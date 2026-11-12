@@ -318,13 +318,17 @@ function receiptRow(
   const last = receipt.steps?.at(-1);
   const refusedTail = receipt.state === "incomplete" && last?.state === "failed" && last.notDispatched === true;
   const refused = receipt.state === "failed" && receipt.notDispatched === true || refusedTail;
-  const group = RECEIPT_GROUP[receipt.state];
+  const result = receipt.key === "instances.cleanup" && "result" in receipt ? receipt.result : null;
+  const kept = result && typeof result === "object" && "kept" in result && Array.isArray(result.kept)
+    ? result.kept.filter((path): path is string => typeof path === "string")
+    : [];
+  const group = RECEIPT_GROUP[receipt.state] ?? (kept.length ? "unread" : undefined);
   if (!group) return null;
   const failure =
     "error" in receipt
       ? summarizeFailure(receipt.error)
       : {
-          summary: "The outcome is not known. Check Revit before running it again.",
+          summary: receipt.state === "succeeded" ? "Cleanup finished with kept files." : "The outcome is not known. Check Revit before running it again.",
           door: null,
           detail: null,
         };
@@ -342,7 +346,7 @@ function receiptRow(
       ? `${routeAddress("settings").link({ section: failure.door.section })}${failure.door.hash ? `#${failure.door.hash}` : ""}`
       : null,
     ...(failure.door ? {} : { refusal: "No address yet: this receipt has no page" }),
-    ...(failure.detail ? { detail: failure.detail } : {}),
+    ...(failure.detail || kept.length ? { detail: [failure.detail, kept.length ? `kept: ${kept.join(", ")}` : null].filter(Boolean).join("\n") } : {}),
   };
 }
 

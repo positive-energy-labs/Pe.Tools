@@ -1,9 +1,9 @@
 import { noticeRows } from "../src/notice-feed.ts";
 import { testHostInputs, journalAt, callRouteOver } from "./effect-test.ts";
 import { Layer, Effect } from "effect";
-import { afterEach, expect, test } from "vite-plus/test";
-import { existsSync } from "node:fs";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { afterEach, expect, test, vi } from "vite-plus/test";
+import { existsSync, unlinkSync } from "node:fs";
+import { mkdir, mkdtemp, readFile, rm, rmdir, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { instancesSessionSelection } from "@pe/agent-contracts";
@@ -23,7 +23,75 @@ import { acquisitionSessionId, foldAcquisitions } from "../src/acquisition.ts";
 import { runSemanticAction } from "../../../packages/mcps/src/shared/takeoff-action-client.ts";
 // Instances owns its SDK transport. These HTTP witnesses expose no bridge attachment or dispatch.
 const sdkOnlyBridge = detachedBridge();
+vi.mock("../src/acquisition.ts", async (original) => {
+  const acquisition = await original<typeof import("../src/acquisition.ts")>();
+  return { ...acquisition, foldAcquisitions: vi.fn(acquisition.foldAcquisitions) };
+});
+vi.mock("node:fs/promises", async (original) => {
+  const fs = await original<typeof import("node:fs/promises")>();
+  return { ...fs, rmdir: vi.fn(fs.rmdir) };
+});
+
+test.each(["EBUSY", "EPERM", "ENOTEMPTY"])("cleanup keeps a folder on rmdir %s and still stops its Revit", async (code) => {
+  const { f, acquired } = await acquisitionSetup();
+  let blocked = "";
+  vi.mocked(rmdir).mockImplementationOnce(async (path) => {
+    blocked = String(path);
+    throw Object.assign(Error(code), { code });
+  });
+  const receipt = await f.admit("instances.cleanup", { acquisition: acquired.id, unsaved: "discard" });
+  expect(receipt.state, JSON.stringify(receipt)).toBe("succeeded");
+  expect(f.calls.some(args => args[0] === "session" && args[1] === "stop")).toBe(true);
+  expect((receipt as { result?: { kept: string[] } }).result?.kept).toContain(blocked);
+  expect(existsSync(blocked)).toBe(true);
+});
+
+test.each(["absolute", "parent", "junction"])("cleanup refuses a tampered %s prune root", async (kind) => {
+  const { f, acquired, acquisition } = await acquisitionSetup();
+  await rm(acquisition.intent.root, { recursive: true });
+  const outside = join(f.dir, "outside");
+  await mkdir(join(outside, "empty"), { recursive: true });
+  let root = outside;
+  if (kind === "parent") root = join(f.peaWork, "..", "outside");
+  if (kind === "junction") {
+    root = join(f.peaWork, "junction");
+    await symlink(outside, root, "junction");
+  }
+  const actual = vi.mocked(foldAcquisitions).getMockImplementation()!;
+  vi.mocked(foldAcquisitions).mockImplementation((...args) =>
+    actual(...args).map(row => ({ ...row, intent: { ...row.intent, root } })));
+  try {
+    const receipt = await f.admit("instances.cleanup", { acquisition: acquired.id, unsaved: "discard" });
+    expect(existsSync(join(outside, "empty"))).toBe(true);
+    expect((receipt as { result?: { kept: string[] } }).result?.kept).toContain(root);
+  } finally {
+    vi.mocked(foldAcquisitions).mockImplementation(actual);
+  }
+});
 const cleanup: (() => Promise<void>)[] = [];
+test.each(["prepare", "run"])("cleanup excludes a temporary file that vanishes before %s", async (phase) => {
+  let work = "";
+  const { f, acquired, acquisition } = await acquisitionSetup(() => {
+    if (phase === "run") unlinkSync(work);
+  });
+  const origin = acquisition.intent.document!.origin;
+  if (origin.kind !== "file-copy") throw Error("expected file copy");
+  work = origin.work;
+  let vanished = false;
+  f.census.beforeSdkList = () => {
+    if (phase === "prepare" && !vanished) {
+      vanished = true;
+      unlinkSync(work);
+    }
+  };
+  const receipt = await f.admit("instances.cleanup", { acquisition: acquired.id, unsaved: "discard" });
+  expect(receipt.state).toBe("succeeded");
+  expect((receipt as { result?: { removed: string[] } }).result?.removed).not.toContain(work);
+  if (phase === "prepare") {
+    expect(receipt.prepared).toMatchObject({ state: "ready", value: { removals: expect.not.arrayContaining([work]) } });
+    expect(receipt.steps.some(step => step.key === "acquisition.remove" && (step.input as { to?: string }).to === work)).toBe(false);
+  }
+});
 afterEach(async () => {
   for (const f of cleanup.splice(0).reverse()) await f();
 });
@@ -102,6 +170,7 @@ async function setup(
     if (args[0] === "session" && args[1] === "list")
       return replayAnswer(args, { result: { state: "ok", sessions: sessionRows } });
     if (args[0] === "doc" && args[1] === "list") {
+      census.beforeSdkList?.();
       const { pid, processStartUtc } =
         census.process ?? (args.includes("--pid") ? observed.process : originalProcess);
       const reply = replayAnswer(args, {
@@ -164,6 +233,7 @@ async function setup(
     identity: "sdk-open-v1" as "sdk-open-v1" | null,
     /** External SDK session-list input can change between successive census reads. */
     beforeCensus: null as null | (() => void),
+    beforeSdkList: null as null | (() => void),
     /** The incarnation `doc list` resolves; the default fixture process when null. */
     process: null as null | {
       pid: number;
@@ -601,7 +671,7 @@ test.each(["resolved-pid", "resolved-start", "session-start", "receipt"])(
   },
 );
 /** An SDK that starts, opens the copy it is given, saves create-only, closes and stops. */
-async function acquisitionSetup() {
+async function acquisitionSetup(beforeClose?: () => void) {
   const row = controlledRow({ shape: shape("background") });
   const f = await setup(
     async (args) => {
@@ -629,6 +699,7 @@ async function acquisitionSetup() {
         return { result: { state: "ok" } };
       }
       if (args[1] === "close") {
+        beforeClose?.();
         f.census.documents = f.census.documents.filter((id) => id !== flag(args, "--doc"));
         return { result: { state: "ok" } };
       }
@@ -1630,5 +1701,7 @@ test.each([false, true])("cleanup through /actions removes empty instance folder
   if (stray) {
     expect(await readFile(extra, "utf8")).toBe("keep me");
     expect(result.kept).toContain(extra);
+    const rows = noticeRows({ threads: [], works: [], machine: null, stored: [], held: [], receipts: [{ revision: 1, action: receipt }] }, Date.now());
+    expect(rows).toMatchObject([{ detail: expect.stringContaining(`kept: ${extra}`) }]);
   }
 });

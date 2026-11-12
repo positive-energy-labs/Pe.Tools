@@ -139,26 +139,32 @@ async function removeReserved(root: string, path: string) {
 }
 
 /** Only empty directories may go: unrecorded files and links stay visible in the receipt. */
-async function removeEmptyAcquisitionRoot(root: string): Promise<string[]> {
+async function removeEmptyAcquisitionRoot(peaWork: string, root: string): Promise<string[]> {
+  const inside = relative(resolve(peaWork), resolve(root));
+  if (!inside || inside.startsWith("..") || isAbsolute(inside)) return [root];
+  for (let at = resolve(root); ; at = dirname(at)) {
+    const stat = await lstat(at).catch(() => null);
+    if (stat?.isSymbolicLink()) return [root];
+    if (at === resolve(peaWork)) break;
+  }
   const kept: string[] = [];
   async function prune(path: string): Promise<void> {
-    const stat = await lstat(path).catch((error: NodeJS.ErrnoException) => {
-      if (error.code === "ENOENT") return null;
-      throw error;
-    });
-    if (!stat) return;
-    if (!stat.isDirectory() || stat.isSymbolicLink()) {
-      kept.push(path);
-      return;
-    }
     const before = kept.length;
-    for (const name of await readdir(path)) await prune(join(path, name));
     try {
+      const stat = await lstat(path).catch((error: NodeJS.ErrnoException) => {
+        if (error.code === "ENOENT") return null;
+        throw error;
+      });
+      if (!stat) return;
+      if (!stat.isDirectory() || stat.isSymbolicLink()) {
+        kept.push(path);
+        return;
+      }
+      for (const name of await readdir(path)) await prune(join(path, name));
       await rmdir(path);
     } catch (error) {
       const code = (error as NodeJS.ErrnoException).code;
       if (code === "ENOENT") return;
-      if (code !== "ENOTEMPTY" && code !== "EEXIST") throw error;
       if (kept.length === before) kept.push(path);
     }
   }
@@ -947,7 +953,7 @@ export function instancesExecutors(deps: InstancesActionDependencies = {}) {
       }),
     }),
     "instances.handover": handoverCommand(read),
-    "instances.cleanup": cleanupCommand(read),
+    "instances.cleanup": cleanupCommand(read, deps.peaWork ?? productPeaWorkPath()),
   };
   const controls = {
     recover: (step: ActionStep) => recoverSdkStep(step, read),
@@ -1081,7 +1087,7 @@ function handoverCommand(read: SdkReceiptReader) {
   });
 }
 
-function cleanupCommand(read: SdkReceiptReader) {
+function cleanupCommand(read: SdkReceiptReader, peaWork: string) {
   return command(commands["instances.cleanup"], releasePreparedSchema, {
     bind: async (ctx) => {
       const { acquisition: id, unsaved } = ctx.admission.input;
@@ -1176,7 +1182,7 @@ function cleanupCommand(read: SdkReceiptReader) {
         );
         if (removed.removed) outcome.removed.push(path);
       }
-      outcome.kept = yield* io(() => removeEmptyAcquisitionRoot(acquired.intent.root));
+      outcome.kept = yield* io(() => removeEmptyAcquisitionRoot(peaWork, acquired.intent.root));
       if (acquired.process && target) {
         // Only the Revit this acquisition started, and only once nothing else is open there.
         const left = yield* io(() => listDocuments(target.selection, target.process, read));
