@@ -5,9 +5,9 @@
  * the one home write door (`writeHome`: compare-and-swap, prior bytes kept) and posts one notice
  * that names the file, the writer and the receipt.
  */
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync, watch } from "node:fs";
 import { userInfo } from "node:os";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import type { SettingTier, SettingTierRead } from "@pe/agent-contracts";
 import { DUCTS_CRITERIA_CELLS, SETTING_TIERS, ductsFirmSchema } from "@pe/agent-contracts";
 import {
@@ -77,6 +77,41 @@ function readTier(tier: SettingTier, owner: string, pointer: string | null | und
 /** Every tier's file for one owner, most specific first. `pointer` is the target model's project pointer. */
 export const readSettingTiers = (owner: string, pointer?: string | null): SettingTierRead[] =>
   SETTING_TIERS.map((tier) => readTier(tier, owner, pointer));
+
+/** Watch the concrete user/project files consumed by this read owner, including absent files. */
+export function watchSettingTiers(changed: () => void) {
+  const watching = new Map<string, () => void>();
+  return {
+    read(owner: string, pointer?: string | null) {
+      const tiers = readSettingTiers(owner, pointer);
+      for (const tier of tiers) {
+        if (tier.tier === "firm" || tier.path === null || watching.has(tier.path)) continue;
+        const path = resolve(tier.path);
+        let previous = JSON.stringify(tier);
+        let base = dirname(path);
+        while (!existsSync(base) && dirname(base) !== base) base = dirname(base);
+        const refresh = () => {
+          const next = JSON.stringify(readTier(tier.tier, owner, pointer));
+          if (next === previous) return;
+          previous = next;
+          changed();
+        };
+        const watcher = watch(base, { recursive: true, persistent: false }, (_event, file) => {
+          const hint = file === null ? null : resolve(base, file.toString());
+          const ancestor = hint === null ? "" : relative(hint, path);
+          if (hint === null || (!ancestor.startsWith(`..${sep}`) && ancestor !== "..")) refresh();
+        });
+        watcher.on("error", changed);
+        watching.set(tier.path, () => watcher.close());
+      }
+      return tiers;
+    },
+    close() {
+      for (const stop of watching.values()) stop();
+      watching.clear();
+    },
+  };
+}
 
 const listeners = new Set<() => void>();
 /** A setting write on this host; the read graph invalidates its settings inputs on it. */

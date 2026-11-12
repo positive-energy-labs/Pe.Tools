@@ -32,7 +32,7 @@ import { historyPoseSchema, addressSchema, sameAddress } from "@pe/agent-contrac
 import { ActionJournalService } from "./receipt-services.ts";
 import { readInvalidations } from "./reads/invalidations.ts";
 import { settingsFile } from "./reads/door.ts";
-import { onSettingWritten, readSettingTiers } from "./tiered-settings.ts";
+import { onSettingWritten, readSettingTiers, watchSettingTiers } from "./tiered-settings.ts";
 import { graphRoute, graphRouteIds, registeredReads } from "./reads/routes.ts";
 import { ResourceConnectionOwner } from "./request-services.ts";
 import {
@@ -221,23 +221,24 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
       }),
     );
   }
+  let settingWatches: ReturnType<typeof watchSettingTiers> | undefined;
   const invalidations = readInvalidations(
     workspace,
     marks,
     recorded,
     publications,
-    // A firm file change and a setting write on this host both move the settings input.
-    // ponytail: another machine's write to a project or user tier is not watched; it shows on the
-    // next read after a host restart or a local write. Watch each tier's folder if that is felt.
+    // Firm changes, external tier edits and local writes all move the settings input.
     (changed) => {
       const stopFiles = files.subscribe?.((name) => {
         changed(name);
         if (name === "firm") changed("settings");
       });
+      settingWatches = watchSettingTiers(() => changed("settings"));
       const stopSettings = onSettingWritten(() => changed("settings"));
       return () => {
         stopFiles?.();
         stopSettings();
+        settingWatches?.close();
       };
     },
   );
@@ -495,7 +496,7 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
               // The project tier is the home the target model's pointer names (homes freeze shape 4).
               const { owner, target } = settingsFile.input.parse(args);
               const pointer = target ? (await invoke(inventory.document(target))).projectHome : null;
-              return readSettingTiers(owner, pointer);
+              return settingWatches ? settingWatches.read(owner, pointer) : readSettingTiers(owner, pointer);
             })()
           : name.startsWith("local:")
           ? readLocal(name.slice(6), args)
