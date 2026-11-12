@@ -10,9 +10,15 @@ import { publishDevTraySession } from "../scripts/dev-tray-session.ts";
 import { hostOwnership } from "./host-ownership.ts";
 import { prepareDevRouteProjection } from "./source-closures.ts";
 
+// scripts/time-cold-start.ts reads these marks (ms since process start); silent otherwise.
+const mark = (phase: string) =>
+  process.env.PE_START_TIMING && console.error(`PE_START_TIMING ${phase} ${Math.round(performance.now())}`);
+mark("entry");
 // The host graph imports closures from disk: prepare them, then link it (see source-closures.ts).
 const routeProjection = await prepareDevRouteProjection();
+mark("projection");
 const { hostProgram } = await import("./host-program.ts");
+mark("hostGraph");
 
 if (process.argv.includes("--share"))
   throw new Error("--share was removed. Use the Share switch on the installed host (/pe/share).");

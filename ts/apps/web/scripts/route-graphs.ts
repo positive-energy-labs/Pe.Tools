@@ -23,6 +23,7 @@ import { createJiti } from "jiti";
 import { readdir, mkdir, writeFile, readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { familyFixturesDir } from "../checkout-paths.ts";
+import { routeStartupSourceHash, writeRouteStartupReceipt } from "../../../packages/host-contracts/src/route-startup.ts";
 import {
   buildBuiltinClosures,
   routeSourceHash,
@@ -76,11 +77,15 @@ const schemaType = (schema: any): string => {
 };
 const projections: Record<string, string> = {};
 const stale: string[] = [];
+// Every full run (codegen:routes or --runtime) leaves the content-hashed receipt a source host start
+// reads instead of producing (source-closures.ts). Hashed before producing; see writeRouteStartupReceipt.
+const checkout = fileURLToPath(new URL("../../../../", import.meta.url));
+const sourceHashBefore = check || closureOnly ? undefined : routeStartupSourceHash(checkout);
 async function emit(destination: URL, text: string) {
   const closure = destination.pathname.endsWith("/source-closure.generated.json");
-  if (runtime) {
-    projections[fileURLToPath(destination)] = text;
-  } else if (check) {
+  projections[fileURLToPath(destination)] = text;
+  if (runtime) return;
+  if (check) {
     // Closures are build output, never tracked: nothing on disk to compare.
     if (closure) return;
     let current: string | undefined;
@@ -216,6 +221,7 @@ if (!closureOnly)
     new URL("../../../packages/agent-contracts/src/generated/route-directory.ts", import.meta.url),
     `// Generated from web route graphs by codegen:routes.\nimport type { RouteDirectory } from "../route-graph.ts";\nexport const routeDirectory: readonly {key: string; directory: RouteDirectory}[] = ${JSON.stringify(directory, null, 2)};\n`,
   );
+if (sourceHashBefore) writeRouteStartupReceipt(checkout, sourceHashBefore, projections);
 console.log(runtime ? JSON.stringify(projections) : `Projected ${directory.length} route graphs`);
 // The C# launch rows project the address table and directory just written; a child process reads
 // them from disk (this process holds the stale modules). One step owns everything a route needs.
