@@ -1,11 +1,11 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vite-plus/test";
 import { bindWork, workKey, ductsRouteState, fansRouteState } from "@pe/agent-contracts";
 import { RouteWorkspace } from "@pe/runtime";
-import { readStoredNotices } from "@pe/host-contracts/store";
-import { storedNoticesPath } from "../src/notice-feed.ts";
+import { readStoredNotices, sha256Hex } from "@pe/host-contracts/store";
+import { storedBlobsPath, storedNoticesPath } from "../src/notice-feed.ts";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
 
 for (const [spec, previous, removed, staged, dropped] of [
@@ -24,7 +24,13 @@ for (const [spec, previous, removed, staged, dropped] of [
         doc: { ...spec.schema.parse({}), ...staged, [removed]: nonempty ? dropped :
           spec.route === "fans" ? { fanFlow: { edit: null }, terminalFlow: { edit: null } } : { edit: null } }, history: [],
       } });
+      const path = join(dir, (await readdir(dir))[0]!);
+      // Noncanonical whitespace distinguishes the original file from reserialized Work.
+      const prior = Buffer.from(`\n  ${await readFile(path, "utf8")}\n`);
+      await writeFile(path, prior);
       expect(await read()).toMatchObject({ revision: 7, schemaVersion: previous + 1, doc: staged });
+      const blob = join(storedBlobsPath(), "sha256", sha256Hex(prior));
+      expect(await readFile(blob)).toEqual(prior);
       const saved = await store.getState({ targetKey, route: spec.route });
       expect(saved).toMatchObject({ schemaVersion: previous + 1, revision: 7, doc: staged });
       expect((saved as { doc: unknown }).doc).not.toHaveProperty(removed);
@@ -32,6 +38,8 @@ for (const [spec, previous, removed, staged, dropped] of [
       const notices = readStoredNotices(storedNoticesPath()).slice(before.length);
       expect(notices).toHaveLength(nonempty ? 1 : 0);
       if (nonempty) {
+        expect(notices[0]!.sha256).toBe(sha256Hex(prior));
+        expect(notices[0]!.reason).toContain(blob);
         expect(notices[0]!.reason).toContain(removed);
         expect(notices[0]!.reason).toContain(JSON.stringify(dropped));
         expect(notices[0]!.reason).toContain("settings at the project or firm tier");

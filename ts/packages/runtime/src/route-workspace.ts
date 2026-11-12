@@ -60,7 +60,9 @@ export type RouteWorkspaceEvent = {
 
 export interface RouteDocumentStore {
   getState(input: { targetKey: string; route: string }): Promise<unknown>;
-  setState(input: { targetKey: string; route: string; value: unknown; reason?: string }): Promise<void>;
+  setState(input: { targetKey: string; route: string; value: unknown; reason?: string;
+    /** Rest the exact prior file bytes before a schema upgrade replaces them. */
+    preservePrior?: boolean }): Promise<void>;
   /** Enumerates canonical persisted records without materializing absent Work. */
   listState?(): Promise<{
     records: { targetKey: string; route: string; value: unknown }[];
@@ -1134,7 +1136,8 @@ export class RouteWorkspace {
     }
     if (upgrade) {
       raw = { ...upgrade.value, doc: envelope.doc };
-      await this.#store.setState({ targetKey: workKey(scope), route: spec.route, value: raw, reason: upgrade.reason });
+      await this.#store.setState({ targetKey: workKey(scope), route: spec.route, value: raw,
+        reason: upgrade.reason, preservePrior: true });
     }
     this.#inverses.set(workKey(scope), this.#retain(
       this.#stored((raw as { history?: unknown }).history, scope), envelope.revision,
