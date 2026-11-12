@@ -109,7 +109,7 @@ test.each([null, { kind: "document" as const, ref: { session: "session", openId:
 });
 
 // Mutant: omit the re-read after a refused stale-hash save; the sheet stays at 800.
-test("a refused stale-hash save re-reads the tier and draws the value now on disk", async () => {
+test.each(["refused", "stale"])("a %s stale-hash save re-reads the tier and draws the value now on disk", async (outcome) => {
   action.mockClear();
   const disk = { value: 800, sha256: "read-hash" };
   const read = () => ({ settings: { ducts: [{ tier: "project", home: "project", name: "project",
@@ -128,7 +128,7 @@ test("a refused stale-hash save re-reads the tier and draws the value now on dis
   disk.sha256 = "outside-write-hash";
   action.mockImplementation(async (request) => {
     expect(request.input.expectedSha256).toBe("read-hash");
-    return { state: "failed", notDispatched: true, outcome: { state: "refused", reason: "project/Settings/ducts.json changed since it was read." },
+    return { state: "failed", notDispatched: true, outcome: { state: outcome, reason: "project/Settings/ducts.json changed since it was read." },
       error: "project/Settings/ducts.json changed since it was read." };
   });
   fireEvent.change(screen.getByRole("textbox", { name: "Supply velocity: value to save" }), { target: { value: "830" } });
