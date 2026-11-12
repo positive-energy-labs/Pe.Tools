@@ -1,4 +1,3 @@
-import { FamilyPdfParser, familyPdfParser } from "./family-spec.ts";
 import {
   builtinFileLayer,
   builtinFileRoutes,
@@ -413,7 +412,6 @@ function liveHttpLive(options: HttpLiveOptions) {
         AppRoutes.pipe(Layer.provide(identity), nativeReadRoot(SdkDriverLive, options.inputs)),
       ).pipe(Layer.provideMerge(ServerLive)),
     ),
-    Layer.provide(Layer.succeed(FamilyPdfParser, familyPdfParser)),
     Layer.provide(NodeHttpClient.layerUndici),
     Layer.provide(FamiliesReader.layer),
     Layer.provide(HostDocumentMarks.layer),

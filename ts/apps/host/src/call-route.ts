@@ -74,7 +74,6 @@ import { ductsReadings } from "./ducts-readings.ts";
 
 import type { FamiliesReader } from "./families-reader.ts";
 import { readFamily, type FamilyActionDependencies } from "./family-actions.ts";
-import { FamilyPdfParser } from "./family-spec.ts";
 import { operationDefinition, gatewayTarget, requireEligibleCaller } from "./gateway-actions.ts";
 import { httpProblems, isDoorFailure } from "./http-problems.ts";
 import { HostInputContext } from "./input-context.ts";
@@ -840,8 +839,7 @@ function callRoutes(
           captures ??=
             Option.getOrUndefined(yield* Effect.serviceOption(TakeoffCaptureStore)) ??
             Context.get(yield* Layer.build(TakeoffCaptureStore.layer()), TakeoffCaptureStore);
-          const parser = Option.getOrUndefined(yield* Effect.serviceOption(FamilyPdfParser));
-          actionDeps = { ...actionDeps, ...(parser ? { parsePdf: parser.parse } : {}), marks: yield* HostDocumentMarks, pictures: yield* PictureCaptureStore, files: yield* DuctFiles };
+          actionDeps = { ...actionDeps, marks: yield* HostDocumentMarks, pictures: yield* PictureCaptureStore, files: yield* DuctFiles };
           const freshness = yield* ReadFreshness;
           yield* Effect.acquireRelease(
             // Queue/native-read telemetry must not invalidate an in-flight read's identity.

@@ -2,6 +2,8 @@ import { afterEach, expect, it, vi } from "vite-plus/test";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { createPeaMcpServer } from "../src/server.ts";
 import { peDo, peRead } from "../src/pea/capability-tools.ts";
+import { actionReceiptSchema } from "@pe/agent-contracts";
+import { peRoutes } from "@pe/agent-contracts/pe-api";
 import { bodyText } from "./body-text.ts";
 
 const input = {
@@ -32,17 +34,35 @@ it("serializes publication as a real MCP PNG block without scope/catalog scans",
   const calls: string[] = [];
   vi.stubGlobal("fetch", async (url: string, init: RequestInit) => {
     calls.push(String(url));
-    expect(new URL(url).pathname).toBe("/pe/pages/publish");
-    expect(JSON.parse(await bodyText(init))).toEqual(input);
-    return Response.json({
-      ok: true,
-      kind: "page",
-      slug: "flow",
-      title: "Flow",
-      key: "page:@pages/flow",
-      openUrl: "http://host/pages/flow/",
-      capture,
+    expect(new URL(url).pathname).toBe(peRoutes["actions.admit"].path);
+    const admission = JSON.parse(await bodyText(init));
+    expect(admission).toEqual({
+      id: expect.any(String),
+      key: "page.publish",
+      target: { kind: "host" },
+      input,
     });
+    return Response.json(
+      actionReceiptSchema.parse({
+        ...admission,
+        caller: { kind: "pea", context: "fixture", thread: "thread" },
+        basis: null,
+        state: "succeeded",
+        steps: [],
+        prepared: { state: "ready", value: null },
+        recovery: [],
+        startedAt: new Date().toISOString(),
+        result: {
+          ok: true,
+          kind: "page",
+          slug: "flow",
+          title: "Flow",
+          key: "page:@pages/flow",
+          openUrl: "http://host/pages/flow/",
+          capture,
+        },
+      }),
+    );
   });
   const server = await createPeaMcpServer({
     hostBaseUrl: "http://host",
