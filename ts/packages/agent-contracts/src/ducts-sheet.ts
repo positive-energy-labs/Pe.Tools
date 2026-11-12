@@ -3,6 +3,16 @@ import { decode, uniqueIdSchema, subjectRefCodeSchema } from "./subject-ref.ts";
 import { documentRefSchema } from "./target.ts";
 import { VALUE_SOURCES } from "./work-value.ts";
 import { settingWrittenSchema } from "./tiered-setting.ts";
+/** The parameter slots `ducts.snapshot` reads and `ducts.apply` writes through. */
+export const DUCT_PARAMETER_KEYS = [
+  "fanStatic",
+  "fanFlow",
+  "componentDrop",
+  "terminalDrop",
+  "fittingCoefficient",
+  "terminalFlow",
+] as const;
+
 const elementSubjectSchema: z.ZodType<string> = subjectRefCodeSchema.refine(code => {
   const ref = decode(code); return ref.ok && ref.value.keyKind === "UniqueId";
 });
@@ -178,16 +188,6 @@ export type DuctsInputs = z.infer<typeof ductsInputsSchema>;
  * rule 8). It states any subset of the criteria; a criterion it leaves out falls to the next tier,
  * then to the engine default. `written` is the write door's stamp: who last wrote the file, and when.
  */
-/** The parameter slots `ducts.snapshot` reads and `ducts.apply` writes through. */
-export const DUCT_PARAMETER_KEYS = [
-  "fanStatic",
-  "fanFlow",
-  "componentDrop",
-  "terminalDrop",
-  "fittingCoefficient",
-  "terminalFlow",
-] as const;
-
 export const ductsFirmSchema = z.strictObject({
   version: z.string().min(1).optional(),
   criteria: ductsCriteriaLayerSchema.optional(),
