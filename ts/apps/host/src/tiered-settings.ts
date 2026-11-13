@@ -50,28 +50,36 @@ function tierHome(tier: SettingTier, pointer: string | null | undefined): Pick<S
   };
 }
 
-/** One tier's file as it stands. A file that is not a JSON object is kept and reported, never used. */
-function readTier(tier: SettingTier, owner: string, pointer: string | null | undefined): SettingTierRead {
-  const at = tierHome(tier, pointer);
-  if (at.home === null) return { tier, ...at, path: null, sha256: null };
-  const path = join(at.home, productPathNames.homeSettingsDirectoryName, `${firmOwner.parse(owner)}.json`);
+/**
+ * The one reader of a `Settings/<owner>.json` file, in any home: absent (no hash and no error), or
+ * its hash with its JSON object. A file that is not a JSON object is kept and reported, never used.
+ */
+export function readSettingsFile(path: string): Pick<SettingTierRead, "sha256" | "json" | "error"> {
   let bytes: Buffer;
   try {
     bytes = readFileSync(path);
   } catch (error) {
     return (error as NodeJS.ErrnoException).code === "ENOENT"
-      ? { tier, ...at, path, sha256: null }
-      : { tier, ...at, path, sha256: null, error: String(error) };
+      ? { sha256: null }
+      : { sha256: null, error: String(error) };
   }
   const sha256 = sha256Hex(bytes);
   try {
     const json: unknown = JSON.parse(bytes.toString("utf8").replace(/^﻿/, ""));
     return json !== null && typeof json === "object" && !Array.isArray(json)
-      ? { tier, ...at, path, sha256, json }
-      : { tier, ...at, path, sha256, error: "The file is not a JSON object" };
+      ? { sha256, json }
+      : { sha256, error: "The file is not a JSON object" };
   } catch (error) {
-    return { tier, ...at, path, sha256, error: String(error) };
+    return { sha256, error: String(error) };
   }
+}
+
+/** One tier's file as it stands. */
+function readTier(tier: SettingTier, owner: string, pointer: string | null | undefined): SettingTierRead {
+  const at = tierHome(tier, pointer);
+  if (at.home === null) return { tier, ...at, path: null, sha256: null };
+  const path = join(at.home, productPathNames.homeSettingsDirectoryName, `${firmOwner.parse(owner)}.json`);
+  return { tier, ...at, path, ...readSettingsFile(path) };
 }
 
 /** Every tier's file for one owner, most specific first. `pointer` is the target model's project pointer. */

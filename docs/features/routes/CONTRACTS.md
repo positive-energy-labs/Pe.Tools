@@ -156,6 +156,37 @@ interface ReadContext {
 }
 ```
 
+### As landed (k2/read-contract)
+
+Where this differs from the frozen text above, this is the contract.
+
+**The native handle's input.** `native(key)` is `ReadHandle<K, NativeArgs<K>, NativeValue<K>>`, not `OpRequestOf<K>` to `OpResponseOf<K>`:
+
+```ts
+type NativeArgs<K> = { request: OpRequestOf<K>; target: ExecutionTarget; version?: string; role?: "acquire" | "validate" | "join" | "beyond" | "none" };
+type NativeValue<K> = { body: NativeReadOutput<K>; version: string | null };
+```
+
+- Reason: a native read cannot run without a target, and the ducts and fans bodies pass `role` and read back `version` (`W/ducts/host.ts:33-44`, `W/ducts/fan-sheet.ts:181-191`). A bare request would need a second door for those.
+- So `ctx.read(native(key), args)` and `ctx.native(key, args)` are the same read, with the same body, input and value. `bodyOf(native(key))` is the host's native body; nobody registers one. k2/read-sweep can delete `ctx.native`.
+- The schemas and both types live once, in `C/native-output-read.ts` (`nativeReadInput`, `nativeReadValue`). The handle and the host door both decode with them. `H/reads/door.ts` re-exports the types.
+- A binding that names `native("revit.catalog.field-options")` as its options read supplies `request`; the door supplies `target`.
+
+**`contract()`.**
+
+- `input` is the host's input, `target` included where the body takes one. The browser door adds `target` from the mount, so a pane supplies the input without it. k2/read-sweep writes that one place; no `contract.ts` declares a second input.
+- Effect, cost and touches join from `uses`. Subject and cardinality do not join: `contract()` takes an optional `subject` (default `"Document"`), and cardinality is `"One"`. The freeze took the first use's subject, which called `open.documents` and `chat.context` Document reads; the nine reads that take no model say `subject: "None"`.
+- `uses` names every catalog Read the body reaches, through its host-only recipes too, and a `ReadHandle` where the body reads another contract. The 13 host-only recipes have no contract (cut), so `ducts.pricing` and `fans.sheet` name the natives under `fans.roster` and `fans.esp-options`.
+- `usesOf(handle)` returns the keys a contract uses. It is a side table: `ReadHandle` gained no field.
+- A `keyedBy` path that is not an array or a record in `data` throws when the contract is minted. Keyed today: `fans.sheet` (`rows`, `fans.rows`), `ducts.roster` (`rows`), `ducts.network` (`nodes`, `segments`, `groups`, `systems`), `rooms.workspace` (`snapshot.regions`), `families.view` (`pivotFamilies`). `pods.roster` is unkeyed: its `pods` schema is a decoded Effect schema the check cannot see into.
+
+**The 15 `contract.ts` files** (19 reads) are `W/<route>/contract.ts` for captures, chat, duct-loss, ducts, families, family, fans, open, ops, pages-bind, pods, rooms, schedules, settings and takeoff. Each export is named as the route's `reads` key. `H/tests/read-contract.test.ts` holds each one equal to the schemas the host registers under that key, so the sweep is a move, not a rewrite. Keys are the host's: `ducts.roster`, not `ducts.roster.value`.
+
+**Host registration.** `body(handle, run)` keeps its handle on the `Read` (`contract`). `readRegistry` and `register` throw `Host read <name> uses '<key>', which has no body on this host` when a used key has neither a `body()` nor a native body. Bodies register when their module loads, so the order of routes does not matter.
+
+**Read lifetime.** `Publications` holds a flight per shared evaluation and one lease per subscriber. `release`, a superseding publish and an invalidated pending basis each release the slot's lease; the last release aborts the read's own signal. A retiring flight refuses a join, and the next subscriber starts its own read. The signal is the fourth argument of `InputPort.take` and the last of `ReadSources.call`; nothing reads it there yet (PI-P2's consumer edit, in k2/read-sweep). `Publications` takes an `OpenFlight` as its third constructor argument: pass `(run) => ownership.flight(owner, run)` to bind flights to a `ReadOwner`. The default has no causal owner and repeats the helper's lease count.
+
+**Firm settings file.** `readSettingsFile(path)` in `H/tiered-settings.ts` is the one reader of a `Settings/<owner>.json` file. `DuctFiles.firm` reads through it. A firm file that is JSON but not an object is now an error (`The file is not a JSON object`) instead of a schema refusal, and a byte-order mark no longer fails the parse.
 
 **Handle and read context.** The TypeScript in section 1. Writers A, C, D, G.
 

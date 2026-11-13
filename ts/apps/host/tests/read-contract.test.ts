@@ -1,0 +1,131 @@
+import { expect, expectTypeOf, test } from "vite-plus/test";
+import { z } from "zod";
+import { ductLossData } from "@pe/agent-contracts";
+import { contract, native, type ReadHandle } from "@pe/agent-contracts/handle";
+import { result as ductLoss } from "../../web/src/duct-loss/contract.ts";
+import {
+  body,
+  bodyOf,
+  evaluate,
+  leaf,
+  nativeRead,
+  type InputPort,
+} from "../src/reads/evaluator.ts";
+import { Publications } from "../src/reads/publications.ts";
+import { readRegistry, registeredReads } from "../src/reads/routes.ts";
+
+const contracts = Object.entries(
+  import.meta.glob<Record<string, ReadHandle>>("../../web/src/*/contract.ts", { eager: true }),
+);
+const shape = (schema: z.ZodType) => z.toJSONSchema(schema, { unrepresentable: "any" });
+const port = (take: InputPort["take"]): InputPort => ({
+  evaluation: "test",
+  origin: {},
+  take,
+  revision: () => 0,
+});
+
+test("each route's contract.ts declares the reads its host serves, with the host's own schemas", () => {
+  const handles = contracts.flatMap(([, module]) => Object.values(module));
+  expect(contracts).toHaveLength(15);
+  expect(handles.map((h) => h.key).sort()).toEqual([
+    "bind.picker", "captures.browse", "chat.context", "duct-loss.result", "ducts.network",
+    "ducts.pricing", "ducts.roster", "families.view", "family.workspace", "fans.sheet",
+    "open.documents", "ops.workspace", "pods.author", "pods.roster", "rooms.workspace",
+    "schedules.view", "settings.machine", "takeoffs.adoption", "takeoffs.views",
+  ]);
+  // Until k2/read-sweep moves each body onto its handle, the contract must equal what the host registers.
+  for (const h of handles) {
+    const served = registeredReads.reads.get(h.key) ?? bodyOf(h);
+    expect(shape(h.input), `${h.key} input`).toEqual(shape(served.input));
+    expect(shape(h.data), `${h.key} data`).toEqual(shape(served.output));
+  }
+  const axes = Object.fromEntries(handles.map((h) => [h.key, h.axes]));
+  // Joined, not the one hand constant: a read that walks the model no longer says Cheap Metadata.
+  expect(axes["chat.context"]).toEqual({ subject: "None", touches: ["Metadata"], effect: "Read", cost: "Cheap", cardinality: "One" });
+  expect(axes["fans.sheet"]!.cost).toBe(native("ducts.snapshot.walk").axes.cost);
+  expect(axes["fans.sheet"]!.touches).toEqual(expect.arrayContaining([...native("ducts.snapshot.walk").axes.touches]));
+});
+
+test("a composition whose uses cannot join throws at host registration", () => {
+  const input = z.null(), data = z.number();
+  const orphan = contract("probe.join.orphan", { input, data, uses: [] });
+  const composed = body(
+    contract("probe.join.composed", { input, data, uses: [orphan, "ducts.tables"] }),
+    (ctx) => ctx.read(orphan, null),
+  );
+  expect(() => readRegistry([{ reads: { composed } }])).toThrow(
+    "Host read probe.join.composed uses 'probe.join.orphan', which has no body on this host",
+  );
+  body(orphan, () => 1);
+  expect(readRegistry([{ reads: { composed } }]).reads.has("probe.join.composed")).toBe(true);
+});
+
+test("a keyedBy path that names no row collection refuses when the contract is minted", () => {
+  const data = z.object({ rows: z.array(z.string()), name: z.string() }).and(z.object({ more: z.record(z.string(), z.number()) }));
+  expect(contract("probe.keyed", { input: z.null(), data, uses: [], keyedBy: { rows: { kind: "name" }, more: { kind: "name" } } }).keyedBy).toHaveProperty("more");
+  expect(() => contract("probe.keyed.bad", { input: z.null(), data, uses: [], keyedBy: { name: { kind: "name" } } })).toThrow(
+    "Read 'probe.keyed.bad' keys 'name', which is no row collection in its data",
+  );
+});
+
+test("ctx.read(native(key)) is the native door: same body, same input, same value", async () => {
+  const tables = native("ducts.tables");
+  expect(bodyOf(tables)).toBe(nativeRead("ducts.tables"));
+  const target = { kind: "host" as const };
+  const taken: unknown[] = [];
+  const probe = body(contract("probe.native", { input: z.null(), data: tables.data, uses: [tables] }), (ctx) =>
+    ctx.read(tables, { request: { ids: ["CD3-2"] }, target, version: "v0", role: "acquire" }),
+  );
+  const value = await evaluate(probe, null, port(async (name, args) => {
+    taken.push([name, args]);
+    return { body: { folder: "x", tables: {}, missing: ["CD3-2"], unsupported: {} }, version: "v1" };
+  }));
+  expect(value.data.version).toBe("v1");
+  expect(taken).toEqual([["native", { key: "ducts.tables", request: { ids: ["CD3-2"] }, target, version: "v0", role: "acquire" }]]);
+  // @ts-expect-error the handle's input is the native read's whole input: a bare request has no target
+  void ((ctx: import("../src/reads/evaluator.ts").ReadContext) => ctx.read(tables, { ids: [] }));
+});
+
+test("the host owns a read's lifetime: the last subscriber's release stops the read, and only then", async () => {
+  const signals: AbortSignal[] = [];
+  const input = leaf("probe-wait", z.null(), z.number(), false);
+  const definition = body(contract("probe.lifetime", { input: z.null(), data: z.number(), uses: [] }), (ctx) => ctx.read(input, null));
+  const publications = new Publications();
+  let answer!: (value: number) => void;
+  // The read's own signal reaches every input it takes.
+  const waiting = port((_name, _args, _ctx, signal) => {
+    signals.push(signal!);
+    return new Promise<number>((resolve) => (answer = resolve));
+  });
+  const first = publications.publish("a", 1, definition, null, waiting);
+  const second = publications.publish("b", 1, definition, null, waiting);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(signals).toHaveLength(1);
+  publications.release("a", 1);
+  expect(signals[0]!.aborted).toBe(false);
+  publications.release("b", 1);
+  expect(signals[0]!.aborted).toBe(true);
+  answer(1);
+  expect((await first).state).toBe("superseded");
+  expect((await second).state).toBe("superseded");
+  // A retiring flight is not joined: the next subscriber starts its own read.
+  const third = publications.publish("c", 1, definition, null, waiting);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(signals).toHaveLength(2);
+  answer(2);
+  expect(await third).toMatchObject({ state: "current", value: { data: 2 } });
+  expect(signals[1]!.aborted).toBe(false);
+});
+
+// The falsifier: change `data` in `duct-loss/contract.ts` only and both lines below stop compiling.
+test("one declaration types the host body and the pane", () => {
+  type Data = z.output<typeof ductLossData>;
+  // The host body's side: `body()` takes a run that returns the contract's data.
+  const hostBody = () => body(ductLoss, (): Data => ({ error: null, result: null }));
+  // The pane's side: what it draws is the contract's publication.
+  expectTypeOf<NonNullable<z.output<typeof ductLoss.output>["value"]>["data"]>().toEqualTypeOf<Data>();
+  expect(hostBody).toBeTypeOf("function");
+  // @ts-expect-error a body that returns another shape does not compile
+  void (() => body(ductLoss, () => ({ error: 1, result: null })));
+});
