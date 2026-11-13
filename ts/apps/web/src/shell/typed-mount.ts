@@ -749,7 +749,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
             const mine=new Promise<Ack>(resolve=>{settle=resolve;});
             sending.set(record,mine);
             let intent: ReturnType<typeof admission.retain> | undefined;
-            const send=async(handle:WorkHandle,doc:unknown,rebased:boolean)=>{
+            const build=(handle:WorkHandle,doc:unknown)=>{
               const applied=applyPatches(record.config.state,{version:1,revision:handle.revision,doc},"human",patches,handle.revision,false,true);
               if (!applied.ok) throw Error(applied.error);
               // Scalar cells travel whole; record cells keep their narrow keys (host inverse authority).
@@ -757,26 +757,40 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
                 ? patches.filter(p=>String(p.path[0])===key) : [{path:[key],value:(applied.envelope.doc as any)[key]}]);
               const label=id===own ? detail.label : `${detail.label} · from /${id}`;
               const write:WorkWrite={kind:"apply",expectedRevision:handle.revision,press:crypto.randomUUID(),patches:normalized,...z.object({label:z.string(),meta:z.json().optional()}).parse(edits!.describe({...detail,label}))};
-              intent=admission.retain(write,label);
-              notify();
+              return {write,label};
+            };
+            // `retried` is the retry's own invocation: its Value is still refreshing after the press ahead of it.
+            const dispatch=async(write:WorkWrite,handle:WorkHandle,retried:InvocationToken|null)=>{
               requireWritable();
-              // A retried press's Value is still refreshing after the press ahead of it; its basis is that acknowledgement.
-              const issued=rebased?gate.invocation(gate.capture("draw"),dependencies()):null;
-              if (rebased ? !issued?.ok : !basis() || !gate.current(token)) throw Error("Stale accepted Work basis");
+              if (!retried && (!basis() || !gate.current(token))) throw Error("Stale accepted Work basis");
               if (owners.get(id)!==record || !record.ready || canonicalRouteInput(record.handle)!==canonicalRouteInput(handle)) throw Error("Owning Work changed since this cell was drawn");
-              return (await submit(record,write,issued?.ok?issued.value:token)).revision;
+              return (await submit(record,write,retried??token)).revision;
             };
             try {
+              const first=build(drawn,docs.get(id));
+              intent=admission.retain(first.write,first.label);
+              notify();
               let to:number;
-              try { to=await send(drawn,docs.get(id),false); }
+              try { to=await dispatch(first.write,drawn,null); }
               catch(error) {
                 const prior=error instanceof StaleRevision&&ahead?await ahead:null;
                 if (!prior||prior.from!==drawn.revision||owners.get(id)!==record||!record.ready||record.handle?.revision!==prior.to) throw error;
-                if (intent) admission.discard(intent);
-                intent=undefined;
-                to=await send(record.handle,record.doc,true);
+                // The retry belongs to the Page the press was made on. A Page that moved while the press
+                // waited (another subject, or the same one again) retired that press: it stays refused.
+                const now=gate.read();
+                if (!now||now.pageEpoch!==token.pageEpoch||now.pageRevision!==token.pageRevision) throw error;
+                const issued=gate.invocation(gate.capture("draw"),dependencies());
+                if (!issued.ok) throw error;
+                // The refused input stays retained until its replacement is. A rebuild that fails on the
+                // acknowledged doc throws here, and the catch below refuses the original input, still visible.
+                const next=build(record.handle,record.doc);
+                const kept=admission.retain(next.write,next.label);
+                admission.discard(intent);
+                intent=kept;
+                notify();
+                to=await dispatch(next.write,record.handle,issued.value);
               }
-              if (intent) admission.discard(intent);
+              admission.discard(intent);
               ack={from:drawn.revision,to};
             } catch(error) {
               if (intent) admission.refuse(intent,error instanceof Error?error.message:String(error));

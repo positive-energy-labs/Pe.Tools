@@ -269,3 +269,33 @@ test("on /fans?target=A a new thread's draft binds to A among two open documents
   expect(client.target).toHaveBeenCalledTimes(1);
   expect(JSON.stringify(client.target.mock.calls[0])).toContain('"openId":"A"');
 });
+
+// Review of c6bd362b, probe 2: a `?target` that names a document which is not open binds nothing.
+// The sole open document is the default only when the URL names no document.
+test("a ?target naming a document that is not open leaves the draft unbound, never the sole open document", async () => {
+  sessionStorage.clear();
+  const doc = (openId: string) => ({ openId, title: `${openId}.rvt`, address: `C:/Jobs/${openId}.rvt`, isFamilyDocument: false, isActive: true });
+  machine.reading = { state: "ready", observation: machineFixture([{ session: "s1", documents: [doc("B")] }]) };
+  const root = createRootRoute({ component: () => <WorkbenchProvider><Probe /><Outlet /></WorkbenchProvider> });
+  const router = createRouter({
+    routeTree: root.addChildren([
+      createRoute({ getParentRoute: () => root, path: "/fans", component: () => <p>fans</p> }),
+    ]),
+    history: createMemoryHistory({ initialEntries: ["/fans?target=C%3A%2FJobs%2FA.rvt"] }),
+  });
+  await router.load();
+  client.threads.mockImplementation(async () => []);
+  render(
+    <RegistryContext.Provider value={appAtomRegistry}>
+      <RouterProvider router={router} />
+    </RegistryContext.Provider>,
+  );
+  await screen.findByText("fans");
+  expect(draftTarget).toBeNull();
+  await act(() => send!("size it"));
+  expect(client.create).toHaveBeenCalledTimes(1);
+  expect(client.target, "nothing seeds the chat with B").not.toHaveBeenCalled();
+  // With no pin, the same machine's sole document is the default, as before.
+  await act(() => router.navigate({ to: "/fans", search: {} }));
+  await waitFor(() => expect(draftTarget).toEqual({ kind: "open", ref: { session: "s1", openId: "B" } }));
+});

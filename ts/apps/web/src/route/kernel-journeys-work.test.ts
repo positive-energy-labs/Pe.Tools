@@ -1190,3 +1190,84 @@ test("D17 the retry fires at most once: a second stale refusal after it stays re
     expect(work.doc).not.toHaveProperty("writeIntent.edit");
   } finally { held?.release.resolve(); j.flushStream(); await j.close(); }
 }, 60_000);
+
+// Review of c6bd362b, probe 1 (input loss). The retry rebuilds on the acknowledged doc, and that
+// rebuild can fail. The refused input must stay visible: it is discarded only once its replacement is retained.
+test("D17 a retry whose rebuild fails keeps the person's refused input", async () => {
+  const j = await journey();
+  let held: ReturnType<typeof gate> | undefined;
+  try {
+    await j.start();
+    expect(await j.cells().at(["flows", terminalA]).stage({ cfm: 240, source: "old" }, { label: "Seed airflow" })).toBeNull();
+    await j.ready();
+    const cells = j.cells(), revision = j.m.owner()!.handle!.revision;
+    j.holdStream();
+    held = j.holdWrite();
+    // One tick: the cell is cleared, then a narrow patch names only its source.
+    const clear = cells.at(["flows", terminalA]).clear({ label: "Clear airflow" });
+    const narrow = cells.patch([{ path: ["flows", terminalA, "edit", "value", "source"], value: "new" }], { label: "Source only" });
+    await held.entered.promise;
+    await vi.waitFor(() => expect(j.writes.filter(w => w.kind === "apply" && w.label === "Source only")).toHaveLength(1));
+    held.release.resolve();
+    expect(await clear).toBeNull();
+    // The clear landed, so the source has no airflow to sit beside: the rebuild is invalid.
+    expect(await narrow).toMatchObject({ code: "refused", message: "the patched document is invalid" });
+    expect(j.writes.filter(w => w.kind === "apply" && w.label === "Source only"), "the invalid rebuild is never sent").toHaveLength(1);
+    const kept = j.m.pendingEdits().filter(intent => intent.label === "Source only");
+    expect(kept, "the refused original input stays inspectable").toHaveLength(1);
+    expect(kept[0]!.input.patches).toEqual([{ path: ["flows", terminalA, "edit", "value", "source"], value: "new" }]);
+    expect((await hostWork(j)).revision).toBe(revision + 1);
+  } finally { held?.release.resolve(); j.flushStream(); await j.close(); }
+}, 60_000);
+
+// Probe 3. The retry belongs to the Page the press was made on: a subject that changed while the
+// stale pick waited retired that press, even when the Page came back to the same subject.
+test("D17 a Page that moved while the stale pick waited keeps it refused", async () => {
+  const j = await journey();
+  let held: ReturnType<typeof gate> | undefined;
+  try {
+    await j.start();
+    const cells = j.cells(), revision = j.m.owner()!.handle!.revision, basis = cells.basis!, pageA = j.m.page.read().fan;
+    j.holdStream();
+    held = j.holdWrite();
+    const edit = cells.at(["flows", terminalA]).stage({ cfm: 240 }, { label: "Terminal A airflow" });
+    const pick = cells.at(["writeIntent"]).stage({ walk: { unitId: 1, portIndex: 0 } }, { label: "Write scope" });
+    await held.entered.promise;
+    await vi.waitFor(() => expect(picks(j)).toHaveLength(1));
+    j.m.page.subject({ kind: "ids", ids: [] });
+    j.m.page.subject(pageA);
+    expect(j.m.current(basis), "the press's invocation is retired").toBe(false);
+    held.release.resolve();
+    expect(await edit).toBeNull();
+    expect(await pick).toMatchObject({ code: "refused", message: `the document moved to r${revision + 1}` });
+    expect(picks(j).map(w => w.expectedRevision), "the pick was sent once and never retried").toEqual([revision]);
+    const work = await hostWork(j);
+    expect(work.revision).toBe(revision + 1);
+    expect(work.doc).not.toHaveProperty("writeIntent.edit");
+  } finally { held?.release.resolve(); j.flushStream(); await j.close(); }
+}, 60_000);
+
+// Probe 4, the boundary the retry does not cross. Once the stream has shown this mount its own
+// press's revision, a pick from the older drawing is refused here and never sent. That is the
+// standing fence ("Read release does not relax the captured revision fence"): the page redraws
+// its cells on that revision and locks them while the Value follows.
+test("D17 boundary: after the stream shows the press's revision, a pick on the older drawing is refused unsent", async () => {
+  const j = await journey();
+  let held: ReturnType<typeof gate> | undefined;
+  try {
+    await j.start();
+    const cells = j.cells(), revision = j.m.owner()!.handle!.revision;
+    held = j.holdWrite();
+    const edit = cells.at(["flows", terminalA]).stage({ cfm: 240 }, { label: "Terminal A airflow" });
+    await held.entered.promise;
+    await vi.waitFor(() => expect(j.m.owner()!.handle!.revision).toBe(revision + 1));
+    expect(await cells.at(["writeIntent"]).stage({ walk: { unitId: 1, portIndex: 0 } }, { label: "Write scope" }))
+      .toMatchObject({ code: "refused", message: "Stale accepted Work basis" });
+    expect(picks(j)).toHaveLength(0);
+    held.release.resolve();
+    expect(await edit).toBeNull();
+    await j.ready();
+    // The redrawn cell, on the revision the page now shows, takes the same pick.
+    expect(await j.cells().at(["writeIntent"]).stage({ walk: { unitId: 1, portIndex: 0 } }, { label: "Write scope" })).toBeNull();
+  } finally { held?.release.resolve(); await j.close(); }
+}, 60_000);

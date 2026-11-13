@@ -23,7 +23,7 @@ import { useEnvironmentReading } from "#/host/environment-state";
 import type { HarnessThreadBody } from "@pe/agent-contracts";
 import { mergeThreadRoster, mergeThreadSummary } from "./thread-merge";
 import { emptyPrompt } from "../prompt";
-import { pinnedDocument, soleUserDocument } from "#/chat/scope";
+import { pinnedDocument, pinsDocument, soleUserDocument } from "#/chat/scope";
 import { machineOf } from "#/machine/model";
 import { useMachineSlice } from "#/machine/use-machine";
 
@@ -100,12 +100,15 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   // Undefined until the human picks or clears: the draft then shows the sole user document, if any.
   const [chosenTarget, setDraftTarget] = useState<DocumentRequest | null>();
   const soleDocument = useMachineSlice((reading) => soleUserDocument(machineOf(reading)));
-  // Owner ruling 2026-11-13 (row 12): a draft binds to the document the URL's `?target` names, and
-  // only with no pin to the sole user document. This is the draft's one owner; the picker draws it.
+  // Owner ruling 2026-11-13 (row 12): a draft binds to the document the URL's `?target` names. A pin
+  // that names a document which is not open binds nothing: the sole user document is the default
+  // only when the URL names no document, never a guess in place of the one it named. This is the
+  // draft's one owner; the picker draws it.
   const pinned = useMachineSlice((reading) =>
     pinnedDocument(machineInventory(machineOf(reading) ?? undefined), search.target),
   );
-  const draftTarget = chosenTarget === undefined ? (pinned ?? soleDocument) : chosenTarget;
+  const draftTarget =
+    chosenTarget !== undefined ? chosenTarget : pinsDocument(search.target) ? pinned : soleDocument;
   const [error, setError] = useState<string>();
 
   // `?fixture=<seed>`: the transcript shows that seed's thread and nothing is fetched.
