@@ -132,7 +132,7 @@ function KernelPicture({ ctx, scope, subject, parts }: { ctx: PicturePaneContext
 
   // The capture follows the pane's own read unless the overlay names another (a geometry read that outlives a re-price).
   const doc = draw.target?.kind === "document" ? draw.target.ref : null;
-  const follows = parts.source ?? { version: draw.value.current ? draw.value.hash : "", current: draw.value.current };
+  const follows = parts.source ?? { version: draw.value.state === "ready" ? draw.value.publication?.evaluation ?? "" : "", current: draw.value.state === "ready" };
   const { focus: _focus, layerOptions: _options, source: _source, label, jump, ...content } = parts;
   return (
     <Picture

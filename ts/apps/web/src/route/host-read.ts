@@ -8,7 +8,6 @@ export interface HostRead {
   input: z.ZodType;
   output: z.ZodType<Publication>;
   axes: EntryContract["axes"];
-  demand?: "mount" | "explicit";
   fixtures?: Readonly<Record<string, (args: any) => FixtureValue<z.ZodType<Publication>>>>;
   endpoint?: PeRouteId;
   request?(args: any, target?: import("@pe/agent-contracts").ExecutionTarget): object;
@@ -28,7 +27,6 @@ export function hostRead<I extends z.ZodType, O extends z.ZodType<Publication>>(
     input: I;
     output: O;
     axes: EntryContract["axes"];
-    demand?: "mount" | "explicit";
   },
   fixtures?: Readonly<Record<string, (args: z.output<I>) => FixtureValue<O>>>,
 ) {

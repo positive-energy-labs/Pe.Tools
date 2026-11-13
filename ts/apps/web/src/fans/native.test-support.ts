@@ -1,3 +1,4 @@
+import { valueOf } from "../route/typed-route";
 import { createElement } from "react";
 import { RosterBody, LedgerBody } from "./mount";
 import { kernelPane } from "../shell/typed-shell";
@@ -13,13 +14,13 @@ export function nativeTestAdapter(mount: TypedMount, _door: WorkJournalDoor) {
   const snapshot = (id: string) => {
     if (id.startsWith("owner:")) {
       const record = mount.owner(id.slice(6));
-      return record?.ready ? { current: true, status: "ready", value: record.doc, handle: record.handle, hash: JSON.stringify(record.doc) }
-        : { current: false, status: "unavailable", reason: record?.problem };
+      return record?.ready ? { state: "ready" as const, value: record.doc, handle: record.handle, hash: JSON.stringify(record.doc) }
+        : { state: "refused" as const, reason: record?.problem ?? "" };
     }
     if (mount.spec.reads?.[id]) return mount.value(mount.spec.reads[id]);
     const value = mount.value();
-    if (value.value === undefined) return value;
-    const data = id === "value" ? {value:{data:value.value}} : id === "sheet" ? value.value : value.value?.[id];
+    if (valueOf(value) === undefined) return value;
+    const data = id === "value" ? {value:{data:valueOf(value)}} : id === "sheet" ? valueOf(value) : valueOf(value)?.[id];
     return {...value,value:data};
   };
   const adapter = {
@@ -29,7 +30,9 @@ export function nativeTestAdapter(mount: TypedMount, _door: WorkJournalDoor) {
         return mount.draw(id, (ctx) => createElement(SheetPane, { ctx: { draw: ctx as never, slot: mount.spec.sheet!, field: mount.spec.subject?.field } }));
       // A kernel picture pane too: the shell's own drawing of the slot.
       if ((mount.spec.panes[id] as { kernel?: string } | undefined)?.kernel === "picture") return mount.draw(id, (ctx) => kernelPane(mount, id, ctx));
-      const body=mount.draw(id) as {props:{ctx:unknown}};
+      const body=mount.draw(id) as {props:{ctx?:unknown}};
+      // A value-less read draws the shell's one line, with no body and so no ctx.
+      if(!body.props.ctx) return body;
       const Component=({"sheet-roster":RosterBody,"sheet-ledger":LedgerBody,"e-systems":networkBodies.SystemsPane,"e-sidebar":networkBodies.TreePane,"e-rules-all":networkBodies.AllRulesBody,"e-rules":networkBodies.RulesBody,"e-inbox":networkBodies.InboxBody} as Record<string,any>)[id];
       return createElement(Component,{ctx:body.props.ctx});
     }, close: mount.dispose,
@@ -42,7 +45,7 @@ export function nativeTestAdapter(mount: TypedMount, _door: WorkJournalDoor) {
     reviewRefusal: (id:string)=>mount.reviewProblem(id)?Error(mount.reviewProblem(id)!):null,
     confirm:(id:string)=>{if(mount.review(id)?.stale) throw Error("Review stale");return mount.run(id,true);},
     readingStatus: (id:string)=>({snapshot:snapshot(id)}),
-    picker: (_field?: string) => {const value=mount.value(mount.spec.subject!.read ?? mount.spec.core).value;return value ? mount.spec.subject!.options(value) : [];},
+    picker: (_field?: string) => {const value=valueOf(mount.value(mount.spec.subject!.read ?? mount.spec.core));return value ? mount.spec.subject!.options(value) : [];},
     journal: () => mount.owner()!.lease.entry.journal.read(),
     setPaneDemand(_pane: string, _next: boolean) {},
     refresh: (id?: string) => mount.refresh(id ? mount.spec.reads?.[id] ?? mount.spec.core : undefined),

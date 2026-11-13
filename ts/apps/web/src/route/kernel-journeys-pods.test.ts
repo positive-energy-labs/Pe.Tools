@@ -98,7 +98,7 @@ async function podJourney() {
       }, loaded.fingerprint, { work, sources: { [name]: source } });
       mounts.push(mount);
       mount.subscribe(() => {});
-      await vi.waitFor(() => expect(mount.value()).toMatchObject({ current: true }), { timeout: 20_000 });
+      await vi.waitFor(() => expect(mount.value()).toMatchObject({ state: "ready" }), { timeout: 20_000 });
       return mount;
     },
     async close() {
@@ -549,7 +549,7 @@ test("JP5 bootstrap replaces only unchanged imports and Home discovers the untru
         view.unmount(); cleanup();
         view = render(createElement(Members, { ctx: {
           page: { read: () => ({ member: { kind: "ids", ids: [] }, runs: "member" }), query() {} },
-          value: { current: true, value: { pods: [kept] } },
+          value: { state: "ready", value: { pods: [kept] } },
         } as unknown as Parameters<typeof Members>[0]["ctx"] }));
         const refusal = screen.getAllByRole("alert").map(node => node.textContent).join(" ");
         expect.soft(refusal, "H16: the actual Pods pane names the preserved example and reason").toContain("Example update kept Snowdon Circuits: its authored members differ");
@@ -624,7 +624,7 @@ test("JZ Open machine census: sampling drift lists documents; content conflict n
       kind: "use", open(_ctx, deliver) { deliver({ kind: "complete", revision: 1, value: packet }); return () => {}; },
     } } });
     mounts.push(mount); mount.subscribe(() => {});
-    return render(createElement(TooltipProvider, null, mount.draw("documents", ctx => createElement(OpenBody, { ctx })) as React.ReactNode));
+    return render(createElement(TooltipProvider, null, mount.draw("documents", (ctx: import("../machine/open-fields").OpenContext) => createElement(OpenBody, { ctx })) as React.ReactNode));
   };
   try {
     packet = await read("stable");

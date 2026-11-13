@@ -120,7 +120,7 @@ function mount(open: OpenSheet | null = sheet, layers = ["meshes", "findings"], 
   const select = vi.fn();
   const draw = {
     target: fans ? { kind: "document", ref: { session: sceneSession, openId: "doc" } } : null,
-    value: { status: "ready", current: true, value: {}, hash: "roster-1", publication: null },
+    value: { state: "ready", value: {}, publication: { evaluation: "roster-1" } },
     page: {
       read: () => ({
         viewport: null,

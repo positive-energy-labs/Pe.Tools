@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { route, field, read, paneLayout, type ContextOf } from "../route/defaults";
+import type { ReadingState } from "@pe/agent-contracts";
 import { hostRead } from "../route/host-read";
 import { draw } from "../route/draw";
 import { command } from "../route/typed-actions";
@@ -42,12 +43,20 @@ export const viewCatalogue = read(
   (page: { work: string }) => ({ work: page.work }),
 );
 export const patches = z.array(routeStatePatchSchema);
-export type AdoptionContext = ContextOf<
-  typeof fields,
-  typeof loaded,
-  typeof takeoffsRouteState,
-  typeof patches
->;
+/** The adoption pane draws the view catalogue it chooses from: the core refuses until views and zones
+ * are chosen ("choose explicit zones"), and the chooser is the control that clears that refusal. */
+export type AdoptionContext = Omit<
+  ContextOf<typeof fields, typeof viewCatalogue, typeof takeoffsRouteState, typeof patches>,
+  "read"
+> & {
+  // Named, not generic: wrapping the adoption data in the generic `read`'s `ReadingState` exceeds tsc's
+  // instantiation depth, so the present arm takes the value as the core context already types it.
+  read(read: typeof loaded): AdoptionReading;
+};
+type Adoption = ContextOf<typeof fields, typeof loaded>["value"];
+export type AdoptionReading =
+  | Pick<Adoption, "state" | "value" | "reason">
+  | Exclude<ReadingState<unknown>, { value: unknown }>;
 export const module = route({
   key: "takeoffs",
   name: "View adoption",
@@ -126,6 +135,7 @@ export const module = route({
     adoption: {
       title: "View adoption",
       purpose: "Choose views and stage designer region names and system tags",
+      read: viewCatalogue,
       body: "scroll",
       draw: draw("scroll", () => import("./typed-adoption"), "AdoptionBody"),
     },

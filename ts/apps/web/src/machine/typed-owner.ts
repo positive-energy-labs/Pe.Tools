@@ -1,8 +1,17 @@
 import { useRef, useMemo } from "react";
+import type { ReadingState } from "@pe/agent-contracts";
+import { refusalOf } from "../route/typed-route";
 import type { OpenContext } from "./open-fields";
+/** What the owner reads: a pane's draw context, or the mount itself where no pane is drawn (the companion
+ *  controls), so the reading may be value-less. */
+export type OpenSource = Pick<OpenContext, "write"> & {
+  readonly value: ReadingState<OpenContext["value"]["value"]>;
+  // A pane's typed Page port, or the mount's own.
+  readonly page: OpenContext["page"] | Pick<import("../shell/typed-mount").TypedMount["page"], "read" | "pose" | "query">;
+};
 import type { OpenOwner } from "./context";
 const openActions = ["start", "open", "close", "stop", "restart"];
-export function useOpenTypedOwner(ctx: OpenContext, actions = openActions): OpenOwner {
+export function useOpenTypedOwner(ctx: OpenSource, actions = openActions): OpenOwner {
   const current = useRef(ctx);
   current.current = ctx;
   return useMemo(
@@ -29,21 +38,17 @@ export function useOpenTypedOwner(ctx: OpenContext, actions = openActions): Open
         readings: {
           mount: () => () => {},
           get: (id: string) => {
-            const ctx = current.current;
+            const { value } = current.current;
             return {
-              status: ctx.value.current
-                ? "complete"
-                : ctx.value.status === "pending"
-                  ? "pending"
-                  : "failed",
-              current: ctx.value.current,
-              value: ctx.value.value?.[id as "machine" | "recents" | "threads"],
-              error: ctx.value.current ? null : ctx.value.reason,
+              status: value.state === "ready" ? "complete" : value.state === "reading" || value.state === "refreshing" ? "pending" : "failed",
+              current: value.state === "ready",
+              value: "value" in value ? value.value[id as "machine" | "recents" | "threads"] : undefined,
+              error: refusalOf(value),
             };
           },
         },
         control: (id: string, input: any) => ({
-          refusal: current.current.value.current ? null : current.current.value.reason,
+          refusal: refusalOf(current.current.value),
           run: async () => {
             try {
               if (input.refusal) throw Error(input.refusal);
