@@ -10798,6 +10798,10 @@ export namespace ScheduleCellsApply {
 export namespace ScriptingExecute {
   export namespace Req {
     export type ScriptPermissionMode = "ReadOnly" | "WriteTransaction" | "NoTransaction";
+    /**
+     * Who started a script run. Only a Person's run may save or synchronize a project document.
+     */
+    export type ScriptCaller = "Agent" | "Person";
 
     /**
      * `WorkspaceKey` is the host's pod selector when no `SourceBundle` is supplied. Native execution never
@@ -10812,6 +10816,7 @@ export namespace ScriptingExecute {
       permissionMode?: ScriptPermissionMode;
       timeoutSeconds?: number;
       sourceBundle?: null | ScriptPodSourceBundle;
+      caller?: ScriptCaller;
     }
     export interface ScriptPodSourceBundle {
       files: ScriptPodSourceFile[];

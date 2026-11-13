@@ -70,6 +70,39 @@ Copy each into both briefs verbatim from the cited lines.
 8. **`ScriptCaller`** (writer A, both halves). `enum ScriptCaller { Agent, Person }`; `ExecuteRevitScriptRequest` gains a trailing `ScriptCaller Caller = ScriptCaller.Agent`; the host sets `caller: guards(caller) ? "Agent" : "Person"` over anything the input carried; a succeeded receipt whose result has `held` yields one `waits` row with verb `held`.
 9. **Capture policy** (writer D, then SI-S3). `sight.md:110`. `native-output.ts` tests `capture: true` from `call-policy.ts` and passes the call's own key to both schemas. SI-S3 adds the focus key as one policy row.
 
+### Frozen in code (k2/freeze-native)
+
+Contracts 2, 3, 4, 7 and 8 are now code, and the code is the contract. No consumer exists yet: nothing fills or reads these.
+
+| Contract | C# | TS |
+|---|---|---|
+| 2 `Touched`, `ViewRef` | `dotnet/Pe.Shared.HostContracts/Bridge/Touched.cs` | `touchedSchema`, `viewRefSchema` in `C/action-receipts.ts` |
+| 3 receipt response | `OpReceiptResponse` in the same file | `nativeReceiptResponseSchema` in `C/action-receipts.ts` |
+| 4 evidence | `IObserved`, `IEvidenced<out TEvidence>` in `dotnet/Pe.Shared.RevitData/Evidence.cs` | `observedSchema` in `C/action-receipts.ts` |
+| 7 read ownership | none | `H/reads/read-ownership.ts` |
+| 8 `ScriptCaller` | `dotnet/Pe.Shared.HostContracts/Scripting/ScriptContracts.cs`, with `ExecuteRevitScriptRequest.Caller` | generated `scripting.execute` request |
+
+**Evidence lives in `Pe.Shared.RevitData`, not `Pe.Shared.HostContracts`** as `sight.md` C8 said. The op runner references RevitData directly and `Pe.Revit.Space` reaches it through `Pe.Revit`. Space does not reference HostContracts, and it should not take the bridge protocol to state what it observed.
+
+**Receipt response shape (contract 3).** The one object `BridgeAgent` writes to an op receipt's response file. `pe-revit op result` returns it as `response`, and `H/native-receipts.ts` reads it after a lost socket. It replaces the bare payload on success and the bare `{error, statusCode, outcome}` on failure. `OpReceiptResponse.ToJson()` is the only writer of the bytes.
+
+```ts
+type NativeReceiptResponse =
+  | { payload: unknown; touched: Touched; evidence?: Observed }                      // verdict ok
+  | { error: string; statusCode: number; outcome?: string; touched: Touched };       // failed, cancelled, refused
+type Observed = { documentKey: string; revision?: number } & Record<string, unknown>; // the domain's own members ride beside
+```
+
+- A success has `payload` and no `error`. A failure has `error` and no `payload`. A response without `touched` does not parse.
+- A failure carries `touched` because a failed or cancelled call may still have written (`unauthorized`, `unknown`).
+- `evidence` is the response's `IEvidenced<T>.Evidence`. It is absent when the response type declares none. An absent `revision` is unknown, never 0.
+- The verdict stays on the SDK receipt and is not repeated in the file.
+- Both languages assert `ts/packages/agent-contracts/tests/fixtures/receipt-response.fixture.json`: C# that it writes those bytes, TS that it parses them with nothing dropped.
+
+**The live path carries the same facts.** `BridgeResponse` gains `EvidenceJson` and `Touched`, and `BridgeTerminal` gains `Touched` (the restore outcome of a call that finished after its socket was lost). In `ts/packages/host-contracts/src/contracts/bridge-protocol.ts` both arrive as `unknown`, because that package cannot import agent-contracts; the reader decodes with `touchedSchema`. An absent `touched` on the socket is unknown, never `none`.
+
+**`ReadOwner.native`** returns `NativeAnswer<OpResponseOf<K>>` until contract 6 replaces the second parameter with `OpEvidenceOf<K>`; writer D edits that line with it.
+
 ## Handles, reads, bindings, projection (reader C)
 
 The frozen interface, landed by the freeze-ts writer before its consumers:

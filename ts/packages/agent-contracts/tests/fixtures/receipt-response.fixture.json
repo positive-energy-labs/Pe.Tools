@@ -1,0 +1,67 @@
+{
+  "ok-none": {
+    "payload": { "views": [{ "id": 12 }] },
+    "touched": { "kind": "none" }
+  },
+  "ok-evidence-rolledBack": {
+    "payload": { "count": 3 },
+    "touched": { "kind": "rolledBack" },
+    "evidence": { "documentKey": "doc-a", "revision": 41, "frame": "host-internal-ft" }
+  },
+  "ok-evidence-no-revision": {
+    "payload": null,
+    "touched": { "kind": "none" },
+    "evidence": { "documentKey": "doc-a" }
+  },
+  "ok-restored": {
+    "payload": { "path": "capture.png" },
+    "touched": {
+      "kind": "restored",
+      "views": [{ "documentKey": "doc-a", "uniqueId": "view-uid-1", "id": 4001 }]
+    }
+  },
+  "ok-restoreFailed": {
+    "payload": { "path": "capture.png" },
+    "touched": {
+      "kind": "restoreFailed",
+      "views": [
+        {
+          "view": { "documentKey": "doc-a", "uniqueId": "view-uid-1", "id": 4001 },
+          "left": ["crop", "scopeBox", "annotationCrop", "sheetFilter"]
+        }
+      ]
+    }
+  },
+  "ok-wrote": {
+    "payload": { "created": [9001] },
+    "touched": {
+      "kind": "wrote",
+      "transactions": ["PE place duct"],
+      "added": 1,
+      "modified": 2,
+      "deleted": 0
+    }
+  },
+  "failed-unauthorized": {
+    "touched": {
+      "kind": "unauthorized",
+      "transactions": ["Rogue commit"],
+      "added": 0,
+      "modified": 5,
+      "deleted": 1
+    },
+    "error": "A read committed a transaction.",
+    "statusCode": 500
+  },
+  "cancelled-unknown": {
+    "touched": { "kind": "unknown", "reason": "cancelled-mid-effect" },
+    "error": "Revit task ended with 'cancelled' (CancelledMidEffect).",
+    "statusCode": 499,
+    "outcome": "CancelledMidEffect"
+  },
+  "failed-posted-command": {
+    "touched": { "kind": "unknown", "reason": "posted-command" },
+    "error": "refused",
+    "statusCode": 423
+  }
+}
