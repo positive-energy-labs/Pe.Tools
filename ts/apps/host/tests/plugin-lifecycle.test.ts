@@ -1,5 +1,9 @@
+import { stateFixture } from "../../../tests/isolated-home/storage.ts";
+import { stateMachine } from "../../../tests/isolated-home/storage.ts";
+import { dirname as storedParent } from "node:path";
+import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect } from "effect";
@@ -8,6 +12,7 @@ import { createContributionContent } from "../src/pe-routes.ts";
 import { createPluginsHandler } from "../src/plugins-handler.ts";
 import { bindPackageLifecycle, createPackageLifecycle, requirePackageEnabled } from "../src/package-lifecycle.ts";
 import { listPackages } from "../src/packages.ts";
+import { createPodRoutes } from "../src/pod-routes.ts";
 import { createPagesHandler } from "../src/pages-route.ts";
 import { freezeScript } from "../src/operation-script.ts";
 import { readMember } from "../src/settings.ts";
@@ -19,6 +24,35 @@ afterEach(async () => {
   bindPackageLifecycle(undefined);
   vi.unstubAllEnvs();
   if (root) await rm(root, { recursive: true, force: true });
+});
+
+test("route inventory waits for an in-flight package reconciliation", async () => {
+  root = await mkdtemp(join(tmpdir(), "pe-plugin-reconcile-"));
+  const machine = stateMachine(root);
+  const captured = Promise.withResolvers<void>();
+  const hold = Promise.withResolvers<void>();
+  let refreshing = false;
+  const lifecycle = createPackageLifecycle({ machine, packages: async () => {
+    if (refreshing) { captured.resolve(); await hold.promise; }
+    return listPackages(join(root, "Pods"));
+  } });
+  const routes = createPodRoutes(lifecycle, { machine });
+  await lifecycle.ready;
+  refreshing = true;
+  const reconciliation = lifecycle.refresh();
+  await captured.promise;
+  let answered = false;
+  const inventory = routes.list().then(rows => { answered = true; return rows; });
+  try {
+    await new Promise<void>(resolve => setImmediate(resolve));
+    expect(answered, "inventory must not publish the census preceding the pending reconciliation").toBe(false);
+  } finally {
+    hold.resolve();
+    await reconciliation;
+    await inventory;
+    routes.close();
+    await lifecycle.close();
+  }
 });
 
 test("an import before initialization finishes becomes active after the initial census", async () => {
@@ -62,7 +96,7 @@ test("import into a running production-root lifecycle activates Pages and retain
   root = await mkdtemp(join(tmpdir(), "pe-plugin-running-import-"));
   vi.stubEnv("PE_TOOLS_PRODUCT_HOME", root);
   vi.stubEnv("LOCALAPPDATA", join(root, "machine"));
-  const content = createContributionContent({ worldRoot: root });
+  const content = createContributionContent({ worldRoot: stateFixture(root) });
   bindPackageLifecycle(content.lifecycle);
   await content.read();
   const files = new Map<string, Buffer>([
@@ -98,7 +132,7 @@ test("public disable removes Page, script, member, catalog and receipted skill; 
     await writeFile(join(pods, "sample", path), text);
   }
   const content = createContributionContent({
-    worldRoot: root,
+    worldRoot: stateFixture(root),
     packages: () => listPackages(pods),
   });
   bindPackageLifecycle(content.lifecycle);
@@ -164,7 +198,7 @@ test("Pod JavaScript is never imported and its package contribution still instal
   const { createPackageLifecycle } = await import("../src/package-lifecycle.ts");
   const lifecycle = createPackageLifecycle({
     packages: () => listPackages(pods),
-    decisionsPath: join(root, "plugins.json"),
+    machine: stateMachine(storedParent(join(root, "plugins.json"))),
   });
   bindPackageLifecycle(lifecycle);
   await lifecycle.ready;

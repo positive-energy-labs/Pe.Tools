@@ -1,6 +1,9 @@
+import { stateFixture } from "../../../tests/isolated-home/storage.ts";
+import { stateTree } from "@pe/host-contracts/service-identity";
+import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { Effect } from "effect";
-import { mkdtemp, writeFile, rm } from "node:fs/promises";
+import { writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PictureCaptures } from "../src/captures-route.ts";
@@ -37,7 +40,7 @@ test("a capture policy row projects using that call's key for both schemas", asy
   try {
     const filePath = join(dir, "image.png");
     await writeFile(filePath, "image bytes");
-    const pictures = new PictureCaptures(dir, 1024 * 1024, () => 1);
+    const pictures = new PictureCaptures(stateFixture(dir), 1024 * 1024, () => 1);
     const keep = vi.spyOn(pictures, "keep");
     const result = await Effect.runPromise(
       projectNativeOutput(
@@ -78,7 +81,7 @@ test("an already projected capture uses its own output schema without reading a 
   expect(
     await Effect.runPromise(
       projectNativeOutput(
-        new PictureCaptures("unused", 1024, () => 1),
+        new PictureCaptures(stateTree(process.env.PE_TEST_HOME_ROOT!).directory("unused"), 1024, () => 1),
         "capture.test",
         value,
         {},
@@ -96,7 +99,7 @@ test("a call without capture policy passes through unchanged", async () => {
   expect(
     await Effect.runPromise(
       projectNativeOutput(
-        new PictureCaptures("unused", 1024, () => 1),
+        new PictureCaptures(stateTree(process.env.PE_TEST_HOME_ROOT!).directory("unused"), 1024, () => 1),
         "ordinary.read",
         value,
         {},

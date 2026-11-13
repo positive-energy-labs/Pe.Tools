@@ -10,7 +10,7 @@
  */
 import { randomUUID } from "node:crypto";
 import { readdir, readFile, stat } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { Clock, Context, Effect, Layer, Schema } from "effect";
 import { HttpRouter, HttpServerResponse as Response } from "effect/http";
 import {
@@ -18,10 +18,26 @@ import {
   captureUrl,
   type CaptureReceipt,
 } from "@pe/agent-contracts";
-import { productPathNames } from "@pe/host-contracts/contracts";
-import { appendStoredLine, readStoredLines } from "@pe/host-contracts/store";
-import { hostOwnership } from "./host-ownership.ts";
-import { storedNoticesPath } from "./notice-feed.ts";
+import {
+  appendLine,
+  readLines,
+  stateKind,
+  stateLog,
+  type StateDirectory,
+} from "@pe/host-contracts/kinds";
+import { z } from "zod";
+
+const pictureKind = stateKind({
+  schema: z.unknown(),
+  place: (_sha: string) => "Picture capture",
+  segments: (sha: string) => ["blobs", `${sha}.png`],
+});
+const receiptsKind = stateLog({
+  schema: captureReceiptSchema,
+  place: () => "Capture receipts",
+  segments: () => ["receipts.jsonl"],
+});
+import { hostState } from "./host-ownership.ts";
 import { isNavigation, type SpaFallback } from "./ops-catalog.ts";
 import { sha256Hex, writeArtifact } from "./page-artifacts.ts";
 
@@ -42,12 +58,12 @@ export class PictureCaptures {
   /** Bytes on disk plus every reservation. Two concurrent takings of one new sha both count it: refused early, never written past the bound. */
   private used: Promise<number> | undefined;
   constructor(
-    root: string,
+    private readonly storage: StateDirectory,
     private readonly maxBytes: number,
     private readonly now: () => number,
   ) {
-    this.blobs = join(root, "blobs");
-    this.receipts = join(root, "receipts.jsonl");
+    this.blobs = dirname(pictureKind.in(storage, "0".repeat(64)).path);
+    this.receipts = receiptsKind.in(storage).path;
   }
 
   /** Reserve `bytes` against the bound before anything is written, or refuse. */
@@ -81,11 +97,11 @@ export class PictureCaptures {
 
   // Content-addressed and never renamed over: Windows refuses that while a reader holds the blob.
   private write(sha: string, bytes: Buffer) {
-    return writeArtifact(this.blobs, this.blobPath(sha), bytes);
+    return writeArtifact(this.blobs, pictureKind.in(this.storage, sha), bytes);
   }
 
-  blobPath(sha: string) {
-    return join(this.blobs, `${sha}.png`);
+  blobPath(sha: string): string {
+    return pictureKind.in(this.storage, sha).path;
   }
 
   /** Keep one taking: the blob if this sha is new, then one appended receipt. */
@@ -112,7 +128,7 @@ export class PictureCaptures {
     await this.write(sha, bytes);
     // One write call per taking, through the kernel: it closes a tail a crash tore, so this
     // receipt never joins a bad line.
-    appendStoredLine(this.receipts, line.trimEnd());
+    appendLine(receiptsKind.in(this.storage), receipt);
     return receipt;
   }
 
@@ -133,10 +149,7 @@ export class PictureCaptures {
    * other receipt stays listed. Before this, one bad line failed every listing with a 500.
    */
   async list(): Promise<CaptureReceipt[]> {
-    const read = readStoredLines(this.receipts, captureReceiptSchema, {
-      place: "Capture receipts",
-      notices: storedNoticesPath(),
-    });
+    const read = readLines(receiptsKind.in(this.storage));
     return read.kind === "ok" ? read.values.reverse() : [];
   }
 
@@ -153,7 +166,7 @@ export class PictureCaptureStore extends Context.Service<PictureCaptureStore, Pi
   "pe/PictureCaptures",
 ) {
   static readonly layer = (
-    root = join(hostOwnership.rootPath, productPathNames.stateDirectoryName, "captures"),
+    root: StateDirectory = hostState().directory("captures"),
     maxBytes = PICTURE_STORE_MAX_BYTES,
   ) =>
     Layer.effect(

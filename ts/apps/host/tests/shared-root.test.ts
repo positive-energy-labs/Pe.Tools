@@ -1,8 +1,13 @@
+import { hostState } from "../src/host-ownership.ts";
+import { ledgerFixture } from "./storage.ts";
+import { mkdtempSync } from "../../../tests/isolated-home/storage.ts";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import { Effect, FileSystem } from "effect";
 import { NodeServices } from "@effect/platform-node";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync,
+  readFileSync, readdirSync, rmSync, statSync, writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, relative } from "node:path";
 import { firmHome, homes, userRoot } from "@pe/host-contracts/product-paths";
@@ -15,7 +20,7 @@ import { commitPagePublication, pageVersion } from "../src/page-publication.ts";
 import { importShippedPods } from "../src/installed-pods.ts";
 import { readDuctCatalogs } from "../src/duct-catalogs.ts";
 import { listPods, listRuns, readMember, saveMember, writeMember, writeRun } from "../src/settings.ts";
-import { sourceRunOutput } from "../src/family-actions.ts";
+import { sourceRunDirectory } from "../src/family-actions.ts";
 import { importPod, writeZip } from "../src/pod-transfer.ts";
 import { peaMcpServer } from "../src/harness/adapter.ts";
 
@@ -114,7 +119,7 @@ test("every content path sits in the user home; Work and every machine path stay
     expect(under(firm, path), `${name}: ${path}`).toBe(false);
     expect(under(content.has(name) ? user : hostOwnership.rootPath, path), name).toBe(true);
   }
-  expect(paths.productRouteWorkPath()).toBe(join(hostOwnership.rootPath, "state", "Work"));
+  expect(hostState().work).toBe(join(hostOwnership.rootPath, "state", "Work"));
 });
 
 // H2 (homes MAP slice 6). Mutant: restore the first-by-id filter in `listPackages`
@@ -234,8 +239,8 @@ test("run output is machine state: declaring and filing a run of a firm-only pod
   const before = [tree(user), tree(firm)];
   const runs = join(stateTree(hostOwnership.rootPath).runs, "theirs");
   // Every Pod-run command's bind declares this effect before consent (ADR 0027): pure, no write.
-  expect(await sourceRunOutput("theirs", {})).toBe(runs);
-  expect(await sourceRunOutput(null, {})).toBe(stateTree(hostOwnership.rootPath).podlessRuns);
+  expect((await sourceRunDirectory("theirs", {})).path).toBe(runs);
+  expect((await sourceRunDirectory(null, {})).path).toBe(stateTree(hostOwnership.rootPath).podlessRuns);
   expect(existsSync(runs)).toBe(false);
   expect(await run(writeRun("theirs", "run-1", { "receipt.json": "{}" }))).toBe(join(runs, "run-1"));
   expect(readFileSync(join(runs, "run-1", "receipt.json"), "utf8")).toBe("{}");
@@ -243,7 +248,7 @@ test("run output is machine state: declaring and filing a run of a firm-only pod
     ["run-1", join(runs, "run-1", "receipt.json")],
   ]);
   expect([tree(user), tree(firm)]).toEqual(before);
-  await expect(sourceRunOutput("absent", {})).rejects.toThrow(/No installed pod/);
+  await expect(sourceRunDirectory("absent", {})).rejects.toThrow(/No installed pod/);
 });
 
 test("importing a pod whose id the firm home already holds is refused: no duplicate is minted", async () => {
@@ -287,7 +292,7 @@ test("W1: a shipped example whose id the firm home holds is not installed again 
   const shipped = join(user, "shipped");
   mkdirSync(shipped);
   archiveOf(join(shipped, "example.zip"), "example");
-  const report = await importShippedPods({ shippedRoot: shipped, ledger: join(user, "state", "shipped-pods.json") });
+  const report = await importShippedPods({ shippedRoot: shipped, ledger: ledgerFixture(join(user, "state", "shipped-pods.json")) });
   expect(report.outcomes).toMatchObject([{ outcome: "present", id: "example", reason: `installed at '${theirs}'` }]);
   expect(existsSync(join(user, "Pods", "example"))).toBe(false);
   // The sentinel: the firm pod is still the one admitted pod of that id.

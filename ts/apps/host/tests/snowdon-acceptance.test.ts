@@ -1,5 +1,7 @@
+import { stateFixture } from "../../../tests/isolated-home/storage.ts";
+import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { createHash } from "node:crypto";
-import { cp, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import { cp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { expect, test } from "vite-plus/test";
@@ -68,7 +70,7 @@ test.each(["snowdon-ducts", "snowdon-circuits"])(
       const snapshot = null;
       const standalone = await exportPage({
         directory: join(to, "Elsewhere/pages/tour"),
-        exports: join(root, "state", "exports"),
+        exports: stateFixture(join(root, "state", "exports")),
         page: `page:@${id}/pages/tour`,
         exportedAt: "2026-10-13T00:00:00.000Z",
         document: null,

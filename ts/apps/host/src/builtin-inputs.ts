@@ -1,3 +1,4 @@
+import { stateScope } from "@pe/host-contracts/service-identity";
 import { catalogsFor } from "./ducts-files.ts";
 import { z } from "zod";
 import { admitNativeCaller } from "./native-read-policy.ts";
@@ -79,7 +80,7 @@ import {
   type HostWork,
   type PeInvocationFactory,
 } from "./pe-routes.ts";
-import { productRouteWorkPath } from "./product-paths.ts";
+import { hostState } from "./host-ownership.ts";
 import { RequestIdentity } from "./request-services.ts";
 import { markReadings } from "./resource-adapters.ts";
 import { fileRouteDocumentStore } from "./route-document-store.ts";
@@ -1349,7 +1350,7 @@ export const defaultReadOwner = (
     };
     return yield* makeReadOwner(inputs, {
       ...options,
-      store: options.store ?? fileRouteDocumentStore(productRouteWorkPath()),
+      store: options.store ?? fileRouteDocumentStore(stateScope(hostState(), hostState().work)),
       live: { ...live, owner: ductsReadings(yield* RevitBridge) },
     });
   });

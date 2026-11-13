@@ -14,12 +14,13 @@ import { basename, join } from "node:path";
 import { Effect } from "effect";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import { fansSheetData, ductsFirmSchema, ductsDocumentSchema, fansDocumentSchema, ductParameterSlots, neutralFansWork, type DuctsCriteriaCell } from "@pe/agent-contracts";
-import { readStoredNotices } from "@pe/host-contracts/store";
+import { notices as storedNotices } from "@pe/host-contracts/kinds";
 import { resolveCriteria, resolveInputs } from "@pe/ducts-domain/sheet/index";
 import { nodeOf, snapshotOf } from "@pe/ducts-domain/test-snapshot";
 import { DuctFiles } from "../../../host/src/ducts-files.ts";
 import { firmLayer } from "../../../host/src/ducts-inputs.ts";
-import { SETTING_WRITE_PLACE, storedBlobsPath, storedNoticesPath } from "../../../host/src/notice-feed.ts";
+import { hostState } from "../../../host/src/host-ownership.ts";
+import { SETTING_WRITE_PLACE } from "../../../host/src/notice-feed.ts";
 import { resolveFirm } from "../../../host/src/reads/door.ts";
 import { readSettingTiers, writeSettingTier, watchSettingTiers } from "../../../host/src/tiered-settings.ts";
 import { ductsSettings } from "@pe/agent-contracts/setting-owners";
@@ -138,11 +139,11 @@ test("FS steps 1, 2, 6 and 7: the sheet's tier label is the home the host served
   expect(writeSettingTier({ owner: "ducts", tier: "project", path: PATHS.velocitySupplyFpm!, value: 850, expectedSha256: null }, { pointer, writer: "B" })).toMatchObject({ ok: false, status: 409 });
   const second = writeSettingTier({ owner: "ducts", tier: "project", path: PATHS.velocitySupplyFpm!, value: 850, expectedSha256: sha(at.tiers, "project") }, { pointer, writer: "B" });
   expect(second).toMatchObject({ ok: true, by: "B", priorSha256: sha(at.tiers, "project") });
-  expect(readFileSync(join(storedBlobsPath(), "sha256", sha(at.tiers, "project")!))).toEqual(before);
+  expect(readFileSync(join(hostState().blobs, "sha256", sha(at.tiers, "project")!))).toEqual(before);
   at = await sheet();
   expect(at.cell("velocitySupplyFpm")).toMatchObject({ value: 850, source: "project" });
   expect(at.cell("velocitySupplyFpm").ref).toContain(" · B · ");
-  const notices = readStoredNotices(storedNoticesPath()).filter((notice) => notice.place === SETTING_WRITE_PLACE && [join(firm, "Settings", "ducts.json"), join(project, "Settings", "ducts.json")].includes(notice.path ?? ""));
+  const notices = storedNotices(hostState()).filter((notice) => notice.place === SETTING_WRITE_PLACE && [join(firm, "Settings", "ducts.json"), join(project, "Settings", "ducts.json")].includes(notice.path ?? ""));
   expect(notices.map((notice) => notice.path)).toEqual([first, firm900, { path: join(project, "Settings", "ducts.json") }, second].map((wrote) => "path" in wrote ? wrote.path : undefined));
   expect(notices.at(-1)!.reason).toContain(`B set 850 at ducts criteria.velocityLimitFpm.supply in the project home`);
   expect(notices.at(-1)!.reason).toContain(`sha256 ${second.ok && second.priorSha256}`);
@@ -164,10 +165,10 @@ test("FS steps 1, 2, 6 and 7: the sheet's tier label is the home the host served
 
 test.each([-1, "0.05", {}, false])("the write door refuses invalid terminal drop %j without changing bytes or notices", (value) => {
   const before = readSettingTiers("ducts", pointer);
-  const notices = readStoredNotices(storedNoticesPath());
+  const notices = storedNotices(hostState());
   expect(writeSettingTier({ owner: "ducts", tier: "firm", path: PATHS.terminalDropInWg!, value, expectedSha256: null }, { pointer })).toMatchObject({ ok: false, status: 422 });
   expect(readSettingTiers("ducts", pointer)).toEqual(before);
-  expect(readStoredNotices(storedNoticesPath())).toEqual(notices);
+  expect(storedNotices(hostState())).toEqual(notices);
 });
 
 test("a declared cell can be cleared, but an undeclared owner or path cannot be written", async () => {
@@ -185,10 +186,10 @@ test("a declared cell can be cleared, but an undeclared owner or path cannot be 
 test.each(["written", "__proto__", "constructor", "prototype"])("the write door refuses reserved path key %s", (key) => {
   for (const path of [[key], ["criteria", key], [key, "terminalDropInWg"], ["parameters", key]]) {
     const before = readSettingTiers("ducts", pointer);
-    const notices = readStoredNotices(storedNoticesPath());
+    const notices = storedNotices(hostState());
     expect(writeSettingTier({ owner: "ducts", tier: "firm", path, value: 1, expectedSha256: null }, { pointer })).toMatchObject({ ok: false, status: 422, message: expect.stringContaining("reserved") });
     expect(readSettingTiers("ducts", pointer)).toEqual(before);
-    expect(readStoredNotices(storedNoticesPath())).toEqual(notices);
+    expect(storedNotices(hostState())).toEqual(notices);
   }
 });
 
@@ -253,10 +254,10 @@ test("a present project marker is not blamed when the firm home cannot anchor it
 
 test("the write door refuses an unknown parameter slot", () => {
   const before = readSettingTiers("ducts", pointer);
-  const notices = readStoredNotices(storedNoticesPath());
+  const notices = storedNotices(hostState());
   expect(writeSettingTier({ owner: "ducts", tier: "firm", path: ["parameters", "bogusSlot"], value: "X", expectedSha256: null }, { pointer })).toMatchObject({ ok: false, status: 422 });
   expect(readSettingTiers("ducts", pointer)).toEqual(before);
-  expect(readStoredNotices(storedNoticesPath())).toEqual(notices);
+  expect(storedNotices(hostState())).toEqual(notices);
 });
 
 test.each([
@@ -266,10 +267,10 @@ test.each([
   [["parameters", "fanFlow"], ""],
 ] as const)("the settings door refuses invalid %j = %j without writes or notices", (path, value) => {
   const before = readSettingTiers("ducts", pointer);
-  const notices = readStoredNotices(storedNoticesPath());
+  const notices = storedNotices(hostState());
   expect(writeSettingTier({ owner: "ducts", tier: "firm", path, value, expectedSha256: null }, { pointer })).toMatchObject({ ok: false, status: 422 });
   expect(readSettingTiers("ducts", pointer)).toEqual(before);
-  expect(readStoredNotices(storedNoticesPath())).toEqual(notices);
+  expect(storedNotices(hostState())).toEqual(notices);
 });
 
 test("design friction can be cleared with null", () => {

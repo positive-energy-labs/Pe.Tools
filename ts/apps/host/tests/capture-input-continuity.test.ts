@@ -1,7 +1,9 @@
+import { stateFixture } from "../../../tests/isolated-home/storage.ts";
+import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { serviceHeaders } from "./callers.ts";
 import { unavailableFieldOptions } from "./effect-test.ts";
 import { readFileSync } from "node:fs";
-import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
+import { mkdir, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect, Layer, Schema } from "effect";
@@ -50,7 +52,7 @@ async function setup(mode = "normal") {
   await mkdir(join(dir, "catalogs"));
   await mkdir(join(dir, "Settings"), { recursive: true }); await writeFile(join(dir, "Settings", "ducts.json"), JSON.stringify(FIRM_SEED));
   const writer = await settle(
-    openRecordingWriter(join(dir, "bundle"), identity, {
+    openRecordingWriter(stateFixture(join(dir, "bundle")), identity, {
       maxBytes: 64 * 1024 * 1024,
       maxTakings: mode === "full" ? 1 : 2048,
     }),
@@ -134,7 +136,7 @@ async function setup(mode = "normal") {
   const web = HttpRouter.toWebHandler(
     readInputRoutes(inputs, {
       live,
-      store: fileRouteDocumentStore(join(dir, "work")),
+      store: fileRouteDocumentStore(stateFixture(join(dir, "work"))),
     }).pipe(Layer.provide(admission)),
     { disableLogger: true },
   );
@@ -185,4 +187,3 @@ test.each(["metadata", "full", "io"])(
     }
   },
 );
-

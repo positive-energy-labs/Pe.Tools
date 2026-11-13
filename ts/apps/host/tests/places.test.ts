@@ -79,5 +79,5 @@ test("undecodable file is set aside with its bytes kept and one notice and reads
   expect(readPlaces(root)).toEqual({ places: [] });
   const rows = notices(root);
   expect(rows).toHaveLength(1);
-  expect(rested(root, rows[0]!.sha256!)).toEqual(bytes);
+  expect(rested(root, rows[0]!.sha256!)).toEqual({ kind: "ok", bytes });
 });

@@ -1,9 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { Receipt, ReceiptReader } from "@pe/agent-contracts";
-import { readStored, writeAtomic } from "@pe/host-contracts/store";
+import { read as readFile, writeState, stateKind, type StoredFile } from "@pe/host-contracts/kinds";
 import { currentCaller, Refused, refusalHeaders, requireHuman } from "./control.ts";
-import { storedNoticesPath } from "./notice-feed.ts";
 
 const scheduleSchema = z.discriminatedUnion("type", [
   z.strictObject({ type: z.literal("interval"), everyMs: z.number().finite().int().min(60_000) }),
@@ -98,8 +97,14 @@ function feedbackMiner(now: Date): ScheduledTask {
   };
 }
 
+export const scheduledTasksKind = stateKind<z.infer<typeof taskSchema>[], [name?: string]>({
+  schema: z.array(taskSchema),
+  place: (_name: string = "scheduled-tasks.json") => "Scheduled tasks",
+  segments: (name: string = "scheduled-tasks.json") => [name],
+});
+
 export function createScheduledTasks(options: {
-  path: string;
+  file: StoredFile<z.infer<typeof taskSchema>[], "state">;
   receipts: ReceiptReader;
   /** Local ids of the threads a run over (since, before] may read. */
   evidence: (since: string, before: string) => ReadonlySet<string>;
@@ -108,11 +113,7 @@ export function createScheduledTasks(options: {
 }) {
   const now = options.now ?? (() => new Date());
   // Machine state (ADR 0039): rows that do not decode are discarded with a notice, and the host starts.
-  const read = readStored(options.path, z.array(taskSchema), {
-    class: "discard",
-    place: "Scheduled tasks",
-    notices: storedNoticesPath(),
-  });
+  const read = readFile(options.file);
   const stored = read.kind === "ok" ? read.value : [];
   // A shipped task's definition comes from this build; only its enabled flag and run state persist,
   // so a release can change the miner's prompt, gate or schedule on machines that already ran it.
@@ -134,7 +135,7 @@ export function createScheduledTasks(options: {
         }
       : shipped,
   ];
-  const save = () => writeAtomic(options.path, JSON.stringify(rows, null, 2));
+  const save = () => writeState(options.file, JSON.stringify(rows, null, 2));
   for (const row of rows)
     if (row.lastStatus === "running") {
       row.lastStatus = "failed";

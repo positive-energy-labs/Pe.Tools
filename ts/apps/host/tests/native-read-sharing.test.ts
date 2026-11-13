@@ -425,7 +425,8 @@ effectTest(
 );
 
 test("retained /fans acquisition admits every caller and keeps miss, refresh and native identity truthful", async () => {
-  const { mkdtemp, rm } = await import("node:fs/promises");
+  const { mkdtemp } = await import("../../../tests/isolated-home/storage.ts");
+  const { rm } = await import("node:fs/promises");
   const { tmpdir } = await import("node:os");
   const { join } = await import("node:path");
   const { ActionJournal } = await import("../src/action-journal.ts");

@@ -1,8 +1,11 @@
 import { HostInputContext } from "../src/input-context.ts";
+import { stateFixture } from "../../../tests/isolated-home/storage.ts";
+import { journalFixture } from "./storage.ts";
 import { PictureCaptureStore } from "../src/captures-route.ts";
 import { DuctFiles } from "../src/ducts-files.ts";
 import { HostDocumentMarks } from "../src/document-marks.ts";
-import { ActionJournalService, type makeActionJournal } from "../src/receipt-services.ts";
+import { ActionJournalService } from "../src/receipt-services.ts";
+import type { ReceiptStamp } from "@pe/agent-contracts";
 import { makeCallRoute } from "../src/call-route.ts";
 import * as adapter from "../src/harness/adapter.ts";
 import { Spawner } from "../src/harness/spawner.ts";
@@ -241,7 +244,7 @@ export const testSpawner = (): Spawner["Service"] => {
  * running test closes. Two calls over one directory are two layers over the same files.
  */
 export const captureStore = (directory: string, apsCachePath?: string): TakeoffCaptures => {
-  return Context.get(testScoped(CaptureStore.layer(directory, apsCachePath)), CaptureStore);
+  return Context.get(testScoped(CaptureStore.layer(stateFixture(directory), apsCachePath)), CaptureStore);
 };
 
 /** A real adapter owned by the running test's scope. */
@@ -268,10 +271,14 @@ export const callRouteOver = (
 export const testJournal = () =>
   Context.get(testScoped(ActionJournalService.live(null, undefined, FetchHttpClient.layer)), ActionJournalService);
 /** The production journal over `path` in the running test's scope: closing it joins, as the host's does. */
-export const journalAt = (...[path, now, stamp, retain]: Parameters<typeof makeActionJournal>) =>
-  Context.get(testScoped(ActionJournalService.at(path, now, stamp, retain, FetchHttpClient.layer)), ActionJournalService);
+export const journalAt = (
+  path: string, now: () => number, stamp?: () => ReceiptStamp | null, retain?: number,
+) =>
+  Context.get(testScoped(ActionJournalService.at(journalFixture(path), now, stamp, retain, FetchHttpClient.layer),
+    ), ActionJournalService,
+  );
 
-export const pictureCaptures = (root: string) => Context.get(testScoped(PictureCaptureStore.layer(root)), PictureCaptureStore);
+export const pictureCaptures = (root: string) => Context.get(testScoped(PictureCaptureStore.layer(stateFixture(root))), PictureCaptureStore);
 export const testDuctFiles = () => Context.get(testScoped(DuctFiles.layer()), DuctFiles);
 
 export const testHostInputs = Layer.mergeAll(DuctFiles.layer(), PictureCaptureStore.layer(), HostDocumentMarks.layer);

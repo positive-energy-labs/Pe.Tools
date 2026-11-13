@@ -1,9 +1,11 @@
+import { stateFixture } from "../../../tests/isolated-home/storage.ts";
+import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 /**
  * Input occurrences (OCCURRENCE-CONTEXT-FREEZE): each start reserves its occurrence before any
  * await, capture binds it to the actual durable taking, and replay selects by read set + input +
  * scope + start. Completion order, equal values and first/latest never supply identity.
  */
-import { mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
+import { readdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -50,7 +52,7 @@ effectTest(
   () =>
     Effect.gen(function* () {
       const dir = yield* bundle;
-      const writer = yield* openRecordingWriter(dir, identity, bounds);
+      const writer = yield* openRecordingWriter(stateFixture(dir), identity, bounds);
       const live = yield* readSets({ kind: "live", captureStore: writer });
       const consumption = yield* live.open(recipe, null);
       const first = yield* Deferred.make<string>();
@@ -88,7 +90,7 @@ effectTest(
   () =>
     Effect.gen(function* () {
       const dir = yield* bundle;
-      const writer = yield* openRecordingWriter(dir, identity, bounds);
+      const writer = yield* openRecordingWriter(stateFixture(dir), identity, bounds);
       const live = yield* readSets({ kind: "live", captureStore: writer });
       const human = yield* live.open(recipe, null);
       const pea = yield* live.open(recipe, null);
@@ -125,7 +127,7 @@ effectTest(
 effectTest("live context loss truncates capture and keeps the live answer unchanged", () =>
   Effect.gen(function* () {
     const dir = yield* bundle;
-    const writer = yield* openRecordingWriter(dir, identity, bounds);
+    const writer = yield* openRecordingWriter(stateFixture(dir), identity, bounds);
     const live = yield* readSets(
       { kind: "live", captureStore: writer },
       {
@@ -181,7 +183,7 @@ effectTest("closing a sealed root releases its slot exactly once", () =>
 
 effectTest("closing a child closes only that child; closing the root closes the tree", () =>
   Effect.gen(function* () {
-    const writer = yield* openRecordingWriter(yield* bundle, identity, bounds);
+    const writer = yield* openRecordingWriter(stateFixture(yield* bundle), identity, bounds);
     const live = yield* readSets({ kind: "live", captureStore: writer });
     const root = yield* live.open(recipe, null);
     const a = ok(root.child(child("ducts.retained")));
@@ -198,7 +200,7 @@ effectTest("closing a child closes only that child; closing the root closes the 
 
 effectTest("no mutation after seal or close, and a dependency never rebinds", () =>
   Effect.gen(function* () {
-    const writer = yield* openRecordingWriter(yield* bundle, identity, bounds);
+    const writer = yield* openRecordingWriter(stateFixture(yield* bundle), identity, bounds);
     const live = yield* readSets({ kind: "live", captureStore: writer });
     const root = yield* live.open(recipe, null);
     const attempt = ok(root.start(FIRM, "{}"));
@@ -238,14 +240,14 @@ const record = (
 effectTest("an interrupted read-set save preserves committed ids and still consumes its byte budget", () =>
   Effect.gen(function* () {
     const dir = yield* bundle;
-    const writer = yield* openRecordingWriter(dir, identity, bounds);
+    const writer = yield* openRecordingWriter(stateFixture(dir), identity, bounds);
     const committed = record({ id: randomUUID(), recipe });
     yield* writer.readSets.keep(committed);
     const pending = join(dir, "read-sets", `${randomUUID()}.json.tmp`);
     yield* Effect.promise(() => writeFile(pending, "unfinished{"));
     const reader = yield* openRecordingReader(dir, identity, bounds);
     expect(reader.readSets.ids()).toEqual([committed.id]);
-    const reopened = yield* openRecordingWriter(dir, identity, bounds);
+    const reopened = yield* openRecordingWriter(stateFixture(dir), identity, bounds);
     expect(reopened.readSets.ids()).toEqual([committed.id]);
     yield* Effect.promise(() => writeFile(pending, "x".repeat(bounds.maxBytes)));
     expect(yield* problem(openRecordingReader(dir, identity, bounds))).toBe("recording.full");
@@ -255,7 +257,7 @@ effectTest("an interrupted read-set save preserves committed ids and still consu
 effectTest("unbound admission counts incomplete matches, validates every record and writes nothing", () =>
   Effect.gen(function* () {
     const dir = yield* bundle;
-    const writer = yield* openRecordingWriter(dir, identity, bounds);
+    const writer = yield* openRecordingWriter(stateFixture(dir), identity, bounds);
     const complete = record({ id: randomUUID(), recipe });
     const partial = record({ id: randomUUID(), recipe, state: "incomplete" });
     expect(writer.readSets.ids()).toEqual([]);
@@ -304,7 +306,7 @@ effectTest(
   () =>
     Effect.gen(function* () {
       const dir = yield* bundle;
-      const writer = yield* openRecordingWriter(dir, identity, bounds);
+      const writer = yield* openRecordingWriter(stateFixture(dir), identity, bounds);
       const leaf = record({ id: randomUUID(), recipe: child("ducts.retained") });
       const other = record({ id: randomUUID(), recipe: child("ducts.retained") });
       yield* writer.readSets.keep(leaf);
@@ -350,7 +352,7 @@ const limits: InputReadSetLimits = {
 effectTest("a live root or child over its capture budget truncates capture and the live read still answers", () =>
   Effect.gen(function* () {
     const dir = yield* bundle;
-    const writer = yield* openRecordingWriter(dir, identity, bounds);
+    const writer = yield* openRecordingWriter(stateFixture(dir), identity, bounds);
     const capped = { ...limits, openRoots: 1, childrenPerRoot: 1 };
     const live = yield* readSets({ kind: "live", captureStore: writer }, capped);
     const first = yield* live.open(recipe, null); // stays open

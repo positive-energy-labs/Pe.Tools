@@ -1,10 +1,11 @@
+import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { Context, Effect, Layer } from "effect";
 import { HttpRouter, HttpServerResponse } from "effect/http";
 import { NodeHttpClient, NodeServices } from "@effect/platform-node";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import { HostNativeRead } from "@pe/host-internal/native-read";
 import { expect, test, vi } from "vite-plus/test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { callRouteOver, detachedBridge, journalAt, sessionView, testHostInputs } from "./effect-test.ts";

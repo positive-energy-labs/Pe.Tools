@@ -1,6 +1,8 @@
+import { stateFixture } from "../../../tests/isolated-home/storage.ts";
+import { mkdtempSync } from "../../../tests/isolated-home/storage.ts";
 import { journalAt } from "./effect-test.ts";
 import { receiptGoldenEnvelope } from "../../../packages/agent-contracts/tests/receipt-fixture.ts";
-import { mkdtempSync, rmSync, readFileSync, writeFileSync, readdirSync } from "node:fs";
+import { rmSync, readFileSync, writeFileSync, readdirSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import { PostHog } from "posthog-node";
@@ -62,7 +64,7 @@ function fixture() {
   const sent: unknown[] = [];
   const exporter = createReceiptExport({
     journal,
-    root: dir,
+    root: stateFixture(dir),
     stamps: { host: { ...stamp, component: "host" }, web: { ...stamp, component: "web" } },
     send: async (e) => {
       sent.push(e);
@@ -134,7 +136,7 @@ test("the actual PostHog client wire carries the original receipt timestamp and 
   const journal = journalAt(join(dir, "journal.json"), Date.now);
   const exporter = createReceiptExport({
     journal,
-    root: dir,
+    root: stateFixture(dir),
     client,
     stamps: { host: { ...stamp, component: "host" }, web: null },
   });
@@ -438,7 +440,7 @@ test("a send past its deadline is aborted on the wire, one at a time, and frees 
   const journal = journalAt(join(dir, "journal.json"), Date.now);
   const exporter = createReceiptExport({
     journal,
-    root: dir,
+    root: stateFixture(dir),
     client,
     deadlineMs: 30,
     stamps: { host: { ...stamp, component: "host" }, web: null },
@@ -479,7 +481,7 @@ test("feedback never reports failed, or offers a second send, while its first se
   const web = { ...stamp, component: "web" as const };
   const exporter = createReceiptExport({
     journal,
-    root: dir,
+    root: stateFixture(dir),
     client,
     deadlineMs: 100,
     stamps: { host: { ...stamp, component: "host" }, web },

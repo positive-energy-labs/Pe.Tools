@@ -1,3 +1,4 @@
+import { hostState } from "../host-ownership.ts";
 import { Effect } from "effect";
 import { subjectName } from "@pe/agent-contracts/subject-ref";
 import { z } from "zod";
@@ -17,7 +18,7 @@ import { command, io, refused, StepFailure, type CommandContext, type CommandWor
 import type { ActionExecution } from "../action-journal.ts";
 import type { RevitBridge } from "../bridge.ts";
 import { currentDocument } from "../document-lifetime.ts";
-import { productRouteWorkPath } from "../product-paths.ts";
+
 
 /*
  * The host side of findings (ADR 0035 rule 9, ADR 0042 rule 5): four catalog doors over one Work per
@@ -112,7 +113,7 @@ export const findingsExecutors = (workspace: RouteWorkspace | undefined, bridge:
     if (!workspace) throw refused("Work storage is unavailable");
     author(ctx.caller);
     const input = await bound(ctx.work, bridge, admission);
-    return { effects: [{ kind: "directory" as const, path: productRouteWorkPath() }], prepare: async () => input };
+    return { effects: [{ kind: "directory" as const, path: hostState().work }], prepare: async () => input };
   };
   /** A write door's one publication step. */
   const step = (key: string, ctx: Pick<CommandContext, "caller">, execution: ActionExecution, run: (workspace: RouteWorkspace, by: Stamp["by"]) => Promise<unknown>) =>

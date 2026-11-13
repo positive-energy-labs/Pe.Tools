@@ -157,7 +157,8 @@ test("JM B03/B14/B18 named Fans roster and a live gesture survive typed Page pro
 
 import { Context, Effect, Layer, Queue, Option } from "effect";
 import { createRootRoute, createRouter, createMemoryHistory, RouterProvider } from "@tanstack/react-router";
-import { mkdtemp, rm } from "node:fs/promises";
+import { rm } from "node:fs/promises";
+import { mkdtemp, stateFixture } from "../../../../tests/isolated-home/storage.ts";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openRecordingWriter, nativeCatalogIdentity } from "../../../host/src/native-recording";
@@ -221,7 +222,7 @@ test("JZ Fans Revert removes A from Plan before staging B",async()=>{
  })).pipe(Layer.provide(ambient(HostNativeRead)),Layer.provide(ambient(RevitBridge)));
  const dir=await mkdtemp(join(tmpdir(),"pe-f05-bisect-"));
  const stamp=admittedReceiptStamps().host!;
- const captureStore=await Effect.runPromise(openRecordingWriter(dir,{build:JSON.stringify({version:stamp.version,build:stamp.build,commit:stamp.commit}),catalog:nativeCatalogIdentity()},{maxBytes:256*1024*1024,maxTakings:10000}));
+ const captureStore=await Effect.runPromise(openRecordingWriter(stateFixture(dir),{build:JSON.stringify({version:stamp.version,build:stamp.build,commit:stamp.commit}),catalog:nativeCatalogIdentity()},{maxBytes:256*1024*1024,maxTakings:10000}));
  const inputs=await Effect.runPromise(HostInputContext.pipe(Effect.provide(HostInputContext.layer({kind:"live",captureStore}))));
  const host=await bootHost({inputs,reads:{live:{marks:ambient(HostDocumentMarks),inventory:HostSessionInventory.layer.pipe(Layer.provide(Layer.mergeAll(ambient(RevitBridge),ambient(SdkSession)))),files:DuctFiles.layer(),native}},revitCompositionFactory:()=>({provider:RevitBridgeLive,routes:Layer.unwrap(Effect.gen(function*(){const reads=yield* ReadOwner;return yield* makeCallRoute(undefined,{workspace:reads.work.workspace,sdk:sdkSessions,workReads:reads.work.reads},{pointers:reads.work.pointers,retainedRead:reads.retainedCall,nativeBody:reads.nativeBody});})).pipe(Layer.provide(native))})});
  trace.base=host.base;

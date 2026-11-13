@@ -1,6 +1,7 @@
+import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { pictureCaptures, journalAt } from "./effect-test.ts";
 import { testRegistry } from "./effect-test.ts";
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";

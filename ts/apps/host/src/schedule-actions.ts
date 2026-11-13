@@ -47,7 +47,7 @@ import {
   runPods,
   writeCaptureRun,
   writeMemberOnce,
-  sourceRunOutput,
+  sourceRunDirectory,
   type FamilyActionDependencies,
 } from "./family-actions.ts";
 
@@ -458,7 +458,7 @@ export function scheduleExecutors(
         effects: [
           { kind: "document", ref: target },
           ...(input.pod
-            ? [{ kind: "directory" as const, path: await sourceRunOutput(input.pod, deps, await podContext(deps, bridge, target)) }]
+            ? [{ kind: "directory" as const, path: (await sourceRunDirectory(input.pod, deps, await podContext(deps, bridge, target))).path }]
             : []),
         ],
         consumes: [
@@ -648,7 +648,7 @@ export function scheduleExecutors(
         ],
         effects: [
           { kind: "document", ref: target },
-          { kind: "directory", path: await sourceRunOutput(input.pod, deps, await podContext(deps, bridge, target)) },
+          { kind: "directory", path: (await sourceRunDirectory(input.pod, deps, await podContext(deps, bridge, target))).path },
           { kind: "member", pod: input.pod, path },
         ],
         prepare: async () => {
@@ -710,7 +710,7 @@ export function scheduleExecutors(
         ],
         effects: [
           { kind: "document", ref: target },
-          { kind: "directory", path: await sourceRunOutput(source.id, deps, await podContext(deps, bridge, target)) },
+          { kind: "directory", path: (await sourceRunDirectory(source.id, deps, await podContext(deps, bridge, target))).path },
         ],
         prepare: async () => {
           return { process, input: { specJson: spec, source: { root: source, dependencies } } };

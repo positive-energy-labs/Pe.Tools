@@ -34,14 +34,9 @@ import { HOST_RESTARTED } from "@pe/agent-contracts/chat-state";
 import { summarizeFailure } from "@pe/host-contracts/failure-summary";
 import type { ThreadPresence } from "@pe/host-contracts/pe-api";
 import { firmHome, noFirmHomeText, userRoot, type FirmHome } from "@pe/host-contracts/product-paths";
-import { stateTree } from "@pe/host-contracts/service-identity";
-import { noteStored, sha256Hex, storedNoticesFile, type StoredNotice } from "@pe/host-contracts/store";
-import { hostOwnership } from "./host-ownership.ts";
+import { note, sha256Hex, type StoredNotice, type StateRoot } from "@pe/host-contracts/kinds";
+import { hostState } from "./host-ownership.ts";
 
-/** The machine's notice file: every `discard` in the host names it, so no file goes without a trace. */
-export const storedNoticesPath = () => storedNoticesFile(hostOwnership.rootPath);
-/** Where a discard that holds authority rests its bytes first (`state\\Blobs`, the write door's store). */
-export const storedBlobsPath = () => stateTree(hostOwnership.rootPath).blobs;
 
 /** The Place a no-firm-home notice is filed under; its row is a finding, not a file that did not decode. */
 const FIRM_HOME_PLACE = "Firm home";
@@ -65,9 +60,9 @@ function holdsFile(path: string): boolean {
 export function noteStartupHomes(
   user = userRoot(),
   firm: FirmHome = firmHome(),
-  notices = storedNoticesPath(),
+  machine: StateRoot = hostState(),
 ): void {
-  noteNoFirmHome(firm, notices);
+  noteNoFirmHome(firm, machine);
   const path = join(user, "Work");
   // Homes never hold Work; old Work is noticed, not migrated.
   try {
@@ -77,7 +72,7 @@ export function noteStartupHomes(
       console.warn(`Could not check earlier Work at '${path}': ${String(error)}`);
     return;
   }
-  noteStored(notices, {
+  note(machine, {
     class: "keep",
     place: EARLIER_WORK_PLACE,
     path,
@@ -92,11 +87,11 @@ export function noteStartupHomes(
  * drive, a second marker) posts again. Silent when a firm home is bound and when nothing was
  * probed, as in a test run: a notice that names no place tells a person nothing.
  */
-export function noteNoFirmHome(firm: FirmHome = firmHome(), notices = storedNoticesPath()): void {
+export function noteNoFirmHome(firm: FirmHome = firmHome(), machine: StateRoot = hostState()): void {
   const places = firm.refused ?? firm.looked;
   if (firm.root || !places.length) return;
   const reason = noFirmHomeText(firm);
-  noteStored(notices, {
+  note(machine, {
     class: "keep",
     place: FIRM_HOME_PLACE,
     path: places[0]!,
@@ -117,7 +112,7 @@ export interface NoticeSources {
   readonly receipts: readonly { readonly revision: number; readonly action: ActionReceipt }[];
   readonly works: readonly NavigationWork[];
   readonly machine: Machine | null;
-  /** `readStoredNotices(storedNoticesPath())`: files refused as kept or discarded. */
+  /** `notices(machine)`: files refused as kept or discarded. */
   readonly stored: readonly StoredNotice[];
   /** Outward sends held for the person (ADR 0038 guard 3); a held door act is its receipt. */
   readonly held: readonly HeldSend[];

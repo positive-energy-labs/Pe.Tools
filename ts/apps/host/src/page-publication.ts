@@ -10,7 +10,14 @@ import type { PictureCaptures } from "./captures-route.ts";
 import { pagePublicationSchema, type PagePublication } from "@pe/host-contracts/pe-api";
 import { validatePageHtml } from "./page-artifacts.ts";
 import type { PagesRoots } from "./page-libraries.ts";
-import { writeHome } from "./settings.ts";
+import { writeHome, homeKind } from "@pe/host-contracts/kinds";
+import { hostState } from "./host-ownership.ts";
+import { basename } from "node:path";
+const pageIndexKind = homeKind({
+  schema: z.string(),
+  place: (_pages: string, slug: string) => `Page ${slug}`,
+  segments: (pages: string, slug: string) => [pages, slug, "index.html"],
+});
 
 export const escapeHtml = (text: string) =>
   text.replace(
@@ -393,7 +400,13 @@ export async function commitPagePublication(
   await ordinaryPath(index);
   // The write door (ADR 0037 rules 5 and 7): the frozen version is the compare-and-swap, the write
   // lands in the home that holds the Page, and an overwrite rests the prior bytes in `state\Blobs`.
-  if (!writeHome(index, input.html, expectedVersion).ok)
+  const pages = await pageHomeRoot(source, input.slug);
+  const file = pageIndexKind.in(
+    hostState().home({ root: dirname(pages), tier: "user" }),
+    basename(pages),
+    input.slug,
+  );
+  if (!writeHome(file, input.html, expectedVersion).ok)
     throw new StepFailure(
       "Page changed after submission; read it and submit a new command",
       409,
