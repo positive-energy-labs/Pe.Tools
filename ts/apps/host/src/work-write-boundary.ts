@@ -10,7 +10,7 @@ import {
   sameCaller,
   writeResponseSchema,
   writePreviewSchema,
-  workHandleSchema,
+  workAdmissionSchema,
   workBinding,
   tools,
   ANY_ROUTE,
@@ -104,8 +104,7 @@ async function deriveFromWork(
   bridge: RevitBridge["Service"],
   deps: { sdk?: SdkReceiptReader },
 ) {
-  const { work, readWorks } = z.object({ work: workHandleSchema, readWorks: z.record(z.string(), workHandleSchema).optional() ,
-    }).parse(definition.input.parse(ctx.admission.input));
+  const { work, readWorks } = workAdmissionSchema.parse(definition.input.parse(ctx.admission.input));
   if (ctx.admission.target.kind !== "document") throw refused("Exact document required");
   const target = ctx.admission.target.ref;
   const observed = await lifetime(bridge, target, false, deps);
