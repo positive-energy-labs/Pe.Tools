@@ -99,6 +99,12 @@ export async function readNativeReceipt(
   };
   const unchanged = () => ({ step, evidence, observation });
   const intent = { id: step.id, key: step.key, kind: step.kind, input: step.input,
+    ...(step.transport ? { transport: step.transport } : {}),
+    ...(step.transport === "bridge" ? {
+      ...(step.touched ? { touched: step.touched } : {}),
+      ...(step.nativeEvidence ? { nativeEvidence: step.nativeEvidence } : {}),
+      ...(step.bridgeReply ? { bridgeReply: step.bridgeReply } : {}),
+    } : {}),
     ...(step.process ? { process: step.process } : {}),
     ...(step.dispatchedAt ? { dispatchedAt: step.dispatchedAt } : {}),
   };
@@ -122,7 +128,8 @@ export async function readNativeReceipt(
         state: "failed",
         error: `Revit process ${original.pid} ended before '${step.key}' recorded an outcome`,
         status: 503,
-        touched: { kind: "unknown", reason: "process-exit" },
+        ...(step.transport === "bridge" && step.dispatchedAt && step.bridgeReply !== "touched"
+          ? { transport: "bridge" as const, touched: { kind: "unknown" as const, reason: "process-exit" as const } } : {}),
         evidence: {
           result: {
             process: original,
@@ -140,7 +147,7 @@ export async function readNativeReceipt(
   const decoded = nativeReceiptResponseSchema.safeParse(result.response);
   if (!decoded.success) return unchanged();
   const response = decoded.data;
-  const terminal = { ...intent, touched: response.touched };
+  const terminal = { ...intent, transport: "bridge" as const, bridgeReply: "touched" as const, touched: response.touched };
   if (receipt.data.verdict === "ok" && "payload" in response)
     return {
       step: { ...terminal, state: "succeeded", result: response.payload,
