@@ -233,8 +233,10 @@ export function installedRuntimeRoot(
     !existsSync(manifest)
   )
     throw Error(`Installed ${app} must execute from an SDK install ('${manifest}' is missing).`);
-  const { product, vendor } = JSON.parse(readFileSync(manifest, "utf8")) as Record<string, unknown>;
-  if (product !== productIdentity.productName || vendor !== productIdentity.vendorName)
+  const decoded: unknown = JSON.parse(readFileSync(manifest, "utf8"));
+  if (typeof decoded !== "object" || decoded === null ||
+      !("product" in decoded) || decoded.product !== productIdentity.productName ||
+      !("vendor" in decoded) || decoded.vendor !== productIdentity.vendorName)
     throw Error(`Installed ${app} manifest '${manifest}' names another product.`);
   return insideTestRoot(root);
 }
