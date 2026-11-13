@@ -21,6 +21,18 @@ export type Health = { casts: Count; suppressions: Count; todos: Count; longFile
 /** Ratchets that hold per file: no file may rise, whatever the total does. */
 export const PER_FILE = ["fsWrites"] as const satisfies readonly (keyof Health)[];
 
+/**
+ * The doors: files a per-file count may rise in, because writes consolidate into them (the store is
+ * the one write door, routes CONTRACTS K-A2). Their calls still count toward the total.
+ */
+export const OWNERS: Record<(typeof PER_FILE)[number], readonly string[]> = {
+  fsWrites: ["ts/packages/host-contracts/src/store.ts"],
+};
+
+/** Per-file rises outside the named owners. */
+export const perFileRises = (name: (typeof PER_FILE)[number], actual: Count, baseline: Count) =>
+  rises(actual, baseline).filter((line) => !OWNERS[name].some((owner) => line.startsWith(`${owner}:`)));
+
 const FS_SCOPE = /^ts\/(apps\/host|packages\/(host-contracts|host-internal|runtime))\//;
 const FS_MODULES = new Set(["fs", "node:fs", "fs/promises", "node:fs/promises"]);
 const NODE_MUTATORS = new Set(
@@ -136,9 +148,9 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       ? (JSON.parse(readFileSync(path, "utf8")) as Health)
       : undefined;
     for (const name of PER_FILE)
-      if (baseline?.[name] && rises(actual[name], baseline[name]).length)
+      if (baseline?.[name] && perFileRises(name, actual[name], baseline[name]).length)
         throw new Error(
-          `health: ${name} rose per file; a ratchet only tightens.\n${rises(actual[name], baseline[name]).join("\n")}`,
+          `health: ${name} rose per file; a ratchet only tightens.\n${perFileRises(name, actual[name], baseline[name]).join("\n")}`,
         );
     for (const name of names)
       if (baseline?.[name] && total(actual[name]) > total(baseline[name]))
