@@ -124,6 +124,7 @@ export function createPackageLifecycle(
     },
   });
   const ready = initialize();
+  let settled: Promise<unknown> = ready;
   async function initialize() {
     decisions = await readDecisions(decisionsFile);
     await runtime.install(
@@ -173,7 +174,8 @@ export function createPackageLifecycle(
     return listing;
   }
   return {
-    ready,
+    // Inventory readers join the current census, including bootstrap's pending reconciliation.
+    get ready() { return settled; },
     observeChanges(listener: () => void) {
       listeners.add(listener);
       return () => {
@@ -182,10 +184,13 @@ export function createPackageLifecycle(
     },
     initialized: () => initialized,
     /** Explicit import, activation and update reconcile setup/cleanup; inventory reads use listing. */
-    refresh: async (initial = false) => {
-      await ready;
-      const listing = initial ? initialListing : undefined;
-      return listing ?? synchronize();
+    refresh: (initial = false) => {
+      const next = settled.catch(() => ready).then(() => {
+        const listing = initial ? initialListing : undefined;
+        return listing ?? synchronize();
+      });
+      settled = next;
+      return next;
     },
     listing: () => initialListing!,
     inventory: runtime.inventory,
