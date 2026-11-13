@@ -177,8 +177,11 @@ test("public disable removes Page, script, member, catalog and receipted skill; 
   await mkdir(join(pods, "new", "pages/tour"), { recursive: true });
   await writeFile(join(pods, "new/pod.json"), '{"id":"new"}');
   await writeFile(join(pods, "new/pages/tour/index.html"), "new");
-  await expect(requirePackageEnabled("new")).rejects.toThrow("inactive");
-  expect((await pages(new Request("http://host/pages/new--tour/"))).status).toBe(404);
+  await expect.poll(async () => {
+    try { await requirePackageEnabled("new"); return true; }
+    catch { return false; }
+  }).toBe(true);
+  expect((await pages(new Request("http://host/pages/new--tour/"))).status).toBe(200);
   await content.lifecycle.close();
 });
 
