@@ -16,6 +16,9 @@ import {
   familyCatalogRequest,
   refusalSchema,
   workKeySchema,
+  workHandleSchema,
+  workTimelineSchema,
+  WORK_TIMELINE_READ,
   type ActionReceipt,
   actionReceiptSchema,
 } from "@pe/agent-contracts";
@@ -1059,15 +1062,7 @@ async function dispatch(
                 target: { session: null, document: null },
               }
             : mountedScope ?? await routeWorkScope(workTarget);
-          const result = await routeFetch(
-            parsed.route,
-            scope.query,
-            {
-              direction,
-              expectedRevision: input.expectedRevision,
-            },
-            "work.history",
-          );
+          const result = await timelineStep(parsed.route, scope.query, direction, input.expectedRevision);
           return { ok: !("isError" in result), target: scope.target, result };
         }
         // Ducts Work is keyed by document: an unbound write lands in Work no page reads (wave 3, 2026-10-19).
@@ -1268,6 +1263,39 @@ function parseTarget(value: unknown): ResolvedTarget | null {
     session: typeof record.session === "string" ? record.session : null,
     document: typeof record.document === "string" ? record.document : null,
   };
+}
+
+/**
+ * Pea's undo and redo go through the host Timeline's one step door (ADR 0042), as a person's do:
+ * read `work.timeline` for this Work, then send back the step it offers. The host picks Pea's own
+ * last step and refuses one a Revit write already consumed.
+ */
+async function timelineStep(
+  route: string,
+  queryString: string,
+  direction: "undo" | "redo",
+  expectedRevision: number,
+): Promise<Record<string, unknown>> {
+  const view = await routeFetch(route, queryString);
+  const key = workHandleSchema.safeParse(view.handle).data?.key;
+  if (!key || view.revision !== expectedRevision)
+    throw new Error(`Work changed before restoring. Read route:${route} again and pass its expectedRevision.`);
+  const client = createPeClient(base(), fetch);
+  const body = {
+    read: WORK_TIMELINE_READ,
+    args: { works: [key] },
+    subscription: `pea-step-${crypto.randomUUID()}`,
+    generation: 0,
+  };
+  const response = await client.response("reads.value", { body });
+  const wire = (await response.json()) as { value?: { data?: unknown } | null };
+  // One-shot read: release the publication it opened.
+  void client.response("reads.value", { body: { ...body, release: true } }).catch(() => {});
+  const timeline = workTimelineSchema.safeParse(wire.value?.data).data;
+  if (!timeline) throw new Error(`The Timeline for route:${route} could not be read (${response.status}).`);
+  const expected = timeline[direction];
+  if (!expected) throw new Error(timeline.refusal[direction] ?? `Nothing of Pea's to ${direction} on route:${route}.`);
+  return routeFetch(route, queryString, { direction, works: [key], expected }, "work.history");
 }
 
 async function routeFetch(
