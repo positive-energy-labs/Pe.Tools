@@ -45,6 +45,6 @@
     "apps/host/tests/vite-web.test.ts": 4,
     "apps/host/tests/work-lifetime.test.ts": 1,
     "packages/browser/tests/acceptance.test.ts": 1,
-    "apps/web/src/route/draw.test.tsx": 0
+    "apps/web/src/shell/typed-shell-findings.test.tsx": 0
   }
 }
