@@ -47,21 +47,26 @@ public sealed class BridgeRequestEvidence {
         lock (_gate) { if (_send == send) _send = null; }
     }
 
-    public async Task CompleteWhenFinishedAsync(string requestId, Task completion, string? receiptId) {
-        var outcome = "Succeeded";
-        try { await completion.ConfigureAwait(false); }
-        catch (OperationCanceledException) { outcome = "Cancelled"; }
-        catch (Exception) { outcome = "Failed"; }
-        await CompleteAsync(requestId, outcome, receiptId).ConfigureAwait(false);
+    /// <summary>
+    ///     The recovered terminal of a call that outlived its response. It always states <c>Touched</c>: the
+    ///     runner's statement when the call finished under it, else unknown. Never absent, never assumed none.
+    /// </summary>
+    public async Task CompleteWhenFinishedAsync(
+        string requestId, Task<(string Outcome, Touched Touched)> completion, string? receiptId) {
+        (string Outcome, Touched Touched) end;
+        try { end = await completion.ConfigureAwait(false); }
+        catch (OperationCanceledException) { end = ("Cancelled", new Touched.Unknown(TouchedUnknownReason.CancelledMidEffect)); }
+        catch (Exception) { end = ("Failed", new Touched.Unknown(TouchedUnknownReason.CancelledMidEffect)); }
+        await CompleteAsync(requestId, end.Outcome, receiptId, end.Touched).ConfigureAwait(false);
     }
 
-    public async Task CompleteAsync(string requestId, string outcome, string? receiptId) {
+    public async Task CompleteAsync(string requestId, string outcome, string? receiptId, Touched? touched = null) {
         BridgeTerminal terminal;
         lock (_gate) {
             if (!_running.TryGetValue(requestId, out var request)) return;
             _running.Remove(requestId);
             terminal = new(requestId, outcome, request.StartedAtUnixMs,
-                DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), receiptId);
+                DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), receiptId, touched);
             _pending.Add(requestId, terminal);
         }
         await SendAsync(terminal).ConfigureAwait(false);

@@ -11,16 +11,16 @@ public sealed class BridgeOpRequestDeserializationTests {
 
     private sealed record ProbeResponse(string Echo);
 
-    [Op("revit.detail.deserialization-probe", OpSubject.None, OpTouches.Metadata, OpEffect.Read, Does = "Exercise strict request deserialization.")]
+    [Op("revit.detail.deserialization-probe", OpSubject.None, OpTouches.Metadata, Does = "Exercise strict request deserialization.")]
     private static ProbeResponse Handle(ProbeRequest request) => new(request.ScriptContent);
 
-    [Op("revit.detail.schedule-source-probe", OpSubject.None, OpTouches.Metadata, OpEffect.Read, Does = "Bind the real schedule.apply request.")]
+    [Op("revit.detail.schedule-source-probe", OpSubject.None, OpTouches.Metadata, Does = "Bind the real schedule.apply request.")]
     private static ProbeResponse HandleSchedule(ScheduleSpecApplyRequest request) => new(request.Source.Root.Id ?? "unfiled");
 
-    [Op("revit.detail.family-source-probe", OpSubject.None, OpTouches.Metadata, OpEffect.Read, Does = "Bind the real family.apply request.")]
+    [Op("revit.detail.family-source-probe", OpSubject.None, OpTouches.Metadata, Does = "Bind the real family.apply request.")]
     private static ProbeResponse HandleFamily(FamilyApplyRequest request) => new(request.Source.Root.Id ?? "unfiled");
 
-    [Op("revit.detail.schedule-cells-probe", OpSubject.None, OpTouches.Metadata, OpEffect.Read, Does = "Bind the real schedule.cells.apply request.")]
+    [Op("revit.detail.schedule-cells-probe", OpSubject.None, OpTouches.Metadata, Does = "Bind the real schedule.cells.apply request.")]
     private static ProbeResponse HandleCells(ScheduleCellApplyRequest request) =>
         new(string.Join(",", request.Edits.SelectMany(edit => edit.ExpectedBinding.Targets).Select(target => $"{target.ParameterId}:{target.HasValue}:{target.RawValue ?? "null"}")));
 
@@ -36,6 +36,7 @@ public sealed class BridgeOpRequestDeserializationTests {
         var exception = Assert.ThrowsAsync<BridgeOperationException>(() => Probe().ExecuteAsync(
             """{"timeoutSeconds":60,"scriptContent":{"Ast":"a powershell script block"}}""",
             null,
+            null,
             CancellationToken.None
         ))!;
 
@@ -50,6 +51,7 @@ public sealed class BridgeOpRequestDeserializationTests {
         var exception = Assert.ThrowsAsync<BridgeOperationException>(() => Probe().ExecuteAsync(
             "{\"scriptContent\": \"unterminated",
             null,
+            null,
             CancellationToken.None
         ))!;
 
@@ -60,6 +62,7 @@ public sealed class BridgeOpRequestDeserializationTests {
     public void A_null_payload_is_a_400_naming_the_expected_type() {
         var exception = Assert.ThrowsAsync<BridgeOperationException>(() => Probe().ExecuteAsync(
             "null",
+            null,
             null,
             CancellationToken.None
         ))!;
@@ -73,6 +76,7 @@ public sealed class BridgeOpRequestDeserializationTests {
         var response = await Probe().ExecuteAsync(
             """{"timeoutSeconds":60,"scriptContent":"using System;\nvar x = 1;\nConsole.WriteLine(x);"}""",
             null,
+            null,
             CancellationToken.None
         );
 
@@ -84,7 +88,7 @@ public sealed class BridgeOpRequestDeserializationTests {
     [TestCase("revit.detail.family-source-probe", """{"specJson":"{}","expectedPlanHashes":{},"source":{"pod":"office","path":"settings/a.json","sha256":"abc"}}""")]
     [TestCase("revit.detail.schedule-source-probe", """{"specJson":"{}","source":{"root":{"id":"office","path":"settings/a.json","sha256":"abc","origin":"SavedMember"},"dependencies":[]}}""")]
     public void An_apply_source_without_captured_bytes_is_a_400_before_any_handler(string key, string payload) {
-        var exception = Assert.ThrowsAsync<BridgeOperationException>(() => Probe(key).ExecuteAsync(payload, null, CancellationToken.None))!;
+        var exception = Assert.ThrowsAsync<BridgeOperationException>(() => Probe(key).ExecuteAsync(payload, null, null, CancellationToken.None))!;
 
         Assert.That(exception.StatusCode, Is.EqualTo(BridgeOperationExceptions.BadRequestStatusCode));
         Assert.That(exception.Message, Does.Contain("Required property"));
@@ -94,6 +98,7 @@ public sealed class BridgeOpRequestDeserializationTests {
     public async Task A_captured_source_binds() {
         var response = await Probe("revit.detail.schedule-source-probe").ExecuteAsync(
             """{"specJson":"{}","source":{"root":{"id":"office","path":"settings/a.json","sha256":"abc","bytesBase64":"e30=","origin":"SavedMember"},"dependencies":[]}}""",
+            null,
             null,
             CancellationToken.None);
 
@@ -116,7 +121,7 @@ public sealed class BridgeOpRequestDeserializationTests {
         var target = Newtonsoft.Json.Linq.JObject.Parse(CellTarget);
         target.Remove(field);
         var exception = Assert.ThrowsAsync<BridgeOperationException>(() => Probe("revit.detail.schedule-cells-probe")
-            .ExecuteAsync(CellRequest(target.ToString(Newtonsoft.Json.Formatting.None)), null, CancellationToken.None))!;
+            .ExecuteAsync(CellRequest(target.ToString(Newtonsoft.Json.Formatting.None)), null, null, CancellationToken.None))!;
 
         Assert.That(exception.StatusCode, Is.EqualTo(BridgeOperationExceptions.BadRequestStatusCode));
         Assert.That(exception.Message, Does.Contain(field));
@@ -125,7 +130,7 @@ public sealed class BridgeOpRequestDeserializationTests {
     [Test]
     public void A_reviewed_cell_without_targets_is_a_400() {
         var exception = Assert.ThrowsAsync<BridgeOperationException>(() => Probe("revit.detail.schedule-cells-probe")
-            .ExecuteAsync(CellRequest(CellTarget).Replace($",\"targets\":[{CellTarget}]", ""), null, CancellationToken.None))!;
+            .ExecuteAsync(CellRequest(CellTarget).Replace($",\"targets\":[{CellTarget}]", ""), null, null, CancellationToken.None))!;
 
         Assert.That(exception.Message, Does.Contain("targets"));
     }
@@ -134,7 +139,7 @@ public sealed class BridgeOpRequestDeserializationTests {
     public async Task A_complete_reviewed_cell_binds_with_a_null_raw_value() {
         var response = await Probe("revit.detail.schedule-cells-probe").ExecuteAsync(
             CellRequest(CellTarget.Replace("\"rawValue\":\"A\"", "\"rawValue\":null").Replace("\"hasValue\":true", "\"hasValue\":false")),
-            null, CancellationToken.None);
+            null, null, CancellationToken.None);
 
         Assert.That(((ProbeResponse)response!).Echo, Is.EqualTo("-1001203:False:null"));
     }
@@ -153,7 +158,7 @@ public sealed class BridgeOpRequestDeserializationTests {
                 Converters = [new Newtonsoft.Json.Converters.StringEnumConverter()]
             });
 
-        var bound = await Probe("revit.detail.schedule-cells-probe").ExecuteAsync(CellRequest(response), null, CancellationToken.None);
+        var bound = await Probe("revit.detail.schedule-cells-probe").ExecuteAsync(CellRequest(response), null, null, CancellationToken.None);
         Assert.That(((ProbeResponse)bound!).Echo, Is.EqualTo("-1001203:False:null"));
     }
 
@@ -165,22 +170,22 @@ public sealed class BridgeOpRequestDeserializationTests {
     private sealed record DefaultsProbe(int Count = 9, bool Enabled = true, string Label = "label",
         OpTier Tier = OpTier.Expert, DefaultsProbe? Nested = null);
 
-    [Op("test.constructor-defaults", OpSubject.None, OpTouches.Metadata, OpEffect.Read, Does = "Echo bound constructor defaults.")]
+    [Op("test.constructor-defaults", OpSubject.None, OpTouches.Metadata, Does = "Echo bound constructor defaults.")]
     private static DefaultsProbe Echo(DefaultsProbe request) => request;
 
     [Test]
     public async Task Dispatch_populates_nested_defaults_and_preserves_explicit_values() {
         OpRegistry.RegisterFrom(typeof(BridgeOpRequestDeserializationTests).Assembly);
         Assert.That(OpRegistry.TryGet("test.constructor-defaults", out var op), Is.True);
-        var omitted = await op.ExecuteAsync("{}", null, CancellationToken.None);
+        var omitted = await op.ExecuteAsync("{}", null, null, CancellationToken.None);
         Assert.That(omitted, Is.EqualTo(new DefaultsProbe(9, true, "label", OpTier.Expert, null)));
         var supplied = await op.ExecuteAsync(
             """{"count":0,"enabled":false,"label":"","tier":"Default","nested":{}}""",
-            null, CancellationToken.None);
+            null, null, CancellationToken.None);
         Assert.That(supplied, Is.EqualTo(new DefaultsProbe(0, false, "", OpTier.Default, new DefaultsProbe(9, true, "label", OpTier.Expert, null))));
     }
 
-    [Op("test.duct-slot-defaults", OpSubject.None, OpTouches.Metadata, OpEffect.Read, Does = "Resolve dispatched duct slot overrides.")]
+    [Op("test.duct-slot-defaults", OpSubject.None, OpTouches.Metadata, Does = "Resolve dispatched duct slot overrides.")]
     private static DuctParameterSlots ResolveSlots(DuctParameterSlotOverrides request) =>
         request.Resolve(new DuctParameterSlotOverrides(FanFlow: "PE_M_Fan_AirFlow", TerminalFlow: "revit:Flow"));
 
@@ -188,7 +193,7 @@ public sealed class BridgeOpRequestDeserializationTests {
     [TestCase("""{"componentDrop":"Damper Drop"}""", "Damper Drop")]
     [TestCase("""{"fanFlow":null,"terminalFlow":null}""", "Pressure Drop")]
     public async Task Dispatched_slot_overrides_preserve_stored_names_before_engine_defaults(string json, string expectedDrop) {
-        var resolved = (DuctParameterSlots)(await Probe("test.duct-slot-defaults").ExecuteAsync(json, null, CancellationToken.None))!;
+        var resolved = (DuctParameterSlots)(await Probe("test.duct-slot-defaults").ExecuteAsync(json, null, null, CancellationToken.None))!;
         Assert.Multiple(() => {
             Assert.That(resolved.FanFlow, Is.EqualTo("PE_M_Fan_AirFlow"));
             Assert.That(resolved.TerminalFlow, Is.EqualTo("revit:Flow"));
@@ -196,14 +201,14 @@ public sealed class BridgeOpRequestDeserializationTests {
         });
     }
 
-    [Op("test.matrix-defaults", OpSubject.None, OpTouches.Metadata, OpEffect.Read, Does = "Bind the real matrix read options.")]
+    [Op("test.matrix-defaults", OpSubject.None, OpTouches.Metadata, Does = "Bind the real matrix read options.")]
     private static LoadedFamiliesMatrixRequest EchoMatrix(LoadedFamiliesMatrixRequest request) => request;
 
     [TestCase("{}", true, LoadedFamiliesReadPhase.Matrix)]
     [TestCase("""{"includeTempPlacement":false,"phase":"Prepare"}""", false, LoadedFamiliesReadPhase.Prepare)]
     public async Task Matrix_dispatch_keeps_the_temp_placement_default_and_explicit_read_phase(
         string json, bool expectedPlacement, LoadedFamiliesReadPhase expectedPhase) {
-        var request = (LoadedFamiliesMatrixRequest)(await Probe("test.matrix-defaults").ExecuteAsync(json, null, CancellationToken.None))!;
+        var request = (LoadedFamiliesMatrixRequest)(await Probe("test.matrix-defaults").ExecuteAsync(json, null, null, CancellationToken.None))!;
         Assert.That(request.IncludeTempPlacement, Is.EqualTo(expectedPlacement));
         Assert.That(request.Phase, Is.EqualTo(expectedPhase));
         Assert.That(request.Filter, Is.Null);

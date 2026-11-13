@@ -112,12 +112,13 @@ public sealed class ViewImageRegistrationProofTests {
             var (activeBefore, annotationBefore) = (view.CropBoxActive, annotationCrop.AsInteger());
             var box = new BoundingBoxXYZ { Min = center - new XYZ(4, 4, 0), Max = center + new XYZ(4, 4, 1) };
 
-            var image = RevitViewImageExporter.ExportFocused(doc, view, box, 8, 1500);
+            var image = RevitViewImageExporter.ExportFocused(doc, view, box, 8, 1500, new Pe.Revit.Operations.SessionWrite(doc));
             Console.WriteLine($"[PE_VIEW_IMAGE_FOCUS] delivered={image.Width}x{image.Height} warning={image.Warning} refusal={image.RegistrationRefusal} file={image.FilePath}");
             Assert.Multiple(() => {
                 Assert.That(Math.Max(image.Width, image.Height), Is.EqualTo(1500).Within(15), "the crop gets the requested long side");
                 Assert.That(image.Warning, Is.Null);
                 Assert.That(image.RegistrationRefusal, Is.Null);
+                Assert.That(image.Restore?.Held, Is.True, "the answer says the restore held");
                 Assert.That(view.CropBoxActive, Is.EqualTo(activeBefore), "crop active restored");
                 Assert.That(view.CropBox.Min.DistanceTo(cropBefore.Min) + view.CropBox.Max.DistanceTo(cropBefore.Max), Is.LessThan(1e-6), "crop box restored");
                 Assert.That(annotationCrop.AsInteger(), Is.EqualTo(annotationBefore), "annotation crop restored");

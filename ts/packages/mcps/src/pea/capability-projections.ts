@@ -14,6 +14,7 @@ import {
 } from "@pe/agent-contracts";
 import { isTsOnlyOperationKey } from "@pe/host-contracts/operation-types";
 import type { HostOperationDefinition } from "@pe/host-contracts/contracts";
+import { opWrites } from "../shared/admission.ts";
 import type { SkillSnapshot } from "./skill-publication.ts";
 import type { CapabilitySources } from "./capabilities.ts";
 export type OpsCatalogEntry = HostOperationDefinition & {
@@ -71,10 +72,10 @@ export function opRow(op: OpsCatalogEntry): Capability {
     // [Op(Finds = ...)] is the op's search vocabulary; without it "point at" or "highlight" never reach the op.
     ...(op.searchTerms?.length ? { finds: [...op.searchTerms] } : {}),
     needs: op.needs === "nothing" && !isTsOnlyOperationKey(op.key) ? "session" : op.needs,
-    effect: op.intent !== "Read" ? "command" : "query",
-    mutates: op.intent !== "Read",
+    effect: opWrites(op) ? "command" : "query",
+    mutates: opWrites(op),
     principal: capabilityPrincipals(
-      op.intent !== "Read",
+      opWrites(op),
       op.principal ?? nativePrincipals(op.actor),
     ),
     input: parseSchema(op.requestSchemaJson),

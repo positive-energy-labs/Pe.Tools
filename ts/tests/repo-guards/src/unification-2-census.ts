@@ -3,6 +3,9 @@ import { relative, resolve } from "node:path";
 import ts from "typescript";
 import { execFileSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
+import { hostOpCatalog } from "../../../packages/host-contracts/src/generated/host-catalog.generated.ts";
+
+const catalogPath = "ts/packages/host-contracts/src/generated/host-catalog.generated.ts";
 
 export const root = resolve(import.meta.dirname, "../../../..");
 const read = (p: string) => readFileSync(resolve(root, p), "utf8");
@@ -149,29 +152,34 @@ function structuralCensus() {
   return Object.fromEntries(Object.entries(result).map(([law, sites]) => [law, [...sites].sort()]));
 }
 
-function geometryCensus(): string[] {
+/**
+ * A read of geometry must name its subject. The axes come from the generated op catalog (the public
+ * contract, drift-checked by codegen:check), not from the `[Op]` argument list, which slice 3 reshapes;
+ * the C# source only says where each op is declared. Fails closed both ways: a declared op with no
+ * catalog row, and a catalog row nothing declares.
+ */
+export function geometryCensus(
+  catalog: readonly { key: string; subject: string; touches: string; effect: string }[] = hostOpCatalog,
+  sources: Record<string, string> = Object.fromEntries(
+    files("dotnet").filter((p) => p.endsWith(".cs") && !p.includes("Tests/")).map((p) => [p, read(p)]),
+  ),
+): string[] {
+  const rows = new Map(catalog.map((row) => [row.key, row]));
+  const declared = new Set<string>();
   const result: string[] = [];
-  // Read current Op axes; absent declarations fail closed.
-  for (const p of files("dotnet").filter((p) => p.endsWith(".cs") && !p.includes("Tests/"))) {
-    const text = read(p);
-    for (const m of text.matchAll(/\[Op\(\s*"([^"]+)"((?:"(?:\\.|[^"\\])*"|[^"])*?)\)\]/gs)) {
-      const axes = m[2]!.match(
-        /^\s*,\s*OpSubject\.(\w+)\s*,\s*(OpTouches\.\w+(?:\s*\|\s*OpTouches\.\w+)*)\s*,\s*OpEffect\.(\w+)/,
-      );
-      const subject = axes?.[1];
-      const touches = axes?.[2];
-      const effect = axes?.[3];
+  for (const [p, text] of Object.entries(sources))
+    for (const [, key] of text.matchAll(/\[Op\(\s*"([^"]+)"/g)) {
+      declared.add(key!);
+      const row = rows.get(key!);
       if (
-        !effect ||
-        !subject ||
-        !touches ||
-        ((effect === "Read" || effect === "TransactRead") &&
-          touches.includes("Geometry") &&
-          ["Document", "None"].includes(subject))
+        !row ||
+        ((row.effect === "Read" || row.effect === "TransactRead") &&
+          row.touches.split(", ").includes("Geometry") &&
+          ["Document", "None"].includes(row.subject))
       )
-        result.push(`${p}#Op:${m[1]}`);
+        result.push(`${p}#Op:${key}`);
     }
-  }
+  for (const row of catalog) if (!declared.has(row.key)) result.push(`${catalogPath}#Op:${row.key}`);
   return [...new Set(result)].sort();
 }
 
