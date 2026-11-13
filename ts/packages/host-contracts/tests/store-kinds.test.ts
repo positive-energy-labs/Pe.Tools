@@ -7,7 +7,7 @@
  * `src/kinds.ts`, widen `read` to take `StoredFile<T, At> | string`, or drop `[where]` from
  * `StatePath` and `HomePath`.
  */
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, test } from "vite-plus/test";
@@ -17,6 +17,7 @@ import {
   appendLine,
   derivedIn,
   derivedKey,
+  generatedKind,
   homeKind,
   keptStateKind,
   notices,
@@ -31,6 +32,7 @@ import {
   stateKind,
   stateLog,
   writeDerivedIn,
+  writeGenerated,
   writeHome,
   writeState,
   type StatePath,
@@ -61,6 +63,19 @@ beforeEach(() => {
 });
 afterEach(() => rmSync(root, { recursive: true, force: true }));
 const blob = (bytes: string) => join(machine.blobs, "sha256", sha256Hex(bytes));
+
+test("a generated kind publishes whole files and leaves identical bytes untouched", () => {
+  const file = generatedKind(["route", "source-closure.generated.json"]).in(root);
+  writeGenerated(file, "first closure");
+  utimesSync(file, 1, 1);
+  writeGenerated(file, "first closure");
+  expect(statSync(file).mtimeMs).toBe(1000);
+  writeGenerated(file, "next closure");
+  expect(readFileSync(file, "utf8")).toBe("next closure");
+  expect(readdirSync(join(root, "route"))).toEqual(["source-closure.generated.json"]);
+  for (const segment of ["..", "../../escape", "a\\b", ""])
+    expect(() => generatedKind([segment]).in(root)).toThrow(/segment/);
+});
 
 test("a kind mints its own path under its root, and refuses a segment that would leave it", () => {
   expect(taskKind.in(machine, "a").path).toBe(join(root, "machine", "state", "tasks", "a.json"));
@@ -149,6 +164,10 @@ export function witness(bare: string) {
   const home = machine.home({ tier: "user", root: bare });
   const state = taskKind.in(machine, "a");
   const authored = settingsKind.in(home, "ducts");
+  // @ts-expect-error generated output needs a kind, not an arbitrary path
+  writeGenerated(bare, "{}");
+  // @ts-expect-error product state cannot enter the disposable build-output writer
+  writeGenerated(state, "{}");
   // @ts-expect-error a bare string is not a stored file
   read(bare);
   // @ts-expect-error a bare string is not a state root
