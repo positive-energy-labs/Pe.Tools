@@ -15,11 +15,13 @@ const readRoot = "ts/apps/host/src/reads";
 // Ownership is reviewed per file, never inferred from a generated-file glob.
 export const readFileOwnership = {
   "door.ts": { owner: "kernel", reason: "Effect-free read door Pods and route directories import" },
-  "evaluator.ts": { owner: "kernel", reason: "Tracked evaluation, Values and publications" },
+  "evaluator.ts": { owner: "kernel", reason: "Tracked evaluation of one recipe into a Value" },
   "history-routes.ts": { owner: "kernel", reason: "Generic History HTTP admission and dispatch" },
   "history.ts": { owner: "kernel", reason: "Durable publication History and replay" },
   "inputs.ts": { owner: "kernel", reason: "Tracked native, Work, file and document inputs" },
   "invalidations.ts": { owner: "kernel", reason: "Shared input invalidation subscriptions" },
+  "publications.ts": { owner: "kernel", reason: "Publication slots, shared flights and a lease per subscriber" },
+  "read-ownership.ts": { owner: "kernel", reason: "Read lifetime: owners, flights and leases over NativeReads; names no route" },
   "routes.ts": { owner: "kernel", reason: "Read registry and generic HTTP dispatcher" },
 } as const satisfies Record<string, { owner: "kernel" | "route-owned" | "generated"; reason: string }>;
 const ownership = new Map(Object.entries(readFileOwnership));
