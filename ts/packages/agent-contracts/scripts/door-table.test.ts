@@ -1,14 +1,15 @@
 import { expect, test } from "vite-plus/test";
-import { commandTable, type CommandKey } from "../src/command-axes.ts";
-import { httpRoutes, peRoutes, type PeRouteId } from "../src/pe-api.ts";
+import { commandTable } from "../src/command-axes.ts";
+import { httpRoutes, peRoutes } from "../src/pe-api.ts";
 
 const axisNames = new Set(["subject", "touches", "effect", "cost", "cardinality", "cap", "internal", "rollsBack"]);
 test("every key shared by the HTTP doors and command table has exactly one policy", () => {
-  const shared = Object.keys(commandTable).filter((key) => Object.hasOwn(httpRoutes, key));
+  const axes = new Map(Object.entries(commandTable).map(([key, row]) => [key, row.axes]));
+  const shared = Object.entries(peRoutes).filter(([key]) => axes.has(key));
   expect(shared.length).toBeGreaterThan(0);
-  for (const key of shared) {
-    const door = Object.fromEntries(Object.entries(peRoutes[key as PeRouteId].catalog).filter(([name]) => axisNames.has(name)));
-    expect.soft(commandTable[key as CommandKey].axes, key).toEqual(door);
+  for (const [key, route] of shared) {
+    const door = Object.fromEntries(Object.entries(route.catalog).filter(([name]) => axisNames.has(name)));
+    expect.soft(axes.get(key), key).toEqual(door);
   }
 });
 
