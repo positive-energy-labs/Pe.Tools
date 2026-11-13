@@ -8,16 +8,13 @@
  */
 import {
   routeAddress,
-  THREAD_TABS_MAX,
-  threadTabSchema,
   type History,
   type RouteKey,
   type RoutePage,
 } from "@pe/agent-contracts";
-import { fromStandardSchema } from "@pe/host-contracts/contracts";
-import { Cause, Exit, Schema } from "effect";
 import { useRouter, useRouterState, type SearchMiddleware } from "@tanstack/react-router";
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useSyncExternalStore } from "react";
+import { places } from "../workbench/places";
 import { z } from "zod";
 import type { ViewOwner } from "./view-owner";
 import { causeRefusal } from "./refusal";
@@ -271,26 +268,10 @@ export function useInitialUrlPage<P>(url: UrlPage<P> | null): Partial<P> {
   )[0];
 }
 
-/** Tab memory as `workbench/tabs.ts` writes it: the window's Places, decoded (ADR 0029 rule 7). */
-const PlacesMemory = Schema.fromJsonString(
-  fromStandardSchema(threadTabSchema.array().max(THREAD_TABS_MAX), "Places"),
-);
-
 /** Defaults are applied by UrlPage.read after merging tab memory and explicit deep-link keys. */
 export function tabPageSearch(pathname: string): Record<string, unknown> | undefined {
   try {
-    // React caller until phase 5: memory from another build that does not decode restores nothing.
-    const memory = Schema.decodeUnknownExit(PlacesMemory)(
-      sessionStorage.getItem("pe.places") ?? "[]",
-    );
-    if (Exit.isFailure(memory)) {
-      console.warn(
-        "ts/apps/web/src/route/url.ts: tab memory does not decode",
-        Cause.pretty(memory.cause),
-      );
-      return undefined;
-    }
-    const tabs = memory.value;
+    const tabs = places.read().tabs;
     const focused = sessionStorage.getItem("pe.place.focus");
     const matches = tabs.filter(
       (tab) => new URL(tab.link, "http://tab.invalid").pathname === pathname,
@@ -316,6 +297,7 @@ export function restorePageSearch(memory?: Record<string, unknown>, url?: Record
 
 /** Restore before device admission, so a bare fixture Place never falls into the host lane. */
 export function useRestoreTabPage() {
+  useSyncExternalStore(places.subscribe, places.read, places.read);
   const router = useRouter();
   const at = useRouterState({ select: (state) => state.location });
   const memory =
