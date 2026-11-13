@@ -5766,7 +5766,7 @@ export namespace RevitContextJournal {
   }
 }
 
-/** Make or refresh this document's lens: a 3D view (default name 'Pe lens') with its section box around the elements, medium detail, hidden lines, and links, levels, grids, rooms, spaces and zones hidden. Answers the view id to pass to revit.context.show-elements. Adds or updates that one view and changes nothing else; the document may be headless. */
+/** Make or refresh this document's lens: a 3D view (default name 'Pe lens') with its section box around the elements, medium detail and hidden lines. Turns off supported clutter categories; hidden reports only switches that held, with host-document instance counts and PeDefault reason. It does not evaluate filters, phases, worksets, occlusion or linked-document contents. Answers the view id to pass to revit.context.show-elements. Adds or updates that one view and changes nothing else; the document may be headless. */
 export namespace RevitContextLens {
   export namespace Req {
     /**
@@ -5828,6 +5828,9 @@ export namespace RevitContextLens {
       lens: Lens;
       hidden: Hidden[];
     }
+    /**
+     * The view used, without inferring who configured a referenced view.
+     */
     export interface Lens {
       basis: LensBasis;
       viewId: number;
@@ -5933,6 +5936,9 @@ export namespace RevitContextShowElements {
       code: string;
       message: string;
     }
+    /**
+     * The view used, without inferring who configured a referenced view.
+     */
     export interface Lens {
       basis: LensBasis;
       viewId: number;
@@ -6161,10 +6167,16 @@ export namespace RevitContextViewImage {
       view: RevitAgentContextHandle;
       filePath: string;
       byteSize: number;
+      /**
+       * Delivered PNG width in pixels, read from the final file (not the export width it was cut from).
+       */
       width: number;
       height: number;
       lens: Lens;
       hidden: Hidden[];
+      /**
+       * Why the image is far smaller than asked, in words; null when it is not.
+       */
       warning?: null | string;
       viewScale?: number | null;
       modelRect?: null | RevitViewImageModelRect;
@@ -6187,6 +6199,9 @@ export namespace RevitContextViewImage {
       label: string;
       categoryName?: null | string;
     }
+    /**
+     * The view used, without inferring who configured a referenced view.
+     */
     export interface Lens {
       basis: LensBasis;
       viewId: number;
@@ -6306,10 +6321,16 @@ export namespace RevitContextViewImageFocus {
       view: RevitAgentContextHandle;
       filePath: string;
       byteSize: number;
+      /**
+       * Delivered PNG width in pixels, read from the final file (not the export width it was cut from).
+       */
       width: number;
       height: number;
       lens: Lens;
       hidden: Hidden[];
+      /**
+       * Why the image is far smaller than asked, in words; null when it is not.
+       */
       warning?: null | string;
       viewScale?: number | null;
       modelRect?: null | RevitViewImageModelRect;
@@ -6332,6 +6353,9 @@ export namespace RevitContextViewImageFocus {
       label: string;
       categoryName?: null | string;
     }
+    /**
+     * The view used, without inferring who configured a referenced view.
+     */
     export interface Lens {
       basis: LensBasis;
       viewId: number;

@@ -61,6 +61,11 @@ public sealed class NativeLensFixtureRecorder {
                 }
                 var red = Assert.Throws<AssertionException>(() => Assert.That(transactions, Is.Empty));
                 Console.WriteLine($"[PE_LENS_MUTANT_RED] unfocused-write: {red!.Message}");
+                using (var cleanup = new Transaction(doc, "SI-S3 mutant cleanup")) {
+                    cleanup.Start();
+                    view.DetailLevel = ViewDetailLevel.Medium;
+                    cleanup.Commit();
+                }
                 transactions.Clear();
                 image = Pe.Revit.DocumentData.AgentContext.RevitViewImageExporter.Export(doc, view, 600);
             } finally { ui.Application.DocumentChanged -= Changed; }

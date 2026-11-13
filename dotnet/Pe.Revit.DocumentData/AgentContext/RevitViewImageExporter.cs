@@ -17,6 +17,8 @@ namespace Pe.Revit.DocumentData.AgentContext;
 /// </summary>
 public static class RevitViewImageExporter {
     // One policy for setting the lens and disclosing category switches on any referenced view.
+    // A whole-house Fine 3D view with architectural links hung the UI thread for 10+ minutes (2026-10-01).
+    // The Pe default stays boxed at Medium with these categories off; their counts disclose that tradeoff.
     public static IReadOnlyList<(BuiltInCategory Category, HiddenKind Kind)> LensCategories { get; } =
         Array.AsReadOnly(new[] {
             (BuiltInCategory.OST_RvtLinks, HiddenKind.Links),
