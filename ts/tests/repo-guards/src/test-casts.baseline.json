@@ -1,6 +1,6 @@
 {
   "testFiles": 810,
-  "total": 321,
+  "total": 316,
   "byFile": {
     "apps/host/tests/admission.test.ts": 1,
     "apps/host/tests/admitted-builtins.test.ts": 1,
@@ -36,7 +36,6 @@
     "apps/host/tests/recording-points.test.ts": 4,
     "apps/host/tests/retained-basis.test.ts": 3,
     "apps/host/tests/route-apply-actions.test.ts": 2,
-    "apps/host/tests/route-doc-restore.test.ts": 1,
     "apps/host/tests/scheduled-tasks.test.ts": 1,
     "apps/host/tests/sdk-replay.ts": 2,
     "apps/host/tests/thread-export.test.ts": 1,
@@ -45,7 +44,6 @@
     "apps/host/tests/turn-element-names-owner.scenario.test.ts": 2,
     "apps/host/tests/work-lifetime.test.ts": 4,
     "apps/host/tests/work-receipt-feed.test.ts": 4,
-    "apps/host/tests/work-timeline-door.test.ts": 1,
     "apps/host/tests/work-write-boundary.test.ts": 15,
     "apps/pea/tests/prompt.test.ts": 1,
     "apps/web/src/attention.test.tsx": 1,
@@ -112,7 +110,6 @@
     "apps/web/src/shell/work-feed-client.test.ts": 4,
     "apps/web/src/shell/work-journal-client.test.ts": 2,
     "apps/web/src/workbench/route-panes.test.tsx": 1,
-    "packages/agent-contracts/scripts/door-table.test.ts": 2,
     "packages/agent-contracts/src/catalog-admission.test.ts": 2,
     "packages/agent-contracts/src/catalog-work.test.ts": 1,
     "packages/agent-contracts/src/catalog.test.ts": 1,
@@ -152,7 +149,6 @@
     "packages/runtime/src/recording-diff.test.ts": 5,
     "packages/runtime/tests/work-handle.test.ts": 1,
     "packages/runtime/tests/work-journal.test.ts": 1,
-    "packages/runtime/tests/work-timeline.test.ts": 1,
     "tests/e2e/route-chaos-launch.ts": 1
   }
 }

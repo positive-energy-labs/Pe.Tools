@@ -132,6 +132,11 @@ export function census(): TestCasts {
   };
 }
 
+const isTestCasts = (value: unknown): value is TestCasts =>
+  typeof value === "object" && value !== null && "total" in value && typeof value.total === "number" &&
+  "byFile" in value && typeof value.byFile === "object" && value.byFile !== null &&
+  Object.values(value.byFile).every((n) => typeof n === "number");
+
 /** The files whose count rose, as `file: baseline -> actual`. */
 export const rises = (actual: TestCasts, baseline: TestCasts) =>
   Object.entries(actual.byFile)
@@ -142,12 +147,12 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   const path = join(import.meta.dirname, "test-casts.baseline.json");
   const actual = census();
   if (process.argv.includes("--tighten")) {
-    const baseline = existsSync(path)
-      ? (JSON.parse(readFileSync(path, "utf8")) as TestCasts)
-      : undefined;
-    if (baseline && actual.total > baseline.total)
+    const parsed: unknown = existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : undefined;
+    if (parsed !== undefined && !isTestCasts(parsed)) throw new Error(`test-casts: ${path} is not a test-casts baseline`);
+    const baseline = isTestCasts(parsed) ? parsed : undefined;
+    if (baseline && (actual.total > baseline.total || rises(actual, baseline).length))
       throw new Error(
-        `test-casts: ${actual.total} casts exceed the baseline ${baseline.total}; a ratchet only tightens.\n${rises(actual, baseline).join("\n")}`,
+        `test-casts: ${actual.total} casts against the baseline ${baseline.total}; a ratchet only tightens, per file too.\n${rises(actual, baseline).join("\n")}`,
       );
     writeFileSync(path, `${JSON.stringify(actual, null, 2)}\n`);
   }
