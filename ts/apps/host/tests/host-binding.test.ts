@@ -6,7 +6,12 @@ import { createServer } from "node:http";
 import { once } from "node:events";
 import { execFile } from "node:child_process";
 import { claimServiceHost, type ServiceHostHandle } from "@pe/host-contracts/pe-service-host";
-import { createServiceFile, discoverService, readServiceFile } from "@pe/host-contracts/pe-service";
+import {
+  createServiceFile,
+  discoverService,
+  readServiceFile,
+  writeServiceFile,
+} from "@pe/host-contracts/pe-service";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { chooseServicePort } from "@pe/host-contracts/pe-service-host";
 import { hostServiceName } from "@pe/host-contracts/service-identity";
@@ -166,6 +171,7 @@ const owner = (lane: "dev" | "installed", rootPath: string): HostOwnership => ({
 function machine(held: Map<number, string>) {
   return {
     discover: async () => null,
+    readRecord: readServiceFile,
     choosePort: async (_appBase: string, _name: string, preferred: number) =>
       preferred > 0 && !held.has(preferred) ? preferred : 0,
     portAvailable: async (port: number) => !held.has(port),
@@ -226,6 +232,34 @@ test("an installed launch binds a free port after its peer never publishes a rec
   };
   expect(await prepareHostBinding(false, "0.7.31", ownership, dependencies)).toBe(0);
   expect(waits).toEqual(Array(60).fill(500));
+});
+
+test("an installed launch refuses an unverifiable recorded peer after the boot-window wait", async () => {
+  const ownership = owner("installed", temp());
+  const file = createServiceFile(53123, "0.7.31", "installed", "token", ownership.executablePath);
+  await writeServiceFile(ownership.rootPath, ownership.serviceName, file);
+  const waits: number[] = [];
+  const dependencies = {
+    ...machine(new Map([[installedPort, ownership.executablePath]])),
+    discover: vi.fn(async () => null),
+    occupants: async () => [{ pid: file.pid, executable: ownership.executablePath }],
+    choosePort: vi.fn(),
+    retire: vi.fn(),
+    sleep: async (ms: number) => {
+      waits.push(ms);
+    },
+  };
+  await expect(prepareHostBinding(false, "0.7.31", ownership, dependencies)).rejects.toThrow(
+    `Installed host refused: service '${ownership.serviceName}' has an unverifiable record (pid ${file.pid}, executable ${ownership.executablePath}, service '${ownership.serviceName}') on port ${file.port}. The first host keeps serving.`,
+  );
+  expect(waits).toEqual(Array(60).fill(500));
+  expect(dependencies.discover).toHaveBeenCalledTimes(62);
+  expect(dependencies.discover).toHaveBeenLastCalledWith(ownership.rootPath, ownership.serviceName, {
+    verifyOwner: true,
+  });
+  expect(dependencies.choosePort).not.toHaveBeenCalled();
+  expect(dependencies.retire).not.toHaveBeenCalled();
+  expect(await readServiceFile(ownership.rootPath, ownership.serviceName)).toEqual(file);
 });
 
 test("an installed launch binds 5180 as soon as its recordless peer frees the port", async () => {

@@ -110,6 +110,7 @@ async function readPortOccupants(appBase: string, port: number): Promise<PortOcc
 
 const bindingDependencies = {
   discover: discoverService,
+  readRecord: readServiceFile,
   choosePort: chooseServicePort,
   portAvailable: installedPortAvailable,
   occupants: readPortOccupants,
@@ -195,8 +196,15 @@ export async function prepareHostBinding(
         live = await dependencies.discover(appBase, ownership.serviceName, { verifyOwner: true });
         if (live) break;
         if (await dependencies.portAvailable(installedPort)) return installedPort;
-        // With no record the SDK has no incumbent to shut down; preserve the free-port fallback.
-        if (attempt === 60) break;
+        if (attempt === 60) {
+          // Verified discovery can fail for a recorded peer; a second SDK claim would shut it down.
+          const recorded = await dependencies.readRecord(appBase, ownership.serviceName);
+          if (recorded)
+            throw new Error(
+              `Installed host refused: service '${ownership.serviceName}' has an unverifiable record (${describeOccupant({ pid: recorded.pid, executable: recorded.executablePath ?? "unknown", serviceName: ownership.serviceName })}) on port ${recorded.port}. The first host keeps serving.`,
+            );
+          break;
+        }
         await dependencies.sleep(500);
       }
     }
