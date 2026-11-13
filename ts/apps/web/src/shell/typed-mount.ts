@@ -128,10 +128,19 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
   ]);
   let stopTimeline = () => {};
   const reads = new Map<import("../route/host-read").HostRead, { snapshot: Snapshot; args: string; stop(): void }>();
+  const readInput = (read: import("../route/host-read").HostRead) => {
+    const project = "args" in read && typeof read.args === "function" ? read.args : spec.core?.args ?? (() => ({}));
+    return read.input.parse(project(page as never));
+  };
+  const currentPublication = (read: import("../route/host-read").HostRead) => {
+    const record = reads.get(read);
+    return record?.snapshot.state === "ready" && record.args === canonicalRouteInput(readInput(read))
+      ? record.snapshot.publication : null;
+  };
   const timelineClient = ports.timeline ?? (input.fixture === null && !input.history ? createTimelineClient(ports.findings) : null);
   const timelineWorks = () => [...new Map([
     ...[...owners.values()].map(owner => owner.handle?.key ?? owner.scope.key),
-    ...[...reads.values()].flatMap(read => read.snapshot.publication?.works ?? []),
+    ...[...reads.keys()].flatMap(read => currentPublication(read)?.works ?? []),
   ].map(key => [workKey(key), key])).values()];
   // The document head has no writable owner. Its host scope is independent of route read membership.
   const timelineDocument = () => {
@@ -142,11 +151,13 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
   let timelineMembership: string | undefined;
   const connectTimeline = (force = false) => {
     const works = timelineWorks(), document = timelineDocument();
-    const membership = canonicalRouteInput([works, document ?? null]);
+    const readingValue = !document && !!spec.core && !currentPublication(spec.core);
+    const membership = canonicalRouteInput([works, document ?? null, readingValue]);
     if (!force && timelineMembership === membership) return;
     timelineMembership = membership;
     stopTimeline(); timelineState = null;
-    timelineProblem = input.history ? "Recorded Timeline is read-only" : "Timeline unavailable";
+    timelineProblem = input.history ? "Recorded Timeline is read-only" : readingValue ? "Reading Timeline: waiting for the current Value" : "Timeline unavailable";
+    if (readingValue) return;
     if (!timelineClient || !works.length && !document) return;
     let closed = false;
     const stop = timelineClient.open(works, (value, reason) => {
@@ -275,8 +286,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
   const syncReads = (force = false) => {
     if (disposed || released || !input.custody.current()) return;
     for (const read of allReads) {
-      const project = "args" in read && typeof read.args === "function" ? read.args : spec.core?.args ?? (()=>({}));
-      const args = read.input.parse(project(page as never)), signature = canonicalRouteInput(args);
+      const args = readInput(read), signature = canonicalRouteInput(args);
       if (!force && signature === reads.get(read)?.args) continue;
       const previous = reads.get(read)?.snapshot;
       const retained: Publication=previous?.publication?freezePage({...previous.publication,freshness:"refresh-needed" as const}):null;
