@@ -176,7 +176,7 @@ async function harness(stale = false) {
     },
   };
   const work = createWorkFeedClient(source, {
-    write: (scope, write) => workspace.write(scope, scope.route, "human", write),
+    write: (scope, write) => workspace.write(scope, scope.route, "human", write, async () => []),
     submit: async () => {
       throw Error("No native command");
     },

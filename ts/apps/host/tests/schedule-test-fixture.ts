@@ -27,6 +27,7 @@ import { BridgeError, type HostBridgeEvent } from "../src/bridge.ts";
 import { hostResourceObserver, markReadings } from "../src/resource-adapters.ts";
 
 import { createPeRoutes, fileRouteDocumentStore } from "../src/pe-routes.ts";
+import { timelineReceipts } from "../src/reads/work-timeline.ts";
 import { sdkSessions, originalProcess } from "./native-receipt-fixture.ts";
 import { markDispatched } from "../src/action-dispatch.ts";
 import { replayAnswer } from "./sdk-replay.ts";
@@ -71,6 +72,9 @@ export async function setup(options: { cold?: boolean } = {}) {
   let capabilities: ReturnType<typeof createCapabilityCatalogSource>;
   const publications = new Publications();
   const app = createPeRoutes({
+    // The Timeline reads this host's receipts: a restore through /apply is refused without them.
+    // `owner` is reopened on restart, so the routes follow the current one.
+    timelineReceipts: () => timelineReceipts(owner),
     readGraph: async (request) => {
       const graph = graphRoute("reads.value", request);
       const publication = graph.publication!;

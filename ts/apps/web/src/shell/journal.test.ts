@@ -63,7 +63,7 @@ function fixture() {
   const requests: WorkWrite[] = [];
   const writer: JournalWriter = (write) => {
     requests.push(structuredClone(write));
-    return workspace.write(key, key.route, "human", write);
+    return workspace.write(key, key.route, "human", write, async () => []);
   };
   const apply = async (
     patches: RouteStatePatch[],

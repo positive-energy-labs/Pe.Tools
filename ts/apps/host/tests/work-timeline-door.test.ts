@@ -1,9 +1,8 @@
 import { expect, test } from "vite-plus/test";
 import { z } from "zod";
-import { bindWork, workTimelineSchema, type Caller, type WorkKey } from "@pe/agent-contracts";
+import { actionStatusSchema, bindWork, workTimelineSchema, type Caller, type WorkKey } from "@pe/agent-contracts";
 import { RouteWorkspace } from "@pe/runtime";
 import { withInvocationContext } from "@pe/runtime/context";
-import type { ActionJournal } from "../src/action-journal.ts";
 import { createPeRoutes } from "../src/pe-routes.ts";
 import { hostTimeline, registerTimelineSource } from "../src/reads/work-timeline.ts";
 import { graphRoute } from "../src/reads/routes.ts";
@@ -26,10 +25,11 @@ function doors() {
     },
   });
   const receipts: unknown[] = [];
-  const journal = {
-    read: async () => receipts.map((value, revision) => ({ revision, body: { kind: "action", value } })),
-  } as unknown as ActionJournal;
-  const routes = createPeRoutes({ workspace, journal, registrations });
+  /** Receipts that exist only from the nth journal read on: a write landing while a step is in flight. */
+  const late = { from: Infinity, rows: [] as unknown[], reads: 0 };
+  const journal = async () =>
+    [...receipts, ...(++late.reads >= late.from ? late.rows : [])].map((value) => actionStatusSchema.parse(value));
+  const routes = createPeRoutes({ workspace, timelineReceipts: journal, registrations });
   const works = [ducts, fans];
   const post = async (key: WorkKey, verb: "apply" | "history", body: unknown, caller: Caller) => {
     const response = await withInvocationContext({ caller }, () =>
@@ -49,6 +49,10 @@ function doors() {
     fans,
     works,
     receipts,
+    late,
+    /** The raw inverse posted to the apply door, as the browser journal's undo sends it. */
+    restore: (key: WorkKey, of: { revision: number; inverse: unknown }, caller: Caller) =>
+      post(key, "apply", { patches: of.inverse, expectedRevision: of.revision, press: null, kind: "restore", restoreOf: of.revision }, caller),
     timeline: hostTimeline(workspace, journal),
     read: (by: "human" | "pea") => hostTimeline(workspace, journal).read(works, by),
     value: async (key: WorkKey) => ((await workspace.view(key, key.route))!.doc as { a: number }).a,
@@ -61,7 +65,7 @@ function doors() {
       );
       expect(written.body, JSON.stringify(written.body)).toMatchObject({ ok: true });
       await new Promise((resolve) => setTimeout(resolve, 3));
-      return written.body as { revision: number };
+      return (written.body as { write: { revision: number; inverse: unknown } }).write;
     },
     async step(direction: "undo" | "redo", caller: Caller, expected: unknown) {
       const result = await post(ducts, "history", { direction, works, expected }, caller);
@@ -166,4 +170,69 @@ test("the read door stamps the caller's author over anything the client sent, an
   expect(await graphRoute("reads.value", request, undefined, "human").evaluate(port)).toMatchObject({ undo: null });
   // A lane with no action journal refuses the read; it never builds a Timeline without receipts.
   await expect(bound.evaluate(inputPort({ source: {} as never, workspace: {} as never, marks: {} as never, run: (async () => undefined) as never, evaluation: "test", origin: () => null, revision: () => 0 }))).rejects.toThrow(/action journal/);
+});
+
+/** A Revit write that consumed `key` at `revision`, in the given state. */
+const consumed = (key: WorkKey, revision: number, a: number, state: "running" | "succeeded" | "failed" = "succeeded") => ({
+  id: "receipt-9",
+  key: "ducts.push",
+  state,
+  ...(state === "succeeded" ? { result: {} } : state === "failed" ? { error: "native failed", status: 500 } : {}),
+  caller: approvedPea("timeline-door"),
+  basis: null,
+  target: { kind: "host" },
+  input: {},
+  startedAt: "2026-11-12T15:00:00Z",
+  effects: [{ kind: "file", path: "C:/model" }],
+  consumes: [{ kind: "work", probe: { handle: { key, revision }, paths: [["a"]] }, expected: { a } }],
+});
+
+test.each([["a person", human], ["Pea", approvedPea("timeline-door")]] as const)(
+  "T1: a raw restore through /apply is the caller's own next step or it is refused, for %s",
+  async (_name, caller) => {
+    const d = doors();
+    const other = caller.kind === "pea" ? human : approvedPea("timeline-door");
+    const edit = await d.edit(d.ducts, caller, 5);
+    // The other author cannot post this author's inverse.
+    const foreign = await d.restore(d.ducts, edit, other);
+    expect(foreign.body).toMatchObject({ ok: false, error: expect.stringContaining("own next Timeline step") });
+    expect(await d.value(d.ducts)).toBe(5);
+    // After a Revit write consumed the edit, its own author cannot either, and the refusal names the receipt.
+    d.receipts.push(consumed(d.ducts, edit.revision, 5));
+    const held = await d.restore(d.ducts, edit, caller);
+    expect(held.body).toMatchObject({ ok: false, error: expect.stringContaining("receipt-9") });
+    expect(await d.value(d.ducts)).toBe(5);
+    // With no write holding it, the author's own raw restore still lands: the browser's undo keeps working.
+    d.receipts.length = 0;
+    expect((await d.restore(d.ducts, edit, caller)).body).toMatchObject({ ok: true, write: { kind: "restore" } });
+    expect(await d.value(d.ducts)).toBe(0);
+  },
+);
+
+test("T2: a running Revit write that consumed the edit holds undo; only a terminal outcome without a write releases it", async () => {
+  const d = doors();
+  const edit = await d.edit(d.ducts, human, 5);
+  const shown = (await d.read("human")).undo;
+  d.receipts.push(consumed(d.ducts, edit.revision, 5, "running"));
+  const read = await d.read("human");
+  expect(read.undo).toBeNull();
+  expect(read.refusal.undo).toContain("receipt-9");
+  expect((await d.step("undo", human, shown)).body).toMatchObject({ ok: false, error: expect.stringContaining("receipt-9") });
+  expect((await d.restore(d.ducts, edit, human)).body).toMatchObject({ ok: false, error: expect.stringContaining("receipt-9") });
+  expect(await d.value(d.ducts)).toBe(5);
+  d.receipts[0] = consumed(d.ducts, edit.revision, 5, "failed");
+  expect((await d.step("undo", human, shown)).body).toMatchObject({ ok: true });
+  expect(await d.value(d.ducts)).toBe(0);
+});
+
+test("T3: a Revit write that lands after the step was chosen is seen inside the write boundary", async () => {
+  const d = doors();
+  const edit = await d.edit(d.ducts, human, 5);
+  const shown = (await d.read("human")).undo;
+  // The door reads receipts to merge, then to choose, then inside the restore's write boundary.
+  d.late.rows.push(consumed(d.ducts, edit.revision, 5));
+  d.late.from = d.late.reads + 3;
+  expect((await d.step("undo", human, shown)).body).toMatchObject({ ok: false, error: expect.stringContaining("receipt-9") });
+  expect(d.late.reads).toBe(d.late.from);
+  expect(await d.value(d.ducts)).toBe(5);
 });
