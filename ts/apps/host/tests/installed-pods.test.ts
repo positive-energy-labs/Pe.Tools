@@ -5,7 +5,8 @@ import { pictureCaptures } from "./effect-test.ts";
  */
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
-import { writeFileSync } from "node:fs";
+import { existsSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { readStoredNotices } from "@pe/host-contracts/store";
@@ -13,7 +14,7 @@ import { PictureCaptures } from "../src/captures-route.ts";
 import { storedNoticesPath } from "../src/notice-feed.ts";
 import { importShippedPods } from "../src/installed-pods.ts";
 import { listPackages } from "../src/packages.ts";
-import { exportPod, importPod, importRecordPath, readZip } from "../src/pod-transfer.ts";
+import { exportPod, importPod, importRecordPath, readZip, writeZip } from "../src/pod-transfer.ts";
 import * as settings from "../src/settings.ts";
 import { productPodsRootPath } from "../src/product-paths.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
@@ -148,7 +149,10 @@ test("rollback names a directory kept because a concurrent writer added a file",
 test("a shipped update dropping a member posts one stored keep notice across restarts", async () => {
   await boot();
   const directory = join(pods, "example");
+  const original = (await listPackages(pods)).packages.find(p => p.id === "example")!;
   const before = await readFile(join(directory, "pages", "tour", "index.html"));
+  const manifest = join(root, "examples", "example", "pod.json");
+  await writeFile(manifest, (await readFile(manifest, "utf8")).replace("1.0.0", "2.0.0"));
   await rm(join(root, "examples", "example", "pages"), { recursive: true });
   await rm(join(shipped, "example.zip"));
   await exportPod({ pod: "example", archivePath: join(shipped, "example.zip") },
@@ -159,6 +163,9 @@ test("a shipped update dropping a member posts one stored keep notice across res
   expect(notices).toHaveLength(1);
   expect(notices[0]).toMatchObject({ class: "keep", reason: expect.stringContaining("removes members") });
   expect(await readFile(join(directory, "pages", "tour", "index.html"))).toEqual(before);
+  for (const member of original.members)
+    expect(await readFile(join(directory, member.path))).toEqual(Buffer.from(member.bytes));
+  expect((await listPackages(pods)).packages.find(p => p.id === "example")!.version).toBe("1.0.0");
 });
 
 test.each(["io", "cas"] as const)("update rolls back a second-member failure (%s) byte for byte and a retry succeeds", async (mode) => {
@@ -361,4 +368,73 @@ test("the wait for the shipped-pod import is bounded: a run that never settles d
   // A failed run is over too, and no run is no wait.
   await settledWithin(Promise.reject(Error("refused")), 60_000);
   await settledWithin(undefined, 60_000);
+});
+
+test("rollback undoes repeated writes to one member newest first", async () => {
+  const path = join(root, "member.txt");
+  await writeFile(path, "original");
+  const hash = (bytes: string) => createHash("sha256").update(bytes).digest("hex");
+  expect(settings.writeHome(path, "first", hash("original")).ok).toBe(true);
+  expect(settings.writeHome(path, "second", hash("first")).ok).toBe(true);
+  expect(settings.rollbackHomeMembers([
+    { path, sha256: hash("first"), prior: Buffer.from("original") },
+    { path, sha256: hash("second"), prior: Buffer.from("first") },
+  ])).toEqual([]);
+  expect(await readFile(path, "utf8")).toBe("original");
+});
+
+test("a failed last non-manifest write never exposes a manifest during import", async () => {
+  const entries = readZip(await readFile(join(shipped, "example.zip")));
+  // The ZIP writer sorts pod.json before z-last.txt; publication must move the manifest last.
+  const ordered = new Map([["pod.json", entries.get("pod.json")!] as const,
+    ...[...entries].filter(([path]) => path !== "pod.json"),
+    ["z-last.txt", Buffer.from("last")] as const]);
+  await writeFile(join(shipped, "example.zip"), writeZip(ordered));
+  const directory = join(pods, "example");
+  const manifest = join(directory, "pod.json");
+  const write = settings.writeHome;
+  const observations: boolean[] = [];
+  const spy = vi.spyOn(settings, "writeHome").mockImplementation((...args) => {
+    observations.push(existsSync(manifest));
+    if (args[0] === join(directory, "z-last.txt")) throw Error("last member failed");
+    const result = write(...args);
+    observations.push(existsSync(manifest));
+    return result;
+  });
+  await expect(importPod({ archivePath: join(shipped, "example.zip") }, { podsRoot: pods, captures }))
+    .rejects.toThrow("last member failed");
+  expect(spy.mock.calls.map(([path]) => path)).toEqual([
+    join(directory, "pages", "tour", "index.html"), join(directory, "z-last.txt"),
+  ]);
+  expect(observations.every(present => !present)).toBe(true);
+  expect(existsSync(manifest)).toBe(false);
+});
+
+test("the shipped census resumes a manifest-free folder recorded present by an old host", async () => {
+  const bytes = await readFile(join(shipped, "example.zip"));
+  const hash = createHash("sha256").update(bytes).digest("hex");
+  await mkdir(dirname(ledger), { recursive: true });
+  await writeFile(ledger, JSON.stringify({ offered: {
+    [hash]: { archive: "example.zip", at: new Date().toISOString(), outcome: "present" },
+  } }));
+  const member = join(pods, "example", "pages", "tour", "index.html");
+  await mkdir(dirname(member), { recursive: true });
+  await writeFile(member, readZip(bytes).get("pages/tour/index.html")!);
+  expect((await listPackages(pods)).packages.some(p => p.id === "example")).toBe(false);
+  expect((await boot()).outcomes).toMatchObject([{ outcome: "imported", id: "example" }]);
+  expect((await listPackages(pods)).packages.some(p => p.id === "example")).toBe(true);
+});
+
+test("an unrelated manifest-free example folder is kept with one notice across censuses", async () => {
+  const directory = join(pods, "example");
+  const member = join(directory, "notes.txt");
+  await mkdir(directory, { recursive: true });
+  await writeFile(member, "mine");
+  await boot();
+  await boot();
+  expect(await readdir(directory)).toEqual(["notes.txt"]);
+  expect(await readFile(member, "utf8")).toBe("mine");
+  expect(readStoredNotices(storedNoticesPath()).filter(n => n.path === directory))
+    .toMatchObject([{ class: "keep", reason: expect.stringContaining("notes.txt") }]);
+  expect(readStoredNotices(storedNoticesPath()).filter(n => n.path === directory)).toHaveLength(1);
 });

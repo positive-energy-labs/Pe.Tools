@@ -299,8 +299,15 @@ async function offer(
       error instanceof TransferRefused &&
       error.status === 409 &&
       /folder already exists/.test(reason)
-    )
-      return { archive, sha256, outcome: "present", id: archiveId(readZip(bytes)), reason };
+    ) {
+      const id = archiveId(readZip(bytes));
+      noteStored(storedNoticesPath(), {
+        class: "keep", place: `Shipped example ${id}`,
+        path: join(options.podsRoot ?? productPodsRootPath(), id),
+        sha256, reason,
+      });
+      return { archive, sha256, outcome: "present", id, reason };
+    }
     return { archive, sha256, outcome: "refused", reason };
   }
 }
