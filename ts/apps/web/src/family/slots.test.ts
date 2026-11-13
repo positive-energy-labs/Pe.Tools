@@ -40,7 +40,7 @@ test("/family declares subject, query and goal, and no carry key", () => {
     sort: "query",
     hidden: "query",
     member: "subject",
-    stage: "pose",
+    stage: "stage",
     pane: "pose",
     overlay: "pose",
     drill: "pose",

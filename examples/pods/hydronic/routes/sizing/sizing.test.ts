@@ -170,6 +170,6 @@ describe("kernel gaps", () => {
   });
   test("kernel door: pod-parameter-write (8)", () => {
     // The parameter binding earns the one sheet pair: the Pod adds no native op (ADR 0030 rule 12).
-    expect(module.data.verbs.sheet).toMatchObject({ effect: "command", entry: "sheet.apply" });
+    expect(module.data.verbs.sheet).toMatchObject({ effect: "ModelWrite", entry: "sheet.apply" });
   });
 });
