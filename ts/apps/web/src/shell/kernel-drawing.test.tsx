@@ -2,6 +2,7 @@
 import "../test-setup";
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { expect, test, vi } from "vite-plus/test";
+import { isValidElement } from "react";
 import { LAYER, readMarks, settled } from "../../../../tests/e2e/marks";
 import { kernelPane } from "./typed-shell";
 import { mountTypedRoute } from "./typed-mount";
@@ -21,7 +22,9 @@ test("the actual kernel picture Suspense blocks driver settledness until its mod
     custody: { current: () => true }, memory: () => ({}),
   }, workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`));
   try {
-    render(<section data-url-settled="">{mount.draw("sheet-picture", ctx => kernelPane(mount, "sheet-picture", ctx))}</section>);
+    const picture = mount.draw("sheet-picture", ctx => kernelPane(mount, "sheet-picture", ctx));
+    if (!isValidElement(picture)) throw Error("Picture pane did not return a drawing element");
+    render(<section data-url-settled="">{picture}</section>);
     expect(screen.getByText("Loading drawing")).toBeTruthy();
     expect(settled(readMarks(LAYER))).toBe(false);
     await act(async () => pending.resolve({ PicturePane: () => <p>Picture ready</p> }));
