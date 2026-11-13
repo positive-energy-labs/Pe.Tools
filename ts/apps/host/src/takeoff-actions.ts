@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { nativeRequestSchema } from "@pe/host-contracts/decoders";
+import { nativeRequestInput } from "./native-input.ts";
 import type { HostOperationKey } from "@pe/host-contracts/operation-types";
 import { lifetime } from "./document-lifetime.ts";
 import { command, io, nativeStep, refused, type CommandContext } from "./command-executor.ts";
@@ -144,7 +145,7 @@ export function takeoffExecutors(
   const bindCarrier = async (ctx: CommandContext, select?: () => Promise<void>) => {
     // Validate the final leaf before carrier preparation can make its first model write.
     const action = ctx.admission.key.replace(/\.preview$/, "");
-    const { work: _work, ...input } = ctx.admission.input;
+    const input = nativeRequestInput(ctx.admission.input);
     const leaf = action === "takeoffs.initialize" ? "takeoffs.initialize-carrier" : action;
     const requests = action === "takeoffs.adopt" ? z.array(z.unknown()).parse(input.views) : [
       action.endsWith(".partition") ? { ...input, runId: ctx.admission.id } : input,
@@ -200,9 +201,8 @@ export function takeoffExecutors(
       bind: (ctx) => bindCarrier(ctx),
       run: (ctx, execution) =>
         runCarrier(ctx, execution, captures, bridge, "Materialization", (native) => {
-          const { work: _work, ...input } = ctx.admission.input;
           return value(ctx, native, "takeoffs.partition", {
-            ...input,
+            ...nativeRequestInput(ctx.admission.input),
             runId: ctx.admission.id,
           });
         }),
@@ -221,8 +221,7 @@ export function takeoffExecutors(
         ),
       run: (ctx, execution) =>
         runCarrier(ctx, execution, captures, bridge, "Rooms", (native) => {
-          const { work: _work, ...input } = ctx.admission.input;
-          return value(ctx, native, "rooms.partition", { ...input, runId: ctx.admission.id });
+          return value(ctx, native, "rooms.partition", { ...nativeRequestInput(ctx.admission.input), runId: ctx.admission.id });
         }),
     }),
     "rooms.draw": command(commands["rooms.draw"], preparedCarrierSchema, {
@@ -230,8 +229,7 @@ export function takeoffExecutors(
       bind: (ctx) => bindCarrier(ctx, () => selectRooms(ctx, () => [])),
       run: (ctx, execution) =>
         runCarrier(ctx, execution, captures, bridge, "Rooms", (native) => {
-          const { work: _work, ...input } = ctx.admission.input;
-          return value(ctx, native, "rooms.draw", input);
+          return value(ctx, native, "rooms.draw", nativeRequestInput(ctx.admission.input));
         }),
     }),
     // TODO: docs/features/routes/LEDGER.md#s7-1cd8580b01 rooms.write native receipts report only a count; retain edits until receipts identify confirmed guid/field cells.
@@ -281,8 +279,7 @@ export function takeoffExecutors(
         ),
       run: (ctx, execution) =>
         runCarrier(ctx, execution, captures, bridge, "Rooms", (native) => {
-          const { work: _work, ...input } = ctx.admission.input;
-          return value(ctx, native, "rooms.merge", input);
+          return value(ctx, native, "rooms.merge", nativeRequestInput(ctx.admission.input));
         }),
     }),
     "takeoffs.sync": command(commands["takeoffs.sync"], preparedSyncSchema, {
