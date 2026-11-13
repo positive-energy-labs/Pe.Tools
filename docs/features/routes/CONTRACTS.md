@@ -50,7 +50,9 @@ Copy each into both briefs verbatim from the cited lines.
 4. **Evidence interfaces** (writer B lift; writer C implements). `sight.md:98-104`. `IObserved { DocumentKey; Revision? }` and `IEvidenced<out TEvidence>`. A null revision stays unknown.
 5. **`SpatialEvidence` wire shape** (writer C gives; the TS decode writer takes). `picture.md:96-108`.
 
-   Native PI-P1 implements `IEvidenced<SpatialEvidence>` on every Space answer, including `SceneArtifact`. The answer member is `evidence`; `stamp` and `fresh` are removed. PSC1 metadata uses `evidence` and format `space-scene-v6`. `SceneReceipt` keeps bounded counts and observation `revision`/`observedAt`; the artifact answer supplies concrete evidence separately. The C# authority is `dotnet/Pe.Revit.Space/Coverage.cs`:
+   Native PI-P1 implements `IEvidenced<SpatialEvidence>` on Space query answers and PSC1 metadata. `SceneArtifact` implements `IEvidenced<SceneEvidence>`: fixed source/acquisition/coverage counts plus the content-addressed PSC1 reference, never full membership in either RPC evidence projection. The answer member is `evidence`; `stamp` and `fresh` are removed. PSC1 metadata retains full `SpatialEvidence` and format `space-scene-v6`. `SceneReceipt` keeps counts and observation `revision`/`observedAt`. The C# authority is `dotnet/Pe.Revit.Space/Coverage.cs`.
+
+   D11: `SceneEvidence` carries `documentKey`, nullable `revision`, `observedAt`, `frame`, `summary` and `artifact: { id, url, bytes }`. Summary has `acquisitionRequested`, `representation`, and fixed count records for source availability, acquisition outcomes and coverage reasons. It carries no identity lists, transforms, reach boxes or exclusions. `SceneArtifact.id/url/bytes` derive from that same reference. Full detail is obtained from the artifact, so the runner's separate `EvidenceJson` cannot repeat the element lists.
 
    ```ts
    type Placement = { hostDocumentKey: string; linkUniqueId: string | null };
@@ -268,7 +270,7 @@ Mapping from today, one to one: `pending` with a value is `refreshing`, `pending
 
 As landed (SH-S6):
 - The gate is in `mount.draw`: a pane whose read is value-less gets the shell's one line (`W/shell/reading-line.tsx`, marked `data-reading`) and its body does not run. A pane with no read always draws. Every pane reads the core unless it names another read.
-- A pane whose control clears the core's refusal names its own read, or the route is a dead end. Three do: ducts `e-systems` and fans `sheet-roster` name the roster, takeoff `adoption` names the view catalogue. Such a body reads the core with `ctx.read(core)` and narrows.
+- A pane whose control clears the core's refusal names its own read, or the route is a dead end. Three do: ducts `e-systems` and fans `sheet-roster` name the roster, takeoff `adoption` names the view catalogue. Such a body reads the core with `ctx.read(core)` and narrows. Demand follows visible panes (`visibleReads`), so when no other pane reads the core the route declares it in `reads`, as takeoff does; ducts and fans keep ungated panes on the core.
 - `refusalOf(state)` (the shell's sentence, null when ready) and `valueOf(state)` (the held value) live in `W/route/typed-route.ts`. `ctx.cells.state` is ready only when Work can be edited; a held doc that cannot be edited is `refreshing` or `stale` with the reason.
 - The kit's `ValueHandle` is `{ state, value?, reason? }`, so a reading state fits it with no adapter.
 - A read has no `demand`: every declared read runs at mount.

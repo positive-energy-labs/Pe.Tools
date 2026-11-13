@@ -1,5 +1,3 @@
-import familiesGraph from "./generated/families-graph.json" with { type: "json" };
-
 export function renderFamiliesSkill(): string {
   return [
     "---",
@@ -15,10 +13,7 @@ export function renderFamiliesSkill(): string {
     "Apply families shows the exact families.plan preview and commits its sealed plan id through families.apply. Work changes make the review stale. Results and receipts are readings, never Page or authored Work. The Timeline lists steps; undo and redo take the caller's own last one.",
     "Start fresh sets unreadable Work aside. Carry over reviews the missing scope and named exclusions, then applies them as one undoable Work write. Both are kernel recovery verbs.",
     "",
-    "The Families route graph:",
-    "```json",
-    JSON.stringify(familiesGraph, null, 2),
-    "```",
+    "Read route:families with pe_read for its current graph, field schemas and verb inputs from the host.",
     "",
   ].join("\n");
 }

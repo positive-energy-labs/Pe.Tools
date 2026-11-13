@@ -1,4 +1,4 @@
-import type { DuctsCriteriaValues } from "@pe/agent-contracts";
+import type { DuctsCriteriaValues } from "./ducts-sheet.ts";
 
 /** Each design criterion in words: the inputs pane's labels and the review's, one map. */
 export const CRITERION_WORDS: Record<keyof DuctsCriteriaValues, string> = {
@@ -12,4 +12,4 @@ export const CRITERION_WORDS: Record<keyof DuctsCriteriaValues, string> = {
 
 /** A criterion's pane label: its words, capitalised. */
 export const criterionLabel = (key: keyof DuctsCriteriaValues) =>
-  CRITERION_WORDS[key][0]!.toUpperCase() + CRITERION_WORDS[key].slice(1);
+  CRITERION_WORDS[key].charAt(0).toUpperCase() + CRITERION_WORDS[key].slice(1);

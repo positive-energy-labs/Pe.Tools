@@ -24,10 +24,9 @@
     "packages/browser/src/attached-guardian.ts": 1,
     "packages/browser/src/keeper.ts": 1,
     "packages/mcps/src/shared/host-rpc-caller.ts": 1,
-    "apps/web/src/route/slots/findings/readings.test-support.ts": 0,
-    "apps/web/src/shell/reading-line.tsx": 0,
-    "apps/web/src/workbench/places.test-support.ts": 0,
-    "apps/web/src/workbench/places.ts": 0
+    "apps/web/src/pods/fields.tsx": 0,
+    "packages/agent-contracts/src/criterion-words.neutral.ts": 0,
+    "packages/agent-contracts/src/setting-owners.ts": 0
   },
   "tests": {
     "apps/host/tests/boundary.test.ts": 5,
@@ -48,13 +47,6 @@
     "apps/host/tests/update-route.test.ts": 1,
     "apps/host/tests/vite-web.test.ts": 4,
     "apps/host/tests/work-lifetime.test.ts": 1,
-    "packages/browser/tests/acceptance.test.ts": 1,
-    "apps/host/tests/capture-disclosure.test.ts": 0,
-    "apps/web/src/route/stage-gates.test.ts": 0,
-    "apps/web/src/shell/command-send.test.ts": 0,
-    "apps/web/src/shell/reading-states.test.tsx": 0,
-    "apps/web/src/workbench/places.test.ts": 0,
-    "packages/agent-contracts/scripts/door-table.test.ts": 0,
-    "packages/ducts-domain/src/sheet/d8-open-end.test.ts": 0
+    "packages/browser/tests/acceptance.test.ts": 1
   }
 }

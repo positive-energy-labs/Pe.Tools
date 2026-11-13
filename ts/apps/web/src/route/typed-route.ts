@@ -49,8 +49,8 @@ export const when = <const F extends Fields, K extends keyof F & string>(
 export function gateActive(condition: string | import("@pe/agent-contracts").GateWhen, page: Readonly<Record<string, unknown>>, subject?: string): boolean {
   if (typeof condition === "object") return page[condition.field] === condition.value;
   if (condition !== "subject") return false;
-  const held = subject ? page[subject] as { kind?: string; ids?: readonly unknown[] } | null : null;
-  return !!held && (held.kind === "all" || !!held.ids?.length);
+  const held = subject ? page[subject] : undefined;
+  return typeof held === "object" && held !== null && (("kind" in held && held.kind === "all") || ("ids" in held && Array.isArray(held.ids) && held.ids.length > 0));
 }
 /** Only panes surviving gates own demand; shared reads stay alive while any visible pane uses them. */
 export function visibleReads(spec: TypedRoute["spec"], page: Readonly<Record<string, unknown>>) {
@@ -398,7 +398,3 @@ export function route<D, const F extends Fields, W extends z.ZodObject, Edit ext
   return {spec:normalized,data,host,entries};
 }
 export type TypedRoute = ReturnType<typeof route<any, Fields, z.ZodObject, z.ZodType, Record<string, HostRead>, HostRead>>;
-
-export function projectValue<A,B>(reading: ReadingState<A>, select:(value:Immutable<A>)=>B): ReadingState<B> {
-  return "value" in reading ? {...reading,value:select(reading.value) as Immutable<B>} : reading;
-}

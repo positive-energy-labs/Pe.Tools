@@ -155,7 +155,9 @@ export function TypedChrome({ mount, document, recorded, thread }: { mount: Type
     {portal ? <PrimaryRouteControls route={spec.key} slot="situation">{head}</PrimaryRouteControls> : head}
     <GraphLayoutView
       layout={layout(spec.layout)}
-      panes={paneFacts(spec)}
+      panes={mount.data.panes}
+      verbs={mount.data.verbs}
+      band={mount.data.band}
       active={when=>subjectActive(mount,when)}
       state={{panes,onChange:next=>{setPanes(next);writeLayoutState(`route:${spec.key}`,next);}}}
       bodies={Object.fromEntries(Object.entries(spec.panes).map(([id,p])=>[id,pane=>pane(mount.draw(id,ctx=><TypedPane mount={mount} id={id} ctx={ctx} />) as ReactNode,{...paneFrame(p.body),ground:p.ground,actions:slot(id),busy:visible&&paneBusy(mount,p)})]))} />
@@ -192,9 +194,6 @@ function bandVerbs(mount: TypedMount): ReactNode[] {
 function BandTimeline({ mount, recorded }: { mount: TypedMount; recorded?: ReactNode }) {
   return <TimelineHead owner={mount} history={<>{recorded}<GraphHistory owner={mount} /></>} />;
 }
-/** The layout view's pane facts: what the graph layout knows of each pane. */
-const paneFacts = (spec: TypedMount["spec"]) =>
-  Object.fromEntries(Object.entries(spec.panes).map(([id,p])=>[id,{label:p.title,purpose:p.purpose,draws:[],verbs:[]}]));
 /** The layout's `subject` gate: open when the Page holds a subject. */
 const subjectActive = (mount: TypedMount, when: string | import("@pe/agent-contracts").GateWhen) =>
   gateActive(when, mount.page.read(), mount.spec.subject?.field);

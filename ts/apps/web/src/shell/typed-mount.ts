@@ -1,3 +1,4 @@
+import { homeHandle } from "../route/slots/sheet/index.ts";
 import { peReadings, type Readings } from "#/host/resource-stream";
 import { findingCommand } from "../route/slots/findings/index.ts";
 import { FINDINGS_OWNER, findingsWorkSchema, type Finding } from "@pe/agent-contracts/slots";
@@ -714,6 +715,14 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
         doc, basis: token, state,
         owner(path) { const route=ownerOf(path); return {route,label:route===own?"Work":`from /${route}`}; },
         at(path,preferred,facts={}) {
+          if (path[0] === "setting") return homeHandle(path, valueOf(core), async request => {
+            requireWritable();
+            try {
+              if (core.state !== "ready") throw Error(reasonOf(core));
+              await settleNative(door.submit({ id: crypto.randomUUID(), key: "settings.tiers.write",
+                target: input.target?.kind === "document" ? input.target : { kind: "host" }, input: request }));
+            } finally { mounted.refresh(); }
+          });
           const route=ownerOf(path,preferred), address=[...path];
           const value=address.reduce((doc,key)=>doc?.[key],owners.get(route)!.doc)??{};
           const cellPatch=(patches: readonly RouteStatePatch[],detail?:EditHistory) => facts.readOnly

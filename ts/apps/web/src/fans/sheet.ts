@@ -1,14 +1,13 @@
 import { z } from "zod";
-import { DUCT_UNIT_ROLES, type fansSheetData, type Immutable, type Resolved } from "@pe/agent-contracts";
-import { local, parameter, store, type CellLayer, type SheetChoice, type SheetSlot } from "@pe/agent-contracts/slots";
+import { DUCT_UNIT_ROLES, routeAddress, subjectCode, type fansSheetData, type Immutable, type Resolved } from "@pe/agent-contracts";
+import { local, parameter, store, type CellLayer, type EnumChoice, type SheetSlot } from "@pe/agent-contracts/slots";
 import { fanWriteCells } from "@pe/ducts-domain/staged";
 import { suggestKind, suggestRole } from "@pe/ducts-domain/roster";
 import { sheetSystems } from "@pe/ducts-domain/sheet/scoped-snapshot";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { elementSubject, workElementId } from "@pe/ducts-domain/work-subject";
 import { elementLabeler } from "@pe/ducts-domain/element-label";
-import { ductsLink } from "../ducts/identity.ts";
-import { ductsSettings, ENGINE_DEFAULT_NO_SHARED_ROOT, NO_SHARED_ROOT } from "../ducts/design-sheet.ts";
+import { ductsSettings, ENGINE_DEFAULT_NO_SHARED_ROOT, NO_SHARED_ROOT } from "@pe/agent-contracts/setting-owners";
 
 /*
  * /fans' sheet (ruling 2026-11-10: /fans keeps Fans Work only). Every binding stages Fans Work; the
@@ -56,19 +55,19 @@ const layer = (resolved: Immutable<Resolved<unknown>> | undefined, wrap: (v: unk
 const units = (read: Read) => Object.keys(inputsOf(read)?.units ?? {});
 const fanUnit = (read: Read) => read?.open?.overview.fan?.unitId ?? null;
 /** The write scope offered from the open fan, with how many staged cells it writes; a standing scope on another fan stays listed. */
-const scopeChoices = (read: Read): readonly SheetChoice[] => {
+const scopeChoices = (read: Read): readonly EnumChoice[] => {
   const snapshot = snapshotOf(read);
   const fan = read?.open?.overview.fan, standing = read?.fansWork.writeIntent.edit?.value?.walk;
   const mine = (walk: { unitId: number; portIndex: number }) => !!fan && walk.unitId === fan.unitId && walk.portIndex === (fan as { portIndex?: number }).portIndex;
   return [
-    ...(fan && "portIndex" in fan ? [{ key: "fan", label: `${fan.mark || `unit ${fan.unitId}`} · ${snapshot ? fanWriteCells(read!.fansWork, snapshot).length : 0} staged`, value: { walk: { unitId: fan.unitId, portIndex: fan.portIndex } },
+    ...(fan && "portIndex" in fan ? [{ label: `${fan.mark || `unit ${fan.unitId}`} · ${snapshot ? fanWriteCells(read!.fansWork, snapshot).length : 0} staged`, value: { walk: { unitId: fan.unitId, portIndex: fan.portIndex } },
       description: "Write this fan's walk and its staged cells" }] : []),
-    ...(standing && !mine(standing) ? [{ key: "other", label: `unit ${standing.unitId}`, value: { walk: standing }, description: "Another fan's scope, still standing" }] : []),
-    { key: "none", label: "None", clear: true, description: "Clear the write scope" },
+    ...(standing && !mine(standing) ? [{ label: `unit ${standing.unitId}`, value: { walk: standing }, description: "Another fan's scope, still standing" }] : []),
+    { value: null, label: "None", description: "Clear the write scope" },
   ];
 };
-const inWg = z.strictObject({ inWg: z.number().nonnegative() });
-const cfm = z.strictObject({ cfm: z.number().nonnegative() });
+const inWg = { kind: "object", fields: { inWg: { kind: "number", min: 0, unit: "in-wg", digits: 4 } } } as const;
+const cfm = { kind: "object", fields: { cfm: { kind: "number", min: 0, unit: "cfm", digits: 0 } } } as const;
 
 export const fansSheet = {
   draft: true,
@@ -79,21 +78,24 @@ export const fansSheet = {
     if (read?.ductsRevision == null) return null;
     const firm = read.sheetView.firm;
     const snapshot = snapshotOf(read);
+    const systems = snapshot ? sheetSystems(snapshot) : [];
     return {
       // Slice 2b: without a shared root the firm layer is refused and the design runs on the engine seed.
       says: `Priced with the /ducts design, Work r${read.ductsRevision}${!firm ? "" : "refused" in firm
         ? `: ${ENGINE_DEFAULT_NO_SHARED_ROOT}. ${NO_SHARED_ROOT}`
         : !firm.present ? " over defaults where no home states a value"
         : ` over firm ${firm.version} · ${firm.path.split(/[\\/]/).at(-1)}`}`,
-      href: ductsLink(snapshot ? sheetSystems(snapshot) : [], search),
+      href: routeAddress("ducts").link(systems.length ? {
+        system: { kind: "ids", ids: systems.map(name => subjectCode({ keyKind: "system-name", key: name })) },
+      } : {}, Object.fromEntries(["target", "fixture", "thread"].flatMap(key => typeof search[key] === "string" ? [[key, search[key]]] : []))),
     };
   },
   bindings: {
     // The design criteria this fan prices under, each with the home tier that served it; "save at" writes that home.
     // Design friction stays /ducts design data (ducts ledger Q2a), so Fans omits it.
     ...Object.fromEntries(Object.entries(ductsSettings).filter(([key]) => key !== "setting.ducts.designFriction")),
-    writeIntent: local(z.unknown(), "route", { label: "Write scope", choices: scopeChoices }),
-    roles: store("_PE_DuctLosses", z.strictObject({ role: z.enum(DUCT_UNIT_ROLES) }), "subject", {
+    writeIntent: local({ kind: "enum", shape: z.strictObject({ walk: z.strictObject({ unitId: z.number().int().positive(), portIndex: z.number().int().nonnegative() }) }), choices: scopeChoices }, "route", { label: "Write scope" }),
+    roles: store("_PE_DuctLosses", { kind: "object", fields: { role: { kind: "enum", shape: z.enum(DUCT_UNIT_ROLES), choices: DUCT_UNIT_ROLES.map(role => ({ value: role, label: role === "fan" ? "Fan" : "Passive" })) } } }, "subject", {
       rows: (read: Read) => rowsOf(read, (snapshotOf(read)?.nodes ?? []).filter((n) => n.kind === "equipment").map((n) => String(n.id))),
       rowLabel: (read, row) => nameOf(read, row, "Unit role"),
       model: (read: Read, row) => {
@@ -102,10 +104,8 @@ export const fansSheet = {
         const node = snapshotOf(read)?.nodes.find((n) => n.id === id);
         return node ? { value: { role: suggestRole(node, suggestKind(node).kind) }, source: "default" } : null;
       },
-      choices: () => DUCT_UNIT_ROLES.map((role) => ({ key: role, label: role === "fan" ? "Fan" : "Passive", value: { role } })),
     }),
-    equipmentFlows: parameter("fanFlow", cfm, undefined, {
-      field: "cfm", unit: "cfm", min: 0, digits: 0,
+    equipmentFlows: parameter("fanFlow", cfm, {
       rows: (read: Read) => rowsOf(read, units(read)),
       rowLabel: (read, row) => nameOf(read, row, "Unit airflow"),
       model: (read: Read, row) => {
@@ -120,27 +120,23 @@ export const fansSheet = {
       },
     }),
     // The open fan's own ESP is an input of this sheet; another unit's only once Work stages it.
-    esp: parameter("fanStatic", inWg, undefined, {
-      field: "inWg", unit: "in-wg", min: 0, digits: 4,
+    esp: parameter("fanStatic", inWg, {
       rows: (read: Read) => rowsOf(read, units(read).filter((id) =>
         Number(id) === fanUnit(read) || inputsOf(read)?.units[id]?.esp.source === "Work")),
       rowLabel: (read, row) => nameOf(read, row, "Unit ESP"),
       model: (read: Read, row) => layer(inputsOf(read)?.units[String(idOf(read, row!))]?.esp, (v) => ({ inWg: v })),
     }),
-    flows: parameter("terminalFlow", cfm, undefined, {
-      field: "cfm", unit: "cfm", min: 0, digits: 0,
+    flows: parameter("terminalFlow", cfm, {
       rows: (read: Read) => rowsOf(read, Object.keys(inputsOf(read)?.terminals ?? {})),
       rowLabel: (read, row) => nameOf(read, row, "Terminal airflow"),
       model: (read: Read, row) => layer(inputsOf(read)?.terminals[String(idOf(read, row!))]?.cfm, (v) => ({ cfm: v })),
     }),
-    terminalDrops: parameter("terminalDrop", inWg, undefined, {
-      field: "inWg", unit: "in-wg", min: 0, digits: 4,
+    terminalDrops: parameter("terminalDrop", inWg, {
       rows: (read: Read) => rowsOf(read, Object.keys(inputsOf(read)?.terminals ?? {})),
       rowLabel: (read, row) => nameOf(read, row, "Terminal drop"),
       model: (read: Read, row) => layer(inputsOf(read)?.terminals[String(idOf(read, row!))]?.drop, (v) => ({ inWg: v }), read),
     }),
-    componentDrops: parameter("componentDrop", inWg, undefined, {
-      field: "inWg", unit: "in-wg", min: 0, digits: 4,
+    componentDrops: parameter("componentDrop", inWg, {
       rows: (read: Read) => rowsOf(read, Object.keys(inputsOf(read)?.components ?? {})),
       rowLabel: (read, row) => nameOf(read, row, "Part drop"),
       model: (read: Read, row) => layer(inputsOf(read)?.components[String(idOf(read, row!))]?.drop, (v) => ({ inWg: v })),

@@ -1,5 +1,6 @@
 import { declaredTeaching, type TeachingLayout } from "@pe/kit/lang/teach";
-import { DUCTS_TEACHING } from "#/ducts/proto/e/teaching";
+import { graphTeaching } from "@pe/kit";
+import { publicRoutes } from "./route-discovery";
 export const SHELL_REGIONS = {
   navigation: {
     id: "navigation",
@@ -23,5 +24,7 @@ const SHELL_LAYOUT = {
 } as const satisfies TeachingLayout;
 export const STARTUP_TEACHING = declaredTeaching(SHELL_LAYOUT);
 /** Single SPA index knows no requested route. First hydration always matches its public shell. */
-export const referenceTeaching = (pathname: string) =>
-  pathname === "/ducts" ? DUCTS_TEACHING : STARTUP_TEACHING;
+export const referenceTeaching = (pathname: string) => {
+  const route = publicRoutes.byAddress(pathname);
+  return route ? graphTeaching(route.typed.data) : STARTUP_TEACHING;
+};
