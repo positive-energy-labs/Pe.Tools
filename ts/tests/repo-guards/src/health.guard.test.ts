@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vite-plus/test";
 import baseline from "./health.baseline.json" with { type: "json" };
-import { census, fsWriteCount, isProduction, PER_FILE, perFileRises, rises, total, type Health } from "./health-census.ts";
+import {
+  census, EXCEPTIONS, exceptionProblems, fsWriteCount, isProduction, PER_FILE, perFileRises, rises, STORE_EXCEPTION,
+  storeScopeSources, total, type Health,
+} from "./health-census.ts";
 
 // Each count only falls: remove the cast, suppression or mark, or split the file, then
 // `vp run ratchets:tighten`. A total may not rise; code may move between files.
@@ -19,6 +22,27 @@ describe("production health counts", () => {
     it(`${name} rise in no file, and a new file starts at 0`, () => {
       expect(perFileRises(name, actual[name], baseline[name]), `${name} hold per file; only a named owner (OWNERS) may absorb writes`).toEqual([]);
     });
+
+  it("each written store exception stands at its site with its end condition", () => {
+    expect(exceptionProblems(storeScopeSources())).toEqual([]);
+  });
+
+  it("an exception whose marker is removed, or a marker nobody listed, is red", () => {
+    const [listed, end] = Object.entries(EXCEPTIONS)[0]!;
+    const sources = Object.fromEntries(Object.entries(EXCEPTIONS).map(([file, e]) => [file, `// ${STORE_EXCEPTION}; ends when ${e} replaces this.`]));
+    expect(exceptionProblems(sources)).toEqual([]);
+    expect(exceptionProblems({ ...sources, [listed]: "// a plain comment" })).toEqual([
+      `${listed}: the written exception is gone; the site needs "${STORE_EXCEPTION}" and its end condition (${end})`,
+    ]);
+    // A wrapped comment carries its end condition; code after the comment does not.
+    expect(exceptionProblems({ ...sources, [listed]: `// ${STORE_EXCEPTION}; kept\n// until ${end} replaces it.\nx;` })).toEqual([]);
+    expect(exceptionProblems({ ...sources, [listed]: `x;\n// ${STORE_EXCEPTION}; kept for now.\nconst ${end} = 1;` })).toEqual([
+      `${listed}:2: ${STORE_EXCEPTION} names no end condition (${end})`,
+    ]);
+    expect(exceptionProblems({ ...sources, "ts/apps/host/src/x.ts": `// ${STORE_EXCEPTION}` })).toEqual([
+      `ts/apps/host/src/x.ts: carries ${STORE_EXCEPTION} but is not in EXCEPTIONS (health-census.ts)`,
+    ]);
+  });
 
   it("lets a named owner absorb writes and holds every other file", () => {
     expect(perFileRises("fsWrites", { "ts/packages/host-contracts/src/store.ts": 9, "ts/apps/host/src/x.ts": 1 }, { "ts/packages/host-contracts/src/store.ts": 4 }))
