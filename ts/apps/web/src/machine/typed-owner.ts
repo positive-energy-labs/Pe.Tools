@@ -14,9 +14,11 @@ export type OpenSource<V extends OpenVerb = OpenVerb> = {
 };
 import type { OpenOwner } from "./context";
 const openActions: readonly OpenVerb[] = ["start", "open", "close", "stop", "restart"];
-export function useOpenTypedOwner<V extends OpenVerb = OpenVerb>(
-  ctx: OpenSource<V>,
-  actions: readonly V[] = openActions as readonly V[],
+export function useOpenTypedOwner(ctx: OpenSource): OpenOwner;
+export function useOpenTypedOwner<V extends OpenVerb>(ctx: OpenSource<V>, actions: readonly V[]): OpenOwner;
+export function useOpenTypedOwner(
+  ctx: OpenSource,
+  actions: readonly OpenVerb[] = openActions,
 ): OpenOwner {
   const current = useRef(ctx);
   current.current = ctx;
@@ -53,7 +55,7 @@ export function useOpenTypedOwner<V extends OpenVerb = OpenVerb>(
             };
           },
         },
-        control: (id: V, input: any) => ({
+        control: (id: OpenVerb, input: any) => ({
           refusal: refusalOf(current.current.value),
           run: async () => {
             try {
