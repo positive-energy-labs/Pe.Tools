@@ -23,7 +23,7 @@ type FixtureValue<O extends z.ZodType<Publication>> = Pick<
 export function hostRead<K extends string, I, D>(
   contract: ReadHandle<K, I, D>,
   fixtures?: Readonly<Record<string, (args: Omit<I, "target">) => FixtureValue<z.ZodType<Publication<D>>>>>,
- ): HostRead & { input: z.ZodType<Omit<I, "target">>; output: z.ZodType<Publication<D>> } {
+): HostRead & { input: z.ZodType<Omit<I, "target">>; output: z.ZodType<Publication<D>> } {
   const { key } = contract;
   const browserInput = contract.input instanceof z.ZodObject && "target" in contract.input.shape
     ? contract.input.omit({ target: true })

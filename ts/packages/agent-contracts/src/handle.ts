@@ -34,7 +34,7 @@ export interface ReadHandle<K extends string = string, I = unknown, D = unknown>
 export type AnyReadHandle = Pick<ReadHandle, typeof minted | "key" | "axes">;
 const costs = ["Cheap", "Bounded", "Expensive", "Mutation"] as const;
 type Safety = typeof hostOpSafety;
-/** Read intent, and Read effect or a rolled-back TransactRead: the keys a read may take. */
+/** The generated effect admits Read and TransactRead keys. */
 export type CatalogReadKey = {
   [K in keyof Safety]: Safety[K] extends (
     | { effect: "Read" }

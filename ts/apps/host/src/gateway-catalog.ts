@@ -93,7 +93,7 @@ export async function operationDefinition(
   let definition;
   try {
     definition = Schema.decodeUnknownSync(hostOperationDefinitionSchema)(raw);
-    if (!["Read", "TransactRead", "SessionWrite", "ModelWrite"].includes(definition.effect))
+    if (!["Read", "TransactRead", "SessionWrite", "ModelWrite"].includes(generated.effect))
       throw refused(`Unknown operation effect for '${key}'`);
   } catch (error) {
     catalogs.get(bridge)?.delete(target.sessionId);

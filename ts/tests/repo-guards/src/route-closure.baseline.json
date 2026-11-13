@@ -32,7 +32,6 @@
   "workbench/moments.tsx -> chat/use-mentions",
   "workbench/provider/view.tsx -> chat/scope",
   "workbench/provider/view.tsx -> chat/thread-navigation",
-  "workbench/route-panes.tsx -> chat/chat-shell",
   "workbench/route-panes.tsx -> chat/thread-work",
   "workbench/store.ts -> chat/thread-work",
   "workbench/tabs.ts -> chat/thread-work"

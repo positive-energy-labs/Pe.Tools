@@ -1,4 +1,4 @@
-import * as contracts from "../open/contract.ts";
+import * as contracts from "./open-contract.ts";
 import { z } from "zod";
 
 import { field, read, type ContextOf, type Verbs } from "../route/defaults";
