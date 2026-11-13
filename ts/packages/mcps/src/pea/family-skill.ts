@@ -1,5 +1,3 @@
-import familyGraph from "./generated/family-graph.json" with { type: "json" };
-
 export function renderFamilySkill(): string {
   return [
     "---",
@@ -15,10 +13,7 @@ export function renderFamilySkill(): string {
     "family.saved inspects an immutable reading at its explicit row. Queries have no undo barrier. Saving a family to a Pod is family.capture, a semantic command: it takes only the Work handle and reads its pod from the writeIntent cell 'family.capture' in Family Work, files the family under settings/family/, and returns the member. family.attach-spec attaches a cut sheet to that member from a path, a URL or an upload. family.read is the live read: an explicit press at the Family row that publishes a fresh reading without touching staged edits; empty Work never reads on arrival.",
     "Start fresh is the kernel's required recovery review. Receipts, query results and review tickets belong to the kernel; Page holds view state only.",
     "",
-    "The Family route graph:",
-    "```json",
-    JSON.stringify(familyGraph, null, 2),
-    "```",
+    "Read route:family with pe_read for its current graph, field schemas and verb inputs from the host.",
     "",
   ].join("\n");
 }

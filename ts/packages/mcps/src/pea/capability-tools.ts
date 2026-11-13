@@ -428,7 +428,9 @@ async function bridgeTarget(target: RunInput["target"]): Promise<RunInput["targe
       "bridge.sessions.list",
     );
     const session = bridgeSessionFor(target.ref.session, sessions);
-    return session === target.ref.session ? target : { kind: "open", ref: { ...target.ref, session } };
+    return session === target.ref.session
+      ? target
+      : { kind: "open", ref: { ...target.ref, session } };
   } catch (error) {
     // The unrewritten target still reaches the resolver, which refuses it in its own words.
     console.error("capability-tools: session list unavailable for target", error);
@@ -443,7 +445,8 @@ async function executeTool(
   replayOperations = false,
 ): Promise<Record<string, unknown>> {
   // A replay or recovery reads an original receipt whose target is already resolved: no discovery.
-  const target = replayOperations || input.actionId ? input.target : await bridgeTarget(input.target);
+  const target =
+    replayOperations || input.actionId ? input.target : await bridgeTarget(input.target);
   if (target !== input.target) input = { ...input, target };
   const contribution = parseContributionKey(input.key);
   const requestId = input.actionId ?? requestIdentity(context);
@@ -854,7 +857,8 @@ async function dispatch(
     case "route-command": {
       // One executor for every leasing route's projected row (`viewRoutes`). The host's channel
       // rechecks the live registration, so a withdrawn or unregistered route refuses there.
-      const view = row.source === "browser Page" ? /^route:(.+)\.(view|set-view)$/.exec(row.key) : null;
+      const view =
+        row.source === "browser Page" ? /^route:(.+)\.(view|set-view)$/.exec(row.key) : null;
       const route = view?.[1];
       if (view && route) {
         if (!viewThread) throw Error("This MCP server has no thread (no harness context).");
@@ -946,6 +950,8 @@ async function dispatch(
         };
       }
       const parsed = parseRouteKey(row.key);
+      if (parsed && row.source === "route graph")
+        return { ok: true, target: scopeTarget, result: await routeGraph(parsed.route) };
       if (!parsed) throw new Error(`Malformed route key '${row.key}'.`);
       if (parsed.route === scheduleGridRouteState.route && !input.workspaceId)
         throw new Error(
@@ -963,18 +969,43 @@ async function dispatch(
       const workspaceId = input.workspaceId;
       let mountedScope: Awaited<ReturnType<typeof routeWorkScope>> | undefined;
       if (viewThread && input.target === undefined && !workspaceId) {
-        const response = await fetch(`${base()}/pe/route-view/${encodeURIComponent(parsed.route)}?thread=${encodeURIComponent(viewThread)}`).catch(() => null);
+        const response = await fetch(
+          `${base()}/pe/route-view/${encodeURIComponent(parsed.route)}?thread=${encodeURIComponent(viewThread)}`,
+        ).catch(() => null);
         if (response?.ok) {
-          const mounted = await response.json() as { context?: { work?: unknown }; work?: Record<string, unknown> };
+          const mounted = (await response.json()) as {
+            context?: { work?: unknown };
+            work?: Record<string, unknown>;
+          };
           const key = workKeySchema.safeParse(mounted.context?.work);
           if (key.success && key.data.route === parsed.route) {
-            const work = key.data, query = new URLSearchParams();
+            const work = key.data,
+              query = new URLSearchParams();
             if (work.binding === "address") query.set("target", work.target);
             if (work.binding === "workspace") query.set("work", work.work);
-            const open = work.binding === "open" ? work.open : work.binding === "address" ? work.from : undefined;
+            const open =
+              work.binding === "open"
+                ? work.open
+                : work.binding === "address"
+                  ? work.from
+                  : undefined;
             if (open) query.set("open", `${open.session}/${open.openId}`);
-            mountedScope = { query: query.toString(), target: { session: open?.session ?? null, document: work.binding === "address" ? work.target : null } };
-            if (parsed.member === undefined && mounted.work) return { ok: true, target: mountedScope.target, result: peaWorkValue(mounted.work, payload.schema === true) };
+            mountedScope = {
+              query: query.toString(),
+              target: {
+                session: open?.session ?? null,
+                document: work.binding === "address" ? work.target : null,
+              },
+            };
+            if (parsed.member === undefined && mounted.work)
+              return {
+                ok: true,
+                target: mountedScope.target,
+                result: peaWorkValue(
+                  { ...mounted.work, graph: await routeGraph(parsed.route) },
+                  payload.schema === true,
+                ),
+              };
           }
         }
       }
@@ -999,8 +1030,11 @@ async function dispatch(
               query: new URLSearchParams({ work: workspaceId }).toString(),
               target: { session: null, document: null },
             }
-          : mountedScope ?? await routeWorkScope(workTarget);
-        const result = peaWorkValue(await routeFetch(parsed.route, scope.query), payload.schema === true);
+          : (mountedScope ?? (await routeWorkScope(workTarget)));
+        const result = peaWorkValue(
+          await routeFetch(parsed.route, scope.query),
+          payload.schema === true,
+        );
         if (parsed.route === familiesRouteState.route && !("isError" in result))
           result.hint =
             "This is authored Work. Read route:families.view for the currently visible matrix or past reading; no matrix read is started.";
@@ -1061,8 +1095,13 @@ async function dispatch(
                 query: new URLSearchParams({ work: workspaceId }).toString(),
                 target: { session: null, document: null },
               }
-            : mountedScope ?? await routeWorkScope(workTarget);
-          const result = await timelineStep(parsed.route, scope.query, direction, input.expectedRevision);
+            : (mountedScope ?? (await routeWorkScope(workTarget)));
+          const result = await timelineStep(
+            parsed.route,
+            scope.query,
+            direction,
+            input.expectedRevision,
+          );
           return { ok: !("isError" in result), target: scope.target, result };
         }
         // Ducts Work is keyed by document: an unbound write lands in Work no page reads (wave 3, 2026-10-19).
@@ -1093,7 +1132,10 @@ async function dispatch(
 export function peaWorkValue(result: Record<string, unknown>, withSchema = false) {
   if (withSchema || "isError" in result || !("schema" in result)) return result;
   const { schema: _schema, ...work } = result;
-  return { ...work, schemaHint: "Pass input {schema: true} to this read for the Work JSON Schema." };
+  return {
+    ...work,
+    schemaHint: "Pass input {schema: true} to this read for the Work JSON Schema.",
+  };
 }
 
 function documentWork(row: Capability): boolean {
@@ -1238,7 +1280,7 @@ async function routeWrite(
         query: new URLSearchParams({ work: workspaceId }).toString(),
         target: { session: null, document: null },
       }
-    : mountedScope ?? await routeWorkScope(defaultTarget);
+    : (mountedScope ?? (await routeWorkScope(defaultTarget)));
   const { query } = scope;
   const result = await routeFetch(route, query, {
     ...body,
@@ -1279,7 +1321,9 @@ async function timelineStep(
   const view = await routeFetch(route, queryString);
   const key = workHandleSchema.safeParse(view.handle).data?.key;
   if (!key || view.revision !== expectedRevision)
-    throw new Error(`Work changed before restoring. Read route:${route} again and pass its expectedRevision.`);
+    throw new Error(
+      `Work changed before restoring. Read route:${route} again and pass its expectedRevision.`,
+    );
   const client = createPeClient(base(), fetch);
   const body = {
     read: WORK_TIMELINE_READ,
@@ -1292,10 +1336,30 @@ async function timelineStep(
   // One-shot read: release the publication it opened.
   void client.response("reads.value", { body: { ...body, release: true } }).catch(() => {});
   const timeline = workTimelineSchema.safeParse(wire.value?.data).data;
-  if (!timeline) throw new Error(`The Timeline for route:${route} could not be read (${response.status}).`);
+  if (!timeline)
+    throw new Error(`The Timeline for route:${route} could not be read (${response.status}).`);
   const expected = timeline[direction];
-  if (!expected) throw new Error(timeline.refusal[direction] ?? `Nothing of Pea's to ${direction} on route:${route}.`);
+  if (!expected)
+    throw new Error(
+      timeline.refusal[direction] ?? `Nothing of Pea's to ${direction} on route:${route}.`,
+    );
   return routeFetch(route, queryString, { direction, works: [key], expected }, "work.history");
+}
+
+async function routeGraph(route: string): Promise<unknown> {
+  const response = await createPeClient(base(), fetch).response("reads.value", {
+    body: {
+      read: `route:${route}`,
+      args: {},
+      subscription: `pea-route:${route}:${crypto.randomUUID()}`,
+      generation: 0,
+      release: true,
+    },
+  });
+  if (!response.ok) throw Error(`Route graph ${route} unavailable: ${await response.text()}`);
+  const publication = await response.json();
+  if (!publication.value) throw Error(`Route graph ${route} has no current value`);
+  return publication.value.data;
 }
 
 async function routeFetch(
@@ -1322,6 +1386,7 @@ async function routeFetch(
           })
       : await client.response("work.get", { params, query });
   const wire = (await response.json()) as Record<string, unknown>;
+  if (body === undefined && response.ok) wire.graph = await routeGraph(route);
   const payload = response.ok
     ? wire
     : ((wire.error as { details?: Record<string, unknown> })?.details ?? wire);
@@ -1410,7 +1475,10 @@ export const targetSet = createTool({
       params: { id: "self" },
       body,
     });
-    const wire = await response.json().catch((error) => { console.error("capability-tools: asynchronous operation failed", error); return null; });
+    const wire = await response.json().catch((error) => {
+      console.error("capability-tools: asynchronous operation failed", error);
+      return null;
+    });
     const answer: unknown = response.ok ? wire : wire?.error?.details;
     const result = putTargetResultSchema.safeParse(answer).data;
     // A host refusal (`grant.required`, `human.only`, `context.foreign-thread`) is returned in its own words.

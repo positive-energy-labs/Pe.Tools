@@ -5,6 +5,7 @@ import { gate, pane, split, type LayoutNode, type PaneDecl } from "@pe/agent-con
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import {
   GraphLayoutView,
+  graphTeaching,
   type GraphLayoutState,
   type PaneApi,
 } from "../src/components/lang/graph-layout";
@@ -32,6 +33,30 @@ const layout = split(
 const bodies = Object.fromEntries(
   Object.keys(panes).map((id) => [id, (pane: PaneApi) => pane(`${id} body`)]),
 );
+
+test("wire verbs teach their band and gated pane without claiming runtime availability", () => {
+  const facts = graphTeaching({
+    layout,
+    panes: { ...panes, inbox: { ...panes.inbox, verbs: ["apply"] } },
+    band: ["read"],
+    verbs: {
+      read: { entry: "test.read", label: "Read rooms", effect: "Read", review: "none" },
+      apply: { entry: "test.apply", label: "Apply rooms", effect: "ModelWrite", review: "shown" },
+    },
+  });
+  expect(facts.find((f) => f.id === "inbox")).toMatchObject({ label: "Review inbox" });
+  expect(facts.filter((f) => f.kind === "views")).toMatchObject([
+    {
+      region: "situation",
+      options: [{ key: "read", label: "Read rooms", says: "Read; review none" }],
+    },
+    {
+      region: "inbox",
+      options: [{ key: "apply", label: "Apply rooms", says: "ModelWrite; review shown" }],
+    },
+  ]);
+  expect(JSON.stringify(facts)).not.toMatch(/"active"|"disabled"|"refusal"|"available"/);
+});
 
 beforeEach(() => {
   const storage = new Map<string, string>();
@@ -247,7 +272,9 @@ test("graph layout passes the body's furniture and bounded persisted resizing", 
   expect(localStorage.getItem("graph-layout-policy")).toBe("360");
   expect(view.container.querySelectorAll('[data-pane-id="plan"]')).toHaveLength(1);
   const body = view.container.querySelector('[data-pane-id="plan"] [data-slot="pane-body"]')!;
-  expect(body.hasAttribute("data-scroll"), "a fill body's pane clips; it draws no Scroll").toBe(false);
+  expect(body.hasAttribute("data-scroll"), "a fill body's pane clips; it draws no Scroll").toBe(
+    false,
+  );
   expect(view.queryByText("Plan legend"), "the layout draws no picture legend").toBeNull();
   expect(view.getByText("Plan metadata")).toBeTruthy();
   expect(view.getByRole("button", { name: "Layer action" })).toBeTruthy();

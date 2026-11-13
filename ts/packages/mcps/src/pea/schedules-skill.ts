@@ -1,5 +1,3 @@
-import schedulesGraph from "./generated/schedules-graph.json" with { type: "json" };
-
 export function renderSchedulesSkill(): string {
   return [
     "---",
@@ -14,10 +12,7 @@ export function renderSchedulesSkill(): string {
     "Use the graph's cell verbs to take, reject, reopen or delete a keyed cell. Apply cells reviews the exact Work and its bindings before schedule.grid.push. A changed Work revision makes that ticket stale. The Timeline lists steps; undo and redo take the caller's own last one.",
     "Push refusals and unread readback counts are readings derived from host receipts. They are never Page or authored Work. A saved spec uses schedule.apply; capture uses schedule.capture.",
     "",
-    "The Schedules route graph:",
-    "```json",
-    JSON.stringify(schedulesGraph, null, 2),
-    "```",
+    "Read route:schedules with pe_read for its current graph, field schemas and verb inputs from the host.",
     "",
   ].join("\n");
 }
