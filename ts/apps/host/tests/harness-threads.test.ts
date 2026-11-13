@@ -276,7 +276,7 @@ test.each(["claude", "codex"] as const)(
       ), readScope,
     ));
     const deps = { sdk: sdkSessions, nativeRead: Context.get(readContext, HostNativeRead), files: Context.get(readContext, DuctFiles), marks: Context.get(readContext, HostDocumentMarks) };
-    const resolve = commandRegistry(bridge, captureStore("harness-threads"), deps, () => Effect.fail(Error("No local command in this journey")));
+    const resolve = commandRegistry(bridge, captureStore(join(dir, "captures")), deps, () => Effect.fail(Error("No local command in this journey")));
     const journal = journalAt(join(dir, "journal.jsonl"), Date.now);
     journal.bindCommands({
       work: routes.workspace,

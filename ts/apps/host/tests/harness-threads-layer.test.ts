@@ -1,3 +1,4 @@
+import { stateTree } from "@pe/host-contracts/service-identity";
 import { stateFixture } from "../../../tests/isolated-home/storage.ts";
 import { randomUUID } from "node:crypto";
 import { followThread } from "@pe/agent-contracts/chat-state";
@@ -18,6 +19,13 @@ const nodeTest = <A, E>(
   name: string,
   body: () => Effect.Effect<A, E, Scope.Scope | FileSystem.FileSystem>,
 ) => effectTest(name, () => body().pipe(Effect.provide(NodeServices.layer)));
+
+const scopedState = (fs: FileSystem.FileSystem) => Effect.gen(function* () {
+  const home = yield* fs.makeTempDirectoryScoped();
+  const directory = stateTree(home).directory("fixture");
+  yield* fs.makeDirectory(directory.path, { recursive: true });
+  return directory.path;
+});
 
 const meta = (id: string) => ({
   id,
@@ -87,7 +95,7 @@ const seed = Effect.fn("test.seed")(function* (
 nodeTest("the Layer replays a saved events.jsonl into the store, skipping a torn line", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    const root = yield* fs.makeTempDirectoryScoped();
+    const root = yield* scopedState(fs);
     yield* seed(
       root,
       "thread",
@@ -106,7 +114,7 @@ nodeTest("the Layer replays a saved events.jsonl into the store, skipping a torn
 nodeTest("a thread whose meta.json does not decode fails typed and the others still load", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    const root = yield* fs.makeTempDirectoryScoped();
+    const root = yield* scopedState(fs);
     yield* seed(root, "good", JSON.stringify(meta("good")));
     yield* seed(root, "bad", "{ not json");
     const unreadable = yield* Effect.flip(loadThread(root, "bad", () => "Claude")).pipe(
@@ -124,7 +132,7 @@ nodeTest("a thread whose meta.json does not decode fails typed and the others st
 nodeTest("a thread root that cannot be made fails the Layer with a typed error", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    const dir = yield* fs.makeTempDirectoryScoped();
+    const dir = yield* scopedState(fs);
     yield* fs.writeFileString(`${dir}/occupied`, "a file where the root should be");
     const failure = yield* Effect.flip(store(`${dir}/occupied`)).pipe(
       Effect.provide(NodeServices.layer),
@@ -136,7 +144,7 @@ nodeTest("a thread root that cannot be made fails the Layer with a typed error",
 nodeTest("event timestamps come from the Clock, not the wall", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    const root = yield* fs.makeTempDirectoryScoped();
+    const root = yield* scopedState(fs);
     yield* TestClock.setTime(Date.parse("2031-01-02T03:04:05.000Z"));
     const threads = yield* store(root);
     // The provider stub cannot start a child, so the new thread logs an `error` event: a stamped append.
@@ -164,7 +172,7 @@ nodeTest("event timestamps come from the Clock, not the wall", () =>
 nodeTest("replay damage preserves sequence identity and delivers the first live event", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    const root = yield* fs.makeTempDirectoryScoped();
+    const root = yield* scopedState(fs);
     yield* seed(
       root,
       "thread",
@@ -211,7 +219,7 @@ nodeTest("replay damage preserves sequence identity and delivers the first live 
 nodeTest("a failed service close is tagged and logged at the scope boundary", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    const root = yield* fs.makeTempDirectoryScoped();
+    const root = yield* scopedState(fs);
     const logs = captureLogs();
     yield* Effect.scoped(
       Effect.gen(function* () {
@@ -232,7 +240,7 @@ nodeTest("a failed service close is tagged and logged at the scope boundary", ()
 nodeTest("a replay gap keeps every new target part linked to its prompt sequence", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    const root = yield* fs.makeTempDirectoryScoped();
+    const root = yield* scopedState(fs);
     yield* seed(root, "thread", JSON.stringify(meta("thread")), [
       JSON.stringify(prompt), '{"seq":2,"kind":"torn',
       JSON.stringify({ ...turnEnd, seq: 3 }), "",

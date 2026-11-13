@@ -28,9 +28,11 @@ vi.mock("@pe/runtime", async (original) => ({
   readOrCreateInstallId: () => "7f183ae6-a157-4eb4-838a-931b950a0bdf",
 }));
 vi.mock("../src/host-ownership.ts", async (original) => {
+  const { stateTree } = await import("@pe/host-contracts/service-identity");
   const actual = await original<typeof import("../src/host-ownership.ts")>();
   return {
     ...actual,
+    hostState: () => stateTree(sandbox.root),
     hostOwnership: {
       ...actual.hostOwnership,
       get rootPath() {

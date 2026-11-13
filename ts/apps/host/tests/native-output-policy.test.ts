@@ -1,4 +1,5 @@
 import { stateFixture } from "../../../tests/isolated-home/storage.ts";
+import { stateTree } from "@pe/host-contracts/service-identity";
 import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { Effect } from "effect";
@@ -80,7 +81,7 @@ test("an already projected capture uses its own output schema without reading a 
   expect(
     await Effect.runPromise(
       projectNativeOutput(
-        new PictureCaptures(stateFixture("unused"), 1024, () => 1),
+        new PictureCaptures(stateTree(process.env.PE_TEST_HOME_ROOT!).directory("unused"), 1024, () => 1),
         "capture.test",
         value,
         {},
@@ -98,7 +99,7 @@ test("a call without capture policy passes through unchanged", async () => {
   expect(
     await Effect.runPromise(
       projectNativeOutput(
-        new PictureCaptures(stateFixture("unused"), 1024, () => 1),
+        new PictureCaptures(stateTree(process.env.PE_TEST_HOME_ROOT!).directory("unused"), 1024, () => 1),
         "ordinary.read",
         value,
         {},

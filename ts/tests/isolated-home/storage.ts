@@ -14,14 +14,14 @@ afterAll(() => {
 export function mkdtempSync(prefix: string): string {
   const root = makeTempSync(prefix);
   temporaryRoots.add(root);
-  const directory = stateTree(root).directory();
+  const directory = stateTree(root).directory("fixture");
   mkdirSync(directory.path, { recursive: true });
   return directory.path;
 }
 export async function mkdtemp(prefix: string): Promise<string> {
   const root = await makeTemp(prefix);
   temporaryRoots.add(root);
-  const directory = stateTree(root).directory();
+  const directory = stateTree(root).directory("fixture");
   await mkdir(directory.path, { recursive: true });
   return directory.path;
 }

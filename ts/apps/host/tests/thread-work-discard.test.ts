@@ -1,5 +1,8 @@
 import { stateFixture } from "../../../tests/isolated-home/storage.ts";
-import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
+import { hostOwnership } from "../src/host-ownership.ts";
+import { stateMachine } from "../../../tests/isolated-home/storage.ts";
+import { dirname } from "node:path";
+import { mkdtempWork as mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { readdir, rm, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
@@ -30,6 +33,8 @@ test("after a read discards the only unreadable Work record, the thread-work Rea
     ((frame as { value?: { observations?: string[] } }).value?.observations ?? []).filter(
       (line) => line.includes("could not be inspected"),
     );
+  const priorRoot = hostOwnership.rootPath;
+  Object.defineProperty(hostOwnership, "rootPath", { value: dirname(stateMachine(dir).state), configurable: true });
   let release: (() => void) | undefined;
   try {
     await writeFile(join(dir, name), '{"format":"route-state-record-v2","targetKey":"x","value":{"trunc');
@@ -44,6 +49,7 @@ test("after a read discards the only unreadable Work record, the thread-work Rea
     await expect.poll(() => unread(frames.at(-1)), { timeout: 10_000, interval: 250 }).toEqual([]);
   } finally {
     release?.();
+    Object.defineProperty(hostOwnership, "rootPath", { value: priorRoot, configurable: true });
     await rm(dir, { recursive: true, force: true });
   }
 }, 30_000);
