@@ -3,9 +3,12 @@
 usage: python pulse.py <base> <tip> [--map <MAP.md>] [--all]
 
 Prints pace (production lines added, deleted and moved per wall hour), every ratchet baseline that
-changed, the cost of merge conflicts, and each slice whose actual time left its estimate. A figure
-inside its band is not printed unless --all, so a quiet run prints the pace line and nothing else.
-Exit 1 when a ratchet rose. `--map` names the file whose `Estimate: <branch> <hours>h` lines it scores.
+changed, the four health counts that changed (escape casts, suppressions, TODO marks, files over
+600 lines, counted at each commit, so a run older than the health guard still reads), the cost of
+merge conflicts, each slice whose actual time left its estimate, and the slices not started. A
+figure inside its band is not printed unless --all, so a quiet run prints the pace line and nothing
+else. Exit 1 when a ratchet or a health count rose. `--map` names the file whose
+`Estimate: <branch> <hours>h` lines it scores; a slice whose branch does not exist is "not started".
 
 ponytail: conflict cost is lines inside conflict markers over lines merged; it stands in for time
 and cannot see a clean merge that breaks behavior. Bands are the constants below; tune them on data.
@@ -48,8 +51,25 @@ def ratchets(ref):
         if f.endswith('.baseline.json'):
             body = json.loads(git('show', '%s:%s' % (ref, f)))
             name = f.split('/')[-1].replace('.baseline.json', '')
-            for k, v in (body.items() if name == 'health' else [('', body)]):
-                out[name + ('.' + k if k else '')] = leaves(v)
+            if name != 'health': out[name] = leaves(body)  # health is counted below, at any commit
+    return out
+
+
+HEALTH = {  # the patterns of ts/tests/repo-guards/src/health-census.ts
+    'casts': r'\bas (any|unknown as)\b|\(dynamic\)|\bas never\b',
+    'suppressions': r'@ts-(ignore|expect-error)|(eslint|oxlint)-disable|#pragma warning disable|SuppressMessage',
+    'todos': r'\b(TODO|HACK|FIXME|XXX)\b',
+    'lines': '^',
+}
+
+
+def health(ref):
+    out = {}
+    for name, pattern in HEALTH.items():
+        per = [l.rsplit(':', 1) for l in git('grep', '-c', '-E', pattern, ref, '--', '*.ts', '*.tsx', '*.cs', ok=(0, 1)).splitlines()]
+        per = [int(n) for f, n in per if is_prod(f.split(':', 1)[1])]
+        if name == 'lines': out['health.longFiles'] = sum(1 for n in per if n > 600)
+        else: out['health.' + name] = sum(per)
     return out
 
 
@@ -79,7 +99,9 @@ def merges(base, tip):
 def main(argv):
     show_all = '--all' in argv
     map_path = argv[argv.index('--map') + 1] if '--map' in argv else None
-    base, tip = [a for a in argv if not a.startswith('--') and a != map_path][:2]
+    refs = [a for a in argv if not a.startswith('--') and a != map_path]
+    if len(refs) != 2 or '--help' in argv: raise SystemExit(__doc__)
+    base, tip = refs
     red = False
 
     add = dele = 0
@@ -89,7 +111,7 @@ def main(argv):
     hours = max((when(tip) - when(base)).total_seconds() / 3600, 0.01)
     print('pace: production +%d -%d, moved %d (net %+d) in %.1f h = %d moved per hour' % (add, dele, add + dele, add - dele, hours, (add + dele) / hours))
 
-    a, b = ratchets(base), ratchets(tip)
+    a, b = {**ratchets(base), **health(base)}, {**ratchets(tip), **health(tip)}
     for k in sorted(set(a) | set(b)):
         was, now = a.get(k), b.get(k)
         if was is None or now is None or now == was:
@@ -97,8 +119,8 @@ def main(argv):
             continue
         rose = now > was
         red |= rose
-        f = '%s/%s.baseline.json' % (DIR, k.split('.')[0])
-        print('ratchet %-26s %s -> %s%s' % (k, was, now, '  ROSE in ' + ' '.join(git('log', '--format=%h', '%s..%s' % (base, tip), '--', f).split()[:6]) if rose else ''))
+        f = '%s/%s.baseline.json' % (DIR, k)
+        print('ratchet %-26s %s -> %s%s' % (k, was, now, '  ROSE' + ('' if k.startswith('health.') else ' in ' + ' '.join(git('log', '--format=%h', '%s..%s' % (base, tip), '--', f).split()[:6])) if rose else ''))
 
     ms = merges(base, tip)
     lines, merged = sum(m[4] for m in ms), sum(m[5] for m in ms)
@@ -110,16 +132,21 @@ def main(argv):
             print('  %s %d lines: %s' % (m[0][:8], m[4], ', '.join(m[3][:4])))
 
     if map_path:
-        for branch, est in re.findall(r'Estimate:\s*(\S+)\s+([\d.]+)h', open(map_path, encoding='utf-8').read()):
+        estimates = re.findall(r'Estimate:\s*(\S+)\s+([\d.]+)h', open(map_path, encoding='utf-8').read())
+        if not estimates: print('estimates: %s has no `Estimate: <branch> <hours>h` line, so none is scored' % map_path)
+        idle = []
+        for branch, est in estimates:
             m = next((m for m in ms if branch in m[1]), None)
             if not m:
-                if show_all: print('estimate %s %sh: not merged' % (branch, est))
+                if subprocess.run(['git', 'rev-parse', '-q', '--verify', branch], capture_output=True).returncode: idle.append(branch)
+                elif show_all: print('estimate %s %sh: not merged' % (branch, est))
                 continue
             first = git('log', '--reverse', '--format=%cI', '%s..%s' % (m[2][0], m[2][1])).splitlines()
             actual = (when(m[0]) - datetime.datetime.fromisoformat(first[0])).total_seconds() / 3600 if first else 0
             ratio = actual / float(est)
             if show_all or not ESTIMATE_BAND[0] <= ratio <= ESTIMATE_BAND[1]:
                 print('estimate %s: %sh planned, %.1fh from first commit to merge = %.1fx' % (branch, est, actual, ratio))
+        if idle: print('not started (no branch): ' + ', '.join(idle))
     return 1 if red else 0
 
 
