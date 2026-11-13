@@ -297,8 +297,12 @@ function receiptRow(
 ): NoticeDraft | null {
   // A held act (ADR 0038) is one row that waits on the person, in its own words, never a failure.
   // A held send's one row is its `held` source, which carries Confirm; its receipt adds no second.
-  if (receipt.refusal?.kind === "held")
-    return receipt.refusal.act === "send-outward" || now - Date.parse(receipt.startedAt) > HELD_FOR_MS
+  const resultHeld = receipt.state === "succeeded" && "result" in receipt &&
+    receipt.result && typeof receipt.result === "object" && "held" in receipt.result &&
+    typeof receipt.result.held === "string" ? receipt.result.held : null;
+  const heldRefusal = receipt.refusal?.kind === "held" ? receipt.refusal : null;
+  if (heldRefusal || resultHeld)
+    return heldRefusal?.act === "send-outward" || now - Date.parse(receipt.startedAt) > HELD_FOR_MS
       ? null
       : {
           key: `action:${receipt.id}`,
@@ -307,7 +311,7 @@ function receiptRow(
           verb: "held",
           what: receipt.key,
           where: callerWord(receipt.caller),
-          says: receipt.refusal.message,
+          says: resultHeld ?? heldRefusal!.message,
           at: receipt.startedAt,
           url: null,
           refusal: "Nothing to open: do this in Revit or the web app yourself",
