@@ -16,7 +16,6 @@ export default defineConfig({
       "**/source-closure.generated.json",
       // route-graphs.ts --check owns exact projection bytes, including compact route-directory.ts.
       "packages/agent-contracts/src/generated/route-directory.ts",
-      "packages/mcps/src/pea/generated/*-graph.json",
       "**/pe-revit-wire.ts",
       // `pe-revit context product` writes this file ("DO NOT EDIT"); regeneration undoes any reformat
       "**/product.g.ts",

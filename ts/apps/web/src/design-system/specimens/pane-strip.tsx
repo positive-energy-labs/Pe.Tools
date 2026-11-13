@@ -25,7 +25,7 @@ import {
 import { SpecimenFrame } from "./recipe-grid";
 import { useTeaching } from "@pe/kit/lang/use-teach";
 import { HelpWorld } from "#/route/help";
-import { DUCTS_TEACHING } from "#/ducts/proto/e/teaching";
+import { referenceTeaching } from "#/route/teaching";
 
 function MountedTutorial() {
   return <HelpWorld facts={useTeaching()} />;
@@ -283,7 +283,7 @@ export function PaneStripSpecimen() {
         <MountedTutorial />
       </SpecimenFrame>
       <SpecimenFrame name="Tutorial foldout · declared Ducts" importPath="@pe/kit/lang/page-map">
-        <HelpWorld facts={DUCTS_TEACHING} />
+        <HelpWorld facts={referenceTeaching("/ducts")} />
       </SpecimenFrame>
     </>
   );
