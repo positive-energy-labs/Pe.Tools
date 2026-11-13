@@ -37,7 +37,7 @@ import {
   type RouteFingerprint,
   type InvocationToken,
 } from "@pe/agent-contracts";
-import { ANY_ROUTE } from "@pe/agent-contracts";
+import { ANY_ROUTE, writeSettingTier } from "@pe/agent-contracts";
 import { createRouteScopeGate } from "@pe/runtime/route-scope-gate";
 import { applicationWorkRegistry, createApplicationWorkRegistry } from "./application-work-registry";
 import { createWorkFeedClient, createTimelineClient, type TimelineClient } from "./work-feed-client";
@@ -764,7 +764,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
             requireWritable();
             try {
               if (core.state !== "ready") throw Error(reasonOf(core));
-              await settleNative(door.submit({ id: crypto.randomUUID(), key: "settings.tiers.write",
+              await settleNative(door.submit({ id: crypto.randomUUID(), key: writeSettingTier.key,
                 target: input.target?.kind === "document" ? input.target : { kind: "host" }, input: request }));
             } finally { mounted.refresh(); }
           });

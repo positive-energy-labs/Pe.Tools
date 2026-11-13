@@ -26,7 +26,6 @@
     "ts/apps/web/src/shell/work-document.ts",
     "ts/apps/web/src/shell/work-door-observation.ts",
     "ts/apps/web/src/shell/work-feed-client.ts",
-    "ts/apps/web/src/shell/work-scope-acceptance.ts",
     "ts/apps/web/src/shell/work-scope.ts",
     "ts/apps/web/src/shell/work-writes.ts",
     "ts/packages/agent-contracts/src/write-intent.ts",

@@ -20,26 +20,35 @@ type FixtureValue<O extends z.ZodType<Publication>> = Pick<
 >;
 
 /** A host publication handle. Importing a route on the host never loads browser transport. */
+export function hostRead<K extends string, S extends z.ZodRawShape, D>(
+  contract: ReadHandle<K, z.output<z.ZodObject<S>>, D> & { input: z.ZodObject<S> },
+  fixtures?: Readonly<Record<string, (args: z.output<z.ZodObject<Omit<S, "target">>>) => FixtureValue<z.ZodType<Publication<D>>>>>,
+): HostRead & { input: z.ZodObject<Omit<S, "target">>; output: z.ZodType<Publication<D>> };
 export function hostRead<K extends string, I, D>(
   contract: ReadHandle<K, I, D>,
-  fixtures?: Readonly<Record<string, (args: Omit<I, "target">) => FixtureValue<z.ZodType<Publication<D>>>>>,
-): HostRead & { input: z.ZodType<Omit<I, "target">>; output: z.ZodType<Publication<D>> } {
+  fixtures?: Readonly<Record<string, (args: I) => FixtureValue<z.ZodType<Publication<D>>>>>,
+): HostRead & { input: z.ZodType<I>; output: z.ZodType<Publication<D>> };
+export function hostRead<K extends string, D>(
+  contract: ReadHandle<K, unknown, D>,
+  fixtures?: HostRead["fixtures"],
+): HostRead & { output: z.ZodType<Publication<D>> } {
   const { key } = contract;
-  const browserInput = contract.input instanceof z.ZodObject && "target" in contract.input.shape
-    ? contract.input.omit({ target: true })
-    : contract.input;
-  const input = z.preprocess((value) => browserInput.parse(value), z.custom<Omit<I, "target">>());
+  let input: z.ZodType = contract.input;
+  if (contract.input instanceof z.ZodObject && "target" in contract.input.shape) {
+    const { target, ...shape } = contract.input.shape;
+    input = z.object(shape).clone({ ...contract.input.def, shape });
+  }
   return {
     ...contract,
     input,
     endpoint: "reads.value" as const,
-    request(args: Omit<I, "target">, target?: import("@pe/agent-contracts").ExecutionTarget) {
+    request(args: z.output<typeof input>, target?: import("@pe/agent-contracts").ExecutionTarget) {
       const shape = contract.input instanceof z.ZodObject ? contract.input.shape.target : undefined;
       const bound = target ?? { kind: "host" as const };
-      const direct = shape?.safeParse(bound);
-      return { read: key, args: contract.input.parse({ ...args, ...(shape ? {
-        target: direct?.success ? direct.data : bound.kind === "document" ? bound.ref : bound,
-      } : {}) }) };
+      const direct = shape instanceof z.ZodType ? shape.safeParse(bound) : undefined;
+      return { read: key, args: contract.input.parse(shape && typeof args === "object" && args !== null
+        ? { ...args, target: direct?.success ? direct.data : bound.kind === "document" ? bound.ref : bound }
+        : args) };
     },
     fixtures,
     source: {

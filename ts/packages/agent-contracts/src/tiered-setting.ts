@@ -1,4 +1,7 @@
 import { z } from "zod";
+import { handle } from "./command-handle.ts";
+
+export const writeSettingTier = handle("settings.tiers.write");
 
 /*
  * Tiered settings (ADR 0037 rule 8; homes MAP slice 6b). A setting is one value at `path` inside
