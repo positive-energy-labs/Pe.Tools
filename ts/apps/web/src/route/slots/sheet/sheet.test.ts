@@ -3,7 +3,7 @@ import { z } from "zod";
 import { commandCatalogAxes } from "@pe/agent-contracts/command-axes";
 import { commands } from "@pe/agent-contracts/semantic-actions";
 import type { CatalogAxes } from "../../../../../../packages/agent-contracts/src/catalog.ts";
-import { BINDING_KINDS, SHEET_COMMANDS, local, parameter, sheetSlotDataSchema } from "@pe/agent-contracts/slots";
+import { SHEET_COMMANDS, local, parameter, sheetSlotDataSchema } from "@pe/agent-contracts/slots";
 import { subjectCode, uniqueIdSchema } from "../../../../../../packages/agent-contracts/src/subject-ref.ts";
 import { sheetCells } from "./index.ts";
 
@@ -17,16 +17,15 @@ import { sheetCells } from "./index.ts";
 const uid = (text: string) => subjectCode({ keyKind: "UniqueId", key: uniqueIdSchema.parse(text) });
 
 test("slice 7: the sheet slot draws a binding's StateCells, and a ModelWrite binds a plan whose effect is Read or TransactRead", () => {
-  // The four closed kinds (ADR 0037 rule 8 added `setting`), and the data projection a Pod decodes (the hydronic Pod's `chosen` binding).
-  expect(BINDING_KINDS).toEqual(["parameter", "store", "local", "setting"]);
-  const slot = { bindings: { chosen: parameter("Diameter", z.number()), maxVelocity: local(z.number()) } };
+  // A Pod decodes the same home and domain grammar the browser declares.
+  const slot = { bindings: { chosen: parameter("Diameter", { kind: "number" }), maxVelocity: local({ kind: "number" }) } };
   expect(
     sheetSlotDataSchema.parse({
       bindings: {
-        chosen: { kind: "parameter", parameter: "Diameter", per: "subject" },
-        maxVelocity: { kind: "local", per: "route" },
+        chosen: { home: { at: "parameter", parameter: "Diameter" }, domain: { kind: "number" }, per: "subject" },
+        maxVelocity: { home: { at: "local" }, domain: { kind: "number" }, per: "route" },
       },
-    }).bindings.chosen.kind,
+    }).bindings.chosen!.home.at,
   ).toBe("parameter");
 
   // Two rows; `a` has a staged value that drifts from the model, `b` shows the model's own value.
@@ -44,7 +43,7 @@ test("slice 7: the sheet slot draws a binding's StateCells, and a ModelWrite bin
     ["chosen", b, 32, 32, false, "model"],
     ["maxVelocity", "route", 1.5, null, false, "work"],
   ]);
-  expect(cells.map((c) => c.kind)).toEqual(["parameter", "parameter", "local"]);
+  expect(cells.map((c) => c.home.at)).toEqual(["parameter", "parameter", "local"]);
 
   // One pair for every sheet, admitted by the existing linker rule (agent-contracts catalog.ts):
   // the apply is a ModelWrite whose plan is a Read or TransactRead.
@@ -59,8 +58,8 @@ test("slice 7: a draft slot draws each Work cell's staged value with its author,
   // ADR 0030 rule 8: Fans Work holds `{ edit: { value, by, at } }` at every address; `{}` is a draft nobody staged.
   const [a, b] = [uid("a-0001"), uid("b-0002")];
   const slot = { draft: true as const, bindings: {
-    localRate: local(z.number()),
-    roles: { kind: "store", store: "_PE_DuctLosses", schema: z.object({ role: z.string() }), per: "subject" } as const,
+    localRate: local({ kind: "number" }),
+    roles: { home: { at: "store", store: "_PE_DuctLosses" }, domain: { kind: "object", fields: { role: { kind: "enum", shape: z.string(), choices: [] } } }, per: "subject" } as const,
   } };
   const cells = sheetCells(slot, {
     rows: [a, b],
@@ -73,4 +72,11 @@ test("slice 7: a draft slot draws each Work cell's staged value with its author,
     ["roles", { role: "passive" }, "model", null],
   ]);
   expect(cells[0]!.pending).toEqual({ by: "pea", value: 0.1, at: "2026-11-10T00:00:00Z" });
+});
+
+test.each([
+  { home: { at: "unknown" }, domain: { kind: "number" } },
+  { home: { at: "local" }, domain: { kind: "unknown" } },
+])("unknown grammar arms fail at the boundary", binding => {
+  expect(sheetSlotDataSchema.safeParse({ bindings: { x: { ...binding, per: "route" } } }).success).toBe(false);
 });

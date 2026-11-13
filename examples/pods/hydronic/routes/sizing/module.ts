@@ -12,7 +12,7 @@ const core = read(hostRead(valueRead(`${key}.sizing`, args, value)), (page: { sy
 type Context = ContextOf<typeof fields, typeof core, typeof workState, typeof edit>;
 // A pipe is named by its SubjectRef code; the kernel resolves it to captured geometry.
 const pipeCode = (uniqueId: string) => subjectCode({ keyKind: "UniqueId", key: uniqueIdSchema.parse(uniqueId) });
-const pipesOf = (ctx: Context) => (ctx.value.current ? ctx.value.value.result.value?.rows : undefined) ?? [];
+const pipesOf = (ctx: Context) => ctx.value.value.result.value?.rows ?? [];
 const inks = { ok: "viz-1", undersized: "viz-2", oversized: "viz-3", "no-flow": "viz-4" } as const;
 
 export const module = route({
@@ -40,9 +40,9 @@ export const module = route({
   // `chosen` is the pipe's Diameter in Revit: sheet.plan reads it, sheet.apply writes it (ADR 0035 rule 3).
   sheet: {
     bindings: {
-      chosen: parameter("Diameter", z.number().positive(), "Millimeters"),
-      maxVelocity: local(z.number().positive()),
-      maxFriction: local(z.number().positive()),
+      chosen: parameter("Diameter", { kind: "number", exclusiveMin: 0, unit: "Millimeters" }),
+      maxVelocity: local({ kind: "number", exclusiveMin: 0 }),
+      maxFriction: local({ kind: "number", exclusiveMin: 0 }),
     },
   },
   // The picture is the system's pipes, each outlined in its status ink. The kernel adds the pane and its pose,
@@ -66,7 +66,6 @@ export const module = route({
       purpose: "Which diameter each pipe should be, and which pipes are wrong today",
       // The sheet and goal slots draw the cells and the unresolved list; this pane is the sizing table.
       draw: (ctx: Context) => {
-        if (!ctx.value.current) return ctx.value.reason;
         const { unresolved } = ctx.value.value;
         const { limits, rows, pumpHead } = ctx.value.value.result.value!;
         return [

@@ -1,3 +1,4 @@
+import { z } from "zod";
 /**
  * Slice 10 falsifier for /family (routes MAP row 10, ADR 0035 rules 1, 2 and 8): the family is the
  * subject (a `name` SubjectRef over its saved member, `[pod, path]`), the table's search, sort,
@@ -9,7 +10,6 @@
  */
 import { readFileSync } from "node:fs";
 import { expect, test } from "vite-plus/test";
-import { z } from "zod";
 import { decode, familyData, familyDraftSchema, podMemberCode, subjectCode } from "@pe/agent-contracts";
 import { local } from "@pe/agent-contracts/slots";
 import { sheetCells } from "../route/slots/sheet/index.ts";
@@ -40,7 +40,7 @@ test("/family declares subject, query and goal, and no carry key", () => {
     sort: "query",
     hidden: "query",
     member: "subject",
-    stage: "pose",
+    stage: "stage",
     pane: "pose",
     overlay: "pose",
     drill: "pose",
@@ -120,7 +120,7 @@ test("the hand member list and the pod/path identity pair are deleted", () => {
  * /family declares its sheet and the table and its codecs go.
  */
 test.fails("kernel gap: cited-cell (10)", () => {
-  const slot = { draft: true as const, bindings: { cells: local(z.unknown(), "subject", { json: true, rows: () => ["/types/Wide/Width"] }) } };
+  const slot = { draft: true as const, bindings: { cells: local({ kind: "enum", shape: z.string(), choices: [] }, "subject", { rows: () => ["/types/Wide/Width"] }) } };
   const work = { cells: { "/types/Wide/Width": { edit: { value: "40in", by: "pea", sources: [{ blockId: "p2-b7" }] } } } };
   const [cell] = sheetCells(slot, { rows: [], work, model: [], read: {} });
   expect(cell).toMatchObject({ value: "40in", pending: { by: "pea" } });
@@ -139,7 +139,7 @@ test.fails("kernel gap: cited-cell (10)", () => {
 test.fails("kernel gap: family-type-parameter (10)", async () => {
   const { sheetWrites } = await import("../../../host/src/slots/sheet.ts");
   const type = subjectCode({ keyKind: "name", key: ["Box", "Wide"] });
-  const sheet = { bindings: { width: { kind: "parameter" as const, parameter: "Width", per: "subject" as const } } };
+  const sheet = { bindings: { width: { home: { at: "parameter" as const, parameter: "Width" }, domain: { kind: "number" as const }, per: "subject" as const } } };
   expect(sheetWrites(sheet, { width: { [type]: "40in" } })).toHaveLength(1);
 });
 

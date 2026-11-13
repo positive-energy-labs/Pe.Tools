@@ -1,11 +1,11 @@
 import { Effect } from "effect";
 import { z } from "zod";
-import { commands, nativeProcessSchema, type WorkHandle } from "@pe/agent-contracts";
-import { SHEET_COMMANDS, type SheetSlotData } from "@pe/agent-contracts/slots";
+import { commands, nativeProcessSchema } from "@pe/agent-contracts";
+import { SHEET_COMMANDS, schemaOfData, type SheetSlotData } from "@pe/agent-contracts/slots";
 import { subjectOf, type SubjectRefCode } from "../../../../packages/agent-contracts/src/subject-ref.ts";
 import type { RevitApplyParameterValues, RevitDetailParameterValues } from "@pe/host-contracts/generated";
 import type { RevitBridge } from "../bridge.ts";
-import { command, nativeStep, refused, type CommandContext, type CommandExecutor } from "../command-executor.ts";
+import { command, nativeStep, refused, type CommandExecutor } from "../command-executor.ts";
 import { projectReader, type FamilyActionDependencies } from "../family-actions.ts";
 
 /*
@@ -47,18 +47,38 @@ const uniqueIdOf = (subject: string) => {
 
 /** Pure: the staged parameter writes a route's Work holds for its sheet, binding by binding then row by row. */
 export function sheetWrites(sheet: SheetSlotData, doc: unknown): readonly SheetWrite[] {
-  const work = (doc ?? {}) as Readonly<Record<string, unknown>>;
+  validateSheetValues(sheet, doc);
   return Object.entries(sheet.bindings).flatMap(([binding, declared]) => {
-    if (declared.kind !== "parameter") return [];
-    const staged = (work[binding] ?? {}) as Readonly<Record<string, unknown>>;
+    const home = declared.home;
+    if (home.at !== "parameter") return [];
+    const heldAt = binding.split(".").reduce(get, doc);
+    const staged = heldAt && typeof heldAt === "object" ? heldAt : {};
     return Object.entries(staged).flatMap(([subject, held]) => {
-      const value = sheet.draft ? (held as { edit?: { value?: unknown } | null } | undefined)?.edit?.value : held;
+      const value = sheet.draft ? get(get(held, "edit"), "value") : held;
       return value === undefined || value === null
         ? []
-        : [{ binding, subject: subject as SubjectRefCode, uniqueId: uniqueIdOf(subject), parameter: declared.parameter,
-            value, ...(declared.unit ? { unit: declared.unit } : {}) }];
+        : [{ binding, subject: subject as SubjectRefCode, uniqueId: uniqueIdOf(subject), parameter: home.parameter,
+            value, ...(declared.domain.kind === "number" && declared.domain.unit ? { unit: declared.domain.unit } : {}) }];
     });
   });
+}
+
+const get = (value: unknown, key: string): unknown => value !== null && typeof value === "object" ? Reflect.get(value, key) : undefined;
+const sheetInput = z.looseObject({ work: z.looseObject({ key: z.looseObject({ route: z.string() }) }), doc: z.unknown() });
+
+/** Every staged value is decoded before the generic or route-specific native executor binds. */
+export function validateSheetValues(sheet: SheetSlotData, doc: unknown): void {
+  for (const [name, b] of Object.entries(sheet.bindings)) {
+    if (b.home.at === "setting") continue;
+    const held = name.split(".").reduce(get, doc);
+    const rows = b.per === "subject" ? Object.values(held && typeof held === "object" ? held : {}) : [held];
+    for (const row of rows) {
+      const value = sheet.draft ? get(get(row, "edit"), "value") : row;
+      if (value == null) continue;
+      const parsed = schemaOfData(b.domain).safeParse(value);
+      if (!parsed.success) throw refused(`${name}: ${parsed.error.issues[0]?.message}`, "sheet.invalid");
+    }
+  }
 }
 
 const planEdit = (write: SheetWrite): Edit => ({
@@ -88,7 +108,7 @@ function parameterExecutor(
     bind: async (ctx) => {
       if (ctx.admission.target.kind !== "document") throw refused("Exact document required");
       const target = ctx.admission.target.ref;
-      const { work, doc } = ctx.admission.input as unknown as { work: WorkHandle; doc: unknown };
+      const { work, doc } = sheetInput.parse(ctx.admission.input);
       const sheet = deps.workspace?.sheet(work.key.route);
       if (!sheet) throw refused(`Route ${work.key.route} declares no sheet slot`, "sheet.undeclared");
       return {
@@ -124,16 +144,15 @@ function parameterExecutor(
 }
 
 const via = z.object({ via: z.enum(["losses", "parameters"]), value: z.unknown() });
-const routeOf = (ctx: CommandContext) => (ctx.admission.input as { work: WorkHandle }).work.key.route;
 
 /** One entry per key: the Work handle's route picks the leaf (the ducts losses store, or parameter values). */
-function dispatch(key: string, byVia: Record<z.output<typeof via>["via"], CommandExecutor>): CommandExecutor {
+function dispatch(key: (typeof SHEET_COMMANDS)[keyof typeof SHEET_COMMANDS], deps: FamilyActionDependencies, byVia: Record<z.output<typeof via>["via"], CommandExecutor>): CommandExecutor {
   const inner = (value: unknown) => {
     const p = via.parse(value);
     return { executor: byVia[p.via], value: byVia[p.via].prepared.parse(p.value) };
   };
   return {
-    definition: commands[key as keyof typeof commands],
+    definition: commands[key],
     prepared: via,
     sealInput: via,
     seal: (value) => {
@@ -141,7 +160,11 @@ function dispatch(key: string, byVia: Record<z.output<typeof via>["via"], Comman
       return executor.seal!(p);
     },
     bind: async (ctx) => {
-      const name = LOSSES_ROUTES.has(routeOf(ctx)) ? "losses" : "parameters";
+      const { work, doc } = sheetInput.parse(ctx.admission.input);
+      const sheet = deps.workspace?.sheet(work.key.route);
+      if (!sheet) throw refused(`Route ${work.key.route} declares no sheet slot`, "sheet.undeclared");
+      validateSheetValues(sheet, doc);
+      const name = LOSSES_ROUTES.has(work.key.route) ? "losses" : "parameters";
       const bound = await byVia[name].bind(ctx);
       return { ...bound, prepare: async () => ({ via: name, value: await bound.prepare?.() }) };
     },
@@ -161,7 +184,7 @@ export function sheetExecutors(
   return Object.fromEntries(
     Object.values(SHEET_COMMANDS).map((key) => [
       key,
-      dispatch(key, { losses: losses[key]!, parameters: parameterExecutor(bridge, deps, key) }),
+      dispatch(key, deps, { losses: losses[key]!, parameters: parameterExecutor(bridge, deps, key) }),
     ]),
   );
 }

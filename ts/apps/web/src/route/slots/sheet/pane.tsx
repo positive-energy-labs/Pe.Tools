@@ -1,14 +1,13 @@
+import { useFieldOptionsReading, previousOf } from "../../../host/resource-state";
+import { FieldOptionSelect, pickerOptions } from "../../../host/field-options";
 import { useState, type ReactNode } from "react";
 import { decode, type SubjectRefCode } from "../../../../../../packages/agent-contracts/src/subject-ref.ts";
-import type { SheetSlot } from "@pe/agent-contracts/slots";
+import { schemaOf, type SheetSlot } from "@pe/agent-contracts/slots";
 import { Button } from "@pe/kit/lang/button";
-import { Input } from "@pe/kit/lang/input";
-import { submitAction } from "@pe/mcps/actions";
-import type { OpResponseOf } from "@pe/host-contracts/operation-types";
 import { StateCell } from "@pe/kit/lang/cell";
 import { useRouteSearchSlice } from "../../activity";
 import type { DrawContext, Fields } from "../../typed-route.ts";
-import { sheetCells, typedCells, type SheetCell } from "./index.ts";
+import { bindingPath, sheetCells, typedCells, type SheetCell } from "./index.ts";
 import { FindingVerb } from "../findings/verb.tsx";
 
 /*
@@ -32,38 +31,77 @@ const rowsOf = (slot: SheetSlot, ctx: Ctx, field?: string): string[] => {
 /** Where a value stands when Work holds none: the layer and, for the firm file, which file. */
 const layerWord = (cell: SheetCell) => (cell.ref ? `${cell.source} ${cell.ref}` : cell.source);
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
-/** A `json` cell's text: JSON when it parses, else the text itself. */
-const jsonOrText = (text: string): unknown => { try { return JSON.parse(text); } catch { return text; } };
 
 /** The row's subject, when its key is a SubjectRef code; a binding's own row key (a slot name) has none. */
 const subjectRow = (row: string | undefined) => (row !== undefined && decode(row).ok ? (row as SubjectRefCode) : null);
 
 function Cell({ ctx, cell, verb }: { ctx: Ctx; cell: SheetCell; verb: ReactNode }) {
-  const handle = ctx.cells.at(cell.row === undefined ? [cell.binding] : [cell.binding, cell.row]);
+  const [draft, setDraft] = useState<{ value: unknown } | null>(null);
+  const [saving, setSaving] = useState<string | null>(null);
+  const [said, setSaid] = useState<string | null>(null);
+  const schema = schemaOf(cell.domain);
+  const domain = cell.domain;
+  const optionInput = domain.kind === "options" ? (typeof domain.input === "function" ? domain.input(ctx.value.value) : domain.input) : null;
+  if (domain.kind === "options" && ctx.target?.kind === "document") domain.handle.input.parse({ request: optionInput, target: ctx.target });
+  const optionsReading = useFieldOptionsReading(ctx.target?.kind === "document" ? ctx.target.ref : null,
+    typeof optionInput?.key === "string" ? optionInput.key : undefined, optionInput?.context ?? {});
+  const options = pickerOptions(optionsReading);
+  if (domain.kind === "options" && previousOf(optionsReading)) domain.handle.data.parse({ body: previousOf(optionsReading), version: null });
+  const setting = cell.setting;
+  const handle = (() => {
+    if (!setting) {
+      const workHandle = ctx.cells.at(bindingPath(cell.binding, cell.row));
+      return { ...workHandle, stage: async (value: unknown, history?: { label: string }) => {
+        const parsed = schema.safeParse(value);
+        return parsed.success ? workHandle.stage(parsed.data, history) : { code: "invalid", message: parsed.error.issues[0]?.message ?? "Invalid value" };
+      } };
+    }
+    return {
+    owner: { route: setting.owner, label: "unsaved" }, value: draft ? { edit: { value: draft.value, by: "human" as const } } : {},
+    refusal: null, transitions: () => [{ kind: "clear" as const, run: async () => { setDraft({ value: null }); return null; } }], clear: async () => { setDraft({ value: null }); return null; },
+    stage: async (value: unknown) => {
+      if (value === null) { setDraft({ value: null }); return null; }
+      const parsed = schema.safeParse(value);
+      if (!parsed.success) return { message: parsed.error.issues[0]?.message ?? "Invalid value" };
+      setDraft({ value: parsed.data }); return null;
+    },
+    };
+  })();
+  const save = async (tier: NonNullable<SheetCell["setting"]>["tiers"][number]) => {
+    const value = draft?.value;
+    if (!setting) return;
+    if (value === undefined) return setSaid("Type a value or clear it before saving");
+    setSaving(tier.tier);
+    const failure = await ctx.cells.at(["setting", setting.owner, tier.tier, ...setting.path]).stage(value);
+    setSaid(failure ? `Not saved: ${failure.message}` : `${value === null ? "Cleared" : "Saved"} at ${tier.tier}`);
+    if (!failure) setDraft(null);
+    setSaving(null);
+  };
   const under = cell.source === "work" ? cell.model : cell.value;
   const field = cell.field;
-  const choices = cell.choices;
+  const choices = cell.choices && cell.value != null && !cell.choices.some(c => !c.clear && same(c.value ?? c.key, cell.value))
+    ? [...cell.choices, { key: "standing", label: typeof cell.value === "string" ? cell.value : JSON.stringify(cell.value), value: cell.value, disabled: "not offered now" }]
+    : cell.choices;
   return (
     <div className="contents" data-sheet-cell={cell.label} data-sheet-address={cell.row === undefined ? cell.binding : `${cell.binding}:${cell.row}`} data-source={cell.source} data-drift={cell.drift || undefined}>
       <span className="min-w-0 truncate">{cell.label}</span>
       <span className="block min-w-0 h-(--item-h)">
         <StateCell
           cell={handle}
-          value={ctx.value as never}
-          label={cell.label}
+          value={ctx.value}
+          label={cell.setting ? `${cell.label}: value to save` : cell.label}
           model={under}
           source={layerWord(cell)}
           scale="row"
-          {...(cell.refusal ? { capReason: cell.refusal } : {})}
+          {...(cell.refusal || domain.kind === "options" && domain.mode === "constraint" ? { capReason: cell.refusal ?? "Choose an option from the list" } : {})}
           {...(cell.note ? { note: cell.note } : {})}
           {...(cell.unit ? { unit: { label: cell.unit } } : {})}
           {...(cell.numeric || field ? { numeric: cell.numeric ?? {} } : {})}
           {...(field ? {
             format: (v: unknown) => String((v as Record<string, unknown> | null)?.[field] ?? "—"),
             parse: (text: string) => ({ [field]: Number(text) }),
-          } : cell.json ? {
-            format: (v: unknown) => (typeof v === "string" ? v : v === undefined ? "" : JSON.stringify(v)),
-            parse: (text: string) => (typeof under === "string" ? text : jsonOrText(text)),
+          } : cell.setting ? {
+            parse: (text: string) => text.trim() === "" ? null : cell.numeric ? Number(text) : text,
           } : {})}
           {...(choices ? {
             options: choices,
@@ -72,68 +110,16 @@ function Cell({ ctx, cell, verb }: { ctx: Ctx; cell: SheetCell; verb: ReactNode 
               ?? (cell.value == null ? choices.find((c) => c.clear)?.key : undefined) ?? null,
           } : {})}
         />
+        {domain.kind === "options" ? <FieldOptionSelect items={options.items} value={typeof cell.value === "string" ? cell.value : undefined}
+          placeholder={`${cell.label} options`} status={options.status} disabled={!!handle.refusal}
+          onChange={option => void handle.stage(domain.persist === "label" ? option.label : option.value)} /> : null}
       </span>
-      <span className="t-small min-w-0 truncate text-ink-2" data-input-source={cell.source}>{layerWord(cell)}</span>
-      <span>{verb}</span>
-    </div>
-  );
-}
-
-/**
- * A `setting` cell (ADR 0037 rule 8): the value, the tier that served it, and "save at" for each
- * declared tier. A save goes straight to that home's file through the host's write door; it never
- * stages in Work, and a tier whose home was not found is refused with where the host looked.
- * Re-openable default (homes MAP decision log, 2026-11-12): one typed value, one button per tier.
- */
-function SettingCell({ ctx, cell, schema }: { ctx: Ctx; cell: SheetCell; schema: SheetSlot["bindings"][string]["schema"] }) {
-  const [text, setText] = useState("");
-  const [busy, setBusy] = useState<string | null>(null);
-  const [said, setSaid] = useState<string | null>(null);
-  const save = async (tier: NonNullable<SheetCell["setting"]>["tiers"][number]) => {
-    const typed = text.trim();
-    const value = typed === "" ? null : cell.numeric || typeof cell.value === "number" ? Number(typed) : typed;
-    const parsed = value === null ? null : schema.safeParse(value);
-    if (parsed && !parsed.success) return setSaid(`Not saved: ${parsed.error.issues[0]?.message ?? "the value is not valid"}`);
-    setBusy(tier.tier);
-    try {
-      const receipt = await submitAction({
-        id: crypto.randomUUID(),
-        key: "settings.tiers.write",
-        target: ctx.target?.kind === "document" ? { kind: "document", ref: ctx.target.ref } : { kind: "host" },
-        input: { owner: cell.setting!.owner, tier: tier.tier, path: [...cell.setting!.path], value: parsed ? parsed.data : null, expectedSha256: tier.sha256 },
-      });
-      if (receipt.state === "failed" && (receipt.outcome?.state === "refused" || receipt.outcome?.state === "stale")) ctx.refresh();
-      if (receipt.state !== "succeeded")
-        throw Error(`Save ${receipt.state}${"error" in receipt ? `: ${receipt.error}` : ""}`);
-      const wrote = receipt.result as OpResponseOf<"settings.tiers.write">;
-      setSaid(`${value === null ? "Cleared" : "Saved"} at ${wrote.tier}: ${wrote.path}`);
-      setText("");
-      ctx.refresh();
-    } catch (error) {
-      setSaid(`Not saved: ${error instanceof Error ? error.message : String(error)}`);
-    } finally {
-      setBusy(null);
-    }
-  };
-  return (
-    <div className="col-span-full flex min-w-0 flex-col gap-1" data-sheet-cell={cell.label} data-sheet-address={cell.binding} data-source={cell.source}>
-      <span className="flex min-w-0 flex-wrap items-baseline gap-x-2">
-        <span className="min-w-0 truncate">{cell.label}</span>
-        <span className="min-w-0 truncate text-ink-2" data-input-source={cell.source}>{[layerWord(cell), cell.note].filter(Boolean).join(" \u00b7 ")}</span>
-      </span>
-      <span className="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,2fr)] items-center gap-1">
-        <span className="min-w-0 truncate">{cell.value == null ? "\u2014" : String(cell.value)}{cell.unit ? ` ${cell.unit}` : ""}</span>
-        <Input aria-label={`${cell.label}: value to save`} value={text} placeholder="save at" onChange={(event) => setText(event.target.value)} />
-      </span>
-      <span className="flex min-w-0 flex-wrap gap-1">
-        {cell.setting!.tiers.map((tier) => (
-          <Button key={tier.tier} kind="quiet" label={`Save ${cell.label} at the ${tier.tier} home${text.trim() ? "" : " (empty clears it there)"}`}
-            busy={busy === tier.tier} {...(tier.home ? {} : { refusal: tier.notFound ?? `No ${tier.tier} home` })} onPress={() => void save(tier)}>
-            {tier.tier}
-          </Button>
-        ))}
-      </span>
-      {said ? <p role="status" className="col-span-full min-w-0 text-ink-2">{said}</p> : null}
+      <span className="t-small min-w-0 truncate text-ink-2" data-input-source={cell.source}>{layerWord(cell)}{cell.setting && draft ? ` · saved ${cell.value ?? "—"}` : ""}</span>
+      <span>{verb}{cell.setting?.tiers.map(tier => <Button key={tier.tier} kind="quiet"
+        label={`Save ${cell.label} at the ${tier.tier} home`} busy={saving === tier.tier}
+        {...(tier.home ? {} : { refusal: tier.notFound ?? `No ${tier.tier} home` })}
+        onPress={() => void save(tier)}>{tier.tier}</Button>)}</span>
+      {said ? <p role="status" className="col-span-full text-ink-2">{said}</p> : null}
     </div>
   );
 }
@@ -171,9 +157,7 @@ export function SheetPane({ ctx: { draw: ctx, slot, field } }: { ctx: { draw: Ct
           // The label keeps its floor (10rem or 45%); the value input sheds width first and the
           // source word takes only its own width, so a ~330px pane no longer reads "Vel..." (L3).
           <div className="grid grid-cols-[minmax(min(10rem,45%),1fr)_minmax(0,9rem)_fit-content(6rem)_auto] items-center gap-x-2 gap-y-1">
-            {shown.map((cell) => cell.setting
-              ? <SettingCell key={cell.binding} ctx={ctx} cell={cell} schema={slot.bindings[cell.binding]!.schema} />
-              : <Cell key={`${cell.binding}:${cell.row ?? ""}`} ctx={ctx} cell={cell} verb={verbOf(cell)} />)}
+            {shown.map(cell => <Cell key={`${cell.binding}:${cell.row ?? ""}`} ctx={ctx} cell={cell} verb={verbOf(cell)} />)}
           </div>
         )}
     </section>
