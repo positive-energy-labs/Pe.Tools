@@ -13,6 +13,7 @@ import {
   productPathNames,
 } from "./contracts/product.ts";
 import { documentsUserRoot, firmHome, insideTestRoot, projectHomeAbove, type Home } from "./product-paths.ts";
+import type { HomeRoot, StatePath, StateRoot } from "./kinds.ts";
 import { storedNoticesFile, type DerivedStore } from "./store.ts";
 export {
   HOST_RUNTIME_SERVICE_HEADER,
@@ -93,11 +94,19 @@ export function productRoot(owner: RuntimeOwner): string {
  * Where the machine keeps what no home may hold (homes freeze shape 7), all under the state
  * root's `state` folder, the one an MSI upgrade keeps. Pod and Page ids are unique across homes,
  * so no key names a home. Pinned by `runtime-ownership.fixture.json` `stateTree`.
+ *
+ * This is the one table that mints a machine-state path, and the only minter of the store's
+ * `StateRoot` (routes CONTRACTS K-A2): a state kind makes its path from what this returns, and
+ * nothing else joins a path onto `state`. A new machine-state location is a row here.
  */
 export function stateTree(root: string) {
   const state = (...segments: string[]) =>
-    join(root, productPathNames.stateDirectoryName, ...segments);
-  return {
+    join(root, productPathNames.stateDirectoryName, ...segments) as StatePath;
+  const paths = {
+    /** The `state` folder itself: every state kind's root. */
+    state: state(),
+    /** The machine's one notice file; every process that refuses a stored file posts here. */
+    notices: storedNoticesFile(root) as StatePath,
     work: state("Work"),
     /** Page state, one folder per slug. */
     pages: state("Pages"),
@@ -111,6 +120,24 @@ export function stateTree(root: string) {
     agent: state("Agent"),
     /** Derived files of a source in no project home, `<key>.<sha256>` (the derived store's fallback). */
     derived: state(productPathNames.derivedDirectoryName),
+    apsCredentials: state("aps-auth", "credentials.json"),
+    apsTokens: state("aps-auth", "tokens.json"),
+    /** One directory per harness thread (`harness/threads.ts`): `meta.json` + `events.jsonl`. */
+    harnessThreads: state("harness-threads"),
+    /** Immutable headless Ducts calculations, including their complete effective inputs. */
+    ductsAnalyses: state("ducts", "analyses"),
+    /** The copies Pea opens, so a person's own file is never her scratch. Model copies must not upload. */
+    peaWork: state("pea-work"),
+    /** User-added endpoint providers (`harness/providers.ts`). Holds keys: state, not Documents. */
+    providers: state("providers.json"),
+    pluginDecisions: state("plugins.json"),
+    routeTrust: state("route-trust.json"),
+  };
+  const machine: StateRoot = paths;
+  return {
+    ...paths,
+    /** Bind a proven home to this machine, whose blob store keeps what a write into the home replaces. */
+    home: (home: Home): HomeRoot => ({ ...home, machine }),
   };
 }
 

@@ -163,6 +163,7 @@ export interface CommandExecutor {
 export type CommandRegistry = (key: string) => CommandExecutor;
 /** Resource I/O only. Control hooks belong to the stable registry entries. */
 export interface CommandResources {
+  readonly readOwnership?: import("./reads/read-ownership.ts").ReadOwnership;
   work?: RouteWorkspace;
   workReads?: (admission: ActionAdmission) => CommandWorkReads;
   /** `moment` is the gate that asks; absent means the strongest reading. */

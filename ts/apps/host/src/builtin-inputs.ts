@@ -211,7 +211,8 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
             row.state === "succeeded" &&
             row.target.kind === "document" &&
             row.steps.some(
-              (s) => s.state === "succeeded" && s.effect !== "Read" && s.effect !== "TransactRead",
+              (s) => s.state === "succeeded" && (s.kind !== "native" || !s.touched ||
+                ["wrote", "unauthorized", "unknown", "restoreFailed"].includes(s.touched.kind)),
             )
           )
             history.afterWrite(row.target.ref, row.id);

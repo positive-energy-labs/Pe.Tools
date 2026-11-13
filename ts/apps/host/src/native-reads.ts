@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Context, Deferred, Effect, Exit, Layer, Schema } from "effect";
-import type { DoorFailure, NativeAnswer, PreparedRead } from "@pe/host-internal/request-contracts";
+import type { DoorFailure, NativeAnswer, PreparedRead, RequestIdentityData, CausalTerminalState, NativeOutcome, NativeTerminalEvidence } from "@pe/host-internal/request-contracts";
 import {
   canonicalJson,
   decodePreparedRead,
@@ -34,6 +34,7 @@ type Flight = {
   callers: number;
   retiring: boolean;
   terminal: boolean;
+  outcome?: NativeOutcome;
 };
 
 export class NativeReads extends Context.Service<
@@ -42,7 +43,10 @@ export class NativeReads extends Context.Service<
     readonly join: <A>(
       read: PreparedRead<A>,
       session: string,
+      owner?: RequestIdentityData,
     ) => Effect.Effect<NativeAnswer<A>, DoorFailure>;
+    readonly state: (owner: RequestIdentityData) => CausalTerminalState;
+    readonly settle: (owner: RequestIdentityData) => Effect.Effect<CausalTerminalState>;
     readonly retained: Effect.Effect<{ entries: number; joiners: number }>;
   }
 >()("NativeReads") {
@@ -55,12 +59,25 @@ export class NativeReads extends Context.Service<
       if (Object.values(limits).some((value) => !Number.isSafeInteger(value) || value < 1))
         return yield* Effect.die(new Error("Native read bounds must be positive safe integers"));
       const flights = new Map<string, Flight>();
+      const owned = new WeakMap<RequestIdentityData, Set<Flight>>();
+      const state = (owner: RequestIdentityData): CausalTerminalState => {
+        const evidence = [...(owned.get(owner) ?? [])].map((flight): NativeTerminalEvidence => {
+          const outcome = flight.outcome ?? "unknown-until-reconciled";
+          return !flight.terminal || outcome === "unknown-until-reconciled" || outcome === "native-cancel-requested"
+            ? { nativeRequestId: flight.requestId, outcome, settlement: "unknown-until-reconciled" }
+            : { nativeRequestId: flight.requestId, outcome, settlement: "terminal" };
+        });
+        if (evidence.every((entry) => entry.settlement === "terminal"))
+          return { kind: "settled", requiredDescendants: [], evidence };
+        return { kind: "unsettled", requiredDescendants: [], evidence };
+      };
       yield* Effect.addFinalizer(() => Effect.sync(() => flights.clear()));
       const busy = (message: string) =>
         new ReadBusy({ message, status: 429, problem: "read.capacity" });
       const join = Effect.fn("NativeReads.join")(function* <A>(
         read: PreparedRead<A>,
         session: string,
+        owner?: RequestIdentityData,
       ) {
         const descriptor = read.descriptor;
         const identity = canonicalJson(Schema.decodeUnknownSync(Schema.Json)(descriptor));
@@ -104,6 +121,9 @@ export class NativeReads extends Context.Service<
                   ),
                 );
                 if (Exit.isFailure(acquired)) {
+                  created.terminal = true;
+                  created.outcome = "never-dispatched";
+                  yield* Deferred.succeed(created.settled, undefined);
                   yield* Deferred.succeed(created.ready, false);
                   yield* Deferred.failCause(created.answer, acquired.cause);
                   flights.delete(identity);
@@ -155,6 +175,7 @@ export class NativeReads extends Context.Service<
                   Effect.forkIn(scope),
                 );
                 const outcome = yield* handle.terminal;
+                created.outcome = outcome;
                 created.terminal = true;
                 flights.delete(identity);
                 yield* Deferred.succeed(created.settled, undefined);
@@ -167,6 +188,11 @@ export class NativeReads extends Context.Service<
             const joined = flight;
             if (joined.callers >= limits.joiners)
               return yield* busy("Native read joiner capacity reached");
+            if (owner) {
+              const held = owned.get(owner) ?? new Set<Flight>();
+              held.add(joined);
+              owned.set(owner, held);
+            }
             joined.callers++;
             return yield* restore(
               Effect.logInfo(
@@ -225,6 +251,11 @@ export class NativeReads extends Context.Service<
       });
       return {
         join,
+        state,
+        settle: (owner) => Effect.gen(function* () {
+          for (const flight of owned.get(owner) ?? []) yield* Deferred.await(flight.settled);
+          return state(owner);
+        }),
         retained: Effect.sync(() => ({
           entries: flights.size,
           joiners: [...flights.values()].reduce((n, f) => n + f.callers, 0),
