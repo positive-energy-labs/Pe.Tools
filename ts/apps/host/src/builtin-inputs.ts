@@ -365,7 +365,7 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
     const timeline = timelineJournal && !recorded ? hostTimeline(workspace, timelineJournal, async () => {
       const result = await invoke(Context.get(services, HostSessionInventory).list());
       return result.sessions.flatMap(session => session.connected
-        ? (session.openDocuments ?? []).map(document => ({ session: session.sessionId, openId: document.openId, address: document.address as import("@pe/agent-contracts").Address | null ?? null, projectHome: document.projectHome }))
+        ? (session.openDocuments ?? []).map(document => ({ session: session.sessionId, openId: document.openId, address: addressSchema.nullable().parse(document.address ?? null), projectHome: document.projectHome }))
         : []);
     }) : undefined;
     const url = new URL(web.url),

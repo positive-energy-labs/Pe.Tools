@@ -392,7 +392,7 @@ export function createPeRoutes(options: PeRoutesOptions) {
       // the step is chosen across `works`, to which the host adds the document's findings Work.
       run: (_scope: WorkKey, _route: string, by: "pea" | "human", body: unknown, caller: Caller) =>
         hostTimeline(work, options.journal ?? telemetryOf(options).journal, async () =>
-          (await options.navigation?.documents() ?? []) as DocumentRow[]).step(
+          z.array(documentRefSchema.extend({ address: addressSchema.nullable(), projectHome: z.string().nullable().optional() })).parse(await options.navigation?.documents() ?? [])).step(
           body as z.infer<typeof historyBody>,
           caller,
           by,

@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect, Layer } from "effect";
 import { expect, test, vi } from "vite-plus/test";
+import { z } from "zod";
 import { sha256Hex } from "@pe/host-contracts/store";
 import * as tiers from "../src/tiered-settings.ts";
 import { callRouteOver, captureStore, detachedBridge, journalAt, sessionView, testHostInputs } from "./effect-test.ts";
@@ -12,7 +13,6 @@ import { serveRoutes } from "./real-server.ts";
 import { bindWork } from "@pe/agent-contracts";
 import { RouteWorkspace } from "@pe/runtime";
 import { hostTimeline } from "../src/reads/work-timeline.ts";
-import type { ActionJournal } from "../src/action-journal.ts";
 import { approvedPea } from "./callers.ts";
 
 test("Pea's first home write records its caller and refuses undo with a reason, keeping the file", async () => {
@@ -30,10 +30,10 @@ test("Pea's first home write records its caller and refuses undo with a reason, 
     expect(posted.status, await posted.clone().text()).toBeLessThan(300);
     const [receipt] = await (await fetch(`${server.base}/actions?id=${id}&wait=10000`, { headers })).json();
     expect(receipt).toMatchObject({ state: "succeeded", result: { priorSha256: null } });
-    const wrote = receipt.result as { path: string; sha256: string };
+    const wrote = z.object({ path: z.string(), sha256: z.string() }).parse(receipt.result);
     const before = readFileSync(wrote.path);
     const workspace = new RouteWorkspace({ registrations: [], store: { getState: async () => null, setState: async () => {} } });
-    const timeline = hostTimeline(workspace, { read: async () => [] } as unknown as ActionJournal);
+    const timeline = hostTimeline(workspace, owner);
     const works = [bindWork("ducts", null, "first-write")];
     const shown = await timeline.read(works, "pea");
     // Mutant ST7a-human-stamp: replace the saved Caller with a human.
