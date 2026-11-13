@@ -75,3 +75,14 @@ test("a different handle or a native mutation never reaches the read route", asy
   expect(transport.submit).not.toHaveBeenCalled();
   expect(transport.fetch).not.toHaveBeenCalled();
 });
+
+test("family reads project the owning Work into scope outside the strict read input", async () => {
+  const transport = ports({ reading: true });
+  const work = { key: { binding: "host", route: "family", target: null }, revision: 7 };
+  await sendCommand(handle("family.read"), { id: "request-a", key: "family.read", target,
+    input: { readId: "read-a", expectedRevision: 7, work } }, transport);
+  expect(transport.fetch).toHaveBeenCalledWith("/family/readings", expect.objectContaining({
+    body: JSON.stringify({ key: "family.read", input: { readId: "read-a", expectedRevision: 7 }, target: target.ref, scope: work.key }),
+  }));
+  expect(transport.submit).not.toHaveBeenCalled();
+});

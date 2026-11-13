@@ -525,7 +525,12 @@ export const hostActions = {
   } as const,
   ...commands,
   ...actionControls,
-  ...familyReads,
+  // These direct reads consume an owning Work just like journaled commands. The send door
+  // projects its handle into the existing family transport's scope, outside the read payload.
+  "family.read": workCommand("family", familyReads["family.read"]),
+  "family.cancel-read": workCommand("family", familyReads["family.cancel-read"]),
+  "family.saved": familyReads["family.saved"],
+  "parameter-links.read": workCommand("parameter-links", familyReads["parameter-links.read"]),
   ...scheduleReads,
   "instances.read": instancesReading,
 } satisfies Record<string, Command>;

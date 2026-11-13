@@ -68,9 +68,12 @@ export async function sendCommand(
     } else if (admission.target.kind === "session") headers[HOST_RPC_BRIDGE_SESSION_HEADER] = admission.target.session;
   } else if (route === "/family/readings" || route === "/schedules/readings") {
     path = route;
-    body = { key: command.key, input: admission.input,
+    const { work, ...input } = admission.input;
+    const scope = route === "/family/readings" && command.key !== "family.saved"
+      ? workHandleSchema.parse(work).key : undefined;
+    body = { key: command.key, input,
       target: admission.target.kind === "document" ? admission.target.ref : undefined,
-      scope: (admission.input.work as { key?: unknown } | undefined)?.key };
+      ...(scope ? { scope } : {}) };
   } else throw Error(`Unsupported command transport: ${route}`);
   const started = performance.now();
   const response = await ports.fetch(path, { method, headers,
