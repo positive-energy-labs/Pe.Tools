@@ -468,7 +468,12 @@ test.each(["undo after apply", "review identity", "insertText", "pointer keyboar
     fireEvent.click(await screen.findByRole("button", { name: "Start" }));
     await waitFor(() => expect(mount.work()?.handle.revision).toBe(1));
     await waitFor(() => expect(mount.value().current).toBe(true));
-    fireEvent.click(screen.getAllByRole("button", { name: "Read schedule" })[1]!);
+    const readSchedule = await waitFor(() => {
+      const button = screen.getAllByRole("button", { name: "Read schedule" })[1];
+      expect(button).toBeDefined();
+      return button!;
+    });
+    fireEvent.click(readSchedule);
     await waitFor(() => expect(mount.work()?.handle.revision).toBe(2));
     await waitFor(() => expect(mount.problem()).toBeNull());
     await screen.findByText("SH1");
