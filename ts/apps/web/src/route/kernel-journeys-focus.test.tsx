@@ -1506,6 +1506,7 @@ vi.mock("../workbench/provider", () => ({ useWorkbench: () => conversation.value
 vi.mock("../chat/chat-shell", () => ({ ChatShell: () => null }));
 
 test("JZ B05 retain Family Work and its spec across folding, first-thread promotion and thread switches", async () => {
+  await seedPlaces([]);
   const [{ createRoute }, { RegistryContext }, { appAtomRegistry }, { RouteDock },
     { createChatPageStore }, { module: family }, { publicRoutes }, { peClient },
     { createPeClient }, { peReadings }, { observeResources }, { createPeRoutes },
