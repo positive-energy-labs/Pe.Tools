@@ -21,6 +21,7 @@ import {
 import type { Page } from "./cdp.ts";
 import { marks, settled } from "./marks.ts";
 import { pickFansWriteScope } from "./fans-write-scope.ts";
+import { fanRosterRow } from "./fan-roster.ts";
 
 const FAN = process.env.E2E_FAN ?? "MUAS-1";
 const PORT = Number(process.env.E2E_PORT ?? "2");
@@ -30,8 +31,7 @@ const CHAOS = new Set((process.env.E2E_CHAOS ?? "").split(",").filter(Boolean));
 const ROSTER = '[data-pane-id="sheet-roster"]';
 const POPOVER = "[data-write-popover]";
 const PLAN_WRITE = /^plan Write to Revit$/;
-const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-const fanRow = new RegExp(`^${esc(FAN)}(?: · .*)? / port ${PORT}$`);
+const fanRow = fanRosterRow(FAN, PORT);
 
 /** The resolved unit ESP as drawn; calculated required ESP need not change after an ESP write. */
 const esp = (page: Page) => page.textOf(FANS_LEDGER_ESP);
