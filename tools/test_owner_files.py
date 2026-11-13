@@ -1,11 +1,13 @@
 """Pure metadata checks: python tools/test_owner_files.py. No SDK or native session commands."""
 
 import os
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 import acceptance
 
 
