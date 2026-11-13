@@ -7,24 +7,29 @@
 //   switch        open another fan while the first one's sheet still loads
 //   untouched     Pea edits while the page gets no input: no click until the turn settles
 //   cold          close and reconnect the browser page between the Pea turn and Plan
-import { expectText, journey, requirePea, requireRevit, revit, sendChat, setPea } from "./cdp.ts";
+import {
+  expectText,
+  FANS_LEDGER_ESP,
+  journey,
+  requirePea,
+  requireRevit,
+  revit,
+  sendChat,
+  setPea,
+} from "./cdp.ts";
 import type { Page } from "./cdp.ts";
 
 const FAN = process.env.E2E_FAN ?? "MUAS-1";
 const ESP = process.env.E2E_VALUE || "1.25";
 const CHAOS = new Set((process.env.E2E_CHAOS ?? "").split(",").filter(Boolean));
 const ROSTER = '[data-pane-id="sheet-roster"]';
-const LEDGER = '[data-pane-id="sheet-ledger"]';
 const POPOVER = "[data-write-popover]";
 const PLAN_WRITE = /^plan Write to Revit$/;
 const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const fanRow = new RegExp(`^${esc(FAN)}(\\s|$)`);
 
-/** The ledger's total line as drawn; the baseline the write is compared against. */
-const total = (page: Page) =>
-  page.read<string>(
-    `(document.querySelector(${JSON.stringify(LEDGER)})?.innerText ?? "").split("\\n").find((l) => /total/i.test(l))?.trim() ?? ""`,
-  );
+/** The resolved unit ESP as drawn; calculated required ESP need not change after an ESP write. */
+const esp = (page: Page) => page.textOf(FANS_LEDGER_ESP);
 
 /** Plan through the visible control and return the popover's text once it names an outcome. */
 async function plan(page: Page) {
@@ -51,8 +56,8 @@ await journey("J6-fans", async (page, step) => {
   );
   // Pressing a selected row closes it.
   if (!selected) await page.click(fanRow, ROSTER);
-  const baseline = await page.until(() => total(page), "the ledger total", 300_000);
-  step(`baseline total: ${baseline}`);
+  const baseline = await page.until(() => esp(page), "the ledger unit ESP", 300_000);
+  step(`baseline unit ESP: ${baseline}`);
 
   step("ask Pea to stage ESP for the fan's shared type");
   await setPea(page);
@@ -79,11 +84,14 @@ await journey("J6-fans", async (page, step) => {
   step("press Write once");
   await page.click("Write to Revit", POPOVER);
   await page.until(
-    async () => (await total(page)) !== "" && !(await page.has("Write to Revit", POPOVER)),
+    async () =>
+      (await esp(page)) === Number(ESP).toFixed(4) &&
+      (await esp(page)) !== baseline &&
+      !(await page.has("Write to Revit", POPOVER)),
     "the write to settle",
     300_000,
   );
-  step(`total after write: ${await total(page)}`);
+  step(`unit ESP after write: ${await esp(page)}`);
 
   step("re-plan: the stage was consumed");
   expectText(await plan(page), "no staged edit", "a re-plan after Write is refused");
