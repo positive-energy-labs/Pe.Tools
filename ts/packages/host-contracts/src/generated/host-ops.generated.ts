@@ -8485,7 +8485,7 @@ export namespace RevitDetailSpaceRows {
   }
 }
 
-/** Export native meshes, full 3D family frames and sized physical runs in host internal feet, including host insulation. Round and flat-oval profiles use 32 circumscribed facets. radialOverdrawFraction discloses the radius expansion, including float32 vertex rounding; round radial overdraw is below 0.484%. Physical diameterFt remains the outside diameter including insulation; bounds include the drawn expansion. Flex and curved runs retain native meshes. focusOnly captures host elementIds without context. Context is read per focus element: each element's own box (a run's location line and size) grown by contextPaddingFt, in every host and link placement, as one quick filter per source before any element loads; explicit bounds replace that reach. A region is admission: with elementIds, every focus element must lie inside it and keeps its own reach and the caller's focusOnly; with none, the region box is the bounds. Focus and context are planned together before capture, with cost in the stamp. Centre-line helpers, view-owned elements, CAD and link noise classes are excluded before iteration. Fitting/accessory insulation retains its own native mesh; only a represented duct/pipe run with matching thickness absorbs its insulation, classified after loading the host. Every source placement (loaded, unloaded or unavailable) reports what reach counted, kept, excluded by class and cut by a bound; detachedElementIds names focus members far from the rest. Context defaults to overview: runs and bounding boxes with no native geometry acquisition. Detailed representations must be selected explicitly and use at least 5 ft of context reach. The oriented option retains meshes for DirectShapes. The triangle-boxes option replaces context DirectShapes with envelopes fitted to their own triangles: frame candidates come from the 24 largest triangles, all vertices set extents, and frame=triangles discloses the approximation. The explicit detailed link-boxes choice uses each linked DirectShape's native source-document bounding box through the link transform, without geometry materialization; frame=link discloses its source frame and possible overdraw for internally rotated geometry. Receipt and metadata linkEnvelopes count boxes per link placement. looseElements is null with unmeasured-without-element-geometry: source bounds cannot identify the internally rotated tail cheaply. contextRepresentation meshes acquires native context in the same reach. none suppresses context. Primitive rows own zero vertices; representation distinguishes mesh, oriented-box and run. Oriented boxes carry center, three unit axes and half sizes. Symbol meshes are tessellated once per native geometry identity and detail during the operation, then placed through the instance and link transforms. Metadata phase distinguishes focus/context, unavailableElements identifies requested ids without meshes, omittedElements counts context excluded by the output budget, and completeness reports deferred context and acquisition resource limits. Successful artifacts preserve focus membership; unsupported parametric focus retains Medium/Fine meshes. Native triangle counts stop further acquisition after each tessellated face, so one already allocated face can exceed the acquisition budget. Completeness discloses omitted or deferred context. RPC returns bounded counts and the artifact id; full typed membership and source transforms remain in PSC1. No document mutation. Browser orbit, visibility and cuts need no further native calls. */
+/** Export native meshes, full 3D family frames and sized physical runs in host internal feet, including host insulation. Round and flat-oval profiles use 32 circumscribed facets. radialOverdrawFraction discloses the radius expansion, including float32 vertex rounding; round radial overdraw is below 0.484%. Physical diameterFt remains the outside diameter including insulation; bounds include the drawn expansion. Flex and curved runs retain native meshes. focusOnly captures host elementIds without context. Context is read per focus element: each element's own box (a run's location line and size) grown by contextPaddingFt, in every host and link placement, as one quick filter per source before any element loads; explicit bounds replace that reach. A region is admission: with elementIds, every focus element must lie inside it and keeps its own reach and the caller's focusOnly; with none, the region box is the bounds. Focus and context are planned together before capture, with cost in the stamp. Centre-line helpers, view-owned elements, CAD and link noise classes are excluded before iteration. Fitting/accessory insulation retains its own native mesh; only a represented duct/pipe run with matching thickness absorbs its insulation, classified after loading the host. Every source placement (loaded, unloaded or unavailable) reports what reach counted, kept, excluded by class and cut by a bound; detachedElementIds names focus members far from the rest. Context defaults to overview: runs and bounding boxes with no native geometry acquisition. Detailed representations must be selected explicitly and use at least 5 ft of context reach. The oriented option retains meshes for DirectShapes. The triangle-boxes option replaces context DirectShapes with envelopes fitted to their own triangles: frame candidates come from the 24 largest triangles, all vertices set extents, and frame=triangles discloses the approximation. The explicit detailed link-boxes choice uses each linked DirectShape's native source-document bounding box through the link transform, without geometry materialization; frame=link discloses its source frame and possible overdraw for internally rotated geometry. Metadata linkEnvelopes count boxes per link placement. looseElements is null with unmeasured-without-element-geometry: source bounds cannot identify the internally rotated tail cheaply. contextRepresentation meshes acquires native context in the same reach. none suppresses context. Primitive rows own zero vertices; representation distinguishes mesh, oriented-box and run. Oriented boxes carry center, three unit axes and half sizes. Symbol meshes are tessellated once per native geometry identity and detail during the operation, then placed through the instance and link transforms. Metadata phase distinguishes focus/context, unavailableElements identifies requested ids without meshes, omittedElements counts context excluded by the output budget, and completeness reports deferred context and acquisition resource limits. Successful artifacts preserve focus membership; unsupported parametric focus retains Medium/Fine meshes. Native triangle counts stop further acquisition after each tessellated face, so one already allocated face can exceed the acquisition budget. Completeness discloses omitted or deferred context. RPC returns bounded counts and the artifact id; full typed membership and source transforms remain in PSC1. No document mutation. Browser orbit, visibility and cuts need no further native calls. */
 export namespace RevitDetailSpaceScene {
   export namespace Req {
     /**
@@ -8526,36 +8526,12 @@ export namespace RevitDetailSpaceScene {
     }
   }
   export namespace Res {
-    /**
-     * Which document a partition reads. One partition per source.
-     */
-    export type SourceKind = "Host" | "RevitLink" | "IfcLink";
-    /**
-     * What a triangle came from. Curve2D is a DWG 2D layer raised into a vertical
-     * ribbon; it is never an obstructor unless a filter names it.
-     *
-     */
-    export type PrimKind = "Solid" | "Mesh" | "Curve2D" | "Element";
-    export type RevisionKind = "observed" | "unavailable";
-    export type RevisionUnavailableReason = "not-recorded" | "source-unread";
-    export type SceneSourceState = "loaded" | "unloaded" | "unavailable";
-    export type AcquisitionOutcome =
-      | "acquired"
-      | "empty"
-      | "partial"
-      | "failed"
-      | "deferred"
-      | "approximate"
-      | "outside-scope";
-    export type AcquisitionReason = "none" | "geometry-read" | "triangulate" | "budget" | "unsupported";
-    export type CoverageReason = "source-unread" | "partial-geometry" | "failed-geometry" | "deferred" | "approximate";
-
     export interface Response {
       scene: SceneReceipt;
+      evidence: SceneEvidence;
       id: string;
       url: string;
       bytes: number;
-      evidence: SpatialEvidence;
     }
     /**
      * Bounded RPC receipt. Full membership, source transforms and unavailable identities live in PSC1.
@@ -8581,9 +8557,6 @@ export namespace RevitDetailSpaceScene {
       work: SceneWork;
       completeness: SceneCompleteness;
       levels: SceneLevelReceipt;
-      linkEnvelopes: {
-        [k: string]: SceneLinkEnvelopeCount;
-      };
     }
     /**
      * Axis-aligned bounds in host internal feet.
@@ -8637,105 +8610,49 @@ export namespace RevitDetailSpaceScene {
       startPrivateBytes: number;
       endPrivateBytes: number;
     }
-    export interface SceneLinkEnvelopeCount {
-      /**
-       * Published link-frame boxes in one source placement.
-       */
-      elements: number;
-      /**
-       * Count exceeding 1.5 times a triangle-fitted envelope's volume; null when unmeasured, never inferred from the source bounding box.
-       */
-      looseElements?: number | null;
-      /**
-       * Why the loose count is unknown. Measuring it requires geometry that this representation deliberately avoids.
-       */
-      looseness: string;
-    }
     /**
-     * Observed basis and acquisition, never a claim that a retained answer is current.
+     * Full scene evidence lives in PSC1. Both RPC evidence projections carry only these fixed counts and its reference.
      */
-    export interface SpatialEvidence {
+    export interface SceneEvidence {
       documentKey: string;
       revision?: number | null;
       observedAt: string;
       frame: string;
-      resolved: Resolved;
-      sources: SourceObservation[];
-      acquisition: Acquisition[];
-      coverage: CoverageGap[];
-      geometryCost?: null | GeometryCost;
+      summary: SceneEvidenceSummary;
+      artifact: SceneArtifactReference;
     }
-    /**
-     * The options a verb actually ran with, after defaults were applied. Never null and never a
-     * silence: a caller who passed no filter reads back Kinds: [Solid, Mesh] and the sources
-     * and categories spelled out. This is the gate that was in force, not the outcome; what the
-     * verb then had to touch is Searched.
-     *
-     */
-    export interface Resolved {
-      sources: SourceKind[];
-      categories: string[];
-      kinds: PrimKind[];
-      layers: string[];
-      exclusions: SubjectExclusion[];
-      scope?: null | Aabb;
-      reach?: number[][] | null;
-      representation: string;
+    export interface SceneEvidenceSummary {
       acquisitionRequested: boolean;
+      representation: string;
+      sources: SceneSourceCounts;
+      acquisition: SceneAcquisitionCounts;
+      coverage: SceneCoverageCounts;
     }
-    export interface SubjectExclusion {
-      documentKey: string;
-      placement: Placement;
-      subjectUniqueId: string;
+    export interface SceneSourceCounts {
+      loaded: number;
+      unloaded: number;
+      unavailable: number;
     }
-    /**
-     * Stable source placement. Numeric Revit ids are payload, never exclusion identity.
-     */
-    export interface Placement {
-      hostDocumentKey: string;
-      linkUniqueId?: null | string;
+    export interface SceneAcquisitionCounts {
+      acquired: number;
+      empty: number;
+      partial: number;
+      failed: number;
+      deferred: number;
+      approximate: number;
+      outsideScope: number;
     }
-    export interface SourceObservation {
-      placement: Placement;
-      documentKey?: null | string;
-      revision: SourceRevision;
-      toHost: number[];
-      availability: SceneSourceState;
+    export interface SceneCoverageCounts {
+      sourceUnread: number;
+      partialGeometry: number;
+      failedGeometry: number;
+      deferred: number;
+      approximate: number;
     }
-    export interface SourceRevision {
-      kind: RevisionKind;
-      epoch?: number | null;
-      version?: null | string;
-      reason?: null | RevisionUnavailableReason;
-    }
-    export interface Acquisition {
-      placement: Placement;
-      subjectUniqueId: string;
-      outcome: AcquisitionOutcome;
-      reason: AcquisitionReason;
-    }
-    export interface CoverageGap {
-      placement: Placement;
-      subjectUniqueId?: null | string;
-      reason: CoverageReason;
-      count: number;
-    }
-    /**
-     * Acquisition evidence, not a memory cap. Native geometry remains allocated until document close.
-     */
-    export interface GeometryCost {
-      plannedCount: number;
-      plannedCost: number;
-      perSource: GeometrySourceCost[];
-      newlyTessellatedCount: number;
-      cumulativeTessellatedCount: number;
-    }
-    export interface GeometrySourceCost {
-      source: string;
-      linkInstanceId?: number | null;
-      count: number;
-      loadOnlyCount: number;
-      cost: number;
+    export interface SceneArtifactReference {
+      id: string;
+      url: string;
+      bytes: number;
     }
   }
   export namespace Artifact {

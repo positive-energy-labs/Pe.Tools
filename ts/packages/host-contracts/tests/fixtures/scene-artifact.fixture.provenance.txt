@@ -1,0 +1,3 @@
+Produced by SceneArtifactReceiptProofTests.LargeArtifactPreservesEveryIdentityWhileRpcReceiptStaysBounded using SpaceSceneOps.Publish, SdkOperations.Json and the IEvidenced<IObserved> projection used by OpRunner.
+Synthetic deterministic scene: 50000 elements/acquisition rows, 49999 approximation gaps, one mesh and 49999 run primitives. Full evidence is preserved in PSC1. This fixture contains only the bounded payload and separate evidence, serialized by C#.
+Record from the repo root with PE_RECORD_SCENE_RECEIPT set to this directory's scene-artifact.fixture.json, then run pe-revit test --project dotnet/Pe.Shared.Tests/Pe.Shared.Tests.csproj --filter FullyQualifiedName~SceneArtifactReceiptProofTests.

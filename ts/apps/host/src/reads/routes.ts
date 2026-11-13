@@ -2,16 +2,53 @@ import { routeRegistry } from "../routes.generated.ts";
 import { placesRead, readPlaces } from "../places.ts";
 import { valueReadRequest, type HostRouteModule } from "@pe/agent-contracts";
 import { usesOf } from "@pe/agent-contracts/handle";
-import {
-  bodyOf,
-  evaluate,
-  fingerprint,
-  type InputPort,
-  type Read,
-} from "./evaluator.ts";
+import { bodyOf, evaluate, fingerprint, type InputPort, type Read } from "./evaluator.ts";
 import type { Publication, Publications } from "./publications.ts";
 import { withTimelineCaller, workTimelineRead } from "./work-timeline.ts";
-import { WORK_TIMELINE_READ, type WorkAuthor } from "@pe/agent-contracts";
+import { WORK_TIMELINE_READ, admittedRouteEntries, type WorkAuthor } from "@pe/agent-contracts";
+import { z } from "zod";
+import { hostOpCatalog } from "@pe/host-contracts/catalog";
+import { linkedCatalog } from "@pe/agent-contracts/pe-api";
+import { read } from "./door.ts";
+
+/** The host joins the wire's entry keys; no executable route code reaches Pea. */
+export function projectRouteRead(module: Pick<HostRouteModule, "data" | "schemas">) {
+  const { data, schemas } = module;
+  const catalog = linkedCatalog().entries;
+  return {
+    ...data,
+    fields: Object.fromEntries(
+      Object.entries(data.fields).map(([id, field]) => {
+        if (!("schema" in field)) return [id, field];
+        const schema = schemas[field.schema];
+        if (!schema) throw Error(`Route ${data.key}: missing field schema ${field.schema}`);
+        return [id, { ...field, schema: z.toJSONSchema(schema, { io: "input" }) }];
+      }),
+    ),
+    verbs: Object.fromEntries(
+      Object.entries(data.verbs).map(([id, verb]) => {
+        const entry = catalog.get(`command:${verb.entry}`) ?? catalog.get(verb.entry);
+        const native = hostOpCatalog.find((op) => op.key === verb.entry);
+        const admitted = [...admittedRouteEntries.values()]
+          .filter((row) => row.available())
+          .map((row) => row.entries[verb.entry])
+          .find(Boolean);
+        const input = admitted
+          ? z.toJSONSchema(admitted.input)
+          : (entry?.discovery?.input ??
+            (native?.requestSchemaJson ? JSON.parse(native.requestSchemaJson) : undefined));
+        if (!input) throw Error(`Route ${data.key}: missing catalog input for ${verb.entry}`);
+        return [id, { ...verb, input }];
+      }),
+    ),
+  };
+}
+export const routeDeclarationRead = (module: Pick<HostRouteModule, "data" | "schemas">) =>
+  read(`route:${module.data.key}`, {
+    input: z.strictObject({}),
+    output: z.unknown(),
+    run: () => projectRouteRead(module),
+  });
 
 export const graphRouteIds = ["reads.value"];
 function bind<I, O>(
@@ -47,11 +84,20 @@ export interface HostReadRegistry {
   register(definitions?: HostRouteModule["reads"], inputs?: HostRouteModule["leaves"]): () => void;
 }
 /** Trusted host modules extend the graph without an endpoint or port branch. */
-export function readRegistry(modules: readonly Pick<HostRouteModule, "reads" | "leaves">[]): HostReadRegistry {
+export function readRegistry(
+  modules: readonly Pick<HostRouteModule, "reads" | "leaves">[],
+): HostReadRegistry {
   const reads = new Map<string, Read<any, any>>();
   const leaves: Record<string, NonNullable<HostRouteModule["leaves"]>[string]> =
     Object.create(null);
-  const serviceInputs = new Set(["native", "resource", "work", "work-scope", "work-timeline", "document-mark"]);
+  const serviceInputs = new Set([
+    "native",
+    "resource",
+    "work",
+    "work-scope",
+    "work-timeline",
+    "document-mark",
+  ]);
   const register = (
     definitions: HostRouteModule["reads"] = {},
     inputs: HostRouteModule["leaves"] = {},
@@ -100,6 +146,14 @@ export const registeredReads: HostReadRegistry = readRegistry([
   { reads: { [WORK_TIMELINE_READ]: workTimelineRead } },
 ]);
 registeredReads.register({ places: placesRead }, { places: async () => readPlaces() });
+registeredReads.register(
+  Object.fromEntries(
+    Object.values(routeRegistry).map(({ key, host }) => [
+      `route:${key}`,
+      routeDeclarationRead(host),
+    ]),
+  ),
+);
 /** HTTP adapters select a read; composition and freshness belong to the evaluator. */
 /** `by` is the request's author: the one per-caller read (`work.timeline`) is stamped with it here. */
 export function graphRoute(
@@ -109,7 +163,12 @@ export function graphRoute(
   by: WorkAuthor | null = null,
 ) {
   if (!graphRouteIds.includes(id)) throw Error(`Unknown read door: ${id}`);
-  const request = valueReadRequest.parse(raw), definition = registry.reads.get(request.read);
+  const request = valueReadRequest.parse(raw),
+    definition = registry.reads.get(request.read);
   if (!definition) throw Error(`Host read is not registered: ${request.read}`);
-  return bind(definition, definition.input.parse(withTimelineCaller(request.read, request.args, by)), request);
+  return bind(
+    definition,
+    definition.input.parse(withTimelineCaller(request.read, request.args, by)),
+    request,
+  );
 }
