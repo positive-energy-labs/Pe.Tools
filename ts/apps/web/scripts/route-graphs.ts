@@ -202,10 +202,11 @@ for (const key of keys) {
       key,
       folder,
       schemas: Object.fromEntries(
-        [...pageSchemas].map((id) => [
-          id,
-          z.toJSONSchema(typed.host.schemas[id]!, { io: "input" }),
-        ]),
+        [...pageSchemas].map((id) => {
+          const schema = typed.host.schemas[id];
+          if (!schema) throw Error(`Route ${key}: missing field schema ${id}`);
+          return [id, z.toJSONSchema(schema, { io: "input" })];
+        }),
       ),
       ...(typed.spec.host ? { host: typed.spec.host } : {}),
       ...(work ? { work } : {}),
