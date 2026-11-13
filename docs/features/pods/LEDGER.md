@@ -76,7 +76,7 @@ Rewritten 2026-09-16 after the pod/product boundary grill. Git holds the earlier
 
 ## Owed
 
-- Kernel crusade 2 slice 2 deletes the Pod plugin import (ADR 0042 rule 8): a Pod's `plugins/*/index.js` no longer runs in the host. No shipped example has one. Owed when a Pod needs host behavior at install: a declared door, never an import.
+- Kernel crusade 2 slice 2 deletes the Pod plugin import (ADR 0042 rule 8): `plugins/*/index.js` cannot run host code or observe turn, session or operation hooks; Pages, routes, scripts, skills and settings remain. No shipped example uses it. Owed when a Pod needs host behavior at install: a declared door, never an import.
 - Decode all executable contract members at the loader and remove the double casts at `pod-module.ts:35/:40`. Evidence: `.artifacts/runs/kernel-crusade-20261104/takeover/WAVE-5.md:374`.
 - kaitpw: rule on removing Pod upgrade/replacement back-compat, including E8-09/E8-10 and the stale Snowdon import. Evidence: `.artifacts/runs/kernel-crusade-20261104/takeover/WAVE-5.md:617`.
 - Shared Documents\Pe.Tools (prefs, settings, Pods) stays shared between dev and installed. Bar: an installed build must recover, not brick, when it meets files written by a newer or dev build or carried over a 0.7.30 upgrade (this morning's writeIntent failure class). Owed: census installed readers of shared home files for strict schemas that refuse to load. (kaitpw, 2026-11-03)
