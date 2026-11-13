@@ -56,6 +56,9 @@ The route kernel and every web route's shared shape ([ADR 0026](../../adr/0026-o
 
 - 2026-11-10, kaitpw: slice 5a, after SubjectRef: one generated route registry replaces the four web and two host registries; per-route TanStack files, per-route contract stubs and in-directory generated files are deleted; `admitted-builtin-keys` derives; a route's host read lives in its own directory behind a browser/host build guard; the capability type is inferred from that read; the icon is any Lucide name checked against the library. "agree on all especially 3." Restated: a route is one directory plus its C# op. See [MAP](MAP.md) row 5a.
 - 2026-11-10, kaitpw: the MEP system read is generic, one `mep.system.members` catalog Read plus a segment-size read in `dotnet/Pe.Revit.Global/Lib/Mep`; the kernel learns no MEP words. "id prefer generic shape obviously". The Pod doors and the goal slot land inside slice 7.
+- 2026-11-12, kaitpw: kernel crusade 2 is one crusade of 14 slices and one parallel track ([MAP.md](MAP.md)); its cross-feature rules are [ADR 0042](../../adr/0042-handles-host-timeline-honest-answers.md). "I want to scope all of your 'crusades' into a single huge one". Fans numbers is a later, smaller crusade.
+- 2026-11-12, kaitpw: route-specific product code is out of kernel crusade 2, even where it touches a primitive. "any overly specific product code that its related to the deep primitive stuff can be left out too".
+- 2026-11-12, kaitpw ("take the defaults"): an unknown setting owner stays a 422 refusal; a subject is stored as kind and subject and named by one namer, never as a label string.
 
 ## Tried & rejected
 
@@ -69,10 +72,12 @@ The route kernel and every web route's shared shape ([ADR 0026](../../adr/0026-o
 - 2026-09-15, a universal mutable route object or one route-wide lifecycle: it hides the difference between authored Work, observed Readings, Page navigation and external outcomes. Compose owners instead.
 - 2026-09-13, Situation variants that lost: the key/value ledger as the head, an always-visible breadcrumb rail, stage as tabs over the verb gutter, refusal as a line under the verb row or as the verb's label, staged Work in a right margin, and `WorkingHead` (three registers stacked, GUID labels: "horrendous").
 - 2026-09-09, the claim that document keys and receipts alone prevent every stale read or duplicate mutation: keys separate open lifetimes; Effect refresh orders reads within one lifetime; host admission and request identity govern retries.
+- 2026-11-12, a `Restored` effect for a focused capture; a `SessionWrite` plus a `touched` value says the same with no third effect (ADR 0042 rule 2). kaitpw: "i also feel like this is an occam victim".
 
 ## Owed
 
-- Kernel crusade slices 1 to 10 are in [MAP.md](MAP.md); each lands with its red falsifier.
+- Kernel crusade 2 slices 0 to 13 and track P are in [MAP.md](MAP.md); each lands with its red falsifier. Slice 0 first pays what the homes ledger's closing line owes: the full suites not run past 7750811e.
+- The first kernel crusade's map was replaced by the crusade 2 map without a sweep; git holds it at 46aeca3a. Its `/family` acceptance, author-witness rules and out-of-scope list are unpromoted. The residue lines below are what this ledger kept. `CHROME-SHAPE.md`, `REGISTRY-SHAPE.md` and `SLOTS-SHAPE.md` cite the old map's rows 5a to 9 and are owed a fold into this ledger or a delete.
 - Slice 7 residue (fill on `crusade/kernel-sheet`, 2026-11-10; implementor defaults, re-openable):
   - Fans' borrowed `InputsBody` is deleted; Fans' inputs are split by owner (ruling 2026-11-10, MAP decision log). /ducts draws a `design` sheet pane: criteria as one Work cell per criterion and side (`DUCTS_CRITERIA_CELLS`), plus `designFriction`, moved from /fans Work. /fans draws its own Work through the slot, with a read-only `from` line to the /ducts revision. Per-fitting loss readouts sit in the Fans Ledger. The census and its homes are at `ts/apps/web/src/route/slots/sheet/index.ts`.
   - Ruled 2026-11-10 (kaitpw, verdict 1): a Ledger fix whose Work is /ducts' is a link, "Fix in /ducts: <subject> ›", that opens /ducts with that subject selected. The subject is the blocker's own `subject`, a `UniqueId:` SubjectRef minted with it (`mintBlocker`, `ts/packages/ducts-domain/src/sheet/walk.ts`); a stand-in with no element opens /ducts on the sheet's systems. It never keys by ElementId (slice 5). Fans has `owners: {}` and its edit door is `fansSheetEditsSchema`. Falsifier: `ts/apps/web/src/fans/no-ducts-writes.test.ts`; arrival: `fans/ledger-fix.journey.test.tsx`.
