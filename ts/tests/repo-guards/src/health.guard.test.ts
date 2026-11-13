@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 import baseline from "./health.baseline.json" with { type: "json" };
 import {
-  castCount, census, EXCEPTIONS, exceptionProblems, fsWriteCount, isProduction, NAMES, PER_FILE, perFileRises, rises,
+  census, escapeCounts, EXCEPTIONS, exceptionProblems, fsWriteCount, isProduction, NAMES, PER_FILE, perFileRises, rises,
   STORE_EXCEPTION, storeScopeSources, total,
 } from "./health-census.ts";
 
@@ -23,14 +23,14 @@ describe("production health counts", () => {
       expect(perFileRises(name, actual[name], baseline[name]), `${name} hold per file; only a named owner (OWNERS) may absorb writes`).toEqual([]);
     });
 
-  it("counts every cast and `any` from the syntax tree, and not `as const`", () => {
+  it("counts every cast and `any`, and every non-null `!`, from the syntax tree; `as const` is no cast", () => {
     const sample = `
       const a = x as Foo; const b = y as unknown as Bar; const c = <Baz>z; const d = [1] as const;
       function f(p: any): Promise<any> { return p; }
       const name = "as any"; // as Foo in a comment
       const e = q!; const g = r satisfies S;`;
-    expect(castCount("ts/apps/host/src/planted.ts", sample)).toBe(6);
-    expect(castCount("ts/apps/web/src/planted.tsx", "const v = <div>{x as Y}</div>;")).toBe(1);
+    expect(escapeCounts("ts/apps/host/src/planted.ts", sample)).toEqual({ casts: 6, nonNull: 1 });
+    expect(escapeCounts("ts/apps/web/src/planted.tsx", "const v = <div>{x! as Y}</div>; a !== b;")).toEqual({ casts: 1, nonNull: 1 });
   });
 
   it("each written store exception stands at its site with its end condition", () => {
