@@ -73,7 +73,9 @@ export const homeWriteSource: HomeWriteSource = {
     if (refusal) throw Error(refusal);
     const file = tierFileKind.in(hostState().home({ root: row.home, tier: row.tier }), row.owner);
     if (file.path !== row.path) throw Error("The home write path does not match its owner. The file is kept.");
-    const wrote = writeHomeKind(file, rested(hostState(), row.priorSha256!)!, row.sha256);
+    const prior = row.priorSha256 === null ? null : rested(hostState(), row.priorSha256);
+    if (prior === null) throw Error("The prior bytes are unavailable or damaged. The file is kept.");
+    const wrote = writeHomeKind(file, prior, row.sha256);
     if (wrote.ok) {
       appendLine(homeWritesKind.in(hostState()), { kind: "home-undo", path: row.path, sha256: row.sha256, by, at: new Date().toISOString() });
       for (const listener of listeners) listener();
