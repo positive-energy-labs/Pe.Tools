@@ -9,6 +9,7 @@ import { afterEach, expect, test, vi } from "vite-plus/test";
 import { actionReceiptSchema, address, type WorkKey } from "@pe/agent-contracts";
 import { createPeClient } from "@pe/agent-contracts/pe-api";
 import { findingsWork, findingsWorkSchema } from "@pe/agent-contracts/slots";
+import { workReadings } from "../findings/readings.test-support";
 import { RouteWorkspace } from "@pe/runtime";
 import { withInvocationContext } from "@pe/runtime/context";
 import { human } from "../../../../../host/tests/callers";
@@ -68,7 +69,7 @@ test("a person's finding on a fan port draws one mark on the port's geometry in 
         const response = await post(command, human);
         expect(response.status, await response.clone().text()).toBeLessThan(400);
         return actionReceiptSchema.parse(await native.journal.wait(command.id));
-      }, browser);
+      }, browser, workReadings(host));
     await waitFor(() => expect(f.typed.owner()?.ready).toBe(true));
     // The shell's own drawing of each pane, redrawn when the mount publishes.
     const Shown = ({ id, children }: { id: string; children?: (ctx: never) => ReactNode }) => {
@@ -87,7 +88,7 @@ test("a person's finding on a fan port draws one mark on the port's geometry in 
     const pop = await screen.findByLabelText(`Finding on ${name}`);
     fireEvent.change(within(pop).getByLabelText("finding text"), { target: { value: "port static reads low" } });
     fireEvent.click(within(pop).getByRole("button", { name: `Write note on ${name}` }));
-    await waitFor(() => expect(submitted.map((c) => c.key)).toEqual(["findings.write"]), { timeout: 20_000 });
+    await waitFor(() => expect(submitted.map((c) => c.key)).toEqual(["findings.say"]), { timeout: 20_000 });
     const key: WorkKey = { ...submitted[0]!.input.work!.key, route: "findings" };
     const written = async () => Object.values(findingsWorkSchema.parse((await host.view(key, "findings"))?.doc ?? {}).findings);
     await waitFor(async () => expect(await written()).toHaveLength(1), { timeout: 20_000 });
