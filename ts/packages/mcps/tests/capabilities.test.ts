@@ -32,6 +32,7 @@ import { createMcpDoor } from "../../../apps/host/src/mcp-route.ts";
 import { projectRouteRead } from "../../../apps/host/src/reads/routes.ts";
 import { routeRegistry } from "../../../apps/host/src/routes.generated.ts";
 import { z } from "zod";
+import { fixture as readDoor } from "../../../apps/host/tests/host-read-graph.test-support.ts";
 import {
   admitCrossing,
   bindControl,
@@ -507,6 +508,39 @@ async function withHead<T>(head: Head, body: () => Promise<T>): Promise<T> {
 const run = (tool: ExecutableTool, input: unknown, head = turn) =>
   withHead(head, () => tool.execute!(input as never, { agent: { toolCallId: "call-1" } } as never));
 
+test("pe_read route graphs read the real host door before releasing their publication", async () => {
+  const f = await readDoor();
+  fakeRuntimeHost("http://127.0.0.1:19999");
+  const requests: Record<string, unknown>[] = [];
+  vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
+    const request = new Request(input, init);
+    if (new URL(request.url).pathname === "/pe/capabilities") return Response.json(catalog());
+    if (new URL(request.url).pathname === "/pe/reads/value")
+      requests.push(await request.clone().json());
+    return f.request(request);
+  });
+  try {
+    for (const route of ["fans", "ducts"]) {
+      const result = await run(peRead, { key: `route:${route}`, timeoutSeconds: 5 });
+      expect(result, JSON.stringify(result)).toMatchObject({ ok: true });
+      expect(result).toMatchObject({
+        result: {
+          key: route,
+          verbs: { losses: { input: z.toJSONSchema(commands["sheet.apply"].input) } },
+        },
+      });
+    }
+    for (const route of ["fans", "ducts"]) {
+      const calls = requests.filter(request => request.read === `route:${route}`);
+      expect(calls).toHaveLength(2);
+      expect(calls[0]!.release).not.toBe(true);
+      expect(calls[1]).toEqual({ ...calls[0], release: true });
+    }
+  } finally {
+    await f.close();
+  }
+});
+
 test("Pea discovers the sheet plan, decodes any route's handle, and previews Ducts", async () => {
   fakeRuntimeHost("http://127.0.0.1:19999");
   const f = await nativeFixture();
@@ -609,7 +643,11 @@ test("an exact-open turn Target reads and writes route Work under its document's
     if (url.pathname === "/pe/capabilities") return Response.json(catalog());
     // The host Timeline's read: the step it offers Pea for the Works the tool names.
     if (url.pathname === "/pe/reads/value") {
-      timelineReads.push(JSON.parse(String(init?.body)));
+      const body = JSON.parse(String(init?.body));
+      if (body.release) return Response.json({ value: null, state: "superseded" });
+      if (body.read.startsWith("route:"))
+        return Response.json({ value: { data: projectRouteRead(routeRegistry[body.read.slice(6)]!.host) } });
+      timelineReads.push(body);
       return Response.json({
         value: { data: { rows: [], undo: step, redo: null, refusal: { undo: null, redo: null } } },
       });
