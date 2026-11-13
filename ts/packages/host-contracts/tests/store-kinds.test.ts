@@ -7,7 +7,16 @@
  * `src/store.ts`, widen `read` to take `StoredFile<T, At> | string`, or remove the private
  * brands from `StatePath` and `HomePath` in `src/store-paths.ts`.
  */
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  utimesSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, test } from "vite-plus/test";
@@ -38,6 +47,8 @@ import {
   type StatePath,
   type DerivedDir,
   type Stored,
+  type StoredFile,
+  type GeneratedFile,
 } from "../src/kinds.ts";
 
 const schema = z.strictObject({ name: z.string() });
@@ -81,13 +92,70 @@ test("a generated kind publishes whole files and leaves identical bytes untouche
     expect(() => generatedKind([segment]).in(root)).toThrow(/segment/);
 });
 
+test("generated I/O rejects spread and object forgeries at runtime", () => {
+  const file = generatedKind(["good.json"]).in(root);
+  const forged = { ...file, path: join(root, "forged.json") };
+  for (const invalid of [
+    forged,
+    { path: forged.path },
+    file.path,
+    taskKind.in(machine, "a"),
+    new Proxy(file, {}),
+  ])
+    expect(() => Reflect.apply(writeGenerated, undefined, [invalid, "forged"])).toThrow(
+      /kind-minted/,
+    );
+  expect(existsSync(forged.path)).toBe(false);
+  expect(Reflect.set(file, "path", forged.path)).toBe(false);
+  expect(Reflect.set(file.constructor, "assert", () => {})).toBe(false);
+  expect(() => Reflect.construct(file.constructor, [Symbol("kind-mint"), forged.path])).toThrow(
+    /kind-minted/,
+  );
+});
+
+test("stored I/O rejects structural and spread forgeries at runtime", () => {
+  const file = taskKind.in(machine, "a");
+  const forged = {
+    path: machine.apsTokens,
+    machine,
+    place: "forged",
+    kind: { at: "state", schema: z.unknown() },
+  };
+  for (const invalid of [
+    forged,
+    { ...file, path: machine.apsTokens },
+    file.path,
+    new Proxy(file, {}),
+  ]) {
+    expect(() => Reflect.apply(writeState, undefined, [invalid, "forged"])).toThrow(/kind-minted/);
+    expect(() => Reflect.apply(read, undefined, [invalid])).toThrow(/kind-minted/);
+  }
+  expect(existsSync(machine.apsTokens)).toBe(false);
+  expect(Reflect.set(file, "path", machine.apsTokens)).toBe(false);
+  expect(Reflect.set(file.kind, "at", "home")).toBe(false);
+  expect(Reflect.set(file.constructor, "assert", () => {})).toBe(false);
+  expect(() =>
+    Reflect.construct(file.constructor, [
+      Symbol("kind-mint"),
+      file.kind,
+      file.path,
+      file.place,
+      machine,
+    ]),
+  ).toThrow(/kind-minted/);
+});
+
 test("a kind mints its own path under its root, and refuses a segment that would leave it", () => {
   expect(taskKind.in(machine, "a").path).toBe(join(root, "machine", "state", "tasks", "a.json"));
   const home = machine.home({ tier: "project", root: join(root, "Project", "Pe.Tools") });
-  expect(settingsKind.in(home, "ducts").path).toBe(join(root, "Project", "Pe.Tools", "Settings", "ducts.json"));
+  expect(settingsKind.in(home, "ducts").path).toBe(
+    join(root, "Project", "Pe.Tools", "Settings", "ducts.json"),
+  );
   expect(taskKind.in(machine, "a").place).toBe("Task a");
   for (const id of ["..", "../../escape", "a\\b", ""])
-    expect(() => stateKind({ place: () => "x", schema, segments: () => [id] }).in(machine)).toThrow(/segment/);
+    expect(() => stateKind({ place: () => "x", schema, segments: () => [id] }).in(machine)).toThrow(
+      /segment/,
+    );
 });
 
 // Mutant: in `policyOf`, drop `blobRoot: file.machine.blobs` and, in `refuse`, send a discard with
@@ -187,10 +255,40 @@ test("a caller without a keep check cannot overwrite a decision without preservi
 });
 
 /** Typechecked only: never called. */
-export function witness(bare: string) {
+export function witness(bare: string): readonly unknown[] {
   const home = machine.home({ tier: "user", root: bare });
   const state = taskKind.in(machine, "a");
   const authored = settingsKind.in(home, "ducts");
+  const generated = generatedKind(["good.json"]).in(bare);
+  // @ts-expect-error a home is not a generated file
+  writeGenerated(home, "{}");
+  // @ts-expect-error a home file is not generated output
+  writeGenerated(authored, "{}");
+  // @ts-expect-error a path is not a generated file
+  writeGenerated(generated.path, "{}");
+  // @ts-expect-error a branded state path is not generated output
+  writeGenerated(state.path, "{}");
+  // @ts-expect-error an object with a path is not a generated file
+  writeGenerated({ path: bare }, "{}");
+  // @ts-expect-error spread cannot copy a generated file's private brand
+  const forgedGenerated: GeneratedFile = { ...generated, path: bare };
+  // @ts-expect-error spread cannot enter the generated writer
+  writeGenerated({ ...generated, path: bare }, "{}");
+  // @ts-expect-error a home is not a stored file
+  read(home);
+  // @ts-expect-error a branded path is not a stored file
+  writeState(state.path, "{}");
+  // @ts-expect-error a generated file is not a stored file
+  writeState(generated, "{}");
+  // @ts-expect-error only Kind.in can mint a stored file
+  const forgedStored: StoredFile<unknown, "state"> = {
+    path: machine.apsTokens,
+    machine,
+    place: "forged",
+    kind: { at: "state", schema: z.unknown() },
+  };
+  // @ts-expect-error spread cannot copy a stored file's private brand
+  writeState({ ...state, path: machine.apsTokens }, "{}");
   // @ts-expect-error generated output needs a kind, not an arbitrary path
   writeGenerated(bare, "{}");
   // @ts-expect-error product state cannot enter the disposable build-output writer
@@ -223,5 +321,5 @@ export function witness(bare: string) {
   const path: StatePath = authored.path;
   // @ts-expect-error a home read never answers `set-aside`
   const aside: { kind: "set-aside" } = read(authored);
-  return [path, aside];
+  return [path, aside, forgedGenerated, forgedStored];
 }

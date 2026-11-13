@@ -250,7 +250,7 @@ export class TakeoffCaptures {
     /** The wall stamp on a completed reading; the store's layer supplies `Clock`'s. */
     private readonly now: () => string,
   ) {}
-  get directory() {
+  get directory(): StateDirectory["path"] {
     return this.storage.path;
   }
 

@@ -46,17 +46,16 @@ export {
   type StoredNotice,
 } from "./store-values.ts";
 import { mintStatePath } from "./store-paths.ts";
+import { GeneratedFile, StoredFile } from "./kinds.ts";
 import type {
   At,
   HomePath,
   StateRoot,
   StatePath,
-  StoredFile,
   Stored,
   StoredLog,
   DerivedDir,
   DerivedFile,
-  GeneratedFile,
 } from "./kinds.ts";
 
 const errno = (error: unknown) => (error as NodeJS.ErrnoException).code ?? "";
@@ -131,6 +130,7 @@ function writeAtomic(path: string, bytes: Uint8Array | string): void {
 
 /** Build output has no authored bytes to preserve. Publish atomically only when bytes differ. */
 export function writeGenerated(file: GeneratedFile, bytes: Uint8Array | string): void {
+  GeneratedFile.assert(file);
   if (readOrNull(file.path)?.equals(Buffer.from(bytes))) return;
   writeAtomic(file.path, bytes);
 }
@@ -473,6 +473,7 @@ export function read<T>(
   file: StoredFile<T, "home" | "state-kept">,
 ): Exclude<Stored<T>, { kind: "set-aside" }>;
 export function read<T>(file: StoredFile<T, At>): Stored<T> {
+  StoredFile.assert(file);
   return settled(readStored(file.path, file.kind.schema, policyOf(file)));
 }
 
@@ -482,6 +483,7 @@ export function writeHome<T>(
   bytes: Uint8Array | string,
   expectSha256: string | null,
 ): HomeWrite {
+  StoredFile.assert(file, ["home"]);
   return writeHomeFile(file.path, bytes, { expectSha256, blobRoot: file.machine.blobs });
 }
 
@@ -490,6 +492,7 @@ export function writeState<T>(
   file: StoredFile<T, "state" | "state-kept">,
   bytes: Uint8Array | string,
 ): void {
+  StoredFile.assert(file, ["state", "state-kept"]);
   if (file.kind.at === "state-kept") {
     const prior = readOrNull(file.path);
     const wrote = writeHomeFile(file.path, bytes, {
@@ -505,6 +508,7 @@ export function setAside<T>(
   file: StoredFile<T, "state">,
   reason: string,
 ): Exclude<Stored<T>, { kind: "ok" }> {
+  StoredFile.assert(file, ["state"]);
   const policy = policyOf(file);
   return settled(setAsideBytes(file.path, policy, reason));
 }

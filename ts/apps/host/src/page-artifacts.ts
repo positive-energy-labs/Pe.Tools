@@ -87,7 +87,7 @@ export async function writeArtifact(
   root: string,
   file: StoredFile<unknown, At>,
   source: string | Uint8Array,
-) {
+): Promise<string> {
   const path = file.path;
   const bytes = Buffer.from(source);
   const parts = artifactRelative(root, dirname(path)).split("/").filter(Boolean);

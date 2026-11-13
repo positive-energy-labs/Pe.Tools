@@ -107,7 +107,10 @@ export function productRoot(owner: RuntimeOwner): string {
  * `StateRoot` (routes CONTRACTS K-A2): a state kind makes its path from what this returns, and
  * nothing else joins a path onto `state`. A new machine-state location is a row here.
  */
-export function stateTree(root: string) {
+export function stateTree(root: string): StateRoot & {
+  directory(...segments: string[]): StateDirectory;
+  home(home: Home): HomeRoot;
+} {
   const state = (...segments: string[]) =>
     mintStatePath(
     join(root, productPathNames.stateDirectoryName, ...segments));

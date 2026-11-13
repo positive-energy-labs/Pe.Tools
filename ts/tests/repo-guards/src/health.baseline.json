@@ -382,7 +382,6 @@
     "ts/packages/host-contracts/src/operation-types.ts": 2,
     "ts/packages/host-contracts/src/pe-api.ts": 68,
     "ts/packages/host-contracts/src/route-startup.ts": 2,
-    "ts/packages/host-contracts/src/store-paths.ts": 2,
     "ts/packages/host-contracts/src/store.ts": 1,
     "ts/packages/host-contracts/src/vendor/pe-revit-cli.ts": 6,
     "ts/packages/host-contracts/src/vendor/pe-service.ts": 11,

@@ -26,11 +26,28 @@ export {
 } from "./store.ts";
 export { writeGenerated } from "./store.ts";
 
-const generatedFile: unique symbol = Symbol("generated-file");
+const mintToken = Symbol("kind-mint");
+let mintGenerated: (root: string, segments: readonly string[]) => GeneratedFile;
 /** Disposable build output, outside content homes and product state. Only its kind mints a file. */
-export type GeneratedFile = { readonly path: string; readonly [generatedFile]: true };
+export class GeneratedFile {
+  readonly #brand = true;
+  readonly path: string;
+  private constructor(token: typeof mintToken, path: string) {
+    if (token !== mintToken) throw Error("Generated output requires a kind-minted file.");
+    this.path = path;
+    Object.freeze(this);
+  }
+  static {
+    mintGenerated = (root, segments) => new GeneratedFile(mintToken, under(root, segments));
+  }
+  static assert(file: unknown): void {
+    if (typeof file !== "object" || file === null || !(#brand in file))
+      throw Error("Generated output requires a kind-minted file.");
+  }
+}
+Object.freeze(GeneratedFile);
 export const generatedKind = (segments: readonly string[]) => ({
-  in: (root: string): GeneratedFile => ({ path: under(root, segments), [generatedFile]: true }),
+  in: (root: string): GeneratedFile => mintGenerated(root, segments),
 });
 
 import { mintHomePath, mintStatePath, type HomePath, type StatePath } from "./store-paths.ts";
@@ -100,12 +117,46 @@ export type Kind<T, A extends At, Args extends readonly unknown[]> = KindRule<T,
 };
 
 /** A stored file: its kind and its path, bound together. Minted only by `Kind.in`. */
-export type StoredFile<T, A extends At> = {
+let mintStored: <T, A extends At>(
+  kind: KindRule<T, A>,
+  binding: { path: PathAt<A>; machine: StateRoot },
+  place: string,
+) => StoredFile<T, A>;
+export class StoredFile<T, A extends At> {
+  readonly #brand = true;
   readonly kind: KindRule<T, A>;
   readonly path: PathAt<A>;
   readonly place: string;
   readonly machine: StateRoot;
-};
+  private constructor(
+    token: typeof mintToken,
+    kind: KindRule<T, A>,
+    path: PathAt<A>,
+    place: string,
+    machine: StateRoot,
+  ) {
+    if (token !== mintToken) throw Error("Stored I/O requires a kind-minted file.");
+    this.kind = kind;
+    this.path = path;
+    this.place = place;
+    this.machine = machine;
+    Object.freeze(this);
+  }
+  static {
+    mintStored = (kind, binding, place) =>
+      new StoredFile(mintToken, kind, binding.path, place, binding.machine);
+  }
+  static assert(file: unknown, at?: readonly At[]): void {
+    if (
+      typeof file !== "object" ||
+      file === null ||
+      !(#brand in file) ||
+      (at && !at.includes(file.kind.at))
+    )
+      throw Error("Stored I/O requires a kind-minted file of the right class.");
+  }
+}
+Object.freeze(StoredFile);
 
 const under = (root: string, segments: readonly string[]): string => {
   for (const segment of segments)
@@ -119,18 +170,15 @@ function kind<T, A extends At, Args extends readonly unknown[]>(
   spec: KindSpec<T, Args>,
   bind: (root: RootAt<A>, segments: readonly string[]) => { path: PathAt<A>; machine: StateRoot },
 ): Kind<T, A, Args> {
-    const made: Kind<T, A, Args> = {
-      at,
-      schema: spec.schema,
-      parse: spec.parse,
-      quiet: spec.quiet,
-      in: (root, ...args) => ({
-        kind: made,
-      ...bind(root, spec.segments(...args)),
-        place: spec.place(...args),
-    }),
+  const made: Kind<T, A, Args> = {
+    at,
+    schema: spec.schema,
+    parse: spec.parse,
+    quiet: spec.quiet,
+    in: (root, ...args) =>
+      mintStored(made, bind(root, spec.segments(...args)), spec.place(...args)),
   };
-  return made;
+  return Object.freeze(made);
 }
 /** Authored bytes, never removed by a reader. */
 export const homeKind = <T, Args extends readonly unknown[] = []>(spec: KindSpec<T, Args>) =>
@@ -142,13 +190,13 @@ export const homeKind = <T, Args extends readonly unknown[] = []>(spec: KindSpec
 export const stateKind = <T, Args extends readonly unknown[] = []>(spec: KindSpec<T, Args>) =>
   kind("state", spec, (root, segments) => ({
     path: mintStatePath(under("path" in root ? root.path : root.state, segments)),
-        machine: "machine" in root ? root.machine : root,
-      }));
+    machine: "machine" in root ? root.machine : root,
+  }));
 /** A person's decision in machine state, refused and kept. */
 export const keptStateKind = <T, Args extends readonly unknown[] = []>(spec: KindSpec<T, Args>) =>
   kind("state-kept", spec, (root, segments) => ({
     path: mintStatePath(under("path" in root ? root.path : root.state, segments)),
-        machine: "machine" in root ? root.machine : root,
+    machine: "machine" in root ? root.machine : root,
   }));
 
 export type Stored<T> =
@@ -176,15 +224,19 @@ export const stateLog = <T, Args extends readonly unknown[] = []>(
     schema: spec.schema,
     path: mintStatePath(under("path" in root ? root.path : root.state, spec.segments(...args))),
     place: spec.place(...args),
-        machine: "machine" in root ? root.machine : root,
+    machine: "machine" in root ? root.machine : root,
   }),
 });
 
 /** A derived folder is the one place that is a home for one caller and state for another. */
-export type DerivedDir<P extends HomePath | StatePath = HomePath | StatePath> = { readonly path: P; readonly machine: StateRoot;
+export type DerivedDir<P extends HomePath | StatePath = HomePath | StatePath> = {
+  readonly path: P;
+  readonly machine: StateRoot;
   readonly file: (name: string) => P;
 };
-export type DerivedFile<P extends HomePath | StatePath = HomePath | StatePath> = { readonly path: P; readonly bytes: Buffer;
+export type DerivedFile<P extends HomePath | StatePath = HomePath | StatePath> = {
+  readonly path: P;
+  readonly bytes: Buffer;
 };
 const derivedDir = <P extends HomePath | StatePath>(
   path: P,
