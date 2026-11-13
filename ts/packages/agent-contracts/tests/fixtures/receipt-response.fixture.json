@@ -100,6 +100,10 @@
   "refused-restoreFailed-no-view": {
     "payload": null, "touched": { "kind": "restoreFailed", "views": [] }
   },
+  "ok-unknown-overlapped": {
+    "payload": { "count": 3 },
+    "touched": { "kind": "unknown", "reason": "overlapped" }
+  },
   "failed-posted-command": {
     "touched": { "kind": "unknown", "reason": "posted-command" },
     "error": "refused",

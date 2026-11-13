@@ -24,9 +24,27 @@ public sealed class OpTouchedTests {
         Assert.That(touched, Is.EqualTo(new Touched.Unauthorized(["Rogue commit"], 1, 2, 0)).Using<Touched>(Same));
     }
 
+    // Purger N1. Mutant: put `&& !overlapped` back on the unauthorized case with no overlapped case above it,
+    // and both lines read `none` and `rolledBack`.
     [Test]
-    public void A_read_beside_another_open_call_is_not_blamed_for_its_commit() =>
-        Assert.That(OpRunner.Touch(OpEffect.Read, ScopeFacts.None, [Commit("Another call")], true), Is.InstanceOf<Touched.None>());
+    public void A_commit_seen_beside_another_open_call_is_unknown_never_clean_and_never_blamed() {
+        var unknown = new Touched.Unknown(TouchedUnknownReason.Overlapped);
+        Assert.That(OpRunner.Touch(OpEffect.Read, ScopeFacts.None, [Commit("Another call")], true), Is.EqualTo(unknown));
+        Assert.That(OpRunner.Touch(OpEffect.TransactRead, Facts(used: true), [Commit("Flex", true), Commit("Another call")], true), Is.EqualTo(unknown));
+        // With nothing stray, an overlap changes nothing.
+        Assert.That(OpRunner.Touch(OpEffect.Read, ScopeFacts.None, [], true), Is.InstanceOf<Touched.None>());
+        Assert.That(OpRunner.Touch(OpEffect.TransactRead, Facts(used: true), [Commit("Flex", true)], true), Is.InstanceOf<Touched.RolledBack>());
+    }
+
+    // Purger N2. Mutant: drop `|| scope.Undiscarded` from the stray filter and the first line reads `rolledBack`.
+    [Test]
+    public void A_transact_read_whose_discard_did_not_happen_contained_nothing() {
+        var undiscarded = new ScopeFacts(true, false, [], [], Undiscarded: true);
+        Assert.That(OpRunner.Touch(OpEffect.TransactRead, undiscarded, [Commit("Place verification row", true)], false),
+            Is.InstanceOf<Touched.Unauthorized>());
+        Assert.That(OpRunner.Touch(OpEffect.TransactRead, undiscarded, [], false),
+            Is.EqualTo(new Touched.Unknown(TouchedUnknownReason.CancelledMidEffect)));
+    }
 
     [Test]
     public void A_read_that_saw_only_sandbox_churn_touched_nothing() =>
