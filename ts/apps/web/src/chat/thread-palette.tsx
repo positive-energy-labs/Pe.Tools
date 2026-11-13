@@ -44,8 +44,7 @@ import { ListView, type ListRowParts } from "@pe/kit/lang/list-view";
 import { Button } from "@pe/kit/lang/button";
 import { ProviderMark } from "#/components/lang/provider-mark";
 import { useSurfaceHost } from "#/navigation/surface-host";
-import { peClient } from "#/host/pe-client";
-import { readPeError } from "@pe/host-contracts/pe-api";
+import { downloadThread } from "#/workbench/provider/harness-client";
 import "./thread-navigation.css";
 import "#/components/lang/navigation.css";
 import type { StoredThreadSummary } from "#/workbench/provider";
@@ -70,7 +69,7 @@ import {
   type ThreadShelf,
   type TargetRead,
   type ThreadAction,
-} from "./thread-navigation";
+} from "#/workbench/thread-navigation";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 import { chipRecipe } from "@pe/kit/lang/chip";
 import type { ThreadWork } from "@pe/agent-contracts";
@@ -83,7 +82,7 @@ import {
   type ClosedWork,
   useThreadWorks,
   workHint,
-} from "./thread-work";
+} from "#/workbench/thread-work";
 
 /** What the roster holds: stored summaries, read against the live inventory by the shell. */
 type RosterThread = StoredThreadSummary & TargetRead;
@@ -236,13 +235,13 @@ function ThreadActionsMenu({
                 reading: true,
                 run: () => apply(snooze, () => ({ snoozedUntil: preset.at.toISOString() })),
               })),
-              { id: "snooze:custom", label: "Custom…", run: () => setForm("snooze") },
+              { id: "snooze:custom", label: "Customâ€¦", run: () => setForm("snooze") },
             ],
           },
       lifecycleAction("unread", unreadIcon, " "),
       {
         id: "rename",
-        label: "Rename…",
+        label: "Renameâ€¦",
         icon: Pencil,
         group: " ",
         refusal: oneThreadRefusal("Rename", count),
@@ -288,20 +287,7 @@ function ThreadActionsMenu({
         group: "  ",
         refusal: oneThreadRefusal("Export", count),
         run: () => {
-          void (async () => {
-            const response = await peClient.response("thread.export", {
-              params: { id: thread.id },
-            });
-            if (!response.ok) throw Error((await readPeError(response)).message);
-            const url = URL.createObjectURL(await response.blob());
-            const link = document.createElement("a");
-            link.href = url;
-            link.download =
-              /filename="([^"]+)"/.exec(response.headers.get("content-disposition") ?? "")?.[1] ??
-              `${thread.id}.json`;
-            link.click();
-            setTimeout(() => URL.revokeObjectURL(url), 1000);
-          })().catch((error: unknown) =>
+          void downloadThread(thread.id).catch((error: unknown) =>
             setFailure(error instanceof Error ? error.message : "Could not export this thread"),
           );
         },
@@ -318,7 +304,7 @@ function ThreadActionsMenu({
             label: "Thread link",
             run: () => {
               const url = new URL(location.href);
-              const at = routeAddress(routeAt(url.pathname) ?? "pea");
+              const at = routeAddress(routeAt(url.pathname) ?? "chat");
               const { page, carry } = at.read(Object.fromEntries(url.searchParams));
               copy(
                 new URL(at.link(page, { ...carry, thread: thread.id }), url.origin).href,
@@ -369,7 +355,7 @@ function ThreadActionsMenu({
       lifecycleAction("archive", archiveIcon, "   "),
       {
         id: "delete",
-        label: "Delete permanently…",
+        label: "Delete permanentlyâ€¦",
         icon: Trash2,
         group: "   ",
         refusal: oneThreadRefusal("Delete", count) ?? (busy ? "finish the work first" : undefined),
@@ -448,7 +434,7 @@ function ThreadActionsMenu({
             {form === "rename"
               ? "Rename thread"
               : form === "snooze"
-                ? "Snooze until…"
+                ? "Snooze untilâ€¦"
                 : "Delete this thread permanently?"}
           </DialogTitle>
           <p>{count > 1 ? `${count} threads` : thread.title}</p>
@@ -553,7 +539,7 @@ const rowHint = (thread: RosterThread, work: ThreadWork | undefined) =>
     STAMP.format(new Date(thread.updatedAt)),
   ]
     .filter(Boolean)
-    .join(" · ");
+    .join(" Â· ");
 
 /**
  * A row's menu re-renders only when its data changes. The closures the sidebar mints per render
@@ -895,7 +881,7 @@ export function ThreadsSidebar({
             </Button>
           </span>
         ),
-      title: [rowHint(thread, work), unresumed.get(thread.id)].filter(Boolean).join(" · "),
+      title: [rowHint(thread, work), unresumed.get(thread.id)].filter(Boolean).join(" Â· "),
       onDoubleClick: () => setMenuId(thread.id),
       onContextMenu: (event) => {
         event.preventDefault();
@@ -960,7 +946,7 @@ export function ThreadsSidebar({
           aria-label="threads"
           empty={
             reading
-              ? { message: "reading threads…", exit: "" }
+              ? { message: "reading threadsâ€¦", exit: "" }
               : { message: "No threads yet", exit: "Start a new thread beside search" }
           }
           row={rowParts}

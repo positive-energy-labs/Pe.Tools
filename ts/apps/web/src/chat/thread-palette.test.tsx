@@ -11,7 +11,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 
 import type { UpdateThreadRequest } from "@pe/agent-contracts";
 import { emptyChatState } from "@pe/agent-contracts/chat-state";
-import { demoThreads } from "./thread-navigation";
+import { demoThreads } from "#/workbench/thread-navigation";
 import { ThreadsSidebar as Sidebar } from "./thread-palette";
 
 function ThreadsSidebar(props: ComponentProps<typeof Sidebar>) {

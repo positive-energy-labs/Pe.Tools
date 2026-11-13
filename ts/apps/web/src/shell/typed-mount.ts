@@ -11,7 +11,7 @@ import { reportFault } from "../host/diagnostics";
 function valueRefusal(error: unknown, read: string): string {
   return readableRefusal(error, `Value unavailable (${read}): the model reading does not match its contract. Refresh to try again.`);
 }
-import { decodeField } from "../route/field-codec";
+import { decodeField, encodeField } from "../route/field-codec";
 import { visibleReads } from "../route/typed-route";
 import {
   applyPatches,
@@ -339,7 +339,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     gate.movePage(page, { kind: "human", source: "query", history: "replace" });
     syncWork(); syncReads(); notify();
     const search = input.address.read();
-    for (const [key,value] of Object.entries(patch)) search.set(key, JSON.stringify(value));
+    for (const [key,value] of Object.entries(patch)) search.set(key, encodeField(spec.fields[key], value));
     input.address.write(search, history);
     return { kind: "accepted", changed: true } as const;
   };

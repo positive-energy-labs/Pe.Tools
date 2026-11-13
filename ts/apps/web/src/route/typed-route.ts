@@ -30,11 +30,14 @@ import { commandCatalogAxes } from "@pe/agent-contracts/command-axes";
 import { fillBody, scrollBody, type Body, type BodyKind } from "./body.ts";
 export { scrollBody, fillBody, type Body, type BodyKind } from "./body.ts";
 
+import type { FieldCodec } from "./field-codec";
 type Field = {
   schema: z.ZodType;
   initial: unknown;
   role: "pose" | "query" | "subject" | "stage";
   url: "push" | "replace";
+  share?: false;
+  codec?: FieldCodec;
 };
 export const whenSubject = (child: string | LayoutJson): LayoutJson => ({
   kind: "gate", when: "subject", child: typeof child === "string" ? { kind: "pane", id: child } : child,
@@ -406,7 +409,7 @@ export function route<D, const F extends Fields, W extends z.ZodObject, Edit ext
     fieldSchemas[key]=schema;
     schemas[schema]=field.schema;
     fields[key]={role:field.role === "subject" ? "query" : field.role,schema,codec:key,
-      ...(field.initial === undefined ? {} : {initial:field.initial}),url:field.url,share:true,agent:spec.agent === false ? "none" : "set"};
+      ...(field.initial === undefined ? {} : {initial:field.initial}),url:field.url,share:field.share !== false,agent:spec.agent === false ? "none" : "set"};
   }
   const readIds = new Map<HostRead,string>();
   if(spec.core) readIds.set(spec.core,"value");

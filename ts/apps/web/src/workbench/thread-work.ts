@@ -91,7 +91,8 @@ export async function resumeWork(workId: string): Promise<Resumed> {
   try {
     return await peClient.call("work.resume", { query: { id: workId } });
   } catch (error) {
-    const said = (error as { problem?: { error?: unknown } }).problem?.error;
+    const problem = error && typeof error === "object" && "problem" in error ? error.problem : undefined;
+    const said = problem && typeof problem === "object" && "error" in problem ? problem.error : undefined;
     return {
       key: null,
       url: null,

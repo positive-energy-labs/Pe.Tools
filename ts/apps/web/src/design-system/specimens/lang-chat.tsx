@@ -1,5 +1,5 @@
 import { ThreadsSidebar } from "#/chat/thread-palette";
-import { demoThreads } from "#/chat/thread-navigation";
+import { demoThreads } from "#/workbench/thread-navigation";
 import { emptyChatState } from "@pe/agent-contracts/chat-state";
 import {
   Composer,

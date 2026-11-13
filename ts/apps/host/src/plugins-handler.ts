@@ -29,7 +29,10 @@ export function createPluginsHandler(
     } catch (error) {
       return json({ error: message(error) }, 409);
     }
-    if (request.method === "GET") return json(content.lifecycle.inventory());
+    if (request.method === "GET") {
+      content.lifecycle.requestRefresh();
+      return json(content.lifecycle.inventory());
+    }
     await content.lifecycle.refresh();
     const id = declared.params.id;
     if (!content.lifecycle.inventory().some((p) => p.id === id))

@@ -31,7 +31,7 @@ import {
 } from "./pod-transfer.ts";
 import { captureDirectory, isPackageMember, listPackages, productPodsRoots, type AdmittedPackage } from "./packages.ts";
 import { shippedPodUpdateRefusals } from "./shipped-pod-status.ts";
-import { activateImportedPackage } from "./package-lifecycle.ts";
+import { activateImportedPackage, reconcilePackageChanges } from "./package-lifecycle.ts";
 import { productPodsRootPath } from "./product-paths.ts";
 import { rollbackHomeMembers, podMemberKind, type HomeMemberUndo } from "./settings.ts";
 
@@ -150,9 +150,8 @@ async function ensureDefaultPod(podsRoot: string | undefined): Promise<void> {
 `,
     null,
   );
-  // The host made this pod at this start, so it is on, like an import: a pod first seen after
-  // the start census is otherwise off, and `pod.list` would never name it. An existing manifest
-  // keeps whatever a person chose.
+  // The host made this Pod, so record the import's explicit on choice. An existing manifest
+  // keeps whatever a person chose; discovery itself also defaults to on.
   if (wrote.ok) await activateImportedPackage(key, podsRoot);
 }
 
@@ -301,6 +300,7 @@ async function offer(
             return { archive, sha256, outcome: "updated", id, folder: installed.folder };
           } catch (error) {
             const kept = rollbackHomeMembers(writes);
+            if (writes.length) await reconcilePackageChanges();
             if (kept.length) throw Error(`its update failed: ${String(error)}; rollback kept: ${kept.join("; ")}`, { cause: error });
             throw error;
           }

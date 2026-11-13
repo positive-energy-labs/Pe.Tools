@@ -172,7 +172,7 @@ function threadRow(thread: NoticeSources["threads"][number], now: number): Notic
     where: thread.providerName,
     says,
     at: thread.updatedAt,
-    url: routeAddress("pea").link({}, { thread: thread.id }),
+    url: routeAddress("chat").link({}, { thread: thread.id }),
   });
   if (state === "waiting" || pending > 0) {
     const ask = openAsk(thread.id, thread.events);
@@ -410,7 +410,7 @@ export function noticeRows(sources: NoticeSources, now: number): NoticeDraft[] {
         ? `Pea wants to attach this source to ${send.target}, which sends it to LlamaCloud to read. Nothing was sent. Confirm to send it and attach the result.`
         : `Pea wants to send pages ${send.pages} of this source to LlamaCloud to read it. Nothing was sent. Confirm to send it and keep the result for Pea.`,
       at: send.at,
-      url: send.thread ? routeAddress("pea").link({}, { thread: send.thread }) : null,
+      url: send.thread ? routeAddress("chat").link({}, { thread: send.thread }) : null,
       ...(send.thread ? {} : { refusal: "No thread asked for this" }),
       act: {
         kind: "confirm-send" as const,

@@ -45,6 +45,7 @@
     "apps/host/tests/vite-web.test.ts": 4,
     "apps/host/tests/work-lifetime.test.ts": 1,
     "packages/browser/tests/acceptance.test.ts": 1,
-    "apps/web/src/fans/timeline-member-switch.test.ts": 0
+    "apps/web/src/fans/timeline-member-switch.test.ts": 0,
+    "apps/host/tests/pod-late-arrival.test.ts": 0
   }
 }

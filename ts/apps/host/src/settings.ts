@@ -35,7 +35,7 @@ import {
   readPackage,
   resolvePackageIdentity,
 } from "./packages.ts";
-import { requirePackageEnabled, activePackages, projectPodIds } from "./package-lifecycle.ts";
+import { requirePackageEnabled, activePackages, projectPodIds, reconcilePackageChanges } from "./package-lifecycle.ts";
 import { shippedPodsSettled } from "./installed-pods.ts";
 import { LocalOpError } from "./local-error.ts";
 import { hostState } from "./host-ownership.ts";
@@ -470,8 +470,12 @@ const throughDoor = (
   content: string,
   expectSha256: string | null,
 ) =>
-  Effect.try({
-    try: () => writeHome(path, content, expectSha256),
+  Effect.tryPromise({
+    try: async () => {
+      const wrote = writeHome(path, content, expectSha256);
+      if (wrote.ok) await reconcilePackageChanges();
+      return wrote;
+    },
     catch: (error) => new LocalOpError(key, errorMessage(error), 500),
   });
 

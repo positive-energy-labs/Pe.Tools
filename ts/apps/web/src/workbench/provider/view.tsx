@@ -18,12 +18,12 @@ import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { errorMessage } from "./use-workbench";
 import { EMPTY_HEAD, isReady, useProviders, type HeadDraft } from "./providers";
 import { machineInventory, routeAddress, targetKey, type DocumentRequest } from "@pe/agent-contracts";
-import { demoThreads } from "#/chat/thread-navigation";
+import { demoThreads } from "#/workbench/thread-navigation";
 import { useEnvironmentReading } from "#/host/environment-state";
 import type { HarnessThreadBody } from "@pe/agent-contracts";
 import { mergeThreadRoster, mergeThreadSummary } from "./thread-merge";
 import { emptyPrompt } from "../prompt";
-import { pinnedDocument, pinsDocument, soleUserDocument } from "#/chat/scope";
+import { pinnedDocument, pinsDocument, soleUserDocument } from "#/workbench/sole-user-document";
 import { machineOf } from "#/machine/model";
 import { useMachineSlice } from "#/machine/use-machine";
 
@@ -63,7 +63,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
           // A move of the address's own fields lands in history by the contract's rule (a draft
           // replaces); a thread move keeps its caller's choice, as it names another place.
           patch: (partial, replace = false) => {
-            const pea = routeAddress("pea");
+            const pea = routeAddress("chat");
             const before = pea.read(router.state.location.search).page;
             const move = "thread" in partial;
             const rule = move

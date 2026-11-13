@@ -6,16 +6,7 @@ import { draw } from "../route/draw";
 import { threadListFields } from "../../../../packages/agent-contracts/src/routes/shared";
 /** Home has no subject and no slot data: every Page field is route-owned `query` (ADR 0035 rule 1). */
 export const query = {
-  threadSearch: field(
-    threadListFields.threadSearch.schema,
-    threadListFields.threadSearch.schema.parse(undefined),
-    "query",
-  ),
-  threadSort: field(
-    threadListFields.threadSort.schema,
-    threadListFields.threadSort.schema.parse(undefined),
-    "query",
-  ),
+  ...threadListFields,
   query: field(z.string(), "", "query"),
   exposure: field(z.enum(["All", "Main", "Preview", "Archive"]), "All", "query", "push"),
   sort: field(z.enum(["workflow", "name"]), "workflow", "query", "push"),

@@ -1,4 +1,5 @@
 import { useWork } from "@pe/kit/lang/work";
+import { z } from "zod";
 /**
  * The question card: one ACP elicitation form (`question_request`) in the composer head, beside
  * the approval cards. Each property of the requested schema is one field: a `oneOf` is a pick, an
@@ -12,15 +13,21 @@ import { Button } from "@pe/kit/lang/button";
 import { useScopeKeys } from "@pe/kit/keys";
 import type { Question } from "@pe/agent-contracts/chat-state";
 
-type Option = { const: unknown; title?: string; description?: string };
-type Property = {
-  type?: string;
-  title?: string;
-  description?: string;
-  oneOf?: Option[];
-  enum?: unknown[];
-  items?: { anyOf?: Option[]; enum?: unknown[] };
-};
+const optionSchema = z.object({ const: z.unknown(), title: z.string().optional(), description: z.string().optional() });
+const propertySchema = z.object({
+  type: z.string().optional(),
+  title: z.string().optional(),
+  description: z.string().optional(),
+  oneOf: z.array(optionSchema).optional(),
+  enum: z.array(z.unknown()).optional(),
+  items: z.object({ anyOf: z.array(optionSchema).optional(), enum: z.array(z.unknown()).optional() }).optional(),
+});
+const questionSchema = z.object({
+  properties: z.record(z.string(), propertySchema).optional(),
+  required: z.array(z.string()).optional(),
+});
+type Option = z.output<typeof optionSchema>;
+type Property = z.output<typeof propertySchema>;
 
 /** A schema constant as the user reads it. */
 const label = (value: unknown) => (typeof value === "string" ? value : JSON.stringify(value));
@@ -34,7 +41,7 @@ const partial = new Map<string, Record<string, unknown>>();
 /** The free-text box an answer typed in the composer lands in: the harness's "Other", else the first plain box. */
 function freeField(question: Question): string | undefined {
   const properties = Object.entries(
-    (question.requestedSchema as { properties?: Record<string, Property> }).properties ?? {},
+    questionSchema.parse(question.requestedSchema).properties ?? {},
   );
   const plain = properties.filter(
     ([, property]) => property.type === "string" && !choices(property),
@@ -64,10 +71,7 @@ export function QuestionForm({
     content?: Record<string, unknown>,
   ) => void | Promise<void>;
 }) {
-  const schema = question.requestedSchema as {
-    properties?: Record<string, Property>;
-    required?: string[];
-  };
+  const schema = questionSchema.parse(question.requestedSchema);
   const fields = Object.entries(schema.properties ?? {});
   const required = new Set(schema.required ?? []);
   const [content, setContent] = useState<Record<string, unknown>>(
@@ -113,20 +117,22 @@ export function QuestionForm({
         options: { ignoreInputs: false },
         callback: (event) => {
           if (event.isComposing || event.repeat) return;
-          const target = event.target as HTMLElement;
+          const target = event.target;
+          if (!(target instanceof Element)) return;
           if (target.closest('[data-question-action="decline"]')) {
             void answer("decline");
             return;
           }
           // "Other" only opens its box; the typed answer is sent by Enter in the box or Answer.
           const other = target.closest<HTMLElement>("[data-other-for]");
-          if (other) {
-            document.getElementById(other.dataset.otherFor!)?.focus();
+          if (other?.dataset.otherFor) {
+            document.getElementById(other.dataset.otherFor)?.focus();
             return;
           }
           const radio = target.closest<HTMLElement>('[role="radio"]');
           const key = radio?.dataset.field;
-          const option = key && choices(schema.properties![key]!)?.[Number(radio.dataset.option)];
+          const property = key ? schema.properties?.[key] : undefined;
+          const option = property && choices(property)?.[Number(radio?.dataset.option)];
           const values = key && option ? { ...content, [key]: option.const } : content;
           if (key && option) set(key, option.const);
           void answer("accept", values);
@@ -226,7 +232,7 @@ function Field({
       </span>
     ) : null;
   if (options && property.type === "array") {
-    const picked = Array.isArray(value) ? (value as unknown[]) : [];
+    const picked = Array.isArray(value) ? value : [];
     return (
       <div className="flex flex-col gap-1">
         {head}
@@ -273,7 +279,7 @@ function Field({
             const buttons = [
               ...event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="radio"]'),
             ];
-            const current = buttons.indexOf(event.target as HTMLButtonElement);
+            const current = buttons.findIndex((button) => button === event.target);
             const next =
               event.key === "Home"
                 ? 0

@@ -57,7 +57,7 @@ describe("a layers field", () => {
 describe("the route address", () => {
 
   test("the thread sidebar query and sort round-trip on Pea and a docked route", () => {
-    for (const key of ["pea", "ducts"] as const) {
+    for (const key of ["chat", "ducts"] as const) {
       const at = routeAddress(key);
       const query = pickListPill(
         { ...emptyListSearch(), keywords: '"supply air"' },
@@ -88,7 +88,7 @@ describe("the route address", () => {
 
 
   test("is one object per route, found by key or path", () => {
-    expect(routeAddress("pea")).toBe(routeAddress("pea"));
+    expect(routeAddress("chat")).toBe(routeAddress("chat"));
     expect(routeOf("ducts")).toBe("ducts");
     expect(routeOf("nowhere")).toBeNull();
     expect(routeAt("/duct-loss")).toBe("duct-loss");
@@ -113,7 +113,7 @@ describe("the route address", () => {
   });
 
   test("a link drops defaults and drafts and keeps the carry", () => {
-    const pea = routeAddress("pea");
+    const pea = routeAddress("chat");
     const { page, carry } = pea.read({ turn: "3", prompt: "draft", thread: "t1" });
     expect(carry).toEqual({ thread: "t1" });
     expect(pea.link(page, carry)).toBe("/pea?turn=3&thread=t1");
@@ -212,7 +212,7 @@ describe("the thin routes adopt the contract", () => {
     expect(routeAddress("settings").agent.patch.safeParse({ session: "s" }).success).toBe(false);
     // Binding is the person's door and Pea does not lease /pea: no lease at all.
     expect(routeAddress("bind").agent).toBeUndefined();
-    expect(routeAddress("pea").agent).toBeUndefined();
+    expect(routeAddress("chat").agent).toBeUndefined();
     // Ops is the admin door: Pea runs an operation through pe_do, not a second path to it.
     expect(routeAddress("ops").agent).toBeUndefined();
   });

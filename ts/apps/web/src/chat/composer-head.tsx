@@ -28,7 +28,8 @@ export type { ChatHandle } from "./owner-ports";
 
 import { PrimaryRouteControls } from "#/navigation/route-controls";
 import { RouteHelpButton } from "#/route/help";
-import { pinnedDocument, useThreadScope } from "#/chat/scope";
+import { useThreadScope } from "#/chat/scope";
+import { pinnedDocument } from "#/workbench/sole-user-document";
 import {
   selectQuestions,
   selectPlan,
@@ -38,7 +39,7 @@ import {
 import { useTranscript, useWorkbench } from "#/workbench/provider";
 
 import { useHeadWorks } from "./head-works";
-import { targetClosure, targetLabel } from "./thread-navigation";
+import { targetClosure, targetLabel } from "#/workbench/thread-navigation";
 import { ProposalHead } from "./proposal-head";
 import { ComposerOpenMode } from "./composer-open";
 import { ComposerPending } from "./composer-pending";

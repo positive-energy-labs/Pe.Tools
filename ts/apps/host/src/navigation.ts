@@ -397,7 +397,7 @@ export async function readNavigation(
       context: targetsLabel(thread.head.targets) ?? thread.providerName,
       state: thread.activity.state,
       revision: thread.head.revision,
-      url: routeAddress("pea").link({}, { thread: thread.id }),
+      url: routeAddress("chat").link({}, { thread: thread.id }),
       reason: null,
     })),
     observations,

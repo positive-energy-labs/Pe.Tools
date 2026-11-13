@@ -1,5 +1,5 @@
 import type { ListSearch } from "@pe/agent-contracts";
-import { useNavigate, useRouterState } from "@tanstack/react-router";
+import { useRouterState } from "@tanstack/react-router";
 import {
   Suspense,
   useCallback,
@@ -11,16 +11,12 @@ import {
   useContext,
   type CSSProperties,
 } from "react";
-import { useRouteSearchSlice } from "#/route/activity";
 import { RegistryContext, useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { NewThreadButton, ThreadsSidebar } from "#/chat/thread-palette";
 import { useTranscript, useTranscriptAtom, useWorkbench } from "#/workbench/provider";
 import {
   selectBreakdown,
-  selectRunStatus,
   selectTitle,
-  selectStarting,
-  selectWaitingSeconds,
 } from "@pe/agent-contracts/chat-state";
 import { EmptyState } from "@pe/kit/lang/empty";
 import { Button } from "@pe/kit/lang/button";
@@ -41,7 +37,7 @@ import { PaneActions } from "#/shell/pane-actions";
 import { useRevealPane } from "@pe/kit/lang/pane-reveal";
 
 import type { ChatHandle } from "./owner-ports";
-import { readThreadTarget } from "#/chat/thread-navigation";
+import { readThreadTarget } from "#/workbench/thread-navigation";
 import "#/workbench/lens.css";
 import "./chat-shell.css";
 import { CurrentThreadViewOwner } from "#/workbench/thread-view";
@@ -50,7 +46,6 @@ import { Work } from "@pe/kit/lang/work";
 import { ThreadBody } from "#/workbench/lens/thread-body";
 import { ComposerBank } from "#/chat/composer-bank";
 import { useThreadPresence } from "#/machine/os-notices";
-import { routeAddress, routeAt } from "@pe/agent-contracts";
 
 import { DockSurface as ChatSurfaceProps, type DockSurfaceProps as ChatShellProps } from "../workbench/hosted-route";
 
@@ -84,28 +79,14 @@ export function ThreadsDrawing({ ctx: handle }: { ctx: ChatHandle }) {
   const chatId = useTranscript((state) => state.id);
   const newThread = useNewThread();
   const reveal = useRevealPane();
-  const navigate = useNavigate();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
-  const sidebarAddress = routeAddress(routeAt(pathname) ?? "pea");
-  const sidebarPage = useRouteSearchSlice((search) => {
-    const page = sidebarAddress.read(search).page;
-    return { threadSearch: page.threadSearch, threadSort: page.threadSort };
-  });
+  const sidebarPage = handle.page.read();
   const threadListAddress = {
     scope: pathname,
     search: sidebarPage.threadSearch,
     sort: sidebarPage.threadSort,
-    onChange: (threadSearch: ListSearch, threadSort: "recent" | "title" | "") => {
-      void navigate({
-        to: ".",
-        replace: true,
-        resetScroll: false,
-        search: (previous: Record<string, unknown>) => ({
-          ...previous,
-          ...sidebarAddress.write({ threadSearch, threadSort }),
-        }),
-      });
-    },
+    onChange: (threadSearch: ListSearch, threadSort: "recent" | "title" | "") =>
+      handle.page.query({ threadSearch, threadSort }),
   };
   const situation = useChatSituation(handle);
   // The live inventory decides what a saved target is: a request that may be closed.
@@ -129,7 +110,7 @@ export function ThreadsDrawing({ ctx: handle }: { ctx: ChatHandle }) {
         </PrimaryRouteControls>
       )}
       <PaneActions pane="threads">
-        <small className="t-small text-ink-mute">{rosterRead ? threads.length : "…"}</small>
+        <small className="t-small text-ink-mute">{rosterRead ? threads.length : "â€¦"}</small>
         <Button kind="quiet" label="New thread" onClick={() => void newThread()}>
           new
         </Button>
@@ -201,7 +182,6 @@ function ChatSurface({ target, handle }: ChatShellProps & { handle: ChatHandle }
   const {
     store,
     bodyAtom,
-    loading,
     threads,
     currentThreadId,
     prompt,
@@ -234,9 +214,6 @@ function ChatSurface({ target, handle }: ChatShellProps & { handle: ChatHandle }
   const chat = useTranscript((state) => ({
     title: selectTitle(state),
     breakdown: selectBreakdown(state),
-    runStatus: selectRunStatus(state),
-    silentFor: selectWaitingSeconds(state),
-    starting: selectStarting(state),
   }));
   useThreadPresence(activity ? null : currentThreadId);
   const situation = useChatSituation(handle);
@@ -252,24 +229,7 @@ function ChatSurface({ target, handle }: ChatShellProps & { handle: ChatHandle }
   const switching = shown.thread !== currentThreadId;
   const retryBody = useAtomRefresh(bodyAtom);
 
-  const { runStatus, silentFor, breakdown } = chat;
-  const status = {
-    text: turnFailure
-      ? "failed"
-      : loading
-        ? "loading thread state"
-        : runStatus === "waiting"
-          ? "waiting for you"
-          : chat.starting
-            ? "starting the harness"
-            : silentFor !== undefined
-              ? `waiting on the model for ${silentFor} s`
-              : runStatus === "running"
-                ? "running"
-                : "ready",
-    caution: turnFailure !== undefined,
-    detail: operationError ?? turnFailure,
-  };
+  const { breakdown } = chat;
   const title =
     chat.title ||
     threads.find((thread) => thread.id === currentThreadId)?.title ||
@@ -307,7 +267,7 @@ function ChatSurface({ target, handle }: ChatShellProps & { handle: ChatHandle }
             aria-busy={switching}
             className="min-h-0 min-w-0"
           >
-            <Work pending={switching} label="opening thread…" />
+            <Work pending={switching} label="opening threadâ€¦" />
             <PaneErrorBoundary key={shown.thread} what="thread" onRetry={retryBody}>
               <Suspense fallback={<PaneLoading what="thread" />}>
                 {missingThread ? (
@@ -335,7 +295,7 @@ function ChatSurface({ target, handle }: ChatShellProps & { handle: ChatHandle }
               pickers={<ComposerPickers situation={situation} urlTarget={target} />}
               state={<ComposerState situation={situation} />}
               work={<ComposerWork situation={situation} />}
-              refusal={situation.head.refusal ?? status.detail}
+              refusal={situation.head.refusal ?? operationError ?? turnFailure}
             />
           </div>
           {/* The context bar shares the lens's side column at the composer's height. */}

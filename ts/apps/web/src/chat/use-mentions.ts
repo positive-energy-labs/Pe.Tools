@@ -8,18 +8,7 @@ import {
   type KeyboardEvent,
   type SetStateAction,
 } from "react";
-import {
-  AppWindow,
-  Cog,
-  FileCode,
-  FileJson,
-  FileText,
-  History,
-  PanelsTopLeft,
-  Sparkles,
-  SquareTerminal,
-  type LucideIcon,
-} from "lucide-react";
+import { MENTION_KINDS } from "#/workbench/mention-kind";
 import {
   machineAttachments,
   discoveryMachine,
@@ -40,27 +29,7 @@ import {
 import type { Collection } from "@pe/kit/lang/collection";
 import type { ChatDraft } from "#/workbench/prompt";
 
-/** Menu order, group heads, the kind word (chips) and the row's glyph: the one kind map. */
-export const MENTION_KINDS: Record<
-  CapabilityKind,
-  { group: string; word: string; icon: LucideIcon }
-> = {
-  document: { group: "Documents", word: "document", icon: FileText },
-  recent: { group: "Recent", word: "recent", icon: History },
-  skill: { group: "Skills", word: "skill", icon: Sparkles },
-  page: { group: "Pages", word: "page", icon: AppWindow },
-  route: { group: "Pod routes", word: "route", icon: PanelsTopLeft },
-  "route-doc": { group: "Route plugins", word: "route", icon: PanelsTopLeft },
-  "route-command": { group: "Commands", word: "command", icon: SquareTerminal },
-  op: { group: "Ops", word: "op", icon: Cog },
-  script: { group: "Scripts", word: "script", icon: FileCode },
-  member: { group: "Pod members", word: "member", icon: FileJson },
-};
-/** Rows a group shows before its "N more" row. */
 export const MENTION_GROUP_CAP = 5;
-
-/** A mention's kind word; a kind this build does not know says itself. */
-export const mentionWord = (kind: string) => MENTION_KINDS[kind as CapabilityKind]?.word ?? kind;
 
 /** What one menu row says: a readable title, one short fact on its line (`mono` when it is a
  * key), and the description the footer says for the cursor row. An op whose title is its key's
@@ -79,7 +48,7 @@ export function mentionFace(
       title: row.title,
       fact: folders || null,
       mono: false,
-      detail: [row.description, address, doc.session].filter(Boolean).join(" · "),
+      detail: [row.description, address, doc.session].filter(Boolean).join(" Â· "),
     };
   }
   if (row.kind === "recent") {
@@ -89,17 +58,17 @@ export function mentionFace(
       title: row.title,
       // A cloud model says its project; a local file its last two folders.
       fact: recent?.isCloud
-        ? ["cloud", words.at(-2)].filter(Boolean).join(" · ")
+        ? ["cloud", words.at(-2)].filter(Boolean).join(" Â· ")
         : words.slice(0, -1).slice(-2).join("\\") || null,
       mono: false,
-      detail: [row.description, recent?.path].filter(Boolean).join(" · "),
+      detail: [row.description, recent?.path].filter(Boolean).join(" Â· "),
     };
   }
   if (row.kind !== "op")
     return { title: row.title, fact: null, mono: false, detail: row.description };
-  // `op:parameter-links.read` → `parameter-links.read`: the group head already says "op".
+  // `op:parameter-links.read` â†’ `parameter-links.read`: the group head already says "op".
   const name = row.key.slice(row.key.indexOf(":") + 1);
-  const clause = row.description.split(/[.,;:(]|\s(?:and|or|—|-)\s/)[0]!.trim();
+  const clause = row.description.split(/[.,;:(]|\s(?:and|or|â€”|-)\s/)[0]!.trim();
   return {
     title: row.title === name && clause ? clause : row.title,
     fact: name,
