@@ -1120,6 +1120,11 @@ const picks = (j: Awaited<ReturnType<typeof journey>>) =>
   j.writes.filter(w => w.kind === "apply" && w.patches.some(p => p.path[0] === "writeIntent"));
 const hostWork = async (j: Awaited<ReturnType<typeof journey>>) => (await j.host.workspace.read(j.key(), "fans"))!;
 const scope = { walk: { unitId: 1, portIndex: 0 } };
+// The retained input itself, not only its label: an empty or wrong payload must fail.
+const keptPick = (j: Awaited<ReturnType<typeof journey>>) =>
+  j.m.pendingEdits().find(e => e.label === "Write scope")?.input.patches.filter(p => p.path[0] === "writeIntent");
+const sentPick = (j: Awaited<ReturnType<typeof journey>>) =>
+  picks(j).at(-1)?.patches.filter(p => p.path[0] === "writeIntent");
 
 test.each(["stream held", "stream free"])("D17 a pick behind the mount's own unacknowledged edit, %s: refused, input retained, and the redrawn cell takes it", async stream => {
   const j = await journey();
@@ -1136,6 +1141,8 @@ test.each(["stream held", "stream free"])("D17 a pick behind the mount's own una
     expect(await edit).toBeNull();
     expect(await pick).toMatchObject({ code: "refused" });
     expect(j.m.pendingEdits()).toEqual([expect.objectContaining({ label: "Write scope", status: "refused" })]);
+    const kept = keptPick(j);
+    expect(JSON.stringify(kept)).toContain(JSON.stringify(scope));
     expect((await hostWork(j)).doc).not.toHaveProperty("writeIntent.edit");
     expect(picks(j).length, "the refused pick is never sent again").toBeLessThanOrEqual(1);
     const sent = picks(j).length;
@@ -1146,6 +1153,7 @@ test.each(["stream held", "stream free"])("D17 a pick behind the mount's own una
     expect(await j.cells().at(["writeIntent"]).stage(scope, { label: "Write scope" })).toBeNull();
     expect((await hostWork(j)).doc).toHaveProperty("writeIntent.edit.value", scope);
     expect(picks(j)).toHaveLength(sent + 1);
+    expect(sentPick(j), "the retained input is the pick the redrawn press sends").toEqual(kept);
   } finally { held?.release.resolve(); j.flushStream(); await j.close(); }
 }, 60_000);
 
@@ -1160,9 +1168,12 @@ test("D17 a pick after the mount's own edit has landed, on the drawing made befo
       .toMatchObject({ code: "refused", message: "Stale accepted Work basis" });
     expect(picks(j), "never sent").toHaveLength(0);
     expect(j.m.pendingEdits()).toEqual([expect.objectContaining({ label: "Write scope", status: "refused" })]);
+    const kept = keptPick(j);
+    expect(JSON.stringify(kept)).toContain(JSON.stringify(scope));
     expect((await hostWork(j)).doc).not.toHaveProperty("writeIntent.edit");
     await j.ready();
     expect(await j.cells().at(["writeIntent"]).stage(scope, { label: "Write scope" })).toBeNull();
     expect((await hostWork(j)).doc).toHaveProperty("writeIntent.edit.value", scope);
+    expect(sentPick(j), "the retained input is the pick the redrawn press sends").toEqual(kept);
   } finally { await j.close(); }
 }, 60_000);
