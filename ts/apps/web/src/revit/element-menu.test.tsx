@@ -39,42 +39,51 @@ test.each(
   expect(submit).not.toHaveBeenCalled();
 });
 
-test("paired IDs retain exact destination, expected identity and structured partial failures", async () => {
-  const data = {
-    shown: [42],
-    missing: [43],
-    viewId: 9,
-    viewName: "3D",
-    note: "Selected 1.",
-    boxed: [42],
-    hidden: [42],
-    identityVerified: [42],
-    issues: [{ elementId: 44, code: "IdentityMismatch", message: "Captured identity changed." }],
-  };
-  submit.mockResolvedValue({ id: "action-1", state: "succeeded", result: data });
-  const result = await showInRevit(
-    {
-      ids: [43],
-      refs: [
-        { kind: "Element", elementId: 42, uniqueId: "captured-42" },
-        { elementId: 44, uniqueId: "old-44" },
-      ],
-      scope,
-    },
-    false,
-  );
-  expect(submit.mock.calls[0]?.[0]).toMatchObject({
-    key: "revit.context.show-elements",
-    target: { kind: "document", ref: documentRef },
-    input: {
-      elementIds: [43, 42, 44],
-      expectedUniqueIds: { 42: "captured-42", 44: "old-44" },
-      selectOnly: false,
-    },
-  });
-  expect(result).toMatchObject({ kind: "action", data });
-  expect(showElementsMessage(result)).toContain("Captured identity changed.");
-});
+test.each([2, 0])(
+  "paired IDs retain exact destination, identity and partial failures with %i hidden categories",
+  async (hiddenCategories) => {
+    const data = {
+      shown: [42],
+      missing: [43],
+      viewId: 9,
+      viewName: "3D",
+      note: "Selected 1.",
+      boxed: [42],
+      hiddenElementIds: [42],
+      lens: { basis: "UserView", viewId: 9 },
+      hidden: [
+        { what: "Links", count: 7, why: "NotEvaluated" },
+        { what: "Levels", count: 3, why: "NotEvaluated" },
+      ].slice(0, hiddenCategories),
+      identityVerified: [42],
+      issues: [{ elementId: 44, code: "IdentityMismatch", message: "Captured identity changed." }],
+    };
+    submit.mockResolvedValue({ id: "action-1", state: "succeeded", result: data });
+    const result = await showInRevit(
+      {
+        ids: [43],
+        refs: [
+          { kind: "Element", elementId: 42, uniqueId: "captured-42" },
+          { elementId: 44, uniqueId: "old-44" },
+        ],
+        scope,
+      },
+      false,
+    );
+    expect(submit.mock.calls[0]?.[0]).toMatchObject({
+      key: "revit.context.show-elements",
+      target: { kind: "document", ref: documentRef },
+      input: {
+        elementIds: [43, 42, 44],
+        expectedUniqueIds: { 42: "captured-42", 44: "old-44" },
+        selectOnly: false,
+      },
+    });
+    expect(result).toMatchObject({ kind: "action", data });
+    expect(showElementsMessage(result)).toContain("Captured identity changed.");
+    expect(showElementsMessage(result)).toContain("Still hidden in the view: 1 element.");
+  },
+);
 
 test("kind, linked path and conflicting expected identities refuse", () => {
   for (const refs of [
