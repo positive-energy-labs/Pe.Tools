@@ -1,4 +1,4 @@
-import { refusalOf } from "#/route/typed-route";
+import { reasonOf, refusalOf } from "#/route/typed-route";
 import { actionScopeKeys, useScopeKeys } from "@pe/kit/keys";
 import { useEffect, useState } from "react";
 import { routeAddress, canonicalRouteInput } from "@pe/agent-contracts";
@@ -96,7 +96,7 @@ export function AdoptionBody({ ctx }: { ctx: AdoptionContext }) {
       },
     },
     candidatesReading: coreReading,
-    candidatesIssue: core.state === "stale" || core.state === "refused" ? Error(refusalOf(core)!) : null,
+    candidatesIssue: core.state === "stale" || core.state === "refused" ? Error(reasonOf(core)) : null,
     actions: {
       patchAdopt(view, elementId, patch) {
         const row = data?.rows.find(

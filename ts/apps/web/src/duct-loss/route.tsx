@@ -1,4 +1,4 @@
-import { refusalOf } from "#/route/typed-route";
+import { reasonOf } from "#/route/typed-route";
 /** The graph owns state, acquisition, layout and keys; these adapters supply pane content. */
 import { useEffect, useId, useState, type ReactNode } from "react";
 import type { DuctLossContext } from "./route";
@@ -98,7 +98,7 @@ const setPage = (ctx: Body, patch: Partial<ReturnType<typeof pageOf>>) => {
 const result = (ctx: Body): DuctResult | undefined =>
   ctx.value.state === "ready" ? (ctx.value.value.result ?? undefined) : undefined;
 const status = (ctx: Body) =>
-  ctx.value.state === "ready" ? (ctx.value.value.error ?? "Calculating duct loss") : refusalOf(ctx.value)!;
+  ctx.value.state === "ready" ? (ctx.value.value.error ?? "Calculating duct loss") : reasonOf(ctx.value);
 
 function Wheel(body: Body) {
   const r = result(body);

@@ -109,9 +109,11 @@ export type Absent = Exclude<ReadingState<unknown>, { value: unknown }>;
 /** The value a reading state holds; undefined when it is value-less. */
 export const valueOf = <T>(state: ReadingState<T> | undefined): Immutable<T> | undefined =>
   state && "value" in state ? state.value : undefined;
-/** Why a reading or Work state is not ready, in the shell's words; null when it is. */
-export const refusalOf = (state: ReadingState<unknown>): string | null =>
-  state.state === "ready" ? null : "reason" in state && state.reason ? state.reason : state.state === "not-yet-run" ? "Start this Work to edit" : "Reading...";
+/** The shell's words for a reading or Work state that is not ready. */
+export const reasonOf = (state: ReadingState<unknown>): string =>
+  "reason" in state && state.reason ? state.reason : state.state === "not-yet-run" ? "Start this Work to edit" : "Reading...";
+/** Why a reading or Work state is not ready; null when it is. */
+export const refusalOf = (state: ReadingState<unknown>): string | null => state.state === "ready" ? null : reasonOf(state);
 export type EditHistory = { label: string; [key: string]: unknown };
 export type EditFailure = { code: string; message: string } | null;
 export type CellFacts = Pick<import("@pe/kit/lang/cell").HandleCellProps, "model" | "source" | "options" | "parse" | "format"> & { baseline?: unknown; readOnly?: boolean };

@@ -45,7 +45,7 @@ import { settleWork } from "./work-door-observation";
 import { freezePage } from "./freeze-page";
 import type { PlaceInput } from "./typed-place";
 import type { ReadingContext, UseSource } from "./source-contract";
-import { refusalOf, valueOf, type DrawContext, type EditFailure, type EditHistory, type TypedRoute } from "../route/typed-route";
+import { reasonOf, refusalOf, valueOf, type DrawContext, type EditFailure, type EditHistory, type TypedRoute } from "../route/typed-route";
 import type { ReadingState } from "@pe/agent-contracts";
 import { absentLine, failureLine } from "./reading-line";
 import { cancelAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
@@ -62,9 +62,9 @@ type Publication = DrawContext<any, any, any, any>["value"]["publication"];
 type Snapshot = ReadingState<any> & { readonly publication: Publication; readonly hash?: string };
 // The one-to-one mapping from a read's outcome (routes CONTRACTS.md, "Reading state"): a refusal over a
 // held value is `stale`, alone it is `refused`; a read in flight over a held value is `refreshing`, alone `reading`.
-const unavailable = (reason: string, value?: any, publication: Publication = null): Snapshot =>
+const unavailable = (reason: string, value?: unknown, publication: Publication = null): Snapshot =>
   value === undefined ? { state: "refused", reason, publication } : { state: "stale", value, reason, publication };
-const reading = (value?: any, publication: Publication = null): Snapshot =>
+const reading = (value?: unknown, publication: Publication = null): Snapshot =>
   value === undefined ? { state: "reading", publication } : { state: "refreshing", value, publication };
 const inFlight = (snapshot: Snapshot) => snapshot.state === "reading" || snapshot.state === "refreshing";
 
@@ -286,7 +286,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     const owner = [...owners.values()].find(o=>!o.ready);
     if (owner) return owner.problem ?? "Reading Work...";
     const core = spec.core ? reads.get(spec.core)?.snapshot : undefined;
-    if (spec.core && core?.state !== "ready") return core ? refusalOf(core)! : "Reading Value...";
+    if (spec.core && core?.state !== "ready") return core ? reasonOf(core) : "Reading Value...";
     return valueAfterWork();
   };
   /** A catalog command that carries the route's Work handle cannot run before that Work exists (a raw
@@ -311,7 +311,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     }
     for (const read of allReads) {
       const value = reads.get(read)?.snapshot ?? reading();
-      if (value.state !== "ready") return { kind: inFlight(value) ? "pending" : "blocked", reason: refusalOf(value)! };
+      if (value.state !== "ready") return { kind: inFlight(value) ? "pending" : "blocked", reason: reasonOf(value) };
     }
     // Recorded and fixture views can settle without granting native write authority.
     const reason = valueAfterWork();
@@ -400,7 +400,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
       const field = subjectSpec.field;
       const subject = spec.fields[field]!.schema.parse(search[field] === undefined ? page[field] : JSON.parse(String(search[field]))) as {kind:string;ids?:string[];active?:string};
       const core = reads.get(subjectSpec.read ?? spec.core!)?.snapshot;
-      if (core?.state !== "ready") return refused(core ? refusalOf(core)! : "Reading the subject roster");
+      if (core?.state !== "ready") return refused(core ? reasonOf(core) : "Reading the subject roster");
       const options=subjectSpec.options(core.value), ids=subject.kind==="all"?options.map(o=>o.id):subject.ids??[];
       if (ids.some(id=>!options.some(o=>o.id===id))) return refused(`A ${spec.subject?.noun ?? "Subject"} in this link is not in this model; choose it again from the roster`);
       if (canonicalRouteInput(subject)!==canonicalRouteInput(page[field])) return null;
@@ -487,7 +487,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     try {
       if (!basis() || [...owners.values()].some(o => !o.ready)) throw Error(basisRefusal() ?? "Work unavailable");
       const core = spec.core ? reads.get(spec.core)?.snapshot : undefined;
-      if (core?.state !== "ready") throw Error(core ? refusalOf(core)! : "Read the current Value before planning");
+      if (core?.state !== "ready") throw Error(core ? reasonOf(core) : "Read the current Value before planning");
       const issued=gate.invocation(gate.capture(`plan:${id}`),dependencies());
       if(!issued.ok) throw Error(issued.reason);
       token=issued.value; plans.set(id,token); reviews.delete(id);
@@ -652,19 +652,21 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
       // reading, refused and not-yet-run, so a body never meets a missing value. A pane with no read always draws.
       const value = pane.read ? mounted.value(pane.read) : undefined;
       // A failed basis outranks the wait it causes: the core pane says what failed, not that it is reading.
-      if (value && !("value" in value)) return pane.read === spec.core && mounted.failure() ? failureLine(mounted.failure()!) : absentLine(value);
+      const failed = pane.read === spec.core ? mounted.failure() : null;
+      if (value && !("value" in value)) return failed ? failureLine(failed) : absentLine(value);
       const core = mounted.value();
       const token = basis();
       const drawnOwners = new Map(owners);
       const handles = new Map([...owners].map(([id,o]) => [id,o.handle]));
       const docs = new Map([...owners].map(([id,o]) => [id,o.doc]));
       const ready = !!token && (!value || value.state === "ready");
-      const refusal = ready ? null : basisRefusal() ?? (value && refusalOf(value)) ?? "Read the current Value before editing";
+      const why = basisRefusal() ?? (value && refusalOf(value)) ?? "Read the current Value before editing";
+      const refusal = ready ? null : why;
       const doc = owners.get(own)?.doc ?? null;
       // Work readiness is the same union: absent Work has not run (Start runs it); a held doc that cannot be edited is refreshing or stale.
-      const state: ReadingState<any> = ready ? { state: "ready", value: doc } : owners.get(own)?.absent ? { state: "not-yet-run" }
-        : readiness().kind === "pending" ? (doc === null ? { state: "reading" } : { state: "refreshing", value: doc, reason: refusal! })
-        : doc === null ? { state: "refused", reason: refusal! } : { state: "stale", value: doc, reason: refusal! };
+      const state: ReadingState<unknown> = ready ? { state: "ready", value: doc } : owners.get(own)?.absent ? { state: "not-yet-run" }
+        : readiness().kind === "pending" ? (doc === null ? { state: "reading" } : { state: "refreshing", value: doc, reason: why })
+        : doc === null ? { state: "refused", reason: why } : { state: "stale", value: doc, reason: why };
       const ownerOf = (path: readonly string[], preferred?: string) => {
         const id = preferred ?? (Object.hasOwn(edits!.work.schema.shape,path[0]!) ? own : [...owners].find(([,o]) => Object.hasOwn(o.config.state.schema.shape,path[0]!))?.[0]);
         if (!id || !owners.has(id) || !Object.hasOwn(owners.get(id)!.config.state.schema.shape,path[0]!)) throw Error(`No owning Work for ${path.join(".")}`);

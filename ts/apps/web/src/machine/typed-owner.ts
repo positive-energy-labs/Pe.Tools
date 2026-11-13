@@ -4,7 +4,11 @@ import { refusalOf } from "../route/typed-route";
 import type { OpenContext } from "./open-fields";
 /** What the owner reads: a pane's draw context, or the mount itself where no pane is drawn (the companion
  *  controls), so the reading may be value-less. */
-export type OpenSource = Pick<OpenContext, "write" | "page"> & { readonly value: ReadingState<OpenContext["value"]["value"]> };
+export type OpenSource = Pick<OpenContext, "write"> & {
+  readonly value: ReadingState<OpenContext["value"]["value"]>;
+  // A pane's typed Page port, or the mount's own.
+  readonly page: OpenContext["page"] | Pick<import("../shell/typed-mount").TypedMount["page"], "read" | "pose" | "query">;
+};
 import type { OpenOwner } from "./context";
 const openActions = ["start", "open", "close", "stop", "restart"];
 export function useOpenTypedOwner(ctx: OpenSource, actions = openActions): OpenOwner {

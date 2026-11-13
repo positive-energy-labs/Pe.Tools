@@ -33,7 +33,7 @@ function Controls({ mount, children }: { mount: TypedMount; children: ReactNode 
   useSyncExternalStore(mount.subscribe, mount.revision, mount.revision);
   // The companion controls draw no pane: they read the mount, so the app's children stay drawn while the
   // machine reading is value-less (a pane's `draw` would hand them the shell's one line instead).
-  return <ControlOwner ctx={{ value: mount.value(), write: mount.action, page: mount.page } as unknown as OpenSource}>{children}</ControlOwner>;
+  return <ControlOwner ctx={{ value: mount.value(), write: mount.action, page: mount.page }}>{children}</ControlOwner>;
 }
 function ControlOwner({ ctx, children }: { ctx: OpenSource; children: ReactNode }) {
   const owner = useOpenTypedOwner(ctx);
