@@ -58,7 +58,7 @@ public static class Solve {
             layer1.Network.Segments.Select(s => new TraceSegment(s.A, s.B, s.Kind)).ToList(),
             layer1.Network.Openings,
             layer1.Facts.Select((f, i) => new TraceFace(i, f.Kind, f.BandWidthFt, f.OwnEdgeEmpty, f.FloatingFt, f.Narrow, Math.Round(f.Backed, 6))).ToList());
-        return new PartitionAnswer(input.Knee.Stamp, input.Knee.Searched, input.Knobs, rooms, acc, null,
+        return new PartitionAnswer(input.Knee.Evidence, input.Knee.Searched, input.Knobs, rooms, acc, null,
             input.Resolved, input.EnclosureSource, Math.Round(sw.Elapsed.TotalMilliseconds, 3), trace);
     }
 

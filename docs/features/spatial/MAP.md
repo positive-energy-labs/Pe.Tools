@@ -186,7 +186,7 @@ Verbs          Pea's Sweep/Slice/Probe/Partition read through the same scoped re
 5. Cache key and invalidation (landed 2026-10-28, `a8938b01`/`4ddf9264`; native 18/18, three-model gate
    and same-hold control within noise of main, PROVEN[session dev controlled, `probe-c`, `cf3ebbe3`/`466a0089`,
    2026-10-28 13:26–14:14Z]; [landing gate](READING-REVIT.md#u6-landing-gate-step-5-fixes-against-unchanged-main)):
-   retain `LinkedGeometryStore` and `Dirty`/`Fresh`; the root linked-path fix, rollback-delta
+   retain `LinkedGeometryStore`; kernel crusade 2 replaces `Dirty`/`Fresh` with explicit acquisition evidence. The root linked-path fix, rollback-delta
    filter fix and harness custody logging landed.
    Loaded document version is falsified as an edit key. The pack reuses only within one process.
 Step 3 (`f1343c26`) and step 6 (`61362210`) are ancestors of main `96cb356a`, checked 2026-11-02. Later overview/detailed work remains in flight; its user ruling does not certify a new native runtime.

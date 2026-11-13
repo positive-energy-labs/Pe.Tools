@@ -124,12 +124,12 @@ public sealed record Room(
 public sealed record Accounting(double ZoneSqft, double Accepted, double Held, double Void, double Excluded);
 
 /// <summary>
-///     <see cref="Stamp" /> carries one resolved gate and the enclosure is two filters, so both are
+///     <see cref="SpatialEvidence" /> carries one resolved gate and the enclosure is two filters, so both are
 ///     echoed here (round 2 ruling). <see cref="EnclosureSource" /> says where the declaration came
 ///     from: the request, the per-document parameter, or the default and why.
 /// </summary>
 public sealed record PartitionAnswer(
-    Stamp Stamp,
+    SpatialEvidence Evidence,
     Searched Searched,
     Knobs Knobs,
     IReadOnlyList<Room> Rooms,
