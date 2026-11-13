@@ -83,87 +83,25 @@
   },
   "verbs": {
     "read": {
-      "kind": "command",
-      "input": "none",
-      "label": "Read families",
-      "review": "shown",
-      "deps": {
-        "page": [],
-        "work": [
-          "writeIntent",
-          "scope",
-          "excluded",
-          "cells",
-          "patch",
-          "executionOptions",
-          "pod",
-          "takenAt"
-        ],
-        "readings": [
-          "value"
-        ]
-      },
-      "captures": [
-        "value"
-      ],
       "entry": "families.read",
-      "intent": "read"
+      "label": "Read families",
+      "effect": "SessionWrite",
+      "review": "none"
     },
     "stop": {
-      "kind": "command",
-      "input": "none",
-      "label": "Stop family read",
-      "review": "shown",
-      "deps": {
-        "page": [],
-        "work": [
-          "writeIntent",
-          "scope",
-          "excluded",
-          "cells",
-          "patch",
-          "executionOptions",
-          "pod",
-          "takenAt"
-        ],
-        "readings": [
-          "value"
-        ]
-      },
-      "captures": [
-        "value"
-      ],
       "entry": "families.cancel-read",
-      "intent": "stop"
+      "label": "Stop family read",
+      "effect": "SessionWrite",
+      "review": "none"
     },
     "apply": {
-      "kind": "command",
-      "input": "none",
-      "label": "Apply families",
-      "review": "shown",
-      "deps": {
-        "page": [],
-        "work": [
-          "writeIntent",
-          "scope",
-          "excluded",
-          "cells",
-          "patch",
-          "executionOptions",
-          "pod",
-          "takenAt"
-        ],
-        "readings": [
-          "value"
-        ]
-      },
-      "captures": [
-        "value"
-      ],
       "entry": "families.apply",
-      "intent": "apply"
+      "label": "Apply families",
+      "effect": "ModelWrite",
+      "review": "shown"
     }
   },
+  "band": [],
   "panes": {
     "main": {
       "label": "Families",
@@ -171,34 +109,13 @@
       "draws": [
         "value"
       ],
-      "verbs": [
-        "read",
-        "stop",
-        "apply"
-      ]
+      "verbs": []
     }
   },
   "layout": {
     "kind": "pane",
     "id": "main"
   },
-  "stages": {
-    "main": {
-      "word": "Families",
-      "panes": [
-        "main"
-      ],
-      "verbs": [
-        "read",
-        "stop",
-        "apply"
-      ]
-    }
-  },
-  "stageOrder": [
-    "main"
-  ],
-  "predicates": {},
   "cells": {},
   "workFields": {
     "excluded": {

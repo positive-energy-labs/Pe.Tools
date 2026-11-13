@@ -21,7 +21,7 @@ const room = subjectSchema(512);
  */
 export const fields = {
   room: field(room, { kind: "ids", ids: [] }, "subject", "push"),
-  stage: field(address.stage, "partition", "pose", "push"),
+  stage: field(address.stage, "partition", "stage", "push"),
   layers: field(address.layers, [], "pose"),
   viewport: field(address.viewport, null, "pose"),
   // The feedback mark pinned on the plan; empty pins the first mark of the picked rooms.

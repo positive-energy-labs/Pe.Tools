@@ -36,8 +36,7 @@ test.each(routes.map((module) => [module.data.address, module] as const))(
     const internal = [...Object.keys(data.verbs), ...Object.keys(data.panes)].filter(id => id.includes("-"));
     const words = [data.name, data.directory.label, ...(data.subject ? [data.subject.noun] : []),
       ...Object.values(data.verbs).map(verb => verb.label),
-      ...Object.values(data.panes).flatMap(pane => [pane.label, pane.purpose]),
-      ...Object.values(data.stages).map(stage => stage.word)];
+      ...Object.values(data.panes).flatMap(pane => [pane.label, pane.purpose])];
     for (const fixture of fixtures(module))
       if (module.spec.subject && fixture.read === (module.spec.subject.read ?? module.spec.core))
         words.push(...module.spec.subject.options(fixture.publication.value!.data).map(option => option.label));

@@ -1,6 +1,6 @@
 import { applyPatches, canonicalRouteInput, workKey } from "@pe/agent-contracts";
 import type { z } from "zod";
-import type { Immutable, RouteGraphJson } from "../../agent-contracts/src/route-kernel-data.ts";
+import type { Immutable, RouteStateGraph as RouteGraphJson } from "../../agent-contracts/src/route-kernel-data.ts";
 import {
   AcceptanceToken,
   InvocationToken,

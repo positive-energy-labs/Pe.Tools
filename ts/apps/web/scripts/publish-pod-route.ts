@@ -4,7 +4,7 @@ import { resolve, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
 import { publishPodRoute } from "../pod-route-authoring.ts";
-import type { RouteGraphJson } from "../../../packages/agent-contracts/src/route-kernel-data.ts";
+import type { RouteGraphWire as RouteGraphJson } from "../../../packages/agent-contracts/src/route-kernel-data.ts";
 
 /** node scripts/publish-pod-route.ts <absolute-pod-directory> <route-slug> [--check] */
 const [directory, slug, mode] = process.argv.slice(2);

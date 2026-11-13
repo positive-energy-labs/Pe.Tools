@@ -53,6 +53,7 @@
     }
   },
   "verbs": {},
+  "band": [],
   "panes": {
     "threads": {
       "label": "Threads",
@@ -91,20 +92,6 @@
     "minOtherSize": 643,
     "persist": "pe.sideWidth"
   },
-  "stages": {
-    "main": {
-      "word": "Pea",
-      "panes": [
-        "threads",
-        "chat"
-      ],
-      "verbs": []
-    }
-  },
-  "stageOrder": [
-    "main"
-  ],
-  "predicates": {},
   "cells": {},
   "workFields": {},
   "seeds": {},

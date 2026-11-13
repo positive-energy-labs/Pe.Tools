@@ -25,7 +25,7 @@ export * from "./duct-catalog.ts";
 export * from "./input-lane.ts";
 export * from "./recording-points.ts";
 
-export type { Immutable, RouteGraphJson } from "./route-kernel-data.ts";
+export type { Immutable, RouteGraphJson, RouteGraphWire, GateWhen } from "./route-kernel-data.ts";
 export type { BodyBindings, WorkPatch, PaneContext, BodyContext, ReadingState, Present } from "./route-kernel-bodies.ts";
 export type { HostRouteModule, HostAdmittedRoute, HostWorkRegistration } from "./host-route-admission.ts";
 export { jsonCodec } from "./route-kernel-codecs.ts";

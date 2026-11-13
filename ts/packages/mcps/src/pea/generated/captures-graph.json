@@ -71,6 +71,7 @@
     }
   },
   "verbs": {},
+  "band": [],
   "panes": {
     "captures": {
       "label": "Captures",
@@ -85,19 +86,6 @@
     "kind": "pane",
     "id": "captures"
   },
-  "stages": {
-    "main": {
-      "word": "Captures",
-      "panes": [
-        "captures"
-      ],
-      "verbs": []
-    }
-  },
-  "stageOrder": [
-    "main"
-  ],
-  "predicates": {},
   "cells": {},
   "workFields": {},
   "seeds": {},

@@ -1,7 +1,7 @@
 import type { z } from "zod";
 import type { ExecutionTarget } from "./target.ts";
 import type { WorkKey, WorkWriteAck } from "./route-state.ts";
-import type { Immutable, RouteGraphJson } from "./route-kernel-data.ts";
+import type { Immutable, RouteStateGraph as RouteGraphJson, RouteGraphJson as BodyGraph } from "./route-kernel-data.ts";
 import type { SubjectRefCode } from "./subject-ref.ts";
 
 export type SchemaTable = Readonly<Record<string, z.ZodType>>;
@@ -9,7 +9,7 @@ export type WorkSchema<G extends RouteGraphJson, S extends SchemaTable> = G exte
   work: { schema: infer K };
 }
   ? S[Extract<K, keyof S>]
-  : RouteGraphJson extends G
+  : BodyGraph extends G
     ? S[keyof S]
     : never;
 export type SchemaValue<S extends SchemaTable, K> = K extends keyof S ? z.output<S[K]> : never;
