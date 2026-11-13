@@ -11,7 +11,7 @@ export function renderSchedulesSkill(): string {
     "",
     "Read op:schedule.grid.snapshot with an exact project document. Its workspaceId selects route:schedules Work; its immutable reading supplies the native binding basis.",
     "Read the Work revision before proposing cells. Never author basis, takenAt, readback or receipts. The host binds readings with op:schedule.grid.bind and records each publication.",
-    "Use the graph's cell verbs to take, reject, reopen or delete a keyed cell. Apply cells reviews the exact Work and its bindings before schedule.grid.push. A changed Work revision makes that ticket stale. History is read-only.",
+    "Use the graph's cell verbs to take, reject, reopen or delete a keyed cell. Apply cells reviews the exact Work and its bindings before schedule.grid.push. A changed Work revision makes that ticket stale. The Timeline lists steps; undo and redo take the caller's own last one.",
     "Push refusals and unread readback counts are readings derived from host receipts. They are never Page or authored Work. A saved spec uses schedule.apply; capture uses schedule.capture.",
     "",
     "The Schedules route graph:",
