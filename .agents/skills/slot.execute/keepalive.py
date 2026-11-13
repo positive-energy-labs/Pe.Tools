@@ -10,7 +10,7 @@ visible and pausable in T3 rather than hidden in Windows Task Scheduler.
 Roster: .artifacts/keepalive/<threadId> holding the cadence in minutes. Idle = now minus the thread's last run completion in
 T3's state db. Not `updatedAt`: it moved about 30 minutes after a run ended, so wakes landed at 86 to 90 minutes, past the
 60-minute prompt cache (retro 2026-11-10, 8 of 9 wakes missed). A running thread is never woken. With a 10-minute tick and a
-45-minute cadence a wake lands 45 to 55 minutes after the last run. A thread with no input but wakes for 16 hours is
+45-minute cadence a wake lands 45 to 55 minutes after the last run. A thread with no input but wakes for 4 hours is
 disarmed, so a finished thread stops costing turns.
 """
 import datetime as dt

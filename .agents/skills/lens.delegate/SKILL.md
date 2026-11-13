@@ -25,7 +25,7 @@ prevents: "context rot: one session carrying everything, the main agent building
 - Make the shared base once (research, fixture, scaffold) and hand it to every thread.
 - Send one question per message, because a thread asked four questions returns one averaged answer. Send the follow-up to the same thread, unless the tier file's rule for that thread's model says to start a fresh one.
 - Reuse before you re-brief. A thread that just read the terrain is primed, so send it the next question instead of paying a new thread to read the same files.
-- A scheduled wake from the harness carries the checkpoint cadence and the time-box alarm. An agent never counts its own runs. A keepalive fires a fixed time after the thread's last run ends, inside the prompt cache's lifetime, and never while the thread runs. A thread arms it once at launch and never re-arms it; `execute` names the tool. An interval wake fires whether or not the thread was active, so it carries a checkpoint or an alarm, never a keepalive.
+- A scheduled wake from the harness carries the checkpoint cadence and the time-box alarm where the harness has one, and `execute` says what stands in where it has none. An agent never counts its own runs. A keepalive fires a fixed time after the thread's last run ends, inside the prompt cache's lifetime, and never while the thread runs. A thread arms it once at launch and never re-arms it; `execute` names the tool. An interval wake fires whether or not the thread was active, so it carries a checkpoint or an alarm, never a keepalive.
 - Research threads read primary sources only (official docs, source, specs), give one citation per claim, and file findings where `docs` says. Clone third-party source locally and sync it before reading, because grep beats the web.
 
 ## Replies
@@ -83,7 +83,7 @@ The second says what the owner needs:
 
 ## Writing and landing
 
-- A writing thread delivers a branch cut from its parent's tip. The parent merges it and reuses the child's stamp at that SHA, re-running only what a conflict touched. Never cherry-pick a child's work, because a cherry-pick re-authors it, hides its conflicts and erases who did it. A thread that wants to be measured works on a branch, because work committed straight to main cannot be attributed.
+- A writing thread delivers a branch cut from its parent's tip. The parent merges it and reuses the child's test result at that SHA, re-running only what a conflict touched. That result admits the branch to the merge and proves no row: in a run with a driver, only the driver stamps a proof row. Never cherry-pick a child's work, because a cherry-pick re-authors it, hides its conflicts and erases who did it. A thread that wants to be measured works on a branch, because work committed straight to main cannot be attributed.
 - Assign one writer per coupled production decision, even across files. Independent writers need settled contracts and separate seams.
 - Give each writing thread its own tree. If two threads edit one checkout, pin every claim to a commit, and discard any proof taken while the other thread was mid-write.
 - Authorship runs in parallel by default: every disjoint seam gets its writer at once, and only landing is ordered. A serial plan names the collision that forces it. Heavy proof (a full suite, a build, a native session, a host with a browser) is admitted by the machine reading `execute` names, never by a count of threads.
