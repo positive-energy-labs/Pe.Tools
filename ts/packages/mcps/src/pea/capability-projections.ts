@@ -168,7 +168,7 @@ function routeRows(spec: RouteStateSpec<z.ZodType>): Capability[] {
     key: `route:${spec.route}.edit`,
     kind: "route-doc",
     title: `${spec.title}: edit`,
-    description: `Edit shared Work with expectedRevision from the read. Each cell holds one staged edit; either author may replace it and the last writer wins, shown with its author. Attribution and host evidence are host-owned. Omit value to delete an authored key. To take back an edit, use route:${spec.route}.history, never a null or cleared value. ${spec.finds?.join(" ") ?? ""} ${scopeHint}`,
+    description: `Edit shared Work with expectedRevision from the read. Each cell holds one staged edit; either author may replace it and the last writer wins, shown with its author. Attribution and host evidence are host-owned. Omit value to delete an authored key. To take back your own edit, use route:${spec.route}.history, never a null or cleared value. ${spec.finds?.join(" ") ?? ""} ${scopeHint}`,
     finds:
       spec.route === "ducts"
         ? ["duct network", "network work"]
@@ -194,7 +194,7 @@ function routeRows(spec: RouteStateSpec<z.ZodType>): Capability[] {
     key: `route:${spec.route}.history`,
     kind: "route-doc",
     title: `${spec.title}: undo or redo`,
-    description: `Undo or redo the last step of this Work's one journal, the same step the user's Undo takes: undo restores the Work exactly as it was before the step (no null placeholders) as one new revision, and redo puts it back. The step may be yours or the user's; the result's write names who made it. Refuses, writing nothing, when the step's values changed elsewhere or nothing is left to undo. ${scopeHint}`,
+    description: `Undo or redo your own last step through the host Timeline, the door the user's Undo uses for theirs: undo restores what your step changed (no null placeholders) as one new revision, and redo puts it back. It never takes the user's step. Refuses, writing nothing, when a Revit write already consumed the step, when its values changed elsewhere, or when you have no step left. ${scopeHint}`,
     finds: ["undo", "redo", "revert", "take back", "roll back edit"],
     needs: "nothing",
     effect: "command",

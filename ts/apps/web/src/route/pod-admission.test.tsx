@@ -19,7 +19,7 @@ import { listPackages } from "../../../host/src/packages";
 import { createPodRoutes } from "../../../host/src/pod-routes";
 import { fileRouteDocumentStore } from "../../../host/src/route-document-store";
 import { graphRoute, registeredReads } from "../../../host/src/reads/routes";
-import { Publications } from "../../../host/src/reads/evaluator";
+import { Publications } from "../../../host/src/reads/publications";
 import { loadPodHostEntry, podArtifactSchema } from "../../../host/src/pod-artifact";
 import { createWorkFeedClient } from "../shell/work-feed-client";
 import { mountTypedRoute } from "../shell/typed-mount";
