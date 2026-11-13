@@ -1347,7 +1347,8 @@ internal sealed class RevitDataRequestService {
                 new RevitShowElementsIssue(id, "SelectionUnavailable", "Revit did not retain this target in the current selection.")));
             shown = shown.Where(selected.Contains).ToList();
             return new(shown, resolved.Missing, target.Id.Value(), target.Name, message,
-                boxedIds, hidden, resolved.IdentityVerified, issues);
+                boxedIds, hidden, resolved.IdentityVerified, issues,
+                new Lens(LensBasis.UserView, target.Id.Value()), RevitViewImageExporter.ReadHidden(document, target));
         }
         if (ids.Count == 0) return Answer(ui.ActiveView, "No requested target could be resolved; selection and view were left as they were.");
         string note;
@@ -1389,14 +1390,7 @@ internal sealed class RevitDataRequestService {
         return Answer(target, note);
     }
 
-    // The clutter a lens hides: everything that is not the model. A whole-house 3D view at Fine with the architect's
-    // links visible hung Revit's UI thread for 10+ minutes (2026-10-01); the lens stays at Medium, hidden lines, boxed.
-    private static readonly BuiltInCategory[] LensClutter = [
-        BuiltInCategory.OST_RvtLinks, BuiltInCategory.OST_VolumeOfInterest, BuiltInCategory.OST_Levels, BuiltInCategory.OST_Grids,
-        BuiltInCategory.OST_CLines, BuiltInCategory.OST_MEPSpaces, BuiltInCategory.OST_HVAC_Zones, BuiltInCategory.OST_Rooms, BuiltInCategory.OST_Areas,
-    ];
-
-    [Op("revit.context.lens", OpSubject.Elements, OpTouches.Geometry, Does = "Make or refresh this document's lens: a 3D view (default name 'Pe lens') with its section box around the elements, medium detail, hidden lines, and links, levels, grids, rooms, spaces and zones hidden. Answers the view id to pass to revit.context.show-elements. Adds or updates that one view and changes nothing else; the document may be headless.", Title = "Lens (Box a 3D View Around Elements)", Finds = ["lens", "3d", "view", "section-box", "box", "isolate", "zoom", "show", "focus", "look"], Actor = OpActor.Any, Cost = OpCost.Mutation, Tier = OpTier.Default, Example = "{ \"elementIds\": [12345, 67890] }")]
+    [Op("revit.context.lens", OpSubject.Elements, OpTouches.Geometry, Does = "Make or refresh this document's lens: a 3D view (default name 'Pe lens') with its section box around the elements, medium detail and hidden lines. Turns off supported clutter categories; hidden reports only switches that held, with host-document instance counts and PeDefault reason. It does not evaluate filters, phases, worksets, occlusion or linked-document contents. Answers the view id to pass to revit.context.show-elements. Adds or updates that one view and changes nothing else; the document may be headless.", Title = "Lens (Box a 3D View Around Elements)", Finds = ["lens", "3d", "view", "section-box", "box", "isolate", "zoom", "show", "focus", "look"], Actor = OpActor.Any, Cost = OpCost.Mutation, Tier = OpTier.Default, Example = "{ \"elementIds\": [12345, 67890] }")]
     private static RevitLensData LensCore(RevitLensRequest request, RevitDocument activeDocument, SessionWrite scope) {
         var document = activeDocument.Value;
         var requested = (request.ElementIds ?? []).Distinct().ToList();
@@ -1431,7 +1425,7 @@ internal sealed class RevitDataRequestService {
         }
         view.DetailLevel = ViewDetailLevel.Medium;
         view.DisplayStyle = DisplayStyle.HLR;
-        foreach (var category in LensClutter) {
+        foreach (var (category, _) in RevitViewImageExporter.LensCategories) {
             var id = new ElementId(category);
             try { if (view.CanCategoryBeHidden(id)) view.SetCategoryHidden(id, true); } catch (Autodesk.Revit.Exceptions.ApplicationException) { }
         }
@@ -1446,7 +1440,8 @@ internal sealed class RevitDataRequestService {
                 [BridgeOperationExceptions.Issue("$", "LensRefused", $"The transaction for '{name}' was not committed.",
                     "Close any modal dialog or edit mode in Revit and retry.")]);
         return new RevitLensData(view.Id.Value(), name, created, boxes.Count,
-            $"{(created ? "Made" : "Refreshed")} '{name}' boxed around {boxes.Count} element(s); pass viewId {view.Id.Value()} to revit.context.show-elements.");
+            $"{(created ? "Made" : "Refreshed")} '{name}' boxed around {boxes.Count} element(s); pass viewId {view.Id.Value()} to revit.context.show-elements.",
+            new Lens(LensBasis.PeDefault, view.Id.Value()), RevitViewImageExporter.ReadHidden(document, view, HiddenWhy.PeDefault));
     }
 
     private static BridgeOperationException CaptureTargetError() => BridgeOperationExceptions.Conflict(

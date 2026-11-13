@@ -16,6 +16,30 @@ namespace Pe.Revit.DocumentData.AgentContext;
 ///     and then undone through the op's <see cref="SessionWrite" /> scope; the unfocused read commits nothing.
 /// </summary>
 public static class RevitViewImageExporter {
+    // One policy for setting the lens and disclosing category switches on any referenced view.
+    // A whole-house Fine 3D view with architectural links hung the UI thread for 10+ minutes (2026-10-01).
+    // The Pe default stays boxed at Medium with these categories off; their counts disclose that tradeoff.
+    public static IReadOnlyList<(BuiltInCategory Category, HiddenKind Kind)> LensCategories { get; } =
+        Array.AsReadOnly(new[] {
+            (BuiltInCategory.OST_RvtLinks, HiddenKind.Links),
+            (BuiltInCategory.OST_VolumeOfInterest, HiddenKind.ScopeBoxes),
+            (BuiltInCategory.OST_Levels, HiddenKind.Levels),
+            (BuiltInCategory.OST_Grids, HiddenKind.Grids),
+            (BuiltInCategory.OST_CLines, HiddenKind.ReferencePlanes),
+            (BuiltInCategory.OST_MEPSpaces, HiddenKind.Spaces),
+            (BuiltInCategory.OST_HVAC_Zones, HiddenKind.Zones),
+            (BuiltInCategory.OST_Rooms, HiddenKind.Rooms),
+            (BuiltInCategory.OST_Areas, HiddenKind.Areas),
+        });
+
+    /// <summary>Reports only category switches, with host-document instance counts. Other visibility causes are not evaluated.</summary>
+    public static IReadOnlyList<Hidden> ReadHidden(Document document, View view, HiddenWhy why = HiddenWhy.NotEvaluated) =>
+        LensCategories.Where(item => view.CanCategoryBeHidden(new ElementId(item.Category))
+                                     && view.GetCategoryHidden(new ElementId(item.Category)))
+            .Select(item => new Hidden(item.Kind,
+                new FilteredElementCollector(document).OfCategory(item.Category).WhereElementIsNotElementType().GetElementCount(), why))
+            .ToList();
+
     public static RevitViewImageData Export(Document document, View view, int pixelSize) {
         var producedPath = ExportCropped(document, view, pixelSize, out var refusal);
         return BuildResult(document, view, producedPath, pixelSize, TryModelRect(view), null,
@@ -334,6 +358,8 @@ public static class RevitViewImageExporter {
             new FileInfo(producedPath).Length,
             frame.PixelWidth,
             frame.PixelHeight,
+            new Lens(LensBasis.UserView, view.Id.Value()),
+            ReadHidden(document, view),
             RevitViewImageData.SmallImageWarning(frame.PixelWidth, frame.PixelHeight, requestedPixelSize),
             scale,
             modelRect,
