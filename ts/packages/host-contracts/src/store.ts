@@ -1,4 +1,8 @@
 /**
+ * The functions here take bare paths. `kinds.ts` is the door over them (routes CONTRACTS K-A2):
+ * a declared kind mints the path and carries the rule. The store sweeps move every caller there;
+ * what is left exported here afterwards is `kinds.ts`'s own imports.
+ *
  * The store kernel (ADR 0039; ADR 0037 rules 5 to 7): one atomic write for machine state, one write
  * door into a home, and one decode at the trust boundary that carries the two failure policies.
  * Nothing here throws on a file that does not decode, so no stored file can stop the host.
@@ -151,7 +155,7 @@ export function writeHomeFile(
  * it returns only when the blob reads back as these bytes, and throws otherwise. A caller removes
  * or overwrites the original only after this returned.
  */
-function restBlob(blobRoot: string, sha256: string, bytes: Uint8Array): string {
+export function restBlob(blobRoot: string, sha256: string, bytes: Uint8Array): string {
   const blob = join(blobRoot, "sha256", sha256);
   const rests = () => {
     const copy = readOrNull(blob);
@@ -219,7 +223,7 @@ export type StoredRead<T> =
   | { kind: "ok"; value: T; sha256: string }
   | { kind: "missing" }
   | { kind: "kept"; reason: string }
-  | { kind: "discarded"; reason: string };
+  | { kind: "discarded"; reason: string; blob: string };
 
 const oneLine = (why: string) => why.replace(/\s+/g, " ").slice(0, 500);
 
@@ -300,7 +304,7 @@ function refuse(path: string, bytes: Buffer | null, policy: StoredPolicy, why: s
   } catch {
     // A held file stays; its bytes rest in the blob store and its notice does not repeat.
   }
-  return { kind: "discarded", reason } as const;
+  return { kind: "discarded", reason, blob } as const;
 }
 
 /**
@@ -417,15 +421,15 @@ export function discardStored(
   path: string,
   policy: Extract<StoredPolicy, { class: "discard" }>,
   reason: string,
-): void {
+): Exclude<StoredRead<never>, { kind: "ok" }> {
   let bytes: Buffer | null;
   try {
     bytes = readOrNull(path);
   } catch (error) {
     // Not a readable file (a folder, a held file): it is kept, and the notice says why.
-    return void refuse(path, null, policy, `${reason} (${message(error)})`);
+    return refuse(path, null, policy, `${reason} (${message(error)})`);
   }
-  if (bytes) refuse(path, bytes, policy, reason);
+  return bytes ? refuse(path, bytes, policy, reason) : { kind: "missing" };
 }
 
 /**
@@ -443,8 +447,8 @@ ${producer}`);
 export const derivedName = (key: string, bytes: Uint8Array | string) => `${key}.${sha256Hex(bytes)}`;
 
 /** An owner refuses one derived file it decoded: discard class (ADR 0039), one notice, the bytes rest in the blob store. */
-export const discardDerived = (store: DerivedStore, path: string, reason: string) =>
-  discardStored(path, { class: "discard", place: "Derived file", notices: store.notices, blobRoot: store.blobRoot }, reason);
+export const discardDerived = (store: DerivedStore, path: string, reason: string): void =>
+  void discardStored(path, { class: "discard", place: "Derived file", notices: store.notices, blobRoot: store.blobRoot }, reason);
 
 /**
  * The file a key names, proven by its own hash. One whose name does not match its bytes is skipped

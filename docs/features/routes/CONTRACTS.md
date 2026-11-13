@@ -8,7 +8,17 @@ Paths: `C/` is `ts/packages/agent-contracts/src/`, `W/` is `ts/apps/web/src/`, `
 
 **K-A1. Store, day one (ST1).** No exported signature in `store.ts` changes. `readStored` returns `{ kind: "kept", reason }` for any file it could not read, in either class. A `discard` removes the file only after `restBlob` returned; if the copy fails the result is `kept` and one notice posts. `readDerived` never deletes: a name that does not match its bytes is skipped with one notice.
 
-**K-A2. Kinds (ST4a), from storage.md C1.** `Kind<T, At, Args>` with `at: "home" | "state" | "state-kept"`; `Kind.in(root, ...args)` is the only way to a `StoredFile<T, At>`; `read(file)`, `writeHome(file, bytes, expectSha256): HomeWrite`, `writeState(file, bytes)`. `Stored<T>` is `ok | missing | kept | set-aside`. No exported function takes or returns a bare `string` path.
+**K-A2. Kinds (ST4a), as built on k2/store.** Home `ts/packages/host-contracts/src/kinds.ts`, imported as `@pe/host-contracts/kinds`. `Kind<T, At, Args>` with `at: "home" | "state" | "state-kept"`; `Kind.in(root, ...args)` is the only way to a `StoredFile<T, At>`; `read(file)`, `writeHome(file, bytes, expectSha256): HomeWrite`, `writeState(file, bytes)`. `Stored<T>` is `ok | missing | kept | set-aside`, and `set-aside` carries `blob: StatePath`. No function in `kinds.ts` takes or returns a bare `string` path. What the plan text did not have, each found while building it:
+
+- A kind is declared with `stateKind`, `keptStateKind` or `homeKind({ place, schema, segments, parse?, quiet? })`. A segment that is not one name (`..`, a separator, empty) throws at `in`.
+- A state kind's root is `StateRoot`, minted only by `stateTree(root)` in `service-identity.ts`; the host's is `hostState()` in `H/host-ownership.ts`. `stateTree` is the one table of machine-state paths, and its rows are `StatePath`.
+- A home kind's root is `HomeRoot`, a proven `Home` bound to this machine: `stateTree(root).home(home)`. The binding is where `writeHome` gets the blob root and a kept read gets the notice file, so no caller passes either.
+- A state file an owner refuses after decoding: `setAside(file, reason)`, one notice. A person's clear: `clear(file)`, no notice, returns the blob. Both keep the bytes; `clear` throws when it cannot.
+- Append logs: `stateLog({ place, schema, segments })`, then `readLines(log)` and `appendLine(log, value)`.
+- Derived folders: `derivedIn(homeRoot | stateRoot)`, then `readDerivedIn`, `writeDerivedIn`, `refuseDerived`. A refused derived file in a home is kept with a notice; in machine state it is set aside.
+- Notices and blobs: `notices(machine)`, `note(machine, notice)`, `rest(machine, bytes)`, `rested(machine, sha256)`. `rest` is the one blob writer.
+- `store.ts` keeps the functions that take bare paths until the store sweeps (ST4b to d) move their callers; a sweep deletes each export when its last outside caller goes. `kinds.ts` holds no filesystem write, so `OWNERS.fsWrites` still names `store.ts` alone.
+- Kernel rules every kind inherits (K-A1 plus two): no write lands over a state file that was kept until its bytes rest in the blob store, and a passing lock on a read is waited out.
 
 **K-A3. Timeline (C1), from chrome.md 3.1.** Home `agent-contracts/src/work-timeline.ts`. `StepRef = { work: WorkKey; revision: number; label: string } | { home: string; sha256: string; label: string }`. `WorkTimeline = { rows; undo: StepRef | null; redo: StepRef | null; refusal: { undo: string | null; redo: string | null } }`. `WorkTimelineArgs = { works: readonly WorkKey[] }`. `WorkStepRequest = { direction: "undo" | "redo"; works: readonly WorkKey[]; expected: StepRef }`. The host refuses when `expected` is not the step it would take. Rows are in host order; the browser never sorts by `at`. `by` is `"human" | "pea"`.
 
@@ -16,7 +26,7 @@ Paths: `C/` is `ts/packages/agent-contracts/src/`, `W/` is `ts/apps/web/src/`, `
 
 **K-A5. Home-write row (ST7a against C2), from storage.md C3.** `HomeWriteRow = { kind: "home-write"; place; path; sha256; priorSha256: string | null; by: Caller; at: string; owner; tier: "user" | "project" | "firm"; home }`. `HomeWriteSource = { rows(filter: { owner: string; homes: readonly string[] }): HomeWriteRow[]; step(ref: { home: string; sha256: string }, by: Caller): HomeWrite }`, declared in `apps/host/src/tiered-settings.ts`. The Timeline arm is `HomeWriteRow & { undoable: boolean }`. C2 leaves one registration point for a second source; ST7a registers it.
 
-**K-A6. Places (C9 against ST4a).** `placesKind: Kind<PlacesFile, "state", []>` at `state\places.json`, declared in `apps/host/src/places.ts`, written only by `writeState`. Focus stays per window in `sessionStorage` (`pe.place.focus`).
+**K-A6. Places (C9 against ST4a).** `placesKind: Kind<PlacesFile, "state", []>` at `state\places.json`, declared in `apps/host/src/places.ts` with `stateKind` from `@pe/host-contracts/kinds`, minted by `placesKind.in(hostState())`, written only by `writeState`. Focus stays per window in `sessionStorage` (`pe.place.focus`).
 
 The five lines K-A4 names (findings Work as a Timeline member):
 
