@@ -140,12 +140,10 @@ function rulingIssue(r: Ruling, issues: readonly StageIssue[]) {
 
 export function DuctsPicture(props: DuctsPictureProps & DuctsPictureExtra) {
   const { snapshot } = props;
-  if (!snapshot)
-    return (
-      <p className="p-3 text-ink-2">
-        {props.ctx.read(network).status === "pending" ? "Reading ducts..." : "No snapshot"}
-      </p>
-    );
+  if (!snapshot) {
+    const read = props.ctx.read(network);
+    return "value" in read ? <p className="p-3 text-ink-2">No snapshot</p> : props.ctx.absent(read);
+  }
   // Route UI stays retained; capture buffers, clipped meshes and layer descriptors do not.
   return (
     <VisibleRouteResource>

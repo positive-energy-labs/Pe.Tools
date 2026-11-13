@@ -559,7 +559,7 @@
       "label": "Fans",
       "purpose": "Open fan ports",
       "draws": [
-        "value"
+        "roster"
       ],
       "verbs": []
     },

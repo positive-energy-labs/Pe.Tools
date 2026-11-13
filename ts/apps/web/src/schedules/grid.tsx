@@ -6,14 +6,14 @@ import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { scheduleGridRouteState, scheduleReadingSchema } from "@pe/agent-contracts";
 import { ScheduleGridWorkspace, type ScheduleGridState } from "../route/schedules/workspace";
 import type { SchedulesDrawContext } from "./route";
-import { namesOf } from "../route/typed-route";
+import { namesOf, refusalOf } from "../route/typed-route";
 
 export function SchedulesGrid({ ctx }: { ctx: SchedulesDrawContext }) {
   const [failure, setFailure] = useState<string | null>(null);
   const data = ctx.value.value,
     shown = data?.reading;
   const page = ctx.page.read();
-  const refusal = !ctx.cells.ready ? ctx.cells.refusal : data?.editRefusal;
+  const refusal = refusalOf(ctx.cells.state) ?? data?.editRefusal;
   const snapshot = shown ? scheduleReadingSchema.parse(shown).snapshot : null;
   const state: ScheduleGridState = {
     at: (key) => {
@@ -43,7 +43,7 @@ export function SchedulesGrid({ ctx }: { ctx: SchedulesDrawContext }) {
       : undefined,
     snapshot,
     refused: data?.outcome.refused ?? {},
-    freshness: ctx.value.current ? "current" : "changed",
+    freshness: ctx.value.state === "ready" ? "current" : "changed",
     table: {
       ...page.table,
       sorts: [...page.table.sorts],
@@ -83,18 +83,11 @@ export function SchedulesGrid({ ctx }: { ctx: SchedulesDrawContext }) {
         </Button>
         <PreviewAction handle={ctx.write("push")} label="Apply cells" />
       </ButtonGroup>
-      {!ctx.value.current && (data || ctx.value.status === "pending") && (
-        <OutcomeLine kind="advisory" label="Schedule reading" says={ctx.value.reason} />
-      )}
       {failure && <OutcomeLine kind="error" label="Schedule grid" says={failure} />}
       {data?.outcome.readbackError && (
         <OutcomeLine kind="error" label="Schedule readback" says={data.outcome.readbackError} />
       )}
-      {!data && !ctx.value.current && ctx.value.status !== "pending" ? (
-        <OutcomeLine kind="error" label="Schedule reading unavailable" says={ctx.value.reason} />
-      ) : (
-        <ScheduleGridWorkspace state={state} onRefused={setFailure} onHidden={setFailure} />
-      )}
+      <ScheduleGridWorkspace state={state} onRefused={setFailure} onHidden={setFailure} />
     </>
   );
 }

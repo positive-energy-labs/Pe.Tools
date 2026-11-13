@@ -1,3 +1,4 @@
+import { valueOf } from "./typed-route";
 // @vitest-environment jsdom
 import { elementSubject } from "@pe/ducts-domain/work-subject";
 import { stableFanKey } from "../ducts/sheet/model";
@@ -50,7 +51,7 @@ test("JZ H04 typed Fans picture demands exact elements and reach, refuses docume
   const { open, tree, resize, mounts, registry } = pictureJourney();
   try {
     const a = open("a");
-    await waitFor(() => expect(a.value(), JSON.stringify(a.value())).toMatchObject({current:true}));
+    await waitFor(() => expect(a.value(), JSON.stringify(a.value())).toMatchObject({ state: "ready" }));
     // The picture pane is the kernel's, loaded lazily: it is measured once it has mounted.
     const view = render(tree(a));
     await waitFor(() => { resize(); expect(io.call).toHaveBeenCalled(); });
@@ -58,7 +59,7 @@ test("JZ H04 typed Fans picture demands exact elements and reach, refuses docume
     fireEvent.click(view.getByRole("button", { name: "Read detailed" }));
     await waitFor(() => expect(io.call.mock.calls.some(([, req]) => req.contextRepresentation === "meshes")).toBe(true));
     const detail = io.call.mock.calls.find(([, req]) => req.contextRepresentation === "meshes")!;
-    const sheet = (a.value().value as any).open;
+    const sheet = (valueOf(a.value()) as any).open;
     const context = a.page.read().context !== "off";
     const expected = [...new Set<number>([sheet.overview.fan.unitId, ...sheet.elements.walkedElementIds,
       ...(context ? sheet.elements.beyond.flatMap((unit: { elementIds: number[] }) => unit.elementIds) : []),
@@ -66,7 +67,7 @@ test("JZ H04 typed Fans picture demands exact elements and reach, refuses docume
     expect(detail[1].elementIds, "H04: detail names only the opened walk and declared neighbours").toEqual(expected);
     expect(detail[1]).toMatchObject({ contextPaddingFt: 10, focusOnly: false });
     expect(detail[2]).toMatchObject({ bridgeSessionId: "h04", openDocumentId: "a" });
-    const b = open("b"); await waitFor(() => expect(b.value().current).toBe(true));
+    const b = open("b"); await waitFor(() => expect(b.value().state === "ready").toBe(true));
     view.rerender(tree(b)); resize();
     await waitFor(() => expect(detail[2].signal.aborted).toBe(true));
     const count = io.call.mock.calls.length;
@@ -75,7 +76,7 @@ test("JZ H04 typed Fans picture demands exact elements and reach, refuses docume
     await waitFor(() => expect(io.call.mock.calls.length).toBeGreaterThan(count));
     expect(io.call.mock.calls.at(-1)![2]).toMatchObject({ bridgeSessionId: "h04", openDocumentId: "b" });
     expect(io.call.mock.calls.at(-1)![1].contextRepresentation).toBe("meshes");
-    const empty = open("empty", true); await waitFor(() => expect(empty.value().current).toBe(true));
+    const empty = open("empty", true); await waitFor(() => expect(empty.value().state === "ready").toBe(true));
     view.rerender(tree(empty)); resize();
     const before = io.call.mock.calls.length;
     expect(view.queryByRole("button", { name: "Read detailed" }), "H04: no element scope offers no detail action").toBeNull();
@@ -121,7 +122,7 @@ test("JM B03/B14/B18 named Fans roster and a live gesture survive typed Page pro
   const { open, tree, resize, mounts, registry } = pictureJourney();
   try {
     const a = open("jm-pose");
-    await waitFor(() => expect(a.value().current).toBe(true));
+    await waitFor(() => expect(a.value().state === "ready").toBe(true));
     const view = render(tree(a));
     await waitFor(() => { resize(); expect(io.orbit?.read()).not.toBeNull(); });
     const orbit = io.orbit!;
@@ -294,7 +295,7 @@ test("JZ Fans Revert removes A from Plan before staging B",async()=>{
    const user=userEvent.setup();
    const edit=async(id:string,value:string)=>{
      const subject=elementSubject((walk.nodes.find((n:any)=>n.id===Number(id)) ?? walk.segments.find((n:any)=>n.id===Number(id)))!);
-     const row=await vi.waitFor(()=>{const row=document.querySelector(`[data-sheet-address="componentDrops:${subject}"]`);expect(row, JSON.stringify({cells:[...document.querySelectorAll("[data-sheet-address]")].map(e=>e.getAttribute("data-sheet-address")),text:document.body.textContent?.slice(-3500),value:mount.value().status})).toBeTruthy();return row!;});
+     const row=await vi.waitFor(()=>{const row=document.querySelector(`[data-sheet-address="componentDrops:${subject}"]`);expect(row, JSON.stringify({cells:[...document.querySelectorAll("[data-sheet-address]")].map(e=>e.getAttribute("data-sheet-address")),text:document.body.textContent?.slice(-3500),value:mount.value().state})).toBeTruthy();return row!;});
      const input=within(row as HTMLElement).getByRole("textbox");
      await user.clear(input);await user.type(input,`${value}{Enter}`);
    };
@@ -302,25 +303,25 @@ test("JZ Fans Revert removes A from Plan before staging B",async()=>{
    await vi.waitFor(()=>expect(mount.owner()?.handle?.revision).toBe(2),{timeout:20000});
    phase("r2");
    act(()=>mount.refresh());
-   await vi.waitFor(()=>expect(mount.value().current).toBe(true),{timeout:20000});
+   await vi.waitFor(()=>expect(mount.value().state === "ready").toBe(true),{timeout:20000});
    fireEvent.click(await screen.findByRole("button",{name:"None"}));
    fireEvent.click(await screen.findByRole("option",{name:/MUAS-1.*1 staged/}));
    await vi.waitFor(()=>expect(mount.owner()?.handle?.revision).toBe(3),{timeout:20000});
    phase("r3");
    act(()=>mount.refresh());
-   await vi.waitFor(()=>expect(mount.value().current).toBe(true),{timeout:20000});
+   await vi.waitFor(()=>expect(mount.value().state === "ready").toBe(true),{timeout:20000});
    // A staged cell's own clear verb returns it to the source underneath (the old row's Revert).
    const ds1=elementSubject((walk.nodes.find((n:any)=>n.id===14577394) ?? walk.segments.find((n:any)=>n.id===14577394))!);
    fireEvent.click(within(document.querySelector(`[data-sheet-address="componentDrops:${ds1}"]`) as HTMLElement).getByRole("button",{name:/clear/i}));
    await vi.waitFor(()=>expect(mount.owner()?.handle?.revision).toBe(4),{timeout:20000});
    phase("r4");
    act(()=>mount.refresh());
-   await vi.waitFor(()=>expect(mount.value().current).toBe(true),{timeout:20000});
+   await vi.waitFor(()=>expect(mount.value().state === "ready").toBe(true),{timeout:20000});
    await edit("13493812","0.01");
    await vi.waitFor(()=>expect(mount.owner()?.handle?.revision).toBe(5),{timeout:20000});
    phase("r5");
    act(()=>mount.refresh());
-   await vi.waitFor(()=>expect(mount.value().current).toBe(true),{timeout:20000});
+   await vi.waitFor(()=>expect(mount.value().state === "ready").toBe(true),{timeout:20000});
    phase("before Plan");
    fireEvent.click(await screen.findByRole("button",{name:"plan Write to Revit"}));
    await vi.waitFor(()=>expect(trace.results).toHaveLength(1),{timeout:20000});

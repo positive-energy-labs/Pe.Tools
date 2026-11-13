@@ -32,7 +32,7 @@ function FanWalk({ ctx, snapshot, picture }: Pick<Props, "ctx" | "picture"> & { 
           pose: (patch) => void ctx.page.pose(patch, "named"),
           select: (key) => void ctx.selection.set([{ kind: "focus", id: key }]),
           work: { doc: ctx.value.value?.design ?? null },
-          source: { version: snapshot.sourceVersion ?? "", current: ctx.value.current },
+          source: { version: snapshot.sourceVersion ?? "", current: ctx.value.state === "ready" },
         }}
         snapshot={snapshot}
         sheet={sheet}

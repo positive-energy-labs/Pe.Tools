@@ -3,7 +3,7 @@ import type { DocumentKey, SubjectRefCode } from "./subject-ref.ts";
 import type { RevitDetailSpaceScene } from "@pe/host-contracts/generated";
 import type { z } from "zod";
 import type { AdmittedRoute } from "./route-kernel-admission.ts";
-import type { ReadingSnapshot } from "./route-kernel-bodies.ts";
+import type { ReadingState } from "./route-kernel-bodies.ts";
 import type { Immutable, RouteGraphJson } from "./route-kernel-data.ts";
 import type {
   AcceptanceToken,
@@ -172,7 +172,7 @@ export class ResolvedGeometryRead<T> {
 export interface ReadHandle<T> {
   readonly lifetime: "read";
   readonly key: ResolvedReadKey;
-  read(): ReadingSnapshot<T>;
+  read(): ReadingState<T>;
   release(): void;
 }
 export interface ReadCapability {
@@ -199,7 +199,7 @@ export interface ReadingsSubscriptionCapability {
   subscribe<T>(
     request: ResolvedRead<T>,
     token: AcceptanceToken,
-    deliver: (value: ReadingSnapshot<T>) => void,
+    deliver: (value: ReadingState<T>) => void,
   ): () => void;
 }
 /** Journal-owned status and cancellation; no invoke/re-execute function escapes. */

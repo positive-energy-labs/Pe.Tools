@@ -11,7 +11,6 @@ import { PointerCite } from "#/shell/pointer-list";
 import { ductElements, pointerRefs } from "../../identity.ts";
 import { subscribe as knobsChanged } from "#/knobs/knobs";
 import { useRevitSubjectProps } from "#/revit/element-menu";
-import { LoadingContext } from "#/route/loading-context";
 import { useAdmittedSubject } from "#/shell/subject";
 import {
   DUCT_UNIT_KINDS,
@@ -51,8 +50,9 @@ import {
   type ComponentProps,
 } from "react";
 import { z } from "zod";
-import type { DuctsDrawContext } from "../../route.ts";
-import { roster as rosterRead, network as networkSource } from "../../route.ts";
+import type { DuctsDrawContext, DuctsReads, DuctsSystemsContext } from "../../route.ts";
+import { roster as rosterRead, network as networkSource, pricing as pricingSource } from "../../route.ts";
+import { refusalOf } from "#/route/typed-route";
 import { airflowOptions } from "../../airflow";
 import { cellFocusOf, cellFocusSubject, focusedElement, issueOf, issueSubject, selectedKeys } from "../../cell-focus";
 import {
@@ -82,9 +82,12 @@ import type { PictureOverlayProps } from "#/route/slots/picture/overlay";
 import { RulesTree, ruleOfIds } from "./rules-pane";
 import { SystemColours } from "./settings";
 import { SystemTree } from "./tree-sidebar";
-type NetworkContext = DuctsDrawContext;
+// Every ducts pane shares this data, whichever read its pane names: pricing is read as a second reading.
+type NetworkContext = DuctsReads;
 function useNetworkData(ctx: NetworkContext) {
-  const workDoc = ctx.value.value?.design ?? null;
+  const pricing = ctx.read(pricingSource);
+  const held = "value" in pricing ? pricing.value : undefined;
+  const workDoc = held?.design ?? null;
   const target = ctx.target;
   const page = ctx.page.read();
   const roster = useValue(ctx.read(rosterRead));
@@ -101,14 +104,13 @@ function useNetworkData(ctx: NetworkContext) {
   const doc = target?.kind === "document" ? target.ref : null;
   const networkRead=ctx.read(networkSource);
   // The existing drawing views accept mutable arrays; decoded Values stay immutable.
-  const snapshot = (networkRead.value ?? null) as
+  const snapshot = ("value" in networkRead ? networkRead.value : null) as
     | import("@pe/agent-contracts").DuctsNetworkData
     | null;
-  const pricing = ctx.value;
   const pricingData = useValue(pricing);
-  const priced = pricing.current ? pricingData : undefined;
+  const priced = pricing.state === "ready" ? pricingData : undefined;
   const edit = useMemo(() => stagedDucts(workDoc ?? null, workDoc ?? neutralFansWork), [workDoc]);
-  const seen = ctx.value.value?.effectiveDesign ?? null;
+  const seen = held?.effectiveDesign ?? null;
   const attentionDoc = doc ? `${doc.session}/${doc.openId}` : "ducts:unbound";
   const selection = useMemo(
     () => Atom.make<ReadonlySet<SubjectKey>>(new Set(selectedKeys(page.selected.map(({ id }) => id)))),
@@ -170,7 +172,7 @@ function useNetworkData(ctx: NetworkContext) {
     return choice.success ? (
       <Button
         label="Choose write scope"
-        refusal={ctx.cells.refusal}
+        refusal={refusalOf(ctx.cells.state)}
         onPress={async () => (await stageScope(choice.data)) ?? null}
       >
         Choose write scope
@@ -198,12 +200,12 @@ function useNetworkData(ctx: NetworkContext) {
       revision: ctx.cells.basis?.workRevision ?? null,
       write: (patches: RouteStatePatch[]) => write(patches),
     },
-    captureSource: networkRead.current && doc && version ? { document: doc, version } : null,
+    captureSource: networkRead.state === "ready" && doc && version ? { document: doc, version } : null,
     scopeCommand,
-    fanRoster: ctx.value.value?.fanRows ?? [],
+    fanRoster: held?.fanRows ?? [],
     edit: pendingCount(workDoc ?? null, snapshot?.store, snapshot ?? { nodes: [], segments: [] }),
     coverage: coverage
-      ? { ...coverage, reading: networkRead.status === "pending" ? systems : [] }
+      ? { ...coverage, reading: networkRead.state === "reading" || networkRead.state === "refreshing" ? systems : [] }
       : null,
   };
 }
@@ -267,21 +269,7 @@ function NetworkFrame({
             }}
           >
             {children}
-            {!data.snapshotRead.value && (
-              <LoadingContext
-                name="Ducts"
-                says={data.document ? "Reading ducts..." : "No document bound"}
-                error={data.snapshotRead.status === "failed" ? data.snapshotRead.reason : null}
-                busy={data.snapshotRead.status === "pending"}
-              >
-                {null}
-              </LoadingContext>
-            )}
-            {!ctx.value.current && "reason" in ctx.value && ctx.value.reason && (
-              <p role="status" className="p-2 text-ink-2">
-                {ctx.value.reason}
-              </p>
-            )}
+            {"value" in data.snapshotRead ? null : ctx.absent(data.snapshotRead)}
           </SubjectTextContext.Provider>
 
 
@@ -321,13 +309,12 @@ function ReadCoverage({ coverage }: { coverage: Coverage }) {
     </p>
   );
 }
-export function SystemsPane({ ctx }: { ctx: DuctsDrawContext }) {
+export function SystemsPane({ ctx }: { ctx: DuctsSystemsContext }) {
   const search = useRouteSearchSlice((search) => search);
   const data = useNetworkData(ctx);
   const { snapshot, priced, page, systems, active, work, analysis, captureSource, coverage } = data;
   const { drawn, nameOf } = useTreeProjection(snapshot, priced, work.doc, systems);
-  const rosterState = ctx.read(rosterRead);
-  const roster = useValue(rosterState);
+  const roster = useValue(ctx.value);
   const systemRows = analysis?.systems ?? (roster?.rows ?? NO_SYSTEMS);
   const notes = analysis?.notes ?? NO_NOTES;
   const { systemSearch, systemSort } = page;
@@ -363,7 +350,7 @@ export function SystemsPane({ ctx }: { ctx: DuctsDrawContext }) {
             </div>
           }
           systems={systemRows}
-          value={ctx.value.current ? ctx.value : rosterState}
+          value={ctx.value}
           fansOf={fansOf}
           nameOf={nameOf}
           notes={notes}
@@ -374,11 +361,6 @@ export function SystemsPane({ ctx }: { ctx: DuctsDrawContext }) {
         />
       </Scroll>
       <ReadCoverage coverage={coverage} />
-      {(rosterState.status === "failed" ? rosterState.reason : null) ? (
-        <p role="alert" data-tone="caution">
-          {rosterState.status === "failed" ? rosterState.reason : null}
-        </p>
-      ) : null}
     </>
   );
   return (
@@ -622,10 +604,10 @@ export function NetworkPicture({ ctx, picture }: PictureOverlayProps<DuctsDrawCo
         <div className="relative min-h-0 flex-1">
           <DuctsPicture
             ctx={ctx}
-            snapshot={data.snapshotRead.value ? snapshot : null}
+            snapshot={"value" in data.snapshotRead ? snapshot : null}
             priced={priced}
             analysis={analysis}
-            source={{ version: data.captureSource?.version ?? "", current: data.snapshotRead.current }}
+            source={{ version: data.captureSource?.version ?? "", current: data.snapshotRead.state === "ready" }}
             subject={data.subject}
             work={work}
             picture={picture}
@@ -643,7 +625,7 @@ export function NetworkPicture({ ctx, picture }: PictureOverlayProps<DuctsDrawCo
             identity={{
               system: chosen ? { ...chosen, note: notes[chosen.key] } : null,
               census,
-              refreshing: !data.snapshotRead.current,
+              refreshing: data.snapshotRead.state !== "ready",
               open: () => {},
               breakdown:
                 activeCritical?.split && activeCritical.total
@@ -753,8 +735,8 @@ export function RulesBody({ ctx, wide = false }: { ctx: DuctsDrawContext; wide?:
           landing={landing}
           nameOf={nameOf}
         />
-      ) : ctx.value.status === "pending" ? (
-        // Loading only while pending; a settled refusal (nothing to price) is the frame's reason line.
+      ) : ctx.value.state === "refreshing" ? (
+        // Loading only while a newer pricing is read; a settled refusal is the shell's line.
         <p className="text-ink-2 p-2">Loading rules</p>
       ) : null}
     </>
