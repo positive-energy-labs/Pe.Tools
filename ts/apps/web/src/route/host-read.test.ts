@@ -3,6 +3,34 @@ import { z } from "zod";
 import { contract } from "@pe/agent-contracts/handle";
 import { hostRead } from "./host-read.ts";
 
+test("union read inputs retain member validation", () => {
+  const input = z.union([
+    z.object({ kind: z.literal("a"), a: z.string() }),
+    z.object({ kind: z.literal("b"), b: z.number() }),
+  ]);
+  const read = hostRead(contract("example.union", { input, data: z.number(), uses: [] }));
+  const member: z.output<typeof input> = read.input.parse({ kind: "a", a: "valid" });
+  expect(member).toEqual({ kind: "a", a: "valid" });
+  expect(read.input).toBe(input);
+  expect(read.input.safeParse({ kind: "b", b: "invalid" }).success).toBe(false);
+  expect(read.request?.({ kind: "b", b: 2 })).toEqual({ read: "example.union", args: { kind: "b", b: 2 } });
+});
+
+test("discriminated unions and transforms pass through unchanged", () => {
+  const input = z.discriminatedUnion("kind", [
+    z.object({ kind: z.literal("a"), a: z.string() }),
+    z.object({ kind: z.literal("b"), b: z.number() }),
+  ]);
+  const read = hostRead(contract("example.discriminated", { input, data: z.number(), uses: [] }));
+  expect(read.input).toBe(input);
+  expect(read.input.parse({ kind: "b", b: 2 })).toEqual({ kind: "b", b: 2 });
+  const transform = z.string().transform((value) => value.length);
+  const transformed = hostRead(contract("example.transform", { input: transform, data: z.number(), uses: [] }));
+  expect(transformed.input).toBe(transform);
+  expect(transformed.input.parse("abc")).toBe(3);
+  expect(transformed.request?.("abc")).toEqual({ read: "example.transform", args: 3 });
+});
+
 test("browser read inputs validate fields and bind the target only on the host request", () => {
   const read = hostRead(contract("example.read", {
     input: z.strictObject({ count: z.number().int().positive(), target: z.object({ kind: z.literal("host") }) }),
