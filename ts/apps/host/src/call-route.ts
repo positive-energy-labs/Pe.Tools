@@ -74,7 +74,7 @@ import { ductsReadings } from "./ducts-readings.ts";
 
 import type { FamiliesReader } from "./families-reader.ts";
 import { readFamily, type FamilyActionDependencies } from "./family-actions.ts";
-import { operationDefinition, gatewayTarget, requireEligibleCaller } from "./gateway-actions.ts";
+import { operationDefinition, gatewayTarget, requireEligibleCaller } from "./gateway-catalog.ts";
 import { httpProblems, isDoorFailure } from "./http-problems.ts";
 import { HostInputContext } from "./input-context.ts";
 import type { InstancesActionDependencies } from "./instances-actions.ts";
