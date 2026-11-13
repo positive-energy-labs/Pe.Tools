@@ -459,7 +459,7 @@ export function commandTarget(
   input: Record<string, unknown>,
   document?: import("./target.ts").DocumentRef,
 ): import("./target.ts").ExecutionTarget {
-  const command: Command | undefined = commands[key as keyof typeof commands];
+  const command: Command | undefined = hostActions[key as keyof typeof hostActions];
   if (command?.target) return command.target(input);
   if (command?.needs === "nothing") return { kind: "host" };
   if (document)

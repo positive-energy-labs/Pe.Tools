@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { generateCommandTable, commandTableSource } from "./command-axes.ts";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import { tsOnlyOperationCatalog } from "@pe/host-contracts/operation-types";
-import { hostActions } from "../src/semantic-actions.ts";
+import { hostActions, commandTarget } from "../src/semantic-actions.ts";
 
 test("native effect changes flow through generation into browser metadata", () => {
   const source = [...hostOpCatalog, ...tsOnlyOperationCatalog];
@@ -47,4 +47,13 @@ test("Takeoffs native model writes have a generated plan and the existing write 
     expect(table[key]).toMatchObject({ effect: "ModelWrite", plan: key + ".preview" });
     expect(hostActions[key].writeBoundary).toMatchObject({ phase: "apply", previewKey: key + ".preview" });
   }
+});
+
+test("direct handles select targets and bind Work from the same command declaration", () => {
+  for (const key of ["page.bind", "ops.read", "action.cancel"]) expect(commandTarget(key, {})).toEqual({ kind: "host" });
+  const ref = { session: "s", openId: "o" };
+  const work = { key: { binding: "host", route: "family", target: null }, revision: 9 } as const;
+  const bound = hostActions["family.read"].work.bind({ readId: crypto.randomUUID(), expectedRevision: 9 }, work);
+  expect(hostActions["family.read"].input.parse(bound)).toEqual(bound);
+  expect(commandTarget("family.read", bound, ref)).toEqual({ kind: "document", ref });
 });
