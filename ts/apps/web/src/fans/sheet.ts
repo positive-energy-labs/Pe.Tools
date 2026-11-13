@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { DUCT_UNIT_ROLES, type fansSheetData, type Immutable, type Resolved } from "@pe/agent-contracts";
+import { DUCT_UNIT_ROLES, routeAddress, subjectCode, type fansSheetData, type Immutable, type Resolved } from "@pe/agent-contracts";
 import { local, parameter, store, type CellLayer, type EnumChoice, type SheetSlot } from "@pe/agent-contracts/slots";
 import { fanWriteCells } from "@pe/ducts-domain/staged";
 import { suggestKind, suggestRole } from "@pe/ducts-domain/roster";
@@ -7,7 +7,6 @@ import { sheetSystems } from "@pe/ducts-domain/sheet/scoped-snapshot";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { elementSubject, workElementId } from "@pe/ducts-domain/work-subject";
 import { elementLabeler } from "@pe/ducts-domain/element-label";
-import { ductsLink } from "../ducts/identity.ts";
 import { ductsSettings, ENGINE_DEFAULT_NO_SHARED_ROOT, NO_SHARED_ROOT } from "@pe/agent-contracts/setting-owners";
 
 /*
@@ -79,13 +78,16 @@ export const fansSheet = {
     if (read?.ductsRevision == null) return null;
     const firm = read.sheetView.firm;
     const snapshot = snapshotOf(read);
+    const systems = snapshot ? sheetSystems(snapshot) : [];
     return {
       // Slice 2b: without a shared root the firm layer is refused and the design runs on the engine seed.
       says: `Priced with the /ducts design, Work r${read.ductsRevision}${!firm ? "" : "refused" in firm
         ? `: ${ENGINE_DEFAULT_NO_SHARED_ROOT}. ${NO_SHARED_ROOT}`
         : !firm.present ? " over defaults where no home states a value"
         : ` over firm ${firm.version} · ${firm.path.split(/[\\/]/).at(-1)}`}`,
-      href: ductsLink(snapshot ? sheetSystems(snapshot) : [], search),
+      href: routeAddress("ducts").link(systems.length ? {
+        system: { kind: "ids", ids: systems.map(name => subjectCode({ keyKind: "system-name", key: name })) },
+      } : {}, Object.fromEntries(["target", "fixture", "thread"].flatMap(key => typeof search[key] === "string" ? [[key, search[key]]] : []))),
     };
   },
   bindings: {
