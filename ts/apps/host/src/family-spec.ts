@@ -11,6 +11,7 @@ import { command, io, refused, type CommandExecutor } from "./command-executor.t
 import { guardSend } from "./guards.ts";
 import { runPods, podContext, type PodDependencies } from "./family-actions.ts";
 import { podFolder, podMemberKind } from "./settings.ts";
+import { reconcilePackageChanges } from "./package-lifecycle.ts";
 import { writeHome } from "@pe/host-contracts/kinds";
 import { parseFamilyPdf } from "@pe/mcps/family-pdf";
 import { readDerivedJson } from "@pe/mcps/held-parse";
@@ -353,6 +354,7 @@ export function familySpecExecutor(deps: PodDependencies = {}, bridge?: RevitBri
                 );
             if (!wrote.ok)
               throw Error(`Spec asset '${asset.path}' changed while it was being written.`);
+                await reconcilePackageChanges();
               }
           return { path: asset.path, sha256: asset.blob.digest };
             }),

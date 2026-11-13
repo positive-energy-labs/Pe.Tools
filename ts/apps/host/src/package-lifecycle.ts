@@ -42,7 +42,14 @@ export function bindPackageLifecycle(
 ) {
   serving = lifecycle;
 }
-/** Import is the explicit activation action, including imports concurrent with the initial census. */
+/** Host-authored Pod changes reconcile before reporting success, including changes during startup. */
+export async function reconcilePackageChanges() {
+  const lifecycle = serving;
+  if (!lifecycle) return;
+  await lifecycle.refresh();
+}
+
+/** Import also records the person's explicit on choice. Ordinary writes preserve that choice. */
 export async function activateImportedPackage(id: string, podsRoot: string) {
   const lifecycle = serving;
   if (podsRoot !== productPodsRootPath() || !lifecycle) return;
@@ -199,7 +206,13 @@ export function createPackageLifecycle(
     for (const pod of listing.packages) {
       const id = `pod:${pod.id}`;
       const signature = createHash("sha256")
-        .update(JSON.stringify(pod.members.map((m) => [m.path, m.sha256])))
+        .update(
+          JSON.stringify([
+            pod.directory,
+            pod.diagnostics,
+            pod.members.map((m) => [m.path, m.sha256]),
+          ]),
+        )
         .digest("hex");
       if (signatures.get(id) === signature) continue;
       signatures.set(id, signature);

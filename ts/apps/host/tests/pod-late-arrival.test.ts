@@ -17,6 +17,145 @@ import {
 import * as filesystem from "node:fs/promises";
 import * as packages from "../src/packages.ts";
 import { createServer } from "node:http";
+import { settle } from "./effect-test.ts";
+import { writeMember, saveMember } from "../src/settings.ts";
+import { installArchive, writeZip, exportPod } from "../src/pod-transfer.ts";
+import * as store from "@pe/host-contracts/kinds";
+
+test("an export written inside a Pod reconciles its new archive member", async () => {
+  await exportPod({ pod: "existing", archivePath: join(root, "user/Pods/existing/copy.zip") }, { machine: stateMachine(root) });
+  expect(content.lifecycle.listing().packages.find(p => p.id === "existing")!.members.map(m => m.path)).toContain("copy.zip");
+});
+
+test("failed import reconciles rollback after its Pod was admitted", async () => {
+  const writeState = store.writeState;
+  let wasActive = false;
+  vi.spyOn(store, "writeState").mockImplementation((...args) => {
+    if (args[0].path.includes("pod-imports")) {
+      wasActive = content.lifecycle.active("rollback");
+      throw Error("import record failed after activation");
+    }
+    return writeState(...args);
+  });
+  const archive = writeZip(new Map([["pod.json", Buffer.from('{"id":"rollback"}')]]));
+  await expect(
+    installArchive(archive, "rollback.zip", undefined, { machine: stateMachine(root) }),
+  ).rejects.toThrow("import record failed");
+  expect(wasActive).toBe(true);
+  expect(content.lifecycle.inventory()).not.toContainEqual(
+    expect.objectContaining({ id: "pod:rollback" }),
+  );
+  expect(content.lifecycle.listing().packages.map((p) => p.id)).not.toContain("rollback");
+});
+
+test("REVIEW: host member write must reconcile before the next inventory", async () => {
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const { lstat: original } =
+    await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
+  vi.spyOn(filesystem, "lstat").mockImplementation(async (...args) => {
+    if (String(args[0]) === join(root, "user", "Pods")) {
+      entered.resolve();
+      await release.promise;
+    }
+    return original(...args);
+  });
+  // Only the lifecycle's metadata scan uses the mocked import; the member door uses its own IO.
+  content.lifecycle.requestRefresh();
+  await entered.promise;
+  let writeReturned = false;
+  const writing = settle(
+    writeMember({ pod: "existing", path: "settings/new.json", content: "{}" }),
+  ).then((result) => {
+    writeReturned = true;
+    return result;
+  });
+  try {
+    await expect
+      .poll(() =>
+        filesystem
+          .readFile(join(root, "user/Pods/existing/settings/new.json"), "utf8")
+          .catch(() => null),
+      )
+      .toBe("{}");
+    // The bytes landed, but success must wait for the held census rather than use discovery.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(writeReturned).toBe(false);
+    release.resolve();
+    await writing;
+    await inventory();
+    await routes.list();
+    expect(
+      content.lifecycle
+        .listing()
+        .packages.find((p) => p.id === "existing")!
+        .members.map((m) => m.path),
+    ).toContain("settings/new.json");
+    await settle(
+      saveMember({
+        pod: "existing",
+        path: "settings/new.json",
+        content: '{"saved":true}',
+        expectedSha256: createHash("sha256").update("{}").digest("hex"),
+      }),
+    );
+    const saved = content.lifecycle
+      .listing()
+      .packages.find((p) => p.id === "existing")!
+      .members.find((m) => m.path === "settings/new.json")!;
+    expect(Buffer.from(saved.bytes).toString()).toBe('{"saved":true}');
+  } finally {
+    release.resolve();
+    await writing;
+    await content.lifecycle.refresh();
+  }
+});
+
+test("REVIEW: late duplicate identity withdraws previously active Pod", async () => {
+  await put(firm, "copy/pod.json", '{"id":"existing"}');
+  await put(firm, "copy/README.md", "before");
+  await content.lifecycle.refresh();
+  expect(
+    content.lifecycle
+      .listing()
+      .packages.every((p) => p.diagnostics.some((d) => d.code === "DuplicatePodId")),
+  ).toBe(true);
+  expect(content.lifecycle.active("existing")).toBe(false);
+  await rm(join(firm, "Pods/copy"), { recursive: true });
+  await content.lifecycle.refresh();
+  expect(content.lifecycle.active("existing")).toBe(true);
+});
+
+test("REVIEW: discovery queued after an action cannot overwrite it", async () => {
+  const captured = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  let calls = 0;
+  const lifecycle = createPackageLifecycle({
+    machine: stateMachine(root),
+    packages: async () => {
+      const listing = await packages.listPackages(join(root, "user/Pods"));
+      if (++calls === 2) {
+        captured.resolve();
+        await release.promise;
+      }
+      return listing;
+    },
+  });
+  try {
+    await lifecycle.ready;
+    await put(join(root, "user"), "late/pod.json", '{"id":"late"}');
+    const action = lifecycle.refresh();
+    await captured.promise;
+    for (let i = 0; i < 10; i++) lifecycle.requestRefresh();
+    release.resolve();
+    await action;
+    expect(lifecycle.active("late")).toBe(true);
+    expect(calls).toBe(2);
+  } finally {
+    release.resolve();
+    await lifecycle.close();
+  }
+});
 
 vi.mock("node:fs/promises", async (load) => {
   const actual = await load<typeof import("node:fs/promises")>();

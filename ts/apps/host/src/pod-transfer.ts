@@ -23,7 +23,7 @@ import {
 } from "./packages.ts";
 import { productPodsRootPath } from "./product-paths.ts";
 import { scratchPageDirectory } from "./page-libraries.ts";
-import { activateImportedPackage } from "./package-lifecycle.ts";
+import { activateImportedPackage, reconcilePackageChanges } from "./package-lifecycle.ts";
 import { sha256Hex as sha256, validatePageHtml, writeArtifact } from "./page-artifacts.ts";
 import { StepFailure } from "./command-executor.ts";
 import { rollbackHomeMembers, podMemberKind, type HomeMemberUndo } from "./settings.ts";
@@ -140,6 +140,8 @@ export async function writePodExport(
     file,
     Buffer.from(prepared.bytesBase64, "base64"),
   );
+  // The caller's export destination may itself be a Pod member.
+  await reconcilePackageChanges();
   return prepared.result;
 }
 
@@ -398,6 +400,7 @@ export async function installArchive(
     };
   } catch (error) {
     const kept = rollbackHomeMembers(writes);
+    if (writes.length) await reconcilePackageChanges();
     // Remove only empty directories, never resumed members or a later writer's files.
     for (const path of [...directories].sort((a, b) => b.length - a.length)) {
       try { await rmdir(path); }
