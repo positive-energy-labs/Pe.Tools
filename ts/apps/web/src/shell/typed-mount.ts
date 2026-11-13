@@ -74,7 +74,7 @@ const reading = (value?: unknown, publication: Publication = null): Snapshot =>
 const inFlight = (snapshot: Snapshot) => snapshot.state === "reading" || snapshot.state === "refreshing";
 
 /** Typed routes execute declarations directly. No graph admission, body slots or reading scheduler. */
-/** The host refused a Work write because the Work moved past the revision the write named. */
+/** The Work moved past the revision a press named: the host said so, or this mount's own fence did. */
 class StaleRevision extends Error {}
 export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerprint: RouteFingerprint,
   ports: { work?: WorkJournalDoor; sources?: Record<string, UseSource>; findings?: Parameters<typeof createTimelineClient>[0]; timeline?: TimelineClient; readings?: Pick<Readings, "subscribe"> } = {}) {
@@ -399,8 +399,14 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     const issued = gate.invocation(gate.capture("draw"), dependencies());
     return renderedBasis = issued.ok ? issued.value : null;
   };
-  /** Each owner's unacknowledged press from this mount: the press a stale refusal may be explained by (D17). */
-  const sending = new WeakMap<object, Promise<{ from: number; to: number } | null>>();
+  // D17, the own-press rule (implementor ruling 2026-11-13, reopenable). `sending` is each owner's
+  // press still in flight from this mount; `pressed` is each owner's presses this mount has had
+  // acknowledged, keyed by the revision they left from, with when they were made and acknowledged
+  // on one clock.
+  // ponytail: `pressed` grows by one small entry per acknowledged press for the mount's life.
+  const sending = new WeakMap<object, Promise<void>>();
+  const pressed = new WeakMap<object, Map<number, { to: number; made: number; landed: number }>>();
+  let clock = 0;
   const submit = async (record: typeof owners extends Map<string, infer R> ? R : never, request: WorkWrite, token: InvocationToken) => {
     requireWritable();
     const result = await settleWork(door.submitWork(record.scope, request, token));
@@ -737,16 +743,21 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
           const groups = new Map<string,RouteStatePatch[]>();
           for (const p of patches) { const id=ownerOf(p.path.map(String),preferred); groups.set(id,[...(groups.get(id)??[]),p]); }
           await Promise.all([...groups].map(async ([id, patches]) => {
-            // D17: a press made while this mount's earlier press on the same Work is unacknowledged was
-            // drawn at the same revision, so the host refuses it as stale for the person's own edit.
-            // That one refusal is retried once, on the revision the press ahead of it produced and
-            // rebuilt on the acknowledged doc. The fence holds for everything else: a press ahead of
-            // nothing, or whose Work was moved by anything but the press ahead of it, stays refused
-            // (C122), and nothing waits before its first send.
+            // D17, the own-press rule. A press names the revision its cell was drawn at. When that
+            // revision is refused as stale, by the host or by this mount's own fence, the press is
+            // rebuilt once on the current doc, but only when every revision change since its drawing
+            // is this mount's own press, made before this one and still unacknowledged when this one
+            // was made: the person pressed twice on one drawing before the page could follow.
+            // Anything else keeps it refused, with its input retained: another writer, a press made
+            // after this one (C122: a delayed press never lands over a newer one), a Page that moved
+            // while it waited, and a press already acknowledged when this one was made (H30, C121:
+            // a drawing kept past an acknowledged edit is an old basis and never recomputes).
+            // Nothing waits before its first send.
             const record=drawnOwners.get(id)!, drawn=handles.get(id)!, ahead=sending.get(record), admission=record.lease.entry;
-            type Ack={from:number;to:number}|null;
-            let settle:(ack:Ack)=>void=()=>{}, ack:Ack=null;
-            const mine=new Promise<Ack>(resolve=>{settle=resolve;});
+            const made=++clock, acknowledged=pressed.get(record)??new Map<number,{to:number;made:number;landed:number}>();
+            pressed.set(record,acknowledged);
+            let settle:()=>void=()=>{};
+            const mine=new Promise<void>(resolve=>{settle=resolve;});
             sending.set(record,mine);
             let intent: ReturnType<typeof admission.retain> | undefined;
             const build=(handle:WorkHandle,doc:unknown)=>{
@@ -759,23 +770,29 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
               const write:WorkWrite={kind:"apply",expectedRevision:handle.revision,press:crypto.randomUUID(),patches:normalized,...z.object({label:z.string(),meta:z.json().optional()}).parse(edits!.describe({...detail,label}))};
               return {write,label};
             };
-            // `retried` is the retry's own invocation: its Value is still refreshing after the press ahead of it.
-            const dispatch=async(write:WorkWrite,handle:WorkHandle,retried:InvocationToken|null)=>{
+            // `rebuilt` is the rebuilt press's own invocation: its Value is still refreshing after the presses before it.
+            const dispatch=async(write:WorkWrite,handle:WorkHandle,rebuilt:InvocationToken|null)=>{
               requireWritable();
-              if (!retried && (!basis() || !gate.current(token))) throw Error("Stale accepted Work basis");
-              if (owners.get(id)!==record || !record.ready || canonicalRouteInput(record.handle)!==canonicalRouteInput(handle)) throw Error("Owning Work changed since this cell was drawn");
-              return (await submit(record,write,retried??token)).revision;
+              if (!rebuilt && (!basis() || !gate.current(token))) throw new StaleRevision("Stale accepted Work basis");
+              if (owners.get(id)!==record || !record.ready || canonicalRouteInput(record.handle)!==canonicalRouteInput(handle)) throw new StaleRevision("Owning Work changed since this cell was drawn");
+              const sent=await submit(record,write,rebuilt??token);
+              acknowledged.set(sent.write.base,{to:sent.revision,made,landed:++clock});
+              return sent.revision;
             };
             try {
               const first=build(drawn,docs.get(id));
               intent=admission.retain(first.write,first.label);
               notify();
-              let to:number;
-              try { to=await dispatch(first.write,drawn,null); }
+              try { await dispatch(first.write,drawn,null); }
               catch(error) {
-                const prior=error instanceof StaleRevision&&ahead?await ahead:null;
-                if (!prior||prior.from!==drawn.revision||owners.get(id)!==record||!record.ready||record.handle?.revision!==prior.to) throw error;
-                // The retry belongs to the Page the press was made on. A Page that moved while the press
+                if (!(error instanceof StaleRevision)) throw error;
+                // An earlier press still in flight is acknowledged, or refused, before this one is judged.
+                if (ahead) await ahead;
+                // Walk from the drawn revision across this mount's own presses that were in flight when this one was made.
+                let reached=drawn.revision;
+                for (let step=acknowledged.get(reached); step&&step.made<made&&step.landed>made; step=acknowledged.get(reached)) reached=step.to;
+                if (reached===drawn.revision||owners.get(id)!==record||!record.ready||record.handle?.revision!==reached) throw error;
+                // The rebuild belongs to the Page the press was made on. A Page that moved while the press
                 // waited (another subject, or the same one again) retired that press: it stays refused.
                 const now=gate.read();
                 if (!now||now.pageEpoch!==token.pageEpoch||now.pageRevision!==token.pageRevision) throw error;
@@ -788,14 +805,13 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
                 admission.discard(intent);
                 intent=kept;
                 notify();
-                to=await dispatch(next.write,record.handle,issued.value);
+                await dispatch(next.write,record.handle,issued.value);
               }
               admission.discard(intent);
-              ack={from:drawn.revision,to};
             } catch(error) {
               if (intent) admission.refuse(intent,error instanceof Error?error.message:String(error));
               throw error;
-            } finally { if (sending.get(record)===mine) sending.delete(record); settle(ack); notify(); }
+            } finally { if (sending.get(record)===mine) sending.delete(record); settle(); notify(); }
           }));
           return null;
         } catch(error) { return {code:"refused",message:error instanceof Error?error.message:String(error)}; }

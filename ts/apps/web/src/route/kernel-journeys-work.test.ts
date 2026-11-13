@@ -1115,6 +1115,67 @@ test("JZ cut two Places retain independent Page pose selection Value and inactiv
 // D17 (fans-reds H1): the person edits a cell and picks the Write scope before that edit's
 // acknowledgement lands. Both cells were drawn at one revision; the pick must not be refused for
 // the page's own unacknowledged edit ("the document moved to r2").
+test("D17 review probe: an invalid rebase keeps the refused input, and only it", async () => {
+  const j = await journey();
+  let held: ReturnType<typeof gate> | undefined;
+  try {
+    await j.start();
+    expect(await j.cells().at(["flows", terminalA]).stage({ cfm: 240, source: "old" })).toBeNull();
+    await j.ready();
+    j.holdStream();
+    held = j.holdWrite();
+    const cells = j.cells();
+    const clear = cells.at(["flows", terminalA]).clear();
+    const change = cells.patch([{ path: ["flows", terminalA, "edit", "value", "source"], value: "new" }]);
+    await held.entered.promise;
+    await vi.waitFor(() => expect(j.writes).toHaveLength(3));
+    held.release.resolve();
+    expect(await clear).toBeNull();
+    expect(await change).toMatchObject({ code: "refused", message: "the patched document is invalid" });
+    expect(j.m.pendingEdits()).toEqual([expect.objectContaining({ status: "refused" })]);
+  } finally { held?.release.resolve(); j.flushStream(); await j.close(); }
+});
+
+test("D17 review probe: a rebuild mints no authority after a Page move", async () => {
+  const j = await journey();
+  let held: ReturnType<typeof gate> | undefined;
+  try {
+    await j.start();
+    j.holdStream();
+    held = j.holdWrite();
+    const cells = j.cells();
+    const original = j.m.workBasis()!;
+    const edit = cells.at(["flows", terminalA]).stage({ cfm: 240 });
+    const pick = cells.at(["writeIntent"]).stage({ walk: { unitId: 1, portIndex: 0 } });
+    await held.entered.promise;
+    await vi.waitFor(() => expect(picks(j)).toHaveLength(1));
+    j.m.page.subject({ kind: "ids", ids: [] });
+    expect(j.m.current(original)).toBe(false);
+    held.release.resolve();
+    expect(await edit).toBeNull();
+    const result = await pick;
+    expect((await hostWork(j)).doc).not.toHaveProperty("writeIntent.edit");
+    expect(result).toMatchObject({ code: "refused" });
+  } finally { held?.release.resolve(); j.flushStream(); await j.close(); }
+});
+
+test("D17 review probe: the stream ahead of the reply still permits the pending scope pick", async () => {
+  const j = await journey();
+  let held: ReturnType<typeof gate> | undefined;
+  try {
+    await j.start();
+    const cells = j.cells(), revision = j.m.owner()!.handle!.revision;
+    held = j.holdWrite();
+    const edit = cells.at(["flows", terminalA]).stage({ cfm: 240 });
+    await held.entered.promise;
+    await vi.waitFor(() => expect(j.m.owner()!.handle!.revision).toBe(revision + 1));
+    const pick = cells.at(["writeIntent"]).stage({ walk: { unitId: 1, portIndex: 0 } });
+    held.release.resolve();
+    expect(await edit).toBeNull();
+    expect(await pick).toBeNull();
+  } finally { held?.release.resolve(); await j.close(); }
+});
+
 test("D17 a pick made while the page's own edit is unacknowledged sticks", async () => {
   const j = await journey();
   try {
@@ -1247,27 +1308,56 @@ test("D17 a Page that moved while the stale pick waited keeps it refused", async
   } finally { held?.release.resolve(); j.flushStream(); await j.close(); }
 }, 60_000);
 
-// Probe 4, the boundary the retry does not cross. Once the stream has shown this mount its own
-// press's revision, a pick from the older drawing is refused here and never sent. That is the
-// standing fence ("Read release does not relax the captured revision fence"): the page redraws
-// its cells on that revision and locks them while the Value follows.
-test("D17 boundary: after the stream shows the press's revision, a pick on the older drawing is refused unsent", async () => {
+// D17 on fans-reds H1's real schedule: the ESP edit is staged, the journey waits until the host
+// has persisted it, and only then the scope is pressed, on the drawing made before the edit.
+// While the edit's reply is still out, the pick sticks whatever the stream has shown this mount.
+test.each([
+  ["neither the reply nor the stream has arrived", true],
+  ["the stream arrived ahead of the reply", false],
+] as const)("D17 H1 schedule, %s: the scope pick on the older drawing sticks", async (_, holdStream) => {
   const j = await journey();
   let held: ReturnType<typeof gate> | undefined;
   try {
     await j.start();
     const cells = j.cells(), revision = j.m.owner()!.handle!.revision;
+    if (holdStream) j.holdStream();
     held = j.holdWrite();
     const edit = cells.at(["flows", terminalA]).stage({ cfm: 240 }, { label: "Terminal A airflow" });
-    await held.entered.promise;
-    await vi.waitFor(() => expect(j.m.owner()!.handle!.revision).toBe(revision + 1));
+    // H1's poll: the staged edit is in the host's Work store.
+    await vi.waitFor(async () => expect((await hostWork(j)).revision).toBe(revision + 1));
+    if (!holdStream) await vi.waitFor(() => expect(j.m.owner()!.handle!.revision).toBe(revision + 1));
+    const pick = cells.at(["writeIntent"]).stage({ walk: { unitId: 1, portIndex: 0 } }, { label: "Write scope" });
+    await new Promise((done) => setTimeout(done, 50));
+    held?.release.resolve();
+    expect(await edit).toBeNull();
+    expect(await pick).toBeNull();
+    j.flushStream();
+    await j.ready();
+    const work = await hostWork(j);
+    expect(work.revision).toBe(revision + 2);
+    expect(work.doc).toMatchObject({ flows: { [terminalA]: { edit: { value: { cfm: 240 } } } }, writeIntent: { edit: { value: { walk: { unitId: 1, portIndex: 0 } } } } });
+    expect(j.m.pendingEdits()).toEqual([]);
+  } finally { held?.release.resolve(); j.flushStream(); await j.close(); }
+}, 60_000);
+
+// D17, the open case (reported to the implementor 2026-11-13). Once the edit's reply has landed, a
+// pick on the drawing made before it is the same schedule H30 and C121/C090 assert: an old basis
+// never recomputes on newer Work. It stays refused and its input stays retained. The ruling that
+// all three H1 schedules stick would invert those two witnesses with this one.
+test("D17 H1 schedule, the reply has landed and the cell is not redrawn: an old basis, refused with its input retained", async () => {
+  const j = await journey();
+  try {
+    await j.start();
+    const cells = j.cells(), revision = j.m.owner()!.handle!.revision;
+    expect(await cells.at(["flows", terminalA]).stage({ cfm: 240 }, { label: "Terminal A airflow" })).toBeNull();
+    await vi.waitFor(async () => expect((await hostWork(j)).revision).toBe(revision + 1));
     expect(await cells.at(["writeIntent"]).stage({ walk: { unitId: 1, portIndex: 0 } }, { label: "Write scope" }))
       .toMatchObject({ code: "refused", message: "Stale accepted Work basis" });
-    expect(picks(j)).toHaveLength(0);
-    held.release.resolve();
-    expect(await edit).toBeNull();
+    expect(picks(j), "never sent").toHaveLength(0);
+    expect(j.m.pendingEdits()).toEqual([expect.objectContaining({ label: "Write scope", status: "refused" })]);
+    expect((await hostWork(j)).doc).not.toHaveProperty("writeIntent.edit");
     await j.ready();
     // The redrawn cell, on the revision the page now shows, takes the same pick.
     expect(await j.cells().at(["writeIntent"]).stage({ walk: { unitId: 1, portIndex: 0 } }, { label: "Write scope" })).toBeNull();
-  } finally { held?.release.resolve(); await j.close(); }
+  } finally { await j.close(); }
 }, 60_000);

@@ -236,6 +236,22 @@ test("a streamed chat chunk updates the transcript without rendering a route pan
 // Row 12 (owner ruling 2026-11-13): a docked thread binds to the document the URL's `?target` names,
 // including a draft with no id yet. The draft's document is the workbench's `draftTarget`, which
 // the composer's picker draws (chat/composer-head.tsx `useThreadHead`).
+test.each([false, true])("review probe: a ?target naming a document that is not open leaves the sole other document unbound: %s", async (missing) => {
+  sessionStorage.clear();
+  const doc = (openId: string) => ({ openId, title: `${openId}.rvt`, address: `C:/Jobs/${openId}.rvt`, isFamilyDocument: false, isActive: true });
+  machine.reading = { state: "ready", observation: machineFixture([{ session: "s1", documents: [doc("B")] }]) };
+  const root = createRootRoute({ component: () => <WorkbenchProvider><Probe /><Outlet /></WorkbenchProvider> });
+  const router = createRouter({
+    routeTree: root.addChildren([createRoute({ getParentRoute: () => root, path: "/fans", component: () => <p>fans</p> })]),
+    history: createMemoryHistory({ initialEntries: [missing ? "/fans?target=C%3A%2FJobs%2FA.rvt" : "/fans"] }),
+  });
+  await router.load();
+  client.threads.mockImplementation(async () => []);
+  render(<RegistryContext.Provider value={appAtomRegistry}><RouterProvider router={router} /></RegistryContext.Provider>);
+  await screen.findByText("fans");
+  expect(draftTarget).toEqual(missing ? null : { kind: "open", ref: { session: "s1", openId: "B" } });
+});
+
 test("on /fans?target=A a new thread's draft binds to A among two open documents, and its first Send seeds A", async () => {
   sessionStorage.clear();
   const doc = (openId: string) => ({ openId, title: `${openId}.rvt`, address: `C:/Jobs/${openId}.rvt`, isFamilyDocument: false, isActive: true });
