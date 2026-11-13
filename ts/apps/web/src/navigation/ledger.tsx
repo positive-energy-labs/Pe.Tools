@@ -8,6 +8,7 @@ import { Scroll } from "@pe/kit/lang/scroll";
 import { Button } from "@pe/kit/lang/button";
 import { NOTICE_GROUPS, type NoticeRow } from "@pe/agent-contracts";
 import { peClient } from "#/host/pe-client";
+import { waitForAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 import { relativeThreadAge } from "#/chat/thread-navigation";
 import { usePodRoutes } from "#/route/pod-route-context";
 import { previousOf } from "#/host/resource-state";
@@ -119,9 +120,18 @@ export function useLedgerList(
   };
   /** The person's Confirm on a held outward send (ADR 0038 guard 3): the host sends and keeps the result. */
   const confirm = (id: string) => {
+    setRefusal(null);
     setResuming(id);
     peClient
       .call("outward.confirm", { params: { id } })
+      .then(({ id }) => {
+        if (typeof id !== "string" || !id) throw Error("The host returned no send receipt.");
+        return waitForAction(id);
+      })
+      .then((receipt) => {
+        if (receipt.state !== "succeeded")
+          setRefusal(`Not sent: ${"error" in receipt ? receipt.error : "Send outcome unavailable"}. Ask Pea to send it again.`);
+      })
       .catch((cause: unknown) => setRefusal(String(cause)))
       .finally(() => setResuming(null));
   };
