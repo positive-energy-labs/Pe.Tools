@@ -10,6 +10,23 @@ const ports = (value: unknown = {}) => ({
   decode: vi.fn(async (_key: string, value: unknown) => value),
 });
 
+test.each(["action.recover", "action.resume", "action.cancel", "action.read"] as const)(
+  "%s controls the original receipt without admitting another action",
+  async (key) => {
+    const receipt = { state: "running", id: "original", key: "sheet.apply", caller: { kind: "human", via: "local" },
+      basis: null, target, input: {}, steps: [], prepared: { state: "unprepared" }, recovery: [],
+      startedAt: "2026-11-12T00:00:00Z" };
+    const transport = ports(key === "action.read" ? [receipt] : receipt);
+    const result = await sendCommand(handle(key), { id: "control-request", key, target, input: { id: "original" } }, transport);
+    expect(result).toMatchObject({ state: "answered", result: { id: "original", key: "sheet.apply", state: "running" } });
+    expect(transport.submit).not.toHaveBeenCalled();
+    expect(transport.fetch).toHaveBeenCalledWith(
+      key === "action.read" ? "/actions?id=original" : "/actions/" + key.slice("action.".length),
+      expect.objectContaining(key === "action.read" ? { method: "GET" } : { method: "POST", body: JSON.stringify({ id: "original" }) }),
+    );
+  },
+);
+
 test("command via submits the original admission and never calls a route", async () => {
   const transport = ports();
   const admission = { id: "request-a", key: "work.start", target, input: {} };

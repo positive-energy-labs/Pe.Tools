@@ -74,14 +74,16 @@ export async function sendCommand(
   } else throw Error(`Unsupported command transport: ${route}`);
   const started = performance.now();
   const response = await ports.fetch(path, { method, headers,
+    signal: AbortSignal.timeout(30_000),
     ...(method === "GET" ? {} : { body: JSON.stringify(body) }) });
   const result = await response.json();
-  if (!response.ok) throw Error(typeof result.error === "string" ? result.error : result.error?.message ?? `Command refused (${response.status})`);
-  if (route.startsWith("action") && route !== "actions.read") return actionReceiptSchema.parse(result);
+  if (!response.ok) throw Error(typeof result?.error === "string" ? result.error : result?.error?.message ?? `Command refused (${response.status})`);
+  if (route.startsWith("action") && route !== "actions.read")
+    return { state: "answered", result: actionReceiptSchema.parse(result) };
   if (route === "actions.read") {
     const row = actionReceiptSchema.array().parse(result).find((row) => row.id === admission.input.id);
     if (!row) throw Error("Original action not found");
-    return row;
+    return { state: "answered", result: row };
   }
   return { state: "answered", result: route === "operation.call"
     ? { kind: "value", value: await ports.decode((admission.input.op as { key: string }).key, result), elapsedMs: Math.round(performance.now() - started),
