@@ -1,4 +1,3 @@
-import { catalogsFor } from "./ducts-files.ts";
 import { targetHomes } from "./call-route.ts";
 import { workKeySchema as mountedWorkKeySchema } from "@pe/agent-contracts";
 import type { DocumentRef, Receipt } from "@pe/agent-contracts";
@@ -97,7 +96,7 @@ import {
   ductsNativeRead,
   type DuctsAnalysisSources,
 } from "./ducts-analysis.ts";
-import { DuctFiles } from "./ducts-files.ts";
+import { catalogsFor, DuctFiles } from "./ducts-files.ts";
 import { runPods } from "./family-actions.ts";
 import { familySpecAsset } from "./family-spec.ts";
 import { ActionJournalService, HostLogService } from "./receipt-services.ts";

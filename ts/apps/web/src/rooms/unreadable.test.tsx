@@ -11,7 +11,7 @@ test("rooms lists unreadable blobs as can't read, kept with owner and reason", (
   const page = roomsPageSchema.parse({ view: DEMO_VIEW });
   const ctx = {
     value: { current: true, status: "current", value: { snapshot: {
-      ...DEMO_ROOMS, unreadable: [{ elementId: null, parameter: "Pe.System", reason: "Broken owner envelope" }],
+      ...DEMO_ROOMS, unreadable: [{ elementId: null, parameter: "Pe.System", reason: "Broken owner envelope" }, { elementId: 123456, parameter: "Pe.Region", reason: "Broken region envelope" }],
     } } },
     page: { read: () => ({ ...page, room: { kind: "all" } }) },
     target: { kind: "document", ref: { session: "fixture", openId: "rooms" } },
@@ -21,5 +21,8 @@ test("rooms lists unreadable blobs as can't read, kept with owner and reason", (
     expect(view.container.textContent).toContain("can't read, kept");
     expect(view.container.textContent).toContain("Pe.System");
     expect(view.container.textContent).toContain("Broken owner envelope");
+    expect(view.container.textContent).toContain("Project Information");
+    expect(view.container.textContent).toContain("Element name unavailable");
+    expect(view.container.textContent).not.toContain("123456");
   } finally { cleanup(); }
 });

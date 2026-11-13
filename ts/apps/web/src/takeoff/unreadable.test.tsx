@@ -12,6 +12,8 @@ test("takeoffs lists unreadable blobs as can't read, kept with owner and reason"
     const view = render(<Drawing mount={j.mount} />);
     expect(view.container.textContent).toContain("can't read, kept");
     expect(view.container.textContent).toContain("Pe.Region");
+    expect(view.container.textContent).toContain("Element name unavailable");
+    expect(view.container.textContent).not.toContain("element 21");
     expect(view.container.textContent).toContain("Unknown owner version 99");
     for (const text of ["Pe.Second", "Malformed second blob", "Pe.Third", "Unsupported third blob"])
       expect(view.container.textContent).toContain(text);
