@@ -11,7 +11,7 @@ import { hostOwnership } from "../../../host/src/host-ownership.ts";
 import { HostDocumentMarks } from "../../../host/src/document-marks.ts";
 import { HostSessionInventory } from "../../../host/src/session-inventory.ts";
 import { DuctFiles } from "../../../host/src/ducts-files.ts";
-import { Publications } from "../../../host/src/reads/evaluator.ts";
+import { Publications } from "../../../host/src/reads/publications.ts";
 import { RevitBridge } from "../../../host/src/bridge.ts";
 import { SdkSession } from "../../../host/src/sdk-session.ts";
 import { bootHost } from "../../../host/tests/real-server.ts";

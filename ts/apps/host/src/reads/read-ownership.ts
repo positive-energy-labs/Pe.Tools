@@ -53,6 +53,47 @@ export interface ReadOwnershipPorts {
   settle(identity: RequestIdentityData): Promise<CausalTerminalState>;
 }
 
+const stopped = () => new Error("Read owner is stopped or settling");
+/** What a subscriber needs of a flight: its result and a lease on it. */
+export type Flight<T> = Pick<ReadFlight<T>, "result" | "join">;
+/**
+ * A flight with no causal owner: the lease count and the read's own signal, nothing else.
+ * `ReadOwnership.flight` adds the owner's admission, settlement and Stop on top of this one.
+ * `admits` closes the flight to new consumers (an owner that stopped or is settling).
+ */
+export function startFlight<T>(
+  run: (signal: AbortSignal) => Promise<T>,
+  admits: () => boolean = () => true,
+): Flight<T> {
+  const controller = new AbortController();
+  let retiring = false,
+    terminal = false,
+    consumers = 0;
+  // Defer execution so a synchronous throw follows the same settlement path as a rejection.
+  const result = Promise.resolve().then(() => run(controller.signal));
+  const finish = () => void (terminal = true);
+  result.then(finish, finish);
+  return {
+    result,
+    join() {
+      if (retiring || terminal || !admits()) throw stopped();
+      consumers++;
+      let released = false;
+      return {
+        release() {
+          if (released) return;
+          released = true;
+          if (--consumers !== 0 || terminal) return;
+          retiring = true;
+          // This signal belongs only to the read. Submitted writes and required cleanup
+          // retain their existing owner; never route this through parent Stop.
+          controller.abort();
+        },
+      };
+    },
+  };
+}
+
 export function createReadOwnership(ports: ReadOwnershipPorts): ReadOwnership {
   const owners = new WeakMap<
     ReadOwner,
@@ -63,7 +104,6 @@ export function createReadOwnership(ports: ReadOwnershipPorts): ReadOwnership {
       pending: Set<Promise<unknown>>;
     }
   >();
-  const stopped = () => new Error("Read owner is stopped or settling");
   const ownership: ReadOwnership = {
     open(identity) {
       const entry = {
@@ -109,42 +149,29 @@ export function createReadOwnership(ports: ReadOwnershipPorts): ReadOwnership {
       const entry = owners.get(owner);
       if (!entry) throw new Error("Read owner belongs to another lifetime service");
       if (entry.closed) throw stopped();
-      const controller = new AbortController();
+      const core = startFlight(run, () => !entry.closed);
       const leases = new Set<ReadLease>();
-      let retiring = false,
-        terminal = false,
-        consumers = 0;
-      // Defer execution so a synchronous throw follows the same settlement path as a rejection.
-      const result = Promise.resolve().then(() => run(controller.signal));
-      entry.pending.add(result);
+      entry.pending.add(core.result);
       const finish = () => {
-        terminal = true;
-        entry.pending.delete(result);
+        entry.pending.delete(core.result);
         for (const lease of leases) entry.leases.delete(lease);
         leases.clear();
       };
-      const completed = result.then(finish, finish);
+      const completed = core.result.then(finish, finish);
       let settlement: Promise<CausalTerminalState> | undefined;
       return {
-        result,
+        result: core.result,
         get settlement() {
           return (settlement ??= completed.then(() => ports.settle(entry.identity)));
         },
         join() {
-          if (retiring || terminal || entry.closed) throw stopped();
-          consumers++;
-          let released = false;
+          const held = core.join();
+          // The owner tracks the lease so `requestStop` can detach it; the count is the flight's.
           const lease: ReadLease = {
             release() {
-              if (released) return;
-              released = true;
               leases.delete(lease);
               entry.leases.delete(lease);
-              if (--consumers !== 0 || terminal) return;
-              retiring = true;
-              // This signal belongs only to the read. Submitted writes and required cleanup
-              // retain their existing owner; never route this through parent Stop.
-              controller.abort();
+              held.release();
             },
           };
           entry.leases.add(lease);
