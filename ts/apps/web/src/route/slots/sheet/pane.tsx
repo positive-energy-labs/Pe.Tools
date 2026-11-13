@@ -88,7 +88,7 @@ function Cell({ ctx, cell, verb }: { ctx: Ctx; cell: SheetCell; verb: ReactNode 
       <span className="block min-w-0 h-(--item-h)">
         <StateCell
           cell={handle}
-          value={ctx.value as never}
+          value={ctx.value}
           label={cell.setting ? `${cell.label}: value to save` : cell.label}
           model={under}
           source={layerWord(cell)}

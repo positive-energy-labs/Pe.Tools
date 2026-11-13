@@ -163,7 +163,7 @@ test.each(["refused", "stale"])("a %s stale-hash save re-reads the tier and draw
   expect(disk.value).toBe(820);
 });
 
-test("the real mount sends a setting-home save with its exact tier, target and read hash without owning Work", async () => {
+test.each(["ready", "stale"] as const)("the real mount sends a setting-home save with its exact tier, target and read hash without owning Work: %s", async state => {
   const loaded = read(hostRead(valueRead("bindings.settings", z.object({}), z.unknown())));
   const declaration = route({ key: "settings", name: "Settings", needs: "host", host: "./host.ts", directory: settingsModule.spec.directory, fields: {}, core: loaded,
     panes: { sheet: { title: "Sheet", purpose: "Edit settings", body: "scroll", kernel: "sheet", read: loaded, draw: () => scrollBody(null) } },
@@ -184,16 +184,21 @@ test("the real mount sends a setting-home save with its exact tier, target and r
     address: { read: () => new URLSearchParams(), write() {}, subscribe: () => () => {} },
     custody: { current: () => true }, memory: () => ({}) }, workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`),
     { work, sources: { "bindings.settings": { kind: "use", open(_ctx, deliver) {
-      deliver({ kind: "complete", revision: 1, value: { key: "settings", generation: 1, version: 1, state: "current",
+      deliver({ kind: "complete", revision: 1, fresh: state === "ready", value: { key: "settings", generation: 1, version: 1, state: state === "ready" ? "current" : "refresh-needed",
         value: { data, evaluation: "e", inputs: "i", trace: [], coverage: { requested: [], covered: [], unknown: [], refused: [] }, origin: null, freshness: "current" } } });
       return () => {};
     } } } });
   const stop = mount.subscribe(() => {});
   try {
     const result = await mount.draw("sheet", ctx => ctx.cells.at(["setting", "ducts", "project", "criteria", "velocityLimitFpm", "supply"]).stage(850));
+    if (state === "stale") {
+      expect(result).toMatchObject({ code: "refused" });
+      expect(sent).toEqual([]);
+    } else {
     expect(result).toBeNull();
     expect(sent).toEqual([expect.objectContaining({ key: "settings.tiers.write", target,
       input: { owner: "ducts", tier: "project", path: ["criteria", "velocityLimitFpm", "supply"], value: 850, expectedSha256: "read-hash" } })]);
+    }
     expect(mount.work()).toBeNull();
   } finally { stop(); mount.dispose(); }
 });

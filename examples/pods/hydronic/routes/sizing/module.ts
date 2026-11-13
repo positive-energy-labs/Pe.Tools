@@ -12,7 +12,7 @@ const core = read(hostRead(valueRead(`${key}.sizing`, args, value)), (page: { sy
 type Context = ContextOf<typeof fields, typeof core, typeof workState, typeof edit>;
 // A pipe is named by its SubjectRef code; the kernel resolves it to captured geometry.
 const pipeCode = (uniqueId: string) => subjectCode({ keyKind: "UniqueId", key: uniqueIdSchema.parse(uniqueId) });
-const pipesOf = (ctx: Context) => (ctx.value.current ? ctx.value.value.result.value?.rows : undefined) ?? [];
+const pipesOf = (ctx: Context) => ctx.value.value.result.value?.rows ?? [];
 const inks = { ok: "viz-1", undersized: "viz-2", oversized: "viz-3", "no-flow": "viz-4" } as const;
 
 export const module = route({
@@ -66,7 +66,6 @@ export const module = route({
       purpose: "Which diameter each pipe should be, and which pipes are wrong today",
       // The sheet and goal slots draw the cells and the unresolved list; this pane is the sizing table.
       draw: (ctx: Context) => {
-        if (!ctx.value.current) return ctx.value.reason;
         const { unresolved } = ctx.value.value;
         const { limits, rows, pumpHead } = ctx.value.value.result.value!;
         return [

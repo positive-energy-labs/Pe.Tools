@@ -50,8 +50,8 @@ export function MemberFields({ ctx }: { ctx: PodsContext }) {
   const [typedOnly, setTypedOnly] = useState(false);
   const search = useRouteSearchSlice(s => s);
   const read = ctx.value.value;
-  const empty = fieldsEmpty(read ?? null);
-  if (empty || !read) return <p className="text-ink-2">{empty}</p>;
+  const empty = fieldsEmpty(read);
+  if (empty) return <p className="text-ink-2">{empty}</p>;
   const cells = memberFields(read, ctx.cells.doc), note = fieldsNote(read);
   const family = read.member && isSpecOf(read.schemaRef, "/schemas/settings/FamilyFoundry/models.json")
     ? routeAddress("family").link({ stage: "apply", member: { kind: "ids", ids: [podMemberCode({ pod: read.scope.pod, path: read.scope.path })] },

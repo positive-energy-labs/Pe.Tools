@@ -711,6 +711,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
           if (path[0] === "setting") return homeHandle(path, valueOf(core), async request => {
             requireWritable();
             try {
+              if (core.state !== "ready") throw Error(reasonOf(core));
               await settleNative(door.submit({ id: crypto.randomUUID(), key: "settings.tiers.write",
                 target: input.target?.kind === "document" ? input.target : { kind: "host" }, input: request }));
             } finally { mounted.refresh(); }
