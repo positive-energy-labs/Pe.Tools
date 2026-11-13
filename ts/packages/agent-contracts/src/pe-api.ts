@@ -8,6 +8,7 @@ import type { Command } from "./command.ts";
 import { capabilityPrincipals } from "./capability.ts";
 import {
   commandLink,
+  nativeAxes,
   link,
   requireLinkedCatalog,
   type CatalogLink,
@@ -149,13 +150,7 @@ export function nativeEntry(op: HostOperationDefinition): CatalogRow {
   return {
     key: op.key,
     call: callPolicies[op.key],
-    subject: op.subject as CatalogRow["subject"],
-    touches: op.touches.split(", ") as CatalogRow["touches"],
-    effect: op.effect as CatalogRow["effect"],
-    cost: op.costTier,
-    cardinality: op.cardinality as CatalogRow["cardinality"],
-    internal: op.internal,
-    rollsBack: op.rollsBack,
+    ...nativeAxes(op),
     // A native write leaf with a `<key>.plan` (Read) or `<key>.preview` (rehearsal) sibling is bound to it,
     // so the linker checks its axis (ADR 0030 rule 4).
     ...[`${op.key}.plan`, `${op.key}.preview`]

@@ -9,13 +9,14 @@ import { nativeRequestSchema, nativeResponseSchema } from "@pe/host-contracts/na
 import type { hostOpSafety } from "@pe/host-contracts/generated";
 import type {
   HostOperationKey,
+  OpKey,
   OpRequestOf,
   OpResponseOf,
 } from "@pe/host-contracts/operation-types";
 import type { PeRouteInput, PeRouteOutput } from "@pe/host-contracts/pe-api";
-import type { CatalogAxes } from "./catalog.ts";
+import { nativeAxes, type CatalogAxes } from "./catalog.ts";
 import { commandTable, type CommandKey } from "./command-axes.ts";
-import { nativeEntry, type httpRoutes } from "./pe-api.ts";
+import type { httpRoutes } from "./pe-api.ts";
 import type { hostActions } from "./semantic-actions.ts";
 import type { SubjectKeyKind } from "./subject-ref.ts";
 import { publicationSchema, type Publication } from "./value.ts";
@@ -62,7 +63,7 @@ export type { CommandKey };
 /** A semantic command's own schema first, then the native DTO, then the pe-api route. */
 export type CommandInput<K extends CommandKey> = K extends keyof Commands
   ? z.input<Commands[K]["input"]>
-  : K extends HostOperationKey
+  : K extends OpKey
     ? OpRequestOf<K>
     : K extends keyof Routes
       ? PeRouteInput<Routes, K>
@@ -71,7 +72,7 @@ export type CommandOutput<K extends CommandKey> = K extends keyof Commands
   ? Commands[K] extends { result: z.ZodType }
     ? z.output<Commands[K]["result"]>
     : unknown
-  : K extends HostOperationKey
+  : K extends OpKey
     ? OpResponseOf<K>
     : K extends keyof Routes
       ? PeRouteOutput<Routes, K>
@@ -120,14 +121,15 @@ export type CatalogReadKey = {
     : never;
 }[keyof Safety] &
   HostOperationKey;
-const nativeHandles = new Map<string, ReadHandle>();
+// The mint alone restores a cached handle's keyed DTO types; storage keeps no unkeyed schema type.
+const nativeHandles = new Map<CatalogReadKey, object>();
 /** A catalog Read as a handle; refuses every other key, as the host's native door does. */
 export function native<K extends CatalogReadKey>(
   key: K,
 ): ReadHandle<K, OpRequestOf<K>, OpResponseOf<K>> {
   type Minted = ReadHandle<K, OpRequestOf<K>, OpResponseOf<K>>;
   const made = nativeHandles.get(key);
-  if (made) return made as unknown as Minted;
+  if (made) return made as Minted;
   const op = hostOpCatalog.find((op) => op.key === key);
   if (
     !op ||
@@ -135,7 +137,7 @@ export function native<K extends CatalogReadKey>(
     !(op.effect === "Read" || (op.effect === "TransactRead" && op.rollsBack))
   )
     throw Error(`Not a catalog Read: ${key}`);
-  const { subject, touches, effect, cost, cardinality, rollsBack } = nativeEntry(op);
+  const { subject, touches, effect, cost, cardinality, rollsBack } = nativeAxes(op);
   const data = nativeResponseSchema(key);
   const result = mint<Minted>({
     key,
@@ -145,7 +147,7 @@ export function native<K extends CatalogReadKey>(
     axes: { subject, touches, effect, cost, cardinality, ...(rollsBack ? { rollsBack } : {}) },
     keyedBy: {},
   });
-  nativeHandles.set(key, result as unknown as ReadHandle);
+  nativeHandles.set(key, result);
   return result;
 }
 

@@ -82,9 +82,10 @@ test("family reads project the owning Work into scope outside the strict read in
   const work = { key: { binding: "host", route: "family", target: null }, revision: 7 };
   await sendCommand(handle("family.read"), { id: "request-a", key: "family.read", target,
     input: { readId: "read-a", expectedRevision: 7, work } }, transport);
-  expect(transport.fetch).toHaveBeenCalledWith("/family/readings", expect.objectContaining({
-    body: JSON.stringify({ key: "family.read", input: { readId: "read-a", expectedRevision: 7 }, target: target.ref, scope: work.key }),
-  }));
+  expect(transport.fetch.mock.calls[0]![0]).toBe("/family/readings");
+  expect(JSON.parse(String(transport.fetch.mock.calls[0]![1]!.body))).toEqual({
+    key: "family.read", input: { readId: "read-a", expectedRevision: 7 }, target: target.ref, scope: work.key,
+  });
   expect(transport.submit).not.toHaveBeenCalled();
 });
 

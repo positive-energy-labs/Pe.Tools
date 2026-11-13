@@ -6,6 +6,7 @@ import {
   opCost,
 } from "@pe/host-contracts/generated";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
+import type { HostOperationDefinition } from "@pe/host-contracts/contracts";
 export const opEffect = { ...nativeOpEffect, WorkWrite: "WorkWrite" } as const;
 export { opSubject, opTouches, opCardinality, opCost };
 type Value<T> = T[keyof T];
@@ -30,6 +31,18 @@ export interface CatalogLink extends CatalogAxes {
   previewBy?: string;
   derive?: NonNullable<import("./command.ts").Command["derivation"]>["derive"];
   preview?: NonNullable<import("./command.ts").Command["derivation"]>["preview"];
+}
+/** The native metadata projection shared by host catalog rows and browser read handles. */
+export function nativeAxes(op: HostOperationDefinition): CatalogAxes {
+  return {
+    subject: op.subject as CatalogAxes["subject"],
+    touches: op.touches.split(", ") as CatalogAxes["touches"],
+    effect: op.effect as CatalogAxes["effect"],
+    cost: op.costTier,
+    cardinality: op.cardinality as CatalogAxes["cardinality"],
+    internal: op.internal,
+    rollsBack: op.rollsBack,
+  };
 }
 const weight = { Cheap: 1, Bounded: 10, Expensive: 100, Mutation: 100 };
 /** Validate edges only. Execution, derivation and preview remain in named runtime functions. */

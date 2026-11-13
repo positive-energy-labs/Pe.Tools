@@ -26,13 +26,18 @@ test("receipt controls select their existing transport and SessionWrite scope", 
   expect(table["action.read"]!.via).toEqual({ route: "actions.read" });
 });
 
-test("findings writes modify Work and plans preserve their native read scope", () => {
+test("findings write doors use WorkWrite and plans preserve their native read scope", () => {
   const table = generateCommandTable();
-  for (const [key, action] of Object.entries(hostActions)) {
-    if (key.startsWith("findings.") && action.effect === "command") expect(table[key]!.effect).toBe("WorkWrite");
+  for (const key of ["findings.say", "findings.rule", "findings.retract"]) {
+    const writes = generateCommandTable({ [key]: { ...hostActions["findings.list"], effect: "command" as const } }, []);
+    expect(writes[key]!.effect).toBe("WorkWrite");
   }
   expect(table["sheet.apply"]!.plan).toBe("sheet.plan");
   expect(table["sheet.plan"]!.effect).toBe("Read");
+});
+
+test("findings.list is Read because listing writes no Work", () => {
+  expect(generateCommandTable()["findings.list"]!.effect).toBe("Read");
 });
 
 test("tracked browser table is fresh and contains data alone", () => {

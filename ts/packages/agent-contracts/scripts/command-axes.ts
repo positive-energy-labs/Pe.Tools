@@ -14,6 +14,7 @@ type Native = (typeof hostOpCatalog)[number] | (typeof tsOnlyOperationCatalog)[n
 type Row = { axes: CatalogAxes; effect: CatalogAxes["effect"]; plan?: string; via: "command" | { route: string } };
 const effects = ["Read", "TransactRead", "SessionWrite", "WorkWrite", "ModelWrite"];
 const costs = ["Cheap", "Bounded", "Expensive", "Mutation"];
+const workWrites = new Set(["findings.say", "findings.rule", "findings.retract"]);
 const max = <T extends string>(values: readonly T[], order: readonly string[]): T =>
   values.reduce((a, b) => order.indexOf(a) >= order.indexOf(b) ? a : b);
 
@@ -49,7 +50,7 @@ export function generateCommandTable(
     const implicitPreview = boundary?.phase === "preview" && key === boundary.key + ".preview";
     const effect = rehearsal || (implicitPreview && nativeEffect === "ModelWrite") ? "TransactRead" : leaves.length
       ? max(leaves.map((op) => op.effect), effects)
-      : action.effect === "query" ? "Read" : key.startsWith("findings.") ? "WorkWrite" : "SessionWrite";
+      : workWrites.has(key) ? "WorkWrite" : action.effect === "query" ? "Read" : "SessionWrite";
     if (!effects.includes(effect)) throw Error(`${key}: invalid native effect ${effect}`);
     const axes: CatalogAxes = {
       subject: (leaves.find((op) => op.subject !== "None")?.subject ?? "None") as CatalogAxes["subject"],

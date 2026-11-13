@@ -148,7 +148,7 @@ export const commandTable = {
   "family.read": {"axes":{"subject":"None","touches":["Metadata"],"effect":"Read","cost":"Bounded","cardinality":"One"},"effect":"Read","via":{"route":"/family/readings"}},
   "family.saved": {"axes":{"subject":"None","touches":["Metadata"],"effect":"Read","cost":"Bounded","cardinality":"One"},"effect":"Read","via":{"route":"/family/readings"}},
   "findings.list": {"axes":{"subject":"None","touches":["Metadata"],"effect":"Read","cost":"Bounded","cardinality":"One"},"effect":"Read","via":"command"},
-  "findings.write": {"axes":{"subject":"None","touches":["Metadata"],"effect":"WorkWrite","cost":"Mutation","cardinality":"One"},"effect":"WorkWrite","via":"command"},
+  "findings.write": {"axes":{"subject":"None","touches":["Metadata"],"effect":"SessionWrite","cost":"Mutation","cardinality":"One"},"effect":"SessionWrite","via":"command"},
   "instances.cleanup": {"axes":{"subject":"None","touches":["Metadata"],"effect":"SessionWrite","cost":"Mutation","cardinality":"One"},"effect":"SessionWrite","via":"command"},
   "instances.close": {"axes":{"subject":"None","touches":["Metadata"],"effect":"SessionWrite","cost":"Mutation","cardinality":"One"},"effect":"SessionWrite","via":"command"},
   "instances.dialogs": {"axes":{"subject":"None","touches":["Metadata"],"effect":"SessionWrite","cost":"Mutation","cardinality":"One"},"effect":"SessionWrite","via":"command"},
