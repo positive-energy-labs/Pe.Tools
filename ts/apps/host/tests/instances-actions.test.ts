@@ -2,7 +2,7 @@ import { noticeRows } from "../src/notice-feed.ts";
 import { testHostInputs, journalAt, callRouteOver } from "./effect-test.ts";
 import { Layer, Effect } from "effect";
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { existsSync, unlinkSync } from "node:fs";
+import { existsSync, symlinkSync, unlinkSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, rmdir, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -66,6 +66,34 @@ test.each(["absolute", "parent", "junction"])("cleanup refuses a tampered %s pru
     expect((receipt as { result?: { kept: string[] } }).result?.kept).toContain(root);
   } finally {
     vi.mocked(foldAcquisitions).mockImplementation(actual);
+  }
+});
+// K2: deleting the symlinked-ancestor guard must prune the external empty folder.
+test("cleanup keeps an acquisition root beneath a junction ancestor", async () => {
+  const { f, acquired, acquisition } = await acquisitionSetup();
+  await rm(acquisition.intent.root, { recursive: true });
+  const target = join(f.dir, "outside");
+  const junction = join(f.peaWork, "junction");
+  const root = join(junction, "acquisition");
+  const externalRoot = join(target, "acquisition");
+  const empty = join(externalRoot, "empty");
+  const file = join(externalRoot, "stray.txt");
+  await mkdir(empty, { recursive: true });
+  await writeFile(file, "keep me");
+  symlinkSync(target, junction, "junction");
+  const actual = vi.mocked(foldAcquisitions).getMockImplementation()!;
+  try {
+    vi.mocked(foldAcquisitions).mockImplementation((...args) =>
+      actual(...args).map(row => ({ ...row, intent: { ...row.intent, root } })));
+    const receipt = await f.admit("instances.cleanup", { acquisition: acquired.id, unsaved: "discard" });
+    expect(receipt.state, JSON.stringify(receipt)).toBe("succeeded");
+    expect(existsSync(externalRoot)).toBe(true);
+    expect(existsSync(empty)).toBe(true);
+    expect(await readFile(file, "utf8")).toBe("keep me");
+    expect((receipt as { result?: { kept: string[] } }).result?.kept).toContain(root);
+  } finally {
+    vi.mocked(foldAcquisitions).mockImplementation(actual);
+    unlinkSync(junction);
   }
 });
 const cleanup: (() => Promise<void>)[] = [];
