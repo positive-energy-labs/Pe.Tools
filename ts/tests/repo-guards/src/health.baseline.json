@@ -293,7 +293,7 @@
     "ts/packages/host-contracts/scripts/ops-catalog-hash.ts": 1,
     "ts/packages/host-contracts/scripts/sdk-wire.ts": 1,
     "ts/packages/host-contracts/src/route-startup.ts": 4,
-    "ts/packages/host-contracts/src/store.ts": 13,
+    "ts/packages/host-contracts/src/store.ts": 11,
     "ts/packages/host-contracts/src/vendor/pe-service-host.ts": 2,
     "ts/packages/host-contracts/src/vendor/pe-service.ts": 11,
     "ts/packages/runtime/src/analytics.ts": 2,
