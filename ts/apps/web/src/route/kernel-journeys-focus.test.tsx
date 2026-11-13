@@ -1,4 +1,5 @@
 import { elementSubject } from "@pe/ducts-domain/work-subject";
+import { host as placesHost, seedPlaces } from "../workbench/places.test-support";
 import { snapshot as workSnapshot } from "../ducts/test-fixture";
 // @vitest-environment jsdom
 import { stableFanKey } from "../ducts/sheet/model";
@@ -1505,6 +1506,7 @@ vi.mock("../workbench/provider", () => ({ useWorkbench: () => conversation.value
 vi.mock("../chat/chat-shell", () => ({ ChatShell: () => null }));
 
 test("JZ B05 retain Family Work and its spec across folding, first-thread promotion and thread switches", async () => {
+  await seedPlaces([]);
   const [{ createRoute }, { RegistryContext }, { appAtomRegistry }, { RouteDock },
     { createChatPageStore }, { module: family }, { publicRoutes }, { peClient },
     { createPeClient }, { peReadings }, { observeResources }, { createPeRoutes },
@@ -1684,9 +1686,9 @@ test("JZ E8-12 close Home clears a capacity refusal and permits another Place", 
   await import("../routes/__root");
   vi.spyOn(await import("../navigation/surface-host"), "useSurfaceHost").mockReturnValue({ surface: "web" } as never);
   vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener() {}, removeEventListener() {} }));
-  sessionStorage.setItem("pe.places", JSON.stringify(Array.from({ length: 12 }, (_, i) => ({
+  await seedPlaces(Array.from({ length: 12 }, (_, i) => ({
     id: `aaaaaaaa-0000-4000-8000-${String(i).padStart(12, "0")}`, route: "home", link: "/", at: new Date().toISOString(),
-  }))));
+  })));
   const store = createChatPageStore({ registry: appAtomRegistry, search: { patch: async () => {} } });
   conversation.value = { store, threads: [] };
   const module = route({ ...family.spec, key: "home", address: "/", name: "Home", needs: "browser", core: undefined,
@@ -1703,12 +1705,12 @@ test("JZ E8-12 close Home clears a capacity refusal and permits another Place", 
     render(<RouterProvider router={router} />);
     await screen.findByText("Home body");
     fireEvent.click(screen.getByRole("button", { name: "Open another Place on this route" }));
-    await screen.findByText("This window keeps 12 Places; close one first.");
+    await screen.findByText("This machine keeps 12 Places; close one first.");
     fireEvent.click(screen.getAllByRole("button", { name: "Close Home" })[11]!);
-    await waitFor(() => expect(JSON.parse(sessionStorage.getItem("pe.places")!)).toHaveLength(11));
-    expect(screen.queryByText("This window keeps 12 Places; close one first.")).toBeNull();
+    await waitFor(() => expect(placesHost.read()).toHaveLength(11));
+    expect(screen.queryByText("This machine keeps 12 Places; close one first.")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Open another Place on this route" }));
-    await waitFor(() => expect(JSON.parse(sessionStorage.getItem("pe.places")!)).toHaveLength(12));
+    await waitFor(() => expect(placesHost.read()).toHaveLength(12));
   } finally { cleanup(); sessionStorage.clear(); vi.unstubAllGlobals(); conversation.value = null; }
 });
 
