@@ -18,7 +18,7 @@ export function createApplicationWorkRegistry() {
       },
       discard(id: string) { intents.delete(id); notify(); if (!refs && !intents.size) entries.delete(workKey(key)); },
       refuse(id: string, reason: string) { const intent = intents.get(id); if (intent) { intent.status = "refused"; intent.reason = reason; notify(); } },
-      accept(press?: string | null) { if (press) { intents.delete(press); notify(); } },
+      accept(press?: string | null) { if (press) { intents.delete(press); notify(); if (!refs && !intents.size) entries.delete(workKey(key)); } },
       subscribe(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; },
     };
   }

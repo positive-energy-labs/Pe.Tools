@@ -17,3 +17,12 @@ test("pending input survives the last Place and only its own acknowledgement rem
   const fresh = registry.acquire(key);
   expect(fresh.entry).not.toBe(next.entry); fresh.release();
 });
+
+test("a late acknowledgement releases retained input after the last Place leaves", () => {
+  const registry = createApplicationWorkRegistry(), key = bindWork("test", null, "late");
+  const first = registry.acquire(key);
+  first.entry.retain({ kind: "apply", press: "late", expectedRevision: 0, patches: [] }, "Edit");
+  first.release(); first.entry.accept("late");
+  const next = registry.acquire(key);
+  expect(next.entry).not.toBe(first.entry); next.release();
+});

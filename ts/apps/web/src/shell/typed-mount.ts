@@ -609,7 +609,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     value: (read: import("../route/host-read").HostRead | undefined = spec.core): Snapshot => read ? reads.get(read)?.snapshot ?? reading() : { state: "not-yet-run", publication: null },
     owner: (id = own) => owners.get(id),
     page: { read: () => page, pose: (patch: any, intent?: "gesture"|"named") => moveRole("pose",patch,intent === "gesture"?"replace":intent === "named"?"push":undefined), query: (patch: any) => moveRole("query",patch), select: (selected: any) => move({selected}), subject: (subject: any) => {if(!spec.subject) throw Error("No subject declared");return move({ [spec.subject.field]: subject },"push");} },
-    subscribe(listener: () => void) { released = false; listeners.add(listener); syncReads(); return () => { listeners.delete(listener); }; },
+    subscribe(listener: () => void) { const resume = released; released = false; listeners.add(listener); if (resume) connectTimeline(); syncReads(); return () => { listeners.delete(listener); }; },
     available: () => !disposed && input.custody.current(),
     /** The URL write is flushed: the address alone, without Place memory, decodes to this Page
      *  (slice 6.1, `data-url-settled`); a reload reads only the address. */
@@ -733,7 +733,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     // Retaining hidden read connections was a Plan-identity workaround; content fingerprints
     // now survive reconnect. Keep Work feeds connected so pending edits settle.
     // Read release preserves write authority; disposal and Place custody fence writes.
-    release() { if (disposed || released) return; released = true; notify(); for (const r of reads.values()) { r.args=""; r.stop(); } },
+    release() { if (disposed || released) return; released = true; stopTimeline(); timelineState = null; timelineProblem = "Timeline is inactive"; notify(); for (const r of reads.values()) { r.args=""; r.stop(); } },
     dispose() { if (disposed) return; disposed=true; publish(); cleanups.splice(0).reverse().forEach(stop => stop()); listeners.clear(); },
   };
   const stopSubject=observeSubject(spec.key,{current:()=>!disposed&&!released&&input.custody.current(),read:subjectState,subscribe:mounted.subscribe});

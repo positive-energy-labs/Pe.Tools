@@ -64,7 +64,7 @@ const refused = (error: string): RouteStateWriteResult => ({
 });
 const writers = new Map<string, ReturnType<typeof createWorkWriter>>();
 
-/** The same identity owns admission, refused intents and the journal in every mount. */
+/** The same identity owns admission and refused input in every mount. */
 export function acquireWorkWriter(key: WorkKey) {
   const id = workKey(key);
   let writer = writers.get(id);

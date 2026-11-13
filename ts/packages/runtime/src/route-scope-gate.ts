@@ -70,7 +70,7 @@ function immutableCopy<T>(value: T): T {
 }
 const refused = (message: string): MoveResult => ({ kind: "refused", code: "acceptance", message });
 
-/** One synchronous acceptance owner below React. UI disposal retires publication, not receipts. */
+/** One synchronous acceptance owner below React. Accepted writes remain host-owned after disposal. */
 export function createRouteScopeGate<
   G extends RouteGraphJson,
   S extends SchemaTable,
