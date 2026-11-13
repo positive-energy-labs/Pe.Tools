@@ -116,7 +116,7 @@ export async function journey(options: { unreadable?: { elementId: number | null
               systems: [],
               carriers: { stage: "Adoption", status: carriers, missingCarrierGuids: [] },
             },
-            unreadable: options.unreadable,
+            unreadable: options.unreadable ?? [],
             zoneFrs: [],
             regionsByZone: {},
           },
