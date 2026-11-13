@@ -3,7 +3,8 @@ import * as Atom from "effect/reactivity/Atom";
 /** First Send from a standalone tool: one chat, seeded only by the composer, the tool kept. */
 import { useContext, useMemo } from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, expect, test, vi } from "vite-plus/test";
+import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
+import { seedPlaces } from "../places.test-support";
 import {
   createMemoryHistory,
   createRootRoute,
@@ -61,12 +62,10 @@ vi.mock("#/machine/use-machine", () => ({
   useMachineSlice: (select: (reading: unknown) => unknown) =>
     machine.reading ? select(machine.reading) : null,
 }));
-vi.mock("#/host/resource-stream", async (actual) => {
-  const real = await actual<typeof import("#/host/resource-stream")>();
-  // workbench/places.ts reads `peReadings` at load; readings stay quiet here.
-  real.peReadings.subscribe = () => () => {};
-  return { ...real, useHostEvents: () => {} };
-});
+vi.mock("#/host/resource-stream", async (actual) => ({
+  ...(await actual<typeof import("#/host/resource-stream")>()),
+  useHostEvents: () => {},
+}));
 vi.mock("#/host/resource-state", () => {
   const host = { known: true };
   return {
@@ -84,6 +83,7 @@ afterEach(() => {
   machine.reading = null;
   vi.clearAllMocks();
 });
+beforeEach(() => seedPlaces([]));
 
 let send: ((text: string) => Promise<void>) | null = null;
 let openThread: ((id: string) => void) | null = null;

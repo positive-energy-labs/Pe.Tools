@@ -7,7 +7,7 @@
   "routes": [
     {
       "artifact": "routes/voltage-drop/route.artifact",
-      "fingerprint": "pod-bytes:5f9c4f49376173ab5cb60de3461346c92ee04fc31035823798ec8cd8808ab28c",
+      "fingerprint": "pod-bytes:c6c1ec590fdcfb2d47fa1f05568a7ceb431a7f7599c683b2963a6cb44c3b52be",
       "name": "Circuit voltage drop",
       "description": "Compare authored copper conductor inputs with the 75 C K method"
     }

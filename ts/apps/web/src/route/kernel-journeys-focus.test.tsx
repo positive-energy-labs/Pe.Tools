@@ -13,7 +13,8 @@ import { useState, useSyncExternalStore } from "react";
 import { journey as takeoffJourney, Drawing as TakeoffDrawing } from "../takeoff/adoption.test.fixture";
 import { adoptionData } from "@pe/agent-contracts/takeoff-read";
 import { createPortal } from "react-dom";
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render as renderView, screen, waitFor, within } from "@testing-library/react";
+import { StandaloneBand } from "../shell/band.test-support";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from "@tanstack/react-router";
 import { route, scrollBody, type TypedRoute } from "./typed-route";
@@ -45,6 +46,8 @@ import { historySnapshotSchema } from "../shell/history";
 import { ref, path } from "../../../host/tests/host-read-graph.test-support";
 import { publicationSource } from "../host/publication-source";
 import { routeRegistry } from "./registry";
+
+const render = (node: import("react").ReactNode) => renderView(node, { wrapper: StandaloneBand });
 
 test("JZ Families History offers published values and marks ambiguous publications Unavailable", async () => {
   const browserHref = window.location.href;
@@ -453,7 +456,9 @@ test.each(["undo after apply", "review identity", "insertText", "pointer keyboar
     address: { read: () => new URLSearchParams(search), write: next => { for (const [k,v] of next) search.set(k,v); }, subscribe: () => () => {} },
     fixture: null, target: { kind: "document", ref: host.b }, work: { address: null, open: host.b },
     custody: { current: () => true }, memory: () => ({}),
-  }, workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`), { work, sources: { "schedules.view": source } });
+  }, workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`), { work,
+    timeline: fixtureTimeline(host.workspace, () => timelineReceipts(host.owner()), changed => host.owner().subscribe({ kinds: ["action"] }, changed)),
+    sources: { "schedules.view": source } });
   function Journey() {
     useSyncExternalStore(mount.subscribe, mount.revision, mount.revision);
     return <KeyScopeHost id="schedules-cell-edit"><TypedChrome mount={mount} document={<span>Project schedules</span>} /></KeyScopeHost>;
@@ -567,12 +572,12 @@ test.each(["undo after apply", "review identity", "insertText", "pointer keyboar
       fireEvent.click(screen.getByRole("button", { name: "Apply cells" }));
       await waitFor(async () => expect((await host.view()).doc.cells["1::2"].edit).toBeNull());
       await waitFor(() => expect(mount.problem()).toBeNull());
-      const undo = screen.getByRole("button", { name: "Undo Edit schedule cell 1::2" });
+      const undo = await screen.findByRole("button", { name: "Undo" });
       expect(undo.getAttribute("aria-disabled"), "Applied Work must not offer a silently refused undo").toBe("true");
       // Kit tips wait for real movement after a press; jsdom's hover omits movementX.
       fireEvent(window, Object.assign(new Event("pointermove"), { movementX: 1 }));
       await user.hover(undo);
-      await screen.findByText("Cannot undo: 'Apply cells' already wrote this to Revit. Reverse it in Revit.");
+      await screen.findByText(/Cannot undo.*Edit schedule cell 1::2.*schedule.grid.push.*already consumed/);
       const settled = await host.view();
       fireEvent.click(undo);
       expect(await host.view()).toEqual(settled);
@@ -1569,11 +1574,16 @@ test("JZ B05 retain Family Work and its spec across folding, first-thread promot
     await router.load();
     render(<RouterProvider router={router} />);
     await screen.findByText("retained-spec.pdf");
-    const seam = screen.getByRole("separator", { name: "Resize pane" });
+    const seam = screen.getAllByRole("separator", { name: "Resize pane" }).find(node =>
+      node.closest("[data-layout-split]")?.getAttribute("data-layout-split") === JSON.stringify(["route-dock", "tools"]));
+    if (!seam) throw Error("The tools dock has no resize separator");
     for (let i = 0; i < 40 && !screen.queryByRole("button", { name: "Expand tools" }); i++)
       fireEvent.keyDown(seam, { key: "ArrowRight" });
     expect(screen.getByRole("button", { name: "Expand tools" }), "B05: the actual tools Activity is folded").toBeTruthy();
-    expect(screen.getByLabelText("Pea context").textContent, "E8-11: folded tools still name Pea's bound Place").toContain("Family");
+    // fedd433a retired the duplicate context row (routes LEDGER); folding retains the actual Work.
+    expect(screen.queryByLabelText("Pea context")).toBeNull();
+    expect(screen.getByLabelText("Mounted Family Work").textContent,
+      "E8-11: folding retains Family's Work and spec").toBe("retained-spec.pdf");
     await (await import("@testing-library/react")).act(() => store.actions.promoteThread(threads[0]!.id));
     expect(router.state.location.search.thread, "B05: first Send supplies the thread after the drawing folded").toBe(threads[0]!.id);
     await waitFor(async () => expect((await read(threads[0]!.id)).status,
