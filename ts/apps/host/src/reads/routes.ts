@@ -10,6 +10,7 @@ import { z } from "zod";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import { linkedCatalog } from "@pe/agent-contracts/pe-api";
 import { read } from "./door.ts";
+import { FINDINGS_DOORS, findingsGuide, findingsCommands } from "@pe/agent-contracts/slots";
 
 /** The host joins the wire's entry keys; no executable route code reaches Pea. */
 export function projectRouteRead(module: Pick<HostRouteModule, "data" | "schemas">) {
@@ -17,6 +18,11 @@ export function projectRouteRead(module: Pick<HostRouteModule, "data" | "schemas
   const catalog = linkedCatalog().entries;
   return {
     ...data,
+    // Kernel doors are available on every route, never declared or placed by the route.
+    findings: Object.fromEntries(Object.values(FINDINGS_DOORS).map(entry => {
+      const command = findingsCommands[entry];
+      return [entry, { entry, description: findingsGuide[entry], input: z.toJSONSchema(command.input), effect: command.catalogEffect }];
+    })),
     fields: Object.fromEntries(
       Object.entries(data.fields).map(([id, field]) => {
         if (!("schema" in field)) return [id, field];

@@ -10,10 +10,7 @@ import type { FamiliesDrawContext } from "./route";
 import { TypeGrid } from "./pivot-grid";
 import { useCellCollection } from "@pe/kit/lang/cell";
 import { useMeasuredParse } from "#/host/measured-parse";
-import { FindingVerb } from "#/route/slots/findings/verb";
-import { FINDINGS_DOORS } from "@pe/agent-contracts/slots";
 import { joinRows } from "./families-matrix";
-import { subjectCode } from "../../../../packages/agent-contracts/src/subject-ref.ts";
 export function FamiliesMatrix({ ctx }: { ctx: FamiliesDrawContext }) {
   const [failure, setFailure] = useState<string | null>(null);
   const run = async (id: "read" | "stop", input?: unknown) => {
@@ -145,13 +142,6 @@ export function FamiliesMatrix({ ctx }: { ctx: FamiliesDrawContext }) {
         families={pivot.pivotFamilies}
         scroller={scroller}
         landed={landed}
-        typeVerb={(type) => (
-          <FindingVerb
-            subject={subjectCode({ keyKind: "name", key: [type.familyName, type.typeName] })}
-            name={`${type.familyName} · ${type.typeName}`}
-            action={ctx.verb(FINDINGS_DOORS.say)}
-          />
-        )}
         edit={{
           live,
           params: new Map(params.map((p) => [p.key, p])),

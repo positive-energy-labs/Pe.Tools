@@ -1,5 +1,7 @@
 /** Element names. SubjectText owns prose references and attention. A claim is a finding now (ADR 0035 rule 9). */
 import { snapshotById } from "@pe/ducts-domain/readiness";
+export { familyTypeName as typeName } from "@pe/agent-contracts/subject-ref";
+import { familyTypeName as typeName } from "@pe/agent-contracts/subject-ref";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import type { Place } from "./legs";
 import type { SubjectDrawn } from "./scene";
@@ -12,11 +14,6 @@ const KIND_WORD: Record<DuctSnapshot["nodes"][number]["kind"], string> = {
   cap: "end cap",
 };
 /** A unit or grille with no label or mark reads by what it is: its family and type ('Price LBP15A Supply 16 X 8'). */
-export const typeName = (node: { family?: string | null; type?: string | null }) => {
-  // A Revit-internal family name (`Damper_Volume_Round`) is not a person's word; its type is.
-  const family = node.family?.includes("_") && node.type?.trim() ? null : node.family;
-  return [...new Set([family, node.type].map((v) => v?.trim()).filter(Boolean))].join(" ");
-};
 const ELEMENT_PLACES = new Set<Place["kind"]>(["equipment", "accessory", "terminal", "cap"]);
 
 /**
