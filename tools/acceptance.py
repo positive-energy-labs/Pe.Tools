@@ -297,7 +297,25 @@ def http(state: dict, who: str, method: str, path: str, body: bytes | None = Non
         return {"status": status, "body": text}
 
 
+def require_setup_admission() -> None:
+    # Point-in-time check only, not a reservation or memory cap over persistent SDK services.
+    try:
+        reading = subprocess.run(
+            [sys.executable, str(CHECKOUT / ".agents/skills/slot.execute/machine.py"),
+             "admit", "revit-drive", "--json"],
+            capture_output=True, text=True, timeout=8,
+        )
+        verdict = json.loads(reading.stdout)
+    except (OSError, subprocess.SubprocessError, ValueError) as error:
+        sys.exit(f"HOLD setup: machine admission failed: {error}")
+    if (reading.returncode != 0 or not isinstance(verdict, dict)
+            or verdict.get("verdict") != "ADMIT" or verdict.get("kind") != "revit-drive"
+            or "error" in verdict):
+        sys.exit(f"HOLD setup: machine admission refused: {reading.stdout.strip()}")
+
+
 def setup(run: str, args: list[str]) -> None:
+    require_setup_admission()  # Includes the host-timeout resume path, before discovery or acquisition.
     owner = owner_home()
     installed = "--installed" in args
     if installed and "--web" in args:
@@ -470,7 +488,11 @@ def teardown(run: str) -> None:
             container = home.parent
             if (home.name == "Pe.Tools" and container.name.startswith("pe-accept-")
                     and container.parent == Path(tempfile.gettempdir()).resolve()):
-                shutil.rmtree(container)
+                target = str(container)
+                if os.name == "nt" and not target.startswith("\\\\?\\"):
+                    # Recording history can exceed MAX_PATH; container is already resolved and guarded.
+                    target = "\\\\?\\UNC\\" + target[2:] if target.startswith("\\\\") else "\\\\?\\" + target
+                shutil.rmtree(target)
 
 
 def processes() -> list[dict]:
