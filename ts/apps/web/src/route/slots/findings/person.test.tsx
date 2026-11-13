@@ -12,6 +12,9 @@ import { RouteWorkspace } from "@pe/runtime";
 import { fixtureNative } from "../../../../../host/tests/fixture-native";
 import { approvedPea, human } from "../../../../../host/tests/callers";
 import { createPeRoutes } from "../../../../../host/src/pe-routes";
+import { graphRoute } from "../../../../../host/src/reads/routes";
+import { inputPort } from "../../../../../host/src/reads/inputs";
+import { hostTimeline } from "../../../../../host/src/reads/work-timeline";
 import { GraphHistory } from "../../../shell/graph-history";
 import { observeWorkReceipts } from "../../../../../host/src/work-receipt-feed";
 import { createWitness } from "../../../fans/cutover.test-support";
@@ -92,7 +95,12 @@ test("the person undoes their own finding from its History row; Pea's newer find
     store: { getState: async () => structuredClone(saved), setState: async ({ value }) => void (saved = structuredClone(value)) },
   });
   const post = native.actions({ workspace: host });
-  const routes = createPeRoutes({ workspace: host, registrations: [{ spec: findingsWork }] });
+  // The host's read door, answering `work.timeline` from the real host Timeline for the person.
+  const timeline = inputPort({ source: {} as never, workspace: host, marks: {} as never, run: (async () => undefined) as never,
+    evaluation: "findings-undo", origin: () => null, revision: () => 0, timeline: hostTimeline(host, native.journal) });
+  const routes = createPeRoutes({ workspace: host, journal: native.journal, registrations: [{ spec: findingsWork }],
+    readGraph: async (request) => (request as { release?: boolean }).release ? {}
+      : { value: { data: await graphRoute("reads.value", request, undefined, "human").evaluate(timeline) } } });
   // The browser's Pe client, answered by the host's own route door as the person.
   const browser = createPeClient("http://host", (url, init) =>
     withInvocationContext({ caller: human }, () => routes.fetch(new Request(url, init))));

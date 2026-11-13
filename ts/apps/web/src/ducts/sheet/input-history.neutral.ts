@@ -3,7 +3,7 @@ import { z } from "zod";
 import { decode } from "@pe/agent-contracts";
 import type { SheetEdits } from "@pe/agent-contracts";
 import type { WorkHistoryEntry } from "../../../../../packages/agent-contracts/src/route-kernel-bodies.ts";
-import { CRITERION_WORDS } from "./criterion-words.neutral.ts";
+import { CRITERION_WORDS } from "@pe/agent-contracts/criterion-words";
 
 export const editMetaSchema = z.strictObject({
   label: z.string(),

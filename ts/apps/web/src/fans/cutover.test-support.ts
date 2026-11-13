@@ -59,7 +59,7 @@ export async function createWitness(
   const connected = createWorkFeedClient(
     { subscribe: observe, dirty() {} },
     {
-      write: (key, write) => ws.write(key, key.route, "human", write),
+      write: (key, write) => ws.write(key, key.route, "human", write, async () => []),
       submit: async command => { const call = `fans:${command.key}`; inputs.set(call,command.input); calls.set(call,(calls.get(call)??0)+1); return submit(command); },
     },
   );

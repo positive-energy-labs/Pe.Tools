@@ -132,7 +132,7 @@ describe("kernel gaps", () => {
   });
   test("kernel slot: parameter-binding (4)", () => {
     // The slot's data projection (sheetSlotDataSchema) keys bindings under `bindings`.
-    expect(module.data).toMatchObject({ sheet: { bindings: { chosen: { kind: "parameter", parameter: "Diameter" } } } });
+    expect(module.data).toMatchObject({ sheet: { bindings: { chosen: { home: { at: "parameter", parameter: "Diameter" }, domain: { kind: "number" } } } } });
   });
   test.fails("kernel gap: subjectref-codec (4)", async () => {
     // chosen is keyed by a raw UniqueId string; no SubjectRef codec exists to key it by.
@@ -170,7 +170,6 @@ describe("kernel gaps", () => {
   });
   test("kernel door: pod-parameter-write (8)", () => {
     // The parameter binding earns the one sheet pair: the Pod adds no native op (ADR 0030 rule 12).
-    expect(Object.values(module.data.verbs).map((v) => v.kind)).toContain("command");
-    expect(module.data.verbs.sheet).toMatchObject({ kind: "command", entry: "sheet.apply" });
+    expect(module.data.verbs.sheet).toMatchObject({ effect: "ModelWrite", entry: "sheet.apply" });
   });
 });

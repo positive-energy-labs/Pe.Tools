@@ -77,7 +77,9 @@ export const module = route({
   },
   fields,
   core: loaded,
-  reads: { views: viewCatalogue },
+  // The adoption pane draws the view catalogue, so no pane demands the core: it is declared here, among the
+  // reads that stay demanded, or the adoption reading is never read (Start, initialize and adopt all need it).
+  reads: { views: viewCatalogue, adoption: loaded },
   edits: {
     work: takeoffsRouteState,
     seed: () => takeoffsRouteState.schema.parse({}),

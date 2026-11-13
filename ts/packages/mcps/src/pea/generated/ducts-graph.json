@@ -311,249 +311,466 @@
     "draft": true,
     "bindings": {
       "setting.ducts.velocitySupplyFpm": {
-        "kind": "setting",
-        "owner": "ducts",
-        "path": [
-          "criteria",
-          "velocityLimitFpm",
-          "supply"
-        ],
-        "tiers": [
-          "project",
-          "firm"
-        ],
+        "home": {
+          "at": "setting",
+          "owner": "ducts",
+          "path": [
+            "criteria",
+            "velocityLimitFpm",
+            "supply"
+          ],
+          "tiers": [
+            "project",
+            "firm"
+          ]
+        },
+        "domain": {
+          "kind": "number",
+          "unit": "fpm",
+          "exclusiveMin": 0
+        },
         "per": "route",
         "label": "Velocity limit supply",
-        "unit": "fpm",
-        "default": 900,
-        "min": 0
+        "default": 900
       },
       "setting.ducts.velocityReturnFpm": {
-        "kind": "setting",
-        "owner": "ducts",
-        "path": [
-          "criteria",
-          "velocityLimitFpm",
-          "return"
-        ],
-        "tiers": [
-          "project",
-          "firm"
-        ],
+        "home": {
+          "at": "setting",
+          "owner": "ducts",
+          "path": [
+            "criteria",
+            "velocityLimitFpm",
+            "return"
+          ],
+          "tiers": [
+            "project",
+            "firm"
+          ]
+        },
+        "domain": {
+          "kind": "number",
+          "unit": "fpm",
+          "exclusiveMin": 0
+        },
         "per": "route",
         "label": "Velocity limit return",
-        "unit": "fpm",
-        "default": 700,
-        "min": 0
+        "default": 700
       },
       "setting.ducts.terminalDropInWg": {
-        "kind": "setting",
-        "owner": "ducts",
-        "path": [
-          "criteria",
-          "terminalDropInWg"
-        ],
-        "tiers": [
-          "project",
-          "firm"
-        ],
+        "home": {
+          "at": "setting",
+          "owner": "ducts",
+          "path": [
+            "criteria",
+            "terminalDropInWg"
+          ],
+          "tiers": [
+            "project",
+            "firm"
+          ]
+        },
+        "domain": {
+          "kind": "number",
+          "unit": "in-wg",
+          "min": 0
+        },
         "per": "route",
         "label": "Default terminal drop",
-        "unit": "in-wg",
-        "default": 0.03,
-        "min": 0
+        "default": 0.03
       },
       "setting.ducts.autoJoinGapIn": {
-        "kind": "setting",
-        "owner": "ducts",
-        "path": [
-          "criteria",
-          "autoJoinGapIn"
-        ],
-        "tiers": [
-          "project",
-          "firm"
-        ],
+        "home": {
+          "at": "setting",
+          "owner": "ducts",
+          "path": [
+            "criteria",
+            "autoJoinGapIn"
+          ],
+          "tiers": [
+            "project",
+            "firm"
+          ]
+        },
+        "domain": {
+          "kind": "number",
+          "unit": "in",
+          "min": 0
+        },
         "per": "route",
         "label": "Auto-join gap",
-        "unit": "in",
-        "default": 3,
-        "min": 0
+        "default": 3
       },
       "setting.ducts.healBoxIn": {
-        "kind": "setting",
-        "owner": "ducts",
-        "path": [
-          "criteria",
-          "healBoxIn"
-        ],
-        "tiers": [
-          "project",
-          "firm"
-        ],
+        "home": {
+          "at": "setting",
+          "owner": "ducts",
+          "path": [
+            "criteria",
+            "healBoxIn"
+          ],
+          "tiers": [
+            "project",
+            "firm"
+          ]
+        },
+        "domain": {
+          "kind": "number",
+          "unit": "in",
+          "min": 0
+        },
         "per": "route",
         "label": "Heal box",
-        "unit": "in",
-        "default": 36,
-        "min": 0
+        "default": 36
       },
       "setting.ducts.splitPolicy": {
-        "kind": "setting",
-        "owner": "ducts",
-        "path": [
-          "criteria",
-          "splitPolicy"
-        ],
-        "tiers": [
-          "project",
-          "firm"
-        ],
+        "home": {
+          "at": "setting",
+          "owner": "ducts",
+          "path": [
+            "criteria",
+            "splitPolicy"
+          ],
+          "tiers": [
+            "project",
+            "firm"
+          ]
+        },
+        "domain": {
+          "kind": "enum",
+          "shape": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "string",
+            "enum": [
+              "even",
+              "proportional"
+            ]
+          }
+        },
         "per": "route",
         "label": "Split policy",
         "default": "even"
       },
       "setting.ducts.allowanceSupplyInWg": {
-        "kind": "setting",
-        "owner": "ducts",
-        "path": [
-          "criteria",
-          "allowanceInWg",
-          "supply"
-        ],
-        "tiers": [
-          "project",
-          "firm"
-        ],
+        "home": {
+          "at": "setting",
+          "owner": "ducts",
+          "path": [
+            "criteria",
+            "allowanceInWg",
+            "supply"
+          ],
+          "tiers": [
+            "project",
+            "firm"
+          ]
+        },
+        "domain": {
+          "kind": "number",
+          "unit": "in-wg",
+          "min": 0
+        },
         "per": "route",
         "label": "Allowance supply",
-        "unit": "in-wg",
-        "default": 0,
-        "min": 0
+        "default": 0
       },
       "setting.ducts.allowanceReturnInWg": {
-        "kind": "setting",
-        "owner": "ducts",
-        "path": [
-          "criteria",
-          "allowanceInWg",
-          "return"
-        ],
-        "tiers": [
-          "project",
-          "firm"
-        ],
+        "home": {
+          "at": "setting",
+          "owner": "ducts",
+          "path": [
+            "criteria",
+            "allowanceInWg",
+            "return"
+          ],
+          "tiers": [
+            "project",
+            "firm"
+          ]
+        },
+        "domain": {
+          "kind": "number",
+          "unit": "in-wg",
+          "min": 0
+        },
         "per": "route",
         "label": "Allowance return",
-        "unit": "in-wg",
-        "default": 0,
-        "min": 0
+        "default": 0
       },
       "setting.ducts.parameters.fanStatic": {
-        "kind": "setting",
-        "owner": "ducts",
-        "path": [
-          "parameters",
-          "fanStatic"
-        ],
-        "tiers": [
-          "project",
-          "firm"
-        ],
+        "home": {
+          "at": "setting",
+          "owner": "ducts",
+          "path": [
+            "parameters",
+            "fanStatic"
+          ],
+          "tiers": [
+            "project",
+            "firm"
+          ]
+        },
+        "domain": {
+          "kind": "enum",
+          "shape": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "string",
+            "minLength": 1
+          }
+        },
         "per": "route",
         "label": "fanStatic slot"
       },
       "setting.ducts.parameters.fanFlow": {
-        "kind": "setting",
-        "owner": "ducts",
-        "path": [
-          "parameters",
-          "fanFlow"
-        ],
-        "tiers": [
-          "project",
-          "firm"
-        ],
+        "home": {
+          "at": "setting",
+          "owner": "ducts",
+          "path": [
+            "parameters",
+            "fanFlow"
+          ],
+          "tiers": [
+            "project",
+            "firm"
+          ]
+        },
+        "domain": {
+          "kind": "enum",
+          "shape": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "string",
+            "minLength": 1
+          }
+        },
         "per": "route",
         "label": "fanFlow slot"
       },
       "setting.ducts.parameters.componentDrop": {
-        "kind": "setting",
-        "owner": "ducts",
-        "path": [
-          "parameters",
-          "componentDrop"
-        ],
-        "tiers": [
-          "project",
-          "firm"
-        ],
+        "home": {
+          "at": "setting",
+          "owner": "ducts",
+          "path": [
+            "parameters",
+            "componentDrop"
+          ],
+          "tiers": [
+            "project",
+            "firm"
+          ]
+        },
+        "domain": {
+          "kind": "enum",
+          "shape": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "string",
+            "minLength": 1
+          }
+        },
         "per": "route",
         "label": "componentDrop slot"
       },
       "setting.ducts.parameters.terminalDrop": {
-        "kind": "setting",
-        "owner": "ducts",
-        "path": [
-          "parameters",
-          "terminalDrop"
-        ],
-        "tiers": [
-          "project",
-          "firm"
-        ],
+        "home": {
+          "at": "setting",
+          "owner": "ducts",
+          "path": [
+            "parameters",
+            "terminalDrop"
+          ],
+          "tiers": [
+            "project",
+            "firm"
+          ]
+        },
+        "domain": {
+          "kind": "enum",
+          "shape": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "string",
+            "minLength": 1
+          }
+        },
         "per": "route",
         "label": "terminalDrop slot"
       },
       "setting.ducts.parameters.fittingCoefficient": {
-        "kind": "setting",
-        "owner": "ducts",
-        "path": [
-          "parameters",
-          "fittingCoefficient"
-        ],
-        "tiers": [
-          "project",
-          "firm"
-        ],
+        "home": {
+          "at": "setting",
+          "owner": "ducts",
+          "path": [
+            "parameters",
+            "fittingCoefficient"
+          ],
+          "tiers": [
+            "project",
+            "firm"
+          ]
+        },
+        "domain": {
+          "kind": "enum",
+          "shape": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "string",
+            "minLength": 1
+          }
+        },
         "per": "route",
         "label": "fittingCoefficient slot"
       },
       "setting.ducts.parameters.terminalFlow": {
-        "kind": "setting",
-        "owner": "ducts",
-        "path": [
-          "parameters",
-          "terminalFlow"
-        ],
-        "tiers": [
-          "project",
-          "firm"
-        ],
+        "home": {
+          "at": "setting",
+          "owner": "ducts",
+          "path": [
+            "parameters",
+            "terminalFlow"
+          ],
+          "tiers": [
+            "project",
+            "firm"
+          ]
+        },
+        "domain": {
+          "kind": "enum",
+          "shape": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "string",
+            "minLength": 1
+          }
+        },
         "per": "route",
         "label": "terminalFlow slot"
       },
       "setting.ducts.designFriction": {
-        "kind": "setting",
-        "owner": "ducts",
-        "path": [
-          "designFriction"
-        ],
-        "tiers": [
-          "project",
-          "firm"
-        ],
+        "home": {
+          "at": "setting",
+          "owner": "ducts",
+          "path": [
+            "designFriction"
+          ],
+          "tiers": [
+            "project",
+            "firm"
+          ]
+        },
+        "domain": {
+          "kind": "number",
+          "unit": "in-wg/100 ft",
+          "exclusiveMin": 0,
+          "digits": 3
+        },
         "per": "route",
         "label": "Design friction",
-        "unit": "in-wg/100 ft",
-        "default": 0.08,
-        "min": 0,
-        "digits": 3
+        "default": 0.08
       },
-      "criteria": {
-        "kind": "store",
-        "store": "_PE_DuctLosses",
-        "per": "subject",
-        "min": 0
+      "criteria.velocitySupplyFpm": {
+        "home": {
+          "at": "store",
+          "store": "_PE_DuctLosses"
+        },
+        "domain": {
+          "kind": "number",
+          "unit": "fpm",
+          "exclusiveMin": 0
+        },
+        "per": "route",
+        "label": "Velocity limit supply"
+      },
+      "criteria.velocityReturnFpm": {
+        "home": {
+          "at": "store",
+          "store": "_PE_DuctLosses"
+        },
+        "domain": {
+          "kind": "number",
+          "unit": "fpm",
+          "exclusiveMin": 0
+        },
+        "per": "route",
+        "label": "Velocity limit return"
+      },
+      "criteria.terminalDropInWg": {
+        "home": {
+          "at": "store",
+          "store": "_PE_DuctLosses"
+        },
+        "domain": {
+          "kind": "number",
+          "unit": "in-wg",
+          "min": 0
+        },
+        "per": "route",
+        "label": "Default terminal drop"
+      },
+      "criteria.autoJoinGapIn": {
+        "home": {
+          "at": "store",
+          "store": "_PE_DuctLosses"
+        },
+        "domain": {
+          "kind": "number",
+          "unit": "in",
+          "min": 0
+        },
+        "per": "route",
+        "label": "Auto-join gap"
+      },
+      "criteria.healBoxIn": {
+        "home": {
+          "at": "store",
+          "store": "_PE_DuctLosses"
+        },
+        "domain": {
+          "kind": "number",
+          "unit": "in",
+          "min": 0
+        },
+        "per": "route",
+        "label": "Heal box"
+      },
+      "criteria.splitPolicy": {
+        "home": {
+          "at": "store",
+          "store": "_PE_DuctLosses"
+        },
+        "domain": {
+          "kind": "enum",
+          "shape": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "string",
+            "enum": [
+              "even",
+              "proportional"
+            ]
+          }
+        },
+        "per": "route",
+        "label": "Split policy"
+      },
+      "criteria.allowanceSupplyInWg": {
+        "home": {
+          "at": "store",
+          "store": "_PE_DuctLosses"
+        },
+        "domain": {
+          "kind": "number",
+          "unit": "in-wg",
+          "min": 0
+        },
+        "per": "route",
+        "label": "Allowance supply"
+      },
+      "criteria.allowanceReturnInWg": {
+        "home": {
+          "at": "store",
+          "store": "_PE_DuctLosses"
+        },
+        "domain": {
+          "kind": "number",
+          "unit": "in-wg",
+          "min": 0
+        },
+        "per": "route",
+        "label": "Allowance return"
       }
     }
   },
