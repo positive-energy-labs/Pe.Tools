@@ -58,7 +58,7 @@ test("a test-named dependency is captured by the real resolver and invalidates r
     projections: { [join(f.root, "ts/apps/web/src/a/source-closure.generated.json")]: canonicalRouteJson(closure) } };
   expect(currentRouteStartupProjection(f.root, receipt)).toBe(true);
   writeFileSync(dependency, "export const value = 2;\n");
-  expect(routeStartupSourceHash(f.root)).toBe(receipt.sourceHash);
+  expect(routeStartupSourceHash(f.root)).not.toBe(receipt.sourceHash);
   expect(currentRouteStartupProjection(f.root, receipt)).toBe(false);
 });
 test("actual resolver closes all module kinds; source, asset and imported JSON mutations change identity; EOLs do not", async () => {
