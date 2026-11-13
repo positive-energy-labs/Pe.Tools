@@ -1,6 +1,5 @@
 import { FINDINGS_DOORS, type Finding, type Mark } from "@pe/agent-contracts/slots";
 import { handle } from "@pe/agent-contracts/handle";
-import { catalogAction } from "../../typed-actions.ts";
 import { resolveMark, type Captured } from "../picture/index.ts";
 
 /*
@@ -29,16 +28,3 @@ export function findingMark(finding: Finding, captured: readonly Captured[]): Ma
   // Nothing captured the subject: the mark stays on its SubjectRef for the picture to resolve later.
   return resolveMark(own, captured) ?? own;
 }
-
-/**
- * The route command a person's row verb (`FindingVerb`) runs: `findings.say` with the row's
- * finding. The mount (shell/typed-mount.ts) adds it to every route as `finding` and binds the
- * route's own Work handle; the host addresses the admitted document's findings Work and stamps the
- * author from the caller. `route()`, the Pod surface, never imports this file, because the contract
- * is the catalog (pod-surface.guard.test.ts).
- */
-export const findingCommand = {
-  ...catalogAction(FINDINGS_DOORS.say),
-  label: "Write finding", row: true as const,
-  input: (_context: unknown, supplied: unknown) => supplied,
-};

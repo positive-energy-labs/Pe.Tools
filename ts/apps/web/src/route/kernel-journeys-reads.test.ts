@@ -58,7 +58,7 @@ import { observeResources } from "@pe/runtime";
 import { workFingerprintSchema, actionReceiptSchema } from "@pe/agent-contracts";
 import { fixture, ref, path, gate, snapshot, roster } from "../../../host/tests/host-read-graph.test-support";
 import { module as fans } from "../fans/route";
-import { mountTypedRoute } from "../shell/typed-mount";
+import { direct, mountTypedRoute, planned } from "../shell/typed-mount";
 import { createWorkFeedClient } from "../shell/work-feed-client";
 import type { UseSource } from "../shell/source-contract";
 import { Effect } from "effect";
@@ -71,7 +71,7 @@ import { fansSheet } from "../fans/host";
 import { module as ducts } from "../ducts/route";
 import { module as families } from "../families/route";
 import type { TypedRoute } from "./typed-route";
-import { commandContract } from "./typed-actions";
+import { handle } from "@pe/agent-contracts/handle";
 import { publicationSource } from "../host/publication-source";
 import { builtinEnrollments } from "../../../host/src/builtin-enrollment";
 import savedNetwork from "../ducts/fixtures/synthetic-snapshot.json";
@@ -195,7 +195,7 @@ test("JZ Plan route switch: Ducts reads preserve the Fans seal; changed Work sta
     expect(staged.ok).toBe(true);
     mounted.refresh();
     await vi.waitFor(() => expect(mounted!.value().state === "ready").toBe(true), { timeout: 20_000 });
-    await mounted.action("losses").plan();
+    await planned(mounted.verb("losses")).plan();
     expect(mounted.review("losses")).toMatchObject({ stale: false, preview: expect.anything() });
     const sealed = mounted.value().publication!;
     // Reopening a source creates a new subscription/consumption, as on page reload.
@@ -244,7 +244,7 @@ test("JZ Plan route switch: Ducts reads preserve the Fans seal; changed Work sta
     mounted.refresh();
     await vi.waitFor(() => expect(mounted!.value().state === "ready").toBe(true), { timeout: 20_000 });
     expect(mounted.review("losses")).toMatchObject({ stale: true, rows: [], cells: [] });
-    await expect(mounted.action("losses").apply()).rejects.toThrow(/stale/i);
+    await expect(planned(mounted.verb("losses")).apply()).rejects.toThrow(/stale/i);
     mounted.dispose();
     await vi.waitFor(() => expect(watched.size, "H05: disposal closes watched inputs").toBe(0));
     expect(streams.size, "a tab never holds more than its one stream").toBeLessThanOrEqual(1);
@@ -488,11 +488,11 @@ test("JX3 open fixture Fans, change scope and attempt a native write without liv
         "H09: fixture publication discloses its origin",
       ).toMatchObject({ kind: "fixture", name: "layout" });
       expect(
-        mounted.commandRefusal("losses"),
+        mounted.verb("losses").refusal,
         "H09: fixture discloses native action refusal",
       ).toMatch(/Fixture/);
       await expect(
-        mounted.action("losses").plan(),
+        planned(mounted.verb("losses")).plan(),
         "H09: even direct invocation cannot write native",
       ).rejects.toThrow(/Fixture/);
       mounted.page.subject({ kind: "ids", ids: [] });
@@ -982,9 +982,8 @@ test("JX4 Families apply readback cannot overwrite a newer manual read or certif
         return journal.wait(command.id);
       },
     });
-    const module: TypedRoute = { ...families, spec: { ...families.spec, core: undefined, commands: {
-      read: { kind: "catalog" as const, entry: "families.read", contract: commandContract("families.read"),
-        label: "Read Families", input: ({ work }) => ({ work, readId: crypto.randomUUID() }) },
+    const module: TypedRoute = { ...families, spec: { ...families.spec, core: undefined, band: ["read"], verbs: {
+      read: { handle: handle("families.read"), label: "Read Families", input: ({ work }) => ({ work, readId: crypto.randomUUID() }) },
     } } };
     const mounted = mountTypedRoute(module, {
       target: { kind: "document", ref: target }, fixture: null, work: { address: path, open: target },
@@ -995,21 +994,16 @@ test("JX4 Families apply readback cannot overwrite a newer manual read or certif
       mounted.subscribe(() => {});
       await vi.waitFor(() => expect(mounted.owner()?.ready, mounted.problem() ?? "Families owner pending").toBe(true));
       hold = paused = gate();
-      const reading = mounted.action("read").run();
+      const reading = direct(mounted.verb("read")).run();
       await Promise.race([paused.entered.promise, reading.then(() => { throw Error("Families read never reached its held native boundary"); })]);
-      const submitted = module.spec.commands.read!;
-      Reflect.set(module.spec.commands, "read", { kind: "catalog", entry: "families.cancel-read",
-        contract: commandContract("families.cancel-read"), label: "Cancel Families read" });
       paused.release.resolve();
-      const output = await reading;
-      expect(commandContract("families.read").output.safeParse(output).success,
-        "H03: a replacement entry cannot change the submitted result decoder").toBe(true);
-      Reflect.set(module.spec.commands, "read", submitted);
+      // The browser holds no command schema (K2): the host decoded this result, and it arrives as sent.
+      expect(await reading, "H03: the submitted read answers with its own result").toMatchObject({ id: expect.any(String) });
       const completed = await captures.latestFamilies(key);
       malformedOutput = true;
-      await expect(mounted.action("read").run(), "H02/H03: malformed native output is a refused action, never a typed success").rejects.toThrow();
+      await expect(direct(mounted.verb("read")).run(), "H02/H03: malformed native output is a refused action, never a typed success").rejects.toThrow();
       expect((await captures.latestFamilies(key))?.id, "H03: failed native decoding preserves the completed observation").toBe(completed!.id);
-      expect(mounted.action("read").failure, "H03: the typed action exposes its durable refusal").toBeTruthy();
+      expect(mounted.verb("read").failure, "H03: the typed action exposes its durable refusal").toBeTruthy();
     } finally { mounted.dispose(); }
   } finally {
     paused?.release.resolve();

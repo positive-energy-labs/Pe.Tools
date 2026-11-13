@@ -2,16 +2,22 @@ import { useRef, useMemo } from "react";
 import type { ReadingState } from "@pe/agent-contracts";
 import { refusalOf } from "../route/typed-route";
 import type { OpenContext } from "./open-fields";
+import type { RunVerb } from "../route/typed-route";
+type OpenVerb = "start" | "open" | "close" | "stop" | "restart";
 /** What the owner reads: a pane's draw context, or the mount itself where no pane is drawn (the companion
- *  controls), so the reading may be value-less. */
-export type OpenSource = Pick<OpenContext, "write"> & {
+ *  controls), so the reading may be value-less. `/sessions` passes the three verbs it declares. */
+export type OpenSource<V extends OpenVerb = OpenVerb> = {
+  verb(id: NoInfer<V>): RunVerb;
   readonly value: ReadingState<OpenContext["value"]["value"]>;
   // A pane's typed Page port, or the mount's own.
   readonly page: OpenContext["page"] | Pick<import("../shell/typed-mount").TypedMount["page"], "read" | "pose" | "query">;
 };
 import type { OpenOwner } from "./context";
-const openActions = ["start", "open", "close", "stop", "restart"];
-export function useOpenTypedOwner(ctx: OpenSource, actions = openActions): OpenOwner {
+const openActions: readonly OpenVerb[] = ["start", "open", "close", "stop", "restart"];
+export function useOpenTypedOwner<V extends OpenVerb = OpenVerb>(
+  ctx: OpenSource<V>,
+  actions: readonly V[] = openActions as readonly V[],
+): OpenOwner {
   const current = useRef(ctx);
   current.current = ctx;
   return useMemo(
@@ -20,7 +26,7 @@ export function useOpenTypedOwner(ctx: OpenSource, actions = openActions): OpenO
         subscribe: () => () => {},
         version: () => 0,
         fixture: null,
-        busy: () => actions.find(id => current.current.write(id).pending) ?? null,
+        busy: () => actions.find(id => current.current.verb(id).pending) ?? null,
         view: {
           read: () => ({
             page: {
@@ -47,12 +53,12 @@ export function useOpenTypedOwner(ctx: OpenSource, actions = openActions): OpenO
             };
           },
         },
-        control: (id: string, input: any) => ({
+        control: (id: V, input: any) => ({
           refusal: refusalOf(current.current.value),
           run: async () => {
             try {
               if (input.refusal) throw Error(input.refusal);
-              const value = await current.current.write(id).run(input.request);
+              const value = await current.current.verb(id).run(input.request);
               return { state: "done", kind: "command", outcome: { state: "succeeded" }, value };
             } catch (error) {
               return { state: "refused", refusal: { message: String(error) } };

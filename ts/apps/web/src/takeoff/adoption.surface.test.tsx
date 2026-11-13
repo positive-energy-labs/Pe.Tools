@@ -5,6 +5,7 @@ import { expect, test } from "vite-plus/test";
 import { commands } from "@pe/agent-contracts";
 import { adoptionData } from "@pe/agent-contracts/takeoff-read";
 import { gate, ref } from "../../../host/tests/host-read-graph.test-support";
+import { planned } from "../shell/typed-mount";
 import { loaded } from "./route";
 import { journey, Drawing } from "./adoption.test.fixture";
 
@@ -19,8 +20,8 @@ test("Initialize plan names the host reading's missing shared parameters before 
       value: { edit: { value: { stage: "Adoption" } } },
     }], owner.handle.revision);
     await j.ready();
-    await j.mount.action("initialize").plan();
-    const review = j.mount.action("initialize").read();
+    await planned(j.mount.verb("initialize")).plan();
+    const review = planned(j.mount.verb("initialize")).read();
     expect(review?.rows).toHaveLength(2);
     expect(review?.rows.join(" ")).toContain("00000000-0000-4000-8000-000000000001");
     expect(review?.rows.join(" ")).toContain("00000000-0000-4000-8000-000000000002");
@@ -125,7 +126,7 @@ test("choose adoption views, edit the actual Work, initialize and adopt through 
       stage: "Adoption",
     });
     fireEvent.click(screen.getByRole("button", { name: "adopt" }));
-    await waitFor(() => expect(j.actions.map((row) => row.key), j.mount.action("adopt").failure ?? screen.queryByRole("alert")?.textContent ?? "").toContain("takeoffs.adopt"), { timeout: 20000 });
+    await waitFor(() => expect(j.actions.map((row) => row.key), j.mount.verb("adopt").failure ?? screen.queryByRole("alert")?.textContent ?? "").toContain("takeoffs.adopt"), { timeout: 20000 });
     expect(j.actions.map((row) => row.key)).toContain(
       commands["takeoffs.adopt"].writeBoundary.previewKey,
     );

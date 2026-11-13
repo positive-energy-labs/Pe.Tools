@@ -104,3 +104,20 @@ test("direct answers resolve and replay without inventing a host receipt", async
   expect(door.accepted(submission.handle.id)).toEqual(accepted);
   expect(accepted).not.toHaveProperty("receiptId");
 });
+
+/*
+ * The witness `runOp` held before k2/verbs deleted it: what this client's contract does not name is
+ * refused. A command key mints no handle; a native read key has no decoder, so its answer is never
+ * handed on as a value.
+ */
+test("a command or a native read absent from this client's contract is refused", async () => {
+  expect(() => handle("nope.command" as never)).toThrow("No command or route: nope.command");
+  const { submit, fetch } = ports({ anything: 1 });
+  const { opResponseSchema } = await import("../host/catalog-client");
+  await expect(sendCommand(handle("ops.read"), {
+    id: "request-a", key: "ops.read", target,
+    input: { op: { key: "revit.detail.not-in-this-contract", intent: "Read" }, request: {} },
+  }, { submit, fetch, decode: async (key, value) => (await opResponseSchema(key)).parse(value) }))
+    .rejects.toThrow("revit.detail.not-in-this-contract is not in the op catalog");
+  expect(submit).not.toHaveBeenCalled();
+});

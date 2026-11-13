@@ -106,7 +106,7 @@ vi.mock("#/host/pe-client", () => ({ peClient: { call } }));
 
 // The retention/lease witness uses the typed Page contract without acquiring native evidence or Work.
 const familiesProbe=declareRoute({
-  ...familiesDeclaration.spec, needs:"browser",core:undefined,edits:undefined,commands:{},
+  ...familiesDeclaration.spec, needs:"browser",core:undefined,edits:undefined,verbs:{},band:[],
   panes:{probe:{title:"Probe",purpose:"Retention proof",body:"scroll",draw:ctx=>scrollBody(<output data-families-probe="">{ctx.page.read().focus}</output>)}},
   layout:{kind:"pane",id:"probe"},
 });

@@ -63,10 +63,10 @@ export function SchedulesGrid({ ctx }: { ctx: SchedulesDrawContext }) {
     cell: page.cell,
     locate: (cell) => ctx.page.pose({ cell }, "named"),
   };
-  const run = async (id: string) => {
+  const run = async (id: "read" | "bind") => {
     try {
       setFailure(null);
-      await ctx.write(id).run();
+      await ctx.verb(id).run();
     } catch (error) {
       setFailure(error instanceof Error ? error.message : String(error));
     }
@@ -81,7 +81,7 @@ export function SchedulesGrid({ ctx }: { ctx: SchedulesDrawContext }) {
         <Button label="Bind schedule" onClick={() => run("bind")}>
           Bind schedule
         </Button>
-        <PreviewAction handle={ctx.write("push")} label="Apply cells" />
+        <PreviewAction handle={ctx.verb("push")} label="Apply cells" />
       </ButtonGroup>
       {failure && <OutcomeLine kind="error" label="Schedule grid" says={failure} />}
       {data?.outcome.readbackError && (

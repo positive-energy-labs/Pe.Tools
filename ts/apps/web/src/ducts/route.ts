@@ -1,6 +1,6 @@
 import type { ContextOf } from "../route/defaults";
 import { systemCode } from "./identity";
-import { command } from "../route/typed-actions.ts";
+import { handle } from "@pe/agent-contracts/handle";
 import { bindings } from "./bindings";
 import { read } from "../route/defaults";
 import { stageField } from "../route/defaults";
@@ -165,23 +165,24 @@ export const module = route({
     history: editMetaSchema,
     describe: describeInputHistory,
   },
-  commands: {
+  verbs: {
     losses: {
-      ...command("sheet.apply"),
+      handle: handle("sheet.apply"),
       label: "Write to Revit",
-      present: (result, data, work) => presentLosses(result, evidence(data, work)),
+      present: (result, { value: data, doc: work }) => presentLosses(result, evidence(data, work)),
     },
     heal: {
-      ...command("ducts.apply-heal"),
+      handle: handle("ducts.apply-heal"),
       label: "Heal",
-      present: (result, data, work) => presentHeal(result, evidence(data, work)),
+      present: (result, { value: data, doc: work }) => presentHeal(result, evidence(data, work)),
     },
     assign: {
-      ...command("ducts.apply-assign-fan"),
+      handle: handle("ducts.apply-assign-fan"),
       label: "Make the fan",
-      present: (result, data, work) => presentFan(result, evidence(data, work)),
+      present: (result, { value: data, doc: work }) => presentFan(result, evidence(data, work)),
     },
   },
+  band: ["losses", "heal", "assign"],
   layout: split(
     "h",
     [
