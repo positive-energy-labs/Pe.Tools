@@ -494,6 +494,9 @@ def value_list(args: list[str], flag: str) -> list[str]:
 
 
 def main(argv: list[str]) -> None:
+    if any(arg in ("-h", "--help") for arg in argv[:2]):
+        print(__doc__)
+        return
     if len(argv) < 2:
         sys.exit(__doc__)
     verb, run, rest = argv[0], argv[1], argv[2:]
