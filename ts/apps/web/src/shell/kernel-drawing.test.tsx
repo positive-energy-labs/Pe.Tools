@@ -4,6 +4,10 @@ import { act, cleanup, render, screen } from "@testing-library/react";
 import { expect, test, vi } from "vite-plus/test";
 import { LAYER, readMarks, settled } from "../../../../tests/e2e/marks";
 import { kernelPane } from "./typed-shell";
+import { mountTypedRoute } from "./typed-mount";
+import { module as fans } from "../fans/route";
+import { route } from "../route/typed-route";
+import { workFingerprintSchema } from "@pe/agent-contracts";
 
 const pending = vi.hoisted(() => Promise.withResolvers<{ PicturePane: () => React.ReactNode }>());
 vi.mock("../route/slots/picture/pane.tsx", () => pending.promise);
@@ -11,10 +15,13 @@ vi.mock("../route/slots/picture/pane.tsx", () => pending.promise);
 vi.mock("../host/build-stamp", () => ({ webBuildStamp: { version: "test", build: "test" } }));
 
 test("the actual kernel picture Suspense blocks driver settledness until its module resolves", async () => {
-  // Only the fields kernelPane reads; the controlled import replaces the renderer, not Suspense.
-  const mount = { spec: { panes: { picture: { kernel: "picture" } }, picture: {}, name: "Picture" }, findings: () => [] } as unknown as Parameters<typeof kernelPane>[0];
+  const mount = mountTypedRoute(route({ ...fans.spec, edits: undefined }), {
+    target: null, fixture: "layout", work: { address: null, open: null },
+    address: { read: () => new URLSearchParams(), write() {}, subscribe: () => () => {} },
+    custody: { current: () => true }, memory: () => ({}),
+  }, workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`));
   try {
-    render(<section data-url-settled="">{kernelPane(mount, "picture", {} as Parameters<typeof kernelPane>[2])}</section>);
+    render(<section data-url-settled="">{mount.draw("sheet-picture", ctx => kernelPane(mount, "sheet-picture", ctx))}</section>);
     expect(screen.getByText("Loading drawing")).toBeTruthy();
     expect(settled(readMarks(LAYER))).toBe(false);
     await act(async () => pending.resolve({ PicturePane: () => <p>Picture ready</p> }));
@@ -22,5 +29,5 @@ test("the actual kernel picture Suspense blocks driver settledness until its mod
     expect(screen.queryByText("Loading drawing")).toBeNull();
     expect(readMarks(LAYER).busy).toBe(false);
     expect(settled(readMarks(LAYER))).toBe(true);
-  } finally { cleanup(); }
+  } finally { cleanup(); mount.dispose(); }
 });

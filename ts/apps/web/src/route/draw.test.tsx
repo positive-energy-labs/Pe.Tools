@@ -4,7 +4,7 @@ import { Component, type ReactNode } from "react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { LAYER, readMarks, settled } from "../../../../tests/e2e/marks";
 import { draw } from "./draw";
-import { overlay, type PictureOverlayProps } from "./slots/picture/overlay";
+import { overlay } from "./slots/picture/overlay";
 
 afterEach(cleanup);
 
@@ -19,7 +19,7 @@ const cases = ["body", "overlay"] as const;
 function drawing(kind: typeof cases[number], promise: ReturnType<typeof heldDrawing>["promise"]) {
   if (kind === "body") return draw("scroll", () => promise, "Drawing")("Drawing ready").node;
   const paint = overlay(() => promise, "Drawing");
-  return paint({ ctx: "Drawing ready", scope: {} as PictureOverlayProps<string>["scope"], picture: () => null });
+  return paint({ ctx: "Drawing ready", scope: { kind: "subjects", refs: [] }, picture: () => null });
 }
 
 test.each(cases)("%s: a pending lazy drawing blocks the exact driver marks until resolution", async (kind) => {
@@ -47,7 +47,7 @@ test.each(cases)("%s: a hidden inert Place's pending drawing is ignored until sh
 });
 
 class Failure extends Component<{ children: ReactNode }, { error: Error | null }> {
-  state = { error: null as Error | null };
+  state: { error: Error | null } = { error: null };
   static getDerivedStateFromError(error: Error) { return { error }; }
   render() { return this.state.error ? <p role="alert">{this.state.error.message}</p> : this.props.children; }
 }
