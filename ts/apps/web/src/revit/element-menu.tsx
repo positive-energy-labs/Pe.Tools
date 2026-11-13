@@ -6,6 +6,7 @@
  * Double-click stays free. The nearest displayed-observation scope is mandatory.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
+import { decode } from "@pe/agent-contracts/subject-ref";
 import { SelectInRevitIcon, SelectionBoxKey } from "@pe/kit/lang/gesture-glyph";
 import { ListPopup } from "@pe/kit/lang/list-popup";
 import { Button } from "@pe/kit/lang/button";
@@ -115,11 +116,11 @@ const typing = (el: Element | null) =>
   !!el?.closest("input, textarea, select, [contenteditable=''], [contenteditable='true']");
 
 export function ElementMenu() {
-  const [menu, setMenu] = useState<(Target & { x: number; y: number }) | null>(null);
-  const count = menu
-    ? new Set([...menu.ids, ...(menu.refs ?? []).map((ref) => ref.elementId)]).size
+  const [menu, setMenu] = useState<{ target: Target | null; code: string | null; route: string | null; x: number; y: number } | null>(null);
+  const count = menu?.target
+    ? new Set([...menu.target.ids, ...(menu.target.refs ?? []).map((ref) => ref.elementId)]).size
     : 0;
-  const subject = menu?.family
+  const subject = menu?.target?.family
     ? "current placements across all family types"
     : `${count} element(s)`;
   const [said, setSaid] = useState<{ text: string; x: number; y: number } | null>(null);
@@ -140,9 +141,13 @@ export function ElementMenu() {
       // A surface with its own menu (a thread row) already took the press.
       if (event.defaultPrevented) return;
       const target = targetOf(event.target as Element);
-      if (!target) return;
+      const node = event.target instanceof Element ? event.target : null;
+      const raw = node?.closest("[data-subject]")?.getAttribute("data-subject");
+      const code = raw && decode(raw).ok ? raw : null;
+      const route = node?.closest("[data-findings-route]")?.getAttribute("data-findings-route") ?? null;
+      if (!target && !(code && route)) return;
       event.preventDefault();
-      setMenu({ ...target, x: event.clientX, y: event.clientY });
+      setMenu({ target, code, route, x: event.clientX, y: event.clientY });
     };
     const onOver = (event: PointerEvent) => {
       pointer = event.target as Element;
@@ -203,7 +208,7 @@ export function ElementMenu() {
         style={{ left: menu?.x ?? 0, top: menu?.y ?? 0 }}
       />
       {menu ? (
-        <ListPopup<(typeof VERBS)[number]>
+        <ListPopup<{ key: string; label: string; selectOnly?: boolean }>
           // The positioner tracks its anchor's scroll and size, not a moved caret: each open mounts anew.
           key={`${menu.x},${menu.y}`}
           anchor="caret"
@@ -214,7 +219,7 @@ export function ElementMenu() {
             if (!next) setMenu(null);
           }}
           aria-label={`Revit ${subject}`}
-          items={VERBS}
+          items={[...(menu.target ? VERBS : []), ...(menu.code && menu.route ? [{ key: "findings", label: "Findings" }] : [])]}
           keyOf={(verb) => verb.key}
           labelOf={(verb) => verb.label}
           filter="none"
@@ -240,7 +245,8 @@ export function ElementMenu() {
           })}
           onPick={(verb) => {
             setMenu(null);
-            run(menu, verb.selectOnly, menu.x, menu.y);
+            if (verb.key === "findings") document.dispatchEvent(new CustomEvent("pe:findings", { detail: { code: menu.code, route: menu.route } }));
+            else if (menu.target) run(menu.target, verb.selectOnly ?? false, menu.x, menu.y);
           }}
         />
       ) : null}

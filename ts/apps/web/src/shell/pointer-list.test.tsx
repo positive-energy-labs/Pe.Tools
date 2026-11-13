@@ -1,70 +1,39 @@
 // @vitest-environment jsdom
-import { stableFanKey } from "../ducts/sheet/model";
 import { act, cleanup, render } from "@testing-library/react";
 import { RegistryContext } from "@effect/atom-react";
-import { afterEach, expect, test, vi } from "vite-plus/test";
+import { afterEach, expect, test } from "vite-plus/test";
 import { citation, selection } from "@pe/kit/lang/attention";
-import { nodeOf, snapshotOf } from "@pe/ducts-domain/test-snapshot";
-import type { Pointer } from "../../../../packages/agent-contracts/src/pointers.ts";
-
-// The host list behind `pointers.list`/`pointers.dismiss`; the components read and dismiss through it.
-let list: Pointer[] = [];
-vi.mock("../host/catalog-client", () => ({
-  callOp: vi.fn(async (_ctx: unknown, key: string, request: { thread: string; id?: string }) => {
-    if (key === "pointers.dismiss") list = list.filter((p) => p.id !== request.id);
-    return { threadId: request.thread, pointers: list };
-  }),
-}));
-import { PointerCite } from "./pointer-list";
-import { pointerRefs } from "../ducts/identity";
-import { WorkbenchContext } from "#/workbench/provider/thread-summary";
-import { makeAtomRegistry } from "#/shell/owner";
-import { elementKey } from "@pe/kit/lang/attention";
-
+import { subjectSchema } from "@pe/agent-contracts/route-kernel-codecs";
+import { subjectCode } from "@pe/agent-contracts/subject-ref";
+import type { Readings } from "../host/resource-stream";
+import { PointerCite, pointerRefs } from "./pointer-list";
+import { makeAtomRegistry } from "./owner";
 afterEach(cleanup);
-const snapshot = snapshotOf({
-  nodes: [nodeOf(7, "equipment", { uniqueId: "u-7" }), nodeOf(8, "equipment", { uniqueId: "u-8" })],
+const type = subjectCode({ keyKind: "name", key: ["Fam", "Type"] });
+const port = subjectCode({ keyKind: "name", key: ["Fam", "Type"], sub: { port: 1 } });
+const fields = { fan: { role: "subject", schema: subjectSchema(512) } };
+
+test("a place uses its declared subject codec; parts cite their base and foreign fields do not resolve", () => {
+  expect(pointerRefs({ fan: JSON.stringify({ kind: "ids", ids: [port] }) }, fields, "s/o").map(ref => ref.key)).toEqual([port, type]);
+  expect(pointerRefs({ unknown: "not json" }, fields, "s/o")).toEqual([]);
+  expect(() => pointerRefs({ fan: "not json" }, fields, "s/o")).toThrow();
 });
 
-test("a fan place maps to the snapshot unit's real element key; foreign text maps to nothing", () => {
-  const place = { fan: JSON.stringify({ kind: "ids", ids: [stableFanKey({ uniqueId: "u-7", portIndex: 0 })] }) };
-  expect(pointerRefs(place, snapshot, "s/o", () => "FC-1")).toEqual([
-    { doc: "s/o", key: elementKey("u-7"), name: "FC-1", number: 1 },
-  ]);
-  expect(pointerRefs({ fan: JSON.stringify({ kind: "ids", ids: [stableFanKey({ uniqueId: "u-9", portIndex: 0 })] }) }, snapshot, "s/o", () => null)).toEqual([]);
-  expect(() => pointerRefs({ fan: "not json" }, snapshot, "s/o", () => null)).toThrow();
-  // A pointer whose target is a SubjectRef names the same element without a place.
-  expect(pointerRefs(stableFanKey({ uniqueId: "u-7", portIndex: 0 }), snapshot, "s/o", () => "FC-1")).toEqual([
-    { doc: "s/o", key: elementKey("u-7"), name: "FC-1", number: 1 },
-  ]);
-});
-
-test("Pea's pointer is cited inside the route; selection and URL never move", async () => {
-  list = [
-    {
-      id: "p1",
-      route: "fans",
-      target: { fan: JSON.stringify({ kind: "ids", ids: [stableFanKey({ uniqueId: "u-7", portIndex: 0 })] }) },
-      label: "FC-1 fan flow",
-      at: "2026-11-05T00:00:00Z",
-    },
-  ];
+test("one thread-head stream frame lights the type without changing selection or URL; dismissal and unmount clear it", async () => {
+  let deliver: Parameters<Readings["subscribe"]>[1] = () => {};
+  let stopped = false;
+  const readings: Pick<Readings, "subscribe"> = { subscribe(request, listener) {
+    expect(request).toEqual({ kind: "thread-head", thread: "t1" }); deliver = listener;
+    return () => { stopped = true; };
+  } };
   const registry = makeAtomRegistry();
-  const url = window.location.href;
-  const selected = registry.get(selection("s/o"));
-  render(
-    <RegistryContext.Provider value={registry}>
-      <WorkbenchContext.Provider value={{ currentThreadId: "t1" } as never}>
-        <PointerCite route="fans" refs={(place) => pointerRefs(place, snapshot, "s/o", () => "FC-1")} />
-      </WorkbenchContext.Provider>
-    </RegistryContext.Provider>,
-  );
-  await act(async () => {});
-  expect(registry.get(citation)).toMatchObject({
-    owner: "pointers:fans",
-    focus: null,
-    refs: [{ doc: "s/o", key: elementKey("u-7") }],
-  });
+  const url = window.location.href, selected = registry.get(selection("s/o"));
+  const { unmount } = render(<RegistryContext value={registry}><PointerCite route="families" thread="t1" fields={fields} doc="s/o" readings={readings} /></RegistryContext>);
+  await act(async () => deliver({ kind: "snapshot", key: "head", value: { pointers: [{ id: "p1", route: "families", target: type, label: "Type", at: "now" }] } }));
+  expect(registry.get(citation)).toMatchObject({ owner: "pointers:families", refs: [{ doc: "s/o", key: type }] });
   expect(registry.get(selection("s/o"))).toEqual(selected);
   expect(window.location.href).toBe(url);
+  await act(async () => deliver({ kind: "snapshot", key: "head", value: { pointers: [] } }));
+  expect(registry.get(citation)).toBeNull();
+  unmount(); expect(stopped).toBe(true);
 });

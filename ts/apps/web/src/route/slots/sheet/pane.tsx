@@ -2,20 +2,19 @@ import { useFieldOptionsReading, previousOf } from "../../../host/resource-state
 import { FieldOptionSelect, pickerOptions } from "../../../host/field-options";
 import { useState, type ReactNode } from "react";
 import { decode, type SubjectRefCode } from "../../../../../../packages/agent-contracts/src/subject-ref.ts";
-import { FINDINGS_DOORS, schemaOf, type SheetSlot } from "@pe/agent-contracts/slots";
+import { schemaOf, type SheetSlot } from "@pe/agent-contracts/slots";
+import { useMention } from "@pe/kit/lang/attention";
 import { Button } from "@pe/kit/lang/button";
 import { StateCell } from "@pe/kit/lang/cell";
 import { useRouteSearchSlice } from "../../activity";
 import type { DrawContext, Fields } from "../../typed-route.ts";
 import { bindingPath, sheetCells, typedCells, type SheetCell } from "./index.ts";
-import { FindingVerb } from "../findings/verb.tsx";
 
 /*
  * The kernel's sheet pane (ADR 0035 rules 1 and 3): one kit StateCell per binding per row, staged
  * through the one Work write path (`ctx.cells.at`); the write button is the route's `sheet` verb in the
  * pane head (`sheet.plan` then `sheet.apply`), so this pane never reaches Revit. A route adds no chrome.
- * A row keyed by a SubjectRef carries the person's Finding verb (rule 9), once, on its first cell,
- * over the `finding` command the mount gives every route (shell/typed-mount.ts); without Work it is refused.
+ * A row keyed by a SubjectRef mentions it; the shell owns the one findings surface (rule 9).
  */
 type Ctx = DrawContext<unknown, Fields, Record<string, unknown>, unknown>;
 
@@ -36,6 +35,8 @@ const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
 const subjectRow = (row: string | undefined) => (row !== undefined && decode(row).ok ? (row as SubjectRefCode) : null);
 
 function Cell({ ctx, cell, verb }: { ctx: Ctx; cell: SheetCell; verb: ReactNode }) {
+  const mention = useMention();
+  const subject = subjectRow(cell.row);
   const [draft, setDraft] = useState<{ value: unknown } | null>(null);
   const [saving, setSaving] = useState<string | null>(null);
   const [said, setSaid] = useState<string | null>(null);
@@ -83,7 +84,7 @@ function Cell({ ctx, cell, verb }: { ctx: Ctx; cell: SheetCell; verb: ReactNode 
     ? [...cell.choices, { key: "standing", label: typeof cell.value === "string" ? cell.value : JSON.stringify(cell.value), value: cell.value, disabled: "not offered now" }]
     : cell.choices;
   return (
-    <div className="contents" data-sheet-cell={cell.label} data-sheet-address={cell.row === undefined ? cell.binding : `${cell.binding}:${cell.row}`} data-source={cell.source} data-drift={cell.drift || undefined}>
+    <div {...mention(subject)} className="contents" data-sheet-cell={cell.label} data-sheet-address={cell.row === undefined ? cell.binding : `${cell.binding}:${cell.row}`} data-source={cell.source} data-drift={cell.drift || undefined}>
       <span className="min-w-0 truncate">{cell.label}</span>
       <span className="block min-w-0 h-(--item-h)">
         <StateCell
@@ -135,13 +136,6 @@ export function SheetPane({ ctx: { draw: ctx, slot, field } }: { ctx: { draw: Ct
   const empty = slot.empty?.(read ?? null);
   const said = read !== undefined ? slot.note?.(read) : null;
   const note = said ? <p role="note" className="min-w-0 text-ink-2" data-sheet-note="">{said}</p> : null;
-  const verbed = new Set<string>();
-  const verbOf = (cell: SheetCell) => {
-    const subject = subjectRow(cell.row);
-    if (!subject || verbed.has(subject)) return null;
-    verbed.add(subject);
-    return <FindingVerb subject={subject} name={cell.label} action={ctx.verb(FINDINGS_DOORS.say)} />;
-  };
   if (empty) return <>{note}<p className="text-ink-2">{empty}</p></>;
   return (
     <section aria-label="Sheet" className="flex min-w-0 flex-col gap-1 t-small">
@@ -157,7 +151,7 @@ export function SheetPane({ ctx: { draw: ctx, slot, field } }: { ctx: { draw: Ct
           // The label keeps its floor (10rem or 45%); the value input sheds width first and the
           // source word takes only its own width, so a ~330px pane no longer reads "Vel..." (L3).
           <div className="grid grid-cols-[minmax(min(10rem,45%),1fr)_minmax(0,9rem)_fit-content(6rem)_auto] items-center gap-x-2 gap-y-1">
-            {shown.map(cell => <Cell key={`${cell.binding}:${cell.row ?? ""}`} ctx={ctx} cell={cell} verb={verbOf(cell)} />)}
+            {shown.map(cell => <Cell key={`${cell.binding}:${cell.row ?? ""}`} ctx={ctx} cell={cell} verb={null} />)}
           </div>
         )}
     </section>

@@ -1,104 +1,57 @@
-import { useCallback, useContext, useEffect, useSyncExternalStore } from "react";
+import { useContext, useEffect, useState } from "react";
 import { RegistryContext } from "@effect/atom-react";
 import { cite, clearCitation, type SubjectReference } from "@pe/kit/lang/attention";
-import type { Pointer } from "../../../../packages/agent-contracts/src/pointers.ts";
-import { WorkbenchContext } from "#/workbench/provider/thread-summary";
-import { callOp } from "../host/catalog-client";
+import { z } from "zod";
+import { subjectSchema } from "@pe/agent-contracts/route-kernel-codecs";
+import { subjectCode, subjectOf, subjectRefCodeSchema } from "@pe/agent-contracts/subject-ref";
+import type { Pointer } from "@pe/agent-contracts";
+import { peReadings, type Readings } from "#/host/resource-stream";
+import { subjectName } from "../route/slots/subject-name.ts";
 
-/** ponytail: polled, ceiling one host read per 2 s per open route; upgrade to a host feed if lists grow. */
-const POLL_MS = 2000;
+const pointers = z.object({ pointers: z.array(z.object({ id: z.string(), route: z.string(), target: z.union([z.string(), z.record(z.string(), z.string())]), label: z.string(), at: z.string() })) });
+type Fields = Readonly<Record<string, { role: string; schema: z.ZodType }>>;
 
-/**
- * "Pea is pointing at" (ADR 0030 rule 10): this thread's pointers on this route, until dismissed.
- * A body cites them through the same host-local read Pea writes with; it never writes the page's
- * selection, attention fields, URL or camera. The person-facing list was retired unmounted
- * (2026-11-11): a person's verb on a subject is a finding (`FindingVerb`), and dismissal is Pea's.
- */
-/*
- * One read of the host's list per thread, shared by every body's highlight. The host thread meta stays the only owner; this is its last answer.
- */
-const reads = new Map<
-  string,
-  { pointers: readonly Pointer[]; listeners: Set<() => void>; stop: () => void }
->();
-const EMPTY: readonly Pointer[] = [];
-function publish(thread: string, pointers: readonly Pointer[]) {
-  const read = reads.get(thread);
-  if (!read) return;
-  read.pointers = pointers;
-  read.listeners.forEach((notify) => notify());
-}
-function subscribe(thread: string, notify: () => void) {
-  let read = reads.get(thread);
-  if (!read) {
-    const control = new AbortController();
-    const fetch = () =>
-      void callOp({ signal: control.signal }, "pointers.list", { thread }).then(
-        (list) => publish(thread, list.pointers),
-        () => {},
-      );
-    const timer = setInterval(fetch, POLL_MS);
-    read = {
-      pointers: EMPTY,
-      listeners: new Set(),
-      stop: () => (control.abort(), clearInterval(timer)),
-    };
-    reads.set(thread, read);
-    fetch();
-  }
-  read.listeners.add(notify);
-  return () => {
-    read.listeners.delete(notify);
-    if (read.listeners.size) return;
-    read.stop();
-    reads.delete(thread);
-  };
-}
-/** This thread's pointers on `route`, read through the host-local op Pea writes with. */
-function usePointers(route: string) {
-  const thread = useContext(WorkbenchContext)?.currentThreadId ?? "";
-  const listen = useCallback(
-    (notify: () => void) => (thread ? subscribe(thread, notify) : () => {}),
-    [thread],
-  );
-  const all = useSyncExternalStore(listen, () => reads.get(thread)?.pointers ?? EMPTY);
-  return { pointers: all.filter((p) => p.route === route) };
+/** A place is decoded by the declared subject fields, never by a route-specific snapshot. */
+export function pointerRefs(target: Pointer["target"], fields: Fields, doc: string): SubjectReference[] {
+  const codes = typeof target === "string" ? [subjectRefCodeSchema.parse(target)]
+    : Object.entries(target).flatMap(([key, text]) => {
+      const field = fields[key];
+      if (field?.role !== "subject") return [];
+      const value = field.schema.parse(JSON.parse(text));
+      const many = subjectSchema(512).safeParse(value);
+      return many.success ? many.data.kind === "ids" ? many.data.ids : [] : [subjectRefCodeSchema.parse(value)];
+    });
+  return [...new Set(codes.flatMap(code => {
+    const ref = subjectOf(code);
+    return [code, ...(ref.sub ? [subjectCode({ ...ref, sub: undefined })] : [])];
+  }))].map((key, index) => ({ doc, key, name: subjectName(key), number: index + 1 }));
 }
 
-/**
- * The highlight, mounted INSIDE the route's AttentionRoot: the route maps each pointer's target to
- * its own refs and this cites them (focus null). It writes only the citation atom, never selection,
- * the URL or the camera; dismissal, a thread change or unmount clears it.
- */
-export function PointerCite({
-  route,
-  refs,
-}: {
-  route: string;
-  refs: (target: Pointer["target"]) => readonly SubjectReference[];
+/** One streamed citation per mounted route; no list, poll, selection or camera write. */
+export function PointerCite({ route, thread, fields, doc, readings = peReadings }: {
+  route: string; thread?: string; fields: Fields; doc: string; readings?: Pick<Readings, "subscribe">;
 }) {
   const registry = useContext(RegistryContext);
-  const { pointers } = usePointers(route);
-  const owner = `pointers:${route}`;
-  const cited = pointers.flatMap((pointer) => {
-    try {
-      return refs(pointer.target);
-    } catch {
-      return []; // A place that does not read as this route's codec text highlights nothing.
-    }
-  });
-  const key = JSON.stringify(cited.map((ref) => [ref.doc, ref.key]));
+  const [all, setAll] = useState<readonly Pointer[]>([]);
   useEffect(() => {
-    if (cited.length)
-      cite(registry, {
-        owner,
-        focus: null,
-        refs: cited.map((ref, i) => ({ ...ref, number: i + 1 })),
-      });
+    setAll([]);
+    return thread ? readings.subscribe({ kind: "thread-head", thread }, frame => {
+      if (frame.kind !== "snapshot") return;
+      const parsed = pointers.safeParse(frame.value);
+      if (parsed.success) setAll(parsed.data.pointers);
+    }) : undefined;
+  }, [thread, readings]);
+  const refs = all.filter(p => p.route === route).flatMap(p => {
+    try { return pointerRefs(p.target, fields, doc); } catch { return []; }
+  });
+  const key = JSON.stringify(refs);
+  useEffect(() => {
+    const owner = `pointers:${route}`;
+    if (refs.length) cite(registry, { owner, focus: null, refs: refs.map((ref, i) => ({ ...ref, number: i + 1 })) });
     else clearCitation(registry, owner);
     return () => clearCitation(registry, owner);
-    // `key` is the cited refs' identity; the array itself is rebuilt every render.
+    // The serialized refs are the citation identity.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [registry, owner, key]);
+  }, [registry, route, key]);
   return null;
 }
