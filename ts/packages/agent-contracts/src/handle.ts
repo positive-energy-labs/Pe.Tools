@@ -69,7 +69,7 @@ export function native<K extends CatalogReadKey>(
     throw Error(`Not a catalog Read: ${key}`);
   const { subject, touches, effect, cost, cardinality, rollsBack } = nativeAxes(op);
   const data = nativeReadValue(key);
-  const result = mint<Minted>({
+  const result: Minted = mint({
     key,
     input: nativeReadInput(key),
     data,
@@ -126,7 +126,7 @@ export function contract<K extends string, I, D>(
   for (const path of Object.keys(def.keyedBy ?? {}))
     if (!rows(def.data, path.split(".")))
       throw Error(`Read '${key}' keys '${path}', which is no row collection in its data`);
-  const made = mint<ReadHandle<K, I, D>>({
+  const made: ReadHandle<K, I, D> = mint({
     key,
     input: def.input,
     data: def.data,

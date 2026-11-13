@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { OpRequestOf } from "@pe/host-contracts/operation-types";
 import { contract, handle, native, type CommandHandle, type InputOf } from "./handle.ts";
 import { commands } from "./semantic-actions.ts";
+import { minted } from "./command-handle.ts";
 
 test("handle() mints a command from the generated table, with its plan when it is a sealed write", () => {
   const apply = handle("sheet.apply");
@@ -10,6 +11,8 @@ test("handle() mints a command from the generated table, with its plan when it i
   expect(apply.plan.key).toBe(commands["sheet.apply"].writeBoundary.previewKey);
   expect(["Read", "TransactRead"]).toContain(apply.plan.effect);
   expect(handle("sheet.apply")).toBe(apply);
+  expect(apply[minted]).toBe(true);
+  expect(Object.isFrozen(apply)).toBe(true);
   expectTypeOf(apply.effect).toEqualTypeOf<"ModelWrite">();
   expectTypeOf<InputOf<typeof apply>>().toEqualTypeOf<z.input<(typeof commands)["sheet.apply"]["input"]>>();
   // A verb declaration demands `present` exactly when the handle carries a plan.
