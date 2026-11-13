@@ -99,8 +99,8 @@
     "check": "vp check",
     "prepublishOnly": "vp run build",
     "codegen:sdk-wire": "node scripts/sdk-wire.ts",
-    "codegen": "node scripts/sdk-wire.ts && dotnet run --project ../../../dotnet/Pe.Dev.Cli -- ops-catalog --out .cache/ops-catalog.json && vpx node --import jiti/register scripts/host-typegen.ts --catalog .cache/ops-catalog.json && node scripts/ops-catalog-hash.ts --write",
-    "codegen:check": "node scripts/sdk-wire.ts --check && dotnet run --project ../../../dotnet/Pe.Dev.Cli -- ops-catalog --out .cache/ops-catalog.json && vpx node --import jiti/register scripts/host-typegen.ts --catalog .cache/ops-catalog.json --check && node scripts/ops-catalog-hash.ts",
+    "codegen": "node scripts/sdk-wire.ts && dotnet run --disable-build-servers --project ../../../dotnet/Pe.Dev.Cli -- ops-catalog --out .cache/ops-catalog.json && vpx node --import jiti/register scripts/host-typegen.ts --catalog .cache/ops-catalog.json && node scripts/ops-catalog-hash.ts --write",
+    "codegen:check": "node scripts/sdk-wire.ts --check && dotnet run --disable-build-servers --project ../../../dotnet/Pe.Dev.Cli -- ops-catalog --out .cache/ops-catalog.json && vpx node --import jiti/register scripts/host-typegen.ts --catalog .cache/ops-catalog.json --check && node scripts/ops-catalog-hash.ts",
     "codegen:verify-live": "vpx node --import jiti/register scripts/host-typegen.ts --check"
   },
   "dependencies": {
