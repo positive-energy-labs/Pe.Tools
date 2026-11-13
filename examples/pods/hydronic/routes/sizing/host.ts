@@ -17,7 +17,7 @@ export const sizing = {
     if (target.kind !== "document") throw Error("Choose a project document");
     // The target document's Work, the firm file's limit, and two generic catalog reads: no Pod-owned native op.
     const doc = stored.parse(await ctx.work(key, target.ref))?.doc ?? work.parse({});
-    const firm = await ctx.firm("hydronic", firmLimits, { maxFriction: 400 });
+    const firm = await ctx.files.firm("hydronic", firmLimits, { maxFriction: 400 });
     const roster = (await ctx.native("mep.system.members", { request: {}, target })).body;
     const chosenSystem = system || roster.systems.find((s) => s.domain === "piping")?.uniqueId;
     if (!chosenSystem) throw Error("This document has no piping system");

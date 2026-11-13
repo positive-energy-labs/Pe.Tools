@@ -11,7 +11,7 @@ export const reads = {
       return {
         machine: await ctx.read(resources.machine, { kind: "machine" }),
         // Every owner a route declares a `setting` for. /settings has no target model, so no project home.
-        settings: { ducts: await ctx.settings("ducts", null) } as Record<string, SettingTierRead[]>,
+        settings: { ducts: await ctx.files.tiers("ducts", null) } as Record<string, SettingTierRead[]>,
       };
     },
   }),
