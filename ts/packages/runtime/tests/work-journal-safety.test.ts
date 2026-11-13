@@ -7,10 +7,8 @@ import {
   type WorkWrite,
 } from "@pe/agent-contracts";
 import { z } from "zod";
-import { RouteWorkspace } from "../../../../packages/runtime/src/route-workspace";
-import { createWorkJournal, type JournalWriter } from "./journal";
-import { projectTimeline, createRouteTimeline, TIMELINE_LIMIT } from "./timeline";
-import { writeLabel } from "./work-writes";
+import { RouteWorkspace } from "../src/route-workspace.ts";
+import { createWorkJournal, type JournalWriter } from "../src/work-journal.ts";
 
 afterEach(() => vi.useRealTimers());
 
@@ -52,11 +50,9 @@ function fixture() {
     },
   });
   const journal = createWorkJournal(key);
-  const timeline = createRouteTimeline();
-  timeline.subscribe(journal.record);
   workspace.subscribeUncaptured((event) => {
     if (event.ok) {
-      journal.observe(stored.get(workKey(key)) as { revision: number; doc: unknown });
+      journal.observe(z.object({ revision: z.number(), doc: z.unknown() }).parse(stored.get(workKey(key))));
       journal.accept(event, event.by === "human" ? { label: event.press ?? "Restore" } : undefined);
     }
   });
@@ -80,7 +76,7 @@ function fixture() {
     if (!result.ok) throw Error("Expected admitted fixture write");
     return result.write;
   };
-  return { key, initial, stored, workspace, journal, timeline, writer, requests, apply };
+  return { key, initial, stored, workspace, journal, writer, requests, apply };
 }
 
 test("undoing a Pea edit still refuses when its path changed elsewhere", async () => {
@@ -109,7 +105,7 @@ test.each([{ path: ["settings"] }, { path: ["settings", "width", "child"] }, { p
   async ({ path }) => {
     const f = fixture();
     await f.apply([{ path: ["settings", "width"], value: 20 }], "human-1");
-    f.timeline.append({
+    f.journal.record({
       kind: "receipt",
       at: 1,
       verb: "rooms.apply",
@@ -126,20 +122,14 @@ test.each([{ path: ["settings"] }, { path: ["settings", "width", "child"] }, { p
   },
 );
 
-test.each(["succeeded", "outcome-unknown"] as const)("%s: timeline eviction never removes the journal barrier", async (state) => {
+test.each(["succeeded", "outcome-unknown"] as const)("%s: a retained receipt blocks redo without a browser projection", async (state) => {
   const f = fixture();
-  f.timeline.append({ kind: "receipt", at: 100, receiptId: "earlier", paths: [[]] });
+  f.journal.record({ kind: "receipt", at: 100, receiptId: "earlier", paths: [[]] });
   await f.apply([{ path: ["settings", "width"], value: 20 }], "human-1");
-  f.timeline.append({ kind: "checkpoint", at: 2, paths: [[]] });
-  f.timeline.append({ kind: "receipt", at: 3, paths: [["cells"]] });
+  f.journal.record({ kind: "checkpoint", at: 2, paths: [[]] });
+  f.journal.record({ kind: "receipt", at: 3, paths: [["cells"]] });
   expect(await f.journal.undo(f.writer)).toMatchObject({ ok: true });
-  f.timeline.append({ kind: "receipt", at: 0, receiptId: "after-undo", outcome: { id: "after-undo", state, input: {} }, paths: [["settings"]] });
-  for (let at = 0; at <= TIMELINE_LIMIT; at++) f.timeline.append({ kind: "invocation", at });
-  expect(f.timeline.read().some(({ receiptId }) => receiptId === "after-undo")).toBe(false);
-  expect(projectTimeline([], {}, f.journal.read()).filter((row) => row.kind === "journal")).toMatchObject([
-    { move: { kind: "apply" }, barrier: { receiptId: "after-undo" } },
-    { move: { kind: "undo" }, barrier: { receiptId: "after-undo" } },
-  ]);
+  f.journal.record({ kind: "receipt", at: 0, receiptId: "after-undo", outcome: { id: "after-undo", state, input: {} }, paths: [["settings"]] });
   expect(await f.journal.redo(f.writer)).toMatchObject({
     ok: false,
     code: "barrier",
@@ -150,7 +140,7 @@ test.each(["succeeded", "outcome-unknown"] as const)("%s: timeline eviction neve
 test("a barrier between acknowledgements of one press is retained", async () => {
   const f = fixture();
   await f.apply([{ path: ["settings", "width"], value: 20 }], "human-1");
-  f.timeline.append({ kind: "receipt", at: 1, receiptId: "apply-between", paths: [["settings"]] });
+  f.journal.record({ kind: "receipt", at: 1, receiptId: "apply-between", paths: [["settings"]] });
   await f.apply([{ path: ["settings", "height"], value: 8 }], "human-1");
   expect(f.journal.read().undo).toHaveLength(1);
   expect(await f.journal.undo(f.writer)).toMatchObject({ ok: false, code: "barrier" });
@@ -346,41 +336,4 @@ test("explicit verb labels survive move, late describe and repeated namer regist
   journal.name(() => ({ label: "Edit Work" }));
   expect(journal.read().undo[0]?.label).toBe("Set MUAS-1 flow");
   expect(journal.read().moves[0]?.label).toBe("Set MUAS-1 flow");
-});
-
-test("host history replay takes field and cell names even when the route arrives after acquisition", async () => {
-  const f = fixture();
-  await f.apply([{ path: ["settings", "width"], value: 20 }], "width");
-  await f.apply([{ path: ["cells", "one", "edit"], value: { value: "after" } }], "cell");
-  const replay = createWorkJournal(f.key);
-  let stop = () => {};
-  const saved = await new Promise<{
-    revision: number;
-    doc: unknown;
-    history: Parameters<typeof replay.restoreView>[1];
-  }>((resolve, reject) => {
-    stop = f.workspace.observeFeed(
-      f.key,
-      (value) => resolve(value as Parameters<typeof resolve>[0]),
-      () => {},
-      reject,
-    );
-  });
-  stop();
-  replay.restoreView(saved, saved.history);
-  replay.name((patches) =>
-    writeLabel(patches, {
-      workFields: { settings: { label: "dimensions" } },
-      cells: [{ segment: "cells", noun: "unit flows", groupOf: (id) => [id] }],
-    }),
-  );
-  expect(replay.read().moves.map((move) => move.label)).toEqual([
-    "Edit dimensions",
-    "Edit unit flows",
-  ]);
-  expect(await replay.undo(f.writer)).toMatchObject({ ok: true });
-  expect((await f.workspace.read(f.key, f.key.route))!.doc).toEqual({
-    ...f.initial,
-    settings: { width: 20, height: 4 },
-  });
 });

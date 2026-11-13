@@ -4,6 +4,7 @@ import type { RouteWorkspace } from "@pe/runtime";
 import type { HostMarks } from "../document-marks.ts";
 import { workInput } from "./evaluator.ts";
 import type { Publications } from "./publications.ts";
+import { settingsFile } from "./door.ts";
 
 export function readInvalidations(
   workspace: RouteWorkspace,
@@ -87,7 +88,7 @@ export function readInvalidations(
   };
   const stopFiles = recorded
     ? undefined
-    : subscribeFiles?.((name) => changed((input) => input === `file:${name}` || (name === "settings" && input === "work-timeline")));
+    : subscribeFiles?.((name) => changed((input) => input === `file:${name}` || (`file:${name}` === settingsFile.name && input === "work-timeline")));
   const stopPlaces = recorded ? undefined : subscribePlaces(() => changed((name) => name === "places"));
   return {
     revision: readRevision,

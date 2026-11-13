@@ -1016,7 +1016,10 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
     /** The `thread-head` Reading: the current head, then every set. */
     observe(threadId: string, listener: (value: { value: ThreadHead & { pointers: readonly Pointer[] } }) => void) {
       const notify = (id: string, head: ThreadHead) => {
-        if (id === threadId) listener({ value: { ...head, pointers: storedPointers(threadId) } });
+        if (id !== threadId) return;
+        // Standalone heads have no harness metadata; pointer mutations still require a stored thread.
+        const pointers = threads.has(threadId) ? storedPointers(threadId) : [];
+        listener({ value: { ...head, pointers } });
       };
       headListeners.add(notify);
       queueMicrotask(() => {

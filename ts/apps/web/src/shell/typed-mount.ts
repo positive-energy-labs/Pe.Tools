@@ -1,5 +1,4 @@
 import { homeHandle } from "../route/slots/sheet/index.ts";
-import { undoOwnFinding } from "../route/host";
 import { peReadings, type Readings } from "#/host/resource-stream";
 import { kernelVerbs, type KernelVerbKey } from "../route/slots/findings/index.ts";
 import { FINDINGS_OWNER, findingsWorkSchema, type Finding } from "@pe/agent-contracts/slots";
@@ -37,12 +36,11 @@ import {
   type WorkScope,
   type RouteFingerprint,
   type InvocationToken,
-  type RouteStateWriteResult,
 } from "@pe/agent-contracts";
-import { ANY_ROUTE } from "@pe/agent-contracts";
+import { ANY_ROUTE, writeSettingTier } from "@pe/agent-contracts";
 import { createRouteScopeGate } from "@pe/runtime/route-scope-gate";
 import { applicationWorkRegistry, createApplicationWorkRegistry } from "./application-work-registry";
-import { createWorkFeedClient } from "./work-feed-client";
+import { createWorkFeedClient, createTimelineClient, type TimelineClient } from "./work-feed-client";
 import { createFixtureWorkDoor } from "./fixture-work-door";
 import { publicationPose, recordedWorkDoor } from "./history";
 import { settleWork } from "./work-door-observation";
@@ -79,7 +77,7 @@ const inFlight = (snapshot: Snapshot) => snapshot.state === "reading" || snapsho
 /** The host refused a Work write because the Work moved past the revision the write named. */
 class StaleRevision extends Error {}
 export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerprint: RouteFingerprint,
-  ports: { work?: WorkJournalDoor; sources?: Record<string, UseSource>; findings?: Parameters<typeof undoOwnFinding>[1]; readings?: Pick<Readings, "subscribe"> } = {}) {
+  ports: { work?: WorkJournalDoor; sources?: Record<string, UseSource>; findings?: Parameters<typeof createTimelineClient>[0]; timeline?: TimelineClient; readings?: Pick<Readings, "subscribe"> } = {}) {
   const cleanups: (() => void)[] = [];
   try {
   const spec = module.spec;
@@ -121,13 +119,64 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     return bindWork(own,input.work.address,undefined,input.work.open ?? undefined);
   };
   let key = selectedKey();
+  let timelineState: import("@pe/agent-contracts").WorkTimeline | null = null;
+  let timelineProblem: string | null = "Reading Timeline";
+  const problems = new Map<string,string>();
+  const stepProblemBasis = new Map<string,string>();
+  const timelineBasis = (value: typeof timelineState) => canonicalRouteInput(value && [
+    [value.undo, value.redo].map(step => step && ("work" in step
+      ? { work: step.work, revision: step.revision } : { home: step.home, sha256: step.sha256 })),
+    value.rows.flatMap(row => "revision" in row ? [{ work: row.work, revision: row.revision }] : []),
+  ]);
+  let stopTimeline = () => {};
+  const timelineClient = ports.timeline ?? (input.fixture === null && !input.history ? createTimelineClient(ports.findings) : null);
+  const timelineWorks = () => [...owners.values()].map(owner => owner.handle?.key ?? owner.scope.key);
+  const connectTimeline = () => {
+    stopTimeline(); timelineState = null;
+    timelineProblem = input.history ? "Recorded Timeline is read-only" : "Timeline unavailable";
+    const works = timelineWorks();
+    if (!timelineClient || !works.length) return;
+    let closed = false;
+    const stop = timelineClient.open(works, (value, reason) => {
+      if (closed || disposed) return;
+      if (value) for (const direction of ["undo", "redo"]) {
+        const id = `work.${direction}`, basis = stepProblemBasis.get(id);
+        if (basis !== undefined && basis !== timelineBasis(value)) { problems.delete(id); stepProblemBasis.delete(id); }
+      }
+      timelineState = value ? freezePage(value) : null; timelineProblem = reason ?? null; notify();
+    });
+    stopTimeline = () => { closed = true; stop(); };
+  };
+  cleanups.push(() => stopTimeline());
+  const stepTimeline = async (direction: "undo" | "redo") => {
+    const id = `work.${direction}`;
+    const basis = timelineBasis(timelineState);
+    problems.delete(id); stepProblemBasis.delete(id); notify();
+    const refused = (message: string) => {
+      if (!disposed && input.custody.current() && (!timelineState || basis === timelineBasis(timelineState))) {
+        problems.set(id, message); stepProblemBasis.set(id, basis); notify();
+      }
+      return { message };
+    };
+    try {
+      requireWritable();
+      const expected = timelineState?.[direction];
+      if (!timelineClient || !expected || timelineProblem || timelineState?.refusal[direction])
+        return refused(timelineProblem ?? timelineState?.refusal[direction] ?? `Nothing to ${direction}`);
+      const result = await timelineClient.step({ direction, works: timelineWorks(), expected });
+      if (!disposed && input.custody.current()) {
+        if (result) connectTimeline();
+        watchFindings();
+      }
+      return result ? refused(result.message) : null;
+    } catch (error) { return refused(error instanceof Error ? error.message : String(error)); }
+  };
   let renderedBasis: InvocationToken | null = null;
   const reads = new Map<import("../route/host-read").HostRead, { snapshot: Snapshot; args: string; stop(): void }>();
   const dependencies = () => Object.fromEntries([...reads].filter(([read,r])=>read === spec.core && r.snapshot.state === "ready").map(([read,r])=>[read.key,r.snapshot.hash??""]));
   const workSchema:z.ZodObject=edits?.work.schema ?? z.strictObject({});
   const gate = createRouteScopeGate({
     workSchema, hashWork: canonicalRouteInput,
-    journal: key => owners.get(key.route)!.lease.entry.journal,
     dependencies,
     preparePage: (_page, patch) => ({ ok: true, value: { page: patch, changed: true, membership: "unresolved" } }),
   });
@@ -152,7 +201,6 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     if (record.handle?.revision === handle.revision && canonicalRouteInput(record.doc) !== canonicalRouteInput(parsed))
       throw Error("Contradictory Work revision; refresh this route");
     record.absent=false; record.handle = freezePage(handle); record.doc = freezePage(parsed); record.ready = true; record.problem = null; record.failure = null; record.failed = false;
-    record.lease.entry.journal.observe({ revision: handle.revision, doc: parsed });
     if (handle.key.route === own) gate.acceptWork(workAttempt,
       { kind: "snapshot", handle, value: parsed, hash: canonicalRouteInput(parsed) });
   };
@@ -164,7 +212,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     ownerStops.splice(0).reverse().forEach(stop=>stop()); owners.clear();
     key=next; renderedBasis=null;
     gate.enter({target:input.target,work:key},page); workAttempt=gate.capture("work");
-    if(!key) return;
+    if(!key) { connectTimeline(); return; }
   for (const [id, config] of Object.entries(ownerConfigs)) {
     const scope: WorkScope = { route: spec.key, fingerprint, key: { ...key, route: id },
       target: input.target, subject: null };
@@ -173,7 +221,6 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
       ready: false, absent:false, problem: null as string | null, failure: null as WorkFeedFailure | null, failed: false, lease };
     owners.set(id, record);
     ownerStops.push(() => lease.release());
-    lease.entry.connect(scope, door);
     const stopJournal = lease.entry.subscribe(notify);
     ownerStops.push(stopJournal);
     const stopFeed = door.open(scope).subscribe(state => {
@@ -181,7 +228,8 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
       try {
         if (state.kind === "ready") {
           accept(record, state.snapshot.handle, state.snapshot.value);
-          lease.entry.restore(state);
+          for (const ack of state.history.acks)
+            if (workKey(ack.key) === workKey(scope.key)) lease.entry.accept(ack.press);
         } else if (state.kind === "ack" && record.handle) {
           const ack = state.ack;
           if (ack.revision > record.handle.revision) {
@@ -190,7 +238,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
             if (!result.ok) throw Error("error" in result ? result.error : "Work acknowledgement was refused");
             accept(record, { key: ack.key, revision: ack.revision }, result.envelope.doc);
           }
-          lease.entry.journal.accept(ack);
+          lease.entry.accept(ack.press);
         } else if (state.kind !== "ack") {
           record.ready = false;
           record.absent=state.kind === "absent";
@@ -204,6 +252,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     }, notify);
     ownerStops.push(stopFeed);
   }
+  connectTimeline();
   };
   syncWork();
   const allReads = { [Symbol.iterator]() {
@@ -315,11 +364,8 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
   const readiness = (): RouteReadiness => {
     if (disposed || released || !input.custody.current()) return { kind: "blocked", reason: "Place is inactive or retired" };
     for (const owner of owners.values()) {
-      // Known absence is settled: Start remains available, while edit admission still refuses.
       if (owner.absent) continue;
-      const journal = owner.lease.entry.journal.read();
-      if (journal.busy || journal.intents.some(intent => intent.status === "pending") ||
-          owner.ready && journal.revision !== owner.handle?.revision)
+      if (owner.lease.entry.pending().some(intent => intent.status === "pending"))
         return { kind: "pending", reason: "Acknowledging Work..." };
       if (!owner.ready) return { kind: owner.failure || owner.problem && owner.problem !== "Reading Work..." ? "blocked" : "pending", reason: owner.problem ?? "Reading Work..." };
     }
@@ -355,7 +401,6 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
   };
   /** Each owner's unacknowledged press from this mount: the press a stale refusal may be explained by (D17). */
   const sending = new WeakMap<object, Promise<{ from: number; to: number } | null>>();
-  const entries = () => disposed ? [] : [...owners.values()].flatMap(o => o.lease.entry.journal.entries()).sort((a,b) => a.at-b.at);
   const submit = async (record: typeof owners extends Map<string, infer R> ? R : never, request: WorkWrite, token: InvocationToken) => {
     requireWritable();
     const result = await settleWork(door.submitWork(record.scope, request, token));
@@ -366,30 +411,11 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
       const applied = applyPatches(record.config.state, { version: 1, revision: record.handle.revision, doc: record.doc }, ack.by, ack.patches, ack.base, true, true);
       if (applied.ok) accept(record, { key: ack.key, revision: ack.revision }, applied.envelope.doc);
     }
-    record.lease.entry.journal.accept(ack); notify();
+    record.lease.entry.accept(ack.press); notify();
     return { ok: true, revision: ack.revision, handle: { key: ack.key, revision: ack.revision }, write: ack } as const;
   };
-  const restore = async (direction: "undo" | "redo", press?: string) => {
-    const step = press ? entries().find(e => e.press === press) : entries().filter(e => e.state === (direction === "undo" ? "applied" : "undone")).at(-1);
-    const record = [...owners.values()].find(o => o.lease.entry.journal.entries().some(e => e.press === step?.press));
-    const token = basis();
-    if (!record?.ready || !token) return { ok: false, code: "write-refused", message: basisRefusal() ?? "Work unavailable" } as const;
-    return record.lease.entry.journal[direction](async request => {
-      try { return await submit(record, request, token); }
-      catch (error) { return { ok: false, kind: "refused", error: String(error), hint: "Read Work again" } as RouteStateWriteResult; }
-    }, step?.press);
-  };
-  const history = { get entries() { return entries(); }, undo: (press?: string) => restore("undo",press),
-    redo: (press?: string) => restore("redo",press), revert: async (press?: string) => {
-      const record=[...owners.values()].find(o=>o.lease.entry.journal.read().undo.at(-1)?.press===(press??entries().filter(e=>e.state==="applied").at(-1)?.press));
-      const step=record?.lease.entry.journal.read().undo.at(-1),token=basis();
-      if(!record?.ready||!step||!token||step.barrier||step.superseded) throw Error("History step is blocked");
-      return submit(record,{kind:"apply",expectedRevision:record.handle!.revision,press:crypto.randomUUID(),label:`Revert ${step.label}`,
-        patches:step.transitions.slice(0,step.cursor).reverse().flatMap(t=>t.inverse)},token);
-    } };
   const reviews = new Map<string, { preview: z.output<typeof writePreviewSchema>; input: Record<string, unknown>; token: InvocationToken; signature: string; presentation: any }>();
   const applyingReviews = new Map<string, ReturnType<typeof reviews.get>>();
-  const problems = new Map<string,string>();
   const plans = new Map<string,InvocationToken>();
   const workSignature = () => canonicalRouteInput([...owners].map(([id,o]) => [id,o.ready,o.handle]));
   // Plans seal Work, target and native reads, not the browser-owned Page pose (ADR 0033).
@@ -427,20 +453,19 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
       return {ready:true,refusal:null,label:ids.length===1?options.find(o=>o.id===ids[0])!.label:ids.length?`${ids.length} ${spec.subject?.noun ?? "Subject"}s`:"",link:`${module.data.address}?${link}`};
     } catch { return refused(`${spec.subject?.noun ?? "Subject"} is malformed`); }
   };
-  const findingMoves: import("./timeline").TimelineEntry[] = [];
   // The document's findings Work (ADR 0035 rule 9), for the kernel's drawing: the host's `work` Reading of the
   // findings key, subscribed on first ask and again when the key changes. Pea's write and a person's arrive the
   // same way, with no reload. The key is the one the findings history door uses: the route's own document-bound
   // Work key, as the host resolved it; a route whose Work is keyed by a member, or that keeps none, binds the
   // document itself.
-  let findings: readonly Finding[] = [], findingsAt: string | null = null, findingsRead = false, stopFindings = () => {};
+  let findings: readonly Finding[] = [], findingsAt: string | null = null, stopFindings = () => {};
   cleanups.push(() => stopFindings());
   const findingsKey = () => (!edits?.key && owners.get(own)?.handle?.key)
     || (input.work.address || input.work.open ? bindWork(FINDINGS_OWNER, input.work.address, undefined, input.work.open ?? undefined) : null);
   const watchFindings = () => {
     const key = findingsKey(), at = key ? workKey(key) : "";
     if (findingsAt === at) return;
-    findingsAt = at; findings = []; findingsRead = false; stopFindings(); stopFindings = () => {};
+    findingsAt = at; findings = []; stopFindings(); stopFindings = () => {};
     if (input.fixture !== null || input.history || !key) return;
     const fault = (error: unknown) => reportFault({ code: "reading.failed", routeCode: spec.key, readingKind: FINDINGS_OWNER }, error);
     // A frame can arrive inside `subscribe`, while a pane is drawing: that value is returned, never notified.
@@ -452,7 +477,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
       // No findings Work yet reads as null: none said. One that does not decode keeps what is drawn and is a fault.
       const parsed = z.object({ doc: findingsWorkSchema }).nullable().safeParse(frame.value);
       if (!parsed.success) return fault(parsed.error);
-      findings = parsed.data ? Object.values(parsed.data.doc.findings) : []; findingsRead = true;
+      findings = parsed.data ? Object.values(parsed.data.doc.findings) : [];
       if (!subscribing) notify();
     });
     subscribing = false;
@@ -615,25 +640,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
       if(!verb) throw Error(`Unknown kernel verb ${key}`);
       return handleOf(`kernel:${key}`, verb) as RunVerb;
     },
-    journal: () => {
-      const journals=[...owners.values()].map(o=>o.lease.entry.journal.read()),base=owners.get(own)?.lease.entry.journal.read() ?? {revision:null,from:0,busy:false,receipts:[],undo:[],redo:[],moves:[],last:null};
-      return freezePage({...base, undo:journals.flatMap(j=>j.undo).sort((a,b)=>a.at-b.at), redo:journals.flatMap(j=>j.redo).sort((a,b)=>a.at-b.at),
-        intents:journals.flatMap(j=>j.intents), moves:journals.flatMap(j=>j.moves).sort((a,b)=>a.at-b.at), last:journals.flatMap(j=>j.last?[j.last]:[]).sort((a,b)=>a.step.at-b.step.at).at(-1)??null});
-    },
-    discardIntent(id: string) { for (const owner of owners.values()) owner.lease.entry.journal.discardIntent(id); notify(); },
-    // The person's own findings live in the document's findings Work, not this route's: their undo is that door's.
-    undoFinding: async () => {
-      const key = findingsKey();
-      if (!key) return { message: "Wait for this route's Work before undoing a finding" };
-      const refused = await undoOwnFinding(key, ports.findings);
-      // ponytail: the History entry lives for this Place; a durable one needs the findings Work's own moves here.
-      if (!refused) { findingMoves.push({ kind: "feed", at: new Date().toISOString(), verb: "findings.undo", subject: { message: "you undid your last finding" } }); notify(); }
-      return refused;
-    },
     findings: () => { watchFindings(); return findings; },
-    // Null until the findings Work is read; the host then refuses an undo with nothing of the person's left.
-    ownFindingsLeft: async () => { watchFindings(); return findingsRead ? findings.filter((finding) => finding.said.by === "person").length : null; },
-    restoreWork: restore, journalRefusal: () => input.readOnly || input.history ? "needs live Revit" : [...owners.values()].some(o=>!o.ready)?"Work unavailable":null,
     stopCommand: (id:string) => {requireWritable();return cancelAction(id);},
     attention: {
       write: (page:object) => Object.fromEntries(Object.keys(spec.fields).map(key=>[key,JSON.stringify((page as Record<string,unknown>)[key])])),
@@ -668,11 +675,11 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     value: (read: import("../route/host-read").HostRead | undefined = spec.core): Snapshot => read ? reads.get(read)?.snapshot ?? reading() : { state: "not-yet-run", publication: null },
     owner: (id = own) => owners.get(id),
     page: { read: () => page, pose: (patch: any, intent?: "gesture"|"named") => moveRole("pose",patch,intent === "gesture"?"replace":intent === "named"?"push":undefined), query: (patch: any) => moveRole("query",patch), select: (selected: any) => move({selected}), subject: (subject: any) => {if(!spec.subject) throw Error("No subject declared");return move({ [spec.subject.field]: subject },"push");} },
-    subscribe(listener: () => void) { released = false; listeners.add(listener); syncReads(); return () => { listeners.delete(listener); }; },
+    subscribe(listener: () => void) { const resume = released; released = false; listeners.add(listener); if (resume) connectTimeline(); syncReads(); return () => { listeners.delete(listener); }; },
     available: () => !disposed && input.custody.current(),
     /** The URL write is flushed: the address alone, without Place memory, decodes to this Page
      *  (slice 6.1, `data-url-settled`); a reload reads only the address. */
-    urlCurrent: () => canonicalRouteInput(addressPage(false)) === canonicalRouteInput(page), target: () => input.target, revision: () => revision, work: () => gate.read()?.work ?? null, workBasis: basis, history,
+    urlCurrent: () => canonicalRouteInput(addressPage(false)) === canonicalRouteInput(page), target: () => input.target, revision: () => revision, work: () => gate.read()?.work ?? null, workBasis: basis,
     problem: () => edits?basisRefusal():null, writeRefusal,
     /** The basis that failed (a Work feed failure, a thrown read), as distinct
      *  from a state such as "Start this Work to edit": failures draw as a pane failure line. */
@@ -691,7 +698,11 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
         rows: stale ? [] : r.presentation.rows, cells: stale ? [] : r.presentation.cells, stale }; },
     reviewProblem: (id: string) => problems.get(id) ?? null,
     cancel: (id: string) => { const token=plans.get(id);if(token) gate.retire(token.token);plans.delete(id);reviews.delete(id);notify(); },
-    timeline: () => [...[...owners.values()].flatMap(o => o.lease.entry.timeline()), ...findingMoves],
+    timeline: () => disposed ? null : timelineState,
+    stepTimeline,
+    timelineRefusal: () => input.readOnly ? "needs live Revit" : timelineProblem,
+    pendingEdits: () => [...owners.values()].flatMap(o => o.lease.entry.pending()),
+    discardIntent(id: string) { for (const owner of owners.values()) owner.lease.entry.discard(id); notify(); },
     // A caller that draws one known pane may name that pane's context type; the mount does not check it.
     draw<C = DrawContext<any,any,any,any>>(id: string, render?: (ctx: C)=>unknown) {
       const pane = spec.panes[id]!;
@@ -732,12 +743,12 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
             // rebuilt on the acknowledged doc. The fence holds for everything else: a press ahead of
             // nothing, or whose Work was moved by anything but the press ahead of it, stays refused
             // (C122), and nothing waits before its first send.
-            const record=drawnOwners.get(id)!, drawn=handles.get(id)!, ahead=sending.get(record), journal=record.lease.entry.journal;
+            const record=drawnOwners.get(id)!, drawn=handles.get(id)!, ahead=sending.get(record), admission=record.lease.entry;
             type Ack={from:number;to:number}|null;
             let settle:(ack:Ack)=>void=()=>{}, ack:Ack=null;
             const mine=new Promise<Ack>(resolve=>{settle=resolve;});
             sending.set(record,mine);
-            let intent: ReturnType<typeof journal.retainIntent> | undefined;
+            let intent: ReturnType<typeof admission.retain> | undefined;
             const send=async(handle:WorkHandle,doc:unknown,rebased:boolean)=>{
               const applied=applyPatches(record.config.state,{version:1,revision:handle.revision,doc},"human",patches,handle.revision,false,true);
               if (!applied.ok) throw Error(applied.error);
@@ -746,7 +757,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
                 ? patches.filter(p=>String(p.path[0])===key) : [{path:[key],value:(applied.envelope.doc as any)[key]}]);
               const label=id===own ? detail.label : `${detail.label} · from /${id}`;
               const write:WorkWrite={kind:"apply",expectedRevision:handle.revision,press:crypto.randomUUID(),patches:normalized,...z.object({label:z.string(),meta:z.json().optional()}).parse(edits!.describe({...detail,label}))};
-              intent=journal.retainIntent(write,label);
+              intent=admission.retain(write,label);
               notify();
               requireWritable();
               // A retried press's Value is still refreshing after the press ahead of it; its basis is that acknowledgement.
@@ -761,14 +772,14 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
               catch(error) {
                 const prior=error instanceof StaleRevision&&ahead?await ahead:null;
                 if (!prior||prior.from!==drawn.revision||owners.get(id)!==record||!record.ready||record.handle?.revision!==prior.to) throw error;
-                if (intent) journal.discardIntent(intent);
+                if (intent) admission.discard(intent);
                 intent=undefined;
                 to=await send(record.handle,record.doc,true);
               }
-              if (intent) journal.discardIntent(intent);
+              if (intent) admission.discard(intent);
               ack={from:drawn.revision,to};
             } catch(error) {
-              if (intent) journal.refuseIntent(intent,error instanceof Error?error.message:String(error));
+              if (intent) admission.refuse(intent,error instanceof Error?error.message:String(error));
               throw error;
             } finally { if (sending.get(record)===mine) sending.delete(record); settle(ack); notify(); }
           }));
@@ -776,14 +787,14 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
         } catch(error) { return {code:"refused",message:error instanceof Error?error.message:String(error)}; }
       };
       const cells: DrawContext<any, any, any, any>["cells"] = {
-        doc, basis: token, state, history,
+        doc, basis: token, state,
         owner(path) { const route=ownerOf(path); return {route,label:route===own?"Work":`from /${route}`}; },
         at(path,preferred,facts={}) {
           if (path[0] === "setting") return homeHandle(path, valueOf(core), async request => {
             requireWritable();
             try {
               if (core.state !== "ready") throw Error(reasonOf(core));
-              await settleNative(door.submit({ id: crypto.randomUUID(), key: "settings.tiers.write",
+              await settleNative(door.submit({ id: crypto.randomUUID(), key: writeSettingTier.key,
                 target: input.target?.kind === "document" ? input.target : { kind: "host" }, input: request }));
             } finally { mounted.refresh(); }
           });
@@ -792,28 +803,19 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
           const cellPatch=(patches: readonly RouteStatePatch[],detail?:EditHistory) => facts.readOnly
             ? Promise.resolve({code:"read-only",message:"This cell is read-only"}) : patch(patches,detail,route);
           const clear=(detail?:EditHistory)=>cellPatch(cellPatches(address.slice(0,-1),address.at(-1)!,value,{kind:"clear"}),detail);
-          const record=owners.get(route)!;
           const accepted = value.edit;
           const accept=(detail?:EditHistory) => {
             if(!accepted) return Promise.resolve({code:"not-staged",message:"This cell is no longer staged"});
             const {by:_by,at:_at,base:_base,...rung}=accepted;
             return cellPatch([{path:[...address,"edit"],value:rung}],detail);
           };
-          // A cell may undo only a press whose entire footprint is this address.
-          const step=record.lease.entry.journal.read().undo.findLast(step=>!step.barrier&&!step.superseded&&step.transitions.every(t=>t.paths.every(p=>address.every((key,i)=>String(p[i])===key))));
-          const undo=async():Promise<EditFailure>=>{
-            if(!ready||!token||!gate.current(token)||canonicalRouteInput(record.handle)!==canonicalRouteInput(handles.get(route))) return {code:"stale-cell",message:"Owning Work changed since this cell was drawn"};
-            if(!step) return {code:"no-cell-undo",message:"No isolated edit for this cell"};
-            const result=await restore("undo",step.press);
-            return result.ok?null:{code:"undo-refused",message:"message" in result?String(result.message):"Cell undo refused"};
-          };
           return {owner:{route,label:route===own?"Work":`from /${route}`},value, facts:{...facts,baseline:facts.baseline??value.base?.value},
-            freshness:ready?"current":owners.get(route)!.doc===null&&valueOf(core)===undefined?"never":"stale", refusal: facts.readOnly ? "This cell is read-only" : refusal, clear, accept,deny:clear,undo,
+            freshness:ready?"current":owners.get(route)!.doc===null&&valueOf(core)===undefined?"never":"stale", refusal: facts.readOnly ? "This cell is read-only" : refusal, clear, accept,deny:clear,
             delete:(detail)=>cellPatch([{path:address}],detail),
             stage:(value2,detail)=> facts.readOnly ? Promise.resolve({code:"read-only",message:"This cell is read-only"}) :
               patch(cellPatches(address.slice(0,-1),address.at(-1)!,value,
                 Object.hasOwn(facts,"baseline")&&canonicalRouteInput(value2)===canonicalRouteInput(facts.baseline)?{kind:"clear"}:{kind:"set",rung:{value:value2}}),detail,route),
-            transitions:(detail)=>!ready?[]:[...(value.edit?[{kind:"clear" as const,run:()=>clear(detail)},...(value.edit.by==="pea"?[{kind:"take" as const,run:()=>accept(detail)},{kind:"unsuggest" as const,run:()=>clear(detail)}]:[])]:[]),...(step?[{kind:"undo" as const,run:undo}]:[])]};
+            transitions:(detail)=>!ready?[]:[...(value.edit?[{kind:"clear" as const,run:()=>clear(detail)},...(value.edit.by==="pea"?[{kind:"take" as const,run:()=>accept(detail)},{kind:"unsuggest" as const,run:()=>clear(detail)}]:[])]:[])]};
         },
         label(input,label) { const foreign=[...new Set(edits!.patches(input,valueOf(core)).map(p=>ownerOf(p.path.map(String))))].filter(id=>id!==own); return foreign.length?`${label} · ${foreign.map(id=>`from /${id}`).join(", ")}`:label; },
         patch,
@@ -824,9 +826,9 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
         verb:(id:string)=>Object.hasOwn(spec.verbs,id)||!Object.hasOwn(kernelVerbs,id)?mounted.verb(id):mounted.kernelVerb(id as KernelVerbKey) } as any);
     },
     // Retaining hidden read connections was a Plan-identity workaround; content fingerprints
-    // now survive reconnect. Keep Work journals/receipts connected so pending edits settle.
+    // now survive reconnect. Keep Work feeds connected so pending edits settle.
     // Read release preserves write authority; disposal and Place custody fence writes.
-    release() { if (disposed || released) return; released = true; notify(); for (const r of reads.values()) { r.args=""; r.stop(); } },
+    release() { if (disposed || released) return; released = true; stopTimeline(); timelineState = null; timelineProblem = "Timeline is inactive"; notify(); for (const r of reads.values()) { r.args=""; r.stop(); } },
     dispose() { if (disposed) return; disposed=true; publish(); cleanups.splice(0).reverse().forEach(stop => stop()); listeners.clear(); },
   };
   const stopSubject=observeSubject(spec.key,{current:()=>!disposed&&!released&&input.custody.current(),read:subjectState,subscribe:mounted.subscribe});

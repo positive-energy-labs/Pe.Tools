@@ -1,3 +1,4 @@
+import { fixtureTimeline } from "../shell/fixture-work-door";
 import { refusalOf, valueOf } from "./typed-route";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
 import { snapshot as workSnapshot } from "../../../host/tests/host-read-graph.test-support";
@@ -370,7 +371,7 @@ async function journey(module: TypedRoute = fans) {
   const mounts: ReturnType<typeof mountTypedRoute>[] = [];
   const mount = (readOnly = false, place: Partial<PlaceInput> = {}, ports: Parameters<typeof mountTypedRoute>[3] = {}, candidate: TypedRoute = module) => {
     const m = mountTypedRoute(candidate, { ...input, ...place, readOnly }, fingerprint, {
-      work,
+      work, timeline: fixtureTimeline(host.workspace),
       sources: { "fans.sheet": read }, ...ports,
     });
     mounts.push(m);
@@ -385,6 +386,7 @@ async function journey(module: TypedRoute = fans) {
     return vi.waitFor(
       () => {
         expect(m.value()).toMatchObject({ state: "ready" });
+        expect(m.timeline()).not.toBeNull();
         if (m.owner()?.ready) expect(m.problem()).toBeNull();
       },
       { timeout: 20_000 },
@@ -429,7 +431,7 @@ async function journey(module: TypedRoute = fans) {
     },
     async close() {
       // Refused intents outlive a Place in production, but not this disposable host fixture.
-      mounts.forEach(m => m.journal().intents.forEach(intent => m.discardIntent(intent.id)));
+      mounts.forEach(m => m.pendingEdits().forEach(intent => m.discardIntent(intent.id)));
       mounts.forEach((m) => m.dispose());
       streams.forEach((stop) => stop());
       await Promise.allSettled([...pending]);
@@ -612,10 +614,11 @@ test("JM H27 interleave a second writer, refuse the original undo and keep its n
     await j.start();
     expect(await j.cells().at(["flows", terminalA]).stage({ cfm: 240 }, { label: "Set terminal airflow" })).toBeNull();
     await j.ready();
-    const step = j.m.history.entries.at(-1)!;
-    expect(await j.m.history.undo(step.press), "H07: typed Work undoes the named edit").toMatchObject({ ok: true });
+    await vi.waitFor(() => expect(j.m.timeline()?.undo).toBeTruthy());
+    const step = j.m.timeline()!.undo!;
+    expect(await j.m.stepTimeline("undo"), "H07: host Timeline undoes the offered edit").toBeNull();
     await j.ready();
-    expect(await j.m.history.redo(step.press), "H07: typed Work redoes the same edit").toMatchObject({ ok: true });
+    expect(await j.m.stepTimeline("redo"), "H07: host Timeline redoes the offered edit").toBeNull();
     await j.ready();
     const result = await j.write(j.key(), { kind: "apply", expectedRevision: j.m.owner()!.handle!.revision,
       press: crypto.randomUUID(), label: "Another designer changes airflow",
@@ -624,11 +627,11 @@ test("JM H27 interleave a second writer, refuse the original undo and keep its n
     await vi.waitFor(() => expect(j.m.owner()!.doc.flows[terminalA].edit.value).toEqual({ cfm: 500 }));
     await j.ready();
     const before = structuredClone(j.m.owner()!.doc), revision = j.m.owner()!.handle!.revision;
-    const undo = await j.m.history.undo(step.press);
+    const undo = await j.host.workspace.step([j.key()], "human", "undo", step, async () => []);
     expect(undo, "H27: a changed affected path refuses its original inverse").toMatchObject({ ok: false });
     expect(j.m.owner()!.doc, "H27: conflicting undo changes no path").toEqual(before);
     expect(j.m.owner()!.handle!.revision, "H27: no inverse retry writes a new revision").toBe(revision);
-    expect(j.m.history.entries.some(entry => entry.press === step.press), "H27: the named entry survives refusal").toBe(true);
+    expect(j.m.timeline()!.rows.some(entry => "work" in entry && entry.kind === "edit" && entry.revision === ("revision" in step ? step.revision : -1)), "H27: the named entry survives refusal").toBe(true);
   } finally { await j.close(); }
 }, 60_000);
 
@@ -649,7 +652,7 @@ test("JM H01/H13 hide one document, inspect another and reopen the first named W
     await vi.waitFor(() => expect(reopened.owner()?.ready).toBe(true));
     expect(reopened.owner()!.scope.key).toEqual(firstKey);
     expect(reopened.owner()!.doc.flows[terminalA].edit.value).toEqual({ cfm: 240 });
-    expect(JSON.stringify(reopened.journal()), "H13: cold reopening retains the human action label").toContain("Terminal A design airflow");
+    await vi.waitFor(() => expect(JSON.stringify(reopened.timeline()), "H13: cold reopening retains the human action label").toContain("Terminal A design airflow"));
   } finally { await j.close(); }
 }, 60_000);
 
@@ -679,7 +682,7 @@ test("JM H30 refuse a stale drawn edit and retain its original intent across ref
     expect(await old.stage({ cfm: 731 }, { label: "Keep my original airflow" })).toMatchObject({ code: "refused" });
     await j.ready();
     expect(j.m.owner()!.doc, "H30: stale intent never recomputes on newer Work").toEqual(before);
-    expect(JSON.stringify(j.m.journal()), "H30: rejected input remains inspectable until explicit discard").toContain("Keep my original airflow");
+    expect(JSON.stringify(j.m.pendingEdits()), "H30: rejected input remains inspectable until explicit discard").toContain("Keep my original airflow");
   } finally { await j.close(); }
 }, 60_000);
 
@@ -700,7 +703,7 @@ test("JZ C121/C090 drawn authority rejects copied, foreign and old bases without
     expect(await drawn.patch([{ path: ["flows", terminalA, "edit"], value: { value: edit } }],
       { label: "Original refused airflow" })).toMatchObject({ code: "refused" });
     expect(j.m.current(old)).toBe(false);
-    const intent = j.m.journal().intents.find(i => i.label === "Original refused airflow")!;
+    const intent = j.m.pendingEdits().find(i => i.label === "Original refused airflow")!;
     expect(intent.input.expectedRevision).toBe(old.workRevision);
     expect(intent.input.patches).toEqual([{ path: ["flows", terminalA, "edit"], value: { value: edit } }]);
     expect(Object.isFrozen(intent.input.patches)).toBe(true);
@@ -708,7 +711,7 @@ test("JZ C121/C090 drawn authority rejects copied, foreign and old bases without
     expect(j.writes).toHaveLength(count);
     expect(j.m.owner()!.doc).toEqual(before);
     j.m.discardIntent(intent.id);
-    expect(j.m.journal().intents.some(i => i.id === intent.id)).toBe(false);
+    expect(j.m.pendingEdits().some(i => i.id === intent.id)).toBe(false);
     expect(await j.cells().at(["flows", terminalA]).stage({ cfm: 201 })).toBeNull();
   } finally { await j.close(); }
 }, 60_000);
@@ -728,7 +731,7 @@ test("JZ C122 delayed mounted submit retains its revision after a newer edit", a
     expect(await pending).toMatchObject({ code: "refused" });
     expect(j.writes.slice(-2).map(w => w.expectedRevision)).toEqual([revision, revision]);
     expect(j.m.owner()!.doc.flows[terminalA].edit.value).toEqual({ cfm: 500 });
-    expect(j.m.journal().intents.at(-1)!.input.patches).toEqual([
+    expect(j.m.pendingEdits().at(-1)!.input.patches).toEqual([
       { path: ["flows", terminalA, "edit"], value: { value: { cfm: 200 } } },
     ]);
   } finally { held?.release.resolve(); await j.close(); }
@@ -762,7 +765,7 @@ test.each(["ack-first", "stream-first"])("JZ C086 %s delivery and pending depart
   } finally { held?.release.resolve(); j.flushStream(); await j.close(); }
 }, 60_000);
 
-test("JZ C718/C675/C676/C730 atomic press, isolated cell undo, root addressing and locked deletion", async () => {
+test("JZ C718/C675/C676/C730 atomic press, Timeline undo, root addressing and locked deletion", async () => {
   const j = await journey();
   try {
     await j.start();
@@ -770,34 +773,29 @@ test("JZ C718/C675/C676/C730 atomic press, isolated cell undo, root addressing a
     expect(await j.cells().patch([terminalA, terminalB].map(id => ({ path: ["flows", id, "edit"], value: { value: { cfm: 240 } } })),
       { label: "Both terminals" })).toBeNull();
     await j.ready();
-    const step = j.m.journal().undo.at(-1)!;
-    expect(j.m.journal().undo.filter(s => s.press === j.writes.at(-1)!.press), JSON.stringify(j.m.journal())).toHaveLength(1);
-    expect(step.transitions).toHaveLength(1);
-    expect(step.transitions[0]!.forward).toHaveLength(2);
-    expect(step.transitions[0]!.inverse).toHaveLength(2);
-    expect(j.writes.at(-1)!.press).toBe(step.press);
-    expect(await j.m.history.undo(step.press)).toMatchObject({ ok: true });
+    await vi.waitFor(() => expect(j.m.timeline()?.undo?.label).toBe("Both terminals"));
+    expect(j.writes.at(-1)!.patches).toHaveLength(2);
+    expect(await j.m.stepTimeline("undo")).toBeNull();
     await j.ready(); expect(j.m.owner()!.doc).toEqual(original);
     expect(await j.cells().patch([terminalA, terminalB].map(id => ({ path: ["flows", id], value: { edit: { value: { cfm: 250 } } } })))).toBeNull();
     await j.ready();
-    const before = structuredClone(j.m.owner()!.doc), steps = j.m.journal().undo.length;
+    const before = structuredClone(j.m.owner()!.doc), steps = j.m.timeline()!.rows.length;
     for (const [id, action] of [[terminalA, "clear"], [terminalB, "clear"], [terminalA, "delete"]] as const) {
       expect(await j.cells().at(["flows", id])[action]({ label: `${action} ${id}` })).toBeNull();
       await j.ready();
     }
     expect(j.m.owner()!.doc.flows[terminalA]).toBeUndefined();
-    expect(j.m.journal().undo).toHaveLength(steps + 3);
-    expect(j.m.journal().undo.slice(-3).map(s => s.transitions.length)).toEqual([1, 1, 1]);
-    for (let i = 0; i < 3; i++) { expect(await j.m.history.undo()).toMatchObject({ ok: true }); await j.ready(); }
+    expect(j.m.timeline()!.rows).toHaveLength(steps + 3);
+    for (let i = 0; i < 3; i++) { expect(await j.m.stepTimeline("undo")).toBeNull(); await j.ready(); }
     expect(j.m.owner()!.doc).toEqual(before);
     expect(await j.cells().at(["writeIntent"]).stage({ walk: { unitId: 1, portIndex: 0 } })).toBeNull(); await j.ready();
-    const rootBefore = structuredClone(j.m.owner()!.doc), rootSteps = j.m.journal().undo.length;
+    const rootBefore = structuredClone(j.m.owner()!.doc), rootSteps = j.m.timeline()!.rows.length;
     expect(() => j.cells().at(["foreignRoot"])).toThrow("No owning Work");
     expect(await j.cells().at(["writeIntent"]).clear()).toBeNull(); await j.ready();
     expect(await j.cells().at(["writeIntent"]).delete()).toBeNull(); await j.ready();
     expect(j.m.owner()!.doc.writeIntent).toEqual({});
-    expect(j.m.journal().undo).toHaveLength(rootSteps + 2);
-    for (let i = 0; i < 2; i++) { expect(await j.m.history.undo()).toMatchObject({ ok: true }); await j.ready(); }
+    expect(j.m.timeline()!.rows).toHaveLength(rootSteps + 2);
+    for (let i = 0; i < 2; i++) { expect(await j.m.stepTimeline("undo")).toBeNull(); await j.ready(); }
     expect(j.m.owner()!.doc).toEqual(rootBefore);
     const locked = j.cells().at(["flows", terminalA], undefined, { readOnly: true });
     const writes = j.writes.length;
@@ -960,7 +958,7 @@ test.each(["accepted", "refused"] as const)("JZ audit member switch keeps a late
     expect(m.owner()!.doc, "The replacement never receives the old member's delta").toEqual(before);
     expect(m.owner()!.handle).toEqual(handle);
     expect(m.problem()).toBeNull();
-    expect(m.journal().intents.some(intent => intent.label === "Member A delayed edit")).toBe(false);
+    expect(m.pendingEdits().some(intent => intent.label === "Member A delayed edit")).toBe(false);
     await vi.waitFor(() => expect(inspectorA.owner()!.doc.flows[terminalA].edit.value).toEqual({ cfm: outcome === "accepted" ? 210 : 700 }));
   } finally { held?.release.resolve(); await j.close(); }
 }, 60_000);

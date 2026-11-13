@@ -33,8 +33,10 @@ export interface ReadHandle<K extends string = string, I = unknown, D = unknown>
 /** A read handle with its input and data erased: what a registry or a `uses` list holds. */
 export type AnyReadHandle = Pick<ReadHandle, typeof minted | "key" | "axes">;
 /** Keep schema outputs named at declaration boundaries, including recursive JSON. */
-export interface ReadContract<K extends string, I extends z.ZodType, D extends z.ZodType>
-  extends ReadHandle<K, z.output<I>, z.output<D>> {}
+export interface ReadContract<K extends string, I extends z.ZodType<z.output<I>>, D extends z.ZodType>
+  extends ReadHandle<K, z.output<I>, z.output<D>> {
+  readonly input: I;
+}
 const costs = ["Cheap", "Bounded", "Expensive", "Mutation"] as const;
 type Safety = typeof hostOpSafety;
 /** The generated effect admits Read and TransactRead keys. */
@@ -129,7 +131,7 @@ export function contract<K extends string, I extends z.ZodType<z.output<I>>, D e
   for (const path of Object.keys(def.keyedBy ?? {}))
     if (!rows(def.data, path.split(".")))
       throw Error(`Read '${key}' keys '${path}', which is no row collection in its data`);
-  const made: ReadHandle<K, z.output<I>, z.output<D>> = mint({
+  const made: ReadContract<K, I, D> = mint({
     key,
     input: def.input,
     data: def.data,

@@ -158,7 +158,7 @@ export function TypedChrome({ mount, document, recorded, thread }: { mount: Type
     {visible ? <Notes key={doc} mount={mount} /> : null}
     {visible ? <PointerCite route={spec.key} thread={thread} fields={spec.fields} doc={doc} /> : null}
     <ScopeKeys keys={actionScopeKeys((["undo","redo"] as const).map(direction=>({id:`work.${direction}`,label:direction,bindings:direction==="undo"?["Mod+Z"]:["Mod+Shift+Z","Mod+Y"],
-      options:{ignoreInputs:true},invoke:()=>{if(visible) void mount.history[direction]();}})))} />
+      options:{ignoreInputs:true},invoke:()=>{if(visible) void mount.stepTimeline(direction);}})))} />
     <RouteBand route={spec.key}>{head}</RouteBand>
     <GraphLayoutView
       layout={layout(spec.layout)}
@@ -200,7 +200,7 @@ function bandVerbs(mount: TypedMount): ReactNode[] {
 function BandTimeline({ mount, recorded }: { mount: TypedMount; recorded?: ReactNode }) {
   // The Timeline is a Work's history and a bound document's recorded points. A route with neither
   // (/pea: a host target, no Work) draws none, never an empty one (row 11-pea-one-band).
-  if (!mount.spec.edits && mount.target()?.kind !== "document" && mount.timeline().length === 0) return null;
+  if (!mount.spec.edits && mount.target()?.kind !== "document" && !mount.timeline()?.rows.length) return null;
   return <TimelineHead owner={mount} history={<>{recorded}<GraphHistory owner={mount} /></>} />;
 }
 /** The layout's `subject` gate: open when the Page holds a subject. */

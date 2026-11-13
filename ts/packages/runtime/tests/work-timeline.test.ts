@@ -152,3 +152,29 @@ test("T4: the projection never reads the clock: an ack stored without a stamp pr
   expect(part.undo).toMatchObject({ at: 0, ref: { label: "old" } });
   expect(part.rows).toMatchObject([{ at: 0 }]);
 });
+
+test("a rejected Pea write marks consumed human edits not written and Pea edits rejected", async () => {
+  const f = place();
+  await f.edit(f.ducts, "human", "Human input", "a", 1);
+  const pea = await f.edit(f.ducts, "pea", "Pea input", "b", 2);
+  const reason = "rejected by person";
+  const rejected = actionStatusSchema.parse({
+    ...revitWrite(f.ducts, pea.revision, { a: 1, b: 2 }),
+    state: "cancelled", error: reason, status: 409, effects: [],
+    consumes: [{ kind: "work", probe: { handle: { key: f.ducts, revision: pea.revision }, paths: [["a"], ["b"]] }, expected: { a: 1, b: 2 } }],
+  });
+  expect((await f.read("human", [rejected])).rows.filter(row => row.kind === "edit")).toMatchObject([
+    { by: "human", notWritten: { invocation: rejected.id, reason, rejected: false } },
+    { by: "pea", notWritten: { invocation: rejected.id, reason, rejected: true } },
+  ]);
+});
+
+test("a successful preview with no effects leaves the host Timeline step undoable", async () => {
+  const f = place();
+  const edit = await f.edit(f.ducts, "human", "Preview input", "a", 5);
+  const preview = actionStatusSchema.parse({ ...revitWrite(f.ducts, edit.revision, { a: 5 }), key: "ducts.plan", effects: [] });
+  const read = await f.read("human", [preview]);
+  expect(read.undo).toMatchObject({ work: f.ducts, label: "Preview input" });
+  expect(read.refusal.undo).toBeNull();
+  expect((await f.press("human", "undo", [preview])).result).toMatchObject({ ok: true, doc: { a: 0 } });
+});
