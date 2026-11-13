@@ -7,7 +7,8 @@ import { elementSubject } from "@pe/ducts-domain/work-subject";
 import { makeAtomRegistry } from "../shell/owner";
 import { SheetPane } from "../route/slots/sheet/pane.tsx";
 import { sheetCells } from "../route/slots/sheet/index.ts";
-import { designSheet, ENGINE_DEFAULT_NO_SHARED_ROOT, NO_SHARED_ROOT } from "../ducts/design-sheet.ts";
+import { designSheet } from "../ducts/design-sheet.ts";
+import { ENGINE_DEFAULT_NO_SHARED_ROOT, NO_SHARED_ROOT } from "@pe/agent-contracts/setting-owners";
 import { fansSheet } from "./sheet.ts";
 
 /*
@@ -20,17 +21,17 @@ test("/fans stages no /ducts Work, and /ducts' sheet stages its criteria", () =>
   const fansKeys = Object.keys(fansDocumentSchema.shape), ductsKeys = Object.keys(ductsDocumentSchema.shape);
   // Every Fans binding addresses a Fans Work key that /ducts does not own.
   // A `setting` binding stages no Work at all: it saves at a home tier (slice 6b).
-  const staged = (sheet: { bindings: Readonly<Record<string, { kind: string }>> }) => Object.keys(sheet.bindings).filter((name) => sheet.bindings[name]!.kind !== "setting");
+  const staged = (sheet: { bindings: Readonly<Record<string, { home: { at: string } }>> }) => Object.keys(sheet.bindings).filter((name) => sheet.bindings[name]!.home.at !== "setting");
   expect(Object.keys(fansSheet.bindings).length).toBeGreaterThan(staged(fansSheet).length);
   for (const binding of staged(fansSheet)) {
     expect(fansKeys, binding).toContain(binding);
     expect(binding === "writeIntent" || !ductsKeys.includes(binding), binding).toBe(true);
   }
   // /ducts' sheet stages its criteria (a row per cell) and the design friction rate, in /ducts Work.
-  expect(staged(designSheet)).toEqual(["criteria"]);
-  for (const binding of staged(designSheet)) expect(ductsKeys).toContain(binding);
+  expect(staged(designSheet).map(name => name.split(".")[0]).every(name => name === "criteria")).toBe(true);
+  for (const binding of staged(designSheet)) expect(ductsKeys).toContain(binding.split(".")[0]);
   const rows = sheetCells(designSheet, { rows: [], work: { criteria: { velocitySupplyFpm: { edit: { value: 850, by: "human" } } } }, model: [], read: null });
-  expect(rows.find((c) => c.row === "velocitySupplyFpm")).toMatchObject({ value: 850, source: "work", label: "Velocity limit supply" });
+  expect(rows.find((c) => c.binding === "criteria.velocitySupplyFpm")).toMatchObject({ value: 850, source: "work", label: "Velocity limit supply" });
   expect(rows.find((c) => c.binding === "setting.ducts.designFriction")).toMatchObject({ value: 0.08, source: "default", unit: "in-wg/100 ft" });
 });
 
@@ -47,7 +48,7 @@ const snapshot = { nodes: [], segments: [], slots: { fanStatic: "Old ESP" } };
 
 test("slot names use project and firm settings and never stage Work", () => {
   const binding = Object.entries(fansSheet.bindings).find(([key]) => key === "setting.ducts.parameters.fanStatic")?.[1];
-  expect(binding).toMatchObject({ kind: "setting", owner: "ducts", path: ["parameters", "fanStatic"], tiers: ["project", "firm"] });
+  expect(binding).toMatchObject({ home: { at: "setting", owner: "ducts", path: ["parameters", "fanStatic"], tiers: ["project", "firm"] } });
   expect(fansDocumentSchema.parse({})).not.toHaveProperty("parameters");
 });
 
@@ -76,10 +77,10 @@ const paneOf = (slot: typeof designSheet | typeof fansSheet, read: object) =>
 test("/ducts with no shared root: a firm criterion is the engine default, and the fix line is drawn", () => {
   const firmCell = { value: 900, source: "firm", units: "fpm" };
   const read = { criteria: { velocityLimitFpm: { supply: firmCell, return: firmCell } }, firm: refused };
-  const cell = sheetCells(designSheet, { rows: [], work: {}, model: [], read }).find((c) => c.row === "velocitySupplyFpm");
+  const cell = sheetCells(designSheet, { rows: [], work: {}, model: [], read }).find((c) => c.binding === "criteria.velocitySupplyFpm");
   expect(cell).toMatchObject({ value: 900, source: "default", ref: ENGINE_DEFAULT_NO_SHARED_ROOT });
   const pane = paneOf(designSheet, read).container;
-  expect(pane.querySelector('[data-sheet-address="criteria:velocitySupplyFpm"]')!.textContent).toContain(ENGINE_DEFAULT_NO_SHARED_ROOT);
+  expect(pane.querySelector('[data-sheet-address="criteria.velocitySupplyFpm"]')!.textContent).toContain(ENGINE_DEFAULT_NO_SHARED_ROOT);
   expect(pane.querySelector("[data-sheet-from]")!.textContent).toBe(NO_SHARED_ROOT);
 });
 

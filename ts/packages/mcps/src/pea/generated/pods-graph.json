@@ -112,16 +112,6 @@
       "refresh": "dependencies"
     }
   },
-  "sheet": {
-    "draft": true,
-    "bindings": {
-      "fields": {
-        "kind": "local",
-        "per": "subject",
-        "json": true
-      }
-    }
-  },
   "goal": "value",
   "verbs": {
     "open": {
@@ -151,6 +141,14 @@
   },
   "band": [],
   "panes": {
+    "sheet": {
+      "label": "Member fields",
+      "purpose": "Edit the member’s arbitrary JSON over its saved bytes",
+      "draws": [
+        "value"
+      ],
+      "verbs": []
+    },
     "members": {
       "label": "Members",
       "purpose": "Browse installed Pod members",
@@ -162,14 +160,6 @@
     "runs": {
       "label": "Runs",
       "purpose": "Inspect member or Pod runs",
-      "draws": [
-        "value"
-      ],
-      "verbs": []
-    },
-    "sheet": {
-      "label": "Sheet",
-      "purpose": "Edit the bound cells",
       "draws": [
         "value"
       ],

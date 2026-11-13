@@ -1,3 +1,5 @@
+// These witnesses test capture and camera ownership; resolve the lazy module before their timed gestures.
+import "./slots/picture/pane.tsx";
 import { valueOf } from "./typed-route";
 // @vitest-environment jsdom
 import { elementSubject } from "@pe/ducts-domain/work-subject";
@@ -124,7 +126,7 @@ test("JM B03/B14/B18 named Fans roster and a live gesture survive typed Page pro
     const a = open("jm-pose");
     await waitFor(() => expect(a.value().state === "ready").toBe(true));
     const view = render(tree(a));
-    await waitFor(() => { resize(); expect(io.orbit?.read()).not.toBeNull(); });
+    await waitFor(() => { resize(); expect(io.orbit?.read()).toBeTruthy(); });
     const orbit = io.orbit!;
     const pose: import("../scene/orbit").OrbitViewport = { kind: "orbit", yaw: 170, elev: 17, zoom: 2, pivot: [0, 0, 0] };
     const gesture = orbit.begin();
