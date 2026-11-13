@@ -44,6 +44,7 @@ export { workFeedFailureMessage } from "./work-journal-door.ts";
 export type { WorkFeedFailure } from "./work-journal-door.ts";
 export { presentationSchema } from "./route-kernel-bodies.ts";
 export * from "./history.ts";
+export * from "./work-timeline.ts";
 
 export * from "./bind-read.ts";
 export * from "./captures-read.ts";
