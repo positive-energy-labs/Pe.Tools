@@ -294,10 +294,10 @@ export const tools = {
       ],
     },
     commands: {
-      ...workIntent("takeoffs", "takeoffs.initialize", definitions["takeoffs.initialize"]),
+      ...workWriteCommands("takeoffs", "takeoffs.initialize", definitions["takeoffs.initialize"]),
       ...workWriteCommands("takeoffs", "takeoffs.adopt", definitions["takeoffs.adopt"]),
       ...workWriteCommands("takeoffs", "takeoffs.partition", definitions["takeoffs.partition"]),
-      ...workIntent("takeoffs", "takeoffs.sync", definitions["takeoffs.sync"]),
+      ...workWriteCommands("takeoffs", "takeoffs.sync", definitions["takeoffs.sync"]),
     },
   },
   rooms: {
@@ -438,7 +438,6 @@ export const commands = {
   "work.start": {
     says:"Start this Work", needs:"nothing", effect:"command", dirties:[],
     input:z.object({key:workKeySchema,seed:z.json()}),
-    axes:{subject:"None",touches:["Metadata"],effect:"SessionWrite",cost:"Mutation",cardinality:"One"},
   } as const,
   ...catalogWorkCommands,
   ...sheetCommands,
@@ -514,6 +513,16 @@ export const preparedTakeoffSchema = z.strictObject({
 
 /** Discovery projects the same portable command contracts used by invocation. */
 export const hostActions = {
+  "ops.read": {
+    says: "Read one native operation through the guarded operation door.",
+    needs: "nothing", effect: "query", dirties: [],
+    input: z.object({ op: z.object({ key: z.string(), intent: z.string() }).passthrough(), request: z.unknown() }),
+  } as const,
+  "page.bind": {
+    says: "Bind a Page to its exact execution target.",
+    needs: "nothing", effect: "command", dirties: [],
+    input: z.object({ slug: z.string().min(1), binding: z.unknown() }),
+  } as const,
   ...commands,
   ...actionControls,
   ...familyReads,

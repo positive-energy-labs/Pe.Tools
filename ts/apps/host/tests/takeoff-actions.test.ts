@@ -9,6 +9,43 @@ import { fixtureNative } from "./fixture-native.ts";
 import { nativeRecordingRequest } from "./native-recordings.ts";
 import { bindControl } from "../src/control.ts";
 
+test("Initialize requires a current plan, whose preparation makes no native write", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "pe-initialize-plan-"));
+  const native = await fixtureNative(join(directory, "native"), "fresh-takeoffs.initialize-carrier");
+  const socket = await native.connect();
+  let state: unknown;
+  const workspace = new RouteWorkspace({ registrations: [{ spec: tools.takeoffs.work }], store: {
+    getState: async () => state, setState: async ({ value }) => { state = structuredClone(value); },
+  } });
+  const key = { binding: "address" as const, route: "takeoffs", target: address("C:/model.rvt") };
+  const post = native.actions({ workspace, marks: testDocumentMarks(native.bridge) }, captureStore(directory));
+  try {
+    await workspace.publish(key, "takeoffs", [{
+      path: ["writeIntent", "takeoffs.initialize"],
+      value: { edit: { value: nativeRecordingRequest("fresh-takeoffs.initialize-carrier") } },
+    }], 0);
+    const work = { key, revision: (await workspace.read(key, "takeoffs"))!.revision };
+    const invoke = async (id: string, command: string) => {
+      const response = await post({ id, key: command, target: { kind: "document", ref: socket.target }, input: { work } });
+      expect([200, 202], await response.clone().text()).toContain(response.status);
+      return native.journal.wait(id);
+    };
+    expect(await invoke("unplanned", "takeoffs.initialize")).toMatchObject({
+      state: "failed", notDispatched: true, refusal: { code: "preview.stale" },
+    });
+    expect(native.calls).toEqual([]);
+    expect(await invoke("plan", "takeoffs.initialize.preview")).toMatchObject({
+      state: "succeeded", result: { previewOnly: true },
+    });
+    expect(native.calls).toEqual([]);
+    expect(await invoke("apply", "takeoffs.initialize")).toMatchObject({ state: "succeeded" });
+    expect(native.calls.map((call) => call.key)).toEqual(["takeoffs.initialize-carrier"]);
+  } finally {
+    await native.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test.each(["selected", "unrelated", "none"] as const)(
   "recorded rooms.write admission fences %s changes and a current preview reaches both declared leaves",
   async (changed) => {

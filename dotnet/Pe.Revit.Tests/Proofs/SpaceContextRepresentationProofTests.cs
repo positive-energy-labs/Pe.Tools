@@ -225,7 +225,7 @@ public sealed class SpaceContextRepresentationProofTests {
             Assert.That(drawn.Representation, Is.EqualTo(SceneRepresentation.Mesh));
             Assert.That(drawn.VertexCount, Is.GreaterThan(0));
             var native = new List<Tri>();
-            Ingest.Element(fittingInsulation, 0, 0, native, Transform.Identity, [], false);
+            Ingest.Element(fittingInsulation, 0, 0, native, Transform.Identity, [], new GeometryRead(), false);
             bytes.Position = drawn.FirstVertex * 12L;
             using var reader = new BinaryReader(bytes, System.Text.Encoding.UTF8, true);
             var points = Enumerable.Range(0, drawn.VertexCount).Select(_ => new System.Numerics.Vector3(
@@ -261,7 +261,7 @@ public sealed class SpaceContextRepresentationProofTests {
     private static void AssertRunBoundsMatchNative(Element element, SceneRun run) {
         var triangles = new List<Tri>();
         var rows = new List<PrimRow>();
-        Ingest.Element(element, 0, 0, triangles, Transform.Identity, rows, false);
+        Ingest.Element(element, 0, 0, triangles, Transform.Identity, rows, new GeometryRead(), false);
         Assert.That(rows, Has.Count.EqualTo(1));
         var x = Point(run.CrossSectionXAxis);
         var z = (Point(run.End) - Point(run.Start)).Normalize();

@@ -58,7 +58,6 @@
     "ts/apps/web/vite.config.ts": 5,
     "ts/packages/agent-contracts/src/catalog.ts": 2,
     "ts/packages/agent-contracts/src/chat-state.ts": 1,
-    "ts/packages/agent-contracts/src/command-axes.ts": 1,
     "ts/packages/agent-contracts/src/host-route-admission.ts": 1,
     "ts/packages/agent-contracts/src/page-keys.ts": 2,
     "ts/packages/agent-contracts/src/pe-api.ts": 1,

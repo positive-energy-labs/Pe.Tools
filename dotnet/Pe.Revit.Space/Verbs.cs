@@ -1,16 +1,19 @@
+using Pe.Shared.RevitData;
 namespace Pe.Revit.Space;
 
 /// <summary>One segment of a swept profile and what it found.</summary>
 public sealed record SweepSegment(
     int Index,
     string Verdict,
-    double MinGapFt,
+    double? MinGapFt,
     Handle? Nearest,
-    double[]? ClosestPoint
+    double[]? ClosestPoint,
+    string SurfaceObservation,
+    string ClearanceReason
 );
 
 /// <summary>Stamped clearance verdicts for each consecutive polyline segment, with search accounting and elapsed milliseconds.</summary>
-public sealed record SweepAnswer(Stamp Stamp, Searched Searched, IReadOnlyList<SweepSegment> Segments, double Ms);
+public sealed record SweepAnswer(SpatialEvidence Evidence, Searched Searched, IReadOnlyList<SweepSegment> Segments, double Ms) : IEvidenced<SpatialEvidence>;
 
 /// <summary>One census row. <see cref="Layer" /> is the DWG layer on a Curve2D bucket, null otherwise.</summary>
 /// <summary>
@@ -21,12 +24,12 @@ public sealed record SweepAnswer(Stamp Stamp, Searched Searched, IReadOnlyList<S
 public sealed record SliceElement(Handle Handle, IReadOnlyList<double[]> Pieces);
 
 public sealed record SliceAnswer(
-    Stamp Stamp,
+    SpatialEvidence Evidence,
     Searched Searched,
     IReadOnlyList<SliceElement> Elements,
     int Pieces,
     double Ms
-);
+) : IEvidenced<SpatialEvidence>;
 
 /// <summary>What a vertical probe met, and how far away it was.</summary>
 public sealed record ProbeHit(Handle Handle, double DistanceFt, double Z);
@@ -37,14 +40,14 @@ public sealed record ProbeHit(Handle Handle, double DistanceFt, double Z);
 ///     building rather than a fabricated elevation.
 /// </summary>
 public sealed record ProbeAnswer(
-    Stamp Stamp,
+    SpatialEvidence Evidence,
     Searched Searched,
     ProbeHit? Floor,
     ProbeHit? Ceiling,
     double MaxDistanceFt,
     double Ms,
     ProbePurpose Purpose = ProbePurpose.Obstructions
-);
+) : IEvidenced<SpatialEvidence>;
 
 public sealed record CensusBucket(
     SourceKind Source,
@@ -59,25 +62,25 @@ public sealed record CensusTop(Handle Handle, int Triangles);
 
 /// <summary>Stamped counts of matching rows by source kind, category, primitive kind and layer, plus the ten largest rows.</summary>
 public sealed record CensusAnswer(
-    Stamp Stamp,
+    SpatialEvidence Evidence,
     Searched Searched,
     IReadOnlyList<CensusBucket> Buckets,
     IReadOnlyList<CensusTop> Top,
     double Ms
-);
+) : IEvidenced<SpatialEvidence>;
 
 /// <summary>
 ///     Original CAD curves whose existing ribbon band overlaps the requested slab. Completion means
 ///     the selected imports were visited; it does not mean physical openings were inventoried.
 /// </summary>
 public sealed record OriginalCurvesAnswer(
-    Stamp Stamp,
+    SpatialEvidence Evidence,
     Searched Searched,
     IReadOnlyList<OriginalCurve> Curves,
     IReadOnlyList<CurveCaptureFailure> Failures,
     string Scope,
     double Ms
-);
+) : IEvidenced<SpatialEvidence>;
 
 /// <summary>
 ///     Queries over operation-owned geometry. A Document entry reads only its own question's scope; pass one World,
@@ -136,7 +139,7 @@ public static class Verbs {
             var levels = new FilteredElementCollector(partition.Doc).OfClass(typeof(Level)).Cast<Level>()
                 .Select(l => (l.ProjectElevation, l.Name)).ToList();
             foreach (var rows in imports) {
-                var eligible = rows.Where(filter.Wants).ToList();
+                var eligible = rows.Where(row => partition.Wants(filter, row)).ToList();
                 if (eligible.Count == 0 || !eligible.Any(r => OverlapsXy(r.Box, xyClip))) {
                     continue;
                 }
@@ -171,7 +174,7 @@ public static class Verbs {
 
         sw.Stop();
         return new OriginalCurvesAnswer(
-            world.StampFor(touched, filter),
+            world.EvidenceFor(touched, filter),
             new Searched(touched.Count, categories.Count, candidates, examined, skipped),
             result, failures,
             "selected-import-curves-by-ribbon-band; not-a-physical-opening-inventory",
@@ -251,7 +254,7 @@ public static class Verbs {
         foreach (var p in touched) {
             foreach (var row in p.Prims) {
                 candidates++;
-                if (!filter.Wants(row)) {
+                if (!p.Wants(filter, row)) {
                     skipped++;
                     continue;
                 }
@@ -272,7 +275,7 @@ public static class Verbs {
 
         sw.Stop();
         return new CensusAnswer(
-            world.StampFor(touched, filter),
+            world.EvidenceFor(touched, filter),
             new Searched(touched.Count, cats.Count, candidates, examined, skipped),
             buckets.Select(kv => new CensusBucket(kv.Key.Item1, kv.Key.Item2, kv.Key.Item3, kv.Value.Elements,
                     kv.Value.Triangles, kv.Key.Item4))
@@ -281,17 +284,7 @@ public static class Verbs {
             Math.Round(sw.Elapsed.TotalMilliseconds, 3));
     }
 
-    /// <summary>
-    ///     Does this rectangular profile fit along this polyline? Each segment is the real thing: an
-    ///     oriented box of the segment's length, the profile's width across and height up, and the
-    ///     gap is the exact signed distance from a triangle to that box. Negative is an overlap.
-    ///     <para>
-    ///         This replaced a capsule of radius half the profile diagonal, which inflated a flat
-    ///         soffit clearance by the profile's corner reach — 0.27 ft on a 1.0 by 0.667 ft duct.
-    ///         The capsule could never produce a false CLEAR and neither can this; the box is simply
-    ///         no longer wrong about how much room is left.
-    ///     </para>
-    /// </summary>
+    /// <summary>Observe triangle surfaces near the profile. No containment-capable clearance predicate is available.</summary>
     public static SweepAnswer Sweep(Document document, IReadOnlyList<XYZ> polyline, double widthFt, double heightFt, double clearanceFt, Filter? filter = null) {
         var reach = SweepReach(polyline, widthFt, heightFt, clearanceFt);
         return Sweep(SpaceWorld.Prepare(document, Bounds(reach), reach, Curves(filter)), polyline, widthFt, heightFt, clearanceFt, filter);
@@ -327,7 +320,7 @@ public static class Verbs {
                 candidates += p.Prims.Length;
                 var prims = p.Prims;
                 var hit = p.Bvh.ClosestToBox(
-                    box, clearanceFt, pi => filter.Wants(prims[pi]), out var gap, out var at, out var ex);
+                    box, clearanceFt, pi => p.Wants(filter, prims[pi]), out var gap, out var at, out var ex);
                 examined += ex;
                 if (hit < 0) continue;
 
@@ -339,21 +332,22 @@ public static class Verbs {
                 _ = cats.Add(row.Category);
             }
 
-            var verdict = bestHandle is null ? "CLEAR"
+            var verdict = bestHandle is null ? "UNKNOWN"
                 : bestGap < 0 ? "HIT"
                 : bestGap < clearanceFt ? "NEAR"
-                : "CLEAR";
+                : "UNKNOWN";
             segments.Add(new SweepSegment(
                 i,
                 verdict,
-                bestHandle is null ? double.PositiveInfinity : Math.Round(bestGap, 6),
+                bestHandle is null ? null : Math.Round(bestGap, 6),
                 bestHandle,
-                bestAt is null ? null : [bestAt.X, bestAt.Y, bestAt.Z]));
+                bestAt is null ? null : [bestAt.X, bestAt.Y, bestAt.Z],
+                bestHandle is null ? "none-observed" : "observed", "containment-unsupported"));
         }
 
         sw.Stop();
         return new SweepAnswer(
-            world.StampFor(touched, filter),
+            world.EvidenceFor(touched, filter),
             new Searched(touched.Count, cats.Count, candidates, examined, skipped),
             segments,
             Math.Round(sw.Elapsed.TotalMilliseconds, 3));
@@ -401,7 +395,7 @@ public static class Verbs {
             for (var i = 0; i < prims.Length; i++) {
                 candidates++;
                 var row = prims[i];
-                if (!filter.Wants(row) || row.Box.MaxZ < z0 || row.Box.MinZ > z1
+                if (!p.Wants(filter, row) || row.Box.MaxZ < z0 || row.Box.MinZ > z1
                     || (xyClip is { } clip && !OverlapsXy(row.Box, clip))) {
                     skipped++;
                     continue;
@@ -432,7 +426,7 @@ public static class Verbs {
 
         sw.Stop();
         return new SliceAnswer(
-            world.StampFor(touched, filter),
+            world.EvidenceFor(touched, filter),
             new Searched(touched.Count, cats.Count, candidates, examined, skipped),
             elements,
             pieces,
@@ -528,7 +522,7 @@ public static class Verbs {
         foreach (var p in touched) {
             candidates += p.Prims.Length;
             var prims = p.Prims;
-            bool Wants(int pi) => filter.Wants(prims[pi]);
+            bool Wants(int pi) => p.Wants(filter, prims[pi]);
 
             bool Floor(Tri t) => Wants(t.Prim) && (purpose == ProbePurpose.Obstructions
                 || HeightRoles.Floor(prims[t.Prim].HeightRole, t, levelZs));
@@ -554,7 +548,7 @@ public static class Verbs {
         // Examined counts the two answers, not the traversal: a ray reports what it found, and the
         // tree visit count is not carried out of Bvh for this verb.
         return new ProbeAnswer(
-            world.StampFor(touched, filter),
+            world.EvidenceFor(touched, filter),
             new Searched(touched.Count, cats.Count, candidates, (down is null ? 0 : 1) + (up is null ? 0 : 1), 0),
             down,
             up,
