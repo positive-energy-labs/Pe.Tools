@@ -1729,6 +1729,7 @@ test.each([false, true])("cleanup through /actions removes empty instance folder
   if (stray) {
     expect(await readFile(extra, "utf8")).toBe("keep me");
     expect(result.kept).toContain(extra);
+    for (const step of receipt.steps) expect(step).not.toHaveProperty("touched");
     const rows = noticeRows({ threads: [], works: [], machine: null, stored: [], held: [], receipts: [{ revision: 1, action: receipt }] }, Date.now());
     expect(rows).toMatchObject([{ detail: expect.stringContaining(`kept: ${extra}`) }]);
   }
