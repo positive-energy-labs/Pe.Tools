@@ -70,6 +70,8 @@ type RevitViewImageData = {
   viewScale?: number | null;
   modelRect?: { minX: number; minY: number; maxX: number; maxY: number } | null;
   sheetNumber?: string | null;
+  /** Set on a focused capture: whether the temporary crop's undo held, and what was left if not. */
+  restore?: { held: boolean; left: string[] } | null;
 };
 
 /**
@@ -110,6 +112,12 @@ export function createCaptureViewTool(createHostRpcCaller: () => Promise<HostRpc
         data.warning
           ? `
 Warning: ${data.warning}`
+          : ""
+      }${
+        data.restore
+          ? data.restore.held
+            ? "\nThe temporary crop was undone; the view is as it was."
+            : `\nWarning: the temporary crop could not be undone. The view was left with: ${data.restore.left.join(", ")}. Tell the user and fix the view's crop.`
           : ""
       }`;
       try {

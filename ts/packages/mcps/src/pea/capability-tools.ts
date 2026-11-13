@@ -471,7 +471,7 @@ async function executeTool(
         intent = await readCapabilityIntent(
           key,
           { hostBaseUrl: base(), ...transportScope(input.target, current) },
-          { needs: row.needs, intent: row.mutates ? "Mutate" : "Read" },
+          { needs: row.needs, mutates: row.mutates },
         );
       }
       const result = await runCapability(
