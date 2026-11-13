@@ -5,7 +5,9 @@
 import * as THREE from "three";
 import { HALF_FOV_TAN, ORBIT_FOV, toCamera, type OrbitViewport } from "./orbit";
 import type { Bounds } from "./types";
-import { sectionContains, sectionPlanes, type Section } from "./section";
+import { sectionContains, sectionPlanes } from "./section";
+import type { SceneSection } from "@pe/agent-contracts";
+import { axisBounds, axisPoint, CUT_AXES, cutPolygon, polygonContains } from "./cuts";
 
 export type Size = { width: number; height: number };
 /** A world point to px from the canvas's top-left; null behind the camera. */
@@ -14,8 +16,56 @@ export type Project = ((point: readonly number[]) => [number, number] | null) & 
 };
 
 /** Clip annotation anchors and line segments against the same inward world planes as meshes. */
-export function sectionProject(project: Project, section: Section | null): Project {
+export function sectionProject(
+  project: Project,
+  section: SceneSection | null,
+  bounds?: Bounds,
+): Project {
   if (!section) return project;
+  if (section.kind === "cuts") {
+    if (!bounds) throw new Error("Scene bounds are required to project polygon cuts");
+    const polygons = CUT_AXES.map((axis) =>
+      cutPolygon(section.cuts[axis], axisBounds(bounds, axis)),
+    );
+    const contains = (point: readonly number[]) =>
+      CUT_AXES.every(
+        (axis, i) =>
+          !polygons[i]!.length ||
+          polygonContains(polygons[i]!, axisPoint(axis, point)) === section.cuts[axis].keepInside,
+      );
+    return Object.assign((point: readonly number[]) => (contains(point) ? project(point) : null), {
+      lines: (line: readonly (readonly number[])[]) =>
+        line.slice(1).flatMap((b, index) => {
+          const a = line[index]!,
+            ts = [0, 1];
+          for (const [axisIndex, axis] of CUT_AXES.entries()) {
+            const ap = axisPoint(axis, a),
+              bp = axisPoint(axis, b),
+              d = [bp[0] - ap[0], bp[1] - ap[1]];
+            const polygon = polygons[axisIndex]!;
+            polygon.forEach((p, i) => {
+              const q = polygon[(i + 1) % polygon.length]!,
+                edge = [q[0] - p[0], q[1] - p[1]];
+              const cross = (u: readonly number[], v: readonly number[]) =>
+                u[0]! * v[1]! - u[1]! * v[0]!;
+              const den = cross(d, edge),
+                delta = [p[0] - ap[0], p[1] - ap[1]];
+              if (Math.abs(den) < 1e-10) return;
+              const t = cross(delta, edge) / den,
+                u = cross(delta, d) / den;
+              if (t > 0 && t < 1 && u >= 0 && u <= 1) ts.push(t);
+            });
+          }
+          ts.sort((a, b) => a - b);
+          const at = (t: number) => a.map((n, i) => n + (b[i]! - n) * t);
+          return ts
+            .slice(1)
+            .flatMap((hi, i) =>
+              hi - ts[i]! > 1e-9 && contains(at((hi + ts[i]!) / 2)) ? [[at(ts[i]!), at(hi)]] : [],
+            );
+        }),
+    });
+  }
   const planes = sectionPlanes(section);
   return Object.assign(
     (point: readonly number[]) => (sectionContains(section, point) ? project(point) : null),

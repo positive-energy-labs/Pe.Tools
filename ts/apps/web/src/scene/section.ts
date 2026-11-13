@@ -1,8 +1,11 @@
 import type { SceneSection } from "@pe/agent-contracts";
 import type { Bounds } from "./types";
 import type { ClipVolume } from "./renderer";
+import { axisBounds, axisPoint, CUT_AXES, cutPolygon, packCuts, polygonContains } from "./cuts";
+import { center } from "./orbit";
 
-export type Section = SceneSection;
+/** Planar renderer sections can make caps; authored polygon cuts deliberately cannot. */
+export type Section = Exclude<SceneSection, { kind: "cuts" }>;
 export type SectionAxis = "x" | "y" | "z";
 export const SECTION_AXES = ["x", "y", "z"] as const;
 export const limitsOf = (bounds: Bounds, axis: SectionAxis) =>
@@ -44,10 +47,25 @@ export function sectionPlanes(section: Section | null): number[][] {
   });
 }
 
-export const sectionContains = (section: Section | null, point: readonly number[]) =>
-  sectionPlanes(section).every(
-    (p) => p[0]! * point[0]! + p[1]! * point[1]! + p[2]! * point[2]! + p[3]! >= -1e-6,
-  );
+export const sectionContains = (
+  section: SceneSection | null,
+  point: readonly number[],
+  bounds?: Bounds,
+) =>
+  section?.kind === "cuts"
+    ? CUT_AXES.every((axis) => {
+        const p = axisPoint(axis, point),
+          cut = section.cuts[axis];
+        const extent = bounds
+          ? axisBounds(bounds, axis)
+          : ([p, p] as [[number, number], [number, number]]);
+        return (
+          !cut.polyline.length || polygonContains(cutPolygon(cut, extent), p) === cut.keepInside
+        );
+      })
+    : sectionPlanes(section).every(
+        (p) => p[0]! * point[0]! + p[1]! * point[1]! + p[2]! * point[2]! + p[3]! >= -1e-6,
+      );
 
 /** Preserve the exact cut face when converting world float32 cap vertices to batch-local feet. */
 export function rebaseCaps(positions: Float32Array, section: Section, origin: readonly number[]) {
@@ -65,13 +83,17 @@ export function rebaseCaps(positions: Float32Array, section: Section, origin: re
 }
 
 /** Typed authoring enters the existing clip seam; polygon cuts can coexist with these planes. */
-export const sectionVolume = (section: Section | null): ClipVolume | null =>
-  section && {
-    data: new Float32Array(0),
-    counts: [0, 0, 0],
-    keepInside: [true, true, true],
-    section,
-  };
+export const sectionVolume = (section: SceneSection | null, bounds?: Bounds): ClipVolume | null =>
+  section?.kind === "cuts"
+    ? bounds
+      ? packCuts(section.cuts, bounds, center(bounds))
+      : null
+    : section && {
+        data: new Float32Array(0),
+        counts: [0, 0, 0],
+        keepInside: [true, true, true],
+        section,
+      };
 
 /** Shader parity for existing extruded polygon cuts as well as authored sections. */
 export function clipContains(

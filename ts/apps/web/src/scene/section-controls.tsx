@@ -4,7 +4,7 @@ import { ButtonGroup } from "@pe/kit/lang/button-group";
 import { Input } from "@pe/kit/lang/input";
 import { ListPopup } from "@pe/kit/lang/list-popup";
 import { Switcher } from "@pe/kit/lang/switcher";
-import type { SceneView } from "@pe/agent-contracts";
+import type { SceneView, SceneSection } from "@pe/agent-contracts";
 import type { Bounds } from "./types";
 import type { Project } from "./projection";
 import { PRESETS } from "./presets";
@@ -16,16 +16,18 @@ export function SectionControls({
   padding,
   onChange,
   proximity,
+  onEdit,
 }: {
   view: SceneView;
   subject: Bounds;
   padding: number;
   onChange: (view: SceneView) => void;
   proximity?: { radiusFt: number; onChange: (radius: number) => void };
+  onEdit?: () => void;
 }) {
   const section = view.section;
   const current = PRESETS.find((p) => p.value === view.preset)!;
-  const setSection = (next: Section | null) => onChange({ ...view, section: next });
+  const setSection = (next: SceneSection | null) => onChange({ ...view, section: next });
   const plane = (axis: SectionAxis): Section => ({
     kind: "plane",
     axis,
@@ -57,14 +59,21 @@ export function SectionControls({
           }
         />
         <ButtonGroup>
-          <Button kind="quiet"
+          {onEdit && (
+            <Button label="Edit bent section" onClick={onEdit}>
+              Bent cut
+            </Button>
+          )}
+          <Button
+            kind="quiet"
             label="Section to subject"
             pressed={section?.kind === "box"}
             onClick={() => setSection(fitSection(subject, padding))}
           >
             Section to subject
           </Button>
-          <Button kind="quiet"
+          <Button
+            kind="quiet"
             label="Plane cut"
             pressed={section?.kind === "plane"}
             onClick={() => setSection(section?.kind === "plane" ? null : plane("z"))}
@@ -134,7 +143,8 @@ export function SectionControls({
             />
           </span>
           <span>ft</span>
-          <Button kind="quiet"
+          <Button
+            kind="quiet"
             label="Flip kept side"
             onClick={() =>
               setSection({ ...section, keep: section.keep === "below" ? "above" : "below" })
@@ -206,7 +216,7 @@ export function SectionHandles({
   subject: Bounds;
   project: Project;
   onPreview: (section: Section | undefined) => void;
-  onCommit: (section: Section) => void;
+  onCommit: (section: Section, gesture?: boolean) => void;
 }): ReactNode {
   const drag = useRef<{
     id: number;
@@ -223,7 +233,7 @@ export function SectionHandles({
     if (!own || own.id !== e.pointerId) return;
     drag.current = null;
     if (cancel) onPreview(undefined);
-    else onCommit(own.next);
+    else onCommit(own.next, true);
   };
   return (
     <div className="pointer-events-none absolute inset-0" aria-label="Section faces">
@@ -258,6 +268,7 @@ export function SectionHandles({
                   dy,
                   next: section,
                 };
+                onPreview(section);
               }}
               onPointerMove={(e) => {
                 const own = drag.current;

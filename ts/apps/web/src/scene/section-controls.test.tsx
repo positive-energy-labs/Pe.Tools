@@ -89,7 +89,7 @@ test("face dragging previews immediately and commits only at release; cancellati
   expect(onPreview).toHaveBeenLastCalledWith({ ...section, offset: 7 });
   expect(onCommit).not.toHaveBeenCalled();
   pointer("pointerup", 70);
-  expect(onCommit).toHaveBeenLastCalledWith({ ...section, offset: 7 });
+  expect(onCommit).toHaveBeenLastCalledWith({ ...section, offset: 7 }, true);
   onCommit.mockClear();
   pointer("pointerdown", 50);
   pointer("pointermove", 60);
