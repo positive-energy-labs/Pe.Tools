@@ -133,6 +133,7 @@
     }
   },
   "verbs": {},
+  "band": [],
   "panes": {
     "wheel": {
       "label": "Wheel",
@@ -189,21 +190,6 @@
     ],
     "sized": "end"
   },
-  "stages": {
-    "main": {
-      "word": "Duct Loss",
-      "panes": [
-        "wheel",
-        "inputs",
-        "charts"
-      ],
-      "verbs": []
-    }
-  },
-  "stageOrder": [
-    "main"
-  ],
-  "predicates": {},
   "cells": {},
   "workFields": {},
   "seeds": {},

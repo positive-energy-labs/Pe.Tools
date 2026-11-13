@@ -563,102 +563,25 @@
   },
   "verbs": {
     "losses": {
-      "kind": "command",
-      "input": "none",
-      "label": "Write to Revit",
-      "review": "shown",
-      "deps": {
-        "page": [
-          "system"
-        ],
-        "work": [
-          "criteria",
-          "kinds",
-          "writeIntent",
-          "assumptions",
-          "rules",
-          "catalogs",
-          "ruleAssignments",
-          "subject",
-          "labelParameter",
-          "workingPhase",
-          "systemColours"
-        ],
-        "readings": [
-          "value"
-        ]
-      },
-      "captures": [
-        "value"
-      ],
       "entry": "sheet.apply",
-      "intent": "losses"
+      "label": "Write to Revit",
+      "effect": "ModelWrite",
+      "review": "shown"
     },
     "heal": {
-      "kind": "command",
-      "input": "none",
-      "label": "Heal",
-      "review": "shown",
-      "deps": {
-        "page": [
-          "system"
-        ],
-        "work": [
-          "criteria",
-          "kinds",
-          "writeIntent",
-          "assumptions",
-          "rules",
-          "catalogs",
-          "ruleAssignments",
-          "subject",
-          "labelParameter",
-          "workingPhase",
-          "systemColours"
-        ],
-        "readings": [
-          "value"
-        ]
-      },
-      "captures": [
-        "value"
-      ],
       "entry": "ducts.apply-heal",
-      "intent": "heal"
+      "label": "Heal",
+      "effect": "ModelWrite",
+      "review": "shown"
     },
     "assign": {
-      "kind": "command",
-      "input": "none",
-      "label": "Make the fan",
-      "review": "shown",
-      "deps": {
-        "page": [
-          "system"
-        ],
-        "work": [
-          "criteria",
-          "kinds",
-          "writeIntent",
-          "assumptions",
-          "rules",
-          "catalogs",
-          "ruleAssignments",
-          "subject",
-          "labelParameter",
-          "workingPhase",
-          "systemColours"
-        ],
-        "readings": [
-          "value"
-        ]
-      },
-      "captures": [
-        "value"
-      ],
       "entry": "ducts.apply-assign-fan",
-      "intent": "assign"
+      "label": "Make the fan",
+      "effect": "ModelWrite",
+      "review": "shown"
     }
   },
+  "band": [],
   "panes": {
     "e-systems": {
       "label": "Systems",
@@ -666,11 +589,7 @@
       "draws": [
         "roster"
       ],
-      "verbs": [
-        "losses",
-        "heal",
-        "assign"
-      ]
+      "verbs": []
     },
     "e-sidebar": {
       "label": "System tree",
@@ -678,11 +597,7 @@
       "draws": [
         "value"
       ],
-      "verbs": [
-        "losses",
-        "heal",
-        "assign"
-      ]
+      "verbs": []
     },
     "e-rules-all": {
       "label": "All-systems rules",
@@ -690,11 +605,7 @@
       "draws": [
         "value"
       ],
-      "verbs": [
-        "losses",
-        "heal",
-        "assign"
-      ]
+      "verbs": []
     },
     "e-rules": {
       "label": "This system’s rules",
@@ -702,11 +613,7 @@
       "draws": [
         "value"
       ],
-      "verbs": [
-        "losses",
-        "heal",
-        "assign"
-      ]
+      "verbs": []
     },
     "e-picture": {
       "label": "Picture",
@@ -714,11 +621,7 @@
       "draws": [
         "value"
       ],
-      "verbs": [
-        "losses",
-        "heal",
-        "assign"
-      ]
+      "verbs": []
     },
     "design": {
       "label": "Design",
@@ -726,11 +629,7 @@
       "draws": [
         "value"
       ],
-      "verbs": [
-        "losses",
-        "heal",
-        "assign"
-      ]
+      "verbs": []
     },
     "e-inbox": {
       "label": "Rulings",
@@ -738,11 +637,7 @@
       "draws": [
         "value"
       ],
-      "verbs": [
-        "losses",
-        "heal",
-        "assign"
-      ]
+      "verbs": []
     }
   },
   "layout": {
@@ -768,8 +663,12 @@
                 "id": "e-systems"
               },
               {
-                "kind": "pane",
-                "id": "e-sidebar"
+                "kind": "gate",
+                "when": "subject",
+                "child": {
+                  "kind": "pane",
+                  "id": "e-sidebar"
+                }
               }
             ],
             "sized": "start"
@@ -791,8 +690,12 @@
                     "id": "e-rules-all"
                   },
                   {
-                    "kind": "pane",
-                    "id": "e-rules"
+                    "kind": "gate",
+                    "when": "subject",
+                    "child": {
+                      "kind": "pane",
+                      "id": "e-rules"
+                    }
                   }
                 ],
                 "sized": "start"
@@ -843,29 +746,6 @@
       }
     }
   },
-  "stages": {
-    "network": {
-      "word": "Ducts",
-      "panes": [
-        "e-systems",
-        "e-sidebar",
-        "e-rules-all",
-        "e-rules",
-        "e-picture",
-        "design",
-        "e-inbox"
-      ],
-      "verbs": [
-        "losses",
-        "heal",
-        "assign"
-      ]
-    }
-  },
-  "stageOrder": [
-    "network"
-  ],
-  "predicates": {},
   "cells": {},
   "workFields": {},
   "seeds": {},

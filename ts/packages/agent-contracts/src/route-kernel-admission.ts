@@ -1,6 +1,6 @@
 import type { SemanticPreviewKey } from "./semantic-actions.ts";
 import type { BodyBindings, CodecBindings, EntryTable } from "./route-kernel-bodies.ts";
-import type { RouteDiagnostic, RouteGraphJson } from "./route-kernel-data.ts";
+import type { RouteDiagnostic, RouteGraphJson, RouteGraphWire } from "./route-kernel-data.ts";
 import type { AdmittedRoute } from "./route-module.ts";
 import type { SchemaTable } from "./route-kernel-page.ts";
 
@@ -35,7 +35,7 @@ export interface ExecutableMember {
  * actual loaded bytes before publishing. A checks hashing; P supplies the Pod artifact. */
 export interface RouteFingerprintInput {
   readonly version: 1;
-  readonly data: RouteGraphJson;
+  readonly data: RouteGraphJson | RouteGraphWire;
   readonly contracts: readonly { readonly id: string; readonly sha256: string }[];
   readonly executables: readonly {
     readonly client: "web" | "pea" | "shared" | "host";

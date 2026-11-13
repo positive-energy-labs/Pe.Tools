@@ -24,5 +24,6 @@ test("a Pod entry importing the whole @pe/web/route surface bundles without effe
   // Command metadata is data-only; the host's executable Zod command declarations stay out.
   expect(bytes).not.toMatch(/(?:const|var|let) (?:commands|hostActions|actionControls|sheetActions)\s*=/);
   expect(bytes).not.toContain("Unrecognized here:");
-  expect(bytes).not.toContain("Start this Work");
+  // SH-S6 exports reasonOf as neutral reading-state presentation, including Work absence wording.
+  // That text no longer identifies a shell dependency; the runtime/catalog checks above still do.
 }, 120_000);
