@@ -289,7 +289,7 @@ const RULES: Rule[] = [
         "grounded-doc/view/page-pane.tsx": "Page geometry synchronizes evidence blocks.",
         "grounded-doc/view/images-pane.tsx": "Markdown images synchronize evidence blocks.",
         "machine/notice.tsx": "Reading a notice pauses expiry.",
-        "open/bay.tsx": "Pointer chooses the file preview.",
+        "machine/bay.tsx": "Pointer chooses the file preview.",
         "workbench/lens/peek.tsx": "Travel funnel and linger timing keep the popover reachable.",
       }),
     ], cannotSee: "Event aliases, hit-test correctness and computed paint." },

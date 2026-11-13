@@ -6,6 +6,8 @@ import { captureReceiptSchema, nativeOutputSchema, type Caller } from "@pe/agent
 import { type PictureCaptures, PictureStoreFull } from "./captures-route.ts";
 import { InvalidRead } from "./native-reads.ts";
 import { RequestIdentity } from "./request-services.ts";
+import { callPolicies } from "../../../packages/agent-contracts/src/call-policy.ts";
+import type { HostOperationKey, OpResponseOf } from "@pe/host-contracts/operation-types";
 
 /** One operation-owned asset projection, before native recording and public response delivery. */
 export const projectNativeOutput = (
@@ -19,15 +21,18 @@ export const projectNativeOutput = (
 ) =>
   Effect.tryPromise({
     try: async () => {
-      if (key !== "revit.context.view-image") return value;
+      if (callPolicies[key]?.capture !== true) return value;
+      const captureKey = key as HostOperationKey;
       if (
         value &&
         typeof value === "object" &&
         "capture" in value &&
         captureReceiptSchema.safeParse(value.capture).success
       )
-        return nativeOutputSchema("revit.context.view-image").parse(value);
-      const raw = nativeResponseSchema("revit.context.view-image").parse(value);
+        return nativeOutputSchema(captureKey).parse(value);
+      const raw = nativeResponseSchema(captureKey).parse(
+        value,
+      ) as OpResponseOf<"revit.context.view-image">;
       const focus =
         (request as { focus?: import("@pe/agent-contracts").CaptureReceipt["focus"] } | null)
           ?.focus ?? null;
@@ -46,7 +51,7 @@ export const projectNativeOutput = (
         registration: raw.registration ? { ...raw.registration } : null,
       });
       const { filePath: _, ...body } = raw;
-      return nativeOutputSchema("revit.context.view-image").parse({
+      return nativeOutputSchema(captureKey).parse({
         ...body,
         capture,
         imageUrl: capture.url,

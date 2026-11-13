@@ -2,27 +2,7 @@ import type { EntryContract } from "../../../../packages/agent-contracts/src/rou
 import type { UseSource } from "../shell/source-contract.ts";
 import { z } from "zod";
 import type { PeRouteId } from "@pe/agent-contracts/pe-api";
-export interface Publication<D = unknown> {
-  key: string;
-  generation: number;
-  version: number;
-  state: "current" | "refresh-needed" | "superseded";
-  reason?: string;
-  value: {
-    data: D;
-    evaluation: string;
-    inputs: string;
-    coverage: {
-      requested: string[];
-      covered: string[];
-      unknown: string[];
-      refused: { keys: string[]; reason: string }[];
-    };
-    origin: unknown;
-    trace: unknown[];
-    freshness: "current" | "refresh-needed";
-  } | null;
-}
+import type { Publication } from "@pe/agent-contracts/value";
 export interface HostRead {
   key: string;
   input: z.ZodType;
