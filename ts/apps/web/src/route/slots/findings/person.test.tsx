@@ -20,14 +20,15 @@ import { createTimelineClient, type TimelineClient } from "../../../shell/work-f
 import { GraphHistory } from "../../../shell/graph-history";
 import { observeWorkReceipts } from "../../../../../host/src/work-receipt-feed";
 import { createWitness } from "../../../fans/cutover.test-support";
-import { RosterBody } from "../../../fans/mount";
+import { Notes } from "./notes.tsx";
+import { subjectCode } from "@pe/agent-contracts/subject-ref";
 import { workReadings } from "./readings.test-support";
 
 afterEach(cleanup);
 
 /*
- * The person's half of MAP row 9: the /fans roster row's own verb runs the route's `finding`
- * command through the typed mount, which submits `findings.say` to a real host action journal
+ * The person's half of MAP row 9: the shell's notes surface runs its kernel verb
+ * through the typed mount, which submits `findings.say` to a real host action journal
  * as the person. Only the native process is a fixture; the journal, registry and Work are real.
  */
 test("a person writes a finding from the /fans roster row; the host's findings.say stamps the author person", async () => {
@@ -51,13 +52,11 @@ test("a person writes a finding from the /fans roster row; the host's findings.s
         return actionReceiptSchema.parse(await native.journal.wait(command.id));
       });
     await waitFor(() => expect(f.typed.owner()?.ready).toBe(true));
-    render(<>{f.typed.draw("sheet-roster", (ctx) => <RosterBody ctx={ctx as never} />) as React.ReactNode}</>);
-    const trigger = (await screen.findAllByRole("button", { name: /^Write a finding on / }))[0]!;
-    const name = trigger.getAttribute("aria-label")!.replace("Write a finding on ", "");
-    fireEvent.click(trigger);
-    const pop = await screen.findByLabelText(`Finding on ${name}`);
+    render(<Notes mount={f.typed} />);
+    fireEvent(document, new CustomEvent("pe:findings", { detail: { route: "fans", code: subjectCode({ keyKind: "name", key: ["Fan", "Type"] }) } }));
+    const pop = await screen.findByRole("dialog");
     fireEvent.click(within(pop).getByRole("button", { name: "check" }));
-    const write = within(pop).getByRole("button", { name: `Write check on ${name}` });
+    const write = within(pop).getByRole("button", { name: "Write finding" });
     // A refused verb says why without a hover (gate-1ebf1fb1: disabled Undo buttons gave no reason).
     expect(write.getAttribute("aria-disabled")).toBe("true");
     expect(write.getAttribute("aria-description")).toBe("Write what you found");
@@ -72,7 +71,7 @@ test("a person writes a finding from the /fans roster row; the host's findings.s
       const { findings } = findingsWorkSchema.parse((await host.view(key, "findings"))?.doc ?? {});
       expect(Object.values(findings)).toEqual([
         expect.objectContaining({ said: expect.objectContaining({ by: "person" }), kind: "check", verdict: expect.objectContaining({ by: "person", value: "fail" }),
-          text: "port 1 static reads low", subject: expect.stringMatching(/^UniqueId:/) }),
+          text: "port 1 static reads low", subject: expect.stringMatching(/^name:/) }),
       ]);
     }, { timeout: 20_000 });
   } finally {
@@ -135,13 +134,11 @@ test("the person undoes their own finding through the host Timeline; Pea's newer
         return actionReceiptSchema.parse(await native.journal.wait(command.id));
       }, browser, workReadings(host), client);
     await waitFor(() => expect(f.typed.owner()?.ready).toBe(true));
-    render(<>{f.typed.draw("sheet-roster", (ctx) => <RosterBody ctx={ctx as never} />) as React.ReactNode}</>);
-    const trigger = (await screen.findAllByRole("button", { name: /^Write a finding on / }))[0]!;
-    const name = trigger.getAttribute("aria-label")!.replace("Write a finding on ", "");
-    fireEvent.click(trigger);
-    const pop = await screen.findByLabelText(`Finding on ${name}`);
+    render(<Notes mount={f.typed} />);
+    fireEvent(document, new CustomEvent("pe:findings", { detail: { route: "fans", code: subjectCode({ keyKind: "name", key: ["Fan", "Type"] }) } }));
+    const pop = await screen.findByRole("dialog");
     fireEvent.change(within(pop).getByLabelText("finding text"), { target: { value: "person note" } });
-    fireEvent.click(within(pop).getByRole("button", { name: `Write note on ${name}` }));
+    fireEvent.click(within(pop).getByRole("button", { name: "Write finding" }));
     await waitFor(() => expect(submitted.map((c) => c.key)).toEqual(["findings.say"]), { timeout: 20_000 });
     const key = { ...submitted[0]!.input.work!.key, route: "findings" } as WorkKey;
     const findings = async () => Object.values(findingsWorkSchema.parse((await host.view(key, "findings"))?.doc ?? {}).findings);
@@ -183,13 +180,11 @@ test("before the Work is started, the row's Write is refused with the Work's rea
     const f = await createWitness(closes, new Map<string, unknown>([["fans", undefined]]), {}, undefined, undefined,
       async (command) => { submitted.push(command); throw Error("no host call expected"); });
     await waitFor(() => expect(f.typed.owner()?.problem).toBe("Start this Work to edit"));
-    render(<>{f.typed.draw("sheet-roster", (ctx) => <RosterBody ctx={ctx as never} />) as React.ReactNode}</>);
-    const trigger = (await screen.findAllByRole("button", { name: /^Write a finding on / }))[0]!;
-    const name = trigger.getAttribute("aria-label")!.replace("Write a finding on ", "");
-    fireEvent.click(trigger);
-    const pop = await screen.findByLabelText(`Finding on ${name}`);
+    render(<Notes mount={f.typed} />);
+    fireEvent(document, new CustomEvent("pe:findings", { detail: { route: "fans", code: subjectCode({ keyKind: "name", key: ["Fan", "Type"] }) } }));
+    const pop = await screen.findByRole("dialog");
     fireEvent.change(within(pop).getByLabelText("finding text"), { target: { value: "unstarted note" } });
-    const write = within(pop).getByRole("button", { name: `Write note on ${name}` });
+    const write = within(pop).getByRole("button", { name: "Write finding" });
     expect(write.getAttribute("aria-disabled")).toBe("true");
     expect(write.getAttribute("aria-description")).toBe("Start this Work to edit");
     fireEvent.click(write);

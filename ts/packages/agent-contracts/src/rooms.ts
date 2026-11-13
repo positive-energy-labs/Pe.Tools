@@ -99,7 +99,7 @@ export const roomsRouteState = {
   route: "rooms",
   title: "Rooms",
   description:
-    "Shared edited room fields (name, type, ceiling, people, lighting, equipment, ventilation), one cell per [region guid, field]. Either author may edit or suggest, and rooms.write reads current edits only. Feedback marks (merge, reject, wall, split) are cells keyed by id with a model-feet anchor and the run they were drawn against: Either author edits these cells. Notes are anchored text either may write. Regions and geometry are read from rooms.snapshot.",
+    "Shared edited room fields (name, type, ceiling, people, lighting, equipment, ventilation), one cell per [region guid, field]. Either author may edit or suggest, and rooms.write reads current edits only. Feedback marks (merge, reject, wall, split) are cells keyed by id with a model-feet anchor and the run they were drawn against: Either author edits these cells. Notes live in findings Work through findings.say, never rooms Work. Regions and geometry are read from rooms.snapshot.",
   schema: roomsDocumentSchema,
 } satisfies RouteStateSpec<typeof roomsDocumentSchema>;
 

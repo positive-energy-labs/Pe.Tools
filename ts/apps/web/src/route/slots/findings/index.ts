@@ -12,8 +12,7 @@ import { resolveMark, type Captured } from "../picture/index.ts";
 
 /**
  * The kernel's verbs: on every route, declared by none, never placed. Findings is this table's only
- * writer; the shell's `mount.kernelVerb(key)` only reads it. `pointers.dismiss` joins when the
- * kernel draws pointers.
+ * writer; the shell's `mount.kernelVerb(key)` only reads it. Pointer dismissal remains Pea's op.
  */
 export const kernelVerbs = {
   [FINDINGS_DOORS.say]: { handle: handle(FINDINGS_DOORS.say), label: "Say finding" },

@@ -231,7 +231,6 @@
     "ts/apps/web/src/route/route-target.ts": 7,
     "ts/apps/web/src/route/situation-ladder.tsx": 5,
     "ts/apps/web/src/route/situation-verbs.tsx": 10,
-    "ts/apps/web/src/route/slots/findings/verb.tsx": 1,
     "ts/apps/web/src/route/slots/picture/marks.ts": 2,
     "ts/apps/web/src/route/slots/picture/overlay.tsx": 1,
     "ts/apps/web/src/route/slots/picture/pane.tsx": 9,

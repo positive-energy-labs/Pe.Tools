@@ -39,6 +39,10 @@ test("a pointer lives in thread meta: it survives a host reload and leaves only 
     ),
   );
   const id = ((await created.json()) as { id: string }).id;
+  const heads: unknown[] = [];
+  const stop = first.heads.observe(id, frame => heads.push(frame.value.pointers));
+  await Promise.resolve();
+  expect(heads).toEqual([[]]);
   // The call route reaches thread meta only through the injected port.
   const port = threadPointerPort();
   expect(() => port.read(id)).toThrow(/unavailable/);
@@ -49,13 +53,20 @@ test("a pointer lives in thread meta: it survives a host reload and leaves only 
     target: { selected: '["UniqueId:u-7"]' },
     label: "FC-1 fan flow",
   });
+  expect(heads.at(-1)).toEqual([expect.objectContaining({ label: "FC-1 fan flow" })]);
+  stop();
   await first.close();
 
   const second = await open();
   port.bind(second.pointers);
   const [pointer] = port.read(pointerThread({ kind: "human" } as never, id)).pointers;
   expect(pointer).toMatchObject({ route: "fans", label: "FC-1 fan flow", target: { selected: '["UniqueId:u-7"]' } });
+  const dismissed: unknown[] = [];
+  const release = second.heads.observe(id, frame => dismissed.push(frame.value.pointers));
+  await Promise.resolve();
   port.dismiss(id, pointer!.id);
+  expect(dismissed.at(-1)).toEqual([]);
+  release();
   await second.close();
 
   const third = await open();

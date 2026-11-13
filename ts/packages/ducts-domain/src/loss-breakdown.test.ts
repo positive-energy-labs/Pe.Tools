@@ -39,15 +39,15 @@ describe("lossGroups", () => {
   it("groups by type, not size, in bar order with the largest first", () => {
     const groups = lossGroups(snapshot, rows);
     expect(groups.map((g) => [g.part, g.label])).toEqual([
-      ["unit", "AHU Coil"],
+      ["unit", "AHU · Coil"],
       ["duct", "Round Duct"],
-      ["duct", "Elbow Radius"],
-      ["terminal", "Grille G1"],
+      ["duct", "Elbow · Radius"],
+      ["terminal", "Grille · G1"],
     ]);
     const duct = groups.find((g) => g.label === "Round Duct")!;
     expect(duct.dp).toBeCloseTo(0.05);
     expect(duct.ids).toEqual([10, 11]);
-    expect(groups.find((g) => g.label === "Elbow Radius")!.unpriced).toBe(1);
+    expect(groups.find((g) => g.label === "Elbow · Radius")!.unpriced).toBe(1);
     expect(groups.reduce((a, g) => a + g.dp, 0)).toBeCloseTo(0.15);
   });
   it("splits by size only when asked", () => {
