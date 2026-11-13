@@ -34,7 +34,8 @@ internal static class PodScriptRunner {
                     SourcePath: item.Entrypoint.SourcePath,
                     WorkspaceKey: capture.Folder,
                     SourceBundle: capture.SourceBundle,
-                    PermissionMode: permissionMode
+                    PermissionMode: permissionMode,
+                    Caller: ScriptCaller.Person
                 ),
                 Guid.NewGuid().ToString("N")
             );
