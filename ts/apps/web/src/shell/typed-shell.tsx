@@ -127,7 +127,7 @@ function TypedPlace({ module, place, fingerprint, snapshot }: { snapshot?: Histo
   // Slice 6.1: a bind still in flight (the document census, or a resolved target before its mount
   // lands) reads as pending, never as "Document unavailable".
   const binding = !mount && !problem && (target.busy || target.resolution.kind === "checking" || target.resolution.kind === "resolved");
-  return <section className="flex min-h-0 flex-1 flex-col" aria-busy={binding && visible || undefined} data-url-settled={urlSettled ? "" : undefined} data-tone={history ? "caution" : undefined} data-wash={history ? "" : undefined} aria-label={history ? "Recorded view, read-only" : undefined}>
+  return <section data-findings-route={module.spec.key} className="flex min-h-0 flex-1 flex-col" aria-busy={binding && visible || undefined} data-url-settled={urlSettled ? "" : undefined} data-tone={history ? "caution" : undefined} data-wash={history ? "" : undefined} aria-label={history ? "Recorded view, read-only" : undefined}>
       {problem ? <>{document}<p role="alert">{problem}</p></> : mount ? <TypedChrome mount={mount} document={document} recorded={recorded} thread={params.get("thread") ?? undefined} /> : <>{document}{binding ? <OutcomeLine kind="busy" label="Document" says="Finding the open document" /> : <p role="status">{target.resolution.kind === "failed" ? target.resolution.message : target.bindingLost?.sentence ?? (target.several ? "Several documents are open; choose one." : "Document unavailable; choose an exact document again.")}</p>}</>}
     </section>;
 
@@ -154,7 +154,7 @@ export function TypedChrome({ mount, document, recorded, thread }: { mount: Type
     timeline={<BandTimeline mount={mount} recorded={recorded} />} />;
   // A route the host leases no view for publishes none, retained (chat's PlaceViews) or direct.
   const doc = currentTarget?.kind === "document" ? `${currentTarget.ref.session}/${currentTarget.ref.openId}` : `${spec.key}:unbound`;
-  return <SubjectDoor.Provider value={subject}><AttentionDocument value={doc}>{leases ? view : null}<KeyScopeHost data-findings-route={spec.key} id={`route:${spec.key}`} hidden={!visible} className="flex min-h-0 flex-1 flex-col">
+  return <SubjectDoor.Provider value={subject}><AttentionDocument value={doc}>{leases ? view : null}<KeyScopeHost id={`route:${spec.key}`} hidden={!visible} className="flex min-h-0 flex-1 flex-col">
     {visible ? <Notes key={doc} mount={mount} /> : null}
     {visible ? <PointerCite route={spec.key} thread={thread} fields={spec.fields} doc={doc} /> : null}
     <ScopeKeys keys={actionScopeKeys((["undo","redo"] as const).map(direction=>({id:`work.${direction}`,label:direction,bindings:direction==="undo"?["Mod+Z"]:["Mod+Shift+Z","Mod+Y"],
