@@ -27,6 +27,11 @@
       "import": "./src/store.ts",
       "default": "./src/store.ts"
     },
+    "./kinds": {
+      "types": "./src/kinds.ts",
+      "import": "./src/kinds.ts",
+      "default": "./src/kinds.ts"
+    },
     "./product-paths": {
       "types": "./src/product-paths.ts",
       "import": "./src/product-paths.ts",

@@ -15,7 +15,7 @@ vi.mock("./psc1", () => ({
     meshes: { instances: [], positions: new Float32Array(0) },
     metadata: {
       elements: [],
-      stamp: { sources: [] },
+      evidence: { sources: [] },
       omittedElements: 0,
       unavailableElements: [],
       completeness: {

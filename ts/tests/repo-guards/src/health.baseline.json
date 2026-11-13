@@ -282,7 +282,7 @@
     "ts/apps/host/src/receipt-export.ts": 5,
     "ts/apps/host/src/redirection-trust.ts": 2,
     "ts/apps/host/src/rhvac-ops.ts": 3,
-    "ts/apps/host/src/route-document-store.ts": 2,
+    "ts/apps/host/src/route-document-store.ts": 1,
     "ts/apps/host/src/settings.ts": 1,
     "ts/apps/host/src/source-closures.ts": 2,
     "ts/apps/host/src/takeoff-captures.ts": 9,

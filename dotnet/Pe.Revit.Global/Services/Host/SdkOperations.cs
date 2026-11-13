@@ -49,15 +49,22 @@ public static class SdkOperations {
     /// </summary>
     public static IDisposable Bind(PeOperationCatalog catalog) {
         Pe.Revit.SettingsRuntime.Json.ValueDomains.SettingsValueDomainBootstrap.RegisterDefaults();
+        OperationMonitor.Attach(RevitUiSession.CurrentUIApplication.Application);
         _ = OpRegistry.RegisterFromLoadedPeAssemblies();
         _ = OpRegistry.Bind(new RevitDataRequestService());
         foreach (var key in ReadOnlyKeys) {
             if (!OpRegistry.TryGet(key, out var op))
                 throw new InvalidOperationException($"Product op '{key}' is not registered.");
-            catalog.Bind(key, (document, body, ct) => JsonConvert.SerializeObject(
-                op.ExecuteAsync(Body(body), Wrap(op.Definition.Needs, document as DbDocument), ct)
-                    .GetAwaiter().GetResult(),
-                Json));
+            // Through the runner, so `family.look` and `family.loadTest` get their TransactRead scope here too and a
+            // commit outside it fails the call. The SDK stores the bare payload: `touched` rides only in the
+            // response file BridgeAgent writes, until the SDK receipt has a field for it.
+            catalog.Bind(key, (document, body, ct) => {
+                var ran = OpRunner.RunAsync(op, Body(body), Wrap(op.Definition.Needs, document as DbDocument), ct)
+                    .GetAwaiter().GetResult();
+                if (ran.Error is not null)
+                    System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(ran.Error).Throw();
+                return JsonConvert.SerializeObject(ran.Response, Json);
+            });
         }
 
         // scripting.execute's op method waits for an external event, which cannot fire while the SDK

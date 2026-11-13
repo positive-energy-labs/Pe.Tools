@@ -1,5 +1,4 @@
 import { readFileSync } from "node:fs";
-import { primitiveMatrix, primitiveTemplate } from "./primitives";
 import { describe, expect, it } from "vite-plus/test";
 import { decodeScene, SCENE_FORMAT, type Psc1Metadata } from "./psc1";
 import { CATEGORY_IDS } from "./categories";
@@ -30,7 +29,7 @@ const handle = (elementId: number, linkInstanceId: number | null = null) =>
 const metadata = (patch: Partial<Psc1Metadata> = {}): Psc1Metadata =>
   ({
     format: SCENE_FORMAT,
-    stamp: { frame: "host-internal-ft", hostDocumentKey: "doc-host" } as Psc1Metadata["stamp"],
+    evidence: { frame: "host-internal-ft", documentKey: "doc-host" } as Psc1Metadata["evidence"],
     bounds: BOX,
     triangles: 2,
     levels: {
@@ -160,7 +159,7 @@ describe("PSC1 decode", () => {
     expect(() => decodeScene(psc1(metadata(), 18, 0))).toThrow("Not a PSC1");
     expect(() => decodeScene(new ArrayBuffer(4))).toThrow("Not a PSC1");
     expect(() =>
-      decodeScene(psc1(metadata({ stamp: { frame: "survey" } as Psc1Metadata["stamp"] }))),
+      decodeScene(psc1(metadata({ evidence: { frame: "survey" } as Psc1Metadata["evidence"] }))),
     ).toThrow("frame");
     expect(() => decodeScene(psc1(metadata(), 9))).toThrow("vertex budget");
   });
@@ -354,20 +353,9 @@ describe("PSC1 decode", () => {
 
 // Native C# output: the Chadds SA 7 fan overview (revit.detail.space-scene, overview, padding 0, 6 focus ids), first captured in
 // u2-gate-0475a118/browser3, re-captured unedited at f47a7d7c so its space-scene-v5 link UniqueIds are real. Never hand-edit it.
-it("decodes and prepares every bounds box in the real Chadds overview", () => {
+it("refuses the retired v5 native capture and requires recapture", () => {
   const bytes = readFileSync(new URL("./fixtures/browser-overview.psc1", import.meta.url));
-  const { meshes } = decodeScene(
+  expect(() => decodeScene(
     bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
-  );
-  const boxes = meshes.instances.flatMap((i) =>
-    i.primitive?.kind === "oriented-box" && i.primitive.box.frame === "bounds" ? [i.primitive] : [],
-  );
-  expect(boxes).toHaveLength(839);
-  for (const box of boxes) {
-    const geometry = primitiveTemplate(box).applyMatrix4(primitiveMatrix(box));
-    geometry.computeBoundingBox();
-    expect(geometry.boundingBox!.min.x).toBeCloseTo(box.bounds.minX, 3);
-    expect(geometry.boundingBox!.max.z).toBeCloseTo(box.bounds.maxZ, 3);
-    geometry.dispose();
-  }
+  )).toThrow("outdated");
 });

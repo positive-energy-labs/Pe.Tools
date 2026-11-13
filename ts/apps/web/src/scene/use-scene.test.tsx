@@ -22,7 +22,7 @@ vi.mock("./psc1", () => ({
     meshes: { instances: [], positions: new Float32Array(0) },
     metadata: {
       elements: [],
-      stamp: { sources: [] },
+      evidence: { sources: [] },
       omittedElements: 11636,
       unavailableElements: [{ elementId: 42 }],
       completeness: {
@@ -48,7 +48,7 @@ it("forwards capture completeness with the decoded meshes and clears it for an i
     meshes: { instances: [], positions: new Float32Array(0) },
     metadata: {
       elements: [],
-      stamp: { sources: [] },
+      evidence: { sources: [] },
       omittedElements: 11636,
       unavailableElements: [{ elementId: 42 }],
       completeness: {

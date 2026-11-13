@@ -53,9 +53,16 @@ test("S1: fixture transports never branch on operation keys or seed routes", () 
   expect(violations).toEqual([]);
 });
 
-test("D2: graph modules never eagerly import fixture payloads", () => {
+// Frozen: the one route module that still imports a fixture payload eagerly. Slice 6 (one read
+// constructor) removes `hostRead(reads.sheet, sheetValueFixtures)`; this list only shrinks.
+const D2_FROZEN = ["apps/web/src/fans/route.ts: ../ducts/sheet/value-fixtures.ts"];
+
+// Retargeted from `*/graph.ts` (none since 6ecbc716) to the route modules route-graphs.ts loads.
+test("D2: route modules never eagerly import fixture payloads", () => {
   const violations: string[] = [];
-  for (const path of productionFiles("apps/web/src").filter((path) => path.endsWith("/graph.ts"))) {
+  const modules = productionFiles("apps/web/src").filter((path) => /^apps\/web\/src\/[^/]+\/route\.ts$/.test(path));
+  expect(modules.length, "the guard reads route modules; none found").toBeGreaterThanOrEqual(15);
+  for (const path of modules) {
     const ast = ts.createSourceFile(
       path,
       readFileSync(resolve(ROOT, path), "utf8"),
@@ -66,10 +73,9 @@ test("D2: graph modules never eagerly import fixture payloads", () => {
       const specifier =
         (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) && node.moduleSpecifier;
       if (specifier && ts.isStringLiteral(specifier) && /fixture|seeds|[?]raw/.test(specifier.text))
-        violations.push(
-          `${path}:${ast.getLineAndCharacterOfPosition(node.getStart()).line + 1}: ${specifier.text}`,
-        );
+        violations.push(`${path}: ${specifier.text}`);
     }
   }
-  expect(violations).toEqual([]);
+  expect(violations.filter((v) => !D2_FROZEN.includes(v)), "a new eager fixture import").toEqual([]);
+  expect(D2_FROZEN.filter((v) => !violations.includes(v)), "fixed: delete it from D2_FROZEN").toEqual([]);
 });

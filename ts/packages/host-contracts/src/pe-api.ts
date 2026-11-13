@@ -131,6 +131,7 @@ function route<const P extends string, B extends z.ZodType, O extends z.ZodType>
 /** The schemas a route table names; each domain owner supplies its own. */
 export type PeApiSchemas = Record<
   | "addProviderRequestSchema"
+  | "placesFileSchema"
   | "providerSchema"
   | "createThreadRequestSchema"
   | "updateThreadRequestSchema"
@@ -158,6 +159,7 @@ export type PeApiSchemas = Record<
   | "turnElementNamesObservationSchema"
   | "routeStatePatchSchema"
   | "workWriteSchema"
+  | "workStepRequestSchema"
   | "valueReadRequest"
   | "valueReadResponse"
   | "fansReadRequest"
@@ -272,6 +274,8 @@ export function peRouteTable<S extends PeApiSchemas>(schemas: S) {
   });
   /** Public HTTP transport authority. Domain schemas stay with their domain owners. */
   const peRoutes = {
+    "places.get": route("GET", "/pe/places", none, schemas.placesFileSchema as S["placesFileSchema"], "read", "pe", "read"),
+    "places.put": route("PUT", "/pe/places", schemas.placesFileSchema as S["placesFileSchema"], schemas.placesFileSchema as S["placesFileSchema"], "human", "pe", "human"),
     "families.readings": route(
       "GET",
       "/families/readings",
@@ -823,14 +827,12 @@ export function peRouteTable<S extends PeApiSchemas>(schemas: S) {
       "pe",
       "human-or-pea",
     ),
-    // Undo or redo the last step of the Work's one journal; the same restore a person's Undo sends.
+    // The Timeline's step door (ADR 0042): the caller's own next step across a Place's Works. The
+    // caller sends back the step `work.timeline` showed it; `:route` only names the Place's route.
     "work.history": route(
       "POST",
       "/pe/route-state/:route/history",
-      z.object({
-        direction: z.enum(["undo", "redo"]),
-        expectedRevision: z.number().int().nonnegative(),
-      }),
+      schemas.workStepRequestSchema as S["workStepRequestSchema"],
       object,
       "human-or-pea",
       "pe",

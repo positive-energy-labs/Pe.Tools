@@ -1,13 +1,17 @@
 import { routeRegistry } from "../routes.generated.ts";
+import { placesRead, readPlaces } from "../places.ts";
 import { valueReadRequest, type HostRouteModule } from "@pe/agent-contracts";
+import { usesOf } from "@pe/agent-contracts/handle";
 import {
+  bodyOf,
   evaluate,
   fingerprint,
   type InputPort,
   type Read,
-  type Publications,
-  type Publication,
 } from "./evaluator.ts";
+import type { Publication, Publications } from "./publications.ts";
+import { withTimelineCaller, workTimelineRead } from "./work-timeline.ts";
+import { WORK_TIMELINE_READ, type WorkAuthor } from "@pe/agent-contracts";
 
 export const graphRouteIds = ["reads.value"];
 function bind<I, O>(
@@ -47,7 +51,7 @@ export function readRegistry(modules: readonly Pick<HostRouteModule, "reads" | "
   const reads = new Map<string, Read<any, any>>();
   const leaves: Record<string, NonNullable<HostRouteModule["leaves"]>[string]> =
     Object.create(null);
-  const serviceInputs = new Set(["native", "resource", "work", "work-scope", "document-mark"]);
+  const serviceInputs = new Set(["native", "resource", "work", "work-scope", "work-timeline", "document-mark"]);
   const register = (
     definitions: HostRouteModule["reads"] = {},
     inputs: HostRouteModule["leaves"] = {},
@@ -58,6 +62,14 @@ export function readRegistry(modules: readonly Pick<HostRouteModule, "reads" | "
       if (reads.has(definition.name) || names.has(definition.name))
         throw Error(`Duplicate host read ${definition.name}`);
       names.add(definition.name);
+      // A composition joins here, not at its first read: every key its contract uses has a body
+      // (a route's, registered when its module loaded, or the native door's), or it does not register.
+      for (const key of definition.contract ? usesOf(definition.contract) : [])
+        try {
+          bodyOf({ key });
+        } catch {
+          throw Error(`Host read ${definition.name} uses '${key}', which has no body on this host`);
+        }
     }
     for (const name of Object.keys(inputs))
       if (
@@ -82,11 +94,22 @@ export function readRegistry(modules: readonly Pick<HostRouteModule, "reads" | "
   for (const module of modules) register(module.reads, module.leaves);
   return { reads, leaves, register };
 }
-export const registeredReads: HostReadRegistry = readRegistry(Object.values(routeRegistry).map((route) => route.host));
+// The Timeline is the kernel's read, not a route's: it is registered beside the route modules.
+export const registeredReads: HostReadRegistry = readRegistry([
+  ...Object.values(routeRegistry).map((route) => route.host),
+  { reads: { [WORK_TIMELINE_READ]: workTimelineRead } },
+]);
+registeredReads.register({ places: placesRead }, { places: async () => readPlaces() });
 /** HTTP adapters select a read; composition and freshness belong to the evaluator. */
-export function graphRoute(id: string, raw: unknown, registry: HostReadRegistry = registeredReads) {
+/** `by` is the request's author: the one per-caller read (`work.timeline`) is stamped with it here. */
+export function graphRoute(
+  id: string,
+  raw: unknown,
+  registry: HostReadRegistry = registeredReads,
+  by: WorkAuthor | null = null,
+) {
   if (!graphRouteIds.includes(id)) throw Error(`Unknown read door: ${id}`);
   const request = valueReadRequest.parse(raw), definition = registry.reads.get(request.read);
   if (!definition) throw Error(`Host read is not registered: ${request.read}`);
-  return bind(definition, definition.input.parse(request.args), request);
+  return bind(definition, definition.input.parse(withTimelineCaller(request.read, request.args, by)), request);
 }

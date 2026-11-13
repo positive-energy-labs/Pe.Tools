@@ -1,4 +1,5 @@
 ﻿using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using Pe.Shared.HostContracts.Bridge;
 using Pe.Shared.HostContracts.Operations;
 using Pe.Shared.HostContracts.Protocol;
@@ -100,12 +101,14 @@ internal sealed class BridgeAgent : IDisposable {
                     Log.Error(exception, message);
             }
         );
+        // One change subscription for every call; made here because this constructor runs in API context.
+        OperationMonitor.Attach(uiapp.Application);
         var discoveredOps = OpRegistry.RegisterFromLoadedPeAssemblies();
         var boundOps = OpRegistry.Bind(
             requestService,
             this._revitDataRequestService,
             this._scriptingMessageHandler,
-            this._pump
+            this
         );
         Log.Information(
             "Host bridge agent discovered {DiscoveredOpCount} operations and bound {BoundOpCount} instance handlers.",
@@ -230,6 +233,18 @@ internal sealed class BridgeAgent : IDisposable {
         }
     }
 
+    // Handler for the pump's cancel: it lives here, not on BridgeRequestPump, because a SessionWrite takes its
+    // scope in its signature and Pe.Shared.HostContracts references no Revit to name one. It runs off the Revit
+    // thread and touches no document.
+    [Op("op.cancel", OpSubject.None, OpTouches.Metadata,
+        Does = "Signal cooperative cancellation to one in-flight bridge request, named by the requestId it was sent under. The operation stops at its next checkpoint and answers with a cancelled outcome; work already committed inside Revit is not undone, and an operation that never checks its token cannot be interrupted.",
+        Title = "Cancel Bridge Request",
+        Actor = OpActor.Any,
+        Finds = ["cancel", "stop", "abort", "request", "timeout"],
+        Tier = OpTier.Expert)]
+    private Task<OpCancelData> CancelAsync(OpCancelRequest request, SessionWrite scope, CancellationToken cancellationToken) =>
+        this._pump.CancelAsync(request, cancellationToken);
+
     private async Task HandleRequestAsync(BridgeRequest request, CancellationToken cancellationToken) {
         using var requestScope = RevitReceiptTransport.EnterRequest(request.RequestId);
         Log.Information("Host bridge received request: OperationKey={OperationKey}, RequestId={RequestId}",
@@ -241,8 +256,10 @@ internal sealed class BridgeAgent : IDisposable {
         // (a bridge frame reaches exactly one live socket and is gone).
         var receipt = BeginOpReceipt(request);
         RequestEvidence.Begin(request.RequestId);
-        var late = new TaskCompletionSource<RevitTaskResult<Task<object?>>>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var late = new TaskCompletionSource<RevitTaskResult<Task<OpRun>>>(TaskCreationOptions.RunContinuationsAsynchronously);
         var deferred = false;
+        // Stays `none` only when the handler never started; once it ran, the runner's statement replaces it.
+        Touched touched = new Touched.None();
 
         try {
             Log.Information(
@@ -254,13 +271,14 @@ internal sealed class BridgeAgent : IDisposable {
                 throw new InvalidOperationException($"Unsupported bridge operation '{request.OperationKey}'.");
 
             OpCallGate.Require(op.Definition, request.DerivedCommand, request.PayloadJson);
-            Task<object?> responseTask;
+            Task<OpRun> responseTask;
             if (op.Thread == OpThread.Revit) {
                 // The op gets the request's own token, never context.Cancellation: the queue disposes
                 // that per-run link when the delegate returns, and an async op (scripting.execute)
                 // returns at its first await, so op.cancel would fire a token nothing links anymore.
                 var run = await this._revitTaskQueue.RunForResult(
-                    context => op.ExecuteAsync(
+                    context => OpRunner.RunAsync(
+                        op,
                         request.PayloadJson,
                         ResolveDocument(op, request.OpenDocumentId, context.Cancellation),
                         cancellationToken, request.DerivedCommand),
@@ -287,10 +305,14 @@ internal sealed class BridgeAgent : IDisposable {
                 } else
                     responseTask = run.Value!;
             } else {
-                responseTask = op.ExecuteAsync(request.PayloadJson, null, cancellationToken, request.DerivedCommand);
+                responseTask = OpRunner.RunAsync(op, request.PayloadJson, null, cancellationToken, request.DerivedCommand);
             }
 
-            var responseEnvelope = await responseTask.ConfigureAwait(false);
+            var ran = await responseTask.ConfigureAwait(false);
+            touched = ran.Touched;
+            if (ran.Error is not null)
+                System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(ran.Error).Throw();
+            var responseEnvelope = ran.Response;
             Log.Information(
                 "Host bridge dispatch completed: OperationKey={OperationKey}, RequestId={RequestId}",
                 request.OperationKey,
@@ -320,7 +342,9 @@ internal sealed class BridgeAgent : IDisposable {
                         requestBytes,
                         responseBytes
                     ),
-                    op.Definition.Needs == OpNeeds.Nothing ? null : request.OpenDocumentId
+                    op.Definition.Needs == OpNeeds.Nothing ? null : request.OpenDocumentId,
+                    ran.EvidenceJson,
+                    touched
                 )
             );
 
@@ -337,7 +361,8 @@ internal sealed class BridgeAgent : IDisposable {
                 request.RequestId,
                 responseBytes
             );
-            CompleteOpReceipt(receipt, BridgeWire.Verdicts.Ok, payloadJson);
+            CompleteOpReceipt(receipt, BridgeWire.Verdicts.Ok, OpReceiptResponse.Ok(
+                new JRaw(payloadJson), touched, ran.EvidenceJson is null ? null : new JRaw(ran.EvidenceJson)));
             await this.WriteFrameAsync(frame, cancellationToken).ConfigureAwait(false);
             Log.Information(
                 "Host bridge wrote response frame: OperationKey={OperationKey}, RequestId={RequestId}",
@@ -353,9 +378,8 @@ internal sealed class BridgeAgent : IDisposable {
                 request.OperationKey,
                 request.RequestId
             );
-            CompleteOpReceipt(receipt, BridgeWire.Verdicts.Cancelled, JsonConvert.SerializeObject(
-                new { error = message, statusCode = BridgeOperationExceptions.CancelledStatusCode },
-                this._serializerSettings));
+            CompleteOpReceipt(receipt, BridgeWire.Verdicts.Cancelled, OpReceiptResponse.Failed(
+                message, BridgeOperationExceptions.CancelledStatusCode, touched));
             throw;
         } catch (BridgeOperationException ex) {
             var totalMs = GetElapsedMilliseconds(startedAt);
@@ -374,7 +398,8 @@ internal sealed class BridgeAgent : IDisposable {
                         0,
                         requestBytes,
                         0
-                    )
+                    ),
+                    Touched: touched
                 )
             );
             Log.Warning(
@@ -387,7 +412,7 @@ internal sealed class BridgeAgent : IDisposable {
             // not `failed`. `op result` reads the verdict; conflating them would tell an agent its
             // op broke when it was simply refused.
             CompleteOpReceipt(receipt, ex.StatusCode == 423 ? BridgeWire.Verdicts.Refused : BridgeWire.Verdicts.Failed,
-                JsonConvert.SerializeObject(new { error = ex.Message, statusCode = ex.StatusCode }, this._serializerSettings));
+                OpReceiptResponse.Failed(ex.Message, ex.StatusCode, touched));
             await this.WriteFrameAsync(errorFrame, cancellationToken).ConfigureAwait(false);
         } catch (Exception ex) {
             var totalMs = GetElapsedMilliseconds(startedAt);
@@ -406,7 +431,8 @@ internal sealed class BridgeAgent : IDisposable {
                         0,
                         requestBytes,
                         0
-                    )
+                    ),
+                    Touched: touched
                 )
             );
             Log.Error(
@@ -415,8 +441,8 @@ internal sealed class BridgeAgent : IDisposable {
                 request.OperationKey,
                 request.RequestId
             );
-            CompleteOpReceipt(receipt, BridgeWire.Verdicts.Failed,
-                JsonConvert.SerializeObject(new { error = ex.Message }, this._serializerSettings));
+            CompleteOpReceipt(receipt, BridgeWire.Verdicts.Failed, OpReceiptResponse.Failed(
+                ex.Message, BridgeOperationExceptions.UnexpectedStatusCode, touched));
             await this.WriteFrameAsync(errorFrame, cancellationToken).ConfigureAwait(false);
         } finally {
             if (deferred)
@@ -429,11 +455,15 @@ internal sealed class BridgeAgent : IDisposable {
 
     private Task SendTerminalAsync(BridgeFrame frame) => this.WriteFrameAsync(frame, CancellationToken.None);
 
-    private static async Task AwaitDeferredAsync(Task<RevitTaskResult<Task<object?>>> completion) {
+    /// <summary>The recovered terminal: how a call that outlived its response ended, and what the runner saw it touch.</summary>
+    private static async Task<(string Outcome, Touched Touched)> AwaitDeferredAsync(Task<RevitTaskResult<Task<OpRun>>> completion) {
         var result = await completion.ConfigureAwait(false);
+        // The delegate yielded without a value, so nothing read the scope: what it committed first is not known.
         if (result.Outcome is RevitTaskOutcome.CancelledCooperatively or RevitTaskOutcome.CancelledBeforeDispatch or RevitTaskOutcome.TimedOut)
-            throw new OperationCanceledException("The native delegate yielded after cancellation or timeout.");
-        await result.GetValueOrThrow().ConfigureAwait(false);
+            return ("Cancelled", result.Outcome == RevitTaskOutcome.CancelledBeforeDispatch
+                ? new Touched.None() : new Touched.Unknown(TouchedUnknownReason.CancelledMidEffect));
+        var ran = await result.GetValueOrThrow().ConfigureAwait(false);
+        return (ran.Error is null ? "Succeeded" : ran.Error is OperationCanceledException ? "Cancelled" : "Failed", ran.Touched);
     }
 
     private async Task WriteRevitTaskOutcomeAsync(
@@ -449,11 +479,12 @@ internal sealed class BridgeAgent : IDisposable {
         var message = $"Revit task ended with '{verdict}' ({outcome})"
                       + (string.IsNullOrWhiteSpace(detail) ? "." : $": {detail}");
         var totalMs = GetElapsedMilliseconds(startedAt);
-        var responseJson = JsonConvert.SerializeObject(
-            new { error = message, statusCode, outcome = outcome.ToString(), verdict },
-            this._serializerSettings
-        );
-        CompleteOpReceipt(receipt, verdict, responseJson);
+        // Still running or stopped part-way: the scope was never read back. Not dispatched: nothing ran.
+        Touched touched = outcome is RevitTaskOutcome.TimedOut or RevitTaskOutcome.AbandonedStillRunning or RevitTaskOutcome.CancelledCooperatively
+            ? new Touched.Unknown(TouchedUnknownReason.CancelledMidEffect)
+            : new Touched.None();
+        CompleteOpReceipt(receipt, verdict, OpReceiptResponse.Failed(
+            message, statusCode, touched, outcome.ToString()));
         Log.Warning(
             "Host bridge Revit task ended without a value: OperationKey={OperationKey}, RequestId={RequestId}, Outcome={Outcome}, Verdict={Verdict}",
             request.OperationKey,
@@ -471,7 +502,8 @@ internal sealed class BridgeAgent : IDisposable {
                     message,
                     statusCode,
                     [BridgeOperationExceptions.Issue("$", outcome.ToString(), message, null)],
-                    new PerformanceMetrics(totalMs, totalMs, 0, requestBytes, 0)
+                    new PerformanceMetrics(totalMs, totalMs, 0, requestBytes, 0),
+                    Touched: touched
                 )
             ),
             cancellationToken
@@ -529,16 +561,18 @@ internal sealed class BridgeAgent : IDisposable {
     }
 
     /// <summary>
-    /// Writes the response payload beside the started receipt and stamps the terminal verdict. The
+    /// Writes the receipt response beside the started receipt and stamps the terminal verdict. The
     /// SDK writes a terminal record ONLY in roots where the response file already landed, so the
     /// payload goes to every receipts root first; `pe-revit op result` then answers with the real
     /// response instead of `response-missing`.
     /// </summary>
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
-    private static void CompleteOpReceipt(object? handle, string verdict, string responseJson) {
+    private static void CompleteOpReceipt(object? handle, string verdict, OpReceiptResponse response) {
         if (handle is null)
             return;
         try {
+            // Contract 3 (docs/features/routes/CONTRACTS.md): the one shape of this file, payload or error, with `touched`.
+            var responseJson = response.ToJson();
             var receipt = (OpReceiptHandle)handle;
             string? written = null;
             foreach (var directory in SessionFiles.ReceiptDirectories()) {
