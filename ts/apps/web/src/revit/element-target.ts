@@ -258,7 +258,9 @@ export function showElementsMessage(result: ShowElementsResult): string {
   return [
     data.note,
     data.missing.length ? `Missing: ${n(data.missing.length)}.` : "",
-    data.hidden.length ? `Still hidden in the view: ${n(data.hidden.length)}.` : "",
+    data.hiddenElementIds.length
+      ? `Still hidden in the view: ${n(data.hiddenElementIds.length)}.`
+      : "",
     issues,
     unverified.length
       ? `${unverified.length} ID-only target(s); stale identity was not verified.`
