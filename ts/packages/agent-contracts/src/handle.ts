@@ -32,6 +32,9 @@ export interface ReadHandle<K extends string = string, I = unknown, D = unknown>
 }
 /** A read handle with its input and data erased: what a registry or a `uses` list holds. */
 export type AnyReadHandle = Pick<ReadHandle, typeof minted | "key" | "axes">;
+/** Keep schema outputs named at declaration boundaries, including recursive JSON. */
+export interface ReadContract<K extends string, I extends z.ZodType, D extends z.ZodType>
+  extends ReadHandle<K, z.output<I>, z.output<D>> {}
 const costs = ["Cheap", "Bounded", "Expensive", "Mutation"] as const;
 type Safety = typeof hostOpSafety;
 /** The generated effect admits Read and TransactRead keys. */
@@ -109,28 +112,28 @@ export const usesOf = (h: AnyReadHandle): readonly string[] => used.get(h) ?? []
  * Effect, cost and touches join. Subject and cardinality do not: a read with no document says so
  * with `subject`, and otherwise it is one value about the Document.
  */
-export function contract<K extends string, I, D>(
+export function contract<K extends string, I extends z.ZodType<z.output<I>>, D extends z.ZodType<z.output<D>>>(
   key: K,
   def: {
-    input: z.ZodType<I>;
-    data: z.ZodType<D>;
+    input: I;
+    data: D;
     uses: readonly (AnyReadHandle | CatalogReadKey)[];
     subject?: CatalogAxes["subject"];
     keyedBy?: Readonly<Record<string, RowKey>>;
     demand?: "mount" | "explicit";
   },
-): ReadHandle<K, I, D> {
+): ReadContract<K, I, D> {
   const handles = def.uses.map((use) => (typeof use === "string" ? native(use) : use));
   const uses = handles.map((use) => use.axes);
   const touches = [...new Set(uses.flatMap((axes) => axes.touches))];
   for (const path of Object.keys(def.keyedBy ?? {}))
     if (!rows(def.data, path.split(".")))
       throw Error(`Read '${key}' keys '${path}', which is no row collection in its data`);
-  const made: ReadHandle<K, I, D> = mint({
+  const made: ReadHandle<K, z.output<I>, z.output<D>> = mint({
     key,
     input: def.input,
     data: def.data,
-    output: publicationSchema(def.data),
+    output: publicationSchema<z.ZodType<z.output<D>>>(def.data),
     // A read that uses nothing native keeps the axes `valueRead` gave every host read.
     axes: {
       subject: def.subject ?? "Document",

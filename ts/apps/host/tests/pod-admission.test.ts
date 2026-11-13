@@ -11,6 +11,7 @@ import { RouteWorkspace, observeResources } from "@pe/runtime";
 import { bindWork, workKey, type ReadingFrame } from "@pe/agent-contracts";
 import { workFingerprintSchema } from "../../../packages/agent-contracts/src/route-kernel-admission.ts";
 import { builtinData } from "../../../packages/agent-contracts/src/route-kernel.fixtures.ts";
+import { podWire, podHostSource } from "./pod-wire.fixture.ts";
 import { buildRouteArtifact } from "../../web/route-module-hash.ts";
 import { createPackageLifecycle } from "../src/package-lifecycle.ts";
 import { listPackages } from "../src/packages.ts";
@@ -28,13 +29,15 @@ async function fixture(
   address = `/tool/${encodeURIComponent("route:@fixture/routes/tool/route.artifact")}`,
   initialWork = false,
 ) {
-  const data = {
+  const typed = await podWire("pod.fixture.tool", address, 2, `Fixture ${salt}`, initialWork);
+  // The native-link falsifier exercises the executable body's catalog linker.
+  const data = native ? {
     ...builtinData,
     key: "pod.fixture.tool",
     address,
     name: `Fixture ${salt}`,
     work: { schema: "work", route: "pod.fixture.tool", version: 2, },
-  };
+  } : typed.data;
   const entry = join(root, "entry.ts");
   const imports = fileURLToPath(
     new URL("../../../packages/agent-contracts/src/route-kernel.fixtures.ts", import.meta.url),
@@ -53,6 +56,10 @@ entries: {...builtinModule.entries, roster: {...builtinModule.entries.roster, ${
     entry,
     root,
     data,
+    ...(!native ? { hostEntry: {
+      entry: join(root, "host.ts"),
+      source: podHostSource(typed, fileURLToPath(import.meta.resolve("zod"))),
+    } } : {}),
     contracts: [{ id: "test-contract", bytes: new TextEncoder().encode("fixture-contract") }],
   });
   const wire = JSON.parse(

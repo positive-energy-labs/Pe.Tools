@@ -89,6 +89,8 @@ test("recorded host-local inputs and immutable capture files replay without a li
                             byteSize: bytes.length,
                             width: 20,
                             height: 10,
+                            lens: { basis: "UserView", viewId: 1 },
+                            hidden: [],
                             registration: {
                               width: 20,
                               height: 10,

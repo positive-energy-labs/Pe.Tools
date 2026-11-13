@@ -3,6 +3,9 @@
 // in Pe.Shared.HostContracts.Operations.
 import { Schema } from "effect";
 
+/** Native scope effects are the authority for read admission, including rolled-back reads. */
+export const isReadEffect = (effect: string): boolean => effect === "Read" || effect === "TransactRead";
+
 export const hostOperationIntentSchema = Schema.Literals(["Read", "Mutate"]);
 export type HostOperationIntent = Schema.Schema.Type<typeof hostOperationIntentSchema>;
 

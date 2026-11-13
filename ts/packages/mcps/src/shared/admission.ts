@@ -1,5 +1,6 @@
 import { readFamilyCapture } from "./family-read-client.ts";
 import { z } from "zod";
+import { isReadEffect } from "@pe/host-contracts/contracts";
 /** Catalog selection is an adapter; immutable request retention and execution belong to shared owners. */
 import {
   commands,
@@ -63,9 +64,9 @@ const caller = (context: AdmissionContext) => new HostRpcCaller(context);
  * write consent, so its effect alone would send it through the command door.
  */
 export const opWrites = (op: Pick<HostOperationDefinition, "key" | "effect"> & { intent?: string }): boolean =>
-  isTsOnlyOperationKey(op.key)
+  isTsOnlyOperationKey(op.key) && op.intent !== undefined
     ? op.intent !== "Read"
-    : op.effect === "SessionWrite" || op.effect === "ModelWrite";
+    : !isReadEffect(op.effect);
 
 export async function readCapabilityIntent(
   key: string,

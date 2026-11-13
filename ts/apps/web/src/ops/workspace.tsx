@@ -54,7 +54,7 @@ export function Operation({ ctx }: { ctx: OpsContext }) {
                 tone={isMutation(selected) ? "caution" : undefined}
                 title={isMutation(selected) ? "changes external state" : "read-only"}
               >
-                {selected.intent ?? "unknown intent"}
+                {selected.effect}
               </FactChip>
               <FactChip title="host-declared cost tier">
                 {selected.costTier ?? "unknown cost"}

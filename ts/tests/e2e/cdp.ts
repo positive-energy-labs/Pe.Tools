@@ -375,6 +375,9 @@ export const revit = {
 export const BOUND = "[data-bound-document] [data-list-trigger]";
 /** Unit ESP cell address emitted by route/slots/sheet/pane.tsx for fans/sheet.ts's esp binding. */
 export const FANS_ESP_ROW = '[data-pane-id="sheet-inputs"] [data-sheet-address^="esp:"]';
+/** Resolved unit ESP, the final cell in the ledger's first numeric grid, not calculated system ESP. */
+export const FANS_LEDGER_ESP =
+  '[data-pane-id="sheet-ledger"] [data-sheet-esp] > div:first-of-type > span:last-child';
 export const DOCUMENT_CHOOSER = '[data-list-trigger][aria-label="Choose a document"]';
 const CHOOSE = "Choose a document";
 

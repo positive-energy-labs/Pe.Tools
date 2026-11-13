@@ -12,6 +12,7 @@ import { executionTargetSchema } from "./target.ts";
 import { workKeySchema } from "./route-state.ts";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import { tsOnlyOperationCatalog } from "@pe/host-contracts/operation-types";
+import { isReadEffect } from "@pe/host-contracts/contracts";
 
 import type { Command } from "./command.ts";
 export type { ActionNeed } from "./command.ts";
@@ -527,10 +528,10 @@ export const preparedTakeoffSchema = z.strictObject({
 export const hostActions = {
   "ops.read": {
     via: { route: "operation.call" },
-    native: [...hostOpCatalog, ...tsOnlyOperationCatalog].filter((op) => (op.effect === "Read" || op.effect === "TransactRead")).map((op) => op.key),
+    native: [...hostOpCatalog, ...tsOnlyOperationCatalog].filter((op) => isReadEffect(op.effect)).map((op) => op.key),
     says: "Read one native operation through the guarded operation door.",
     needs: "nothing", effect: "query", dirties: [],
-    input: z.object({ op: z.object({ key: z.string(), intent: z.string() }).passthrough(), request: z.unknown() }),
+    input: z.object({ op: z.object({ key: z.string(), effect: z.string().refine(isReadEffect, "ops.read requires a native Read") }).passthrough(), request: z.unknown() }),
   } as const,
   "page.bind": {
     via: { route: "page.bind" },

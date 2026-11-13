@@ -1,5 +1,8 @@
 import { expect, test, vi } from "vite-plus/test";
 import { handle } from "@pe/agent-contracts/handle";
+import { hostOpCatalog } from "@pe/host-contracts/catalog";
+import { hostActions } from "@pe/agent-contracts/semantic-actions";
+import { isMutation } from "../ops/manifest";
 import { HOST_RPC_BRIDGE_SESSION_HEADER, HOST_RPC_DOCUMENT_HEADER } from "@pe/host-contracts/operation-types";
 import { sendCommand, createWorkFeedClient, browserWorkPorts } from "./work-feed-client";
 import type { AcceptedResult } from "../../../../packages/agent-contracts/src/work-journal-door";
@@ -53,7 +56,7 @@ test("native read route retains the exact session and open document", async () =
   const transport = ports({ rows: [] });
   await sendCommand(handle("ops.read"), {
     id: "request-a", key: "ops.read", target,
-    input: { op: { key: "revit.detail.elements", intent: "Read" }, request: { ids: ["one"] } },
+    input: { op: { key: "revit.detail.elements", effect: "Read" }, request: { ids: ["one"] } },
   }, transport);
   expect(transport.fetch).toHaveBeenCalledWith("/call", expect.objectContaining({
     headers: expect.objectContaining({
@@ -71,10 +74,31 @@ test("a different handle or a native mutation never reaches the read route", asy
   }, transport)).rejects.toThrow("Handle and admission command differ");
   await expect(sendCommand(handle("ops.read"), {
     id: "request-a", key: "ops.read", target,
-    input: { op: { key: "ducts.assign-fan", intent: "Mutation" }, request: {} },
+    input: { op: { key: "ducts.assign-fan", effect: "ModelWrite" }, request: {} },
   }, transport)).rejects.toThrow("requires a native Read");
   expect(transport.submit).not.toHaveBeenCalled();
   expect(transport.fetch).not.toHaveBeenCalled();
+});
+
+test("Ops fallback catalog classifies every native effect and admits only reads to Run read", async () => {
+  const seen = new Set<string>();
+  for (const op of hostOpCatalog) {
+    const read = op.effect === "Read" || op.effect === "TransactRead";
+    seen.add(op.effect);
+    expect(isMutation(op), op.key).toBe(!read);
+    const input = { op, request: {} };
+    expect(hostActions["ops.read"].input.safeParse(input).success, op.key).toBe(read);
+    const transport = ports();
+    const sent = sendCommand(handle("ops.read"), { id: "fallback", key: "ops.read", target, input }, transport);
+    if (read) {
+      await expect(sent).resolves.toMatchObject({ state: "answered" });
+      expect(transport.fetch).toHaveBeenCalledOnce();
+    } else {
+      await expect(sent).rejects.toThrow("requires a native Read");
+      expect(transport.fetch).not.toHaveBeenCalled();
+    }
+  }
+  expect([...seen]).toEqual(expect.arrayContaining(["Read", "TransactRead", "ModelWrite", "SessionWrite"]));
 });
 
 test("family reads project the owning Work into scope outside the strict read input", async () => {
@@ -116,7 +140,7 @@ test("a command or a native read absent from this client's contract is refused",
   const { opResponseSchema } = await import("../host/catalog-client");
   await expect(sendCommand(handle("ops.read"), {
     id: "request-a", key: "ops.read", target,
-    input: { op: { key: "revit.detail.not-in-this-contract", intent: "Read" }, request: {} },
+    input: { op: { key: "revit.detail.not-in-this-contract", effect: "Read" }, request: {} },
   }, { submit, fetch, decode: async (key, value) => (await opResponseSchema(key)).parse(value) }))
     .rejects.toThrow("revit.detail.not-in-this-contract is not in the op catalog");
   expect(submit).not.toHaveBeenCalled();
