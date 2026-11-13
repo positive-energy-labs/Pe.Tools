@@ -10,39 +10,40 @@ import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { Ladder } from "../route/ladder";
 import { AdoptRegions, type AdoptionStore } from "./adopt-panel";
 import { TakeoffKernel } from "./kernel-context";
-import { viewCatalogue, type AdoptionContext } from "./route";
+import { loaded, type AdoptionContext } from "./route";
 
 export function AdoptionBody({ ctx }: { ctx: AdoptionContext }) {
-  const data = ctx.value.value;
+  // The adoption reading is a second reading here: it refuses until views and zones are chosen below.
+  const core = ctx.read(loaded);
+  const data = "value" in core ? core.value : undefined;
+  const coreReading = core.state === "reading" || core.state === "refreshing";
   const savedZones = useList({
-    value: ctx.value,
+    value: core,
     rowsOf: (value) => value.saved?.snapshot.world.zones ?? [],
     keyOf: (row) => row.zone.guid,
     search: (row) => ({ text: [row.name, row.zone.lane.label, row.zone.declaredSqft, row.stage] }),
     select: "none",
   });
   const page = ctx.page.read();
-  const catalogue = ctx.read(viewCatalogue);
-  // A second reading: the body narrows it. The view options it last held stay choosable to read, not to pick.
-  const views = "value" in catalogue ? catalogue.value : undefined;
-  const viewsReading = catalogue.state === "reading" || catalogue.state === "refreshing";
+  // The pane's own read. A catalogue that is not current stays readable, not pickable.
+  const catalogue = ctx.value, views = catalogue.value;
+  const viewsReading = catalogue.state === "refreshing";
   const viewNote = catalogue.state === "ready" ? undefined : viewsReading
-    ? views ? "Reading views; showing the last known catalogue" : "Reading views..."
-    : `View catalogue unavailable: ${refusalOf(catalogue)}${views ? "; showing the last known catalogue" : ""}`;
-  const selectedViews = page.views === "all"
-    ? views?.viewOptions.map((row) => row.id) ?? [] : page.views;
+    ? "Reading views; showing the last known catalogue"
+    : `View catalogue unavailable: ${refusalOf(catalogue)}; showing the last known catalogue`;
+  const selectedViews = page.views === "all" ? views.viewOptions.map((row) => row.id) : page.views;
   const [pending, setPending] = useState<{ id: "initialize" | "adopt"; request: unknown } | null>(
     null,
   );
   const [problem, setProblem] = useState<string | null>(null);
   // This is a pending gesture, not authored Work: the host must publish the staged intent before its action runs.
   useEffect(() => {
-    if (!pending || ctx.value.state !== "ready" || ctx.cells.state.state !== "ready") return;
+    if (!pending || core.state !== "ready" || ctx.cells.state.state !== "ready") return;
     const entry = `takeoffs.${pending.id}`;
     const authored = ctx.cells.doc?.writeIntent?.[entry]?.edit?.value;
     if (canonicalRouteInput(authored) !== canonicalRouteInput(pending.request)) return;
     if (
-      canonicalRouteInput(ctx.value.value?.[pending.id].request) !==
+      canonicalRouteInput(data?.[pending.id].request) !==
       canonicalRouteInput(pending.request)
     ) {
       setPending(null);
@@ -58,7 +59,7 @@ export function AdoptionBody({ ctx }: { ctx: AdoptionContext }) {
         await action.apply();
       } else await action.run();
     })().catch((error) => setProblem(String(error)));
-  }, [pending, ctx.value, ctx.cells.state.state]);
+  }, [pending, core, ctx.cells.state.state]);
   const stage = async (id: "initialize" | "adopt") => {
     if (!data) return;
     const request = data[id].request;
@@ -96,8 +97,8 @@ export function AdoptionBody({ ctx }: { ctx: AdoptionContext }) {
         },
       },
     },
-    candidatesReading: ctx.value.state === "refreshing",
-    candidatesIssue: ctx.value.state === "stale" ? Error(refusalOf(ctx.value)!) : null,
+    candidatesReading: coreReading,
+    candidatesIssue: core.state === "stale" || core.state === "refused" ? Error(refusalOf(core)!) : null,
     actions: {
       patchAdopt(view, elementId, patch) {
         const row = data?.rows.find(
@@ -123,7 +124,7 @@ export function AdoptionBody({ ctx }: { ctx: AdoptionContext }) {
         label: "Adopt",
         bindings: ["Mod+Shift+A"],
         available: () =>
-          !frozen && ctx.value.state === "ready" && ctx.cells.state.state === "ready" && !pending && !data?.adopt.refusal,
+          !frozen && core.state === "ready" && ctx.cells.state.state === "ready" && !pending && !data?.adopt.refusal,
         invoke: () => {
           void stage("adopt");
         },
@@ -146,6 +147,7 @@ export function AdoptionBody({ ctx }: { ctx: AdoptionContext }) {
         <OutcomeLine key={index} kind="refused" label="can't read, kept"
           says={`${blob.parameter} / ${blob.elementId == null ? "Project Information" : "Element name unavailable"}: ${blob.reason}`} />
       ))}
+      {"value" in core ? null : ctx.absent(core)}
       {problem && <OutcomeLine kind="error" label="Adoption" says={problem} />}
       {frozen ? (
         <>
@@ -170,15 +172,15 @@ export function AdoptionBody({ ctx }: { ctx: AdoptionContext }) {
         </>
       ) : (
         <Ladder
-          header={viewNote && views ? <p role={viewsReading ? "status" : "alert"}>{viewNote}</p> : undefined}
+          header={viewNote ? <p role={viewsReading ? "status" : "alert"}>{viewNote}</p> : undefined}
           levels={[
             {
               key: "views",
               label: selectedViews.length ? `${selectedViews.length} views` : null,
               placeholder: "choose views",
-              options: views?.viewOptions.map((row) => ({ ...row,
+              options: views.viewOptions.map((row) => ({ ...row,
                 ...(catalogue.state !== "ready" ? { refusal: viewNote } : {}),
-              })) ?? null,
+              })),
               note: viewNote,
               multi: true,
               picked: (id) => selectedViews.includes(id),
@@ -207,7 +209,7 @@ export function AdoptionBody({ ctx }: { ctx: AdoptionContext }) {
                 label: row.title || row.id,
                 sub: row.capturedAt,
               })) ?? null,
-            note: ctx.value.state === "refreshing" ? "Reading saved captures..." : refusalOf(ctx.value) ?? undefined,
+            note: coreReading ? "Reading saved captures..." : refusalOf(core) ?? undefined,
             picked: (id) => id === page.work,
             pick: (work) => {
               setPending(null);
@@ -229,7 +231,7 @@ export function AdoptionBody({ ctx }: { ctx: AdoptionContext }) {
               refusal={
                 pending
                   ? "Preparing Work"
-                  : (refusalOf(ctx.value) ?? data?.[id].refusal ?? refusalOf(ctx.cells.state))
+                  : (refusalOf(core) ?? data?.[id].refusal ?? refusalOf(ctx.cells.state))
               }
               onClick={() => void stage(id)}
             >

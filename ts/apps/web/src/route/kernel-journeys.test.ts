@@ -213,8 +213,7 @@ test("J2 switch a subject while its answer is delayed, then hide and return", as
     j.mount.page.subject(j.fan("MUAS-1"));
     await held.entered.promise;
     expect(j.mount.value(), "B05: keep the last answer while the new subject waits").toMatchObject({
-      current: false,
-      status: "pending",
+      state: "refreshing",
       value: old,
     });
     j.mount.page.subject(j.fan("FC-23"));

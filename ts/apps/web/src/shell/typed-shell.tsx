@@ -34,7 +34,7 @@ import { PaneActions, PaneActionSlots, usePaneActionSlot } from "./pane-actions"
 import { SubjectDoor } from "./subject";
 import { SubjectPicker } from "./subject-picker";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
-import { absentLine, retainedLine } from "./reading-line";
+import { absentLine, failureLine, retainedLine } from "./reading-line";
 import { typedSubjectDoor } from "./subject";
 import { PrimaryRouteControls, useHasGlobalNavigation } from "../navigation/route-controls";
 import { leasesView, useRouteViewBridge } from "../route/view-bridge";
@@ -254,7 +254,7 @@ export function TypedPane({mount,id,ctx}: {mount:TypedMount;id:string;ctx:DrawCo
     <NativeObservationScope value={stale?{...observation,scope:null}:observation}>
       {stale&&mount.spec.panes[id]!.read!==mount.spec.core?<p role="status">{stale}</p>:null}
       {titlePane(mount.spec) === id ? <PaneTitle text={mount.spec.title!(ctx)} pane={id} /> : null}
-      {(mount.spec.panes[id]!.read ?? mount.spec.core)===mount.spec.core&&mount.failure()?<OutcomeLine kind="error" label="Reading failed" says={mount.failure()!} />:null}
+      {(mount.spec.panes[id]!.read ?? mount.spec.core)===mount.spec.core&&mount.failure()?failureLine(mount.failure()!):null}
       {kernelPane(mount, id, ctx) ?? mount.spec.panes[id]!.draw(ctx).node}
     </NativeObservationScope>
   </AttentionScope></ValueScope>;

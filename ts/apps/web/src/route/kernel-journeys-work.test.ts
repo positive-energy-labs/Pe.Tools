@@ -868,8 +868,11 @@ test("JZ a null Place target refuses Work before dispatch but still permits clie
     expect(unbound.value().state === "ready", "A targetless Page cannot borrow document Value authority").toBe(false);
     const before = structuredClone(unbound.owner()!.doc), revision = unbound.owner()!.handle!.revision;
     const count = j.writes.length;
-    const cells = unbound.draw("sheet-inputs", ctx => ctx.cells) as DrawContext<any, any, any, any>["cells"];
-    expect(await cells.at(["flows", terminalA]).stage({ cfm: 330 }), "No target means no write authority").toMatchObject({ code: "unavailable" });
+    // The read is value-less, so the shell draws its line and no body: there is no cell to stage through.
+    // The refused stage over a held value keeps its witness in rooms.test.tsx ("Unsafe").
+    let drew = false;
+    unbound.draw("sheet-inputs", () => { drew = true; return null; });
+    expect(drew, "No target means no body, so no write authority").toBe(false);
     expect(j.writes).toHaveLength(count);
     expect(unbound.owner()!.doc).toEqual(before);
     expect(unbound.owner()!.handle!.revision).toBe(revision);

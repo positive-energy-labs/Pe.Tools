@@ -47,7 +47,7 @@ import type { PlaceInput } from "./typed-place";
 import type { ReadingContext, UseSource } from "./source-contract";
 import { refusalOf, valueOf, type DrawContext, type EditFailure, type EditHistory, type TypedRoute } from "../route/typed-route";
 import type { ReadingState } from "@pe/agent-contracts";
-import { absentLine } from "./reading-line";
+import { absentLine, failureLine } from "./reading-line";
 import { cancelAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 import { observeSubject, subjectScopeKey, type SubjectState } from "./subject";
 
@@ -651,7 +651,8 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
       // A pane that names a read draws only over a present value: the shell's one line stands in for
       // reading, refused and not-yet-run, so a body never meets a missing value. A pane with no read always draws.
       const value = pane.read ? mounted.value(pane.read) : undefined;
-      if (value && !("value" in value)) return absentLine(value);
+      // A failed basis outranks the wait it causes: the core pane says what failed, not that it is reading.
+      if (value && !("value" in value)) return pane.read === spec.core && mounted.failure() ? failureLine(mounted.failure()!) : absentLine(value);
       const core = mounted.value();
       const token = basis();
       const drawnOwners = new Map(owners);

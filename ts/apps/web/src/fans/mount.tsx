@@ -10,7 +10,8 @@ import { elementSubject } from "@pe/ducts-domain/work-subject";
 import type { SubjectKey } from "@pe/kit/lang/attention";
 import { SubjectTextContext } from "@pe/kit/lang/reach";
 import { useMemo } from "react";
-import type { FansDrawContext } from "./route.ts";
+import { sheet, type FansDrawContext } from "./route.ts";
+import { valueOf } from "#/route/typed-route";
 import { issueOf, issueSubject } from "../ducts/cell-focus";
 import { ductsLink } from "../ducts/identity.ts";
 import { subjectNamer } from "../ducts/subject-text";
@@ -59,10 +60,12 @@ export function useSheetData(ctx: SheetContext, snapshot: DuctSnapshot) {
 }
 export function RosterBody({ ctx }: { ctx: SheetContext }) {
   const authored = ctx.page.read();
-  const snapshot = sheetSnapshot(ctx.value.value?.sheetSnapshot);
-  const fans = ctx.value.value?.fans;
-  const roster = rosterOrder(ctx.value.value?.rows ?? fans?.rows ?? []);
-  const busy = ctx.value.state === "refreshing";
+  // This pane's read is the roster; the open sheet is a second reading, and it wins where it is held.
+  const opened = ctx.read(sheet), held = valueOf(opened) ?? ctx.value.value;
+  const snapshot = sheetSnapshot(held.sheetSnapshot);
+  const fans = held.fans;
+  const roster = rosterOrder(held.rows ?? fans?.rows ?? []);
+  const busy = opened.state === "reading" || opened.state === "refreshing";
   const nameOf = useMemo(
     () => ("kind" in snapshot ? (id: number) => String(id) : subjectNamer(snapshot)),
     [snapshot],
@@ -88,7 +91,7 @@ export function RosterBody({ ctx }: { ctx: SheetContext }) {
           open: open,
           finding: ctx.write("finding"),
           busy: busy,
-          loading: ctx.value.state === "refreshing",
+          loading: busy,
         }}
       />
       {("kind" in snapshot ? [] : sheetSystems(snapshot)).map((name) => (

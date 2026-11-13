@@ -36,7 +36,7 @@ test("JZ Ducts chooser search box does not move across recorded Reading settleme
       await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
       const input = document.querySelector<HTMLInputElement>('input[aria-label="Search systems"]')!;
       const { x, y, width, height } = input.getBoundingClientRect();
-      return { x, y, width, height, reading: !!document.querySelector('[data-startup]'), connected: input.isConnected,
+      return { x, y, width, height, reading: !!document.querySelector('[data-reading="reading"]'), connected: input.isConnected,
         statuses: Array.from(document.querySelectorAll('[role="status"], [role="alert"]')).map(n => ({ text: n.textContent, y: n.getBoundingClientRect().y, height: n.getBoundingClientRect().height })) };
     });
     const before = await measure();
@@ -448,8 +448,7 @@ test("JX2 retain the pane through waiting, a refused subject, hiding and returni
     await vi.waitFor(() =>
       expect(j.mount.value(), "B05: refusal is honest and preserves the last answer").toMatchObject(
         {
-          current: false,
-          status: "unavailable",
+          state: "stale",
           value: retained,
           reason: expect.stringContaining("unavailable"),
         },
