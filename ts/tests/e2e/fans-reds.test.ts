@@ -17,9 +17,9 @@ const MALFORMED = /Malformed route value/;
 const out = () => dirname(process.env.E2E_RESULT_PATH!);
 
 /** The first visible control in `scope` whose text matches `pattern`, with its press point. */
-function find(page: TypedPage, scope: string, pattern: string) {
+function find(page: TypedPage, scope: string, pattern: string, role?: "button") {
   return page.evaluate(
-    (scope, pattern) => {
+    (scope, pattern, role) => {
       const re = new RegExp(pattern, "i");
       const name = (e: HTMLElement) =>
         (e.innerText ?? "").trim() || e.getAttribute("aria-label") || "";
@@ -29,7 +29,12 @@ function find(page: TypedPage, scope: string, pattern: string) {
         ),
       ]
         // An icon-only control (a folded pane rail's expand press) is named by its aria-label.
-        .filter((e) => e.getClientRects().length > 0 && re.test(name(e)))
+        .filter(
+          (e) =>
+            (!role || e.matches('button, [role="button"]')) &&
+            e.getClientRects().length > 0 &&
+            re.test(name(e)),
+        )
         .sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top);
       for (const element of candidates) {
         element.scrollIntoView({ block: "center" });
@@ -52,13 +57,20 @@ function find(page: TypedPage, scope: string, pattern: string) {
     },
     scope,
     pattern,
+    role ?? null,
   );
 }
 
-async function press(page: TypedPage, scope: string, pattern: string, timeout = 60_000) {
+async function press(
+  page: TypedPage,
+  scope: string,
+  pattern: string,
+  timeout = 60_000,
+  role?: "button",
+) {
   let hit: Awaited<ReturnType<typeof find>> = null;
   await expect
-    .poll(async () => (hit = await find(page, scope, pattern))?.disabled ?? "absent", {
+    .poll(async () => (hit = await find(page, scope, pattern, role))?.disabled ?? "absent", {
       timeout,
       message: `enabled control /${pattern}/ in ${scope}`,
     })
@@ -228,12 +240,18 @@ test("resume round trip keeps /fans decodable and drawn through tabs, history an
   const checkpoints: unknown[] = [];
   try {
     await openFans(page);
-    // Non-vacuous anchor: the four panes, a decodable inputSort and a quiet console hold here today.
+    // openFans selected a real fan through the roster. Fresh Places need no explicit inputSort.
     checkpoints.push(await settle(page, "fans first open", FANS_PANES, "inputSort"));
-    expect(
-      (await reading(page)).raw.inputSort,
-      "the Driver's start state carries inputSort",
-    ).toBeDefined();
+    const selected = (await reading(page)).raw.fan;
+    expect(JSON.parse(selected ?? "null"), "the journey opened one fan").toMatchObject({
+      kind: "ids",
+      ids: [expect.any(String)],
+    });
+    const retainedSelection = async () =>
+      expect(
+        (await reading(page)).raw.fan,
+        "the journey's fan selection survives return",
+      ).toBe(selected);
     // The person types /ducts once (Driver step b); that opens the Ducts tab beside Fans.
     await page.send("Page.navigate", { url: new URL("/ducts", process.env.E2E_WEB!).href });
     checkpoints.push(await settle(page, "ducts typed", DUCTS_PANES, "threadSort"));
@@ -244,6 +262,7 @@ test("resume round trip keeps /fans decodable and drawn through tabs, history an
     ] as const) {
       await press(page, '[data-pane-id="tools"]', tab);
       checkpoints.push(await settle(page, label, [...panes], field));
+      if (field === "inputSort") await retainedSelection();
     }
     for (const [label, delta, panes, field] of [
       ["back to ducts", -1, DUCTS_PANES, "threadSort"],
@@ -254,11 +273,13 @@ test("resume round trip keeps /fans decodable and drawn through tabs, history an
         entryId: history.entries[history.currentIndex + delta]!.id,
       });
       checkpoints.push(await settle(page, label, [...panes], field));
+      if (field === "inputSort") await retainedSelection();
     }
     const loads = page.loadCount();
     await page.send("Page.reload", { ignoreCache: true });
     await expect.poll(() => page.loadCount(), { timeout: 30_000 }).toBeGreaterThan(loads);
     checkpoints.push(await settle(page, "reload fans", FANS_PANES, "inputSort"));
+    await retainedSelection();
   } catch (error) {
     await capture(page, "resume-failed", { checkpoints });
     throw error;
@@ -303,6 +324,9 @@ test("H1: a MUAS-1 ESP write refuses for its shared type and MUAS-2 keeps its va
   const seen: Record<string, unknown> = {};
   try {
     await openFans(page);
+    // A fresh Place can read model values before Work exists, but editing requires Start.
+    if (await find(page, "body", "^Start$", "button"))
+      await press(page, "body", "^Start$", 60_000, "button");
     // openFans opened the roster's one MUAS-1 row, port 2 (the Driver's walk). The open fan
     // draws its own Unit ESP row; its key carries MUAS-1's element id.
     const espRow = () =>
