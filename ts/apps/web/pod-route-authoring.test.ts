@@ -37,6 +37,10 @@ test("Snowdon publishes deterministic browser and host bytes; tampering either r
   const second = await build();
   expect(first.bytes).toEqual(second.bytes);
   expect(first.artifact.artifact.executables).toEqual(JSON.parse(readFileSync(`${root}/routes/voltage-drop/route.artifact`,"utf8")).artifact.executables);
+  // Compare payloads too: the CLI and in-process publisher must emit identical web and host bytes.
+  expect(JSON.parse(new TextDecoder().decode(first.bytes)).executables).toEqual(
+    JSON.parse(readFileSync(`${root}/routes/voltage-drop/route.artifact`, "utf8")).executables,
+  );
   expect(first.declaration).toEqual(second.declaration);
   expect(podRouteDeclarationSchema.parse(first.declaration)).toEqual(first.declaration);
   const { loadPodRoute } = await import("./src/route/pod-module.ts");

@@ -131,6 +131,8 @@ export async function buildRouteArtifact(options: {
         fileName: () => "route.js",
       },
       rolldownOptions: {
+        // Region paths are hashed bytes too; anchor them to the Pod, not the caller's cwd.
+        cwd: options.root ?? dirname(options.entry),
         external: shared.map((item) => item.specifier),
         output: {
           codeSplitting: false,

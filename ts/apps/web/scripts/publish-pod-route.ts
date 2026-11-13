@@ -41,10 +41,10 @@ if (mode === "--check") {
   const artifactFile = join(root, result.declaration.artifact);
   const checked = JSON.parse(await readFile(artifactFile, "utf8"));
   const hashes = (wire: {
-    executables: {
+    executables: readonly {
       client: string;
       entry: string;
-      members: { path: string; bytes: ArrayLike<number> }[];
+      members: readonly { path: string; bytes: ArrayLike<number> }[];
     }[];
   }) =>
     wire.executables.map(({ client, entry, members }) => ({
