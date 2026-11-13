@@ -109,46 +109,16 @@
   },
   "verbs": {
     "bind": {
-      "kind": "command",
-      "input": "verb:bind",
+      "entry": "page.bind",
       "label": "Bind",
       "effect": "SessionWrite",
-      "review": "none",
-      "deps": {
-        "page": [
-          "page"
-        ],
-        "work": [],
-        "readings": [
-          "value"
-        ]
-      },
-      "captures": [
-        "value"
-      ],
-      "entry": "page.bind",
-      "intent": "bind"
+      "review": "none"
     },
     "read": {
-      "kind": "command",
-      "input": "verb:read",
+      "entry": "bind.target",
       "label": "Read binding",
       "effect": "Read",
-      "review": "none",
-      "deps": {
-        "page": [
-          "page"
-        ],
-        "work": [],
-        "readings": [
-          "value"
-        ]
-      },
-      "captures": [
-        "value"
-      ],
-      "entry": "bind.target",
-      "intent": "read"
+      "review": "none"
     }
   },
   "band": [],
@@ -166,22 +136,6 @@
     "kind": "pane",
     "id": "main"
   },
-  "stages": {
-    "main": {
-      "word": "Bind",
-      "panes": [
-        "main"
-      ],
-      "verbs": [
-        "bind",
-        "read"
-      ]
-    }
-  },
-  "stageOrder": [
-    "main"
-  ],
-  "predicates": {},
   "cells": {},
   "workFields": {},
   "seeds": {},

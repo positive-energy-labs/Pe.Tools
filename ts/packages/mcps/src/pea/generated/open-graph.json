@@ -86,99 +86,34 @@
   },
   "verbs": {
     "stop": {
-      "kind": "command",
-      "input": "verb:stop",
+      "entry": "instances.stop",
       "label": "Stop Revit",
       "effect": "SessionWrite",
-      "review": "none",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": [
-          "value"
-        ]
-      },
-      "captures": [
-        "value"
-      ],
-      "entry": "instances.stop",
-      "intent": "stop"
+      "review": "none"
     },
     "restart": {
-      "kind": "command",
-      "input": "verb:restart",
+      "entry": "instances.restart",
       "label": "Hot reload Revit",
       "effect": "SessionWrite",
-      "review": "none",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": [
-          "value"
-        ]
-      },
-      "captures": [
-        "value"
-      ],
-      "entry": "instances.restart",
-      "intent": "restart"
+      "review": "none"
     },
     "start": {
-      "kind": "command",
-      "input": "verb:start",
+      "entry": "instances.start",
       "label": "Start Revit and open",
       "effect": "SessionWrite",
-      "review": "none",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": [
-          "value"
-        ]
-      },
-      "captures": [
-        "value"
-      ],
-      "entry": "instances.start",
-      "intent": "start"
+      "review": "none"
     },
     "open": {
-      "kind": "command",
-      "input": "verb:open",
+      "entry": "instances.open",
       "label": "Open document",
       "effect": "SessionWrite",
-      "review": "none",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": [
-          "value"
-        ]
-      },
-      "captures": [
-        "value"
-      ],
-      "entry": "instances.open",
-      "intent": "open"
+      "review": "none"
     },
     "close": {
-      "kind": "command",
-      "input": "verb:close",
+      "entry": "instances.close",
       "label": "Close document",
       "effect": "SessionWrite",
-      "review": "none",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": [
-          "value"
-        ]
-      },
-      "captures": [
-        "value"
-      ],
-      "entry": "instances.close",
-      "intent": "close"
+      "review": "none"
     }
   },
   "band": [],
@@ -196,25 +131,6 @@
     "kind": "pane",
     "id": "documents"
   },
-  "stages": {
-    "main": {
-      "word": "Open document",
-      "panes": [
-        "documents"
-      ],
-      "verbs": [
-        "stop",
-        "restart",
-        "start",
-        "open",
-        "close"
-      ]
-    }
-  },
-  "stageOrder": [
-    "main"
-  ],
-  "predicates": {},
   "cells": {},
   "workFields": {},
   "seeds": {},

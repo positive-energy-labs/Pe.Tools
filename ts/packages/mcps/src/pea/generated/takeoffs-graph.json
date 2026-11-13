@@ -133,11 +133,11 @@
       "agent": "set"
     },
     "stage": {
-      "role": "pose",
+      "role": "stage",
       "schema": "stage",
       "codec": "stage",
       "initial": "adopt",
-      "url": "replace",
+      "url": "push",
       "share": true,
       "agent": "set"
     },
@@ -214,56 +214,16 @@
   },
   "verbs": {
     "initialize": {
-      "kind": "command",
-      "input": "verb:initialize",
+      "entry": "takeoffs.initialize",
       "label": "Initialize",
       "effect": "ModelWrite",
-      "review": "shown",
-      "deps": {
-        "page": [],
-        "work": [
-          "writeIntent",
-          "edits",
-          "bases",
-          "adopt",
-          "decisions",
-          "reviewFlags"
-        ],
-        "readings": [
-          "value"
-        ]
-      },
-      "captures": [
-        "value"
-      ],
-      "entry": "takeoffs.initialize",
-      "intent": "initialize"
+      "review": "shown"
     },
     "adopt": {
-      "kind": "command",
-      "input": "verb:adopt",
+      "entry": "takeoffs.adopt",
       "label": "Adopt",
       "effect": "ModelWrite",
-      "review": "shown",
-      "deps": {
-        "page": [],
-        "work": [
-          "writeIntent",
-          "edits",
-          "bases",
-          "adopt",
-          "decisions",
-          "reviewFlags"
-        ],
-        "readings": [
-          "value"
-        ]
-      },
-      "captures": [
-        "value"
-      ],
-      "entry": "takeoffs.adopt",
-      "intent": "adopt"
+      "review": "shown"
     }
   },
   "band": [],
@@ -281,22 +241,6 @@
     "kind": "pane",
     "id": "adoption"
   },
-  "stages": {
-    "main": {
-      "word": "View adoption",
-      "panes": [
-        "adoption"
-      ],
-      "verbs": [
-        "initialize",
-        "adopt"
-      ]
-    }
-  },
-  "stageOrder": [
-    "main"
-  ],
-  "predicates": {},
   "cells": {},
   "workFields": {
     "writeIntent": {

@@ -102,6 +102,7 @@ export const admittedRouteEntries = new Map<
 
 import {
   decodeRouteGraph,
+  linkRouteGates,
   linkRouteBodies,
   routeBindingSchema,
   routeDiagnostic,
@@ -113,6 +114,7 @@ import type {
   Immutable,
   RouteDiagnostic,
 } from "./route-kernel-data.ts";
+import { RouteGraphWire } from "./route-kernel-data.ts";
 
 const sha = kernelZ.string().regex(/^[a-f0-9]{64}$/);
 const packagePath = kernelZ
@@ -142,10 +144,16 @@ const envelopeSchema = kernelZ.strictObject({
     .min(1),
 });
 const compare = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+/** Fingerprints cover either a discovery projection or an executable body graph.
+ * Admission still decodes the schema of its own consumer before granting authority. */
+function decodeRouteProjection(input: unknown) {
+  const wire = RouteGraphWire.safeParse(input);
+  return wire.success ? { ok: true as const, data: wire.data } : decodeRouteGraph(input);
+}
 function fingerprintEnvelope(input: unknown): RouteFingerprintInput {
   canonicalRouteJson(input);
   const parsed = envelopeSchema.parse(input);
-  const decoded = decodeRouteGraph(parsed.data);
+  const decoded = decodeRouteProjection(parsed.data);
   if (!decoded.ok)
     throw Error(decoded.diagnostics.map((d) => `${d.path}: ${d.message}`).join("; "));
   const distinct = (keys: readonly string[]) => {
@@ -207,7 +215,7 @@ export interface PackageRouteAdmissionEvidence {
 export interface BuiltinClosure {
   readonly source: "builtin-closure";
   readonly version: 1;
-  readonly data: KernelGraph;
+  readonly data: KernelGraph | RouteGraphWire;
   readonly variants: readonly { readonly client: "web" | "pea"; readonly entry: string }[];
   readonly modules: readonly { readonly id: string; readonly sha256: string }[];
   readonly inputs: readonly { readonly id: string; readonly sha256: string }[];
@@ -223,7 +231,7 @@ export type RouteFingerprintEnvelope =
 export async function builtinClosureFingerprint(
   closure: BuiltinClosure,
 ): Promise<RouteFingerprint> {
-  const decoded = decodeRouteGraph(closure.data);
+  const decoded = decodeRouteProjection(closure.data);
   if (!decoded.ok) throw Error("Invalid builtin declaration");
   for (const list of [closure.modules, closure.inputs, closure.externals]) {
     if (new Set(list.map((member) => member.id)).size !== list.length)
@@ -783,10 +791,11 @@ function admitHostProjection(
   fingerprint: RouteFingerprint,
   source: "builtin-closure" | "pod-bytes" = "builtin-closure",
 ): HostRouteAdmission {
-  const decoded = decodeRouteGraph(module.data);
+  const wire = RouteGraphWire.safeParse(module.data);
+  const decoded = wire.success ? { ok: true as const, data: wire.data } : { ok: false as const, diagnostics: wire.error.issues.map(issue => routeDiagnostic(module.data, issue.path.join("."), "", "RouteGraphWire", issue.message, "schema")) };
   if (!decoded.ok) return decoded;
   const data = decoded.data;
-  const errors: RouteDiagnostic[] = [];
+  const errors: RouteDiagnostic[] = linkRouteGates(data, module.schemas);
   const fail = (path: string, message: string) =>
     errors.push(routeDiagnostic(data, path, "", "neutral host binding", message));
   if (canonicalRouteJson(data) !== canonicalRouteJson(closure.data))

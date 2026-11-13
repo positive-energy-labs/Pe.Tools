@@ -356,20 +356,6 @@
     ],
     "sized": "end"
   },
-  "stages": {
-    "main": {
-      "word": "Settings",
-      "panes": [
-        "settings",
-        "sheet"
-      ],
-      "verbs": []
-    }
-  },
-  "stageOrder": [
-    "main"
-  ],
-  "predicates": {},
   "cells": {},
   "workFields": {},
   "seeds": {},

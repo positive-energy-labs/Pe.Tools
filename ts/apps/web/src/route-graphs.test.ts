@@ -1,5 +1,5 @@
 import { expect, test } from "vite-plus/test";
-import { RouteGraphJson } from "../../../packages/agent-contracts/src/route-kernel-data";
+import { RouteGraphWire as RouteGraphJson } from "../../../packages/agent-contracts/src/route-kernel-data";
 import { routeRegistry } from "./route/registry";
 import { agentFields } from "@pe/agent-contracts";
 
@@ -9,7 +9,7 @@ const projections = import.meta.glob<{ default: unknown }>(
 );
 
 test.each(Object.keys(routeRegistry).sort())("%s wire verbs reflect the declaration without guessing placement", (key) => {
-  const { spec, data, host } = routeRegistry[key]!.module;
+  const { spec, data } = routeRegistry[key]!.module;
   expect(data.band).toEqual([]);
   for (const pane of Object.values(data.panes)) expect(pane.verbs).toEqual([]);
   expect(Object.keys(data.verbs)).toEqual(Object.keys(spec.commands));
@@ -19,7 +19,7 @@ test.each(Object.keys(routeRegistry).sort())("%s wire verbs reflect the declarat
     expect(verb.label).toBe(command.label);
     expect(verb.review).toBe("plan" in command ? "shown" : "none");
     expect(verb.effect).toBe(command.contract.axes.effect);
-    expect(host.schemas[verb.input]).toBe(command.contract.input);
+    expect(Object.keys(verb).sort()).toEqual(["effect", "entry", "label", "review"]);
   }
 });
 

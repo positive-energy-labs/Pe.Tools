@@ -149,7 +149,7 @@ selected: {...field(focusSelectionSchema,"replace"),agent:undefined}
 "zones": field((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","anyOf":[{"type":"array","items":{"type":"string"}},{"type":"string","const":"all"}]}) as z.ZodType<Immutable<Array<string> | "all">>).default([]), "push"),
 "work": field((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","type":"string"}) as z.ZodType<Immutable<string>>).default(""), "push"),
 "r10": field((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","type":"string"}) as z.ZodType<Immutable<string>>).default(""), "push"),
-"stage": field((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","type":"string","const":"adopt"}) as z.ZodType<Immutable<"adopt">>).default("adopt"), "replace"),
+"stage": field((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","type":"string","const":"adopt"}) as z.ZodType<Immutable<"adopt">>).default("adopt"), "push"),
 selected: {...field(focusSelectionSchema,"replace"),agent:undefined}
 }, agent: { policy: "Use the route fields as declared." }, module: "takeoff" },
 } satisfies Record<string, RouteDeclaration>;

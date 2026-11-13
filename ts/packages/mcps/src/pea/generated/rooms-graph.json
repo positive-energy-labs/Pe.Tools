@@ -58,7 +58,7 @@
       }
     },
     "stage": {
-      "role": "pose",
+      "role": "stage",
       "schema": "stage",
       "codec": "stage",
       "initial": "partition",
@@ -141,79 +141,22 @@
   "goal": "value",
   "verbs": {
     "partition": {
-      "kind": "command",
-      "input": "verb:partition",
+      "entry": "rooms.partition",
       "label": "Partition view",
       "effect": "ModelWrite",
-      "review": "shown",
-      "deps": {
-        "page": [
-          "room"
-        ],
-        "work": [
-          "writeIntent",
-          "edits",
-          "marks"
-        ],
-        "readings": [
-          "value"
-        ]
-      },
-      "captures": [
-        "value"
-      ],
-      "entry": "rooms.partition",
-      "intent": "partition"
+      "review": "shown"
     },
     "apply": {
-      "kind": "command",
-      "input": "verb:apply",
+      "entry": "rooms.write",
       "label": "Write room fields",
       "effect": "ModelWrite",
-      "review": "shown",
-      "deps": {
-        "page": [
-          "room"
-        ],
-        "work": [
-          "writeIntent",
-          "edits",
-          "marks"
-        ],
-        "readings": [
-          "value"
-        ]
-      },
-      "captures": [
-        "value"
-      ],
-      "entry": "rooms.write",
-      "intent": "apply"
+      "review": "shown"
     },
     "merge": {
-      "kind": "command",
-      "input": "verb:merge",
+      "entry": "rooms.merge",
       "label": "Merge rooms",
       "effect": "ModelWrite",
-      "review": "shown",
-      "deps": {
-        "page": [
-          "room"
-        ],
-        "work": [
-          "writeIntent",
-          "edits",
-          "marks"
-        ],
-        "readings": [
-          "value"
-        ]
-      },
-      "captures": [
-        "value"
-      ],
-      "entry": "rooms.merge",
-      "intent": "merge"
+      "review": "shown"
     }
   },
   "band": [],
@@ -252,24 +195,6 @@
     ],
     "sized": "end"
   },
-  "stages": {
-    "main": {
-      "word": "Rooms",
-      "panes": [
-        "main",
-        "goal"
-      ],
-      "verbs": [
-        "partition",
-        "apply",
-        "merge"
-      ]
-    }
-  },
-  "stageOrder": [
-    "main"
-  ],
-  "predicates": {},
   "cells": {},
   "workFields": {},
   "seeds": {},

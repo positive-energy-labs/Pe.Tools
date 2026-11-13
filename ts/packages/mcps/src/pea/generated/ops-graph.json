@@ -91,46 +91,16 @@
   },
   "verbs": {
     "run": {
-      "kind": "command",
-      "input": "verb:run",
+      "entry": "ops.read",
       "label": "Run read",
       "effect": "Read",
-      "review": "none",
-      "deps": {
-        "page": [
-          "op"
-        ],
-        "work": [],
-        "readings": [
-          "value"
-        ]
-      },
-      "captures": [
-        "value"
-      ],
-      "entry": "ops.read",
-      "intent": "run"
+      "review": "none"
     },
     "control": {
-      "kind": "command",
-      "input": "verb:control",
+      "entry": "ops.receipt-control",
       "label": "Receipt control",
       "effect": "Read",
-      "review": "none",
-      "deps": {
-        "page": [
-          "op"
-        ],
-        "work": [],
-        "readings": [
-          "value"
-        ]
-      },
-      "captures": [
-        "value"
-      ],
-      "entry": "ops.receipt-control",
-      "intent": "control"
+      "review": "none"
     }
   },
   "band": [],
@@ -148,22 +118,6 @@
     "kind": "pane",
     "id": "main"
   },
-  "stages": {
-    "main": {
-      "word": "Ops",
-      "panes": [
-        "main"
-      ],
-      "verbs": [
-        "run",
-        "control"
-      ]
-    }
-  },
-  "stageOrder": [
-    "main"
-  ],
-  "predicates": {},
   "cells": {},
   "workFields": {},
   "seeds": {},

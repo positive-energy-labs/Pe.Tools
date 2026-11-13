@@ -71,19 +71,6 @@
     "kind": "pane",
     "id": "main"
   },
-  "stages": {
-    "main": {
-      "word": "Design System",
-      "panes": [
-        "main"
-      ],
-      "verbs": []
-    }
-  },
-  "stageOrder": [
-    "main"
-  ],
-  "predicates": {},
   "cells": {},
   "workFields": {},
   "seeds": {},

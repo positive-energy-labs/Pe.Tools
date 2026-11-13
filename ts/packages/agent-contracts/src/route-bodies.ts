@@ -55,6 +55,25 @@ export const routeBindingSchema = z.object({
   bodies: z.record(z.string(), bodySchema),
 });
 export type RouteBindings = z.output<typeof routeBindingSchema>;
+/** Gate values are linked against the actual field schema, never a stage-name table. */
+export function linkRouteGates(data: Pick<import("./route-kernel-data.ts").RouteGraphWire, "key" | "version" | "layout" | "fields" | "subject" | "panes">, schemas: SchemaTable): RouteDiagnostic[] {
+  const errors: RouteDiagnostic[] = [];
+  const walk = (node: LayoutJson, path: string) => {
+    if (node.kind === "pane") {
+      if (!Object.hasOwn(data.panes, node.id)) errors.push(routeDiagnostic(data, `${path}.id`, node.id, "declared pane", "Unknown pane"));
+    } else if (node.kind === "split") node.children.forEach((child, i) => walk(child, `${path}.children.${i}`));
+    else {
+      const condition = node.when;
+      const field = condition === "subject" ? undefined : data.fields[condition.field];
+      const schema = field && "schema" in field ? schemas[field.schema] : undefined;
+      const valid = condition === "subject" ? !!data.subject : !!schema?.safeParse(condition.value).success;
+      if (!valid) errors.push(routeDiagnostic(data, `${path}.when`, condition === "subject" ? "subject" : condition.field, "declared field value", "Gate must name a declared subject or an accepted field value"));
+      walk(node.child, `${path}.child`);
+    }
+  };
+  walk(data.layout, "layout");
+  return errors;
+}
 export function routeDiagnostic(
   data: { key?: string; version?: number },
   path: string,
@@ -545,7 +564,14 @@ export function linkRouteBodies(
   const layout = (node: LayoutJson, path: string) => {
     if (node.kind === "pane") reference(data.panes, node.id, `${path}.id`, "pane");
     else if (node.kind === "gate") {
-      reference(data.predicates, node.when, `${path}.when`, "predicate");
+      if (node.when === "subject") {
+        if (!data.subject) fail(`${path}.when`, "subject", "subject declaration", "Subject gate requires a subject");
+      } else {
+        const field = data.fields[node.when.field];
+        const schema = field && "schema" in field ? bindings.schemas[field.schema] : undefined;
+        if (!schema?.safeParse(node.when.value).success)
+          fail(`${path}.when`, node.when.field, "declared field value", "Gate must name a field and a value accepted by its schema");
+      }
       layout(node.child, `${path}.child`);
     } else {
       if (layoutIds.has(node.id)) fail(`${path}.id`, node.id, "unique split", "Duplicate split id");

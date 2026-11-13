@@ -83,88 +83,22 @@
   },
   "verbs": {
     "read": {
-      "kind": "command",
-      "input": "verb:read",
+      "entry": "families.read",
       "label": "Read families",
       "effect": "SessionWrite",
-      "review": "none",
-      "deps": {
-        "page": [],
-        "work": [
-          "writeIntent",
-          "scope",
-          "excluded",
-          "cells",
-          "patch",
-          "executionOptions",
-          "pod",
-          "takenAt"
-        ],
-        "readings": [
-          "value"
-        ]
-      },
-      "captures": [
-        "value"
-      ],
-      "entry": "families.read",
-      "intent": "read"
+      "review": "none"
     },
     "stop": {
-      "kind": "command",
-      "input": "verb:stop",
+      "entry": "families.cancel-read",
       "label": "Stop family read",
       "effect": "SessionWrite",
-      "review": "none",
-      "deps": {
-        "page": [],
-        "work": [
-          "writeIntent",
-          "scope",
-          "excluded",
-          "cells",
-          "patch",
-          "executionOptions",
-          "pod",
-          "takenAt"
-        ],
-        "readings": [
-          "value"
-        ]
-      },
-      "captures": [
-        "value"
-      ],
-      "entry": "families.cancel-read",
-      "intent": "stop"
+      "review": "none"
     },
     "apply": {
-      "kind": "command",
-      "input": "verb:apply",
+      "entry": "families.apply",
       "label": "Apply families",
       "effect": "ModelWrite",
-      "review": "shown",
-      "deps": {
-        "page": [],
-        "work": [
-          "writeIntent",
-          "scope",
-          "excluded",
-          "cells",
-          "patch",
-          "executionOptions",
-          "pod",
-          "takenAt"
-        ],
-        "readings": [
-          "value"
-        ]
-      },
-      "captures": [
-        "value"
-      ],
-      "entry": "families.apply",
-      "intent": "apply"
+      "review": "shown"
     }
   },
   "band": [],
@@ -182,23 +116,6 @@
     "kind": "pane",
     "id": "main"
   },
-  "stages": {
-    "main": {
-      "word": "Families",
-      "panes": [
-        "main"
-      ],
-      "verbs": [
-        "read",
-        "stop",
-        "apply"
-      ]
-    }
-  },
-  "stageOrder": [
-    "main"
-  ],
-  "predicates": {},
   "cells": {},
   "workFields": {
     "excluded": {
