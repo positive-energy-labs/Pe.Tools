@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import baseline from "./health.baseline.json" with { type: "json" };
-import { census, fsWriteCount, isProduction, PER_FILE, rises, total, type Health } from "./health-census.ts";
+import { census, fsWriteCount, isProduction, PER_FILE, perFileRises, rises, total, type Health } from "./health-census.ts";
 
 // Each count only falls: remove the cast, suppression or mark, or split the file, then
 // `vp run ratchets:tighten`. A total may not rise; code may move between files.
@@ -17,8 +17,13 @@ describe("production health counts", () => {
 
   for (const name of PER_FILE)
     it(`${name} rise in no file, and a new file starts at 0`, () => {
-      expect(rises(actual[name], baseline[name]), `${name} hold per file; the owning module is the only door`).toEqual([]);
+      expect(perFileRises(name, actual[name], baseline[name]), `${name} hold per file; only a named owner (OWNERS) may absorb writes`).toEqual([]);
     });
+
+  it("lets a named owner absorb writes and holds every other file", () => {
+    expect(perFileRises("fsWrites", { "ts/packages/host-contracts/src/store.ts": 9, "ts/apps/host/src/x.ts": 1 }, { "ts/packages/host-contracts/src/store.ts": 4 }))
+      .toEqual(["ts/apps/host/src/x.ts: 0 -> 1"]);
+  });
 
   it("counts every filesystem mutation spelling and nothing that only reads", () => {
     const sample = `
