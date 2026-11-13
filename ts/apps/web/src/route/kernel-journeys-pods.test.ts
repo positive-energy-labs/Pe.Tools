@@ -521,8 +521,10 @@ test("JP5 bootstrap replaces only unchanged imports and Home discovers the untru
       expect(screen.queryByText(current.name), "H16: obsolete declarations cannot become executable Home rows").toBeNull();
       await act(async () => { gate.resolve(); await completed.promise; });
       const report = await completed.promise;
+      // Reconciliation's package listing measured about 800 ms; allow 5x that cost here.
+      // The one-second default also races this census on the clean integration baseline.
       if (!modified && report.outcomes[0]?.outcome === "updated")
-        await vi.waitFor(async () => expect((await routes!.list()).find(row => row.packageId === manifest.id)).toMatchObject({ fingerprint: current.fingerprint }));
+        await vi.waitFor(async () => expect((await routes!.list()).find(row => row.packageId === manifest.id)).toMatchObject({ fingerprint: current.fingerprint }), { timeout: 4_000 });
       // Import completion precedes the owner's asynchronous lifecycle reconciliation.
       // The provider's real interval re-reads; neither router nor Home is reloaded or remounted.
       await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
