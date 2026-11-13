@@ -132,7 +132,8 @@ for (const key of keys) {
     const agent = typed.spec.agent !== false;
     const fields = Object.entries(typed.spec.fields).map(([key, field]) => {
       const json = z.toJSONSchema(field.schema, { io: "input" });
-      const schema = field.role === "subject"
+      // A scene pose's geometric refinements cannot survive JSON Schema projection.
+      const schema = key === "sceneView" ? "sceneViewSchema" : field.role === "subject"
         ? `subjectSchema(${(json.oneOf as {properties?:{ids?:{maxItems?:number}}}[]).find(part=>part.properties?.ids)?.properties!.ids!.maxItems})`
         : `(z.fromJSONSchema(${JSON.stringify(json)}) as z.ZodType<Immutable<${schemaType(json)}>>)`;
       return `${JSON.stringify(key)}: ${agent ? "field" : "personField"}(${schema}${field.initial === undefined ? ".optional()" : `.default(${JSON.stringify(field.initial)})`}, ${JSON.stringify(field.url)})`;

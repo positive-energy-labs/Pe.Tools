@@ -1,4 +1,11 @@
-import { useMemo, useRef, useSyncExternalStore, type PointerEvent } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type PointerEvent,
+} from "react";
 import type { SceneSection, PlaneViewport } from "@pe/agent-contracts";
 import { Button } from "@pe/kit/lang/button";
 import { ButtonGroup } from "@pe/kit/lang/button-group";
@@ -30,6 +37,10 @@ export function SectionEditor({
   thumbnail: (axis: CutAxis, canvas: HTMLCanvasElement | null) => void;
 }) {
   const draft = useSyncExternalStore(controller.subscribe, controller.read);
+  const [refusal, setRefusal] = useState<string | null>(null);
+  useEffect(() => {
+    setRefusal(null);
+  }, [section, axis]);
   const thumbnailRefs = useMemo(
     () =>
       Object.fromEntries(
@@ -52,7 +63,9 @@ export function SectionEditor({
   const publish = (next: typeof cut) => {
     if (!axis) return;
     controller.begin({ kind: "cuts", cuts: { ...cuts, [axis]: next } });
-    controller.release();
+    const reason = controller.release();
+    setRefusal(reason);
+    return reason ? { message: reason } : null;
   };
   const offset: CellHandle = {
     owner: { route: "picture", label: "Section offset" },
@@ -62,8 +75,7 @@ export function SectionEditor({
     stage: async (value) => {
       if (typeof value !== "number" || !Number.isFinite(value))
         return { message: "Enter finite feet" };
-      publish({ ...cut, offset: value });
-      return null;
+      return publish({ ...cut, offset: value }) ?? null;
     },
     clear: async () => {
       publish({ ...cut, offset: 0 });
@@ -75,8 +87,7 @@ export function SectionEditor({
     owner: { route: "picture", label: "Kept side" },
     stage: async (value) => {
       if (typeof value !== "boolean") return { message: "Choose a kept side" };
-      publish({ ...cut, keepInside: value });
-      return null;
+      return publish({ ...cut, keepInside: value }) ?? null;
     },
     clear: async () => {
       publish({ ...cut, keepInside: true });
@@ -112,7 +123,7 @@ export function SectionEditor({
           ...own,
           cuts: { ...own.cuts, [axis!]: mergeCut(own.cuts[axis!], viewport!.scale) },
         });
-      controller.release();
+      setRefusal(controller.release());
     }
   };
   return (
@@ -182,6 +193,7 @@ export function SectionEditor({
               kind="advisory"
               label={
                 draft?.refusal ??
+                refusal ??
                 "Drag to draw; drag corners or edges. Right-click an edge to insert, a corner to delete. Bent cuts are uncapped."
               }
             />
@@ -207,12 +219,14 @@ export function SectionEditor({
             e.preventDefault();
             e.stopPropagation();
             e.currentTarget.focus();
+            setRefusal(null);
             e.currentTarget.setPointerCapture(e.pointerId);
-            const target = (e.target as Element).closest("[data-node], [data-edge]"),
+            const target =
+                e.target instanceof Element ? e.target.closest("[data-node], [data-edge]") : null,
               node = target?.getAttribute("data-node") ?? null,
               edge = target?.getAttribute("data-edge") ?? null;
             const p = local(e),
-              points = cut.polyline.map((p) => [...p] as Point);
+              points = cut.polyline.map((p): Point => [...p]);
             const nodes =
               node !== null
                 ? [Number(node)]
@@ -260,10 +274,11 @@ export function SectionEditor({
           onContextMenu={(e) => {
             e.preventDefault();
             e.stopPropagation();
-            const target = (e.target as Element).closest("[data-node], [data-edge]");
+            const target =
+              e.target instanceof Element ? e.target.closest("[data-node], [data-edge]") : null;
             const node = target?.getAttribute("data-node") ?? null,
               edge = target?.getAttribute("data-edge") ?? null;
-            const points = cut.polyline.map((p) => [...p] as Point);
+            const points = cut.polyline.map((p): Point => [...p]);
             if (node !== null) points.splice(Number(node), 1);
             else if (edge !== null && points.length < 56) {
               const i = Number(edge),
@@ -302,17 +317,29 @@ export function SectionEditor({
                   </>
                 )}
                 <foreignObject x={a[0] - 10} y={a[1] - 12} width={24} height={24}>
-            <Button data-node={i} label={`Cut corner ${i + 1}; arrow keys move by 0.25 feet`}
-              onKeyDown={e => {
-                if (e.altKey || e.ctrlKey || e.metaKey) return;
-                const moves: Record<string, Point> = { ArrowLeft: [-0.25, 0], ArrowRight: [0.25, 0],
-                  ArrowUp: [0, 0.25], ArrowDown: [0, -0.25] };
-                const direction = moves[e.key];
-                if (!direction) return;
-                e.preventDefault(); e.stopPropagation();
-                publish({ ...cut, polyline: cut.polyline.map((p, n) => n === i ?
-                  [p[0] + direction[0]!, p[1] + direction[1]!] : p) });
-              }}>
+                  <Button
+                    data-node={i}
+                    label={`Cut corner ${i + 1}; arrow keys move by 0.25 feet`}
+                    onKeyDown={(e) => {
+                      if (e.altKey || e.ctrlKey || e.metaKey) return;
+                      const moves: Record<string, Point> = {
+                        ArrowLeft: [-0.25, 0],
+                        ArrowRight: [0.25, 0],
+                        ArrowUp: [0, 0.25],
+                        ArrowDown: [0, -0.25],
+                      };
+                      const direction = moves[e.key];
+                      if (!direction) return;
+                      e.preventDefault();
+                      e.stopPropagation();
+                      publish({
+                        ...cut,
+                        polyline: cut.polyline.map((p, n) =>
+                          n === i ? [p[0] + direction[0]!, p[1] + direction[1]!] : p,
+                        ),
+                      });
+                    }}
+                  >
                     {i + 1}
                   </Button>
                 </foreignObject>

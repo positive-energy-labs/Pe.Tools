@@ -158,6 +158,9 @@ it("P3-C section editing shares the captured renderer and preserves orbit across
     calls = io.call.mock.calls.length;
   fireEvent.click(view.getByRole("button", { name: "Edit bent section" }));
   expect(io.scene?.plane?.axis).toBe("top");
+  const panned = { kind: "plane" as const, scale: 24, tx: 100, ty: 200 };
+  act(() => io.scene?.onPlane?.(panned, "gesture"));
+  expect(io.scene?.plane?.viewport).toEqual(panned);
   expect(view.setPage).not.toHaveBeenCalled();
   fireEvent.click(view.getByRole("button", { name: "Edit cut from North" }));
   expect(io.scene?.plane?.axis).toBe("north");

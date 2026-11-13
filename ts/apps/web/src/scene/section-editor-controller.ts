@@ -32,7 +32,8 @@ export class SectionEditorController {
     this.reconcile();
     if (this.basis === null) return;
     try {
-      sceneSectionSchema.parse(section);
+      const parsed = sceneSectionSchema.safeParse(section);
+      if (!parsed.success) throw new Error(parsed.error.issues[0]?.message ?? "Invalid cut");
       if (section.kind === "cuts") {
         const bounds = this.bounds();
         if (!bounds) throw new Error("No scene to section");
@@ -59,6 +60,7 @@ export class SectionEditorController {
       JSON.stringify(draft.section) !== JSON.stringify(this.source().section)
     )
       this.commit(draft.section, "named");
+    return draft?.refusal ?? null;
   }
   cancel = () => {
     this.basis = null;

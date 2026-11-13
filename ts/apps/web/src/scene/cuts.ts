@@ -176,7 +176,7 @@ export function sectionCuts(section: SceneSection | null, bounds: Bounds): Cuts 
   if (section?.kind === "plane") {
     const axis = section.axis === "z" ? "north" : "top",
       [lo, hi] = axisBounds(bounds, axis);
-    const offset = section.axis === "z" ? section.offset : section.offset;
+    const offset = section.offset;
     const horizontal = section.axis !== "x";
     cuts[axis] = {
       polyline: horizontal
@@ -198,7 +198,7 @@ export function sectionCuts(section: SceneSection | null, bounds: Bounds): Cuts 
 
 /** A release within ten screen pixels merges neighbours; a collapsed bevel drops both ends. */
 export function mergeCut(cut: Cut, pixelsPerFoot: number): Cut {
-  const p = cut.polyline.map((p) => [...p] as Point);
+  const p = cut.polyline.map((p): Point => [...p]);
   for (let i = p.length - 1; i > 0; i--)
     if (Math.hypot(...sub(p[i]!, p[i - 1]!)) * pixelsPerFoot <= 10) p.splice(i, 1);
   if (cut.closed && p.length > 1 && Math.hypot(...sub(p[0]!, p.at(-1)!)) * pixelsPerFoot <= 10)
@@ -208,7 +208,7 @@ export function mergeCut(cut: Cut, pixelsPerFoot: number): Cut {
 
 /** Move an edge along its normal, retaining the neighbouring lines. A bevel folds to their corner. */
 export function moveCutEdge(cut: Cut, edge: number, delta: Point): Cut {
-  const p = cut.polyline.map((p) => [...p] as Point),
+  const p = cut.polyline.map((p): Point => [...p]),
     n = p.length;
   const end = (edge + 1) % n,
     a = p[edge]!,

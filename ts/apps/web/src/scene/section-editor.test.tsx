@@ -15,7 +15,10 @@ function fixture() {
     [8, 1],
     [8, 8],
   ];
-  const source = { document: "doc", section: { kind: "cuts", cuts } as SceneSection };
+  const source: { document: string; section: SceneSection } = {
+    document: "doc",
+    section: { kind: "cuts", cuts },
+  };
   const commit = vi.fn(),
     onAxis = vi.fn();
   const controller = new SectionEditorController(

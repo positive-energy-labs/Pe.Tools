@@ -9,6 +9,7 @@ import {
   moveCutEdge,
   packCuts,
   sectionCuts,
+  type Cut,
   type Point,
 } from "./cuts";
 import { clipContains, rebaseClip, sectionContains, sectionVolume } from "./section";
@@ -210,14 +211,14 @@ test("P3-D explicit box and plane conversion preserves halfspaces; neighbours me
     [0, 0],
     [2, 0],
   ]);
-  const bevel = {
+  const bevel: Cut = {
     ...emptyCuts().top,
     polyline: [
       [0, 0],
       [3, 0],
       [4, 1],
       [4, 4],
-    ] as Point[],
+    ],
   };
   expect(moveCutEdge(bevel, 1, [2, -2]).polyline).toEqual([
     [0, 0],

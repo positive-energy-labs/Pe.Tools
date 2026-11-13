@@ -40,6 +40,7 @@ import {
   type SceneView,
   type SceneSection,
   type Immutable,
+  type PlaneViewport,
 } from "@pe/agent-contracts";
 import { type LiveOrbit } from "@pe/kit/lang/live-orbit";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
@@ -250,6 +251,9 @@ export function ModelPicture({
   const section = draft && !draft.refusal ? draft.section : sceneView.section;
   const [editing, setEditing] = useState(false);
   const [axis, setAxis] = useState<PlaneAxis | null>(null);
+  const [axisPose, setAxisPose] = useState<{ axis: PlaneAxis; viewport: PlaneViewport } | null>(
+    null,
+  );
   const [thumbs, setThumbs] = useState<Partial<Record<PlaneAxis, HTMLCanvasElement | null>>>({});
   const thumbnail = useCallback((axis: PlaneAxis, canvas: HTMLCanvasElement | null) => {
     setThumbs((before) => (before[axis] === canvas ? before : { ...before, [axis]: canvas }));
@@ -257,6 +261,7 @@ export function ModelPicture({
   useEffect(() => {
     setEditing(false);
     setAxis(null);
+    setAxisPose(null);
   }, [documentKey]);
   const clip = useMemo(() => {
     const cut =
@@ -273,14 +278,18 @@ export function ModelPicture({
   }, [section, sectionSubject, look.layers.preset, look.section.paddingFt, draft, bounds]);
   const clipVolume = clip.volume;
   const shownView = { preset, section: section ?? clipVolume?.section ?? null };
+  const baseLayers = useMemo(
+    () => drawn.flatMap((layer) => layer.draw({ meshes, paintOf })),
+    [drawn, meshes, paintOf],
+  );
   const pictureLayers = useMemo(
     () => [
-      ...drawn.flatMap((layer) => layer.draw({ meshes, paintOf })),
+      ...baseLayers,
       ...(editing && section?.kind === "cuts" && bounds && !draft?.refusal && !clip.refusal
         ? [cutCurtain(section.cuts, bounds.scene)]
         : []),
     ],
-    [drawn, meshes, paintOf, editing, section, bounds, draft?.refusal, clip.refusal],
+    [baseLayers, editing, section, bounds, draft?.refusal, clip.refusal],
   );
   const commitSection = (next: SceneSection, gesture = false) => {
     if (gesture && !editor.read()) return;
@@ -330,8 +339,15 @@ export function ModelPicture({
     overlay &&
     sectionProject(overlay.project, clip.refusal ? null : shownView.section, bounds?.scene);
   const plane = useMemo(
-    () => (axis && bounds && size ? { axis, viewport: fitPlane(axis, bounds.scene, size) } : null),
-    [axis, bounds, size],
+    () =>
+      axis && bounds && size
+        ? {
+            axis,
+            viewport:
+              axisPose?.axis === axis ? axisPose.viewport : fitPlane(axis, bounds.scene, size),
+          }
+        : null,
+    [axis, axisPose, bounds, size],
   );
 
   const keysOf = useMemo(() => {
@@ -392,6 +408,9 @@ export function ModelPicture({
         preset={preset}
         clipVolume={clipVolume}
         plane={plane}
+        onPlane={(viewport) => {
+          if (axis) setAxisPose({ axis, viewport });
+        }}
         thumbs={thumbs}
         isolated={layers.has("meshes") ? null : NONE}
         layers={pictureLayers}
