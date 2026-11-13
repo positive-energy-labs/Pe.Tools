@@ -96,7 +96,9 @@ describe("catalog dependency graph", () => {
       expect(byKey.get(`command:ducts.rehearse-${kind}`)).toMatchObject({ effect: "TransactRead", rollsBack: true });
     for (const key of ["ducts.heal", "ducts.assign-fan", "revit.apply.parameter-links"]) {
       expect(byKey.get(key)).toMatchObject({ effect: "ModelWrite", internal: true, previewBy: `${key}.preview` });
-      expect(byKey.get(`${key}.preview`)).toMatchObject({ effect: "TransactRead", rollsBack: true });
+      // The effect is the native handler's scope: the parameter-links preview opens no transaction, so it is a Read.
+      expect(byKey.get(`${key}.preview`)).toMatchObject(
+        key === "revit.apply.parameter-links" ? { effect: "Read", rollsBack: false } : { effect: "TransactRead", rollsBack: true });
     }
     for (const row of catalogEntries.filter((row) => row.key.startsWith("command:") && row.effect === "ModelWrite"))
       expect(["Read", "TransactRead"]).toContain(byKey.get(row.previewBy!)?.effect);

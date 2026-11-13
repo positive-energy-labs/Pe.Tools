@@ -79,7 +79,9 @@ internal static class OpRunner {
         int added = stray.Sum(change => change.Added), modified = stray.Sum(change => change.Modified), deleted = stray.Sum(change => change.Deleted);
         switch (effect) {
             case OpEffect.SessionWrite or OpEffect.ModelWrite when stray.Count != 0:
-                // UNPROVEN[spike A]: that a SessionWrite's commit lists views only is not checked here yet.
+                // Not checked: that a SessionWrite changed views only. Spike A (fresh Revit 2025) shows a crop commit
+                // lists the view and two non-View elements beside it, so a strict "views only" rule would refuse
+                // the capture itself. The transaction names and counts are stated instead.
                 return new Touched.Wrote(names, added, modified, deleted);
             case OpEffect.SessionWrite when scope.Restores.Count != 0:
                 return new Touched.Restored(scope.Restores.Select(View).Distinct().ToList());

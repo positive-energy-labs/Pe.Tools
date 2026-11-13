@@ -35,7 +35,7 @@ public sealed record ScopeFacts(bool Used, bool Posted, IReadOnlyCollection<stri
 
 /// <summary>What the runner hands a handler, whatever its effect. <see cref="Document" /> is null for an op that needs none.</summary>
 public abstract class OperationScope(Document? document) {
-    private int _contained;
+    private readonly List<Document> _discarding = [];
     protected Document Document => document
         ?? throw new InvalidOperationException("This operation has no document, so its scope cannot open a transaction.");
 
@@ -47,13 +47,17 @@ public abstract class OperationScope(Document? document) {
     /// <summary>The handler posted a ribbon command: Revit runs it after the call returns, where nothing here can see it.</summary>
     public bool Posted { get; protected set; }
     public ScopeFacts Facts() => new(this.Used, this.Posted, this.Own.ToList(), this.Restores.ToList());
-    /// <summary>True while the scope is inside work whose commits it discards. Read by the change monitor on the API thread.</summary>
-    public bool Containing => this._contained > 0;
+    /// <summary>
+    ///     True while the scope is discarding what is committed in <paramref name="changed" />. Read by the change
+    ///     monitor on the API thread. Compared with Document.Equals: Revit hands each event its own wrapper, so
+    ///     ReferenceEquals is always false (spike A fact 4, fresh Revit 2025, spike/kernel2-a 55cfb68c).
+    /// </summary>
+    public bool Discards(Document? changed) => changed is not null && this._discarding.Any(document => document.Equals(changed));
 
-    protected T Contained<T>(Func<T> work) {
+    protected T Discarding<T>(Document document, Func<T> work) {
         this.Used = true;
-        this._contained++;
-        try { return work(); } finally { this._contained--; }
+        this._discarding.Add(document);
+        try { return work(); } finally { _ = this._discarding.Remove(document); }
     }
 
     protected void Commit(string name, Action apply) {
@@ -70,7 +74,7 @@ public abstract class OperationScope(Document? document) {
 
 public sealed class TransactRead(Document? document) : OperationScope(document) {
     /// <summary>Runs <paramref name="work" /> inside a transaction group on the op's document and always rolls it back.</summary>
-    public T Run<T>(string name, Func<T> work) => this.Contained(() => {
+    public T Run<T>(string name, Func<T> work) => this.Discarding(this.Document, () => {
         using var group = new TransactionGroup(this.Document, DocumentSandbox.TransactionNamePrefix + name);
         if (group.Start() != TransactionStatus.Started)
             throw new InvalidOperationException($"'{name}' rollback group could not start.");
@@ -81,13 +85,8 @@ public sealed class TransactRead(Document? document) : OperationScope(document) 
     ///     <paramref name="work" /> may commit only in <paramref name="owned" />, a document the handler opened and
     ///     discards. No transaction is opened here: LoadFamily and EditFamily refuse one.
     /// </summary>
-    // ponytail: containment is by time, not by document. A commit to another document inside this call reads as
-    // discarded. Compare the event's document to `owned` once spike A (fact 4) proves Document.Equals survives
-    // Revit's per-event wrappers; RevitScriptExecutionService's guard found that ReferenceEquals does not.
-    public T InDisposable<T>(Document owned, string name, Func<T> work) {
-        _ = owned ?? throw new ArgumentNullException(nameof(owned));
-        return this.Contained(work);
-    }
+    public T InDisposable<T>(Document owned, string name, Func<T> work) =>
+        this.Discarding(owned ?? throw new ArgumentNullException(nameof(owned)), work);
 }
 
 public sealed class SessionWrite(Document? document) : OperationScope(document) {
@@ -154,7 +153,7 @@ public sealed class ModelWrite(Document? document) : OperationScope(document) {
 }
 
 /// <summary>One committed change Revit reported while a call was running.</summary>
-/// <param name="Contained">Sandbox churn, or a commit a scope was discarding when it fired.</param>
+/// <param name="Contained">Sandbox churn, or a commit in a document the call's scope was discarding when it fired.</param>
 public sealed record ObservedChange(
     string DocumentTitle, IReadOnlyList<string> Transactions, int Added, int Modified, int Deleted, bool Contained);
 
@@ -180,8 +179,9 @@ public static class OperationMonitor {
     public static Window Watch(OperationScope? scope = null) {
         var window = new Window(scope);
         lock (Gate) {
-            // ponytail: two calls open at once cannot tell their commits apart, so both are marked and the runner
-            // calls nothing unauthorized on a marked call. Attribute by document once spike A proves an identity.
+            // ponytail: two calls open at once cannot tell their commits apart (both may target one document), so
+            // both are marked and the runner calls nothing unauthorized on a marked call. Give each commit its
+            // call (an ambient scope on the API thread) if a real overlap ever hides a real unauthorized write.
             if (Open.Count != 0) {
                 window.Overlapped = true;
                 foreach (var other in Open) other.Overlapped = true;
@@ -197,11 +197,12 @@ public static class OperationMonitor {
         if (added == 0 && modified == 0 && deleted == 0) return;
         var names = args.GetTransactionNames().ToList();
         var sandbox = DocumentSandbox.RollbackScopeActive || DocumentSandbox.IsSandboxTransaction(names);
-        var title = args.GetDocument()?.Title ?? "<unknown>";
+        var document = args.GetDocument();
+        var title = document?.Title ?? "<unknown>";
         lock (Gate)
             foreach (var window in Open)
                 window.Add(new ObservedChange(title, names, added, modified, deleted,
-                    sandbox || window.Scope?.Containing == true));
+                    sandbox || window.Scope?.Discards(document) == true));
     }
 
     public sealed class Window : IDisposable {
