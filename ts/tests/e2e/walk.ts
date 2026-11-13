@@ -18,6 +18,8 @@ export type Action = {
   name: string;
   /** Read from the page: can this action run now? */
   can: (c: Ctx) => Promise<boolean>;
+  /** A fixed journey may omit an action whose purpose is already satisfied. */
+  skipWhen?: (c: Ctx) => Promise<boolean>;
   /** The trusted gesture; returns the condition that shows its result on the page. */
   act: (c: Ctx) => Promise<() => Promise<boolean>>;
   /** Deadline for the result (default 60 s). */
@@ -107,9 +109,12 @@ export async function run(
       const t0 = Date.now();
       const results: Record<string, true | string> = {};
       try {
-        if (!(await action.can(c))) throw new Error("its precondition does not hold");
-        const done = await action.act(c);
-        await page.until(done, `${action.name} to settle`, action.ms ?? 60_000);
+        if (await action.skipWhen?.(c)) net.notes.push(`${action.name}: already satisfied`);
+        else {
+          if (!(await action.can(c))) throw new Error("its precondition does not hold");
+          const done = await action.act(c);
+          await page.until(done, `${action.name} to settle`, action.ms ?? 60_000);
+        }
       } catch (error) {
         // The action itself failed: no rule ran on a page it left half-done.
         results["The action settles."] = error instanceof Error ? error.message : String(error);
