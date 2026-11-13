@@ -228,13 +228,14 @@
 
   /**
    * A picture of elements the agent can cite: `revit.context.lens` boxes a 3D view around them (a mutation, through
-   * `pe.do`), then `revit.context.view-image` exports that view cropped to them (a read). The host keeps the PNG once
+   * `pe.do`), then `revit.context.view-image.focus` exports that view cropped to them (it commits a temporary crop and
+   * its undo, so it too goes through `pe.do`; its `restore` says whether the undo held). The host keeps the PNG once
    * per sha at `url`; `registration` places its pixels in model XY (null when the host refused to register it).
    */
   // TODO: with `focus` set, view-image crops to the elements alone; one 7 in elbow came back as two unreadable arcs (pdrop-tour walk, 2026-10-05). Widen the crop (margin, or focus off and the lens box only) so a person can tell what they are looking at.
   pe.picture = async (elementIds, { name, paddingFeet, pixelSize, marginPercent } = {}) => {
     const lens = await pe.do("revit.context.lens", { elementIds, name, paddingFeet });
-    const image = await pe.read("revit.context.view-image", {
+    const image = await pe.do("revit.context.view-image.focus", {
       target: { id: lens.viewId },
       focus: { elementIds },
       pixelSize,

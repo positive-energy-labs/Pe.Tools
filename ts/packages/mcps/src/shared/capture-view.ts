@@ -42,7 +42,7 @@ const captureViewInputSchema = z.object({
     })
     .optional()
     .describe(
-      "Optional crop — exactly one of elementIds, selection, or scopeBox. Uses a temporary crop box that is rolled back, so graphics stay exactly what the user sees. Needs an editable document; not supported on sheets.",
+      "Optional crop — exactly one of elementIds, selection, or scopeBox. Sets a temporary crop box on the view, commits it, and then commits its undo; the answer's restore says whether the undo held and what the view was left with if it did not. Needs an editable document; not supported on sheets.",
     ),
   marginPercent: z
     .number()
@@ -85,16 +85,20 @@ export function createCaptureViewTool(createHostRpcCaller: () => Promise<HostRpc
     inputSchema: captureViewInputSchema,
     execute: async (input): Promise<ReadImageResult> => {
       const caller = await createHostRpcCaller();
-      const result = await caller.callOperation("revit.context.view-image", {
+      // A focus commits a temporary crop, so it is the SessionWrite twin; no focus is the read.
+      const result = await caller.callOperation(
+        input.focus ? "revit.context.view-image.focus" : "revit.context.view-image", {
         target: input.target,
         focus: input.focus,
         marginPercent: input.marginPercent,
         pixelSize: input.pixelSize,
       });
       if (!result.ok) return { text: `capture_view failed: ${result.message}`, isError: true };
-      if (!result.capture)
+      const data = result.response as RevitViewImageData & { capture?: { id: string; url: string } };
+      // The read names its capture in headers; the focused command carries it on its result.
+      const capture = result.capture ?? data?.capture;
+      if (!capture)
         return { text: "capture_view: the host answered without keeping a capture", isError: true };
-      const data = result.response as RevitViewImageData;
       const extras = [
         data.sheetNumber ? `on sheet ${data.sheetNumber}` : null,
         data.viewScale ? `1:${data.viewScale}` : null,
@@ -102,19 +106,19 @@ export function createCaptureViewTool(createHostRpcCaller: () => Promise<HostRpc
           ? `model rect (${data.modelRect.minX.toFixed(1)},${data.modelRect.minY.toFixed(1)})→(${data.modelRect.maxX.toFixed(1)},${data.modelRect.maxY.toFixed(1)}) ft`
           : null,
       ].filter(Boolean);
-      const text = `${data.view?.label ?? "view"}: ${caller.hostBaseUrl.replace(/\/$/, "")}${result.capture.url} (capture ${result.capture.id}, ${data.byteSize} bytes, ${data.width}x${data.height}px delivered${extras.length ? `; ${extras.join("; ")}` : ""})${
+      const text = `${data.view?.label ?? "view"}: ${caller.hostBaseUrl.replace(/\/$/, "")}${capture.url} (capture ${capture.id}, ${data.byteSize} bytes, ${data.width}x${data.height}px delivered${extras.length ? `; ${extras.join("; ")}` : ""})${
         data.warning
           ? `
 Warning: ${data.warning}`
           : ""
       }`;
       try {
-        const sha = /^\/captures\/([0-9a-f]{64})\.png$/.exec(result.capture.url)?.[1];
+        const sha = /^\/captures\/([0-9a-f]{64})\.png$/.exec(capture.url)?.[1];
         if (!sha) throw new Error("The host returned an invalid capture URL");
         if (data.byteSize > defaultReadImageMaxBytes)
           throw new Error("Image exceeds the 5MB limit; capture again with a smaller pixelSize");
         const response = await fetch(
-          `${caller.hostBaseUrl.replace(/\/$/, "")}${result.capture.url}`,
+          `${caller.hostBaseUrl.replace(/\/$/, "")}${capture.url}`,
           {
             redirect: "error",
             signal: AbortSignal.timeout(30_000),

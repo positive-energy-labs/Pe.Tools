@@ -20,6 +20,7 @@ export const callPolicies: Readonly<Record<string, CallPolicy>> = {
   "takeoffs.saved": { saved: true },
   "takeoffs.snapshot": { snapshot: true, admission: "intrinsic" },
   "revit.context.view-image": { capture: true },
+  "revit.context.view-image.focus": { capture: true },
   "host.shell.open": { shell: true },
   "ducts.snapshot.roster": { canonicalSession: true, reading: "roster" },
   "ducts.snapshot.walk": { canonicalSession: true, reading: "walk" },
