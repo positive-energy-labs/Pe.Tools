@@ -22,7 +22,7 @@ test("nonempty provenance cannot authorize another command's Internal leaf", () 
 });
 
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
-import { requireEligibleCaller } from "../src/gateway-actions.ts";
+import { requireEligibleCaller } from "../src/gateway-catalog.ts";
 import { pea } from "./callers.ts";
 test("every advertised native preview admits a direct Pea call and agrees with C# metadata", () => {
   const previews = hostOpCatalog.filter(op => op.key.endsWith(".preview"));

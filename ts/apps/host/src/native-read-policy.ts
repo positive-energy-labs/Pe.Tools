@@ -6,7 +6,7 @@ import { Effect } from "effect";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import { nativePrincipals } from "@pe/agent-contracts";
 import { admitAnonymousCall } from "./control.ts";
-import { requireEligibleCaller } from "./gateway-actions.ts";
+import { requireEligibleCaller } from "./gateway-catalog.ts";
 import { isDoorFailure } from "./http-problems.ts";
 import { InvalidRead } from "./native-reads.ts";
 import { RequestIdentity } from "./request-services.ts";
