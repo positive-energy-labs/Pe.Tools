@@ -9,7 +9,7 @@ test("pending input survives the last Place and only its own acknowledgement rem
   first.entry.refuse(id, "Offline"); first.release();
   const next = registry.acquire(key);
   expect(next.entry.pending()).toMatchObject([{ id: "p", status: "refused", reason: "Offline" }]);
-  next.entry.pending()[0]!.input.expectedRevision = 99;
+  expect(() => { next.entry.pending()[0]!.input.expectedRevision = 99; }).toThrow();
   expect(next.entry.pending()[0]!.input.expectedRevision).toBe(0);
   next.entry.accept("other"); expect(next.entry.pending()).toHaveLength(1);
   next.entry.accept("p"); expect(next.entry.pending()).toEqual([]);

@@ -1,4 +1,5 @@
 import { workKey, type WorkKey, type WorkWrite } from "@pe/agent-contracts";
+import { freezePage } from "./freeze-page";
 
 /** Pending input survives a Place leaving; accepted history belongs to the host Timeline. */
 export function createApplicationWorkRegistry() {
@@ -11,7 +12,7 @@ export function createApplicationWorkRegistry() {
     return {
       acquire() { refs++; },
       release() { if (--refs === 0 && !intents.size) entries.delete(workKey(key)); },
-      pending: () => structuredClone([...intents.values()]),
+      pending: () => freezePage([...intents.values()]),
       retain(input: WorkWrite, label: string) {
         const id = input.press ?? crypto.randomUUID();
         intents.set(id, { id, input: structuredClone(input), label, status: "pending" }); notify(); return id;
