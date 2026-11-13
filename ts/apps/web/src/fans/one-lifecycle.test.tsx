@@ -92,7 +92,7 @@ test("optional Work and invocation arguments share one typed scope", async () =>
     expect(mounted.placement()).toEqual({band:["start","echo"],panes:{main:[]}});
     expect(mounted.kernelVerb("findings.say")).toMatchObject({label:"Say finding",effect:"WorkWrite"});
     expect(()=>mounted.verb("nope")).toThrow("Unknown verb nope");
-    const echo={op:{key:"logs.tail",intent:"Read"},request:{blob:"invocation only"}};
+    const echo={op:{key:"logs.tail",effect:"Read"},request:{blob:"invocation only"}};
     await direct(mounted.verb("echo")).run(echo);
     expect(door.submit).toHaveBeenLastCalledWith({id:expect.any(String),key:"ops.read",target:{kind:"host"},input:echo});
     await direct(mounted.verb("start")).run({year:"2026",owner:"you",addins:"on"});expect(door.submit).toHaveBeenCalledTimes(2);
