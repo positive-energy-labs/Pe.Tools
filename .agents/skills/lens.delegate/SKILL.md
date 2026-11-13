@@ -83,7 +83,7 @@ The second says what the owner needs:
 
 ## Writing and landing
 
-- A writing thread delivers a branch cut from its parent's tip. The parent merges it and reuses the child's stamp at that SHA, re-running only what a conflict touched. Never cherry-pick a child's work, because a cherry-pick re-authors it, hides its conflicts and erases who did it. A thread that wants to be measured works on a branch, because work committed straight to main cannot be attributed.
+- A writing thread delivers a branch cut from its parent's tip. The parent merges it and reuses the child's test result at that SHA, re-running only what a conflict touched. That result admits the branch to the merge and proves no row: in a run with a driver, only the driver stamps a proof row. Never cherry-pick a child's work, because a cherry-pick re-authors it, hides its conflicts and erases who did it. A thread that wants to be measured works on a branch, because work committed straight to main cannot be attributed.
 - Assign one writer per coupled production decision, even across files. Independent writers need settled contracts and separate seams.
 - Give each writing thread its own tree. If two threads edit one checkout, pin every claim to a commit, and discard any proof taken while the other thread was mid-write.
 - Authorship runs in parallel by default: every disjoint seam gets its writer at once, and only landing is ordered. A serial plan names the collision that forces it. Heavy proof (a full suite, a build, a native session, a host with a browser) is admitted by the machine reading `execute` names, never by a count of threads.
