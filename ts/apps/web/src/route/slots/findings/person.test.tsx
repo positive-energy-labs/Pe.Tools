@@ -16,15 +16,16 @@ import { GraphHistory } from "../../../shell/graph-history";
 import { observeWorkReceipts } from "../../../../../host/src/work-receipt-feed";
 import { createWitness } from "../../../fans/cutover.test-support";
 import { RosterBody } from "../../../fans/mount";
+import { workReadings } from "./readings.test-support";
 
 afterEach(cleanup);
 
 /*
  * The person's half of MAP row 9: the /fans roster row's own verb runs the route's `finding`
- * command through the typed mount, which submits `findings.write` to a real host action journal
+ * command through the typed mount, which submits `findings.say` to a real host action journal
  * as the person. Only the native process is a fixture; the journal, registry and Work are real.
  */
-test("a person writes a finding from the /fans roster row; the host's findings.write stamps the author person", async () => {
+test("a person writes a finding from the /fans roster row; the host's findings.say stamps the author person", async () => {
   const dir = await mkdtemp(join(tmpdir(), "pe-findings-person-"));
   const native = await fixtureNative(join(dir, "native"));
   const socket = await native.connect();
@@ -52,22 +53,21 @@ test("a person writes a finding from the /fans roster row; the host's findings.w
     const pop = await screen.findByLabelText(`Finding on ${name}`);
     fireEvent.click(within(pop).getByRole("button", { name: "check" }));
     const write = within(pop).getByRole("button", { name: `Write check on ${name}` });
-    expect(write.getAttribute("aria-disabled") ?? write.hasAttribute("disabled"), "a check refuses until its verdict").toBeTruthy();
     // A refused verb says why without a hover (gate-1ebf1fb1: disabled Undo buttons gave no reason).
-    expect(write.getAttribute("aria-description")).toBe("Write what you found");
-    // With text written, a check still refuses until its verdict is chosen: nothing is defaulted.
-    fireEvent.change(within(pop).getByLabelText("finding text"), { target: { value: "port 1 static reads low" } });
     expect(write.getAttribute("aria-disabled")).toBe("true");
-    expect(write.getAttribute("aria-description")).toBe("Choose this check's verdict");
-    fireEvent.click(within(pop).getByRole("button", { name: "fail" }));
+    expect(write.getAttribute("aria-description")).toBe("Write what you found");
+    // With text written the check may be said unruled: a verdict is optional and may come later (findings.rule).
+    fireEvent.change(within(pop).getByLabelText("finding text"), { target: { value: "port 1 static reads low" } });
     expect(write.getAttribute("aria-description")).toBeNull();
+    fireEvent.click(within(pop).getByRole("button", { name: "fail" }));
     fireEvent.click(write);
-    await waitFor(() => expect(submitted.map((c) => c.key)).toEqual(["findings.write"]), { timeout: 20_000 });
+    await waitFor(() => expect(submitted.map((c) => c.key)).toEqual(["findings.say"]), { timeout: 20_000 });
     const key = { ...submitted[0]!.input.work!.key, route: "findings" } as WorkKey;
     await waitFor(async () => {
       const { findings } = findingsWorkSchema.parse((await host.view(key, "findings"))?.doc ?? {});
       expect(Object.values(findings)).toEqual([
-        expect.objectContaining({ by: "person", kind: "check", verdict: "fail", text: "port 1 static reads low", subject: expect.stringMatching(/^UniqueId:/) }),
+        expect.objectContaining({ said: expect.objectContaining({ by: "person" }), kind: "check", verdict: expect.objectContaining({ by: "person", value: "fail" }),
+          text: "port 1 static reads low", subject: expect.stringMatching(/^UniqueId:/) }),
       ]);
     }, { timeout: 20_000 });
   } finally {
@@ -108,7 +108,7 @@ test("the person undoes their own finding from its History row; Pea's newer find
         const response = await post(command, human);
         expect(response.status, await response.clone().text()).toBeLessThan(400);
         return actionReceiptSchema.parse(await native.journal.wait(command.id));
-      }, browser);
+      }, browser, workReadings(host));
     await waitFor(() => expect(f.typed.owner()?.ready).toBe(true));
     render(<>{f.typed.draw("sheet-roster", (ctx) => <RosterBody ctx={ctx as never} />) as React.ReactNode}</>);
     const trigger = (await screen.findAllByRole("button", { name: /^Write a finding on / }))[0]!;
@@ -117,15 +117,15 @@ test("the person undoes their own finding from its History row; Pea's newer find
     const pop = await screen.findByLabelText(`Finding on ${name}`);
     fireEvent.change(within(pop).getByLabelText("finding text"), { target: { value: "person note" } });
     fireEvent.click(within(pop).getByRole("button", { name: `Write note on ${name}` }));
-    await waitFor(() => expect(submitted.map((c) => c.key)).toEqual(["findings.write"]), { timeout: 20_000 });
+    await waitFor(() => expect(submitted.map((c) => c.key)).toEqual(["findings.say"]), { timeout: 20_000 });
     const key = { ...submitted[0]!.input.work!.key, route: "findings" } as WorkKey;
     const findings = async () => Object.values(findingsWorkSchema.parse((await host.view(key, "findings"))?.doc ?? {}).findings);
-    const authors = async () => (await findings()).map((x) => [x.text, x.by]);
+    const authors = async () => (await findings()).map((x) => [x.text, x.said.by]);
     await waitFor(async () => expect(await authors()).toEqual([["person note", "person"]]), { timeout: 20_000 });
     // Pea writes after the person, through the findings Work handle.
-    const pea = await post({ id: "pea-write", key: "findings.write", target: { kind: "document", ref: socket.target },
+    const pea = await post({ id: "pea-write", key: "findings.say", target: { kind: "document", ref: socket.target },
       input: { work: workHandle(key, (await host.view(key, "findings"))!.revision),
-        finding: { id: "pea-1", subject: (await findings())[0]!.subject, kind: "note", text: "pea note", place: {} } } },
+        subject: (await findings())[0]!.subject, kind: "note", text: "pea note" } },
       approvedPea("findings-undo"));
     expect(pea.status, await pea.clone().text()).toBeLessThan(400);
     expect(await native.journal.wait("pea-write")).toMatchObject({ state: "succeeded" });

@@ -14,8 +14,8 @@ const KIND_SAYS: Record<FindingKind, string> = {
 
 /**
  * The person's row verb for findings (ADR 0035 rule 9): a finding on this row's subject, written
- * through the route's `findings.write` command, where the host stamps the author from the caller.
- * A kind with verdicts refuses until one is chosen; nothing is defaulted for the person.
+ * through the route's `findings.say` command, where the host mints the id and stamps the author
+ * from the caller. A verdict is optional: none chosen says the statement unruled, for `findings.rule`.
  */
 export function FindingVerb({
   subject,
@@ -32,11 +32,7 @@ export function FindingVerb({
   const [verdict, setVerdict] = useState("");
   const [text, setText] = useState("");
   const verdicts: readonly string[] = FINDING_KINDS[kind];
-  const refusal = action.refusal ?? (!text.trim()
-    ? "Write what you found"
-    : verdicts.length && !verdicts.includes(verdict)
-      ? `Choose this ${kind}'s verdict`
-      : null);
+  const refusal = action.refusal ?? (!text.trim() ? "Write what you found" : null);
   return (
     <Popover>
       <PopoverTrigger aria-label={`Write a finding on ${name}`}>Finding</PopoverTrigger>
@@ -68,12 +64,10 @@ export function FindingVerb({
           onPress={async () => {
             try {
               await action.run({
-                id: crypto.randomUUID(),
                 subject,
                 kind,
                 text: text.trim(),
-                place: {},
-                ...(verdicts.length ? { verdict } : {}),
+                ...(verdict ? { verdict } : {}),
               });
               setText("");
             } catch (error) {
