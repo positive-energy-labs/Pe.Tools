@@ -11,7 +11,7 @@ import type { httpRoutes } from "./pe-api.ts";
 import type { hostActions } from "./semantic-actions.ts";
 
 export type Effect = "Read" | "TransactRead" | "SessionWrite" | "WorkWrite" | "ModelWrite";
-export declare const minted: unique symbol;
+export const minted: unique symbol = Symbol("handle");
 export interface CommandHandle<
   K extends string = string,
   I = unknown,
@@ -59,27 +59,30 @@ type Planned<K extends CommandKey, I> = Row<K> extends { plan: string }
   : unknown;
 
 export const effects = ["Read", "TransactRead", "SessionWrite", "WorkWrite", "ModelWrite"] as const;
-export const mint = <H>(shape: Omit<H, typeof minted>) => Object.freeze(shape) as H;
+export function mint<S extends object>(shape: S) {
+  const branded: S & { readonly [minted]: true } = { ...shape, [minted]: true };
+  return Object.freeze(branded);
+}
 const commandHandles = new Map<string, CommandHandle>();
 const isPlan = (command: CommandHandle): command is CommandHandle<string, unknown, unknown, "Read" | "TransactRead"> =>
   command.effect === "Read" || command.effect === "TransactRead";
 export function handle<K extends CommandKey>(
   key: K,
 ): CommandHandle<K, CommandInput<K>, CommandOutput<K>, CommandEffect<K>> &
-  Planned<K, CommandInput<K>> {
-  type Minted = ReturnType<typeof handle<K>>;
+  Planned<K, CommandInput<K>>;
+export function handle(key: CommandKey): CommandHandle {
   const made = commandHandles.get(key);
-  if (made) return made as Minted;
+  if (made) return made;
   if (!Object.hasOwn(commandTable, key)) throw Error(`No command or route: ${key}`);
   const row = commandTable[key];
   const plan = "plan" in row ? handle(row.plan) : undefined;
   if (plan && !isPlan(plan)) throw Error(`${key} declares a plan that writes`);
-  const result = mint<CommandHandle>({
+  const result: CommandHandle = mint({
     key,
     effect: row.effect,
     via: row.via,
     ...(plan ? { plan } : {}),
   });
   commandHandles.set(key, result);
-  return result as Minted;
+  return result;
 }
