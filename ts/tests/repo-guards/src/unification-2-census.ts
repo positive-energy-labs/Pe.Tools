@@ -196,6 +196,15 @@ export function census(): Record<string, string[]> {
 }
 
 export type OffenderSets = Record<string, string[]>;
+const isOffenderSets = (value: unknown): value is OffenderSets =>
+  typeof value === "object" && value !== null &&
+  Object.values(value).every((sites) => Array.isArray(sites) && sites.every((site) => typeof site === "string"));
+/** The parser's own diagnostics (an internal of `ts.SourceFile`); its absence is a broken census, never clean. */
+function parseDiagnostics(source: ts.SourceFile): readonly ts.Diagnostic[] {
+  const diagnostics: unknown = Reflect.get(source, "parseDiagnostics");
+  if (!Array.isArray(diagnostics)) throw Error(`${source.fileName}: the parser exposes no parseDiagnostics`);
+  return diagnostics;
+}
 export const baselinePath = "ts/tests/repo-guards/src/unification-2.baseline.json";
 export function additions(actual: OffenderSets, allowed: OffenderSets): string[] {
   return Object.entries(actual).flatMap(([law, sites]) => {
@@ -231,13 +240,12 @@ export function baselineFloors(): CarriedFloor[] {
   });
   function floorAt(sha: string): OffenderSets[] {
     const value: unknown = JSON.parse(git("show", `${sha}:${baselinePath}`));
-    if (typeof value !== "object" || value === null || !Object.values(value).every(Array.isArray))
-      return [];
+    if (!isOffenderSets(value)) return [];
     // RATCHET-GREEN explicitly re-baselines the legacy ordinal format with audited causes.
     // Incomparable old snapshots cannot cap the new buckets; later multiset floors still shrink.
-    if (Object.values(value).some((sites) => sites.some((site: string) => /@\d+$/.test(site))))
+    if (Object.values(value).some((sites) => sites.some((site) => /@\d+$/.test(site))))
       return [];
-    return [value as OffenderSets];
+    return [value];
   }
 }
 
@@ -381,9 +389,7 @@ export function boundaryCensus(input?: Record<string, string>): OffenderSets {
     const imports: { node: ts.Node; target: string }[] = [];
     edges.set(file, imports);
     // TypeScript recovers an AST from malformed input. Recovery must never mean clean.
-    for (const diagnostic of (
-      source as ts.SourceFile & { parseDiagnostics: readonly ts.Diagnostic[] }
-    ).parseDiagnostics)
+    for (const diagnostic of parseDiagnostics(source))
       result.malformedSources!.push(`${file}#parse:${diagnostic.code}`);
     const admittedNames = new Set<string>();
     walk(source, (node) => {
@@ -504,7 +510,8 @@ if (
   resolve(process.argv[1]) === resolve(import.meta.filename) &&
   process.argv.includes("--tighten")
 ) {
-  const prior = JSON.parse(read(baselinePath)) as OffenderSets;
+  const prior: unknown = JSON.parse(read(baselinePath));
+  if (!isOffenderSets(prior)) throw Error(`${baselinePath} is not offender sets`);
   const actual = { ...census(), ...boundaryCensus() };
   const next = Object.fromEntries(
     Object.entries(prior).map(([law, sites]) => [
