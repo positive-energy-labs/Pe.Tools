@@ -113,8 +113,7 @@ export const module = route({
   sheet: {
     draft: true,
     bindings: {
-      fields: local(z.unknown(), "subject", {
-        json: true,
+      fields: local({ kind: "json", reason: "Pod member properties are arbitrary authored JSON" }, "subject", {
         rows: (read: Value) => Object.keys((current(read) && objectOf(read.draft)) ?? {}).map(pointer),
         rowLabel: (_read: Value, row: string) => keyOf(row),
         model: (read: Value, row: string | undefined) => {

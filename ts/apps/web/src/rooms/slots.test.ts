@@ -98,7 +98,7 @@ test("the hand inbox list, the card: selection codec and the picked/show fields 
  */
 test.fails("kernel gap: store-binding-write (10)", async () => {
   const { sheetWrites } = await import("../../../host/src/slots/sheet.ts");
-  const sheet = { draft: true as const, bindings: { name: { kind: "store" as const, store: "rooms", per: "subject" as const } } };
+  const sheet = { draft: true as const, bindings: { name: { home: { at: "store" as const, store: "rooms" }, domain: { kind: "enum" as const, shape: { type: "string" } }, per: "subject" as const } } };
   expect(writesRevit(sheet)).toBe(true);
   expect(sheetWrites(sheet, { name: { [regionSubject(room!.guid)]: { edit: { value: "Pantry" } } } })).toHaveLength(1);
 });

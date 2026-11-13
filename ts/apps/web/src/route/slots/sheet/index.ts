@@ -1,152 +1,105 @@
+import { settingOwners } from "@pe/agent-contracts/setting-owners";
 import type { Immutable } from "@pe/agent-contracts";
-import { serveSetting, type SettingTier, type SettingTierRead } from "@pe/agent-contracts/tiered-setting";
-import type { ModelValue, SheetChoice, SheetSlot, StateCell } from "@pe/agent-contracts/slots";
-
-/*
- * The kernel seam for the sheet slot (ADR 0035 rules 1 and 3). The slot draws one StateCell per
- * binding per row from the Work doc, the route's core read and its declared layers; staging goes
- * through the one Work write path (`DrawContext.cells`) and Revit through `SHEET_COMMANDS`. Owner: slice 7.
- *
- * Census of what Fans' borrowed `InputsBody` drew, and where each part lives now (slice 7 Delete,
- * ruling 2026-11-10: split by owner; MAP decision log). Slot features: `SheetSlot.draft`, a binding's
- * `default`/`unit`/`min`/`max`/`digits`/`field`, `model`, `choices`, `rows`, a firm `source` with
- * `ref`, a layer's `refusal` and `note`, `SheetSlot.from` and `empty`, and the pane's typed-only filter.
- *   draft cells, `{ edit: { value, by, at } }`            the slot: `SheetSlot.draft`, `pending` by author
- *   design friction (default 0.08, min 0, in-wg/100 ft)  /ducts sheet: its own `designFriction` cell, default layer and limits
- *   criteria and split policy, with their firm source    /ducts sheet: `criteria` rows, firm `source` and `ref`
- *   the firm line (version, file, present)               /ducts sheet: the `ref` of every firm-sourced cell
- *   fitting tables, rule assignments                     /ducts Rules pane (its chips), already there
- *   unit kinds                                           /ducts All-systems rules pane, already there
- *   network rulings (joins, ends)                        /ducts Rulings pane, already there
- *   parameter slot names, ESP and protocol slot pickers  /fans sheet: `parameters` rows, model and choices from the read
- *   write scope (`writeIntent`)                          /fans sheet: choices from the open fan
- *   unit roles, drops, esp and flows                     /fans sheet: rows per binding, `field`, units, model from the read
- *   no flow parameter (locked), model/walk flow conflict  /fans sheet: the model layer's `refusal` and `note`
- *   "Open a fan from the roster"                          /fans sheet: `SheetSlot.empty`
- *   the /ducts design Fans prices with                   /fans sheet: the slot's read-only `from` line, linked to /ducts
- *   per-fitting loss readouts                            /fans Ledger: a result, beside the ESP it explains
- *   undo, redo, revert, restore                          kernel chrome (the Timeline) and each cell's own clear
- *   typed-only filter                                    the sheet pane's chrome, cells whose source is Work
- *
- * A `setting` binding (homes MAP slice 6b) never stages in Work: its cell draws the tier that served
- * it and saves at a tier through the home write door (`settings.tiers.write`).
- */
-
+import { serveSetting, SETTING_TIERS, type SettingTierRead } from "@pe/agent-contracts/tiered-setting";
+import { schemaOf, type Choice, type Domain, type ModelValue, type SheetSlot, type StateCell } from "@pe/agent-contracts/slots";
 export interface SheetInput<W = unknown> {
-  /** The rows of a per-subject binding with no rows of its own: the route subject's members, in roster order. */
   readonly rows: readonly string[];
-  /** The Work doc the bindings stage in; null before the handle lands. */
   readonly work: Immutable<W> | null;
-  /** What Revit (parameter) and the store (store) hold for a binding's row, when read apart from `read`. */
   readonly model: readonly ModelValue[];
-  /** The route's core read; a binding's `rows`, `model` and `choices` read it. */
   readonly read?: unknown;
 }
-
-/** A StateCell as the kernel draws it: the binding's label, unit, limits and choices for this row. */
 export interface SheetCell extends StateCell {
+  readonly domain: Domain;
   readonly label: string;
   readonly unit?: string;
-  readonly numeric?: { readonly min?: number; readonly max?: number; readonly digits?: number };
+  readonly numeric?: { min?: number; max?: number; digits?: number };
   readonly field?: string;
   readonly json?: true;
-  readonly choices?: readonly SheetChoice[];
+  readonly choices?: readonly Choice[];
   readonly ref?: string;
   readonly refusal?: string;
   readonly note?: string;
-  /** A `setting` cell's save-at targets: each declared tier's home and the hash its next write names. */
   readonly setting?: {
     readonly owner: string;
     readonly path: readonly string[];
-    readonly tiers: readonly { readonly tier: SettingTier; readonly home: string | null; readonly sha256: string | null; readonly notFound?: string }[];
+    readonly tiers: readonly { tier: import("@pe/agent-contracts/tiered-setting").SettingTier; home: string | null; sha256: string | null; notFound?: string }[];
   };
 }
-
-/**
- * A `setting` cell (ADR 0037 rule 8): the read carries each owner's tiers as the host read them
- * (`read.settings[owner]`), and `serveSetting` picks the tier. The label is the home that served
- * the value, so a tier whose home was not found can never be the source.
- */
-function settingCell(binding: string, declared: Extract<SheetSlot["bindings"][string], { kind: "setting" }>, read: unknown): SheetCell {
-  const tiers = (read as { settings?: Readonly<Record<string, readonly SettingTierRead[]>> } | null | undefined)?.settings?.[declared.owner];
-  const served = serveSetting(tiers, declared.tiers, declared.path, declared.schema, declared.default);
-  const numeric = defined({ min: declared.min, max: declared.max, digits: declared.digits });
-  return {
-    binding,
-    kind: "setting",
-    value: served.value,
-    model: served.value,
-    pending: null,
-    drift: false,
-    freshness: tiers ? "fresh" : "never",
-    source: served.tier,
-    label: declared.label ?? binding,
-    ...defined({ unit: declared.unit, ref: served.ref, note: served.note }),
-    ...(Object.keys(numeric).length ? { numeric } : {}),
-    setting: {
-      owner: declared.owner,
-      path: declared.path,
-      tiers: declared.tiers.map((tier) => {
-        const at = tiers?.find((candidate) => candidate.tier === tier);
-        return { tier, home: at?.home ?? null, sha256: at?.sha256 ?? null, ...(at?.home ? {} : { notFound: at?.notFound ?? `No ${tier} home was read` }) };
-      }),
-    },
-  };
+/** A dotted binding names its existing nested Work cell, without a second writable copy. */
+export const bindingPath = (binding: string, row?: string): [string, ...string[]] => {
+  const [first, ...rest] = binding.split(".");
+  return [first!, ...rest, ...(row === undefined ? [] : [row])];
+};
+export function domainDraw(domain: Domain, read: unknown, row?: string): Pick<SheetCell, "unit" | "numeric" | "field" | "json" | "choices"> {
+  if (domain.kind === "number") return { unit: domain.unit, numeric: { min: domain.min ?? domain.exclusiveMin, max: domain.max, digits: domain.digits } };
+  if (domain.kind === "json") return { json: true };
+  if (domain.kind === "enum") {
+    const choices = typeof domain.choices === "function" ? domain.choices(read, row) : domain.choices;
+    return choices.length ? { choices } : {};
+  }
+  if (domain.kind === "object") {
+    const fields = Object.entries(domain.fields);
+    if (fields.length !== 1) return {};
+    const [field, child] = fields[0]!;
+    const draw = domainDraw(child, read, row);
+    return { ...draw, field, ...(draw.choices ? { choices: draw.choices.map(c => ({ ...c, value: { [field]: c.value ?? c.key } })) } : {}) };
+  }
+  return {};
 }
-
-const defined = <T extends object>(o: T) =>
-  Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined)) as Partial<T>;
-
-/** A pure projection: binding by binding in declaration order, each per-subject binding once per row. */
 export function sheetCells(slot: SheetSlot, input: SheetInput): readonly SheetCell[] {
-  const work = (input.work ?? {}) as Readonly<Record<string, unknown>>;
   const read = input.read;
-  return Object.entries(slot.bindings).flatMap(([binding, declared]) =>
-    declared.kind === "setting" ? [settingCell(binding, declared, read)] :
-    (declared.per === "subject" ? (read !== undefined && declared.rows?.(read)) || input.rows : [undefined]).map((row): SheetCell => {
-      const held = work[binding];
-      const at = row === undefined ? held : (held as Readonly<Record<string, unknown>> | undefined)?.[row];
-      const edit = slot.draft ? (at as { edit?: { value?: unknown; by?: string; at?: string | null } | null } | undefined)?.edit : undefined;
-      const staged = slot.draft ? edit?.value : at;
-      const layer = input.model.find((m) => m.binding === binding && m.row === row)
-        ?? (read !== undefined ? declared.model?.(read, row) : undefined) ?? undefined;
+  return Object.entries(slot.bindings).flatMap(([binding, b]) =>
+    (b.per === "subject" ? (read !== undefined && b.rows?.(read)) || input.rows : [undefined]).map(row => {
+      const home = b.home;
+      const tiers = home.at === "setting" ? (read as { settings?: Record<string, readonly SettingTierRead[]> } | undefined)?.settings?.[home.owner] : undefined;
+      const served = home.at === "setting" ? serveSetting(tiers, home.tiers, home.path, schemaOf(b.domain), b.default) : null;
+      const held = bindingPath(binding, row).reduce<any>((doc, key) => doc?.[key], input.work);
+      const edit = slot.draft ? held?.edit : undefined;
+      const staged = home.at === "setting" ? undefined : slot.draft ? edit?.value : held;
+      const layer = served ? { value: served.value, source: served.tier, ref: served.ref, note: served.note }
+        : input.model.find(m => m.binding === binding && m.row === row) ?? (read !== undefined ? b.model?.(read, row) : undefined);
       const model = layer?.value ?? null;
-      const value = staged ?? model ?? declared.default ?? null;
-      const source = staged !== undefined ? "work"
-        : layer && layer.value != null ? (("source" in layer && layer.source) || "model")
-        : declared.default !== undefined ? "default" : "model";
-      const numeric = defined({ min: declared.min, max: declared.max, digits: declared.digits });
+      const value = staged ?? model ?? b.default ?? null;
       return {
-        binding,
-        ...(row === undefined ? {} : { row }),
-        kind: declared.kind,
-        value,
-        model,
-        // A raw Work value carries no author; a draft cell's edit is the pending change, by whoever staged it.
-        pending: edit && staged !== undefined
-          ? { by: edit.by === "pea" ? "pea" : "person", value: staged, at: edit.at ?? "" }
-          : null,
-        // A local binding never reaches Revit, so it cannot drift from it.
-        drift: declared.kind !== "local" && JSON.stringify(value) !== JSON.stringify(model),
-        freshness: layer?.freshness ?? (layer ? "fresh" : declared.kind === "local" ? "fresh" : "never"),
-        source,
-        label: row === undefined ? (declared.label ?? binding)
-          : (read !== undefined && declared.rowLabel?.(read, row)) || declared.label || binding,
-        ...defined({
-          unit: (layer && "unit" in layer ? layer.unit : undefined) ?? declared.unit,
-          field: declared.field,
-          json: declared.json,
-          ref: layer && "ref" in layer ? layer.ref : undefined,
-          refusal: layer && "refusal" in layer ? layer.refusal : undefined,
-          note: layer && "note" in layer ? layer.note : undefined,
-          // A row the binding offers no choice for is a typed cell.
-          choices: read !== undefined ? declared.choices?.(read, row)?.length ? declared.choices(read, row) : undefined : undefined,
-        }),
-        ...(Object.keys(numeric).length ? { numeric } : {}),
-      };
-    }),
-  );
+        binding, ...(row === undefined ? {} : { row }), home, domain: b.domain,
+        value, model, pending: edit && staged !== undefined ? { by: edit.by === "pea" ? "pea" as const : "person" as const, value: staged, at: edit.at ?? "" } : null,
+        drift: home.at !== "local" && home.at !== "setting" && JSON.stringify(value) !== JSON.stringify(model),
+        freshness: home.at === "setting" ? tiers ? "fresh" : "never" : layer && "freshness" in layer ? layer.freshness ?? "fresh" : layer || home.at === "local" ? "fresh" : "never",
+        source: staged !== undefined ? "work" : layer && layer.value != null ? ("source" in layer && layer.source) || "model" : b.default !== undefined ? "default" : "model",
+        label: (row !== undefined && read !== undefined && b.rowLabel?.(read, row)) || b.label || binding,
+        ...domainDraw(b.domain, read, row),
+        ...(layer && "unit" in layer && layer.unit ? { unit: layer.unit } : {}),
+        ...(layer && "ref" in layer ? { ref: layer.ref } : {}),
+        ...(layer && "note" in layer ? { note: layer.note } : {}),
+        ...(layer && "refusal" in layer ? { refusal: layer.refusal } : {}),
+        ...(home.at === "setting" ? { setting: { owner: home.owner, path: home.path, tiers: home.tiers.map(tier => {
+          const at = tiers?.find(candidate => candidate.tier === tier);
+          return { tier, home: at?.home ?? null, sha256: at?.sha256 ?? null, ...(at?.home ? {} : { notFound: at?.notFound ?? `No ${tier} home was read` }) };
+        }) } } : {}),
+      } satisfies SheetCell;
+    }));
 }
+export const typedCells = (cells: readonly SheetCell[]) => cells.filter(c => c.source === "work");
 
-/** The pane's typed-only filter: the cells Work stages, by person or Pea. */
-export const typedCells = (cells: readonly SheetCell[]) => cells.filter((c) => c.source === "work");
+/** Settings use the same structural kit handle; the mount owns custody and command transport. */
+export function homeHandle(path: readonly string[], read: unknown, send: (request: {
+  owner: string; tier: import("@pe/agent-contracts/tiered-setting").SettingTier; path: string[]; value: unknown; expectedSha256: string | null;
+}) => Promise<void>) {
+  const [, owner = "", tierName, ...settingPath] = path;
+  const tier = SETTING_TIERS.find(t => t === tierName);
+  const registry = Object.hasOwn(settingOwners, owner) ? settingOwners[owner] : undefined;
+  const declared = registry?.at(settingPath);
+  const at = (read as { settings?: Record<string, readonly SettingTierRead[]> } | undefined)?.settings?.[owner]?.find(at => at.tier === tier);
+  const save = async (value: unknown) => {
+    if (!tier || !declared || !registry!.accepts(settingPath, value, tier)) return { code: "invalid", message: "No declared setting accepts this value at that tier" };
+    if (!at?.home) return { code: "unavailable", message: at?.notFound ?? `No ${tier} home was read` };
+    try {
+      await send({ owner, tier, path: settingPath, value, expectedSha256: at.sha256 });
+      return null;
+    } catch (error) { return { code: "refused", message: error instanceof Error ? error.message : String(error) }; }
+  };
+  return { owner: { route: owner, label: `${tier} home` }, value: {}, facts: {}, freshness: "current" as const,
+    refusal: declared ? null : "No declared setting", stage: save, clear: () => save(null),
+    accept: async () => null, deny: () => save(null), undo: async () => ({ code: "no-undo", message: "Use the Timeline" }),
+    delete: () => save(null), transitions: () => [] };
+}

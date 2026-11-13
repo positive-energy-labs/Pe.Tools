@@ -47,7 +47,7 @@ test("/pods declares subject, sheet, goal and query, and keeps no hand-drawn spe
   expect(data.fields.member).toMatchObject({ role: "subject", cardinality: "many" });
   expect(data.subject).toMatchObject({ field: "member", pane: "members" });
   expect(data.goal).toBe("value");
-  expect(data.sheet?.bindings.fields).toMatchObject({ kind: "local", per: "subject", json: true });
+  expect(data.sheet?.bindings.fields).toMatchObject({ home: { at: "local" }, domain: { kind: "json" }, per: "subject" });
   // A local-only sheet never reaches Revit, so the kernel adds no sheet write verb; Save is the route's own.
   expect(Object.keys(spec.commands).sort()).toEqual(["adopt", "open", "save", "saveNew"]);
   // A person can Start this Work: the route seeds an empty one for Open saved bytes to fill.
@@ -65,7 +65,7 @@ test("the sheet draws one local JSON cell per top-level property, over the saved
     ["/names", "names", ["Elbow", "Tee"], ["Elbow", "Tee"], "model", true],
     ["/a~1b", "a/b", 1, 1, "model", true],
   ]);
-  expect(cells.every((c) => c.kind === "local" && !c.drift && !c.refusal)).toBe(true);
+  expect(cells.every((c) => c.home.at === "local" && !c.drift && !c.refusal)).toBe(true);
 });
 
 test("before Open saved bytes the cells refuse with the reason, so a save cannot replace the file", () => {

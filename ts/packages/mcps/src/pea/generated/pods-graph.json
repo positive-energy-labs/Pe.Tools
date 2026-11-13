@@ -116,9 +116,14 @@
     "draft": true,
     "bindings": {
       "fields": {
-        "kind": "local",
-        "per": "subject",
-        "json": true
+        "home": {
+          "at": "local"
+        },
+        "domain": {
+          "kind": "json",
+          "reason": "Pod member properties are arbitrary authored JSON"
+        },
+        "per": "subject"
       }
     }
   },

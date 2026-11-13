@@ -1,4 +1,4 @@
-import type { DuctsCriteriaValues } from "@pe/agent-contracts";
+import type { DuctsCriteriaValues } from "./ducts-sheet.ts";
 
 /** Each design criterion in words: the inputs pane's labels and the review's, one map. */
 export const CRITERION_WORDS: Record<keyof DuctsCriteriaValues, string> = {

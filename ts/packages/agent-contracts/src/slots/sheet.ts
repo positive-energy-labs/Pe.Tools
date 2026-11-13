@@ -1,5 +1,48 @@
 import { z } from "zod";
 import { SETTING_TIERS, type SettingTier } from "../tiered-setting.ts";
+import type { native } from "../handle.ts";
+import type { OpRequestOf } from "@pe/host-contracts/operation-types";
+type OptionsRequest = OpRequestOf<"revit.catalog.field-options">;
+export type OptionsDomain = { kind: "options"; handle: ReturnType<typeof native<"revit.catalog.field-options">>; input: OptionsRequest | ((read: unknown) => OptionsRequest); persist: "value" | "label"; mode: "constraint" | "suggestion" };
+
+export type NumberDomain = { kind: "number"; unit?: string; min?: number; exclusiveMin?: number; max?: number; digits?: number };
+export type Choice = { key: string; label: string; value?: unknown; description?: string; disabled?: string; clear?: true };
+export type Domain =
+  | NumberDomain
+  | { kind: "enum"; shape: z.ZodType; choices: readonly Choice[] | ((read: any, row?: string) => readonly Choice[]) }
+  | OptionsDomain
+  | { kind: "object"; fields: Readonly<Record<string, Domain>> }
+  | { kind: "derived" }
+  | { kind: "json"; reason: string };
+export type Home =
+  | { at: "parameter"; parameter: string }
+  | { at: "store"; store: string }
+  | { at: "local" }
+  | { at: "setting"; owner: string; path: readonly string[]; tiers: readonly SettingTier[] };
+
+export type DomainValue<D extends Domain> = D extends NumberDomain ? number
+  : D extends { kind: "enum"; shape: z.ZodType<infer V> } ? V
+  : D extends { kind: "options" } ? string
+  : D extends { kind: "object"; fields: infer F extends Record<string, Domain> } ? { [K in keyof F]: DomainValue<F[K]> }
+  : D extends { kind: "derived" } ? never : z.output<ReturnType<typeof z.json>>;
+/** Decode is independent of the choices a current read happens to offer. */
+export function schemaOf<const D extends Domain>(domain: D): z.ZodType<DomainValue<D>>;
+export function schemaOf(domain: Domain): z.ZodType {
+  switch (domain.kind) {
+    case "number": {
+      let schema = z.number();
+      if (domain.min !== undefined) schema = schema.min(domain.min);
+      if (domain.exclusiveMin !== undefined) schema = schema.gt(domain.exclusiveMin);
+      if (domain.max !== undefined) schema = schema.max(domain.max);
+      return schema;
+    }
+    case "enum": return domain.shape;
+    case "options": return z.string().min(1);
+    case "object": return z.strictObject(Object.fromEntries(Object.entries(domain.fields).map(([key, field]) => [key, schemaOf(field)])));
+    case "json": return z.json();
+    case "derived": return z.never();
+  }
+}
 
 /*
  * The sheet slot (ADR 0035 rules 1 and 3; ADR 0030 rules 4, 6 and 8). A route fills it with data:
@@ -8,26 +51,7 @@ import { SETTING_TIERS, type SettingTier } from "../tiered-setting.ts";
  * Owner: slice 7. Scaffold: types and the closed kinds only.
  */
 
-/**
- * Four closed binding kinds (ADR 0035 rule 3, amended by ADR 0037 rule 8). Only the kernel adds one.
- * A `setting` is a tiered value in `Settings/<owner>.json` of a home; a Pod member is a home of Work.
- */
-export const BINDING_KINDS = ["parameter", "store", "local", "setting"] as const;
-export type BindingKind = (typeof BINDING_KINDS)[number];
-
-/** Whether a binding has one cell per subject row or one cell for the route. */
 export type BindingPer = "subject" | "route";
-
-/** One option a binding offers a row: what picking it stages (`value`, else `key`), or a clear. */
-export interface SheetChoice {
-  readonly key: string;
-  readonly label: string;
-  readonly value?: unknown;
-  readonly description?: string;
-  /** Listed, greyed and unpickable, with this reason in place of the description. */
-  readonly disabled?: string;
-  readonly clear?: true;
-}
 
 /** A layer under Work for one row: what the model, the store, a home tier or a default holds, and from where. */
 export interface CellLayer {
@@ -46,52 +70,26 @@ export interface CellLayer {
 
 /**
  * How the kernel reads and draws a binding beyond Work. The data fields reach the projection; the
- * functions read the route's core read (`R`) and stay web side, like `schema`.
+ * functions read the route's core read (`R`) and stay web side.
  */
 export interface BindingDraw<R = any> {
   readonly label?: string;
-  /** The display unit (a parameter binding's is also the Revit unit it writes in). */
-  readonly unit?: string;
-  /** The last layer: drawn, never staged, when no Work, model, store or firm value stands. */
   readonly default?: unknown;
-  readonly min?: number;
-  readonly max?: number;
-  readonly digits?: number;
-  /** The value is an object; the cell edits this one numeric key (`{ inWg }`). */
-  readonly field?: string;
-  /** The value is any JSON: the cell shows and takes its JSON text, and a value held as a string stays text. */
-  readonly json?: true;
   /** The binding's own rows, apart from the route subject (equipment units, criteria, slot names). */
   readonly rows?: (read: R) => readonly string[];
   readonly rowLabel?: (read: R, row: string) => string;
   readonly model?: (read: R, row: string | undefined) => CellLayer | null | undefined;
-  readonly choices?: (read: R, row: string | undefined) => readonly SheetChoice[];
 }
 
-export type SheetBinding<V extends z.ZodType = z.ZodType> = BindingDraw &
-  (
-    /** A Revit parameter by name on the row's element: UniqueId key, no sub, no placement (`parameterSubject`). `unit` names a measurable value's unit (a Revit UnitTypeId name or symbol). */
-    | { kind: "parameter"; parameter: string; schema: V; per: "subject" }
-    /** The model store (for ducts `_PE_DuctLosses`), any key. */
-    | { kind: "store"; store: string; schema: V; per: BindingPer }
-    /** Work only; feeds the Goal and never reaches Revit. */
-    | { kind: "local"; schema: V; per: BindingPer }
-    /**
-     * A tiered value: `path` inside `Settings/<owner>.json`, served by the most specific of `tiers`
-     * that states it. It never stages in Work: a person saves it at a tier, through the home write door.
-     */
-    | { kind: "setting"; owner: string; path: readonly string[]; schema: V; tiers: readonly SettingTier[]; per: "route" }
-  );
-
-export const parameter = <V extends z.ZodType>(parameter: string, schema: V, unit?: string, draw?: BindingDraw) =>
-  ({ ...draw, kind: "parameter", parameter, schema, per: "subject", ...(unit ? { unit } : {}) }) as const satisfies SheetBinding<V>;
-export const store = <V extends z.ZodType>(store: string, schema: V, per: BindingPer = "subject", draw?: BindingDraw) =>
-  ({ ...draw, kind: "store", store, schema, per }) as const satisfies SheetBinding<V>;
-export const local = <V extends z.ZodType>(schema: V, per: BindingPer = "route", draw?: BindingDraw) =>
-  ({ ...draw, kind: "local", schema, per }) as const satisfies SheetBinding<V>;
-
-export const setting = <V extends z.ZodType>(owner: string, path: readonly string[], schema: V, tiers: readonly SettingTier[], draw?: BindingDraw) =>
-  ({ ...draw, kind: "setting", owner, path, schema, tiers, per: "route" }) as const satisfies SheetBinding<V>;
+export type SheetBinding = BindingDraw & { readonly domain: Domain; readonly home: Home; readonly per: BindingPer };
+export const parameter = (parameter: string, domain: Domain, draw?: BindingDraw): SheetBinding =>
+  ({ ...draw, domain, home: { at: "parameter", parameter }, per: "subject" });
+export const store = (store: string, domain: Domain, per: BindingPer = "subject", draw?: BindingDraw): SheetBinding =>
+  ({ ...draw, domain, home: { at: "store", store }, per });
+export const local = (domain: Domain, per: BindingPer = "route", draw?: BindingDraw): SheetBinding =>
+  ({ ...draw, domain, home: { at: "local" }, per });
+export const setting = (owner: string, path: readonly string[], domain: Domain, tiers: readonly SettingTier[], draw?: BindingDraw): SheetBinding =>
+  ({ ...draw, domain, home: { at: "setting", owner, path, tiers }, per: "route" });
 
 /** The declaration: bindings by cell name. Rows are the route subject; the kernel supplies them. */
 export interface SheetSlot<B extends Readonly<Record<string, SheetBinding>> = Readonly<Record<string, SheetBinding>>> {
@@ -128,7 +126,7 @@ export type CellSource = "work" | "model-store" | SettingTier | "default" | "mod
 
 /** Every value Pea can touch (ADR 0030 rule 8): current, model (struck), pending author, drift, freshness, source. */
 export interface StateCell<V = unknown> extends CellAddress {
-  readonly kind: BindingKind;
+  readonly home: Home;
   readonly value: V | null;
   /** What Revit or the store holds now; shown struck when it disagrees with `value`. */
   readonly model: V | null;
@@ -151,36 +149,53 @@ export interface ModelValue<V = unknown> extends CellAddress {
  */
 export const SHEET_COMMANDS = { plan: "sheet.plan", apply: "sheet.apply" } as const;
 
-/** The data projection a Pod decodes at the boundary (ADR 0035 rule 4). */
-const drawData = {
-  label: z.string().min(1).optional(),
-  unit: z.string().min(1).optional(),
-  default: z.unknown().optional(),
-  min: z.number().optional(),
-  max: z.number().optional(),
-  digits: z.number().int().nonnegative().optional(),
-  field: z.string().min(1).optional(),
-  json: z.literal(true).optional(),
-};
+/** Enum schemas travel as JSON Schema; callbacks and read bodies stay local. */
+export type DomainData = NumberDomain
+  | { kind: "enum"; shape: Record<string, unknown> }
+  | { kind: "options"; handle: string; input?: Record<string, unknown>; persist: "value" | "label"; mode: "constraint" | "suggestion" }
+  | { kind: "object"; fields: Record<string, DomainData> }
+  | { kind: "derived" } | { kind: "json"; reason: string };
+export const domainDataSchema: z.ZodType<DomainData> = z.lazy(() => z.discriminatedUnion("kind", [
+  z.strictObject({ kind: z.literal("number"), unit: z.string().optional(), min: z.number().optional(), exclusiveMin: z.number().optional(), max: z.number().optional(), digits: z.number().int().nonnegative().optional() }),
+  z.strictObject({ kind: z.literal("enum"), shape: z.record(z.string(), z.unknown()) }),
+  z.strictObject({ kind: z.literal("options"), handle: z.string(), input: z.record(z.string(), z.unknown()).optional(), persist: z.enum(["value", "label"]), mode: z.enum(["constraint", "suggestion"]) }),
+  z.strictObject({ kind: z.literal("object"), fields: z.record(z.string(), domainDataSchema) }),
+  z.strictObject({ kind: z.literal("derived") }),
+  z.strictObject({ kind: z.literal("json"), reason: z.string().min(1) }),
+]));
+export const homeSchema = z.discriminatedUnion("at", [
+  z.strictObject({ at: z.literal("parameter"), parameter: z.string().min(1) }),
+  z.strictObject({ at: z.literal("store"), store: z.string().min(1) }),
+  z.strictObject({ at: z.literal("local") }),
+  z.strictObject({ at: z.literal("setting"), owner: z.string().min(1), path: z.array(z.string().min(1)).min(1).readonly(), tiers: z.array(z.enum(SETTING_TIERS)).min(1).readonly() }),
+]);
 export const sheetSlotDataSchema = z.strictObject({
   draft: z.literal(true).optional(),
-  bindings: z.record(
-    z.string(),
-    z.discriminatedUnion("kind", [
-      z.strictObject({ kind: z.literal("parameter"), parameter: z.string().min(1), per: z.literal("subject"), ...drawData }),
-      z.strictObject({ kind: z.literal("store"), store: z.string().min(1), per: z.enum(["subject", "route"]), ...drawData }),
-      z.strictObject({ kind: z.literal("local"), per: z.enum(["subject", "route"]), ...drawData }),
-      z.strictObject({ kind: z.literal("setting"), owner: z.string().min(1), path: z.array(z.string().min(1)).min(1).readonly(), tiers: z.array(z.enum(SETTING_TIERS)).min(1).readonly(), per: z.literal("route"), ...drawData }),
-    ]),
-  ),
+  bindings: z.record(z.string(), z.strictObject({
+    home: homeSchema, domain: domainDataSchema, per: z.enum(["subject", "route"]),
+    label: z.string().optional(), default: z.unknown().optional(),
+  })),
 });
 export type SheetSlotData = z.output<typeof sheetSlotDataSchema>;
-/** The declaration's data projection: every binding without its schema. */
-export const sheetSlotData = (slot: SheetSlot): SheetSlotData => ({
-  // `from` is web side: a function of the read, like a binding's `model`.
-  ...(slot.draft ? { draft: true as const } : {}),
-  bindings: Object.fromEntries(Object.entries(slot.bindings).map(([name, binding]) => [name,
-    Object.fromEntries(Object.entries(binding).filter(([key, value]) => key !== "schema" && typeof value !== "function"))])),
-}) as SheetSlotData;
-/** A binding the plan derives a Revit write from (`local` feeds only the Goal; a `setting` writes a home). */
-export const writesRevit = (data: SheetSlotData) => Object.values(data.bindings).some((b) => b.kind === "parameter" || b.kind === "store");
+const domainData = (domain: Domain): DomainData => {
+  switch (domain.kind) {
+    case "enum": return { kind: domain.kind, shape: JSON.parse(JSON.stringify(z.toJSONSchema(domain.shape), (key, value) => key === "~standard" ? undefined : value)) };
+    case "object": return { kind: domain.kind, fields: Object.fromEntries(Object.entries(domain.fields).map(([key, value]) => [key, domainData(value)])) };
+    case "options": return { kind: domain.kind, handle: domain.handle.key, ...(typeof domain.input === "function" ? {} : { input: { ...domain.input } }), persist: domain.persist, mode: domain.mode };
+    default: return domain;
+  }
+};
+export function schemaOfData(domain: z.output<typeof domainDataSchema>): z.ZodType {
+  if (domain.kind === "enum") return z.fromJSONSchema(domain.shape);
+  if (domain.kind === "object") return z.strictObject(Object.fromEntries(Object.entries(domain.fields).map(([key, value]) => [key, schemaOfData(value)])));
+  if (domain.kind === "options") return z.string().min(1);
+  return schemaOf(domain);
+}
+export const sheetSlotData = (slot: SheetSlot): SheetSlotData => sheetSlotDataSchema.parse({
+  ...(slot.draft ? { draft: true } : {}),
+  bindings: Object.fromEntries(Object.entries(slot.bindings).map(([name, b]) => [name, {
+    home: b.home, domain: domainData(b.domain), per: b.per,
+    ...(b.label ? { label: b.label } : {}), ...(b.default !== undefined ? { default: b.default } : {}),
+  }])),
+});
+export const writesRevit = (data: SheetSlotData) => Object.values(data.bindings).some(b => b.home.at === "parameter" || b.home.at === "store");

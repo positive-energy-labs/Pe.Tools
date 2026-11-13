@@ -14,8 +14,8 @@ const pipe = subjectCode({ keyKind: "UniqueId", key: uniqueIdSchema.parse("9e9fb
 
 // A Pod's route, as a Pod declares it: only `@pe/web/route`, a sheet whose rows are its pipes.
 const sheet = { bindings: {
-  sized: local(z.number(), "subject", { label: "Pipe size", rows: () => [pipe] }),
-  slot: local(z.string(), "subject", { rows: () => ["fanFlow"] }),
+  sized: local({ kind: "number" }, "subject", { label: "Pipe size", rows: () => [pipe] }),
+  slot: local({ kind: "enum", shape: z.string(), choices: [] }, "subject", { rows: () => ["fanFlow"] }),
 } };
 const pod = route({
   key: "pod-sizing", name: "Sizing", directory: { group: "Pods", summary: "Size pipes", label: "Sizing", icon: "Table2",
