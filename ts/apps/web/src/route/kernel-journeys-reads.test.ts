@@ -461,8 +461,7 @@ test("JX2 retain the pane through waiting, a refused subject, hiding and returni
       j.mount.page.subject({ kind: "ids", ids: [] });
       await j.ready();
       expect(j.mount.value(), "B05: return can publish an honest current answer").toMatchObject({
-        current: true,
-        status: "ready",
+        state: "ready",
       });
     } finally {
       resume();

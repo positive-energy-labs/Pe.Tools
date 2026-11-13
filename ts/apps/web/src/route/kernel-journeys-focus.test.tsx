@@ -1549,10 +1549,11 @@ test("JZ B05 retain Family Work and its spec across folding, first-thread promot
   const store = createChatPageStore({ registry: appAtomRegistry, search: { patch: async () => {} } });
   conversation.value = { store, threads };
   const stamp = routeRegistry.family!.fingerprint;
-  // This journey holds Family Work with no host read behind it: one hand pane, and no subject or goal,
-  // since a subject route's Place enrolls only once its roster read is current (`typed-mount.ts`, subjectState).
+  // This journey holds Family Work with no host read behind it: one hand pane that names no read (a pane
+  // with no read always draws), and no subject or goal, since a subject route's Place enrolls only once its
+  // roster read is current (`typed-mount.ts`, subjectState).
   const declaration = route({ ...family.spec, subject: undefined, goal: undefined, layout: { kind: "pane", id: "workspace" }, panes: { workspace: {
-    ...family.spec.panes.workspace,
+    ...family.spec.panes.workspace, read: undefined,
     body: "scroll", draw: ctx => scrollBody(<output aria-label="Mounted Family Work">{ctx.cells.doc?.spec?.doc.fileName}</output>),
   } } });
   function Family() { return <TypedShell module={declaration} fingerprint={stamp} />; }
