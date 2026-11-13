@@ -73,6 +73,38 @@ public sealed record SpatialEvidence(string DocumentKey, long? Revision, DateTim
     }
 }
 
+/// <summary>Full scene evidence lives in PSC1. Both RPC evidence projections carry only these fixed counts and its reference.</summary>
+public sealed record SceneEvidence(string DocumentKey, long? Revision, DateTime ObservedAt, string Frame,
+    SceneEvidenceSummary Summary, SceneArtifactReference Artifact) : IObserved {
+    public static SceneEvidence From(SpatialEvidence evidence, SceneArtifactReference artifact) => new(
+        evidence.DocumentKey, evidence.Revision, evidence.ObservedAt, evidence.Frame,
+        new SceneEvidenceSummary(evidence.Resolved.AcquisitionRequested, evidence.Resolved.Representation,
+            new SceneSourceCounts(
+                evidence.Sources.Count(s => s.Availability == SceneSourceState.Loaded),
+                evidence.Sources.Count(s => s.Availability == SceneSourceState.Unloaded),
+                evidence.Sources.Count(s => s.Availability == SceneSourceState.Unavailable)),
+            new SceneAcquisitionCounts(
+                evidence.Acquisition.Count(a => a.Outcome == AcquisitionOutcome.Acquired),
+                evidence.Acquisition.Count(a => a.Outcome == AcquisitionOutcome.Empty),
+                evidence.Acquisition.Count(a => a.Outcome == AcquisitionOutcome.Partial),
+                evidence.Acquisition.Count(a => a.Outcome == AcquisitionOutcome.Failed),
+                evidence.Acquisition.Count(a => a.Outcome == AcquisitionOutcome.Deferred),
+                evidence.Acquisition.Count(a => a.Outcome == AcquisitionOutcome.Approximate),
+                evidence.Acquisition.Count(a => a.Outcome == AcquisitionOutcome.OutsideScope)),
+            new SceneCoverageCounts(
+                evidence.Coverage.Where(g => g.Reason == CoverageReason.SourceUnread).Sum(g => g.Count),
+                evidence.Coverage.Where(g => g.Reason == CoverageReason.PartialGeometry).Sum(g => g.Count),
+                evidence.Coverage.Where(g => g.Reason == CoverageReason.FailedGeometry).Sum(g => g.Count),
+                evidence.Coverage.Where(g => g.Reason == CoverageReason.Deferred).Sum(g => g.Count),
+                evidence.Coverage.Where(g => g.Reason == CoverageReason.Approximate).Sum(g => g.Count))), artifact);
+}
+public sealed record SceneArtifactReference(string Id, string Url, long Bytes);
+public sealed record SceneEvidenceSummary(bool AcquisitionRequested, string Representation,
+    SceneSourceCounts Sources, SceneAcquisitionCounts Acquisition, SceneCoverageCounts Coverage);
+public sealed record SceneSourceCounts(int Loaded, int Unloaded, int Unavailable);
+public sealed record SceneAcquisitionCounts(int Acquired, int Empty, int Partial, int Failed, int Deferred, int Approximate, int OutsideScope);
+public sealed record SceneCoverageCounts(int SourceUnread, int PartialGeometry, int FailedGeometry, int Deferred, int Approximate);
+
 internal sealed class GeometryRead {
     internal bool Failed;
     internal bool Outside;
