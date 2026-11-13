@@ -15,8 +15,8 @@ import { instancesActions, nativeProcessSchema, type MachineSession } from "@pe/
 import { ArmingStrip } from "@pe/kit/lang/arming-strip";
 import { Button } from "@pe/kit/lang/button";
 import { OutcomeLine, type OutcomeKind } from "@pe/kit/lang/outcome";
-import { PidChip } from "#/components/lang/process";
-import type { SessionFacts } from "#/components/lang/session";
+import { PidChip } from "../components/lang/process";
+import type { SessionFacts } from "../components/lang/session";
 import {
   custodyOf,
   executionRefusal,
@@ -28,7 +28,7 @@ import {
   selectorWords,
   unsavedOf,
   PHASE_TONE,
-} from "#/machine/session";
+} from "./session";
 import { outcomeOf, useOpenKernel } from "./context";
 
 /** The kit's reading of one census row, derived here once for both densities. */

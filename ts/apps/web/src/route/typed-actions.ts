@@ -32,9 +32,9 @@ export const sessionCommand = <K extends SessionCommandKey & keyof typeof comman
   return {kind:"session" as const,entry:key,contract:commandContract(key)};
 };
 type DirectCommandKey = { [K in keyof typeof commandCatalogAxes]:
-  (typeof commandCatalogAxes)[K]["effect"] extends "Read"|"SessionWrite" ? K : never }[keyof typeof commandCatalogAxes];
+  (typeof commandCatalogAxes)[K]["effect"] extends "Read"|"SessionWrite"|"WorkWrite" ? K : never }[keyof typeof commandCatalogAxes];
 export const catalogAction = <K extends DirectCommandKey & keyof typeof commands>(key:K) => {
-  if(!["Read","SessionWrite"].includes(commandCatalogAxes[key].effect) || "writeBoundary" in commands[key])
+  if(!["Read","SessionWrite","WorkWrite"].includes(commandCatalogAxes[key].effect) || "writeBoundary" in commands[key])
     throw Error("Direct catalog actions cannot cross a model write boundary");
   return {kind:"catalog" as const,entry:key,contract:commandContract(key)};
 };

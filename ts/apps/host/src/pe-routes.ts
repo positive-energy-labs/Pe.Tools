@@ -160,7 +160,6 @@ import {
   scratchPageDescriptors,
   type PageDescriptor,
 } from "./page-libraries.ts";
-import { observePluginOperations } from "./plugin-receipts.ts";
 import { createPluginsHandler } from "./plugins-handler.ts";
 import { createPodRoutes } from "./pod-routes.ts";
 import {
@@ -1227,7 +1226,6 @@ function* hostPeRoutes(
     });
   // Every provider is probed once in the background; the list says `unknown` until then.
   const providers = createProviders({ shellPath, spawner: yield* Spawner });
-  const stopOperationHooks = observePluginOperations(journal, content.lifecycle.emit);
   const receiptThreads = createThreadReceiptAdapter(telemetry, () => threads.receiptSnapshot());
   const threads = yield* makeHarnessThreads({
     admittedRoutes: () => routes.workspace.admittedRoutes(),
@@ -1242,7 +1240,6 @@ function* hostPeRoutes(
     developerInstructions: async () => peaAgentInstructions,
     mcpServer: (context) => peaMcpServer(sourceRoot, hostBaseUrl, context),
     receiptFact: receiptThreads.accept,
-    pluginHook: content.lifecycle.emit,
     // Cached bridge metadata only. Remembered labels/addresses never admit a native operation.
     observeDocument: (request) => {
       if (!bridge) return null;
@@ -1519,7 +1516,6 @@ function* hostPeRoutes(
   const plugins = {
     close: async () => {
       podRoutes.close();
-      stopOperationHooks();
       stopWorkContext?.();
       await content.close();
       bindPackageLifecycle(undefined);

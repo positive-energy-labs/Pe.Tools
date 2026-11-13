@@ -10,11 +10,11 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { beforeEach, afterEach, describe, expect, test, vi } from "vite-plus/test";
 
 import { runSemanticAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
-import { PatchBay } from "./bay";
-import { installOpenControls } from "./context";
-import { OpenControls } from "./kernel";
-import { lifecycleRequest } from "./lifecycle";
-import { EMPTY_DRAFT, launchPlan, modelRows, type DocRow } from "./model";
+import { PatchBay } from "../machine/bay";
+import { installOpenControls } from "../machine/context";
+import { OpenControls } from "../machine/kernel";
+import { lifecycleRequest } from "../machine/lifecycle";
+import { EMPTY_DRAFT, launchPlan, modelRows, type DocRow } from "../machine/open-model";
 import {
   BACKGROUND_BOOTING,
   BAY_RECENTS,
@@ -23,7 +23,7 @@ import {
   MACHINE_SEEDS,
   OBSERVED_ICON,
   RECENTS,
-} from "../design-system/open-examples";
+} from "../machine/open-examples";
 
 vi.mock("../../../../packages/mcps/src/shared/takeoff-action-client", async (importOriginal) => {
   const run = vi.fn(async (key, input, _target?: unknown, _basis?: unknown) =>
@@ -50,7 +50,7 @@ vi.mock("../../../../packages/mcps/src/shared/takeoff-action-client", async (imp
   };
 });
 vi.mock("../shell/host-read-source", async () => {
-  const { MACHINE_SEEDS, BAY_RECENTS, BAY_THREADS } = await import("../design-system/open-examples");
+  const { MACHINE_SEEDS, BAY_RECENTS, BAY_THREADS } = await import("../machine/open-examples");
   return { hostReadSource: () => ({ kind: "use", open: (_: unknown, deliver: (event: unknown) => void) => {
     deliver({ kind: "complete", revision: 1, value: {
       key: "open", generation: 0, version: 1, state: "current", value: {

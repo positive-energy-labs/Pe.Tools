@@ -538,6 +538,7 @@ const storedSchema = z.object({
   ),
 });
 
+// STORE-EXCEPTION: ADR 0039; harness/ provider writes stay local until T3 replaces this persistence.
 function writeJson(path: string, value: unknown) {
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(`${path}.tmp`, JSON.stringify(value, null, 2));
@@ -683,6 +684,8 @@ export function createProviders(options: ProvidersOptions) {
   };
   let providerReadError: string | null = null;
 
+  // STORE-EXCEPTION: ADR 0039; harness/ providers keep credential bytes and refuse saves after
+  // a bad decode. Retire this exception when T3 replaces provider persistence.
   /** Re-read before writes so external damage cannot be replaced by a cached valid list. */
   const stored = (): EndpointRecord[] => {
     const path = productProvidersPath();
@@ -716,6 +719,7 @@ export function createProviders(options: ProvidersOptions) {
     stored();
     return [...new Set([...knownKeys, ...sharedKeyValues()])];
   };
+  // STORE-EXCEPTION: ADR 0039; T3 replaces this provider writer; unreadable key bytes must stay.
   const save = (records: EndpointRecord[]) => {
     stored();
     if (providerReadError) throw Error(providerReadError);

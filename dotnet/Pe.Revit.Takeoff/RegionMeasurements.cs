@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using Pe.Revit.Space;
+using Pe.Revit.Extensions.ProjDocument;
 
 namespace Pe.Revit.Takeoff;
 
@@ -66,8 +67,7 @@ internal static class RegionMeasurements
             var label = shape.InteriorPoint.Coordinate;
             // ponytail: one interior height probe, matching Partition; sample multiple points when variable-height rooms are supported.
             var probe = Pe.Revit.Space.Verbs.Probe(world, new XYZ(label.X, label.Y, levelZ + 3.5), purpose: ProbePurpose.RoomHeights);
-            if (!probe.Stamp.Fresh || probe.Stamp.BuiltUtc == default)
-                throw new InvalidOperationException("Native measurement requires fresh Space evidence");
+            probe.Evidence.RequireBasis(doc.GetDocumentKey(), SpaceWorld.Epoch(doc));
             var floor = probe.Floor?.Z;
             var ceiling = probe.Ceiling?.Z;
             var knobs = Pe.Revit.Partition.Knobs.Default;

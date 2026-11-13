@@ -2,7 +2,7 @@ import { z } from "zod";
 import { route, field, read, paneLayout, type ContextOf } from "../route/defaults";
 import { hostRead } from "../route/host-read";
 import { draw } from "../route/draw";
-import { command, sessionCommand } from "../route/typed-actions";
+import { command } from "../route/typed-actions";
 import {
   takeoffsRouteState,
   valueRead,
@@ -81,7 +81,7 @@ export const module = route({
   },
   commands: {
     initialize: {
-      ...sessionCommand("takeoffs.initialize"),
+      ...command("takeoffs.initialize"),
       label: "Initialize",
       input: ({ value }) => {
         if (!value || value.initialize.refusal)
@@ -94,6 +94,10 @@ export const module = route({
           throw Error("Prepare Initialize from the current reading");
         return {};
       },
+      present: () => ({
+        sentence: "Write the shared parameters the current document is missing.",
+        rows: [],
+      }),
     },
     adopt: {
       ...command("takeoffs.adopt"),

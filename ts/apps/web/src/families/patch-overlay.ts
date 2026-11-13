@@ -1,6 +1,6 @@
 import { familyCellKey, type FamiliesPatchCell } from "@pe/agent-contracts";
 
-import type { ParamSpec } from "#/family/family-model";
+import type { ParamSpec } from "@pe/agent-contracts";
 import type { ParamColumn, TypeRow } from "./matrix-columns";
 
 type OverlayRung = "edit";

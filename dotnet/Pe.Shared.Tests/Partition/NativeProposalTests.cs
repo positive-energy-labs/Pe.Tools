@@ -13,7 +13,7 @@ public sealed class NativeProposalTests {
     private static readonly GeometryFactory Factory = new();
     private static readonly Resolved Gate = new([], [], [], [], []);
     private static readonly SliceAnswer Empty = new(
-        new Stamp("unit-domain", 0, Stamp.HostInternalFt, DateTime.UnixEpoch, [], true, Gate),
+        new SpatialEvidence("unit-domain", 0, DateTime.UnixEpoch, SpatialEvidence.HostInternalFt, Gate, [], [], []),
         new Searched(0, 0, 0, 0, 0), [], 0, 0);
 
     [Test]
@@ -104,7 +104,7 @@ public sealed class NativeProposalTests {
         var recorded = Load("answer")["Rooms"]!.Where(r => r["Proposal"]?.Type == JTokenType.Object)
             .GroupBy(r => (string)r["Proposal"]!["SourceKey"]!).ToDictionary(g => g.Key, g => g.Sum(r => (double)r["AreaSqft"]!));
         Assert.That(recorded, Has.Count.EqualTo(10), "the fixture carries ten architect Rooms");
-        var answer = Solve.RunRails(input, (_, _) => new ProbeAnswer(input.Knee.Stamp, input.Knee.Searched, null, null, 0, 0));
+        var answer = Solve.RunRails(input, (_, _) => new ProbeAnswer(input.Knee.Evidence, input.Knee.Searched, null, null, 0, 0));
         var adopted = answer.Rooms.Where(r => r.Proposal != null).GroupBy(r => r.Proposal!.SourceKey)
             .ToDictionary(g => g.Key, g => g.Sum(r => r.AreaSqft));
         Assert.That(adopted.Keys, Is.EquivalentTo(recorded.Keys));
@@ -121,7 +121,7 @@ public sealed class NativeProposalTests {
         ProbeAnswer Probe(double x, double y) {
             queries.Add((x, y));
             var handle = new Handle("unit-domain", 1, "unit-hit", null, "unit", PrimKind.Solid);
-            return new ProbeAnswer(Empty.Stamp, Empty.Searched,
+            return new ProbeAnswer(Empty.Evidence, Empty.Searched,
                 floor is { } f ? new ProbeHit(handle, 3.5 - f, f) : null,
                 ceiling is { } c ? new ProbeHit(handle, c - 3.5, c) : null, 200, 0,
                 ProbePurpose.RoomHeights);

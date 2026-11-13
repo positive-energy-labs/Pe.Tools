@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vite-plus/tes
 
 import { acknowledgeUpdate } from "#/host/install";
 import { alignRevitBootstrap, switchRemoteAdministration, switchShare } from "#/host/machine";
-import { BAY_YOURS_25, MACHINE_SEEDS } from "#/design-system/open-examples";
+import { BAY_YOURS_25, MACHINE_SEEDS } from "./open-examples";
 import { GENERATED_FROM } from "@pe/host-contracts/pe-revit-contract";
 import { Button } from "@pe/kit/lang/button";
 import { BootstrapAlignment } from "./bootstrap";
@@ -15,7 +15,7 @@ import { SettingsBody } from "./body";
 import { machineOf } from "./model";
 import { ShareSettings } from "./share";
 import { UpdateGroup } from "./update";
-import { installOpenControls, OpenOwnerContext, type OpenOwner } from "#/open/context";
+import { installOpenControls, OpenOwnerContext, type OpenOwner } from "./context";
 
 const surface = vi.hoisted(() => ({ surface: "web", native: false }));
 const go = vi.hoisted(() => vi.fn());

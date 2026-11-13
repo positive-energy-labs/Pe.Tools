@@ -8,7 +8,7 @@ public sealed class RailsTests {
         new("doc", id, "u" + id, null, category, kind, layer);
 
     private static PartitionInput Input(params SliceElement[] elements) {
-        var stamp = new Stamp("doc", 0, Stamp.HostInternalFt, DateTime.UnixEpoch, [], true, new Resolved([], [], [], [], []));
+        var stamp = new SpatialEvidence("doc", 0, DateTime.UnixEpoch, SpatialEvidence.HostInternalFt, new Resolved([], [], [], [], []), [], [], []);
         var knee = new SliceAnswer(stamp, new Searched(0, 0, 0, 0, 0), elements, elements.Sum(e => e.Pieces.Count), 0);
         return new PartitionInput(knee, knee with { Elements = [] }, [], 0, Knobs.Default, [], "test", []);
     }

@@ -1,6 +1,6 @@
 import { expect, test } from "vite-plus/test";
 import type { Machine, Reading } from "@pe/agent-contracts";
-import { MACHINE_SEEDS } from "#/design-system/open-examples";
+import { MACHINE_SEEDS } from "./open-examples";
 import { chipText, machineOf, runtimeIdentity } from "./model";
 
 const original = machineOf(MACHINE_SEEDS["no-revit"])!;

@@ -113,7 +113,11 @@ public sealed record BridgeResponse(
     int? StatusCode,
     List<ValidationIssue>? Issues,
     PerformanceMetrics Metrics,
-    string? OpenDocumentId = null
+    string? OpenDocumentId = null,
+    // The response's IEvidenced<T>.Evidence, apart from PayloadJson; null when the response type declares none.
+    string? EvidenceJson = null,
+    // Null only from a bridge that predates the scopes; the host reads that as unknown, never as none.
+    Touched? Touched = null
 );
 
 public sealed record BridgeEvent(
@@ -143,7 +147,9 @@ public sealed record BridgeFrame(
 
 // A terminal is created once; transport replay may deliver it more than once under the original request id.
 public sealed record BridgeTerminal(
-    string RequestId, string Outcome, long StartedAtUnixMs, long CompletedAtUnixMs, string? ReceiptId = null);
+    string RequestId, string Outcome, long StartedAtUnixMs, long CompletedAtUnixMs, string? ReceiptId = null,
+    // What the finished call did, restore outcome included. The payload and evidence are in the receipt's response file.
+    Touched? Touched = null);
 public sealed record BridgeInFlightRequest(string RequestId, string State, long StartedAtUnixMs);
 public sealed record BridgeInFlightSnapshot(
     int ProcessId, long ProcessStartUtcUnixMs,

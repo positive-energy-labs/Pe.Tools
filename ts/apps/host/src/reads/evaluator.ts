@@ -3,7 +3,9 @@ import { z } from "zod";
 import { canonicalRouteInput as canonicalJson } from "@pe/agent-contracts";
 import { documentRefSchema } from "@pe/agent-contracts/target";
 import type { SettingTierRead } from "@pe/agent-contracts/tiered-setting";
+import type { ReadHandle } from "@pe/agent-contracts/handle";
 import {
+  bodyOf,
   firm as firmFile,
   settingsFile,
   firmOwner,
@@ -117,15 +119,20 @@ export class RefusedPartition extends Error {}
 const moved = (name: string, args: unknown, when = "while this was being read") =>
   `The ${name === "resource" && typeof args === "object" && args && "kind" in args ? String(args.kind) : name} input changed ${when}.`;
 export interface ReadContext {
+  /** By handle: the registry resolves the body by key. By body or leaf until the route reads are converted (k2/read-sweep). */
+  read<I, D>(h: ReadHandle<string, I, D>, args: I): Promise<D>;
   read<I, O>(read: Read<I, O> | Leaf<I, O>, args: I): Promise<O>;
   /** Work by key, or a target document's Work for `owner` given its document ref (a Pod's door: no module import). */
   work(owner: string, scope: unknown): Promise<unknown>;
   /** The one native door: any catalog Read, typed and decoded by the host's generated catalog. */
   native<K extends CatalogReadKey>(key: K, args: NativeArgs<K>): Promise<NativeValue<K>>;
-  /** The firm file layer (ADR 0026): the firm's per-owner `<owner>.json` decoded by `schema`, else `seed` with why. */
-  firm<T>(owner: string, schema: z.ZodType<T>, seed: T): Promise<FirmValue<T>>;
-  /** Every home tier's per-owner settings file for the target model (ADR 0037 rule 8), most specific first. */
-  settings(owner: string, target: z.output<typeof documentRefSchema> | null): Promise<SettingTierRead[]>;
+  /** The read side of the store: each is a recorded, invalidated input, never a plain file read. */
+  readonly files: {
+    /** The firm file layer (ADR 0026): the firm's per-owner `<owner>.json` decoded by `schema`, else `seed` with why. */
+    firm<T>(owner: string, schema: z.ZodType<T>, seed: T): Promise<FirmValue<T>>;
+    /** Every home tier's per-owner settings file for the target model (ADR 0037 rule 8), most specific first. */
+    tiers(owner: string, target: z.output<typeof documentRefSchema> | null): Promise<SettingTierRead[]>;
+  };
   collect<K, I, O>(
     keys: readonly K[],
     options: {
@@ -162,8 +169,14 @@ export async function evaluate<I, O>(
     refused: { keys: string[]; reason: string }[] = [];
   const reason = (error: unknown) => (error instanceof Error ? error.message : String(error));
   const ctx: ReadContext = {
-    read: <A, B>(definition: Read<A, B> | Leaf<A, B>, input: A): Promise<B> => {
+    read: <A, B>(named: Read<A, B> | Leaf<A, B> | ReadHandle<string, A, B>, input: A): Promise<B> => {
       if (closed) return Promise.reject(Error("This evaluation is closed"));
+      let definition: Read<A, B> | Leaf<A, B>;
+      try {
+        definition = "key" in named ? bodyOf(named) : named;
+      } catch (error) {
+        return Promise.reject(error);
+      }
       const args = immutable(wireValue(definition.input.parse(input)));
       const recipe = fingerprint([
         definition.name,
@@ -211,9 +224,11 @@ export async function evaluate<I, O>(
       return ctx.read(workInput, { owner, scope: key });
     },
     native: (key, args) => ctx.read(nativeRead(key), args),
-    firm: async (owner, schema, seed) =>
-      resolveFirm(await ctx.read(firmFile, firmOwner.parse(owner)), schema, seed),
-    settings: (owner, target) => ctx.read(settingsFile, { owner: firmOwner.parse(owner), target }),
+    files: {
+      firm: async (owner, schema, seed) =>
+        resolveFirm(await ctx.read(firmFile, firmOwner.parse(owner)), schema, seed),
+      tiers: (owner, target) => ctx.read(settingsFile, { owner: firmOwner.parse(owner), target }),
+    },
     collect: async (keys, options) => {
       if (!Number.isSafeInteger(options.batch) || options.batch < 1)
         throw Error("Batch must be a positive integer");

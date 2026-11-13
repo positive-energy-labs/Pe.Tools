@@ -1,7 +1,7 @@
-import { mountTypedRoute, type TypedMount } from "#/shell/typed-mount";
+import { mountTypedRoute, type TypedMount } from "../shell/typed-mount";
 import { currentFixture } from "../shell/fixture-name";
-import { routeRegistry } from "#/route/registry";
-import { module, type OpenContext } from "./route";
+import { routeRegistry } from "../route/registry";
+import type { OpenContext } from "./open-fields";
 import { useOpenTypedOwner } from "./typed-owner";
 import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { OpenOwnerContext } from "./context";
@@ -19,7 +19,7 @@ export function OpenControls({ children }: { children: ReactNode }) {
     let active = true;
     const listeners = new Set<() => void>();
     let search = new URLSearchParams();
-    const mounted = mountTypedRoute(module, {
+    const mounted = mountTypedRoute(routeRegistry.open!.module, {
       address: { read: () => new URLSearchParams(search), write: value => { search = new URLSearchParams(value); listeners.forEach(f => f()); },
         subscribe: listener => { listeners.add(listener); return () => void listeners.delete(listener); } },
       fixture: currentFixture(), target: { kind: "host" }, work: { address: null, open: null },

@@ -16,19 +16,16 @@ export { oneName, nameOf } from "../../../../packages/agent-contracts/src/subjec
 import { subjectSchema } from "@pe/agent-contracts/route-kernel-codecs";
 import type { PlanHandle as importPlanHandle } from "@pe/kit/lang/write-action";
 import { z } from "zod";
-import type { Publication } from "./host-read.ts";
+import type { Publication } from "@pe/agent-contracts/value";
 import { picturePoseSchemas, pictureSlotData, sheetSlotData, writesRevit, SHEET_COMMANDS, type Goal, type PictureScope, type PictureSlot, type SheetSlot } from "@pe/agent-contracts/slots";
 
-/*
- * The sheet pair's contracts, inline: importing `typed-actions` would pull the whole semantic catalog into
- * every Pod bundle. The axes equal `commandCatalogAxes` for the pair; the host decodes the real input.
- */
-const sheetContract = (effect: "Read" | "ModelWrite") => ({
-  input: z.looseObject({}), output: z.unknown(),
-  axes: { subject: "Elements", touches: ["Metadata"], effect, cost: "Mutation", cardinality: "One" } as const,
+// Generated metadata keeps command schemas out of Pod bundles. The host decodes inputs.
+import { commandCatalogAxes } from "@pe/agent-contracts/command-axes";
+const sheetContract = (key: typeof SHEET_COMMANDS[keyof typeof SHEET_COMMANDS]) => ({
+  input: z.looseObject({}), output: z.unknown(), axes: commandCatalogAxes[key],
 });
 const sheetCommand = { entry: SHEET_COMMANDS.apply, plan: SHEET_COMMANDS.plan,
-  contract: sheetContract("ModelWrite"), planContract: sheetContract("Read") };
+  contract: sheetContract(SHEET_COMMANDS.apply), planContract: sheetContract(SHEET_COMMANDS.plan) };
 import { fillBody, scrollBody, type Body, type BodyKind } from "./body.ts";
 export { scrollBody, fillBody, type Body, type BodyKind } from "./body.ts";
 
