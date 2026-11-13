@@ -172,6 +172,7 @@ export declare const SdkSession: Context.Service<SdkSession, SdkSessionService>;
  * Owners project internal failures here; the router maps the closed union once.
  * Interruption stays interruption, never a DoorFailure. */
 export interface DoorEvidence {
+  readonly uncertainty?: "lost-response" | "process-exit";
   readonly nativeRequestId?: string;
   readonly receiptId?: string;
   readonly actualTarget?: NativeAnswer<never>["actualTarget"];
