@@ -1,5 +1,9 @@
+import { notices as storedNotices } from "@pe/host-contracts/kinds";
+import { stateMachine } from "../../../tests/isolated-home/storage.ts";
+import { dirname as storedParent } from "node:path";
+import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { contextHeaders } from "./callers.ts";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vite-plus/test";
@@ -7,8 +11,9 @@ import { Effect, Layer } from "effect";
 import { HttpRouter } from "effect/http";
 import { createShare, shareIntentFile, tailscaleCommand, shareRoute } from "../src/share.ts";
 import { requestIdentityLayer } from "../src/request-identity.ts";
-import { readStoredNotices, sha256Hex } from "@pe/host-contracts/store";
-import { storedBlobsPath, storedNoticesPath } from "../src/notice-feed.ts";
+import { sha256Hex } from "@pe/host-contracts/kinds";
+import { stateTree } from "@pe/host-contracts/service-identity";
+import { shareKind } from "../src/share.ts";
 
 test("fake tailscale binary: foreign rule refused; own changes re-read status; observations stay bounded", async () => {
   const dir = await mkdtemp(join(tmpdir(), "pe-share-fake-"));
@@ -45,7 +50,7 @@ else if(args.includes('--https=443')) {
     port: () => 5180,
     now: () => time,
     run: tailscaleCommand(process.execPath, [script, config, log]),
-    ...shareIntentFile(join(dir, "intent.json")),
+    ...shareIntentFile(stateTree(dir)),
   };
   const share = createShare(options);
   try {
@@ -223,12 +228,14 @@ test("Off persists cancellation even when Tailscale status is unavailable", asyn
 // (`share.unavailable`) until someone fixed the file by hand.
 test("a share intent that does not decode is discarded on the request that meets it, not refused", async () => {
   const dir = await mkdtemp(join(tmpdir(), "pe-share-corrupt-"));
-  const path = join(dir, "share.json");
+  const machine = stateTree(dir);
+  const path = shareKind.in(machine).path;
+  await mkdir(machine.state, { recursive: true });
   await writeFile(path, "{ this is not JSON");
   const share = createShare({
     installed: true,
     port: () => 5180,
-    ...shareIntentFile(path),
+    ...shareIntentFile(machine),
     // A running tailnet with nothing served: the only thing wrong on this machine is the intent.
     run: async (args) =>
       args[0] === "status"
@@ -250,7 +257,8 @@ test("a share intent that does not decode is discarded on the request that meets
     const response = await app.handler(
       new Request("http://127.0.0.1:5180/pe/share", {
         method: "PUT",
-        headers: { "content-type": "application/json", host: "127.0.0.1:5180", ...contextHeaders() },
+        headers: { "content-type": "application/json", host: "127.0.0.1:5180", ...contextHeaders(),
+        },
         body: JSON.stringify({ on: false }),
       }),
     );
@@ -258,7 +266,8 @@ test("a share intent that does not decode is discarded on the request that meets
     expect(await response.json()).toMatchObject({ desired: "off", refusal: null });
     expect(JSON.parse(await readFile(path, "utf8"))).toMatchObject({ desired: "off" });
     expect(
-      readStoredNotices(storedNoticesPath()).filter((notice) => notice.path === path),
+      storedNotices(stateMachine(storedParent(machine.notices))).filter((notice) => notice.path === path,
+      ),
     ).toMatchObject([{ class: "discard", place: "Sharing" }]);
   } finally {
     await app.dispose();
@@ -271,17 +280,24 @@ test("a share intent that does not decode is discarded on the request that meets
 // bytes that have no copy). The planted copy failure is a folder where this file's blob would rest.
 test("a share intent whose bytes cannot be copied aside is kept, and no save lands over it", async () => {
   const dir = await mkdtemp(join(tmpdir(), "pe-share-kept-"));
-  const path = join(dir, "intent.json");
+  const machine = stateTree(dir);
+  const path = shareKind.in(machine).path;
+  await mkdir(machine.state, { recursive: true });
   const torn = `{ torn ${crypto.randomUUID()}`;
-  const blob = join(storedBlobsPath(), "sha256", sha256Hex(torn));
+  const blob = join(machine.blobs, "sha256", sha256Hex(torn));
   try {
     await writeFile(path, torn);
     await mkdir(blob, { recursive: true });
-    const intent = shareIntentFile(path);
+    const intent = shareIntentFile(machine);
     expect(await intent.load!()).toBeNull();
     expect(await readFile(path, "utf8")).toBe(torn);
-    expect(readStoredNotices(storedNoticesPath()).filter((n) => n.path === path)).toMatchObject([
-      { class: "keep", place: "Sharing", reason: expect.stringContaining("could not be copied aside") },
+    expect(
+      storedNotices(stateMachine(storedParent(machine.notices))).filter((n) => n.path === path),
+    ).toMatchObject([
+      {
+        class: "keep",
+        place: "Sharing", reason: expect.stringContaining("could not be copied aside"),
+      },
     ]);
     await expect(intent.save!({ desired: "on", mapping: null })).rejects.toThrow();
     expect(await readFile(path, "utf8")).toBe(torn);

@@ -1,10 +1,15 @@
 import { readdir, realpath, stat } from "node:fs/promises";
-import { join, resolve, relative, isAbsolute } from "node:path";
+import { basename, dirname, join, resolve, relative, isAbsolute } from "node:path";
 import { catalogSchema, type Catalogs, type CatalogTable } from "@pe/ducts-domain/catalog";
 import { productPathNames } from "@pe/host-contracts/contracts";
 import { homeDirs } from "@pe/host-contracts/product-paths";
-import { readStored } from "@pe/host-contracts/store";
-import { storedNoticesPath } from "./notice-feed.ts";
+import { read as readStoredFile, homeKind } from "@pe/host-contracts/kinds";
+import { hostState } from "./host-ownership.ts";
+  const catalogKind = homeKind({
+  schema: catalogSchema,
+  place: (_library: string, id: string) => `Catalog ${id}`,
+  segments: (library: string, id: string) => [library, id, "catalog.json"],
+});
 
 /** The product's Catalogs in every home, in list order (user, project, firm). */
 export const productCatalogsRoots = (pointer?: string | null) => homeDirs(productPathNames.catalogsDirectoryName, { pointer });
@@ -45,11 +50,13 @@ async function readCatalogsFolder(
     try {
       const dir = await realpath(join(root, folder.name));
       // Authored (ADR 0039): a catalog that does not decode is refused and kept, with its reason.
-      const read = readStored(join(dir, "catalog.json"), catalogSchema, {
-        class: "keep",
-        place: `Catalog ${folder.name}`,
-        notices: storedNoticesPath(),
-      });
+      const read = readStoredFile(
+        catalogKind.in(
+          hostState().home({ root: dirname(root), tier: "user" }),
+          basename(root),
+          folder.name,
+        ),
+      );
       if (read.kind !== "ok") throw Error(read.kind === "missing" ? "catalog.json is missing" : read.reason);
       const catalog = read.value;
       for (const table of catalog.tables) {

@@ -1,3 +1,5 @@
+import { stateFixture } from "../../../tests/isolated-home/storage.ts";
+import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { actAs } from "./callers.ts";
 import { RevitBridgeLive } from "../src/bridge.ts";
 import { nativeReadRoot } from "../src/app.ts";
@@ -7,7 +9,7 @@ import { CaptureStore } from "../src/takeoff-captures.ts";
 import type { NativeReadInput } from "@pe/host-internal/native-read";
 import type { BridgeSessionsListData } from "@pe/host-contracts/operation-types";
 import { unavailableFieldOptions, journalAt, callRouteOver } from "./effect-test.ts";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Context, Effect, Layer, Schema } from "effect";
@@ -95,7 +97,7 @@ export async function fixture(
         HostInputContext.layer({
           kind: "live",
           captureStore: capture
-            ? await settle(openRecordingWriter(join(dir, "recording"), identity, bounds))
+            ? await settle(openRecordingWriter(stateFixture(join(dir, "recording")), identity, bounds))
             : undefined,
         }),
       ),
@@ -111,7 +113,7 @@ export async function fixture(
     return Layer.mergeAll(peCoreRoutes(routes, reads.invocation, inputs), historyRoutes(reads.history),
       recorded.actions ? callRouteOver(journal, undefined, {workspace: reads.work.workspace, workReads: reads.work.reads}).pipe(
         nativeReadRoot(), Layer.provide(RevitBridgeLive),
-        Layer.provideMerge(PictureCaptureStore.layer(join(dir, "pictures"))),
+        Layer.provideMerge(PictureCaptureStore.layer(stateFixture(join(dir, "pictures")))),
         HttpRouter.provideRequest(Layer.mergeAll(NodeServices.layer, NodeHttpClient.layerUndici, RevitBridgeLive)),
       ) : Layer.empty).pipe(
       HttpRouter.provideRequest(Layer.succeedContext(Context.add(reads.services, HostInputContext, inputs))),
@@ -120,7 +122,7 @@ export async function fixture(
   }));
   const web = HttpRouter.toWebHandler(
     fixtureRoutes({
-      store: fileRouteDocumentStore(join(dir, "work")),
+      store: fileRouteDocumentStore(stateFixture(join(dir, "work"))),
       initialize: async (current) => {
         workspace = current;
       },
@@ -198,7 +200,7 @@ export async function fixture(
             }),
         }),
       },
-    }).pipe(Layer.provide(CaptureStore.layer(join(dir, "captures")))),
+    }).pipe(Layer.provide(CaptureStore.layer(stateFixture(join(dir, "captures"))))),
     { disableLogger: true },
   );
   const send = async (

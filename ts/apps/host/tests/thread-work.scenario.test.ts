@@ -1,5 +1,7 @@
+import { stateFixture } from "../../../tests/isolated-home/storage.ts";
+import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { actAs } from "./callers.ts";
-import { mkdtemp, rm } from "node:fs/promises";
+import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
@@ -13,7 +15,7 @@ test("explicit Pea opens travel live through world and cannot address another co
   const root = await mkdtemp(join(tmpdir(), "pe-view-open-"));
   const app = createPeRoutes({
     registrations: createRouteRegistrations(),
-    store: fileRouteDocumentStore(root),
+    store: fileRouteDocumentStore(stateFixture(root)),
     heads: { observe: () => () => {} },
     observeHostResource: hostResourceObserver(),
   });

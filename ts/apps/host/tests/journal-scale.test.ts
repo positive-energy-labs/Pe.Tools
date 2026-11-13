@@ -1,6 +1,7 @@
+import { mkdtempSync } from "../../../tests/isolated-home/storage.ts";
 import { journalAt } from "./effect-test.ts";
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { rmSync } from "node:fs";
 import { stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";

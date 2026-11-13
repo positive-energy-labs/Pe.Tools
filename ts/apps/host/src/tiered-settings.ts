@@ -21,11 +21,10 @@ import {
   homes,
 } from "@pe/host-contracts/product-paths";
 import { productPathNames } from "@pe/host-contracts/contracts";
-import { noteStored, sha256Hex } from "@pe/host-contracts/store";
-import { SETTING_WRITE_PLACE, storedNoticesPath } from "./notice-feed.ts";
+import { note, sha256Hex } from "@pe/host-contracts/kinds";
+import { SETTING_WRITE_PLACE } from "./notice-feed.ts";
 import { firmOwner } from "./reads/door.ts";
-import { writeHome } from "./settings.ts";
-import { appendLine, homeKind, readLines, rested, stateLog, writeHome as writeHomeKind, type HomeWrite } from "@pe/host-contracts/kinds";
+import { appendLine, homeKind, readLines, rested, stateLog, writeHome, type HomeWrite } from "@pe/host-contracts/kinds";
 import { hostState } from "./host-ownership.ts";
 import { registerTimelineSource } from "./reads/work-timeline.ts";
 
@@ -72,7 +71,7 @@ const activeWrites = (log = events()) => {
 };
 const undoRefusal = (row: HomeWriteRow): string | null => {
   if (row.priorSha256 === null) return "This file was new. Undo of a first home write is not supported; the file is kept.";
-  if (!rested(hostState(), row.priorSha256)) return "The prior bytes are unavailable or damaged. The file is kept.";
+  if (rested(hostState(), row.priorSha256).kind !== "ok") return "The prior bytes are unavailable or damaged. The file is kept.";
   try { return sha256Hex(readFileSync(row.path)) === row.sha256 ? null : `${row.path} changed since the save. Nothing was written.`; }
   catch { return `${row.path} cannot be read. The file is kept.`; }
 };
@@ -88,8 +87,8 @@ export const homeWriteSource: HomeWriteSource = {
     const file = tierFileKind.in(hostState().home({ root: row.home, tier: row.tier }), row.owner);
     if (file.path !== row.path) throw Error("The home write path does not match its owner. The file is kept.");
     const prior = row.priorSha256 === null ? null : rested(hostState(), row.priorSha256);
-    if (prior === null) throw Error("The prior bytes are unavailable or damaged. The file is kept.");
-    const wrote = writeHomeKind(file, prior, row.sha256);
+    if (prior?.kind !== "ok") throw Error("The prior bytes are unavailable or damaged. The file is kept.");
+    const wrote = writeHome(file, prior.bytes, row.sha256);
     if (wrote.ok) {
       appendLine(homeWritesKind.in(hostState()), { kind: "home-undo", path: row.path, sha256: row.sha256, by, at: new Date().toISOString() });
       for (const listener of listeners) listener();
@@ -268,14 +267,14 @@ export function writeSettingTier(
   if (request.value == null) delete node[leaf];
   else node[leaf] = request.value;
   next.written = { by, at };
-  const wrote = writeHome(read.path, `${JSON.stringify(next, null, 2)}\n`, request.expectedSha256);
+  const wrote = writeHome(tierFileKind.in(hostState().home({ root: read.home, tier: request.tier }), request.owner), `${JSON.stringify(next, null, 2)}\n`, request.expectedSha256);
   if (!wrote.ok) return { ok: false, status: 409, message: `${read.path} changed since it was read.` };
   appendLine(homeWritesKind.in(hostState()), {
     kind: "home-write", place: `${request.owner} ${request.path.join(".")} at ${request.tier}${read.name ? ` (${read.name})` : ""}`,
     path: read.path, home: read.home, owner: request.owner, tier: request.tier,
     sha256: wrote.sha256, priorSha256: wrote.priorSha256, by: context.caller ?? { kind: "human", via: "local" }, at,
   });
-  noteStored(storedNoticesPath(), {
+  note(hostState(), {
     class: "keep",
     place: SETTING_WRITE_PLACE,
     path: read.path,

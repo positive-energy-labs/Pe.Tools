@@ -1,3 +1,7 @@
+import { stateMachine, stateFixture } from "../../../tests/isolated-home/storage.ts";
+import { dirname as storedParent } from "node:path";
+import { ledgerFixture } from "./storage.ts";
+import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 /**
  * Guard M1 (homes slice 5, ADR 0037 rule 6): a content home holds only authored files. Two
  * "machines" with their own state root, install root and port bootstrap one home, and the home
@@ -9,11 +13,11 @@
  * `agentPath: homeRoot` to `publishPeaSkills`, so a projection is written back into the home.
  */
 import { createHash } from "node:crypto";
-import { cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, relative, sep } from "node:path";
 import { afterEach, expect, test } from "vite-plus/test";
-import { resolvePeaSkillPaths } from "@pe/mcps";
+import { stateDirectory } from "@pe/host-contracts/service-identity";
 import { writePeaCodexProjectConfig } from "../src/harness/user-shell.ts";
 import { importShippedPods } from "../src/installed-pods.ts";
 import { listPackages } from "../src/packages.ts";
@@ -95,36 +99,33 @@ async function bootstrap(machine: Machine, home: string) {
   const pods = join(home, "Pods");
   const agent = agentOf(machine);
   // What an agent leaves in its own harness root: the deleted read-back copied it into `Skills/`.
-  const stray = join(resolvePeaSkillPaths(agent)[1]!, "stray");
+  const stray = stateDirectory(stateFixture(agent), ".claude", "skills", "stray").path;
   await mkdir(stray, { recursive: true });
   await writeFile(join(stray, "SKILL.md"), `written by an agent on ${machine.name}`);
   const content = createContributionContent({
-    worldRoot: agent,
+    worldRoot: stateFixture(agent),
     homeRoot: home,
     packages: () => listPackages(pods),
-    decisionsPath: join(machine.state, "plugins.json"),
+    decisionsMachine: stateMachine(storedParent(join(machine.state, "plugins.json"))),
     bootstrap: () =>
       importShippedPods({
         shippedRoot: join(machine.install, "pods"),
         podsRoot: pods,
-        ledger: join(machine.state, "shipped-pods.json"),
+        ledger: ledgerFixture(join(machine.state, "shipped-pods.json")),
         captures: pictureCaptures(join(machine.state, "captures")),
       }),
   });
   await content.read();
   await content.close();
   await writePeaCodexProjectConfig(agent, ["mine"]);
-  await fileRouteDocumentStore(join(machine.state, "Work")).setState({
+  await fileRouteDocumentStore(stateFixture(join(machine.state, "Work"))).setState({
     targetKey: "document:one",
     route: "ducts",
     value: { rows: [machine.name] },
   });
   const pages = asCaller(
     human,
-    createPagesHandler(join(home, "Pages"), pods, undefined, undefined, {
-      root: join(machine.state, "Pages"),
-      notices: join(machine.state, "stored-notices.jsonl"),
-    }),
+    createPagesHandler(join(home, "Pages"), pods, undefined, undefined, stateFixture(join(machine.state, "Pages"))),
   );
   const send = async (method: string, path: string, body: unknown) => {
     const response = await pages(

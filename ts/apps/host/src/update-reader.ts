@@ -13,8 +13,7 @@ import {
   type UpdatePlan,
   type UpdateReceipt,
 } from "@pe/host-contracts/pe-revit-contract";
-import { readStored, writeAtomic } from "@pe/host-contracts/store";
-import { storedBlobsPath, storedNoticesPath } from "./notice-feed.ts";
+import { read as readFile, writeState, stateKind } from "@pe/host-contracts/kinds";
 
 const blocker = z.object({ code: z.string(), detail: z.string() });
 const processIdentity = z.object({ pid: z.number().int(), processStartUtc: z.string().nullable() });
@@ -146,9 +145,18 @@ export type UpdateFact =
       readonly exitCode: number | null;
     };
 
+export const updateAdmissionKind = stateKind<
+  z.infer<typeof storedAdmissionSchema> | z.infer<typeof discardedSchema>,
+  [name?: string]
+>({
+  schema: z.union([storedAdmissionSchema, discardedSchema]),
+  place: (_name: string = "host-update.json") => "Update status",
+  segments: (name: string = "host-update.json") => [name],
+});
+
 /** One persisted recovery handle. A lost acknowledgement is never permission to dispatch again. */
 export function createUpdateReader(options: {
-  readonly path: string;
+  readonly file: ReturnType<typeof updateAdmissionKind.in>;
   readonly run: UpdateRunner;
   readonly installed: boolean;
   readonly pid: number;
@@ -194,18 +202,13 @@ export function createUpdateReader(options: {
       // Machine state (ADR 0039): an admission that does not decode, or whose receipt answers
       // another request, is discarded with a notice. The update then reads as never admitted. Its
       // bytes rest in the blob store first, under the hash the notice names.
-      const read = readStored(options.path, z.union([storedAdmissionSchema, discardedSchema]), {
-        class: "discard",
-        place: "Update status",
-        notices: storedNoticesPath(),
-        blobRoot: storedBlobsPath(),
-      });
+      const read = readFile(options.file);
       // The replay guard's record rides this file, like the journal's header: a discard leaves
       // when it happened, and every admission after it carries that forward.
-      if (read.kind === "discarded") {
+      if (read.kind === "set-aside") {
         discardedAtUtc = now();
         try {
-          writeAtomic(options.path, JSON.stringify({ discardedAtUtc }));
+          writeState(options.file, JSON.stringify({ discardedAtUtc }));
         } catch (error) {
           // The flag stays in memory, and the next admission writes it.
           console.warn(`Could not record the update status discard: ${String(error)}`);
@@ -241,7 +244,7 @@ export function createUpdateReader(options: {
     }));
 
   async function persist(record: Admission) {
-    writeAtomic(options.path, JSON.stringify(record));
+    writeState(options.file, JSON.stringify(record));
     const before = admission?.requestId === record.requestId ? admission.receipt?.state : null;
     admission = record;
     const after = record.receipt?.state;

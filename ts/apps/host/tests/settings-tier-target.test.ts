@@ -1,11 +1,12 @@
+import { mkdtempSync } from "../../../tests/isolated-home/storage.ts";
 import { randomUUID } from "node:crypto";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect, Layer } from "effect";
 import { expect, test, vi } from "vite-plus/test";
 import { z } from "zod";
-import { sha256Hex } from "@pe/host-contracts/store";
+import { sha256Hex } from "@pe/host-contracts/kinds";
 import * as tiers from "../src/tiered-settings.ts";
 import { callRouteOver, captureStore, detachedBridge, journalAt, sessionView, testHostInputs } from "./effect-test.ts";
 import { contextHeaders } from "./callers.ts";

@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { resolve, basename, dirname } from "node:path";
+import { hostState } from "./host-ownership.ts";
 import { createHash } from "node:crypto";
 import { readSettingTiers } from "./tiered-settings.ts";
 import { targetHomes } from "./call-route.ts";
@@ -11,6 +12,7 @@ import {
   installArchive,
   preparePodExport,
   writePodExport,
+  archiveExportKind,
 } from "./pod-transfer.ts";
 import { z } from "zod";
 import { CommandRejected, StepFailure, io, nativeStep, refused, type CommandContext, type CommandExecutor } from "./command-executor.ts";
@@ -411,9 +413,12 @@ export function gatewayExecutor(
                   : installed;
               });
             if (exported)
-              return io(() =>
-                writePodExport(exported as Awaited<ReturnType<typeof preparePodExport>>),
-              );
+              return io(() => {
+                const captured = exported as Awaited<ReturnType<typeof preparePodExport>>;
+                return writePodExport(captured, archiveExportKind.in(
+                  hostState().home({ root: dirname(captured.result.archivePath), tier: "user" }), basename(captured.result.archivePath),
+                ));
+              });
             return local(key, input, admission.target.kind === "document"
               ? { bridgeSessionId: admission.target.ref.session, openDocumentId: admission.target.ref.openId }
               : undefined, { receiptId: admission.id, settingPath: prepared.settingPath, caller });

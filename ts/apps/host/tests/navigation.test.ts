@@ -1,7 +1,9 @@
+import { stateFixture } from "../../../tests/isolated-home/storage.ts";
+import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { registryService, harnessThreads } from "./effect-test.ts";
 import { createHash } from "node:crypto";
 import { HostLog } from "../src/host-log.ts";
-import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test } from "vite-plus/test";
@@ -48,7 +50,7 @@ const bytes = async (directory: string) =>
   );
 
 test("HTTP navigation resumes only the exact unique current document and reflects later writes", async () => {
-  const store = fileRouteDocumentStore(await temporary());
+  const store = fileRouteDocumentStore(stateFixture(await temporary()));
   const scope = bindWork("family", address("C:\\Models\\A.rvt"));
   await store.setState({ targetKey: workKey(scope), route: "family", value: envelope });
   let documents = [
@@ -89,7 +91,7 @@ test("HTTP navigation resumes only the exact unique current document and reflect
 
 test("discovery reports transplanted Work identity without mutating its file", async () => {
   const directory = await temporary();
-  const store = fileRouteDocumentStore(directory);
+  const store = fileRouteDocumentStore(stateFixture(directory));
   const scope = bindWork("family", address("C:\\Models\\A.rvt"));
   const other = bindWork("family", address("C:\\Models\\B.rvt"));
   await store.setState({ targetKey: workKey(scope), route: "family", value: envelope });
@@ -133,8 +135,8 @@ test("Pea navigation reads real persisted harness summaries and preserves thread
     keys: () => [],
   } as unknown as HarnessThreadsOptions["providers"];
   const options: Omit<HarnessThreadsOptions, "runs"> = {
-    root: join(directory, "threads"),
-    log: new HostLog(join(directory, "log"), Date.now),
+    root: stateFixture(join(directory, "threads")),
+    log: new HostLog(stateFixture(join(directory, "log")), Date.now),
     worldRoot: directory,
     providers,
     mcpServer: () => ({ name: "unused", command: "unused", args: [], env: [] }),
@@ -144,7 +146,7 @@ test("Pea navigation reads real persisted harness summaries and preserves thread
   try {
     const workspace = new RouteWorkspace({
       registrations: [],
-      store: fileRouteDocumentStore(join(directory, "work")),
+      store: fileRouteDocumentStore(stateFixture(join(directory, "work"))),
     });
     const snapshot = await readNavigation(workspace, {
       threads: async () => (await threads.fetch(new Request("http://host/pe/threads"))).json(),

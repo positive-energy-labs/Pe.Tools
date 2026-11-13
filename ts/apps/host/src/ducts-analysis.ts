@@ -40,10 +40,16 @@ import {
 } from "@pe/host-contracts/operation-types";
 import { contextFetch } from "@pe/runtime/context";
 import { readFile } from "node:fs/promises";
-import { join } from "node:path";
 import { gzipSync, gunzipSync } from "node:zlib";
 import type { DocumentMarks } from "./document-marks.ts";
 import { sha256Hex, writeArtifact } from "./page-artifacts.ts";
+import { stateKind, type StateDirectory } from "@pe/host-contracts/kinds";
+import { z } from "zod";
+const analysisArtifactKind = stateKind({
+  schema: z.unknown(),
+  place: (_id: string) => "Duct analysis",
+  segments: (id: string) => [`${id}.json`],
+});
 
 type Observation = {
   target: DocumentRef;
@@ -54,7 +60,7 @@ type Observation = {
   provenance: unknown;
 };
 export interface DuctsAnalysisSources {
-  root: string;
+  root: StateDirectory;
   catalogs: (pointer?: string | null) => Promise<{ tables: Catalogs; findings: string[] }>;
   producer: unknown;
   marks: DocumentMarks;
@@ -311,7 +317,7 @@ export const ductsNativeRead =
 export function createDuctsAnalysis(sources: DuctsAnalysisSources) {
   const artifactBytes = async (id: string) => {
     if (!/^[a-f0-9]{64}$/.test(id)) throw Error("Invalid analysis artifact id");
-    const bytes = await readFile(join(sources.root, `${id}.json`));
+    const bytes = await readFile(analysisArtifactKind.in(sources.root, id).path);
     if (bytes.length > MAX_BYTES || sha256Hex(bytes) !== id)
       throw Error("Analysis artifact integrity failed");
     return bytes;
@@ -556,7 +562,7 @@ export function createDuctsAnalysis(sources: DuctsAnalysisSources) {
     if (bytes.length > MAX_BYTES)
       throw Error("Apply request exceeds byte budget; no partial artifact was published");
     const planId = sha256Hex(bytes);
-    await writeArtifact(sources.root, join(sources.root, `${planId}.json`), bytes);
+    await writeArtifact(sources.root.path, analysisArtifactKind.in(sources.root, planId), bytes);
     return {
       artifact: {
         id: planId,
@@ -591,7 +597,7 @@ export function createDuctsAnalysis(sources: DuctsAnalysisSources) {
         if (bytes.length > MAX_BYTES)
           throw Error("Analysis artifact exceeds byte budget; no partial artifact was published");
         id = sha256Hex(bytes);
-        await writeArtifact(sources.root, join(sources.root, `${id}.json`), bytes);
+        await writeArtifact(sources.root.path, analysisArtifactKind.in(sources.root, id), bytes);
       } else {
         id = request.source.id;
         bytes = await artifactBytes(id);

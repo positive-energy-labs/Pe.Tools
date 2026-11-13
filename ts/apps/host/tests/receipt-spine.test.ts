@@ -1,6 +1,7 @@
+import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { journalAt } from "./effect-test.ts";
 import { receiptGoldenEnvelope } from "../../../packages/agent-contracts/tests/receipt-fixture.ts";
-import { chmod, mkdtemp, rm } from "node:fs/promises";
+import { chmod, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test } from "vite-plus/test";

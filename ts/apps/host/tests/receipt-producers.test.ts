@@ -1,10 +1,12 @@
+import { stateFixture } from "../../../tests/isolated-home/storage.ts";
+import { mkdtempSync } from "../../../tests/isolated-home/storage.ts";
 import { journalAt } from "./effect-test.ts";
 import { NodeHttpServer } from "@effect/platform-node";
 import { HOST_CONTEXT_HEADER } from "@pe/host-contracts/contracts";
 import { Deferred, Effect, Layer } from "effect";
 import { HttpEffect, HttpRouter } from "effect/http";
 import { randomUUID } from "node:crypto";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { readFileSync, rmSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -42,7 +44,7 @@ test("real HTTP feedback retains content and caller before body; diagnostics can
   });
   const telemetry = module.createReceiptExport({
     journal,
-    root: dir,
+    root: stateFixture(dir),
     stamps: {
       host: receiptGoldenEnvelope.stamp!,
       web: webStamp,
@@ -188,7 +190,7 @@ test("real HTTP refusals, from admission and from a door, export refusal_count w
   const module = await import("../src/receipt-export.ts");
   const telemetry = module.createReceiptExport({
     journal,
-    root: dir,
+    root: stateFixture(dir),
     stamps: { host: receiptGoldenEnvelope.stamp!, web: null },
     send: async (e) => {
       sent.push(e);

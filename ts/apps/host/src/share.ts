@@ -3,8 +3,7 @@ import { execFile } from "node:child_process";
 import { HttpRouter, HttpEffect } from "effect/http";
 import { z } from "zod";
 import type { MachineShare } from "@pe/agent-contracts";
-import { readStored, writeAtomic } from "@pe/host-contracts/store";
-import { storedNoticesPath } from "./notice-feed.ts";
+import { read as readFile, writeState, stateKind, type StateRoot } from "@pe/host-contracts/kinds";
 import type { IdentityResult } from "./request-identity.ts";
 
 const intentSchema = z.object({
@@ -13,6 +12,11 @@ const intentSchema = z.object({
   allowRemoteAdministration: z.boolean().optional(),
 });
 type Intent = z.infer<typeof intentSchema>;
+export const shareKind = stateKind({
+  schema: intentSchema,
+  place: () => "Sharing",
+  segments: () => ["share.json"],
+});
 type ServeStatus = {
   TCP?: Record<string, unknown>;
   Web?: Record<string, { Handlers?: Record<string, unknown> }>;
@@ -39,20 +43,17 @@ export function tailscaleCommand(binary = "tailscale", prefix: readonly string[]
     );
 }
 
-export function shareIntentFile(path: string): Pick<ShareOptions, "load" | "save"> {
+export function shareIntentFile(root: StateRoot): Pick<ShareOptions, "load" | "save"> {
+  const file = shareKind.in(root);
   return {
     // Machine state (ADR 0039): an intent that does not decode is discarded with a notice, and
     // sharing reads as never turned on.
     async load() {
-      const read = readStored(path, intentSchema, {
-        class: "discard",
-        place: "Sharing",
-        notices: storedNoticesPath(),
-      });
+      const read = readFile(file);
       return read.kind === "ok" ? read.value : null;
     },
     async save(value) {
-      writeAtomic(path, JSON.stringify(value));
+      writeState(file, JSON.stringify(value));
     },
   };
 }

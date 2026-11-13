@@ -1,4 +1,3 @@
-import { join } from "node:path";
 import { hostProcessIdentity } from "@pe/host-contracts/contracts";
 import {
   checkoutRootFrom,
@@ -35,7 +34,6 @@ export const hostOwnership = resolveHostOwnership();
  */
 export const hostState = () => stateTree(hostOwnership.rootPath);
 
-export const hostStateDir = () => join(hostOwnership.rootPath, "state", "host", hostOwnership.serviceName);
 
 function resolveHostCapabilities(argv: readonly string[] = process.argv): PeaRuntimeCapabilities {
   return { revit: !argv.includes(NO_REVIT_ARGUMENT) };

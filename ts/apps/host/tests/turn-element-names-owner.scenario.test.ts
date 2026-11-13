@@ -1,6 +1,8 @@
+import { stateFixture } from "../../../tests/isolated-home/storage.ts";
+import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { registryService, harnessThreads, testSpawner } from "./effect-test.ts";
 import { afterAll, beforeAll, expect, test } from "vite-plus/test";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
@@ -33,10 +35,10 @@ afterAll(async () => {
   await rm(root, { recursive: true, force: true });
 });
 async function host(home: string, observeDocument?: ObserveDocument) {
-  const log = new HostLog(join(home, "log"), Date.now);
+  const log = new HostLog(stateFixture(join(home, "log")), Date.now);
   const threads = await harnessThreads({
     runs: registryService(),
-    root: join(home, "threads"),
+    root: stateFixture(join(home, "threads")),
     log,
     observeDocument,
     worldRoot: tmpdir(),
@@ -173,7 +175,7 @@ test("HTTP prompt pins exact refs; concurrent reads persist once and restart fre
   expect(first.entries[1]).toMatchObject({ uniqueId: "unique-202", name: "Name 202" });
   const app = createPeRoutes({
     registrations: [],
-    store: fileRouteDocumentStore(join(home, "work")),
+    store: fileRouteDocumentStore(stateFixture(join(home, "work"))),
     heads: h.threads.heads,
     turnElementNames: (input) => h.threads.readTurnElementNames(input, nativeRead),
   });

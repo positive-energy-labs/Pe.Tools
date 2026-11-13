@@ -9,6 +9,7 @@ import { dirname, join } from "node:path";
 import { expect, test } from "vite-plus/test";
 import { decode } from "../../packages/agent-contracts/src/subject-ref.ts";
 import { FANS_ESP_ROW } from "./cdp.ts";
+import { pickFansWriteScope } from "./fans-write-scope.ts";
 import { workEvidence } from "./conversation-work.fixture.ts";
 import { marks, settled } from "./marks.ts";
 import { connectTypedPage, type TypedPage } from "./typed-page.ts";
@@ -251,10 +252,9 @@ test("resume round trip keeps /fans decodable and drawn through tabs, history an
       ids: [expect.any(String)],
     });
     const retainedSelection = async () =>
-      expect(
-        (await reading(page)).raw.fan,
-        "the journey's fan selection survives return",
-      ).toBe(selected);
+      expect((await reading(page)).raw.fan, "the journey's fan selection survives return").toBe(
+        selected,
+      );
     // The person types /ducts once (Driver step b); that opens the Ducts tab beside Fans.
     await page.send("Page.navigate", { url: new URL("/ducts", process.env.E2E_WEB!).href });
     checkpoints.push(await settle(page, "ducts typed", DUCTS_PANES, "threadSort"));
@@ -303,7 +303,14 @@ var units = new FilteredElementCollector(doc).OfCategory(BuiltInCategory.OST_Mec
     espType = f.Symbol.LookupParameter("PE_M_Fan_ExternalStaticPressure").AsDouble(),
     espInstance = f.LookupParameter("PE_M_Fan_ExternalStaticPressure")?.Element.Id == f.Id }).ToList();
 Result(new { units, store = doc.ProjectInformation.LookupParameter("_PE_DuctLosses")?.AsString() });`;
-type H1Unit = { id: number; uniqueId: string; type: string; typeId: number; espType: number; espInstance: boolean };
+type H1Unit = {
+  id: number;
+  uniqueId: string;
+  type: string;
+  typeId: number;
+  espType: number;
+  espInstance: boolean;
+};
 const nativeFans = () =>
   JSON.parse(
     execFileSync(
@@ -354,7 +361,8 @@ test("H1: a MUAS-1 ESP write refuses for its shared type and MUAS-2 keeps its va
     const row = (await espRow())!;
     const subject = row.key.slice("esp:".length);
     const ref = decode(subject);
-    if (!ref.ok || ref.value.keyKind !== "UniqueId") throw new Error(`Invalid ESP subject: ${subject}`);
+    if (!ref.ok || ref.value.keyKind !== "UniqueId")
+      throw new Error(`Invalid ESP subject: ${subject}`);
     const before = nativeFans();
     const unit = before.units.find((u) => u.uniqueId === ref.value.key);
     expect(unit, "the drawn ESP subject names a native unit").toBeDefined();
@@ -384,7 +392,8 @@ test("H1: a MUAS-1 ESP write refuses for its shared type and MUAS-2 keeps its va
     const staged = async () =>
       (await workEvidence(home)).some(
         ({ record }) =>
-          record?.route === "fans" && record.value?.doc?.esp?.[subject]?.edit?.value?.inWg === 2.6581,
+          record?.route === "fans" &&
+          record.value?.doc?.esp?.[subject]?.edit?.value?.inWg === 2.6581,
       );
     await expect
       .poll(staged, { timeout: 30_000, message: "MUAS-1 ESP staged in fans Work" })
@@ -397,11 +406,12 @@ test("H1: a MUAS-1 ESP write refuses for its shared type and MUAS-2 keeps its va
       .poll(async () => settled(await marks(page)), { timeout: 180_000, message: "page settled after the ESP edit" })
       .toBe(true);
     // The person scopes the write to this fan, then re-reads the sheet the edits made stale.
-    await press(page, '[data-choice-cell="Write scope"]', "^None");
-    await press(page, '[role="listbox"]', "^MUAS-1 · \\d+ staged");
-    await expect
-      .poll(() => find(page, '[data-choice-cell="Write scope"]', "^MUAS-1 · "), { timeout: 30_000 })
-      .not.toBeNull();
+    await pickFansWriteScope(
+      "MUAS-1",
+      (scope, pattern) => press(page, scope, pattern),
+      (scope, pattern) =>
+        expect.poll(() => find(page, scope, pattern), { timeout: 30_000 }).not.toBeNull(),
+    );
     // The Inputs pane's reading status (PaneStatus) is absent only when every reading it draws is
     // current. Its other status cells (the write scope's) are not readings.
     const status = () =>
@@ -463,9 +473,8 @@ test("H1: a MUAS-1 ESP write refuses for its shared type and MUAS-2 keeps its va
       plan.popover ??
       (await page.evaluate(
         () =>
-          /sheet.plan\n[\w-]+ \/ you \/ [\d:]+ \/ ([^\n]+)/.exec(
-            document.body.innerText,
-          )?.[1] ?? null,
+          /sheet.plan\n[\w-]+ \/ you \/ [\d:]+ \/ ([^\n]+)/.exec(document.body.innerText)?.[1] ??
+          null,
       )));
     // Without the refusal, the person applies what the plan offers (the Driver's hazard).
     if (plan.armed) seen.apply = await press(page, "[data-write-popover]", "^Write to Revit$");

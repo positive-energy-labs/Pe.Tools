@@ -1,6 +1,8 @@
+import { stateFixture } from "../../../tests/isolated-home/storage.ts";
+import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { registryService, harnessThreads, testSpawner } from "./effect-test.ts";
 import { afterAll, beforeAll, expect, test } from "vite-plus/test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { createProviders } from "../src/harness/providers.ts";
@@ -20,8 +22,8 @@ afterAll(async () => {
 const open = () =>
   harnessThreads({
     runs: registryService(),
-    root: join(root, "threads"),
-    log: new HostLog(join(root, "log"), Date.now),
+    root: stateFixture(join(root, "threads")),
+    log: new HostLog(stateFixture(join(root, "log")), Date.now),
     worldRoot: tmpdir(),
     mcpServer: () => ({ name: "pea", command: "unused", args: [], env: [] }),
     providers: createProviders({ spawner: testSpawner(), shellPath: async () => "", probeOnStart: false }),

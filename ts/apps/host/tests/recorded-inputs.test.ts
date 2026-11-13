@@ -1,9 +1,11 @@
+import { stateFixture } from "../../../tests/isolated-home/storage.ts";
+import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 /**
  * Store v2 for the non-native owners (ADR 0031 rules 1, 2 and 5): files, marks and the session
  * inventory keep exactly what their live owner answered, replay it without any live owner, and
  * refuse a miss, another ref, an ambiguity, a full bundle or an older format.
  */
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Context, Effect, Layer, Schema } from "effect";
@@ -56,7 +58,7 @@ effectTest("format 1 and 2 bundles refuse explicitly and are never migrated", ()
     const v1 = { version: 1, ...identity, coverage: { kind: "partial", inputs: ["native-read"] } };
     yield* Effect.promise(() => writeFile(join(dir, "manifest.json"), JSON.stringify(v1)));
     expect(yield* problem(reader(dir))).toBe("recording.mismatch");
-    expect(yield* problem(openRecordingWriter(dir, identity, bounds))).toBe("recording.mismatch");
+    expect(yield* problem(openRecordingWriter(stateFixture(dir), identity, bounds))).toBe("recording.mismatch");
     const v2 = { version: 2, ...identity };
     yield* Effect.promise(() => writeFile(join(dir, "manifest.json"), JSON.stringify(v2)));
     expect(yield* problem(reader(dir))).toBe("recording.mismatch");
@@ -68,7 +70,7 @@ effectTest(
   () =>
     Effect.gen(function* () {
       const dir = yield* bundle;
-      const writer = yield* openRecordingWriter(dir, identity, bounds);
+      const writer = yield* openRecordingWriter(stateFixture(dir), identity, bounds);
       const files = yield* service(
         DuctFiles,
         DuctFiles.capturing(writer).pipe(Layer.provide(liveFiles)),
@@ -89,7 +91,7 @@ effectTest(
   () =>
     Effect.gen(function* () {
       const dir = yield* bundle;
-      const writer = yield* openRecordingWriter(dir, identity, bounds);
+      const writer = yield* openRecordingWriter(stateFixture(dir), identity, bounds);
       const live = hostMarks({
         observedSince: 5,
         changedAt: (ref) => (ref.openId === "A" ? 42 : null),
@@ -129,7 +131,7 @@ effectTest(
 effectTest("inventory replays recorded answers and refusal classes without an SDK or bridge", () =>
   Effect.gen(function* () {
     const dir = yield* bundle;
-    const writer = yield* openRecordingWriter(dir, identity, bounds);
+    const writer = yield* openRecordingWriter(stateFixture(dir), identity, bounds);
     const closed = new InvalidRead({
       message: "Sheet Work target is no longer open",
       status: 409,
@@ -171,7 +173,7 @@ effectTest("inventory replays recorded answers and refusal classes without an SD
 effectTest("an unrebuildable failure or a full bundle stops capture, keeps no taking and returns the live result", () =>
   Effect.gen(function* () {
     const dir = yield* bundle;
-    const writer = yield* openRecordingWriter(dir, identity, {
+    const writer = yield* openRecordingWriter(stateFixture(dir), identity, {
       maxBytes: 1_000_000,
       maxTakings: 1,
     });
@@ -188,7 +190,7 @@ effectTest("an unrebuildable failure or a full bundle stops capture, keeps no ta
     expect(writer.capture.truncated()).toEqual({ at: 1, stoppedAt: expect.any(Number), site: "failure", op: "files.firm", reason: "unsupported" });
     expect(writer.coverage()).toEqual([]);
     const fullDir = yield* bundle;
-    const full = yield* openRecordingWriter(fullDir, identity, { maxBytes: 1_000_000, maxTakings: 1 });
+    const full = yield* openRecordingWriter(stateFixture(fullDir), identity, { maxBytes: 1_000_000, maxTakings: 1 });
     const kept = yield* service(DuctFiles, DuctFiles.capturing(full).pipe(Layer.provide(liveFiles)));
     yield* kept.ductCatalogs;
     expect(yield* kept.ductCatalogs).toEqual(catalogs);
@@ -204,7 +206,7 @@ effectTest(
   () =>
     Effect.gen(function* () {
       const dir = yield* bundle;
-      const writer = yield* openRecordingWriter(dir, identity, bounds);
+      const writer = yield* openRecordingWriter(stateFixture(dir), identity, bounds);
       const seen: Taking[] = [];
       const files = yield* service(
         DuctFiles,
@@ -245,7 +247,7 @@ effectTest(
   () =>
     Effect.gen(function* () {
       const dir = yield* bundle;
-      const writer = yield* openRecordingWriter(dir, identity, {
+      const writer = yield* openRecordingWriter(stateFixture(dir), identity, {
         maxBytes: 1_000_000,
         maxTakings: 1,
       });
@@ -265,7 +267,7 @@ effectTest(
         status: 409,
         problem: "read-set.closed",
       });
-      const other = yield* openRecordingWriter(yield* bundle, identity, bounds);
+      const other = yield* openRecordingWriter(stateFixture(yield* bundle), identity, bounds);
       const refusing = yield* service(
         DuctFiles,
         DuctFiles.capturing(other, () => Effect.fail(broken)).pipe(Layer.provide(liveFiles)),
@@ -280,7 +282,7 @@ effectTest(
   () =>
     Effect.gen(function* () {
       const dir = yield* bundle;
-      const writer = yield* openRecordingWriter(dir, identity, bounds);
+      const writer = yield* openRecordingWriter(stateFixture(dir), identity, bounds);
       const live = hostMarks({
         observedSince: 100,
         changedAt: () => 300,

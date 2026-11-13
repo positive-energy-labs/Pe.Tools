@@ -1,6 +1,8 @@
+import { stateFixture } from "../../../tests/isolated-home/storage.ts";
+import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { registryService, harnessThreads, testSpawner } from "./effect-test.ts";
 import { afterAll, beforeAll, expect, test } from "vite-plus/test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { rm } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -29,10 +31,10 @@ afterAll(async () => {
 });
 
 async function host(limits?: { segmentBytes: number; segments: number; entryBytes: number }) {
-  const log = new HostLog(join(root, "log", randomUUID()), Date.now, limits);
+  const log = new HostLog(stateFixture(join(root, "log", randomUUID())), Date.now, limits);
   const threads = await harnessThreads({
     runs: registryService(),
-    root: join(root, "threads"),
+    root: stateFixture(join(root, "threads")),
     log,
     worldRoot: tmpdir(),
     mcpServer: () => ({ name: "pea", command: "unused", args: [], env: [] }),

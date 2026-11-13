@@ -1,10 +1,12 @@
+import { stateFixture } from "../../../tests/isolated-home/storage.ts";
+import { mkdtempSync } from "../../../tests/isolated-home/storage.ts";
 import { journalAt } from "./effect-test.ts";
 import { receiptGoldenEnvelope } from "../../../packages/agent-contracts/tests/receipt-fixture.ts";
 import { machineFixture } from "../../../packages/agent-contracts/tests/machine-fixture.ts";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { Layer, Effect, Deferred } from "effect";
 import { NodeHttpServer } from "@effect/platform-node";
-import { mkdtempSync, rmSync } from "node:fs";
+import { rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PostHog } from "posthog-node";
@@ -101,7 +103,7 @@ async function fixture(telemetry?: ReceiptExporter) {
     const root = mkdtempSync(join(tmpdir(), "pe-mcp-local-"));
     telemetry = createReceiptExport({
       journal: journalAt(join(root, "journal.json"), Date.now),
-      root,
+      root: stateFixture(root),
       stamps: { host: null, web: null },
     });
     const exporter = telemetry;
@@ -371,7 +373,7 @@ test("real HTTP MCP schemas/results match off/on; the adapter never sends direct
   const capture = vi.spyOn(client, "capture");
   const exporter = createReceiptExport({
     journal,
-    root: dir,
+    root: stateFixture(dir),
     stamps: { host: { ...receiptGoldenEnvelope.stamp!, component: "host" }, web: null },
     client,
     send: async (e) => {
@@ -380,7 +382,7 @@ test("real HTTP MCP schemas/results match off/on; the adapter never sends direct
   });
   try {
     const off = await fixture(
-      createReceiptExport({ journal, root: dir, stamps: { host: null, web: null } }),
+      createReceiptExport({ journal, root: stateFixture(dir), stamps: { host: null, web: null } }),
     );
     const on = await fixture(exporter);
     const a = await off.init(local);

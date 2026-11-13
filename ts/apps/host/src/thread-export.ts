@@ -2,6 +2,15 @@ import { lstatSync, readFileSync, realpathSync } from "node:fs";
 import { join } from "node:path";
 import { harnessEventSchema, threadExportSchema } from "@pe/agent-contracts";
 
+import { stateKind, type StateDirectory } from "@pe/host-contracts/kinds";
+import { z } from "zod";
+
+const threadArchiveKind = stateKind({
+  schema: z.unknown(),
+  place: (_sha: string) => "Thread export",
+  segments: (sha: string) => [".exports", `${sha}.json`],
+});
+
 import type { HostLog } from "./host-log.ts";
 import { artifactRelative, sha256Hex as sha, writeArtifact } from "./page-artifacts.ts";
 
@@ -22,8 +31,8 @@ export const threadSegment = (threadId: string) =>
 
 /** The durable thread writer is synchronous. These reads occupy the same JS turn, so a live
  * append or metadata write cannot interleave. The captured tail may still be a running turn. */
-export async function exportThread(root: string, threadId: string, hostLog: HostLog) {
-  const store = realpathSync(root);
+export async function exportThread(root: StateDirectory, threadId: string, hostLog: HostLog) {
+  const store = realpathSync(root.path);
   const directory = inside(store, join(store, threadSegment(threadId)));
   const sources = (["meta.json", "events.jsonl"] as const).map((path) => {
     const file = join(directory, path);
@@ -71,7 +80,7 @@ export async function exportThread(root: string, threadId: string, hostLog: Host
   });
   const content = JSON.stringify(archive, null, 2) + "\n";
   const sha256 = sha(content);
-  await writeArtifact(store, join(store, ".exports", `${sha256}.json`), content);
+  await writeArtifact(store, threadArchiveKind.in(root, sha256), content);
   return new Response(content, {
     headers: {
       "content-type": "application/json; charset=utf-8",

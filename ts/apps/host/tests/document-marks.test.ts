@@ -1,3 +1,4 @@
+import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 /**
  * Freshness is a per-document change mark, held by the host (design-system ledger, 2026-09-22).
  * The host derives it once, against when the Reading it serves was taken, and republishes the
@@ -7,7 +8,7 @@ import { detachedBridge, captureStore } from "./effect-test.ts";
 import { expect, test, vi } from "vite-plus/test";
 import { Context, Effect, Exit, Layer, Scope } from "effect";
 import * as TestClock from "effect/testing/TestClock";
-import { mkdtemp, rm } from "node:fs/promises";
+import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {

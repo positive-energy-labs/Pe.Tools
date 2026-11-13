@@ -1,6 +1,7 @@
-// E2E-J6 · Fans mutation: Pea stages ESP for a fan's shared type, the human plans, Write consumes
+// E2E-J6 · Fans mutation: Pea stages ESP for a fan, the human plans, Write consumes
 // the stage, and a re-plan refuses with "no staged edit". Real host, real Pea, real Revit.
-// Data by env: E2E_FAN (roster label, default MUAS-1), E2E_VALUE (ESP in. wg, default 1.25).
+// Data by env: E2E_FAN (mark, default MUAS-1), E2E_PORT (default 2), E2E_VALUE (ESP in. wg, default 1.25).
+// Use an unshared ESP type for success; a shared-type target is expected to refuse (H1's claim).
 //
 // Chaos moves (E2E_CHAOS, comma-separated; real gestures only):
 //   leave-return  leave /fans by a link and come back through a link before Plan   (implemented)
@@ -18,15 +19,19 @@ import {
   setPea,
 } from "./cdp.ts";
 import type { Page } from "./cdp.ts";
+import { marks, settled } from "./marks.ts";
+import { pickFansWriteScope } from "./fans-write-scope.ts";
 
 const FAN = process.env.E2E_FAN ?? "MUAS-1";
+const PORT = Number(process.env.E2E_PORT ?? "2");
+if (!Number.isInteger(PORT) || PORT < 0) throw new Error("PRECONDITION: E2E_PORT must be a nonnegative integer");
 const ESP = process.env.E2E_VALUE || "1.25";
 const CHAOS = new Set((process.env.E2E_CHAOS ?? "").split(",").filter(Boolean));
 const ROSTER = '[data-pane-id="sheet-roster"]';
 const POPOVER = "[data-write-popover]";
 const PLAN_WRITE = /^plan Write to Revit$/;
 const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-const fanRow = new RegExp(`^${esc(FAN)}(\\s|$)`);
+const fanRow = new RegExp(`^${esc(FAN)}(?: · .*)? / port ${PORT}$`);
 
 /** The resolved unit ESP as drawn; calculated required ESP need not change after an ESP write. */
 const esp = (page: Page) => page.textOf(FANS_LEDGER_ESP);
@@ -50,7 +55,7 @@ await journey("J6-fans", async (page, step) => {
   await page.open(revit.url("/fans"));
   await requireRevit(page, 600_000);
   await page.until(() => page.has(fanRow, ROSTER), `${FAN} on the fans roster`, 600_000);
-  step(`pick ${FAN} from the roster`);
+  step(`pick ${FAN} port ${PORT} from the roster`);
   const selected = await page.read<boolean>(
     `[...document.querySelectorAll(${JSON.stringify(`${ROSTER} [aria-selected="true"]`)})].some((e) => ${fanRow}.test(e.innerText.trim()))`,
   );
@@ -59,12 +64,12 @@ await journey("J6-fans", async (page, step) => {
   const baseline = await page.until(() => esp(page), "the ledger unit ESP", 300_000);
   step(`baseline unit ESP: ${baseline}`);
 
-  step("ask Pea to stage ESP for the fan's shared type");
+  step(`ask Pea to stage ESP for ${FAN} port ${PORT}`);
   await setPea(page);
   await requirePea(page);
   await sendChat(
     page,
-    `On /fans, stage External Static Pressure ${ESP} in. wg for the type that ${FAN} shares. Stage only; do not plan or write to Revit.`,
+    `On /fans, stage External Static Pressure ${ESP} in. wg for ${FAN}, port ${PORT}. Stage only; do not plan or write to Revit.`,
   );
 
   if (CHAOS.has("leave-return")) {
@@ -78,6 +83,13 @@ await journey("J6-fans", async (page, step) => {
     await page.until(() => page.has(fanRow, ROSTER), `${FAN} after returning`, 300_000);
   }
 
+  await page.until(async () => settled(await marks(page)), "fans settled before scope", 300_000);
+  await pickFansWriteScope(
+    FAN,
+    (scope, pattern) => page.click(new RegExp(pattern), scope),
+    (scope, pattern) => page.until(() => page.has(new RegExp(pattern), scope), "the Write scope"),
+  );
+  await page.until(async () => settled(await marks(page)), "fans settled before plan", 300_000);
   step("open the human plan");
   expectText(await plan(page), /planned/i, "the staged ESP plans");
 

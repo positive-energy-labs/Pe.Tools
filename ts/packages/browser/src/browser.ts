@@ -92,7 +92,7 @@ export interface SessionReceipt {
 export interface KeeperConfig {
   id: string;
   token: string;
-  home: string;
+  home: import("@pe/host-contracts/kinds").StateDirectory;
   open?: OpenBrowserOptions;
   attach?: AttachBrowserOptions;
   lifetime: "caller" | "session";
@@ -104,7 +104,7 @@ async function start(
   const home = browserHome(config.home);
   const id = randomUUID();
   const token = randomUUID();
-  const directory = join(home, id);
+  const directory = join(home.path, id);
   const full: KeeperConfig = { ...config, id, token, home };
   const configFile = join(directory, "config.json");
   const worker = browserWorkerCommand("keeper", configFile);
@@ -210,7 +210,9 @@ export async function connectBrowser(
   options: { home?: string; clientId?: string } = {},
 ): Promise<BrowserSession> {
   if (!/^[a-zA-Z0-9-]+$/.test(id)) throw new Error("Invalid browser session id");
-  const receipt = (await readSessionReceipt(join(browserHome(options.home), id, "session.json")))!;
+  const receipt = (await readSessionReceipt(
+    join(browserHome(options.home).path, id, "session.json"),
+  ))!;
   if (receipt.info.id !== id)
     throw new BrowserError("InvalidReceipt", `Receipt id does not match ${id}`, {
       outcome: "not-sent",
@@ -223,7 +225,7 @@ export async function listBrowsers(options: { home?: string } = {}): Promise<Ses
   const home = browserHome(options.home);
   let entries;
   try {
-    entries = await readdir(home, { withFileTypes: true });
+    entries = await readdir(home.path, { withFileTypes: true });
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
     throw error;
@@ -235,7 +237,7 @@ export async function listBrowsers(options: { home?: string } = {}): Promise<Ses
     let session: BrowserSession | undefined;
     try {
       // Profiles and unrelated directories are not sessions; an existing bad receipt is an error.
-      if (!(await readSessionReceipt(join(home, id, "session.json"), true))) continue;
+      if (!(await readSessionReceipt(join(home.path, id, "session.json"), true))) continue;
       session = await connectBrowser(id, options);
       result.push(session.info);
     } catch (error) {
