@@ -10,9 +10,11 @@ from contextlib import contextmanager
 import ctypes as c
 from ctypes import wintypes as w
 import json
+import math
 import os
 from pathlib import Path
 import shutil
+import re
 import signal
 import sqlite3
 import subprocess
@@ -60,7 +62,7 @@ class Memory(c.Structure):
 
 class Counters(c.Structure):
     _fields_ = [("size", w.DWORD), ("faults", w.DWORD)] + [
-        (n, c.c_size_t) for n in ("peak_ws", "ws", "peak_paged", "paged", "peak_nonpaged", "nonpaged", "commit", "peak_commit", "private")]
+        (n, c.c_size_t) for n in ("peak_ws", "ws", "peak_paged", "paged", "peak_nonpaged", "nonpaged", "commit", "peak_commit", "private", "private_ws")] + [("shared_commit", c.c_ulonglong)]
 
 
 class Limits(c.Structure):
@@ -124,11 +126,13 @@ def job_read(name):
                 m = Counters()
                 m.size = c.sizeof(m)
                 if not memory_info(ph, c.byref(m), m.size):
+                    error = c.get_last_error()
                     # A job member may exit between enumeration and this reading.
                     if identity(pid) is None:
                         continue
-                    raise c.WinError(c.get_last_error())
-                ws += m.ws
+                    raise c.WinError(error)
+                # EX2's private WS excludes shared DLL/mapped pages credited by other jobs.
+                ws += m.private_ws
                 private += m.private
             finally:
                 close(ph)
@@ -163,13 +167,41 @@ def state(home, deadline):
         database.execute("BEGIN IMMEDIATE")
         saved = database.execute("SELECT body FROM reservations WHERE id=1").fetchone()
         rows = json.loads(saved[0]) if saved else []
+        validate_rows(rows)
         yield rows
+        validate_rows(rows)
         body = json.dumps(rows)
         if not saved or saved[0] != body:
             database.execute("INSERT OR REPLACE INTO reservations VALUES (1, ?)", (body,))
         database.commit()
     finally:
         database.close()  # rolls back on cancellation/crash; the OS releases the lock
+
+
+def validate_rows(rows):
+    keys = {"id", "pid", "created", "checkout", "thread", "kind", "budget", "running", "deadline", "job"}
+    seen = set()
+    if type(rows) is not list:
+        raise ValueError("invalid reservation state: expected rows")
+    for row in rows:
+        if type(row) is not dict or row.keys() != keys:
+            raise ValueError("invalid reservation row fields")
+        valid = (
+            type(row["id"]) is str and re.fullmatch(r"[0-9a-f]{32}", row["id"]) is not None
+            and type(row["pid"]) is int and 0 < row["pid"] < 2**32
+            and type(row["created"]) is int and 0 < row["created"] < 2**64
+            and type(row["kind"]) is str and row["kind"] in BUDGETS
+            and type(row["budget"]) is int and 0 < row["budget"] == int(BUDGETS[row["kind"]] * GIB)
+            and type(row["running"]) is bool
+            and type(row["deadline"]) in (float, int) and 0 <= row["deadline"] <= 2**63 and math.isfinite(row["deadline"])
+            and type(row["checkout"]) is str and 0 < len(row["checkout"]) <= 32767
+            and Path(row["checkout"]).is_absolute()
+            and type(row["thread"]) is str and len(row["thread"]) <= 4096
+            and row["job"] == "Local\\Pe.Tools.reservation." + row["id"]
+        )
+        if not valid or row["id"] in seen:
+            raise ValueError("invalid reservation row values or duplicate identity")
+        seen.add(row["id"])
 
 
 def sweep(rows):
@@ -196,7 +228,7 @@ def run(argv):
     parser.add_argument("kind", choices=["light", *BUDGETS])
     parser.add_argument("--wait", type=float, default=60, help="queue deadline in seconds, 0..600")
     parser.add_argument("--integrator", action="store_true")
-    parser.add_argument("--home", type=Path, default=Path(os.environ["LOCALAPPDATA"]) / "Positive Energy/Pe.Tools/machine-reservations-v1")
+    parser.add_argument("--home", type=Path)
     parser.add_argument("--receipt", type=Path)
     split = argv.index("--") if "--" in argv else len(argv)
     options = parser.parse_args(argv[:split])
@@ -206,36 +238,50 @@ def run(argv):
     if options.kind == "suite" and not options.integrator and os.environ.get("T3CODE_THREAD_ID", "").startswith("thread:delegated-task:"):
         print("REFUSE suite: only the integrator runs the full suite", file=sys.stderr)
         return 4
-    # Resolve scripts explicitly; subprocess does not resolve .cmd via PATHEXT.
+    # Executable argv only: list2cmdline cannot escape cmd.exe shell syntax.
     executable = shutil.which(command[0])
     if executable is None:
         raise FileNotFoundError(command[0])
     command[0] = executable
     if executable.lower().endswith((".cmd", ".bat")):
-        # /s strips one outer quote pair. Pass a command line, not a list that
-        # Popen would quote a second time and turn executable quotes into literals.
-        command = subprocess.list2cmdline([os.environ["COMSPEC"], "/d", "/s", "/c"]) + ' "' + subprocess.list2cmdline(command) + '"'
+        raise ValueError("batch forwarding is unsupported; invoke an executable or node <pnpm.cjs> directly")
     if options.kind == "light":
         return subprocess.call(command)
     inherited = os.environ.get("PE_MACHINE_RESERVATION_JOB")
     if inherited:
-        if options.kind != os.environ.get("PE_MACHINE_RESERVATION_KIND"):
-            raise ValueError("a nested heavy command must use the outer reservation kind")
-        handle = checked(open_job(4, False, inherited))
-        try:
-            member = w.BOOL()
-            checked(in_job(current_process(), handle, c.byref(member)))
-            if not member.value:
-                raise ValueError("inherited reservation does not contain this process")
-        finally:
-            close(handle)
-        # Descendants are already covered by the outer job and its envelope.
+        inherited_home = os.environ.get("PE_MACHINE_RESERVATION_HOME")
+        if not inherited_home or not Path(inherited_home).is_absolute():
+            raise ValueError("inherited reservation needs its coordinator namespace")
+        home = Path(inherited_home).resolve()
+        if options.home is not None and options.home.resolve() != home:
+            raise ValueError("nested commands cannot change the coordinator namespace")
+        with state(home, time.monotonic() + options.wait) as rows:
+            row = next((r for r in rows if r["job"] == inherited and r["running"]), None)
+            if row is None or row["kind"] != options.kind or identity(row["pid"]) != row["created"]:
+                raise ValueError("inherited reservation has no matching running owner")
+            handle = checked(open_job(4, False, inherited))
+            owner = None
+            try:
+                owner = checked(open_process(0x1000, False, row["pid"]))
+                member, owner_member = w.BOOL(), w.BOOL()
+                checked(in_job(current_process(), handle, c.byref(member)))
+                checked(in_job(owner, handle, c.byref(owner_member)))
+                if not member.value or not owner_member.value:
+                    raise ValueError("inherited reservation does not contain caller and owner")
+                if not fits(*capacity(), rows, 0):
+                    raise ValueError("inherited reservation capacity is no longer available")
+            finally:
+                if owner:
+                    close(owner)
+                close(handle)
+        # Reuse exactly the verified outer envelope, never another waiting reservation.
         return subprocess.call(command)
+    options.home = (options.home or Path(os.environ["LOCALAPPDATA"]) / "Positive Energy/Pe.Tools/machine-reservations-v1").resolve()
     started = time.monotonic()
     deadline = started + options.wait
     row = {"id": uuid.uuid4().hex, "pid": os.getpid(), "created": identity(os.getpid()),
            "checkout": str(Path.cwd().resolve()), "thread": os.environ.get("T3CODE_THREAD_ID", ""),
-           "kind": options.kind, "budget": BUDGETS[options.kind] * GIB, "running": False, "deadline": deadline}
+           "kind": options.kind, "budget": int(BUDGETS[options.kind] * GIB), "running": False, "deadline": deadline}
     row["job"] = "Local\\Pe.Tools.reservation." + row["id"]
     # This self-containing job closes the spawn/crash gap without suspended or orphan processes.
     job = own_job(row["job"])
@@ -266,7 +312,7 @@ def run(argv):
                 return 3
             time.sleep(min(0.1, max(0, deadline - time.monotonic())))
         child = subprocess.Popen(command, env={**os.environ, "PE_MACHINE_RESERVATION_JOB": row["job"],
-                                               "PE_MACHINE_RESERVATION_KIND": options.kind})
+                                               "PE_MACHINE_RESERVATION_HOME": str(options.home)})
         while True:
             count, ws, private, peak = job_read(row["job"])
             peak_ws = max(peak_ws, ws)
@@ -292,7 +338,7 @@ def run(argv):
                 "setup_s": setup_done - started,
                 "queue_s": (admitted or finished) - setup_done,
                 "execution_s": finished - admitted if admitted else 0, "cleanup_s": ended - finished,
-                "wall_s": ended - started, "peak_ws_bytes": peak_ws,
+                "wall_s": ended - started, "peak_private_ws_bytes": peak_ws,
                 "peak_private_bytes": peak_commit}), encoding="utf-8")
 
 
