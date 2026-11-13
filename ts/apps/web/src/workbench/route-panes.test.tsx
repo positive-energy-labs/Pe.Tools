@@ -1,3 +1,4 @@
+import { host, seedPlaces } from "./places.test-support";
 import { stableFanKey } from "../ducts/sheet/model";
 import {route as declareRoute, scrollBody} from "../route/typed-route";
 import {module as familiesDeclaration} from "../families/route";
@@ -67,8 +68,8 @@ const tabOpen = place("aaaaaaaa-0000-4000-8000-00000000000c", "SO", "303", {
   ref: { session: "s1", openId: "o1" },
 });
 const seeded = [ducts, tabA, tabB, tabOpen];
-const places = () => JSON.parse(sessionStorage.getItem("pe.places") ?? "[]") as ThreadTab[];
-// Only T and U are real host chats; Places are this window's sessionStorage, seeded per test.
+const places = () => host.read() as ThreadTab[];
+// Only T and U are real host chats; the host list is seeded per test.
 const threads = [{ id: "T" }, { id: "U" }];
 vi.mock("./provider", () => ({ useWorkbench: () => ({ store, threads }) }));
 const hostEvents = vi.hoisted(() => {
@@ -124,12 +125,12 @@ function DuctsProbe() {
   return <output data-ducts-probe="">{system.kind === "all" ? "all" : (namesOf(system) as string[]).join(" + ")}</output>;
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   mounts = 0;
   call.mockReset();
   call.mockImplementation(async (door) => (door === "view.publish" ? { revision: 1 } : {}));
   sessionStorage.clear();
-  sessionStorage.setItem("pe.places", JSON.stringify(seeded));
+  await seedPlaces(seeded);
   vi.stubGlobal("matchMedia", () => ({
     matches: false,
     addEventListener() {},
@@ -196,12 +197,9 @@ async function mount(entry = "/pea?thread=T", strict = false, restore = false, v
 const tools = () => document.querySelector<HTMLElement>('[data-pane-id="tools"]')!;
 
 test("a tab press expands the tools on that Place; a Work press restores its Page without a remount", async () => {
-  sessionStorage.setItem(
-    "pe.places",
-    JSON.stringify([
+  await seedPlaces([
       { ...ducts, link: routeAddress("ducts").link({ system: {kind:"ids",ids:[systemCode("S1")]} }, { work: "w1" }) },
-    ]),
-  );
+    ]);
   const router = await mount();
   fireEvent.click(screen.getByRole("button", { name: "Expand tools" }));
   fireEvent.click(screen.getByRole("button", { name: TAB }));
@@ -386,7 +384,7 @@ test("an admitted Place keeps its codec bytes through open, switch, bare URL res
     link,
     at: ducts.at,
   };
-  sessionStorage.setItem("pe.places", JSON.stringify([ducts, fans]));
+  await seedPlaces([ducts, fans]);
   // Raw `key=value` pairs, never decoded: byte equality, order-free, the shell's own keys aside.
   const pairs = (query: string) =>
     query
@@ -543,7 +541,7 @@ test("route-view-open: same binding keeps the Page and tags the command; another
 });
 
 test("route-view-open with a new binding opens a default Page and borrows no visible target", async () => {
-  sessionStorage.setItem("pe.places", JSON.stringify([tabA]));
+  await seedPlaces([tabA]);
   const router = await mount(`${tabA.link}&thread=T`);
   await settle();
   act(() =>
@@ -581,7 +579,7 @@ test("the closed-Work band follows the Place a press opened, with no chat select
 });
 
 test("an explicit open's command id clears when the thread association changes", async () => {
-  sessionStorage.setItem("pe.places", JSON.stringify([]));
+  await seedPlaces([]);
   const router = await mount("/pea?thread=T");
   await settle();
   const commandId = "33333333-3333-4333-8333-333333333333";
@@ -616,7 +614,7 @@ test("a saved legacy open-ref Place keeps its id under StrictMode, /pea and a cr
     target: JSON.stringify({ kind: "open", ref: { session: "closed-session", openId: "closed-open" } }),
   });
   // New enrollment is exercised above through actual Fans admission. This tests saved-Place rebinding.
-  sessionStorage.setItem("pe.places", JSON.stringify([{ ...ducts, link: legacy }]));
+  await seedPlaces([{ ...ducts, link: legacy }]);
   const router = await mount(legacy, true);
   await waitFor(() => expect(shown(router).tab).not.toBeNull());
   await settle();
