@@ -23,12 +23,7 @@
     "apps/host/src/session-route.ts": 1,
     "packages/browser/src/attached-guardian.ts": 1,
     "packages/browser/src/keeper.ts": 1,
-    "packages/mcps/src/shared/host-rpc-caller.ts": 1,
-    "apps/host/src/run-files.ts": 0,
-    "apps/web/src/shell/band.test-support.tsx": 0,
-    "packages/browser/src/keeper-config.ts": 0,
-    "packages/host-contracts/src/store-paths.ts": 0,
-    "packages/host-contracts/src/store-values.ts": 0
+    "packages/mcps/src/shared/host-rpc-caller.ts": 1
   },
   "tests": {
     "apps/host/tests/boundary.test.ts": 5,
@@ -50,8 +45,6 @@
     "apps/host/tests/vite-web.test.ts": 4,
     "apps/host/tests/work-lifetime.test.ts": 1,
     "packages/browser/tests/acceptance.test.ts": 1,
-    "apps/host/tests/action-blobs.test.ts": 0,
-    "apps/host/tests/storage.ts": 0,
-    "packages/browser/tests/keeper-config.test.ts": 0
+    "apps/web/src/route/draw.test.tsx": 0
   }
 }
