@@ -1,9 +1,9 @@
 import { createHash } from "node:crypto";
-import { mkdirSync, rmSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
-import { discardStored, noteStored, readStored, sha256Hex, writeAtomic, writeHomeFile } from "@pe/host-contracts/store";
+import { discardStored, readStored, writeAtomic } from "@pe/host-contracts/store";
 import type { RouteDocumentStore } from "@pe/runtime";
 import { storedBlobsPath, storedNoticesPath } from "./notice-feed.ts";
 
@@ -21,8 +21,9 @@ const MISPLACED = "Stored Work identity does not match its address";
 
 /**
  * Indexed Work carries its identity. Work is `discard` (ADR 0039 rule 1, ADR 0033 rule 5): a record
- * that does not decode, or sits at another address, is deleted with one notice in the feed when
- * it is read at its address. The listing only counts such a file; see the note on `listState`.
+ * that does not decode, or sits at another address, is set aside (its bytes rest in the blob store,
+ * then it is removed) with one notice in the feed when it is read at its address. A record that
+ * cannot be read is kept. The listing only counts such a file; see the note on `listState`.
  */
 export function fileRouteDocumentStore(dir: string): RouteDocumentStore {
   mkdirSync(dir, { recursive: true });
@@ -37,30 +38,15 @@ export function fileRouteDocumentStore(dir: string): RouteDocumentStore {
       );
       return read.kind === "ok" ? read.value.value : null;
     },
-    setState: async ({ targetKey, route, value, reason, preservePrior }) => {
+    setState: async ({ targetKey, route, value, reason }) => {
       const path = join(dir, filename(targetKey, route));
       if (value == null) {
-        // With a reason, the runtime refused the staged values inside a record that decoded here:
-        // the same discard, in its words. Without one, a person cleared their own Work.
-        if (reason) discardStored(path, work(`Work for ${route} (${targetKey})`), reason);
-        else rmSync(path, { force: true });
+        // One door for every set-aside (owner ruling, 2026-11-13): with a reason the runtime
+        // refused the record, without one a person cleared their own Work. Bytes kept, one notice.
+        discardStored(path, work(`Work for ${route} (${targetKey})`), reason ?? "Cleared.");
         return;
       }
-      const bytes = JSON.stringify({ format: "route-state-record-v2", targetKey, route, value });
-      let priorSha256: string | undefined;
-      let priorBlob: string | null = null;
-      if (preservePrior) {
-        priorSha256 = sha256Hex(await readFile(path));
-        // Work is machine state, but an upgrade needs the same prior-byte safety net as a home write.
-        const saved = writeHomeFile(path, bytes, { expectSha256: priorSha256, blobRoot: storedBlobsPath() });
-        if (!saved.ok) throw Error("Work changed before its schema upgrade");
-        priorBlob = saved.priorBlob;
-      } else writeAtomic(path, bytes);
-      if (reason) noteStored(storedNoticesPath(), {
-        class: "discard", place: `Work for ${route} (${targetKey})`, path,
-        sha256: priorSha256 ?? sha256Hex(bytes),
-        reason: priorBlob ? `Prior bytes: ${priorBlob}. ${reason}` : reason,
-      });
+      writeAtomic(path, JSON.stringify({ format: "route-state-record-v2", targetKey, route, value }));
     },
     // The listing is read-only, and ADR 0039's discard does not apply here. Ruling: commit 556652bc
     // (2026-11-07) moved deletion of a misplaced record to the addressed read and left discovery

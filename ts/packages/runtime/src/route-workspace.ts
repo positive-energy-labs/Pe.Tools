@@ -67,9 +67,11 @@ export type RouteWorkspaceEvent = {
 
 export interface RouteDocumentStore {
   getState(input: { targetKey: string; route: string }): Promise<unknown>;
-  setState(input: { targetKey: string; route: string; value: unknown; reason?: string;
-    /** Rest the exact prior file bytes before a schema upgrade replaces them. */
-    preservePrior?: boolean }): Promise<void>;
+  /**
+   * `value: null` sets the stored Work aside with its bytes kept and one notice. With a `reason`
+   * the runtime refused it; without one a person cleared their own Work.
+   */
+  setState(input: { targetKey: string; route: string; value: unknown; reason?: string }): Promise<void>;
   /** Enumerates canonical persisted records without materializing absent Work. */
   listState?(): Promise<{
     records: { targetKey: string; route: string; value: unknown }[];
@@ -1144,24 +1146,16 @@ export class RouteWorkspace {
     }
   }
 
+  /** Decode, or set aside: stored Work that is not this spec's is never migrated (MAP invariant). */
   async #decodeStored(targetKey: string, spec: RouteStateSpec<z.ZodType>, raw: unknown) {
     if (raw == null) return null;
-    let upgrade: ReturnType<NonNullable<typeof spec.upgrade>>;
-    let envelope: RouteEnvelope<unknown>;
     try {
-      upgrade = spec.upgrade?.(raw) ?? null;
-      envelope = parseEnvelope(upgrade?.value ?? raw, spec);
+      return { raw, envelope: parseEnvelope(raw, spec) };
     } catch (error) {
       await this.#store.setState({ targetKey, route: spec.route, value: null,
         reason: error instanceof Error ? error.message : String(error) });
       return null;
     }
-    if (upgrade) {
-      raw = { ...upgrade.value as object, doc: envelope.doc };
-      await this.#store.setState({ targetKey, route: spec.route, value: raw,
-        reason: upgrade.reason, preservePrior: true });
-    }
-    return { raw, envelope };
   }
 
   #load(

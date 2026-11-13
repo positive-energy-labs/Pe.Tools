@@ -5,7 +5,6 @@ import { footprintSchema } from "./run-registry.ts";
 import { executionTargetSchema } from "./target.ts";
 import { consumedSchema, claimSchema, commandRefusalSchema } from "./command.ts";
 import { nativeProcessSchema } from "./native-process.ts";
-import { opEffect } from "@pe/host-contracts/generated";
 export { nativeProcessSchema, type NativeProcess } from "./native-process.ts";
 
 /** One public outcome vocabulary across host receipts, Pea and the shell Timeline. */
@@ -32,9 +31,8 @@ const stepIntent = z.object({
   id: z.string(),
   key: z.string(),
   kind: z.enum(["native", "file", "publication"]),
-  /** Host-stamped from the generated op catalog when a native step is recorded. A succeeded Read or
-   * rolled-back TransactRead changed no model; an unstamped step (older rows, files) is an effect. */
-  effect: z.enum(opEffect).optional(),
+  touched: z.lazy(() => touchedSchema).optional(),
+  nativeEvidence: z.lazy(() => observedSchema).optional(),
   input: z.unknown(),
   process: nativeProcessSchema.optional(),
   releases: z.array(z.strictObject({ action: z.string(), claim: claimSchema })).optional(),
@@ -205,9 +203,9 @@ export const viewRefSchema = z.strictObject({
 export type ViewRef = z.infer<typeof viewRefSchema>;
 const changed = {
   transactions: z.array(z.string()),
-  added: z.number().int(),
-  modified: z.number().int(),
-  deleted: z.number().int(),
+  added: z.number().int().nonnegative(),
+  modified: z.number().int().nonnegative(),
+  deleted: z.number().int().nonnegative(),
 };
 /** What one native call did to the document. Filled by the scope and the change monitor, never by
  * an op. Omitted from what Pea reads when "none". `restoreFailed`, `unauthorized` and `unknown`
@@ -224,7 +222,7 @@ export const touchedSchema = z.discriminatedUnion("kind", [
         view: viewRefSchema,
         left: z.array(z.enum(["crop", "scopeBox", "annotationCrop", "sheetFilter"])),
       }),
-    ),
+    ).min(1),
   }),
   z.strictObject({ kind: z.literal("wrote"), ...changed }),
   z.strictObject({ kind: z.literal("unauthorized"), ...changed }),
@@ -234,12 +232,12 @@ export const touchedSchema = z.discriminatedUnion("kind", [
   }),
 ]);
 export type Touched = z.infer<typeof touchedSchema>;
-/** The least every evidence record states (C# `IObserved`). An absent revision is no
+/** The least every evidence record states (C# `IObserved`). A null or absent revision is no
  * source-revision proof: the observed basis is unavailable, never 0 or "current". The domain's own
  * members (Space's sources and manifest) ride beside these two and are kept. */
 export const observedSchema = z.looseObject({
   documentKey: z.string(),
-  revision: z.number().int().optional(),
+  revision: z.number().int().nullish(),
 });
 export type Observed = z.infer<typeof observedSchema>;
 /** The one object the bridge writes to an op receipt's response file (C# `OpReceiptResponse`),
@@ -249,8 +247,8 @@ export type Observed = z.infer<typeof observedSchema>;
  * the SDK receipt, not here. */
 export const nativeReceiptResponseSchema = z.union([
   z.strictObject({
-    payload: z.unknown(),
-    touched: touchedSchema,
+    payload: z.unknown().refine((value) => value !== undefined, "Success requires a payload key"),
+    touched: touchedSchema.refine((value) => value.kind !== "unauthorized", "Unauthorized changes cannot succeed"),
     evidence: observedSchema.optional(),
   }),
   z.strictObject({ ...nativeReceiptFailureSchema.shape, touched: touchedSchema }),

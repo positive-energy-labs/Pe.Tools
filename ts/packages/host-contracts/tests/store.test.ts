@@ -311,6 +311,32 @@ describe("readStored", () => {
     expect(readFileSync(path, "utf8")).toBe("{ other");
   });
 
+  test("no write lands over a kept state file until its bytes rest in the blob store", () => {
+    // Mutant: in `writeAtomic`, drop the `owed` block (the fresh file replaces bytes with no copy).
+    const path = join(root, "work.json");
+    writeFileSync(path, "{ torn");
+    writeFileSync(join(root, "not-a-folder"), "");
+    const policy = { ...discard(), blobRoot: join(root, "not-a-folder") };
+    expect(readStored(path, schema, policy)).toMatchObject({ kind: "kept" });
+    // The owner read it as absent and writes a fresh file: refused while no copy can be made.
+    expect(() => writeAtomic(path, '{"name":"fresh"}')).toThrow();
+    expect(readFileSync(path, "utf8")).toBe("{ torn");
+    // Once a copy can be made, the write rests the kept bytes and then lands.
+    rmSync(join(root, "not-a-folder"));
+    writeAtomic(path, '{"name":"fresh"}');
+    expect(readFileSync(path, "utf8")).toBe('{"name":"fresh"}');
+    expect(readFileSync(join(root, "not-a-folder", "sha256", sha256Hex("{ torn")), "utf8")).toBe("{ torn");
+    // A locked file owes the same: the write after the lock ends keeps what was there.
+    const locked = join(root, "locked.json");
+    writeFileSync(locked, '{"name":"mine"}');
+    const release = held(locked);
+    expect(readStored(locked, schema, discard())).toMatchObject({ kind: "kept" });
+    expect(() => writeAtomic(locked, "{}")).toThrow(/EBUSY/);
+    release();
+    writeAtomic(locked, "{}");
+    expect(readFileSync(join(root, "state", "Blobs", "sha256", sha256Hex('{"name":"mine"}')), "utf8")).toBe('{"name":"mine"}');
+  });
+
   test("a derived file whose name does not match its bytes stays, is skipped, and posts one notice", () => {
     // Mutant: in `readDerived`, call `discardDerived` on the mismatch (the forged file is removed).
     const store = { dir: join(root, "Derived"), notices: notices(), blobRoot: join(root, "state", "Blobs") };
