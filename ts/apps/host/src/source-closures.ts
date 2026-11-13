@@ -43,7 +43,7 @@ export async function prepareDevRouteProjection(): Promise<RouteStartupProjectio
   for (const [path, text] of Object.entries(receipt.projections)) {
     if (!path.endsWith("source-closure.generated.json")) continue;
     try { if (await readFile(path, "utf8") === text) continue; }
-    catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+    catch (error) { if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error; }
     await mkdir(dirname(path), { recursive: true });
     const temp = `${path}.${process.pid}.${randomUUID()}`;
     try {
