@@ -322,15 +322,13 @@ const compositionRoots = new Set([
   // Typed mounts own the fixture/live composition boundary.
   `${WEB}shell/typed-mount.ts`,
   `${WEB}shell/typed-shell.tsx`,
-  `${WEB}shell/mount-work.tsx`,
   `${WEB}shell/fixture-lane.ts`,
   // The shared selector was extracted without the retired fixture engine.
   `${WEB}shell/fixture-name.ts`,
-  `${WEB}chat/owner.tsx`,
 ]);
 // Admitted Place composition may bind app capabilities and fixture inputs. Its implementation
 // is private like the shell; direct private-owner imports and re-exports still cross the fence.
-const admittedPlaceRoots = new Set([`${WEB}chat/owner.tsx`, `${WEB}workbench/provider/view.tsx`, `${WEB}workbench/thread-view.tsx`, `${WEB}route/builtin-routes.tsx`, `${WEB}pods/route.tsx`, `${WEB}router.tsx`]);
+const admittedPlaceRoots = new Set([`${WEB}workbench/provider/view.tsx`, `${WEB}workbench/thread-view.tsx`, `${WEB}route/builtin-routes.tsx`, `${WEB}router.tsx`]);
 /** A declared pane may display its public provenance; this grants no legacy-owner access. */
 function paneFixture(source: ts.SourceFile, node: ts.Node): boolean {
   if (!ts.isPropertyAccessExpression(node) || !ts.isIdentifier(node.expression)) return false;

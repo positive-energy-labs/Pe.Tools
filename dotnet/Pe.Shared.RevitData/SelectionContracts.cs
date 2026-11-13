@@ -158,7 +158,7 @@ public record RevitShowElementsIssue(long ElementId, string Code, string Message
 /// <param name="ViewName">That view's name.</param>
 /// <param name="Note">One line on what happened.</param>
 /// <param name="Boxed">Targets with model geometry included in the committed 3D section box. This does not guarantee visibility.</param>
-/// <param name="Hidden">Boxed targets absent from that view's visible-element collection.</param>
+/// <param name="HiddenElementIds">Boxed targets absent from that view's visible-element collection.</param>
 /// <param name="IdentityVerified">Targets whose supplied expected UniqueId matched the local ID. ID-only targets never appear here.</param>
 /// <param name="Issues">Per-target refusals and partial failures.</param>
 public record RevitShowElementsData(
@@ -168,9 +168,11 @@ public record RevitShowElementsData(
     string ViewName,
     string Note,
     List<long> Boxed,
-    List<long> Hidden,
+    List<long> HiddenElementIds,
     List<long> IdentityVerified,
-    List<RevitShowElementsIssue> Issues
+    List<RevitShowElementsIssue> Issues,
+    Lens Lens,
+    IReadOnlyList<Hidden> Hidden
 );
 
 /// <summary>Request for revit.context.lens: box a 3D view around elements so a window or a capture can look at them.</summary>
@@ -194,5 +196,7 @@ public record RevitLensData(
     string ViewName,
     bool Created,
     int Boxed,
-    string Note
+    string Note,
+    Lens Lens,
+    IReadOnlyList<Hidden> Hidden
 );

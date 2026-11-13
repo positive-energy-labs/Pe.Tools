@@ -5766,7 +5766,7 @@ export namespace RevitContextJournal {
   }
 }
 
-/** Make or refresh this document's lens: a 3D view (default name 'Pe lens') with its section box around the elements, medium detail, hidden lines, and links, levels, grids, rooms, spaces and zones hidden. Answers the view id to pass to revit.context.show-elements. Adds or updates that one view and changes nothing else; the document may be headless. */
+/** Make or refresh this document's lens: a 3D view (default name 'Pe lens') with its section box around the elements, medium detail and hidden lines. Turns off supported clutter categories; hidden reports only switches that held, with host-document instance counts and PeDefault reason. It does not evaluate filters, phases, worksets, occlusion or linked-document contents. Answers the view id to pass to revit.context.show-elements. Adds or updates that one view and changes nothing else; the document may be headless. */
 export namespace RevitContextLens {
   export namespace Req {
     /**
@@ -5788,6 +5788,19 @@ export namespace RevitContextLens {
     }
   }
   export namespace Res {
+    export type LensBasis = "UserView" | "PeDefault";
+    export type HiddenKind =
+      | "Links"
+      | "ScopeBoxes"
+      | "Levels"
+      | "Grids"
+      | "ReferencePlanes"
+      | "Spaces"
+      | "Zones"
+      | "Rooms"
+      | "Areas";
+    export type HiddenWhy = "PeDefault" | "NotEvaluated";
+
     /**
      * What revit.context.lens made or refreshed.
      */
@@ -5812,6 +5825,24 @@ export namespace RevitContextLens {
        * One line on what happened.
        */
       note: string;
+      lens: Lens;
+      hidden: Hidden[];
+    }
+    /**
+     * The view used, without inferring who configured a referenced view.
+     */
+    export interface Lens {
+      basis: LensBasis;
+      viewId: number;
+    }
+    /**
+     * Host-document instance count for a category whose visibility switch is off, not a visible/occluded count.
+     *             Does not evaluate filters, phases, worksets, individual hiding, or linked-document contents.
+     */
+    export interface Hidden {
+      what: HiddenKind;
+      count: number;
+      why: HiddenWhy;
     }
   }
 }
@@ -5844,6 +5875,19 @@ export namespace RevitContextShowElements {
     }
   }
   export namespace Res {
+    export type LensBasis = "UserView" | "PeDefault";
+    export type HiddenKind =
+      | "Links"
+      | "ScopeBoxes"
+      | "Levels"
+      | "Grids"
+      | "ReferencePlanes"
+      | "Spaces"
+      | "Zones"
+      | "Rooms"
+      | "Areas";
+    export type HiddenWhy = "PeDefault" | "NotEvaluated";
+
     /**
      * What revit.context.show-elements selected, what it could not find, and the view it zoomed.
      */
@@ -5875,7 +5919,7 @@ export namespace RevitContextShowElements {
       /**
        * Boxed targets absent from that view's visible-element collection.
        */
-      hidden: number[];
+      hiddenElementIds: number[];
       /**
        * Targets whose supplied expected UniqueId matched the local ID. ID-only targets never appear here.
        */
@@ -5884,11 +5928,29 @@ export namespace RevitContextShowElements {
        * Per-target refusals and partial failures.
        */
       issues: RevitShowElementsIssue[];
+      lens: Lens;
+      hidden: Hidden[];
     }
     export interface RevitShowElementsIssue {
       elementId: number;
       code: string;
       message: string;
+    }
+    /**
+     * The view used, without inferring who configured a referenced view.
+     */
+    export interface Lens {
+      basis: LensBasis;
+      viewId: number;
+    }
+    /**
+     * Host-document instance count for a category whose visibility switch is off, not a visible/occluded count.
+     *             Does not evaluate filters, phases, worksets, individual hiding, or linked-document contents.
+     */
+    export interface Hidden {
+      what: HiddenKind;
+      count: number;
+      why: HiddenWhy;
     }
   }
 }
@@ -6079,6 +6141,18 @@ export namespace RevitContextViewImage {
       | "Schedule"
       | "Category"
       | "Family";
+    export type LensBasis = "UserView" | "PeDefault";
+    export type HiddenKind =
+      | "Links"
+      | "ScopeBoxes"
+      | "Levels"
+      | "Grids"
+      | "ReferencePlanes"
+      | "Spaces"
+      | "Zones"
+      | "Rooms"
+      | "Areas";
+    export type HiddenWhy = "PeDefault" | "NotEvaluated";
     /**
      * Why a view image carries no RevitViewImageRegistration.
      */
@@ -6098,6 +6172,8 @@ export namespace RevitContextViewImage {
        */
       width: number;
       height: number;
+      lens: Lens;
+      hidden: Hidden[];
       /**
        * Why the image is far smaller than asked, in words; null when it is not.
        */
@@ -6122,6 +6198,22 @@ export namespace RevitContextViewImage {
       uniqueId?: null | string;
       label: string;
       categoryName?: null | string;
+    }
+    /**
+     * The view used, without inferring who configured a referenced view.
+     */
+    export interface Lens {
+      basis: LensBasis;
+      viewId: number;
+    }
+    /**
+     * Host-document instance count for a category whose visibility switch is off, not a visible/occluded count.
+     *             Does not evaluate filters, phases, worksets, individual hiding, or linked-document contents.
+     */
+    export interface Hidden {
+      what: HiddenKind;
+      count: number;
+      why: HiddenWhy;
     }
     /**
      * Axis-aligned model-space XY bounds (feet) of the view's crop, when known. Not a pixel mapping on a
@@ -6203,6 +6295,18 @@ export namespace RevitContextViewImageFocus {
       | "Schedule"
       | "Category"
       | "Family";
+    export type LensBasis = "UserView" | "PeDefault";
+    export type HiddenKind =
+      | "Links"
+      | "ScopeBoxes"
+      | "Levels"
+      | "Grids"
+      | "ReferencePlanes"
+      | "Spaces"
+      | "Zones"
+      | "Rooms"
+      | "Areas";
+    export type HiddenWhy = "PeDefault" | "NotEvaluated";
     /**
      * Why a view image carries no RevitViewImageRegistration.
      */
@@ -6222,6 +6326,8 @@ export namespace RevitContextViewImageFocus {
        */
       width: number;
       height: number;
+      lens: Lens;
+      hidden: Hidden[];
       /**
        * Why the image is far smaller than asked, in words; null when it is not.
        */
@@ -6246,6 +6352,22 @@ export namespace RevitContextViewImageFocus {
       uniqueId?: null | string;
       label: string;
       categoryName?: null | string;
+    }
+    /**
+     * The view used, without inferring who configured a referenced view.
+     */
+    export interface Lens {
+      basis: LensBasis;
+      viewId: number;
+    }
+    /**
+     * Host-document instance count for a category whose visibility switch is off, not a visible/occluded count.
+     *             Does not evaluate filters, phases, worksets, individual hiding, or linked-document contents.
+     */
+    export interface Hidden {
+      what: HiddenKind;
+      count: number;
+      why: HiddenWhy;
     }
     /**
      * Axis-aligned model-space XY bounds (feet) of the view's crop, when known. Not a pixel mapping on a
