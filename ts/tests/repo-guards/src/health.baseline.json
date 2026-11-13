@@ -562,7 +562,7 @@
     "ts/apps/web/scripts/route-graphs.ts": 4,
     "ts/apps/web/src/captures/list.tsx": 1,
     "ts/apps/web/src/chat/chat-shell.tsx": 1,
-    "ts/apps/web/src/chat/composer-head.tsx": 2,
+    "ts/apps/web/src/chat/composer-head.tsx": 1,
     "ts/apps/web/src/chat/composer-pending.tsx": 1,
     "ts/apps/web/src/chat/head-works.ts": 3,
     "ts/apps/web/src/chat/proposal-head.tsx": 6,

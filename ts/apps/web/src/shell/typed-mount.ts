@@ -734,7 +734,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
             // (C122), and nothing waits before its first send.
             const record=drawnOwners.get(id)!, drawn=handles.get(id)!, ahead=sending.get(record), journal=record.lease.entry.journal;
             type Ack={from:number;to:number}|null;
-            let settle!:(ack:Ack)=>void, ack:Ack=null;
+            let settle:(ack:Ack)=>void=()=>{}, ack:Ack=null;
             const mine=new Promise<Ack>(resolve=>{settle=resolve;});
             sending.set(record,mine);
             let intent: ReturnType<typeof journal.retainIntent> | undefined;
@@ -751,7 +751,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
               requireWritable();
               // A retried press's Value is still refreshing after the press ahead of it; its basis is that acknowledgement.
               const issued=rebased?gate.invocation(gate.capture("draw"),dependencies()):null;
-              if (rebased ? !issued!.ok : !basis() || !gate.current(token)) throw Error("Stale accepted Work basis");
+              if (rebased ? !issued?.ok : !basis() || !gate.current(token)) throw Error("Stale accepted Work basis");
               if (owners.get(id)!==record || !record.ready || canonicalRouteInput(record.handle)!==canonicalRouteInput(handle)) throw Error("Owning Work changed since this cell was drawn");
               return (await submit(record,write,issued?.ok?issued.value:token)).revision;
             };

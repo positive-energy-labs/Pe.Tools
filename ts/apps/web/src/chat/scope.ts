@@ -51,7 +51,7 @@ export function soleUserDocument(machine: Machine | null): DocumentRequest | nul
 export function pinnedDocument(
   inventory: ReturnType<typeof machineInventory>,
   target?: string | null,
-) {
+): { kind: "open"; ref: { session: string; openId: string } } | null {
   const parsed = parseTarget(target);
   if (parsed?.kind !== "address" || inventory.kind !== "ready") return null;
   const refs = Object.entries(inventory.sessions).flatMap(([session, found]) =>
@@ -61,7 +61,8 @@ export function pinnedDocument(
           .map((doc) => ({ session, openId: doc.openId }))
       : [],
   );
-  return refs.length === 1 ? ({ kind: "open", ref: refs[0]! } as const) : null;
+  const [only, ...others] = refs;
+  return only && !others.length ? { kind: "open", ref: only } : null;
 }
 
 /** A host door's refusal in the person's words: the door, the reason, then the remedy. */

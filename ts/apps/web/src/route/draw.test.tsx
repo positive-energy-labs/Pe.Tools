@@ -38,7 +38,7 @@ test("D18 a pane whose drawing is still loading keeps the page unsettled, and se
 test("D18 a picture overlay that is still loading keeps the page unsettled", async () => {
   const over = loader<{ Over: typeof Over }>();
   const Overlay = overlay(over.load, "Over");
-  render(<section data-url-settled=""><Overlay ctx={{ says: "overlaid" }} scope={null as never} picture={() => null} /></section>);
+  render(<section data-url-settled=""><Overlay ctx={{ says: "overlaid" }} scope={{ kind: "subjects", refs: [] }} picture={() => null} /></section>);
   expect(marksSettled(readMarks(LAYER))).toBe(false);
   await act(async () => over.land({ Over }));
   expect(marksSettled(readMarks(LAYER))).toBe(true);
