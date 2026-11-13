@@ -31,8 +31,6 @@ const stepIntent = z.object({
   id: z.string(),
   key: z.string(),
   kind: z.enum(["native", "file", "publication"]),
-  touched: z.lazy(() => touchedSchema).optional(),
-  nativeEvidence: z.lazy(() => observedSchema).optional(),
   input: z.unknown(),
   process: nativeProcessSchema.optional(),
   releases: z.array(z.strictObject({ action: z.string(), claim: claimSchema })).optional(),
@@ -57,33 +55,46 @@ const executionFailure = {
     )
     .optional(),
 };
-export const actionStepSchema = z.discriminatedUnion("state", [
-  stepIntent.extend({ state: z.literal("running") }).strict(),
-  stepIntent
-    .extend({
-      state: z.literal("succeeded"),
-      result: z.unknown().refine((value) => value !== undefined),
-    })
-    .strict(),
-  stepIntent
-    .extend({
-      state: z.literal("failed"),
-      ...executionFailure,
-      notDispatched: z.literal(true).optional(),
-    })
-    .strict(),
-  stepIntent.extend({ state: z.literal("unknown"), ...executionFailure }).strict(),
-  // Cancelled is its own settled state: the op reached Revit, stopped at a checkpoint, and needs
-  // no recovery read. Unknown means nobody knows; failed means the operation answered, and
-  // notDispatched proves it never ran when present.
-  stepIntent
-    .extend({
-      state: z.literal("cancelled"),
-      error: z.string(),
-      status: z.number(),
-      notDispatched: z.literal(true).optional(),
-    })
-    .strict(),
+function stepStates<T extends z.ZodRawShape>(transport: T) {
+  const intent = stepIntent.extend(transport);
+  return z.discriminatedUnion("state", [
+    intent.extend({ state: z.literal("running") }).strict(),
+    intent
+      .extend({
+        state: z.literal("succeeded"),
+        result: z.unknown().refine((value) => value !== undefined),
+      })
+      .strict(),
+    intent
+      .extend({
+        state: z.literal("failed"),
+        ...executionFailure,
+        notDispatched: z.literal(true).optional(),
+      })
+      .strict(),
+    intent.extend({ state: z.literal("unknown"), ...executionFailure }).strict(),
+    // Cancelled is its own settled state: the op reached Revit, stopped at a checkpoint, and needs
+    // no recovery read. Unknown means nobody knows; failed means the operation answered, and
+    // notDispatched proves it never ran when present.
+    intent
+      .extend({
+        state: z.literal("cancelled"),
+        error: z.string(),
+        status: z.number(),
+        notDispatched: z.literal(true).optional(),
+      })
+      .strict(),
+  ]);
+}
+/** Only bridge dispatches carry native model-change evidence. A reply overrides host uncertainty. */
+export const actionStepSchema = z.union([
+  stepStates({
+    transport: z.literal("bridge"),
+    touched: z.lazy(() => touchedSchema).optional(),
+    nativeEvidence: z.lazy(() => observedSchema).optional(),
+    bridgeReply: z.enum(["touched", "missing-touched", "invalid-touched"]).optional(),
+  }),
+  stepStates({ transport: z.literal("sdk").optional() }),
 ]);
 export type ActionStep = z.infer<typeof actionStepSchema>;
 /** Host-filed receipt checkpoint. TODO: docs/features/routes/LEDGER.md#s7-b8dae54505 resolve these references in the owed ?at= viewer. */

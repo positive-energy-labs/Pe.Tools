@@ -12,6 +12,8 @@ import { documentRefSchema, executionTargetSchema, type ExecutionTarget } from "
 import { nativeProcessSchema } from "./native-process.ts";
 import { packageDiagnosticSchema } from "./contribution.ts";
 import { heldSchema } from "./guards.ts";
+import type { PeApiSchemas, PeRouteTable } from "@pe/host-contracts/pe-api";
+type CommandRouteId = keyof PeRouteTable<PeApiSchemas>;
 
 export const workHandleSchema = z.strictObject({
   key: workKeySchema,
@@ -171,7 +173,11 @@ export interface Command<I = unknown, R = unknown> {
   dirties: readonly ActionReadingKey[];
   needs: ActionNeed;
   principal?: readonly import("./principal.ts").Principal[];
+  /** Execution category; catalogEffect is the mutation scope. */
   effect: "query" | "command";
+  /** Local scope; absent only when native leaves own the effect. */
+  catalogEffect?: Exclude<import("./catalog.ts").CatalogAxes["effect"], "Unset">;
+  via?: { readonly route: CommandRouteId };
   input: z.ZodType<I>;
   result?: z.ZodType<R>;
   /** Executable hooks, shared with the host write boundary; never unresolved symbol names. */

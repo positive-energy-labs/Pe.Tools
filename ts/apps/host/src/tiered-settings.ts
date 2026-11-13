@@ -9,20 +9,105 @@ import { settingOwners } from "@pe/agent-contracts/setting-owners";
 import { existsSync, readFileSync, watch } from "node:fs";
 import { userInfo } from "node:os";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
-import type { SettingTier, SettingTierRead } from "@pe/agent-contracts";
-import { SETTING_TIERS } from "@pe/agent-contracts";
+import type { Caller, HomeWriteRow, SettingTier, SettingTierRead } from "@pe/agent-contracts";
+import { SETTING_TIERS, homeWriteRowSchema, callerSchema, sameAddress } from "@pe/agent-contracts";
+import { z } from "zod";
 import {
   firmHome,
   noFirmHomeText,
   projectHome,
   sharedDriveRoot,
   userRoot,
+  homes,
 } from "@pe/host-contracts/product-paths";
 import { productPathNames } from "@pe/host-contracts/contracts";
 import { noteStored, sha256Hex } from "@pe/host-contracts/store";
 import { SETTING_WRITE_PLACE, storedNoticesPath } from "./notice-feed.ts";
 import { firmOwner } from "./reads/door.ts";
 import { writeHome } from "./settings.ts";
+import { appendLine, homeKind, readLines, rested, stateLog, writeHome as writeHomeKind, type HomeWrite } from "@pe/host-contracts/kinds";
+import { hostState } from "./host-ownership.ts";
+import { registerTimelineSource } from "./reads/work-timeline.ts";
+
+const homeUndoSchema = z.strictObject({ kind: z.literal("home-undo"), path: z.string(), sha256: z.string(), by: callerSchema, at: z.string() });
+export const homeWritesKind = stateLog({
+  schema: z.union([homeWriteRowSchema, homeUndoSchema]),
+  segments: () => ["home-writes.jsonl"],
+  place: () => "Home writes",
+});
+const tierFileKind = homeKind({ schema: z.unknown(), segments: (owner: string) => [productPathNames.homeSettingsDirectoryName, `${firmOwner.parse(owner)}.json`], place: (owner) => `${owner} settings` });
+
+export interface HomeWriteSource {
+  rows(filter: { owner: string; homes: readonly string[] }): HomeWriteRow[];
+  step(ref: { home: string; sha256: string }, by: Caller): HomeWrite;
+}
+const events = () => {
+  const read = readLines(homeWritesKind.in(hostState()));
+  if (read.kind === "ok" && read.skipped) throw Error("The home-write log has unreadable rows. Undo is unavailable; files are kept.");
+  return read.kind === "ok" ? read.values : [];
+};
+const activeWrites = (log = events()) => {
+  const active: HomeWriteRow[] = [];
+  for (const event of log) {
+    if (event.kind === "home-write") active.push(event);
+    else {
+      const index = active.findLastIndex(row => row.path === event.path && row.sha256 === event.sha256);
+      if (index >= 0) active.splice(index, 1);
+    }
+  }
+  return active;
+};
+const undoRefusal = (row: HomeWriteRow): string | null => {
+  if (row.priorSha256 === null) return "This file was new. Undo of a first home write is not supported; the file is kept.";
+  if (!rested(hostState(), row.priorSha256)) return "The prior bytes are unavailable or damaged. The file is kept.";
+  try { return sha256Hex(readFileSync(row.path)) === row.sha256 ? null : `${row.path} changed since the save. Nothing was written.`; }
+  catch { return `${row.path} cannot be read. The file is kept.`; }
+};
+export const homeWriteSource: HomeWriteSource = {
+  rows: ({ owner, homes }) => events().filter((row): row is HomeWriteRow => row.kind === "home-write" && row.owner === owner && homes.includes(row.home)),
+  step(ref, by) {
+    // StepRef.home identifies the file, as C2's second-source door requires, not just its root.
+    const row = activeWrites().findLast(row => row.path === ref.home && row.sha256 === ref.sha256);
+    if (!row) throw Error("This home write is no longer available to undo. Re-read the Timeline.");
+    if (by.kind !== row.by.kind || (by.kind !== "human" && by.kind !== "pea")) throw Error("Only the save's author can undo it.");
+    const refusal = undoRefusal(row);
+    if (refusal) throw Error(refusal);
+    const file = tierFileKind.in(hostState().home({ root: row.home, tier: row.tier }), row.owner);
+    if (file.path !== row.path) throw Error("The home write path does not match its owner. The file is kept.");
+    const prior = row.priorSha256 === null ? null : rested(hostState(), row.priorSha256);
+    if (prior === null) throw Error("The prior bytes are unavailable or damaged. The file is kept.");
+    const wrote = writeHomeKind(file, prior, row.sha256);
+    if (wrote.ok) {
+      appendLine(homeWritesKind.in(hostState()), { kind: "home-undo", path: row.path, sha256: row.sha256, by, at: new Date().toISOString() });
+      for (const listener of listeners) listener();
+    }
+    return wrote;
+  },
+};
+registerTimelineSource({
+  read(works, by, documents) {
+    const roots = new Set(homes().map(home => home.root));
+    for (const work of works) {
+      const document = documents.find(doc => work.binding === "address" ? doc.address !== null && sameAddress(work.target, doc.address) : work.binding === "open" && work.open.session === doc.session && work.open.openId === doc.openId);
+      const project = projectHome(document?.projectHome);
+      if (project) roots.add(project);
+    }
+    const owners = new Set(works.map(work => work.route));
+    const log = events();
+    const active = new Set(activeWrites(log));
+    const rows = log.filter((row): row is HomeWriteRow => row.kind === "home-write" && owners.has(row.owner) && roots.has(row.home));
+    const latest = rows.findLast(row => active.has(row) && row.by.kind === by);
+    return {
+      rows: rows.map(row => ({ ...row, undoable: active.has(row) && undoRefusal(row) === null })),
+      undo: latest ? { ref: { home: latest.path, sha256: latest.sha256, label: latest.place }, at: Date.parse(latest.at), refusal: undoRefusal(latest) } : null,
+      redo: null,
+    };
+  },
+  async step(direction, ref, caller) {
+    if (direction !== "undo" || !("home" in ref)) throw Error("Home writes support undo only.");
+    return homeWriteSource.step(ref, caller);
+  },
+});
 
 /** A tier's home for the target model: its folder and its name, or why there is none. */
 function tierHome(tier: SettingTier, pointer: string | null | undefined): Pick<SettingTierRead, "home" | "name" | "notFound"> {
@@ -140,7 +225,7 @@ export type SettingWrite =
  */
 export function writeSettingTier(
   request: { owner: string; tier: SettingTier; path: readonly string[]; value: unknown; expectedSha256: string | null },
-  context: { pointer?: string | null; writer?: string; now?: () => Date; receiptId?: string; expectedPath?: string } = {},
+  context: { pointer?: string | null; caller?: Caller; writer?: string; now?: () => Date; receiptId?: string; expectedPath?: string } = {},
 ): SettingWrite {
   if (request.path.some((key) => ["written", "__proto__", "constructor", "prototype"].includes(key)))
     return { ok: false, status: 422, message: "The setting path contains a reserved key." };
@@ -169,6 +254,11 @@ export function writeSettingTier(
   next.written = { by, at };
   const wrote = writeHome(read.path, `${JSON.stringify(next, null, 2)}\n`, request.expectedSha256);
   if (!wrote.ok) return { ok: false, status: 409, message: `${read.path} changed since it was read.` };
+  appendLine(homeWritesKind.in(hostState()), {
+    kind: "home-write", place: `${request.owner} ${request.path.join(".")} at ${request.tier}${read.name ? ` (${read.name})` : ""}`,
+    path: read.path, home: read.home, owner: request.owner, tier: request.tier,
+    sha256: wrote.sha256, priorSha256: wrote.priorSha256, by: context.caller ?? { kind: "human", via: "local" }, at,
+  });
   noteStored(storedNoticesPath(), {
     class: "keep",
     place: SETTING_WRITE_PLACE,

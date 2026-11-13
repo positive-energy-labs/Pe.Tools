@@ -2,10 +2,15 @@ import { placesFileSchema } from "../../../../packages/agent-contracts/src/place
 import type { ThreadTab } from "@pe/agent-contracts";
 import { peClient } from "#/host/pe-client";
 import { peReadings, type Readings } from "#/host/resource-stream";
+import { z } from "zod";
+
+const publicationStateSchema = z.object({ state: z.string() });
 
 /** A window's projection of the host list. Focus never travels to the host. */
 export class Places {
-  private state = { tabs: [] as ThreadTab[], ready: false, error: null as string | null };
+  private state: { tabs: ThreadTab[]; ready: boolean; error: string | null } = {
+    tabs: [], ready: false, error: null,
+  };
   private listeners = new Set<() => void>();
   private stop?: () => void;
   private writes = Promise.resolve();
@@ -49,8 +54,11 @@ export class Places {
       }
     };
     const release = this.stream.subscribe({ kind: "publication", subscription, generation: 0 }, frame => {
-      if (frame.kind === "snapshot" && !frame.stale &&
-        (!this.state.ready || ["refresh-needed", "absent"].includes((frame.value as { state: string }).state))) void refresh();
+      if (frame.kind === "snapshot" && !frame.stale) {
+        const state = publicationStateSchema.safeParse(frame.value);
+        if (state.success && (!this.state.ready || ["refresh-needed", "absent"].includes(state.data.state)))
+          void refresh();
+      }
       if (frame.kind === "failure") this.publish(this.state.tabs, false, frame.error);
     });
     this.refresh = refresh;
@@ -75,7 +83,7 @@ export class Places {
 export const places = new Places();
 
 type FocusStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
-export const readFocus = (storage: FocusStorage = sessionStorage) => {
+export const readFocus = (storage: FocusStorage = sessionStorage): string | null => {
   try { return storage.getItem("pe.place.focus"); } catch { return null; }
 };
 export function focus(id: string | null, storage: FocusStorage = sessionStorage) {
