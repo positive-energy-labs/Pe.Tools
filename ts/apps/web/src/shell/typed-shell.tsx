@@ -198,7 +198,9 @@ function bandVerbs(mount: TypedMount): ReactNode[] {
 }
 /** Band timeline: the Timeline head over the recorded points and the Work history. */
 function BandTimeline({ mount, recorded }: { mount: TypedMount; recorded?: ReactNode }) {
-  if (!mount.spec.edits && !mount.target() && mount.timeline().length === 0) return null;
+  // The Timeline is a Work's history and a bound document's recorded points. A route with neither
+  // (/pea: a host target, no Work) draws none, never an empty one (row 11-pea-one-band).
+  if (!mount.spec.edits && mount.target()?.kind !== "document" && mount.timeline().length === 0) return null;
   return <TimelineHead owner={mount} history={<>{recorded}<GraphHistory owner={mount} /></>} />;
 }
 /** The layout's `subject` gate: open when the Page holds a subject. */
