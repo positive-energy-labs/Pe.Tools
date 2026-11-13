@@ -67,6 +67,20 @@ type Publication = DrawContext<any, any, any, any>["value"]["publication"];
 type Snapshot = ReadingState<any> & { readonly publication: Publication; readonly hash?: string };
 // The one-to-one mapping from a read's outcome (routes CONTRACTS.md, "Reading state"): a refusal over a
 // held value is `stale`, alone it is `refused`; a read in flight over a held value is `refreshing`, alone `reading`.
+const traced = z.object({ name: z.string(), args: z.unknown(), hash: z.string().optional() });
+/** F1: the source inputs a value was read from that the Work `own` does not own, each with its hash.
+ *  A derived read (`compute`, or a dotted read name) is left out, because it moves when its sources
+ *  do; so is `own`'s Work. ponytail: the host's trace does not mark a source input, so the dotted
+ *  name is the test; have the host mark it if a source input is ever given a dotted name. */
+const elsewhere = (trace: readonly unknown[], own: string) => {
+  const sources = new Map<string, string>();
+  for (const entry of trace) {
+    const { name, args, hash } = traced.parse(entry);
+    if (name === "compute" || name.includes(".") || (name === "work" && z.object({ owner: z.literal(own) }).safeParse(args).success)) continue;
+    sources.set(`${name} ${canonicalRouteInput(args)}`, hash ?? "");
+  }
+  return sources;
+};
 const unavailable = (reason: string, value?: unknown, publication: Publication = null): Snapshot =>
   value === undefined ? { state: "refused", reason, publication } : { state: "stale", value, reason, publication };
 const reading = (value?: unknown, publication: Publication = null): Snapshot =>
@@ -173,6 +187,8 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
   };
   let renderedBasis: InvocationToken | null = null;
   const reads = new Map<import("../route/host-read").HostRead, { snapshot: Snapshot; args: string; stop(): void }>();
+  // F1: the trace of each core value this mount has shown, by evaluation, so a press can name what its drawing was read from.
+  const drawnFrom = new Map<string, readonly unknown[]>();
   const dependencies = () => Object.fromEntries([...reads].filter(([read,r])=>read === spec.core && r.snapshot.state === "ready").map(([read,r])=>[read.key,r.snapshot.hash??""]));
   const workSchema:z.ZodObject=edits?.work.schema ?? z.strictObject({});
   const gate = createRouteScopeGate({
@@ -282,6 +298,10 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
               !!packet.value && !packet.value.coverage.unknown.length && !packet.value.coverage.refused.length;
             record.snapshot = current ? { state: "ready", value: publication!.data, publication, hash: packet.value!.evaluation }
               : unavailable(valueRefusal(frame.reason ?? packet.reason ?? "Incomplete Value", read.key), publication?.data??valueOf(record.snapshot), publication??record.snapshot.publication);
+            if (read === spec.core && record.snapshot.state === "ready" && record.snapshot.hash && record.snapshot.publication) {
+              drawnFrom.set(record.snapshot.hash, record.snapshot.publication.trace);
+              if (drawnFrom.size > 32) drawnFrom.delete(drawnFrom.keys().next().value ?? "");
+            }
           } catch (error) { record.snapshot = unavailable(valueRefusal(error, read.key), valueOf(record.snapshot), record.snapshot.publication); }
         } else if (frame.kind !== "log") record.snapshot = frame.kind === "failure"?unavailable(valueRefusal(frame.error, read.key),valueOf(record.snapshot),record.snapshot.publication):reading(valueOf(record.snapshot),record.snapshot.publication);
         notify();
@@ -796,6 +816,15 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
                 // waited (another subject, or the same one again) retired that press: it stays refused.
                 const now=gate.read();
                 if (!now||now.pageEpoch!==token.pageEpoch||now.pageRevision!==token.pageRevision) throw error;
+                // F1: the rebuild crosses only what this Work moved. A source the drawing was read from
+                // that is owned elsewhere (another route's Work, the model, a file) and has moved since
+                // keeps the press refused. Reads derived from this Work may move: that is the own edit.
+                if (spec.core) {
+                  const from=drawnFrom.get(token.dependencies[spec.core.key]??""), to=reads.get(spec.core)?.snapshot.publication?.trace;
+                  if (!from||!to) throw error;
+                  const since=elsewhere(to,id);
+                  for (const [source,hash] of elsewhere(from,id)) if (since.has(source)&&since.get(source)!==hash) throw error;
+                }
                 const issued=gate.invocation(gate.capture("draw"),dependencies());
                 if (!issued.ok) throw error;
                 // The refused input stays retained until its replacement is. A rebuild that fails on the

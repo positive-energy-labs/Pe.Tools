@@ -1361,3 +1361,66 @@ test("D17 H1 schedule, the reply has landed and the cell is not redrawn: an old 
     expect(await j.cells().at(["writeIntent"]).stage({ walk: { unitId: 1, portIndex: 0 } }, { label: "Write scope" })).toBeNull();
   } finally { await j.close(); }
 }, 60_000);
+
+// F1 (re-check 2026-11-13): the rebuild crosses only what this Work moved. A read owned elsewhere
+// that moved while the pick waited (here the /ducts criterion, so `ductsRevision`) keeps it refused.
+test("D17 F1: a read owned elsewhere that moves while the pick waits keeps it refused, input retained", async () => {
+  const j = await journey();
+  let held: ReturnType<typeof gate> | undefined;
+  try {
+    await j.start();
+    const cells = j.cells(), original = cells.basis!;
+    const before = j.m.value();
+    j.holdStream(); held = j.holdWrite();
+    const edit = cells.at(["flows", terminalA]).stage({ cfm: 240 });
+    const pick = cells.at(["writeIntent"]).stage({ walk: { unitId: 1, portIndex: 0 } }, { label: "Write scope" });
+    await held.entered.promise;
+    await vi.waitFor(() => expect(picks(j)).toHaveLength(1));
+    const other = { ...j.key(), route: "ducts" };
+    const prior = await j.host.workspace.read(other, "ducts");
+    await j.host.workspace.publish(other, "ducts", [{ path: ["criteria", "terminalDropInWg"], value: { edit: { value: 1.25 } } }], prior?.revision ?? 0);
+    j.m.refresh();
+    await vi.waitFor(() => {
+      const now = j.m.value();
+      expect(now.state).toBe("ready");
+      expect(now.hash).not.toBe(before.hash);
+      expect(valueOf(now).ductsRevision).not.toBe(valueOf(before).ductsRevision);
+    }, { timeout: 20_000 });
+    expect(j.m.current(original)).toBe(false);
+    held.release.resolve();
+    expect(await edit).toBeNull();
+    expect(await pick).toMatchObject({ code: "refused" });
+    expect(picks(j), "sent once, never rebuilt").toHaveLength(1);
+    expect((await hostWork(j)).doc).not.toHaveProperty("writeIntent.edit");
+    expect(j.m.pendingEdits()).toEqual([expect.objectContaining({ label: "Write scope", status: "refused" })]);
+  } finally { held?.release.resolve(); j.flushStream(); await j.close(); }
+}, 60_000);
+
+// The other half of the owner split: the own edit's read may arrive before its reply, and the pick still sticks.
+test("D17 F1: the own edit's read moving while the pick waits does not refuse it", async () => {
+  const j = await journey();
+  let held: ReturnType<typeof gate> | undefined;
+  try {
+    await j.start();
+    const cells = j.cells(), original = cells.basis!;
+    const before = j.m.value();
+    held = j.holdWrite();
+    const edit = cells.at(["flows", terminalA]).stage({ cfm: 240 });
+    const pick = cells.at(["writeIntent"]).stage({ walk: { unitId: 1, portIndex: 0 } }, { label: "Write scope" });
+    await held.entered.promise;
+    await vi.waitFor(() => expect(picks(j)).toHaveLength(1));
+    j.m.refresh();
+    await vi.waitFor(() => {
+      const now = j.m.value();
+      expect(now.state).toBe("ready");
+      expect(now.hash).not.toBe(before.hash);
+      expect(valueOf(now).ductsRevision).toBe(valueOf(before).ductsRevision);
+    }, { timeout: 20_000 });
+    expect(j.m.current(original)).toBe(false);
+    held.release.resolve();
+    expect(await edit).toBeNull();
+    expect(await pick).toBeNull();
+    expect((await hostWork(j)).doc).toHaveProperty("writeIntent.edit");
+    expect(j.m.pendingEdits()).toEqual([]);
+  } finally { held?.release.resolve(); await j.close(); }
+}, 60_000);
