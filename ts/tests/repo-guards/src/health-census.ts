@@ -18,10 +18,10 @@ import { fileURLToPath } from "node:url";
 import ts from "typescript";
 
 export type Count = Record<string, number>;
-export type Health = { casts: Count; suppressions: Count; todos: Count; longFiles: Count; fsWrites: Count };
+export type Health = { casts: Count; nonNull: Count; suppressions: Count; todos: Count; longFiles: Count; fsWrites: Count };
 
 /** Ratchets that hold per file: no file may rise, whatever the total does. */
-export const PER_FILE = ["casts", "fsWrites"] as const satisfies readonly (keyof Health)[];
+export const PER_FILE = ["casts", "nonNull", "fsWrites"] as const satisfies readonly (keyof Health)[];
 
 /**
  * The doors: files a per-file count may rise in, because writes consolidate into them (the store is
@@ -29,9 +29,10 @@ export const PER_FILE = ["casts", "fsWrites"] as const satisfies readonly (keyof
  */
 export const OWNERS: Record<(typeof PER_FILE)[number], readonly string[]> = {
   casts: [],
+  nonNull: [],
   fsWrites: ["ts/packages/host-contracts/src/store.ts"],
 };
-export const NAMES = ["casts", "suppressions", "todos", "longFiles", "fsWrites"] as const satisfies readonly (keyof Health)[];
+export const NAMES = ["casts", "nonNull", "suppressions", "todos", "longFiles", "fsWrites"] as const satisfies readonly (keyof Health)[];
 
 /** Per-file rises outside the named owners. */
 export const perFileRises = (name: (typeof PER_FILE)[number], actual: Count, baseline: Count) =>
@@ -144,22 +145,27 @@ export function fsWriteCount(path: string, text: string): number {
   return count;
 }
 
-/** TypeScript type escapes: `as T` (not `as const`), `<T>x`, and `any` as a type. */
-export function castCount(path: string, text: string): number {
+/**
+ * TypeScript type escapes. `casts`: `as T` (not `as const`), `<T>x`, and `any` as a type.
+ * `nonNull`: postfix `x!` (owner ruling 2026-11-13: its own count, a different escape with a
+ * different fix; frozen at the census, it only falls).
+ */
+export function escapeCounts(path: string, text: string): { casts: number; nonNull: number } {
   const kind = path.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS;
   const ast = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true, kind);
-  let count = 0;
+  const counts = { casts: 0, nonNull: 0 };
   const visit = (node: ts.Node) => {
     if (
       (ts.isAsExpression(node) && !(ts.isTypeReferenceNode(node.type) && node.type.typeName.getText(ast) === "const")) ||
       ts.isTypeAssertionExpression(node) ||
       node.kind === ts.SyntaxKind.AnyKeyword
     )
-      count++;
+      counts.casts++;
+    if (ts.isNonNullExpression(node)) counts.nonNull++;
     ts.forEachChild(node, visit);
   };
   visit(ast);
-  return count;
+  return counts;
 }
 
 const repoRoot = resolve(import.meta.dirname, "../../../..");
@@ -191,7 +197,7 @@ const productionFiles = () =>
     .sort();
 
 export function census(): Health {
-  const health: Health = { casts: {}, suppressions: {}, todos: {}, longFiles: {}, fsWrites: {} };
+  const health: Health = { casts: {}, nonNull: {}, suppressions: {}, todos: {}, longFiles: {}, fsWrites: {} };
   for (const file of productionFiles()) {
     const source = readFileSync(join(repoRoot, file), "utf8");
     if (FS_SCOPE.test(file) && /\.tsx?$/.test(file)) {
@@ -200,8 +206,11 @@ export function census(): Health {
     }
     const text = source.split("\n");
     if (text.length > LONG) health.longFiles[file] = 1;
-    const casts = file.endsWith(".cs") ? text.filter((line) => DYNAMIC.test(line)).length : castCount(file, source);
-    if (casts) health.casts[file] = casts;
+    const escapes = file.endsWith(".cs")
+      ? { casts: text.filter((line) => DYNAMIC.test(line)).length, nonNull: 0 }
+      : escapeCounts(file, source);
+    if (escapes.casts) health.casts[file] = escapes.casts;
+    if (escapes.nonNull) health.nonNull[file] = escapes.nonNull;
     for (const name of LINE_COUNTS) {
       const hits = text.filter((line) => lines[name].test(line)).length;
       if (hits) health[name][file] = hits;
