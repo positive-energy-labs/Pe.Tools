@@ -1,12 +1,12 @@
+import * as contracts from "./contract.ts";
 import type { ContextOf } from "../route/defaults";
 import { read } from "../route/defaults";
-import { valueRead } from "../../../../packages/agent-contracts/src/value.ts";
 import { route } from "../route/defaults.ts";
 import { hostRead } from "../route/host-read.ts";
 import { draw } from "../route/draw.tsx";
 
-import { chatArgs, chatValue } from "../../../../packages/agent-contracts/src/chat-read.ts";
-export const loaded = read(hostRead(valueRead("chat.context", chatArgs, chatValue)));
+
+export const loaded = read(hostRead(contracts.context));
 export const fields = {};
 export type ChatHandle = ContextOf<typeof fields, typeof loaded, never, never>;
 /** `minOtherSize` is Pea's floor: the chat column's reading measure (`--chat-measure` in

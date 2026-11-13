@@ -31,11 +31,8 @@ type CatalogEntry = {
   effect: string;
   cardinality: string;
   internal: boolean;
-  rollsBack: boolean;
   displayName?: string | null;
-  intent: string;
   costTier: string;
-  usesTransactions: boolean;
   description: string;
   requestSchemaJson: string;
   responseSchemaJson: string;
@@ -228,9 +225,9 @@ chunks.push(
   "export const hostOpSafety = {",
   ...operations.map(
     (op) =>
-      `  ${JSON.stringify(op.key)}: ${JSON.stringify({ intent: op.intent, costTier: op.costTier, usesTransactions: op.usesTransactions, subject: op.subject, touches: op.touches, effect: op.effect, cardinality: op.cardinality, internal: op.internal, rollsBack: op.rollsBack })},`,
+      `  ${JSON.stringify(op.key)}: ${JSON.stringify({ costTier: op.costTier, subject: op.subject, touches: op.touches, effect: op.effect, cardinality: op.cardinality, internal: op.internal })},`,
   ),
-  "} as const satisfies Record<keyof HostOps, { intent: string; costTier: string; usesTransactions: boolean; subject: string; touches: string; effect: string; cardinality: string; internal: boolean; rollsBack: boolean }>;",
+  "} as const satisfies Record<keyof HostOps, { costTier: string; subject: string; touches: string; effect: string; cardinality: string; internal: boolean }>;",
   "",
 );
 
@@ -239,13 +236,13 @@ const catalogOutput = [
   ...banner,
   "/** Host-only C# discovery metadata. Runtime availability is reported separately by the host. */",
   'import type { HostOperationDefinition } from "../contracts/operation-vocabulary.ts";',
-  "type CatalogEntry = HostOperationDefinition & { readonly requestSchemaJson: string; readonly responseSchemaJson: string; readonly description: string; readonly artifactSchemaJson?: string } & (",
+  'type CatalogEntry = Omit<HostOperationDefinition, "intent" | "rollsBack" | "usesTransactions"> & { readonly requestSchemaJson: string; readonly responseSchemaJson: string; readonly description: string; readonly artifactSchemaJson?: string } & (',
   ...operations.map(
     (op) =>
       `  | { readonly key: ${JSON.stringify(op.key)}${op.artifactSchemaJson ? "; readonly artifactSchemaJson: string" : ""} }`,
   ),
   ");",
-  `export const hostOpCatalog: readonly CatalogEntry[] = ${JSON.stringify(operations, null, 2)};`,
+  `export const hostOpCatalog: readonly CatalogEntry[] = ${JSON.stringify(operations.map((op) => Object.fromEntries(Object.entries(op).filter(([key]) => !["intent", "rollsBack", "usesTransactions"].includes(key)))), null, 2)};`,
   "",
 ].join("\n");
 const outputs = [

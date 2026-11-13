@@ -6,7 +6,7 @@ import type { TypedMount } from "./typed-mount";
  */
 import { useSyncExternalStore, type ReactNode } from "react";
 import { MoreHorizontal, Redo2, Undo2 } from "lucide-react";
-import { Button } from "@pe/kit/lang/button";
+import { Button, ButtonOutcome } from "@pe/kit/lang/button";
 import { Popover, PopoverTrigger, SubjectPopoverContent } from "@pe/kit/lang/popover";
 import { activityTime } from "./timeline";
 import "./situation-band.css";
@@ -57,16 +57,20 @@ export function SituationBand({
   );
 }
 
-export type TimelineOwner = Pick<TypedMount, "subscribe" | "revision" | "timeline" | "stepTimeline" | "timelineRefusal" | "pendingEdits" | "discardIntent" | "stopCommand">;
+export type TimelineOwner = Pick<TypedMount, "subscribe" | "revision" | "timeline" | "stepTimeline" | "timelineRefusal" | "pendingEdits" | "discardIntent" | "stopCommand" | "reviewProblem">;
 
 export function TimelineButtons({ owner }: { owner: TimelineOwner }) {
   useSyncExternalStore(owner.subscribe, owner.revision, owner.revision);
   const timeline = owner.timeline();
-  return <>{(["undo", "redo"] as const).map(direction => <Button key={direction} kind="quiet"
+  return <>{(["undo", "redo"] as const).map(direction => {
+    const message = owner.reviewProblem(`work.${direction}`);
+    return <ButtonOutcome.Provider key={direction} value={message ? { kind: "refused", label: message } : null}>
+    <Button kind="quiet"
     icon={direction === "undo" ? Undo2 : Redo2}
     label={timeline?.[direction] ? `${direction === "undo" ? "Undo" : "Redo"} ${timeline[direction]!.label}` : direction === "undo" ? "Undo" : "Redo"}
     refusal={owner.timelineRefusal() ?? timeline?.refusal[direction] ?? (timeline?.[direction] ? null : `Nothing to ${direction}`)}
-    onPress={() => owner.stepTimeline(direction)} />)}</>;
+    onPress={async () => { await owner.stepTimeline(direction); }} /></ButtonOutcome.Provider>;
+  })}</>;
 }
 
 export function TimelineHead({ owner, history }: { owner: TimelineOwner; history: ReactNode }) {

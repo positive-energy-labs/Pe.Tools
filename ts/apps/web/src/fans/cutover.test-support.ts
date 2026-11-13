@@ -1,4 +1,5 @@
 import { fixtureTimeline } from "../shell/fixture-work-door";
+import * as ductsReads from "../ducts/contract.ts";
 import { systemList } from "@pe/ducts-domain/system-list";
 import { createHash } from "node:crypto";
 import { withStoredRulings } from "@pe/ducts-domain/rulings";
@@ -109,9 +110,9 @@ export async function createWitness(
     },
   });
   for (const [entry, read] of Object.entries({
-    "ducts.roster.value": "roster",
-    "ducts.network.value": "network",
-    "ducts.pricing.value": "pricing",
+    [ductsReads.roster.key]: "roster",
+    [ductsReads.network.key]: "network",
+    [ductsReads.pricing.key]: "pricing",
   })) {
     native[entry] = {
       kind: "use",

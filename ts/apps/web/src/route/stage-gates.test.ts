@@ -1,3 +1,4 @@
+import { contract } from "@pe/agent-contracts/handle";
 import { expect, test, vi } from "vite-plus/test";
 import { z } from "zod";
 import { field, when, split, route, scrollBody } from "./defaults";
@@ -23,7 +24,7 @@ test("wire preserves the ducts subject gates and declares stage roles", () => {
 });
 
 test("closed gates acquire no pane read; closing releases it and shared reads survive", async () => {
-  const read = (key: string) => ({ ...hostRead({ ...ducts.spec.core!, key, input: z.object({}) }), args: () => ({}) });
+  const read = (key: string) => ({ ...hostRead(contract(key, { input: z.object({}), data: z.unknown(), uses: [] })), args: () => ({}) });
   const detail = read("gate.detail"), shared = read("gate.shared");
   const pane = (read: typeof detail) => ({ title: "Witness", purpose: "Read demand", read, body: "scroll" as const, draw: () => scrollBody(null) });
   const declaration = route({ key: "gate-witness", name: "Gates", needs: "host", directory: ducts.data.directory, fields,

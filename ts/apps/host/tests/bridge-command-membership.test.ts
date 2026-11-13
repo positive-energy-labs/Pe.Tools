@@ -25,6 +25,9 @@ import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import { requireEligibleCaller } from "../src/gateway-catalog.ts";
 import { pea } from "./callers.ts";
 test("every advertised native preview admits a direct Pea call and agrees with C# metadata", () => {
+  for (const op of hostOpCatalog)
+    for (const column of ["rollsBack", "intent", "usesTransactions"])
+      expect(op, op.key).not.toHaveProperty(column);
   const previews = hostOpCatalog.filter(op => op.key.endsWith(".preview"));
   // ducts.apply.preview became the Read ducts.apply.plan (V1, 0d237121).
   expect(previews.map(op => op.key).sort()).toEqual([
@@ -37,8 +40,6 @@ test("every advertised native preview admits a direct Pea call and agrees with C
     // takes no scope and is a Read; the two duct previews rehearse inside a rollback.
     const rehearses = op.key !== "revit.apply.parameter-links.preview";
     expect(op.effect, op.key).toBe(rehearses ? "TransactRead" : "Read");
-    expect(op.rollsBack, op.key).toBe(rehearses);
-    expect(op.intent, op.key).toBe("Read");
     expect(op.internal, op.key).toBe(false);
     expect(commandLeafRefusal(op.key, undefined)).toBeNull();
     expect(() => requireEligibleCaller({ ...op, principal: ["human", "pea"] }, pea(), "/call")).not.toThrow();

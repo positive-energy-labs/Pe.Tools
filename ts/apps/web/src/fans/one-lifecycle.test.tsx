@@ -1,3 +1,4 @@
+import { contract } from "@pe/agent-contracts/handle";
 // @vitest-environment jsdom
 import { expect, test, vi } from "vite-plus/test";
 import { address } from "@pe/agent-contracts";
@@ -50,9 +51,9 @@ test("optional Work and invocation arguments share one typed scope", async () =>
   const {handle}=await import("@pe/agent-contracts/handle");
   const {module:reference}=await import("./route");
   const {hostRead}=await import("../route/host-read");
-  const {valueRead,workFingerprintSchema}=await import("@pe/agent-contracts");
+  const {workFingerprintSchema}=await import("@pe/agent-contracts");
   const source=vi.fn();
-  const read=hostRead({...valueRead("probe.value",z.object({}),z.object({answer:z.number()}))});
+  const read=hostRead({...contract("probe.value", { input: z.object({}), data: z.object({answer:z.number()}), uses: [] })});
   const declaration={key:"wave4-probe",address:"/",name:"Probe",needs:"host" as const,directory:reference.data.directory,
     fields:{member:field(z.string(),"","query")},core:{...read,args:()=>({})},
     panes:{main:{title:"Probe",purpose:"Scope falsifier",read,body:"scroll" as const,draw:(ctx:any)=>scrollBody(ctx)}},layout:{kind:"pane" as const,id:"main"}};

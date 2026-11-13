@@ -22,7 +22,7 @@ export function GraphHistory({ owner }: { owner: TimelineOwner }) {
       </> })),
     ...(owner.timeline()?.rows ?? []).map(row => ({ key: timelineRowKey(row),
       label: row.kind === "home-write" ? row.place : row.kind === "point" ? row.reason : row.label,
-      sub: [row.kind === "edit" || row.kind === "restore" ? `${row.work.route} / ${row.by === "pea" ? "Pea" : "you"} / ${row.state} / r${row.revision}` : row.kind === "receipt" ? `${row.by === "pea" ? "Pea" : "you"} / ${row.state}` : row.kind,
+      sub: [row.kind === "edit" || row.kind === "restore" ? `${row.work.route} / ${row.by === "pea" ? "Pea" : "you"} / ${row.notWritten ? `not written${row.notWritten.rejected ? " / rejected" : ""}` : row.state} / r${row.revision}` : row.kind === "receipt" ? `${row.by === "pea" ? "Pea" : "you"} / ${row.state}` : row.kind,
         activityTime(row.at), "blockedBy" in row ? row.blockedBy && "receipt" in row.blockedBy ? row.blockedBy.label : row.blockedBy?.reason : null].filter(Boolean).join(" / "),
       actions: row.kind === "receipt" ? <><a href={routeAddress("ops").link({ actionId: row.id })}>Inspect</a>
         {["queued", "running", "outcome-unknown"].includes(row.state) && <Button label="Stop command" onClick={() => void owner.stopCommand(row.id)}>Stop</Button>}</> : null,

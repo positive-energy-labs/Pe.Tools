@@ -119,6 +119,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
   let key = selectedKey();
   let timelineState: import("@pe/agent-contracts").WorkTimeline | null = null;
   let timelineProblem: string | null = "Reading Timeline";
+  const problems = new Map<string,string>();
   let stopTimeline = () => {};
   const timelineClient = ports.timeline ?? (input.fixture === null && !input.history ? createTimelineClient(ports.findings) : null);
   const timelineWorks = () => [...owners.values()].map(owner => owner.handle?.key ?? owner.scope.key);
@@ -136,18 +137,24 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
   };
   cleanups.push(() => stopTimeline());
   const stepTimeline = async (direction: "undo" | "redo") => {
+    const id = `work.${direction}`;
+    problems.delete(id); notify();
+    const refused = (message: string) => {
+      if (!disposed && input.custody.current()) { problems.set(id, message); notify(); }
+      return { message };
+    };
     try {
       requireWritable();
       const expected = timelineState?.[direction];
       if (!timelineClient || !expected || timelineProblem || timelineState?.refusal[direction])
-        return { message: timelineProblem ?? timelineState?.refusal[direction] ?? `Nothing to ${direction}` };
+        return refused(timelineProblem ?? timelineState?.refusal[direction] ?? `Nothing to ${direction}`);
       const result = await timelineClient.step({ direction, works: timelineWorks(), expected });
       if (!disposed && input.custody.current()) {
         if (result) connectTimeline();
         watchFindings();
       }
-      return result;
-    } catch (error) { return { message: error instanceof Error ? error.message : String(error) }; }
+      return result ? refused(result.message) : null;
+    } catch (error) { return refused(error instanceof Error ? error.message : String(error)); }
   };
   let renderedBasis: InvocationToken | null = null;
   const reads = new Map<import("../route/host-read").HostRead, { snapshot: Snapshot; args: string; stop(): void }>();
@@ -391,7 +398,6 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
   };
   const reviews = new Map<string, { preview: z.output<typeof writePreviewSchema>; input: Record<string, unknown>; token: InvocationToken; signature: string; presentation: any }>();
   const applyingReviews = new Map<string, ReturnType<typeof reviews.get>>();
-  const problems = new Map<string,string>();
   const plans = new Map<string,InvocationToken>();
   const workSignature = () => canonicalRouteInput([...owners].map(([id,o]) => [id,o.ready,o.handle]));
   // Plans seal Work, target and native reads, not the browser-owned Page pose (ADR 0033).

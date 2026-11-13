@@ -1,18 +1,18 @@
+import * as contracts from "./contract.ts";
 import type { ContextOf, Verbs } from "../route/defaults";
 import { handle } from "@pe/agent-contracts/handle";
 import { read } from "../route/defaults";
 import { paneLayout } from "../route/defaults";
 import { z } from "zod";
-import { valueRead } from "@pe/agent-contracts";
 import { route, field, subjectSchema, oneName } from "../route/defaults";
 import { hostRead } from "../route/host-read";
 import { draw } from "../route/draw";
-import { opsArgs, opsData } from "@pe/agent-contracts";
+
 /** The op is the subject (keyKind `name`, tuple `[op key]`); the receipt in view is route-owned query. */
 export const fields = { op: field(subjectSchema(1), { kind: "ids", ids: [] }, "subject", "push") };
 export const query = { actionId: field(z.string(), "", "query", "push") };
 export const loaded = read(
-  hostRead(valueRead("ops.workspace", opsArgs, opsData)),
+  hostRead(contracts.workspace),
   (page: { actionId: string }) => ({ actionId: page.actionId }),
 );
 export const receiptControls = ["action.read", "action.recover", "action.resume", "action.cancel"] as const;

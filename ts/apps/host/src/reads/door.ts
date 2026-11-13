@@ -105,8 +105,7 @@ export function nativeRead<K extends HostOperationKey>(
   const operation = hostOpCatalog.find((op) => op.key === key);
   if (
     !operation ||
-    operation.intent !== "Read" ||
-    !(operation.effect === "Read" || (operation.effect === "TransactRead" && operation.rollsBack))
+    !(operation.effect === "Read" || operation.effect === "TransactRead")
   )
     throw Error(`Input is not a catalog Read/Read: ${key}`);
   const input = nativeReadInput(key);

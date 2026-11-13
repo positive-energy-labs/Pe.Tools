@@ -8,6 +8,8 @@ import type { RouteStartupProjection } from "@pe/host-contracts/route-startup";
 
 declare const __PE_SOURCE_COMMIT__: string;
 const sourceClosure = generatedKind(["source-closure.generated.json"]);
+const mark = (phase: string) =>
+  process.env.PE_START_TIMING && console.error(`PE_START_TIMING ${phase} ${Math.round(performance.now())}`);
 
 /** ADR 0029 rule 4 exception: this source bootstrap runs before the Effect graph has a process scope.
  * Builtin closures are untracked build output that the host graph imports from disk under jiti.
@@ -26,13 +28,16 @@ export async function prepareSourceClosures() {
  * tests/source-closures.test.ts holds that. A miss produces, and the producer stores a new receipt. */
 export async function prepareDevRouteProjection(): Promise<RouteStartupProjection> {
   const root = fileURLToPath(new URL("../../../../", import.meta.url));
+  mark("receipt-check");
   let receipt = readRouteStartupReceipt(root);
+  mark(receipt ? "receipt-hit" : "receipt-miss");
   let current = !!receipt;
   if (!receipt) {
     const sourceHash = routeStartupSourceHash(root);
     const { stdout } = await promisify(execFile)(process.execPath, [
       fileURLToPath(new URL("../../web/scripts/route-graphs.ts", import.meta.url)), "--runtime",
     ], { maxBuffer: 16 * 1024 * 1024 });
+    mark("receipt-produced");
     receipt = { checkout: routeStartupOwner(root), sourceHash, projections: JSON.parse(stdout) };
     current = currentRouteStartupProjection(root, receipt);
   }

@@ -1,24 +1,24 @@
+import { native } from "@pe/agent-contracts/handle";
+import * as contracts from "./contract.ts";
+import { body } from "@pe/host/read-graph";
 import { z } from "zod";
 import type { Read } from "@pe/host/read-graph";
 import { workRead } from "@pe/host/reads/inputs";
 
 import { executionTargetSchema, roomsRouteState } from "@pe/agent-contracts";
-import { read, workScope, documentMark } from "@pe/host/read-graph";
+import { workScope, documentMark } from "@pe/host/read-graph";
 import { roomsArgs, roomsData } from "@pe/agent-contracts";
 import { planOf } from "./rooms-plan.ts";
 import { roomsGoal, traceRefusal } from "./goal.ts";
 const workspaceArgs = roomsArgs.extend({ target: executionTargetSchema });
 export const reads: { workspace: Read<z.output<typeof workspaceArgs>, z.output<typeof roomsData>> } = {
-  workspace: read("rooms.workspace", {
-    input: workspaceArgs,
-    output: roomsData,
-    async run(ctx, { target, view }) {
+  workspace: body(contracts.workspace, async function(ctx, { target, view }) {
       if (target.kind !== "document") throw Error("Choose a project document");
       await ctx.read(documentMark, target.ref);
       const key = { ...(await ctx.read(workScope, target.ref)), route: "rooms" };
       const work = await ctx.read(workRead("rooms", roomsRouteState.schema), key);
       const snapshot = (
-        await ctx.native(view ? "rooms.snapshot" : "rooms.roster", {
+        await ctx.read(native(view ? "rooms.snapshot" : "rooms.roster"), {
           request: view ? { view } : {},
           target,
         })
@@ -30,7 +30,7 @@ export const reads: { workspace: Read<z.output<typeof workspaceArgs>, z.output<t
       if (view) {
         try {
           trace = (
-            await ctx.native("rooms.trace", {
+            await ctx.read(native("rooms.trace"), {
               request: { view },
               target: target,
             })
@@ -42,7 +42,7 @@ export const reads: { workspace: Read<z.output<typeof workspaceArgs>, z.output<t
         try {
           plan = planOf(
             (
-              await ctx.native("revit.context.view-image", {
+              await ctx.read(native("revit.context.view-image"), {
                 request: { target: { name: view }, pixelSize: 8000 },
                 target,
               })
@@ -63,6 +63,5 @@ export const reads: { workspace: Read<z.output<typeof workspaceArgs>, z.output<t
         plan,
         planError,
       };
-    },
-  }),
+    }),
 };
