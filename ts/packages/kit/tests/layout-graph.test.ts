@@ -37,7 +37,7 @@ test("takeoffs cursor detail gates independently of stage", () => {
 });
 
 test("all-empty and nested gates reduce to null without evaluating a closed child", () => {
-  const active = vi.fn((_when: string) => false);
+  const active = vi.fn<Parameters<typeof reduceLayout>[1]>(() => false);
   expect(reduceLayout(gate("outer", gate("inner", rooms)), active)).toBeNull();
   expect(active.mock.calls).toEqual([["outer"]]);
   expect(reduceLayout(rooms, () => false)).toBeNull();
