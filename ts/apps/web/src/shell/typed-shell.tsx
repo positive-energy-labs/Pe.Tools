@@ -37,7 +37,7 @@ import { SubjectPicker } from "./subject-picker";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { absentLine, failureLine, retainedLine } from "./reading-line";
 import { typedSubjectDoor } from "./subject";
-import { PrimaryRouteControls, useHasGlobalNavigation } from "../navigation/route-controls";
+import { RouteBand } from "../navigation/route-controls";
 import { leasesView, useRouteViewBridge } from "../route/view-bridge";
 import { createContext, useInsertionEffect, useLayoutEffect } from "react";
 import { useRouteCurrent } from "../route/activity";
@@ -131,7 +131,7 @@ function TypedPlace({ module, place, fingerprint, snapshot }: { snapshot?: Histo
 export function TypedChrome({ mount, document, recorded, thread }: { mount: TypedMount; document: ReactNode; recorded?: ReactNode; thread?: string }) {
   useSyncExternalStore(mount.subscribe,mount.revision,mount.revision);
   const { spec }=mount;
-  const visible=useContext(RouteVisibility), portal=useHasGlobalNavigation();
+  const visible=useContext(RouteVisibility);
   const [panes,setPanes]=useState<GraphLayoutState>(()=>readLayoutState(`route:${spec.key}`));
   const slot=usePaneActionSlot();
   const subject=useMemo(()=>typedSubjectDoor(mount),[mount]);
@@ -152,7 +152,7 @@ export function TypedChrome({ mount, document, recorded, thread }: { mount: Type
   return <SubjectDoor.Provider value={subject}>{leases ? view : null}<KeyScopeHost id={`route:${spec.key}`} hidden={!visible} className="flex min-h-0 flex-1 flex-col">
     <ScopeKeys keys={actionScopeKeys((["undo","redo"] as const).map(direction=>({id:`work.${direction}`,label:direction,bindings:direction==="undo"?["Mod+Z"]:["Mod+Shift+Z","Mod+Y"],
       options:{ignoreInputs:true},invoke:()=>{if(visible) void mount.stepTimeline(direction);}})))} />
-    {portal ? <PrimaryRouteControls route={spec.key} slot="situation">{head}</PrimaryRouteControls> : head}
+    <RouteBand route={spec.key}>{head}</RouteBand>
     <GraphLayoutView
       layout={layout(spec.layout)}
       panes={mount.data.panes}
@@ -191,6 +191,7 @@ function bandVerbs(mount: TypedMount): ReactNode[] {
 }
 /** Band timeline: the Timeline head over the recorded points and the Work history. */
 function BandTimeline({ mount, recorded }: { mount: TypedMount; recorded?: ReactNode }) {
+  if (!mount.spec.edits && !mount.target() && mount.timeline().length === 0) return null;
   return <TimelineHead owner={mount} history={<>{recorded}<GraphHistory owner={mount} /></>} />;
 }
 /** The layout's `subject` gate: open when the Page holds a subject. */

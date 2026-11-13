@@ -3,7 +3,15 @@ import { expect, test, vi } from "vite-plus/test";
 import { createRef } from "react";
 import { fireEvent, render } from "@testing-library/react";
 import { actionScopeKeys, KeyScope, ScopeKeys } from "@pe/kit/keys";
-import { chordIgnoresInputs } from "./keys";
+import { chordIgnoresInputs, validateGraphChords } from "./keys";
+import { z } from "zod";
+
+test.each(["Alt+/", "Option+/", "Mod+Shift+.", "Ctrl+Shift+.", "Command+Shift+Period"] as const)(
+  "shell reserves %s before any route binds it", (chord) => {
+    expect(validateGraphChords({ verbs: { help: { kind: "query", review: "none", label: "Help", chord, effect: "query", input: z.object({}) } }, panes: {} }))
+      .toMatchObject([{ code: "reserved-chord", path: "verbs.help.chord" }]);
+  },
+);
 
 test.each([["E", true], ["Shift+E", true], ["Mod+Enter", false], ["Alt+T", false]] as const)(
   "%s leaves text inputs alone = %s", (chord, ignores) => {
