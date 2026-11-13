@@ -32,6 +32,7 @@ import {
 } from "@pe/host-contracts/operation-types";
 
 import { HostNativeRead } from "@pe/host-internal/native-read";
+import { NativeReads } from "./native-reads.ts";
 import type { NativeReadInput } from "@pe/host-internal/native-read";
 
 import { Context, Effect, Layer, Option, Schema } from "effect";
@@ -864,11 +865,16 @@ function callRoutes(
             ),
             (release) => Effect.sync(release),
           );
+          const nativeReads = Option.getOrUndefined(yield* Effect.serviceOption(NativeReads));
+          const source = yield* HostInputContext;
+          if (source.lane.kind === "live" && !nativeReads)
+            return yield* Effect.die(Error("Live command reads require native terminal observation"));
           bindCommandRuntime(
             operations,
             bridge,
             observations(),
-            { ...actionDeps, families: composition?.families, nativeRead: yield* HostNativeRead },
+            { ...actionDeps, families: composition?.families, nativeRead: yield* HostNativeRead,
+              nativeReads: nativeReads ?? { kind: "recorded" } },
             composition?.local ??
               ((key, input, scope, context) =>
                 executeGatewayLocal(key, input, bridge, observations(), actionDeps.pictures!, actionDeps.launchShell, scope, context)),

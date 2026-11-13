@@ -1,7 +1,7 @@
 import { outwardSendExecutor } from "./outward-send.ts";
 import type { ActionJournal } from "./action-journal.ts";
 import type { HostNativeRead } from "@pe/host-internal/native-read";
-import { commandResources } from "./command-reads.ts";
+import { commandResources, commandReadOwnership, type NativeReadTerminals } from "./command-reads.ts";
 import { workStartExecutor } from "./work-start.ts";
 import { findingsExecutors } from "./slots/findings.ts";
 import { isAnyOperationKey } from "@pe/host-contracts/operation-types";
@@ -167,12 +167,14 @@ export function bindCommandRuntime(
   owner: ActionJournal,
   bridge: RevitBridge["Service"],
   captures: TakeoffCaptures,
-  deps: FamilyActionDependencies & InstancesActionDependencies & { nativeRead?: HostNativeRead["Service"] },
+  deps: FamilyActionDependencies & InstancesActionDependencies & { nativeRead?: HostNativeRead["Service"]; nativeReads?: NativeReadTerminals },
   local: GatewayLocal,
   origin?: () => string,
 ): void {
+  const owned = commandReadOwnership(deps.nativeRead, deps.nativeReads);
   owner.bindCommands({
     ...commandResources(bridge, deps, async (id) => (await owner.list(undefined, id))[0]),
-    resolve: commandRegistry(bridge, captures, deps, local, origin),
+    readOwnership: owned.readOwnership,
+    resolve: commandRegistry(bridge, captures, { ...deps, nativeRead: owned.nativeRead }, local, origin),
   });
 }
