@@ -100,8 +100,8 @@ export class PictureCaptures {
     return writeArtifact(this.blobs, pictureKind.in(this.storage, sha), bytes);
   }
 
-  blobPath(sha: string) {
-    return join(this.blobs, `${sha}.png`);
+  blobPath(sha: string): string {
+    return pictureKind.in(this.storage, sha).path;
   }
 
   /** Keep one taking: the blob if this sha is new, then one appended receipt. */
