@@ -3,6 +3,7 @@ import { subjectCode, uniqueIdSchema, familyTypeName } from "@pe/agent-contracts
 import { subjectName } from "./subject-name.ts";
 test("one subject namer uses the roster, names ports, and hides unknown raw element codes", () => {
   expect(subjectName(subjectCode({ keyKind: "name", key: ["Fam", "Type"] }))).toBe("Fam · Type");
+  expect(subjectName(subjectCode({ keyKind: "name", key: ["Hidden_Internal", "Type"] }))).toBe("Type");
   const ref = { keyKind: "UniqueId", key: uniqueIdSchema.parse("abcdefgh-long-key") } as const;
   const code = subjectCode(ref);
   const roster = [{ id: code, label: "FC-11" }];

@@ -77,7 +77,7 @@ export function SubjectPicker({ mount, data, single = false }: { mount: SubjectM
           />
         ) : (
           open.map((o) => (
-            <span key={identity(o.id)} {...(typeof o.id === "string" && decode(o.id).ok ? mention(subjectRefCodeSchema.parse(o.id)) : {})}><NarrowChip
+            <span key={identity(o.id)} data-findings-route={data.key} {...(typeof o.id === "string" && decode(o.id).ok ? mention(subjectRefCodeSchema.parse(o.id)) : {})}><NarrowChip
               label={o.label}
               selected={identity(o.id) === active}
               title={`Close this ${noun}; the others stay open`}
@@ -98,7 +98,7 @@ export function SubjectPicker({ mount, data, single = false }: { mount: SubjectM
         select={many && !single ? "multi" : "single"}
         selected={selected}
         empty={`No ${noun} available`}
-        row={(o) => ({ label: <span {...(typeof o.id === "string" && decode(o.id).ok ? mention(subjectRefCodeSchema.parse(o.id)) : {})}>{o.label}</span> })}
+        row={(o) => ({ label: <span data-findings-route={data.key} {...(typeof o.id === "string" && decode(o.id).ok ? mention(subjectRefCodeSchema.parse(o.id)) : {})}>{o.label}</span> })}
         onPick={(option) => single ? subject.select([option.id]) : subject.toggle(option.id)}
         onSelectedChange={
           many && !single

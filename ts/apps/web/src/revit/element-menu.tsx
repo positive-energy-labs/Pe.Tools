@@ -218,7 +218,7 @@ export function ElementMenu() {
           onOpenChange={(next) => {
             if (!next) setMenu(null);
           }}
-          aria-label={`Revit ${subject}`}
+          aria-label={menu.target ? `Revit ${subject}` : "Subject actions"}
           items={[...(menu.target ? VERBS : []), ...(menu.code && menu.route ? [{ key: "findings", label: "Findings" }] : [])]}
           keyOf={(verb) => verb.key}
           labelOf={(verb) => verb.label}
@@ -239,7 +239,7 @@ export function ElementMenu() {
               ),
             lead: verb.key === "select" ? <SelectInRevitIcon aria-hidden /> : undefined,
             title:
-              verb.key === "box"
+              verb.key === "findings" ? "Read and write findings on this subject" : verb.key === "box"
                 ? SECTION_BOX_LABEL
                 : `select ${subject} in Revit; the view stays as it is`,
           })}

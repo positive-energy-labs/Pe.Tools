@@ -86,7 +86,7 @@ export function subjectName(code: string, roster: readonly { id: string; label: 
   const ref = parsed.value;
   const base = subjectCode({ ...ref, sub: undefined });
   const known = roster.find(row => row.id === base)?.label;
-  const name = known ?? (ref.keyKind === "name" ? ref.key.join(" · ")
+  const name = known ?? (ref.keyKind === "name" ? ref.key.length === 2 ? familyTypeName({ family: ref.key[0], type: ref.key[1] }) : ref.key.join(" · ")
     : ref.keyKind === "UniqueId" ? `element ${ref.key.slice(0, 8)}` : ref.key);
   return ref.sub ? `${name} · ${"port" in ref.sub ? `port ${ref.sub.port}` : ref.sub.field}` : name;
 }
