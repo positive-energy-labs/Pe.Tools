@@ -11,7 +11,7 @@ export function createApplicationWorkRegistry() {
     return {
       acquire() { refs++; },
       release() { if (--refs === 0 && !intents.size) entries.delete(workKey(key)); },
-      pending: () => [...intents.values()],
+      pending: () => structuredClone([...intents.values()]),
       retain(input: WorkWrite, label: string) {
         const id = input.press ?? crypto.randomUUID();
         intents.set(id, { id, input: structuredClone(input), label, status: "pending" }); notify(); return id;

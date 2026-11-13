@@ -6,7 +6,6 @@ import type { TypedMount } from "./typed-mount";
  */
 import { useSyncExternalStore, type ReactNode } from "react";
 import { MoreHorizontal, Redo2, Undo2 } from "lucide-react";
-import type { VerbDecl } from "@pe/agent-contracts";
 import { Button } from "@pe/kit/lang/button";
 import { Popover, PopoverTrigger, SubjectPopoverContent } from "@pe/kit/lang/popover";
 import { activityTime } from "./timeline";
@@ -56,18 +55,6 @@ export function SituationBand({
       {timeline}
     </section>
   );
-}
-
-/**
- * The band's ranking: the verb that declares `primary`, else the stage's first model write (its
- * press previews, then applies: ADR 0027 rule 10), else the first declared. The rest keep their order.
- */
-export function rankVerbs(ids: readonly string[], verbs: Readonly<Record<string, VerbDecl>>) {
-  const primary =
-    ids.find((id) => verbs[id]?.primary) ??
-    ids.find((id) => verbs[id]?.effect === "command") ??
-    ids[0];
-  return primary === undefined ? [] : [primary, ...ids.filter((id) => id !== primary)];
 }
 
 export type TimelineOwner = Pick<TypedMount, "subscribe" | "revision" | "timeline" | "stepTimeline" | "timelineRefusal" | "pendingEdits" | "discardIntent" | "stopCommand">;

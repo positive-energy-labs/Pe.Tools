@@ -128,7 +128,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     let closed = false;
     const stop = timelineClient.open(works, (value, reason) => {
       if (closed || disposed) return;
-      timelineState = value; timelineProblem = reason ?? null; notify();
+      timelineState = value ? freezePage(value) : null; timelineProblem = reason ?? null; notify();
     });
     stopTimeline = () => { closed = true; stop(); };
   };
@@ -140,8 +140,11 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
       if (!timelineClient || !expected || timelineProblem || timelineState?.refusal[direction])
         return { message: timelineProblem ?? timelineState?.refusal[direction] ?? `Nothing to ${direction}` };
       const result = await timelineClient.step({ direction, works: timelineWorks(), expected });
-      if (result) connectTimeline();
-      loadFindings(); return result;
+      if (!disposed && input.custody.current()) {
+        if (result) connectTimeline();
+        loadFindings();
+      }
+      return result;
     } catch (error) { return { message: error instanceof Error ? error.message : String(error) }; }
   };
   let renderedBasis: InvocationToken | null = null;
@@ -634,7 +637,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
         rows: stale ? [] : r.presentation.rows, cells: stale ? [] : r.presentation.cells, stale }; },
     reviewProblem: (id: string) => problems.get(id) ?? null,
     cancel: (id: string) => { const token=plans.get(id);if(token) gate.retire(token.token);plans.delete(id);reviews.delete(id);notify(); },
-    timeline: () => timelineState,
+    timeline: () => disposed ? null : timelineState,
     stepTimeline,
     timelineRefusal: () => input.readOnly ? "needs live Revit" : timelineProblem,
     pendingEdits: () => [...owners.values()].flatMap(o => o.lease.entry.pending()),
