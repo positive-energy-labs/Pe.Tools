@@ -4,10 +4,10 @@ import { bridgeDocumentSnapshotSchema } from "@pe/host-contracts/contracts";
 import { NodeServices } from "@effect/platform-node";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, relative, isAbsolute } from "node:path";
 import { targetHomes } from "../src/call-route.ts";
 import { bindPackageLifecycle, createPackageLifecycle } from "../src/package-lifecycle.ts";
-import { listPods, readMember, writeMember } from "../src/settings.ts";
+import { listPods, readMember, writeMember, writeRun, runsFolder } from "../src/settings.ts";
 
 // Homes slice 6, the project pointer (MAP freeze shape 4): a call that targets a document reads
 // that document's project home between the user and firm homes. The temp folder stands for the
@@ -103,4 +103,16 @@ test("the pointer a call reads is its target document's, from the bridge's open-
   // No target, or a document that is not open: no project home, and the listing says so.
   expect(await of()).toEqual({});
   expect(await of("gone")).toEqual({});
+});
+
+// M2: filing runs under the Pod's content home violates ADR 0037 rule 6.
+test("a project-only Pod files run bytes outside every content home", async () => {
+  const folder = await run(writeRun("site", "project-run", { "receipt.json": "project run" }, { pointer }));
+  expect(folder).toBe(join(runsFolder("site"), "project-run"));
+  for (const home of [user, project, process.env.PE_TOOLS_SHARED_ROOT!]) {
+    const rel = relative(home, folder);
+    expect(isAbsolute(rel) || rel.startsWith(".."), `${folder} must be outside ${home}`).toBe(true);
+  }
+  expect(readFileSync(join(folder, "receipt.json"), "utf8")).toBe("project run");
+  rmSync(folder, { recursive: true, force: true });
 });

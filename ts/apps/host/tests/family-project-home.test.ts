@@ -36,3 +36,19 @@ test("family spec HTTP assets read the scoped document's project Pod", async () 
   expect(response.status, await response.clone().text()).toBe(200);
   expect(await response.json()).toEqual({ projectEvidence: true });
 });
+
+// M4: recovery must resolve the source Pod using the original target's project pointer.
+test("families apply recovery finds the target project-only Pod's machine run folder", async () => {
+  const f = await projectFixture(false);
+  const { familyExecutors } = await import("../src/family-actions.ts");
+  const { detachedBridge, sessionView, captureStore } = await import("./effect-test.ts");
+  const { Effect } = await import("effect");
+  const bridge = detachedBridge({ list: Effect.succeed([sessionView({ sessionId: f.target.ref.session, connected: true,
+    state: { openDocuments: [{ openId: f.target.ref.openId, projectHome: "Projects/Example" }] } })]) });
+  const executors = familyExecutors(captureStore(join(f.dir, "recovery-captures")), bridge, { sdk: async () => { throw Error("No SDK receipt"); } });
+  const recover = executors["families.apply"]!.recover!;
+  const step = { kind: "native", key: "families.apply", state: "unknown", id: "lost-apply", input: { source: { root: { id: "project-only" } } },
+    process: { pid: 42, processStartUtc: "2026-01-01T00:00:00Z" } } as Parameters<typeof recover>[0];
+  const recovered = await recover(step, {}, f.target);
+  expect(recovered.evidence).toMatchObject({ nativeRun: "missing or ambiguous" });
+});

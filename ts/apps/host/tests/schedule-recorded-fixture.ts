@@ -26,7 +26,7 @@ afterEach(async () => {
   vi.restoreAllMocks();
   vi.unstubAllEnvs();
 });
-export async function setup(options: { cold?: boolean } = {}) {
+export async function setup(options: { cold?: boolean; projectHome?: string; pod?: string } = {}) {
 
   const dir = await mkdtemp(join(tmpdir(), "pe-schedule-chain-"));
   cleanup.push(() => rm(dir, { recursive: true, force: true, maxRetries: 5 }));
@@ -34,7 +34,7 @@ export async function setup(options: { cold?: boolean } = {}) {
   const native = await fixtureNative(join(dir, "native"),
     "fresh-schedule-01-revit.detail.schedules", "fresh-schedule-02-revit.catalog.schedules", "fresh-schedule-03-schedule.cells.apply");
   cleanup.push(() => native.close());
-  const socket = await native.connect();
+  const socket = await native.connect(options.projectHome ? { openDocuments: [{ openId: "selected-open", title: "Project", isActive: true, isFamilyDocument: false, address: "C:/model.rvt", projectHome: options.projectHome }] } : {});
   const b = socket.target;
   const marks = testDocumentMarks(native.bridge);
   let post: (path: string, body: unknown) => Promise<{ status: number; value: any }>;
@@ -120,6 +120,7 @@ export async function setup(options: { cold?: boolean } = {}) {
     expect(await bind(reading)).toMatchObject({ state: "succeeded" });
     expect(await patch(request.edits.map((edit: any) => ({ path: ["cells", `${edit.rowNumber}::${edit.columnNumber}`], value: { edit: { value: edit.value } } })))).toMatchObject({ ok: true });
   }
+  if (options.pod) expect(await patch([{ path: ["writeIntent", "schedule.grid.push", "edit"], value: { value: { pod: options.pod } } }])).toMatchObject({ ok: true });
   const admission = async (id = crypto.randomUUID(), ref = b): Promise<ActionAdmission> => {
     const value: ActionAdmission = { id, key: "schedule.grid.push", target: { kind: "document", ref }, input: { work: { key: scope, revision: (await getView()).revision } } };
     await execute({ ...value, id: `${id}:preview`, key: "schedule.grid.push.preview" });
