@@ -18,6 +18,8 @@ import {
   setPea,
 } from "./cdp.ts";
 import type { Page } from "./cdp.ts";
+import { marks, settled } from "./marks.ts";
+import { pickFansWriteScope } from "./fans-write-scope.ts";
 
 const FAN = process.env.E2E_FAN ?? "MUAS-1";
 const ESP = process.env.E2E_VALUE || "1.25";
@@ -78,6 +80,13 @@ await journey("J6-fans", async (page, step) => {
     await page.until(() => page.has(fanRow, ROSTER), `${FAN} after returning`, 300_000);
   }
 
+  await page.until(async () => settled(await marks(page)), "fans settled before scope", 300_000);
+  await pickFansWriteScope(
+    FAN,
+    (scope, pattern) => page.click(new RegExp(pattern), scope),
+    (scope, pattern) => page.until(() => page.has(new RegExp(pattern), scope), "the Write scope"),
+  );
+  await page.until(async () => settled(await marks(page)), "fans settled before plan", 300_000);
   step("open the human plan");
   expectText(await plan(page), /planned/i, "the staged ESP plans");
 
