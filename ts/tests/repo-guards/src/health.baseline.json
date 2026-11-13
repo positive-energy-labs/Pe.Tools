@@ -138,7 +138,6 @@
     "ts/apps/host/src/call-route.ts": 2,
     "ts/apps/host/src/control.ts": 1,
     "ts/apps/host/src/machine.ts": 1,
-    "ts/apps/host/src/resource-adapters.ts": 1,
     "ts/apps/host/src/static-spa.ts": 1,
     "ts/apps/host/src/takeoff-actions.ts": 1,
     "ts/apps/host/src/work-write-boundary.ts": 1,
