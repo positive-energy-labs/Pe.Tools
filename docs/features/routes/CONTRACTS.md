@@ -13,7 +13,7 @@ Paths: `C/` is `ts/packages/agent-contracts/src/`, `W/` is `ts/apps/web/src/`, `
 - A kind is declared with `stateKind`, `keptStateKind` or `homeKind({ place, schema, segments, parse?, quiet? })`. A segment that is not one name (`..`, a separator, empty) throws at `in`.
 - A state kind's root is `StateRoot`, minted only by `stateTree(root)` in `service-identity.ts`; the host's is `hostState()` in `H/host-ownership.ts`. `stateTree` is the one table of machine-state paths, and its rows are `StatePath`.
 - A home kind's root is `HomeRoot`, a proven `Home` bound to this machine: `stateTree(root).home(home)`. The binding is where `writeHome` gets the blob root and a kept read gets the notice file, so no caller passes either.
-- A state file an owner refuses after decoding: `setAside(file, reason)`, one notice. A person's clear: `clear(file)`, no notice, returns the blob. Both keep the bytes; `clear` throws when it cannot.
+- A state file an owner refuses after decoding, and a person's clear: `setAside(file, reason)`, the one set-aside door, bytes kept and one notice. A clear has no door of its own and no undo hook (kaitpw, 2026-11-13: "whatever is occam ... set aside is fine with me, i dont think i care about it being undo-able tho").
 - Append logs: `stateLog({ place, schema, segments })`, then `readLines(log)` and `appendLine(log, value)`.
 - Derived folders: `derivedIn(homeRoot | stateRoot)`, then `readDerivedIn`, `writeDerivedIn`, `refuseDerived`. A refused derived file in a home is kept with a notice; in machine state it is set aside.
 - Notices and blobs: `notices(machine)`, `note(machine, notice)`, `rest(machine, bytes)`, `rested(machine, sha256)`. `rest` is the one blob writer.

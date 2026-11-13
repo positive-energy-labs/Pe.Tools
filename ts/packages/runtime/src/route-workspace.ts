@@ -61,8 +61,8 @@ export type RouteWorkspaceEvent = {
 export interface RouteDocumentStore {
   getState(input: { targetKey: string; route: string }): Promise<unknown>;
   /**
-   * `value: null` sets the stored Work aside with its bytes kept. With a `reason` the runtime
-   * refused it and the person gets one notice; without one a person cleared their own Work.
+   * `value: null` sets the stored Work aside with its bytes kept and one notice. With a `reason`
+   * the runtime refused it; without one a person cleared their own Work.
    */
   setState(input: { targetKey: string; route: string; value: unknown; reason?: string }): Promise<void>;
   /** Enumerates canonical persisted records without materializing absent Work. */

@@ -402,20 +402,6 @@ export function appendStoredLine(path: string, line: string): void {
   }
 }
 
-/**
- * Set a file aside on its owner's own word, with no notice (a person cleared their own Work):
- * copy, verify, then remove. Returns the blob that holds its bytes, or null when no file was
- * there. Throws, and removes nothing, when the file cannot be read or the copy cannot be made.
- */
-export function setAsideStored(path: string, blobRoot: string): string | null {
-  const bytes = readOrNull(path);
-  if (!bytes) return null;
-  const blob = restBlob(blobRoot, sha256Hex(bytes), bytes);
-  rmSync(path, { force: true });
-  owed.delete(resolve(path));
-  return blob;
-}
-
 /** Discard a file its owner refused after decoding (a stale identity, an unsupported epoch). */
 export function discardStored(
   path: string,

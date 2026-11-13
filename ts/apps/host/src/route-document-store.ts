@@ -3,7 +3,7 @@ import { mkdirSync } from "node:fs";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
-import { discardStored, readStored, setAsideStored, writeAtomic } from "@pe/host-contracts/store";
+import { discardStored, readStored, writeAtomic } from "@pe/host-contracts/store";
 import type { RouteDocumentStore } from "@pe/runtime";
 import { storedBlobsPath, storedNoticesPath } from "./notice-feed.ts";
 
@@ -41,12 +41,9 @@ export function fileRouteDocumentStore(dir: string): RouteDocumentStore {
     setState: async ({ targetKey, route, value, reason }) => {
       const path = join(dir, filename(targetKey, route));
       if (value == null) {
-        // With a reason, the runtime refused the staged values inside a record that decoded here:
-        // the same set-aside, in its words, with one notice. Without one, a person cleared their
-        // own Work: no notice, and the bytes rest in the blob store all the same, so the clear
-        // can be undone. A clear whose bytes cannot be kept fails and the Work stays.
-        if (reason) discardStored(path, work(`Work for ${route} (${targetKey})`), reason);
-        else setAsideStored(path, storedBlobsPath());
+        // One door for every set-aside (owner ruling, 2026-11-13): with a reason the runtime
+        // refused the record, without one a person cleared their own Work. Bytes kept, one notice.
+        discardStored(path, work(`Work for ${route} (${targetKey})`), reason ?? "Cleared.");
         return;
       }
       writeAtomic(path, JSON.stringify({ format: "route-state-record-v2", targetKey, route, value }));

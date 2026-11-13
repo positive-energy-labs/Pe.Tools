@@ -21,7 +21,6 @@ import {
   readStoredLines,
   readStoredNotices,
   restBlob,
-  setAsideStored,
   sha256Hex,
   writeAtomic,
   writeDerived,
@@ -161,14 +160,6 @@ export function writeState<T>(file: StoredFile<T, "state" | "state-kept">, bytes
 export function setAside<T>(file: StoredFile<T, "state">, reason: string): Exclude<Stored<T>, { kind: "ok" }> {
   const policy = policyOf(file) as Extract<StoredPolicy, { class: "discard" }>;
   return settled<T>(discardStored(file.path, policy, reason)) as Exclude<Stored<T>, { kind: "ok" }>;
-}
-
-/**
- * A person clears their own state file: set aside with no notice. Returns the blob that holds its
- * bytes, or null when no file was there. Throws, and removes nothing, when no copy can be made.
- */
-export function clear<T>(file: StoredFile<T, "state">): StatePath | null {
-  return setAsideStored(file.path, file.machine.blobs) as StatePath | null;
 }
 
 /** An append-only log in machine state, decoded one line at a time. Minted only by `LogKind.in`. */

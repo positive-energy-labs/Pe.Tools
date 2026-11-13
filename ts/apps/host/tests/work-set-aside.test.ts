@@ -4,7 +4,7 @@
  *
  * Mutants. In `runtime/src/route-workspace.ts` `#decodeStored`, return
  * `{ raw, envelope: raw }` without `parseEnvelope` (old Work is then served, and no blob rests).
- * In `route-document-store.ts` `setState`, replace `setAsideStored(...)` with
+ * In `route-document-store.ts` `setState`, send a clear with no reason to
  * `rmSync(path, { force: true })` (a person's clear then keeps no bytes).
  */
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
@@ -82,7 +82,7 @@ test.each(["record", "envelope"])("unreadable Work %s keeps exact prior bytes in
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
 
-test("a person's clear sets the Work aside with its bytes kept and no notice", async () => {
+test("a person's clear goes through the one set-aside door: bytes kept, one notice", async () => {
   const dir = await mkdtemp(join(tmpdir(), "pe-work-clear-"));
   const store = fileRouteDocumentStore(dir);
   const spec = ductsRouteState, targetKey = workKey(bindWork(spec.route, null));
@@ -93,7 +93,7 @@ test("a person's clear sets the Work aside with its bytes kept and no notice", a
     await store.setState({ targetKey, route: spec.route, value: null });
     expect(await readdir(dir)).toEqual([]);
     expect(await readFile(blobOf(prior))).toEqual(prior);
-    expect(posted(path)).toEqual([]);
+    expect(posted(path)).toMatchObject([{ class: "discard", sha256: sha256Hex(prior), reason: expect.stringContaining("Cleared.") }]);
     // Clearing what is not there is not an error.
     await store.setState({ targetKey, route: spec.route, value: null });
   } finally { await rm(dir, { recursive: true, force: true }); }

@@ -15,7 +15,6 @@ import { z } from "zod";
 import { stateTree } from "../src/service-identity.ts";
 import {
   appendLine,
-  clear,
   derivedIn,
   derivedKey,
   homeKind,
@@ -87,13 +86,10 @@ test("a state kind that names no blob root still keeps the bytes it sets aside",
     { class: "discard", place: "Task a", path: file.path, sha256: sha256Hex("{ torn") },
   ]);
   expect(read(file)).toEqual({ kind: "missing" });
-  // An owner's refusal and a person's clear keep the bytes the same way; only the first posts.
+  // An owner's refusal (another epoch, a person's clear) goes through the same door.
   writeState(file, '{"name":"stale"}');
   expect(setAside(file, "another epoch")).toMatchObject({ kind: "set-aside", blob: blob('{"name":"stale"}') });
-  writeState(file, '{"name":"mine"}');
-  expect(clear(file)).toBe(blob('{"name":"mine"}'));
-  expect(clear(file)).toBeNull();
-  expect(readFileSync(blob('{"name":"mine"}'), "utf8")).toBe('{"name":"mine"}');
+  expect(setAside(file, "another epoch")).toEqual({ kind: "missing" });
   expect(notices(machine)).toHaveLength(2);
 });
 
@@ -170,7 +166,7 @@ export function witness(bare: string) {
   // @ts-expect-error a home file is never set aside
   setAside(authored, "stale");
   // @ts-expect-error a kept-state file is never set aside
-  clear(trustKind.in(machine));
+  setAside(trustKind.in(machine), "stale");
   // @ts-expect-error a kind and a separately made path cannot be paired by hand
   read({ ...state, path: bare });
   // @ts-expect-error a home path is not a state path
