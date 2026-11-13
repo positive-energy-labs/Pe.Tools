@@ -37,7 +37,7 @@ public sealed class RailsRun {
 
     [Test]
     public void Captured_zone_holes_reach_solver_accounting_without_rewriting_the_capture() {
-        var stamp = new Stamp("doc", 0, Stamp.HostInternalFt, DateTime.UnixEpoch, [], true, new Resolved([], [], [], [], []));
+        var stamp = new SpatialEvidence("doc", 0, DateTime.UnixEpoch, SpatialEvidence.HostInternalFt, new Resolved([], [], [], [], []), [], [], []);
         var knee = new SliceAnswer(stamp, new Searched(0, 0, 0, 0, 0), [], 0, 0);
         var locked = new RoomProposal(RoomProposal.LockedPrefix + "room", "kept", "", [[1, 1, 3, 1, 3, 3, 1, 3]]);
         var level = new PartitionInput(knee, knee, [], 42, Knobs.Default, [], "authored", [locked]);
