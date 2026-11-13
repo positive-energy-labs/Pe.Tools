@@ -1,6 +1,7 @@
 import { SheetPane } from "../route/slots/sheet/pane.tsx";
 import { GoalPane } from "../route/slots/goal/pane.tsx";
-import { lazy, Suspense } from "react";
+import { lazy } from "react";
+import { DrawingBoundary } from "../route/draw";
 import type { Goal } from "@pe/agent-contracts/slots";
 import { refuse } from "../route/refusal";
 import * as Atom from "effect/reactivity/Atom";
@@ -197,7 +198,9 @@ function bandVerbs(mount: TypedMount): ReactNode[] {
 }
 /** Band timeline: the Timeline head over the recorded points and the Work history. */
 function BandTimeline({ mount, recorded }: { mount: TypedMount; recorded?: ReactNode }) {
-  if (!mount.spec.edits && !mount.target() && !mount.timeline()?.rows.length) return null;
+  // The Timeline is a Work's history and a bound document's recorded points. A route with neither
+  // (/pea: a host target, no Work) draws none, never an empty one (row 11-pea-one-band).
+  if (!mount.spec.edits && mount.target()?.kind !== "document" && !mount.timeline()?.rows.length) return null;
   return <TimelineHead owner={mount} history={<>{recorded}<GraphHistory owner={mount} /></>} />;
 }
 /** The layout's `subject` gate: open when the Page holds a subject. */
@@ -314,7 +317,7 @@ function PublishedView({ view }: { view: View }) { useRouteViewBridge(view); ret
 export function kernelPane(mount: TypedMount, id: string, ctx: Parameters<TypedMount["spec"]["panes"][string]["draw"]>[0]): ReactNode | null {
   const kernel = (mount.spec.panes[id] as { kernel?: "sheet" | "goal" | "picture" }).kernel;
   if (kernel === "picture" && mount.spec.picture)
-    return <Suspense fallback="Loading drawing"><PicturePane ctx={{ draw: ctx as never, slot: mount.spec.picture as never, name: mount.spec.name, subjectField: mount.spec.subject?.field, findings: mount.findings() }} /></Suspense>;
+    return <DrawingBoundary><PicturePane ctx={{ draw: ctx as never, slot: mount.spec.picture as never, name: mount.spec.name, subjectField: mount.spec.subject?.field, findings: mount.findings() }} /></DrawingBoundary>;
   if (kernel === "sheet" && mount.spec.sheet)
     return <SheetPane ctx={{ draw: ctx as never, slot: mount.spec.sheet, field: mount.spec.subject?.field }} />;
   if (kernel === "goal") return <GoalPane ctx={{ goal: ctx.value.value as Goal }} />;

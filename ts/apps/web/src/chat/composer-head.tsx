@@ -21,7 +21,6 @@ import { Button } from "@pe/kit/lang/button";
 import { previousOf } from "#/host/resource-state";
 import { Ladder } from "#/route/ladder";
 import { useDocumentLadder } from "#/route/situation-ladder";
-import { parseTarget } from "#/route/target-codec";
 import type { RouteHandle } from "#/route/handle";
 
 import { chatReading, type ChatHandle } from "./owner-ports";
@@ -29,7 +28,7 @@ export type { ChatHandle } from "./owner-ports";
 
 import { PrimaryRouteControls } from "#/navigation/route-controls";
 import { RouteHelpButton } from "#/route/help";
-import { useThreadScope } from "#/chat/scope";
+import { pinnedDocument, useThreadScope } from "#/chat/scope";
 import {
   selectQuestions,
   selectPlan,
@@ -90,20 +89,6 @@ const complaint = (resolution: TargetResolution): string | null =>
             "wrong-document-kind": "that document is the wrong kind for this call",
             ambiguous: "two Revits hold it — choose the document again",
           }[resolution.reason];
-
-/** The one open document at a `?target` address pin; none when absent or held twice. */
-const pinnedRef = (inventory: ReturnType<typeof machineInventory>, target?: string) => {
-  const parsed = parseTarget(target);
-  if (parsed?.kind !== "address" || inventory.kind !== "ready") return null;
-  const refs = Object.entries(inventory.sessions).flatMap(([session, found]) =>
-    found.kind === "ready"
-      ? found.values
-          .filter((doc) => doc.address === parsed.address)
-          .map((doc) => ({ session, openId: doc.openId }))
-      : [],
-  );
-  return refs.length === 1 ? refs[0]! : null;
-};
 
 /** The bound document's Address, which keys document-owned Work. */
 const documentAddress = (
@@ -232,7 +217,7 @@ export function ComposerPickers({
   // A new thread under a `?target` address pin binds to the one open document at that address,
   // once per thread: "new" keeps the URL's document. A later clear in the picker stands.
   const pinned = useRef<string | null>(null);
-  const pinRef = pinnedRef(inventory, urlTarget);
+  const pinRef = pinnedDocument(inventory, urlTarget)?.ref ?? null;
   useEffect(() => {
     if (!pinRef || head.stale || !head.hydrated || head.targets.length) return;
     if (pinned.current === currentThreadId) return;

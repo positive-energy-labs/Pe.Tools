@@ -64,6 +64,8 @@ The route kernel and every web route's shared shape ([ADR 0026](../../adr/0026-o
 
 - 2026-11-13, `fedd433a` implements [MAP slice 12](MAP.md#ordered-deletable-slices): a docked route owns the band in its pane head; the duplicate `Pea context` row is retired. Folding retains the bound Place and adds no context row.
 
+- D17 (2026-11-13): no automatic rebuild of a stale pick; a refusal is visible, input is retained, and the redrawn cell takes the pick. Rejected: an own-press rebuild, which three non-author reviews showed grants authority over unseen reads (refresh, dotted sources, missing keys).
+
 ## Tried & rejected
 
 - 2026-11-04, dynamic `new URL` for nested Pod artifact paths excludes the nested file from Vite's emitted lookup and requests `undefined`; use literal bundled asset URLs. [Artifact law](../../../ts/apps/web/src/route/pod-fixtures.test.ts). (FIXTURE0)

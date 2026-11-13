@@ -1018,3 +1018,33 @@ test("6.1b a hidden Place's section carries no aria-busy while the document bind
   await settle();
   expect(document.querySelectorAll("[aria-busy]")).toHaveLength(0);
 });
+
+// D10 (implementor ruling 2026-11-13): a collapsed Pea pane stays collapsed across loads.
+test("D10 a folded Pea pane is still folded after a remount, and an expanded one still expanded", async () => {
+  const stored = new Map<string, string>();
+  vi.stubGlobal("localStorage", { getItem: (key: string) => stored.get(key) ?? null, setItem: (key: string, value: string) => void stored.set(key, value) });
+  // jsdom lays nothing out: give the dock a width so the separator can push Pea under its floor.
+  const rect = vi.spyOn(Element.prototype, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, 800, 600));
+  const folded = () => screen.queryByRole("button", { name: "Expand pea" });
+  const separator = () =>
+    [...document.querySelectorAll<HTMLElement>("[data-layout-split]")].find(
+      (el) => el.dataset.layoutSplit === JSON.stringify(["route-dock", "tools"]),
+    )!.querySelector<HTMLElement>(':scope > [role="separator"], [role="separator"]')!;
+  await mount("/fans?fixture=layout");
+  await settle();
+  expect(folded()).toBeNull();
+  // The person drags the tools wide enough that Pea folds to its rail (here, by the arrow keys).
+  for (let step = 0; step < 8 && !folded(); step++) fireEvent.keyDown(separator(), { key: "ArrowLeft" });
+  await waitFor(() => expect(folded()).not.toBeNull());
+  cleanup();
+  await mount("/fans?fixture=layout");
+  await settle();
+  expect(folded(), "a page load keeps Pea folded").not.toBeNull();
+  fireEvent.click(folded()!);
+  await waitFor(() => expect(folded()).toBeNull());
+  cleanup();
+  await mount("/fans?fixture=layout");
+  await settle();
+  expect(folded(), "a page load keeps Pea expanded").toBeNull();
+  rect.mockRestore();
+}, 60_000);
