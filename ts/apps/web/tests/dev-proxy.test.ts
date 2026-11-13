@@ -40,7 +40,7 @@ test("borrowed host mode changes only web identity and permits Ducts reads, neve
 test("borrowed calls follow generated safety metadata, including rolled-back transaction refusals", () => {
   for (const [key, safety] of Object.entries(hostOpSafety))
     expect(readHostRequest("POST", "/call", { key }), key).toBe(
-      safety.intent === "Read" && !safety.usesTransactions,
+      safety.effect === "Read",
     );
   for (const key of [
     "family.look",

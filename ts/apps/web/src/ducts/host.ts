@@ -1,15 +1,14 @@
+import { native } from "@pe/agent-contracts/handle";
+import * as contracts from "./contract.ts";
+import { body } from "@pe/host/read-graph";
 import { z } from "zod";
-import {
-  DUCTS_SYSTEM_MAX,
+import { DUCTS_SYSTEM_MAX,
   ductsRosterArgs,
-  ductsRosterData,
-  ductsNetworkArgs,
   ductsNetworkData,
   ductsPricingData,
   ductsDesign,
   stagedDucts,
-  ductParameterSlots,
-} from "@pe/agent-contracts";
+  ductParameterSlots, } from "@pe/agent-contracts";
 import { SYSTEMS_PER_READ, mergeSnapshots } from "@pe/ducts-domain/system-reads";
 import { toGrids } from "@pe/ducts-domain/loss-grid";
 import { TABLE_IDS } from "@pe/ducts-domain/pricing";
@@ -23,14 +22,11 @@ import { systemList } from "@pe/ducts-domain/system-list";
 import { withStoredRulings } from "@pe/ducts-domain/rulings";
 import { fanRoster, espOptions } from "./fan-sheet.ts";
 
-export const ductsRoster = read("ducts.roster", {
-  input: ductsRosterArgs,
-  output: ductsRosterData,
-  async run(ctx, { target }) {
+export const ductsRoster = body(contracts.roster, async function(ctx, { target }) {
     const saved = await ctx.read(designLayers, target),
       design = ductsDesign(saved.ducts, saved.fans);
     const staged = stagedDucts(design, design);
-    const response = await ctx.native("ducts.snapshot.roster", {
+    const response = await ctx.read(native("ducts.snapshot.roster"), {
       role: "acquire",
       target: { kind: "document", ref: target },
       request: {
@@ -42,8 +38,7 @@ export const ductsRoster = read("ducts.roster", {
     if (!response.version) throw Error("Duct roster has no observation version");
     const snapshot = response.body;
     return { ...snapshot, rows: systemList(snapshot, null), sourceVersion: response.version };
-  },
-});
+  });
 const systems = read("ducts.systems", {
   input: ductsRosterArgs.extend({ systemIds: z.array(z.number()).max(SYSTEMS_PER_READ) }),
   output: ductsNetworkData,
@@ -51,7 +46,7 @@ const systems = read("ducts.systems", {
     const saved = await ctx.read(designLayers, target),
       design = ductsDesign(saved.ducts, saved.fans);
     const staged = stagedDucts(design, design);
-    const response = await ctx.native("ducts.snapshot.walk", {
+    const response = await ctx.read(native("ducts.snapshot.walk"), {
       role: "acquire",
       target: { kind: "document", ref: target },
       request: {
@@ -72,10 +67,7 @@ const systems = read("ducts.systems", {
     };
   },
 });
-export const ductsNetwork = read("ducts.network", {
-  input: ductsNetworkArgs,
-  output: ductsNetworkData,
-  async run(ctx, args) {
+export const ductsNetwork = body(contracts.network, async function(ctx, args) {
     const roster = await ctx.read(ductsRoster, { target: args.target });
     const names =
       args.system === "all"
@@ -106,8 +98,7 @@ export const ductsNetwork = read("ducts.network", {
         missing: parts.flatMap((part) => part.systemReads.missing),
       },
     };
-  },
-});
+  });
 // Built once: z.json() constructs a lazy union per call, and wire visits every leaf of the pricing result.
 const jsonLeaf = z.json();
 /** The wire carries every Map entry and Set member, never JSON.stringify's empty object. */
@@ -124,14 +115,11 @@ function wire(value: unknown): z.infer<ReturnType<typeof z.json>> {
     );
   return jsonLeaf.parse(value);
 }
-export const ductsPricing = read("ducts.pricing", {
-  input: ductsNetworkArgs,
-  output: ductsPricingData,
-  async run(ctx, args) {
+export const ductsPricing = body(contracts.pricing, async function(ctx, args) {
     const network = await ctx.read(ductsNetwork, args);
     const layers = await ctx.read(designLayers, args.target),
       catalog = await ctx.read(catalogs, args.target);
-    const tables = await ctx.native("ducts.tables", {
+    const tables = await ctx.read(native("ducts.tables"), {
       role: "acquire",
       target: { kind: "document", ref: args.target },
       request: { ids: [...TABLE_IDS] },
@@ -206,7 +194,6 @@ export const ductsPricing = read("ducts.pricing", {
         };
       },
     );
-  },
-});
+  });
 
 export const reads = { roster: ductsRoster, network: ductsNetwork, pricing: ductsPricing };

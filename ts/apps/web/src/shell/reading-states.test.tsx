@@ -1,3 +1,4 @@
+import { contract } from "@pe/agent-contracts/handle";
 // @vitest-environment jsdom
 import { useSyncExternalStore } from "react";
 import { act, cleanup, render, waitFor } from "@testing-library/react";
@@ -5,7 +6,7 @@ import { afterEach, expect, test } from "vite-plus/test";
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from "@tanstack/react-router";
 import { z } from "zod";
 import { KeyScopeHost } from "@pe/kit/keys";
-import { valueRead, workFingerprintSchema } from "@pe/agent-contracts";
+import {  workFingerprintSchema } from "@pe/agent-contracts";
 import { module as families } from "../families/route";
 import { route, type ContextOf } from "../route/defaults";
 import { hostRead } from "../route/host-read";
@@ -17,9 +18,9 @@ import type { UseSource } from "./source-contract";
 
 afterEach(cleanup);
 
-const read = hostRead(valueRead("probe.value", z.object({}), z.object({ rows: z.array(z.string()) })));
+const read = hostRead(contract("probe.value", { input: z.object({}), data: z.object({ rows: z.array(z.string()) }), uses: [] }));
 const core = { ...read, args: () => ({}) };
-const choices = { ...hostRead(valueRead("probe.choices", z.object({}), z.object({ names: z.array(z.string()) }))), args: () => ({}) };
+const choices = { ...hostRead(contract("probe.choices", { input: z.object({}), data: z.object({ names: z.array(z.string()) }), uses: [] })), args: () => ({}) };
 type Core = ContextOf<{}, typeof core>;
 /** Two panes draw the core, and both bodies throw on a missing value: neither narrows, neither falls back.
  *  The chooser names its own read, as a pane does whose control clears the core's refusal. */

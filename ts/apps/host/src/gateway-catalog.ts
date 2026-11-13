@@ -1,4 +1,5 @@
 import { Schema } from "effect";
+import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import {
   type Caller,
   type ExecutionTarget,
@@ -63,7 +64,7 @@ async function operationRows(bridge: RevitBridge["Service"], target: SdkSession)
 }
 /** One rule for /call and /actions: a declared human-only op refuses every other caller. */
 export function requireEligibleCaller(
-  definition: { key: string; principal?: readonly Principal[]; intent?: string },
+  definition: { key: string; principal?: readonly Principal[] },
   caller: Caller,
   door: string,
 ) {
@@ -81,6 +82,8 @@ export async function operationDefinition(
 ) {
   const local = tsOnlyOperationCatalog.find((row) => row.key === key);
   if (local) return local;
+  const generated = hostOpCatalog.find((row) => row.key === key);
+  if (!generated) throw refused(`Generated metadata unavailable for '${key}'`);
   if (!target) throw refused("An SDK-resolved attachment is required");
   const rows = await operationRows(bridge, target);
   const raw = rows?.find(
@@ -90,14 +93,15 @@ export async function operationDefinition(
   let definition;
   try {
     definition = Schema.decodeUnknownSync(hostOperationDefinitionSchema)(raw);
-    if (definition.intent !== "Read" && definition.intent !== "Mutate")
-      throw refused(`Unknown operation intent for '${key}'`);
+    if (!["Read", "TransactRead", "SessionWrite", "ModelWrite"].includes(generated.effect))
+      throw refused(`Unknown operation effect for '${key}'`);
   } catch (error) {
     catalogs.get(bridge)?.delete(target.sessionId);
     throw error;
   }
   return {
     ...definition,
+    effect: generated.effect,
     principal: nativePrincipals(definition.actor),
   };
 }

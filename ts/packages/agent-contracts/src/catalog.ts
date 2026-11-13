@@ -38,7 +38,7 @@ function axis<T extends string>(values: Record<string, T>, value: string): T {
   return found;
 }
 /** The native metadata projection shared by host catalog rows and browser read handles. */
-export function nativeAxes(op: HostOperationDefinition): CatalogAxes {
+export function nativeAxes(op: Omit<HostOperationDefinition, "intent" | "rollsBack" | "usesTransactions">): CatalogAxes {
   return {
     subject: axis(opSubject, op.subject),
     touches: op.touches.split(", ").map((touch) => axis(opTouches, touch)),
@@ -46,7 +46,7 @@ export function nativeAxes(op: HostOperationDefinition): CatalogAxes {
     cost: op.costTier,
     cardinality: axis(opCardinality, op.cardinality),
     internal: op.internal,
-    rollsBack: op.rollsBack,
+    rollsBack: op.effect === "TransactRead",
   };
 }
 const weight = { Cheap: 1, Bounded: 10, Expensive: 100, Mutation: 100 };

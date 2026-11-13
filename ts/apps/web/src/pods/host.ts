@@ -1,28 +1,18 @@
+import * as contracts from "./contract.ts";
+import { body } from "@pe/host/read-graph";
 import { workRead } from "@pe/host/reads/inputs";
 import { z } from "zod";
 import { memberWork, settingsRouteState, settingsCandidate } from "@pe/agent-contracts";
-import { read } from "@pe/host/read-graph";
+
 import { localRead } from "@pe/host/local-inputs";
-import {
-  podsArgs,
-  podsValue,
-  podsRosterValue,
-  podMemberOfPage as member,
-} from "@pe/agent-contracts";
+import { podMemberOfPage as member, } from "@pe/agent-contracts";
 import { compositionReadSchema } from "@pe/agent-contracts";
 
 export const reads = {
-  roster: read("pods.roster", {
-    input: z.object({}),
-    output: podsRosterValue,
-    async run(ctx) {
+  roster: body(contracts.roster, async function(ctx) {
       return { pods: (await ctx.read(localRead("pod.list"), {})).pods };
-    },
-  }),
-  author: read("pods.author", {
-    input: podsArgs,
-    output: podsValue,
-    async run(ctx, args) {
+    }),
+  author: body(contracts.author, async function(ctx, args) {
       const ref = member(args);
       const selected = ref?.path.endsWith(".json")
         ? { member: ref, ...(await ctx.read(localRead("pod.member.read"), ref)) }
@@ -99,6 +89,5 @@ export const reads = {
             ).runs
           : [],
       };
-    },
-  }),
+    }),
 };

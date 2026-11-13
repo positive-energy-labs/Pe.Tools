@@ -1,13 +1,14 @@
+import { sizing } from "./contract.ts";
 import { z } from "zod";
-import { valueRead } from "@pe/agent-contracts/value";
+
 import { parameter, local } from "@pe/agent-contracts/slots";
 import { subjectCode, uniqueIdSchema } from "@pe/agent-contracts/subject-ref";
 import { route, read, field, split, type ContextOf } from "@pe/web/route";
 import { hostRead } from "@pe/web/host-read";
-import { key, address, workState, edit, args, value } from "./schema.ts";
+import { key, address, workState, edit, value } from "./schema.ts";
 
 const fields = { system: field(z.string(), "", "query") };
-const core = read(hostRead(valueRead(`${key}.sizing`, args, value)), (page: { system: string }) => ({ system: page.system }));
+const core = read(hostRead(sizing), (page: { system: string }) => ({ system: page.system }));
 // Builtins get this from a generated context file; a Pod names it once with the kernel's ContextOf.
 type Context = ContextOf<typeof fields, typeof core, typeof workState, typeof edit>;
 // A pipe is named by its SubjectRef code; the kernel resolves it to captured geometry.

@@ -11,7 +11,7 @@ import {
   cellPatches,
   showFamilyCell,
 } from "@pe/agent-contracts";
-import { reads } from "./reads.ts";
+import * as reads from "./contract.ts";
 import { route, field } from "../route/defaults.ts";
 import { hostRead } from "../route/host-read.ts";
 import { draw } from "../route/draw.tsx";

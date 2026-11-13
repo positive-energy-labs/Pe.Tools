@@ -161,7 +161,7 @@ export function gatewayExecutor(
       let process: NativeProcess | undefined;
       let script: Awaited<ReturnType<typeof freezeScript>>;
       requireEligibleCaller(metadata, caller, "/actions");
-      if (metadata.intent !== "Mutate" && key !== "scripting.execute")
+      if ((metadata.effect === "Read" || metadata.effect === "TransactRead") && key !== "scripting.execute")
         throw refused("Only catalogued commands enter action admission");
       const expected = key === "settings.tiers.write" && target
         ? { kind: "document" as const, ref: target }

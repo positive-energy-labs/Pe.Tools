@@ -34,11 +34,11 @@ export interface ReadHandle<K extends string = string, I = unknown, D = unknown>
 export type AnyReadHandle = Pick<ReadHandle, typeof minted | "key" | "axes">;
 const costs = ["Cheap", "Bounded", "Expensive", "Mutation"] as const;
 type Safety = typeof hostOpSafety;
-/** Read intent, and Read effect or a rolled-back TransactRead: the keys a read may take. */
+/** The generated effect admits Read and TransactRead keys. */
 export type CatalogReadKey = {
-  [K in keyof Safety]: Safety[K] extends { intent: "Read" } & (
+  [K in keyof Safety]: Safety[K] extends (
     | { effect: "Read" }
-    | { effect: "TransactRead"; rollsBack: true }
+    | { effect: "TransactRead" }
   )
     ? K
     : never;
@@ -64,8 +64,7 @@ export function native<K extends CatalogReadKey>(
   const op = hostOpCatalog.find((op) => op.key === key);
   if (
     !op ||
-    op.intent !== "Read" ||
-    !(op.effect === "Read" || (op.effect === "TransactRead" && op.rollsBack))
+    !(op.effect === "Read" || op.effect === "TransactRead")
   )
     throw Error(`Not a catalog Read: ${key}`);
   const { subject, touches, effect, cost, cardinality, rollsBack } = nativeAxes(op);
