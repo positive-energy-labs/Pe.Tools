@@ -1,6 +1,6 @@
 import { useFieldOptionsReading, previousOf } from "../../../host/resource-state";
 import { FieldOptionSelect, pickerOptions } from "../../../host/field-options";
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import { decode, type SubjectRefCode } from "../../../../../../packages/agent-contracts/src/subject-ref.ts";
 import { schemaOf, type SheetSlot } from "@pe/agent-contracts/slots";
 import { useMention } from "@pe/kit/lang/attention";
@@ -34,7 +34,7 @@ const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
 /** The row's subject, when its key is a SubjectRef code; a binding's own row key (a slot name) has none. */
 const subjectRow = (row: string | undefined) => (row !== undefined && decode(row).ok ? (row as SubjectRefCode) : null);
 
-function Cell({ ctx, cell, verb }: { ctx: Ctx; cell: SheetCell; verb: ReactNode }) {
+function Cell({ ctx, cell }: { ctx: Ctx; cell: SheetCell }) {
   const mention = useMention();
   const subject = subjectRow(cell.row);
   const [draft, setDraft] = useState<{ value: unknown } | null>(null);
@@ -116,7 +116,7 @@ function Cell({ ctx, cell, verb }: { ctx: Ctx; cell: SheetCell; verb: ReactNode 
           onChange={option => void handle.stage(domain.persist === "label" ? option.label : option.value)} /> : null}
       </span>
       <span className="t-small min-w-0 truncate text-ink-2" data-input-source={cell.source}>{layerWord(cell)}{cell.setting && draft ? ` · saved ${cell.value ?? "—"}` : ""}</span>
-      <span>{verb}{cell.setting?.tiers.map(tier => <Button key={tier.tier} kind="quiet"
+      <span>{cell.setting?.tiers.map(tier => <Button key={tier.tier} kind="quiet"
         label={`Save ${cell.label} at the ${tier.tier} home`} busy={saving === tier.tier}
         {...(tier.home ? {} : { refusal: tier.notFound ?? `No ${tier.tier} home` })}
         onPress={() => void save(tier)}>{tier.tier}</Button>)}</span>
@@ -151,7 +151,7 @@ export function SheetPane({ ctx: { draw: ctx, slot, field } }: { ctx: { draw: Ct
           // The label keeps its floor (10rem or 45%); the value input sheds width first and the
           // source word takes only its own width, so a ~330px pane no longer reads "Vel..." (L3).
           <div className="grid grid-cols-[minmax(min(10rem,45%),1fr)_minmax(0,9rem)_fit-content(6rem)_auto] items-center gap-x-2 gap-y-1">
-            {shown.map(cell => <Cell key={`${cell.binding}:${cell.row ?? ""}`} ctx={ctx} cell={cell} verb={null} />)}
+            {shown.map(cell => <Cell key={`${cell.binding}:${cell.row ?? ""}`} ctx={ctx} cell={cell} />)}
           </div>
         )}
     </section>
