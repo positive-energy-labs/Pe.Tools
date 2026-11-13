@@ -33,9 +33,11 @@ export function hostRead<K extends string, D>(
   fixtures?: HostRead["fixtures"],
 ): HostRead & { output: z.ZodType<Publication<D>> } {
   const { key } = contract;
-  const input: z.ZodType = contract.input instanceof z.ZodObject && "target" in contract.input.shape
-    ? contract.input.omit({ target: true })
-    : contract.input;
+  let input: z.ZodType = contract.input;
+  if (contract.input instanceof z.ZodObject && "target" in contract.input.shape) {
+    const { target, ...shape } = contract.input.shape;
+    input = z.object(shape).clone({ ...contract.input.def, shape });
+  }
   return {
     ...contract,
     input,

@@ -16,7 +16,7 @@ test("union read inputs retain member validation", () => {
   expect(read.request?.({ kind: "b", b: 2 })).toEqual({ read: "example.union", args: { kind: "b", b: 2 } });
 });
 
-test("discriminated unions and transforms pass through unchanged", () => {
+test("discriminated unions pass through unchanged and request() validates a raw transform input", () => {
   const input = z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("a"), a: z.string() }),
     z.object({ kind: z.literal("b"), b: z.number() }),
@@ -25,10 +25,25 @@ test("discriminated unions and transforms pass through unchanged", () => {
   expect(read.input).toBe(input);
   expect(read.input.parse({ kind: "b", b: 2 })).toEqual({ kind: "b", b: 2 });
   const transform = z.string().transform((value) => value.length);
+  // B48: this exercises request() directly, not the mount path's repeated parsing.
   const transformed = hostRead(contract("example.transform", { input: transform, data: z.number(), uses: [] }));
   expect(transformed.input).toBe(transform);
   expect(transformed.input.parse("abc")).toBe(3);
   expect(transformed.request?.("abc")).toEqual({ read: "example.transform", args: 3 });
+});
+
+test("refined object inputs retain checks when the browser target is removed", () => {
+  const base = z.strictObject({ n: z.number(), target: z.object({ kind: z.literal("host") }) });
+  for (const input of [
+    base.refine((value) => value.n > 0),
+    base.check(z.refine((value) => value.n > 0)),
+  ]) {
+    const read = hostRead(contract("example.refined", { input, data: z.number(), uses: [] }));
+    expect(Object.keys(read.input.shape)).toEqual(["n"]);
+    expect(read.input.parse({ n: 1 })).toEqual({ n: 1 });
+    expect(read.input.safeParse({ n: -1 }).success).toBe(false);
+    expect(read.request?.({ n: 1 })).toEqual({ read: "example.refined", args: { n: 1, target: { kind: "host" } } });
+  }
 });
 
 test("browser read inputs validate fields and bind the target only on the host request", () => {
