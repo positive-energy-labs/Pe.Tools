@@ -35,7 +35,7 @@ export interface HostRouteModule extends Omit<HostWorkRegistration, "spec"> {
     readonly name:string; readonly input:z.ZodType; readonly output:z.ZodType;
     readonly run:(context:any,args:any)=>unknown;
     /** The handle a `body()` serves; registration joins its `uses`. */
-    readonly contract?: import("./handle.ts").ReadHandle<string, any, any>;
+    readonly contract?: import("./handle.ts").AnyReadHandle;
   }>>;
   readonly leaves?: Readonly<Record<string,(args:unknown,services:HostLeafServices)=>Promise<unknown>>>;
 
