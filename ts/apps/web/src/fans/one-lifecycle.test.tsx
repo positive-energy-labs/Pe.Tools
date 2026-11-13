@@ -33,10 +33,10 @@ test("typed panes share declared Values; recorded Fans and Ducts use frozen Work
       expect(recorded.owner()?.ready).toBe(true);
       expect(recorded.page.read().contextRadiusFt).toBe(23);
       expect(recorded.workBasis()).toBeNull();
-      expect(recorded.journalRefusal()).toBe("needs live Revit");
+      expect(recorded.timelineRefusal()).toBe("needs live Revit");
       expect(open.mock.calls.at(-1)![0]).toMatchObject({historyPoint:history.point.id,historyPose:{instance:"recorded",route:route.data.key}});
       await expect(recorded.run("losses")).rejects.toThrow("needs live Revit");
-    } finally { recorded.dispose(); expect(recorded.history.entries).toEqual([]); }
+    } finally { recorded.dispose(); expect(recorded.timeline()).toBeNull(); }
     }
 
   } finally { closes.reverse().forEach(close => close()); }
@@ -97,7 +97,7 @@ test("optional Work and invocation arguments share one typed scope", async () =>
 });
 
 
-test("cell undo targets the exact owner press and leaves the other owner staged",async()=>{
+test("Timeline undo takes the latest owner step, then the prior owner",async()=>{
   const {z}=await import("zod");
   const {draftCellSchema,workFingerprintSchema}=await import("@pe/agent-contracts");
   const {route}=await import("../route/typed-route");
@@ -112,14 +112,18 @@ test("cell undo targets the exact owner press and leaves the other owner staged"
   const door=createFixtureWorkDoor(primary,schema.parse({}),{"undo-b":schema},{"undo-a":schema.parse({}),"undo-b":schema.parse({})},{"undo-b":"undo-b"});
   const mount=mountTypedRoute(module,{address:{read:()=>new URLSearchParams(),write:()=>{},subscribe:()=>()=>{}},fixture:null,
     target:{kind:"host"},work:{address:null,open:{session:"undo",openId:"cells"}},custody:{current:()=>true},memory:()=>({})},
-    workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`),{work:door});
+    workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`),{work:door,timeline:door.timeline});
   const ctx=()=>mount.draw("main") as import("../route/typed-route").DrawContext<unknown,{},import("zod").z.output<typeof schema>,never>;
   try {
     await vi.waitFor(()=>expect(ctx().cells.state.state).toBe("ready"));
     expect(await ctx().cells.at(["cells","one"],"undo-a").stage(1,{label:"First owner"})).toBeNull();
     expect(await ctx().cells.at(["cells","two"],"undo-b").stage(2,{label:"Second owner"})).toBeNull();
-    expect(await ctx().cells.at(["cells","one"],"undo-a").undo()).toBeNull();
+    await vi.waitFor(()=>expect(mount.timeline()?.undo?.label).toContain("Second owner"));
+    expect(await mount.stepTimeline("undo")).toBeNull();
+    expect(mount.owner("undo-b")?.doc.cells.two?.edit).toBeFalsy();
+    await vi.waitFor(()=>expect(mount.timeline()?.undo?.label).toBe("First owner"));
+    expect(await mount.stepTimeline("undo")).toBeNull();
     expect(mount.owner("undo-a")?.doc.cells.one?.edit).toBeFalsy();
-    expect(mount.owner("undo-b")?.doc.cells.two.edit.value).toBe(2);
+
   } finally {mount.dispose();}
 });

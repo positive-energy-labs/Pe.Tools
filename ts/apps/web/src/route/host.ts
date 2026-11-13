@@ -2,8 +2,6 @@ import { peClient } from "#/host/pe-client";
 import { peReadings, type Readings } from "#/host/resource-stream";
 import {
   workWriteAckSchema,
-  workTimelineSchema,
-  WORK_TIMELINE_READ,
   type RouteStateWriteResult,
   type WorkKey,
   type WorkWriteAck,
@@ -44,39 +42,6 @@ export async function writeRouteWork(
   );
 }
 
-/**
- * The person's undo of their own last finding (ADR 0035 rule 9): the findings Work's history door
- * at its current revision. The host takes the author from the caller, so Pea's findings stay.
- */
-export async function undoOwnFinding(
-  key: WorkKey,
-  client: Pick<typeof peClient, "response"> = peClient,
-): Promise<{ message: string } | null> {
-  // The host Timeline's step door (ADR 0042): read the step it offers this caller for the findings
-  // Work alone, then send it back. k2/journal-delete replaces this path with the mount's Timeline.
-  const findings = { ...key, route: FINDINGS_OWNER };
-  const read = {
-    read: WORK_TIMELINE_READ,
-    args: { works: [findings] },
-    subscription: `undo-finding-${crypto.randomUUID()}`,
-    generation: 0,
-  };
-  const shown = await client.response("reads.value", { body: read });
-  void client.response("reads.value", { body: { ...read, release: true } }).catch(() => {});
-  const timeline = shown.ok
-    ? workTimelineSchema.safeParse(((await shown.json()) as { value?: { data?: unknown } | null }).value?.data).data
-    : undefined;
-  if (!timeline?.undo) return { message: timeline?.refusal.undo ?? "No findings on this document to undo" };
-  const response = await client.response("work.history", {
-    ...routeInput(FINDINGS_OWNER, findings),
-    body: { direction: "undo", works: [findings], expected: timeline.undo },
-  });
-  const wire = (await response.json().catch(() => null)) as { ok?: boolean; error?: unknown } | null;
-  return response.ok && wire?.ok !== false
-    ? null
-    : { message: String(wire?.error ?? `Undo failed (${response.status})`) };
-}
-
 /** This document's findings, as the host's findings Work holds them; none before the first is written, null when unread. */
 export async function readFindings(
   key: WorkKey,
@@ -87,10 +52,6 @@ export async function readFindings(
   const doc = read.ok ? z.object({ doc: findingsWorkSchema }).safeParse(await read.json()).data?.doc : undefined;
   return doc ? Object.values(doc.findings) : null;
 }
-
-/** How many of this document's findings a person wrote; null when unread. */
-export const ownFindingsLeft = async (key: WorkKey, client?: Pick<typeof peClient, "response">): Promise<number | null> =>
-  (await readFindings(key, client))?.filter((finding) => finding.by === "person").length ?? null;
 
 export type RouteWriteResponse = { status: number; result: RouteStateWriteResult | null };
 type WorkInput = { params: { route: string }; query: Record<string, string> };

@@ -1,129 +1,39 @@
+import { useSyncExternalStore } from "react";
 import { useList } from "@pe/kit/lang/collection";
+import { ListView } from "@pe/kit/lang/list-view";
 import { Button } from "@pe/kit/lang/button";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { Popover, PopoverTrigger, SubjectPopoverContent } from "@pe/kit/lang/popover";
-import { ListView } from "@pe/kit/lang/list-view";
-import { teachText } from "@pe/kit/lang/use-teach";
-import { useEffect, useState } from "react";
 import { routeAddress } from "@pe/agent-contracts";
-import { FINDINGS_DOORS } from "@pe/agent-contracts/slots";
-import type { JournalOwner } from "./situation-band";
-import { entryCaller, stepState, useWorkJournal } from "./situation-band";
-import { activityTime, projectTimeline, type TimelineRow, type TimelineVerbs } from "./timeline";
+import type { TimelineOwner } from "./situation-band";
+import { activityTime, timelineRowKey } from "./timeline";
 
-const receiptKey = (row: TimelineRow) => (row.entry.basis as { receipt?: { key?: string } } | undefined)?.receipt?.key;
-
-/** One History presentation for graph panes: accepted calls and exact Work receipts. */
-export function GraphHistory({
-  owner,
-  workOnly = false,
-  label = "History",
-  verbs: declaredVerbs,
-}: {
-  owner: JournalOwner;
-  verbs?: TimelineVerbs;
-  workOnly?: boolean;
-  label?: string;
-}) {
-  const [entries, setEntries] = useState(owner.timeline);
-  useEffect(() => owner.subscribe(() => setEntries(owner.timeline())), [owner]);
-  const journal = useWorkJournal(owner);
-  const verbs = declaredVerbs ?? {};
-  const projected = projectTimeline(entries, verbs, journal);
-  // The person's latest written finding carries their undo; the host's history door undoes their own last one.
-  const ownFinding = owner.undoFinding && [...projected].reverse().find((row) =>
-    receiptKey(row) === FINDINGS_DOORS.write && row.outcome?.state === "succeeded" && entryCaller(row.entry) === "you")?.key;
-  // Whether anything of the person's is left to undo is the host's findings Work's answer, asked again
-  // when their latest write changes and after each undo; null (unread) leaves the host to refuse.
-  const [ownLeft, setOwnLeft] = useState<number | null>(null);
-  useEffect(() => {
-    if (ownFinding && owner.ownFindingsLeft) void owner.ownFindingsLeft().then(setOwnLeft, () => setOwnLeft(null));
-  }, [owner, ownFinding]);
-  // A refused verb says why on the page, not only in its description.
-  const undoRefusal = ownLeft === 0 ? "Nothing of yours left to undo: Pea's findings are Pea's to undo" : null;
-  const rows = [...(journal?.intents ?? []).map(intent => ({
-    key: `intent:${intent.id}`, label: intent.label,
-    sub: `${intent.status} / ${intent.owner.route} / expected r${intent.input.expectedRevision} / ${intent.reason ?? "Awaiting acknowledgement"}`,
-    actions: <><Popover><PopoverTrigger aria-label={`Inspect ${intent.label}`}>Inspect</PopoverTrigger>
-      <SubjectPopoverContent aria-label={`Original input: ${intent.label}`}><pre>{JSON.stringify(intent,null,2)}</pre></SubjectPopoverContent>
-    </Popover>{owner.discardIntent && <Button label={`Discard ${intent.label}`} refusal={intent.status === "pending" ? "Awaiting acknowledgement" : null} onClick={()=>owner.discardIntent!(intent.id)}>Discard</Button>}</>,
-  })), ...[...projected]
-    .reverse()
-    .filter((row) => !workOnly || row.kind === "journal")
-    .map((row) => ({
-      key: row.key,
-      label: row.entry.receiptId ? (
-        <a href={routeAddress("ops").link({ actionId: row.entry.receiptId })}>{row.verb}</a>
-      ) : (
-        row.verb
-      ),
-      sub: [
-        row.move
-          ? `${row.move.kind} / ${row.move.by === "pea" ? "Pea" : "you"} / ${row.move.kind === "apply" && row.step ? stepState(journal!, row.step) : `r${row.move.revision}`}`
-          : `${row.outcome?.state ?? row.kind} / ${entryCaller(row.entry)}`,
-        activityTime(row.at, row.startedAt),
-        row.outcome?.reason,
-        row.move?.kind === "apply" ? row.step?.superseded?.message : undefined,
-        row.kind === "feed"
-          ? (row.entry.subject as { message?: string } | null)?.message
-          : undefined,
-      ]
-        .filter(Boolean)
-        .join(" / "),
-      actions: (
-        <>
-          {row.outcome?.recovery && row.outcome.receiptId && (
-            <a href={routeAddress("ops").link({ actionId: row.outcome.receiptId })}>
-              {row.outcome.recovery}
-            </a>
-          )}
-          {row.key === ownFinding && (<>
-            <Button
-              label="Undo your last finding"
-              refusal={undoRefusal}
-              onPress={async () => {
-                const refused = await owner.undoFinding!();
-                setOwnLeft((await owner.ownFindingsLeft?.()) ?? null);
-                return refused;
-              }}
-            >
-              Undo finding
-            </Button>
-            {undoRefusal && <OutcomeLine kind="refused" label={undoRefusal} />}
-          </>)}
-          {row.entry.receiptId &&
-            ["queued", "running", "outcome-unknown"].includes(row.outcome?.state ?? "") && (
-              <Button
-                label="Stop command"
-                onClick={() => void owner.stopCommand(row.entry.receiptId!)}
-              >
-                Stop
-              </Button>
-            )}
-        </>
-      ),
-    }))];
-  const list = useList({
-    items: rows,
-    keyOf: (row) => row.key,
-    search: (row) => ({ text: [teachText(row.label), row.sub] }),
-    select: "none",
-  });
-  return (
-    <section aria-label={label}>
-      <ListView
-        list={list}
-        aria-label={label}
-        maxHeight="min(24rem, 60vh)"
-        row={(row) => ({
-          label: row.label,
-          sub: row.sub,
-          actions: row.actions,
-          title: teachText(row.label),
-          lines: 3,
-        })}
-        empty={{ message: "No activity yet", exit: "Run a command or edit Work" }}
-      />
-    </section>
-  );
+/** Draw host order directly, including the findings Work. No browser reconstruction. */
+export function GraphHistory({ owner }: { owner: TimelineOwner }) {
+  useSyncExternalStore(owner.subscribe, owner.revision, owner.revision);
+  const rows = [
+    ...owner.pendingEdits().map(intent => ({ key: `intent:${intent.id}`, label: intent.label,
+      sub: intent.reason ?? "Awaiting acknowledgement", actions: <>
+        <Popover><PopoverTrigger aria-label={`Inspect ${intent.label}`}>Inspect</PopoverTrigger>
+          <SubjectPopoverContent aria-label={`Original input: ${intent.label}`}><pre>{JSON.stringify(intent.input, null, 2)}</pre></SubjectPopoverContent>
+        </Popover>
+        <Button label={`Discard ${intent.label}`} refusal={intent.status === "pending" ? "Awaiting acknowledgement" : null}
+          onClick={() => owner.discardIntent(intent.id)}>Discard</Button>
+      </> })),
+    ...(owner.timeline()?.rows ?? []).map(row => ({ key: timelineRowKey(row),
+      label: row.kind === "home-write" ? row.place : row.kind === "point" ? row.reason : row.label,
+      sub: [row.kind === "edit" || row.kind === "restore" ? `${row.work.route} / ${row.by === "pea" ? "Pea" : "you"} / ${row.state} / r${row.revision}` : row.kind === "receipt" ? `${row.by === "pea" ? "Pea" : "you"} / ${row.state}` : row.kind,
+        activityTime(row.at), "blockedBy" in row ? row.blockedBy && "receipt" in row.blockedBy ? row.blockedBy.label : row.blockedBy?.reason : null].filter(Boolean).join(" / "),
+      actions: row.kind === "receipt" ? <><a href={routeAddress("ops").link({ actionId: row.id })}>Inspect</a>
+        {["queued", "running", "outcome-unknown"].includes(row.state) && <Button label="Stop command" onClick={() => void owner.stopCommand(row.id)}>Stop</Button>}</> : null,
+    })),
+  ];
+  const list = useList({ items: rows, keyOf: row => row.key, search: row => ({ text: [row.label, row.sub] }), select: "none" });
+  return <section aria-label="Timeline activity">
+    {owner.timelineRefusal() && <div role="status">{owner.timelineRefusal()}</div>}
+    {[...new Set(Object.values(owner.timeline()?.refusal ?? {}).filter((reason): reason is string => !!reason))]
+      .map(reason => <OutcomeLine key={reason} kind="refused" label={reason} />)}
+    <ListView list={list} aria-label="Timeline activity" row={row => ({ label: row.label, sub: row.sub, actions: row.actions, lines: 3 })}
+      empty={{ message: "No activity yet", exit: "Run a command or edit Work" }} />
+  </section>;
 }

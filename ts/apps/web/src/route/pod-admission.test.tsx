@@ -1,3 +1,4 @@
+import { fixtureTimeline } from "../shell/fixture-work-door";
 // @vitest-environment jsdom
 import { resolve } from "node:path";
 import { readFile, cp, mkdtemp, rm } from "node:fs/promises";
@@ -231,7 +232,7 @@ async function harness(stale = false) {
       custody: { current: () => true },
     },
     route.fingerprint,
-    { work, sources: { [`${row.workRoute}.calculation`]: publication } },
+    { work, timeline: fixtureTimeline(workspace), sources: { [`${row.workRoute}.calculation`]: publication } },
   );
   return {
     dir,
@@ -278,11 +279,11 @@ test("Snowdon mounts typed over real host Work and tracked calculation, edits, u
       expect(screen.getByText(/Authored inputs/).textContent).toContain('"length": 300'),
     );
     expect(screen.getByText(/Copper voltage-drop worksheet/).textContent).toContain('"drop"');
-    await act(() => h.mount.history.undo());
+    await act(async () => { expect(await h.mount.stepTimeline("undo")).toBeNull(); });
     await vi.waitFor(() =>
       expect(screen.getByText(/Authored inputs/).textContent).toContain('"length": 175'),
     );
-    await act(() => h.mount.history.redo());
+    await act(async () => { expect(await h.mount.stepTimeline("redo")).toBeNull(); });
     await vi.waitFor(() =>
       expect(screen.getByText(/Authored inputs/).textContent).toContain('"length": 300'),
     );

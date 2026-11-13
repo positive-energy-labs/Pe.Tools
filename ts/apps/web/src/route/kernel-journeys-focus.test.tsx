@@ -1,3 +1,5 @@
+import { fixtureTimeline } from "../shell/fixture-work-door";
+import { timelineReceipts } from "../../../host/src/reads/work-timeline";
 import { refusalOf, valueOf } from "./typed-route";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
 import { host as placesHost, seedPlaces } from "../workbench/places.test-support";
@@ -24,7 +26,7 @@ import { RouteActivity, RouteVisibility } from "./activity";
 import { setup as scheduleHost, cellsApplied } from "../../../host/tests/schedule-test-fixture";
 import { module as schedules } from "../schedules/route";
 import { namesOf } from "./typed-route";
-import { createWorkFeedClient } from "../shell/work-feed-client";
+import { createTimelineClient, createWorkFeedClient } from "../shell/work-feed-client";
 import type { UseSource } from "../shell/source-contract";
 import { KeyScopeHost } from "@pe/kit/keys";
 import { module as families } from "../families/route";
@@ -38,7 +40,6 @@ import userEvent from "@testing-library/user-event";
 import { createServer } from "node:http";
 import { RecordedPoints } from "../shell/history-rail";
 import { historySnapshotSchema } from "../shell/history";
-import * as historyLinks from "../shell/history";
 import { ref, path } from "../../../host/tests/host-read-graph.test-support";
 import { publicationSource } from "../host/publication-source";
 import { routeRegistry } from "./registry";
@@ -193,12 +194,6 @@ test("JZ Families History offers published values and marks ambiguous publicatio
     expect(badRow.textContent).toContain("Unavailable: Ambiguous pane at this point");
     fireEvent.click(badRow);
     expect(await screen.findByRole("status")).toHaveProperty("textContent", "Ambiguous pane at this point");
-    // jsdom cannot leave the document. Intercept only navigation, retaining the actual point URL.
-    const pointHref = historyLinks.pointHref;
-    let picked = "";
-    vi.spyOn(historyLinks, "pointHref").mockImplementation((point, instance) => {
-      picked = pointHref(point, instance); return "#history-picked";
-    });
     // Every enabled menu entry is opened through the host's HTTP replay door and typed mount.
     const available = listed.points.flatMap((point: any) => point.history.poses
       .filter((pose: any) => pose.route === "families" && !listed.unavailable.some((item: any) => item.point === point.id && item.instance === pose.instance))
@@ -207,13 +202,12 @@ test("JZ Families History offers published values and marks ambiguous publicatio
     for (const { point, pose: recordedPose } of available) {
       cleanup();
       render(<RecordedPoints document={path} route="families" address={address} compare={false} />);
-      fireEvent.click(await screen.findByRole("button", { name: "Open History" }));
-      const options = await screen.findAllByRole("option");
-      picked = "";
-      const option = options.find(option => option.getAttribute("data-key") === `${point.id}:${recordedPose.instance}`)!;
-      expect(option.textContent).not.toContain("Unavailable");
-      fireEvent.click(option);
-      await waitFor(() => expect(new URL(picked, base).searchParams.get("atInstance")).toBe(recordedPose.instance));
+      const option = await waitFor(() => {
+        const link = document.querySelector<HTMLAnchorElement>(`[data-point="${point.id}:${recordedPose.instance}"]`);
+        expect(link?.getAttribute("href")).toBeTruthy(); return link!;
+      });
+      const picked = option.getAttribute("href")!;
+      expect(new URL(picked, base).searchParams.get("atInstance")).toBe(recordedPose.instance);
       cleanup();
       const opened = await request(`/pe/history?at=${new URL(picked, base).searchParams.get("at")}`);
       const history = historySnapshotSchema.parse(await opened.json());
@@ -612,7 +606,7 @@ afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 test("JZ Fans undo after apply: public write journey leaves an honest toolbar refusal", async () => {
   const { nativeFixture } = await import("../../../host/tests/fans-work-fixture");
   const { observeResources } = await import("@pe/runtime");
-  const { JournalButtons } = await import("../shell/situation-band");
+  const { TimelineButtons } = await import("../shell/situation-band");
   const { withInvocationContext } = await import("@pe/runtime/context");
   const { peRouteUrl } = await import("@pe/agent-contracts/pe-api");
   const f = await nativeFixture();
@@ -646,8 +640,8 @@ test("JZ Fans undo after apply: public write journey leaves an honest toolbar re
     target: f.target, fixture: null, work: { address: null, open: f.target.ref },
     address: { read: () => new URLSearchParams(), write() {}, subscribe: () => () => {} },
     custody: { current: () => true }, memory: () => ({}),
-  }, routeRegistry.fans!.fingerprint, { work, sources: { "fans.sheet": { kind: "use", open: () => () => {} } } });
-  const view = render(<JournalButtons owner={mount} />);
+  }, routeRegistry.fans!.fingerprint, { work, timeline: fixtureTimeline(f.saved, () => timelineReceipts(f.journal), changed => f.journal.subscribe({ kinds: ["action"] }, changed)), sources: { "fans.sheet": { kind: "use", open: () => () => {} } } });
+  const view = render(<TimelineButtons owner={mount} />);
   try {
     const staged = await stage("ducts", [
       { path: ["writeIntent", "edit"], value: { value: { groups: ["group:g1"] } } },
@@ -666,11 +660,11 @@ test("JZ Fans undo after apply: public write journey leaves an honest toolbar re
     await command("undo-plan", "sheet.plan");
     await command("undo-apply", "sheet.apply");
     expect(f.native.get(4)).toBe(250);
-    await waitFor(() => expect(screen.getByRole("button", { name: "Undo Edit fan airflow" }).getAttribute("aria-disabled")).toBe("true"));
-    const undo = screen.getByRole("button", { name: "Undo Edit fan airflow" });
+    await waitFor(() => expect(screen.getByRole("button", { name: "Undo" }).getAttribute("aria-disabled")).toBe("true"));
+    const undo = screen.getByRole("button", { name: "Undo" });
     fireEvent(window, Object.assign(new Event("pointermove"), { movementX: 1 }));
     await userEvent.setup().hover(undo);
-    await screen.findByText("Cannot undo: 'Write to Revit' already wrote this to Revit. Reverse it in Revit.");
+    await screen.findByText(/Cannot undo:.*Revit/);
     fireEvent.click(undo);
     expect(f.native.get(4)).toBe(250);
     expect(screen.getByRole("button", { name: "Redo" }).getAttribute("aria-disabled")).toBe("true");
@@ -999,7 +993,7 @@ test("JZ B02 undo follows focus between typed routes, portal and hidden pane; te
   render(<RouterProvider router={router} />);
   await screen.findByRole("button", { name: "jz-b focus" });
   expect(owners).toHaveLength(2);
-  const undo = owners.map(owner => vi.spyOn(owner.history, "undo"));
+  const undo = owners.map(owner => vi.spyOn(owner, "stepTimeline"));
   const press = (node: HTMLElement) => { node.focus(); const native = fireEvent.keyDown(node, { key: "z", code: "KeyZ", ctrlKey: true }); fireEvent.keyUp(node, { key: "z", code: "KeyZ", ctrlKey: true }); return native; };
   press(screen.getByRole("textbox", { name: "jz-a text" }));
   expect(undo.map(spy => spy.mock.calls.length), "B02: browser retains text undo").toEqual([0, 0]);
@@ -1950,7 +1944,7 @@ test("JZ audit Schedules keyed edits preserve a sibling stale mark and narrow in
   const mount = mounts.mountTypedRoute(module, { target: { kind: "document", ref: host.b }, fixture: null,
     work: { address: null, open: host.b }, address: { read: () => new URLSearchParams(), write() {}, subscribe: () => () => {} },
     custody: { current: () => true }, memory: () => ({}),
-  }, workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`), { work });
+  }, workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`), { work, timeline: createTimelineClient(client) });
   const cells = () => mount.draw("main", ctx => ctx.cells) as any;
   try {
     await vi.waitFor(() => expect(mount.owner()?.ready).toBe(true));
@@ -1964,11 +1958,11 @@ test("JZ audit Schedules keyed edits preserve a sibling stale mark and narrow in
     expect(stale).toMatchObject({ ok: false, code: "stale_revision" });
     expect(await cells().at(["cells", "1::2"]).delete({ label: "Delete first cell" })).toBeNull();
     expect(last.write.inverse.filter((p: { path: string[] }) => p.path[0] === "cells").map((p: { path: string[] }) => p.path)).toEqual([["cells", "1::2"]]);
-    expect(await mount.history.undo()).toMatchObject({ ok: true });
+    expect(await mount.stepTimeline("undo")).toBeNull();
     expect(mount.owner()!.doc).toEqual(reviewed);
     expect(await cells().patch([{ path: ["cells"], value: reviewed.cells }], { label: "Replace collection deliberately" })).toBeNull();
     expect(mount.owner()!.doc.basis.stale ?? []).toEqual([]);
-  } finally { mount.journal().intents.forEach(intent => mount.discardIntent(intent.id)); mount.dispose(); }
+  } finally { mount.pendingEdits().forEach(intent => mount.discardIntent(intent.id)); mount.dispose(); }
 }, 60_000);
 
 

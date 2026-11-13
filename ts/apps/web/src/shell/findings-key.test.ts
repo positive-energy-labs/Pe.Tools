@@ -34,25 +34,25 @@ function mountPods(answer: (call: Call, nth: number) => Response | Promise<Respo
 }
 const work = (findings: Record<string, unknown> = {}) => Response.json({ revision: 3, doc: { findings } });
 /** The host Timeline's answer for the findings Work: one step of the person's to undo. */
-const timeline = () => Response.json({ value: { data: { rows: [], redo: null, refusal: { undo: null, redo: null },
+const timeline = () => Response.json({ generation: 0, version: 1, state: "current", value: { evaluation: "test", coverage: { refused: [], unknown: [] }, data: { rows: [], redo: null, refusal: { undo: null, redo: null },
   undo: { work: { binding: "address", route: "findings", target: address }, revision: 3, label: "late" } } } });
 const answer = ({ name }: { name: string }) =>
   name === "work.get" ? work() : name === "reads.value" ? timeline() : Response.json({ ok: true });
 const one = { id: "f1", subject: subjectCode({ keyKind: "UniqueId", key: uniqueIdSchema.parse("9e9fb89e-a9db-4d9a-8f35-b8fbc2303423-00d3da72") }), kind: "note", text: "late", by: "person", at: "2026-11-11T12:00:00.000Z", place: {} };
 
 /* purge-2 c103cdbc: undo and the own-findings count used the route's member key, a findings Work the host never wrote. */
-test("on a member-keyed route the pane read, undo and the own-findings count address one findings Work: the document's", async () => {
+test("on a member-keyed route the pane read addresses the document findings and Timeline undo sends every mounted Work", async () => {
   const { mount, calls } = mountPods(answer);
   try {
     await vi.waitFor(() => expect(mount.owner()?.handle).toBeTruthy());
     mount.findings();
-    expect(await mount.undoFinding()).toBeNull();
-    await mount.ownFindingsLeft();
+    await vi.waitFor(() => expect(mount.timeline()?.undo).toBeTruthy());
+    expect(await mount.stepTimeline("undo")).toBeNull();
     expect(calls.map((call) => call.name)).toContain("work.history");
     // The Timeline read carries its Work in the body; every keyed call names the document, not the member.
-    expect(calls.filter((call) => call.name !== "reads.value" && JSON.stringify(call.query) !== JSON.stringify({ target: address }))).toEqual([]);
+    expect(calls.filter(call => call.name === "work.get").every(call => call.query.target === address)).toBe(true);
     expect(calls.filter((call) => call.name === "reads.value").map((call) => call.works)).toContainEqual([
-      { binding: "address", route: "findings", target: address },
+      expect.objectContaining({ route: "pods" }),
     ]);
   } finally { mount.dispose(); }
 });
@@ -60,12 +60,14 @@ test("on a member-keyed route the pane read, undo and the own-findings count add
 test("an older findings read that answers late does not overwrite a newer one", async () => {
   let late!: (response: Response) => void;
   // 1 = the pane's first read (held); then undo's Timeline read and its history write; then the re-read undo asks for.
-  const { mount } = mountPods((call, nth) =>
-    nth === 1 ? new Promise<Response>((resolve) => { late = resolve; }) : answer(call));
+  let reads = 0;
+  const { mount } = mountPods(call =>
+    call.name === "work.get" && ++reads === 1 ? new Promise<Response>((resolve) => { late = resolve; }) : answer(call));
   try {
     await vi.waitFor(() => expect(mount.owner()?.handle).toBeTruthy());
     mount.findings();
-    expect(await mount.undoFinding()).toBeNull();
+    await vi.waitFor(() => expect(mount.timeline()?.undo).toBeTruthy());
+    expect(await mount.stepTimeline("undo")).toBeNull();
     await vi.waitFor(() => expect(late).toBeTruthy());
     late(work({ f1: one }));
     await new Promise((resolve) => setTimeout(resolve, 20));

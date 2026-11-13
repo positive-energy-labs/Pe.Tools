@@ -150,7 +150,7 @@ export function TypedChrome({ mount, document, recorded, thread }: { mount: Type
   // A route the host leases no view for publishes none, retained (chat's PlaceViews) or direct.
   return <SubjectDoor.Provider value={subject}>{leases ? view : null}<KeyScopeHost id={`route:${spec.key}`} hidden={!visible} className="flex min-h-0 flex-1 flex-col">
     <ScopeKeys keys={actionScopeKeys((["undo","redo"] as const).map(direction=>({id:`work.${direction}`,label:direction,bindings:direction==="undo"?["Mod+Z"]:["Mod+Shift+Z","Mod+Y"],
-      options:{ignoreInputs:true},invoke:()=>{if(visible) void mount.history[direction]();}})))} />
+      options:{ignoreInputs:true},invoke:()=>{if(visible) void mount.stepTimeline(direction);}})))} />
     {portal ? <PrimaryRouteControls route={spec.key} slot="situation">{head}</PrimaryRouteControls> : head}
     <GraphLayoutView
       layout={layout(spec.layout)}

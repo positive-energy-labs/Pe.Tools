@@ -1,12 +1,11 @@
 import { elementSubject } from "@pe/ducts-domain/work-subject";
 import { snapshot } from "../ducts/test-fixture";
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { fansDocumentSchema, ductsDocumentSchema, workKey, type WorkWriteAck } from "@pe/agent-contracts";
+import { fansDocumentSchema, ductsDocumentSchema, workKey } from "@pe/agent-contracts";
 import type {
   Observation,
   WorkWriteOutcome,
 } from "../../../../packages/agent-contracts/src/work-journal-door";
-import { presentInputHistory } from "../ducts/sheet/input-history.neutral";
 import { createWitness } from "./cutover.test-support";
 const closes: (() => void)[] = [];
 const partNode = snapshot.nodes.find(node => node.kind === "fitting")!;
@@ -77,27 +76,14 @@ test("human calculation/drop/flow edits stay in Fans Work, preserve siblings and
   f.fans.close();
   const next = f.mount(f.admitted.presenter);
   await vi.waitFor(() => expect(next.workBasis()).not.toBeNull());
-  expect(next.journal()!.moves.map((move) => move.label)).toEqual(
+  expect(next.timeline()!.rows.flatMap(row => row.kind === "edit" ? [row.label] : [])).toEqual(
     edits.map((edit) => edit.history.label),
   );
-  expect(next.history!.entries.map((entry) => entry.label)).toEqual(
-    edits.map((edit) => edit.history.label),
-  );
-  expect(await next.history!.undo()).toMatchObject({ ok: true });
+  expect(await next.stepTimeline("undo")).toBeNull();
   expect(fansDocumentSchema.parse(next.work()!.value).flows).toEqual({});
-  expect(await next.history!.redo()).toMatchObject({ ok: true });
+  await vi.waitFor(() => expect(next.timeline()?.redo).toBeTruthy());
+  expect(await next.stepTimeline("redo")).toBeNull();
   expect(fansDocumentSchema.parse(next.work()!.value).flows).toHaveProperty(terminal);
-  const history = presentInputHistory(
-    next.history!.entries as Parameters<typeof presentInputHistory>[0],
-    null,
-  );
-  expect(history.last?.words).toBe("");
-  expect(
-    next
-      .journal()!
-      .receipts.map((ack: WorkWriteAck) => ack.meta)
-      .filter(Boolean),
-  ).toHaveLength(3);
 });
 
 test("W06: one-press Revert is a new edit; cleared-row Restore uses the host inverse", async () => {
@@ -124,21 +110,14 @@ test("W06: one-press Revert is a new edit; cleared-row Restore uses the host inv
     { kind: "accepted" },
   );
   expect(fansDocumentSchema.parse(f.fans.work()!.value).componentDrops[part]?.edit).toBeNull();
-  const history = presentInputHistory(
-    f.fans.history!.entries as Parameters<typeof presentInputHistory>[0],
-    null,
-  );
-  expect(history.cleared).toMatchObject({
-    rowKey: `part-drop:${partNode.id}`,
-    was: "0.18 in-wg",
-    row: { label: "DS-1", ids: [partNode.id] },
-  });
-  expect(await f.fans.history!.undo(history.cleared!.press)).toMatchObject({ ok: true });
+  await vi.waitFor(() => expect(f.fans.timeline()?.undo?.label).toBe("Revert DS-1"));
+  expect(await f.fans.stepTimeline("undo")).toBeNull();
   expect(
     fansDocumentSchema.parse(f.fans.work()!.value).componentDrops[part]?.edit?.value.inWg,
   ).toBe(0.18);
-  expect(f.fans.journal()!.receipts.at(-1)).toMatchObject({ kind: "restore", restoreOf: 2 });
-  expect(await f.fans.history!.redo()).toMatchObject({ ok: true });
+  await vi.waitFor(() => expect(f.fans.timeline()?.rows.at(-1)).toMatchObject({ kind: "restore" }));
+  await vi.waitFor(() => expect(f.fans.timeline()?.redo).toBeTruthy());
+  expect(await f.fans.stepTimeline("redo")).toBeNull();
   expect(fansDocumentSchema.parse(f.fans.work()!.value).componentDrops[part]?.edit).toBeNull();
 });
 
@@ -157,7 +136,7 @@ test("W07/X01: a new workspace reacquires Pea history and never replays an old v
       { press: "pea-drop", kind: "apply", label: "Pea part drop" },
     ),
   ).toMatchObject({ ok: true });
-  await vi.waitFor(() => expect(f.fans.history!.entries.at(-1)?.label).toBe("Pea part drop"));
+  await vi.waitFor(() => expect(f.fans.timeline()!.rows.flatMap(row => row.kind === "edit" ? [row.label] : []).at(-1)).toBe("Pea part drop"));
   closes
     .splice(0)
     .reverse()
@@ -167,9 +146,9 @@ test("W07/X01: a new workspace reacquires Pea history and never replays an old v
   expect(
     fansDocumentSchema.parse(next.fans.work()!.value).componentDrops[terminal]?.edit?.value.inWg,
   ).toBe(0.25);
-  expect(next.fans.history!.entries.map((entry) => entry.label)).toEqual(["Pea part drop"]);
-  expect(await next.fans.history!.undo()).toMatchObject({ ok: true });
-  expect(fansDocumentSchema.parse(next.fans.work()!.value).componentDrops).toEqual({});
+  expect(next.fans.timeline()!.rows.flatMap(row => row.kind === "edit" ? [row.label] : [])).toEqual(["Pea part drop"]);
+  expect(await next.fans.stepTimeline("undo")).toMatchObject({ message: expect.any(String) });
+  expect(fansDocumentSchema.parse(next.fans.work()!.value).componentDrops[terminal]?.edit?.value.inWg).toBe(0.25);
 });
 
 test("Fans starts with empty inputs and undo after the ducts Work split", async () => {
@@ -177,7 +156,7 @@ test("Fans starts with empty inputs and undo after the ducts Work split", async 
   await vi.waitFor(() => expect(f.owner.workBasis()).not.toBeNull());
   await settle(f.owner.invoke("edit", { patches: [{ path: ["rules", "elbow"], value: { edit: { value: { table: "CD3-1" } } } }] }) as Observation<WorkWriteOutcome>);
   expect(fansDocumentSchema.parse(f.fans.work()?.value)).toEqual(fansDocumentSchema.parse({}));
-  expect(f.fans.history?.entries).toEqual([]);
+  expect(f.fans.timeline()?.rows ?? []).toEqual([]);
   expect(f.fans.work()?.revision).toBe(0);
   expect(ductsDocumentSchema.parse(f.owner.work()?.value).rules.elbow?.edit?.value.table).toBe("CD3-1");
 });

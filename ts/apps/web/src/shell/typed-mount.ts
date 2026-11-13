@@ -1,4 +1,4 @@
-import { ownFindingsLeft, readFindings, undoOwnFinding } from "../route/host";
+import { readFindings } from "../route/host";
 import { findingCommand } from "../route/slots/findings/index.ts";
 import { FINDINGS_DOORS, FINDINGS_OWNER, type Finding } from "@pe/agent-contracts/slots";
 import { hostReadSource } from "./host-read-source.ts";
@@ -33,12 +33,11 @@ import {
   type WorkScope,
   type RouteFingerprint,
   type InvocationToken,
-  type RouteStateWriteResult,
 } from "@pe/agent-contracts";
 import { ANY_ROUTE } from "@pe/agent-contracts";
 import { createRouteScopeGate } from "@pe/runtime/route-scope-gate";
 import { applicationWorkRegistry, createApplicationWorkRegistry } from "./application-work-registry";
-import { createWorkFeedClient } from "./work-feed-client";
+import { createWorkFeedClient, createTimelineClient, type TimelineClient } from "./work-feed-client";
 import { createFixtureWorkDoor } from "./fixture-work-door";
 import { publicationPose, recordedWorkDoor } from "./history";
 import { settleWork } from "./work-door-observation";
@@ -70,7 +69,7 @@ const inFlight = (snapshot: Snapshot) => snapshot.state === "reading" || snapsho
 
 /** Typed routes execute declarations directly. No graph admission, body slots or reading scheduler. */
 export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerprint: RouteFingerprint,
-  ports: { work?: WorkJournalDoor; sources?: Record<string, UseSource>; findings?: Parameters<typeof undoOwnFinding>[1] } = {}) {
+  ports: { work?: WorkJournalDoor; sources?: Record<string, UseSource>; findings?: Parameters<typeof readFindings>[1]; timeline?: TimelineClient } = {}) {
   const cleanups: (() => void)[] = [];
   try {
   // Every route carries the kernel's one command, the person's `finding` (ADR 0035 rule 9); a route's own
@@ -115,13 +114,41 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     return bindWork(own,input.work.address,undefined,input.work.open ?? undefined);
   };
   let key = selectedKey();
+  let timelineState: import("@pe/agent-contracts").WorkTimeline | null = null;
+  let timelineProblem: string | null = "Reading Timeline";
+  let stopTimeline = () => {};
+  const timelineClient = ports.timeline ?? (input.fixture === null && !input.history ? createTimelineClient(ports.findings) : null);
+  const timelineWorks = () => [...owners.values()].map(owner => owner.handle?.key ?? owner.scope.key);
+  const connectTimeline = () => {
+    stopTimeline(); timelineState = null;
+    timelineProblem = input.history ? "Recorded Timeline is read-only" : "Timeline unavailable";
+    const works = timelineWorks();
+    if (!timelineClient || !works.length) return;
+    let closed = false;
+    const stop = timelineClient.open(works, (value, reason) => {
+      if (closed || disposed) return;
+      timelineState = value; timelineProblem = reason ?? null; notify();
+    });
+    stopTimeline = () => { closed = true; stop(); };
+  };
+  cleanups.push(() => stopTimeline());
+  const stepTimeline = async (direction: "undo" | "redo") => {
+    try {
+      requireWritable();
+      const expected = timelineState?.[direction];
+      if (!timelineClient || !expected || timelineProblem || timelineState?.refusal[direction])
+        return { message: timelineProblem ?? timelineState?.refusal[direction] ?? `Nothing to ${direction}` };
+      const result = await timelineClient.step({ direction, works: timelineWorks(), expected });
+      if (result) connectTimeline();
+      loadFindings(); return result;
+    } catch (error) { return { message: error instanceof Error ? error.message : String(error) }; }
+  };
   let renderedBasis: InvocationToken | null = null;
   const reads = new Map<import("../route/host-read").HostRead, { snapshot: Snapshot; args: string; stop(): void }>();
   const dependencies = () => Object.fromEntries([...reads].filter(([read,r])=>read === spec.core && r.snapshot.state === "ready").map(([read,r])=>[read.key,r.snapshot.hash??""]));
   const workSchema:z.ZodObject=edits?.work.schema ?? z.strictObject({});
   const gate = createRouteScopeGate({
     workSchema, hashWork: canonicalRouteInput,
-    journal: key => owners.get(key.route)!.lease.entry.journal,
     dependencies,
     preparePage: (_page, patch) => ({ ok: true, value: { page: patch, changed: true, membership: "unresolved" } }),
   });
@@ -146,7 +173,6 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     if (record.handle?.revision === handle.revision && canonicalRouteInput(record.doc) !== canonicalRouteInput(parsed))
       throw Error("Contradictory Work revision; refresh this route");
     record.absent=false; record.handle = freezePage(handle); record.doc = freezePage(parsed); record.ready = true; record.problem = null; record.failure = null; record.failed = false;
-    record.lease.entry.journal.observe({ revision: handle.revision, doc: parsed });
     if (handle.key.route === own) gate.acceptWork(workAttempt,
       { kind: "snapshot", handle, value: parsed, hash: canonicalRouteInput(parsed) });
   };
@@ -158,7 +184,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     ownerStops.splice(0).reverse().forEach(stop=>stop()); owners.clear();
     key=next; renderedBasis=null;
     gate.enter({target:input.target,work:key},page); workAttempt=gate.capture("work");
-    if(!key) return;
+    if(!key) { connectTimeline(); return; }
   for (const [id, config] of Object.entries(ownerConfigs)) {
     const scope: WorkScope = { route: spec.key, fingerprint, key: { ...key, route: id },
       target: input.target, subject: null };
@@ -167,7 +193,6 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
       ready: false, absent:false, problem: null as string | null, failure: null as WorkFeedFailure | null, failed: false, lease };
     owners.set(id, record);
     ownerStops.push(() => lease.release());
-    lease.entry.connect(scope, door);
     const stopJournal = lease.entry.subscribe(notify);
     ownerStops.push(stopJournal);
     const stopFeed = door.open(scope).subscribe(state => {
@@ -175,7 +200,6 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
       try {
         if (state.kind === "ready") {
           accept(record, state.snapshot.handle, state.snapshot.value);
-          lease.entry.restore(state);
         } else if (state.kind === "ack" && record.handle) {
           const ack = state.ack;
           if (ack.revision > record.handle.revision) {
@@ -184,7 +208,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
             if (!result.ok) throw Error("error" in result ? result.error : "Work acknowledgement was refused");
             accept(record, { key: ack.key, revision: ack.revision }, result.envelope.doc);
           }
-          lease.entry.journal.accept(ack);
+          lease.entry.accept(ack.press);
         } else if (state.kind !== "ack") {
           record.ready = false;
           record.absent=state.kind === "absent";
@@ -198,6 +222,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     }, notify);
     ownerStops.push(stopFeed);
   }
+  connectTimeline();
   };
   syncWork();
   const allReads = new Set([spec.core,...Object.values(spec.reads ?? {}),...Object.values(spec.panes).map(p=>p.read)].filter((read):read is import("../route/host-read").HostRead=>!!read));
@@ -301,11 +326,8 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
   const readiness = (): RouteReadiness => {
     if (disposed || released || !input.custody.current()) return { kind: "blocked", reason: "Place is inactive or retired" };
     for (const owner of owners.values()) {
-      // Known absence is settled: Start remains available, while edit admission still refuses.
       if (owner.absent) continue;
-      const journal = owner.lease.entry.journal.read();
-      if (journal.busy || journal.intents.some(intent => intent.status === "pending") ||
-          owner.ready && journal.revision !== owner.handle?.revision)
+      if (owner.lease.entry.pending().some(intent => intent.status === "pending"))
         return { kind: "pending", reason: "Acknowledging Work..." };
       if (!owner.ready) return { kind: owner.failure || owner.problem && owner.problem !== "Reading Work..." ? "blocked" : "pending", reason: owner.problem ?? "Reading Work..." };
     }
@@ -339,7 +361,6 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     const issued = gate.invocation(gate.capture("draw"), dependencies());
     return renderedBasis = issued.ok ? issued.value : null;
   };
-  const entries = () => disposed ? [] : [...owners.values()].flatMap(o => o.lease.entry.journal.entries()).sort((a,b) => a.at-b.at);
   const submit = async (record: typeof owners extends Map<string, infer R> ? R : never, request: WorkWrite, token: InvocationToken) => {
     requireWritable();
     const result = await settleWork(door.submitWork(record.scope, request, token));
@@ -349,27 +370,9 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
       const applied = applyPatches(record.config.state, { version: 1, revision: record.handle.revision, doc: record.doc }, ack.by, ack.patches, ack.base, true, true);
       if (applied.ok) accept(record, { key: ack.key, revision: ack.revision }, applied.envelope.doc);
     }
-    record.lease.entry.journal.accept(ack); notify();
+    record.lease.entry.accept(ack.press); notify();
     return { ok: true, revision: ack.revision, handle: { key: ack.key, revision: ack.revision }, write: ack } as const;
   };
-  const restore = async (direction: "undo" | "redo", press?: string) => {
-    const step = press ? entries().find(e => e.press === press) : entries().filter(e => e.state === (direction === "undo" ? "applied" : "undone")).at(-1);
-    const record = [...owners.values()].find(o => o.lease.entry.journal.entries().some(e => e.press === step?.press));
-    const token = basis();
-    if (!record?.ready || !token) return { ok: false, code: "write-refused", message: basisRefusal() ?? "Work unavailable" } as const;
-    return record.lease.entry.journal[direction](async request => {
-      try { return await submit(record, request, token); }
-      catch (error) { return { ok: false, kind: "refused", error: String(error), hint: "Read Work again" } as RouteStateWriteResult; }
-    }, step?.press);
-  };
-  const history = { get entries() { return entries(); }, undo: (press?: string) => restore("undo",press),
-    redo: (press?: string) => restore("redo",press), revert: async (press?: string) => {
-      const record=[...owners.values()].find(o=>o.lease.entry.journal.read().undo.at(-1)?.press===(press??entries().filter(e=>e.state==="applied").at(-1)?.press));
-      const step=record?.lease.entry.journal.read().undo.at(-1),token=basis();
-      if(!record?.ready||!step||!token||step.barrier||step.superseded) throw Error("History step is blocked");
-      return submit(record,{kind:"apply",expectedRevision:record.handle!.revision,press:crypto.randomUUID(),label:`Revert ${step.label}`,
-        patches:step.transitions.slice(0,step.cursor).reverse().flatMap(t=>t.inverse)},token);
-    } };
   const reviews = new Map<string, { preview: z.output<typeof writePreviewSchema>; input: Record<string, unknown>; token: InvocationToken; signature: string; presentation: any }>();
   const applyingReviews = new Map<string, ReturnType<typeof reviews.get>>();
   const problems = new Map<string,string>();
@@ -410,7 +413,6 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
       return {ready:true,refusal:null,label:ids.length===1?options.find(o=>o.id===ids[0])!.label:ids.length?`${ids.length} ${spec.subject?.noun ?? "Subject"}s`:"",link:`${module.data.address}?${link}`};
     } catch { return refused(`${spec.subject?.noun ?? "Subject"} is malformed`); }
   };
-  const findingMoves: import("./timeline").TimelineEntry[] = [];
   // The document's findings Work (ADR 0035 rule 9), for the kernel's picture pane: read on first ask, when the
   // route's Work key arrives, after this Place's own finding write or undo, and on refresh. The key is the one the
   // findings history door uses: the route's own document-bound Work key, as the host resolved it; a route whose
@@ -564,24 +566,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
         run:(supplied)=>perform(false,supplied),plan:()=>perform(),apply:()=>perform(true),
         cancel:()=>mounted.cancel(id),read:()=>mounted.review(id)};
     },
-    journal: () => {
-      const journals=[...owners.values()].map(o=>o.lease.entry.journal.read()),base=owners.get(own)?.lease.entry.journal.read() ?? {revision:null,from:0,busy:false,receipts:[],undo:[],redo:[],moves:[],last:null};
-      return freezePage({...base, undo:journals.flatMap(j=>j.undo).sort((a,b)=>a.at-b.at), redo:journals.flatMap(j=>j.redo).sort((a,b)=>a.at-b.at),
-        intents:journals.flatMap(j=>j.intents), moves:journals.flatMap(j=>j.moves).sort((a,b)=>a.at-b.at), last:journals.flatMap(j=>j.last?[j.last]:[]).sort((a,b)=>a.step.at-b.step.at).at(-1)??null});
-    },
-    discardIntent(id: string) { for (const owner of owners.values()) owner.lease.entry.journal.discardIntent(id); notify(); },
-    // The person's own findings live in the document's findings Work, not this route's: their undo is that door's.
-    undoFinding: async () => {
-      const key = findingsKey();
-      if (!key) return { message: "Wait for this route's Work before undoing a finding" };
-      const refused = await undoOwnFinding(key, ports.findings);
-      // ponytail: the History entry lives for this Place; a durable one needs the findings Work's own moves here.
-      if (!refused) { findingMoves.push({ kind: "feed", at: new Date().toISOString(), verb: "findings.undo", subject: { message: "you undid your last finding" } }); loadFindings(); notify(); }
-      return refused;
-    },
     findings: () => { const key = findingsKey(); if (findingsAt !== (key ? workKey(key) : "")) { findingsAt = ""; loadFindings(); } return findings; },
-    ownFindingsLeft: () => { const key = findingsKey(); return key ? ownFindingsLeft(key, ports.findings) : Promise.resolve(null); },
-    restoreWork: restore, journalRefusal: () => input.readOnly || input.history ? "needs live Revit" : [...owners.values()].some(o=>!o.ready)?"Work unavailable":null,
     stopCommand: (id:string) => {requireWritable();return cancelAction(id);},
     attention: {
       write: (page:object) => Object.fromEntries(Object.keys(spec.fields).map(key=>[key,JSON.stringify((page as Record<string,unknown>)[key])])),
@@ -620,7 +605,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     available: () => !disposed && input.custody.current(),
     /** The URL write is flushed: the address alone, without Place memory, decodes to this Page
      *  (slice 6.1, `data-url-settled`); a reload reads only the address. */
-    urlCurrent: () => canonicalRouteInput(addressPage(false)) === canonicalRouteInput(page), target: () => input.target, revision: () => revision, work: () => gate.read()?.work ?? null, workBasis: basis, history,
+    urlCurrent: () => canonicalRouteInput(addressPage(false)) === canonicalRouteInput(page), target: () => input.target, revision: () => revision, work: () => gate.read()?.work ?? null, workBasis: basis,
     // A row verb runs on this route's own Work handle: before the Work is ready it refuses with the Work's own
     // reason ("Start this Work to edit"), as the cells do, instead of failing a press nobody sees. Any other
     // catalog command that carries the Work handle refuses through workCommandRefusal.
@@ -644,7 +629,11 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
         rows: stale ? [] : r.presentation.rows, cells: stale ? [] : r.presentation.cells, stale }; },
     reviewProblem: (id: string) => problems.get(id) ?? null,
     cancel: (id: string) => { const token=plans.get(id);if(token) gate.retire(token.token);plans.delete(id);reviews.delete(id);notify(); },
-    timeline: () => [...[...owners.values()].flatMap(o => o.lease.entry.timeline()), ...findingMoves],
+    timeline: () => timelineState,
+    stepTimeline,
+    timelineRefusal: () => input.readOnly ? "needs live Revit" : timelineProblem,
+    pendingEdits: () => [...owners.values()].flatMap(o => o.lease.entry.pending()),
+    discardIntent(id: string) { for (const owner of owners.values()) owner.lease.entry.discard(id); notify(); },
     // A caller that draws one known pane may name that pane's context type; the mount does not check it.
     draw<C = DrawContext<any,any,any,any>>(id: string, render?: (ctx: C)=>unknown) {
       const pane = spec.panes[id]!;
@@ -687,16 +676,16 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
               ? patches.filter(p=>String(p.path[0])===key) : [{path:[key],value:(applied.envelope.doc as any)[key]}]);
             const label=id===own ? detail.label : `${detail.label} · from /${id}`;
             const write:WorkWrite={kind:"apply",expectedRevision:handle.revision,press:crypto.randomUUID(),patches:normalized,...z.object({label:z.string(),meta:z.json().optional()}).parse(edits!.describe({...detail,label}))};
-            const journal=record.lease.entry.journal, intent=journal.retainIntent(write,label);
+            const admission=record.lease.entry, intent=admission.retain(write,label);
             notify();
             try {
               requireWritable();
               if (!basis() || !gate.current(token)) throw Error("Stale accepted Work basis");
               if (owners.get(id)!==record || !record.ready || canonicalRouteInput(record.handle)!==canonicalRouteInput(handle)) throw Error("Owning Work changed since this cell was drawn");
               await submit(record,write,token);
-              journal.discardIntent(intent);
+              admission.discard(intent);
             } catch(error) {
-              journal.refuseIntent(intent,error instanceof Error?error.message:String(error));
+              admission.refuse(intent,error instanceof Error?error.message:String(error));
               throw error;
             } finally { notify(); }
           }));
@@ -704,7 +693,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
         } catch(error) { return {code:"refused",message:error instanceof Error?error.message:String(error)}; }
       };
       const cells: DrawContext<any, any, any, any>["cells"] = {
-        doc, basis: token, state, history,
+        doc, basis: token, state,
         owner(path) { const route=ownerOf(path); return {route,label:route===own?"Work":`from /${route}`}; },
         at(path,preferred,facts={}) {
           const route=ownerOf(path,preferred), address=[...path];
@@ -712,28 +701,19 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
           const cellPatch=(patches: readonly RouteStatePatch[],detail?:EditHistory) => facts.readOnly
             ? Promise.resolve({code:"read-only",message:"This cell is read-only"}) : patch(patches,detail,route);
           const clear=(detail?:EditHistory)=>cellPatch(cellPatches(address.slice(0,-1),address.at(-1)!,value,{kind:"clear"}),detail);
-          const record=owners.get(route)!;
           const accepted = value.edit;
           const accept=(detail?:EditHistory) => {
             if(!accepted) return Promise.resolve({code:"not-staged",message:"This cell is no longer staged"});
             const {by:_by,at:_at,base:_base,...rung}=accepted;
             return cellPatch([{path:[...address,"edit"],value:rung}],detail);
           };
-          // A cell may undo only a press whose entire footprint is this address.
-          const step=record.lease.entry.journal.read().undo.findLast(step=>!step.barrier&&!step.superseded&&step.transitions.every(t=>t.paths.every(p=>address.every((key,i)=>String(p[i])===key))));
-          const undo=async():Promise<EditFailure>=>{
-            if(!ready||!token||!gate.current(token)||canonicalRouteInput(record.handle)!==canonicalRouteInput(handles.get(route))) return {code:"stale-cell",message:"Owning Work changed since this cell was drawn"};
-            if(!step) return {code:"no-cell-undo",message:"No isolated edit for this cell"};
-            const result=await restore("undo",step.press);
-            return result.ok?null:{code:"undo-refused",message:"message" in result?String(result.message):"Cell undo refused"};
-          };
           return {owner:{route,label:route===own?"Work":`from /${route}`},value, facts:{...facts,baseline:facts.baseline??value.base?.value},
-            freshness:ready?"current":owners.get(route)!.doc===null&&valueOf(core)===undefined?"never":"stale", refusal: facts.readOnly ? "This cell is read-only" : refusal, clear, accept,deny:clear,undo,
+            freshness:ready?"current":owners.get(route)!.doc===null&&valueOf(core)===undefined?"never":"stale", refusal: facts.readOnly ? "This cell is read-only" : refusal, clear, accept,deny:clear,
             delete:(detail)=>cellPatch([{path:address}],detail),
             stage:(value2,detail)=> facts.readOnly ? Promise.resolve({code:"read-only",message:"This cell is read-only"}) :
               patch(cellPatches(address.slice(0,-1),address.at(-1)!,value,
                 Object.hasOwn(facts,"baseline")&&canonicalRouteInput(value2)===canonicalRouteInput(facts.baseline)?{kind:"clear"}:{kind:"set",rung:{value:value2}}),detail,route),
-            transitions:(detail)=>!ready?[]:[...(value.edit?[{kind:"clear" as const,run:()=>clear(detail)},...(value.edit.by==="pea"?[{kind:"take" as const,run:()=>accept(detail)},{kind:"unsuggest" as const,run:()=>clear(detail)}]:[])]:[]),...(step?[{kind:"undo" as const,run:undo}]:[])]};
+            transitions:(detail)=>!ready?[]:[...(value.edit?[{kind:"clear" as const,run:()=>clear(detail)},...(value.edit.by==="pea"?[{kind:"take" as const,run:()=>accept(detail)},{kind:"unsuggest" as const,run:()=>clear(detail)}]:[])]:[])]};
         },
         label(input,label) { const foreign=[...new Set(edits!.patches(input,valueOf(core)).map(p=>ownerOf(p.path.map(String))))].filter(id=>id!==own); return foreign.length?`${label} · ${foreign.map(id=>`from /${id}`).join(", ")}`:label; },
         patch,
@@ -743,7 +723,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
         write:mounted.action } as any);
     },
     // Retaining hidden read connections was a Plan-identity workaround; content fingerprints
-    // now survive reconnect. Keep Work journals/receipts connected so pending edits settle.
+    // now survive reconnect. Keep Work feeds connected so pending edits settle.
     // Read release preserves write authority; disposal and Place custody fence writes.
     release() { if (disposed || released) return; released = true; notify(); for (const r of reads.values()) { r.args=""; r.stop(); } },
     dispose() { if (disposed) return; disposed=true; publish(); cleanups.splice(0).reverse().forEach(stop => stop()); listeners.clear(); },
