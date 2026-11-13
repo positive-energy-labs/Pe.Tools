@@ -91,7 +91,7 @@ test("6.1b two Places on one route, one hidden mid-read: every aria-busy in the 
 
 test("6.1b a route the host leases no view for (chat at /pea) never PUTs a route view; a leasing route does", async () => {
   const chatFrames: Parameters<UseSource["open"]>[1][] = [], roomsFrames: Parameters<UseSource["open"]>[1][] = [];
-  const chat = held(roomsProbe({ key: "chat", address: "/pea", name: "Pea" }), chatFrames), rooms = held(roomsProbe(), roomsFrames);
+  const chat = held(roomsProbe({ key: "chat", address: "/pea", name: "Pea", agent: false }), chatFrames), rooms = held(roomsProbe(), roomsFrames);
   call.mockClear();
   const puts = () => call.mock.calls.filter(([door]) => door === "view.publish").map(([, req]) => (req as { params: { route: string } }).params.route);
   try {
