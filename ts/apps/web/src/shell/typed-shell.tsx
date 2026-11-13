@@ -1,4 +1,5 @@
 import { SheetPane } from "../route/slots/sheet/pane.tsx";
+import { drawingLoading } from "../route/draw";
 import { GoalPane } from "../route/slots/goal/pane.tsx";
 import { lazy, Suspense } from "react";
 import type { Goal } from "@pe/agent-contracts/slots";
@@ -314,7 +315,7 @@ function PublishedView({ view }: { view: View }) { useRouteViewBridge(view); ret
 export function kernelPane(mount: TypedMount, id: string, ctx: Parameters<TypedMount["spec"]["panes"][string]["draw"]>[0]): ReactNode | null {
   const kernel = (mount.spec.panes[id] as { kernel?: "sheet" | "goal" | "picture" }).kernel;
   if (kernel === "picture" && mount.spec.picture)
-    return <Suspense fallback="Loading drawing"><PicturePane ctx={{ draw: ctx as never, slot: mount.spec.picture as never, name: mount.spec.name, subjectField: mount.spec.subject?.field, findings: mount.findings() }} /></Suspense>;
+    return <Suspense fallback={drawingLoading}><PicturePane ctx={{ draw: ctx as never, slot: mount.spec.picture as never, name: mount.spec.name, subjectField: mount.spec.subject?.field, findings: mount.findings() }} /></Suspense>;
   if (kernel === "sheet" && mount.spec.sheet)
     return <SheetPane ctx={{ draw: ctx as never, slot: mount.spec.sheet, field: mount.spec.subject?.field }} />;
   if (kernel === "goal") return <GoalPane ctx={{ goal: ctx.value.value as Goal }} />;

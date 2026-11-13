@@ -3,6 +3,8 @@ import { fillBody, scrollBody, type Body, type BodyKind } from "./body";
 
 type Context<C> = C extends (props: { ctx: infer T }) => ReactNode ? T : never;
 
+export const drawingLoading = createElement("span", { "aria-busy": true }, "Loading drawing");
+
 /** Keep the authored module DOM-free for host admission and load drawing only on demand. The kind
  * is the pane's declared `body` (route/body.ts); the drawing's element is branded with it. */
 export function draw<B extends BodyKind, M, K extends keyof M>(
@@ -14,7 +16,7 @@ export function draw<B extends BodyKind, M, K extends keyof M>(
     load().then((module) => ({ default: module[name] as ComponentType<{ ctx: Context<M[K]> }> })),
   );
   const Drawing = ({ ctx }: { ctx: Context<M[K]> }) =>
-    createElement(Suspense, { fallback: "Loading drawing" }, createElement(Component, { ctx }));
+    createElement(Suspense, { fallback: drawingLoading }, createElement(Component, { ctx }));
   const brand = (kind === "fill" ? fillBody : scrollBody) as (node: ReactNode) => Body<B>;
   return (ctx: Context<M[K]>) => brand(createElement(Drawing, { ctx }));
 }

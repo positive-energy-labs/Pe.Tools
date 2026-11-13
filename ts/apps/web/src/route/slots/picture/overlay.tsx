@@ -2,6 +2,7 @@ import { createElement, lazy, Suspense, type ComponentType, type ReactNode, type
 import type { PictureScope } from "@pe/agent-contracts/slots";
 import type { SubjectKey } from "@pe/kit/lang/attention";
 import type { LayerOption, PictureContent } from "#/scene/picture/picture";
+import { drawingLoading } from "../../draw";
 
 /*
  * The picture slot's one declared overlay hook (ADR 0035 rules 1 and 2; owner ruling 2026-11-11). The
@@ -41,5 +42,5 @@ export function overlay<M, K extends keyof M>(load: () => Promise<M>, name: K & 
     load().then((module) => ({ default: module[name] as ComponentType<PictureOverlayProps<Context<M[K]>>> })),
   );
   return (props: PictureOverlayProps<Context<M[K]>>): ReactNode =>
-    createElement(Suspense, { fallback: "Loading drawing" }, createElement(Component, props));
+    createElement(Suspense, { fallback: drawingLoading }, createElement(Component, props));
 }
