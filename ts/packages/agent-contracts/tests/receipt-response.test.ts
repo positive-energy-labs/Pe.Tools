@@ -7,13 +7,19 @@ const fixture: Record<string, Record<string, unknown>> = JSON.parse(
   readFileSync(new URL("./fixtures/receipt-response.fixture.json", import.meta.url), "utf8"),
 );
 
-test("only a bridge dispatch can carry native touched evidence", () => {
+test("an SDK step needs a decoded op receipt to carry touched", () => {
   const step = { id: "sdk", key: "instances.cleanup.close", kind: "native", state: "succeeded", input: {}, result: null };
   const touched = { kind: "unknown", reason: "lost-response" };
   expect(actionStepSchema.safeParse({ ...step, transport: "sdk" }).success).toBe(true);
   expect(actionStepSchema.safeParse({ ...step, transport: "sdk", touched }).success).toBe(false);
   expect(actionStepSchema.safeParse({ ...step, touched }).success).toBe(false);
   expect(actionStepSchema.safeParse({ ...step, transport: "bridge", touched }).success).toBe(true);
+  const op = { ...step, key: "takeoffs.partition" };
+  const opReceipt = { requestId: op.id, key: op.key, pid: 42,
+    processStartUtc: "2026-11-13T00:00:00Z", verdict: "ok" };
+  expect(actionStepSchema.safeParse({ ...op, transport: "sdk", opReceipt, touched }).success).toBe(true);
+  expect(actionStepSchema.safeParse({ ...op, transport: "sdk", opReceipt }).success).toBe(false);
+  expect(actionStepSchema.safeParse({ ...op, transport: "sdk", opReceipt: {}, touched }).success).toBe(false);
 });
 
 test("every receipt response the bridge writes round-trips with nothing dropped", () => {
