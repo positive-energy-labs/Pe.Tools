@@ -295,6 +295,28 @@ export const RouteGraphWire = RouteGraphJson.omit({ stages: true, stageOrder: tr
 export type RouteGraphWire = Immutable<z.output<typeof RouteGraphWire>>;
 /** Page and Work ownership do not depend on discovery or body verb protocols. */
 export type RouteStateGraph = Pick<RouteGraphJson, "fields" | "work">;
+/** Keep gate linking neutral: a Pod declaration must not pull in the executable catalog. */
+export function linkRouteGates(data: Pick<RouteGraphWire, "key" | "version" | "layout" | "fields" | "subject" | "panes">, schemas: Readonly<Record<string, z.ZodType>>): RouteDiagnostic[] {
+  const errors: RouteDiagnostic[] = [];
+  const fail = (path: string, reference: string, expected: string, message: string) => errors.push({
+    path, reference, expected, message, namespace: data.key, version: data.version, source: null, code: "reference",
+  });
+  const walk = (node: LayoutJson, path: string) => {
+    if (node.kind === "pane") {
+      if (!Object.hasOwn(data.panes, node.id)) fail(`${path}.id`, node.id, "declared pane", "Unknown pane");
+    } else if (node.kind === "split") node.children.forEach((child, i) => walk(child, `${path}.children.${i}`));
+    else {
+      const condition = node.when;
+      const field = condition === "subject" ? undefined : data.fields[condition.field];
+      const schema = field && "schema" in field ? schemas[field.schema] : undefined;
+      const valid = condition === "subject" ? !!data.subject : !!schema?.safeParse(condition.value).success;
+      if (!valid) fail(`${path}.when`, condition === "subject" ? "subject" : condition.field, "declared field value", "Gate must name a declared subject or an accepted field value");
+      walk(node.child, `${path}.child`);
+    }
+  };
+  walk(data.layout, "layout");
+  return errors;
+}
 export type FieldJson = RouteGraphJson["fields"][string];
 export type ReadingDependencies = RouteGraphJson["readings"][string]["deps"];
 

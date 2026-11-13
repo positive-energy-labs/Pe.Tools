@@ -21,6 +21,16 @@ const step: ActionStep = {
   error: "reply lost",
   status: 503,
 };
+
+test("process-exit recovery marks only a dispatched bridge request uncertain", async () => {
+  const envelope = JSON.parse(sdkEnvelope({ requestId: step.id, state: "abandoned" }));
+  envelope.diagnostics = [{ code: "op.process-dead", detail: "Original process exited", fix: null }];
+  const read = async () => JSON.stringify(envelope);
+  const bridge = await readNativeReceipt({ ...step, transport: "bridge", dispatchedAt: "2026-11-13T00:00:00Z" }, originalProcess, read);
+  expect(bridge.step).toMatchObject({ state: "failed", transport: "bridge", touched: { kind: "unknown", reason: "process-exit" } });
+  const sdk = await readNativeReceipt({ ...step, transport: "sdk", dispatchedAt: "2026-11-13T00:00:00Z" }, originalProcess, read);
+  expect(sdk.step).not.toHaveProperty("touched");
+});
 test("original process freeze requires one exact bridge incarnation before native dispatch", async () => {
   expect(await readOriginalProcess(42, 1000, sdkSessions)).toEqual(originalProcess);
   await expect(readOriginalProcess(42, 1001, sdkSessions)).rejects.toThrow(/Cannot prove/);
@@ -103,6 +113,8 @@ test("production SDK reader uses exact generated selector; mismatched or unresol
       state: "failed",
       error: "central unreachable",
       status: 409,
+      transport: "bridge",
+      bridgeReply: "touched",
       touched: { kind: "none" },
     });
     await writeFile(

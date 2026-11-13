@@ -17,6 +17,7 @@ import { subjectSchema } from "@pe/agent-contracts/route-kernel-codecs";
 import type { PlanHandle as importPlanHandle } from "@pe/kit/lang/write-action";
 import { z } from "zod";
 import type { Publication } from "@pe/agent-contracts/value";
+import { linkRouteGates } from "../../../../packages/agent-contracts/src/route-kernel-data.ts";
 import { picturePoseSchemas, pictureSlotData, sheetSlotData, writesRevit, SHEET_COMMANDS, type Goal, type PictureScope, type PictureSlot, type SheetSlot } from "@pe/agent-contracts/slots";
 
 // Generated metadata keeps command schemas out of Pod bundles. The host decodes inputs.
@@ -377,6 +378,8 @@ export function route<D, const F extends Fields, W extends z.ZodObject, Edit ext
     ...(sheet?{sheet}:{}),...(spec.picture?{picture:pictureSlotData(spec.picture)}:{}),...(spec.goal?{goal:readIds.get(spec.goal)!}:{}),
     needs:normalized.needs === "browser" || normalized.needs === "host" ? "nothing" : normalized.needs,
     observe:[],resetOnTarget:[]};
+  const gateErrors = linkRouteGates(data, schemas);
+  if (gateErrors.length) throw Error(gateErrors.map(error => `${error.path}: ${error.message}`).join("; "));
   const host:HostRouteModule={data,schemas,...(work?{workState:work,readWorks:Object.keys(owners).filter(id=>id!==work.route)}:{})};
   const entries:Record<string,EntryContract>=Object.fromEntries([...[...readIds.keys()].map(read=>[read.key,read]),
     ...Object.values(normalized.commands).flatMap(c=>[[c.entry,c.contract],...("plan" in c?[[c.plan,c.planContract]]:[])])]);

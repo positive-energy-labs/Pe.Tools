@@ -13,7 +13,7 @@ test("a Pod entry importing the whole @pe/web/route surface bundles without effe
   const entry = fileURLToPath(new URL("./src/route/pod-surface.entry.ts", import.meta.url));
   const built = await buildRouteArtifact({
     entry,
-    source: 'export * from "./defaults.ts";\n',
+    source: 'export * from "./defaults.ts";\nexport { handle } from "@pe/agent-contracts/handle";\n',
     root: fileURLToPath(new URL(".", import.meta.url)),
     data,
     contracts: [{ id: "surface-guard", bytes: new TextEncoder().encode("surface guard") }],

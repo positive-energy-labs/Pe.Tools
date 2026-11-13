@@ -102,7 +102,6 @@ export const admittedRouteEntries = new Map<
 
 import {
   decodeRouteGraph,
-  linkRouteGates,
   linkRouteBodies,
   routeBindingSchema,
   routeDiagnostic,
@@ -795,7 +794,7 @@ function admitHostProjection(
   const decoded = wire.success ? { ok: true as const, data: wire.data } : { ok: false as const, diagnostics: wire.error.issues.map(issue => routeDiagnostic(module.data, issue.path.join("."), "", "RouteGraphWire", issue.message, "schema")) };
   if (!decoded.ok) return decoded;
   const data = decoded.data;
-  const errors: RouteDiagnostic[] = linkRouteGates(data, module.schemas);
+  const errors: RouteDiagnostic[] = [];
   const fail = (path: string, message: string) =>
     errors.push(routeDiagnostic(data, path, "", "neutral host binding", message));
   if (canonicalRouteJson(data) !== canonicalRouteJson(closure.data))
