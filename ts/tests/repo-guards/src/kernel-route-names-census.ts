@@ -23,6 +23,7 @@ export const readFileOwnership = {
   "publications.ts": { owner: "kernel", reason: "Publication slots, shared flights and a lease per subscriber" },
   "read-ownership.ts": { owner: "kernel", reason: "Read lifetime: owners, flights and leases over NativeReads; names no route" },
   "routes.ts": { owner: "kernel", reason: "Read registry and generic HTTP dispatcher" },
+  "work-timeline.ts": { owner: "kernel", reason: "The host Timeline: one read, one step door, and its source registration (ADR 0042)" },
 } as const satisfies Record<string, { owner: "kernel" | "route-owned" | "generated"; reason: string }>;
 const ownership = new Map(Object.entries(readFileOwnership));
 // Import ownership, not an occurrence allowance: the picture currency serves every caller/route.

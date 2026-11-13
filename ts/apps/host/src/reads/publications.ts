@@ -14,7 +14,7 @@ import {
   type Trace,
   type Value,
 } from "./evaluator.ts";
-import type { ReadFlight, ReadLease } from "./read-ownership.ts";
+import { startFlight, type Flight, type ReadLease } from "./read-ownership.ts";
 
 export interface Publication<T> {
   readonly key: string;
@@ -27,37 +27,8 @@ export interface Publication<T> {
 type Dependency = Pick<Trace, "name" | "args">;
 type Pending = { inputs: Dependency[]; superseded: boolean };
 type Slot = { generation: number; key: string; published?: Publication<unknown>; attempt: number; pending?: Pending; lease?: ReadLease };
-/** What a publication needs of a `ReadFlight`. An owner's `ReadOwnership.flight` satisfies it. */
-export type Flight<T> = Pick<ReadFlight<T>, "result" | "join">;
+/** How a publication starts its shared read. Pass `(run) => ownership.flight(owner, run)` to bind it to a `ReadOwner`. */
 export type StartFlight = <T>(run: (signal: AbortSignal) => Promise<T>) => Flight<T>;
-/**
- * A flight with no causal owner: leases only. The final release aborts the read's own signal.
- * ponytail: repeats the lease count of `read-ownership.ts`, whose flight needs a `ReadOwner`;
- * the publish caller passes `(run) => ownership.flight(owner, run)` once it holds one.
- */
-const unowned: StartFlight = (run) => {
-  const controller = new AbortController();
-  let consumers = 0,
-    done = false;
-  const result = Promise.resolve().then(() => run(controller.signal));
-  const finish = () => void (done = true);
-  result.then(finish, finish);
-  return {
-    result,
-    join() {
-      if (done || controller.signal.aborted) throw Error("Read flight is retiring");
-      consumers++;
-      let released = false;
-      return {
-        release() {
-          if (released) return;
-          released = true;
-          if (--consumers === 0 && !done) controller.abort();
-        },
-      };
-    },
-  };
-};
 /** One entry per (read,args), one generation per client subscription; no client acknowledgement. */
 export class Publications {
   private readonly slots = new Map<string, Slot>();
@@ -74,7 +45,7 @@ export class Publications {
   constructor(
     private readonly capacity = 128,
     private readonly byteLimit = 128 * 1024 * 1024,
-    private readonly open: StartFlight = unowned,
+    private readonly open: StartFlight = startFlight,
   ) {}
   observe(id: string, notify: (publication: Publication<unknown>) => void) {
     const listeners = this.listeners.get(id) ?? new Set<() => void>();

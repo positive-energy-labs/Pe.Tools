@@ -13,6 +13,7 @@
     "ts/apps/host/src/reads/publications.ts",
     "ts/apps/host/src/reads/read-ownership.ts",
     "ts/apps/host/src/reads/routes.ts",
+    "ts/apps/host/src/reads/work-timeline.ts",
     "ts/apps/host/src/work-inputs.ts",
     "ts/apps/host/src/work-receipt-feed.ts",
     "ts/apps/host/src/work-start.ts",
@@ -42,7 +43,8 @@
     "ts/packages/runtime/src/route-view-store.ts",
     "ts/packages/runtime/src/route-workspace.ts",
     "ts/packages/runtime/src/runtime-owner.ts",
-    "ts/packages/runtime/src/work-journal.ts"
+    "ts/packages/runtime/src/work-journal.ts",
+    "ts/packages/runtime/src/work-timeline.ts"
   ],
   "sites": {
     "routeNames": [

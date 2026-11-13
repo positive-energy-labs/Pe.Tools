@@ -46,9 +46,17 @@ function fixture(limits?: { maxCount: number; maxBytes: number }) {
     if (!result.ok) throw Error(refusalText(result));
     return result;
   };
+  /** Press the door as a client does: read the Timeline, send back the step it offers. */
+  const step = async (by: "human" | "pea", direction: "undo" | "redo") => {
+    const next = (await host.timeline([key], by, []))[direction];
+    return next
+      ? host.step([key], by, direction, next.ref, [])
+      : ({ ok: false, error: `Nothing to ${direction}` } as const);
+  };
   return {
     key,
     edit,
+    step,
     get host() {
       return host;
     },
@@ -89,7 +97,7 @@ test("web and Pea share the reducer; a two-write press restores as one step acro
   web.accept((await f.edit("human", "two-writes", 2)).write);
   expect(web.read().undo).toHaveLength(1);
   f.restart();
-  expect(await f.host.step(f.key, f.key.route, "pea", "undo", 2)).toMatchObject({
+  expect(await f.step("human", "undo")).toMatchObject({
     ok: true,
     revision: 4,
     doc: { a: 0 },
@@ -105,7 +113,7 @@ test("web and Pea share the reducer; a two-write press restores as one step acro
   expect(web.read().moves.map(({ kind }) => kind)).toEqual(["apply", "apply", "undo"]);
   stop();
   f.restart();
-  expect(await f.host.step(f.key, f.key.route, "human", "redo", 4)).toMatchObject({
+  expect(await f.step("human", "redo")).toMatchObject({
     ok: true,
     revision: 6,
     doc: { a: 2 },
@@ -152,7 +160,7 @@ test("restore identity is exact even when inverse patches repeat; missing identi
     expectedRevision: 3,
   });
   expect(unknown.ok).toBe(false);
-  const result = await f.host.step(f.key, f.key.route, "pea", "undo", 3);
+  const result = await f.step("human", "undo");
   expect(result).toMatchObject({
     ok: true,
     write: { restoreOf: 3, step: "human:three" },
@@ -166,7 +174,7 @@ test("a durable publish remains a barrier after restart even when values return"
   await f.host.publish(f.key, f.key.route, [{ path: ["a"], value: 2 }], 1);
   await f.host.publish(f.key, f.key.route, [{ path: ["a"], value: 1 }], 2);
   f.restart();
-  expect((await f.host.step(f.key, f.key.route, "pea", "undo", 3)).ok).toBe(false);
+  expect((await f.step("human", "undo")).ok).toBe(false);
   expect(await f.host.view(f.key, f.key.route)).toMatchObject({ revision: 3, doc: { a: 1 } });
 });
 
@@ -349,7 +357,7 @@ test.each([
     const view = await f.snapshot();
     expect(view).toMatchObject({ revision: 1, doc: { a: 1 } });
     expect(view?.history.acks.map((ack) => ack.press)).toEqual(["retained"]);
-    expect(await f.host.step(f.key, f.key.route, "human", "undo", 1)).toMatchObject({
+    expect(await f.step("human", "undo")).toMatchObject({
       ok: true,
       doc: { a: 0 },
     });
@@ -367,22 +375,20 @@ test("per-author undo per document: Pea's and a person's undo each revert only t
   });
   if (!pea.ok) throw Error(refusalText(pea));
   // The person's step is not last; their own undo still reaches it and leaves Pea's `b`.
-  expect(await f.host.step(f.key, f.key.route, "human", "undo", pea.revision, true)).toMatchObject({
+  expect(await f.step("human", "undo")).toMatchObject({
     ok: true,
     write: { step: "human:mine" },
     doc: { a: 0, b: 2 },
   });
   f.restart();
-  const after = (await f.host.view(f.key, f.key.route))!.revision;
-  expect(await f.host.step(f.key, f.key.route, "pea", "undo", after, true)).toMatchObject({
+  expect(await f.step("pea", "undo")).toMatchObject({
     ok: true,
     write: { step: "pea:yours" },
     doc: { a: 0, b: 0 },
   });
   // Nothing of the person's is left to undo; their redo brings back only their own edit.
-  const last = (await f.host.view(f.key, f.key.route))!.revision;
-  expect((await f.host.step(f.key, f.key.route, "human", "undo", last, true)).ok).toBe(false);
-  expect(await f.host.step(f.key, f.key.route, "human", "redo", last, true)).toMatchObject({
+  expect((await f.step("human", "undo")).ok).toBe(false);
+  expect(await f.step("human", "redo")).toMatchObject({
     ok: true,
     doc: { a: 1, b: 0 },
   });

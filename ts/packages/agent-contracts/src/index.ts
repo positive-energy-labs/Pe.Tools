@@ -71,3 +71,4 @@ export * from "./subject-ref.ts";
 export * from "./notice-feed.ts";
 
 export type { ParamSpec } from "./family-param-spec.ts";
+export * from "./places.ts";

@@ -1,4 +1,5 @@
 import { canonicalRouteInput, documentRefSchema } from "@pe/agent-contracts";
+import { subscribePlaces } from "../places.ts";
 import type { RouteWorkspace } from "@pe/runtime";
 import type { HostMarks } from "../document-marks.ts";
 import { workInput } from "./evaluator.ts";
@@ -10,6 +11,8 @@ export function readInvalidations(
   recorded: boolean,
   publications: Publications,
   subscribeFiles?: (changed: (name: string) => void) => () => void,
+  /** Action receipts: a landed Revit write moves the Timeline's barrier without a Work event. */
+  subscribeReceipts?: (changed: () => void) => () => void,
 ) {
   const revisions = new Map<string, number>();
   const revision = (name: string, args: unknown) =>
@@ -50,11 +53,20 @@ export function readInvalidations(
     }
   };
   const readRevision = (name: string, args: unknown) => {
-    if (name === "work" && !watchingWork) {
+    if ((name === "work" || name === "work-timeline") && !watchingWork) {
       watchingWork = true;
-      stopWork = workspace.subscribeUncaptured((event) =>
-        changed((name, args) => name === "work" && workMatches(args, event.route, event.scope)),
+      // ponytail: any Work write moves every Timeline input; match its Works if that proves noisy.
+      const stopWrites = workspace.subscribeUncaptured((event) =>
+        changed(
+          (name, args) =>
+            name === "work-timeline" || (name === "work" && workMatches(args, event.route, event.scope)),
+        ),
       );
+      const stopReceipts = recorded ? undefined : subscribeReceipts?.(() => changed((name) => name === "work-timeline"));
+      stopWork = () => {
+        stopWrites();
+        stopReceipts?.();
+      };
     }
     if (name === "document-mark" && !recorded && !watchingMarks) {
       watchingMarks = true;
@@ -76,10 +88,12 @@ export function readInvalidations(
   const stopFiles = recorded
     ? undefined
     : subscribeFiles?.((name) => changed((input) => input === `file:${name}`));
+  const stopPlaces = recorded ? undefined : subscribePlaces(() => changed((name) => name === "places"));
   return {
     revision: readRevision,
     close: () => {
       stopFiles?.();
+      stopPlaces?.();
       stopWork();
       stopMarks();
     },
