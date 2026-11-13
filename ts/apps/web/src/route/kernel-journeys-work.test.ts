@@ -1129,3 +1129,63 @@ test("D17 a pick made while the page's own edit is unacknowledged sticks", async
     expect(j.m.owner()!.doc.writeIntent.edit.value).toEqual({ walk: { unitId: 1, portIndex: 0 } });
   } finally { await j.close(); }
 });
+
+// D17 safety, the fence the retry must not relax. Both tests hold the first press's acknowledgement
+// at the door (the host has applied it), so the pick is refused stale and waits on that press.
+const d17Race = async (j: Awaited<ReturnType<typeof journey>>) => {
+  const cells = j.cells(), revision = j.m.owner()!.handle!.revision;
+  const held = j.holdWrite();
+  // Both presses leave in one tick, before the stream can show this mount the first one's revision.
+  const edit = cells.at(["flows", terminalA]).stage({ cfm: 240 }, { label: "Terminal A airflow" });
+  const pick = cells.at(["writeIntent"]).stage({ walk: { unitId: 1, portIndex: 0 } }, { label: "Write scope" });
+  await held.entered.promise;
+  await vi.waitFor(() => expect(picks(j)).toHaveLength(1));
+  await vi.waitFor(async () => expect((await hostWork(j)).revision).toBe(revision + 1));
+  // Another writer lands on the revision the first press produced, not this mount's press.
+  expect(await j.write(j.key(), { kind: "apply", expectedRevision: revision + 1, press: crypto.randomUUID(),
+    label: "Another designer changes airflow", patches: [{ path: ["flows", terminalB], value: { edit: { value: { cfm: 300 } } } }] }))
+    .toMatchObject({ ok: true });
+  return { revision, held, edit, pick };
+};
+const picks = (j: Awaited<ReturnType<typeof journey>>) =>
+  j.writes.filter(w => w.kind === "apply" && w.patches.some(p => p.path[0] === "writeIntent"));
+const hostWork = async (j: Awaited<ReturnType<typeof journey>>) => (await j.host.workspace.read(j.key(), "fans"))!;
+
+test("D17 another writer moves the Work between the two presses: the pick stays refused and is not retried", async () => {
+  const j = await journey();
+  let held: ReturnType<typeof gate> | undefined;
+  try {
+    await j.start();
+    const race = await d17Race(j); held = race.held;
+    // This mount has seen the other writer's revision before the first press is acknowledged.
+    await vi.waitFor(() => expect(j.m.owner()!.handle!.revision).toBe(race.revision + 2));
+    held.release.resolve();
+    expect(await race.edit).toBeNull();
+    expect(await race.pick).toMatchObject({ code: "refused", message: `the document moved to r${race.revision + 1}` });
+    await j.ready();
+    expect(picks(j).map(w => w.expectedRevision), "the pick was sent once and never retried").toEqual([race.revision]);
+    const work = await hostWork(j);
+    expect(work.revision, "nothing landed after the other writer").toBe(race.revision + 2);
+    expect(work.doc).not.toHaveProperty("writeIntent.edit");
+    expect(j.m.owner()!.doc).not.toHaveProperty("writeIntent.edit");
+  } finally { held?.release.resolve(); await j.close(); }
+}, 60_000);
+
+test("D17 the retry fires at most once: a second stale refusal after it stays refused", async () => {
+  const j = await journey();
+  let held: ReturnType<typeof gate> | undefined;
+  try {
+    await j.start();
+    // The stream is held, so this mount learns the first press's revision from its acknowledgement
+    // alone and never sees the other writer: the retry leaves on a revision the host has passed.
+    j.holdStream();
+    const race = await d17Race(j); held = race.held;
+    held.release.resolve();
+    expect(await race.edit).toBeNull();
+    expect(await race.pick).toMatchObject({ code: "refused", message: `the document moved to r${race.revision + 2}` });
+    expect(picks(j).map(w => w.expectedRevision), "one send and one retry, then nothing").toEqual([race.revision, race.revision + 1]);
+    const work = await hostWork(j);
+    expect(work.revision).toBe(race.revision + 2);
+    expect(work.doc).not.toHaveProperty("writeIntent.edit");
+  } finally { held?.release.resolve(); j.flushStream(); await j.close(); }
+}, 60_000);
