@@ -1,4 +1,5 @@
 import { targetHomes } from "./call-route.ts";
+import { readPlaces, writePlaces } from "./places.ts";
 import { workKeySchema as mountedWorkKeySchema } from "@pe/agent-contracts";
 import type { DocumentRef, Receipt } from "@pe/agent-contracts";
 import { held, heldSendRequestSchema } from "@pe/agent-contracts";
@@ -388,7 +389,8 @@ export function createPeRoutes(options: PeRoutesOptions) {
       // Undo is per author on every Work (ADR 0042); the URL's Work is checked like any write and
       // the step is chosen across `works`, to which the host adds the document's findings Work.
       run: (_scope: WorkKey, _route: string, by: "pea" | "human", body: unknown, caller: Caller) =>
-        hostTimeline(work, options.journal ?? telemetryOf(options).journal).step(
+        hostTimeline(work, options.journal ?? telemetryOf(options).journal, async () =>
+          z.array(documentRefSchema.extend({ address: addressSchema.nullable(), projectHome: z.string().nullable().optional() })).parse(await options.navigation?.documents() ?? [])).step(
           body as z.infer<typeof historyBody>,
           caller,
           by,
@@ -438,6 +440,8 @@ export function createPeRoutes(options: PeRoutesOptions) {
       if (!read) return json({ error: "Host read graph is unavailable" }, 503);
       return json(await read(await request.json()));
     }
+    if (declared.id === "places.get") return json(readPlaces());
+    if (declared.id === "places.put") return json(writePlaces(await request.json()));
     if (declared.id === "ducts.analysis" || declared.id === "ducts.analysis-artifact") {
       if (!options.ductsAnalysis) return json({ error: "Ducts analysis is unavailable" }, 503);
       try {
@@ -1329,6 +1333,7 @@ function* hostPeRoutes(
               session: session.sessionId!,
               openId: document.openId,
               address: document.address ?? null,
+              projectHome: document.projectHome ?? null,
             }))
           : [],
       );

@@ -29,7 +29,8 @@ public sealed record ScopeRestore(string DocumentKey, string UniqueId, long View
 ///     tested without Revit. <see cref="Own" /> holds the names of the set and undo transactions of the scope's
 ///     temporaries: expected commits, not writes.
 /// </summary>
-public sealed record ScopeFacts(bool Used, bool Posted, IReadOnlyCollection<string> Own, IReadOnlyList<ScopeRestore> Restores) {
+public sealed record ScopeFacts(bool Used, bool Posted, IReadOnlyCollection<string> Own, IReadOnlyList<ScopeRestore> Restores,
+    bool Undiscarded = false) {
     public static readonly ScopeFacts None = new(false, false, [], []);
 }
 
@@ -46,7 +47,12 @@ public abstract class OperationScope(Document? document) {
     public List<ScopeRestore> Restores { get; } = [];
     /// <summary>The handler posted a ribbon command: Revit runs it after the call returns, where nothing here can see it.</summary>
     public bool Posted { get; protected set; }
-    public ScopeFacts Facts() => new(this.Used, this.Posted, this.Own.ToList(), this.Restores.ToList());
+    /// <summary>A rollback that did not roll back, or a disposable document still open when the handler returned.</summary>
+    protected bool RollbackFailed { get; set; }
+    protected List<Document> Disposables { get; } = [];
+    protected bool IsOpDocument(Document other) => document is not null && document.Equals(other);
+    public ScopeFacts Facts() => new(this.Used, this.Posted, this.Own.ToList(), this.Restores.ToList(),
+        this.RollbackFailed || this.Disposables.Any(owned => owned.IsValidObject));
     /// <summary>
     ///     True while the scope is discarding what is committed in <paramref name="changed" />. Read by the change
     ///     monitor on the API thread. Compared with Document.Equals: Revit hands each event its own wrapper, so
@@ -78,15 +84,21 @@ public sealed class TransactRead(Document? document) : OperationScope(document) 
         using var group = new TransactionGroup(this.Document, DocumentSandbox.TransactionNamePrefix + name);
         if (group.Start() != TransactionStatus.Started)
             throw new InvalidOperationException($"'{name}' rollback group could not start.");
-        try { return work(); } finally { _ = group.RollBack(); }
+        try { return work(); } finally { this.RollbackFailed |= group.RollBack() != TransactionStatus.RolledBack; }
     });
 
     /// <summary>
     ///     <paramref name="work" /> may commit only in <paramref name="owned" />, a document the handler opened and
-    ///     discards. No transaction is opened here: LoadFamily and EditFamily refuse one.
+    ///     discards. No transaction is opened here: LoadFamily and EditFamily refuse one. The op's own document is
+    ///     never disposable, and the runner reads <paramref name="owned" /> back after the handler returns: if it is
+    ///     still open, what was committed in it was not discarded.
     /// </summary>
-    public T InDisposable<T>(Document owned, string name, Func<T> work) =>
-        this.Discarding(owned ?? throw new ArgumentNullException(nameof(owned)), work);
+    public T InDisposable<T>(Document owned, string name, Func<T> work) {
+        if (owned is null) throw new ArgumentNullException(nameof(owned));
+        if (this.IsOpDocument(owned)) throw new ArgumentException($"'{name}' cannot discard the operation's own document.", nameof(owned));
+        this.Disposables.Add(owned);
+        return this.Discarding(owned, work);
+    }
 }
 
 public sealed class SessionWrite(Document? document) : OperationScope(document) {

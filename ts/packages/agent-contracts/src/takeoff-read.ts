@@ -39,6 +39,7 @@ export const adoptionData = z.object({
   ),
   initialize: z.object({
     request: commands["takeoffs.initialize"].authoredInput,
+    missingCarrierGuids: z.array(z.string()),
     refusal: z.string().nullable(),
   }),
   adopt: z.object({

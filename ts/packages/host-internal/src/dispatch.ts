@@ -448,6 +448,7 @@ export const makeDispatcher = (ports: DispatchPorts) =>
               new BridgeError(
                 `Revit process ${session.processId} exited before answering '${operationKey}'; its outcome is unknown.`,
                 503,
+                { uncertainty: "process-exit" },
               ),
             );
           }
@@ -465,6 +466,7 @@ export const makeDispatcher = (ports: DispatchPorts) =>
               new BridgeError(
                 `Revit process ${session.processId} was replaced by a new incarnation before answering '${operationKey}'; its outcome is unknown.`,
                 503,
+                { uncertainty: "process-exit" },
               ),
             ),
           ),
@@ -635,6 +637,7 @@ export const makeDispatcher = (ports: DispatchPorts) =>
             new BridgeError(
               `Sending '${operationKey}' to Revit failed; it may have been delivered, so its outcome is unknown.`,
               503,
+              { uncertainty: "lost-response" },
             ),
           );
         }
@@ -645,6 +648,7 @@ export const makeDispatcher = (ports: DispatchPorts) =>
             catch: () =>
               new BridgeError("Dispatched; the journal did not record it", 503, {
                 dispatched: true,
+                uncertainty: "lost-response",
               }),
           });
         // The slot is released by Revit's answer to THIS request (from any socket of the
@@ -1177,6 +1181,7 @@ export const makeDispatcher = (ports: DispatchPorts) =>
                       ? new BridgeError(
                           "The host bridge stopped while Revit ran this request; its outcome is unknown here.",
                           503,
+                          { uncertainty: "lost-response" },
                         )
                       : new BridgeError(
                           "The host bridge stopped before this request reached Revit.",

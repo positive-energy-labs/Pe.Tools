@@ -23,6 +23,7 @@ export const outputRenderers: Record<string, ComponentType<OpViewProps>> = {
   "revit.catalog.project-index": ProjectIndexView,
   "revit.context.summary": ContextSummaryView,
   "revit.context.view-image": ViewImageView,
+  "revit.context.view-image.focus": ViewImageView,
   "revit.resolve.references": ResolveReferencesView,
   "revit.detail.schedules": SchedulesView,
   "revit.detail.sheets": SheetsView,

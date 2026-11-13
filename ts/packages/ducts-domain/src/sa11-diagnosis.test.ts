@@ -222,6 +222,7 @@ const hostParse = (raw: DuctSnapshot) =>
       catalogFindings: true,
       criteria: true,
       firm: true,
+      settings: true,
     })
     .parse(wire(pricingResult(raw, {}, {}, null)));
 const rowOf = (raw: DuctSnapshot) =>

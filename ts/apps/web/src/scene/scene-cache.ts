@@ -1,6 +1,6 @@
 /**
  * Decoded PSC1 scenes resident in the browser, shared by every route that draws one (space, ducts).
- * A scene is content-addressed by its artifact id; the stamp's epochs invalidate older captures.
+ * A scene is content-addressed by its artifact id; observed revisions invalidate older captures.
  */
 import type { Psc1Metadata } from "./psc1";
 import {
@@ -97,22 +97,24 @@ export class SceneCache<T extends SceneData = SceneData> {
     const bytes = sceneAdmissionBytes(data);
     if (bytes > this.maxBytes)
       throw Error("Scene exceeds the resident geometry budget. Narrow the scope.");
-    const stamp = data.metadata.stamp;
-    // FOOTGUN: scoped captures have different builtUtc at the same epoch. Invalidate by revision.
+    const evidence = data.metadata.evidence;
+    // Scoped captures have different observation times at the same revision.
     for (const [key, { scene: entry }] of this.#entries) {
-      const previous = entry.metadata.stamp;
-      const sourceChanged = previous.sources.some((before) =>
-        stamp.sources.some(
+      const previous = entry.metadata.evidence;
+      const sourceChanged = previous.sources.length !== evidence.sources.length || previous.sources.some((before) =>
+        !evidence.sources.some(
           (after) =>
-            before.documentKey === after.documentKey &&
-            before.linkInstanceId === after.linkInstanceId &&
-            (before.builtAtEpoch !== after.builtAtEpoch || before.dirty !== after.dirty),
+            before.placement.hostDocumentKey === after.placement.hostDocumentKey &&
+            before.placement.linkUniqueId === after.placement.linkUniqueId &&
+            before.documentKey === after.documentKey && JSON.stringify(before.revision) === JSON.stringify(after.revision) &&
+              before.availability === after.availability &&
+              JSON.stringify(before.toHost) === JSON.stringify(after.toHost),
         ),
       );
       // New document epochs and rebuilt source partitions invalidate every old scope of that document.
       if (
-        previous.hostDocumentKey === stamp.hostDocumentKey &&
-        (previous.epoch !== stamp.epoch || sourceChanged)
+        previous.documentKey === evidence.documentKey &&
+        (previous.revision !== evidence.revision || sourceChanged)
       )
         this.delete(key);
     }

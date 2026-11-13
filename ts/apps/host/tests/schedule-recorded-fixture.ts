@@ -2,7 +2,7 @@ import { stateFixture } from "../../../tests/isolated-home/storage.ts";
 import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { testDocumentMarks, captureStore } from "./effect-test.ts";
 import { graphRoute } from "../src/reads/routes.ts";
-import { Publications } from "../src/reads/evaluator.ts";
+import { Publications } from "../src/reads/publications.ts";
 import { inputPort } from "../src/reads/inputs.ts";
 import { hostMarks } from "../src/document-marks.ts";
 import { createPeClient, httpRoutes, servePeRoute } from "@pe/agent-contracts/pe-api";

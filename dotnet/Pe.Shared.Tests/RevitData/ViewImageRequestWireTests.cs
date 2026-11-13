@@ -31,13 +31,29 @@ public sealed class ViewImageRequestWireTests {
         var sha = new string('a', 64);
         var handle = new RevitAgentContextHandle(RevitAgentContextHandleKind.View, "doc", 1, "u", "L1");
         var registered = new RevitViewImageData(handle, "C:/t/view.png", 3, 10, 10,
+            new Lens(LensBasis.UserView, 1), [],
             Registration: new RevitViewImageRegistration(10, 10, sha, [0, 1], [1, 1], [0, 0]));
         var refused = new RevitViewImageData(handle, "C:/t/sheet.png", 3, 10, 10,
+            new Lens(LensBasis.UserView, 1), [],
             RegistrationRefusal: RevitViewImageRegistrationRefusal.NoCrop);
         Assert.Multiple(() => {
             Assert.That(JsonConvert.SerializeObject(registered, BridgeSettings),
                 Does.Contain($"\"imageUrl\":\"/captures/{sha}.png\""));
             Assert.That(JsonConvert.SerializeObject(refused, BridgeSettings), Does.Not.Contain("imageUrl"));
+        });
+    }
+
+    [Test]
+    public void Seeing_disclosure_keeps_zero_counts_and_first_enum_values_on_the_wire() {
+        var handle = new RevitAgentContextHandle(RevitAgentContextHandleKind.View, "doc", 1, "u", "L1");
+        var image = new RevitViewImageData(handle, "C:/t/view.png", 3, 10, 10,
+            new Lens(LensBasis.UserView, 1), [new Hidden(HiddenKind.Links, 0, HiddenWhy.PeDefault)]);
+        var json = Newtonsoft.Json.Linq.JObject.Parse(JsonConvert.SerializeObject(image, BridgeSettings));
+        Assert.Multiple(() => {
+            Assert.That((string?)json["lens"]?["basis"], Is.EqualTo("UserView"));
+            Assert.That((string?)json["hidden"]?[0]?["what"], Is.EqualTo("Links"));
+            Assert.That((int?)json["hidden"]?[0]?["count"], Is.EqualTo(0));
+            Assert.That((string?)json["hidden"]?[0]?["why"], Is.EqualTo("PeDefault"));
         });
     }
 }

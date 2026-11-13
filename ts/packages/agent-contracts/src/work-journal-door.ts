@@ -135,7 +135,8 @@ export type AcceptedResult =
   | { readonly kind: "accepted"; readonly ack: WorkWriteAck; readonly receiptId: string }
   | {
       readonly kind: "accepted-native";
-      readonly receiptId: string;
+      /** Direct read transports have no durable action receipt. */
+      readonly receiptId?: string;
       readonly outcome: "committed";
       /** Authoritative catalog output, decoded by the mount before lands. Only committed
        * outcomes may land; absent output is decoded as undefined, never a guessed result. */

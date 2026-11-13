@@ -38,7 +38,8 @@ public static class HostProtocol {
     // 54: FamilyParameterSnapshot gains DisplayUnit (the project's unit for the parameter's spec) and
     //     FamilyCaptureData gains ParameterUnits (the open family document's own units, by parameter)
     // 55: revit.context.view-image imageUrl names /captures/<imageSha256>.png; /view-image is gone
-    public const int ContractVersion = 55;
+    // 56: seeing answers disclose lens and counted hidden categories; show-elements target ids are hiddenElementIds.
+    public const int ContractVersion = 56;
 }
 
 [JsonConverter(typeof(StringEnumConverter))]

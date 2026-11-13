@@ -1,7 +1,9 @@
 import { canonicalRouteInput, documentRefSchema } from "@pe/agent-contracts";
+import { subscribePlaces } from "../places.ts";
 import type { RouteWorkspace } from "@pe/runtime";
 import type { HostMarks } from "../document-marks.ts";
-import { workInput, type Publications } from "./evaluator.ts";
+import { workInput } from "./evaluator.ts";
+import type { Publications } from "./publications.ts";
 
 export function readInvalidations(
   workspace: RouteWorkspace,
@@ -85,11 +87,13 @@ export function readInvalidations(
   };
   const stopFiles = recorded
     ? undefined
-    : subscribeFiles?.((name) => changed((input) => input === `file:${name}`));
+    : subscribeFiles?.((name) => changed((input) => input === `file:${name}` || (name === "settings" && input === "work-timeline")));
+  const stopPlaces = recorded ? undefined : subscribePlaces(() => changed((name) => name === "places"));
   return {
     revision: readRevision,
     close: () => {
       stopFiles?.();
+      stopPlaces?.();
       stopWork();
       stopMarks();
     },

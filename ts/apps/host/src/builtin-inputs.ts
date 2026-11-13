@@ -28,7 +28,8 @@ import {
 } from "./input-occurrence.ts";
 import type { TakingObserver } from "./native-recording.ts";
 import { inputPort, type ReadSources } from "./reads/inputs.ts";
-import { Publications, fingerprint } from "./reads/evaluator.ts";
+import { fingerprint } from "./reads/evaluator.ts";
+import { Publications } from "./reads/publications.ts";
 import { History, localHistory } from "./reads/history.ts";
 import { historyRoutes } from "./reads/history-routes.ts";
 import { historyPoseSchema, addressSchema, sameAddress } from "@pe/agent-contracts";
@@ -212,7 +213,7 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
             row.state === "succeeded" &&
             row.target.kind === "document" &&
             row.steps.some(
-              (s) => s.state === "succeeded" && (s.kind !== "native" || !s.touched ||
+              (s) => s.state === "succeeded" && (s.kind !== "native" || s.transport !== "bridge" || !s.touched ||
                 ["wrote", "unauthorized", "unknown", "restoreFailed"].includes(s.touched.kind)),
             )
           )
@@ -228,7 +229,6 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
   }
   // The Timeline reads receipts from the action journal; a lane built before the journal opens has no Timeline.
   const timelineJournal = Option.getOrUndefined(yield* Effect.serviceOption(ActionJournalService));
-  const timeline = timelineJournal && !recorded ? hostTimeline(workspace, timelineJournal) : undefined;
   let settingWatches: ReturnType<typeof watchSettingTiers> | undefined;
   const invalidations = readInvalidations(
     workspace,
@@ -368,6 +368,12 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
     const admitted = Context.add(provided, RequestIdentity, identity);
     const invoke = <A, E>(effect: Effect.Effect<A, E, RequestIdentityKey | HostNativeRead>) =>
       runPods({}, Effect.provide(effect, admitted));
+    const timeline = timelineJournal && !recorded ? hostTimeline(workspace, timelineJournal, async () => {
+      const result = await invoke(Context.get(services, HostSessionInventory).list());
+      return result.sessions.flatMap(session => session.connected
+        ? (session.openDocuments ?? []).map(document => ({ session: session.sessionId, openId: document.openId, address: addressSchema.nullable().parse(document.address ?? null), projectHome: document.projectHome }))
+        : []);
+    }) : undefined;
     const url = new URL(web.url),
       declared = matchPeRoute(web.method, url.pathname)!;
     if (declared.id === "resources.subscriptions") return { resourceOwner: connectionOwner };

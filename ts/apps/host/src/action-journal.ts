@@ -111,7 +111,7 @@ const undispatched = (steps: readonly ActionStep[]) =>
 const effected = (step: ActionStep) =>
   step.kind !== "publication" &&
   (step.kind === "native"
-    ? (!step.touched || ["wrote", "unauthorized", "unknown", "restoreFailed"].includes(step.touched.kind)) &&
+    ? (step.transport !== "bridge" || !step.touched || ["wrote", "unauthorized", "unknown", "restoreFailed"].includes(step.touched.kind)) &&
       !("notDispatched" in step && step.notDispatched)
     : step.state === "succeeded");
 const holdsClaims = (row: ActionReceipt) =>
@@ -711,7 +711,7 @@ export class ActionJournal implements ReceiptReader {
     }
     return this.dispatchRefusal(requestId);
   }
-  async markDispatched(requestId: string) {
+  async markDispatched(requestId: string, transport: "bridge" | "sdk") {
     await this.serial(async () => {
       const action = this.stepAction.get(requestId),
         row = action ? this.rows.get(action) : undefined;
@@ -720,7 +720,7 @@ export class ActionJournal implements ReceiptReader {
         {
           ...row,
           steps: row.steps.map((step) =>
-            step.id === requestId ? { ...step, dispatchedAt: new Date(this.now()).toISOString() } : step,
+            step.id === requestId ? { ...step, transport, dispatchedAt: new Date(this.now()).toISOString() } : step,
           ),
         },
       ]);
@@ -1675,18 +1675,28 @@ export class ActionJournal implements ReceiptReader {
                   bindActionDispatch(step.id, {
                     refusal: () => journal.dispatchRefusal(step.id),
                     validate: () => journal.validateDispatch(step.id),
-                    dispatched: () => journal.markDispatched(step.id),
+                    dispatched: (transport) => journal.markDispatched(step.id, transport),
                     terminal: async (touched, evidenceJson) => {
                       const parsed = touchedSchema.safeParse(touched);
                       let nativeEvidence: import("@pe/agent-contracts").Observed | undefined;
                       try { nativeEvidence = observedSchema.safeParse(JSON.parse(evidenceJson ?? "null")).data; }
                       catch { /* Malformed evidence cannot establish an observation. */ }
-                      await save((current) => ({ ...current, steps: current.steps.map((held) =>
-                        held.id === step.id ? { ...held,
-                          touched: parsed.success ? parsed.data : { kind: "unknown", reason: "lost-response" },
+                      await save((current) => ({ ...current, steps: current.steps.map((held) => {
+                        if (held.id !== step.id || (!parsed.success && held.transport === "bridge" && held.bridgeReply === "touched")) return held;
+                        const base = held.transport === "bridge" ? { ...held } : held;
+                        if (base.transport === "bridge") delete base.touched;
+                        return { ...base,
+                          transport: "bridge",
+                          bridgeReply: parsed.success ? "touched" : touched == null ? "missing-touched" : "invalid-touched",
+                          ...(parsed.success ? { touched: parsed.data } : {}),
                           ...(nativeEvidence ? { nativeEvidence } : {}),
-                        } : held) }));
+                        };
+                      }) }));
                     },
+                    uncertain: async (reason) => save((current) => ({ ...current, steps: current.steps.map((held) =>
+                      held.id !== step.id || (held.transport === "bridge" && held.bridgeReply === "touched") ? held
+                        : { ...held, transport: "bridge", touched: { kind: "unknown", reason } },
+                    ) })),
                   }),
                 );
               return { step };
@@ -1979,8 +1989,8 @@ export class ActionJournal implements ReceiptReader {
             throw Error("Recovery cannot change a step's immutable intent or process");
           // Recovery supplies a new outcome. Obsolete fields from the previous state are not
           // part of that outcome; the journal retains immutable intent and dispatch evidence.
-          const variant = actionStepSchema.options.find(
-            (schema) => schema.shape.state.value === update.step.state,
+          const variant = [...actionStepSchema.options[0].options, ...actionStepSchema.options[1].options].find(
+            (schema) => schema.shape.state.value === update.step.state && schema.shape.transport.safeParse(update.step.transport).success,
           )!;
           update.step = actionStepSchema.parse({
             ...variant.strip().parse(update.step),
@@ -2196,13 +2206,6 @@ export class ActionJournal implements ReceiptReader {
 
   /** Append the revisions these rows and facts make, and any freshly minted mappings. */
   private async commit(rows: readonly ActionReceipt[] = [], facts: readonly Receipt[] = []) {
-    // Missing native testimony is unknown, even on success or host interruption.
-    rows = rows.map((row) => ({ ...row, steps: row.steps.map((step) =>
-      step.kind !== "native" || step.state === "running" || step.touched ? step : {
-        ...step, touched: "notDispatched" in step && step.notDispatched
-          ? { kind: "none" as const }
-          : { kind: "unknown" as const, reason: "lost-response" as const },
-      }) }));
     // File checkpoints in the same append as the confirmed receipt, including recovery.
     rows = rows.map((row) => {
       if (row.state !== "succeeded" || !row.steps.some((step) => step.state === "succeeded"))

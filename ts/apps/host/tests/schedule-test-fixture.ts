@@ -3,7 +3,7 @@ import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { ownedSession } from "./callers.ts";
 import { testDocumentMarks, journalAt, callRouteOver } from "./effect-test.ts";
 import { graphRoute } from "../src/reads/routes.ts";
-import { Publications } from "../src/reads/evaluator.ts";
+import { Publications } from "../src/reads/publications.ts";
 import { inputPort } from "../src/reads/inputs.ts";
 import { DuctFiles } from "../src/ducts-files.ts";
 import { HostDocumentMarks, hostMarks } from "../src/document-marks.ts";
@@ -180,7 +180,7 @@ export async function setup(options: { cold?: boolean } = {}) {
     invoke: (key: string, input: unknown, session?: string, openId?: string | null, id?: string) =>
       Effect.tryPromise({
         try: async () => {
-          if (id) await markDispatched(id);
+          if (id) await markDispatched(id, "bridge");
           sent.push({ key, input, session: session!, openId: openId!, id });
           if (key === "revit.catalog.schedules") {
             onCatalog();
