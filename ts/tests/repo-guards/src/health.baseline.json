@@ -294,8 +294,11 @@
     "ts/packages/host-contracts/scripts/sdk-wire.ts": 1,
     "ts/packages/host-contracts/src/route-startup.ts": 4,
     "ts/packages/host-contracts/src/store.ts": 11,
-    "ts/packages/host-contracts/src/vendor/pe-service-host.ts": 2,
-    "ts/packages/host-contracts/src/vendor/pe-service.ts": 11,
+    "ts/packages/mcps/src/pea/skill-publication.ts": 4,
+    "ts/packages/mcps/src/shared/autodesk-docs/tbc.ts": 2,
+    "ts/packages/mcps/src/shared/read-document.ts": 2,
+    "ts/packages/mcps/src/shared/rvt-api/local-docs.ts": 2,
+    "ts/packages/mcps/src/shared/spill.ts": 3,
     "ts/packages/runtime/src/analytics.ts": 2,
     "ts/packages/runtime/src/invocation-context.ts": 1
   }

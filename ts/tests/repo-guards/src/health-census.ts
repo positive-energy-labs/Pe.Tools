@@ -81,7 +81,9 @@ export const storeScopeSources = (): Record<string, string> =>
       .map((file) => [file, readFileSync(join(repoRoot, file), "utf8")]),
   );
 
-const FS_SCOPE = /^ts\/(apps\/host|packages\/(host-contracts|host-internal|runtime))\//;
+// ST5 scope (storage.md): the host and the packages that store for it. The vendored service is not ours
+// to convert; the browser package writes no product state.
+const FS_SCOPE = /^ts\/(apps\/host|packages\/(host-contracts|host-internal|runtime))\/(?!src\/vendor\/)|^ts\/packages\/mcps\/src\//;
 const FS_MODULES = new Set(["fs", "node:fs", "fs/promises", "node:fs/promises"]);
 const NODE_MUTATORS = new Set(
   ["writeFile", "appendFile", "rename", "rm", "rmdir", "unlink", "mkdir", "mkdtemp", "copyFile", "cp", "symlink", "link", "truncate", "chmod", "utimes"]
