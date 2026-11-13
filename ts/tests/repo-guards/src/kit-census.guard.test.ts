@@ -332,6 +332,8 @@ const RULES: Rule[] = [
       "workbench/world/lane.tsx": "Reader explicitly expands a tool-result payload.",
       "route/help.tsx": "Tutorial body explains the route.",
       "route/situation-marks.tsx": "Reader opens state details.",
+      // Moved out of the excluded chat/ folder (k2 chat-route) so machine/notice.tsx can import it; same 3 uses.
+      "workbench/question-form.tsx": "The question card asks the person a question the harness waits on.",
     }), max: {
       [W + "duct-loss/route.tsx"]: 7,
       [W + "duct-loss/duct/charts.tsx"]: 1,
@@ -342,6 +344,7 @@ const RULES: Rule[] = [
       [W + "workbench/world/lane.tsx"]: 1,
       [W + "route/help.tsx"]: 1,
       [W + "route/situation-marks.tsx"]: 1,
+      [W + "workbench/question-form.tsx"]: 3,
     }, cannotSee: "Unclassed prose and whether a sentence belongs in Tutorial." },
   { id: "nav-list-kit", doctrine: "N3", pattern: /<ul\b|<li\b|role=["']list["']/g,
     roots: [W + "**/*.tsx"], allow: allow({

@@ -235,13 +235,13 @@ function ThreadActionsMenu({
                 reading: true,
                 run: () => apply(snooze, () => ({ snoozedUntil: preset.at.toISOString() })),
               })),
-              { id: "snooze:custom", label: "Customâ€¦", run: () => setForm("snooze") },
+              { id: "snooze:custom", label: "Custom…", run: () => setForm("snooze") },
             ],
           },
       lifecycleAction("unread", unreadIcon, " "),
       {
         id: "rename",
-        label: "Renameâ€¦",
+        label: "Rename…",
         icon: Pencil,
         group: " ",
         refusal: oneThreadRefusal("Rename", count),
@@ -355,7 +355,7 @@ function ThreadActionsMenu({
       lifecycleAction("archive", archiveIcon, "   "),
       {
         id: "delete",
-        label: "Delete permanentlyâ€¦",
+        label: "Delete permanently…",
         icon: Trash2,
         group: "   ",
         refusal: oneThreadRefusal("Delete", count) ?? (busy ? "finish the work first" : undefined),
@@ -434,7 +434,7 @@ function ThreadActionsMenu({
             {form === "rename"
               ? "Rename thread"
               : form === "snooze"
-                ? "Snooze untilâ€¦"
+                ? "Snooze until…"
                 : "Delete this thread permanently?"}
           </DialogTitle>
           <p>{count > 1 ? `${count} threads` : thread.title}</p>
@@ -539,7 +539,7 @@ const rowHint = (thread: RosterThread, work: ThreadWork | undefined) =>
     STAMP.format(new Date(thread.updatedAt)),
   ]
     .filter(Boolean)
-    .join(" Â· ");
+    .join(" · ");
 
 /**
  * A row's menu re-renders only when its data changes. The closures the sidebar mints per render
@@ -881,7 +881,7 @@ export function ThreadsSidebar({
             </Button>
           </span>
         ),
-      title: [rowHint(thread, work), unresumed.get(thread.id)].filter(Boolean).join(" Â· "),
+      title: [rowHint(thread, work), unresumed.get(thread.id)].filter(Boolean).join(" · "),
       onDoubleClick: () => setMenuId(thread.id),
       onContextMenu: (event) => {
         event.preventDefault();
@@ -946,7 +946,7 @@ export function ThreadsSidebar({
           aria-label="threads"
           empty={
             reading
-              ? { message: "reading threadsâ€¦", exit: "" }
+              ? { message: "reading threads…", exit: "" }
               : { message: "No threads yet", exit: "Start a new thread beside search" }
           }
           row={rowParts}

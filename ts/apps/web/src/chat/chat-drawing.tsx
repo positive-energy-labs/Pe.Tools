@@ -110,7 +110,7 @@ export function ThreadsDrawing({ ctx: handle }: { ctx: ChatHandle }) {
         </PrimaryRouteControls>
       )}
       <PaneActions pane="threads">
-        <small className="t-small text-ink-mute">{rosterRead ? threads.length : "â€¦"}</small>
+        <small className="t-small text-ink-mute">{rosterRead ? threads.length : "…"}</small>
         <Button kind="quiet" label="New thread" onClick={() => void newThread()}>
           new
         </Button>
@@ -267,7 +267,7 @@ function ChatSurface({ target, handle }: ChatShellProps & { handle: ChatHandle }
             aria-busy={switching}
             className="min-h-0 min-w-0"
           >
-            <Work pending={switching} label="opening threadâ€¦" />
+            <Work pending={switching} label="opening thread…" />
             <PaneErrorBoundary key={shown.thread} what="thread" onRetry={retryBody}>
               <Suspense fallback={<PaneLoading what="thread" />}>
                 {missingThread ? (

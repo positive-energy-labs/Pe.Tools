@@ -48,7 +48,7 @@ export function mentionFace(
       title: row.title,
       fact: folders || null,
       mono: false,
-      detail: [row.description, address, doc.session].filter(Boolean).join(" Â· "),
+      detail: [row.description, address, doc.session].filter(Boolean).join(" · "),
     };
   }
   if (row.kind === "recent") {
@@ -58,17 +58,17 @@ export function mentionFace(
       title: row.title,
       // A cloud model says its project; a local file its last two folders.
       fact: recent?.isCloud
-        ? ["cloud", words.at(-2)].filter(Boolean).join(" Â· ")
+        ? ["cloud", words.at(-2)].filter(Boolean).join(" · ")
         : words.slice(0, -1).slice(-2).join("\\") || null,
       mono: false,
-      detail: [row.description, recent?.path].filter(Boolean).join(" Â· "),
+      detail: [row.description, recent?.path].filter(Boolean).join(" · "),
     };
   }
   if (row.kind !== "op")
     return { title: row.title, fact: null, mono: false, detail: row.description };
-  // `op:parameter-links.read` â†’ `parameter-links.read`: the group head already says "op".
+  // `op:parameter-links.read` → `parameter-links.read`: the group head already says "op".
   const name = row.key.slice(row.key.indexOf(":") + 1);
-  const clause = row.description.split(/[.,;:(]|\s(?:and|or|â€”|-)\s/)[0]!.trim();
+  const clause = row.description.split(/[.,;:(]|\s(?:and|or|—|-)\s/)[0]!.trim();
   return {
     title: row.title === name && clause ? clause : row.title,
     fact: name,
