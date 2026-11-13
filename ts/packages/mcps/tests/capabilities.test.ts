@@ -565,6 +565,10 @@ test("an exact-open turn Target reads and writes route Work under its document's
   const projectA = "C:\\Models\\projectA.rvt";
   const routeCalls: URL[] = [];
   const historyBodies: unknown[] = [];
+  const timelineReads: { read?: string; args?: unknown; release?: boolean }[] = [];
+  const familiesWork = { binding: "address", route: "families", target: projectA };
+  const step = { work: familiesWork, revision: 3, label: "Edit intent" };
+  let revision = 2;
   vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
     const url = new URL(input instanceof Request ? input.url : String(input));
     if (typeof init?.body === "string" && JSON.parse(init.body).key === "bridge.sessions.list")
@@ -578,11 +582,17 @@ test("an exact-open turn Target reads and writes route Work under its document's
         ],
       });
     if (url.pathname === "/pe/capabilities") return Response.json(catalog());
+    // The host Timeline's read: the step it offers Pea for the Works the tool names.
+    if (url.pathname === "/pe/reads/value") {
+      timelineReads.push(JSON.parse(String(init?.body)));
+      return Response.json({ value: { data: { rows: [], undo: step, redo: null, refusal: { undo: null, redo: null } } } });
+    }
     if (!url.pathname.includes("/route-state/")) throw Error(`unexpected ${url.pathname}`);
     routeCalls.push(url);
     if (url.pathname.endsWith("/history")) historyBodies.push(JSON.parse(String(init?.body)));
+    if (url.pathname.endsWith("/apply")) revision++;
     return url.searchParams.get("target") === projectA
-      ? Response.json({ route: "families", revision: 2, doc: {}, ok: true })
+      ? Response.json({ route: "families", revision, handle: { key: familiesWork, revision }, doc: {}, ok: true })
       : Response.json({ error: "unknown route 'families'" }, { status: 404 });
   });
   const open: Head = {
@@ -611,7 +621,8 @@ test("an exact-open turn Target reads and writes route Work under its document's
     )) as { ok: boolean };
     expect(proposed.ok).toBe(true);
     expect(routeCalls.map((url) => url.searchParams.get("target"))).toEqual([projectA, projectA]);
-    // Pea's undo is the journal verb on the same Work key, never a null edit.
+    // Pea's undo is the Timeline's step door on the same Work key (ADR 0042), never a null edit:
+    // it reads the step the host offers Pea and sends that step back.
     const undone = (await run(
       peDo,
       {
@@ -625,8 +636,9 @@ test("an exact-open turn Target reads and writes route Work under its document's
     expect(undone.ok).toBe(true);
     expect(routeCalls.at(-1)!.pathname).toBe("/pe/route-state/families/history");
     expect(routeCalls.at(-1)!.searchParams.get("target")).toBe(projectA);
-    expect(historyBodies).toEqual([{ direction: "undo", expectedRevision: 3 }]);
-    routeCalls.pop();
+    expect(historyBodies).toEqual([{ direction: "undo", works: [familiesWork], expected: step }]);
+    expect(timelineReads.find((read) => !read.release)).toMatchObject({ read: "work.timeline", args: { works: [familiesWork] } });
+    routeCalls.splice(-2);
 
     // A Chat document that closed has no Address to key by: refuse, never read Target-less Work.
     const gone = (await run(

@@ -9,6 +9,7 @@ import {
 import type { HostOperationKey } from "@pe/host-contracts/operation-types";
 import { leaf, read, nativeArgs, nativeRead, type InputPort, RefusedPartition } from "./evaluator.ts";
 import type { RouteWorkspace, WorkReadContext } from "@pe/runtime";
+import { workTimelineInput } from "./work-timeline.ts";
 import type { HostMarks } from "../document-marks.ts";
 import type { WorkInputRunner } from "../work-inputs.ts";
 import type { InputConsumption } from "../input-occurrence.ts";
@@ -59,6 +60,8 @@ export function inputPort(options: {
   origin: () => unknown;
   revision: InputPort["revision"];
   leaves?: import("@pe/agent-contracts").HostRouteModule["leaves"];
+  /** Absent on a lane with no action journal: the Timeline is then refused, never built without receipts. */
+  timeline?: import("./work-timeline.ts").HostTimeline;
 }): InputPort {
   const port: InputPort = {
     evaluation: options.evaluation,
@@ -95,6 +98,11 @@ export function inputPort(options: {
         return ref
           ? { ...(await source.workKey(ref)), route: request.route }
           : bindWork(request.route, null);
+      }
+      if (name === "work-timeline") {
+        if (!options.timeline) throw Error("The Timeline needs the host's action journal");
+        const { works, by } = workTimelineInput.input.parse(raw);
+        return options.timeline.read(works, by);
       }
       if (name === "work") {
         const { owner, scope } = z.object({ owner: z.string(), scope: workKeySchema }).parse(raw);
