@@ -1,8 +1,8 @@
 /** Transport consumes packages.ts's captured members; source bytes and local custody stay distinct. */
 import { randomUUID } from "node:crypto";
 import { constants } from "node:fs";
-import { copyFile, cp, lstat, mkdir, readFile, rename, rm, rmdir, stat } from "node:fs/promises";
-import { basename, dirname, isAbsolute, join } from "node:path";
+import { copyFile, cp, lstat, mkdir, readFile, readdir, rename, rm, rmdir, stat } from "node:fs/promises";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { crc32, deflateRawSync, inflateRawSync } from "node:zlib";
 import { message, packageIdSchema, packageMemberPathSchema } from "@pe/agent-contracts";
 import { scriptPodMemberBounds } from "@pe/host-contracts/generated";
@@ -275,16 +275,39 @@ export async function installArchive(
   const installed = (await listPackages(everyRoot)).packages.find((p) => p.id === id);
   if (installed)
     throw new TransferRefused(
-      `Pod id '${id}' is already installed at '${installed.directory}'.`,
+      `Pod id '${id}' is already installed at '${installed.directory}'. Remove or rename that folder, or import an archive with another id.`,
       409,
     );
   const directory = join(podsRoot, folder);
+  const resumed = new Map<string, string>();
+  const refuseFolder = (taken: string, reason: string): never => {
+    throw new TransferRefused(`Pod folder already exists: ${taken}; ${reason}. Remove or rename it, or import under another id.`, 409);
+  };
   // The folder name is an address too, unique across every home (`resolvePackageIdentity`), so it
-  // must be free in each. An absent folder is the expected case; any other failure is not swallowed.
+  // must be free in each, except an exact, manifest-free partial import in the destination home.
   for (const root of [everyRoot].flat()) {
     const taken = join(root, folder);
-    if (await lstat(taken).catch((error: NodeJS.ErrnoException) => { if (error.code !== "ENOENT") throw error; return null; }))
-      throw new TransferRefused(`Pod folder already exists: ${taken}`, 409);
+    const info = await lstat(taken).catch((error: NodeJS.ErrnoException) => { if (error.code !== "ENOENT") throw error; return null; });
+    if (!info) continue;
+    if (resolve(taken) !== resolve(directory) || !info.isDirectory() || info.isSymbolicLink())
+      refuseFolder(taken, "it is not a resumable import destination");
+    if (await lstat(join(taken, "pod.json")).catch((error: NodeJS.ErrnoException) => { if (error.code !== "ENOENT") throw error; return null; }))
+      refuseFolder(taken, "pod.json is already present");
+    // Capture every file, including debris that package discovery deliberately ignores.
+    const walk = async (relative: string): Promise<void> => {
+      for (const entry of await readdir(join(taken, relative), { withFileTypes: true })) {
+        const path = relative ? `${relative}/${entry.name}` : entry.name;
+        if (entry.isSymbolicLink()) refuseFolder(taken, `'${path}' is a link`);
+        if (entry.isDirectory()) { await walk(path); continue; }
+        const bytes = entries.get(path);
+        if (!entry.isFile() || !bytes) return refuseFolder(taken, `'${path}' is not an archive member`);
+        const target = join(taken, path);
+        if ((await lstat(target)).size !== bytes.length || sha256(await readFile(target)) !== sha256(bytes))
+          refuseFolder(taken, `'${path}' differs from the archive`);
+        resumed.set(path, sha256(bytes));
+      }
+    };
+    await walk("");
   }
   for (const [path, bytes] of entries) {
     if (/^pages\/[^/]+\/index\.html$/.test(path)) validatePageHtml(bytes.toString("utf8"), true);
@@ -294,7 +317,7 @@ export async function installArchive(
   }
 
   const archiveSha256 = sha256(archive);
-  // Staged under machine state, never in the home: a crash leaves no half folder on a synced drive.
+  // Validate in machine state first. A crash during home publication can leave resumable members.
   const staging = podStatePath(options, "pod-importing", randomUUID());
   const writes: HomeMemberUndo[] = [];
   const directories = new Set<string>([directory]);
@@ -309,11 +332,19 @@ export async function installArchive(
     // including first imports, rather than renaming machine state onto a synced drive.
     for (const [path, bytes] of [...entries].sort(([a], [b]) => Number(a === "pod.json") - Number(b === "pod.json"))) {
       const target = join(directory, path);
+      if (resumed.has(path)) {
+        if (sha256(await readFile(target)) !== resumed.get(path))
+          throw new TransferRefused(`Pod member changed during import: ${target}`, 409);
+        continue;
+      }
       for (let parent = dirname(target); parent !== directory; parent = dirname(parent)) directories.add(parent);
+      // A write may throw after creating bytes. Undo still uses only our intended hash.
+      writes.push({ path: target, sha256: sha256(bytes), prior: null });
       const wrote = writeHome(target, bytes, null);
-      if (!wrote.ok)
+      if (!wrote.ok) {
+        writes.pop(); // A refused CAS made no write, so it owns nothing to undo.
         throw new TransferRefused(`Pod member changed during import: ${path}`, 409);
-      writes.push({ path: target, sha256: wrote.sha256, prior: null });
+      }
     }
     // The import record is machine state (it is derived, and dated here), keyed by the pod's id.
     // It names its archive by content hash and file name: no machine path is stored anywhere.
@@ -335,11 +366,11 @@ export async function installArchive(
     };
   } catch (error) {
     const kept = rollbackHomeMembers(writes);
-    // This import required an absent folder. Remove only empty directories, never a later writer's files.
+    // Remove only empty directories, never resumed members or a later writer's files.
     for (const path of [...directories].sort((a, b) => b.length - a.length)) {
       try { await rmdir(path); }
       catch (undoError) {
-        if (!["ENOENT", "ENOTEMPTY", "EEXIST"].includes((undoError as NodeJS.ErrnoException).code ?? ""))
+        if ((undoError as NodeJS.ErrnoException).code !== "ENOENT")
           kept.push(`${path} (${String(undoError)})`);
       }
     }
