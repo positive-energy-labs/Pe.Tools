@@ -40,9 +40,7 @@ export const module = route({
       body: "scroll",
       draw: (ctx) =>
         scrollBody(
-          ctx.value.current
-            ? `Copper voltage-drop worksheet\nAuthored inputs\n${JSON.stringify(ctx.value.value, null, 2)}\nCopper K method at 75 C, unity power factor, negligible reactance. No model facts are inferred.`
-            : ctx.value.reason,
+          `Copper voltage-drop worksheet\nAuthored inputs\n${JSON.stringify(ctx.value.value, null, 2)}\nCopper K method at 75 C, unity power factor, negligible reactance. No model facts are inferred.`,
         ),
     },
   },

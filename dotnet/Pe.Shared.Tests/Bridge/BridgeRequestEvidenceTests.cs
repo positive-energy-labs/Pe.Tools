@@ -40,19 +40,23 @@ public class BridgeRequestEvidenceTests {
     [TestCase("Cancelled")]
     public async Task TerminalWaitsForActualCompletionEvenAfterCallerHasLeft(string outcome) {
         var evidence = new BridgeRequestEvidence();
-        var completion = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var completion = new TaskCompletionSource<(string Outcome, Touched Touched)>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var restored = new Touched.Restored([new ViewRef("doc-a", "view-uid-1", 4001)]);
         evidence.Begin("abandoned");
         evidence.Uncertain("abandoned", "AbandonedStillRunning");
         var observe = evidence.CompleteWhenFinishedAsync("abandoned", completion.Task, null);
         Assert.That(observe.IsCompleted, Is.False);
         Assert.That(evidence.Snapshot().Requests.Single().RequestId, Is.EqualTo("abandoned"));
         Assert.That(evidence.Snapshot().Terminals, Is.Empty);
-        if (outcome == "Succeeded") completion.SetResult(null);
+        if (outcome == "Succeeded") completion.SetResult(("Succeeded", restored));
         else if (outcome == "Failed") completion.SetException(new InvalidOperationException("native failure"));
         else completion.SetCanceled();
         await observe;
         Assert.That(evidence.Snapshot().Requests, Is.Empty);
         Assert.That(evidence.Snapshot().Terminals.Single().Outcome, Is.EqualTo(outcome));
+        // The recovered terminal never says nothing: the runner's statement, or unknown when the call died under it.
+        Assert.That(evidence.Snapshot().Terminals.Single().Touched, Is.EqualTo(outcome == "Succeeded"
+            ? restored : new Touched.Unknown(TouchedUnknownReason.CancelledMidEffect)));
     }
 
     [Test]

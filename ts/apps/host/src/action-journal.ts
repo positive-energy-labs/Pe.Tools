@@ -7,7 +7,8 @@ import type {
 } from "./command-executor.ts";
 import { CommandRejected, StepFailure, io, refused } from "./command-executor.ts";
 import { readJournalSnapshot } from "./journal-snapshot.ts";
-import { nativeEffect, validateNativeInput } from "./native-input.ts";
+import { validateNativeInput } from "./native-input.ts";
+import type { ReadOwner } from "./reads/read-ownership.ts";
 import { bindActionDispatch, type DispatchRefusal } from "./action-dispatch.ts";
 import { appendFile, mkdir, readdir, readFile } from "node:fs/promises";
 import { discardStored, readStored, writeAtomic } from "@pe/host-contracts/store";
@@ -32,6 +33,8 @@ import {
   sameCaller,
   actionReceiptSchema,
   actionStepSchema,
+  touchedSchema,
+  observedSchema,
   actionAdmissionSchema,
   type ActionAdmission,
   type Consumed,
@@ -99,12 +102,13 @@ const undispatched = (steps: readonly ActionStep[]) =>
       (step.state === "failed" || step.state === "cancelled") &&
       step.notDispatched === true,
   );
-/** A succeeded step that may have changed something: only the catalog's stamp clears a read. */
+/** Only native terminal evidence can clear a possible document write. */
 const effected = (step: ActionStep) =>
-  step.state === "succeeded" &&
   step.kind !== "publication" &&
-  step.effect !== "Read" &&
-  step.effect !== "TransactRead";
+  (step.kind === "native"
+    ? (!("touched" in step) || !step.touched || ["wrote", "unauthorized", "unknown", "restoreFailed"].includes(step.touched.kind)) &&
+      !("notDispatched" in step && step.notDispatched)
+    : step.state === "succeeded");
 const holdsClaims = (row: ActionReceipt) =>
   !(
     (row.state === "failed" || row.state === "cancelled") &&
@@ -372,7 +376,7 @@ type Settled = { state: Exclude<ActionReceipt["state"], "running"> } & Record<
  * - an uncertain step is never hidden: the attempt is unknown and nothing redispatches it;
  * - cancelled is a settled answer, never a rollback claim;
  * - a known succeeded effect is never erased: a later failure makes the attempt incomplete;
- * - a succeeded catalog Read is a known outcome, not an effect: a later refusal stays known;
+ * - a native terminal that proves no remaining change keeps a later refusal known;
  * - with no effect, a failure is failed, and not dispatched only when no step reached its owner.
  * `null` means recovery proved nothing new and the attempt keeps its state.
  */
@@ -520,6 +524,7 @@ export class ActionJournal implements ReceiptReader {
   private flushed = false;
   // Page authority is a host-minted object capability, never reconstructed from persisted data.
   private readonly activeCallers = new Map<string, Caller>();
+  private readonly readOwners = new Map<string, ReadOwner>();
   private environment?: CommandEnvironment;
   private inputContext?: HostInputContext["Service"];
   bindInputContext(inputs: HostInputContext["Service"]): void {
@@ -699,7 +704,7 @@ export class ActionJournal implements ReceiptReader {
     }
     return this.dispatchRefusal(requestId);
   }
-  async markDispatched(requestId: string) {
+  async markDispatched(requestId: string, transport: "bridge" | "sdk") {
     await this.serial(async () => {
       const action = this.stepAction.get(requestId),
         row = action ? this.rows.get(action) : undefined;
@@ -707,9 +712,12 @@ export class ActionJournal implements ReceiptReader {
       await this.commit([
         {
           ...row,
-          steps: row.steps.map((step) =>
-            step.id === requestId ? { ...step, dispatchedAt: new Date(this.now()).toISOString() } : step,
-          ),
+          steps: row.steps.map((step) => {
+            if (step.id !== requestId) return step;
+            if (step.transport && step.transport !== transport)
+              throw Error("Dispatch cannot change a step's recorded transport");
+            return actionStepSchema.parse({ ...step, transport, dispatchedAt: new Date(this.now()).toISOString() });
+          }),
         },
       ]);
       this.notify();
@@ -1656,7 +1664,6 @@ export class ActionJournal implements ReceiptReader {
                 id: randomUUID(),
                 kind,
                 key,
-                ...(kind === "native" && nativeEffect(key) ? { effect: nativeEffect(key) } : {}),
                 input: structuredClone(input),
                 ...(kind === "native" && exactProcess
                   ? { process: structuredClone(exactProcess) }
@@ -1670,7 +1677,28 @@ export class ActionJournal implements ReceiptReader {
                   bindActionDispatch(step.id, {
                     refusal: () => journal.dispatchRefusal(step.id),
                     validate: () => journal.validateDispatch(step.id),
-                    dispatched: () => journal.markDispatched(step.id),
+                    dispatched: (transport) => journal.markDispatched(step.id, transport),
+                    terminal: async (touched, evidenceJson) => {
+                      const parsed = touchedSchema.safeParse(touched);
+                      let nativeEvidence: import("@pe/agent-contracts").Observed | undefined;
+                      try { nativeEvidence = observedSchema.safeParse(JSON.parse(evidenceJson ?? "null")).data; }
+                      catch { /* Malformed evidence cannot establish an observation. */ }
+                      await save((current) => ({ ...current, steps: current.steps.map((held): ActionStep => {
+                        if (held.id !== step.id || held.transport !== "bridge" || (!parsed.success && held.bridgeReply === "touched")) return held;
+                        const base = { ...held };
+                        delete base.touched;
+                        const bridgeReply: typeof held.bridgeReply = parsed.success ? "touched" : touched == null ? "missing-touched" : "invalid-touched";
+                        return { ...base,
+                          bridgeReply,
+                          ...(parsed.success ? { touched: parsed.data } : {}),
+                          ...(nativeEvidence ? { nativeEvidence } : {}),
+                        };
+                      }) }));
+                    },
+                    uncertain: async (reason) => save((current) => ({ ...current, steps: current.steps.map((held) =>
+                      held.id !== step.id || held.transport !== "bridge" || held.bridgeReply === "touched" ? held
+                        : { ...held, touched: { kind: "unknown", reason } },
+                    ) })),
                   }),
                 );
               return { step };
@@ -1802,6 +1830,7 @@ export class ActionJournal implements ReceiptReader {
         try {
           if (!retirementOnly) commandCheckpoint(originOf(row.caller));
         } catch {
+          void this.readOwners.get(row.id)?.requestStop().catch(persistenceFailed);
           void save((current) => ({ ...current, cancellationRequested: true })).catch(
             persistenceFailed,
           );
@@ -1829,9 +1858,13 @@ export class ActionJournal implements ReceiptReader {
           await gate(row, "prepared");
       };
       // Rule 2g: settle inside the Exit, so every exit (interruption included) commits once.
-      const settleExit = (exit: Exit.Exit<unknown, unknown>) => {
+      const identity = ownerIdentity(row, crossing.parent);
+      const readOwner = this.environment?.readOwnership?.open(identity);
+      if (readOwner) this.readOwners.set(row.id, readOwner);
+      const settleExit = async (exit: Exit.Exit<unknown, unknown>) => {
+        const descendants = await readOwner?.settle();
         const error = Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined;
-        const finished = {
+        let finished = {
           ...unsettled(row),
           ...(Exit.isSuccess(exit)
             ? settle(true, row.steps, { kind: "returned", result: exit.value })
@@ -1840,6 +1873,9 @@ export class ActionJournal implements ReceiptReader {
                 ...(error instanceof CommandRejected ? { refusal: error.refusal } : {}),
               }),
         } as ActionReceipt;
+        if (descendants?.kind === "unsettled") finished = { ...unsettled(finished),
+          state: "unknown", error: "Required native reads have no terminal evidence", status: 503,
+        };
         return this.serial(async () => {
             const next = actionReceiptSchema.parse({
               ...finished,
@@ -1859,6 +1895,7 @@ export class ActionJournal implements ReceiptReader {
               throw error;
             } finally {
               this.activeCallers.delete(row.id);
+              this.readOwners.delete(row.id);
               releaseRun();
               releaseDispatch.forEach((release) => release());
             }
@@ -1883,7 +1920,7 @@ export class ActionJournal implements ReceiptReader {
               Effect.sync(() => console.error("action-journal: completion failed", Cause.pretty(cause))),
             ),
           ),
-        ).pipe(Effect.provideService(RequestIdentity, ownerIdentity(row, crossing.parent))),
+        ).pipe(Effect.provideService(RequestIdentity, identity)),
       );
       return structuredClone(row);
     });
@@ -1899,6 +1936,7 @@ export class ActionJournal implements ReceiptReader {
     if (!row) throw Error(`Action '${id}' has no admitted receipt`);
     if (row.state !== "running")
       throw Error(`Action '${id}' is ${row.state}; only an active action can be cancelled`);
+    await this.readOwners.get(id)?.requestStop();
     await this.serial(async () => {
       const current = this.rows.get(id)!;
       await this.commit([{ ...current, cancellationRequested: true }]);
@@ -1945,6 +1983,7 @@ export class ActionJournal implements ReceiptReader {
             update.step.id !== step.id ||
             update.step.key !== step.key ||
             update.step.kind !== step.kind ||
+            update.step.transport !== step.transport ||
             canonicalRouteInput(update.step.input) !== canonicalRouteInput(step.input) ||
             (step.process &&
               update.step.process &&
@@ -1953,8 +1992,9 @@ export class ActionJournal implements ReceiptReader {
             throw Error("Recovery cannot change a step's immutable intent or process");
           // Recovery supplies a new outcome. Obsolete fields from the previous state are not
           // part of that outcome; the journal retains immutable intent and dispatch evidence.
-          const variant = actionStepSchema.options.find(
-            (schema) => schema.shape.state.value === update.step.state,
+          const variant = actionStepSchema.options.map((option) => option.options).flat().find(
+            (schema) => schema.shape.state.value === update.step.state && schema.shape.transport.safeParse(update.step.transport).success &&
+              ("opReceipt" in schema.shape) === ("opReceipt" in update.step),
           )!;
           update.step = actionStepSchema.parse({
             ...variant.strip().parse(update.step),

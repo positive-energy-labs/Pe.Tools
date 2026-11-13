@@ -3,8 +3,6 @@ import { fileURLToPath } from "node:url";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import { tsOnlyOperationCatalog } from "@pe/host-contracts/operation-types";
 import { hostActions } from "../src/semantic-actions.ts";
-import { familyReads } from "../src/family-actions.ts";
-import { scheduleReads } from "../src/schedule-actions.ts";
 import type { Command } from "../src/command.ts";
 import type { CatalogAxes } from "../src/catalog.ts";
 import type { WriteBoundaryBinding } from "../src/write-intent.ts";
@@ -43,36 +41,20 @@ export function generateCommandTable(
       if (!leaf) throw Error(`Unknown native command dependency: ${key}`);
       return leaf;
     });
-    // A generated preview without an explicit leaf rehearses the write, never assumes Read.
-    const rehearsal = boundary?.phase === "preview" && !leaves.length;
-    const nativeEffect = leaves.length ? max(leaves.map((op) => op.effect), effects) : undefined;
-    const implicitPreview = boundary?.phase === "preview" && key === boundary.key + ".preview";
-    const effect = rehearsal || (implicitPreview && nativeEffect === "ModelWrite") ? "TransactRead" : leaves.length
-      ? max(leaves.map((op) => op.effect), effects)
-      : action.effect === "query" ? "Read" : key.startsWith("findings.") ? "WorkWrite" : "SessionWrite";
+    const effect = action.catalogEffect ?? (leaves.length ? max(leaves.map((op) => op.effect), effects) : undefined);
+    if (!effect) throw Error(`${key}: declare catalogEffect or native dependencies`);
     if (!effects.includes(effect)) throw Error(`${key}: invalid native effect ${effect}`);
     const axes: CatalogAxes = {
       subject: (leaves.find((op) => op.subject !== "None")?.subject ?? "None") as CatalogAxes["subject"],
       touches: [...new Set(leaves.length ? leaves.flatMap((op) => op.touches.split(", ")) : ["Metadata"])] as CatalogAxes["touches"],
       effect: effect as CatalogAxes["effect"],
-      cost: leaves.length ? max(leaves.map((op) => op.costTier), costs) : action.effect === "query" ? "Bounded" : "Mutation",
+      cost: leaves.length ? max(leaves.map((op) => op.costTier), costs) : effect === "Read" ? "Bounded" : "Mutation",
       // Command admission is bounded to one target; native collectors keep their own cardinality.
       cardinality: "One",
       ...(effect === "TransactRead" ? { rollsBack: true } : {}),
     };
-    // A semantic command can persist host state around a native read (captures and cached reads).
-    if (!boundary && action.effect === "command" && (axes.effect === "Read" || axes.effect === "TransactRead")) {
-      axes.effect = "SessionWrite";
-      delete axes.rollsBack;
-    }
-    const route = key.startsWith("action.") ? key === "action.read" ? "actions.read" : key
-      : key === "page.bind" ? key : key === "ops.read" ? "operation.call"
-      : Object.hasOwn(familyReads, key) ? "/family/readings"
-      : Object.hasOwn(scheduleReads, key) ? "/schedules/readings" : undefined;
-    // Receipt controls operate on an existing admission, never make a fresh one.
-    if (key === "action.recover" || key === "action.resume" || key === "action.cancel") axes.effect = "SessionWrite";
     table[key] = { axes, effect: axes.effect, ...(boundary?.phase === "apply" ? { plan: boundary.previewKey } : {}),
-      via: route ? { route } : "command" };
+      via: action.via ?? "command" };
   }
   for (const [key, action] of Object.entries(definitions)) {
     const boundary = action.writeBoundary;

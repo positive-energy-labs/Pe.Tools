@@ -97,6 +97,7 @@ const saveTo = z.discriminatedUnion("kind", [
  */
 export const instancesActions = {
   "instances.start": {
+    catalogEffect: "SessionWrite",
     says: "Start an empty Revit of one installed year. owner pea starts it in the background; addins off quarantines third-party add-ins. The receipt is the SDK envelope.",
     dirties: ["sdk"],
     needs: "nothing",
@@ -104,6 +105,7 @@ export const instancesActions = {
     input: instancesStartSchema,
   },
   "instances.open": {
+    catalogEffect: "SessionWrite",
     says: "Open a source into a running session (into.session) or a new Revit (into.start). A Pea acquisition copies local bytes, or downloads an explicit immutable APS cloudVersion, into its baseline/work folder. Only the local work copy opens, detached when workshared. Pea writes only after native facts certify independence. The receipt names the acquisition and baseline.",
     dirties: ["sdk"],
     needs: "nothing",
@@ -111,6 +113,7 @@ export const instancesActions = {
     input: instancesLaunchSchema,
   },
   "instances.restart": {
+    catalogEffect: "SessionWrite",
     says: "Restart the explicitly supplied session incarnation, discarding unsaved changes and reopening its documents. Held for Pea, as the person's act, when a project document has unsaved changes.",
     dirties: ["sdk"],
     needs: "session",
@@ -118,6 +121,7 @@ export const instancesActions = {
     input: sessionInput,
   },
   "instances.stop": {
+    catalogEffect: "SessionWrite",
     says: "Stop the explicitly supplied session incarnation, keeping or discarding unsaved changes as the caller chose. Held for Pea, as the person's act, when a project document has unsaved changes.",
     dirties: ["sdk"],
     needs: "session",
@@ -125,6 +129,7 @@ export const instancesActions = {
     input: sessionInput.extend({ force: z.boolean().default(false), unsaved }),
   },
   "instances.reset": {
+    catalogEffect: "SessionWrite",
     says: "Recover a stuck session incarnation: dismiss its windows, cancel its operations, close its documents keeping or discarding unsaved work, and restart it if still blocked (or always, with restart). Held for Pea, as the person's act, when a project document has unsaved changes.",
     dirties: ["sdk"],
     needs: "session",
@@ -136,6 +141,7 @@ export const instancesActions = {
     }),
   },
   "instances.dialogs": {
+    catalogEffect: "SessionWrite",
     says: "Dismiss one window of the session incarnation by the handle a dialogs reading just listed.",
     dirties: ["sdk"],
     needs: "session",
@@ -143,6 +149,7 @@ export const instancesActions = {
     input: sessionInput.extend({ hwnd: z.string().trim().min(1) }),
   },
   "instances.save": {
+    catalogEffect: "SessionWrite",
     says: "Save the explicitly supplied document lifetime in place, by Save As to a new file (the open document then lives at that file and the old file keeps its last save), or by synchronizing with central, optionally returning its workshared ownership. For Pea, an in-place save or a synchronize of a project document is held as the person's act; a Save As to a new path and a family document are not. A Save As of an acquired document records the new file as that acquisition's artifact; cleanup keeps it.",
     dirties: ["sdk"],
     needs: "document",
@@ -154,6 +161,7 @@ export const instancesActions = {
     }),
   },
   "instances.handover": {
+    catalogEffect: "SessionWrite",
     says: "Hand over one acquisition by its id: save its document to the acquisition's reserved result path (create-only, never central, ownership kept), then write a diff plan against its recorded baseline that names what it could not compare. Review only: nothing merges, loads back, overwrites or syncs.",
     dirties: ["sdk"],
     needs: "nothing",
@@ -161,6 +169,7 @@ export const instancesActions = {
     input: z.strictObject({ acquisition: z.string().min(1) }),
   },
   "instances.cleanup": {
+    catalogEffect: "SessionWrite",
     says: "Release one acquisition by its id: close its document (keep refuses while it holds changes no handover saved; discard drops them, and is held for Pea on a project document), stop the Revit it started once nothing else is open there, and remove its temporary copies. A handover's result, diff plan and baseline are kept.",
     dirties: ["sdk"],
     needs: "nothing",
@@ -168,6 +177,7 @@ export const instancesActions = {
     input: z.strictObject({ acquisition: z.string().min(1), unsaved }),
   },
   "instances.close": {
+    catalogEffect: "SessionWrite",
     says: "Close the explicitly supplied document lifetime by its published openId, keeping or discarding unsaved changes as the caller chose. Held for Pea, as the person's act, when a project document has unsaved changes.",
     dirties: ["sdk"],
     needs: "document",
@@ -190,6 +200,7 @@ export function instancesSessionSelection(input: unknown): SdkSessionSelection |
 }
 
 export const instancesReading = {
+  catalogEffect: "Read",
   says: "Read SDK sessions, installed years, recents, documents, visible windows (dialogs), session-journal logs, or op receipts including work outside the host journal. Holdings requires exact session, processStartUtc and openId, returns at most 100 elements with a content-bound cursor; null/failed observations refuse. Logs and ops accept tail (1–500, default 100); the SDK owns their lineage and envelopes.",
   dirties: [],
   needs: "nothing",

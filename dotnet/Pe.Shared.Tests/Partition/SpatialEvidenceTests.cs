@@ -8,6 +8,32 @@ using Pe.Revit.Space;
 namespace Pe.Partition.Tests;
 
 public sealed class SpatialEvidenceTests {
+    [Test]
+    public void Sweep_wire_fixture_is_native_serialization_with_omitted_unknown_distance() {
+        var evidence = new SpatialEvidence("host", null, DateTime.UnixEpoch, SpatialEvidence.HostInternalFt,
+            new Resolved([], [], [], [], []), [],
+            [new(new("host", null), "subject", AcquisitionOutcome.OutsideScope, AcquisitionReason.None)], []);
+        var answer = new SweepAnswer(evidence, new Searched(0, 0, 0, 0, 0),
+            [new(0, "UNKNOWN", null, null, null, "none-observed", "containment-unsupported")], 0);
+        var settings = new JsonSerializerSettings {
+            ContractResolver = new CamelCasePropertyNamesContractResolver(),
+            NullValueHandling = NullValueHandling.Ignore, Converters = [new StringEnumConverter()],
+            Formatting = Formatting.Indented
+        };
+        var wire = JsonConvert.SerializeObject(answer, settings).Replace("\r\n", "\n") + "\n";
+        var recordPath = Environment.GetEnvironmentVariable("PE_RECORD_SPATIAL_EVIDENCE");
+        var fixturePath = recordPath ?? Path.Combine(TestContext.CurrentContext.TestDirectory, "spatial-evidence.fixture.json");
+        var bytes = new System.Text.UTF8Encoding(false).GetBytes(wire);
+        if (recordPath is not null) {
+            File.WriteAllBytes(fixturePath, bytes);
+            TestContext.Progress.WriteLine($"Recorded spatial evidence fixture: {Path.GetFullPath(fixturePath)}");
+        }
+        Assert.That(File.ReadAllBytes(fixturePath), Is.EqualTo(bytes), "The fixture must contain the exact C# serializer bytes.");
+        var decoded = JsonConvert.DeserializeObject<SweepAnswer>(wire, settings)!;
+        Assert.That(decoded.Segments[0].MinGapFt, Is.Null);
+        Assert.That(decoded.Segments[0].Verdict, Is.EqualTo("UNKNOWN"));
+        Assert.That(decoded.Evidence.Acquisition[0].Outcome, Is.EqualTo(AcquisitionOutcome.OutsideScope));
+    }
     private static readonly Placement Host = new("host", null);
     private static readonly double[] Identity = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
     private static SpatialEvidence Evidence() => new("host", 7, DateTime.UnixEpoch, SpatialEvidence.HostInternalFt,

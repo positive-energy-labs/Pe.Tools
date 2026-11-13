@@ -98,6 +98,7 @@ export type FindingInput = z.output<typeof sayInput>;
  */
 export const findingsCommands = {
   [FINDINGS_DOORS.list]: workCommand(FINDINGS_OWNER, {
+    catalogEffect: "Read",
     says: "List this document's findings, oldest first, optionally only those on one subject (a SubjectRef code). Each has who said it (said) and, once ruled, who ruled it (verdict).",
     needs: "project-document",
     effect: "query",
@@ -105,6 +106,7 @@ export const findingsCommands = {
     dirties: [],
   }),
   [FINDINGS_DOORS.say]: workCommand(FINDINGS_OWNER, {
+    catalogEffect: "WorkWrite",
     says: "Say one finding on a subject of this document: a note, a claim (ruled yes, no or not-this) or a check (ruled pass or fail). The verdict is optional and may come later through findings.rule. Returns the id the host minted. Never changes Revit.",
     needs: "project-document",
     effect: "command",
@@ -112,6 +114,7 @@ export const findingsCommands = {
     dirties: [],
   }),
   [FINDINGS_DOORS.rule]: workCommand(FINDINGS_OWNER, {
+    catalogEffect: "WorkWrite",
     says: "Rule on a claim or a check by id: value is one its kind admits, or null to withdraw the ruling. The statement and who said it stay as they were. Never changes Revit.",
     needs: "project-document",
     effect: "command",
@@ -119,6 +122,7 @@ export const findingsCommands = {
     dirties: [],
   }),
   [FINDINGS_DOORS.retract]: workCommand(FINDINGS_OWNER, {
+    catalogEffect: "WorkWrite",
     says: "Remove one finding by id. Either author may retract any finding; it is one step and can be undone. Never changes Revit.",
     needs: "project-document",
     effect: "command",

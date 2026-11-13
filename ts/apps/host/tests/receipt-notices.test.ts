@@ -9,7 +9,6 @@ import {
   actionReceiptSchema,
   held,
   noticeFeedSchema,
-  type ActionReceipt,
   type HarnessEvent,
   type NoticeFeed,
   type ReadingFrame,
@@ -43,16 +42,18 @@ const thread = (
     lifecycle: { status: "active", explicitUnread: false, readSeq },
     events: log,
   }) as unknown as NoticeSources["threads"][number];
-const receipt = (id: string, state: string, revision = 1, error?: string) => ({
+const receipt = (id: string, state: "failed" | "unknown" | "succeeded", revision = 1, error?: string) => ({
   revision,
-  action: {
+  action: actionReceiptSchema.parse({
     id,
     key: "revit.ducts.resize",
     state,
-    caller: { kind: "pea" },
+    caller: { kind: "pea", context: "notice", thread: "t1" },
     startedAt: at,
-    ...(error ? { error } : {}),
-  } as unknown as ActionReceipt,
+    basis: null, target: { kind: "host" }, input: {}, steps: [],
+    prepared: { state: "ready", value: null }, recovery: [],
+    ...(state === "succeeded" ? { result: null } : { error: error ?? "Outcome unknown", status: 503 }),
+  }),
 });
 const none: NoticeSources = { threads: [], receipts: [], works: [], machine: null, stored: [], held: [] };
 

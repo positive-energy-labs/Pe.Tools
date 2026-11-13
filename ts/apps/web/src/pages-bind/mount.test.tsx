@@ -31,7 +31,7 @@ const mount = () => {
   const run = vi.fn(async () => reading);
   const ctx = {
     page: { read: () => ({ page: oneName("snowdon-ducts--tour"), view: false, query: {}, fragment: "" }) },
-    value: { current: true, value: null },
+    value: { state: "ready", value: null },
     write: () => ({ run }),
   };
   return { run, screen: render(<BindBody ctx={ctx as never} />) };

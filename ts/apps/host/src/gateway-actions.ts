@@ -18,6 +18,8 @@ import { scratchPageDirectory } from "./page-libraries.ts";
 import { resolveSdkSession, SdkSession } from "./sdk-session.ts";
 import { freezeScript, requireScriptSuccess } from "./operation-script.ts";
 import { validateNativeInput } from "./native-input.ts";
+import { projectNativeOutput } from "./native-output.ts";
+import { isViewImage } from "@pe/agent-contracts/native-output-read";
 import { Effect, Schema } from "effect";
 import {
   commands,
@@ -81,7 +83,7 @@ export const gatewayNativeLeaves = (key: string): readonly string[] =>
   isTsOnlyOperationKey(key) ? [] : ["host.ops.catalog", key];
 
 /** A host-leaf operation, run on the journal-owned attempt fiber with the journal's services. */
-export type GatewayLocalContext = { receiptId: string; settingPath?: string };
+export type GatewayLocalContext = { receiptId: string; settingPath?: string; caller: import("@pe/agent-contracts").Caller };
 export type GatewayLocal = (key: string, input: unknown, scope?: HostSessionScope, context?: GatewayLocalContext) => Effect.Effect<unknown, unknown, AttemptHost>;
 
 /** Generated native metadata is the fallback contract; public semantic implementations are hidden. */
@@ -414,18 +416,31 @@ export function gatewayExecutor(
               );
             return local(key, input, admission.target.kind === "document"
               ? { bridgeSessionId: admission.target.ref.session, openDocumentId: admission.target.ref.openId }
-              : undefined, { receiptId: admission.id, settingPath: prepared.settingPath });
+              : undefined, { receiptId: admission.id, settingPath: prepared.settingPath, caller });
           }
           const target = admission.target;
           if (target.kind !== "document" && target.kind !== "session")
             return Effect.fail(refused("Native target required"));
-          return nativeStep(
+          const step = nativeStep(
             bridge,
             target.kind === "document" ? target.ref : { session: target.session },
             key,
             input,
             requestId,
           );
+          // A capture command (the focused view image) keeps its picture as the read door does, so
+          // its result names the capture and never a path on the host's disk.
+          return isViewImage(key)
+            ? step.pipe(
+                Effect.flatMap((value) =>
+                  projectNativeOutput(pictures, key, value, input,
+                    { openDocumentId: target.kind === "document" ? target.ref.openId : null }, caller),
+                ),
+                Effect.mapError((error) =>
+                  error instanceof StepFailure ? error : new StepFailure(error.message, error.status, "failed"),
+                ),
+              )
+            : step;
         },
         {
           process: prepared.kind === "native-leaf" ? prepared.process : undefined,

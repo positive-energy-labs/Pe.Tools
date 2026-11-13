@@ -1,6 +1,7 @@
 ﻿using Pe.Shared.Product;
 using System.IO;
 using System.Windows.Media.Imaging;
+using Pe.Revit.Operations;
 using Pe.Shared.RevitData;
 
 namespace Pe.Revit.DocumentData.AgentContext;
@@ -11,9 +12,34 @@ namespace Pe.Revit.DocumentData.AgentContext;
 ///     hide/isolate all apply. Never creates or permanently mutates views.
 ///     A cropped view exports unmodified and is cut to exactly its crop arithmetically; focus capture
 ///     sets a temporary crop box (clearing any scope box, annotation crop on) then restores it (editable doc only).
-///     Sheet-filtered schedules get their filter temporarily lifted the same way (editable doc only).
+///     A focused capture of a sheet-filtered schedule lifts the filter the same way. Both temporaries are committed
+///     and then undone through the op's <see cref="SessionWrite" /> scope; the unfocused read commits nothing.
 /// </summary>
 public static class RevitViewImageExporter {
+    // One policy for setting the lens and disclosing category switches on any referenced view.
+    // A whole-house Fine 3D view with architectural links hung the UI thread for 10+ minutes (2026-10-01).
+    // The Pe default stays boxed at Medium with these categories off; their counts disclose that tradeoff.
+    public static IReadOnlyList<(BuiltInCategory Category, HiddenKind Kind)> LensCategories { get; } =
+        Array.AsReadOnly(new[] {
+            (BuiltInCategory.OST_RvtLinks, HiddenKind.Links),
+            (BuiltInCategory.OST_VolumeOfInterest, HiddenKind.ScopeBoxes),
+            (BuiltInCategory.OST_Levels, HiddenKind.Levels),
+            (BuiltInCategory.OST_Grids, HiddenKind.Grids),
+            (BuiltInCategory.OST_CLines, HiddenKind.ReferencePlanes),
+            (BuiltInCategory.OST_MEPSpaces, HiddenKind.Spaces),
+            (BuiltInCategory.OST_HVAC_Zones, HiddenKind.Zones),
+            (BuiltInCategory.OST_Rooms, HiddenKind.Rooms),
+            (BuiltInCategory.OST_Areas, HiddenKind.Areas),
+        });
+
+    /// <summary>Reports only category switches, with host-document instance counts. Other visibility causes are not evaluated.</summary>
+    public static IReadOnlyList<Hidden> ReadHidden(Document document, View view, HiddenWhy why = HiddenWhy.NotEvaluated) =>
+        LensCategories.Where(item => view.CanCategoryBeHidden(new ElementId(item.Category))
+                                     && view.GetCategoryHidden(new ElementId(item.Category)))
+            .Select(item => new Hidden(item.Kind,
+                new FilteredElementCollector(document).OfCategory(item.Category).WhereElementIsNotElementType().GetElementCount(), why))
+            .ToList();
+
     public static RevitViewImageData Export(Document document, View view, int pixelSize) {
         var producedPath = ExportCropped(document, view, pixelSize, out var refusal);
         return BuildResult(document, view, producedPath, pixelSize, TryModelRect(view), null,
@@ -57,13 +83,18 @@ public static class RevitViewImageExporter {
         return cutPath;
     }
 
-    /// <summary>Focus capture: temporary crop box around <paramref name="modelBox" />, rolled back after export.</summary>
+    /// <summary>
+    ///     Focus capture: a temporary crop box around <paramref name="modelBox" />, committed, exported, then undone by a
+    ///     second committed transaction. When that undo does not hold the image is still returned, and
+    ///     <see cref="RevitViewImageData.Restore" /> names what the view was left with.
+    /// </summary>
     public static RevitViewImageData ExportFocused(
         Document document,
         View view,
         BoundingBoxXYZ modelBox,
         double marginPercent,
-        int pixelSize
+        int pixelSize,
+        SessionWrite scope
     ) {
         if (document.IsReadOnly)
             throw new InvalidOperationException("Focus capture needs an editable document (it sets a temporary crop box).");
@@ -87,7 +118,7 @@ public static class RevitViewImageExporter {
         // Annotation crop ON for the duration makes View.Outline (the extent ExportImage fits) exactly the crop: with it off,
         // far annotations keep the extent wide, the export hits the 8000 px cap and a 10 ft focus in an 800 ft plan came out
         // ~92 px (PROVEN[fresh, ViewImageRegistrationProofTests.Focus_capture_delivers_the_requested_pixels_in_a_wide_plan]: outline
-        // 804 ft -> 10 ft). It only hides annotations past the crop, which the cut discards anyway.
+        // 804 ft -> 10 ft). It hides annotations past the crop.
         var annotationCropParam = view.get_Parameter(BuiltInParameter.VIEWER_ANNOTATION_CROP_ACTIVE);
         var originalAnnotationCrop = annotationCropParam is { IsReadOnly: false } ? annotationCropParam.AsInteger() : (int?)null;
         var scopeParam = view.get_Parameter(BuiltInParameter.VIEWER_VOLUME_OF_INTEREST_CROP);
@@ -95,53 +126,48 @@ public static class RevitViewImageExporter {
         var originalCrop = view.CropBox;
         var originalActive = view.CropBoxActive;
         var originalVisible = view.CropBoxVisible;
-        RunCropTransaction(document, "PE temporary crop", () => {
-            if (originalScopeId != ElementId.InvalidElementId) scopeParam!.Set(ElementId.InvalidElementId);
-            ApplyCrop(view, modelBox, marginPercent);
-            if (originalAnnotationCrop is not null) annotationCropParam!.Set(1);
-        });
-        try {
-            var producedPath = ExportCropped(document, view, pixelSize, out var refusal);
-            // Read while the temporary crop is still set: it is the crop the image was exported with.
-            return BuildResult(document, view, producedPath, pixelSize, TryModelRect(view), null,
-                refusal is { } refused ? (null, refused) : TryRegistration(view, producedPath));
-        } finally {
-            RunCropTransaction(document, "PE restore crop", () => {
+        var what = ViewTemporary.Crop
+                   | (originalScopeId != ElementId.InvalidElementId ? ViewTemporary.ScopeBox : 0)
+                   | (originalAnnotationCrop is not null ? ViewTemporary.AnnotationCrop : 0);
+        return scope.Temporarily(view, what, "crop",
+            set: () => {
+                if (originalScopeId != ElementId.InvalidElementId) scopeParam!.Set(ElementId.InvalidElementId);
+                ApplyCrop(view, modelBox, marginPercent);
+                if (originalAnnotationCrop is not null) annotationCropParam!.Set(1);
+            },
+            use: () => {
+                var producedPath = ExportCropped(document, view, pixelSize, out var refusal);
+                // Read while the temporary crop is still set: it is the crop the image was exported with.
+                return BuildResult(document, view, producedPath, pixelSize, TryModelRect(view), null,
+                    refusal is { } refused ? (null, refused) : TryRegistration(view, producedPath)) with { Restore = new(true, []) };
+            },
+            undo: () => {
                 view.CropBox = originalCrop;
                 view.CropBoxActive = originalActive;
                 view.CropBoxVisible = originalVisible;
                 if (originalAnnotationCrop is { } annotationCrop) annotationCropParam!.Set(annotationCrop);
                 // Re-assigning the scope box re-locks the crop to its extent (the original state).
                 if (originalScopeId != ElementId.InvalidElementId) scopeParam!.Set(originalScopeId);
-            });
-        }
-    }
-
-    private static void RunCropTransaction(Document document, string name, Action apply) {
-        using var transaction = new Transaction(document, name);
-        if (transaction.Start() != TransactionStatus.Started)
-            throw new InvalidOperationException($"'{name}' transaction could not start.");
-        apply();
-        if (transaction.Commit() != TransactionStatus.Committed)
-            throw new InvalidOperationException(
-                $"'{name}' transaction did not commit (a Revit failure/warning likely rolled it back).");
+            },
+            whenLeft: data => data with { Restore = new(false, what.Codes()) });
     }
 
     /// <summary>
     ///     Sheeted-schedule capture: export the sheet, then pixel-crop to the schedule
-    ///     instance's outline. When the schedule is filtered by sheet, the filter is
-    ///     temporarily lifted (set → export → restore, like focus capture) so the image
-    ///     shows the FULL schedule, not the one-sheet slice the placement happens to render.
+    ///     instance's outline. With a <paramref name="scope" /> (the focused capture) a sheet filter is
+    ///     temporarily lifted (set → export → restore, like the crop) so the image shows the FULL schedule.
+    ///     Without one (the read) the schedule is captured as placed: the one-sheet slice, and no transaction.
     /// </summary>
     public static RevitViewImageData ExportSheetedSchedule(
         Document document,
         ViewSheet sheet,
         ScheduleSheetInstance instance,
         double marginPercent,
-        int pixelSize
+        int pixelSize,
+        SessionWrite? scope = null
     ) {
         var schedule = (ViewSchedule)document.GetElement(instance.ScheduleId);
-        if (!schedule.Definition.IsFilteredBySheet)
+        if (scope is null || !schedule.Definition.IsFilteredBySheet)
             return ExportSheetedScheduleCore(document, sheet, instance, marginPercent, pixelSize);
 
         if (document.IsReadOnly)
@@ -155,16 +181,13 @@ public static class RevitViewImageExporter {
         // and flip-regen (2-6ms) + rollback (12-23ms) are noise against the ~300ms export.
         // Committed set → export → restore is kept for symmetry with the crop path above, where
         // it is the only shape that works.
-        RunCropTransaction(document, "PE lift schedule sheet filter",
-            () => schedule.Definition.IsFilteredBySheet = false);
-        try {
+        return scope.Temporarily(schedule, ViewTemporary.SheetFilter, "schedule sheet filter",
+            set: () => schedule.Definition.IsFilteredBySheet = false,
             // Re-fetch: the instance regrows to full contents once the filter is lifted.
-            var fullInstance = (ScheduleSheetInstance)document.GetElement(instance.Id);
-            return ExportSheetedScheduleCore(document, sheet, fullInstance, marginPercent, pixelSize);
-        } finally {
-            RunCropTransaction(document, "PE restore schedule sheet filter",
-                () => schedule.Definition.IsFilteredBySheet = true);
-        }
+            use: () => ExportSheetedScheduleCore(document, sheet, (ScheduleSheetInstance)document.GetElement(instance.Id),
+                marginPercent, pixelSize) with { Restore = new(true, []) },
+            undo: () => schedule.Definition.IsFilteredBySheet = true,
+            whenLeft: data => data with { Restore = new(false, ViewTemporary.SheetFilter.Codes()) });
     }
 
     private static RevitViewImageData ExportSheetedScheduleCore(
@@ -335,6 +358,8 @@ public static class RevitViewImageExporter {
             new FileInfo(producedPath).Length,
             frame.PixelWidth,
             frame.PixelHeight,
+            new Lens(LensBasis.UserView, view.Id.Value()),
+            ReadHidden(document, view),
             RevitViewImageData.SmallImageWarning(frame.PixelWidth, frame.PixelHeight, requestedPixelSize),
             scale,
             modelRect,

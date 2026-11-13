@@ -2,6 +2,8 @@ import { peClient } from "#/host/pe-client";
 import { peReadings, type Readings } from "#/host/resource-stream";
 import {
   workWriteAckSchema,
+  workTimelineSchema,
+  WORK_TIMELINE_READ,
   type RouteStateWriteResult,
   type WorkKey,
   type WorkWriteAck,
@@ -9,7 +11,6 @@ import {
 } from "@pe/agent-contracts";
 import { peRoutes } from "@pe/agent-contracts/pe-api";
 import { FINDINGS_OWNER } from "@pe/agent-contracts/slots";
-import { z } from "zod";
 import type { WorkAdmission } from "./route-discovery";
 export function routeInput(route: string, key: WorkKey) {
   const query: Record<string, string> = {};
@@ -50,15 +51,24 @@ export async function undoOwnFinding(
   key: WorkKey,
   client: Pick<typeof peClient, "response"> = peClient,
 ): Promise<{ message: string } | null> {
-  const input = routeInput(FINDINGS_OWNER, { ...key, route: FINDINGS_OWNER });
-  const read = await client.response("work.get", input);
-  const revision = read.ok
-    ? z.object({ revision: z.number().int() }).safeParse(await read.json()).data?.revision
+  // The host Timeline's step door (ADR 0042): read the step it offers this caller for the findings
+  // Work alone, then send it back. k2/journal-delete replaces this path with the mount's Timeline.
+  const findings = { ...key, route: FINDINGS_OWNER };
+  const read = {
+    read: WORK_TIMELINE_READ,
+    args: { works: [findings] },
+    subscription: `undo-finding-${crypto.randomUUID()}`,
+    generation: 0,
+  };
+  const shown = await client.response("reads.value", { body: read });
+  void client.response("reads.value", { body: { ...read, release: true } }).catch(() => {});
+  const timeline = shown.ok
+    ? workTimelineSchema.safeParse(((await shown.json()) as { value?: { data?: unknown } | null }).value?.data).data
     : undefined;
-  if (revision === undefined) return { message: "No findings on this document to undo" };
+  if (!timeline?.undo) return { message: timeline?.refusal.undo ?? "No findings on this document to undo" };
   const response = await client.response("work.history", {
-    ...input,
-    body: { direction: "undo", expectedRevision: revision },
+    ...routeInput(FINDINGS_OWNER, findings),
+    body: { direction: "undo", works: [findings], expected: timeline.undo },
   });
   const wire = (await response.json().catch(() => null)) as { ok?: boolean; error?: unknown } | null;
   return response.ok && wire?.ok !== false

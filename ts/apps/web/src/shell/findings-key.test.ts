@@ -22,13 +22,18 @@ const basis = { member: ref, rawContent: "{}", sha256: "f".repeat(64) };
 const address = addressSchema.parse("C:/model.rvt");
 const port = subjectCode({ keyKind: "UniqueId", key: uniqueIdSchema.parse("9e9fb89e-a9db-4d9a-8f35-b8fbc2303423-00d3da72"), sub: { port: 1 } });
 type Ports = NonNullable<Parameters<typeof mountTypedRoute>[3]>;
-type Call = { name: string; query: Record<string, string> };
+type Call = { name: string; query: Record<string, string>; works?: unknown };
 
 /** /pods at a picked member on one document: the route's Work is keyed by the member, the findings by the document. */
 function mountPods(readings: NonNullable<Ports["readings"]>, calls: Call[] = []) {
-  const findings: NonNullable<Ports["findings"]> = { async response(name: string, input: { query?: object }) {
-    calls.push({ name, query: { ...input.query } });
-    return name === "work.get" ? Response.json({ revision: 3, doc: { findings: {} } }) : Response.json({ ok: true });
+  const findings: NonNullable<Ports["findings"]> = { async response(name: string, input: { query?: object; body?: unknown }) {
+    const works = (input.body as { args?: { works?: unknown } } | undefined)?.args?.works;
+    calls.push({ name, query: { ...input.query }, ...(works ? { works } : {}) });
+    // The host Timeline's answer for the findings Work: one step of the person's to undo.
+    return name === "reads.value"
+      ? Response.json({ value: { data: { rows: [], redo: null, refusal: { undo: null, redo: null },
+          undo: { work: { binding: "address", route: "findings", target: address }, revision: 3, label: "late" } } } })
+      : Response.json({ ok: true });
   } };
   return mountTypedRoute(pods, {
     address: { read: () => new URLSearchParams(), write() {}, subscribe: () => () => {} },
@@ -93,7 +98,11 @@ test("on a member-keyed route the findings Reading and undo address one findings
     expect(seen, "one subscription, to the document's findings Work").toEqual([{ kind: "work", binding: "address", route: "findings", target: address }]);
     expect(await mount.undoFinding()).toBeNull();
     expect(calls.map((call) => call.name)).toContain("work.history");
-    expect(calls.filter((call) => JSON.stringify(call.query) !== JSON.stringify({ target: address }))).toEqual([]);
+    // The Timeline read carries its Work in the body; every keyed call names the document, not the member.
+    expect(calls.filter((call) => call.name !== "reads.value" && JSON.stringify(call.query) !== JSON.stringify({ target: address }))).toEqual([]);
+    expect(calls.filter((call) => call.name === "reads.value").map((call) => call.works)).toContainEqual([
+      { binding: "address", route: "findings", target: address },
+    ]);
   } finally { mount.dispose(); }
 });
 

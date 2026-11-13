@@ -354,6 +354,33 @@ function receiptRow(
   };
 }
 
+function nativeTouchedRows(receipt: ActionReceipt): NoticeDraft[] {
+  return receipt.steps.flatMap((step): NoticeDraft[] => {
+    if ((step.transport !== "bridge" && !("opReceipt" in step)) || step.state === "running") return [];
+    if (step.transport === "bridge" && !step.touched && (step.bridgeReply === "missing-touched" || step.bridgeReply === "invalid-touched"))
+      return [{ key: `native:${step.id}`, group: "failed" as const, revision: 0,
+        verb: step.bridgeReply, what: step.key, where: callerWord(receipt.caller),
+        says: step.bridgeReply === "missing-touched"
+          ? "Revit answered without a touched value. Its document changes were not reported."
+          : "Revit answered with an invalid touched value. Its document changes could not be decoded.",
+        at: receipt.startedAt, url: null, refusal: "No address yet: this receipt has no page" }];
+    if (!step.touched || !["restoreFailed", "unauthorized", "unknown"].includes(step.touched.kind)) return [];
+    const touched = step.touched;
+    return [{
+      // One card per native step, even when the parent receipt advances after its terminal.
+      key: `native:${step.id}`, group: "failed" as const, revision: 0,
+      verb: touched.kind, what: step.key, where: callerWord(receipt.caller),
+      says: touched.kind === "restoreFailed" ? "Revit could not restore the captured view. Check its view settings."
+        : touched.kind === "unauthorized" ? "Revit changed the document outside the permitted scope."
+        : touched.kind === "unknown" && touched.reason === "process-exit"
+          ? "Revit exited before answering. It may have changed the model; the outcome is unknown."
+        : "The native call's changes are unknown. Check Revit before running it again.",
+      detail: JSON.stringify(touched), at: receipt.startedAt, url: null,
+      refusal: "No address yet: this receipt has no page",
+    }];
+  });
+}
+
 /** Every row, group order first (waits and working lead), newest first inside a group. */
 export function noticeRows(sources: NoticeSources, now: number): NoticeDraft[] {
   const rows: NoticeDraft[] = [
@@ -372,7 +399,10 @@ export function noticeRows(sources: NoticeSources, now: number): NoticeDraft[] {
     ...sources.threads
       .filter((thread) => thread.lifecycle.status === "active")
       .flatMap((thread) => threadRow(thread, now) ?? []),
-    ...sources.receipts.flatMap((receipt) => receiptRow(receipt, now) ?? []),
+    ...sources.receipts.flatMap((receipt) => {
+      const parent = receiptRow(receipt, now);
+      return [...(parent ? [parent] : []), ...nativeTouchedRows(receipt.action)];
+    }),
     ...sources.stored.flatMap((notice) => storedRow(notice, now) ?? []),
     ...sources.held.map((send) => ({
       key: `held:${send.id}`,

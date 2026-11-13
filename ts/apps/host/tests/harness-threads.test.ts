@@ -227,7 +227,7 @@ test.each(["claude", "codex"] as const)(
           else if (op === "ducts.tables") value = { folder: "fixture", tables: {}, missing: [], unsupported: {} };
           else if (op === "ducts.apply" || op === "ducts.apply.plan") {
             const preview = op === "ducts.apply.plan";
-            await journal.markDispatched(requestId!);
+            await journal.markDispatched(requestId!, "bridge");
             if (!preview) writes.push(input);
             value = {
               previewOnly: preview,

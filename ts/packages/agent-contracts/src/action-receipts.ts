@@ -5,7 +5,6 @@ import { footprintSchema } from "./run-registry.ts";
 import { executionTargetSchema } from "./target.ts";
 import { consumedSchema, claimSchema, commandRefusalSchema } from "./command.ts";
 import { nativeProcessSchema } from "./native-process.ts";
-import { opEffect } from "@pe/host-contracts/generated";
 export { nativeProcessSchema, type NativeProcess } from "./native-process.ts";
 
 /** One public outcome vocabulary across host receipts, Pea and the shell Timeline. */
@@ -32,9 +31,6 @@ const stepIntent = z.object({
   id: z.string(),
   key: z.string(),
   kind: z.enum(["native", "file", "publication"]),
-  /** Host-stamped from the generated op catalog when a native step is recorded. A succeeded Read or
-   * rolled-back TransactRead changed no model; an unstamped step (older rows, files) is an effect. */
-  effect: z.enum(opEffect).optional(),
   input: z.unknown(),
   process: nativeProcessSchema.optional(),
   releases: z.array(z.strictObject({ action: z.string(), claim: claimSchema })).optional(),
@@ -59,33 +55,52 @@ const executionFailure = {
     )
     .optional(),
 };
-export const actionStepSchema = z.discriminatedUnion("state", [
-  stepIntent.extend({ state: z.literal("running") }).strict(),
-  stepIntent
-    .extend({
-      state: z.literal("succeeded"),
-      result: z.unknown().refine((value) => value !== undefined),
-    })
-    .strict(),
-  stepIntent
-    .extend({
-      state: z.literal("failed"),
-      ...executionFailure,
-      notDispatched: z.literal(true).optional(),
-    })
-    .strict(),
-  stepIntent.extend({ state: z.literal("unknown"), ...executionFailure }).strict(),
-  // Cancelled is its own settled state: the op reached Revit, stopped at a checkpoint, and needs
-  // no recovery read. Unknown means nobody knows; failed means the operation answered, and
-  // notDispatched proves it never ran when present.
-  stepIntent
-    .extend({
-      state: z.literal("cancelled"),
-      error: z.string(),
-      status: z.number(),
-      notDispatched: z.literal(true).optional(),
-    })
-    .strict(),
+function stepStates<T extends z.ZodRawShape>(transport: T) {
+  const intent = stepIntent.extend(transport);
+  return z.discriminatedUnion("state", [
+    intent.extend({ state: z.literal("running") }).strict(),
+    intent
+      .extend({
+        state: z.literal("succeeded"),
+        result: z.unknown().refine((value) => value !== undefined),
+      })
+      .strict(),
+    intent
+      .extend({
+        state: z.literal("failed"),
+        ...executionFailure,
+        notDispatched: z.literal(true).optional(),
+      })
+      .strict(),
+    intent.extend({ state: z.literal("unknown"), ...executionFailure }).strict(),
+    // Cancelled is its own settled state: the op reached Revit, stopped at a checkpoint, and needs
+    // no recovery read. Unknown means nobody knows; failed means the operation answered, and
+    // notDispatched proves it never ran when present.
+    intent
+      .extend({
+        state: z.literal("cancelled"),
+        error: z.string(),
+        status: z.number(),
+        notDispatched: z.literal(true).optional(),
+      })
+      .strict(),
+  ]);
+}
+/** A bridge reply or a decoded C# op receipt carries model-change evidence; dispatch transport stays immutable. */
+export const actionStepSchema = z.union([
+  stepStates({
+    transport: z.literal("bridge"),
+    touched: z.lazy(() => touchedSchema).optional(),
+    nativeEvidence: z.lazy(() => observedSchema).optional(),
+    bridgeReply: z.enum(["touched", "missing-touched", "invalid-touched"]).optional(),
+  }),
+  stepStates({
+    transport: z.literal("sdk").optional(),
+    opReceipt: z.lazy(() => nativeReceiptSchema),
+    touched: z.lazy(() => touchedSchema),
+    nativeEvidence: z.lazy(() => observedSchema).optional(),
+  }),
+  stepStates({ transport: z.literal("sdk").optional() }),
 ]);
 export type ActionStep = z.infer<typeof actionStepSchema>;
 /** Host-filed receipt checkpoint. TODO: docs/features/routes/LEDGER.md#s7-b8dae54505 resolve these references in the owed ?at= viewer. */
@@ -205,9 +220,9 @@ export const viewRefSchema = z.strictObject({
 export type ViewRef = z.infer<typeof viewRefSchema>;
 const changed = {
   transactions: z.array(z.string()),
-  added: z.number().int(),
-  modified: z.number().int(),
-  deleted: z.number().int(),
+  added: z.number().int().nonnegative(),
+  modified: z.number().int().nonnegative(),
+  deleted: z.number().int().nonnegative(),
 };
 /** What one native call did to the document. Filled by the scope and the change monitor, never by
  * an op. Omitted from what Pea reads when "none". `restoreFailed`, `unauthorized` and `unknown`
@@ -224,33 +239,33 @@ export const touchedSchema = z.discriminatedUnion("kind", [
         view: viewRefSchema,
         left: z.array(z.enum(["crop", "scopeBox", "annotationCrop", "sheetFilter"])),
       }),
-    ),
+    ).min(1),
   }),
   z.strictObject({ kind: z.literal("wrote"), ...changed }),
   z.strictObject({ kind: z.literal("unauthorized"), ...changed }),
   z.strictObject({
     kind: z.literal("unknown"),
-    reason: z.enum(["lost-response", "cancelled-mid-effect", "process-exit", "posted-command"]),
+    reason: z.enum(["lost-response", "cancelled-mid-effect", "process-exit", "posted-command", "overlapped"]),
   }),
 ]);
 export type Touched = z.infer<typeof touchedSchema>;
-/** The least every evidence record states (C# `IObserved`). An absent revision is no
+/** The least every evidence record states (C# `IObserved`). A null or absent revision is no
  * source-revision proof: the observed basis is unavailable, never 0 or "current". The domain's own
  * members (Space's sources and manifest) ride beside these two and are kept. */
 export const observedSchema = z.looseObject({
   documentKey: z.string(),
-  revision: z.number().int().optional(),
+  revision: z.number().int().nullish(),
 });
 export type Observed = z.infer<typeof observedSchema>;
-/** The one object the bridge writes to an op receipt's response file (C# `OpReceiptResponse`),
+/** The one object a C# op writes to its receipt's response file (`OpReceiptResponse`),
  * which `pe-revit op result` returns as `response`. A success has `payload` and no `error`; a
  * failure has `error` and no `payload`. Both carry `touched`: a failed or cancelled call may still
  * have written. `evidence` is absent when the op's response type declares none. The verdict is on
  * the SDK receipt, not here. */
 export const nativeReceiptResponseSchema = z.union([
   z.strictObject({
-    payload: z.unknown(),
-    touched: touchedSchema,
+    payload: z.unknown().refine((value) => value !== undefined, "Success requires a payload key"),
+    touched: touchedSchema.refine((value) => value.kind !== "unauthorized", "Unauthorized changes cannot succeed"),
     evidence: observedSchema.optional(),
   }),
   z.strictObject({ ...nativeReceiptFailureSchema.shape, touched: touchedSchema }),

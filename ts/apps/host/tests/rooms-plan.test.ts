@@ -8,6 +8,8 @@ test("a plan draws only a paired URL and finite two-dimensional native registrat
     byteSize: 1,
     width: 800,
     height: 480,
+    lens: { basis: "UserView", viewId: 1 },
+    hidden: [],
     registration: {
       width: 800,
       height: 480,

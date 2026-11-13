@@ -19,7 +19,7 @@ import { listPackages } from "../../../host/src/packages";
 import { createPodRoutes } from "../../../host/src/pod-routes";
 import { fileRouteDocumentStore } from "../../../host/src/route-document-store";
 import { graphRoute, registeredReads } from "../../../host/src/reads/routes";
-import { Publications } from "../../../host/src/reads/evaluator";
+import { Publications } from "../../../host/src/reads/publications";
 import { loadPodHostEntry, podArtifactSchema } from "../../../host/src/pod-artifact";
 import { createWorkFeedClient } from "../shell/work-feed-client";
 import { mountTypedRoute } from "../shell/typed-mount";
@@ -309,16 +309,18 @@ test("a stale typed Pod remains read-only after refresh and retained return", as
   try {
     await vi.waitFor(() => expect(h.mount.owner(h.key.route)?.problem).toMatch(/older|reload/i));
     const count = h.acquired.filter((kind) => kind === "work" || kind === "work-acks").length;
-    const edit = () =>
-      h.mount.draw("calculation", (ctx) =>
-        ctx.cells.edit({ ...h.inputs, length: 300 }, { label: "Stale edit" }),
-      );
-    expect(await edit()).toMatchObject({ code: "unavailable" });
+    // A stale Pod's read is value-less: the shell draws its line and no body, so there is no cell to edit through.
+    const drawsBody = () => {
+      let body = false;
+      h.mount.draw("calculation", () => { body = true; return null; });
+      return body;
+    };
+    expect(drawsBody()).toBe(false);
     h.mount.refresh();
     h.mount.release();
     const stop = h.mount.subscribe(() => {});
     try {
-      expect(await edit()).toMatchObject({ code: "unavailable" });
+      expect(drawsBody()).toBe(false);
     } finally {
       stop();
     }

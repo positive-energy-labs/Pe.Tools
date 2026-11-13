@@ -3,6 +3,9 @@ import { relative, resolve } from "node:path";
 import ts from "typescript";
 import { execFileSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
+import { hostOpCatalog } from "../../../packages/host-contracts/src/generated/host-catalog.generated.ts";
+
+const catalogPath = "ts/packages/host-contracts/src/generated/host-catalog.generated.ts";
 
 export const root = resolve(import.meta.dirname, "../../../..");
 const read = (p: string) => readFileSync(resolve(root, p), "utf8");
@@ -149,29 +152,34 @@ function structuralCensus() {
   return Object.fromEntries(Object.entries(result).map(([law, sites]) => [law, [...sites].sort()]));
 }
 
-function geometryCensus(): string[] {
+/**
+ * A read of geometry must name its subject. The axes come from the generated op catalog (the public
+ * contract, drift-checked by codegen:check), not from the `[Op]` argument list, which slice 3 reshapes;
+ * the C# source only says where each op is declared. Fails closed both ways: a declared op with no
+ * catalog row, and a catalog row nothing declares.
+ */
+export function geometryCensus(
+  catalog: readonly { key: string; subject: string; touches: string; effect: string }[] = hostOpCatalog,
+  sources: Record<string, string> = Object.fromEntries(
+    files("dotnet").filter((p) => p.endsWith(".cs") && !p.includes("Tests/")).map((p) => [p, read(p)]),
+  ),
+): string[] {
+  const rows = new Map(catalog.map((row) => [row.key, row]));
+  const declared = new Set<string>();
   const result: string[] = [];
-  // Read current Op axes; absent declarations fail closed.
-  for (const p of files("dotnet").filter((p) => p.endsWith(".cs") && !p.includes("Tests/"))) {
-    const text = read(p);
-    for (const m of text.matchAll(/\[Op\(\s*"([^"]+)"((?:"(?:\\.|[^"\\])*"|[^"])*?)\)\]/gs)) {
-      const axes = m[2]!.match(
-        /^\s*,\s*OpSubject\.(\w+)\s*,\s*(OpTouches\.\w+(?:\s*\|\s*OpTouches\.\w+)*)\s*,\s*OpEffect\.(\w+)/,
-      );
-      const subject = axes?.[1];
-      const touches = axes?.[2];
-      const effect = axes?.[3];
+  for (const [p, text] of Object.entries(sources))
+    for (const [, key] of text.matchAll(/\[Op\(\s*"([^"]+)"/g)) {
+      declared.add(key!);
+      const row = rows.get(key!);
       if (
-        !effect ||
-        !subject ||
-        !touches ||
-        ((effect === "Read" || effect === "TransactRead") &&
-          touches.includes("Geometry") &&
-          ["Document", "None"].includes(subject))
+        !row ||
+        ((row.effect === "Read" || row.effect === "TransactRead") &&
+          row.touches.split(", ").includes("Geometry") &&
+          ["Document", "None"].includes(row.subject))
       )
-        result.push(`${p}#Op:${m[1]}`);
+        result.push(`${p}#Op:${key}`);
     }
-  }
+  for (const row of catalog) if (!declared.has(row.key)) result.push(`${catalogPath}#Op:${row.key}`);
   return [...new Set(result)].sort();
 }
 
@@ -188,6 +196,15 @@ export function census(): Record<string, string[]> {
 }
 
 export type OffenderSets = Record<string, string[]>;
+const isOffenderSets = (value: unknown): value is OffenderSets =>
+  typeof value === "object" && value !== null &&
+  Object.values(value).every((sites) => Array.isArray(sites) && sites.every((site) => typeof site === "string"));
+/** The parser's own diagnostics (an internal of `ts.SourceFile`); its absence is a broken census, never clean. */
+function parseDiagnostics(source: ts.SourceFile): readonly ts.Diagnostic[] {
+  const diagnostics: unknown = Reflect.get(source, "parseDiagnostics");
+  if (!Array.isArray(diagnostics)) throw Error(`${source.fileName}: the parser exposes no parseDiagnostics`);
+  return diagnostics;
+}
 export const baselinePath = "ts/tests/repo-guards/src/unification-2.baseline.json";
 export function additions(actual: OffenderSets, allowed: OffenderSets): string[] {
   return Object.entries(actual).flatMap(([law, sites]) => {
@@ -223,13 +240,12 @@ export function baselineFloors(): CarriedFloor[] {
   });
   function floorAt(sha: string): OffenderSets[] {
     const value: unknown = JSON.parse(git("show", `${sha}:${baselinePath}`));
-    if (typeof value !== "object" || value === null || !Object.values(value).every(Array.isArray))
-      return [];
+    if (!isOffenderSets(value)) return [];
     // RATCHET-GREEN explicitly re-baselines the legacy ordinal format with audited causes.
     // Incomparable old snapshots cannot cap the new buckets; later multiset floors still shrink.
-    if (Object.values(value).some((sites) => sites.some((site: string) => /@\d+$/.test(site))))
+    if (Object.values(value).some((sites) => sites.some((site) => /@\d+$/.test(site))))
       return [];
-    return [value as OffenderSets];
+    return [value];
   }
 }
 
@@ -306,15 +322,13 @@ const compositionRoots = new Set([
   // Typed mounts own the fixture/live composition boundary.
   `${WEB}shell/typed-mount.ts`,
   `${WEB}shell/typed-shell.tsx`,
-  `${WEB}shell/mount-work.tsx`,
   `${WEB}shell/fixture-lane.ts`,
   // The shared selector was extracted without the retired fixture engine.
   `${WEB}shell/fixture-name.ts`,
-  `${WEB}chat/owner.tsx`,
 ]);
 // Admitted Place composition may bind app capabilities and fixture inputs. Its implementation
 // is private like the shell; direct private-owner imports and re-exports still cross the fence.
-const admittedPlaceRoots = new Set([`${WEB}chat/owner.tsx`, `${WEB}workbench/provider/view.tsx`, `${WEB}workbench/thread-view.tsx`, `${WEB}route/builtin-routes.tsx`, `${WEB}pods/route.tsx`, `${WEB}router.tsx`]);
+const admittedPlaceRoots = new Set([`${WEB}workbench/provider/view.tsx`, `${WEB}workbench/thread-view.tsx`, `${WEB}route/builtin-routes.tsx`, `${WEB}router.tsx`]);
 /** A declared pane may display its public provenance; this grants no legacy-owner access. */
 function paneFixture(source: ts.SourceFile, node: ts.Node): boolean {
   if (!ts.isPropertyAccessExpression(node) || !ts.isIdentifier(node.expression)) return false;
@@ -373,9 +387,7 @@ export function boundaryCensus(input?: Record<string, string>): OffenderSets {
     const imports: { node: ts.Node; target: string }[] = [];
     edges.set(file, imports);
     // TypeScript recovers an AST from malformed input. Recovery must never mean clean.
-    for (const diagnostic of (
-      source as ts.SourceFile & { parseDiagnostics: readonly ts.Diagnostic[] }
-    ).parseDiagnostics)
+    for (const diagnostic of parseDiagnostics(source))
       result.malformedSources!.push(`${file}#parse:${diagnostic.code}`);
     const admittedNames = new Set<string>();
     walk(source, (node) => {
@@ -496,7 +508,8 @@ if (
   resolve(process.argv[1]) === resolve(import.meta.filename) &&
   process.argv.includes("--tighten")
 ) {
-  const prior = JSON.parse(read(baselinePath)) as OffenderSets;
+  const prior: unknown = JSON.parse(read(baselinePath));
+  if (!isOffenderSets(prior)) throw Error(`${baselinePath} is not offender sets`);
   const actual = { ...census(), ...boundaryCensus() };
   const next = Object.fromEntries(
     Object.entries(prior).map(([law, sites]) => [

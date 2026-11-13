@@ -22,7 +22,8 @@ import type { RecordingReader, RecordingWriter } from "../native-recording.ts";
 import { recordingReadSetReferences } from "../recording-points.ts";
 import { readSetRecords } from "../input-occurrence.ts";
 import { InvalidRead } from "../native-reads.ts";
-import { immutable, type Publication, type Publications } from "./evaluator.ts";
+import { immutable } from "./evaluator.ts";
+import type { Publication, Publications } from "./publications.ts";
 
 const fail = (message: string) =>
   new InvalidRead({ message, status: 409, problem: "history.unavailable" });

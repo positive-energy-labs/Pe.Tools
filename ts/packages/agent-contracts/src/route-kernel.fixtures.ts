@@ -159,13 +159,16 @@ export const builtinData = {
   resetOnTarget: [],
   observe: [],
 } as const satisfies RouteGraphJson;
+/** The value a reading holds, for a body that draws over a value-less state too. */
+const held = <T>(reading: import("./route-kernel-bodies.ts").ReadingState<T>) =>
+  "value" in reading ? reading.value : undefined;
 const source = { module: "bodies.js", export: "bodies" } as const;
 export const builtinBodies = {
   pick: {
     slot: "fields.system.picker.options",
     kind: "picker",
     source,
-    run: (reading) => reading.value?.map((s) => ({ id: s.id, label: s.name })) ?? [],
+    run: (reading) => held(reading)?.map((s) => ({ id: s.id, label: s.name })) ?? [],
   },
   rosterArgs: {
     slot: "readings.roster.args",
@@ -177,7 +180,7 @@ export const builtinBodies = {
     slot: "readings.total.derive",
     kind: "derive",
     source,
-    run: ({ work, readings }) => ({ total: work.amount * (readings.roster.value?.length ?? 1) }),
+    run: ({ work, readings }) => ({ total: work.amount * (held(readings.roster)?.length ?? 1) }),
   },
   edit: {
     slot: "verbs.edit.patches",
@@ -189,13 +192,13 @@ export const builtinBodies = {
     slot: "verbs.apply.intent",
     kind: "intent",
     source,
-    run: ({ work, captures }) => ({ amount: captures.total.value?.total ?? work.amount }),
+    run: ({ work, captures }) => ({ amount: held(captures.total)?.total ?? work.amount }),
   },
   main: {
     slot: "panes.main.body",
     kind: "pane",
     source,
-    run: ({ page, readings }) => `${page.read().system}: ${readings.total.value?.total}`,
+    run: ({ page, readings }) => `${page.read().system}: ${held(readings.total)?.total}`,
   },
 } satisfies BodyBindings<typeof builtinData, typeof schemas, typeof entries, string>;
 
@@ -272,7 +275,7 @@ export const podEntries = {
 export const podBodies = {
   pick: {
     ...builtinBodies.pick,
-    run: (reading) => reading.value?.map((s) => ({ id: s.id, label: s.name })) ?? [],
+    run: (reading) => held(reading)?.map((s) => ({ id: s.id, label: s.name })) ?? [],
   },
   rosterArgs: { ...builtinBodies.rosterArgs, run: ({ page }) => ({ filter: page.search }) },
   calculate: {
@@ -281,7 +284,7 @@ export const podBodies = {
       total:
         isManual(page.system)
           ? work.amount
-          : work.amount * (readings.roster.value?.length ?? 1),
+          : work.amount * (held(readings.roster)?.length ?? 1),
     }),
   },
   edit: {
@@ -290,7 +293,7 @@ export const podBodies = {
   },
   apply: {
     ...builtinBodies.apply,
-    run: ({ work, captures }) => ({ amount: captures.total.value?.total ?? work.amount }),
+    run: ({ work, captures }) => ({ amount: held(captures.total)?.total ?? work.amount }),
   },
   main: { ...builtinBodies.main, run: ({ page }) => (isManual(page.read().system) ? "manual" : "none") },
   cellGroup: {

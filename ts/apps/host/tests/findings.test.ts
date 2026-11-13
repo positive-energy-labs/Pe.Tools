@@ -10,6 +10,7 @@ import { RouteWorkspace } from "@pe/runtime";
 import { subjectCode, uniqueIdSchema, type SubjectRefCode } from "../../../packages/agent-contracts/src/subject-ref.ts";
 import { createPeRoutes } from "../src/pe-routes.ts";
 import { findingsExecutors } from "../src/slots/findings.ts";
+import { hostTimeline } from "../src/reads/work-timeline.ts";
 import { approvedPea, human } from "./callers.ts";
 import { fixtureNative } from "./fixture-native.ts";
 
@@ -44,7 +45,7 @@ async function doors() {
   const revision = async () => (await workspace.view(key, "findings"))?.revision ?? 0;
   const peaCaller = approvedPea("findings-doors");
   const post = native.actions({ workspace });
-  const routes = createPeRoutes({ workspace, registrations: [{ spec: findingsWork }] });
+  const routes = createPeRoutes({ workspace, journal: native.journal, registrations: [{ spec: findingsWork }] });
   let calls = 0;
   const document = { kind: "document", ref: socket.target } as const;
   /** One door call that must succeed; answers its receipt's result. */
@@ -96,6 +97,12 @@ async function doors() {
         `http://host/pe/route-state/findings/${verb}?target=${encodeURIComponent(target)}`,
         { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) },
       ))),
+    /** As a client presses undo: it names its route's Work only, and sends back the step the read shows. */
+    async undo(caller: Caller, by: "human" | "pea") {
+      const works = [bindWork("fans", target)];
+      const shown = await hostTimeline(workspace, native.journal).read(works, by);
+      return this.door("history", { direction: "undo", works, expected: shown.undo }, caller);
+    },
     close: async () => { await native.close(); await rm(dir, { recursive: true, force: true }); },
   };
 }
@@ -236,7 +243,7 @@ test("Pea's undo through the Work history door reverts Pea's own finding; the pe
   try {
     await d.say(input("p1", port, "claim", "no"), d.peaCaller);
     await d.say(input("h1", row, "claim", "yes"), human);
-    const undone = await d.door("history", { direction: "undo", expectedRevision: await d.revision() });
+    const undone = await d.undo(d.peaCaller, "pea");
     expect(await undone.json()).toMatchObject({ ok: true });
     expect(await d.authors()).toEqual([["h1", "person"]]);
   } finally { await d.close(); }
@@ -247,7 +254,7 @@ test("the person's undo through the Work history door reverts the person's own f
   try {
     await d.say(input("h1", row, "claim", "yes"), human);
     await d.say(input("p1", port, "claim", "no"), d.peaCaller);
-    const undone = await d.door("history", { direction: "undo", expectedRevision: await d.revision() }, human);
+    const undone = await d.undo(human, "human");
     expect(await undone.json()).toMatchObject({ ok: true });
     expect(await d.authors()).toEqual([["p1", "pea"]]);
   } finally { await d.close(); }

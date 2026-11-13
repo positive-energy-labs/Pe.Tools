@@ -1,6 +1,6 @@
 import { DispatchLimits } from "@pe/host-internal/dispatch";
 import { bindActionDispatch } from "../src/action-dispatch.ts";
-import { Cause, Effect, Exit, Fiber, Layer, Queue, Scope } from "effect";
+import { Cause, Context, Effect, Exit, Fiber, Layer, Queue, Scope } from "effect";
 import { TestClock } from "effect/testing";
 import { expect, vi } from "vite-plus/test";
 import type { BridgeFrame } from "@pe/host-contracts/contracts";
@@ -8,7 +8,16 @@ import { CANCEL_OPERATION_KEY, RevitBridgeLive, RevitProcessAlive } from "../src
 import { connectTestBridge } from "./bridge-fixture.ts";
 import { ActionJournalService } from "../src/receipt-services.ts";
 import type { ActionJournal } from "../src/action-journal.ts";
-import { effectTest } from "./effect-test.ts";
+import { effectTest, journalAt } from "./effect-test.ts";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { actionReceiptSchema } from "@pe/agent-contracts";
+import { noticeRows } from "../src/notice-feed.ts";
+import { readNativeReceipt } from "../src/native-receipts.ts";
+import { originalProcess, sdkEnvelope } from "./native-receipt-fixture.ts";
+import { command } from "../src/command-executor.ts";
+import { z } from "zod";
 
 // The session line's law (ADR 0029 phase 3b; a PROVEN 7.6 GB regression class lives behind it):
 // interrupting a waiter removes it and nothing else; op.cancel never takes a place in the line;
@@ -405,6 +414,105 @@ const terminal = (requestId: string, outcome = "Succeeded") => ({
 });
 const terminalFrame = (requestId: string, outcome?: string) =>
   JSON.stringify({ kind: "Terminal", terminal: terminal(requestId, outcome) });
+
+for (const mode of ["reported-unknown", "process-exit", "missing-touched", "restored-after-loss"] as const)
+effectTest(`a dispatched bridge request preserves its evidence: ${mode}`, () =>
+  Effect.gen(function* () {
+    const directory = yield* Effect.promise(() => mkdtemp(join(tmpdir(), "pe-bridge-unknown-")));
+    yield* Effect.addFinalizer(() => Effect.promise(() => rm(directory, { recursive: true, force: true })));
+    const services = yield* Layer.build(ActionJournalService.live(null, directory));
+    const journal = Context.get(services, ActionJournalService);
+    const { bridge, bridgeScope, target, sent, frame, close, life, socketOf } = yield* harness.pipe(Effect.provideService(ActionJournalService, journal));
+    yield* Effect.addFinalizer(() => Scope.close(bridgeScope, Exit.void));
+    journal.bindCommands({ probe: async () => null, resolve: () => command(
+      { says: "Read bridge evidence", needs: "nothing", effect: "command", dirties: [], input: z.record(z.string(), z.unknown()) },
+      z.null(), { bind: async () => ({ effects: [] }), run: (_ctx, execution) => execution.step(
+        "native", "test.bridge-unknown", {}, (id) => bridge.invoke("test.bridge-unknown", {}, target.session, target.openId, id)
+          .pipe(Effect.map(({ value }) => value)),
+      ) },
+    ) });
+    yield* Effect.promise(() => journal.invoke({ id: "bridge-unknown", key: "test.bridge-unknown", target: { kind: "host" }, input: {} },
+      { caller: { kind: "human", via: "local" }, basis: null }));
+    const request = yield* sent;
+    const touched = mode === "restored-after-loss" ? { kind: "restored", views: [] }
+      : { kind: "unknown", reason: mode === "process-exit" ? "process-exit" : "lost-response" };
+    if (mode === "process-exit") {
+      yield* close;
+      const pending = yield* Effect.promise(() => journal.list(undefined, "bridge-unknown"));
+      expect(pending[0]?.steps[0]).toMatchObject({ transport: "bridge", touched: { kind: "unknown", reason: "lost-response" } });
+      life.alive = false;
+      yield* TestClock.adjust("2 seconds");
+    } else {
+      let deliver = frame;
+      if (mode === "missing-touched" || mode === "restored-after-loss") {
+        yield* close;
+        deliver = (yield* socketOf()).frame;
+      }
+      const reply = JSON.parse(response(request.requestId));
+      if (mode !== "missing-touched") reply.response.touched = touched;
+      yield* deliver(JSON.stringify(reply));
+    }
+    const action = yield* Effect.promise(() => journal.wait("bridge-unknown"));
+    const rows = noticeRows({ threads: [], receipts: [{ revision: 1, action }], works: [], machine: null, stored: [], held: [] }, 0);
+    if (mode === "missing-touched") {
+      expect(action.steps[0]).not.toHaveProperty("touched");
+      expect(rows).toMatchObject([{ verb: "missing-touched", says: expect.stringContaining("answered without a touched value") }]);
+    } else if (mode === "restored-after-loss") {
+      expect(action.steps[0]).toMatchObject({ transport: "bridge", touched });
+      expect(rows).toEqual([]);
+    } else {
+      expect(action.steps[0]).toMatchObject({ transport: "bridge", touched });
+      expect(rows.filter((row) => row.key === `native:${request.requestId}`))
+        .toMatchObject([{ verb: "unknown", detail: JSON.stringify(touched) }]);
+      if (mode === "process-exit") expect(rows.find((row) => row.key === `native:${request.requestId}`)?.says).toContain("Revit exited");
+    }
+  }),
+);
+
+effectTest("socket killed during focused capture recovers restoreFailed and one notice", () =>
+  Effect.gen(function* () {
+    const directory = yield* Effect.promise(() => mkdtemp(join(tmpdir(), "pe-focused-socket-")));
+    const journal = journalAt(join(directory, "receipts.jsonl"), Date.now);
+    yield* Effect.addFinalizer(() => Effect.promise(async () => {
+      await journal.close();
+      await rm(directory, { recursive: true, force: true });
+    }));
+    const { call, sent, close, socketOf } = yield* harness.pipe(Effect.provideService(ActionJournalService, journal));
+    let terminalTouched: unknown;
+    const release = bindActionDispatch("focused-socket", {
+      refusal: () => null, validate: async () => null, dispatched: async () => {},
+      terminal: async (touched) => { terminalTouched = touched; },
+    });
+    yield* Effect.addFinalizer(() => Effect.sync(release));
+    const capture = yield* call("revit.context.view-image", { focus: { elementIds: [42] } }, "focused-socket");
+    const request = yield* sent;
+    yield* close;
+    const touched = { kind: "restoreFailed", views: [{
+      view: { documentKey: "model", uniqueId: "focus-view", id: 42 }, left: ["crop"],
+    }] };
+    yield* socketOf(inFlight({ terminals: [{ ...terminal(request.requestId), touched }] }));
+    yield* Fiber.await(capture);
+    expect(terminalTouched).toEqual(touched);
+    const recovered = yield* Effect.promise(() => readNativeReceipt({
+      id: request.requestId, key: request.operationKey, kind: "native", input: {},
+      state: "unknown", error: "socket lost", status: 503,
+    }, originalProcess, async () => sdkEnvelope({
+      requestId: request.requestId, state: "ok",
+      receipt: { ...originalProcess, requestId: request.requestId, key: request.operationKey, verdict: "ok" },
+      response: { payload: { image: "focus.png" }, touched },
+    })));
+    expect(recovered.step).toMatchObject({ state: "succeeded", touched });
+    const action = actionReceiptSchema.parse({
+      id: "focused-capture", key: request.operationKey, state: "succeeded", result: {},
+      caller: { kind: "human", via: "local" }, basis: null, target: { kind: "host" },
+      input: {}, steps: [recovered.step], prepared: { state: "ready", value: null },
+      recovery: [], startedAt: "2026-11-12T00:00:00Z",
+    });
+    expect(noticeRows({ threads: [], works: [], machine: null, stored: [], held: [],
+      receipts: [{ revision: 1, action }] }, 0))
+      .toMatchObject([{ key: `native:${request.requestId}`, verb: "restoreFailed" }]);
+  }),
+);
 
 effectTest("a failed dispatch journal mark stays typed and holds B until A Terminal", () =>
   Effect.gen(function* () {
