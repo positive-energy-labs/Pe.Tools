@@ -78,7 +78,7 @@ const allZones = model.zones.map((zone) => zone.zone.guid);
 const seed = (
   title: string,
   page: Partial<TakeoffPage>,
-  readings: Partial<Record<TakeoffReadingKey, unknown>>,
+  readings: Partial<Record<TakeoffReadingKey, unknown>> & { snapshot?: TakeoffSnapshot },
   failure?: { action: string; message: string },
 ): Seed<TakeoffsRouteDocument, TakeoffReadingKey, TakeoffPage> => ({
   title,
@@ -94,7 +94,7 @@ const seed = (
             target: DEMO_TARGET.ref,
             capture: {
               id: "0".repeat(64),
-              capturedAt: (readings.snapshot as TakeoffSnapshot).reading.observedAt,
+              capturedAt: readings.snapshot.reading.observedAt,
               provenance: { kind: "live", target: DEMO_TARGET.ref },
               snapshot: readings.snapshot,
             },
