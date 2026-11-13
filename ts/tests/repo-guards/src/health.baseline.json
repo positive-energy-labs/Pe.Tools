@@ -1101,7 +1101,6 @@
     "ts/apps/host/src/rhvac-ops.ts": 3,
     "ts/apps/host/src/route-document-store.ts": 1,
     "ts/apps/host/src/settings.ts": 1,
-    "ts/apps/host/src/source-closures.ts": 2,
     "ts/apps/host/src/takeoff-captures.ts": 9,
     "ts/apps/host/src/update-reader.ts": 3,
     "ts/apps/host/vite.config.ts": 4,
