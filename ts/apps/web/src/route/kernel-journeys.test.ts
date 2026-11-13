@@ -1,3 +1,4 @@
+import { valueOf } from "./typed-route";
 import { stableFanKey } from "../ducts/sheet/model";
 import { expect, test, vi } from "vite-plus/test";
 import { observeResources } from "@pe/runtime";
@@ -81,7 +82,7 @@ async function journey() {
   const stop = mount.subscribe(() => {});
   const ready = () =>
     vi.waitFor(
-      () => expect(mount.value(), "mounted publication").toMatchObject({ current: true }),
+      () => expect(mount.value(), "mounted publication").toMatchObject({ state: "ready" }),
       { timeout: 20_000 },
     );
   const fan = (mark: string) => {
@@ -190,12 +191,12 @@ test("JM H18 open core and roster together, switch fan and retain both host publ
   try {
     await j.ready();
     const roster = fans.spec.reads!.roster;
-    await vi.waitFor(() => expect(j.mount.value(roster).current, "H18: roster survives concurrent core demand").toBe(true));
+    await vi.waitFor(() => expect(j.mount.value(roster).state === "ready", "H18: roster survives concurrent core demand").toBe(true));
     j.mount.page.subject(j.fan("MUAS-1"));
     await j.ready();
-    expect(j.mount.value(roster).current, "H18: selected core cannot supersede the roster").toBe(true);
-    expect(j.mount.value(roster).value.rows.length).toBeGreaterThan(1);
-    expect(j.mount.value().value.opened.length, "H18: core retains its own selected scope").toBe(1);
+    expect(j.mount.value(roster).state === "ready", "H18: selected core cannot supersede the roster").toBe(true);
+    expect(valueOf(j.mount.value(roster)).rows.length).toBeGreaterThan(1);
+    expect(valueOf(j.mount.value()).opened.length, "H18: core retains its own selected scope").toBe(1);
     const point = historyPointSchema.parse(await j.host.history("", { kind: "captured", document: path }));
     expect(point.history.publications.filter(p => p.read === "fans.sheet").length,
       "H18: shared operation records both distinct argument publications").toBeGreaterThanOrEqual(2);
@@ -207,13 +208,12 @@ test("J2 switch a subject while its answer is delayed, then hide and return", as
   let held: ReturnType<typeof gate> | undefined;
   try {
     await j.ready();
-    const old = j.mount.value().value;
+    const old = valueOf(j.mount.value());
     held = j.delay();
     j.mount.page.subject(j.fan("MUAS-1"));
     await held.entered.promise;
     expect(j.mount.value(), "B05: keep the last answer while the new subject waits").toMatchObject({
-      current: false,
-      status: "pending",
+      state: "refreshing",
       value: old,
     });
     j.mount.page.subject(j.fan("FC-23"));
@@ -225,7 +225,7 @@ test("J2 switch a subject while its answer is delayed, then hide and return", as
       expect(j.mount.value(), "B06: old generation cannot replace the new pane").toEqual(current),
     );
     j.mount.release();
-    expect(j.mount.value().value, "B05: hide retains the answer").toEqual(current.value);
+    expect(valueOf(j.mount.value()), "B05: hide retains the answer").toEqual(valueOf(current));
     const resume = j.mount.subscribe(() => {});
     try {
       await j.ready();

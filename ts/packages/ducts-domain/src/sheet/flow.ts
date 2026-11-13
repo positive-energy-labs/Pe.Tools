@@ -65,7 +65,7 @@ export interface Flows {
   /** Per end: cfm, or null when it needs one and has none. */
   end: (number | null)[];
   endSource: (string | null)[];
-  /** Per leg key `${state}>${out}`: summed cfm, or null with the no-flow blockers that withhold it. */
+  /** Per leg key `${state}>${out}`: null if any contributor is unknown; never a partial sum. */
   leg: Map<string, { cfm: number | null; ends: number; missing: string[]; sources: Set<string> }>;
   /** A-INFLOW sources, by end index; empty on side-stream fans and in chain mode. */
   inflows: Inflow[];
@@ -183,10 +183,14 @@ export function flowsOf(
   const endSource: (string | null)[] = [];
   const inflows: Inflow[] = [];
   w.ends.forEach((e, i) => {
-    let cfm: number | null = 0;
+    let cfm: number | null = null;
     let source: string | null = null;
     if (opts.only) {
-      if (i === opts.only.end) [cfm, source] = [opts.only.cfm, opts.only.source];
+      [cfm, source] = i === opts.only.end
+        ? [opts.only.cfm, opts.only.source]
+        : [0, "outside chain"];
+    } else if (e.end.kind === "sibling-fan") {
+      [cfm, source] = [0, "sibling-fan"];
     } else if (isInflow(e)) {
       const inflow = inflowOf(e);
       inflows.push({ end: i, ...inflow });
@@ -278,7 +282,7 @@ export function flowsOf(
         at.cfm = null;
         at.missing.push(...e.blockerIds.filter((b) => b.startsWith("no-flow:")));
       } else if (at.cfm != null) at.cfm += end[i]!;
-      if (end[i]) {
+      if (end[i] != null) {
         at.ends++;
         at.sources.add(endSource[i]!);
       }

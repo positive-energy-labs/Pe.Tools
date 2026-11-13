@@ -1,10 +1,12 @@
 import type { PictureScope } from "@pe/agent-contracts/slots";
 import { subjectCode, uniqueIdSchema } from "../../../../packages/agent-contracts/src/subject-ref.ts";
-import type { FansDrawContext } from "./route";
+import { sheet, type FansDrawContext } from "./route";
+import { valueOf } from "../route/typed-route";
 import { cellMembers, selectedKeys } from "../ducts/cell-focus";
 import { ductElements } from "../ducts/identity";
 export function bindings(ctx:FansDrawContext) {
-  const snapshot=ctx.value.value?.sheetSnapshot;
+  // The roster pane names the roster as its read; the open sheet's snapshot rides the sheet reading on every pane.
+  const snapshot=valueOf(ctx.read(sheet))?.sheetSnapshot;
   const elements=ductElements(snapshot), selected=selectedKeys(ctx.selection.read().map(({id})=>id));
   return {selected,members:cellMembers(selected,elements),
     observation:{scope:{document:ctx.target?.kind === "document"?ctx.target.ref:null,source:"native" as const},

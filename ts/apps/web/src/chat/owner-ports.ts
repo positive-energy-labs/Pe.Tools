@@ -8,9 +8,8 @@ export function chatReading<T = unknown>(
   id: "machine" | "capabilities",
 ): Reading<T> {
   const state = owner.value,
-    value = state.value?.[id] as T | undefined;
-  if (state.current && value !== undefined) return { state: "ready", observation: value };
-  if (state.status === "failed") return { state: "failed", message: state.reason, previous: value };
+    value = state.value[id] as T | undefined;
+  if (state.state === "ready" && value !== undefined) return { state: "ready", observation: value };
   return value === undefined
     ? { state: "absent" }
     : { state: "stale", previous: value, reason: "dirtied" };

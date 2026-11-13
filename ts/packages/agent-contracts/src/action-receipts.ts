@@ -86,13 +86,19 @@ function stepStates<T extends z.ZodRawShape>(transport: T) {
       .strict(),
   ]);
 }
-/** Only bridge dispatches carry native model-change evidence. A reply overrides host uncertainty. */
+/** A bridge reply or a decoded C# op receipt carries model-change evidence; dispatch transport stays immutable. */
 export const actionStepSchema = z.union([
   stepStates({
     transport: z.literal("bridge"),
     touched: z.lazy(() => touchedSchema).optional(),
     nativeEvidence: z.lazy(() => observedSchema).optional(),
     bridgeReply: z.enum(["touched", "missing-touched", "invalid-touched"]).optional(),
+  }),
+  stepStates({
+    transport: z.literal("sdk").optional(),
+    opReceipt: z.lazy(() => nativeReceiptSchema),
+    touched: z.lazy(() => touchedSchema),
+    nativeEvidence: z.lazy(() => observedSchema).optional(),
   }),
   stepStates({ transport: z.literal("sdk").optional() }),
 ]);
@@ -239,7 +245,7 @@ export const touchedSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("unauthorized"), ...changed }),
   z.strictObject({
     kind: z.literal("unknown"),
-    reason: z.enum(["lost-response", "cancelled-mid-effect", "process-exit", "posted-command"]),
+    reason: z.enum(["lost-response", "cancelled-mid-effect", "process-exit", "posted-command", "overlapped"]),
   }),
 ]);
 export type Touched = z.infer<typeof touchedSchema>;
@@ -251,7 +257,7 @@ export const observedSchema = z.looseObject({
   revision: z.number().int().nullish(),
 });
 export type Observed = z.infer<typeof observedSchema>;
-/** The one object the bridge writes to an op receipt's response file (C# `OpReceiptResponse`),
+/** The one object a C# op writes to its receipt's response file (`OpReceiptResponse`),
  * which `pe-revit op result` returns as `response`. A success has `payload` and no `error`; a
  * failure has `error` and no `payload`. Both carry `touched`: a failed or cancelled call may still
  * have written. `evidence` is absent when the op's response type declares none. The verdict is on

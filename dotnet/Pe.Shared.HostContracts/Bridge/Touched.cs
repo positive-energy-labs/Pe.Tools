@@ -25,7 +25,9 @@ public enum TouchedUnknownReason {
     [EnumMember(Value = "lost-response")] LostResponse,
     [EnumMember(Value = "cancelled-mid-effect")] CancelledMidEffect,
     [EnumMember(Value = "process-exit")] ProcessExit,
-    [EnumMember(Value = "posted-command")] PostedCommand
+    [EnumMember(Value = "posted-command")] PostedCommand,
+    /// <summary>A commit landed while another call's window was open, so it cannot be pinned on this call or cleared from it.</summary>
+    [EnumMember(Value = "overlapped")] Overlapped
 }
 
 /// <summary>
@@ -102,12 +104,14 @@ public sealed record OpReceiptResponse {
 
     /// <summary>A success always writes its <c>payload</c> key, as JSON <c>null</c> when the op returned nothing.</summary>
     public static OpReceiptResponse Ok(JRaw? payload, Touched touched, JRaw? evidence = null) =>
-        touched is Touched.Unauthorized
+        (touched ?? throw new ArgumentNullException(nameof(touched))) is Touched.Unauthorized
             ? throw new ArgumentException("A success cannot carry touched: unauthorized; that call fails.", nameof(touched))
             : new OpReceiptResponse(touched) { Payload = payload ?? new JRaw("null"), Evidence = evidence };
 
     public static OpReceiptResponse Failed(string error, int statusCode, Touched touched, string? outcome = null) =>
-        new(touched) { Error = error, StatusCode = statusCode, Outcome = outcome };
+        new(touched ?? throw new ArgumentNullException(nameof(touched))) {
+            Error = error ?? throw new ArgumentNullException(nameof(error)), StatusCode = statusCode, Outcome = outcome
+        };
 
     // The bytes are the contract, so the shape serializes itself and no caller's settings can change them.
     private static readonly JsonSerializerSettings Json = new() {

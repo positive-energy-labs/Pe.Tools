@@ -63,7 +63,7 @@ function mountPods(fields: Record<string, never> = {}) {
 test("the /pods sheet pane draws the picked member's cells from the core read", async () => {
   const pods = mountPods();
   try {
-    await waitFor(() => expect(pods.mount.value()).toMatchObject({ current: true }));
+    await waitFor(() => expect(pods.mount.value()).toMatchObject({ state: "ready" }));
     expect(await screen.findByText("maxSystems")).toBeTruthy();
     expect(screen.getByText("names")).toBeTruthy();
     expect(screen.queryByText("Pick a member on the left to edit its Work")).toBeNull();

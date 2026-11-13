@@ -17,6 +17,7 @@ const step: ActionStep = {
   key: "takeoffs.partition",
   kind: "native",
   input: { zoneRegion: 1 },
+  transport: "sdk",
   state: "unknown",
   error: "reply lost",
   status: 503,
@@ -76,8 +77,11 @@ test("production SDK reader uses exact generated selector; mismatched or unresol
     await writeFile(file, sdkEnvelope(result));
     expect((await readNativeReceipt(step, originalProcess, read)).step).toMatchObject({
       id: step.id,
+      transport: "sdk",
       state: "succeeded",
       result: { written: true },
+      touched: result.response.touched,
+      opReceipt: { requestId: step.id, key: step.key, verdict: "ok" },
     });
     for (const altered of [
       { ...result, requestId: "another-request" },
@@ -113,8 +117,9 @@ test("production SDK reader uses exact generated selector; mismatched or unresol
       state: "failed",
       error: "central unreachable",
       status: 409,
-      transport: "bridge",
-      bridgeReply: "touched",
+      transport: "sdk",
+      opReceipt: { requestId: step.id, key: step.key, pid: originalProcess.pid,
+        processStartUtc: originalProcess.processStartUtc, verdict: "failed" },
       touched: { kind: "none" },
     });
     await writeFile(
