@@ -50,7 +50,8 @@ const memory = () => {
  */
 test("a findings.say through the host as Pea appears in a mounted route's findings with no person action", async () => {
   const dir = await mkdtemp(join(tmpdir(), "pe-findings-reading-"));
-  const native = await fixtureNative(join(dir, "native"));
+  // The native fixture's journal is a stored kind, so its folder sits under a machine `state` root.
+  const native = await fixtureNative(join(dir, "state", "native"));
   const socket = await native.connect();
   const host = memory();
   const post = native.actions({ workspace: host });

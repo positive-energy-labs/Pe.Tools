@@ -33,7 +33,7 @@ afterEach(cleanup);
  */
 test("a person writes a finding from the /fans roster row; the host's findings.say stamps the author person", async () => {
   const dir = await mkdtemp(join(tmpdir(), "pe-findings-person-"));
-  const native = await fixtureNative(join(dir, "native"));
+  const native = await fixtureNative(join(dir, "state", "native"));
   const socket = await native.connect();
   let saved: unknown = null;
   const host = new RouteWorkspace({
@@ -88,7 +88,7 @@ test("a person writes a finding from the /fans roster row; the host's findings.s
  */
 test("the person undoes their own finding through the host Timeline; Pea's newer finding stays", async () => {
   const dir = await mkdtemp(join(tmpdir(), "pe-findings-undo-"));
-  const native = await fixtureNative(join(dir, "native"));
+  const native = await fixtureNative(join(dir, "state", "native"));
   const socket = await native.connect();
   let saved: unknown = null;
   const host = new RouteWorkspace({
