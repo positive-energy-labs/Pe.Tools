@@ -31,7 +31,7 @@ import { RunRegistry } from "../src/run-registry.ts";
 import { bindControl } from "../src/control.ts";
 import { hostResourceObserver } from "../src/resource-adapters.ts";
 import type { ReadSources } from "../src/reads/inputs.ts";
-import { Publications } from "../src/reads/evaluator.ts";
+import { Publications } from "../src/reads/publications.ts";
 import { graphRoute } from "../src/reads/routes.ts";
 import { sheetPort } from "./ducts-read.fixture.ts";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";

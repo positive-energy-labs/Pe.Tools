@@ -2,7 +2,8 @@ import { canonicalRouteInput, documentRefSchema } from "@pe/agent-contracts";
 import { subscribePlaces } from "../places.ts";
 import type { RouteWorkspace } from "@pe/runtime";
 import type { HostMarks } from "../document-marks.ts";
-import { workInput, type Publications } from "./evaluator.ts";
+import { workInput } from "./evaluator.ts";
+import type { Publications } from "./publications.ts";
 
 export function readInvalidations(
   workspace: RouteWorkspace,
