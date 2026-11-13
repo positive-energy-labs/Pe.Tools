@@ -24,7 +24,8 @@
 import { settingsFieldPointer, cellPatches } from "@pe/agent-contracts";
 
 import type { RouteStatePatch } from "@pe/agent-contracts";
-import type { ConnectorSpec, FamilyModel, FormSpec, ParamSpec } from "#/family/family-model";
+import type { ConnectorSpec, FamilyModel, FormSpec } from "#/family/family-model";
+import type { ParamSpec } from "@pe/agent-contracts";
 import { paramRef, paramSpec, parameterText } from "#/family/family-model";
 import type { EvidenceSlice } from "#/family/types";
 import {

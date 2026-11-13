@@ -8,8 +8,8 @@ import {
 } from "react";
 import { Switch } from "@pe/kit/lang/switch";
 import { Switcher } from "@pe/kit/lang/switcher";
-import { useIsPrimaryRoute } from "#/navigation/route-controls";
-import { useSurfaceHost } from "#/navigation/surface-host";
+import { useIsPrimaryRoute } from "./route-controls";
+import { useSurfaceHost } from "./surface-host";
 import {
   createPageOptions,
   type SettingsOption,

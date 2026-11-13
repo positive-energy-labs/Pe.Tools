@@ -11,7 +11,7 @@ import { PopupFrame } from "@pe/kit/lang/list-popup";
 import { Switcher } from "@pe/kit/lang/switcher";
 import { machineOf } from "#/machine/model";
 import { useMachine } from "#/machine/use-machine";
-import { PatchBay, useBayReadings } from "#/open/bay";
+import { PatchBay, useBayReadings } from "../machine/bay";
 
 type Mode = "target" | "open";
 

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { EMPTY_DRAFT } from "./model";
+import { EMPTY_DRAFT } from "./open-model";
 
 export const draft = z
   .object({

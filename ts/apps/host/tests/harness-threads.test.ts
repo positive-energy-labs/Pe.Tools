@@ -24,8 +24,6 @@ import type {
   Caller,
   HarnessEvent,
   HarnessThreadBody,
-  PluginHookName,
-  PluginHooks,
   WorkHandle,
 } from "@pe/agent-contracts";
 import { HARNESS_EVENT_MAX_BYTES, readingKey, tools, bindWork, stagedDucts, workKey, address as documentAddress } from "@pe/agent-contracts";
@@ -84,7 +82,6 @@ const host = async (
   prepare?: () => Promise<unknown>,
   openConsole: (command: string, opened: () => void) => Promise<void> = async (_, opened) =>
     opened(),
-  pluginHook?: <N extends PluginHookName>(name: N, event: PluginHooks[N]) => Promise<void>,
   extra: Partial<HarnessThreadsOptions> = {},
 ): Promise<Host> => {
   const consoles: string[] = [];
@@ -103,7 +100,6 @@ const host = async (
     runs: registryService(),
     log,
     prepare,
-    pluginHook,
     updatePending,
     root,
     worldRoot: tmpdir(),
@@ -1117,6 +1113,17 @@ test("door 6: a human adds your open lifetimes with an admission; Pea's own and 
   expect(twice.status).toBe(403);
 });
 
+test("a torn standalone thread head reads empty and keeps its bytes", async () => {
+  const h = await host();
+  const { createHash } = await import("node:crypto");
+  const id = "torn-standalone-head";
+  const file = join(root, ".heads", `${createHash("sha256").update(id).digest("hex")}.json`);
+  const torn = '{"targets":';
+  await writeFile(file, torn);
+  expect(h.heads.read(id)).toEqual({ targets: [], revision: 0 });
+  expect(await readFile(file, "utf8")).toBe(torn);
+});
+
 test("thread target changes preserve Pea capability and retain revocation for external grants", async () => {
   const h = await host();
   bindControl({ heads: h.heads.read });
@@ -1635,7 +1642,7 @@ test("Stop with a failing run close still cancels, then kills a child that ignor
       throw Error("close failed");
     },
   };
-  const h = await host(undefined, undefined, undefined, undefined, { runs, stopGraceMs: 500 });
+  const h = await host(undefined, undefined, undefined, { runs, stopGraceMs: 500 });
   const call = caller(h);
   const read = reader(h);
   const id = (await call("POST", "/pe/threads", { providerId: "claude" })).json.id as string;
@@ -1656,7 +1663,7 @@ test("Stop with a failing run close still cancels, then kills a child that ignor
 }, 30_000);
 
 test("question settlement survives a throwing persist listener and reports failure", async () => {
-  const h = await host(undefined, undefined, undefined, undefined, {
+  const h = await host(undefined, undefined, undefined, {
     receiptFact: (_id, _title, event) => {
       if (event.kind === "question_resolved") throw Error("question persist failed");
     },
@@ -1679,23 +1686,14 @@ test("question settlement survives a throwing persist listener and reports failu
 });
 
 test("Stop escalation kills the child even when the transcript disk append fails", async () => {
-  let killed = false;
-  const h = await host(
-    undefined,
-    undefined,
-    undefined,
-    async (name) => {
-      if (name === "harness.session.stopped") killed = true;
-    },
-    { stopGraceMs: 500 },
-  );
+  const h = await host(undefined, undefined, undefined, { stopGraceMs: 500 });
   const call = caller(h);
   const read = reader(h);
   const created = await call("POST", "/pe/threads", { providerId: "claude" });
   const id: string = created.json.id;
   await call("POST", `/pe/threads/${id}/prompt`, { text: "stubborn" });
   await until(read, id, (b) => lastEcho(b) === "echo: stubborn");
-  killed = false;
+  const stop = vi.spyOn(adapter, "stopChild");
   const append = h.log.append.bind(h.log);
   const fault = vi.spyOn(h.log, "append").mockImplementation((event) => {
     if (
@@ -1711,16 +1709,19 @@ test("Stop escalation kills the child even when the transcript disk append fails
   try {
     await call("POST", `/pe/threads/${id}/cancel`);
     await until(read, id, (b) => JSON.stringify(b.events).includes("ignoring cancel"));
-    await expect.poll(() => killed, { timeout: 2500 }).toBe(true);
+    await expect.poll(() => stop.mock.calls.some(([child]) =>
+      child && (child.exitCode !== null || child.signalCode !== null),
+    ), { timeout: 2500 }).toBe(true);
     expect((await call("GET", `/pe/threads/${id}`)).status).toBe(200);
   } finally {
+    stop.mockRestore();
     fault.mockRestore();
     await h.close();
   }
 });
 
 test("Stop escalation logs a retiring failure as ThreadRetireFailed", async () => {
-  const h = await host(undefined, undefined, undefined, undefined, { stopGraceMs: 50 });
+  const h = await host(undefined, undefined, undefined, { stopGraceMs: 50 });
   const call = caller(h);
   const read = reader(h);
   const created = await call("POST", "/pe/threads", { providerId: "claude" });

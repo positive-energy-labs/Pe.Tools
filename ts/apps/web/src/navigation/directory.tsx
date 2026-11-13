@@ -14,8 +14,8 @@ import type { NavigationWork } from "./navigation-client";
 import { PrimaryRouteControls } from "./route-controls";
 import { RouteHelpButton } from "#/route/help";
 
-import { usePublishRouteOptions } from "#/settings/options";
-import type { PageOption } from "#/settings/option-state";
+import { usePublishRouteOptions } from "./options";
+import type { PageOption } from "./option-state";
 import type { DirectorySearch } from "./directory-search";
 import { usePodRoutes } from "#/route/pod-route-context";
 

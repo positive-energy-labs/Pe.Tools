@@ -219,7 +219,7 @@ import { AssetReel, threadAssets } from "../chat/asset-reel";
 import { TooltipProvider } from "@pe/kit/lang/tooltip";
 import { createPeRoutes } from "../../../host/src/pe-routes";
 import { SettingsBody } from "../machine/body";
-import { MACHINE_SEEDS } from "../design-system/open-examples";
+import { MACHINE_SEEDS } from "../machine/open-examples";
 import { reportFault, DIAGNOSTICS_MAX_PENDING } from "../host/diagnostics";
 import { Pane, PaneFaultProvider } from "@pe/kit/lang/pane";
 import { mkdtemp, rm } from "node:fs/promises";
