@@ -4,7 +4,8 @@ import type {
   RouteGraphJson,
   RouteStatePatch,
   RouteStateSpec,
-  ReadingSnapshot,
+  ReadingState,
+  Present,
   LayoutJson,
   InvocationToken,
   EntryContract,
@@ -103,6 +104,11 @@ export type DrawPage<F extends Fields> = {
   query(patch: Partial<Pick<FieldValues<F>, RoleFields<F, "query">>>): unknown;
   select(value: Page<F>["selected"]): unknown;
 };
+/** A value-less reading state: reading, refused, or not yet run. */
+export type Absent = Exclude<ReadingState<unknown>, { value: unknown }>;
+/** Why a reading or Work state is not ready, in the shell's words; null when it is. */
+export const refusalOf = (state: ReadingState<unknown>): string | null =>
+  state.state === "ready" ? null : "reason" in state && state.reason ? state.reason : state.state === "not-yet-run" ? "Start this Work to edit" : "Reading...";
 export type EditHistory = { label: string; [key: string]: unknown };
 export type EditFailure = { code: string; message: string } | null;
 export type CellFacts = Pick<import("@pe/kit/lang/cell").HandleCellProps, "model" | "source" | "options" | "parse" | "format"> & { baseline?: unknown; readOnly?: boolean };
@@ -123,8 +129,8 @@ export interface OwnedCell {
 export interface EditableCells<W, Edit> {
   readonly doc: Immutable<W> | null;
   readonly basis: InvocationToken | null;
-  readonly ready: boolean;
-  readonly refusal: string | null;
+  /** Work readiness as one reading state: `ready` is editable, absent Work is `not-yet-run`. */
+  readonly state: ReadingState<W>;
   readonly history: WorkHistoryPort<any>;
   owner(path: readonly string[]): { route: string; label: string };
   at(path: readonly [string, ...string[]], owner?: string, facts?: CellFacts): OwnedCell;
@@ -140,8 +146,12 @@ export type PaneBindings = {
 };
 export interface DrawContext<D, F extends Fields, W, Edit> {
   readonly target: import("@pe/agent-contracts").ExecutionTarget | null;
-  read<R extends HostRead>(read: R): ReadingSnapshot<ReadData<R>>;
-  readonly value: ReadingSnapshot<D> & { readonly publication: Immutable<Publication<D>["value"]> };
+  /** A second reading; the body narrows on `"value" in` and draws `absent(state)` otherwise. */
+  read<R extends HostRead>(read: R): ReadingState<ReadData<R>>;
+  /** The pane's own read, always present: the shell draws reading, refused and not-yet-run before `draw` runs. */
+  readonly value: Present<D> & { readonly publication: Immutable<Publication<D>["value"]> };
+  /** The shell's one line for a value-less state. */
+  absent(state: Absent): import("react").ReactNode;
   readonly page: DrawPage<F>;
   readonly selection: { read(): Page<F>["selected"]; set(value: Page<F>["selected"]): unknown };
   readonly cells: EditableCells<W, Edit>;
@@ -329,7 +339,7 @@ export function route<D, const F extends Fields, W extends z.ZodObject, Edit ext
     cardinality:"many",picker:{reading:subjectRead!,options:"subject"}};
   fields.selected={role:"selection",kinds:["focus"]};
   const readings: Record<string,RouteGraphJson["readings"][string]>={};
-  for(const [read,id] of readIds) readings[id]={kind:"use",entry:read.key,demand:read.demand === "explicit"?"explicit":"visible",
+  for(const [read,id] of readIds) readings[id]={kind:"use",entry:read.key,demand:"visible",
     retain:{evidence:"scope",resource:"scope"},refresh:"dependencies",deps:{page:Object.keys(fields),work:[],readings:[]}};
   const verbs:RouteGraphJson["verbs"]=Object.fromEntries(Object.entries(normalized.commands).map(([id,cmd])=>[id,{
     kind:"command",entry:cmd.entry,input:"none",label:cmd.label,review:"shown",
@@ -361,6 +371,6 @@ export type TypedRoute = ReturnType<typeof route<any, Fields, z.ZodObject, z.Zod
 function discoveryLayout(node: LayoutJson): LayoutJson {
   return node.kind === "gate" ? discoveryLayout(node.child) : node.kind === "split" ? {...node,children:node.children.map(discoveryLayout)} : node;
 }
-export function projectValue<A,B>(reading: ReadingSnapshot<A>, select:(value:Immutable<A>)=>B): ReadingSnapshot<B> {
-  return {...reading,...(reading.value === undefined ? {} : {value:select(reading.value)})} as ReadingSnapshot<B>;
+export function projectValue<A,B>(reading: ReadingState<A>, select:(value:Immutable<A>)=>B): ReadingState<B> {
+  return "value" in reading ? {...reading,value:select(reading.value) as Immutable<B>} : reading;
 }

@@ -45,7 +45,9 @@ import { settleWork } from "./work-door-observation";
 import { freezePage } from "./freeze-page";
 import type { PlaceInput } from "./typed-place";
 import type { ReadingContext, UseSource } from "./source-contract";
-import type { DrawContext, EditFailure, EditHistory, TypedRoute } from "../route/typed-route";
+import { refusalOf, type DrawContext, type EditFailure, type EditHistory, type TypedRoute } from "../route/typed-route";
+import type { ReadingState } from "@pe/agent-contracts";
+import { absentLine } from "./reading-line";
 import { cancelAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 import { observeSubject, subjectScopeKey, type SubjectState } from "./subject";
 
@@ -55,9 +57,17 @@ export type RouteReadiness =
   | { kind: "ready" }
   | { kind: "pending" | "blocked"; reason: string };
 
-type Value = DrawContext<any, any, any, any>["value"];
-const unavailable = (reason: string, value?: any, publication: Value["publication"] = null): Extract<Value,{current:false}> =>
-  ({ current: false, status: "unavailable", reason, publication, ...(value === undefined ? {} : { value }) });
+type Publication = DrawContext<any, any, any, any>["value"]["publication"];
+/** A read as the mount holds it: its state, the publication it came from, and the hash of a ready value. */
+type Snapshot = ReadingState<any> & { readonly publication: Publication; readonly hash?: string };
+// The one-to-one mapping from a read's outcome (routes CONTRACTS.md, "Reading state"): a refusal over a
+// held value is `stale`, alone it is `refused`; a read in flight over a held value is `refreshing`, alone `reading`.
+const unavailable = (reason: string, value?: any, publication: Publication = null): Snapshot =>
+  value === undefined ? { state: "refused", reason, publication } : { state: "stale", value, reason, publication };
+const reading = (value?: any, publication: Publication = null): Snapshot =>
+  value === undefined ? { state: "reading", publication } : { state: "refreshing", value, publication };
+const held = (snapshot: Snapshot | undefined) => snapshot && "value" in snapshot ? snapshot.value : undefined;
+const inFlight = (snapshot: Snapshot) => snapshot.state === "reading" || snapshot.state === "refreshing";
 
 /** Typed routes execute declarations directly. No graph admission, body slots or reading scheduler. */
 export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerprint: RouteFingerprint,
@@ -107,8 +117,8 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
   };
   let key = selectedKey();
   let renderedBasis: InvocationToken | null = null;
-  const reads = new Map<import("../route/host-read").HostRead, { snapshot: Value; args: string; stop(): void }>();
-  const dependencies = () => Object.fromEntries([...reads].filter(([read,r])=>read === spec.core && r.snapshot.current).map(([read,r])=>[read.key,r.snapshot.current?r.snapshot.hash??"":""]));
+  const reads = new Map<import("../route/host-read").HostRead, { snapshot: Snapshot; args: string; stop(): void }>();
+  const dependencies = () => Object.fromEntries([...reads].filter(([read,r])=>read === spec.core && r.snapshot.state === "ready").map(([read,r])=>[read.key,r.snapshot.hash??""]));
   const workSchema:z.ZodObject=edits?.work.schema ?? z.strictObject({});
   const gate = createRouteScopeGate({
     workSchema, hashWork: canonicalRouteInput,
@@ -192,19 +202,17 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
   };
   syncWork();
   const allReads = new Set([spec.core,...Object.values(spec.reads ?? {}),...Object.values(spec.panes).map(p=>p.read)].filter((read):read is import("../route/host-read").HostRead=>!!read));
-  const demanded = new Set<import("../route/host-read").HostRead>();
   const syncReads = (force = false) => {
     if (disposed || released || !input.custody.current()) return;
     for (const read of allReads) {
-      if(read.demand === "explicit" && !demanded.has(read)) continue;
       const project = "args" in read && typeof read.args === "function" ? read.args : spec.core?.args ?? (()=>({}));
       const args = read.input.parse(project(page as never)), signature = canonicalRouteInput(args);
       if (!force && signature === reads.get(read)?.args) continue;
       const previous = reads.get(read)?.snapshot;
-      const retained=previous?.publication?freezePage({...previous.publication,freshness:"refresh-needed" as const}):null;
+      const retained: Publication=previous?.publication?freezePage({...previous.publication,freshness:"refresh-needed" as const}):null;
       reads.get(read)?.stop();
       const controller = new AbortController();
-      const record: {snapshot:Value;args:string;stop():void} = { args: signature, snapshot: { ...unavailable("Reading...", previous?.value,retained),status:"pending" }, stop: () => controller.abort() };
+      const record: {snapshot:Snapshot;args:string;stop():void} = { args: signature, snapshot: reading(held(previous),retained), stop: () => controller.abort() };
       reads.set(read, record);
       const deliver = (frame: Parameters<UseSource["open"]>[1] extends (arg: infer P) => any ? P : never) => {
         if (controller.signal.aborted || disposed || reads.get(read) !== record) return;
@@ -214,10 +222,10 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
             const publication = freezePage(packet.value);
             const current = frame.kind === "complete" && frame.fresh !== false && packet.state === "current" &&
               !!packet.value && !packet.value.coverage.unknown.length && !packet.value.coverage.refused.length;
-            record.snapshot = current ? { status: "ready", current: true, value: publication!.data, publication, hash: packet.value!.evaluation }
-              : unavailable(valueRefusal(frame.reason ?? packet.reason ?? "Incomplete Value", read.key), publication?.data??record.snapshot.value, publication??record.snapshot.publication);
-          } catch (error) { record.snapshot = unavailable(valueRefusal(error, read.key), record.snapshot.value, record.snapshot.publication); }
-        } else if (frame.kind !== "log") record.snapshot = frame.kind === "failure"?unavailable(valueRefusal(frame.error, read.key),record.snapshot.value,record.snapshot.publication):{...unavailable("Reading...",record.snapshot.value,record.snapshot.publication),status:"pending"};
+            record.snapshot = current ? { state: "ready", value: publication!.data, publication, hash: packet.value!.evaluation }
+              : unavailable(valueRefusal(frame.reason ?? packet.reason ?? "Incomplete Value", read.key), publication?.data??held(record.snapshot), publication??record.snapshot.publication);
+          } catch (error) { record.snapshot = unavailable(valueRefusal(error, read.key), held(record.snapshot), record.snapshot.publication); }
+        } else if (frame.kind !== "log") record.snapshot = frame.kind === "failure"?unavailable(valueRefusal(frame.error, read.key),held(record.snapshot),record.snapshot.publication):reading(held(record.snapshot),record.snapshot.publication);
         notify();
       };
       if (input.fixture !== null) {
@@ -270,7 +278,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
   });
   cleanups.push(stopAddress);
   const valueAfterWork = () => [...owners.values()].some(owner => owner.ready && owner.config.value && spec.core &&
-    canonicalRouteInput(owner.doc) !== canonicalRouteInput(reads.get(spec.core)?.snapshot.value?.[owner.config.value!]))
+    canonicalRouteInput(owner.doc) !== canonicalRouteInput(held(reads.get(spec.core)?.snapshot)?.[owner.config.value!]))
     ? "Refreshing Value after Work changed" : null;
   const basisRefusal = () => {
     if (input.readOnly || input.history) return "needs live Revit";
@@ -279,7 +287,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     const owner = [...owners.values()].find(o=>!o.ready);
     if (owner) return owner.problem ?? "Reading Work...";
     const core = spec.core ? reads.get(spec.core)?.snapshot : undefined;
-    if (spec.core && !core?.current) return core?.reason ?? "Reading Value...";
+    if (spec.core && core?.state !== "ready") return core ? refusalOf(core)! : "Reading Value...";
     return valueAfterWork();
   };
   /** A catalog command that carries the route's Work handle cannot run before that Work exists (a raw
@@ -303,9 +311,8 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
       if (!owner.ready) return { kind: owner.failure || owner.problem && owner.problem !== "Reading Work..." ? "blocked" : "pending", reason: owner.problem ?? "Reading Work..." };
     }
     for (const read of allReads) {
-      if (read.demand === "explicit" && !demanded.has(read)) continue;
-      const value = reads.get(read)?.snapshot;
-      if (!value?.current) return { kind: !value || value.status === "pending" ? "pending" : "blocked", reason: value?.reason ?? "Reading..." };
+      const value = reads.get(read)?.snapshot ?? reading();
+      if (value.state !== "ready") return { kind: inFlight(value) ? "pending" : "blocked", reason: refusalOf(value)! };
     }
     // Recorded and fixture views can settle without granting native write authority.
     const reason = valueAfterWork();
@@ -394,7 +401,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
       const field = subjectSpec.field;
       const subject = spec.fields[field]!.schema.parse(search[field] === undefined ? page[field] : JSON.parse(String(search[field]))) as {kind:string;ids?:string[];active?:string};
       const core = reads.get(subjectSpec.read ?? spec.core!)?.snapshot;
-      if (!core?.current) return refused(core?.reason ?? "Reading the subject roster");
+      if (core?.state !== "ready") return refused(core ? refusalOf(core)! : "Reading the subject roster");
       const options=subjectSpec.options(core.value), ids=subject.kind==="all"?options.map(o=>o.id):subject.ids??[];
       if (ids.some(id=>!options.some(o=>o.id===id))) return refused(`A ${spec.subject?.noun ?? "Subject"} in this link is not in this model; choose it again from the roster`);
       if (canonicalRouteInput(subject)!==canonicalRouteInput(page[field])) return null;
@@ -436,7 +443,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     if("kind" in cmd) {
       const queryPage = cmd.kind === "query" ? gate.read()?.pageEpoch : null;
       const handle=owners.get(own)?.handle ?? null;
-      const context={page:page as never,target:input.target,work:handle,value:spec.core?reads.get(spec.core)?.snapshot.value:undefined};
+      const context={page:page as never,target:input.target,work:handle,value:spec.core?held(reads.get(spec.core)?.snapshot):undefined};
       try {
         const proposed=cmd.input?.(context,supplied) ?? supplied ?? {};
         const catalog=commands[cmd.entry as keyof typeof commands];
@@ -481,7 +488,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     try {
       if (!basis() || [...owners.values()].some(o => !o.ready)) throw Error(basisRefusal() ?? "Work unavailable");
       const core = spec.core ? reads.get(spec.core)?.snapshot : undefined;
-      if (!core?.current) throw Error(core?.reason ?? "Read the current Value before planning");
+      if (core?.state !== "ready") throw Error(core ? refusalOf(core)! : "Read the current Value before planning");
       const issued=gate.invocation(gate.capture(`plan:${id}`),dependencies());
       if(!issued.ok) throw Error(issued.reason);
       token=issued.value; plans.set(id,token); reviews.delete(id);
@@ -492,7 +499,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
       const request = cmd.planContract.input.parse({ ...z.record(z.string(),z.unknown()).parse(proposed), work: primary,
         readWorks: Object.fromEntries([...owners].filter(([id]) => id !== primary.key.route).map(([id,o]) => [id,o.handle])) });
       const signature = workSignature();
-      const data = spec.core ? reads.get(spec.core)?.snapshot.value : undefined, doc = owners.get(own)!.doc;
+      const data = spec.core ? held(reads.get(spec.core)?.snapshot) : undefined, doc = owners.get(own)!.doc;
       const result = await settleNative(door.submit({ id: token.id, key: cmd.plan, target: input.target!, input: z.record(z.string(),z.unknown()).parse(request) }));
       const preview = writePreviewSchema.parse(cmd.planContract.output.parse(result));
       const handle = z.object({ handle: workHandleSchema }).parse(preview.seal.work).handle;
@@ -589,9 +596,9 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
           value = text;
         }
         if (subject?.field === key && !field.schema.safeParse(value).success) {
-          const reading = reads.get(subject.read ?? spec.core!)?.snapshot;
-          if (!reading?.current) throw Error("Read the subject roster before choosing a name");
-          const options = subject.options(reading.value);
+          const roster = reads.get(subject.read ?? spec.core!)?.snapshot;
+          if (roster?.state !== "ready") throw Error("Read the subject roster before choosing a name");
+          const options = subject.options(roster.value);
           const resolve = (name: unknown) => {
             if (typeof name !== "string") throw Error("A subject name must be text");
             const exact = options.filter(option => option.id === name || option.label === name);
@@ -606,7 +613,8 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
         return [key, field.schema.parse(value)];
       })),
     }, current: (token:InvocationToken) => gate.current(token),
-    value: (read: import("../route/host-read").HostRead | undefined = spec.core) => read ? reads.get(read)?.snapshot ?? unavailable(read.demand === "explicit"?"Press Read":"Reading...") : unavailable("No read declared"),
+    // ponytail: a read the route never declared has not run; no caller draws this state (a pane with no read always draws).
+    value: (read: import("../route/host-read").HostRead | undefined = spec.core): Snapshot => read ? reads.get(read)?.snapshot ?? reading() : { state: "not-yet-run", publication: null },
     owner: (id = own) => owners.get(id),
     page: { read: () => page, pose: (patch: any, intent?: "gesture"|"named") => moveRole("pose",patch,intent === "gesture"?"replace":intent === "named"?"push":undefined), query: (patch: any) => moveRole("query",patch), select: (selected: any) => move({selected}), subject: (subject: any) => {if(!spec.subject) throw Error("No subject declared");return move({ [spec.subject.field]: subject },"push");} },
     subscribe(listener: () => void) { released = false; listeners.add(listener); syncReads(); return () => { listeners.delete(listener); }; },
@@ -620,17 +628,15 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     commandRefusal:(id:string)=> input.readOnly || input.history ? "needs live Revit" : input.fixture !== null ? "Fixture has no native actions"
       : "kind" in spec.commands[id]! ? ("row" in spec.commands[id]! && spec.commands[id]!.row ? (!edits ? "This view keeps no Work to write findings into" : !owners.get(own)?.ready ? owners.get(own)?.problem ?? "Reading Work..." : null) : workCommandRefusal(spec.commands[id]!.entry)) : basisRefusal(),
     problem: () => edits?basisRefusal():null, writeRefusal,
-    /** The basis that failed (a Work feed failure, a thrown read, a failed core reading), as distinct
+    /** The basis that failed (a Work feed failure, a thrown read), as distinct
      *  from a state such as "Start this Work to edit": failures draw as a pane failure line. */
     failure: () => {
       if (!edits) return null;
       const owner = [...owners.values()].find(o => !o.ready && o.failed);
-      if (owner) return owner.problem;
-      const core = spec.core ? reads.get(spec.core)?.snapshot : undefined;
-      return core?.status === "failed" ? core.reason ?? "Reading failed" : null;
+      return owner ? owner.problem : null;
     },
     refresh: (read?:import("../route/host-read").HostRead) => {
-      requireCurrent(); for(const selected of read?[read]:allReads) demanded.add(selected); syncReads(true); loadFindings();
+      requireCurrent(); syncReads(true); loadFindings();
     }, run, result:(id:string)=>results.get(id),
     review: (id: string) => { const r=reviews.get(id)??applyingReviews.get(id); if(!r) return null;
       const stale = !reviewCurrent(id, r.token, r.signature);
@@ -641,14 +647,22 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     timeline: () => [...[...owners.values()].flatMap(o => o.lease.entry.timeline()), ...findingMoves],
     draw(id: string, render?: (ctx: DrawContext<any,any,any,any>)=>unknown) {
       const pane = spec.panes[id]!;
-      const value = pane.read ? reads.get(pane.read)?.snapshot ?? unavailable(pane.read.demand === "explicit"?"Press Read":"Reading...") : unavailable("No read declared");
-      const core = spec.core ? reads.get(spec.core)?.snapshot ?? unavailable("Reading...") : unavailable("No read declared");
+      // A pane that names a read draws only over a present value: the shell's one line stands in for
+      // reading, refused and not-yet-run, so a body never meets a missing value. A pane with no read always draws.
+      const value = pane.read ? mounted.value(pane.read) : undefined;
+      if (value && !("value" in value)) return absentLine(value);
+      const core = mounted.value();
       const token = basis();
       const drawnOwners = new Map(owners);
       const handles = new Map([...owners].map(([id,o]) => [id,o.handle]));
       const docs = new Map([...owners].map(([id,o]) => [id,o.doc]));
-      const ready = !!token && (!pane.read || value.current);
-      const refusal = ready ? null : basisRefusal() ?? (!value.current ? value.reason : "Read the current Value before editing");
+      const ready = !!token && (!value || value.state === "ready");
+      const refusal = ready ? null : basisRefusal() ?? (value && refusalOf(value)) ?? "Read the current Value before editing";
+      const doc = owners.get(own)?.doc ?? null;
+      // Work readiness is the same union: absent Work has not run (Start runs it); a held doc that cannot be edited is refreshing or stale.
+      const state: ReadingState<any> = ready ? { state: "ready", value: doc } : owners.get(own)?.absent ? { state: "not-yet-run" }
+        : readiness().kind === "pending" ? (doc === null ? { state: "reading" } : { state: "refreshing", value: doc, reason: refusal! })
+        : doc === null ? { state: "refused", reason: refusal! } : { state: "stale", value: doc, reason: refusal! };
       const ownerOf = (path: readonly string[], preferred?: string) => {
         const id = preferred ?? (Object.hasOwn(edits!.work.schema.shape,path[0]!) ? own : [...owners].find(([,o]) => Object.hasOwn(o.config.state.schema.shape,path[0]!))?.[0]);
         if (!id || !owners.has(id) || !Object.hasOwn(owners.get(id)!.config.state.schema.shape,path[0]!)) throw Error(`No owning Work for ${path.join(".")}`);
@@ -686,7 +700,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
         } catch(error) { return {code:"refused",message:error instanceof Error?error.message:String(error)}; }
       };
       const cells: DrawContext<any, any, any, any>["cells"] = {
-        doc: owners.get(own)?.doc ?? null, basis: token, ready, refusal, history,
+        doc, basis: token, state, history,
         owner(path) { const route=ownerOf(path); return {route,label:route===own?"Work":`from /${route}`}; },
         at(path,preferred,facts={}) {
           const route=ownerOf(path,preferred), address=[...path];
@@ -710,18 +724,18 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
             return result.ok?null:{code:"undo-refused",message:"message" in result?String(result.message):"Cell undo refused"};
           };
           return {owner:{route,label:route===own?"Work":`from /${route}`},value, facts:{...facts,baseline:facts.baseline??value.base?.value},
-            freshness:ready?"current":owners.get(route)!.doc===null&&core.value===undefined?"never":"stale", refusal: facts.readOnly ? "This cell is read-only" : refusal, clear, accept,deny:clear,undo,
+            freshness:ready?"current":owners.get(route)!.doc===null&&held(core)===undefined?"never":"stale", refusal: facts.readOnly ? "This cell is read-only" : refusal, clear, accept,deny:clear,undo,
             delete:(detail)=>cellPatch([{path:address}],detail),
             stage:(value2,detail)=> facts.readOnly ? Promise.resolve({code:"read-only",message:"This cell is read-only"}) :
               patch(cellPatches(address.slice(0,-1),address.at(-1)!,value,
                 Object.hasOwn(facts,"baseline")&&canonicalRouteInput(value2)===canonicalRouteInput(facts.baseline)?{kind:"clear"}:{kind:"set",rung:{value:value2}}),detail,route),
             transitions:(detail)=>!ready?[]:[...(value.edit?[{kind:"clear" as const,run:()=>clear(detail)},...(value.edit.by==="pea"?[{kind:"take" as const,run:()=>accept(detail)},{kind:"unsuggest" as const,run:()=>clear(detail)}]:[])]:[]),...(step?[{kind:"undo" as const,run:undo}]:[])]};
         },
-        label(input,label) { const foreign=[...new Set(edits!.patches(input,core.value).map(p=>ownerOf(p.path.map(String))))].filter(id=>id!==own); return foreign.length?`${label} · ${foreign.map(id=>`from /${id}`).join(", ")}`:label; },
+        label(input,label) { const foreign=[...new Set(edits!.patches(input,held(core)).map(p=>ownerOf(p.path.map(String))))].filter(id=>id!==own); return foreign.length?`${label} · ${foreign.map(id=>`from /${id}`).join(", ")}`:label; },
         patch,
-        edit: (edit,detail)=>patch(()=>edits!.patches(edits!.input.parse(edit),core.value),detail),
+        edit: (edit,detail)=>patch(()=>edits!.patches(edits!.input.parse(edit),held(core)),detail),
       };
-      return (render ?? ((ctx: DrawContext<any,any,any,any>) => pane.draw(ctx).node))({ target: input.target, refresh:mounted.refresh, read:(read:import("../route/host-read").HostRead)=>mounted.value(read), value, page: mounted.page, cells, selection:{read:()=>page.selected,set:(selected:any)=>move({selected})},
+      return (render ?? ((ctx: DrawContext<any,any,any,any>) => pane.draw(ctx).node))({ target: input.target, refresh:mounted.refresh, read:(read:import("../route/host-read").HostRead)=>mounted.value(read), absent:absentLine, value, page: mounted.page, cells, selection:{read:()=>page.selected,set:(selected:any)=>move({selected})},
         write:mounted.action } as any);
     },
     // Retaining hidden read connections was a Plan-identity workaround; content fingerprints

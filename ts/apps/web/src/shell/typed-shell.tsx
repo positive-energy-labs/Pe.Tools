@@ -34,6 +34,7 @@ import { PaneActions, PaneActionSlots, usePaneActionSlot } from "./pane-actions"
 import { SubjectDoor } from "./subject";
 import { SubjectPicker } from "./subject-picker";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
+import { absentLine, retainedLine } from "./reading-line";
 import { typedSubjectDoor } from "./subject";
 import { PrimaryRouteControls, useHasGlobalNavigation } from "../navigation/route-controls";
 import { leasesView, useRouteViewBridge } from "../route/view-bridge";
@@ -172,7 +173,7 @@ function BandAlerts({ mount }: { mount: TypedMount }) {
   const readiness = mount.readiness(), failure = mount.failure(), problem = failure ? null : mount.problem();
   return <>
     <span role="status" aria-label="Route readiness" data-readiness={readiness.kind}>{readiness.kind !== "ready" && readiness.reason !== problem && readiness.reason !== failure ? readiness.reason : null}</span>
-    {mount.value().value!==undefined&&!mount.value().current?<span role="status">{retainedValueLabel(mount.value())}</span>:null}
+    {retainedLine(mount.value())?<span role="status">{retainedLine(mount.value())}</span>:null}
     {problem ? <span role="alert">{problem}</span> : null}
     {mount.absentOwners().map(owner=>{const route=routeOf(owner);return <span key={owner}>Work is absent: {route?<a href={routeAddress(route).link()}>Start {owner}</a>:owner}</span>;})}
     <CatalogWorkReviews mount={mount} />
@@ -184,8 +185,6 @@ function bandVerbs(mount: TypedMount): ReactNode[] {
   return [
     ...(mount.startAction()?[<TypedStart key="start" mount={mount}/>]:[]),
     ...Object.entries(spec.commands).filter(([,c])=>!("row" in c && c.row) && !("pane" in c && c.pane)).map(([id])=><TypedWrite key={id} mount={mount} id={id} />),
-    // An explicit-demand read is a verb the person presses; nothing else re-reads from chrome.
-    ...Object.entries(spec.panes).filter(([,p])=>p.read?.demand === "explicit").map(([id,p])=><Button key={`read:${id}`} label={`Read ${p.title}`} onClick={()=>mount.refresh(p.read)}>Read</Button>),
   ];
 }
 /** Band timeline: the Timeline head over the recorded points and the Work history. */
@@ -214,7 +213,7 @@ export function TypedSubject({ mount }: { mount: TypedMount }) {
   // One capability has one choice path: a declared subject-list pane owns subject choice, even when hidden.
   if (Object.values(mount.spec.panes).some(pane => pane.subjectList)) return null;
   const roster = mount.value(subject.read ?? mount.spec.core);
-  if (!roster.current) return <OutcomeLine kind={roster.status === "pending" ? "busy" : "refused"} label={`Choose ${subject.noun}`} says={roster.reason} />;
+  if (!("value" in roster)) return absentLine(roster, `Choose ${subject.noun}`);
   return <SubjectPicker data={mount.data} single={subject.multiple === false} mount={{
     picker: () => subject.options(roster.value), page: mount.page,
     controls: { subject: mount.page.subject },
@@ -225,7 +224,7 @@ const still = () => () => {};
  *  a route never sets it. A pane with no read of its own draws the core; the subject list, the roster.
  *  A hidden Place released its reads, so it is reading nothing: its panes carry no busy (callers gate on `visible`). */
 const paneBusy = (mount: TypedMount, pane: TypedMount["spec"]["panes"][string]) =>
-  [pane.read ?? mount.spec.core, pane.subjectList ? mount.spec.subject?.read : undefined].some(read => !!read && mount.value(read).status === "pending");
+  [pane.read ?? mount.spec.core, pane.subjectList ? mount.spec.subject?.read : undefined].some(read => !!read && ["reading","refreshing"].includes(mount.value(read).state));
 function layout(node: TypedRoute["spec"]["layout"]): LayoutNode {
   return node.kind==="split"?{...node,sized:node.sized??"end",children:node.children.map(layout)}:node.kind==="gate"?{...node,child:layout(node.child)}:node;
 }
@@ -244,13 +243,16 @@ export function TypedPane({mount,id,ctx}: {mount:TypedMount;id:string;ctx:DrawCo
   const doc=document?`${document.session}/${document.openId}`:`${mount.spec.key}:unbound`;
   const selected=useMemo(()=>Atom.make(()=>new Set(bindings?.selected??[])),[bindings?.selected]);
   const observation=bindings?.observation??{scope:null,references:[]};
+  // The shell overlays refreshing and stale: the body draws the held value, the shell says it is not current.
+  // A pane with no read has no value of its own (ctx.value is absent) and nothing to overlay.
+  const stale=ctx.value?retainedLine(ctx.value):null;
   // Bindings rebuild their references every render; the index changes only when the pairs do.
   const refs=(observation.references??[]) as readonly {elementId:number;uniqueId?:string|null}[];
   const pairs=refs.map(r=>`${r.elementId}=${r.uniqueId??""}`).join();
   const elements=useMemo(()=>elementIndex(refs),[pairs]); // eslint-disable-line react-hooks/exhaustive-deps
   return <ValueScope value={ctx.value}><AttentionScope doc={doc} selected={selected} members={bindings?.members} elements={elements}>
-    <NativeObservationScope value={ctx.value.current?observation:{...observation,scope:null}}>
-      {mount.spec.panes[id]!.read!==mount.spec.core&&retainedValueLabel(ctx.value)?<p role="status">{retainedValueLabel(ctx.value)}</p>:null}
+    <NativeObservationScope value={stale?{...observation,scope:null}:observation}>
+      {stale&&mount.spec.panes[id]!.read!==mount.spec.core?<p role="status">{stale}</p>:null}
       {titlePane(mount.spec) === id ? <PaneTitle text={mount.spec.title!(ctx)} pane={id} /> : null}
       {(mount.spec.panes[id]!.read ?? mount.spec.core)===mount.spec.core&&mount.failure()?<OutcomeLine kind="error" label="Reading failed" says={mount.failure()!} />:null}
       {kernelPane(mount, id, ctx) ?? mount.spec.panes[id]!.draw(ctx).node}
@@ -264,10 +266,6 @@ function TypedStart({mount}:{mount:TypedMount}) {
   return <><Button label="Start" refusal={action.refusal} busy={action.pending} onClick={()=>void action.run().catch(()=>{})}>Start</Button>
     {action.refusal?<span role="status">Start unavailable: {action.refusal}</span>:null}
     {action.failure?<span role="alert">{action.failure}</span>:null}</>;
-}
-
-export function retainedValueLabel(value:{current:boolean;status:string;value?:unknown}) {
-  return value.current||value.value===undefined?null:value.status === "pending"?"Showing previous Value; refreshing":"Showing previous Value; refresh needed";
 }
 
 type View = Parameters<typeof useRouteViewBridge>[0];
@@ -314,7 +312,7 @@ export function kernelPane(mount: TypedMount, id: string, ctx: Parameters<TypedM
     return <Suspense fallback="Loading drawing"><PicturePane ctx={{ draw: ctx as never, slot: mount.spec.picture as never, name: mount.spec.name, subjectField: mount.spec.subject?.field, findings: mount.findings() }} /></Suspense>;
   if (kernel === "sheet" && mount.spec.sheet)
     return <SheetPane ctx={{ draw: ctx as never, slot: mount.spec.sheet, field: mount.spec.subject?.field }} />;
-  if (kernel === "goal") return <GoalPane ctx={{ goal: ctx.value.value as Goal | undefined }} />;
+  if (kernel === "goal") return <GoalPane ctx={{ goal: ctx.value.value as Goal }} />;
   return null;
 }
 
