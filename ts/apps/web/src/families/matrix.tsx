@@ -116,9 +116,6 @@ export function FamiliesMatrix({ ctx }: { ctx: FamiliesDrawContext }) {
         </Button>
         <PreviewAction handle={ctx.write("apply")} label="Apply families" />
       </ButtonGroup>
-      {!ctx.value.current && (
-        <OutcomeLine kind="advisory" label="Family read" says={ctx.value.reason} />
-      )}
       {shown?.progress && shown.progress.state !== "complete" && (
         <OutcomeLine
           kind={shown.progress.state === "failed" ? "error" : "advisory"}
@@ -157,7 +154,7 @@ export function FamiliesMatrix({ ctx }: { ctx: FamiliesDrawContext }) {
         edit={{
           live,
           params: new Map(params.map((p) => [p.key, p])),
-          readOnly: !ctx.cells.ready || !!data?.editRefusal,
+          readOnly: ctx.cells.state.state !== "ready" || !!data?.editRefusal,
           parse,
           propose: async (address, value, current) => {
             const result = await ctx.cells.edit(

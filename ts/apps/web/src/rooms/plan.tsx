@@ -140,7 +140,6 @@ export function RoomsPlan({
   onSelect,
   trace,
   page: place,
-  value,
   overlay,
 }: {
   renderPane: TeachingPaneRender;
@@ -374,13 +373,6 @@ export function RoomsPlan({
 
   const notice = (
     <>
-      {value && !value.current ? (
-        <OutcomeLine
-          kind={value.status === "pending" ? "busy" : "error"}
-          label="Plan reading"
-          says={value.reason}
-        />
-      ) : null}
       {!trace.data && trace.none ? (
         <OutcomeLine
           kind="advisory"

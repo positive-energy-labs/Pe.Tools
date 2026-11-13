@@ -1,3 +1,4 @@
+import { refusalOf } from "#/route/typed-route";
 import { actionScopeKeys, useScopeKeys } from "@pe/kit/keys";
 import { useEffect, useState } from "react";
 import { routeAddress, canonicalRouteInput } from "@pe/agent-contracts";
@@ -22,18 +23,21 @@ export function AdoptionBody({ ctx }: { ctx: AdoptionContext }) {
   });
   const page = ctx.page.read();
   const catalogue = ctx.read(viewCatalogue);
-  const viewNote = catalogue.current ? undefined : catalogue.status === "pending"
-    ? catalogue.value ? "Reading views; showing the last known catalogue" : "Reading views..."
-    : `View catalogue unavailable: ${catalogue.reason}${catalogue.value ? "; showing the last known catalogue" : ""}`;
+  // A second reading: the body narrows it. The view options it last held stay choosable to read, not to pick.
+  const views = "value" in catalogue ? catalogue.value : undefined;
+  const viewsReading = catalogue.state === "reading" || catalogue.state === "refreshing";
+  const viewNote = catalogue.state === "ready" ? undefined : viewsReading
+    ? views ? "Reading views; showing the last known catalogue" : "Reading views..."
+    : `View catalogue unavailable: ${refusalOf(catalogue)}${views ? "; showing the last known catalogue" : ""}`;
   const selectedViews = page.views === "all"
-    ? catalogue.value?.viewOptions.map((row) => row.id) ?? [] : page.views;
+    ? views?.viewOptions.map((row) => row.id) ?? [] : page.views;
   const [pending, setPending] = useState<{ id: "initialize" | "adopt"; request: unknown } | null>(
     null,
   );
   const [problem, setProblem] = useState<string | null>(null);
   // This is a pending gesture, not authored Work: the host must publish the staged intent before its action runs.
   useEffect(() => {
-    if (!pending || !ctx.value.current || !ctx.cells.ready) return;
+    if (!pending || ctx.value.state !== "ready" || ctx.cells.state.state !== "ready") return;
     const entry = `takeoffs.${pending.id}`;
     const authored = ctx.cells.doc?.writeIntent?.[entry]?.edit?.value;
     if (canonicalRouteInput(authored) !== canonicalRouteInput(pending.request)) return;
@@ -54,7 +58,7 @@ export function AdoptionBody({ ctx }: { ctx: AdoptionContext }) {
         await action.apply();
       } else await action.run();
     })().catch((error) => setProblem(String(error)));
-  }, [pending, ctx.value, ctx.cells.ready]);
+  }, [pending, ctx.value, ctx.cells.state.state]);
   const stage = async (id: "initialize" | "adopt") => {
     if (!data) return;
     const request = data[id].request;
@@ -92,9 +96,8 @@ export function AdoptionBody({ ctx }: { ctx: AdoptionContext }) {
         },
       },
     },
-    candidatesReading: ctx.value.status === "pending",
-    candidatesIssue:
-      !ctx.value.current && ctx.value.status !== "pending" ? Error(ctx.value.reason) : null,
+    candidatesReading: ctx.value.state === "refreshing",
+    candidatesIssue: ctx.value.state === "stale" ? Error(refusalOf(ctx.value)!) : null,
     actions: {
       patchAdopt(view, elementId, patch) {
         const row = data?.rows.find(
@@ -120,7 +123,7 @@ export function AdoptionBody({ ctx }: { ctx: AdoptionContext }) {
         label: "Adopt",
         bindings: ["Mod+Shift+A"],
         available: () =>
-          !frozen && ctx.value.current && ctx.cells.ready && !pending && !data?.adopt.refusal,
+          !frozen && ctx.value.state === "ready" && ctx.cells.state.state === "ready" && !pending && !data?.adopt.refusal,
         invoke: () => {
           void stage("adopt");
         },
@@ -139,13 +142,6 @@ export function AdoptionBody({ ctx }: { ctx: AdoptionContext }) {
           View adoption
         </a>
       </nav>
-      {!ctx.value.current && (
-        <OutcomeLine
-          kind={ctx.value.status === "pending" ? "busy" : "error"}
-          label="Takeoff reading"
-          says={ctx.value.reason}
-        />
-      )}
       {data?.unreadable?.map((blob, index) => (
         <OutcomeLine key={index} kind="refused" label="can't read, kept"
           says={`${blob.parameter} / ${blob.elementId == null ? "Project Information" : "Element name unavailable"}: ${blob.reason}`} />
@@ -174,20 +170,20 @@ export function AdoptionBody({ ctx }: { ctx: AdoptionContext }) {
         </>
       ) : (
         <Ladder
-          header={viewNote && catalogue.value ? <p role={catalogue.status === "pending" ? "status" : "alert"}>{viewNote}</p> : undefined}
+          header={viewNote && views ? <p role={viewsReading ? "status" : "alert"}>{viewNote}</p> : undefined}
           levels={[
             {
               key: "views",
               label: selectedViews.length ? `${selectedViews.length} views` : null,
               placeholder: "choose views",
-              options: catalogue.value?.viewOptions.map((row) => ({ ...row,
-                ...(!catalogue.current ? { refusal: viewNote } : {}),
+              options: views?.viewOptions.map((row) => ({ ...row,
+                ...(catalogue.state !== "ready" ? { refusal: viewNote } : {}),
               })) ?? null,
               note: viewNote,
               multi: true,
               picked: (id) => selectedViews.includes(id),
               pick: (id) => {
-                if (!catalogue.current) return;
+                if (catalogue.state !== "ready") return;
                 const views = selectedViews;
                 setPending(null);
                 ctx.page.query({
@@ -211,7 +207,7 @@ export function AdoptionBody({ ctx }: { ctx: AdoptionContext }) {
                 label: row.title || row.id,
                 sub: row.capturedAt,
               })) ?? null,
-            note: !ctx.value.current ? ctx.value.status === "pending" ? "Reading saved captures..." : ctx.value.reason : undefined,
+            note: ctx.value.state === "refreshing" ? "Reading saved captures..." : refusalOf(ctx.value) ?? undefined,
             picked: (id) => id === page.work,
             pick: (work) => {
               setPending(null);
@@ -233,9 +229,7 @@ export function AdoptionBody({ ctx }: { ctx: AdoptionContext }) {
               refusal={
                 pending
                   ? "Preparing Work"
-                  : !ctx.value.current
-                    ? ctx.value.reason
-                    : (data?.[id].refusal ?? ctx.cells.refusal)
+                  : (refusalOf(ctx.value) ?? data?.[id].refusal ?? refusalOf(ctx.cells.state))
               }
               onClick={() => void stage(id)}
             >

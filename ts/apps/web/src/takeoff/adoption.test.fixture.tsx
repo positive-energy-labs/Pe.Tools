@@ -1,3 +1,4 @@
+import { refusalOf } from "../route/typed-route";
 ﻿import { useSyncExternalStore } from "react";
 import { cleanup, waitFor } from "@testing-library/react";
 import { expect } from "vite-plus/test";
@@ -316,8 +317,8 @@ export async function journey(options: { unreadable?: { elementId: number | null
       waitFor(
         () => {
           const value = mount.value();
-          expect(value.current, value.current ? "" : value.reason).toBe(true);
-          if (!options.route) expect(mount.value(viewCatalogue).current).toBe(true);
+          expect(value.state === "ready", (value.state === "ready") ? "" : refusalOf(value) ?? "").toBe(true);
+          if (!options.route) expect(mount.value(viewCatalogue).state === "ready").toBe(true);
           expect(mount.workBasis()).toBeTruthy();
         },
         { timeout: 20000 },

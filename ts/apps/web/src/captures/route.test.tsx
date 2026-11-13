@@ -9,8 +9,7 @@ afterEach(cleanup);
 test("a retained picture names its runtime owner and reports a failed image", async () => {
   const sha = "a".repeat(64);
   const value = {
-    current: true,
-    status: "ready",
+    state: "ready",
     value: {
       captures: [
         {
@@ -38,7 +37,7 @@ test("a retained picture names its runtime owner and reports a failed image", as
   );
   mounted.rerender(
     <CapturesList
-      value={{ ...value, current: false, status: "failed", reason: "Capture list unavailable" }}
+      value={{ ...value, state: "stale", reason: "Capture list unavailable" }}
       focus={sha}
       open={[sha]}
       onPage={() => {}}

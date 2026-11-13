@@ -1,3 +1,4 @@
+import { refusalOf, valueOf } from "./typed-route";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
 import { snapshot as workSnapshot } from "../ducts/test-fixture";
 // @vitest-environment jsdom
@@ -150,14 +151,14 @@ test("JZ Families History offers published values and marks ambiguous publicatio
     }, routeRegistry.families!.fingerprint, { work, sources: { "families.view": source } });
     mountsToClose.push(live);
     const firstStop = live.subscribe(() => {});
-    await waitFor(() => expect(live.value().current).toBe(true));
+    await waitFor(() => expect(live.value().state === "ready").toBe(true));
     const earlier = await j.host.history("", { kind: "captured", document: path });
     const originalBinding = earlier.history.publications.find((b: any) => b.instance === lifecyclePose.instance);
     await waitFor(() => expect(streams.size).toBeGreaterThan(0));
     firstStop(); live.release();
     await waitFor(() => expect(requests.filter(r => r.release)).toHaveLength(1));
     live.subscribe(() => {});
-    await waitFor(() => expect(live.value().current).toBe(true));
+    await waitFor(() => expect(live.value().state === "ready").toBe(true));
     await waitFor(() => expect(new Set(requests.filter(r => !r.release).map(r => r.subscription)).size).toBe(2));
     await writeScope();
     // A point records what the host has published, including a Value awaiting refresh after a write.
@@ -238,7 +239,7 @@ test("JZ Families History offers published values and marks ambiguous publicatio
       expect(await screen.findByRole("option", { name: "Air Terminal Tags" })).toBeTruthy();
       const binding = point.history.publications.find((b: any) => b.instance === recordedPose.instance && b.read === "families.view");
       expect(mounted.value().publication!.evaluation).toBe(binding.evaluation);
-      if (recordedPose.instance === pose.instance) expect(mounted.value().value).toEqual(first.value.data);
+      if (recordedPose.instance === pose.instance) expect(valueOf(mounted.value())).toEqual(first.value.data);
     }
   } finally {
     cleanup();
@@ -466,7 +467,7 @@ test.each(["undo after apply", "review identity", "insertText", "pointer keyboar
     fireEvent.click(await screen.findByRole("option", { name: "Panel" }));
     fireEvent.click(await screen.findByRole("button", { name: "Start" }));
     await waitFor(() => expect(mount.work()?.handle.revision).toBe(1));
-    await waitFor(() => expect(mount.value().current).toBe(true));
+    await waitFor(() => expect(mount.value().state === "ready").toBe(true));
     fireEvent.click(screen.getAllByRole("button", { name: "Read schedule" })[1]!);
     await waitFor(() => expect(mount.work()?.handle.revision).toBe(2));
     await waitFor(() => expect(mount.problem()).toBeNull());
@@ -556,7 +557,7 @@ test.each(["undo after apply", "review identity", "insertText", "pointer keyboar
     fireEvent.click(screen.getByRole("button", { name: /plan Apply cells/i }));
     if (entryMode === "review identity") {
       await screen.findByText(/Panel Schedule.*SH1.*Id 7.*PE_G___Description.*instance.*Duct heater → Duct heater - gate review/);
-      const reading = mount.value().value as { saved: { snapshot: { rows: { bindings: { targets: unknown[] }[] }[] } } };
+      const reading = valueOf(mount.value()) as { saved: { snapshot: { rows: { bindings: { targets: unknown[] }[] }[] } } };
       expect(reading.saved.snapshot.rows[0]!.bindings[0]!.targets[0]).toMatchObject({
         uniqueId: "schedule-member-7", elementLabel: "SH1", scope: "instance",
         parameterName: "PE_G___Description", displayValue: "Duct heater",
@@ -715,10 +716,10 @@ test("JZ header chooser query keys preserve the current schedule until an explic
   }, workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`), { work, sources: { "schedules.view": source } });
   let view: ReturnType<typeof render> | undefined;
   try {
-    await waitFor(() => expect(mount.value().current).toBe(true), { timeout: 20_000 });
-    const chosen = mount.value().value.catalog.schedules.find((row: any) => row.name === "Panel 16").workspaceId;
+    await waitFor(() => expect(mount.value().state === "ready").toBe(true), { timeout: 20_000 });
+    const chosen = valueOf(mount.value()).catalog.schedules.find((row: any) => row.name === "Panel 16").workspaceId;
     const pending: string[] = [];
-    const unsubscribe = mount.subscribe(() => { if (mount.value().status === "pending") pending.push(mount.value().status); });
+    const unsubscribe = mount.subscribe(() => { const { state } = mount.value(); if (state === "reading" || state === "refreshing") pending.push(state); });
     const root = createRootRoute({ component: () => <KeyScopeHost id="chooser-journey"><TypedSubject mount={mount} /></KeyScopeHost> });
     const router = createRouter({ routeTree: root, history: createMemoryHistory({ initialEntries: ["/schedules"] }) });
     view = render(<RouterProvider router={router} />);
@@ -739,7 +740,7 @@ test("JZ header chooser query keys preserve the current schedule until an explic
     await user.click(screen.getByRole("option", { name: "Panel 16" }));
     // The real Schedules chooser chooses one member; only the explicit choice replaces Panel.
     await waitFor(() => expect(mount.page.read().workspaceId.ids).toEqual([subjectCode({ keyKind: "workspace", key: chosen })]));
-    await waitFor(() => expect(mount.value().current).toBe(true), { timeout: 20_000 });
+    await waitFor(() => expect(mount.value().state === "ready").toBe(true), { timeout: 20_000 });
     expect(requests.length).toBeGreaterThan(count);
   } finally { view?.unmount(); mount.dispose(); await Promise.all(pendingReads); }
 });
@@ -880,7 +881,7 @@ test("D G07 Family renders named picker, member roster, Work and stage words wit
     expect(readiness.textContent, "The readiness marker must not repeat the problem alert").toBe("");
     expect(screen.queryByText(member)).toBeNull(); // No member can be chosen before its roster arrives.
     await ready.promise;
-    expect(mount.value().current).toBe(false);
+    expect(mount.value().state === "ready").toBe(false);
     cleanWords("C746: before the roster publication, no raw identity fallback");
     roster.resolve();
     expect((await surfaceReadiness()).getAttribute("data-readiness")).toBe("ready");
@@ -888,13 +889,13 @@ test("D G07 Family renders named picker, member roster, Work and stage words wit
     expect(screen.queryByText(/^Ready$/)).toBeNull();
     expect(mount.owner()?.doc).toEqual(original);
     // Slice 10: the kernel's subject picker is the one family chooser; the roster is its options, by name.
-    await waitFor(() => expect(mount.value().value).toBeTruthy());
-    expect.soft(family.spec.subject!.options(mount.value().value as never).map(option => option.label)).toEqual([`Mechanical library · ${member}`]);
+    await waitFor(() => expect(valueOf(mount.value())).toBeTruthy());
+    expect.soft(family.spec.subject!.options(valueOf(mount.value()) as never).map(option => option.label)).toEqual([`Mechanical library · ${member}`]);
     cleanWords("C747: actual Work and member payload display strings");
     const picked = { kind: "ids" as const, ids: [podMemberCode({ pod, path: member })] };
     await act(async () => { mount.page.subject(picked); });
     await waitFor(() => expect(memberReads).toBeGreaterThan(0));
-    await waitFor(() => expect(mount.value().current).toBe(true));
+    await waitFor(() => expect(mount.value().state === "ready").toBe(true));
     expect(mount.page.read()).toMatchObject({ pod, member: picked });
     expect.soft((await screen.findByRole("textbox", { name: "Destination pod" }) as HTMLInputElement).value).toBe("Mechanical library");
     cleanWords("C746: selected roster member keeps its canonical key off the surface");
@@ -1092,7 +1093,7 @@ test("JZ Fans native before: stage, Plan, inspect method and unset pressure; unr
     await vi.waitFor(() => expect(f.fans.work()!.value.equipmentFlows[elementSubject(realMuas.nodes.find(node => node.id === 14577391)!)]?.edit?.value.cfm).toBe(1000));
     f.fans.refresh("value");
     for (const id of ["value"])
-      await vi.waitFor(() => expect(f.fans.readingStatus(id).snapshot).toMatchObject({ current: true }));
+      await vi.waitFor(() => expect(f.fans.readingStatus(id).snapshot).toMatchObject({ state: "ready" }));
     function WriteReview() {
       const [, changed] = useReducer(n => n + 1, 0);
       useEffect(() => f.fans.subscribe(changed), []);
@@ -1173,8 +1174,8 @@ test.each([false, true])(
     for (const id of ["value"])
       await vi.waitFor(() => {
         const snapshot = f.fans.readingStatus(id).snapshot;
-        if (snapshot.status === "failed") throw Error(`${id}: ${snapshot.reason}`);
-        expect(snapshot).toMatchObject({ current: true });
+        if (snapshot.state === "refused") throw Error(`${id}: ${refusalOf(snapshot)}`);
+        expect(snapshot).toMatchObject({ state: "ready" });
       });
     function Write() {
       const [, changed] = useReducer((n) => n + 1, 0);
@@ -1213,7 +1214,7 @@ test.each([false, true])(
     });
     expect(f.fans.work()!.revision).toBe(stagedRevision);
     expect(f.calls.get("fans:fans.sheet")).toBeGreaterThan(beforeReads!);
-    await waitFor(() => expect(f.typed.value().current).toBe(true));
+    await waitFor(() => expect(f.typed.value().state === "ready").toBe(true));
     expect(f.typed.value().publication!.evaluation).toBe(beforeSwitch);
     await act(async () =>
       plan({
@@ -1344,7 +1345,7 @@ test("JZ B03 people choose named subjects: pending Families scope, cold Schedule
   const router = createRouter({ routeTree: root, history: createMemoryHistory({ initialEntries: ["/schedules"] }) });
   const view = render(<RouterProvider router={router} />);
   try {
-    await waitFor(() => expect(mount.value().current).toBe(true));
+    await waitFor(() => expect(mount.value().state === "ready").toBe(true));
     expect(mount.work(), "B03: catalogue discovery does not require selected Work").toBeNull();
     await waitFor(() => expect(screen.getAllByRole("button", { name: "Read schedule" })).toHaveLength(2));
     await act(async () => { fireEvent.click(screen.getAllByRole("button", { name: "Read schedule" }).at(-1)!); });
@@ -1360,7 +1361,7 @@ test("JZ B03 people choose named subjects: pending Families scope, cold Schedule
     expect(chosen).not.toEqual([host.scope.work]);
     expect(search.has("workspaceId"), "B03: picker creates the Page address without a URL seed").toBe(true);
     await screen.findByRole("button", { name: "Start" });
-    await waitFor(() => expect(mount.value().current).toBe(true));
+    await waitFor(() => expect(mount.value().state === "ready").toBe(true));
     const before = host.reads();
     await act(async () => { fireEvent.click(screen.getAllByRole("button", { name: "Read schedule" }).at(-1)!); });
     expect.soft(screen.queryAllByText("Start this schedule Work before reading").length,
@@ -1372,17 +1373,17 @@ test("JZ B03 people choose named subjects: pending Families scope, cold Schedule
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Start" })); });
     await waitFor(() => expect(mount.work()).not.toBeNull());
     expect([mount.work()!.handle.key.work]).toEqual(chosen);
-    await waitFor(() => expect(mount.value().current).toBe(true));
+    await waitFor(() => expect(mount.value().state === "ready").toBe(true));
     await act(async () => { fireEvent.click(screen.getAllByRole("button", { name: "Read schedule" }).at(-1)!); });
     await waitFor(() => expect(host.reads(), "B03: Read reaches native schedule detail").toBeGreaterThan(before));
     await waitFor(() => expect(mount.result("read")).toBeDefined());
     await waitFor(() => {
-      expect(mount.value().current, "B03: Read publishes a current Value").toBe(true);
-      expect(mount.value().value?.reading, "B03: publication contains the completed Read, not the old capture").toEqual(mount.result("read"));
+      expect(mount.value().state === "ready", "B03: Read publishes a current Value").toBe(true);
+      expect(valueOf(mount.value())?.reading, "B03: publication contains the completed Read, not the old capture").toEqual(mount.result("read"));
     });
     expect(mount.action("read").failure).toBeNull();
-    expect(mount.value().value?.reading?.snapshot.scheduleId).toBe(43);
-    expect(mount.value().value?.reading?.snapshot.scheduleName).toBe("ElectricDuctHeater");
+    expect(valueOf(mount.value())?.reading?.snapshot.scheduleId).toBe(43);
+    expect(valueOf(mount.value())?.reading?.snapshot.scheduleName).toBe("ElectricDuctHeater");
     expect(host.sent.filter(row => row.key === "revit.detail.schedules").at(-1)?.input)
       .toMatchObject({ query: { kind: "ScheduleReferences", scheduleIds: [43] } });
     // TypedChrome mounts the shipped pane: members must reach the grid.
@@ -1441,10 +1442,10 @@ async function pendingFamiliesChoice() {
   try {
     await screen.findByRole("option", { name: "Air Terminal Tags" });
     await waitFor(() => expect(mount.work()).not.toBeNull());
-    await waitFor(() => expect(mount.value().current).toBe(true));
+    await waitFor(() => expect(mount.value().state === "ready").toBe(true));
     hold = true;
     await act(async () => mount.refresh());
-    expect(mount.value(), "B03 Families: pending refresh retains named choices").toMatchObject({ status: "pending", current: false });
+    expect(mount.value(), "B03 Families: pending refresh retains named choices").toMatchObject({ state: "refreshing" });
     const before = { work: mount.work(), page: mount.page.read(), url: search.toString() };
     const category = screen.getByRole("option", { name: "Air Terminal Tags" });
     const member = screen.getByRole("option", { name: "Air Terminal Tag" });
@@ -1457,7 +1458,7 @@ async function pendingFamiliesChoice() {
     expect({ work: mount.work(), page: mount.page.read(), url: search.toString() }, "B03 Families: a refused choice commits nothing").toEqual(before);
     expect(familiesRouteState.schema.parse(mount.work()?.value).scope.edit, "B03 Families: no category was queued secretly").toBeUndefined();
     await act(async () => { release.resolve(); });
-    await waitFor(() => expect(mount.value().current).toBe(true));
+    await waitFor(() => expect(mount.value().state === "ready").toBe(true));
     expect(screen.getByRole("option", { name: "Air Terminal Tags" }).getAttribute("aria-disabled"), "B03 Families: current basis re-enables scope choices").not.toBe("true");
     expect(familiesRouteState.schema.parse(mount.work()?.value).scope.edit).toBeUndefined();
   } finally { release.resolve(); view.unmount(); mount.dispose(); await Promise.all(tasks); }
@@ -1472,16 +1473,16 @@ test("JZ H01 H17 saved takeoff choice preserves authored Work and live Initializ
     render(<TakeoffDrawing mount={j.mount} />);
     fireEvent.click(screen.getByRole("button", { name: "Choose views" }));
     fireEvent.click(await screen.findByRole("option", { name: "Zoning plan" }));
-    await waitFor(() => expect(j.mount.value().current).toBe(true), {timeout:20000});
+    await waitFor(() => expect(j.mount.value().state === "ready").toBe(true), {timeout:20000});
     await waitFor(() => expect(j.mount.owner()?.ready || j.mount.owner()?.absent).toBe(true));
     expect(j.mount.owner()!.handle, "H01: view choice cannot select another Work through serialized Page fields").toEqual(originalWork);
     await j.ready();
-    const capture = adoptionData.parse(j.mount.value().value).captures[0]!;
+    const capture = adoptionData.parse(valueOf(j.mount.value())).captures[0]!;
     fireEvent.click(screen.getByRole("button", { name: "Choose capture" }));
     const option = (await screen.findAllByRole("option")).find(row => row.textContent?.includes(capture.capturedAt));
     expect(option, "choose this exact saved capture").toBeTruthy();
     fireEvent.click(option!);
-    await waitFor(() => expect(j.mount.value().current).toBe(true), {timeout:20000});
+    await waitFor(() => expect(j.mount.value().state === "ready").toBe(true), {timeout:20000});
     await waitFor(() => expect(j.mount.owner()?.ready || j.mount.owner()?.absent).toBe(true));
     expect(screen.getByText(/Archived takeoff/)).toBeTruthy();
     expect(j.mount.owner()!.handle, "H01: a saved-evidence id cannot select another Work").toEqual(originalWork);
@@ -1491,7 +1492,7 @@ test("JZ H01 H17 saved takeoff choice preserves authored Work and live Initializ
     await screen.findByRole("checkbox", {name:"Select Office zone in Zoning plan"});
     expect(j.mount.owner()!.handle).toEqual(originalWork);
     expect((screen.getByRole("button", {name:"initialize"}) as HTMLButtonElement).disabled, "H17: live readiness uses the current document and its original Work").toBe(false);
-    expect(j.mount.value().value.initialize.refusal).toBeNull();
+    expect(valueOf(j.mount.value()).initialize.refusal).toBeNull();
     expect(j.host.inputs.source).toMatchObject({capturing:true});
     expect(j.host.inputs.lane.kind).toBe("live");
     if(j.host.inputs.lane.kind === "live")
@@ -1623,8 +1624,8 @@ test.each(["takeoffs", "families"] as const)("JZ kernel Start on %s after read r
     try {
       const start = await screen.findByRole("button", { name: "Start" });
       const retainedStart = j.mount.startAction()!;
-      if (!catalogue) await waitFor(() => expect(j.mount.value().current).toBe(true), { timeout: 20000 });
-      else expect(j.mount.value()).toMatchObject({ current: false, status: "pending" });
+      if (!catalogue) await waitFor(() => expect(j.mount.value().state === "ready").toBe(true), { timeout: 20000 });
+      else expect(j.mount.value()).toMatchObject({ state: expect.stringMatching(/^(reading|refreshing)$/) });
       // Resource release alone leaves the selected Place's Start authority intact.
       await act(async () => { j.mount.release(); });
       expect(j.mount.available()).toBe(true);
@@ -1637,7 +1638,7 @@ test.each(["takeoffs", "families"] as const)("JZ kernel Start on %s after read r
       expect(receipts).toHaveLength(1);
       expect(receipts[0]!.state).toBe("succeeded");
       expect(screen.queryByRole("button", { name: "Start" })).toBeNull();
-      if (route === "takeoffs") expect(j.mount.value().value.initialize.refusal).toBeNull();
+      if (route === "takeoffs") expect(valueOf(j.mount.value()).initialize.refusal).toBeNull();
       else {
         const category = await screen.findByRole("option", { name: "Air Terminal Tags" });
         expect(category.getAttribute("aria-disabled")).toBeNull();
@@ -1658,11 +1659,11 @@ test("JZ saved Takeoffs capture explains its empty snapshot and returns to live 
   try {
     await j.ready();
     render(<TakeoffDrawing mount={j.mount} />);
-    const capture = adoptionData.parse(j.mount.value().value).captures[0]!;
+    const capture = adoptionData.parse(valueOf(j.mount.value())).captures[0]!;
     fireEvent.click(screen.getByRole("button", { name: "Choose capture" }));
     const option = (await screen.findAllByRole("option")).find(row => row.textContent?.includes(capture.capturedAt));
     fireEvent.click(option!);
-    await waitFor(() => expect(j.mount.value().current).toBe(true), { timeout: 20000 });
+    await waitFor(() => expect(j.mount.value().state === "ready").toBe(true), { timeout: 20000 });
     expect(screen.getByText(/Archived takeoff/)).toBeTruthy();
     expect(screen.getByText("No adopted zones in this saved takeoff")).toBeTruthy();
     expect(screen.getByText(/This capture stores takeoff data, not a view image/)).toBeTruthy();
@@ -1730,7 +1731,7 @@ test("JZ E8-03 a typed Fans refused Plan explains the atomic Apply hold at the a
     { path: ["equipmentFlows", elementSubject(realMuas.nodes.find(node => node.id === 14577391)!), "edit"], value: { value: { cfm: 925, source: "test" } } },
   ], f.fans.work()!.revision);
   f.fans.refresh("value");
-  await vi.waitFor(() => expect(f.typed.value().current).toBe(true));
+  await vi.waitFor(() => expect(f.typed.value().state === "ready").toBe(true));
   const reason = "MUAS-1: missing PE_M_Fan_AirFlowDesign; add the missing parameter";
   native.submit.mockImplementation(async () => ({ id: "atomic-hold", state: "succeeded", result: {
     previewOnly: true, planRefusal: reason,
@@ -1809,7 +1810,7 @@ test.each(["Fans", "Ducts"] as const)("JZ C042 %s subject-list declaration suppr
       else await screen.findByRole("region", { name: "Fan subject list" });
       expect(screen.queryByRole("button", { name: "Choose fan" }), "One subject capability has one choice path").toBeNull();
       if (pane === "roster") {
-        const first = fans.spec.subject!.options(mount.value().value)[0]!;
+        const first = fans.spec.subject!.options(valueOf(mount.value()))[0]!;
         fireEvent.click(screen.getByRole("button", { name: first.label }));
         expect(mount.page.read().fan).toEqual({ kind: "ids", ids: [first.id] });
       }
@@ -1848,7 +1849,7 @@ test("JZ audit named subject choices preserve all none add and toggle without ra
     await screen.findByRole("button", { name: "Choose fan" });
     expect(document.body.textContent).not.toContain(unknown);
     expect(screen.getByText(/outside the current roster/)).toBeTruthy();
-    const options = module.spec.subject!.options(mount.value(roster).value);
+    const options = module.spec.subject!.options(valueOf(mount.value(roster)));
     expect(options.length).toBeGreaterThan(1);
     fireEvent.click(screen.getByRole("button", { name: "No fan" }));
     expect(mount.page.read().fan).toEqual({ kind: "ids", ids: [] }); expect(moves).toBe(1);
@@ -1972,7 +1973,7 @@ test("JZ Plan refusal marker holds a valid sealed ancillary-only review at the t
     { path: ["writeIntent"], value: { edit: { value: { walk: { unitId: 14577391, portIndex: 2 } } } } },
     { path: ["equipmentFlows", elementSubject(realMuas.nodes.find(node => node.id === 14577391)!), "edit"], value: { value: { cfm: 925, source: "test" } } },
   ], f.fans.work()!.revision);
-  f.fans.refresh("value"); await vi.waitFor(() => expect(f.typed.value().current).toBe(true));
+  f.fans.refresh("value"); await vi.waitFor(() => expect(f.typed.value().state === "ready").toBe(true));
   const reason = "MUAS-1: required airflow parameter is missing; add the missing parameter";
   native.submit.mockClear();
   native.submit.mockImplementation(async () => ({ id: "marker-only-plan", state: "succeeded", result: {

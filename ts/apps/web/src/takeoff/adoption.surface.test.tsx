@@ -1,3 +1,4 @@
+import { valueOf } from "../route/typed-route";
 // @vitest-environment jsdom
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { expect, test } from "vite-plus/test";
@@ -25,7 +26,7 @@ test("view choices stay pending for a slow native catalogue, arrive before captu
     catalogue.release.resolve();
     await snapshot.entered.promise;
     expect(await screen.findByRole("option", { name: "Zoning plan" })).toBeTruthy();
-    expect(j.mount.value().current).toBe(false);
+    expect(j.mount.value().state === "ready").toBe(false);
     expect(new Set(j.nativeCalls.filter((call) => call.key === "revit.catalog.project-index").map((call) => JSON.stringify(call.input))).size).toBe(1);
     expect(j.nativeScopes.every((scope) => JSON.stringify(scope) === JSON.stringify({ bridgeSessionId: ref.session, openDocumentId: ref.openId }))).toBe(true);
     snapshot.release.resolve();
@@ -90,7 +91,7 @@ test("choose adoption views, edit the actual Work, initialize and adopt through 
     );
     await waitFor(
       () =>
-        expect(j.mount.value().value.initialize.refusal).toBe(
+        expect(valueOf(j.mount.value()).initialize.refusal).toBe(
           "The document already carries every shared parameter",
         ),
       { timeout: 20000 },
@@ -111,7 +112,7 @@ test("choose adoption views, edit the actual Work, initialize and adopt through 
       ],
     });
     await j.ready();
-    const data = adoptionData.parse(j.mount.value().value);
+    const data = adoptionData.parse(valueOf(j.mount.value()));
     expect(data.captures.length).toBeGreaterThan(0);
     const calls = j.nativeCalls.length;
     j.mount.page.query({ work: data.captures[0]!.id });
@@ -120,7 +121,7 @@ test("choose adoption views, edit the actual Work, initialize and adopt through 
     expect(screen.getByText(/Archived takeoff/)).toBeTruthy();
     expect(screen.queryByRole("checkbox")).toBeNull();
     expect(screen.getByRole("button", { name: "live" })).toBeTruthy();
-    expect(j.mount.value(loaded).current).toBe(true);
+    expect(j.mount.value(loaded).state === "ready").toBe(true);
     expect(j.host.inputs.source).toMatchObject({capturing:true});
     fireEvent.click(screen.getByRole("button", {name:"live"}));
     await j.ready();

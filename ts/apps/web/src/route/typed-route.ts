@@ -106,6 +106,9 @@ export type DrawPage<F extends Fields> = {
 };
 /** A value-less reading state: reading, refused, or not yet run. */
 export type Absent = Exclude<ReadingState<unknown>, { value: unknown }>;
+/** The value a reading state holds; undefined when it is value-less. */
+export const valueOf = <T>(state: ReadingState<T> | undefined): Immutable<T> | undefined =>
+  state && "value" in state ? state.value : undefined;
 /** Why a reading or Work state is not ready, in the shell's words; null when it is. */
 export const refusalOf = (state: ReadingState<unknown>): string | null =>
   state.state === "ready" ? null : "reason" in state && state.reason ? state.reason : state.state === "not-yet-run" ? "Start this Work to edit" : "Reading...";

@@ -78,7 +78,7 @@ function mount(slot: Parameters<typeof PicturePane>[0]["ctx"]["slot"], findings:
   io.call.mockReturnValue(new Promise(() => {}));
   const draw = {
     target: { kind: "document", ref: { session: crypto.randomUUID(), openId: "doc" } },
-    value: { status: "ready", current: true, value: {}, hash: "evaluation-1", publication: null },
+    value: { state: "ready", value: {}, publication: { evaluation: "evaluation-1" } },
     page: { read: () => ({ ...pose, layers, selected: [] }), pose: vi.fn(), query: vi.fn(), select: vi.fn() },
     selection: { read: () => [], set: vi.fn() },
   };

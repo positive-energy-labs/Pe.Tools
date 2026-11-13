@@ -28,7 +28,7 @@ function pointBlocker(at: { elementId: number; subject?: string }) {
 
 async function ledgerLink() {
   const f = await createWitness(closes);
-  await vi.waitFor(() => expect(f.fans.readingStatus("sheet").snapshot.current).toBe(true));
+  await vi.waitFor(() => expect(f.fans.readingStatus("sheet").snapshot.state === "ready").toBe(true));
   const ducts0 = f.owner.work()?.revision ?? 0;
   const registry = makeAtomRegistry();
   closes.push(() => registry.dispose());
