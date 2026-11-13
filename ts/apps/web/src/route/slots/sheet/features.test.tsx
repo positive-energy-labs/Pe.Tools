@@ -186,7 +186,7 @@ test.each(["ready", "stale"] as const)("the real mount sends a setting-home save
     custody: { current: () => true }, memory: () => ({}) }, workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`),
     { work, sources: { "bindings.settings": { kind: "use", open(_ctx, deliver) {
       deliver({ kind: "complete", revision: 1, fresh: state === "ready", value: { key: "settings", generation: 1, version: 1, state: state === "ready" ? "current" : "refresh-needed",
-        value: { data, evaluation: "e", inputs: "i", trace: [], coverage: { requested: [], covered: [], unknown: [], refused: [] }, origin: null, freshness: "current" } } });
+        value: { data, evaluation: "e", inputs: "i", works: [], trace: [], coverage: { requested: [], covered: [], unknown: [], refused: [] }, origin: null, freshness: "current" } } });
       return () => {};
     } } } });
   const stop = mount.subscribe(() => {});

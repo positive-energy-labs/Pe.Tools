@@ -75,7 +75,7 @@ test("Pea enumerates Pod members and proposes revision-checked Work without rout
             data: graph,
             evaluation: "pods-fixture",
             inputs: "pods-fixture",
-            trace: [],
+            works: [], trace: [],
             coverage: { requested: [], covered: [], unknown: [], refused: [] },
             origin: null,
             freshness: "current",

@@ -52,7 +52,7 @@ import { handle } from "@pe/agent-contracts/handle";
 import type { Command } from "../../../../packages/agent-contracts/src/command.ts";
 import { reasonOf, refusalOf, valueOf } from "../route/typed-route";
 import type { ReadingState } from "@pe/agent-contracts";
-import { absentLine, failureLine } from "./reading-line";
+import { absentLine, failureLine, retainedLine } from "./reading-line";
 import { cancelAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 import { observeSubject, subjectScopeKey, type SubjectState } from "./subject";
 
@@ -127,13 +127,43 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     value.rows.flatMap(row => "revision" in row ? [{ work: row.work, revision: row.revision }] : []),
   ]);
   let stopTimeline = () => {};
+  const reads = new Map<import("../route/host-read").HostRead, { snapshot: Snapshot; args: string; stop(): void }>();
+  const readInput = (read: import("../route/host-read").HostRead) => {
+    const project = "args" in read && typeof read.args === "function" ? read.args : spec.core?.args ?? (() => ({}));
+    return read.input.parse(project(page as never));
+  };
+  const currentPublication = (read: import("../route/host-read").HostRead) => {
+    const record = reads.get(read);
+    return record?.snapshot.state === "ready" && record.args === canonicalRouteInput(readInput(read))
+      ? record.snapshot.publication : null;
+  };
   const timelineClient = ports.timeline ?? (input.fixture === null && !input.history ? createTimelineClient(ports.findings) : null);
-  const timelineWorks = () => [...owners.values()].map(owner => owner.handle?.key ?? owner.scope.key);
-  const connectTimeline = () => {
+  const timelineWorks = () => [...new Map([
+    ...[...owners.values()].map(owner => owner.handle?.key ?? owner.scope.key),
+    ...[...reads.keys()].flatMap(read => currentPublication(read)?.works ?? []),
+  ].map(key => [workKey(key), key])).values()];
+  // The document head has no writable owner. Its host scope is independent of route read membership.
+  const timelineDocument = () => {
+    if (edits || input.target?.kind !== "document") return undefined;
+    const bound = bindWork(spec.key, input.work.address, undefined, input.work.open ?? input.target.ref);
+    return bound.binding === "address" || bound.binding === "open" ? bound : undefined;
+  };
+  let timelineMembership: string | undefined;
+  const connectTimeline = (force = false) => {
+    const works = timelineWorks(), document = timelineDocument();
+    const core = spec.core ? reads.get(spec.core)?.snapshot : undefined;
+    const valueProblem = !document && !!spec.core && !currentPublication(spec.core)
+      ? core && (core.state === "refused" || core.state === "stale")
+        ? `Undo and Redo unavailable: current Value refused. ${reasonOf(core)}. ${retainedLine(core) ?? "Refresh needed"}.`
+        : "Reading Timeline: waiting for the current Value"
+      : null;
+    const membership = canonicalRouteInput([works, document ?? null, valueProblem]);
+    if (!force && timelineMembership === membership) return;
+    timelineMembership = membership;
     stopTimeline(); timelineState = null;
-    timelineProblem = input.history ? "Recorded Timeline is read-only" : "Timeline unavailable";
-    const works = timelineWorks();
-    if (!timelineClient || !works.length) return;
+    timelineProblem = input.history ? "Recorded Timeline is read-only" : valueProblem ?? "Timeline unavailable";
+    if (valueProblem) return;
+    if (!timelineClient || !works.length && !document) return;
     let closed = false;
     const stop = timelineClient.open(works, (value, reason) => {
       if (closed || disposed) return;
@@ -142,7 +172,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
         if (basis !== undefined && basis !== timelineBasis(value)) { problems.delete(id); stepProblemBasis.delete(id); }
       }
       timelineState = value ? freezePage(value) : null; timelineProblem = reason ?? null; notify();
-    });
+    }, document);
     stopTimeline = () => { closed = true; stop(); };
   };
   cleanups.push(() => stopTimeline());
@@ -161,16 +191,16 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
       const expected = timelineState?.[direction];
       if (!timelineClient || !expected || timelineProblem || timelineState?.refusal[direction])
         return refused(timelineProblem ?? timelineState?.refusal[direction] ?? `Nothing to ${direction}`);
-      const result = await timelineClient.step({ direction, works: timelineWorks(), expected });
+      const document = timelineDocument();
+      const result = await timelineClient.step({ direction, works: timelineWorks(), expected, ...(document ? { document } : {}) });
       if (!disposed && input.custody.current()) {
-        if (result) connectTimeline();
+        if (result) connectTimeline(true);
         watchFindings();
       }
       return result ? refused(result.message) : null;
     } catch (error) { return refused(error instanceof Error ? error.message : String(error)); }
   };
   let renderedBasis: InvocationToken | null = null;
-  const reads = new Map<import("../route/host-read").HostRead, { snapshot: Snapshot; args: string; stop(): void }>();
   const dependencies = () => Object.fromEntries([...reads].filter(([read,r])=>read === spec.core && r.snapshot.state === "ready").map(([read,r])=>[read.key,r.snapshot.hash??""]));
   const workSchema:z.ZodObject=edits?.work.schema ?? z.strictObject({});
   const gate = createRouteScopeGate({
@@ -261,8 +291,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
   const syncReads = (force = false) => {
     if (disposed || released || !input.custody.current()) return;
     for (const read of allReads) {
-      const project = "args" in read && typeof read.args === "function" ? read.args : spec.core?.args ?? (()=>({}));
-      const args = read.input.parse(project(page as never)), signature = canonicalRouteInput(args);
+      const args = readInput(read), signature = canonicalRouteInput(args);
       if (!force && signature === reads.get(read)?.args) continue;
       const previous = reads.get(read)?.snapshot;
       const retained: Publication=previous?.publication?freezePage({...previous.publication,freshness:"refresh-needed" as const}):null;
@@ -282,7 +311,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
               : unavailable(valueRefusal(frame.reason ?? packet.reason ?? "Incomplete Value", read.key), publication?.data??valueOf(record.snapshot), publication??record.snapshot.publication);
           } catch (error) { record.snapshot = unavailable(valueRefusal(error, read.key), valueOf(record.snapshot), record.snapshot.publication); }
         } else if (frame.kind !== "log") record.snapshot = frame.kind === "failure"?unavailable(valueRefusal(frame.error, read.key),valueOf(record.snapshot),record.snapshot.publication):reading(valueOf(record.snapshot),record.snapshot.publication);
-        notify();
+        connectTimeline(); notify();
       };
       if (input.fixture !== null) {
         try { deliver({ kind: "complete", value: read.source.provide!(input.fixture, args), revision: 1 }); }
@@ -300,7 +329,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
         }).catch(error => deliver({ kind: "failure", error }));
       }
     }
-    notify();
+    connectTimeline(); notify();
   };
   const move = (patch: Record<string, unknown>, history?: "push" | "replace") => {
     requireCurrent();
@@ -670,7 +699,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     value: (read: import("../route/host-read").HostRead | undefined = spec.core): Snapshot => read ? reads.get(read)?.snapshot ?? reading() : { state: "not-yet-run", publication: null },
     owner: (id = own) => owners.get(id),
     page: { read: () => page, pose: (patch: any, intent?: "gesture"|"named") => moveRole("pose",patch,intent === "gesture"?"replace":intent === "named"?"push":undefined), query: (patch: any) => moveRole("query",patch), select: (selected: any) => move({selected}), subject: (subject: any) => {if(!spec.subject) throw Error("No subject declared");return move({ [spec.subject.field]: subject },"push");} },
-    subscribe(listener: () => void) { const resume = released; released = false; listeners.add(listener); if (resume) connectTimeline(); syncReads(); return () => { listeners.delete(listener); }; },
+    subscribe(listener: () => void) { const resume = released; released = false; listeners.add(listener); if (resume) connectTimeline(true); syncReads(); return () => { listeners.delete(listener); }; },
     available: () => !disposed && input.custody.current(),
     /** The URL write is flushed: the address alone, without Place memory, decodes to this Page
      *  (slice 6.1, `data-url-settled`); a reload reads only the address. */

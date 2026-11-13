@@ -88,13 +88,18 @@ export const workTimelineSchema = z.strictObject({
 export type WorkTimeline = z.infer<typeof workTimelineSchema>;
 
 /** Args of the read. The host adds the document's findings Work itself. */
-export const workTimelineArgsSchema = z.strictObject({ works: z.array(workKeySchema).readonly() });
+export const workTimelineArgsSchema = z.strictObject({
+  works: z.array(workKeySchema).readonly(),
+  /** The global document head only: the host resolves every registered Work at this binding. */
+  document: workKeySchema.refine(key => key.binding === "open" || key.binding === "address", "Timeline needs a document binding").optional(),
+});
 export type WorkTimelineArgs = z.infer<typeof workTimelineArgsSchema>;
 
 /** Body of `work.history`. The host refuses when `expected` is not the step it would take. */
 export const workStepRequestSchema = z.strictObject({
   direction: z.enum(["undo", "redo"]),
   works: z.array(workKeySchema).readonly(),
+  document: workTimelineArgsSchema.shape.document,
   expected: stepRefSchema,
 });
 export type WorkStepRequest = z.infer<typeof workStepRequestSchema>;

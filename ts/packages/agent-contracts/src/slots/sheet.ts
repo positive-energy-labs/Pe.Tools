@@ -48,7 +48,8 @@ export type BindingPer = "subject" | "route";
 /** A layer under Work for one row: what the model, the store, a home tier or a default holds, and from where. */
 export interface CellLayer {
   readonly value: unknown;
-  readonly source?: Exclude<CellSource, "work">;
+  /** A host-resolved layer can contain Work from its evaluation, even after the live cell moved. */
+  readonly source?: CellSource;
   /** Which file, store key or version the value came from (the firm line: version and file). */
   readonly ref?: string;
   readonly freshness?: StateCell["freshness"];

@@ -103,8 +103,8 @@ export function inputPort(options: {
       }
       if (name === "work-timeline") {
         if (!options.timeline) throw Error("The Timeline needs the host's action journal");
-        const { works, by } = workTimelineInput.input.parse(raw);
-        return options.timeline.read(works, by);
+        const { works, by, document } = workTimelineInput.input.parse(raw);
+        return options.timeline.read(works, by, document);
       }
       if (name === "work") {
         const { owner, scope } = z.object({ owner: z.string(), scope: workKeySchema }).parse(raw);

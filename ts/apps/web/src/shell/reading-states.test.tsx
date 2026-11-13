@@ -47,7 +47,7 @@ const probe = route({
 });
 
 const packet = (data: object) => ({ key: "probe", generation: 0, version: 1, state: "current", value: {
-  data, evaluation: JSON.stringify(data), inputs: "probe", origin: { kind: "fixture" }, trace: [], freshness: "current",
+  data, evaluation: JSON.stringify(data), inputs: "probe", origin: { kind: "fixture" }, works: [], trace: [], freshness: "current",
   coverage: { requested: [], covered: [], unknown: [], refused: [] } } });
 
 /** Map slice 5: the shell draws reading, refused and not-yet-run; a body sees a present value. */

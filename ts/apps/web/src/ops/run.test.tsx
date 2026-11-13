@@ -63,7 +63,7 @@ function journey() {
             data: { catalog: { operations: [entry] }, receipts: [], receipt: [] },
             evaluation: "ops-test", inputs: "ops-test",
             coverage: { requested: [], covered: [], refused: [], unknown: [] },
-            origin: {}, trace: [], freshness: "current",
+            origin: {}, works: [], trace: [], freshness: "current",
           },
         },
       });

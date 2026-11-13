@@ -3,7 +3,6 @@ import {
   actionStatusSchema,
   refuse,
   workKey,
-  workKeySchema,
   workTimelineArgsSchema,
   workTimelineSchema,
   WORK_TIMELINE_READ,
@@ -56,18 +55,20 @@ export const timelineReceipts = async (journal: Pick<ActionJournal, "read">): Pr
 
 /** The host Timeline (ADR 0042): one read and one step door over the Work journals and every registered source. */
 export function hostTimeline(workspace: RouteWorkspace, source: Pick<ActionJournal, "read"> | TimelineReceipts, documents: () => Promise<readonly DocumentRow[]> = async () => []) {
+  const membersOf = (works: readonly WorkKey[], document?: WorkKey) => timelineMembers(document
+    ? workspace.list().map(({ route }) => ({ ...document, route })) : works);
   /** The action journal, or the reader a host with no journal of its own supplies. */
   const receiptsNow: TimelineReceipts = typeof source === "function" ? source : () => timelineReceipts(source);
   const parts = async (works: readonly WorkKey[], by: WorkAuthor, receipts: readonly ActionStatus[]) =>
     documents().then((docs) => Promise.all([workspace.timeline(works, by, receipts), ...[...sources].map((source) => source.read(works, by, docs))]));
   return {
-    async read(works: readonly WorkKey[], by: WorkAuthor): Promise<WorkTimeline> {
-      const members = timelineMembers(works);
+    async read(works: readonly WorkKey[], by: WorkAuthor, document?: WorkKey): Promise<WorkTimeline> {
+      const members = membersOf(works, document);
       return mergeTimeline(await parts(members, by, await receiptsNow())).timeline;
     },
     /** The same door for a person and Pea: the caller sends back the step it was shown. */
     async step(request: WorkStepRequest, caller: Caller, by: WorkAuthor): Promise<unknown> {
-      const members = timelineMembers(request.works);
+      const members = membersOf(request.works, request.document);
       const receipts = await receiptsNow();
       const next = mergeTimeline(await parts(members, by, receipts))[request.direction];
       if (!next) return refuse("refused", `Nothing to ${request.direction}`, "Re-read the Timeline.");
@@ -101,6 +102,6 @@ export const workTimelineRead = read(WORK_TIMELINE_READ, {
 });
 export const withTimelineCaller = (name: string, args: unknown, by: WorkAuthor | null): unknown =>
   name === WORK_TIMELINE_READ
-    ? { works: z.object({ works: z.array(workKeySchema) }).parse(args).works, by: by ?? "human" }
+    ? { ...workTimelineArgsSchema.strip().parse(args), by: by ?? "human" }
     : args;
 export const sameWorks = (a: WorkKey, b: WorkKey) => workKey(a) === workKey(b);

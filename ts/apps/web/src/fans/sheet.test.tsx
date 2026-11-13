@@ -39,12 +39,24 @@ const handle = (value: object, stage = vi.fn(async () => null)) => ({
   owner: { route: "fans", label: "Work" }, refusal: null, value, freshness: "current" as const,
   transitions: () => [], stage, clear: async () => null,
 });
-const drawn = (read: object, doc: Record<string, unknown>, at: (path: readonly string[]) => object, only: keyof typeof fansSheet.bindings) => {
+const drawn = (read: object, doc: Record<string, unknown>, at: (path: readonly string[]) => object, only: keyof typeof fansSheet.bindings, state: "ready" | "refreshing" = "ready") => {
   const slot = { ...fansSheet, bindings: { [only]: fansSheet.bindings[only] } };
-  const ctx = { cells: { doc, at }, page: { read: () => ({}) }, value: { state: "ready", value: read }, verb: () => ({ run: async () => null, refusal: null }) };
+  const ctx = { cells: { doc, at }, page: { read: () => ({}) }, value: { state, value: read }, verb: () => ({ run: async () => null, refusal: null }) };
   return render(<RegistryContext value={makeAtomRegistry()}><SheetPane ctx={{ draw: ctx as never, slot }} /></RegistryContext>);
 };
 const snapshot = { nodes: [], segments: [], slots: { fanStatic: "Old ESP" } };
+
+test("D25: a retained resolved Work airflow keeps Work provenance after its live edit is undone", () => {
+  const unit = { id: 7, kind: "equipment", uniqueId: "unit-7", family: "MUAS", type: "A", mark: "MA-1", connectors: [], facts: [] };
+  const row = elementSubject(unit);
+  const read = { sheetSnapshot: { ...snapshot, nodes: [unit] }, sheetView: { inputs: { units: { "7": { cfm: { value: 1234, source: "Work" } } } } } };
+  const cells = sheetCells({ ...fansSheet, bindings: { equipmentFlows: fansSheet.bindings.equipmentFlows } }, { rows: [], work: fansDocumentSchema.parse({}), model: [], read });
+  expect(cells.find(cell => cell.row === row)).toMatchObject({ value: { cfm: 1234 }, source: "work", pending: null });
+  const view = drawn(read, {}, () => handle({}), "equipmentFlows", "refreshing");
+  expect(view.container.querySelector('[data-input-source="work"]')?.textContent).toBe("work");
+  expect(view.container.querySelector('[data-sheet-cell]')?.textContent).not.toContain("model");
+  expect(view.container.textContent).toContain("1234");
+});
 
 test("slot names use project and firm settings and never stage Work", () => {
   const binding = Object.entries(fansSheet.bindings).find(([key]) => key === "setting.ducts.parameters.fanStatic")?.[1];

@@ -329,7 +329,7 @@ test("JZ DuctLoss numeric drafts refuse negatives without changing the URL and r
     }),
     // Only the host reading is a fixture; the page, address codec and input events are production.
     sources: { "duct-loss.result": { kind: "use", open(_ctx, deliver) {
-      deliver({ kind: "complete", value: { key: "numeric-entry", generation: 1, version: 1, state: "current", value: { data: { result: solve({ shape: "round", a: 12, b: 8, cfm: 0, length: 100, roughness: 0.0003, density: 0.075 }), error: null }, evaluation: "numeric-entry", inputs: "numeric-entry", coverage: { requested: [], covered: [], unknown: [], refused: [] }, origin: { kind: "fixture" }, trace: [], freshness: "current" } }, revision: 1 }); return () => {};
+      deliver({ kind: "complete", value: { key: "numeric-entry", generation: 1, version: 1, state: "current", value: { data: { result: solve({ shape: "round", a: 12, b: 8, cfm: 0, length: 100, roughness: 0.0003, density: 0.075 }), error: null }, evaluation: "numeric-entry", inputs: "numeric-entry", coverage: { requested: [], covered: [], unknown: [], refused: [] }, origin: { kind: "fixture" }, works: [], trace: [], freshness: "current" } }, revision: 1 }); return () => {};
     } } },
   });
   function Journey() {
@@ -644,7 +644,12 @@ test("JZ Fans undo after apply: public write journey leaves an honest toolbar re
     target: f.target, fixture: null, work: { address: null, open: f.target.ref },
     address: { read: () => new URLSearchParams(), write() {}, subscribe: () => () => {} },
     custody: { current: () => true }, memory: () => ({}),
-  }, routeRegistry.fans!.fingerprint, { work, timeline: fixtureTimeline(f.saved, () => timelineReceipts(f.journal), changed => f.journal.subscribe({ kinds: ["action"] }, changed)), sources: { "fans.sheet": { kind: "use", open: () => () => {} } } });
+  }, routeRegistry.fans!.fingerprint, { work, timeline: fixtureTimeline(f.saved, () => timelineReceipts(f.journal), changed => f.journal.subscribe({ kinds: ["action"] }, changed)), sources: { "fans.sheet": { kind: "use", open(ctx, deliver) {
+    const packet = fans.spec.core?.source.provide?.("scene", ctx.args);
+    if (!packet) throw Error("Missing current Fans fixture");
+    deliver({ kind: "complete", revision: 1, value: packet });
+    return () => {};
+  } } } });
   const view = render(<TimelineButtons owner={mount} />);
   try {
     const staged = await stage("ducts", [
@@ -1414,7 +1419,7 @@ async function pendingFamiliesChoice() {
       data: { familiesWork: doc, catalog: catalogue, categories: ["Air Terminal Tags"], observation: null,
         rows: [], facts: {}, params: [], pivotRows: [], pivotFamilies: [], outcomes: [], activeReadId: null, editRefusal: "Read these families before editing" },
       evaluation: "b03-families", inputs: "b03-families", coverage: { requested: [], covered: [], unknown: [], refused: [] },
-      origin: { kind: "fixture", name: "post-start-families" }, trace: [], freshness: "current",
+      origin: { kind: "fixture", name: "post-start-families" }, works: [], trace: [], freshness: "current",
     },
   });
   const release = Promise.withResolvers<void>();

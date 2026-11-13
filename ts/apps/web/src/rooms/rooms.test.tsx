@@ -144,7 +144,7 @@ test("pending Values retain Rooms navigation while edits refuse, then reject lat
   const ctx=()=>mount.draw("main") as import("./route").RoomsContext;
   const packet=(label:string)=>({key:"retained",generation:0,version:1,state:"current",value:{
     data:{...roomsGoal(roomsRouteState.schema.parse({}),DEMO_ROOMS,""),roomsWork:roomsRouteState.schema.parse({}),handle:null,snapshot:{...DEMO_ROOMS,levels:[{name:label,elevation:0,views:["First view","Second view"]}]},trace:null,traceError:null,plan:null,planError:null},
-    evaluation:label,inputs:"retained",origin:{kind:"fixture"},trace:[],freshness:"current",coverage:{requested:[],covered:[],unknown:[],refused:[]}}});
+    evaluation:label,inputs:"retained",origin:{kind:"fixture"},works: [], trace: [],freshness:"current",coverage:{requested:[],covered:[],unknown:[],refused:[]}}});
   const emit=(index:number,label:string)=>frames[index]!({kind:"complete",revision:1,value:packet(label)});
   function Chooser(){useSyncExternalStore(mount.subscribe,mount.revision,mount.revision);const current=ctx();return <RoomsProvider ctx={current}>
     <ScopeBody ctx={current} page={roomsPageSchema.parse({view:current.page.read().view})} verbs={()=>null}/>

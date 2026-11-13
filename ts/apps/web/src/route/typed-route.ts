@@ -443,7 +443,7 @@ export function route<D, const F extends Fields, W extends z.ZodObject, Edit ext
     observe:[],resetOnTarget:[]};
   const gateErrors = linkRouteGates(data, schemas);
   if (gateErrors.length) throw Error(gateErrors.map(error => `${error.path}: ${error.message}`).join("; "));
-  const host:HostRouteModule={data,schemas,...(work?{workState:work,readWorks:Object.keys(owners).filter(id=>id!==work.route)}:{})};
+  const host:HostRouteModule={data,schemas,...(work?{workState:work}:{})};
   const axes: Readonly<Record<string, EntryContract["axes"]>> = commandCatalogAxes;
   const entries:Record<string,EntryContract>=Object.fromEntries([...[...readIds.keys()].map(read=>[read.key,read]),
     // The linker finds a verb's entry by key; its axes are the generated table's, and no schema rides along.

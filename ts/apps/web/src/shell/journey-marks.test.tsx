@@ -36,7 +36,7 @@ function held(typed: ReturnType<typeof roomsProbe>, frames: Parameters<UseSource
 }
 const complete = (deliver: Parameters<UseSource["open"]>[1]) => deliver({ kind: "complete", revision: 1, value: { key: "busy", generation: 0, version: 1, state: "current", value: {
   data: { ...GOAL, roomsWork: roomsRouteState.schema.parse({}), handle: null, snapshot: DEMO_ROOMS, trace: null, traceError: null, plan: null, planError: null },
-  evaluation: "busy", inputs: "busy", origin: { kind: "fixture" }, trace: [], freshness: "current",
+  evaluation: "busy", inputs: "busy", origin: { kind: "fixture" }, works: [], trace: [], freshness: "current",
   coverage: { requested: [], covered: [], unknown: [], refused: [] } } } });
 const router = (component: () => React.ReactNode) =>
   createRouter({ routeTree: createRootRoute({ component }), history: createMemoryHistory({ initialEntries: ["/"] }) });
@@ -60,7 +60,7 @@ test("6.1 a pane whose reading is pending says aria-busy, and clears it when the
     expect(pane.getAttribute("aria-busy")).toBe("true");
     await act(async () => frames.at(-1)!({ kind: "complete", revision: 1, value: { key: "busy", generation: 0, version: 1, state: "current", value: {
       data: { ...GOAL, roomsWork: roomsRouteState.schema.parse({}), handle: null, snapshot: DEMO_ROOMS, trace: null, traceError: null, plan: null, planError: null },
-      evaluation: "busy", inputs: "busy", origin: { kind: "fixture" }, trace: [], freshness: "current",
+      evaluation: "busy", inputs: "busy", origin: { kind: "fixture" }, works: [], trace: [], freshness: "current",
       coverage: { requested: [], covered: [], unknown: [], refused: [] } } } }));
     await settled(pane);
     expect(pane.getAttribute("aria-busy")).toBeNull();
@@ -91,7 +91,7 @@ test("6.1b two Places on one route, one hidden mid-read: every aria-busy in the 
 
 test("6.1b a route the host leases no view for (chat at /pea) never PUTs a route view; a leasing route does", async () => {
   const chatFrames: Parameters<UseSource["open"]>[1][] = [], roomsFrames: Parameters<UseSource["open"]>[1][] = [];
-  const chat = held(roomsProbe({ key: "chat", address: "/pea", name: "Pea" }), chatFrames), rooms = held(roomsProbe(), roomsFrames);
+  const chat = held(roomsProbe({ key: "chat", address: "/pea", name: "Pea", agent: false }), chatFrames), rooms = held(roomsProbe(), roomsFrames);
   call.mockClear();
   const puts = () => call.mock.calls.filter(([door]) => door === "view.publish").map(([, req]) => (req as { params: { route: string } }).params.route);
   try {

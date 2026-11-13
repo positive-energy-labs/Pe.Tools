@@ -57,7 +57,7 @@ vi.mock("../shell/host-read-source", async () => {
         data: { machine: (MACHINE_SEEDS["patch-bay"] as { observation: Machine }).observation,
           recents: BAY_RECENTS, threads: BAY_THREADS },
         evaluation: "open-test", inputs: "open-test", coverage: { requested: [], covered: [], refused: [], unknown: [] },
-        origin: {}, trace: [], freshness: "current",
+        origin: {}, works: [], trace: [], freshness: "current",
       },
     } });
   } }) };

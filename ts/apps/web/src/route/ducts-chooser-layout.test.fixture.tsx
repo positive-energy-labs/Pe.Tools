@@ -23,7 +23,7 @@ const value = { ...snapshot, rows: systemList(snapshot, null), sourceVersion: "l
 const networkValue = nativeResponseSchema("ducts.snapshot.walk").parse(recordedNetwork);
 const publication = (data: unknown) => ({ key: "layout", generation: 1, version: 1, state: "current", value: {
   data, evaluation: "layout", inputs: "recorded", coverage: { requested: [], covered: [], unknown: [], refused: [] },
-  origin: { kind: "fixture" }, trace: [], freshness: "current",
+  origin: { kind: "fixture" }, works: [], trace: [], freshness: "current",
 } });
 let complete: ReadingDelivery;
 const registry = makeAtomRegistry();

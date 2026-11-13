@@ -67,7 +67,7 @@ test("contract() joins its axes from what it uses: effect max, cost max, touches
   expect(order.indexOf(joined.axes.cost)).toBe(Math.max(...[rehearsal, read].map((use) => order.indexOf(use.axes.cost))));
   expect(new Set(joined.axes.touches)).toEqual(new Set(["Metadata", ...rehearsal.axes.touches, ...read.axes.touches]));
   expect(joined).toMatchObject({ keyedBy: { rows: { kind: "UniqueId" } }, demand: "explicit" });
-  const value = { data: { rows: ["a"] }, evaluation: "e", inputs: "i", trace: [],
+  const value = { data: { rows: ["a"] }, evaluation: "e", inputs: "i", works: [], trace: [],
     coverage: { requested: [], unknown: [], covered: [], refused: [] }, origin: null, freshness: "current" };
   expect(joined.output.parse({ key: "k", generation: 0, version: 1, state: "current", value }).value?.data.rows).toEqual(["a"]);
   expect(joined.output.safeParse({ key: "k", generation: 0, version: 1, state: "current", value: { ...value, data: { rows: [1] } } }).success).toBe(false);

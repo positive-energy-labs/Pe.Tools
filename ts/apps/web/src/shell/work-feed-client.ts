@@ -41,21 +41,22 @@ import { routeInput } from "../route/host";
 import { workTimelineSchema, type WorkKey, type WorkStepRequest, type WorkTimeline } from "@pe/agent-contracts";
 
 export interface TimelineClient {
-  open(works: readonly WorkKey[], deliver: (value: WorkTimeline | null, reason?: string) => void): () => void;
+  open(works: readonly WorkKey[], deliver: (value: WorkTimeline | null, reason?: string) => void, document?: WorkKey): () => void;
   step(request: WorkStepRequest): Promise<{ message: string } | null>;
 }
 /** One host publication, invalidated on Work and receipt changes, shared with Pea's step door. */
 export function createTimelineClient(client: Pick<typeof peClient, "response"> = peClient): TimelineClient {
   return {
-    open(works, deliver) {
+    open(works, deliver, document) {
+      const args = { works, ...(document ? { document } : {}) };
       const controller = new AbortController();
       const source = publicationSource({ async read(_ctx, publication, release) {
-        const response = await client.response("reads.value", { body: { ...publication, read: "work.timeline", args: { works }, release } });
+        const response = await client.response("reads.value", { body: { ...publication, read: "work.timeline", args, release } });
         if (!response.ok) throw Error(`Timeline unavailable (${response.status})`);
         return await response.json();
       } });
       const stop = source.open({ target: { kind: "host" }, workKey: null, workRevision: null, page: {}, work: null,
-        args: { works }, inputs: {}, signal: controller.signal, attempt: { target: { kind: "host" }, workKey: null, generation: 0 }, trigger: { kind: "demand" } }, frame => {
+        args, inputs: {}, signal: controller.signal, attempt: { target: { kind: "host" }, workKey: null, generation: 0 }, trigger: { kind: "demand" } }, frame => {
         if (frame.kind === "complete") {
           const parsed = workTimelineSchema.safeParse(frame.value.value?.data);
           deliver(parsed.success ? parsed.data : null, parsed.success ? undefined : "Timeline answer does not match its contract");
@@ -65,7 +66,7 @@ export function createTimelineClient(client: Pick<typeof peClient, "response"> =
       return () => { controller.abort(); if (typeof stop === "function") stop(); };
     },
     async step(request) {
-      const key = request.works[0];
+      const key = request.works[0] ?? request.document;
       if (!key) return { message: "No Work in this Timeline" };
       const response = await client.response("work.history", { ...routeInput(key.route, key), body: request });
       const wire = await response.json();

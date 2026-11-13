@@ -29,7 +29,7 @@ const author = (fields: Record<string, never>) => ({
 const publication = (key: string, data: unknown) => ({
   key, generation: 0, version: 1, state: "current", value: {
     data, evaluation: key, inputs: key, coverage: { requested: [], covered: [], unknown: [], refused: [] },
-    origin: {}, trace: [], freshness: "current",
+    origin: {}, works: [], trace: [], freshness: "current",
   },
 });
 const source = (key: string, data: unknown): UseSource => ({
