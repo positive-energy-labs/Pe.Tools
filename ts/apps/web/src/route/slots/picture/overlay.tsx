@@ -1,4 +1,5 @@
-import { createElement, lazy, Suspense, type ComponentType, type ReactNode, type RefObject } from "react";
+import { createElement, lazy, type ComponentType, type ReactNode, type RefObject } from "react";
+import { DrawingBoundary } from "../../draw";
 import type { PictureScope } from "@pe/agent-contracts/slots";
 import type { SubjectKey } from "@pe/kit/lang/attention";
 import type { LayerOption, PictureContent } from "#/scene/picture/picture";
@@ -41,5 +42,5 @@ export function overlay<M, K extends keyof M>(load: () => Promise<M>, name: K & 
     load().then((module) => ({ default: module[name] as ComponentType<PictureOverlayProps<Context<M[K]>>> })),
   );
   return (props: PictureOverlayProps<Context<M[K]>>): ReactNode =>
-    createElement(Suspense, { fallback: "Loading drawing" }, createElement(Component, props));
+    createElement(DrawingBoundary, null, createElement(Component, props));
 }
