@@ -1,5 +1,5 @@
 {
-  "testFiles": 802,
+  "testFiles": 810,
   "total": 321,
   "byFile": {
     "apps/host/tests/admission.test.ts": 1,
@@ -29,7 +29,7 @@
     "apps/host/tests/pod-admission.test.ts": 1,
     "apps/host/tests/pod-inventory-read.test.ts": 2,
     "apps/host/tests/receipt-export.test.ts": 1,
-    "apps/host/tests/receipt-notices.test.ts": 4,
+    "apps/host/tests/receipt-notices.test.ts": 3,
     "apps/host/tests/receipt-spine.test.ts": 1,
     "apps/host/tests/recorded-fans-graph.test.ts": 7,
     "apps/host/tests/recorded-inputs.test.ts": 1,
@@ -91,7 +91,7 @@
     "apps/web/src/route/kernel-journeys-geometry.test.tsx": 1,
     "apps/web/src/route/kernel-journeys-pods.test.ts": 1,
     "apps/web/src/route/kernel-journeys-reads.test.ts": 1,
-    "apps/web/src/route/kernel-journeys-work.test.ts": 6,
+    "apps/web/src/route/kernel-journeys-work.test.ts": 5,
     "apps/web/src/route/slots/findings/person.test.tsx": 2,
     "apps/web/src/route/slots/sheet/sheet.test.ts": 1,
     "apps/web/src/scene/damage.test.ts": 1,
@@ -112,6 +112,7 @@
     "apps/web/src/shell/work-feed-client.test.ts": 4,
     "apps/web/src/shell/work-journal-client.test.ts": 2,
     "apps/web/src/workbench/route-panes.test.tsx": 1,
+    "packages/agent-contracts/scripts/door-table.test.ts": 2,
     "packages/agent-contracts/src/catalog-admission.test.ts": 2,
     "packages/agent-contracts/src/catalog-work.test.ts": 1,
     "packages/agent-contracts/src/catalog.test.ts": 1,
