@@ -32,6 +32,7 @@ import { History, localHistory } from "./reads/history.ts";
 import { historyRoutes } from "./reads/history-routes.ts";
 import { historyPoseSchema, addressSchema, sameAddress } from "@pe/agent-contracts";
 import { ActionJournalService } from "./receipt-services.ts";
+import { hostTimeline } from "./reads/work-timeline.ts";
 import { readInvalidations } from "./reads/invalidations.ts";
 import { settingsFile } from "./reads/door.ts";
 import { onSettingWritten, readSettingTiers, watchSettingTiers } from "./tiered-settings.ts";
@@ -224,6 +225,9 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
       }),
     );
   }
+  // The Timeline reads receipts from the action journal; a lane built before the journal opens has no Timeline.
+  const timelineJournal = Option.getOrUndefined(yield* Effect.serviceOption(ActionJournalService));
+  const timeline = timelineJournal && !recorded ? hostTimeline(workspace, timelineJournal) : undefined;
   let settingWatches: ReturnType<typeof watchSettingTiers> | undefined;
   const invalidations = readInvalidations(
     workspace,
@@ -244,6 +248,7 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
         settingWatches?.close();
       };
     },
+    timelineJournal && ((changed) => timelineJournal.subscribe({ kinds: ["action"] }, changed)),
   );
   yield* Effect.addFinalizer(() => Effect.sync(invalidations.close));
   const json = (value: unknown) =>
@@ -367,7 +372,14 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
       query: Object.fromEntries(url.searchParams),
       body: web.method === "GET" ? undefined : await web.clone().json(),
     });
-    const graph = graphRouteIds.includes(declared.id) ? graphRoute(declared.id, input.body) : null;
+    const graph = graphRouteIds.includes(declared.id)
+      ? graphRoute(
+          declared.id,
+          input.body,
+          undefined,
+          identity.caller.kind === "pea" ? "pea" : identity.caller.kind === "human" ? "human" : null,
+        )
+      : null;
     const graphRequest = graph?.publication;
     const historyDocument = documentRefSchema.safeParse(
       (graph?.args as { target?: unknown } | undefined)?.target,
@@ -990,6 +1002,7 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
             readGraph: async () => {
               const port = inputPort({
                 leaves: registeredReads.leaves,
+                timeline,
                 source,
                 workspace,
                 marks,

@@ -145,6 +145,7 @@ import {
 import { homeLogLines } from "@pe/host-contracts/product-paths";
 import { heldSend, heldSends, holdSend, confirmSend, subscribeHeldSends } from "./guards.ts";
 import type { ActionJournal } from "./action-journal.ts";
+import { hostTimeline } from "./reads/work-timeline.ts";
 import { observePageTarget } from "./pages-route.ts";
 import { createPackageLifecycle, bindPackageLifecycle } from "./package-lifecycle.ts";
 import {
@@ -386,19 +387,22 @@ export function createPeRoutes(options: PeRoutesOptions) {
     },
     history: {
       schema: historyBody,
-      hint: "expected { direction: undo | redo, expectedRevision }",
-      run: (scope: WorkKey, route: string, by: "pea" | "human", body: unknown) => {
-        const { direction, expectedRevision } = body as z.infer<typeof historyBody>;
-        // Host-authored undo is per author (ADR 0035 rule 9): the host derives `own` from the spec, never the client.
-        return work.step(scope, route, by, direction, expectedRevision, !!work.spec(route)?.authoredThrough);
-      },
+      hint: "expected { direction: undo | redo, works, expected }: read work.timeline and send back its undo or redo",
+      // Undo is per author on every Work (ADR 0042); the URL's Work is checked like any write and
+      // the step is chosen across `works`, to which the host adds the document's findings Work.
+      run: (_scope: WorkKey, _route: string, by: "pea" | "human", body: unknown, caller: Caller) =>
+        hostTimeline(work, options.journal ?? telemetryOf(options).journal).step(
+          body as z.infer<typeof historyBody>,
+          caller,
+          by,
+        ),
     },
   } as Record<
     string,
     {
       schema: z.ZodType;
       hint: string;
-      run: (s: WorkKey, r: string, by: "pea" | "human", b: unknown) => Promise<unknown>;
+      run: (s: WorkKey, r: string, by: "pea" | "human", b: unknown, caller: Caller) => Promise<unknown>;
     }
   >;
 
@@ -849,7 +853,7 @@ export function createPeRoutes(options: PeRoutesOptions) {
           return json({ ok: false, kind: "error", error, hint: write.hint }, 400);
         }
         try {
-          return json(await write.run(scope, route, by, parsed.data));
+          return json(await write.run(scope, route, by, parsed.data, caller));
         } catch (error) {
           return json(
             {
