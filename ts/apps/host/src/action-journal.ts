@@ -7,7 +7,8 @@ import type {
 } from "./command-executor.ts";
 import { CommandRejected, StepFailure, io, refused } from "./command-executor.ts";
 import { readJournalSnapshot } from "./journal-snapshot.ts";
-import { nativeEffect, validateNativeInput } from "./native-input.ts";
+import { validateNativeInput } from "./native-input.ts";
+import type { ReadOwner } from "./reads/read-ownership.ts";
 import { bindActionDispatch, type DispatchRefusal } from "./action-dispatch.ts";
 import { appendFile, mkdir, readdir, readFile } from "node:fs/promises";
 import { discardStored, readStored, writeAtomic } from "@pe/host-contracts/store";
@@ -32,6 +33,8 @@ import {
   sameCaller,
   actionReceiptSchema,
   actionStepSchema,
+  touchedSchema,
+  observedSchema,
   actionAdmissionSchema,
   type ActionAdmission,
   type Consumed,
@@ -99,12 +102,13 @@ const undispatched = (steps: readonly ActionStep[]) =>
       (step.state === "failed" || step.state === "cancelled") &&
       step.notDispatched === true,
   );
-/** A succeeded step that may have changed something: only the catalog's stamp clears a read. */
+/** Only native terminal evidence can clear a possible document write. */
 const effected = (step: ActionStep) =>
-  step.state === "succeeded" &&
   step.kind !== "publication" &&
-  step.effect !== "Read" &&
-  step.effect !== "TransactRead";
+  (step.kind === "native"
+    ? (!step.touched || ["wrote", "unauthorized", "unknown", "restoreFailed"].includes(step.touched.kind)) &&
+      !("notDispatched" in step && step.notDispatched)
+    : step.state === "succeeded");
 const holdsClaims = (row: ActionReceipt) =>
   !(
     (row.state === "failed" || row.state === "cancelled") &&
@@ -372,7 +376,7 @@ type Settled = { state: Exclude<ActionReceipt["state"], "running"> } & Record<
  * - an uncertain step is never hidden: the attempt is unknown and nothing redispatches it;
  * - cancelled is a settled answer, never a rollback claim;
  * - a known succeeded effect is never erased: a later failure makes the attempt incomplete;
- * - a succeeded catalog Read is a known outcome, not an effect: a later refusal stays known;
+ * - a native terminal that proves no remaining change keeps a later refusal known;
  * - with no effect, a failure is failed, and not dispatched only when no step reached its owner.
  * `null` means recovery proved nothing new and the attempt keeps its state.
  */
@@ -520,6 +524,7 @@ export class ActionJournal implements ReceiptReader {
   private flushed = false;
   // Page authority is a host-minted object capability, never reconstructed from persisted data.
   private readonly activeCallers = new Map<string, Caller>();
+  private readonly readOwners = new Map<string, ReadOwner>();
   private environment?: CommandEnvironment;
   private inputContext?: HostInputContext["Service"];
   bindInputContext(inputs: HostInputContext["Service"]): void {
@@ -1654,7 +1659,6 @@ export class ActionJournal implements ReceiptReader {
                 id: randomUUID(),
                 kind,
                 key,
-                ...(kind === "native" && nativeEffect(key) ? { effect: nativeEffect(key) } : {}),
                 input: structuredClone(input),
                 ...(kind === "native" && exactProcess
                   ? { process: structuredClone(exactProcess) }
@@ -1669,6 +1673,17 @@ export class ActionJournal implements ReceiptReader {
                     refusal: () => journal.dispatchRefusal(step.id),
                     validate: () => journal.validateDispatch(step.id),
                     dispatched: () => journal.markDispatched(step.id),
+                    terminal: async (touched, evidenceJson) => {
+                      const parsed = touchedSchema.safeParse(touched);
+                      let nativeEvidence: import("@pe/agent-contracts").Observed | undefined;
+                      try { nativeEvidence = observedSchema.safeParse(JSON.parse(evidenceJson ?? "null")).data; }
+                      catch { /* Malformed evidence cannot establish an observation. */ }
+                      await save((current) => ({ ...current, steps: current.steps.map((held) =>
+                        held.id === step.id ? { ...held,
+                          touched: parsed.success ? parsed.data : { kind: "unknown", reason: "lost-response" },
+                          ...(nativeEvidence ? { nativeEvidence } : {}),
+                        } : held) }));
+                    },
                   }),
                 );
               return { step };
@@ -1800,6 +1815,7 @@ export class ActionJournal implements ReceiptReader {
         try {
           if (!retirementOnly) commandCheckpoint(originOf(row.caller));
         } catch {
+          void this.readOwners.get(row.id)?.requestStop().catch(persistenceFailed);
           void save((current) => ({ ...current, cancellationRequested: true })).catch(
             persistenceFailed,
           );
@@ -1827,9 +1843,13 @@ export class ActionJournal implements ReceiptReader {
           await gate(row, "prepared");
       };
       // Rule 2g: settle inside the Exit, so every exit (interruption included) commits once.
-      const settleExit = (exit: Exit.Exit<unknown, unknown>) => {
+      const identity = ownerIdentity(row, crossing.parent);
+      const readOwner = this.environment?.readOwnership?.open(identity);
+      if (readOwner) this.readOwners.set(row.id, readOwner);
+      const settleExit = async (exit: Exit.Exit<unknown, unknown>) => {
+        const descendants = await readOwner?.settle();
         const error = Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined;
-        const finished = {
+        let finished = {
           ...unsettled(row),
           ...(Exit.isSuccess(exit)
             ? settle(true, row.steps, { kind: "returned", result: exit.value })
@@ -1838,6 +1858,9 @@ export class ActionJournal implements ReceiptReader {
                 ...(error instanceof CommandRejected ? { refusal: error.refusal } : {}),
               }),
         } as ActionReceipt;
+        if (descendants?.kind === "unsettled") finished = { ...unsettled(finished),
+          state: "unknown", error: "Required native reads have no terminal evidence", status: 503,
+        };
         return this.serial(async () => {
             const next = actionReceiptSchema.parse({
               ...finished,
@@ -1857,6 +1880,7 @@ export class ActionJournal implements ReceiptReader {
               throw error;
             } finally {
               this.activeCallers.delete(row.id);
+              this.readOwners.delete(row.id);
               releaseRun();
               releaseDispatch.forEach((release) => release());
             }
@@ -1881,7 +1905,7 @@ export class ActionJournal implements ReceiptReader {
               Effect.sync(() => console.error("action-journal: completion failed", Cause.pretty(cause))),
             ),
           ),
-        ).pipe(Effect.provideService(RequestIdentity, ownerIdentity(row, crossing.parent))),
+        ).pipe(Effect.provideService(RequestIdentity, identity)),
       );
       return structuredClone(row);
     });
@@ -1897,6 +1921,7 @@ export class ActionJournal implements ReceiptReader {
     if (!row) throw Error(`Action '${id}' has no admitted receipt`);
     if (row.state !== "running")
       throw Error(`Action '${id}' is ${row.state}; only an active action can be cancelled`);
+    await this.readOwners.get(id)?.requestStop();
     await this.serial(async () => {
       const current = this.rows.get(id)!;
       await this.commit([{ ...current, cancellationRequested: true }]);
@@ -2178,6 +2203,13 @@ export class ActionJournal implements ReceiptReader {
 
   /** Append the revisions these rows and facts make, and any freshly minted mappings. */
   private async commit(rows: readonly ActionReceipt[] = [], facts: readonly Receipt[] = []) {
+    // Missing native testimony is unknown, even on success or host interruption.
+    rows = rows.map((row) => ({ ...row, steps: row.steps.map((step) =>
+      step.kind !== "native" || step.state === "running" || step.touched ? step : {
+        ...step, touched: "notDispatched" in step && step.notDispatched
+          ? { kind: "none" as const }
+          : { kind: "unknown" as const, reason: "lost-response" as const },
+      }) }));
     // File checkpoints in the same append as the confirmed receipt, including recovery.
     rows = rows.map((row) => {
       if (row.state !== "succeeded" || !row.steps.some((step) => step.state === "succeeded"))

@@ -1,7 +1,7 @@
 import { createPeClient } from "@pe/agent-contracts/pe-api";
 import { readPeError } from "@pe/host-contracts/pe-api";
 import { contextFetch as fetch } from "@pe/runtime/context";
-import { documentRefSchema, type ActionReceipt, type DocumentRef } from "@pe/agent-contracts";
+import { documentRefSchema, type ActionReceipt, type DocumentRef, type Touched } from "@pe/agent-contracts";
 import { recoverAction, type DetachedAction } from "./takeoff-action-client.ts";
 import { runCapability, CANCEL_KEY } from "./admission.ts";
 import { Effect } from "effect";
@@ -156,6 +156,7 @@ export type HostOperationCallResult =
       capture?: { id: string; url: string };
       response: unknown;
       action?: ActionReceipt | DetachedAction;
+      touched?: Touched[];
     }
   | {
       ok: false;
@@ -166,6 +167,7 @@ export type HostOperationCallResult =
       message: string;
       problem?: unknown;
       action?: ActionReceipt | DetachedAction;
+      touched?: Touched[];
       resolvedTarget?: ResolvedTarget;
       bestRequestExample?: HostOperationRequestExample;
       nextSteps: readonly string[];
@@ -238,8 +240,11 @@ export class HostRpcCaller {
           },
           { door: "command", mutates: true, needs: operation?.needs ?? "document" },
         )) as ActionReceipt | DetachedAction);
+      const touched = "steps" in action ? action.steps.flatMap((step) =>
+        step.touched && step.touched.kind !== "none" ? [step.touched] : []) : [];
+      const facts = touched.length ? { touched } : {};
       return action.state === "succeeded"
-        ? { ok: true, key, elapsedMs: Date.now() - started, response: action.result, action }
+        ? { ok: true, key, elapsedMs: Date.now() - started, response: action.result, action, ...facts }
         : {
             ok: false,
             key,
@@ -247,6 +252,7 @@ export class HostRpcCaller {
             message: `${action.id}: ${action.state}`,
             problem: action,
             action,
+            ...facts,
             nextSteps: [
               "Read/recover the original receipt; do not submit a new ID for an uncertain effect.",
             ],
