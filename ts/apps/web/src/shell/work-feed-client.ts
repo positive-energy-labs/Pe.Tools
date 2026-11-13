@@ -33,6 +33,7 @@ import type { ActionAdmission } from "@pe/agent-contracts/semantic-actions";
 import type { CommandHandle } from "@pe/agent-contracts/handle";
 import { handle } from "@pe/agent-contracts/handle";
 import { httpRoutes } from "@pe/agent-contracts/pe-api";
+import { familyReadingRoute, savedFamilyRead, scheduleReadingRoute } from "@pe/agent-contracts";
 import { HOST_RPC_BRIDGE_SESSION_HEADER, HOST_RPC_DOCUMENT_HEADER } from "@pe/host-contracts/operation-types";
 import { peClient } from "../host/pe-client";
 import { publicationSource } from "../host/publication-source";
@@ -101,7 +102,7 @@ export async function sendCommand(
     body = admission.input.binding;
   } else if (route === "operation.call") {
     const op = z.object({ key: z.string(), effect: z.string() }).parse(admission.input.op);
-    if (!isReadEffect(op.effect)) throw Error("ops.read requires a native Read");
+    if (!isReadEffect(op.effect)) throw Error(`${command.key} requires a native Read`);
     nativeKey = op.key;
     path = "/call";
     body = { key: op.key, request: admission.input.request };
@@ -109,10 +110,10 @@ export async function sendCommand(
       headers[HOST_RPC_BRIDGE_SESSION_HEADER] = admission.target.ref.session;
       headers[HOST_RPC_DOCUMENT_HEADER] = admission.target.ref.openId;
     } else if (admission.target.kind === "session") headers[HOST_RPC_BRIDGE_SESSION_HEADER] = admission.target.session;
-  } else if (route === "family.readings" || route === "schedules.readings") {
+  } else if (route === familyReadingRoute || route === scheduleReadingRoute) {
     path = httpRoutes[route].path;
     const { work, ...input } = admission.input;
-    const scope = route === "family.readings" && command.key !== "family.saved"
+    const scope = route === familyReadingRoute && command.key !== savedFamilyRead
       ? workHandleSchema.parse(work).key : undefined;
     body = { key: command.key, input,
       target: admission.target.kind === "document" ? admission.target.ref : undefined,

@@ -37,7 +37,7 @@ import {
   type RouteFingerprint,
   type InvocationToken,
 } from "@pe/agent-contracts";
-import { ANY_ROUTE } from "@pe/agent-contracts";
+import { ANY_ROUTE, writeSettingTier } from "@pe/agent-contracts";
 import { createRouteScopeGate } from "@pe/runtime/route-scope-gate";
 import { applicationWorkRegistry, createApplicationWorkRegistry } from "./application-work-registry";
 import { createWorkFeedClient, createTimelineClient, type TimelineClient } from "./work-feed-client";
@@ -120,6 +120,12 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
   let timelineState: import("@pe/agent-contracts").WorkTimeline | null = null;
   let timelineProblem: string | null = "Reading Timeline";
   const problems = new Map<string,string>();
+  const stepProblemBasis = new Map<string,string>();
+  const timelineBasis = (value: typeof timelineState) => canonicalRouteInput(value && [
+    [value.undo, value.redo].map(step => step && ("work" in step
+      ? { work: step.work, revision: step.revision } : { home: step.home, sha256: step.sha256 })),
+    value.rows.flatMap(row => "revision" in row ? [{ work: row.work, revision: row.revision }] : []),
+  ]);
   let stopTimeline = () => {};
   const timelineClient = ports.timeline ?? (input.fixture === null && !input.history ? createTimelineClient(ports.findings) : null);
   const timelineWorks = () => [...owners.values()].map(owner => owner.handle?.key ?? owner.scope.key);
@@ -131,6 +137,10 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     let closed = false;
     const stop = timelineClient.open(works, (value, reason) => {
       if (closed || disposed) return;
+      if (value) for (const direction of ["undo", "redo"]) {
+        const id = `work.${direction}`, basis = stepProblemBasis.get(id);
+        if (basis !== undefined && basis !== timelineBasis(value)) { problems.delete(id); stepProblemBasis.delete(id); }
+      }
       timelineState = value ? freezePage(value) : null; timelineProblem = reason ?? null; notify();
     });
     stopTimeline = () => { closed = true; stop(); };
@@ -138,9 +148,12 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
   cleanups.push(() => stopTimeline());
   const stepTimeline = async (direction: "undo" | "redo") => {
     const id = `work.${direction}`;
-    problems.delete(id); notify();
+    const basis = timelineBasis(timelineState);
+    problems.delete(id); stepProblemBasis.delete(id); notify();
     const refused = (message: string) => {
-      if (!disposed && input.custody.current()) { problems.set(id, message); notify(); }
+      if (!disposed && input.custody.current() && (!timelineState || basis === timelineBasis(timelineState))) {
+        problems.set(id, message); stepProblemBasis.set(id, basis); notify();
+      }
       return { message };
     };
     try {
@@ -751,7 +764,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
             requireWritable();
             try {
               if (core.state !== "ready") throw Error(reasonOf(core));
-              await settleNative(door.submit({ id: crypto.randomUUID(), key: "settings.tiers.write",
+              await settleNative(door.submit({ id: crypto.randomUUID(), key: writeSettingTier.key,
                 target: input.target?.kind === "document" ? input.target : { kind: "host" }, input: request }));
             } finally { mounted.refresh(); }
           });

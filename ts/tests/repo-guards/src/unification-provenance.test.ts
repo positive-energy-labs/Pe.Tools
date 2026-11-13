@@ -18,17 +18,17 @@ test("public pane provenance does not permit legacy or untyped fixture access", 
   expect(actual.fixtureMode).toHaveLength(3);
 });
 
-test("Pods Place and router facades still reject private imports and reexports", () => {
+test("admitted Place and router facades still reject private imports and reexports", () => {
   const sources = {
     "ts/apps/web/src/shell/owner.ts": "export const owner = {};",
     "ts/apps/web/src/routes/__root.tsx": 'import { owner } from "../shell/owner";',
-    "ts/apps/web/src/pods/route.tsx": 'import { Route } from "../routes/__root";',
-    "ts/apps/web/src/router.tsx": 'import { podsRoute } from "./pods/route";',
+    "ts/apps/web/src/route/builtin-routes.tsx": 'import { Route } from "../routes/__root";',
+    "ts/apps/web/src/router.tsx": 'import { BuiltinRoute } from "./route/builtin-routes";',
     "ts/apps/web/src/example/body.tsx": 'import { owner } from "../shell/owner";',
   };
   expect(boundaryCensus(sources).rawPageImports).toHaveLength(1);
   expect(boundaryCensus({ ...sources,
-    "ts/apps/web/src/pods/route.tsx": 'export { owner } from "../shell/owner";',
+    "ts/apps/web/src/route/builtin-routes.tsx": 'export { owner } from "../shell/owner";',
     "ts/apps/web/src/router.tsx": 'import { owner } from "./shell/owner";',
   }).rawPageImports).toHaveLength(3);
 });
