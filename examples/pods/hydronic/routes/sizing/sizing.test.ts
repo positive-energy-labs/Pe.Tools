@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vite-plus/test";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
+import { isReadEffect } from "@pe/host-contracts/contracts";
 import { linkedCatalog } from "@pe/agent-contracts/pe-api";
 import { buildCapabilities, createRouteRegistrations } from "@pe/mcps";
 import { mkdtemp } from "node:fs/promises";
@@ -87,7 +88,7 @@ describe("sizing", () => {
 // Each red test names a capability the spec needs and a Pod cannot reach today (gaps.json); a closed one is a plain test.
 // test.fails keeps the suite green while the gap is open and fails the day the kernel closes it:
 // then make it a plain test and use the capability.
-const reads = hostOpCatalog.filter((op) => op.intent === "Read").map((op) => op.key);
+const reads = hostOpCatalog.filter((op) => isReadEffect(op.effect)).map((op) => op.key);
 const hostDoors = async () => Object.keys(await import("@pe/host/read-graph"));
 describe("kernel gaps", () => {
   test("kernel door: pod-native-read-door (2)", async () => {

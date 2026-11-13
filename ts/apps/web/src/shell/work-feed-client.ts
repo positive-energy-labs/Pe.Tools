@@ -4,6 +4,7 @@ import {
   type WorkFeedFailure,
 } from "../../../../packages/agent-contracts/src/work-journal-door";
 import { z } from "zod";
+import { isReadEffect } from "@pe/host-contracts/contracts";
 import {
   actionStatusSchema,
   actionReceiptSchema,
@@ -60,8 +61,8 @@ export async function sendCommand(
     method = "PUT";
     body = admission.input.binding;
   } else if (route === "operation.call") {
-    const op = z.object({ key: z.string(), intent: z.string() }).parse(admission.input.op);
-    if (op.intent.toLowerCase() !== "read") throw Error("ops.read requires a native Read");
+    const op = z.object({ key: z.string(), effect: z.string() }).parse(admission.input.op);
+    if (!isReadEffect(op.effect)) throw Error("ops.read requires a native Read");
     nativeKey = op.key;
     path = "/call";
     body = { key: op.key, request: admission.input.request };
