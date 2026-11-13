@@ -67,23 +67,33 @@ export async function sendHeldParse(
   const store = parseStore(send.path);
   const key = derivedKey(bytes, llamaParser(send.pages));
   if (readDerivedJson(store, key, parsedPagesSchema)) return;
-  const apiKey = requireLlamaCloudKey(env);
-  const result = await parseWithLlamaCloud({
-    sender: "person",
-    file: new File([new Uint8Array(bytes)], path.basename(send.path), {
-      type: path.extname(send.path).toLowerCase() === ".pdf" ? "application/pdf" : "",
-    }),
-    apiKey,
-    targetPages: send.pages,
-    // Markdown, not text: agentic_plus marks a struck cell <s> in its HTML tables; its text mode drops the strike.
-    expand: ["markdown"],
-  });
-  const kept: ParsedPages = {
-    totalPages: null,
-    pages: (result.markdown?.pages ?? []).map((page) => ({
-      pageNum: page.page_number,
-      text: "markdown" in page ? page.markdown : "",
-    })),
-  };
-  writeDerived(store, key, JSON.stringify(kept));
+  let apiKey: string;
+  try {
+    apiKey = requireLlamaCloudKey(env);
+  } catch (error) {
+    throw new Error(`${error instanceof Error ? error.message : String(error)}, so nothing was sent.`);
+  }
+  // From the upload on, the bytes may have left; a failure must not let the row say "not sent".
+  try {
+    const result = await parseWithLlamaCloud({
+      sender: "person",
+      file: new File([new Uint8Array(bytes)], path.basename(send.path), {
+        type: path.extname(send.path).toLowerCase() === ".pdf" ? "application/pdf" : "",
+      }),
+      apiKey,
+      targetPages: send.pages,
+      // Markdown, not text: agentic_plus marks a struck cell <s> in its HTML tables; its text mode drops the strike.
+      expand: ["markdown"],
+    });
+    const kept: ParsedPages = {
+      totalPages: null,
+      pages: (result.markdown?.pages ?? []).map((page) => ({
+        pageNum: page.page_number,
+        text: "markdown" in page ? page.markdown : "",
+      })),
+    };
+    writeDerived(store, key, JSON.stringify(kept));
+  } catch (error) {
+    throw new Error(`The file may have reached LlamaCloud: ${error instanceof Error ? error.message : String(error)}`);
+  }
 }

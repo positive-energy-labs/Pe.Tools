@@ -131,11 +131,14 @@ export function useLedgerList(
       .then((receipt) => {
         if (receipt.state === "succeeded") return;
         const reason = "error" in receipt ? receipt.error : "the host gave no outcome";
-        // Only a failed or cancelled receipt says nothing left; an interrupted send may have arrived.
+        // Only notDispatched proves nothing left. A failed send's own reason says which side of the
+        // upload it failed on (held-parse.ts); an interrupted or cancelled one may have arrived.
         setRefusal(
-          receipt.state === "failed" || receipt.state === "cancelled"
+          "notDispatched" in receipt && receipt.notDispatched
             ? `Not sent: ${reason}. Ask Pea to send it again.`
-            : `The send may have arrived: ${reason}. Check the destination before asking Pea to send it again.`,
+            : receipt.state === "failed"
+              ? `Send failed: ${reason}. Ask Pea to send it again if it is still needed.`
+              : `The send may have arrived: ${reason}. Check the destination before asking Pea to send it again.`,
         );
       })
       .catch((cause: unknown) => setRefusal(String(cause)))

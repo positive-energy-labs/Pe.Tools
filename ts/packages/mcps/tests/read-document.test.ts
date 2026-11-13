@@ -242,10 +242,28 @@ test("a failed Confirm uploads once and surfaces the error; a later Confirm can 
       }),
     );
     const request = { path, sha256: sha256Of(bytes), pages: "1" };
-    await expect(sendHeldParse(request)).rejects.toThrow(/500/);
+    // The upload began, so the reason must not let the row say nothing left.
+    await expect(sendHeldParse(request)).rejects.toThrow(/^The file may have reached LlamaCloud: .*500/);
     expect(uploads).toBe(1);
     await expect(sendHeldParse(request)).rejects.toThrow(/500/);
     expect(uploads).toBe(2);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a Confirm without a LlamaCloud key says nothing was sent and uploads nothing", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "held-no-key-"));
+  try {
+    const path = join(dir, "schedule.pdf");
+    const bytes = schedulePdf();
+    writeFileSync(path, bytes);
+    const upload = vi.fn(async () => Response.json({}, { status: 500 }));
+    vi.stubGlobal("fetch", upload);
+    await expect(
+      sendHeldParse({ path, sha256: sha256Of(bytes), pages: "1" }, {}),
+    ).rejects.toThrow(/so nothing was sent\.$/);
+    expect(upload).not.toHaveBeenCalled();
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

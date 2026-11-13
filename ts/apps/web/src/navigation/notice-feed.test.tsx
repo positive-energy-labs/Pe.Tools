@@ -60,7 +60,7 @@ vi.mock("#/navigation/state", () => ({
 vi.mock("#/route/pod-route-context", () => ({ usePodRoutes: () => null }));
 afterEach(cleanup);
 
-test.each(["failed", "unknown", "succeeded"] as const)("Confirm follows a %s send receipt in Activity", async (state) => {
+test.each(["refused", "failed", "unknown", "succeeded"] as const)("Confirm follows a %s send receipt in Activity", async (state) => {
   const { Ledger } = await import("./ledger");
   const { LEDGER_PRESENTATIONS } = await import("./ledger-model");
   const running = actionReceiptSchema.parse({
@@ -70,8 +70,9 @@ test.each(["failed", "unknown", "succeeded"] as const)("Confirm follows a %s sen
     startedAt: "2026-11-12T00:00:00.000Z",
   });
   const terminal = actionReceiptSchema.parse({
-    ...running, state,
-    ...(state === "failed" ? { error: "LLAMA_CLOUD_API_KEY is not set", status: 502 }
+    ...running, state: state === "refused" ? "failed" : state,
+    ...(state === "refused" ? { error: "caller.ineligible", status: 403, notDispatched: true }
+      : state === "failed" ? { error: "The file may have reached LlamaCloud: 500", status: 502 }
       : state === "unknown" ? { error: "The host stopped during the send", status: 503 } : { result: {} }),
   });
   let finish!: (response: Response) => void;
@@ -91,8 +92,13 @@ test.each(["failed", "unknown", "succeeded"] as const)("Confirm follows a %s sen
     view.rerender(<Ledger presentation={LEDGER_PRESENTATIONS.home} />);
     expect(screen.queryByRole("button", { name: /Confirm:/ })).toBeNull();
     await act(async () => { finish(Response.json([terminal])); });
-    if (state === "failed")
-      expect(await screen.findByText("Not sent: LLAMA_CLOUD_API_KEY is not set. Ask Pea to send it again.")).toBeTruthy();
+    if (state === "refused")
+      expect(await screen.findByText("Not sent: caller.ineligible. Ask Pea to send it again.")).toBeTruthy();
+    else if (state === "failed") {
+      // A failed send may have uploaded first; only notDispatched lets the row say "Not sent".
+      expect(await screen.findByText("Send failed: The file may have reached LlamaCloud: 500. Ask Pea to send it again if it is still needed.")).toBeTruthy();
+      expect(screen.queryByText(/Not sent:/)).toBeNull();
+    }
     else if (state === "unknown") {
       // An interrupted send may already have left; the row must not claim it did not.
       expect(await screen.findByText(/^The send may have arrived: The host stopped during the send\./)).toBeTruthy();
