@@ -1,3 +1,4 @@
+import { schemaOf, type Domain } from "./slots/sheet.ts";
 import { z } from "zod";
 import { decode, uniqueIdSchema, subjectRefCodeSchema } from "./subject-ref.ts";
 import { documentRefSchema } from "./target.ts";
@@ -89,16 +90,18 @@ export type DuctsCriteriaLayer = z.infer<typeof ductsCriteriaLayerSchema>;
  * design sheet draws one row per cell). A sided criterion is a cell per side; `layer` is where the
  * cell's value sits in the criteria layer the engine resolves over the store and the firm file.
  */
+const criterion = <const L extends readonly [keyof DuctsCriteriaLayer, ("supply" | "return")?], const D extends Domain>(layer: L, domain: D) =>
+  ({ layer, domain, value: schemaOf(domain), unit: domain.kind === "number" ? domain.unit : undefined });
 export const DUCTS_CRITERIA_CELLS = {
-  velocitySupplyFpm: { layer: ["velocityLimitFpm", "supply"], value: num.positive(), unit: "fpm" },
-  velocityReturnFpm: { layer: ["velocityLimitFpm", "return"], value: num.positive(), unit: "fpm" },
-  terminalDropInWg: { layer: ["terminalDropInWg"], value: nonneg, unit: "in-wg" },
-  autoJoinGapIn: { layer: ["autoJoinGapIn"], value: nonneg, unit: "in" },
-  healBoxIn: { layer: ["healBoxIn"], value: nonneg, unit: "in" },
-  splitPolicy: { layer: ["splitPolicy"], value: splitPolicy, unit: undefined },
-  allowanceSupplyInWg: { layer: ["allowanceInWg", "supply"], value: nonneg, unit: "in-wg" },
-  allowanceReturnInWg: { layer: ["allowanceInWg", "return"], value: nonneg, unit: "in-wg" },
-} as const satisfies Record<string, { layer: readonly [keyof DuctsCriteriaLayer, ("supply" | "return")?]; value: z.ZodType; unit: string | undefined }>;
+  velocitySupplyFpm: criterion(["velocityLimitFpm", "supply"], { kind: "number", exclusiveMin: 0, unit: "fpm" }),
+  velocityReturnFpm: criterion(["velocityLimitFpm", "return"], { kind: "number", exclusiveMin: 0, unit: "fpm" }),
+  terminalDropInWg: criterion(["terminalDropInWg"], { kind: "number", min: 0, unit: "in-wg" }),
+  autoJoinGapIn: criterion(["autoJoinGapIn"], { kind: "number", min: 0, unit: "in" }),
+  healBoxIn: criterion(["healBoxIn"], { kind: "number", min: 0, unit: "in" }),
+  splitPolicy: criterion(["splitPolicy"], { kind: "enum", shape: splitPolicy, choices: ["even", "proportional"].map(value => ({ value, label: value })) }),
+  allowanceSupplyInWg: criterion(["allowanceInWg", "supply"], { kind: "number", min: 0, unit: "in-wg" }),
+  allowanceReturnInWg: criterion(["allowanceInWg", "return"], { kind: "number", min: 0, unit: "in-wg" }),
+};
 export type DuctsCriteriaCell = keyof typeof DUCTS_CRITERIA_CELLS;
 /** The criteria layer the cells' staged values make; an unstaged cell leaves its criterion (or side) out. */
 export function criteriaLayer(cells: Readonly<Partial<Record<DuctsCriteriaCell, { readonly edit?: { readonly value?: unknown } | null }>>>): DuctsCriteriaLayer {

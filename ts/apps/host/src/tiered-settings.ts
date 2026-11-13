@@ -1,3 +1,4 @@
+import { settingOwners } from "@pe/agent-contracts/setting-owners";
 /**
  * Tiered settings (ADR 0037 rule 8; homes MAP slice 6b): `Settings/<owner>.json` in the user home,
  * the target model's project home and the firm home. A read returns every tier's file as it stands
@@ -9,7 +10,7 @@ import { existsSync, readFileSync, watch } from "node:fs";
 import { userInfo } from "node:os";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import type { Caller, HomeWriteRow, SettingTier, SettingTierRead } from "@pe/agent-contracts";
-import { DUCTS_CRITERIA_CELLS, SETTING_TIERS, ductsFirmSchema, homeWriteRowSchema, callerSchema, sameAddress } from "@pe/agent-contracts";
+import { SETTING_TIERS, homeWriteRowSchema, callerSchema, sameAddress } from "@pe/agent-contracts";
 import { z } from "zod";
 import {
   firmHome,
@@ -233,23 +234,6 @@ export type SettingWrite =
   | { ok: false; status: 404 | 409 | 422; message: string };
 
 /**
- * A declared ducts cell accepts the value (`null` clears it). Criteria cells check their own
- * schema; the whole-key settings (`designFriction`, one `parameters` slot) check through the tier
- * file's schema on a file holding only that value, so a bad sibling never blocks a good write.
- */
-function ductsCellAccepts(path: readonly string[], value: unknown): boolean {
-  const criteria = Object.values(DUCTS_CRITERIA_CELLS).find((declared) =>
-    ["criteria", ...declared.layer].length === path.length &&
-    ["criteria", ...declared.layer].every((key, index) => key === path[index]));
-  if (criteria) return value === null || criteria.value.safeParse(value).success;
-  const probe =
-    path.length === 1 && path[0] === "designFriction" ? { designFriction: value } :
-    path.length === 2 && path[0] === "parameters" ? { parameters: { [path[1]!]: value } } :
-    null;
-  return probe !== null && (value === null || ductsFirmSchema.safeParse(probe).success);
-}
-
-/**
  * Save one value at one tier. The file is rewritten with the value at `path` (null removes it) and
  * the writer's stamp, on the hash the writer read; a file changed since then is a conflict, and a
  * home that was not found is refused, never written somewhere else.
@@ -260,6 +244,9 @@ export function writeSettingTier(
 ): SettingWrite {
   if (request.path.some((key) => ["written", "__proto__", "constructor", "prototype"].includes(key)))
     return { ok: false, status: 422, message: "The setting path contains a reserved key." };
+  const owner = Object.hasOwn(settingOwners, request.owner) ? settingOwners[request.owner] : undefined;
+  if (!owner?.accepts(request.path, request.value, request.tier))
+    return { ok: false, status: 422, message: `No declared setting accepts ${request.owner} ${request.path.join(".")} with that value.` };
   const read = readTier(request.tier, request.owner, context.pointer);
   if (read.home === null || read.path === null)
     return { ok: false, status: 404, message: read.notFound ?? `No ${request.tier} home` };
@@ -269,9 +256,6 @@ export function writeSettingTier(
     return { ok: false, status: 422, message: `${read.path} can't be read, so it is kept as it is: ${read.error}` };
   if (read.sha256 !== request.expectedSha256)
     return { ok: false, status: 409, message: `${read.path} changed since it was read.` };
-  // setting(owner, ...) is generic; a second owner gets 422 at Save until this door uses a shared owner-to-cells registry.
-  if (request.owner !== "ducts" || !ductsCellAccepts(request.path, request.value))
-    return { ok: false, status: 422, message: `No declared setting accepts ${request.owner} ${request.path.join(".")} with that value.` };
   const by = context.writer ?? userInfo().username;
   const at = (context.now?.() ?? new Date()).toISOString();
   const next = structuredClone((read.json ?? {}) as Record<string, unknown>);

@@ -145,7 +145,8 @@ import {
 import { homeLogLines } from "@pe/host-contracts/product-paths";
 import { heldSend, heldSends, holdSend, confirmSend, subscribeHeldSends } from "./guards.ts";
 import type { ActionJournal } from "./action-journal.ts";
-import { hostTimeline } from "./reads/work-timeline.ts";
+import { hostTimeline, timelineReceipts } from "./reads/work-timeline.ts";
+import type { TimelineReceipts } from "@pe/runtime";
 import { observePageTarget } from "./pages-route.ts";
 import { createPackageLifecycle, bindPackageLifecycle } from "./package-lifecycle.ts";
 import {
@@ -201,6 +202,8 @@ export interface PeRoutesOptions {
   inputs?: HostInputContext["Service"];
   /** The receipt owner for a confirmed document-reader send. */
   journal?: ActionJournal;
+  /** The Timeline's receipts, when they do not come from `journal` (a host whose journal is reopened). */
+  timelineReceipts?: TimelineReceipts;
   workspace?: RouteWorkspace;
   registrations: readonly RouteWorkspaceRegistration[];
   store?: RouteDocumentStore;
@@ -374,6 +377,9 @@ export function createPeRoutes(options: PeRoutesOptions) {
     };
   };
 
+  // Read at each use: a composition without a journal fails closed there, not at construction.
+  const receiptsNow: TimelineReceipts =
+    options.timelineReceipts ?? (() => timelineReceipts(options.journal ?? telemetryOf(options).journal));
   const writes = {
     apply: {
       schema: applyBody,
@@ -382,7 +388,16 @@ export function createPeRoutes(options: PeRoutesOptions) {
         // A host-authored Work (findings, ADR 0035 rule 9) has no generic door: its spec names the one command.
         const hostAuthored = hostAuthoredRefusal(work.spec(route));
         if (hostAuthored) throw Error(hostAuthored);
-        return work.write(scope, route, by, body as z.infer<typeof applyBody>);
+        const write = body as z.infer<typeof applyBody>;
+        // A raw restore (the browser journal's undo, until it moves to the step door) meets the same
+        // Timeline admission as the step door: own step, next step, no Revit write holding it.
+        return work.write(
+          scope,
+          route,
+          by,
+          write,
+          write.kind === "restore" ? receiptsNow : undefined,
+        );
       },
     },
     history: {
@@ -391,7 +406,7 @@ export function createPeRoutes(options: PeRoutesOptions) {
       // Undo is per author on every Work (ADR 0042); the URL's Work is checked like any write and
       // the step is chosen across `works`, to which the host adds the document's findings Work.
       run: (_scope: WorkKey, _route: string, by: "pea" | "human", body: unknown, caller: Caller) =>
-        hostTimeline(work, options.journal ?? telemetryOf(options).journal, async () =>
+        hostTimeline(work, receiptsNow, async () =>
           z.array(documentRefSchema.extend({ address: addressSchema.nullable(), projectHome: z.string().nullable().optional() })).parse(await options.navigation?.documents() ?? [])).step(
           body as z.infer<typeof historyBody>,
           caller,

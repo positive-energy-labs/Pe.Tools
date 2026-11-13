@@ -9,7 +9,7 @@ import {
   type WorkKey,
 } from "@pe/agent-contracts";
 import { RouteWorkspace } from "../src/route-workspace.ts";
-import { mergeTimeline } from "../src/work-timeline.ts";
+import { mergeTimeline, projectWorks } from "../src/work-timeline.ts";
 
 /** Two Works in one Place, as Fans edits both its own Work and Ducts'. */
 function place() {
@@ -51,7 +51,7 @@ function place() {
   const press = async (by: "human" | "pea", direction: "undo" | "redo", receipts: ActionStatus[] = []) => {
     const next = (await read(by, receipts))[direction];
     if (!next) throw Error(`The read offers no ${direction}`);
-    const result = await host.step(works, by, direction, next, receipts);
+    const result = await host.step(works, by, direction, next, async () => receipts);
     await new Promise((resolve) => setTimeout(resolve, 3));
     return { next, result };
   };
@@ -118,9 +118,9 @@ test.each(["human", "pea"] as const)(
 
     // A client that still holds the step it was shown before the write landed is refused too.
     const shown = (await f.read(by)).undo!;
-    const refused = await f.host.step(f.works, by, "undo", shown, receipts);
-    expect(refused).toMatchObject({ ok: false });
-    expect(refusalText(refused as Extract<typeof refused, { ok: false }>)).toContain("receipt-1");
+    const refused = await f.host.step(f.works, by, "undo", shown, async () => receipts);
+    if (refused.ok) throw Error("The door restored a step a Revit write consumed");
+    expect(refusalText(refused)).toContain("receipt-1");
     expect((await f.host.view(f.ducts, f.ducts.route))!.doc).toMatchObject({ a: 5 });
     // An edit made after the write is still the caller's to undo.
     await f.edit(f.ducts, by, "later", "b", 9);
@@ -136,10 +136,19 @@ test("undo is per author on every Work, and a stale expected step is refused", a
   expect((await f.read("pea")).undo).toMatchObject({ label: "pea's" });
   const shown = (await f.read("human")).undo!;
   await f.edit(f.fans, "human", "newer", "a", 3);
-  expect(await f.host.step(f.works, "human", "undo", shown, [])).toMatchObject({
+  expect(await f.host.step(f.works, "human", "undo", shown, async () => [])).toMatchObject({
     ok: false,
     code: "stale_revision",
   });
   expect((await f.press("human", "undo")).result).toMatchObject({ ok: true, write: { key: f.fans } });
   expect((await f.press("human", "undo")).result).toMatchObject({ ok: true, doc: { a: 0, b: 2 } });
+});
+
+test("T4: the projection never reads the clock: an ack stored without a stamp projects at 0", async () => {
+  const f = place();
+  const { at: _at, ...unstamped } = (await f.edit(f.ducts, "human", "old", "a", 1)).write;
+  const work = { key: f.ducts, snapshot: { revision: 1, doc: { a: 1, b: 0 } }, acks: [unstamped] };
+  const part = projectWorks([work], [], "human");
+  expect(part.undo).toMatchObject({ at: 0, ref: { label: "old" } });
+  expect(part.rows).toMatchObject([{ at: 0 }]);
 });

@@ -8,7 +8,7 @@ import { hostRead } from "../route/host-read.ts";
 import { draw } from "../route/draw.tsx";
 import { split } from "../route/typed-route.ts";
 import type { SheetSlot } from "../../../../packages/agent-contracts/src/slots/sheet.ts";
-import { ductsSettings } from "../ducts/design-sheet.ts";
+import { settingOwners } from "@pe/agent-contracts/setting-owners";
 
 import {
   settingsArgs,
@@ -24,7 +24,7 @@ export const fields = { session: field(z.string(), "", "pose") };
  * with a target (/fans, /ducts) saves at it. The machine pane stays the route's own drawing: it
  * holds acts on this machine (Revit sessions, update, sharing, providers), not values in a home.
  */
-export const settingsSheet = { bindings: { ...ductsSettings } } as const satisfies SheetSlot;
+export const settingsSheet = { bindings: Object.fromEntries(Object.values(settingOwners).flatMap(owner => owner.bindings.map(b => [b.name, { label: b.label, default: b.default, domain: b.domain, home: b.home, per: "route" as const }]))) } as const satisfies SheetSlot;
 export const query = {
   section: field(z.enum(["none", ...SETTINGS_SECTIONS]).optional(), undefined, "query", "push"),
 };
