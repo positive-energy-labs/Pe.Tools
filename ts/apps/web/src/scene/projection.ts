@@ -30,24 +30,24 @@ export function sectionProject(
     const contains = (point: readonly number[]) =>
       CUT_AXES.every(
         (axis, i) =>
-          !polygons[i]!.length ||
-          polygonContains(polygons[i]!, axisPoint(axis, point)) === section.cuts[axis].keepInside,
+          !polygons[i].length ||
+          polygonContains(polygons[i], axisPoint(axis, point)) === section.cuts[axis].keepInside,
       );
     return Object.assign((point: readonly number[]) => (contains(point) ? project(point) : null), {
       lines: (line: readonly (readonly number[])[]) =>
         line.slice(1).flatMap((b, index) => {
-          const a = line[index]!,
+          const a = line[index],
             ts = [0, 1];
           for (const [axisIndex, axis] of CUT_AXES.entries()) {
             const ap = axisPoint(axis, a),
               bp = axisPoint(axis, b),
               d = [bp[0] - ap[0], bp[1] - ap[1]];
-            const polygon = polygons[axisIndex]!;
+            const polygon = polygons[axisIndex];
             polygon.forEach((p, i) => {
-              const q = polygon[(i + 1) % polygon.length]!,
+              const q = polygon[(i + 1) % polygon.length],
                 edge = [q[0] - p[0], q[1] - p[1]];
               const cross = (u: readonly number[], v: readonly number[]) =>
-                u[0]! * v[1]! - u[1]! * v[0]!;
+                u[0] * v[1] - u[1] * v[0];
               const den = cross(d, edge),
                 delta = [p[0] - ap[0], p[1] - ap[1]];
               if (Math.abs(den) < 1e-10) return;
@@ -57,11 +57,11 @@ export function sectionProject(
             });
           }
           ts.sort((a, b) => a - b);
-          const at = (t: number) => a.map((n, i) => n + (b[i]! - n) * t);
+          const at = (t: number) => a.map((n, i) => n + (b[i] - n) * t);
           return ts
             .slice(1)
             .flatMap((hi, i) =>
-              hi - ts[i]! > 1e-9 && contains(at((hi + ts[i]!) / 2)) ? [[at(ts[i]!), at(hi)]] : [],
+              hi - ts[i] > 1e-9 && contains(at((hi + ts[i]) / 2)) ? [[at(ts[i]), at(hi)]] : [],
             );
         }),
     });
@@ -72,19 +72,19 @@ export function sectionProject(
     {
       lines: (line: readonly (readonly number[])[]) =>
         line.slice(1).flatMap((b, i) => {
-          const a = line[i]!;
+          const a = line[i];
           let lo = 0,
             hi = 1;
           for (const p of planes) {
             const side = (v: readonly number[]) =>
-              p[3]! + v.reduce((sum, n, axis) => sum + n * p[axis]!, 0);
+              p[3] + v.reduce((sum, n, axis) => sum + n * p[axis], 0);
             const da = side(a),
               db = side(b);
             if (da < 0 && db < 0) return [];
             if (da < 0) lo = Math.max(lo, da / (da - db));
             if (db < 0) hi = Math.min(hi, da / (da - db));
           }
-          const at = (t: number) => a.map((n, axis) => n + (b[axis]! - n) * t);
+          const at = (t: number) => a.map((n, axis) => n + (b[axis] - n) * t);
           return lo <= hi ? [[at(lo), at(hi)]] : [];
         }),
     },
@@ -143,7 +143,7 @@ export function projectThrough(camera: THREE.Camera, size: Size): Project {
   const lens = camera.projectionMatrix.clone();
   const v = new THREE.Vector3();
   return (p) => {
-    v.set(p[0]!, p[1]!, p[2]!).applyMatrix4(view);
+    v.set(p[0], p[1], p[2]).applyMatrix4(view);
     if (v.z >= 0) return null;
     v.applyMatrix4(lens);
     return [((v.x + 1) / 2) * size.width, ((1 - v.y) / 2) * size.height];

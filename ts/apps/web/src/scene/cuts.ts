@@ -30,7 +30,7 @@ export const emptyCuts = (): Cuts =>
     ),
   );
 export const axisPoint = (axis: CutAxis, p: readonly number[]): Point =>
-  axis === "top" ? [p[0]!, p[1]!] : axis === "north" ? [-p[0]!, p[2]!] : [p[1]!, p[2]!];
+  axis === "top" ? [p[0], p[1]] : axis === "north" ? [-p[0], p[2]] : [p[1], p[2]];
 const sub = (a: Point, b: Point): Point => [a[0] - b[0], a[1] - b[1]];
 const cross = (a: Point, b: Point) => a[0] * b[1] - a[1] * b[0];
 const add = (a: Point, d: Point, t: number): Point => [a[0] + d[0] * t, a[1] + d[1] * t];
@@ -89,33 +89,33 @@ export function cutPolygon(cut: Cut, extent: [Point, Point]): Point[] {
         [1, lo[1], 0],
         [1, hi[1], 2],
       ]) {
-        const n = (value! - at[k!]!) / d[k!]!;
+        const n = (value - at[k]) / d[k];
         if (n > 0 && n < t) {
           t = n;
-          side = edge!;
+          side = edge;
         }
       }
       return { at: add(at, d, t), side };
     };
-    const start = ray(p[0]!, direction(p[1]!, p[0]!)),
-      end = ray(p.at(-1)!, direction(p.at(-2)!, p.at(-1)!));
+    const start = ray(p[0], direction(p[1], p[0])),
+      end = ray(p[p.length - 1], direction(p[p.length - 2], p[p.length - 1]));
     const closure: Point[] = [];
     // Same-side ends may still need a full boundary traversal.
-    const edgeDirection = sub(corners[(end.side + 1) % 4]!, corners[end.side]!);
+    const edgeDirection = sub(corners[(end.side + 1) % 4], corners[end.side]);
     const forward = sub(start.at, end.at);
     const sameAhead =
       start.side === end.side && forward[0] * edgeDirection[0] + forward[1] * edgeDirection[1] >= 0;
     if (!sameAhead)
       for (let edge = end.side; ; edge = (edge + 1) % 4) {
-        closure.push(corners[(edge + 1) % 4]!);
+        closure.push(corners[(edge + 1) % 4]);
         if ((edge + 1) % 4 === start.side) break;
       }
     p.splice(0, 0, start.at);
     p.push(end.at, ...closure);
     // A ray through a rectangle corner names the same point as the boundary walk.
     for (let i = p.length - 1; i > 0; i--)
-      if (Math.hypot(...sub(p[i]!, p[i - 1]!)) < 1e-8) p.splice(i, 1);
-    if (Math.hypot(...sub(p[0]!, p.at(-1)!)) < 1e-8) p.pop();
+      if (Math.hypot(...sub(p[i], p[i - 1])) < 1e-8) p.splice(i, 1);
+    if (Math.hypot(...sub(p[0], p[p.length - 1])) < 1e-8) p.pop();
   }
   if (p.length > 64) throw new Error("Cut exceeds the 64 packed point limit");
   validatePolyline(p, true);
@@ -126,8 +126,8 @@ export function polygonContains(polygon: Point[], p: Point) {
   if (!polygon.length) return true;
   let inside = false;
   for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-    const a = polygon[j]!,
-      b = polygon[i]!,
+    const a = polygon[j],
+      b = polygon[i],
       ab = sub(b, a),
       ap = sub(p, a);
     if (
@@ -149,7 +149,7 @@ export function packCuts(cuts: Cuts, bounds: Bounds, origin: readonly number[]) 
   const data = new Float32Array(384);
   const polygons = CUT_AXES.map((axis) => cutPolygon(cuts[axis], axisBounds(bounds, axis)));
   polygons.forEach((p, a) => {
-    const o = axisPoint(CUT_AXES[a]!, origin);
+    const o = axisPoint(CUT_AXES[a], origin);
     p.forEach((p, i) => data.set([p[0] - o[0], p[1] - o[1]], a * 128 + i * 2));
   });
   return {
@@ -200,8 +200,8 @@ export function sectionCuts(section: SceneSection | null, bounds: Bounds): Cuts 
 export function mergeCut(cut: Cut, pixelsPerFoot: number): Cut {
   const p = cut.polyline.map((p): Point => [...p]);
   for (let i = p.length - 1; i > 0; i--)
-    if (Math.hypot(...sub(p[i]!, p[i - 1]!)) * pixelsPerFoot <= 10) p.splice(i, 1);
-  if (cut.closed && p.length > 1 && Math.hypot(...sub(p[0]!, p.at(-1)!)) * pixelsPerFoot <= 10)
+    if (Math.hypot(...sub(p[i], p[i - 1])) * pixelsPerFoot <= 10) p.splice(i, 1);
+  if (cut.closed && p.length > 1 && Math.hypot(...sub(p[0], p[p.length - 1])) * pixelsPerFoot <= 10)
     p.pop();
   return { ...cut, polyline: p };
 }
@@ -211,15 +211,15 @@ export function moveCutEdge(cut: Cut, edge: number, delta: Point): Cut {
   const p = cut.polyline.map((p): Point => [...p]),
     n = p.length;
   const end = (edge + 1) % n,
-    a = p[edge]!,
-    b = p[end]!,
+    a = p[edge],
+    b = p[end],
     d = direction(a, b);
   const normal: Point = [-d[1], d[0]],
     distance = delta[0] * normal[0] + delta[1] * normal[1];
   const movedA = add(a, normal, distance),
     movedB = add(b, normal, distance);
-  const previous = cut.closed || edge > 0 ? p[(edge + n - 1) % n]! : null;
-  const next = cut.closed || end < n - 1 ? p[(end + 1) % n]! : null;
+  const previous = cut.closed || edge > 0 ? p[(edge + n - 1) % n] : null;
+  const next = cut.closed || end < n - 1 ? p[(end + 1) % n] : null;
   const intersect = (at: Point, vector: Point, other: Point, line: Point): Point | null => {
     const den = cross(vector, line);
     return Math.abs(den) < 1e-8 ? null : add(at, vector, cross(sub(other, at), line) / den);
@@ -249,7 +249,7 @@ export function cutCurtain(cuts: Cuts, bounds: Bounds): Layer3D {
     const p = cutPolygon(cuts[axis], axisBounds(bounds, axis));
     const { w0, w1 } = frameRect(axis, bounds);
     p.forEach((a, i) => {
-      const b = p[(i + 1) % p.length]!;
+      const b = p[(i + 1) % p.length];
       const corners = [
         fromFrame(axis, ...a, w0),
         fromFrame(axis, ...b, w0),
@@ -257,8 +257,8 @@ export function cutCurtain(cuts: Cuts, bounds: Bounds): Layer3D {
         fromFrame(axis, ...a, w1),
       ];
       // Both windings keep a curtain visible from either side without asserting a closed solid.
-      for (const index of [0, 1, 2, 0, 2, 3, 2, 1, 0, 3, 2, 0]) positions.push(...corners[index]!);
-      lines.push(...corners[0]!, ...corners[1]!, ...corners[3]!, ...corners[2]!);
+      for (const index of [0, 1, 2, 0, 2, 3, 2, 1, 0, 3, 2, 0]) positions.push(...corners[index]);
+      lines.push(...corners[0], ...corners[1], ...corners[3], ...corners[2]);
     });
   }
   const materials = new WeakMap<THREE.Group, THREE.Material[]>();

@@ -95,25 +95,32 @@ export function SectionEditor({
     },
   };
   const local = (e: PointerEvent<SVGSVGElement>): Point => {
+    if (!viewport) throw new Error("An axis viewport is required to edit a cut");
     const rect = e.currentTarget.getBoundingClientRect();
     return [
-      (e.clientX - rect.left - viewport!.tx) / viewport!.scale,
-      (viewport!.ty - e.clientY + rect.top) / viewport!.scale,
+      (e.clientX - rect.left - viewport.tx) / viewport.scale,
+      (viewport.ty - e.clientY + rect.top) / viewport.scale,
     ];
   };
-  const screen = (p: Point): Point => [
-    p[0] * viewport!.scale + viewport!.tx,
-    viewport!.ty - p[1] * viewport!.scale,
-  ];
+  const screen = (p: Point): Point => {
+    if (!viewport) throw new Error("An axis viewport is required to draw a cut");
+    return [p[0] * viewport.scale + viewport.tx, viewport.ty - p[1] * viewport.scale];
+  };
   const change = (points: Point[]) => {
+    if (!axis) return;
     const next = {
       kind: "cuts" as const,
-      cuts: { ...cuts, [axis!]: { ...cut, polyline: points } },
+      cuts: { ...cuts, [axis]: { ...cut, polyline: points } },
     };
     controller.preview(next);
   };
   const end = (e: PointerEvent<SVGSVGElement>, cancel: boolean) => {
     if (drag.current?.id !== e.pointerId) return;
+    if (!axis || !viewport) {
+      drag.current = null;
+      controller.cancel();
+      return;
+    }
     drag.current = null;
     if (cancel) controller.cancel();
     else {
@@ -121,7 +128,7 @@ export function SectionEditor({
       if (own?.kind === "cuts")
         controller.preview({
           ...own,
-          cuts: { ...own.cuts, [axis!]: mergeCut(own.cuts[axis!], viewport!.scale) },
+          cuts: { ...own.cuts, [axis]: mergeCut(own.cuts[axis], viewport.scale) },
         });
       setRefusal(controller.release());
     }
@@ -133,15 +140,19 @@ export function SectionEditor({
           {CUT_AXES.map((a) => (
             <span key={a} className="relative">
               <Button
-                label={`Edit cut from ${AXIS_LABEL[a]}`}
+                label={
+                  axis === a
+                    ? `Return to orbit from ${AXIS_LABEL[a]}`
+                    : `Edit cut from ${AXIS_LABEL[a]}`
+                }
                 pressed={axis === a}
                 onClick={() => {
                   controller.cancel();
-                  onAxis(a);
+                  onAxis(axis === a ? null : a);
                 }}
               >
                 <canvas ref={thumbnailRefs[a]} width={120} height={72} className="h-12 w-20" />
-                {AXIS_LABEL[a]}
+                {axis === a ? "Orbit" : AXIS_LABEL[a]}
               </Button>
             </span>
           ))}
@@ -248,13 +259,17 @@ export function SectionEditor({
               if (
                 points.length < 56 &&
                 (!points.length ||
-                  Math.hypot(p[0] - points.at(-1)![0], p[1] - points.at(-1)![1]) * viewport.scale >=
+                  Math.hypot(
+                    p[0] - points[points.length - 1][0],
+                    p[1] - points[points.length - 1][1],
+                  ) *
+                    viewport.scale >=
                     12)
               )
                 change([...points, p]);
             } else if (own.nodes.length === 2)
               change(
-                moveCutEdge({ ...cut, polyline: own.points }, own.nodes[0]!, [
+                moveCutEdge({ ...cut, polyline: own.points }, own.nodes[0], [
                   p[0] - own.start[0],
                   p[1] - own.start[1],
                 ]).polyline,
@@ -282,8 +297,8 @@ export function SectionEditor({
             if (node !== null) points.splice(Number(node), 1);
             else if (edge !== null && points.length < 56) {
               const i = Number(edge),
-                a = points[i]!,
-                b = points[(i + 1) % points.length]!;
+                a = points[i],
+                b = points[(i + 1) % points.length];
               points.splice(i + 1, 0, [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]);
             } else return;
             publish({ ...cut, polyline: points, closed: cut.closed && points.length >= 3 });
@@ -291,7 +306,7 @@ export function SectionEditor({
         >
           {cut.polyline.map((p, i) => {
             const a = screen(p),
-              next = cut.polyline[(i + 1) % cut.polyline.length]!,
+              next = cut.polyline[(i + 1) % cut.polyline.length],
               b = screen(next);
             return (
               <g key={i}>
@@ -335,7 +350,7 @@ export function SectionEditor({
                       publish({
                         ...cut,
                         polyline: cut.polyline.map((p, n) =>
-                          n === i ? [p[0] + direction[0]!, p[1] + direction[1]!] : p,
+                          n === i ? [p[0] + direction[0], p[1] + direction[1]] : p,
                         ),
                       });
                     }}

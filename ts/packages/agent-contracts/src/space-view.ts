@@ -4,17 +4,17 @@ import { z } from "zod";
 export function validateCutPolyline(points: [number, number][], closed: boolean) {
   const n = points.length,
     edges = closed ? n : n - 1;
-  const sub = (a: number[], b: number[]) => [a[0]! - b[0]!, a[1]! - b[1]!];
-  const cross = (a: number[], b: number[]) => a[0]! * b[1]! - a[1]! * b[0]!;
+  const sub = (a: number[], b: number[]) => [a[0] - b[0], a[1] - b[1]];
+  const cross = (a: number[], b: number[]) => a[0] * b[1] - a[1] * b[0];
   for (let i = 0; i < edges; i++) {
-    const a = points[i]!,
-      b = points[(i + 1) % n]!,
+    const a = points[i],
+      b = points[(i + 1) % n],
       ab = sub(b, a);
     if (Math.hypot(...ab) < 0.001) throw new Error("Cut points must be distinct");
     for (let j = i + 2; j < edges; j++) {
       if (closed && i === 0 && j === edges - 1) continue;
-      const c = points[j]!,
-        d = points[(j + 1) % n]!,
+      const c = points[j],
+        d = points[(j + 1) % n],
         cd = sub(d, c),
         denom = cross(ab, cd);
       if (Math.abs(denom) < 1e-10) {
@@ -22,8 +22,8 @@ export function validateCutPolyline(points: [number, number][], closed: boolean)
           Math.abs(cross(sub(c, a), ab)) < 1e-8 &&
           [0, 1].every(
             (k) =>
-              Math.max(Math.min(a[k]!, b[k]!), Math.min(c[k]!, d[k]!)) <=
-              Math.min(Math.max(a[k]!, b[k]!), Math.max(c[k]!, d[k]!)) + 1e-8,
+              Math.max(Math.min(a[k], b[k]), Math.min(c[k], d[k])) <=
+              Math.min(Math.max(a[k], b[k]), Math.max(c[k], d[k])) + 1e-8,
           )
         )
           throw new Error("Cut edges overlap");
@@ -36,7 +36,7 @@ export function validateCutPolyline(points: [number, number][], closed: boolean)
     const next = i + 1 < edges ? points[(i + 2) % n] : undefined;
     if (next) {
       const after = sub(next, b);
-      if (Math.abs(cross(ab, after)) < 1e-10 && ab[0]! * after[0]! + ab[1]! * after[1]! < 0)
+      if (Math.abs(cross(ab, after)) < 1e-10 && ab[0] * after[0] + ab[1] * after[1] < 0)
         throw new Error("Cut folds back");
     }
   }
@@ -46,7 +46,7 @@ export function validateCutPolyline(points: [number, number][], closed: boolean)
     n &&
     Math.abs(
       points.reduce(
-        (s, p, i) => s + cross(sub(p, points[0]!), sub(points[(i + 1) % n]!, points[0]!)),
+        (s, p, i) => s + cross(sub(p, points[0]), sub(points[(i + 1) % n], points[0])),
         0,
       ),
     ) < 1e-8
@@ -73,11 +73,16 @@ export function offsetSpaceCut(cut: {
     return [d[0] / length, d[1] / length];
   };
   return p.flatMap((at, i): Point[] => {
-    const before = i > 0 ? direction(p[i - 1]!, at) : cut.closed ? direction(p.at(-1)!, at) : null;
+    const before =
+      i > 0 ? direction(p[i - 1], at) : cut.closed ? direction(p[p.length - 1], at) : null;
     const after =
-      i < p.length - 1 ? direction(at, p[i + 1]!) : cut.closed ? direction(at, p[0]!) : null;
+      i < p.length - 1 ? direction(at, p[i + 1]) : cut.closed ? direction(at, p[0]) : null;
     const shift = (d: Point) => add(at, [-d[1], d[0]], cut.offset);
-    if (!before || !after) return [shift((before ?? after)!)];
+    if (!before) {
+      if (!after) throw new Error("A cut needs at least two points");
+      return [shift(after)];
+    }
+    if (!after) return [shift(before)];
     const a = shift(before),
       b = shift(after),
       denom = cross(before, after);
@@ -97,8 +102,7 @@ const polyline = z
   .refine(
     (points) =>
       points.every(
-        (p, i) =>
-          i === 0 || Math.hypot(p[0] - points[i - 1]![0], p[1] - points[i - 1]![1]) >= 0.001,
+        (p, i) => i === 0 || Math.hypot(p[0] - points[i - 1][0], p[1] - points[i - 1][1]) >= 0.001,
       ),
     "Cut points must be distinct",
   );
@@ -142,32 +146,9 @@ const view = {
   isolated: z.array(z.string().max(4096)).max(50000).nullable(),
   selected: z.string().max(4096).nullable(),
 };
-const current = z.strictObject({
+export const spaceViewSchema = z.strictObject({
   version: z.literal(2),
   ...view,
   cuts: spaceCutsSchema,
 });
-const empty = emptySpaceCut;
-/** Version 1 had one plan cut plus a straight plane; its plan cut becomes the top cut, the plane is retired. */
-const legacy = z
-  .object({
-    version: z.literal(1),
-    ...view,
-    polyline,
-    keepInside: z.boolean(),
-    closed: z.boolean().default(false),
-    offset: z.number().finite().default(0),
-  })
-  .transform(({ polyline, keepInside, closed, offset, version: _, ...rest }) =>
-    current.parse({
-      ...rest,
-      version: 2,
-      cuts: {
-        top: { polyline: polyline.length > 1 ? polyline : [], closed, offset, keepInside },
-        north: empty,
-        east: empty,
-      },
-    }),
-  );
-export const spaceViewSchema = z.union([current, legacy]);
-export type SpaceViewState = z.output<typeof current>;
+export type SpaceViewState = z.output<typeof spaceViewSchema>;

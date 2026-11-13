@@ -1,6 +1,6 @@
 {
-  "testFiles": 824,
-  "total": 309,
+  "testFiles": 829,
+  "total": 308,
   "byFile": {
     "apps/host/tests/admission.test.ts": 1,
     "apps/host/tests/admitted-builtins.test.ts": 1,
@@ -92,7 +92,7 @@
     "apps/web/src/route/slots/sheet/sheet.test.ts": 1,
     "apps/web/src/scene/damage.test.ts": 1,
     "apps/web/src/scene/picture/detail.test.tsx": 1,
-    "apps/web/src/scene/picture/lifecycle.test.tsx": 2,
+    "apps/web/src/scene/picture/lifecycle.test.tsx": 1,
     "apps/web/src/scene/prepared-cache.test.ts": 1,
     "apps/web/src/scene/psc1.test.ts": 5,
     "apps/web/src/scene/scene-cache.test.ts": 2,

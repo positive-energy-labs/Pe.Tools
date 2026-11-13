@@ -13,11 +13,17 @@ import { ductsData as ductsGraph } from "#/ducts/route";
 import { reduceLayout } from "../../../../../packages/kit/src/components/lang/layout-graph";
 import type { LayoutNode } from "@pe/agent-contracts";
 
-const io = vi.hoisted(() => ({
-  call: vi.fn(),
-  orbit: null as Scene3DProps["orbit"] | null,
-  scene: null as Scene3DProps | null,
-}));
+const io = vi.hoisted(
+  (): {
+    call: ReturnType<typeof vi.fn>;
+    orbit: Scene3DProps["orbit"] | null;
+    scene: Scene3DProps | null;
+  } => ({
+    call: vi.fn(),
+    orbit: null,
+    scene: null,
+  }),
+);
 vi.mock("#/host/client", () => ({ callHostRpc: io.call }));
 vi.mock("../artifact", () => ({ fetchSceneArtifact: async () => new ArrayBuffer(0) }));
 vi.mock("../psc1", () => ({
@@ -158,6 +164,9 @@ it("P3-C section editing shares the captured renderer and preserves orbit across
     calls = io.call.mock.calls.length;
   fireEvent.click(view.getByRole("button", { name: "Edit bent section" }));
   expect(io.scene?.plane?.axis).toBe("top");
+  fireEvent.click(view.getByRole("button", { name: "Return to orbit from Top" }));
+  expect(io.scene?.plane).toBeNull();
+  fireEvent.click(view.getByRole("button", { name: "Edit cut from Top" }));
   const panned = { kind: "plane" as const, scale: 24, tx: 100, ty: 200 };
   act(() => io.scene?.onPlane?.(panned, "gesture"));
   expect(io.scene?.plane?.viewport).toEqual(panned);
