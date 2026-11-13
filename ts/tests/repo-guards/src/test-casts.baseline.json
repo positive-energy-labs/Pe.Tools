@@ -1,6 +1,6 @@
 {
-  "testFiles": 811,
-  "total": 316,
+  "testFiles": 813,
+  "total": 315,
   "byFile": {
     "apps/host/tests/admission.test.ts": 1,
     "apps/host/tests/admitted-builtins.test.ts": 1,
@@ -73,7 +73,6 @@
     "apps/web/src/fans/one-lifecycle.test.tsx": 3,
     "apps/web/src/fans/work-reading.test.ts": 1,
     "apps/web/src/fans/write-action.test.tsx": 2,
-    "apps/web/src/host/client.test.ts": 1,
     "apps/web/src/host/connection-budget.test.ts": 1,
     "apps/web/src/machine/machine.test.tsx": 3,
     "apps/web/src/machine/runtime.test.ts": 1,

@@ -12,7 +12,7 @@ import {
   type Immutable,
   type SubjectRefCode,
 } from "@pe/agent-contracts";
-import { reads } from "./reads.ts";
+import * as reads from "./contract.ts";
 import { editPatches } from "@pe/ducts-domain/sheet/index";
 import { field, picturePose, route, subjectSchema, split } from "../route/defaults.ts";
 import { hostRead } from "../route/host-read.ts";

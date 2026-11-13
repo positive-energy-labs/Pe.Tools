@@ -307,7 +307,7 @@ function callRoutes(
         originClass,
         requestId,
       };
-      let intent: string | undefined;
+      let effect: string | undefined;
       if (entry.admission !== "intrinsic") {
         const definition = isTsOnlyOperationKey(key)
           ? yield* Effect.tryPromise({
@@ -331,8 +331,8 @@ function callRoutes(
           resolvedSession && typeof openDocumentId === "string"
             ? { session: resolvedSession.sessionId, openId: openDocumentId }
             : undefined;
-        intent = consentedRead(caller, key, request, ref) ? "Read" : definition.intent;
-        if (intent === "Mutate" && !humanDoor) {
+        effect = consentedRead(caller, key, request, ref) ? "Read" : definition.effect;
+        if (effect !== "Read" && effect !== "TransactRead" && !humanDoor) {
           return yield* Effect.fail(
             new BridgeError(
               "Submit the original exact admission to /actions; raw mutation dispatch is retired",
@@ -341,10 +341,6 @@ function callRoutes(
             ),
           );
         }
-        if (intent !== "Read" && !humanDoor)
-          return yield* Effect.fail(
-            new BridgeError("Unknown operation intent", 409, { notDispatched: true }),
-          );
         yield* Effect.try({
           try: () => requireEligibleCaller(definition, caller, "/call"),
           catch: (error) => error,
@@ -456,7 +452,7 @@ function callRoutes(
                 isDoorFailure(error) || error instanceof BridgeError ? error : new BridgeError(String(error), 409),
               ),
             )
-          : intent === "Read" && !entry.script
+          : (effect === "Read" || effect === "TransactRead") && !entry.script
             ? yield* Effect.gen(function* () {
                 if (!resolvedSession || !bridgeSessionId)
                   return yield* new InvalidRead({

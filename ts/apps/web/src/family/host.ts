@@ -1,9 +1,11 @@
+import * as contracts from "./contract.ts";
+import { body } from "@pe/host/read-graph";
 import { z } from "zod";
 import type { Read } from "@pe/host/read-graph";
 import { workRead } from "@pe/host/reads/inputs";
 
 import { executionTargetSchema, familyDraftSchema } from "@pe/agent-contracts";
-import { read } from "@pe/host/read-graph";
+
 import { localRead } from "@pe/host/local-inputs";
 import { familySpec, podProfile } from "@pe/host/builtin-read-handles";
 import { workBinding } from "@pe/host/reads/inputs";
@@ -12,10 +14,7 @@ import { familyArgs, familyData } from "@pe/agent-contracts";
 import { familyGoal } from "./goal.ts";
 const workspaceArgs = familyArgs.extend({ target: executionTargetSchema });
 export const reads: { workspace: Read<z.output<typeof workspaceArgs>, z.output<typeof familyData>> } = {
-  workspace: read("family.workspace", {
-    input: workspaceArgs,
-    output: familyData,
-    async run(ctx, args) {
+  workspace: body(contracts.workspace, async function(ctx, args) {
       const target = args.target;
       const key = await ctx.read(workBinding, { route: "family", target });
       if (!key) throw Error("Family Work binding is unavailable");
@@ -51,6 +50,5 @@ export const reads: { workspace: Read<z.output<typeof workspaceArgs>, z.output<t
         specError: document.error,
         pods: (await ctx.read(localRead("pod.list"), {})).pods,
       };
-    },
-  }),
+    }),
 };

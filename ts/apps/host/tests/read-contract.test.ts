@@ -13,6 +13,9 @@ import {
 } from "../src/reads/evaluator.ts";
 import { Publications } from "../src/reads/publications.ts";
 import { readRegistry, registeredReads } from "../src/reads/routes.ts";
+import { hostRead } from "../../web/src/route/host-read.ts";
+import { sheet as fanSheet } from "../../web/src/fans/contract.ts";
+import { workspace as roomsWorkspace } from "../../web/src/rooms/contract.ts";
 
 const contracts = Object.entries(
   import.meta.glob<Record<string, ReadHandle>>("../../web/src/*/contract.ts", { eager: true }),
@@ -25,6 +28,16 @@ const port = (take: InputPort["take"]): InputPort => ({
   revision: () => 0,
 });
 
+test("the browser door binds the target in the host contract's shape", () => {
+  // Mutant: always forward ExecutionTarget, including to a contract that takes DocumentRef.
+  const ref = { session: "s", openId: "d" };
+  const fans = hostRead(fanSheet);
+  expect(fans.input.parse({ fan: [], sheetPath: "" })).not.toHaveProperty("target");
+  expect(fans.request?.({ fan: [], sheetPath: "" }, { kind: "document", ref })).toMatchObject({ args: { target: ref } });
+  const rooms = hostRead(roomsWorkspace);
+  expect(rooms.request?.(rooms.input.parse({ view: "" }), { kind: "document", ref })).toMatchObject({ args: { target: { kind: "document", ref } } });
+});
+
 test("each route's contract.ts declares the reads its host serves, with the host's own schemas", () => {
   const handles = contracts.flatMap(([, module]) => Object.values(module));
   expect(contracts).toHaveLength(15);
@@ -34,9 +47,10 @@ test("each route's contract.ts declares the reads its host serves, with the host
     "open.documents", "ops.workspace", "pods.author", "pods.roster", "rooms.workspace",
     "schedules.view", "settings.machine", "takeoffs.adoption", "takeoffs.views",
   ]);
-  // Until k2/read-sweep moves each body onto its handle, the contract must equal what the host registers.
+  // Mutant: register read(name, ...) with copied schemas instead of body(handle, ...).
   for (const h of handles) {
     const served = registeredReads.reads.get(h.key) ?? bodyOf(h);
+    expect(served.contract, `${h.key} declaration`).toBe(h);
     expect(shape(h.input), `${h.key} input`).toEqual(shape(served.input));
     expect(shape(h.data), `${h.key} data`).toEqual(shape(served.output));
   }

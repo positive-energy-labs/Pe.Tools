@@ -1,13 +1,12 @@
+import * as contracts from "./contract.ts";
+import { body } from "@pe/host/read-graph";
 import { resources } from "@pe/host/builtin-read-handles";
 
-import { executionTargetSchema } from "@pe/agent-contracts";
-import { read } from "@pe/host/read-graph";
-import { opsArgs, opsData } from "@pe/agent-contracts";
+
+
+
 export const reads = {
-  workspace: read("ops.workspace", {
-    input: opsArgs.extend({ target: executionTargetSchema }),
-    output: opsData,
-    async run(ctx, { target, actionId }) {
+  workspace: body(contracts.workspace, async function(ctx, { target, actionId }) {
       const session =
         target.kind === "document"
           ? target.ref.session
@@ -23,6 +22,5 @@ export const reads = {
         ? await ctx.read(resources.receipt, { kind: "receipts", id: actionId })
         : [];
       return { catalog, receipts, receipt };
-    },
-  }),
+    }),
 };

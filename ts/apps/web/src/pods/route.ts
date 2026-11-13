@@ -1,20 +1,16 @@
+import * as contracts from "./contract.ts";
 import type { ContextOf } from "../route/defaults";
 import { handle } from "@pe/agent-contracts/handle";
 import { read } from "../route/defaults";
 import { z } from "zod";
 import { memberWork, settingsRouteState, type Immutable } from "@pe/agent-contracts";
-import { valueRead } from "../../../../packages/agent-contracts/src/value.ts";
 import { field, route, split, subjectSchema } from "../route/defaults.ts";
 import { hostRead } from "../route/host-read.ts";
 import { draw } from "../route/draw.tsx";
 
-import {
-  podsArgs,
-  podsValue,
-  podsRosterValue,
+import { podsArgs,
   podMemberCode,
-  podMemberOfCode,
-} from "../../../../packages/agent-contracts/src/pods-read.ts";
+  podMemberOfCode, } from "../../../../packages/agent-contracts/src/pods-read.ts";
 
 /** The open member: the subject's one id, a `name` SubjectRef `[pod, path]` (ADR 0035 rule 2). */
 export const member = (page: { member: Immutable<z.output<ReturnType<typeof subjectSchema>>> }) =>
@@ -26,14 +22,14 @@ const chosen = (page: Parameters<typeof member>[0]) => {
   return ref;
 };
 export const loaded = read(
-  hostRead(valueRead("pods.author", podsArgs, podsValue)),
+  hostRead(contracts.author),
   (page: Parameters<typeof member>[0] & { runs: "member" | "pod" }) => ({
     pod: member(page)?.pod ?? "",
     path: member(page)?.path ?? "",
     runs: page.runs,
   }),
 );
-export const inventory = read(hostRead(valueRead("pods.roster", z.object({}), podsRosterValue)));
+export const inventory = read(hostRead(contracts.roster));
 export const fields = {
   member: field(subjectSchema(1), { kind: "ids", ids: [] }, "subject", "push"),
 };

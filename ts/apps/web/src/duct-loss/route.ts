@@ -1,11 +1,12 @@
+import * as contracts from "./contract.ts";
 import type { ContextOf } from "../route/defaults";
 import { read } from "../route/defaults";
 import { z } from "zod";
-import { valueRead, GALVANIZED_STEEL_ROUGHNESS } from "@pe/agent-contracts";
+import { GALVANIZED_STEEL_ROUGHNESS } from "@pe/agent-contracts";
 import { route, field } from "../route/defaults";
 import { hostRead } from "../route/host-read";
 import { draw } from "../route/draw";
-import { ductLossArgs, ductLossData } from "@pe/agent-contracts";
+import { ductLossArgs } from "@pe/agent-contracts";
 export const fields = {
   shape: field(ductLossArgs.shape.shape, "round", "query", "push"),
   a: field(z.number(), 12, "query"),
@@ -17,7 +18,7 @@ export const fields = {
   face: field(z.enum(["commercial", "residential"]), "commercial", "pose", "push"),
 };
 export const loaded = read(
-  hostRead(valueRead("duct-loss.result", ductLossArgs, ductLossData)),
+  hostRead(contracts.result),
   (page: { [K in keyof typeof fields]: z.output<(typeof fields)[K]["schema"]> }) =>
     ductLossArgs.parse(page),
 );

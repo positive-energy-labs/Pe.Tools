@@ -3,7 +3,18 @@ import { expect, test, vi } from "vite-plus/test";
 import { createRef } from "react";
 import { fireEvent, render } from "@testing-library/react";
 import { actionScopeKeys, KeyScope, ScopeKeys } from "@pe/kit/keys";
-import { chordIgnoresInputs } from "./keys";
+import { chordIgnoresInputs, validateGraphChords } from "./keys";
+import { ductLossGraph } from "./projection-graph.test.fixture";
+
+test.each(["Mod+Z", "Control+Z", "Command+K"])("%s remains reserved without the dead binder", chord => {
+  // Mutant: remove the reserved-chord admission check with bindGraphChords.
+  const graph = { ...ductLossGraph, panes: {
+    probe: { label: "Probe", purpose: "Reservation", draws: [], verbs: [], chords: { probe: chord } },
+  } };
+  expect(validateGraphChords(graph)).toEqual(expect.arrayContaining([
+    expect.objectContaining({ code: "reserved-chord", path: "panes.probe.chords.probe" }),
+  ]));
+});
 
 test.each([["E", true], ["Shift+E", true], ["Mod+Enter", false], ["Alt+T", false]] as const)(
   "%s leaves text inputs alone = %s", (chord, ignores) => {

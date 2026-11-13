@@ -37,8 +37,8 @@ test("every advertised native preview admits a direct Pea call and agrees with C
     // takes no scope and is a Read; the two duct previews rehearse inside a rollback.
     const rehearses = op.key !== "revit.apply.parameter-links.preview";
     expect(op.effect, op.key).toBe(rehearses ? "TransactRead" : "Read");
-    expect(op.rollsBack, op.key).toBe(rehearses);
-    expect(op.intent, op.key).toBe("Read");
+    for (const column of ["rollsBack", "intent", "usesTransactions"])
+      expect(op, op.key).not.toHaveProperty(column);
     expect(op.internal, op.key).toBe(false);
     expect(commandLeafRefusal(op.key, undefined)).toBeNull();
     expect(() => requireEligibleCaller({ ...op, principal: ["human", "pea"] }, pea(), "/call")).not.toThrow();
