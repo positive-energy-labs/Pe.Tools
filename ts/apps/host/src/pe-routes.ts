@@ -74,7 +74,7 @@ import { createHash } from "node:crypto";
 import { unwatchFile, watchFile } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { readStoredNotices } from "@pe/host-contracts/store";
+import { notices as storedNotices } from "@pe/host-contracts/kinds";
 import { z } from "zod";
 import type { CapabilityContent } from "../../../packages/mcps/src/pea/capabilities.ts";
 import { skillSnapshot } from "../../../packages/mcps/src/pea/skill-publication.ts";
@@ -112,7 +112,7 @@ import {
 } from "./harness/user-shell.ts";
 import { resolveHostVersion } from "./host-lifecycle.ts";
 import type { HostLog } from "./host-log.ts";
-import { hostOwnership } from "./host-ownership.ts";
+import { hostOwnership, hostState } from "./host-ownership.ts";
 import { httpProblems, isDoorFailure } from "./http-problems.ts";
 import { HostInputContext } from "./input-context.ts";
 import { importShippedPods } from "./installed-pods.ts";
@@ -1350,7 +1350,7 @@ function* hostPeRoutes(
             receipts: [...noticeCache.receipts.values()],
             works: noticeCache.works,
             machine,
-            stored: readStoredNotices(storedNoticesPath()),
+            stored: storedNotices(hostState()),
             held: heldSends(),
           },
           Date.now(),

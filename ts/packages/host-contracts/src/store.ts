@@ -30,6 +30,7 @@ import {
 import { dirname, join, resolve } from "node:path";
 import { z } from "zod";
 import { productPathNames } from "./contracts/product.ts";
+import { stateTree } from "./service-identity.ts";
 
 export const sha256Hex = (bytes: Uint8Array | string) =>
   createHash("sha256").update(bytes).digest("hex");
@@ -279,7 +280,7 @@ function refuse(path: string, bytes: Buffer | null, policy: StoredPolicy, why: s
   const kept = (reason: string) => ({ kind: "kept", reason: note("keep", oneLine(reason)) }) as const;
   if (policy.class === "keep") return kept(why);
   const blobRoot =
-    policy.blobRoot ?? join(dirname(policy.notices), productPathNames.blobsDirectoryName);
+    policy.blobRoot ?? stateTree(dirname(dirname(policy.notices))).blobs;
   // Until the set-aside below completes, a write over this path owes its bytes a copy.
   owed.set(resolve(path), blobRoot);
   if (!bytes) return kept(why);

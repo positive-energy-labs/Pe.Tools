@@ -151,6 +151,10 @@ export function witness(bare: string) {
   const authored = settingsKind.in(home, "ducts");
   // @ts-expect-error a bare string is not a stored file
   read(bare);
+  // @ts-expect-error a home path cannot be passed to the reader as a file
+  read(authored.path);
+  // @ts-expect-error a state kind cannot read a file carrying a HomePath
+  read({ ...state, path: authored.path });
   // @ts-expect-error a bare string is not a state root
   taskKind.in(bare, "a");
   // @ts-expect-error a bare `Home` is not bound to a machine

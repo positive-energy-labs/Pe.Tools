@@ -12,13 +12,19 @@ import {
   type ApsTokenRequest,
   type ApsTokenResult,
 } from "@pe/host-contracts/operation-types";
-import { discardStored } from "@pe/host-contracts/store";
+import { setAside, stateKind } from "@pe/host-contracts/kinds";
+import { z } from "zod";
 import { LocalOpError } from "./local-error.ts";
 import { runHostChild } from "./host-child.ts";
-import { storedNoticesPath } from "./notice-feed.ts";
+import { hostState } from "./host-ownership.ts";
 import { productApsCredentialsPath, productApsTokensPath } from "./product-paths.ts";
 
 const APS_AUTH_BASE_URL = "https://developer.api.autodesk.com/authentication/v2";
+const tokensKind = stateKind({
+  place: () => "Autodesk sign-in",
+  schema: z.unknown(),
+  segments: () => ["aps-auth", "tokens.json"],
+});
 const CALLBACK_PORT = 8080;
 const CALLBACK_URI = `http://localhost:${CALLBACK_PORT}/api/aps/callback/oauth`;
 const EXPIRATION_BUFFER_SECONDS = 60;
@@ -479,9 +485,8 @@ const loadPersistedTokenMap = Effect.fnUntraced(function* () {
     // refused on every call until someone deleted the file by hand.
     Effect.catch((error) =>
       Effect.sync(() => {
-        discardStored(
-          productApsTokensPath(),
-          { class: "discard", place: "Autodesk sign-in", notices: storedNoticesPath() },
+        setAside(
+          tokensKind.in(hostState()),
           errorMessage(error),
         );
         return null;

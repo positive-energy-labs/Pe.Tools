@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { productPathNames } from "@pe/host-contracts/contracts";
-import { noteStored } from "@pe/host-contracts/store";
+import { note } from "@pe/host-contracts/kinds";
 import type { ReceiptStamp } from "@pe/agent-contracts";
 import { HostInputContext } from "./input-context.ts";
 import {
@@ -10,7 +10,6 @@ import {
   type HostInputLane,
 } from "./native-recording.ts";
 import { InvalidRead } from "./native-reads.ts";
-import { storedNoticesPath } from "./notice-feed.ts";
 
 import { linkedCatalog } from "@pe/agent-contracts/pe-api";
 import { execFile, spawn } from "node:child_process";
@@ -22,7 +21,7 @@ import { serviceFilePath, type ServiceFile } from "@pe/host-contracts/pe-service
 import type { ServiceHostHandle } from "@pe/host-contracts/pe-service-host";
 import { openWindow, prepareHostBinding, resolveHostVersion } from "./host-lifecycle.ts";
 import { makeHttpLive, resolveWebRoot } from "./app.ts";
-import { hostCapabilities, hostOwnership } from "./host-ownership.ts";
+import { hostCapabilities, hostOwnership, hostState } from "./host-ownership.ts";
 import { trayOwnerArguments } from "@pe/host-contracts/service-identity";
 import { makeInstalledUpdateReader } from "./update-route.ts";
 import { ActionJournalService } from "./receipt-services.ts";
@@ -71,7 +70,7 @@ export const hostInputs = (stamp: ReceiptStamp | null, selection: HostInputSelec
     Effect.map((writer): HostInputLane => ({ kind: "live", captureStore: writer })),
     Effect.catch((error) =>
       Effect.sync((): HostInputLane => {
-        noteStored(storedNoticesPath(), {
+        note(hostState(), {
           class: "keep",
           place: "Recording history",
           path: directory,
