@@ -354,14 +354,14 @@ function receiptRow(
   };
 }
 
-/** Every row, group order first (waits and working lead), newest first inside a group. */
-function nativeTouchedRows(receipt: ActionReceipt, revision: number): NoticeDraft[] {
+function nativeTouchedRows(receipt: ActionReceipt): NoticeDraft[] {
   return receipt.steps.flatMap((step) => {
     if (step.state === "running" || !step.touched ||
       !["restoreFailed", "unauthorized", "unknown"].includes(step.touched.kind)) return [];
     const touched = step.touched;
     return [{
-      key: `native:${step.id}`, group: "failed" as const, revision,
+      // One card per native step, even when the parent receipt advances after its terminal.
+      key: `native:${step.id}`, group: "failed" as const, revision: 0,
       verb: touched.kind, what: step.key, where: callerWord(receipt.caller),
       says: touched.kind === "restoreFailed" ? "Revit could not restore the captured view. Check its view settings."
         : touched.kind === "unauthorized" ? "Revit changed the document outside the permitted scope."
@@ -372,6 +372,7 @@ function nativeTouchedRows(receipt: ActionReceipt, revision: number): NoticeDraf
   });
 }
 
+/** Every row, group order first (waits and working lead), newest first inside a group. */
 export function noticeRows(sources: NoticeSources, now: number): NoticeDraft[] {
   const rows: NoticeDraft[] = [
     ...(sources.machine ? attention(sources.machine) : []).map((line) => ({
@@ -390,7 +391,7 @@ export function noticeRows(sources: NoticeSources, now: number): NoticeDraft[] {
       .filter((thread) => thread.lifecycle.status === "active")
       .flatMap((thread) => threadRow(thread, now) ?? []),
     ...sources.receipts.flatMap((receipt) => {
-      const native = nativeTouchedRows(receipt.action, receipt.revision);
+      const native = nativeTouchedRows(receipt.action);
       return native.length ? native : receiptRow(receipt, now) ?? [];
     }),
     ...sources.stored.flatMap((notice) => storedRow(notice, now) ?? []),

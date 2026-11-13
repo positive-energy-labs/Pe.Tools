@@ -8,7 +8,10 @@ import { CANCEL_OPERATION_KEY, RevitBridgeLive, RevitProcessAlive } from "../src
 import { connectTestBridge } from "./bridge-fixture.ts";
 import { ActionJournalService } from "../src/receipt-services.ts";
 import type { ActionJournal } from "../src/action-journal.ts";
-import { effectTest } from "./effect-test.ts";
+import { effectTest, journalAt } from "./effect-test.ts";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { actionReceiptSchema } from "@pe/agent-contracts";
 import { noticeRows } from "../src/notice-feed.ts";
 import { readNativeReceipt } from "../src/native-receipts.ts";
@@ -412,7 +415,12 @@ const terminalFrame = (requestId: string, outcome?: string) =>
 
 effectTest("socket killed during focused capture recovers restoreFailed and one notice", () =>
   Effect.gen(function* () {
-    const journal = { recordQueue: async () => null } as unknown as ActionJournal;
+    const directory = yield* Effect.promise(() => mkdtemp(join(tmpdir(), "pe-focused-socket-")));
+    const journal = journalAt(join(directory, "receipts.jsonl"), Date.now);
+    yield* Effect.addFinalizer(() => Effect.promise(async () => {
+      await journal.close();
+      await rm(directory, { recursive: true, force: true });
+    }));
     const { call, sent, close, socketOf } = yield* harness.pipe(Effect.provideService(ActionJournalService, journal));
     let terminalTouched: unknown;
     const release = bindActionDispatch("focused-socket", {

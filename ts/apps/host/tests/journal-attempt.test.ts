@@ -156,7 +156,7 @@ test.each([
   { touched: { kind: "rolledBack" }, state: "failed" },
   { touched: { kind: "restored", views: [] }, state: "failed" },
   { touched: { kind: "wrote", transactions: [], added: 0, modified: 1, deleted: 0 }, state: "incomplete" },
-  { touched: { kind: "restoreFailed", views: [] }, state: "incomplete" },
+  { touched: { kind: "restoreFailed", views: [{ view: { documentKey: "doc", uniqueId: "view", id: 1 }, left: ["crop"] }] }, state: "incomplete" },
   { touched: { kind: "unknown", reason: "lost-response" }, state: "incomplete" },
 ])("a later refusal uses native $touched.kind testimony: $state", async ({ touched, state }) => {
   const f = await fixture(undefined, true);

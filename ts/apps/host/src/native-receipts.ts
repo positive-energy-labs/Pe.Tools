@@ -141,7 +141,7 @@ export async function readNativeReceipt(
   if (!decoded.success) return unchanged();
   const response = decoded.data;
   const terminal = { ...intent, touched: response.touched };
-  if (receipt.data.verdict === "ok" && "payload" in response && response.payload !== undefined)
+  if (receipt.data.verdict === "ok" && "payload" in response)
     return {
       step: { ...terminal, state: "succeeded", result: response.payload,
         ...(response.evidence ? { nativeEvidence: response.evidence } : {}) },
