@@ -71,7 +71,7 @@ it("sections are where the run bundle keeps its count; residual and velocity-ove
     sectionIds: ["supply:a1", "supply:a2", "supply:b3", "supply:c4"],
   });
   expect(run(60).residualInWg).toBeNull();
-  expect(run(50).complete).toBe(false);
+  expect(run(50)).toMatchObject({ complete: false, cfm: 100 });
   expect(run(60).overLegIds).toEqual(["a1", "a2"]);
   expect(run(70)).toMatchObject({ critical: false, residualInWg: null });
   expect(w.worstKnownInWg).toBe(0.14);

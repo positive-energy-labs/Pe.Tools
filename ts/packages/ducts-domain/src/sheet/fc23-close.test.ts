@@ -474,13 +474,14 @@ it.skipIf(!existsSync(CHADDS))(
     };
     const sheet = buildSheet(input);
 
-    // 1. Converging: every return-side junction leg is off SD5-9; 13971115 (12x8 on the 32x11
-    // trunk, walked main to branch) reads ER5-2 Cb, its row stating the Ab/Ac gap.
+    // D8: 13971115 feeds unresolved plenum openings as well as a terminal: the known demand
+    // cannot price that shared leg. A fully known branch still reads converging ER5-2 Cb.
     const returnLegs = [
       ...new Set(sheet.paths.filter((p) => p.side === "return").flatMap((p) => p.legIds)),
     ].map((id) => sheet.legs[id]!);
     expect(returnLegs.filter((l) => /SD5-9/.test(l.lossSource.ref))).toEqual([]);
-    expect(sheet.legs["13971115:0>1"]!.lossSource).toMatchObject({
+    expect(sheet.legs["13971115:0>1"]).toMatchObject({ flowCfm: null, lossInWg: null });
+    expect(sheet.legs["14551976:0>1"]!.lossSource).toMatchObject({
       kind: "rule",
       ref: expect.stringMatching(/^tap-converging-rect ER5-2 Cb=/),
     });
