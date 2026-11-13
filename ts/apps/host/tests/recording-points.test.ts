@@ -1,5 +1,7 @@
+import { stateFixture } from "../../../tests/isolated-home/storage.ts";
+import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { randomUUID } from "node:crypto";
-import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Context, Effect, Layer, Result, Schema } from "effect";
@@ -98,7 +100,7 @@ const nativeBody = (
   });
 const fixture = Effect.gen(function* () {
   const dir = yield* temporary;
-  const writer = yield* openRecordingWriter(dir, identity, bounds);
+  const writer = yield* openRecordingWriter(stateFixture(dir), identity, bounds);
   const live = yield* readSets({ kind: "live", captureStore: writer });
   const a = yield* nativeBody(writer, live, "native-A"),
     b = yield* nativeBody(writer, live, "native-B");
@@ -291,7 +293,7 @@ if (corpus)
       const dir = yield* temporary;
       yield* Effect.promise(() => cp(corpus, dir, { recursive: true }));
       const manifest = yield* Effect.promise(async () => JSON.parse(await readFile(join(dir, "manifest.json"), "utf8")));
-      const writer = yield* openRecordingWriter(dir, manifest, bounds);
+      const writer = yield* openRecordingWriter(stateFixture(dir), manifest, bounds);
       const ids = ["17cd7b7c-fedb-4352-b8f9-9a66b0311126", "c4308818-7c32-4bc4-8880-6ad3267731d1"];
       const record = yield* writer.readSets.get(ids[0]!);
       const taking = writer.taking(record.inputs.find((input) => input.input.kind === "document")!.takingId)!;

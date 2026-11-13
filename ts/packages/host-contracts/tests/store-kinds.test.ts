@@ -34,9 +34,9 @@ import {
   writeHome,
   writeState,
   type StatePath,
+  type DerivedDir,
   type Stored,
 } from "../src/kinds.ts";
-import { writeAtomic } from "../src/store.ts";
 
 const schema = z.strictObject({ name: z.string() });
 /** A kind declares a place, a schema and segments, and nothing about notices or blobs. */
@@ -45,7 +45,11 @@ const taskKind = stateKind({
   schema,
   segments: (id: string) => ["tasks", `${id}.json`],
 });
-const trustKind = keptStateKind({ place: () => "Route trust", schema, segments: () => ["route-trust.json"] });
+const trustKind = keptStateKind({
+  place: () => "Route trust",
+  schema,
+  segments: () => ["route-trust.json"],
+});
 const settingsKind = homeKind({
   place: (owner: string) => `Settings for ${owner}`,
   schema,
@@ -77,7 +81,7 @@ test("a state kind that names no blob root still keeps the bytes it sets aside",
   const file = taskKind.in(machine, "a");
   writeState(file, '{"name":"a"}');
   expect(read(file)).toMatchObject({ kind: "ok", value: { name: "a" } });
-  writeAtomic(file.path, "{ torn");
+  writeState(file, "{ torn");
   const result: Stored<{ name: string }> = read(file);
   expect(result).toMatchObject({ kind: "set-aside", blob: blob("{ torn") });
   expect(existsSync(file.path)).toBe(false);
@@ -88,7 +92,10 @@ test("a state kind that names no blob root still keeps the bytes it sets aside",
   expect(read(file)).toEqual({ kind: "missing" });
   // An owner's refusal (another epoch, a person's clear) goes through the same door.
   writeState(file, '{"name":"stale"}');
-  expect(setAside(file, "another epoch")).toMatchObject({ kind: "set-aside", blob: blob('{"name":"stale"}') });
+  expect(setAside(file, "another epoch")).toMatchObject({
+    kind: "set-aside",
+    blob: blob('{"name":"stale"}'),
+  });
   expect(setAside(file, "another epoch")).toEqual({ kind: "missing" });
   expect(notices(machine)).toHaveLength(2);
 });
@@ -105,8 +112,14 @@ test("a kept-state kind and a home kind are never set aside", () => {
   expect(read(settings)).toMatchObject({ kind: "kept" });
   expect(readFileSync(settings.path, "utf8")).toBe("{ torn");
   // The home write door compares, and rests what it replaces in this machine's blob store.
-  expect(writeHome(settings, '{"name":"a"}', sha256Hex("other"))).toMatchObject({ ok: false, kind: "conflict" });
-  expect(writeHome(settings, '{"name":"a"}', sha256Hex("{ torn"))).toMatchObject({ ok: true, priorBlob: blob("{ torn") });
+  expect(writeHome(settings, '{"name":"a"}', sha256Hex("other"))).toMatchObject({
+    ok: false,
+    kind: "conflict",
+  });
+  expect(writeHome(settings, '{"name":"a"}', sha256Hex("{ torn"))).toMatchObject({
+    ok: true,
+    priorBlob: blob("{ torn"),
+  });
   expect(read(settings)).toMatchObject({ kind: "ok", value: { name: "a" } });
   expect(notices(machine).map((n) => n.class)).toEqual(["keep", "keep"]);
 });
@@ -117,13 +130,18 @@ test("a state log decodes per line, and a derived folder is read and written by 
   appendLine(log, { name: "a" });
   writeFileSync(log.path, "{ torn", { flag: "a" });
   appendLine(log, { name: "b" });
-  expect(readLines(log)).toEqual({ kind: "ok", values: [{ name: "a" }, { name: "b" }], skipped: 1 });
+  expect(readLines(log)).toEqual({
+    kind: "ok",
+    values: [{ name: "a" }, { name: "b" }],
+    skipped: 1,
+  });
 
   const key = derivedKey("source", "producer/1");
   const here = derivedIn(machine);
   const shared = derivedIn(machine.home({ tier: "project", root: join(root, "Project") }));
   expect(shared.path).toBe(join(root, "Project", "Derived"));
-  for (const dir of [here, shared]) {
+  const directories: DerivedDir[] = [here, shared];
+  for (const dir of directories) {
     expect(readDerivedIn(dir, key)).toBeNull();
     const written = writeDerivedIn(dir, key, "pages");
     expect(readDerivedIn(dir, key)).toMatchObject({ path: written.path });

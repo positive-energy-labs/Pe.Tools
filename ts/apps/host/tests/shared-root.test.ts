@@ -1,8 +1,12 @@
+import { ledgerFixture } from "./storage.ts";
+import { mkdtempSync } from "../../../tests/isolated-home/storage.ts";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import { Effect, FileSystem } from "effect";
 import { NodeServices } from "@effect/platform-node";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync,
+  readFileSync, readdirSync, rmSync, statSync, writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, relative } from "node:path";
 import { firmHome, homes, userRoot } from "@pe/host-contracts/product-paths";
@@ -287,7 +291,7 @@ test("W1: a shipped example whose id the firm home holds is not installed again 
   const shipped = join(user, "shipped");
   mkdirSync(shipped);
   archiveOf(join(shipped, "example.zip"), "example");
-  const report = await importShippedPods({ shippedRoot: shipped, ledger: join(user, "state", "shipped-pods.json") });
+  const report = await importShippedPods({ shippedRoot: shipped, ledger: ledgerFixture(join(user, "state", "shipped-pods.json")) });
   expect(report.outcomes).toMatchObject([{ outcome: "present", id: "example", reason: `installed at '${theirs}'` }]);
   expect(existsSync(join(user, "Pods", "example"))).toBe(false);
   // The sentinel: the firm pod is still the one admitted pod of that id.

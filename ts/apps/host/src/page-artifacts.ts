@@ -3,7 +3,7 @@ import { link, mkdir, readFile, realpath, rm, writeFile } from "node:fs/promises
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { Script } from "node:vm";
 import { parse, parseFragment, type DefaultTreeAdapterMap } from "parse5";
-import { sha256Hex, writeAtomic } from "@pe/host-contracts/store";
+import { sha256Hex, type At, type StoredFile } from "@pe/host-contracts/kinds";
 
 export { sha256Hex };
 
@@ -81,15 +81,14 @@ export class ContentAddressCorruption extends Error {
 }
 
 /** The one artifact writer, for Pages, exports and Pods: no directory it creates or writes into
- * resolves outside `root`. `replace` swaps atomically through the store kernel's `writeAtomic`;
- * otherwise an existing artifact must already hold the same bytes. Neither mode changes the
+ * resolves outside `root`. An existing artifact must already hold the same bytes. It never changes the
  * supplied bytes. */
 export async function writeArtifact(
   root: string,
-  path: string,
+  file: StoredFile<unknown, At>,
   source: string | Uint8Array,
-  replace = false,
 ) {
+  const path = file.path;
   const bytes = Buffer.from(source);
   const parts = artifactRelative(root, dirname(path)).split("/").filter(Boolean);
   await mkdir(root, { recursive: true });
@@ -117,10 +116,6 @@ export async function writeArtifact(
     if (actual !== expected) throw new ContentAddressCorruption(path, expected, actual);
     return true;
   };
-  if (replace) {
-    writeAtomic(path, bytes);
-    return path;
-  }
   if (await existing()) return path;
   const temporary = join(directory, `.artifact-${randomUUID()}`);
   try {
@@ -128,7 +123,7 @@ export async function writeArtifact(
     // A rename can replace a concurrent winner; link atomically publishes only if absent.
     await link(temporary, path).catch(async (error: NodeJS.ErrnoException) => {
       if (error.code !== "EEXIST") throw error;
-      if (!await existing()) throw error;
+      if (!(await existing())) throw error;
     });
   } finally {
     await rm(temporary, { force: true });

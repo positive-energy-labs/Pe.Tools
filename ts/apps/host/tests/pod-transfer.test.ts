@@ -1,3 +1,4 @@
+import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { fixtureNative } from "./fixture-native.ts";
 import { testHostInputs, callRouteOver } from "./effect-test.ts";
 import { pictureCaptures } from "./effect-test.ts";
@@ -8,7 +9,7 @@ import { pictureCaptures } from "./effect-test.ts";
 import { captureStore } from "./effect-test.ts";
 import { afterEach, beforeEach, expect, test } from "vite-plus/test";
 import { Layer } from "effect";
-import { mkdir, mkdtemp, open, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, open, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
 import { basename, join } from "node:path";
@@ -19,7 +20,7 @@ import { productPathNames } from "@pe/host-contracts/contracts";
 const homeVariable = productPathNames.productHomeVariable;
 import type { PictureCaptures } from "../src/captures-route.ts";
 import { listPackages } from "../src/packages.ts";
-import { exportPod, importPod, importRecordPath, placePod, writeZip } from "../src/pod-transfer.ts";
+import { exportPod, importPod, importRecordFile, placePod, writeZip } from "../src/pod-transfer.ts";
 import { productPluginDecisionsPath } from "../src/product-paths.ts";
 
 let root: string;
@@ -262,7 +263,7 @@ test("export vendors, ports the project, closes captures; import into a renamed 
   // The import record is machine state, keyed by pod id beside this owner's Pods root: nothing
   // machine-derived lands in the pod, and no machine path is stored (homes freeze shape 6).
   await expect(read("imported.json")).rejects.toThrow();
-  const record = await readFile(importRecordPath("ducts", { podsRoot: otherPods }), "utf8");
+  const record = await readFile(importRecordFile("ducts").path, "utf8");
   expect(JSON.parse(record)).toMatchObject({
     archiveSha256: exported.archiveSha256,
     archive: basename(archivePath),

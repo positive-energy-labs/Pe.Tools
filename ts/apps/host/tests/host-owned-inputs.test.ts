@@ -1,5 +1,7 @@
+import { stateFixture } from "../../../tests/isolated-home/storage.ts";
+import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { actAs } from "./callers.ts";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { Context, Effect, Layer } from "effect";
@@ -34,7 +36,7 @@ test("recorded host-local inputs and immutable capture files replay without a li
   const dir = await mkdtemp(join(tmpdir(), "pe-owner-inputs-"));
   const identity = { build: "owner-inputs", catalog: nativeCatalogIdentity() },
     bounds = { maxBytes: 8 * 1024 * 1024, maxTakings: 100 };
-  const pictures = new PictureCaptures(join(dir, "pictures"), 1024 * 1024, () => 1);
+  const pictures = new PictureCaptures(stateFixture(join(dir, "pictures")), 1024 * 1024, () => 1);
   const bytes = Buffer.from("opaque-content-addressed-file");
   const receipt = await pictures.keep(bytes, {
     origin: "human",
@@ -58,7 +60,7 @@ test("recorded host-local inputs and immutable capture files replay without a li
       ).body,
   });
   const unregister = registeredReads.register({ image: imageRead });
-  const writer = await settle(openRecordingWriter(join(dir, "bundle"), identity, bounds));
+  const writer = await settle(openRecordingWriter(stateFixture(join(dir, "bundle")), identity, bounds));
   const who = { kind: "human" as const, via: "local" as const };
   const make = (lane: HostInputLane) => {
     const inputs = Effect.runSync(
@@ -69,7 +71,7 @@ test("recorded host-local inputs and immutable capture files replay without a li
         inputs,
         lane.kind === "live"
           ? {
-              store: fileRouteDocumentStore(join(dir, "work")),
+              store: fileRouteDocumentStore(stateFixture(join(dir, "work"))),
               live: {
                 owner: new DuctsReadings(),
                 native: Layer.succeed(HostNativeRead, {

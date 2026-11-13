@@ -1,9 +1,13 @@
-import { copyFile, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { notices as storedNotices } from "@pe/host-contracts/kinds";
+import { stateMachine } from "../../../tests/isolated-home/storage.ts";
+import { dirname as storedParent } from "node:path";
+import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
+import { copyFile, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test, vi } from "vite-plus/test";
 import { ADMISSION_RESEND_HEADER } from "@pe/agent-contracts";
-import { readStoredNotices, sha256Hex } from "@pe/host-contracts/store";
+import { sha256Hex } from "@pe/host-contracts/store";
 import { storedBlobsPath, storedNoticesPath } from "../src/notice-feed.ts";
 import { setup } from "./schedule-recorded-fixture.ts";
 import { fixtureNative } from "./fixture-native.ts";
@@ -52,7 +56,7 @@ test("E8 corrupt journal is discarded with one notice, and a real action then ru
       discarded: expect.any(String),
     });
     expect(
-      readStoredNotices(storedNoticesPath()).filter((notice) => notice.path === path),
+      storedNotices(stateMachine(storedParent(storedNoticesPath()))).filter((notice) => notice.path === path),
     ).toMatchObject([{ class: "discard", place: "Action journal", sha256: sha256Hex(corrupt) }]);
     // Nothing is lost: the discarded bytes rest in the blob store under the hash the notice names.
     expect(await readFile(join(storedBlobsPath(), "sha256", sha256Hex(corrupt)))).toEqual(corrupt);

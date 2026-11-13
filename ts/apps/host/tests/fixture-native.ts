@@ -1,3 +1,4 @@
+import { stateFixture } from "../../../tests/isolated-home/storage.ts";
 import { Context, Effect, Exit, Fiber, Layer, Queue, Scope } from "effect";
 import type { BridgeStateSnapshot } from "@pe/host-contracts/contracts";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
@@ -46,7 +47,7 @@ export async function fixtureNative(
   let transport = makeTransport();
   const scope = Scope.makeUnsafe();
   const context = await settle(Layer.buildWithScope(
-    RevitBridgeLive.pipe(Layer.provideMerge(ActionJournalService.live(null, directory))), scope,
+    RevitBridgeLive.pipe(Layer.provideMerge(ActionJournalService.live(null, stateFixture(directory)))), scope,
   ));
   const actualBridge = Context.get(context, RevitBridge);
   let nextInventory: (() => Promise<void>) | undefined;
@@ -120,7 +121,7 @@ export async function fixtureNative(
       const web = serveRoutes(Layer.mergeAll(routes, callRouteOver(journal, captures, dependencies, composition)).pipe(
         Layer.provide(peApiErrorsLayer),
         Layer.provide(Layer.mergeAll(DuctFiles.layer(), HostDocumentMarks.layer)),
-        Layer.provideMerge(PictureCaptureStore.layer(join(directory, "pictures"))),
+        Layer.provideMerge(PictureCaptureStore.layer(stateFixture(join(directory, "pictures")))),
       ), bridge, Layer.succeed(SdkDriver, args => Effect.promise(() => dependencies.sdk(args))));
       handlers.push(web);
       const request = async (req: Request, caller: Caller = { kind: "human", via: "local" }) => {

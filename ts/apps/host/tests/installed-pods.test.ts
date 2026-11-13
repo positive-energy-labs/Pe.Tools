@@ -1,20 +1,24 @@
+import { notices as storedNotices } from "@pe/host-contracts/kinds";
+import { authoredFixture, ledgerFixture } from "./storage.ts";
+import { stateMachine } from "../../../tests/isolated-home/storage.ts";
+import { dirname as storedParent } from "node:path";
+import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { pictureCaptures } from "./effect-test.ts";
 /**
  * First-run import of shipped pods: ordinary import, once per archive, never over a user's pod.
  * The shipped archive is written by the production exporter, never a fixture zip writer.
  */
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
-import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { existsSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { readStoredNotices } from "@pe/host-contracts/store";
 import { PictureCaptures } from "../src/captures-route.ts";
 import { storedNoticesPath } from "../src/notice-feed.ts";
 import { importShippedPods } from "../src/installed-pods.ts";
 import { listPackages } from "../src/packages.ts";
-import { exportPod, importPod, importRecordPath, readZip, writeZip } from "../src/pod-transfer.ts";
+import { exportPod, importPod, importRecordFile, readZip, writeZip } from "../src/pod-transfer.ts";
 import * as settings from "../src/settings.ts";
 import { productPodsRootPath } from "../src/product-paths.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
@@ -52,7 +56,7 @@ beforeEach(async () => {
 });
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); return rm(root, { recursive: true, force: true }); });
 
-const boot = () => importShippedPods({ shippedRoot: shipped, ledger, podsRoot: pods, captures });
+const boot = () => importShippedPods({ shippedRoot: shipped, ledger: ledgerFixture(ledger), podsRoot: pods, captures });
 
 test("a torn import resumes missing members and publishes its manifest last", async () => {
   const directory = join(pods, "example");
@@ -63,7 +67,7 @@ test("a torn import resumes missing members and publishes its manifest last", as
   await expect(importPod({ archivePath: join(shipped, "example.zip") }, { podsRoot: pods, captures }))
     .resolves.toMatchObject({ id: "example" });
   expect(await readFile(join(directory, "pod.json"), "utf8")).toContain('"example"');
-  expect(writes.mock.calls.map(([path]) => path)).toEqual([join(directory, "pod.json")]);
+  expect(writes.mock.calls.map(([file]) => file.path)).toEqual([join(directory, "pod.json")]);
 });
 
 test.each(["different", "extra"])("a torn folder with a %s file refuses with its address and remedy", async (kind) => {
@@ -112,7 +116,7 @@ test.each([true, false])("a throwing second write rolls back only matching bytes
   let torn = "";
   vi.spyOn(settings, "writeHome").mockImplementation((...args) => {
     if (++count !== 2) return write(...args);
-    torn = args[0];
+    torn = args[0].path;
     write(...args);
     if (!matching) writeFileSync(torn, "concurrent edit");
     throw Error("injected torn write");
@@ -134,7 +138,7 @@ test("rollback names a directory kept because a concurrent writer added a file",
   let directory = "";
   vi.spyOn(settings, "writeHome").mockImplementation((...args) => {
     if (++count === 2) {
-      directory = dirname(args[0]);
+      directory = dirname(args[0].path);
       writeFileSync(join(directory, "later.txt"), "mine");
       throw Error("injected write failure");
     }
@@ -159,7 +163,7 @@ test("a shipped update dropping a member posts one stored keep notice across res
     { podsRoot: join(root, "examples"), captures });
   await boot();
   await boot();
-  const notices = readStoredNotices(storedNoticesPath()).filter(n => n.path === directory);
+  const notices = storedNotices(ledgerFixture(ledger).machine).filter(n => n.path === directory);
   expect(notices).toHaveLength(1);
   expect(notices[0]).toMatchObject({ class: "keep", reason: expect.stringContaining("removes members") });
   expect(await readFile(join(directory, "pages", "tour", "index.html"))).toEqual(before);
@@ -203,7 +207,7 @@ test.each(["import", "update"] as const)("%s rollback keeps and names a concurre
   let count = 0;
   let first = "";
   vi.spyOn(settings, "writeHome").mockImplementation((...args) => {
-    if (++count === 1) first = args[0];
+    if (++count === 1) first = args[0].path;
     if (count === 2) {
       writeFileSync(first, "concurrent edit");
       throw Error("injected second-member failure");
@@ -227,21 +231,21 @@ test("host-start examples use the override home and the write door, never the Do
   const writes = vi.spyOn(settings, "writeHome");
   // Observe resolution before any import: a real-home mutant fails without touching personal files.
   expect(productPodsRootPath()).toBe(join(override, "Pods"));
-  const report = await importShippedPods({ shippedRoot: shipped, ledger, captures });
+  const report = await importShippedPods({ shippedRoot: shipped, ledger: ledgerFixture(ledger), captures });
   expect(report.outcomes).toMatchObject([{ outcome: "imported" }]);
   expect(await readFile(join(override, "Pods", "example", "pod.json"), "utf8")).toContain('"example"');
   expect(writes.mock.calls.length).toBeGreaterThanOrEqual(3);
-  expect(writes.mock.calls.every(([path]) => path.startsWith(override + "/") || path.startsWith(override + "\\"))).toBe(true);
+  expect(writes.mock.calls.every(([file]) => file.path.startsWith(override + "/") || file.path.startsWith(override + "\\"))).toBe(true);
 });
 
 test("host-start missing example source posts one notice and never throws", async () => {
   const missing = join(root, "missing-examples");
-  const start = () => importShippedPods({ shippedRoot: missing, ledger, podsRoot: pods, captures });
+  const start = () => importShippedPods({ shippedRoot: missing, ledger: ledgerFixture(ledger), podsRoot: pods, captures });
   await expect(start()).resolves.toMatchObject({ outcomes: [] });
   await start();
-  expect(readStoredNotices(storedNoticesPath()).filter(n => n.path === missing))
+  expect(storedNotices(ledgerFixture(ledger).machine).filter(n => n.path === missing))
     .toMatchObject([{ class: "keep", place: "Shipped examples" }]);
-  expect(readStoredNotices(storedNoticesPath()).filter(n => n.path === missing)).toHaveLength(1);
+  expect(storedNotices(ledgerFixture(ledger).machine).filter(n => n.path === missing)).toHaveLength(1);
 });
 
 test("a dev host with a missing checkout example directory still starts with one notice", async () => {
@@ -249,10 +253,10 @@ test("a dev host with a missing checkout example directory still starts with one
   const missingCheckout = join(root, "missing-checkout");
   Object.defineProperty(hostOwnership, "sourceRoot", { value: missingCheckout });
   try {
-    const start = () => importShippedPods({ ledger, podsRoot: pods, captures });
+    const start = () => importShippedPods({ ledger: ledgerFixture(ledger), podsRoot: pods, captures });
     await expect(start()).resolves.toMatchObject({ outcomes: [] });
     await start();
-    expect(readStoredNotices(storedNoticesPath()).filter(n => n.path === join(missingCheckout, "examples", "pods")))
+    expect(storedNotices(ledgerFixture(ledger).machine).filter(n => n.path === join(missingCheckout, "examples", "pods")))
       .toHaveLength(1);
   } finally {
     Object.defineProperty(hostOwnership, "sourceRoot", { value: sourceRoot });
@@ -272,7 +276,7 @@ test("a shipped update uses home CAS without moving the pod, and keeps a later u
   };
   expect((await update("<title>Updated</title>")).outcomes).toMatchObject([{ outcome: "updated" }]);
   expect(await readFile(member, "utf8")).toBe("<title>Updated</title>");
-  expect(writes.mock.calls.some(([path, , sha]) => path === member && sha !== null)).toBe(true);
+  expect(writes.mock.calls.some(([file, , sha]) => file.path === member && sha !== null)).toBe(true);
   await writeFile(member, "<title>Mine</title>");
   expect((await update("<title>New version</title>")).outcomes).toMatchObject([{ outcome: "present" }]);
   expect(await readFile(member, "utf8")).toBe("<title>Mine</title>");
@@ -288,7 +292,7 @@ test("first boot imports the shipped pod; a restart offers nothing again, even a
   // The import record is machine state beside the ledger this owner named, never in the pod, and it
   // names its archive by file name: no machine path is stored.
   await expect(readFile(join(pods, "example", "imported.json"))).rejects.toThrow();
-  const record = await readFile(importRecordPath("example", { stateRoot: dirname(ledger) }), "utf8");
+  const record = await readFile(importRecordFile("example", { machine: stateMachine(dirname(ledger)) }).path, "utf8");
   expect(JSON.parse(record).archive).toBe("example.zip");
   expect(record).not.toContain(JSON.stringify(shipped).slice(1, -1));
 
@@ -347,7 +351,7 @@ test("the real examples stage and first-boot import unchanged: same members, pro
 
 test("a ledger that does not decode is discarded with one notice, and the shipped pod is offered again", async () => {
   const posted = () =>
-    readStoredNotices(storedNoticesPath()).filter((notice) => notice.path === ledger);
+    storedNotices(ledgerFixture(ledger).machine).filter((notice) => notice.path === ledger);
   await mkdir(join(root, "state"), { recursive: true });
   await writeFile(ledger, "{ this is not JSON");
 
@@ -374,11 +378,11 @@ test("rollback undoes repeated writes to one member newest first", async () => {
   const path = join(root, "member.txt");
   await writeFile(path, "original");
   const hash = (bytes: string) => createHash("sha256").update(bytes).digest("hex");
-  expect(settings.writeHome(path, "first", hash("original")).ok).toBe(true);
-  expect(settings.writeHome(path, "second", hash("first")).ok).toBe(true);
+  expect(settings.writeHome(authoredFixture(path), "first", hash("original")).ok).toBe(true);
+  expect(settings.writeHome(authoredFixture(path), "second", hash("first")).ok).toBe(true);
   expect(settings.rollbackHomeMembers([
-    { path, sha256: hash("first"), prior: Buffer.from("original") },
-    { path, sha256: hash("second"), prior: Buffer.from("first") },
+    { file: authoredFixture(path), sha256: hash("first"), prior: Buffer.from("original") },
+    { file: authoredFixture(path), sha256: hash("second"), prior: Buffer.from("first") },
   ])).toEqual([]);
   expect(await readFile(path, "utf8")).toBe("original");
 });
@@ -396,14 +400,14 @@ test("a failed last non-manifest write never exposes a manifest during import", 
   const observations: boolean[] = [];
   const spy = vi.spyOn(settings, "writeHome").mockImplementation((...args) => {
     observations.push(existsSync(manifest));
-    if (args[0] === join(directory, "z-last.txt")) throw Error("last member failed");
+    if (args[0].path === join(directory, "z-last.txt")) throw Error("last member failed");
     const result = write(...args);
     observations.push(existsSync(manifest));
     return result;
   });
   await expect(importPod({ archivePath: join(shipped, "example.zip") }, { podsRoot: pods, captures }))
     .rejects.toThrow("last member failed");
-  expect(spy.mock.calls.map(([path]) => path)).toEqual([
+  expect(spy.mock.calls.map(([file]) => file.path)).toEqual([
     join(directory, "pages", "tour", "index.html"), join(directory, "z-last.txt"),
   ]);
   expect(observations.every(present => !present)).toBe(true);
@@ -434,7 +438,7 @@ test("an unrelated manifest-free example folder is kept with one notice across c
   await boot();
   expect(await readdir(directory)).toEqual(["notes.txt"]);
   expect(await readFile(member, "utf8")).toBe("mine");
-  expect(readStoredNotices(storedNoticesPath()).filter(n => n.path === directory))
+  expect(storedNotices(ledgerFixture(ledger).machine).filter(n => n.path === directory))
     .toMatchObject([{ class: "keep", reason: expect.stringContaining("notes.txt") }]);
-  expect(readStoredNotices(storedNoticesPath()).filter(n => n.path === directory)).toHaveLength(1);
+  expect(storedNotices(ledgerFixture(ledger).machine).filter(n => n.path === directory)).toHaveLength(1);
 });

@@ -35,11 +35,11 @@ import { summarizeFailure } from "@pe/host-contracts/failure-summary";
 import type { ThreadPresence } from "@pe/host-contracts/pe-api";
 import { firmHome, noFirmHomeText, userRoot, type FirmHome } from "@pe/host-contracts/product-paths";
 import { stateTree } from "@pe/host-contracts/service-identity";
-import { noteStored, sha256Hex, storedNoticesFile, type StoredNotice } from "@pe/host-contracts/store";
+import { note, sha256Hex, type StoredNotice, type StateRoot } from "@pe/host-contracts/kinds";
 import { hostOwnership } from "./host-ownership.ts";
 
 /** The machine's notice file: every `discard` in the host names it, so no file goes without a trace. */
-export const storedNoticesPath = () => storedNoticesFile(hostOwnership.rootPath);
+export const storedNoticesPath = () => stateTree(hostOwnership.rootPath).notices;
 /** Where a discard that holds authority rests its bytes first (`state\\Blobs`, the write door's store). */
 export const storedBlobsPath = () => stateTree(hostOwnership.rootPath).blobs;
 
@@ -65,9 +65,9 @@ function holdsFile(path: string): boolean {
 export function noteStartupHomes(
   user = userRoot(),
   firm: FirmHome = firmHome(),
-  notices = storedNoticesPath(),
+  machine: StateRoot = stateTree(hostOwnership.rootPath),
 ): void {
-  noteNoFirmHome(firm, notices);
+  noteNoFirmHome(firm, machine);
   const path = join(user, "Work");
   // Homes never hold Work; old Work is noticed, not migrated.
   try {
@@ -77,7 +77,7 @@ export function noteStartupHomes(
       console.warn(`Could not check earlier Work at '${path}': ${String(error)}`);
     return;
   }
-  noteStored(notices, {
+  note(machine, {
     class: "keep",
     place: EARLIER_WORK_PLACE,
     path,
@@ -92,11 +92,11 @@ export function noteStartupHomes(
  * drive, a second marker) posts again. Silent when a firm home is bound and when nothing was
  * probed, as in a test run: a notice that names no place tells a person nothing.
  */
-export function noteNoFirmHome(firm: FirmHome = firmHome(), notices = storedNoticesPath()): void {
+export function noteNoFirmHome(firm: FirmHome = firmHome(), machine: StateRoot = stateTree(hostOwnership.rootPath)): void {
   const places = firm.refused ?? firm.looked;
   if (firm.root || !places.length) return;
   const reason = noFirmHomeText(firm);
-  noteStored(notices, {
+  note(machine, {
     class: "keep",
     place: FIRM_HOME_PLACE,
     path: places[0]!,

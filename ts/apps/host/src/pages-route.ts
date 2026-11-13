@@ -53,7 +53,7 @@ import {
 import { z } from "zod";
 import { resourceSnapshot, type OwnerValue } from "@pe/runtime";
 import { RevitBridge } from "./bridge.ts";
-import { hostOwnership } from "./host-ownership.ts";
+import { hostOwnership, hostState } from "./host-ownership.ts";
 import {
   admitPage,
   currentCaller,
@@ -80,14 +80,15 @@ import type { ActionJournal } from "./action-journal.ts";
 import { ActionJournalService } from "./receipt-services.ts";
 import { PAGE_MEDIA } from "./page-artifacts.ts";
 import {
-  appendStoredLine,
-  readStored,
-  readStoredLines,
-  writeAtomic,
-  type StoredPolicy,
-} from "@pe/host-contracts/store";
-import { storedNoticesPath } from "./notice-feed.ts";
-import { productPageStatePath } from "./product-paths.ts";
+  appendLine,
+  read as readStoredFile,
+  readLines,
+  writeState,
+  stateKind,
+  stateLog,
+  type StateDirectory,
+} from "@pe/host-contracts/kinds";
+import { stateDirectory } from "@pe/host-contracts/service-identity";
 
 /**
  * Each library file beside its source on the dev lane, so an edit is live on the next request;
@@ -273,6 +274,22 @@ const unboundRefusal = (door: string): Refusal => ({
  * deleted with one notice and reads as absent. The event log is append-only and decodes per line:
  * a bad line is left out with one notice, and a read never rewrites the file.
  */
+const pageFileKind = <T>(
+  schema: z.ZodType<T>,
+  name: "snapshot.json" | "binding.json" | "snapshot.md",
+  slug: string,
+) =>
+  stateKind({
+    schema,
+    parse: name === "snapshot.md" ? (text) => text : undefined,
+    place: () => `Page ${slug}`,
+    segments: () => [name],
+  });
+const pageEventsKind = stateLog({
+  schema: pageEventRowSchema,
+  place: (slug: string) => `Page ${slug}`,
+  segments: (_slug: string) => ["events.jsonl"],
+});
 class PageState {
   private readonly listeners = new Set<Listener>();
   private readonly signals = new Set<Signal>();
@@ -280,15 +297,17 @@ class PageState {
   private queue: Promise<unknown> = Promise.resolve();
   constructor(
     private readonly pageDir: string,
-    private readonly dir: string,
-    private readonly policy: Extract<StoredPolicy, { class: "discard" }>,
+    private readonly storage: StateDirectory,
   ) {}
-  private stored<T>(file: string, schema: z.ZodType<T>, missing: T) {
-    const read = readStored(join(this.dir, file), schema, this.policy);
+  private get dir() {
+    return this.storage.path;
+  }
+  private stored<T>(file: "snapshot.json" | "binding.json", schema: z.ZodType<T>, missing: T) {
+    const read = readStoredFile(pageFileKind(schema, file, basename(this.dir)).in(this.storage));
     return read.kind === "ok" ? read.value : missing;
   }
   async rows(): Promise<PageEventRow[]> {
-    const read = readStoredLines(join(this.dir, "events.jsonl"), pageEventRowSchema, this.policy);
+    const read = readLines(pageEventsKind.in(this.storage, basename(this.dir)));
     return read.kind === "ok" ? read.values : [];
   }
   append(event: unknown, origin: string): Promise<PageEventRow> {
@@ -296,7 +315,7 @@ class PageState {
       // After the last row that reads, not a count: a line left out must not hand its number out twice.
       const seq = lastSeq(await this.rows()) + 1;
       const row: PageEventRow = { seq, at: new Date().toISOString(), origin, event };
-      appendStoredLine(join(this.dir, "events.jsonl"), JSON.stringify(row));
+      appendLine(pageEventsKind.in(this.storage, basename(this.dir)), row);
       for (const listen of this.listeners) listen(row);
       return row;
     });
@@ -310,14 +329,20 @@ class PageState {
     return this.stored("snapshot.json", z.unknown(), null);
   }
   async writeSnapshot(value: unknown) {
-    writeAtomic(join(this.dir, "snapshot.json"), JSON.stringify(value, null, 2));
+    writeState(
+      pageFileKind(z.unknown(), "snapshot.json", basename(this.dir)).in(this.storage),
+      JSON.stringify(value, null, 2),
+    );
   }
   /** A binding names a thread or a document as data in the file, never in its path. */
   binding(): PageBinding {
     return this.stored("binding.json", pageBindingSchema, unboundPage);
   }
   writeBinding(value: PageBinding) {
-    writeAtomic(join(this.dir, "binding.json"), JSON.stringify(value, null, 2));
+    writeState(
+      pageFileKind(pageBindingSchema, "binding.json", basename(this.dir)).in(this.storage),
+      JSON.stringify(value, null, 2),
+    );
     this.signal("binding", {});
   }
   /** The page's text projection (`pe.describe`): markdown an agent reads instead of the snapshot. */
@@ -328,7 +353,7 @@ class PageState {
     });
   }
   async writeText(text: string) {
-    writeAtomic(join(this.dir, "snapshot.md"), text);
+    writeState(pageFileKind(z.string(), "snapshot.md", basename(this.dir)).in(this.storage), text);
   }
   follow(listen: Listener) {
     this.listeners.add(listen);
@@ -409,10 +434,7 @@ export function createPagesHandler(
   live: PageLive = noLive,
   journal?: ActionJournal,
   /** Where Page state lives: one folder per slug under the machine state root, never in a home. */
-  stored: { root: string; notices: string } = {
-    root: productPageStatePath(),
-    notices: storedNoticesPath(),
-  },
+  stored: StateDirectory = hostState().directory("Pages"),
 ) {
   /**
    * Where a slug's folder is: `<root>/<slug>`, or for `<id>--<page>` the folder of the one admitted
@@ -426,7 +448,7 @@ export function createPagesHandler(
     const [id, page, ...more] = slug.split("--");
     if (page === undefined) {
       const found = await scratchPageDirectory(slug, root);
-      return found && { ...found, pod: null, state: join(stored.root, basename(found.dir)) };
+      return found && { ...found, pod: null, state: join(stored.path, basename(found.dir)) };
     }
     if (more.length || !pods) return null;
     for (const pod of await activePackages((await listPackages(pods)).packages, pods)) {
@@ -438,7 +460,7 @@ export function createPagesHandler(
           dir: join(pod.directory, row.path),
           pod: pod.id,
           key: row.key,
-          state: join(stored.root, slug),
+          state: join(stored.path, slug),
         };
     }
     return null;
@@ -448,12 +470,10 @@ export function createPagesHandler(
   const stateOf = (where: { dir: string; state: string }) => {
     let state = states.get(where.dir);
     if (!state) {
-      const policy = {
-        class: "discard",
-        place: `Page ${basename(where.state)}`,
-        notices: stored.notices,
-      } as const;
-      states.set(where.dir, (state = new PageState(where.dir, where.state, policy)));
+      states.set(
+        where.dir,
+        (state = new PageState(where.dir, stateDirectory(stored, basename(where.state)))),
+      );
     }
     return state;
   };
@@ -937,7 +957,7 @@ export function createPagesHandler(
       try {
         const result = await exportPage({
           directory: where.dir,
-          exports: join(where.state, "exports"),
+          exports: stateDirectory(stored, basename(where.state), "exports"),
           page: where.key,
           exportedAt: new Date().toISOString(),
           document: (await target(where.key, state)).document,

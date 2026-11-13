@@ -1,5 +1,6 @@
+import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { testHostInputs, journalAt, callRouteOver } from "./effect-test.ts";
-import { mkdtemp, rm } from "node:fs/promises";
+import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Context, Effect, Exit, Layer, Scope } from "effect";

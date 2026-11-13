@@ -26,7 +26,7 @@ import {
 import { fixtureServer } from "./fixtures/server.ts";
 import { actionTrace } from "./fixtures/action-trace.ts";
 import { readSessionReceipt } from "../src/receipts.ts";
-import { assertProfileAvailable } from "../src/platform.ts";
+import { assertProfileAvailable, browserHome } from "../src/platform.ts";
 import { guardianClient } from "../src/attached-guardian.ts";
 import {
   processIdentities,
@@ -542,7 +542,7 @@ test("A3 four independent workers and two attached clients with target contentio
     attachBrowser({ endpoint: foreign.info.endpoint, home: competingHome }),
   ).rejects.toMatchObject({
     code: "AttachmentBusy",
-    data: { existing: { id: attachedSession.info.id, home } },
+    data: { existing: { id: attachedSession.info.id, home: browserHome(home).path } },
   });
   const cliBusy = await exec(
     process.execPath,
@@ -562,7 +562,7 @@ test("A3 four independent workers and two attached clients with target contentio
   );
   expect(cliBusy.error).toMatchObject({
     code: "AttachmentBusy",
-    data: { existing: { id: attachedSession.info.id, home } },
+    data: { existing: { id: attachedSession.info.id, home: browserHome(home).path } },
   });
   const secondProductHome = join(home, "second-product-home");
   const crossProductBusy = await exec(
@@ -589,7 +589,7 @@ test("A3 four independent workers and two attached clients with target contentio
   );
   expect(crossProductBusy.error).toMatchObject({
     code: "AttachmentBusy",
-    data: { existing: { id: attachedSession.info.id, home } },
+    data: { existing: { id: attachedSession.info.id, home: browserHome(home).path } },
   });
   const clients = [
     worker("connect", attachedSession.info.id),

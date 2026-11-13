@@ -1,3 +1,5 @@
+import { stateFixture } from "../../../tests/isolated-home/storage.ts";
+import { mkdtempSync } from "../../../tests/isolated-home/storage.ts";
 import { Cause, Context, Effect, Exit, Layer, Scope } from "effect";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { settle } from "./effect-test.ts";
@@ -13,7 +15,7 @@ import {
   constructorWorkRegistrations,
 } from "../src/admitted-builtins.ts";
 import { builtinEnrollments, type BuiltinEnrollment } from "../src/builtin-enrollment.ts";
-import { mkdtempSync, rmSync } from "node:fs";
+import { rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
@@ -27,7 +29,7 @@ function workspace() {
   const root = mkdtempSync(join(tmpdir(), "pe-builtins-"));
   roots.push(root);
   return {
-    workspace: new RouteWorkspace({ registrations: [], store: fileRouteDocumentStore(root) }),
+    workspace: new RouteWorkspace({ registrations: [], store: fileRouteDocumentStore(stateFixture(root)) }),
   };
 }
 
@@ -144,7 +146,7 @@ test("Pea's catalog lists admitted Work; the constructor guard keeps one registr
   roots.push(root);
   const ws = new RouteWorkspace({
     registrations: constructorWorkRegistrations(registrations),
-    store: fileRouteDocumentStore(root),
+    store: fileRouteDocumentStore(stateFixture(root)),
   });
   const run = await open(ws);
   try {
@@ -166,7 +168,7 @@ test("Pea's catalog lists admitted Work; the constructor guard keeps one registr
     await close(run.scope);
   }
   // Falsifier: without the guard the admitted owner collides with the constructor seat.
-  const unguarded = new RouteWorkspace({ registrations, store: fileRouteDocumentStore(root) });
+  const unguarded = new RouteWorkspace({ registrations, store: fileRouteDocumentStore(stateFixture(root)) });
   const collided = await open(unguarded);
   expect(collided.service).toBeUndefined();
   expect(String(collided.result._tag === "Failure" ? Cause.pretty(collided.result.cause) : "")).toMatch(

@@ -1,7 +1,9 @@
+import { stateFixture } from "../../../tests/isolated-home/storage.ts";
+import { mkdtempSync } from "../../../tests/isolated-home/storage.ts";
 import { testInputContext } from "./effect-test.ts";
 import { ActionJournalService } from "../src/receipt-services.ts";
 import { machineFixture } from "../../../packages/agent-contracts/tests/machine-fixture.ts";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer as createNodeServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -204,7 +206,7 @@ test("one admitted content snapshot publishes exact skill bytes and retains froz
     writeFileSync(join(folder, path), text);
   }
   const content = createContributionContent({
-    worldRoot: home,
+    worldRoot: stateFixture(home),
     homeRoot: home,
     packages: async () => {
       listings++;

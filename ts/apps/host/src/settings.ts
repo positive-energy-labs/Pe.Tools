@@ -3,7 +3,7 @@ import { lstat, stat } from "node:fs/promises";
 import { readFileSync, unlinkSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { isUtf8 } from "node:buffer";
-import { join, win32 } from "node:path";
+import { basename, dirname, join, win32 } from "node:path";
 import { Ajv, type ErrorObject, type ValidateFunction } from "ajv";
 import { Effect, FileSystem, Semaphore } from "effect";
 import type {
@@ -30,7 +30,6 @@ import {
   isPackageMember,
   listPackages,
   podHome,
-  podStatePath,
   productPodsRoots,
   projectPodsRoot,
   readPackage,
@@ -41,12 +40,31 @@ import { shippedPodsSettled } from "./installed-pods.ts";
 import { LocalOpError } from "./local-error.ts";
 import { hostState } from "./host-ownership.ts";
 import { productPathNames } from "@pe/host-contracts/contracts";
-import { sha256Hex, writeAtomic, writeHomeFile } from "@pe/host-contracts/store";
+import { sha256Hex,
+  writeHome,
+  writeState,
+  homeKind,
+  stateKind,
+  type StoredFile,
+  type StateRoot,
+} from "@pe/host-contracts/kinds";
+import { stateDirectory } from "@pe/host-contracts/service-identity";
+export { writeHome } from "@pe/host-contracts/kinds";
+export const podMemberKind = homeKind({
+  schema: z.unknown(),
+  place: (_parts: readonly string[]) => "Pod member",
+  segments: (parts: readonly string[]) => parts,
+});
+const runOutputKind = stateKind({
+  schema: z.unknown(),
+  place: (_run: string, _parts: readonly string[]) => "Run output",
+  segments: (run: string, parts: readonly string[]) => [run, ...parts],
+});
+import { z } from "zod";
 import {
   localOpFileError,
   makeDirectory,
-  readDirectoryEntriesOrEmpty,
-} from "./files/index.ts";
+  readDirectoryEntriesOrEmpty } from "./files/index.ts";
 
 /**
  * Pod members are host-native file I/O under `Pods/<folder>/` in the home that holds the pod; a pod
@@ -55,6 +73,7 @@ import {
  * and arrive through the bridge.
  */
 export type PodContext = {
+  readonly machine?: StateRoot;
   readonly podsRoot?: string;
   /**
    * `data.path` of the target document's project-home blob (ADR 0037): undefined when the call
@@ -70,15 +89,11 @@ export type PodContext = {
  * where the file is, in whichever home holds it; before an overwrite the prior bytes rest under
  * `state\Blobs` and the receipt names their hash.
  */
-export const writeHome = (path: string, bytes: Uint8Array | string, expectSha256: string | null) =>
-  writeHomeFile(path, bytes, {
-    expectSha256,
-    blobRoot: hostState().blobs,
-  });
 
 /** Only for undoing a newly created Pod member after failed publication; never delete a later edit.
  * Like writeHome, this has the store's compare-then-I/O concurrency ceiling. */
-export function deleteHomeIfSha(path: string, expectSha256: string): boolean {
+export function deleteHomeIfSha(file: StoredFile<unknown, "home">, expectSha256: string): boolean {
+  const path = file.path;
   let bytes: Buffer;
   try { bytes = readFileSync(path); }
   catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return false; throw error; }
@@ -87,7 +102,9 @@ export function deleteHomeIfSha(path: string, expectSha256: string): boolean {
   return true;
 }
 
-export type HomeMemberUndo = { path: string; sha256: string; prior: Uint8Array | null };
+export type HomeMemberUndo = {
+  file: StoredFile<unknown, "home">; sha256: string; prior: Uint8Array | null;
+};
 
 /** Undo only this publication's writes, newest first; one conflict must not prevent other undos. */
 export function rollbackHomeMembers(writes: readonly HomeMemberUndo[]): string[] {
@@ -95,10 +112,12 @@ export function rollbackHomeMembers(writes: readonly HomeMemberUndo[]): string[]
   for (const write of [...writes].reverse()) {
     try {
       const undone = write.prior === null
-        ? deleteHomeIfSha(write.path, write.sha256)
-        : writeHome(write.path, write.prior, write.sha256).ok;
-      if (!undone) kept.push(`${write.path} (changed after publication)`);
-    } catch (error) { kept.push(`${write.path} (${String(error)})`); }
+        ? deleteHomeIfSha(write.file, write.sha256)
+        : writeHome(write.file, write.prior, write.sha256).ok;
+      if (!undone) kept.push(`${write.file.path} (changed after publication)`);
+    } catch (error) {
+      kept.push(`${write.file.path} (${String(error)})`);
+    }
   }
   return kept;
 }
@@ -108,8 +127,18 @@ export function rollbackHomeMembers(writes: readonly HomeMemberUndo[]): string[]
  * `_no-pod`. A run is machine state and never sits in a home. An owner that supplies its own Pods
  * root (the demo lane, a test) keeps its runs in `Runs` beside it, outside the product's state.
  */
-export const runsFolder = (pod: string | null | undefined, ctx: Pick<PodContext, "podsRoot"> = {}) =>
-  podStatePath(ctx, productPathNames.runsDirectoryName, pod ?? productPathNames.podlessRunsDirectoryName);
+export const runsDirectory = (
+  pod: string | null | undefined,
+  ctx: Pick<PodContext, "machine"> = {},
+) =>
+  stateDirectory(
+    ctx.machine ?? hostState(),
+    productPathNames.runsDirectoryName, pod ?? productPathNames.podlessRunsDirectoryName,
+  );
+export const runsFolder = (
+  pod: string | null | undefined,
+  ctx: Pick<PodContext, "podsRoot" | "machine"> = {},
+) => runsDirectory(pod, ctx).path;
 
 const ajv = new Ajv({ allErrors: true, strict: false, allowUnionTypes: true });
 // ponytail: one host-wide write lane; per-member locks only if unrelated writes contend.
@@ -400,7 +429,11 @@ export const writeRun = (
       for (const [name, content] of Object.entries(files))
         // Run output is machine state, so it takes the kernel's atomic write, not the home door.
         yield* Effect.try({
-          try: () => writeAtomic(join(folder, name), content),
+          try: () =>
+            writeState(
+              runOutputKind.in(runsDirectory(pod, ctx), runId, name.split(/[\\\\/]/)),
+              content,
+            ),
           catch: (error) => localOpFileError(key, error),
         });
       return folder;
@@ -443,7 +476,12 @@ export const saveMember = (request: PodMemberSaveRequest, ctx: PodContext = {}) 
   );
 
 /** A member write lands in the pod's own home, in place, through the one door. */
-const throughDoor = (key: string, path: string, content: string, expectSha256: string | null) =>
+const throughDoor = (
+  key: string,
+  path: StoredFile<unknown, "home">,
+  content: string,
+  expectSha256: string | null,
+) =>
   Effect.try({
     try: () => writeHome(path, content, expectSha256),
     catch: (error) => new LocalOpError(key, errorMessage(error), 500),
@@ -454,7 +492,7 @@ const writablePath = Effect.fnUntraced(function* (
   ctx: PodContext,
   key: string,
 ) {
-  const path = yield* memberFile(request, ctx, key);
+  yield* memberFile(request, ctx, key);
   if (/^(output\/|pod\.json$)/i.test(normalizeMemberPath(request.path)))
     return yield* Effect.fail(
       new LocalOpError(key, "Runs and the manifest are not writable members.", 400),
@@ -467,7 +505,20 @@ const writablePath = Effect.fnUntraced(function* (
         400,
       ),
     );
-  return path;
+  const directory = yield* podFolder(request.pod, ctx);
+  const home = podHome(directory, ctx.pointer);
+  return podMemberKind.in(
+    {
+      root: dirname(dirname(directory)),
+      tier: home?.tier ?? "user",
+      machine: ctx.machine ?? hostState(),
+    },
+    [
+      basename(dirname(directory)),
+      basename(directory),
+      ...normalizeMemberPath(request.path).split("/"),
+    ],
+  );
 });
 
 const written = (request: PodMember & { content: string }): PodMemberWritten => ({

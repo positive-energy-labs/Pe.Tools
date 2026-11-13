@@ -1,4 +1,6 @@
-import { mkdir, mkdtemp, rm, rename, writeFile } from "node:fs/promises";
+import { stateFixture } from "../../../tests/isolated-home/storage.ts";
+import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
+import { mkdir, rm, rename, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Context, Deferred, Effect, Fiber, Layer, Result, Schema } from "effect";
@@ -66,7 +68,7 @@ function router(lane: HostInputLane, owner: DuctsReadings, counts: { reads: numb
       admittedRequestIdentity(anonymous ? { kind: "anonymous" } : { kind: "human", via: "local" }, scope))) };
 }
 async function captured(maxTakings = 100, observer?: (taking: Taking) => Effect.Effect<void>) {
-  const dir = await temp(); const writer = await run(openRecordingWriter(dir, identity, { ...bounds, maxTakings }));
+  const dir = await temp(); const writer = await run(openRecordingWriter(stateFixture(dir), identity, { ...bounds, maxTakings }));
   const takes: Taking[] = []; const counts = { reads: 0 }; const owner = new DuctsReadings();
   const web = router({ kind: "live", captureStore: writer }, owner, counts, (taking) =>
     Effect.sync(() => { takes.push(taking); }).pipe(Effect.andThen(observer?.(taking) ?? Effect.void)));
@@ -112,7 +114,7 @@ effectTest("an overlapping acquisition keeps its own body after its peer publish
 
 effectTest("overlapping HTTP retained readers share one dispatch and link only their own taking", () => Effect.gen(function* () {
   const dir = yield* Effect.promise(temp);
-  const writer = yield* openRecordingWriter(dir, identity, bounds);
+  const writer = yield* openRecordingWriter(stateFixture(dir), identity, bounds);
   const lane = { kind: "live", captureStore: writer } as const;
   const basis = createDuctsBodyBasis(lane)!;
   const nativeReady = yield* Deferred.make<void>();
@@ -325,7 +327,7 @@ test("foreign native binding, corrupt basis target/version and missing basis ref
     const foreign = new Map(selected); foreign.set(nativeKey, basisTaking.id);
     const web = router({ kind: "recording", recordingStore: reader, at: null, bindings: foreign }, new DuctsReadings(), { reads: 0 });
     try { expect((await web.post()).status).toBe(409); } finally { await web.close(); }
-    const empty = await temp(); const writer = await run(openRecordingWriter(empty, identity, bounds));
+    const empty = await temp(); const writer = await run(openRecordingWriter(stateFixture(empty), identity, bounds));
     const native = c.takes.find((taking) => taking.input.kind === "native")!;
     if (native.outcome.kind !== "answered") throw Error("Missing answered fixture dependency");
     const { observation: _, kind: __, ...answer } = native.outcome;
@@ -370,7 +372,7 @@ test("invalidation during deferred basis capture fences ready publication", asyn
 });
 
 test("retained calls in their own child contexts link the original native taking; replay needs no bindings", async () => {
-  const dir = await temp(); const writer = await run(openRecordingWriter(dir, identity, bounds));
+  const dir = await temp(); const writer = await run(openRecordingWriter(stateFixture(dir), identity, bounds));
   const takes: Taking[] = []; const counts = { reads: 0 }; const consumer = { current: undefined as InputConsumption | undefined };
   const web = router({ kind: "live", captureStore: writer }, new DuctsReadings(), counts,
     (taking) => Effect.sync(() => { takes.push(taking); }), consumer);
@@ -413,7 +415,7 @@ test("retained calls in their own child contexts link the original native taking
 });
 
 test("a cold hit-only child selects its stored native link for resolve and read; a foreign link refuses", async () => {
-  const dir = await temp(); const writer = await run(openRecordingWriter(dir, identity, bounds));
+  const dir = await temp(); const writer = await run(openRecordingWriter(stateFixture(dir), identity, bounds));
   const takes: Taking[] = []; const consumer = { current: undefined as InputConsumption | undefined };
   const web = router({ kind: "live", captureStore: writer }, new DuctsReadings(), { reads: 0 },
     (taking) => Effect.sync(() => { takes.push(taking); }), consumer);
@@ -450,7 +452,7 @@ test("a cold hit-only child selects its stored native link for resolve and read;
   const validate = await run(reader.readSets.get(stored.children[1]!.readSetId));
   const foreign = takes.find((taking) => taking.input.kind !== "native")!;
   const forged = { ...validate, id: crypto.randomUUID(), takingLinks: { native: foreign.id } };
-  const again = await run(openRecordingWriter(dir, identity, bounds));
+  const again = await run(openRecordingWriter(stateFixture(dir), identity, bounds));
   await run(again.readSets.keep(forged));
   const forgedReader = await run(openRecordingReader(dir, identity, bounds));
   const forgedLane = { kind: "recording", recordingStore: forgedReader, at: null } as const;

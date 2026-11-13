@@ -1,13 +1,12 @@
+import { stateFixture } from "../../../tests/isolated-home/storage.ts";
+import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import {
   access,
   appendFile,
-  mkdir,
-  mkdtemp,
-  readFile,
+  mkdir, readFile,
   rename,
   rm,
-  writeFile,
-} from "node:fs/promises";
+  writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runInNewContext } from "node:vm";
@@ -50,10 +49,7 @@ async function pagesRoot(live?: PageLive) {
   await mkdir(join(root, "todo", ".state"), { recursive: true });
   await writeFile(join(root, "todo", ".state", "secret.txt"), "private");
   await writeFile(join(root, "loose.html"), "<p>not a page: a file, not a folder</p>");
-  const handle = createPagesHandler(root, pods, live, undefined, {
-    root: state,
-    notices: join(world, "state", "stored-notices.jsonl"),
-  });
+  const handle = createPagesHandler(root, pods, live, undefined, stateFixture(state));
   const fetch = (path: string, init?: RequestInit) =>
     handle(new Request(`http://host${path}`, init));
   return { root, pods, state, fetch, handle };

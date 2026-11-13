@@ -1,4 +1,7 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { stateFixture } from "../../../tests/isolated-home/storage.ts";
+import { journalFixture } from "./storage.ts";
+import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
+import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Context, Deferred, Effect, Exit, Fiber, Layer, Scope } from "effect";
@@ -22,7 +25,7 @@ async function fixture(readOwnership?: ReadOwnership, failAfter = false) {
   const dir = await mkdtemp(join(tmpdir(), "pe-attempt-"));
   const host = Scope.makeUnsafe();
   const journal = Context.get(
-    await settle(Layer.buildWithScope(ActionJournalService.live(null, dir), host)),
+    await settle(Layer.buildWithScope(ActionJournalService.live(null, stateFixture(dir)), host)),
     ActionJournalService,
   );
   const native = Deferred.makeUnsafe<unknown, StepFailure>();
@@ -83,9 +86,9 @@ async function fixture(readOwnership?: ReadOwnership, failAfter = false) {
     submit,
     answer: (value: Effect.Effect<unknown, StepFailure>) => Deferred.doneUnsafe(native, value),
     closeHost: () => settle(Scope.close(host, Exit.void)),
-    reopen: () => new ActionJournal(join(dir, "partition-operations.json"), Date.now),
+    reopen: () => new ActionJournal(journalFixture(join(dir, "partition-operations.json")), Date.now),
     /** Receipt revisions the host log holds, as JSON text. */
-    logged: () => new HostLog(join(dir, "log"), Date.now).read(0, (entry) => entry.event.kind === "receipt").entries.map((entry) => JSON.stringify(entry.event)),
+    logged: () => new HostLog(stateFixture(join(dir, "log")), Date.now).read(0, (entry) => entry.event.kind === "receipt").entries.map((entry) => JSON.stringify(entry.event)),
     async dispose() {
       // A failed assertion leaves the step held; release it so the scope's join can finish.
       Deferred.doneUnsafe(native, Effect.succeed(null));
@@ -155,8 +158,15 @@ test.each([
   { touched: { kind: "none" }, state: "failed" },
   { touched: { kind: "rolledBack" }, state: "failed" },
   { touched: { kind: "restored", views: [] }, state: "failed" },
-  { touched: { kind: "wrote", transactions: [], added: 0, modified: 1, deleted: 0 }, state: "incomplete" },
-  { touched: { kind: "restoreFailed", views: [{ view: { documentKey: "doc", uniqueId: "view", id: 1 }, left: ["crop"] }] }, state: "incomplete" },
+  { touched: { kind: "wrote", transactions: [], added: 0, modified: 1, deleted: 0 },
+    state: "incomplete",
+  },
+  {
+    touched: {
+      kind: "restoreFailed", views: [{ view: { documentKey: "doc", uniqueId: "view", id: 1 }, left: ["crop"] }],
+    },
+    state: "incomplete",
+  },
   { touched: { kind: "unknown", reason: "lost-response" }, state: "incomplete" },
 ])("a later refusal uses native $touched.kind testimony: $state", async ({ touched, state }) => {
   const f = await fixture(undefined, true);

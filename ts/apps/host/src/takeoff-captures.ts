@@ -1,5 +1,10 @@
-import { readStored, writeAtomic } from "@pe/host-contracts/store";
-import { storedNoticesPath } from "./notice-feed.ts";
+import {
+  read as readStoredFile,
+  writeState,
+  stateKind,
+  type StateDirectory,
+  type StoredFile,
+} from "@pe/host-contracts/kinds";
 import { writeArtifact } from "./page-artifacts.ts";
 import { scheduleReadingSchema, type ScheduleReading } from "@pe/agent-contracts";
 
@@ -51,7 +56,7 @@ import {
   type TakeoffObservation,
   type TakeoffSnapshot,
 } from "@pe/agent-contracts";
-import { hostOwnership } from "./host-ownership.ts";
+import { hostOwnership, hostState } from "./host-ownership.ts";
 
 const keyOf = (target: DocumentRef) => JSON.stringify([target.session, target.openId]);
 const previousOf = (state: TakeoffObservation) =>
@@ -184,12 +189,20 @@ const progressManifestSchema = z.object({
  * Captures are derived files (ADR 0039 rule 1): one that does not decode is discarded with one
  * notice, and from then on reads as missing, like a capture this host never held.
  */
-function storedCapture<T>(path: string, schema: z.ZodType<T>): T | null {
-  const read = readStored(path, schema, {
-    class: "discard",
-    place: "Captures",
-    notices: storedNoticesPath(),
+const captureKind = <T>(schema: z.ZodType<T>) =>
+  stateKind({
+    schema,
+    place: (_parts: readonly string[]) => "Captures",
+    segments: (parts: readonly string[]) => parts,
   });
+const pointerKind = stateKind({
+  schema: z.string(),
+  parse: (text) => text,
+  place: (_parts: readonly string[]) => "Captures",
+  segments: (parts: readonly string[]) => parts,
+});
+function storedCapture<T>(file: StoredFile<T, "state">): T | null {
+  const read = readStoredFile(file);
   return read.kind === "ok" ? read.value : null;
 }
 const missingCapture = (path: string) =>
@@ -232,11 +245,14 @@ export class TakeoffCaptures {
    * is what the owning {@link CaptureStore} scope does on release.
    */
   constructor(
-    readonly directory: string,
+    readonly storage: StateDirectory,
     private readonly apsCachePath: string,
     /** The wall stamp on a completed reading; the store's layer supplies `Clock`'s. */
     private readonly now: () => string,
   ) {}
+  get directory() {
+    return this.storage.path;
+  }
 
   /**
    * Families publication is admitted or refused here: an admitted write is joined by `close`, and
@@ -308,9 +324,16 @@ export class TakeoffCaptures {
   }
 
   /** The typed route reads the same full observation as the explicit Families command. */
-  observeFamilies(work:WorkKey, listener:(value:OwnerValue<FamiliesObservation|null>)=>void) {
+  observeFamilies(
+    work: WorkKey, listener:(value:OwnerValue<FamiliesObservation|null>)=>void,
+  ) {
     const key=`families-reading:${workKey(work)}`;
-    return this.reads.observe(key,()=>this.displayedFamilies(work),notify=>this.subscribe(key,notify),listener);
+    return this.reads.observe(
+      key,
+      () => this.displayedFamilies(work),
+      (notify) => this.subscribe(key, notify),
+      listener,
+    );
   }
 
   /**
@@ -446,7 +469,11 @@ export class TakeoffCaptures {
     const reading = scheduleReadingSchema.parse({ ...value, id });
     const directory = join(this.directory, "schedules");
     await mkdir(directory, { recursive: true });
-    await writeArtifact(directory, join(directory, `${id}.json`), JSON.stringify(reading));
+    await writeArtifact(
+      directory,
+      captureKind(scheduleReadingSchema).in(this.storage, ["schedules", `${id}.json`]),
+      JSON.stringify(reading),
+    );
     return reading;
   }
   /**
@@ -489,14 +516,18 @@ export class TakeoffCaptures {
   private async storedSchedule(id: string): Promise<unknown> {
     const path = join(this.directory, "schedules", `${id}.json`);
     // JSON null is no reading, so `unknown` loses nothing by reading it as missing.
-    const stored = storedCapture(path, z.unknown());
+    const stored = storedCapture(
+      captureKind(z.unknown()).in(this.storage, ["schedules", `${id}.json`]),
+    );
     if (stored == null) throw missingCapture(path);
     return stored;
   }
   async saved(id: string): Promise<TakeoffCapture> {
     takeoffCaptureSchema.shape.id.parse(id);
     const path = join(this.directory, `${id}.json`);
-    const stored = storedCapture(path, takeoffCaptureSchema);
+    const stored = storedCapture(
+      captureKind(takeoffCaptureSchema).in(this.storage, [`${id}.json`]),
+    );
     if (!stored) throw missingCapture(path);
     return stored;
   }
@@ -538,7 +569,11 @@ export class TakeoffCaptures {
     const directory = join(this.directory, "family");
     await mkdir(directory, { recursive: true });
     await current?.();
-    await writeArtifact(directory, join(directory, `${id}.json`), JSON.stringify(capture));
+    await writeArtifact(
+      directory,
+      captureKind(familyCaptureSchema).in(this.storage, ["family", `${id}.json`]),
+      JSON.stringify(capture),
+    );
     // Published immutable bytes may already have another consumer; cancellation never deletes them.
     await current?.();
     this.notify(`family:${canonicalRouteInput(value.key)}`);
@@ -548,7 +583,9 @@ export class TakeoffCaptures {
     familyCaptureSchema.shape.id.parse(id);
     signal?.throwIfAborted();
     const path = join(this.directory, "family", `${id}.json`);
-    const stored = storedCapture(path, familyCaptureSchema);
+    const stored = storedCapture(
+      captureKind(familyCaptureSchema).in(this.storage, ["family", `${id}.json`]),
+    );
     if (!stored) throw missingCapture(path);
     return stored;
   }
@@ -596,7 +633,6 @@ export class TakeoffCaptures {
     const directory = join(this.directory, "families");
     const save = async () => {
       await mkdir(directory, { recursive: true });
-      const snapshot = join(directory, `${id}.json`);
       const pointer = join(directory, `${key}.latest`);
       if (expectedLatestId) {
         const latestId = await readFile(pointer, "utf8").catch((error: NodeJS.ErrnoException) => {
@@ -606,8 +642,12 @@ export class TakeoffCaptures {
         if (latestId !== expectedLatestId)
           throw Error("A newer Families reading replaced the readback basis");
       }
-      await writeArtifact(directory, snapshot, JSON.stringify(observation));
-      writeAtomic(pointer, id);
+      await writeArtifact(
+        directory,
+        captureKind(familiesObservationSchema).in(this.storage, ["families", `${id}.json`]),
+        JSON.stringify(observation),
+      );
+      writeState(pointerKind.in(this.storage, ["families", `${key}.latest`]), id);
       await this.displayPointer(value.work, id);
     };
     const pending = (this.familiesSaves.get(key) ?? Promise.resolve())
@@ -718,7 +758,7 @@ export class TakeoffCaptures {
 
   private async displayPointer(work: WorkKey, id: string) {
     const key = createHash("sha256").update(workKey(work)).digest("hex");
-    writeAtomic(join(this.directory, "families", `${key}.display`), id);
+    writeState(pointerKind.in(this.storage, ["families", `${key}.display`]), id);
     this.notify(`families-reading:${workKey(work)}`);
   }
 
@@ -732,14 +772,16 @@ export class TakeoffCaptures {
       (record) => record.id === id,
       "Families observation ID does not match its file",
     );
-    const whole = storedCapture(path, schema);
+    const whole = storedCapture(captureKind(schema).in(this.storage, ["families", `${id}.json`]));
     if (whole) return { record: whole as FamiliesObservation, path, bytes: await readFile(path) };
     const manifest = await this.progressManifest(id);
     if (!manifest) throw missingCapture(path);
     path = join(this.directory, "families", "progress", "artifacts", `${id}.json`);
     const families = manifest.records.map((hash) => {
       const record = join(this.directory, "families", "records", `${hash}.json`);
-      const stored = storedCapture(record, z.unknown());
+      const stored = storedCapture(
+        captureKind(z.unknown()).in(this.storage, ["families", "records", `${hash}.json`]),
+      );
       if (stored == null) throw missingCapture(record);
       return stored;
     });
@@ -754,8 +796,7 @@ export class TakeoffCaptures {
   private async progressManifest(id: string): Promise<ProgressManifest | null> {
     familyObservationId(id);
     const manifest = storedCapture(
-      join(this.directory, "families", "progress", `${id}.json`),
-      progressManifestSchema,
+      captureKind(progressManifestSchema).in(this.storage, ["families", "progress", `${id}.json`]),
     );
     if (!manifest) return null;
     const progress = manifest.observation.progress;
@@ -790,7 +831,11 @@ export class TakeoffCaptures {
       value.result.families.map(async (record) => {
         const text = JSON.stringify(record);
         const hash = createHash("sha256").update(text).digest("hex");
-        await writeArtifact(folder, join(folder, "records", `${hash}.json`), text);
+        await writeArtifact(
+          folder,
+          captureKind(z.unknown()).in(this.storage, ["families", "records", `${hash}.json`]),
+          text,
+        );
         return hash;
       }),
     );
@@ -801,15 +846,18 @@ export class TakeoffCaptures {
       .digest("hex");
     const observation = { ...metadata, id, completedAt };
     await writeArtifact(
-      folder, join(folder, "progress", `${id}.json`),
+      folder,
+      captureKind(progressManifestSchema).in(this.storage, ["families", "progress", `${id}.json`]),
       JSON.stringify({ observation, records }),
     );
-    const pointer = join(
-      folder,
-      "progress",
+    writeState(
+      pointerKind.in(this.storage, [
+        "families",
+        "progress",
       `${this.progressKey(value.document, value.filter)}.latest`,
+      ]),
+      id,
     );
-    writeAtomic(pointer, id);
     await this.displayPointer(value.work, id);
     this.notify(`families-matrix:${keyOf(value.document)}`);
     return { ...observation, result: value.result };
@@ -959,7 +1007,11 @@ export class TakeoffCaptures {
     const capture = takeoffCaptureSchema.parse({ id, ...value });
     await mkdir(this.directory, { recursive: true });
     await current?.();
-    await writeArtifact(this.directory, join(this.directory, `${id}.json`), JSON.stringify(capture));
+    await writeArtifact(
+      this.directory,
+      captureKind(takeoffCaptureSchema).in(this.storage, [`${id}.json`]),
+      JSON.stringify(capture),
+    );
     // Cancellation withdraws the answer, never immutable bytes a peer may already reference.
     await current?.();
     return capture;
@@ -988,7 +1040,11 @@ export class CaptureStore extends Context.Service<CaptureStore, TakeoffCaptures>
   "pe/CaptureStore",
 ) {
   static readonly layer = (
-    directory: string = takeoffCapturesDirectory(),
+    directory: StateDirectory = hostState().directory(
+      "host",
+      hostOwnership.serviceName,
+      "takeoff-captures",
+    ),
     apsCachePath: string = apsParameterCachePath(),
   ) =>
     Layer.effect(

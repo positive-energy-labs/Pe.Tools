@@ -1,3 +1,8 @@
+import { stateMachine } from "../../../tests/isolated-home/storage.ts";
+import { notices as storedNotices } from "@pe/host-contracts/kinds";
+import { dirname as storedParent } from "node:path";
+import { stateTree } from "@pe/host-contracts/service-identity";
+import { mkdtempSync } from "../../../tests/isolated-home/storage.ts";
 /**
  * Slice 6 falsifier, one notice feed (ADR 0035 rule 7), host side: the `notices` Reading's first
  * frame is a `NoticeFeed` snapshot with every group present, built from the host's own stores.
@@ -6,17 +11,13 @@ import { expect, test } from "vite-plus/test";
 import { NOTICE_GROUPS, noticeFeedSchema, type ReadingFrame } from "@pe/agent-contracts";
 import { createNoticeFeed } from "../src/notice-feed.ts";
 import {
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
+  mkdirSync, readFileSync,
   readdirSync,
   rmSync,
   statSync,
-  writeFileSync,
-} from "node:fs";
+  writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { readStoredNotices, storedNoticesFile } from "@pe/host-contracts/store";
 import { noteStartupHomes, noticeRows } from "../src/notice-feed.ts";
 
 test("start census notices earlier Work once per folder without changing files", () => {
@@ -29,8 +30,8 @@ test("start census notices earlier Work once per folder without changing files",
   writeFileSync(file, bytes);
   const before = statSync(file, { bigint: true });
   try {
-    noteStartupHomes(user, { root: null, looked: [] }, notices);
-    const stored = readStoredNotices(notices);
+    noteStartupHomes(user, { root: null, looked: [] }, stateMachine(notices));
+    const stored = storedNotices(stateMachine(storedParent(notices)));
     expect(stored).toHaveLength(1);
     expect(stored[0]).toMatchObject({ class: "keep", path: work });
     const text = `Work saved by an earlier version is at ${work}. This version no longer reads it. Nothing was changed or deleted. You may delete the folder.`;
@@ -42,16 +43,16 @@ test("start census notices earlier Work once per folder without changing files",
     expect(rows).toHaveLength(1);
     expect(rows[0]!.says).toBe(text);
     const feedBytes = readFileSync(notices);
-    noteStartupHomes(user, { root: null, looked: [] }, notices);
-    expect(readStoredNotices(notices)).toHaveLength(1);
+    noteStartupHomes(user, { root: null, looked: [] }, stateMachine(notices));
+    expect(storedNotices(stateMachine(storedParent(notices)))).toHaveLength(1);
     expect(readFileSync(notices)).toEqual(feedBytes);
     expect(readdirSync(work)).toEqual(["a.json"]);
     expect(readFileSync(file)).toEqual(bytes);
     expect(statSync(file, { bigint: true }).mtimeNs).toBe(before.mtimeNs);
     // A different file in the same folder is still the same finding, not a new digest.
     writeFileSync(join(work, "b.txt"), "also kept");
-    noteStartupHomes(user, { root: null, looked: [] }, notices);
-    expect(readStoredNotices(notices)).toHaveLength(1);
+    noteStartupHomes(user, { root: null, looked: [] }, stateMachine(notices));
+    expect(storedNotices(stateMachine(storedParent(notices)))).toHaveLength(1);
   } finally {
     rmSync(user, { recursive: true, force: true });
   }
@@ -61,14 +62,14 @@ test("start census is silent for a missing or empty earlier Work folder", () => 
   const user = mkdtempSync(join(tmpdir(), "pe-no-earlier-work-"));
   const notices = join(user, "state", "stored-notices.jsonl");
   try {
-    noteStartupHomes(user, { root: null, looked: [] }, notices);
-    expect(readStoredNotices(notices)).toEqual([]);
+    noteStartupHomes(user, { root: null, looked: [] }, stateMachine(notices));
+    expect(storedNotices(stateMachine(storedParent(notices)))).toEqual([]);
     mkdirSync(join(user, "Work", "empty"), { recursive: true });
-    noteStartupHomes(user, { root: null, looked: [] }, notices);
-    expect(readStoredNotices(notices)).toEqual([]);
+    noteStartupHomes(user, { root: null, looked: [] }, stateMachine(notices));
+    expect(storedNotices(stateMachine(storedParent(notices)))).toEqual([]);
     writeFileSync(join(user, "Work", "empty", "nested.txt"), "kept");
-    noteStartupHomes(user, { root: null, looked: [] }, notices);
-    expect(readStoredNotices(notices)).toHaveLength(1);
+    noteStartupHomes(user, { root: null, looked: [] }, stateMachine(notices));
+    expect(storedNotices(stateMachine(storedParent(notices)))).toHaveLength(1);
     expect(readFileSync(join(user, "Work", "empty", "nested.txt"), "utf8")).toBe("kept");
   } finally {
     rmSync(user, { recursive: true, force: true });
@@ -99,10 +100,10 @@ test("red (slice 6 seam c): the notices Reading serves one grouped feed snapshot
 
 // Mutant, run red once (2026-11-11): `noteNoFirmHome` returns before its `noteStored` call.
 test("no firm home posts one notice that names where the host looked, and it draws as one row", async () => {
-  const { mkdtempSync, rmSync } = await import("node:fs");
+  const { mkdtempSync } = await import("../../../tests/isolated-home/storage.ts");
+  const { rmSync } = await import("node:fs");
   const { tmpdir } = await import("node:os");
   const { join } = await import("node:path");
-  const { readStoredNotices } = await import("@pe/host-contracts/store");
   const { noteNoFirmHome, noticeRows } = await import("../src/notice-feed.ts");
   const dir = mkdtempSync(join(tmpdir(), "pe-firm-notice-"));
   const notices = join(dir, "stored-notices.jsonl");
@@ -110,13 +111,13 @@ test("no firm home posts one notice that names where the host looked, and it dra
   const looked = [join("G:", "Shared drives", "*", firm), join("G:", firm)];
   try {
     // A bound firm home, and a probe that looked nowhere, say nothing.
-    noteNoFirmHome({ root: join("G:", firm), looked }, notices);
-    noteNoFirmHome({ root: null, looked: [] }, notices);
-    expect(readStoredNotices(notices)).toEqual([]);
+    noteNoFirmHome({ root: join("G:", firm), looked }, stateMachine(notices));
+    noteNoFirmHome({ root: null, looked: [] }, stateMachine(notices));
+    expect(storedNotices(stateMachine(storedParent(notices)))).toEqual([]);
     // Unbound: one notice, however often the host starts.
-    noteNoFirmHome({ root: null, looked }, notices);
-    noteNoFirmHome({ root: null, looked }, notices);
-    const stored = readStoredNotices(notices);
+    noteNoFirmHome({ root: null, looked }, stateMachine(notices));
+    noteNoFirmHome({ root: null, looked }, stateMachine(notices));
+    const stored = storedNotices(stateMachine(storedParent(notices)));
     expect(stored).toHaveLength(1);
     const rows = noticeRows(
       { threads: [], receipts: [], works: [], machine: null, stored, held: [] },
@@ -127,8 +128,8 @@ test("no firm home posts one notice that names where the host looked, and it dra
     for (const place of looked) expect(rows[0]!.says).toContain(place);
     // Two markers are a different finding: it posts once more and names both.
     const refused = [join("P:", firm), join("G:", firm)];
-    noteNoFirmHome({ root: null, looked, refused }, notices);
-    const both = readStoredNotices(notices);
+    noteNoFirmHome({ root: null, looked, refused }, stateMachine(notices));
+    const both = storedNotices(stateMachine(storedParent(notices)));
     expect(both).toHaveLength(2);
     for (const place of refused) expect(both[1]!.reason).toContain(place);
   } finally {
@@ -148,7 +149,7 @@ test("outbox and host writers post to the notice feed's contract path", async ()
   const file = join(runtimeRoot(), "state", resolveLaneAndRoot().serviceName, "invocation-outbox",
     `${createHash("sha256").update(slot).digest("hex")}.json`);
   expect(runtimeRoot()).toBe(hostOwnership.rootPath);
-  expect(storedNoticesPath()).toBe(storedNoticesFile(runtimeRoot()));
+  expect(storedNoticesPath()).toBe(stateTree(runtimeRoot()).notices);
   mkdirSync(dirname(file), { recursive: true });
   writeFileSync(file, "{torn");
   const looked = [slot];
@@ -156,7 +157,7 @@ test("outbox and host writers post to the notice feed's contract path", async ()
     expect(() => readOutbox(slot)).toThrow(file);
     expect(() => writeOutbox(slot, { id: slot })).toThrow(file);
     noteNoFirmHome({ root: null, looked });
-    const notices = readStoredNotices(storedNoticesPath());
+    const notices = storedNotices(stateMachine(storedParent(storedNoticesPath())));
     expect(notices.filter(notice => notice.path === file)).toMatchObject([
       { class: "keep", place: "Pending action" },
     ]);

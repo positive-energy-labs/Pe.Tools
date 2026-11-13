@@ -11,9 +11,14 @@ import { validateNativeInput } from "./native-input.ts";
 import type { ReadOwner } from "./reads/read-ownership.ts";
 import { bindActionDispatch, type DispatchRefusal } from "./action-dispatch.ts";
 import { appendFile, mkdir, readdir, readFile } from "node:fs/promises";
-import { discardStored, readStored, writeAtomic } from "@pe/host-contracts/store";
-import { storedBlobsPath, storedNoticesPath } from "./notice-feed.ts";
-import { dirname, join, win32 } from "node:path";
+import { stateDirectory } from "@pe/host-contracts/service-identity";
+import { stateKind, read as readStoredFile, setAside, writeState, type StoredFile } from "@pe/host-contracts/kinds";
+export const journalKind = stateKind({ schema: z.unknown(), place: (_name: string) => "Action journal", segments: (name: string) => [name] });
+const outputKind = stateKind({
+  schema: z.unknown(), place: (_id: string, ..._parts: string[]) => "Action outputs",
+  segments: (id: string, ...parts: string[]) => ["action-outputs", createHash("sha256").update(id).digest("hex"), ...parts],
+});
+import { dirname, join, relative, win32 } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import { holdSendCommand, SendHeld } from "./guards.ts";
 import { OwnerReads, type OwnerValue } from "@pe/runtime";
@@ -534,7 +539,7 @@ export class ActionJournal implements ReceiptReader {
   private readonly listeners = new Set<() => void>();
   private readonly reads = new OwnerReads();
   constructor(
-    private readonly path: string,
+    private readonly file: StoredFile<unknown, "state">,
     /** The host runtime's clock: every event time this journal produces reads it. */
     private readonly now: () => number,
     private readonly stamp: () => ReceiptStamp | null = () => null,
@@ -542,6 +547,8 @@ export class ActionJournal implements ReceiptReader {
     /** Absent only on a read-side journal (a restart reader); such a journal admits nothing. */
     private readonly owners?: Owners,
   ) {}
+  private get path() { return this.file.path; }
+  private get storage() { return stateDirectory(this.file.machine, ...relative(this.file.machine.state, dirname(this.path)).split(/[\\\\/]/).filter(Boolean)); }
   /** Bound once when the host/demo/test runtime acquires its exact bridge and Work owner. */
   bindCommands(environment: CommandEnvironment): void {
     if (this.environment) throw Error("This journal already has its command environment");
@@ -824,11 +831,7 @@ export class ActionJournal implements ReceiptReader {
       if (entry.isFile() && entry.name.endsWith(".json")) {
         const path = join(entry.parentPath, entry.name);
         // Derived (ADR 0039): an export that does not decode is discarded with a notice and left out.
-        const read = readStored(path, z.unknown(), {
-          class: "discard",
-          place: "Action outputs",
-          notices: storedNoticesPath(),
-        });
+        const read = readStoredFile(outputKind.in(this.storage, id, ...path.slice(home.length + 1).split(/[\\\\/]/)));
         if (read.kind === "ok") files[path.slice(home.length + 1).replaceAll("\\", "/")] = read.value;
       }
     return { id, home, files };
@@ -842,7 +845,7 @@ export class ActionJournal implements ReceiptReader {
     );
   }
   private async export(id: string, name: string, value: unknown) {
-    writeAtomic(join(this.home(id), name), JSON.stringify(value, null, 2));
+    writeState(outputKind.in(this.storage, id, ...name.split(/[\\\\/]/)), JSON.stringify(value, null, 2));
   }
   private async waitForTurn(id: string, retirementOnly = false) {
     for (;;) {
@@ -2105,17 +2108,7 @@ export class ActionJournal implements ReceiptReader {
     // itself, is deleted with one notice and the host runs on an empty journal. Before this, a
     // throw here rejected every later journal write for the life of the host.
     const discard = (reason: string) => {
-      discardStored(
-        this.path,
-        {
-          class: "discard",
-          place: "Action journal",
-          notices: storedNoticesPath(),
-          // The bytes rest in the blob store first, under the hash the notice names.
-          blobRoot: storedBlobsPath(),
-        },
-        reason,
-      );
+      setAside(this.file, reason);
       for (const held of [
         this.rows,
         this.receipts,
@@ -2134,7 +2127,7 @@ export class ActionJournal implements ReceiptReader {
       this.discarded = new Date(this.now()).toISOString();
       // Written now, not at the next commit: a host that restarts before any write still knows.
       try {
-        writeAtomic(this.path, this.headerLine());
+        writeState(this.file, this.headerLine());
         this.header = true;
       } catch (error) {
         // The flag stays in memory, and the next commit writes the header that carries it.
@@ -2327,8 +2320,8 @@ export class ActionJournal implements ReceiptReader {
       ...[...this.mappings].map((mapping) => ({ mapping })),
       ...[...this.receipts.values()].map((receipt) => ({ receipt })),
     ];
-    writeAtomic(
-      this.path,
+    writeState(
+      this.file,
       `${this.headerLine()}${lines.map((line) => `${JSON.stringify(line)}\n`).join("")}`,
     );
     this.header = true;

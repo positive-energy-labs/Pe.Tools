@@ -1,46 +1,33 @@
-/**
- * Kinds (routes CONTRACTS K-A2): the door to every stored file. A kind is a declared class of
- * stored file, and it mints the file's path: `Kind.in(root, ...args)` is the only way to a
- * `StoredFile`, and every function here takes a `StoredFile`, never a string. So the place a file
- * sits and the rule it is read under cannot disagree, and what preserves its bytes is the kind,
- * never a caller's argument. The bytes move through `store.ts`, which stays the one file that
- * writes (the fs ratchet's named owner).
- */
-import { readFileSync } from "node:fs";
+/** A kind binds location, decode and preservation. Only Kind.in mints a StoredFile. */
 import { join } from "node:path";
 import type { z } from "zod";
 import { productPathNames } from "./contracts/product.ts";
 import type { Home } from "./product-paths.ts";
-import {
-  appendStoredLine,
-  discardDerived,
-  discardStored,
-  noteStored,
-  readDerived,
-  readStored,
-  readStoredLines,
-  readStoredNotices,
-  restBlob,
+export {
+  derivedKey,
   sha256Hex,
-  writeAtomic,
-  writeDerived,
-  writeHomeFile,
-  type DerivedStore,
+  read,
+  writeHome,
+  writeState,
+  setAside,
+  readLines,
+  appendLine,
+  readDerivedIn,
+  writeDerivedIn,
+  refuseDerived,
+  notices,
+  note,
+  rest,
+  rested,
   type HomeWrite,
   type StoredNotice,
-  type StoredPolicy,
-  type StoredRead,
 } from "./store.ts";
-export { derivedKey, sha256Hex, type HomeWrite, type StoredNotice } from "./store.ts";
 
-declare const where: unique symbol;
-/** A path inside a content home. Only a home kind mints one. */
-export type HomePath = string & { readonly [where]: "home" };
-/** A path under this machine's `state` folder. Only `stateTree()` and a state kind mint one. */
-export type StatePath = string & { readonly [where]: "state" };
+import { mintHomePath, mintStatePath, type HomePath, type StatePath } from "./store-paths.ts";
+export type { HomePath, StatePath } from "./store-paths.ts";
 /** `state-kept` is machine state that holds a person's decision: read under the keep rule. */
 export type At = "home" | "state" | "state-kept";
-type PathAt<A extends At> = A extends "home" ? HomePath : StatePath;
+type PathAt<A extends At> = { home: HomePath; state: StatePath; "state-kept": StatePath }[A];
 
 /**
  * This machine's state root, as the kernel needs it. Minted only by `stateTree()` in
@@ -55,7 +42,13 @@ export type StateRoot = {
 };
 /** A proven home, bound to the machine whose blob store keeps what a write into it replaces (ADR 0037 rule 7). Minted by `stateTree(root).home(home)`. */
 export type HomeRoot = Home & { readonly machine: StateRoot };
-type RootAt<A extends At> = A extends "home" ? HomeRoot : StateRoot;
+/** A named folder of machine state, minted by stateTree().directory(). */
+export type StateDirectory = { readonly path: StatePath; readonly machine: StateRoot };
+type RootAt<A extends At> = {
+  home: HomeRoot;
+  state: StateRoot | StateDirectory;
+  "state-kept": StateRoot | StateDirectory;
+}[A];
 
 type KindSpec<T, Args extends readonly unknown[]> = {
   /** Words a person knows: "Work for /ducts". */
@@ -89,15 +82,18 @@ export type StoredFile<T, A extends At> = {
   readonly machine: StateRoot;
 };
 
-const under = <P extends string>(root: string, segments: readonly string[]): P => {
+const under = (root: string, segments: readonly string[]): string => {
   for (const segment of segments)
     if (!segment || segment === "." || segment === ".." || /[\\/]/.test(segment))
       throw Error(`'${segment}' is not one path segment, so no stored path is made from it.`);
-  return join(root, ...segments) as P;
+  return join(root, ...segments);
 };
 
-function kind<A extends At>(at: A) {
-  return <T, Args extends readonly unknown[] = []>(spec: KindSpec<T, Args>): Kind<T, A, Args> => {
+function kind<T, A extends At, Args extends readonly unknown[]>(
+  at: A,
+  spec: KindSpec<T, Args>,
+  bind: (root: RootAt<A>, segments: readonly string[]) => { path: PathAt<A>; machine: StateRoot },
+): Kind<T, A, Args> {
     const made: Kind<T, A, Args> = {
       at,
       schema: spec.schema,
@@ -105,20 +101,30 @@ function kind<A extends At>(at: A) {
       quiet: spec.quiet,
       in: (root, ...args) => ({
         kind: made,
-        path: under<PathAt<A>>("machine" in root ? root.root : root.state, spec.segments(...args)),
+      ...bind(root, spec.segments(...args)),
         place: spec.place(...args),
-        machine: "machine" in root ? root.machine : root,
-      }),
-    };
-    return made;
+    }),
   };
+  return made;
 }
-/** An authored file in a content home: never removed by a reader, written only by `writeHome`. */
-export const homeKind = kind("home");
-/** Machine state: a file that does not decode is set aside, its bytes kept, with one notice. */
-export const stateKind = kind("state");
-/** Machine state that is a person's decision (route trust, pod choices): refused and kept. */
-export const keptStateKind = kind("state-kept");
+/** Authored bytes, never removed by a reader. */
+export const homeKind = <T, Args extends readonly unknown[] = []>(spec: KindSpec<T, Args>) =>
+  kind("home", spec, (root, segments) => ({
+    path: mintHomePath(under(root.root, segments)),
+    machine: root.machine,
+  }));
+/** Machine state, set aside only after its bytes are kept. */
+export const stateKind = <T, Args extends readonly unknown[] = []>(spec: KindSpec<T, Args>) =>
+  kind("state", spec, (root, segments) => ({
+    path: mintStatePath(under("path" in root ? root.path : root.state, segments)),
+        machine: "machine" in root ? root.machine : root,
+      }));
+/** A person's decision in machine state, refused and kept. */
+export const keptStateKind = <T, Args extends readonly unknown[] = []>(spec: KindSpec<T, Args>) =>
+  kind("state-kept", spec, (root, segments) => ({
+    path: mintStatePath(under("path" in root ? root.path : root.state, segments)),
+        machine: "machine" in root ? root.machine : root,
+  }));
 
 export type Stored<T> =
   | { kind: "ok"; value: T; sha256: string }
@@ -128,40 +134,6 @@ export type Stored<T> =
   /** State only, after the copy was verified. `blob` holds the exact bytes. */
   | { kind: "set-aside"; reason: string; blob: StatePath };
 
-const policyOf = (file: StoredFile<unknown, At>): StoredPolicy => {
-  const { parse, quiet } = file.kind;
-  return file.kind.at === "state"
-    ? { class: "discard", place: file.place, parse, notices: file.machine.notices, blobRoot: file.machine.blobs }
-    : { class: "keep", place: file.place, parse, notices: quiet ? undefined : file.machine.notices };
-};
-const settled = <T>(read: StoredRead<T>): Stored<T> =>
-  read.kind === "discarded"
-    ? { kind: "set-aside", reason: read.reason, blob: read.blob as StatePath }
-    : read;
-
-/** Decode a stored file at the trust boundary, under its kind's rule. Never throws on a bad file. */
-export function read<T>(file: StoredFile<T, "state">): Stored<T>;
-export function read<T>(file: StoredFile<T, "home" | "state-kept">): Exclude<Stored<T>, { kind: "set-aside" }>;
-export function read<T>(file: StoredFile<T, At>): Stored<T> {
-  return settled(readStored(file.path, file.kind.schema, policyOf(file)));
-}
-
-/** The one way to write into a home: a compare-and-swap on the hash the writer read (`null`: the file must not exist). */
-export function writeHome<T>(file: StoredFile<T, "home">, bytes: Uint8Array | string, expectSha256: string | null): HomeWrite {
-  return writeHomeFile(file.path, bytes, { expectSha256, blobRoot: file.machine.blobs });
-}
-
-/** Write machine state atomically. Refused while kept bytes at the path still have no copy. */
-export function writeState<T>(file: StoredFile<T, "state" | "state-kept">, bytes: Uint8Array | string): void {
-  writeAtomic(file.path, bytes);
-}
-
-/** An owner refuses a state file it decoded (a stale identity, another epoch): set aside, one notice. */
-export function setAside<T>(file: StoredFile<T, "state">, reason: string): Exclude<Stored<T>, { kind: "ok" }> {
-  const policy = policyOf(file) as Extract<StoredPolicy, { class: "discard" }>;
-  return settled<T>(discardStored(file.path, policy, reason)) as Exclude<Stored<T>, { kind: "ok" }>;
-}
-
 /** An append-only log in machine state, decoded one line at a time. Minted only by `LogKind.in`. */
 export type StoredLog<T> = {
   readonly schema: z.ZodType<T>;
@@ -170,70 +142,40 @@ export type StoredLog<T> = {
   readonly machine: StateRoot;
 };
 export type LogKind<T, Args extends readonly unknown[]> = {
-  in(root: StateRoot, ...args: Args): StoredLog<T>;
+  in(root: StateRoot | StateDirectory, ...args: Args): StoredLog<T>;
 };
 export const stateLog = <T, Args extends readonly unknown[] = []>(
   spec: Pick<KindSpec<T, Args>, "place" | "schema" | "segments">,
 ): LogKind<T, Args> => ({
   in: (root, ...args) => ({
     schema: spec.schema,
-    path: under<StatePath>(root.state, spec.segments(...args)),
+    path: mintStatePath(under("path" in root ? root.path : root.state, spec.segments(...args))),
     place: spec.place(...args),
-    machine: root,
+        machine: "machine" in root ? root.machine : root,
   }),
 });
-/** Every line that decodes. A line that does not is left out with one notice and stays in the file. */
-export const readLines = <T>(log: StoredLog<T>) =>
-  readStoredLines(log.path, log.schema, { place: log.place, notices: log.machine.notices });
-export const appendLine = <T>(log: StoredLog<T>, value: T): void =>
-  appendStoredLine(log.path, JSON.stringify(value));
 
 /** A derived folder is the one place that is a home for one caller and state for another. */
-export type DerivedDir = { readonly path: HomePath | StatePath; readonly machine: StateRoot };
-export type DerivedFile = { readonly path: HomePath | StatePath; readonly bytes: Uint8Array };
-/** The `Derived` folder of a project home, or this machine's `state\Derived`. */
-export const derivedIn = (root: HomeRoot | StateRoot): DerivedDir =>
-  "machine" in root
-    ? { path: under<HomePath>(root.root, [productPathNames.derivedDirectoryName]), machine: root.machine }
-    : { path: root.derived, machine: root };
-const derivedStoreOf = (dir: DerivedDir): DerivedStore => ({
-  dir: dir.path,
-  notices: dir.machine.notices,
-  blobRoot: dir.machine.blobs,
-});
-/** The file a key names in a derived folder, proven by its own hash; see `readDerived`. */
-export const readDerivedIn = (dir: DerivedDir, key: string): DerivedFile | null =>
-  readDerived(derivedStoreOf(dir), key) as DerivedFile | null;
-/** Write once into a derived folder; see `writeDerived`. */
-export const writeDerivedIn = (dir: DerivedDir, key: string, bytes: Uint8Array | string): DerivedFile => ({
-  path: writeDerived(derivedStoreOf(dir), key, bytes) as HomePath | StatePath,
-  bytes: Buffer.from(bytes),
-});
-/** An owner refuses a derived file it decoded. In a home it is kept with a notice; in state it is set aside. */
-export const refuseDerived = (dir: DerivedDir, file: DerivedFile, reason: string): void => {
-  const store = derivedStoreOf(dir);
-  if (dir.path === dir.machine.derived) return discardDerived(store, file.path, reason);
-  noteStored(store.notices, { class: "keep", place: "Derived file", path: file.path, sha256: sha256Hex(file.bytes), reason });
+export type DerivedDir<P extends HomePath | StatePath = HomePath | StatePath> = { readonly path: P; readonly machine: StateRoot;
+  readonly file: (name: string) => P;
 };
-
-/** The notices posted on this machine so far. */
-export const notices = (machine: StateRoot) => readStoredNotices(machine.notices);
-/** Post one notice for a refusal that is not one decoded file. Never throws. */
-export const note = (machine: StateRoot, notice: Omit<StoredNotice, "at">) =>
-  noteStored(machine.notices, notice);
-
-/** Rest bytes in this machine's blob store, proven by reading them back. The one blob writer. */
-export const rest = (machine: StateRoot, bytes: Uint8Array | string): { sha256: string; blob: StatePath } => {
-  const sha256 = sha256Hex(bytes);
-  return { sha256, blob: restBlob(machine.blobs, sha256, Buffer.from(bytes)) as StatePath };
+export type DerivedFile<P extends HomePath | StatePath = HomePath | StatePath> = { readonly path: P; readonly bytes: Buffer;
 };
-/** The bytes that rest under a hash, or null. Bytes that do not match their hash read as null. */
-export const rested = (machine: StateRoot, sha256: string): Buffer | null => {
-  if (!/^[0-9a-f]{64}$/.test(sha256)) return null;
-  try {
-    const bytes = readFileSync(join(machine.blobs, "sha256", sha256));
-    return sha256Hex(bytes) === sha256 ? bytes : null;
-  } catch {
-    return null;
-  }
-};
+const derivedDir = <P extends HomePath | StatePath>(
+  path: P,
+  machine: StateRoot,
+  mint: (path: string) => P,
+): DerivedDir<P> => ({ path, machine, file: (name) => mint(under(path, [name])) });
+/** The Derived folder of a project home, or this machine's state. */
+export function derivedIn(root: HomeRoot): DerivedDir<HomePath>;
+export function derivedIn(root: StateRoot): DerivedDir<StatePath>;
+export function derivedIn(root: HomeRoot | StateRoot): DerivedDir;
+export function derivedIn(root: HomeRoot | StateRoot): DerivedDir {
+  return "machine" in root
+    ? derivedDir(
+        mintHomePath(under(root.root, [productPathNames.derivedDirectoryName])),
+        root.machine,
+        mintHomePath,
+      )
+    : derivedDir(root.derived, root, mintStatePath);
+}

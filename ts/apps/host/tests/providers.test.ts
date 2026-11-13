@@ -1,10 +1,12 @@
+import { stateFixture } from "../../../tests/isolated-home/storage.ts";
+import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { registryService, harnessThreads, testSpawner } from "./effect-test.ts";
 import { asCaller, human } from "./callers.ts";
 import { HostLog } from "../src/host-log.ts";
 import { emptyThreadLifecycle } from "@pe/agent-contracts";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import { createServer, type Server } from "node:http";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { createProviders } from "../src/harness/providers.ts";
@@ -384,7 +386,7 @@ test("witness: a thread event and meta echoing a shared key are written redacted
   );
   await writeFile(join(threadsRoot, "thread", "events.jsonl"), "");
   const threads = await harnessThreads({
-    root: threadsRoot, log: new HostLog(join(threadsRoot, ".log"), Date.now), worldRoot: threadsRoot,
+    root: stateFixture(threadsRoot), log: new HostLog(stateFixture(join(threadsRoot, ".log")), Date.now), worldRoot: threadsRoot,
     mcpServer: () => ({ name: "unused", command: "unused", args: [], env: [] }), providers,
     runs: registryService(),
   });

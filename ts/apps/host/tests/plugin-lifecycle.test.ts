@@ -1,5 +1,9 @@
+import { stateFixture } from "../../../tests/isolated-home/storage.ts";
+import { stateMachine } from "../../../tests/isolated-home/storage.ts";
+import { dirname as storedParent } from "node:path";
+import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect } from "effect";
@@ -62,7 +66,7 @@ test("import into a running production-root lifecycle activates Pages and retain
   root = await mkdtemp(join(tmpdir(), "pe-plugin-running-import-"));
   vi.stubEnv("PE_TOOLS_PRODUCT_HOME", root);
   vi.stubEnv("LOCALAPPDATA", join(root, "machine"));
-  const content = createContributionContent({ worldRoot: root });
+  const content = createContributionContent({ worldRoot: stateFixture(root) });
   bindPackageLifecycle(content.lifecycle);
   await content.read();
   const files = new Map<string, Buffer>([
@@ -98,7 +102,7 @@ test("public disable removes Page, script, member, catalog and receipted skill; 
     await writeFile(join(pods, "sample", path), text);
   }
   const content = createContributionContent({
-    worldRoot: root,
+    worldRoot: stateFixture(root),
     packages: () => listPackages(pods),
   });
   bindPackageLifecycle(content.lifecycle);
@@ -164,7 +168,7 @@ test("Pod JavaScript is never imported and its package contribution still instal
   const { createPackageLifecycle } = await import("../src/package-lifecycle.ts");
   const lifecycle = createPackageLifecycle({
     packages: () => listPackages(pods),
-    decisionsPath: join(root, "plugins.json"),
+    machine: stateMachine(storedParent(join(root, "plugins.json"))),
   });
   bindPackageLifecycle(lifecycle);
   await lifecycle.ready;

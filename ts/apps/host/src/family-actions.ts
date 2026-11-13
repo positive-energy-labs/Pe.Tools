@@ -92,7 +92,7 @@ import {
   saveMember,
   writeMember,
   readMember,
-  runsFolder,
+  runsDirectory,
   writeRun,
   type PodContext,
 } from "./settings.ts";
@@ -109,10 +109,14 @@ const digest = (value: string) => createHash("sha256").update(value).digest("hex
  * for a supplied draft (homes freeze shape 7). Pure: no write, and no pod is copied anywhere. The
  * pod must exist; its home does not matter, because a run never lands in a home.
  */
-export const sourceRunOutput = async (pod: string | null | undefined, deps: PodDependencies, pods: PodContext = { podsRoot: deps.podsRoot }) => {
+export const sourceRunDirectory = async (pod: string | null | undefined, deps: PodDependencies, pods: PodContext = { podsRoot: deps.podsRoot },
+) => {
   if (pod) await runPods(deps, podFolder(pod, pods));
-  return runsFolder(pod, { podsRoot: deps.podsRoot });
+  return runsDirectory(pod, pods);
 };
+
+export const sourceRunOutput = async (...args: Parameters<typeof sourceRunDirectory>) =>
+  (await sourceRunDirectory(...args)).path;
 
 /** Pod I/O runs against the product Pods root unless an owner (the demo lane) supplies its own. */
 export type PodDependencies = {
@@ -969,7 +973,10 @@ export function familyExecutors(
       const run =
         target.kind === "document"
           ? await familiesApplyRun(
-              await sourceRunOutput(source.root.id, deps, await podContext(deps, bridge, target.ref)),
+              await sourceRunDirectory(
+                source.root.id,
+                deps, await podContext(deps, bridge, target.ref),
+              ),
               step,
               { ...prepared, process },
               target.ref.openId,
@@ -1157,7 +1164,9 @@ export function familyExecutors(
       effects: input.pod
         ? [
             ...paths.map((path) => ({ kind: "member" as const, pod: input.pod!, path })),
-            { kind: "directory" as const, path: await sourceRunOutput(input.pod, deps, await podsFor(ctx)) },
+            {
+              kind: "directory" as const, path: await sourceRunOutput(input.pod, deps, await podsFor(ctx)),
+            },
           ]
         : [],
       prepare: async () => {
@@ -1322,15 +1331,17 @@ export function familyExecutors(
         }),
       };
     },
-    run: (ctx, execution) => Effect.gen(function* () {
+    run: (ctx, execution) =>
+      Effect.gen(function* () {
       const prepared = execution.prepared;
       if (!ctx.admission.input.work) return prepared;
       yield* execution.publishWork(ctx.admission.input.work.key, "family", [
         { path: ["reading"], value: prepared.reading },
         { path: ["takenAt"], value: prepared.takenAt },
       ]);
-      return { envelope: yield* io(() => ctx.work.read(ctx.admission.input.work!.key, "family")) };
-    }),
+        return { envelope: yield* io(() => ctx.work.read(ctx.admission.input.work!.key, "family")),
+        };
+      }),
   });
   const settingsObserve = command(commands["settings.observe"], settingsObservationSchema, {
     bind: async (ctx) => {

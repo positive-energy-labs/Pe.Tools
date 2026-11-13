@@ -2,10 +2,11 @@
 import { join } from "node:path";
 import { Effect, Layer } from "effect";
 import { HttpRouter, HttpServerResponse as Response } from "effect/http";
-import { hostOwnership } from "./host-ownership.ts";
+import { hostOwnership, hostState } from "./host-ownership.ts";
 import { parsePeRevitEnvelope, peRevitLauncher, withStderr } from "./pe-revit-launch.ts";
 import {
   createUpdateReader,
+  updateAdmissionKind,
   isUpdatePlanId,
   UpdateReader,
   type UpdateFact,
@@ -65,7 +66,7 @@ export const makeInstalledUpdateReader = (
 ) =>
   createUpdateReader({
     handoff,
-    path: join(hostOwnership.rootPath, "state", "host-update.json"),
+    file: updateAdmissionKind.in(hostState()),
     automaticOffPath: join(hostOwnership.rootPath, "state", "host-update-automatic-off"),
     fact,
     run: updateVerb,

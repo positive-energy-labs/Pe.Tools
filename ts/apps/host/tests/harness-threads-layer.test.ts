@@ -1,3 +1,4 @@
+import { stateFixture } from "../../../tests/isolated-home/storage.ts";
 import { randomUUID } from "node:crypto";
 import { followThread } from "@pe/agent-contracts/chat-state";
 import { Spawner } from "../src/harness/spawner.ts";
@@ -45,9 +46,9 @@ const store = Effect.fn("test.store")(function* (
   logs?: ReturnType<typeof captureLogs>,
 ) {
   const options: HarnessThreadsOptions = {
-    root,
+    root: stateFixture(root),
     runs: registryService(),
-    log: new HostLog(`${root}.log`, Date.now),
+    log: new HostLog(stateFixture(`${root}.log`), Date.now),
     worldRoot: root,
     mcpServer: () => ({ name: "unused", command: "unused", args: [], env: [] }),
     providers: {

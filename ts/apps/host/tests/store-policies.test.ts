@@ -1,3 +1,8 @@
+import { notices as storedNotices } from "@pe/host-contracts/kinds";
+import { stateMachine, stateFixture } from "../../../tests/isolated-home/storage.ts";
+import { dirname as storedParent } from "node:path";
+import { scheduleFixture, updateFixture } from "./storage.ts";
+import { mkdtempSync } from "../../../tests/isolated-home/storage.ts";
 /**
  * ADR 0039 falsifiers, one seeded corrupt file per stored kind the host reads through `readStored`.
  * `keep`: the file is listed "can't read, kept" and its bytes are unchanged. `discard`: the corrupt
@@ -7,28 +12,26 @@
 import { createHash, randomUUID } from "node:crypto";
 import {
   existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readdirSync,
+  mkdirSync, readdirSync,
   readFileSync,
   rmSync,
-  writeFileSync,
-} from "node:fs";
+  writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { Effect } from "effect";
 import { afterEach, beforeEach, describe, expect, test } from "vite-plus/test";
-import { readStoredNotices, sha256Hex } from "@pe/host-contracts/store";
+import { sha256Hex } from "@pe/host-contracts/store";
 import { hostInputs } from "../src/host-program.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
 import { noticeRows, storedBlobsPath, storedNoticesPath } from "../src/notice-feed.ts";
 import { createPackageLifecycle } from "../src/package-lifecycle.ts";
 import { listPackages } from "../src/packages.ts";
 import { createPodRoutes } from "../src/pod-routes.ts";
-import { createDevices } from "../src/remote-device.ts";
+import { createDevices, devicesKind } from "../src/remote-device.ts";
+import { stateTree } from "@pe/host-contracts/service-identity";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
 import { createScheduledTasks } from "../src/scheduled-tasks.ts";
-import { shareIntentFile } from "../src/share.ts";
+import { shareIntentFile, shareKind } from "../src/share.ts";
 import { TakeoffCaptures } from "../src/takeoff-captures.ts";
 import { admitBuild } from "../src/receipt-export.ts";
 import { createUpdateReader } from "../src/update-reader.ts";
@@ -51,20 +54,23 @@ const seed = (path: string, bytes: string) => {
   return path;
 };
 const posted = (path: string) =>
-  readStoredNotices(storedNoticesPath()).filter((notice) => notice.path === path);
+  storedNotices(stateMachine(path)).filter((notice) => notice.path === path);
 const holds = (path: string, bytes: string) =>
   existsSync(path) && readFileSync(path, "utf8") === bytes;
 /** Whether the blob store holds these exact bytes under their hash (`state\\Blobs\\sha256\\<hash>`). */
 const rests = (bytes: string) => {
   const blob = join(storedBlobsPath(), "sha256", sha256Hex(bytes));
-  return existsSync(blob) && readFileSync(blob, "utf8") === bytes;
+  const local = join(stateTree(root).blobs, "sha256", sha256Hex(bytes));
+  return [blob, local, join(stateMachine(root).blobs, "sha256", sha256Hex(bytes))].some(
+    (file) => existsSync(file) && readFileSync(file, "utf8") === bytes,
+  );
 };
 
 /** A discard-class kind: `read` meets the seeded file the way the host does, and must not throw. */
 type Kind = { name: string; place: string; file: () => string; read: (path: string) => unknown };
 const scheduler = (path: string) =>
   createScheduledTasks({
-    path,
+    file: scheduleFixture(path),
     receipts: { read: async () => [], subscribe: () => () => {} },
     evidence: () => new Set<string>(),
     launch: () => ({ threadId: "t", completion: Promise.resolve() }),
@@ -79,14 +85,14 @@ const kinds: Kind[] = [
   {
     name: "paired devices",
     place: "Paired devices",
-    file: () => join(root, "devices.json"),
-    read: (path) => createDevices(path).list(),
+    file: () => devicesKind.in(stateTree(root), "devices").path,
+    read: () => createDevices(devicesKind.in(stateTree(root), "devices")).list(),
   },
   {
     name: "share intent",
     place: "Sharing",
-    file: () => join(root, "share.json"),
-    read: (path) => shareIntentFile(path).load(),
+    file: () => shareKind.in(stateTree(root)).path,
+    read: () => shareIntentFile(stateTree(root)).load(),
   },
   {
     name: "update admission",
@@ -103,7 +109,7 @@ const kinds: Kind[] = [
 ];
 const updates = (path: string) =>
   createUpdateReader({
-    path,
+    file: updateFixture(path),
     run: async () => {
       throw Error("no SDK in this test");
     },
@@ -111,7 +117,7 @@ const updates = (path: string) =>
     pid: 1,
   });
 const captures = () =>
-  new TakeoffCaptures(join(root, "captures"), join(root, "aps.json"), () => "2026-11-11T00:00:00Z");
+  new TakeoffCaptures(stateFixture(join(root, "captures")), join(root, "aps.json"), () => "2026-11-11T00:00:00Z");
 
 describe("discard: the corrupt bytes are gone, with one notice that does not repeat", () => {
   test.each(kinds)("$name", async ({ place, file, read }) => {
@@ -138,7 +144,7 @@ describe("discard: the corrupt bytes are gone, with one notice that does not rep
 
   test("Work: the addressed read discards; the listing reports and never mutates", async () => {
     const dir = join(root, "Work");
-    const store = fileRouteDocumentStore(dir);
+    const store = fileRouteDocumentStore(stateFixture(dir));
     const name = (route: string, targetKey: string) =>
       `${createHash("sha256").update(`${route}:${targetKey}`).digest("hex")}.json`;
     const read = seed(join(dir, name("ducts", "doc-a")), CORRUPT);
@@ -219,7 +225,7 @@ describe("discard: the corrupt bytes are gone, with one notice that does not rep
 
 describe("keep: a person's file is listed \"can't read, kept\", its bytes never change, and no write lands over it", () => {
   const lifecycle = (decisionsPath: string) =>
-    createPackageLifecycle({ packages: () => listPackages(join(root, "Pods")), decisionsPath });
+    createPackageLifecycle({ packages: () => listPackages(join(root, "Pods")), machine: stateMachine(storedParent(decisionsPath)) });
   const kinds = [
     {
       name: "Pod on and off choices",
@@ -236,9 +242,9 @@ describe("keep: a person's file is listed \"can't read, kept\", its bytes never 
       name: "Pod route trust",
       file: () => join(root, "route-trust.json"),
       read: (path: string) =>
-        createPodRoutes(lifecycle(join(root, "none.json")), { trustPath: path }).list(),
+        createPodRoutes(lifecycle(join(root, "none.json")), { machine: stateMachine(storedParent(path)) }).list(),
       write: (path: string) =>
-        createPodRoutes(lifecycle(join(root, "none.json")), { trustPath: path }).trust(
+        createPodRoutes(lifecycle(join(root, "none.json")), { machine: stateMachine(storedParent(path)) }).trust(
           "route:@pod/routes/a",
           HEX,
           true,
@@ -271,7 +277,7 @@ describe("keep: a person's file is listed \"can't read, kept\", its bytes never 
 
 test("host start throws 0 times over corrupt scheduled tasks, devices, a torn journal, a torn update admission and a torn recording", async () => {
   const tasks = seed(join(root, "scheduled-tasks.json"), CORRUPT);
-  const devices = seed(join(root, "devices.json"), CORRUPT);
+  const devices = seed(devicesKind.in(stateTree(root), "devices").path, CORRUPT);
   const journal = seed(join(root, "journal", "journal.jsonl"), CORRUPT);
   const TORN_UPDATE = '{"requestId":"torn-update-admission';
   const update = seed(join(root, "state", "host-update.json"), TORN_UPDATE);
@@ -299,7 +305,7 @@ test("host start throws 0 times over corrupt scheduled tasks, devices, a torn jo
     () => journalAt(journal, Date.now).list(),
     // `app.ts` builds the update reader and the machine reading refreshes it.
     () => updates(update).refresh(false),
-    () => createDevices(devices).list(),
+    () => createDevices(devicesKind.in(stateTree(root), "devices")).list(),
     () => scheduler(tasks),
   ])
     try {

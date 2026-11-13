@@ -1,4 +1,6 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { stateFixture } from "../../../tests/isolated-home/storage.ts";
+import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
+import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -47,7 +49,7 @@ test("fitting edits land on Work's own keys and read back through the Work layer
   const dir = await mkdtemp(join(tmpdir(), "ducts-fitting-edits-"));
   try {
     const registrations = [{ spec: ductsRouteState }];
-    const workspace = new RouteWorkspace({ store: fileRouteDocumentStore(dir), registrations });
+    const workspace = new RouteWorkspace({ store: fileRouteDocumentStore(stateFixture(dir)), registrations });
     const scope = bindWork("ducts", addressSchema.parse("C:\\models\\fittings.rvt"), undefined, {
       session: "s",
       openId: "o",

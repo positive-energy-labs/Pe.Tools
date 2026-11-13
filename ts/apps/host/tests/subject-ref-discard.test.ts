@@ -1,11 +1,14 @@
-import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
+import { stateFixture, stateMachine } from "../../../tests/isolated-home/storage.ts";
+import { notices as storedNotices } from "@pe/host-contracts/kinds";
+import { dirname as storedParent } from "node:path";
+import { mkdtempWork as mkdtemp } from "../../../tests/isolated-home/storage.ts";
+import { readdir, rm, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vite-plus/test";
 import { bindWork, ductsDocumentSchema, familiesRouteState, fansRouteState, workKey } from "@pe/agent-contracts";
 import { decode, subjectCode, uniqueIdSchema } from "../../../packages/agent-contracts/src/subject-ref.ts";
-import { readStoredNotices } from "@pe/host-contracts/store";
 import { storedNoticesPath } from "../src/notice-feed.ts";
 import { createPeRoutes } from "../src/pe-routes.ts";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
@@ -23,7 +26,7 @@ test("stored Families Work in the old [family,type,parameter] spelling is discar
       value: { version: 1, schemaVersion: 1, revision: 7,
         doc: { cells: { [cellKey]: cell } }, history: [] } });
   const open = async () =>
-    (await createPeRoutes({ store: fileRouteDocumentStore(dir), registrations: [{ spec }] })
+    (await createPeRoutes({ store: fileRouteDocumentStore(stateFixture(dir)), registrations: [{ spec }] })
       .fetch(new Request(`http://host/pe/route-state/${key.route}`))).json() as Promise<{ doc: { cells: object }; revision: number }>;
   try {
     // The old spelling is refused and its bytes deleted; the Work opens empty.
@@ -31,7 +34,7 @@ test("stored Families Work in the old [family,type,parameter] spelling is discar
     expect(await open()).toMatchObject({ revision: 0, doc: { cells: {} } });
     expect(await readdir(dir)).toEqual([]);
     // The loss is a notice in the feed's durable source, in the runtime's own words.
-    expect(readStoredNotices(storedNoticesPath()).filter((notice) => notice.path === path))
+    expect(storedNotices(stateMachine(path)).filter((notice) => notice.path === path))
       .toMatchObject([{ class: "discard", reason: expect.stringContaining("SubjectRef") }]);
     // The canonical SubjectRef spelling is kept as written.
     await writeFile(path, stored('name:["F","T"]#field:P'));
@@ -57,7 +60,7 @@ test("stored fans Work with an ElementId cell is discarded; UniqueId port cells 
     await writeFile(path, JSON.stringify({ format: "route-state-record-v2", targetKey, route: key.route,
       value: { version: 1, schemaVersion: spec.schemaVersion, revision: 7,
         doc: { terminalDrops: { [cellKey]: cell } }, history: [] } }));
-    return (await createPeRoutes({ store: fileRouteDocumentStore(dir), registrations: [{ spec }] })
+    return (await createPeRoutes({ store: fileRouteDocumentStore(stateFixture(dir)), registrations: [{ spec }] })
       .fetch(new Request(`http://host/pe/route-state/${key.route}`))).json();
   };
   try {

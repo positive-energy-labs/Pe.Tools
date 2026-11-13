@@ -12,9 +12,16 @@ import {
   productInstallLayout,
   productPathNames,
 } from "./contracts/product.ts";
-import { documentsUserRoot, firmHome, insideTestRoot, projectHomeAbove, type Home } from "./product-paths.ts";
-import type { HomeRoot, StatePath, StateRoot } from "./kinds.ts";
-import { storedNoticesFile, type DerivedStore } from "./store.ts";
+import { documentsUserRoot, firmHome, insideTestRoot, projectHomeAbove, type Home,
+} from "./product-paths.ts";
+import { mintStatePath } from "./store-paths.ts";
+import {
+  derivedIn,
+  type DerivedDir,
+  type HomeRoot,
+  type StateDirectory,
+  type StateRoot,
+} from "./kinds.ts";
 export {
   HOST_RUNTIME_SERVICE_HEADER,
   HOST_RUNTIME_SERVICE_QUERY,
@@ -101,12 +108,13 @@ export function productRoot(owner: RuntimeOwner): string {
  */
 export function stateTree(root: string) {
   const state = (...segments: string[]) =>
-    join(root, productPathNames.stateDirectoryName, ...segments) as StatePath;
+    mintStatePath(
+    join(root, productPathNames.stateDirectoryName, ...segments));
   const paths = {
     /** The `state` folder itself: every state kind's root. */
     state: state(),
     /** The machine's one notice file; every process that refuses a stored file posts here. */
-    notices: storedNoticesFile(root) as StatePath,
+    notices: state(productPathNames.storedNoticesFileName),
     work: state("Work"),
     /** Page state, one folder per slug. */
     pages: state("Pages"),
@@ -136,8 +144,22 @@ export function stateTree(root: string) {
   const machine: StateRoot = paths;
   return {
     ...paths,
+    directory: (...segments: string[]): StateDirectory => stateDirectory(machine, ...segments),
     /** Bind a proven home to this machine, whose blob store keeps what a write into the home replaces. */
     home: (home: Home): HomeRoot => ({ ...home, machine }),
+  };
+}
+
+export function stateDirectory(
+  root: StateRoot | StateDirectory,
+  ...segments: string[]
+): StateDirectory {
+  for (const segment of segments)
+    if (!segment || segment === "." || segment === ".." || /[\\\\/]/.test(segment))
+      throw Error(`Invalid state directory segment: ${segment}`);
+  return {
+    path: mintStatePath(join("path" in root ? root.path : root.state, ...segments)),
+    machine: "machine" in root ? root.machine : root,
   };
 }
 
@@ -146,14 +168,10 @@ export function stateTree(root: string) {
  * the first of `near` sits in, so every person on that project finds the same files; with no
  * project home, this machine's `state\Derived`. Never the user home, never a temp folder.
  */
-export function derivedStore(root: string, ...near: string[]): DerivedStore {
+export function derivedFor(root: string, ...near: string[]): DerivedDir {
   const tree = stateTree(root);
   const home = near.map((path) => projectHomeAbove(path)).find(Boolean);
-  return {
-    dir: home ? join(home, productPathNames.derivedDirectoryName) : tree.derived,
-    notices: storedNoticesFile(root),
-    blobRoot: tree.blobs,
-  };
+  return derivedIn(home ? tree.home({ root: home, tier: "project" }) : tree);
 }
 
 /** OS-user product state namespace, independent of product-home overrides; test isolation still applies. */

@@ -1,5 +1,7 @@
+import { stateFixture } from "../../../tests/isolated-home/storage.ts";
+import { mkdtempSync } from "../../../tests/isolated-home/storage.ts";
 import { expect, test, vi } from "vite-plus/test";
-import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import { readFileSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
@@ -25,8 +27,8 @@ vi.mock("node:fs", async (load) => {
 test("two interleaved Work writers publish complete records without sharing staging files", async () => {
   const dir = mkdtempSync(join(tmpdir(), "pe-work-writers-"));
   try {
-    const first = fileRouteDocumentStore(dir);
-    const second = fileRouteDocumentStore(dir);
+    const first = fileRouteDocumentStore(stateFixture(dir));
+    const second = fileRouteDocumentStore(stateFixture(dir));
     const address = { targetKey: "same-work", route: "fans" };
     const value = { author: "first", body: "a".repeat(4096) };
     let competing: Promise<void> | undefined;
@@ -53,7 +55,7 @@ test("two interleaved Work writers publish complete records without sharing stag
 test("a failed Work publish removes its own staging file", async () => {
   const dir = mkdtempSync(join(tmpdir(), "pe-work-failed-"));
   try {
-    const store = fileRouteDocumentStore(dir);
+    const store = fileRouteDocumentStore(stateFixture(dir));
     interleave.failRename = true;
     await expect(store.setState({ targetKey: "w", route: "fans", value: { a: 1 } })).rejects.toThrow("EBUSY");
     expect(readdirSync(dir)).toEqual([]);

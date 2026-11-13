@@ -8,8 +8,8 @@ import { isSea } from "node:sea";
 import { CLOSE_BUDGET_MS } from "./receipts.ts";
 import { runtimeRoot } from "@pe/runtime/runtime-owner";
 
-export const browserHome = (home?: string) =>
-  resolve(home ?? join(runtimeRoot(), "state", "browser"));
+import { stateTree } from "@pe/host-contracts/service-identity";
+export const browserHome = (home?: string) => stateTree(home ?? runtimeRoot()).directory("browser");
 export const defaultChromeProfile = () =>
   process.platform === "win32"
     ? join(

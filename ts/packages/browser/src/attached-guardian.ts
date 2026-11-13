@@ -8,8 +8,10 @@ import { BrowserError } from "./errors.ts";
 import { evaluator } from "./evaluate.ts";
 import { releaseAttachment, type AttachmentLock } from "./attachment-lock.ts";
 import { publishJson } from "./receipts.ts";
+import type { StateDirectory } from "@pe/host-contracts/kinds";
 
 interface GuardianConfig {
+  storage: StateDirectory;
   endpoint: string;
   receipt: string;
   lock: AttachmentLock;
@@ -175,7 +177,7 @@ export async function runAttachedGuardian(configFile: string): Promise<void> {
         }
         await cdp.close();
       }
-      await publishJson(join(directory, "attached-cleanup.json"), {
+      await publishJson(config.storage, "attached-cleanup.json", {
         status: "closed",
         guardianPid: process.pid,
         connections: opened ? 1 : 0,

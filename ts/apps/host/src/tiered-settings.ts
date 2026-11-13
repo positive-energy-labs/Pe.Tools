@@ -18,8 +18,15 @@ import {
   userRoot,
 } from "@pe/host-contracts/product-paths";
 import { productPathNames } from "@pe/host-contracts/contracts";
-import { noteStored, sha256Hex } from "@pe/host-contracts/store";
-import { SETTING_WRITE_PLACE, storedNoticesPath } from "./notice-feed.ts";
+import { note, sha256Hex, homeKind } from "@pe/host-contracts/kinds";
+import { z } from "zod";
+import { hostState } from "./host-ownership.ts";
+const settingKind = homeKind({
+  schema: z.unknown(),
+  place: (owner: string) => `Settings for ${owner}`,
+  segments: (owner: string) => ["Settings", `${owner}.json`],
+});
+import { SETTING_WRITE_PLACE } from "./notice-feed.ts";
 import { firmOwner } from "./reads/door.ts";
 import { writeHome } from "./settings.ts";
 
@@ -156,14 +163,23 @@ export function writeSettingTier(
   if (read.home === null || read.path === null)
     return { ok: false, status: 404, message: read.notFound ?? `No ${request.tier} home` };
   if (context.expectedPath !== undefined && read.path !== context.expectedPath)
-    return { ok: false, status: 409, message: `The setting home changed since binding: expected ${context.expectedPath}, now ${read.path}. Nothing was written.` };
+    return {
+      ok: false,
+      status: 409, message: `The setting home changed since binding: expected ${context.expectedPath}, now ${read.path}. Nothing was written.`,
+    };
   if (read.error !== undefined)
-    return { ok: false, status: 422, message: `${read.path} can't be read, so it is kept as it is: ${read.error}` };
+    return {
+      ok: false,
+      status: 422, message: `${read.path} can't be read, so it is kept as it is: ${read.error}`,
+    };
   if (read.sha256 !== request.expectedSha256)
     return { ok: false, status: 409, message: `${read.path} changed since it was read.` };
   // setting(owner, ...) is generic; a second owner gets 422 at Save until this door uses a shared owner-to-cells registry.
   if (request.owner !== "ducts" || !ductsCellAccepts(request.path, request.value))
-    return { ok: false, status: 422, message: `No declared setting accepts ${request.owner} ${request.path.join(".")} with that value.` };
+    return {
+      ok: false,
+      status: 422, message: `No declared setting accepts ${request.owner} ${request.path.join(".")} with that value.`,
+    };
   const by = context.writer ?? userInfo().username;
   const at = (context.now?.() ?? new Date()).toISOString();
   const next = structuredClone((read.json ?? {}) as Record<string, unknown>);
@@ -176,9 +192,13 @@ export function writeSettingTier(
   if (request.value == null) delete node[leaf];
   else node[leaf] = request.value;
   next.written = { by, at };
-  const wrote = writeHome(read.path, `${JSON.stringify(next, null, 2)}\n`, request.expectedSha256);
+  const wrote = writeHome(
+    settingKind.in(hostState().home({ root: read.home, tier: request.tier }), request.owner),
+    `${JSON.stringify(next, null, 2)}\n`,
+    request.expectedSha256,
+  );
   if (!wrote.ok) return { ok: false, status: 409, message: `${read.path} changed since it was read.` };
-  noteStored(storedNoticesPath(), {
+  note(hostState(), {
     class: "keep",
     place: SETTING_WRITE_PLACE,
     path: read.path,
@@ -188,5 +208,6 @@ export function writeSettingTier(
     }${context.receiptId ? ` Receipt ${context.receiptId}.` : ""}`,
   });
   for (const listener of listeners) listener();
-  return { ok: true, tier: request.tier, path: read.path, sha256: wrote.sha256, priorSha256: wrote.priorSha256, by, at };
+  return { ok: true, tier: request.tier, path: read.path, sha256: wrote.sha256, priorSha256: wrote.priorSha256, by, at,
+  };
 }

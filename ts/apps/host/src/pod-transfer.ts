@@ -1,12 +1,16 @@
 /** Transport consumes packages.ts's captured members; source bytes and local custody stay distinct. */
 import { randomUUID } from "node:crypto";
 import { constants } from "node:fs";
-import { copyFile, cp, lstat, mkdir, readFile, readdir, rename, rm, rmdir, stat } from "node:fs/promises";
+import { copyFile, cp, lstat, mkdir, readFile, readdir, rename, rm, rmdir, stat,
+} from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { crc32, deflateRawSync, inflateRawSync } from "node:zlib";
 import { message, packageIdSchema, packageMemberPathSchema } from "@pe/agent-contracts";
 import { scriptPodMemberBounds } from "@pe/host-contracts/generated";
-import { writeAtomic } from "@pe/host-contracts/store";
+import { writeState, homeKind, stateKind, type StateRoot } from "@pe/host-contracts/kinds";
+import { stateDirectory } from "@pe/host-contracts/service-identity";
+import { hostState } from "./host-ownership.ts";
+import { z } from "zod";
 import type { PodExport, PodImport, PodPromote } from "@pe/host-contracts/operation-types";
 import { type PictureCaptures } from "./captures-route.ts";
 import {
@@ -15,7 +19,6 @@ import {
   isPackageMember,
   listPackages,
   onePackage,
-  podStatePath,
   productPodsRoots,
   type PackageListing,
 } from "./packages.ts";
@@ -24,7 +27,18 @@ import { scratchPageDirectory } from "./page-libraries.ts";
 import { activateImportedPackage } from "./package-lifecycle.ts";
 import { sha256Hex as sha256, validatePageHtml, writeArtifact } from "./page-artifacts.ts";
 import { StepFailure } from "./command-executor.ts";
-import { rollbackHomeMembers, writeHome, type HomeMemberUndo } from "./settings.ts";
+import { rollbackHomeMembers, writeHome, podMemberKind, type HomeMemberUndo } from "./settings.ts";
+
+const archiveExportKind = homeKind({
+  schema: z.unknown(),
+  place: (_name: string) => "Pod archive export",
+  segments: (name: string) => [name],
+});
+const stagingMemberKind = stateKind({
+  schema: z.unknown(),
+  place: (_parts: readonly string[]) => "Staged Pod",
+  segments: (parts: readonly string[]) => parts,
+});
 
 const VENDOR_DIRECTORY = "_vendor";
 const LOCAL_PREFIX = "@local/";
@@ -36,7 +50,7 @@ const MAX_ARCHIVE_BYTES = scriptPodMemberBounds.maxTotalBytes * 2;
 export type TransferOptions = {
   readonly podsRoot?: string;
   /** Where this machine keeps what it derives about pods; the product's `state` folder when absent. */
-  readonly stateRoot?: string;
+  readonly machine?: StateRoot;
   readonly pagesRoot?: string;
   readonly captures?: PictureCaptures;
 };
@@ -64,7 +78,7 @@ export async function preparePodExport(
   snapshot?: PackageListing,
 ) {
   const archivePath = zipPath(request.archivePath);
-  const listing = snapshot ?? await listPackages(options.podsRoot);
+  const listing = snapshot ?? (await listPackages(options.podsRoot));
   const pod = unique(listing, request.pod);
   const captured = await capturePackage(pod).catch((error: unknown) => {
     throw new TransferRefused(`Pod '${request.pod}' is not exportable: ${message(error)}`);
@@ -118,7 +132,10 @@ export async function writePodExport(
   const { archivePath } = prepared.result;
   await writeArtifact(
     dirname(archivePath),
-    archivePath,
+    archiveExportKind.in(
+      hostState().home({ root: dirname(archivePath), tier: "user" }),
+      basename(archivePath),
+    ),
     Buffer.from(prepared.bytesBase64, "base64"),
   );
   return prepared.result;
@@ -318,12 +335,21 @@ export async function installArchive(
 
   const archiveSha256 = sha256(archive);
   // Validate in machine state first. A crash during home publication can leave resumable members.
-  const staging = podStatePath(options, "pod-importing", randomUUID());
+  const stagingStorage = stateDirectory(
+    options.machine ?? hostState(),
+    "pod-importing",
+    randomUUID(),
+  );
+  const staging = stagingStorage.path;
   const writes: HomeMemberUndo[] = [];
   const directories = new Set<string>([directory]);
   try {
     for (const [path, bytes] of entries) {
-      await writeArtifact(staging, join(staging, folder, path), bytes);
+      await writeArtifact(
+        staging,
+        stagingMemberKind.in(stagingStorage, [folder, ...path.split("/")]),
+        bytes,
+      );
     }
     const admitted = (await listPackages(staging)).packages[0];
     if (!admitted || admitted.id !== id)
@@ -339,8 +365,12 @@ export async function installArchive(
       }
       for (let parent = dirname(target); parent !== directory; parent = dirname(parent)) directories.add(parent);
       // A write may throw after creating bytes. Undo still uses only our intended hash.
-      writes.push({ path: target, sha256: sha256(bytes), prior: null });
-      const wrote = writeHome(target, bytes, null);
+      const file = podMemberKind.in(
+        { root: dirname(podsRoot), tier: "user", machine: options.machine ?? hostState() },
+        [basename(podsRoot), folder, ...path.split("/")],
+      );
+      writes.push({ file, sha256: sha256(bytes), prior: null });
+      const wrote = writeHome(file, bytes, null);
       if (!wrote.ok) {
         writes.pop(); // A refused CAS made no write, so it owns nothing to undo.
         throw new TransferRefused(`Pod member changed during import: ${path}`, 409);
@@ -352,8 +382,8 @@ export async function installArchive(
     for (const [path, bytes] of entries)
       if (CAPTURE_MEMBER.exec(path)?.[2] === "png") await store.adopt(bytes);
     await activateImportedPackage(id, podsRoot);
-    writeAtomic(
-      importRecordPath(id, options),
+    writeState(
+      importRecordFile(id, options),
       `${JSON.stringify({ archiveSha256, archive: basename(locator), date: new Date().toISOString() }, null, 2)}\n`,
     );
     return {
@@ -382,8 +412,13 @@ export async function installArchive(
 }
 
 /** Where a pod's import record rests: `state\pod-imports\<pod-id>.json`. */
-export const importRecordPath = (id: string, owner: Pick<TransferOptions, "podsRoot" | "stateRoot"> = {}) =>
-  podStatePath(owner, "pod-imports", `${id}.json`);
+export const importRecordKind = stateKind({
+  schema: z.object({ archiveSha256: z.string().regex(/^[a-f0-9]{64}$/) }),
+  place: (id: string) => `Import record for ${id}`,
+  segments: (id: string) => ["pod-imports", `${id}.json`],
+});
+export const importRecordFile = (id: string, owner: Pick<TransferOptions, "machine"> = {}) =>
+  importRecordKind.in(owner.machine ?? hostState(), id);
 
 /**
  * Move a staged pod into its home whole. One volume: one rename. Across volumes (state on C:, the

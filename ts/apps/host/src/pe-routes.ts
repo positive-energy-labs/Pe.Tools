@@ -163,12 +163,7 @@ import {
 import { createPluginsHandler } from "./plugins-handler.ts";
 import { createPodRoutes } from "./pod-routes.ts";
 import {
-  productAgentPath,
-  productDuctsAnalysesPath,
-  productHarnessThreadsPath,
-  productRouteWorkPath,
-  productUserContentRootPath,
-} from "./product-paths.ts";
+  productAgentPath, productUserContentRootPath } from "./product-paths.ts";
 import { graphRouteIds } from "./reads/routes.ts";
 import {
   ReceiptExport,
@@ -180,7 +175,7 @@ import { hostResourceObserver, markReadings } from "./resource-adapters.ts";
 import { bindRevoke } from "./revoke.ts";
 import { fileRouteDocumentStore } from "./route-document-store.ts";
 import { RunRegistry } from "./run-registry.ts";
-import { createScheduledTasks } from "./scheduled-tasks.ts";
+import { createScheduledTasks, scheduledTasksKind } from "./scheduled-tasks.ts";
 import { resolveSdkSession, readSessionScope } from "./sdk-session.ts";
 import type { DocumentRow } from "./session-inventory.ts";
 import { CaptureStore, type TakeoffCaptures } from "./takeoff-captures.ts";
@@ -239,10 +234,13 @@ const historyBody = peRoutes["work.history"].body;
 const json = (value: unknown, status = 200) => Response.json(value, { status });
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
-const historicalPeRefusal = (inputs: HostInputContext["Service"] | undefined, method: string, id: string) => {
+const historicalPeRefusal = (inputs: HostInputContext["Service"] | undefined, method: string, id: string,
+) => {
   if (inputs?.lane.kind !== "recording") return null;
-  if (![...graphRouteIds, "work.get", "work.list", "resources.stream", "resources.subscriptions", "features.get"].includes(id))
-    return method === "GET" ? new InvalidRead({ message: "Recording does not cover this route owner", status: 409, problem: "recording.coverage" })
+  if (![...graphRouteIds, "work.get", "work.list", "resources.stream", "resources.subscriptions", "features.get",
+    ].includes(id))
+    return method === "GET" ? new InvalidRead({ message: "Recording does not cover this route owner", status: 409, problem: "recording.coverage",
+        })
       : inputs.check({ kind: "work", verb: "edit" });
   const needs = id.startsWith("work.") ? ["work" as const] : [];
   for (const input of needs) { const refusal = inputs.check({ kind: "input", input }); if (refusal) return refusal; }
@@ -472,8 +470,11 @@ export function createPeRoutes(options: PeRoutesOptions) {
     if (method === "GET" && declared.id === "family.spec") {
       const scope = readSessionScope(Object.fromEntries(request.headers));
       const document = scope.bridgeSessionId && scope.openDocumentId && invocation.document
-        ? await invocation.document({ session: scope.bridgeSessionId, openId: scope.openDocumentId })
-        : null;
+          ? await invocation.document({
+              session: scope.bridgeSessionId,
+              openId: scope.openDocumentId,
+            })
+          : null;
       return familySpecAsset(url, undefined, document?.projectHome);
     }
     const parts = url.pathname.split("/").slice(2).map(decodeURIComponent); // drop "", "pe"
@@ -545,7 +546,8 @@ export function createPeRoutes(options: PeRoutesOptions) {
       try {
         const query = url.searchParams;
         const catalog = await options.capabilityCatalog.read({
-          bridgeSessionId: scope.binding === "open" ? scope.open.session : query.get("session") ?? undefined,
+          bridgeSessionId:
+            scope.binding === "open" ? scope.open.session : (query.get("session") ?? undefined),
           openDocumentId: scope.binding === "open" ? scope.open.openId : undefined,
           session: query.has("sdk")
             ? sdkSessionSelectionSchema.parse(JSON.parse(query.get("sdk")!))
@@ -915,7 +917,7 @@ function workKey(url: URL, route: string, shape: "read" | "write"): WorkKey | Re
  */
 export function createContributionContent(options: {
   /** The agent's working directory: the harness skill projections land here, never in a home. */
-  worldRoot: string;
+  worldRoot: import("@pe/host-contracts/kinds").StateDirectory;
   /** The user home that authors `Skills/` and, by default, `Pages/`; the user root when omitted. */
   homeRoot?: string;
   /** Scratch Pages in read order; the home's `Pages` when omitted (an isolated test world). */
@@ -924,7 +926,7 @@ export function createContributionContent(options: {
   pages?: (packages: readonly AdmittedPackage[]) => Promise<readonly PageDescriptor[]>;
   /** Runs beside the start census, never before it: the host door does not wait for an import. */
   bootstrap?: () => Promise<unknown>;
-  decisionsPath?: string;
+  decisionsMachine?: import("@pe/host-contracts/kinds").StateRoot;
   changed?: () => void;
 }) {
   const homeRoot = options.homeRoot ?? productUserContentRootPath();
@@ -937,7 +939,7 @@ export function createContributionContent(options: {
   let bootstrapProblem: string | undefined;
   let admitted: readonly AdmittedPackage[] = [];
   const lifecycle = createPackageLifecycle({
-    decisionsPath: options.decisionsPath,
+    machine: options.decisionsMachine,
     packages: options.packages,
     changed: () => {
       snapshot = undefined;
@@ -955,7 +957,7 @@ export function createContributionContent(options: {
     await lifecycle.refresh();
     snapshot = undefined;
     options.changed?.();
-  }).catch(error => {
+  }).catch((error) => {
     bootstrapProblem = `Shipped Pods unavailable: ${String(error)}`;
     snapshot = undefined;
     options.changed?.();
@@ -1081,7 +1083,7 @@ export function createContributionContent(options: {
             }),
     );
     const publication = await publishPeaSkills(
-      { productHomePath: homeRoot, agentPath: options.worldRoot, captureDirectory },
+      { productHomePath: homeRoot, agent: options.worldRoot, captureDirectory },
       packagedSkills,
       lifecycle.skills(),
     );
@@ -1190,7 +1192,7 @@ function* hostPeRoutes(
   for (const line of homeLogLines()) yield* Effect.logInfo(line);
   let invalidateCatalog = () => {};
   const content = createContributionContent({
-    worldRoot,
+    worldRoot: hostState().directory("Agent"),
     pagesRoots: productPagesRoots(),
     changed: () => invalidateCatalog(),
     bootstrap: async () => {
@@ -1233,7 +1235,7 @@ function* hostPeRoutes(
     prepare: () => content.read(),
     providers,
     updatePending: update.automaticPending,
-    root: productHarnessThreadsPath(),
+    root: hostState().directory("harness-threads"),
     log: hostLog,
     worldRoot,
     // The same kernel the Pea MCP server declares, for the harness that cannot read it from there.
@@ -1272,7 +1274,7 @@ function* hostPeRoutes(
   hostWork?.pointers?.bind(threads.pointers);
   const stopWorkContext = bridge?.subscribe(() => threads.refreshWorkContexts());
   const scheduler = createScheduledTasks({
-    path: join(hostOwnership.rootPath, "state", hostOwnership.serviceName, "scheduled-tasks.json"),
+    file: scheduledTasksKind.in(hostState().directory(hostOwnership.serviceName)),
     receipts: journal,
     evidence: (since, before) =>
       new Set(eligibleThreads(threads.historySnapshot(), since, before).map((t) => t.id)),
@@ -1445,7 +1447,7 @@ function* hostPeRoutes(
     workspace: hostWork?.workspace,
     registrations,
     ductsAnalysis: {
-      root: productDuctsAnalysesPath(),
+      root: hostState().directory("ducts", "analyses"),
       producer: { version: resolveHostVersion(), ...hostOwnership },
       marks,
       catalogs: (pointer) => runPods({}, catalogsFor(files, pointer)),
@@ -1476,7 +1478,7 @@ function* hostPeRoutes(
       },
       call: ductsNativeRead(hostBaseUrl),
     },
-    ...(hostWork ? {} : { store: fileRouteDocumentStore(productRouteWorkPath()) }),
+    ...(hostWork ? {} : { store: fileRouteDocumentStore(hostState().directory("Work")) }),
     heads: threads.heads,
     turnElementNames: (request) =>
       threads.readTurnElementNames(request, (operation, input, ref) => {
@@ -1534,7 +1536,8 @@ export const makeHostPeRoutes = Effect.fn("peRoutes.make")(hostPeRoutes);
 /** Same declared Pe doors, with request-local source ports and no surrounding live services. */
 const addPeHttpRoutes = (router: HttpRouter.HttpRouter,
   handlers: Readonly<Record<string, (request: Request, context: Context.Context<RequestIdentityKey>) => Promise<Response>>>,
-  inputs?: HostInputContext["Service"]) => Effect.gen(function* () {
+  inputs?: HostInputContext["Service"],
+) => Effect.gen(function* () {
   for (const route of Object.values(peRoutes)) {
     const handle = handlers[route.owner];
     if (!handle) continue;
@@ -1542,7 +1545,8 @@ const addPeHttpRoutes = (router: HttpRouter.HttpRouter,
       const context = yield* Effect.context<RequestIdentityKey>();
       const declared = matchPeRoute(request.method, new URL(request.originalUrl, "http://host").pathname)!;
       if (request.headers["x-pe-history-point"] && ![...graphRouteIds, "features.get", "capabilities.list"].includes(declared.id))
-        return yield* new InvalidRead({ message: "needs live Revit", status: 409, problem: "history.read-only" });
+        return yield* new InvalidRead({ message: "needs live Revit", status: 409, problem: "history.read-only",
+            });
       const denied = historicalPeRefusal(inputs, request.method, declared.id);
       if (denied) return yield* denied;
       let failure: import("@pe/host-internal/request-contracts").DoorFailure | undefined;
@@ -1558,7 +1562,8 @@ const addPeHttpRoutes = (router: HttpRouter.HttpRouter,
       }));
       if (failure) return yield* Effect.fail(failure);
       return response;
-    }));
+    }),
+      );
   }
 });
 

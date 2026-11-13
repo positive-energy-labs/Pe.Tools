@@ -1,3 +1,4 @@
+import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { DispatchLimits } from "@pe/host-internal/dispatch";
 import { bindActionDispatch } from "../src/action-dispatch.ts";
 import { Cause, Effect, Exit, Fiber, Layer, Queue, Scope } from "effect";
@@ -9,7 +10,7 @@ import { connectTestBridge } from "./bridge-fixture.ts";
 import { ActionJournalService } from "../src/receipt-services.ts";
 import type { ActionJournal } from "../src/action-journal.ts";
 import { effectTest, journalAt } from "./effect-test.ts";
-import { mkdtemp, rm } from "node:fs/promises";
+import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { actionReceiptSchema } from "@pe/agent-contracts";

@@ -1,3 +1,4 @@
+import { stateFixture } from "../../../tests/isolated-home/storage.ts";
 import { expect, test } from "vite-plus/test";
 import { Layer } from "effect";
 import { HttpServer } from "effect/http";
@@ -35,7 +36,7 @@ test("Pages and Catalogs HTTP listings read the target document's project home",
   expect(await freePages.json()).toMatchObject({ pages: [] });
   const freeCatalogs = await f.request(new Request("http://fixture/pe/ducts/catalogs"));
   expect(await freeCatalogs.json()).toMatchObject({ tables: {} });
-  const content = createContributionContent({ worldRoot: join(f.dir, "agent"), homeRoot: join(f.dir, "user") });
+  const content = createContributionContent({ worldRoot: stateFixture(join(f.dir, "agent")), homeRoot: join(f.dir, "user") });
   try {
     expect(await content.pages("Projects/Example")).toEqual([expect.objectContaining({ key: "page:@pages/project-page" })]);
     expect(await content.pages()).toEqual([]);

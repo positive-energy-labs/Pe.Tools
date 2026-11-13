@@ -7,14 +7,18 @@ import {
   type DeviceTransport,
   type Pairing,
 } from "@pe/host-contracts/pe-api";
-import { readStored, writeAtomic } from "@pe/host-contracts/store";
+import { read as readFile, writeState, stateKind, type StoredFile } from "@pe/host-contracts/kinds";
 import { Refused } from "./control.ts";
 import { hostOwnership } from "./host-ownership.ts";
-import { storedNoticesPath } from "./notice-feed.ts";
 
 const persistedSchema = z.strictObject({
   environmentId: z.uuid(),
   sessions: z.array(deviceSessionSchema.extend({ digest: z.string() })),
+});
+export const devicesKind = stateKind({
+  schema: persistedSchema,
+  place: (_service: string) => "Paired devices",
+  segments: (service: string) => [service, "devices.json"],
 });
 const digest = (token: string) => createHash("sha256").update(token).digest("hex");
 const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -28,26 +32,23 @@ const denied = (code: "device.unpaired" | "device.revoked" | "device.pairing", r
   });
 
 /** One host identity and one credential per device, independent of the connection address. */
-export function createDevices(path?: string, now = () => Date.now()) {
+export function createDevices(
+  file?: StoredFile<z.infer<typeof persistedSchema>, "state">,
+  now = () => Date.now(),
+) {
   // Machine state (ADR 0039): a store that does not decode is discarded with a notice, the host
   // starts as a new environment, and every device pairs once more.
-  const read = path
-    ? readStored(path, persistedSchema, {
-        class: "discard",
-        place: "Paired devices",
-        notices: storedNoticesPath(),
-      })
-    : null;
+  const read = file ? readFile(file) : null;
   let state =
     read?.kind === "ok"
       ? read.value
       : { environmentId: randomUUID(), sessions: [] as Array<DeviceSession & { digest: string }> };
   let pending: (Pairing & { digest: string; attempts: number }) | undefined;
   const save = (next: typeof state) => {
-    if (path) writeAtomic(path, JSON.stringify(next));
+    if (file) writeState(file, JSON.stringify(next));
     state = next;
   };
-  if (path && !existsSync(path)) save(state);
+  if (file && !existsSync(file.path)) save(state);
   const active = (id: string) => {
     const session = state.sessions.find((row) => row.id === id);
     if (!session)

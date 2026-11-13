@@ -1,3 +1,6 @@
+import { stateFixture } from "../../../tests/isolated-home/storage.ts";
+import { updateFixture } from "./storage.ts";
+import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { markReadings } from "../src/resource-adapters.ts";
 import { openRecordingWriter, openRecordingReader, nativeCatalogIdentity } from "../src/native-recording.ts";
 import { fansDocumentSchema } from "@pe/agent-contracts";
@@ -13,7 +16,7 @@ import { createPeClient, servePeRoute } from "@pe/agent-contracts/pe-api";
 import { afterAll, afterEach, beforeAll, expect, onTestFinished, test, vi } from "vite-plus/test";
 import { HostLog } from "../src/host-log.ts";
 import { createServer, type Server } from "node:http";
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -95,13 +98,13 @@ const host = async (
       return { exitCode: 0, commandExitCode: 0, logPath: join(root, "console.log") };
     },
   });
-  const log = new HostLog(join(root, ".log", randomUUID()), Date.now);
+  const log = new HostLog(stateFixture(join(root, ".log", randomUUID())), Date.now);
   const threads = await harnessThreads({
     runs: registryService(),
     log,
     prepare,
     updatePending,
-    root,
+    root: stateFixture(root),
     worldRoot: tmpdir(),
     mcpServer,
     developerInstructions: async () => "KERNEL: You are Pea.",
@@ -205,7 +208,7 @@ test.each(["claude", "codex"] as const)(
     const key = bindWork("ducts", address, undefined, target);
     const routes = createPeRoutes({
       registrations: [{ spec: tools.ducts.work }, { spec: tools.fans.work }],
-      store: fileRouteDocumentStore(join(dir, "work")),
+      store: fileRouteDocumentStore(stateFixture(join(dir, "work"))),
       heads: { observe: () => () => {} },
       navigation: { documents: async () => [{ ...target, address }], threads: async () => [] },
     });
@@ -475,7 +478,7 @@ test("automatic update admission refuses a new Pea prompt through download and r
     return answer({ requestId, response: { requestId, key: "update.apply", result: receipt() } });
   };
   const updates = createUpdateReader({
-    path: join(root, "auto-update.json"),
+    file: updateFixture(join(root, "auto-update.json")),
     run,
     installed: true,
     pid: 123,
@@ -1752,7 +1755,7 @@ test("DocLab terminal burst replays through HTTP beside real mark capture withou
   const dir = await mkdtemp(join(root, "mark-burst-"));
   const identity = { build: "mark-burst", catalog: nativeCatalogIdentity() };
   const bounds = { maxBytes: 1024 * 1024, maxTakings: 100 };
-  const writer = await settle(openRecordingWriter(join(dir, "recording"), identity, bounds));
+  const writer = await settle(openRecordingWriter(stateFixture(join(dir, "recording")), identity, bounds));
   const live = hostMarks({ changedAt: () => null, subscribe: () => () => {} });
   const marks = await settle(HostDocumentMarks.pipe(Effect.provide(
     HostDocumentMarks.capturing(writer).pipe(Layer.provide(Layer.succeed(HostDocumentMarks, live))),
@@ -1773,7 +1776,7 @@ test("DocLab terminal burst replays through HTTP beside real mark capture withou
   let storm = false;
   const routes = createPeRoutes({
     registrations: [], heads: { observe: () => () => {} },
-    store: fileRouteDocumentStore(join(dir, "work")),
+    store: fileRouteDocumentStore(stateFixture(join(dir, "work"))),
     observeHostResource: (request, publish, after) => h.observe(request, publish, after) ?? (() => {
       for (let i = 0; i < (storm ? 65 : 1); i++)
         publish({ kind: "snapshot", key: readingKey(request), value: { takenAt: new Date(1).toISOString() } });

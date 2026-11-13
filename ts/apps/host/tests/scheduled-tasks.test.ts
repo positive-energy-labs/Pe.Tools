@@ -1,5 +1,7 @@
+import { mkdtempSync } from "../../../tests/isolated-home/storage.ts";
+import { scheduleFixture } from "./storage.ts";
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -26,7 +28,7 @@ function fixture() {
     completion: Promise.resolve(),
   }));
   const options = {
-    path,
+    file: scheduleFixture(path),
     receipts: { read, subscribe: () => () => {} },
     evidence: () => new Set(["eligible"]),
     launch,

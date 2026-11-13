@@ -8,9 +8,15 @@ import {
   type AdmittedPackage,
   type PodsRoots,
 } from "./packages.ts";
-import { readStored, writeAtomic } from "@pe/host-contracts/store";
-import { storedNoticesPath } from "./notice-feed.ts";
-import { productPluginDecisionsPath, productPodsRootPath } from "./product-paths.ts";
+import {
+  read as readFile,
+  writeState,
+  keptStateKind,
+  type StateRoot,
+  type StoredFile,
+} from "@pe/host-contracts/kinds";
+import { hostState } from "./host-ownership.ts";
+import { productPodsRootPath } from "./product-paths.ts";
 import {
   builtinPeaSkillSnapshots,
   type SkillSnapshot,
@@ -20,6 +26,12 @@ type Contribution =
   | { kind: "package"; package: AdmittedPackage }
   | { kind: "skill"; skill: SkillSnapshot };
 const decisionsSchema = z.record(z.string(), z.boolean());
+export const decisionsKind = keptStateKind({
+  schema: decisionsSchema,
+  place: () => "Pod on and off choices",
+  segments: () => ["plugins.json"],
+});
+type DecisionsFile = StoredFile<z.infer<typeof decisionsSchema>, "state-kept">;
 let serving: ReturnType<typeof createPackageLifecycle> | undefined;
 export function bindPackageLifecycle(
   lifecycle: ReturnType<typeof createPackageLifecycle> | undefined,
@@ -39,14 +51,9 @@ export async function activateImportedPackage(id: string, podsRoot: string) {
  * not decode is refused with a notice and its bytes stay. Defaults hold, and no choice is saved
  * over it until a person fixes or removes the file.
  */
-const storedDecisions = (path: string) =>
-  readStored(path, decisionsSchema, {
-    class: "keep",
-    place: "Pod on and off choices",
-    notices: storedNoticesPath(),
-  });
-const readDecisions = async (path: string) => {
-  const read = storedDecisions(path);
+const storedDecisions = (file: DecisionsFile) => readFile(file);
+const readDecisions = async (file: DecisionsFile) => {
+  const read = storedDecisions(file);
   return read.kind === "ok" ? read.value : {};
 };
 /**
@@ -69,7 +76,7 @@ export async function requirePackageEnabled(
     await serving.ready;
     if (!serving.active(id)) throw Error(`Pod '${id}' is inactive`);
   }
-  if ((await readDecisions(productPluginDecisionsPath()))[`pod:${id}`] === false)
+  if ((await readDecisions(decisionsKind.in(hostState())))[`pod:${id}`] === false)
     throw Error(`Pod '${id}' is disabled`);
 }
 /** Inactive scopes stay visible through plugin inventory, never through their doors. */
@@ -87,11 +94,11 @@ export async function activePackages(
 export function createPackageLifecycle(
   options: {
     packages?: typeof listPackages;
-    decisionsPath?: string;
+    machine?: StateRoot;
     changed?: () => void;
   } = {},
 ) {
-  const decisionsPath = options.decisionsPath ?? productPluginDecisionsPath();
+  const decisionsFile = decisionsKind.in(options.machine ?? hostState());
   let decisions: Record<string, boolean> = {};
   let initialized = false;
   const signatures = new Map<string, string>();
@@ -104,19 +111,19 @@ export function createPackageLifecycle(
   const runtime = createPluginRuntime<Contribution>({
     changed,
     persist: async (id, enabled) => {
-      const stored = storedDecisions(decisionsPath);
+      const stored = storedDecisions(decisionsFile);
       if (stored.kind === "kept")
         throw Error(
           `Pod on and off choices can't be read, so the file is kept and this choice is not saved: ${stored.reason}`,
         );
       const next = { ...decisions, [id]: enabled };
-      writeAtomic(decisionsPath, JSON.stringify(next));
+      writeState(decisionsFile, JSON.stringify(next));
       decisions = next;
     },
   });
   const ready = initialize();
   async function initialize() {
-    decisions = await readDecisions(decisionsPath);
+    decisions = await readDecisions(decisionsFile);
     await runtime.install(
       {
         id: "product:skills",

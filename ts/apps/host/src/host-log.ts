@@ -10,7 +10,14 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import { HOST_LOG_MAX_ENTRY_BYTES, type HostEvent, type HostLogEntry } from "@pe/agent-contracts";
-import { writeAtomic } from "@pe/host-contracts/store";
+import { stateKind, writeState, type StateDirectory } from "@pe/host-contracts/kinds";
+import { z } from "zod";
+const segmentKind = stateKind({
+  schema: z.string(),
+  place: (_first: number) => "Host log",
+  segments: (first: number) => [segmentName(first)],
+  parse: (text) => text,
+});
 
 /** 8 segments of 8 MiB: the newest ~64 MiB of host history replays; older reads as a gap. */
 const HOST_LOG_LIMITS = {
@@ -50,11 +57,12 @@ export class HostLog {
   private readonly listeners = new Set<(entry: HostLogEntry) => void>();
 
   constructor(
-    private readonly dir: string,
+    private readonly storage: StateDirectory,
     /** The host runtime's clock for entry times. */
     private readonly now: () => number,
     private readonly limits = HOST_LOG_LIMITS,
   ) {
+    const dir = this.dir;
     mkdirSync(dir, { recursive: true });
     this.segments = readdirSync(dir)
       .filter((name) => /^\d{16}\.jsonl$/.test(name))
@@ -102,6 +110,10 @@ export class HostLog {
     return entry;
   }
 
+  private get dir() {
+    return this.storage.path;
+  }
+
   /** Entries after `after`, oldest first. `gap` says retention already dropped some of them. */
   read(after: number, match?: (entry: HostLogEntry) => boolean): {gap: boolean; entries: HostLogEntry[]} {
     const entries: HostLogEntry[] = [];
@@ -125,10 +137,9 @@ export class HostLog {
     // A fresh tail named past the last id keeps that id when every kept entry is gone.
     this.open(this.lastId + 1);
     for (const segment of this.segments) {
-      const file = join(this.dir, segmentName(segment.first));
       const kept = this.entries(segment.first).filter((entry) => !match(entry));
       const text = kept.map((entry) => `${JSON.stringify(entry)}\n`).join("");
-      writeAtomic(file, text);
+      writeState(segmentKind.in(this.storage, segment.first), text);
       segment.bytes = Buffer.byteLength(text);
     }
   }

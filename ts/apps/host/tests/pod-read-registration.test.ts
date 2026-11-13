@@ -1,5 +1,8 @@
+import { stateMachine, stateFixture } from "../../../tests/isolated-home/storage.ts";
+import { dirname as storedParent } from "node:path";
+import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { actAs } from "./callers.ts";
-import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
+import { mkdir, writeFile, rm } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -113,7 +116,7 @@ leaves:{'${leaf}':async()=>({total:17})}};`,
   );
   const lifecycle = createPackageLifecycle({
     packages: () => listPackages(join(root, "Pods")),
-    decisionsPath: join(root, "enabled.json"),
+    machine: stateMachine(storedParent(join(root, "enabled.json"))),
   });
   let routes: ReturnType<typeof createPodRoutes> | undefined;
   const inputs = Effect.runSync(
@@ -121,9 +124,9 @@ leaves:{'${leaf}':async()=>({total:17})}};`,
   );
   const web = HttpRouter.toWebHandler(
     readInputRoutes(inputs, {
-      store: fileRouteDocumentStore(join(root, "Work")),
+      store: fileRouteDocumentStore(stateFixture(join(root, "Work"))),
       initialize: async (workspace) => {
-        routes = createPodRoutes(lifecycle, { workspace, trustPath: join(root, "trust.json") });
+        routes = createPodRoutes(lifecycle, { workspace, machine: stateMachine(storedParent(join(root, "trust.json"))) });
       },
       live: {
         owner: new DuctsReadings(),

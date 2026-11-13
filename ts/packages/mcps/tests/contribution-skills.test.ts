@@ -1,4 +1,6 @@
 import { createHash } from "node:crypto";
+import { notices as storedNotices } from "@pe/host-contracts/kinds";
+import { stateTree } from "@pe/host-contracts/service-identity";
 import path from "node:path";
 import { captureDirectory } from "../../../apps/host/src/packages.ts";
 import { access, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
@@ -25,12 +27,13 @@ afterEach(() => {
 async function world(prefix: string) {
   const root = await mkdtemp(join(tmpdir(), prefix));
   const home = join(root, "home");
-  const agent = join(root, "agent");
+  const storage = stateTree(root).directory("Agent");
+  const agent = storage.path;
   return {
     root,
     home,
     agent,
-    options: { productHomePath: home, agentPath: agent, captureDirectory },
+    options: { productHomePath: home, agent: storage, captureDirectory },
   };
 }
 
@@ -130,7 +133,14 @@ test("a corrupt projection receipt cannot turn skill retirement into a path esca
       JSON.stringify({ "../../outside": "a".repeat(64) }),
     );
     await writeFile(join(agent, "outside"), "keep");
-    await expect(publishPeaSkills(options)).rejects.toThrow();
+    await publishPeaSkills(options);
+    const prior =
+      JSON.stringify({ "../../outside": "a".repeat(64) });
+    const sha = createHash("sha256").update(prior).digest("hex");
+    expect(storedNotices(options.agent.machine)).toMatchObject([
+      { class: "discard", path: join(root, ".pe-projection.json"), sha256: sha },
+    ]);
+    expect(await readFile(join(options.agent.machine.blobs, "sha256", sha), "utf8")).toBe(prior);
     expect(await readFile(join(agent, "outside"), "utf8")).toBe("keep");
   } finally {
     await rm(temp, { recursive: true, force: true });

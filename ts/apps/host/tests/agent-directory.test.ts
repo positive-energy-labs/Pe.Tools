@@ -1,8 +1,10 @@
+import { stateMachine } from "../../../tests/isolated-home/storage.ts";
+import { dirname as storedParent } from "node:path";
+import { mkdtempSync } from "../../../tests/isolated-home/storage.ts";
 import { expect, test, vi } from "vite-plus/test";
 import {
   existsSync,
   mkdirSync,
-  mkdtempSync,
   readFileSync,
   rmSync,
   statSync,
@@ -45,15 +47,15 @@ const composeHost = () =>
 test("host preparation continues after an instructions write failure and posts one notice", () => {
   mkdirSync(productAgentPath(), { recursive: true });
   writeFileSync(instructions(), "outdated instructions");
-  const writeAtomic = store.writeAtomic;
-  const write = vi.spyOn(store, "writeAtomic").mockImplementation((path, bytes) => {
-    if (path === instructions()) throw Error("locked file");
-    return writeAtomic(path, bytes);
+  const writeState = store.writeState;
+  const write = vi.spyOn(store, "writeState").mockImplementation((path, bytes) => {
+    if (path.path === instructions()) throw Error("locked file");
+    return writeState(path, bytes);
   });
   const log = vi.spyOn(console, "error").mockImplementation(() => {});
   try {
     expect(composeHost).not.toThrow();
-    const notices = store.readStoredNotices(storedNoticesPath()).filter(n => n.path === instructions());
+    const notices = store.notices(stateMachine(storedParent(storedNoticesPath()))).filter(n => n.path === instructions());
     expect(notices).toHaveLength(1);
     expect(notices[0]!.reason).toContain("locked file");
     expect(log).toHaveBeenCalledOnce();
@@ -97,10 +99,13 @@ test("dev override refuses a junction into a checkout", () => {
 test("instructions replacement uses the atomic write door", () => {
   mkdirSync(productAgentPath(), { recursive: true });
   writeFileSync(instructions(), "old bytes");
-  const write = vi.spyOn(store, "writeAtomic");
+  const write = vi.spyOn(store, "writeState");
   try {
     prepareAgentDirectory();
-    expect(write).toHaveBeenCalledExactlyOnceWith(instructions(), peaAgentInstructions);
+    expect(write).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({
+        path: instructions(),
+        kind: expect.objectContaining({ at: "state" }),
+      }), peaAgentInstructions);
     expect(readFileSync(instructions(), "utf8")).toBe(peaAgentInstructions);
   } finally {
     write.mockRestore();
@@ -112,9 +117,11 @@ test("host starts under a plain temporary override home and writes instructions 
   expect(existsSync(instructions())).toBe(false);
   const host = await bootHost();
   try {
-    expect((await fetch(`${host.base}/host/status`)).status).toBe(200);
+    const response = await fetch(`${host.base}/host/status`, { headers: { connection: "close" } });
+    expect(response.status).toBe(200);
+    await response.arrayBuffer();
     expect(existsSync(productAgentPath())).toBe(true);
-    expect(readFileSync(instructions(), "utf8")).toBe(peaAgentInstructions);
+  expect(readFileSync(instructions(), "utf8")).toBe(peaAgentInstructions);
   } finally {
     await host.close();
   }
@@ -143,7 +150,11 @@ test.each([undefined, "", "   "])(
     const checkout = mkdtempSync(join(process.env.PE_TEST_HOME_ROOT!, "dev-checkout-"));
     mkdirSync(join(checkout, ".git"));
     const agent = join(stateRoot("dev", checkout, override), "state", "Agent");
-    const path = vi.spyOn(productPaths, "productAgentPath").mockReturnValue(agent);
+    const priorRoot = hostOwnership.rootPath;
+    Object.defineProperty(hostOwnership, "rootPath", {
+      value: stateRoot("dev", checkout, override),
+      configurable: true,
+    });
     const content = vi.spyOn(contentHomes, "homeDirs").mockReturnValue([join(checkout, "content")]);
     vi.stubEnv(productPathNames.productHomeVariable, override);
     try {
@@ -152,7 +163,7 @@ test.each([undefined, "", "   "])(
       composeHost();
       expect(readFileSync(join(agent, "AGENTS.md"), "utf8")).toBe(peaAgentInstructions);
     } finally {
-      path.mockRestore();
+      Object.defineProperty(hostOwnership, "rootPath", { value: priorRoot, configurable: true });
       content.mockRestore();
       vi.unstubAllEnvs();
       rmSync(checkout, { recursive: true, force: true });

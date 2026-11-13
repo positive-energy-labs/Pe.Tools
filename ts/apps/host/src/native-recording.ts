@@ -8,7 +8,14 @@ import { writeArtifact } from "./page-artifacts.ts";
 import { randomUUID, createHash } from "node:crypto";
 import { appendFile, mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { writeAtomic } from "@pe/host-contracts/store";
+import { writeState, stateKind, type StateDirectory } from "@pe/host-contracts/kinds";
+import { z } from "zod";
+const recordingMetadataKind = stateKind({
+  schema: z.unknown(),
+  place: (_folder: string, _id: string) => "Recording metadata",
+  segments: (folder: string,
+  id: string) => [folder, `${id}.json`],
+});
 import { Cause, Clock, Effect, Exit, Layer, Option, Result, Schema } from "effect";
 import { attemptFor, CurrentInputConsumption } from "./input-occurrence.ts";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
@@ -193,7 +200,11 @@ export const inputBindingKey = (input: RecordedInput, scope: string) =>
 export type TakingObserver = (taking: Taking) => Effect.Effect<void, DoorFailure>;
 
 /** A consumer's fixed host recipe: its build-bound key, actual validated input and exact scope. */
-const consumerRecipe = Schema.Struct({ key: Schema.String, input: Schema.Json, scope: Schema.String });
+const consumerRecipe = Schema.Struct({
+  key: Schema.String,
+  input: Schema.Json,
+  scope: Schema.String,
+});
 // Host-minted ids only; decoded before any path is built.
 const readSetIdName = Schema.String.check(
   Schema.makeFilter((id) => /^[0-9a-f-]{36}$/.test(id) || "Read-set id is not host minted"),
@@ -209,7 +220,12 @@ export const readSetRecordSchema = Schema.Struct({
   recipe: consumerRecipe,
   state: Schema.Literals(["complete", "incomplete"]),
   inputs: Schema.Array(
-    Schema.Struct({ input: recordedInput, scope: Schema.String, start: Schema.Number, takingId: Schema.String }),
+    Schema.Struct({
+      input: recordedInput,
+      scope: Schema.String,
+      start: Schema.Number,
+      takingId: Schema.String,
+    }),
   ),
   children: Schema.Array(
     Schema.Struct({ recipe: consumerRecipe, start: Schema.Number, readSetId: readSetIdName }),
@@ -350,13 +366,17 @@ const loadBundle = Effect.fn("Recording.load")(function* (
     }
   }
   // A crash between the blob and taking append must not recover uncharged disk capacity.
-  for (const name of yield* io(() => readdir(observations).catch((error: unknown) => missing(error) ? [] : Promise.reject(error)))) {
+  for (const name of yield* io(() =>
+    readdir(observations).catch((error: unknown) => (missing(error) ? [] : Promise.reject(error))),
+  )) {
     const sha = yield* Schema.decodeUnknownEffect(sha256Name)(name.endsWith(".json") ? name.slice(0, -5) : null)
       .pipe(Effect.mapError(() => refuse("tamper", "Observation filename is not a SHA-256")));
     if (!stored.has(sha)) used += (yield* io(() => stat(join(observations, name)))).size;
   }
   const names = yield* io(() =>
-    readdir(join(dir, READ_SETS)).catch((error: unknown) => (missing(error) ? [] : Promise.reject(error))),
+    readdir(join(dir, READ_SETS)).catch((error: unknown) =>
+      missing(error) ? [] : Promise.reject(error),
+    ),
   );
   const sets: string[] = [];
   for (const name of names) {
@@ -433,7 +453,8 @@ const loadBundle = Effect.fn("Recording.load")(function* (
         Effect.mapError(() => refuse("tamper", `Observation ${sha} is not JSON`)),
       );
     }),
-    coverage: () => [...new Set(takings.flatMap((taking) => taking.input.kind === "publication" ? [] : [taking.input.kind]))],
+    coverage: () => [...new Set(takings.flatMap((taking) => taking.input.kind === "publication" ? [] : [taking.input.kind])),
+    ],
     truncation,
     readSets: {
       ids: () => sets.slice(),
@@ -478,10 +499,11 @@ export const openRecordingReader = (
 
 /** Opens or creates the bundle capture appends to, under the same identity and bounds checks. */
 export const openRecordingWriter = Effect.fn("Recording.writer")(function* (
-  dir: string,
+  storage: StateDirectory,
   identity: RecordingIdentity,
   bounds: RecordingBounds,
 ) {
+  const dir = storage.path;
   const { reader, takings, stored, takingsPath, observations, ...loaded } = yield* loadBundle(
     dir,
     identity,
@@ -497,9 +519,11 @@ export const openRecordingWriter = Effect.fn("Recording.writer")(function* (
   let reserved = 0;
   const clock = yield* Clock.Clock;
   const writeObservation = (sha: string, bytes: string) => {
-    const path = join(observations, `${sha}.json`);
     // An opened bundle losing its observations directory is damage, not a new store.
-    const write = stat(observations).then(() => writeArtifact(observations, path, bytes))
+    const write = stat(observations)
+      .then(() =>
+        writeArtifact(observations, recordingMetadataKind.in(storage, "observations", sha), bytes),
+      )
       .then(() => {
         stored.add(sha);
       })
@@ -517,9 +541,8 @@ export const openRecordingWriter = Effect.fn("Recording.writer")(function* (
     if (used + size > bounds.maxBytes)
       return yield* refuse("full", `Recording is full; read set ${record.id} was not kept`, 507);
     used += size;
-    const path = join(dir, READ_SETS, `${record.id}.json`);
     const kept = yield* Effect.exit(
-      io(async () => writeAtomic(path, bytes)),
+      io(async () => writeState(recordingMetadataKind.in(storage, READ_SETS, record.id), bytes)),
     );
     if (Exit.isFailure(kept)) {
       used -= size;
@@ -546,9 +569,10 @@ export const openRecordingWriter = Effect.fn("Recording.writer")(function* (
           return yield* refuse("full", "Recording is full; point was not kept", 507);
         used += size;
         pointWrites.add(point.id);
-        const path = join(dir, "points", `${point.id}.json`);
         // Same reservation and atomic metadata durability as read sets. Failed IO remains charged.
-        const kept = yield* Effect.exit(io(async () => writeAtomic(path, bytes)));
+        const kept = yield* Effect.exit(
+          io(async () => writeState(recordingMetadataKind.in(storage, "points", point.id), bytes)),
+        );
         pointWrites.delete(point.id);
         if (Exit.isFailure(kept)) return yield* Effect.failCause(kept.cause);
         loaded.points.push(point.id);
@@ -565,8 +589,12 @@ export const openRecordingWriter = Effect.fn("Recording.writer")(function* (
         Effect.suspend(() => {
           if (truncated) return Effect.void;
           const op = truncationSchema.shape.op.safeParse(source.op);
-          truncated = { at, stoppedAt: clock.currentTimeMillisUnsafe(), reason,
-            site: source.site, op: op.success ? op.data : "unknown" };
+          truncated = {
+            at, stoppedAt: clock.currentTimeMillisUnsafe(),
+            reason,
+            site: source.site,
+            op: op.success ? op.data : "unknown",
+          };
           // ponytail: best-effort marker; on an already failed disk only this process knows.
           return io(() => writeFile(join(dir, TRUNCATION), JSON.stringify(truncated))).pipe(
             Effect.orElseSucceed(() => undefined),
@@ -797,8 +825,10 @@ const captured = <A, E, R>(
             ),
       ),
     );
-    if (Exit.isFailure(kept)) yield* writer.capture.stop(at, reasonOf(kept.cause),
-      { site: Exit.isFailure(exit) ? "failure" : "json", op });
+    if (Exit.isFailure(kept))
+      yield* writer.capture.stop(at, reasonOf(kept.cause), { site: Exit.isFailure(exit) ? "failure" : "json",
+        op,
+      });
     return yield* exit;
   });
 /** A live failure as its recorded outcome, or null for an interrupted read, which is no taking. */
@@ -817,29 +847,38 @@ const capturing = (store: RecordingWriter, observed: TakingObserver) =>
       return {
         resolve: live.resolve,
         read: (request) =>
-          captured(store, request.key, live.read(request), (exit) =>
-            Effect.gen(function* () {
-              const outcome: Outcome | null = Exit.isSuccess(exit)
-                ? {
-                    kind: "answered",
+          captured(
+            store,
+            request.key,
+            live.read(request),
+            (exit) =>
+              Effect.gen(function* () {
+                const outcome: Outcome | null = Exit.isSuccess(exit)
+                  ? {
+                      kind: "answered",
                     value: exit.value.value,
-                    answer: {
+                      answer: {
                       nativeRequestId: exit.value.nativeRequestId,
                       actualTarget: exit.value.actualTarget,
-                      freshness: { freshnessGeneration: exit.value.freshness.freshnessGeneration },
+                        freshness: { freshnessGeneration: exit.value.freshness.freshnessGeneration,
+                        },
                       cost: exit.value.cost,
                       nativeOutcome: exit.value.outcome,
-                    },
-                  }
-                : yield* failedOutcome(exit);
+                      },
+                    }
+                  : yield* failedOutcome(exit);
               if (outcome === null) return null;
-              const input = {
-                input: { kind: "native" as const, key: request.key, args: yield* argsOf(request) },
+                const input = {
+                  input: {
+                    kind: "native" as const,
+                    key: request.key,
+                    args: yield* argsOf(request),
+                  },
                 scope: yield* scopeOf(request),
                 outputVersion: yield* versionOf(request.key),
-              };
+                };
               return { input, outcome };
-            }),
+              }),
             observed,
             nativeOccurrence(request),
           ),
@@ -849,7 +888,9 @@ const capturing = (store: RecordingWriter, observed: TakingObserver) =>
 /** A native read's occurrence, when its input and scope are JSON; otherwise it has none to reserve. */
 const nativeOccurrence = (request: NativeReadInput): Effect.Effect<Occurrence | undefined> =>
   Effect.all([argsOf(request), scopeOf(request)]).pipe(
-    Effect.map(([args, scope]) => ({ input: { kind: "native" as const, key: request.key, args }, scope })),
+    Effect.map(([args, scope]) => ({ input: { kind: "native" as const, key: request.key, args },
+      scope,
+    })),
     Effect.orElseSucceed(() => undefined),
   );
 

@@ -3,9 +3,9 @@ import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
 import { resolveKey } from "@pe/host-contracts/shared-keys";
-import { readStored, writeAtomic } from "@pe/host-contracts/store";
+import { read as readFile, stateKind, writeState } from "@pe/host-contracts/kinds";
+import { stateTree } from "@pe/host-contracts/service-identity";
 import { runtimeRoot } from "./runtime-owner.ts";
-import { productPathNames } from "@pe/host-contracts/contracts";
 
 export interface AnalyticsConfig {
   apiKey: string;
@@ -28,7 +28,7 @@ export function analyticsConfig(lane: "dev" | "installed"): AnalyticsConfig | nu
           | undefined)?.telemetry?.posthog;
   const key =
     lane === "dev"
-      ? resolveKey(null, "posthog.api-key")
+      ? resolveKey(null, "posthog.api-key", stateTree(runtimeRoot()))
       : typeof config?.apiKey === "string" && config.apiKey.trim()
         ? { value: config.apiKey.trim() }
         : { refused: "no-key" as const };
@@ -50,6 +50,11 @@ function readJson(path: string): unknown {
   }
 }
 const installFile = z.object({ installId: z.uuid() });
+const installKind = stateKind({
+  schema: installFile,
+  place: () => "Install identity",
+  segments: () => ["install.json"],
+});
 
 /**
  * This install's opaque id, from `state\install.json`. The file is machine state, so its class is
@@ -61,18 +66,12 @@ const installFile = z.object({ installId: z.uuid() });
  */
 export function readOrCreateInstallId(): string | null {
   try {
-    const state = join(runtimeRoot(), "state");
-    const path = join(state, "install.json");
-    const read = () =>
-      readStored(path, installFile, {
-        class: "discard",
-        place: "Install identity",
-        notices: join(state, productPathNames.storedNoticesFileName),
-      });
+    const file = installKind.in(stateTree(runtimeRoot()));
+    const read = () => readFile(file);
     const existing = read();
     if (existing.kind === "ok") return existing.value.installId;
     const id = randomUUID();
-    writeAtomic(path, JSON.stringify({ installId: id }));
+    writeState(file, JSON.stringify({ installId: id }));
     const written = read();
     return written.kind === "ok" ? written.value.installId : id;
   } catch (error) { console.warn("ts/packages/runtime/src/analytics.ts: fallback after failure", error);

@@ -1,5 +1,7 @@
+import { stateFixture } from "../../../tests/isolated-home/storage.ts";
+import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { readFileSync } from "node:fs";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -145,7 +147,7 @@ effectTest("two dirty source builds at one HEAD refuse each other's recordings",
     });
     const bounds = { maxBytes: 1_000_000, maxTakings: 100 };
     const recording = join(dir, "recording");
-    yield* openRecordingWriter(recording, identity(first), bounds);
+    yield* openRecordingWriter(stateFixture(recording), identity(first), bounds);
     expect(
       (yield* Effect.flip(openRecordingReader(recording, identity(second), bounds))).problem,
     ).toBe("recording.mismatch");

@@ -40,10 +40,16 @@ import {
 } from "@pe/host-contracts/operation-types";
 import { contextFetch } from "@pe/runtime/context";
 import { readFile } from "node:fs/promises";
-import { join } from "node:path";
 import { gzipSync, gunzipSync } from "node:zlib";
 import type { DocumentMarks } from "./document-marks.ts";
 import { sha256Hex, writeArtifact } from "./page-artifacts.ts";
+import { stateKind, type StateDirectory } from "@pe/host-contracts/kinds";
+import { z } from "zod";
+const analysisArtifactKind = stateKind({
+  schema: z.unknown(),
+  place: (_id: string) => "Duct analysis",
+  segments: (id: string) => [`${id}.json`],
+});
 
 type Observation = {
   target: DocumentRef;
@@ -54,7 +60,7 @@ type Observation = {
   provenance: unknown;
 };
 export interface DuctsAnalysisSources {
-  root: string;
+  root: StateDirectory;
   catalogs: (pointer?: string | null) => Promise<{ tables: Catalogs; findings: string[] }>;
   producer: unknown;
   marks: DocumentMarks;
@@ -311,12 +317,14 @@ export const ductsNativeRead =
 export function createDuctsAnalysis(sources: DuctsAnalysisSources) {
   const artifactBytes = async (id: string) => {
     if (!/^[a-f0-9]{64}$/.test(id)) throw Error("Invalid analysis artifact id");
-    const bytes = await readFile(join(sources.root, `${id}.json`));
+    const bytes = await readFile(analysisArtifactKind.in(sources.root, id).path);
     if (bytes.length > MAX_BYTES || sha256Hex(bytes) !== id)
       throw Error("Analysis artifact integrity failed");
     return bytes;
   };
-  async function acquire(target: DocumentRef, selector: DuctsAnalysisRequest["selector"]): Promise<Artifact> {
+  async function acquire(
+    target: DocumentRef, selector: DuctsAnalysisRequest["selector"],
+  ): Promise<Artifact> {
     const began = Date.now();
     const beforeMark = sources.marks.changedAt(target);
     const observedSince = sources.marks.observedSince;
@@ -370,12 +378,18 @@ export function createDuctsAnalysis(sources: DuctsAnalysisSources) {
       ...(Object.keys(slots).length ? { slots } : {}),
       ...(staged.labelParameter ? { labelParameter: staged.labelParameter } : {}),
     };
-    await read("ducts.snapshot.roster", { ...readOptions, selector: { kind: "roster" } }) as DuctSnapshot;
+    (await read("ducts.snapshot.roster", {
+      ...readOptions,
+      selector: { kind: "roster" },
+    })) as DuctSnapshot;
     const scope = selector.kind === "equipment" || selector.kind === "terminal"
       ? { kind: "from", unitId: selector.id }
       : null;
     if (!scope) throw Error("Fresh analysis requires an equipment or terminal subject; read the roster first. Document/group projections remain available on saved artifacts.");
-    const snapshot = await read("ducts.snapshot.walk", { ...readOptions, selector: scope }) as DuctSnapshot;
+    const snapshot = (await read("ducts.snapshot.walk", {
+      ...readOptions,
+      selector: scope,
+    })) as DuctSnapshot;
     const tables = await read("ducts.tables", { ids: [...TABLE_IDS] });
     const catalogs = await sources.catalogs(observation.projectHome);
     const inputJson = JSON.stringify({
@@ -461,7 +475,11 @@ export function createDuctsAnalysis(sources: DuctsAnalysisSources) {
     const work = ductsDocumentSchema.parse(input.work);
     if (input.snapshot.storeError) throw Error("Apply request provenance store is unreadable");
     if (artifact.acquisition.length !== 3) throw Error("Apply request acquisitions are incomplete");
-    for (const [index, key] of ["ducts.snapshot.roster", "ducts.snapshot.walk", "ducts.tables"].entries()) {
+    for (const [index, key] of [
+      "ducts.snapshot.roster",
+      "ducts.snapshot.walk",
+      "ducts.tables",
+    ].entries()) {
       const row = artifact.acquisition[index]!;
       const raw = Buffer.from(row.bodyUtf8, "utf8");
       if (
@@ -556,7 +574,7 @@ export function createDuctsAnalysis(sources: DuctsAnalysisSources) {
     if (bytes.length > MAX_BYTES)
       throw Error("Apply request exceeds byte budget; no partial artifact was published");
     const planId = sha256Hex(bytes);
-    await writeArtifact(sources.root, join(sources.root, `${planId}.json`), bytes);
+    await writeArtifact(sources.root.path, analysisArtifactKind.in(sources.root, planId), bytes);
     return {
       artifact: {
         id: planId,
@@ -591,7 +609,7 @@ export function createDuctsAnalysis(sources: DuctsAnalysisSources) {
         if (bytes.length > MAX_BYTES)
           throw Error("Analysis artifact exceeds byte budget; no partial artifact was published");
         id = sha256Hex(bytes);
-        await writeArtifact(sources.root, join(sources.root, `${id}.json`), bytes);
+        await writeArtifact(sources.root.path, analysisArtifactKind.in(sources.root, id), bytes);
       } else {
         id = request.source.id;
         bytes = await artifactBytes(id);
@@ -632,9 +650,7 @@ function project(
     freshness: artifact.freshness,
   });
   const { snapshot, flows, groups, selectedTerminals, reached, equipment } = assessment;
-  const findings = [
-    ...assessment.findings,
-  ];
+  const findings = [...assessment.findings];
   const nodes = new Map(snapshot.nodes.map((node) => [node.id, node]));
   const baseRow = (node: DuctSnapshot["nodes"][number] | undefined, elementId: number) => ({
     id: elementId,

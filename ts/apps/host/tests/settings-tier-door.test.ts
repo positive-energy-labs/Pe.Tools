@@ -1,9 +1,13 @@
+import { notices as storedNotices } from "@pe/host-contracts/kinds";
+import { stateMachine } from "../../../tests/isolated-home/storage.ts";
+import { dirname as storedParent } from "node:path";
+import { mkdtempSync } from "../../../tests/isolated-home/storage.ts";
 import { randomUUID } from "node:crypto";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test, vi } from "vite-plus/test";
-import { readStoredNotices, sha256Hex } from "@pe/host-contracts/store";
+import { sha256Hex } from "@pe/host-contracts/store";
 import { noticeRows, storedBlobsPath, storedNoticesPath } from "../src/notice-feed.ts";
 import { bootHost } from "./real-server.ts";
 import { BRIDGE_CONTRACT_VERSION, BRIDGE_PATH, HOST_RUNTIME_SERVICE_QUERY, type BridgeFrame } from "@pe/host-contracts/contracts";
@@ -95,8 +99,8 @@ test.each(["firm", "project"] as const)("settings.tiers.write crosses /actions, 
     expect(receipt.result.sha256).toBe(sha256Hex(bytes));
     expect(readFileSync(join(storedBlobsPath(), "sha256", sha256Hex(prior)))).toEqual(prior);
     // Mutant H9-notice: omit the action receipt id from the saved-setting notice.
-    expect(readStoredNotices(storedNoticesPath()).find(notice => notice.path === path)?.reason).toContain(receipt.id);
-    expect(readStoredNotices(storedNoticesPath()).filter(notice => notice.path === path)).toMatchObject([
+    expect(storedNotices(stateMachine(storedParent(storedNoticesPath()))).find(notice => notice.path === path)?.reason).toContain(receipt.id);
+    expect(storedNotices(stateMachine(storedParent(storedNoticesPath()))).filter(notice => notice.path === path)).toMatchObject([
       { class: "keep", sha256: sha256Hex(bytes), reason: expect.stringContaining(sha256Hex(prior)) },
     ]);
   } finally {

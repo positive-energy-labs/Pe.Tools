@@ -8,15 +8,15 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { z } from "zod";
-import { derivedStore } from "@pe/host-contracts/service-identity";
+import { derivedFor } from "@pe/host-contracts/service-identity";
 import {
   derivedKey,
-  discardDerived,
-  readDerived,
+  refuseDerived,
+  readDerivedIn,
   sha256Hex,
-  writeDerived,
-  type DerivedStore,
-} from "@pe/host-contracts/store";
+  writeDerivedIn,
+  type DerivedDir,
+} from "@pe/host-contracts/kinds";
 import { runtimeRoot } from "@pe/runtime/runtime-owner";
 import { LLAMA_TIER, parseWithLlamaCloud, requireLlamaCloudKey } from "./llama-parse.ts";
 
@@ -30,7 +30,7 @@ export type ParsedPages = z.infer<typeof parsedPagesSchema>;
 export const sha256Of = sha256Hex;
 
 /** The derived store of the project home `file` (or the first of `near`) sits in; else this machine's. */
-export const parseStore = (...near: string[]): DerivedStore => derivedStore(runtimeRoot(), ...near);
+export const parseStore = (...near: string[]): DerivedDir => derivedFor(runtimeRoot(), ...near);
 
 /**
  * A hosted parse's identity. The tier and the pages are part of what was derived, so they are part
@@ -39,13 +39,13 @@ export const parseStore = (...near: string[]): DerivedStore => derivedStore(runt
 export const llamaParser = (pages: string) => `llamaparse/${LLAMA_TIER}/markdown/1/${pages}`;
 
 /** A derived JSON file; one that does not decode is discarded with a notice and reads as absent (ADR 0039). */
-export function readDerivedJson<T>(store: DerivedStore, key: string, schema: z.ZodType<T>): T | null {
-  const found = readDerived(store, key);
+export function readDerivedJson<T>(store: DerivedDir, key: string, schema: z.ZodType<T>): T | null {
+  const found = readDerivedIn(store, key);
   if (!found) return null;
   try {
-    return schema.parse(JSON.parse(found.bytes.toString("utf8")));
+    return schema.parse(JSON.parse(Buffer.from(found.bytes).toString("utf8")));
   } catch (error) {
-    discardDerived(store, found.path, error instanceof Error ? error.message : String(error));
+    refuseDerived(store, found, error instanceof Error ? error.message : String(error));
     return null;
   }
 }
@@ -92,7 +92,7 @@ export async function sendHeldParse(
         text: "markdown" in page ? page.markdown : "",
       })),
     };
-    writeDerived(store, key, JSON.stringify(kept));
+    writeDerivedIn(store, key, JSON.stringify(kept));
   } catch (error) {
     throw new Error(`The file may have reached LlamaCloud: ${error instanceof Error ? error.message : String(error)}`);
   }

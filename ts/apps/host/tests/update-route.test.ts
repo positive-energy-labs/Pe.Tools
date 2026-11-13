@@ -1,4 +1,9 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { updateFixture } from "./storage.ts";
+import { notices as storedNotices } from "@pe/host-contracts/kinds";
+import { stateMachine } from "../../../tests/isolated-home/storage.ts";
+import { dirname as storedParent } from "node:path";
+import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
+import { readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Context, Deferred, Effect, Layer } from "effect";
@@ -6,7 +11,7 @@ import { HttpRouter } from "effect/http";
 import { expect, test, vi } from "vite-plus/test";
 import type { Envelope, UpdatePlan, UpdateReceipt } from "@pe/host-contracts/pe-revit-contract";
 import type { ServiceHostHandle } from "@pe/host-contracts/pe-service-host";
-import { readStoredNotices, sha256Hex } from "@pe/host-contracts/store";
+import { sha256Hex } from "@pe/host-contracts/store";
 import { storedBlobsPath, storedNoticesPath } from "../src/notice-feed.ts";
 import {
   createUpdateReader,
@@ -111,7 +116,7 @@ async function fixture() {
   const facts: UpdateFact[] = [];
   const make = (runner = run) =>
     createUpdateReader({
-      path,
+      file: updateFixture(path),
       run: runner,
       installed: true,
       pid: 123,
@@ -341,10 +346,10 @@ test("wrong request or plan cannot overwrite a confirmed receipt; a corrupt admi
       discardedAtUtc: expect.any(String),
     });
     expect(
-      readStoredNotices(storedNoticesPath()).filter((notice) => notice.path === f.path),
+      storedNotices(stateMachine(f.path)).filter((notice) => notice.path === f.path),
     ).toMatchObject([{ class: "discard", place: "Update status", sha256: sha256Hex("{}") }]);
     // Nothing is lost: the discarded bytes rest in the blob store under the hash the notice names.
-    expect(await readFile(join(storedBlobsPath(), "sha256", sha256Hex("{}")), "utf8")).toBe("{}");
+    expect(await readFile(join(stateMachine(f.path).blobs, "sha256", sha256Hex("{}")), "utf8")).toBe("{}");
     expect(f.calls.filter(({ args }) => args[1] === "apply")).toHaveLength(1);
     // A plan this host checks after the discard is a new decision: it is admitted, and its record
     // carries the discard forward.
@@ -466,7 +471,7 @@ test("U-02/U-04: a lost acknowledgement is unknown, and late recovery of a runni
     return recovered(saved);
   });
   const reader = createUpdateReader({
-    path: f.path,
+    file: updateFixture(f.path),
     run,
     installed: true,
     pid: 123,
@@ -524,9 +529,9 @@ test("an admission that does not decode is discarded on the request that meets i
     expect(said).toContain("was discarded, so whether this plan was already applied is unknown");
     expect(f.calls.filter(({ args }) => args[1] === "apply")).toHaveLength(0);
     expect(
-      readStoredNotices(storedNoticesPath()).filter((notice) => notice.path === f.path),
+      storedNotices(stateMachine(f.path)).filter((notice) => notice.path === f.path),
     ).toMatchObject([{ class: "discard", place: "Update status", sha256: sha256Hex(corrupt) }]);
-    expect(await readFile(join(storedBlobsPath(), "sha256", sha256Hex(corrupt)), "utf8")).toBe(
+    expect(await readFile(join(stateMachine(f.path).blobs, "sha256", sha256Hex(corrupt)), "utf8")).toBe(
       corrupt,
     );
   } finally {

@@ -1,4 +1,6 @@
-import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
+import { stateFixture } from "../../../tests/isolated-home/storage.ts";
+import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
+import { readdir, rm, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -31,7 +33,7 @@ test("after a read discards the only unreadable Work record, the thread-work Rea
   let release: (() => void) | undefined;
   try {
     await writeFile(join(dir, name), '{"format":"route-state-record-v2","targetKey":"x","value":{"trunc');
-    const app = createPeRoutes({ store: fileRouteDocumentStore(dir), registrations: [{ spec }] });
+    const app = createPeRoutes({ store: fileRouteDocumentStore(stateFixture(dir)), registrations: [{ spec }] });
     const frames: unknown[] = [];
     release = app.observe({ kind: "thread-work" } as never, (frame: unknown) => frames.push(frame), null as never) ?? undefined;
     await expect.poll(() => frames.length, { timeout: 5_000 }).toBeGreaterThan(0);

@@ -1,11 +1,17 @@
 import { existsSync, mkdirSync, readFileSync, realpathSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { productPathNames } from "@pe/host-contracts/contracts";
-import { noteStored, writeAtomic } from "@pe/host-contracts/store";
+import { note, stateKind, writeState } from "@pe/host-contracts/kinds";
+import { z } from "zod";
 import { peaAgentInstructions } from "@pe/mcps";
 import { productAgentPath } from "./product-paths.ts";
-import { hostOwnership } from "./host-ownership.ts";
-import { storedNoticesPath } from "./notice-feed.ts";
+import { hostOwnership, hostState } from "./host-ownership.ts";
+const instructionsKind = stateKind({
+  schema: z.string(),
+  parse: (text) => text,
+  place: () => "Agent instructions",
+  segments: () => ["Agent", productPathNames.agentInstructionsFileName],
+});
 
 /** Refuse checkout inheritance before composing a host that can spawn a harness child. */
 export function prepareAgentDirectory(): void {
@@ -25,16 +31,17 @@ export function prepareAgentDirectory(): void {
       if (dirname(ancestor) === ancestor) break;
     }
   }
-  const instructions = join(agent, productPathNames.agentInstructionsFileName);
+  const file = instructionsKind.in(hostState());
+  const instructions = file.path;
   try {
     mkdirSync(agent, { recursive: true });
     // ADR 0037 rule 6: product-owned machine state outside every home is replaced on any
     // byte difference; a hand edit to state/Agent/AGENTS.md is not kept.
     if (!existsSync(instructions) || readFileSync(instructions, "utf8") !== peaAgentInstructions)
-      writeAtomic(instructions, peaAgentInstructions);
+      writeState(file, peaAgentInstructions);
   } catch (error) {
     console.error("Agent instructions unavailable", { path: instructions, error });
-    noteStored(storedNoticesPath(), {
+    note(hostState(), {
       class: "keep", place: "Agent instructions", path: instructions,
       sha256: null, reason: `Instructions unavailable: ${String(error)}`,
     });
