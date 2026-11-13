@@ -124,13 +124,18 @@ export interface ReadHandle<K extends string = string, I = unknown, D = unknown>
   readonly [minted]: true;
   readonly key: K;
   readonly input: z.ZodType<I>;
+  readonly data: z.ZodType<D>;                          // added at the freeze: body() decodes a result with it
   readonly output: z.ZodType<Publication<D>>;           // Publication moves to C/value.ts
   readonly axes: CatalogAxes;                           // joined from uses: effect max, cost max, touches union
   readonly keyedBy: Readonly<Record<string, RowKey>>;   // dotted collection path; an unnamed collection is unkeyed
   readonly demand?: "mount" | "explicit";
 }
 export type InputOf<H> = H extends CommandHandle<string, infer I> ? I : never;
-export declare function handle<K extends CommandKey>(key: K): CommandHandle<K, CommandInput<K>, CommandOutput<K>, CommandEffect<K>>;
+export declare function handle<K extends CommandKey>(key: K): CommandHandle<K, CommandInput<K>, CommandOutput<K>, CommandEffect<K>> & Planned<K, CommandInput<K>>;
+// As landed: CommandKey is every key of K1's generated commandTable (semantic commands, raw native commands, pe-api routes);
+// effect, plan and via come from its row. Input and output: hostActions first, then OpRequestOf/OpResponseOf, then the pe-api route.
+// Planned makes `plan` required on a sealed write, so VerbDecl's `H extends { plan: object }` holds.
+// CatalogReadKey lives in C/handle.ts; the host door re-exports it.
 export declare function native<K extends CatalogReadKey>(key: K): ReadHandle<K, OpRequestOf<K>, OpResponseOf<K>>;
 export declare function contract<K extends string, I, D>(key: K, def: {
   input: z.ZodType<I>; data: z.ZodType<D>;
@@ -140,6 +145,8 @@ export declare function contract<K extends string, I, D>(key: K, def: {
 
 // H/reads/door.ts and evaluator.ts — the host half, frozen in the same commit
 export declare function body<K extends string, I, D>(h: ReadHandle<K, I, D>, run: (ctx: ReadContext, args: I) => Promise<D> | D): Read<I, D>;
+// As landed: read(name, def) and ctx.read(body | leaf) stay beside these until k2/read-sweep converts the route reads.
+// ctx.firm and ctx.settings are gone. bodyOf(handle) is the registry lookup.
 interface ReadContext {
   read<I, D>(h: ReadHandle<string, I, D>, args: I): Promise<D>;   // by handle; the registry resolves the body by key
   readonly files: {

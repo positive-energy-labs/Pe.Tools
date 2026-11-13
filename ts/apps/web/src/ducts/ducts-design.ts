@@ -23,8 +23,8 @@ export const designLayers = read("ducts.design-layers", {
       fans: fansDocumentSchema.parse(fans?.doc ?? {}),
       revision: ducts?.revision ?? 0,
       fansRevision: fans?.revision ?? 0,
-      firm: await ctx.firm("ducts", ductsFirmSchema, {}),
-      settings: await ctx.settings("ducts", target),
+      firm: await ctx.files.firm("ducts", ductsFirmSchema, {}),
+      settings: await ctx.files.tiers("ducts", target),
     };
   },
 });

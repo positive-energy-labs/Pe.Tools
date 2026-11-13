@@ -80,9 +80,20 @@ export const routeReadingJsonSchema = z.union([
     ...readingPolicy,
   }),
 ]);
+// Kernel crusade 2 freeze (CONTRACTS.md, "Wire shape of a route's verbs and gates"): the additions
+// land optional so today's graphs still decode; SH-S1 makes them required and SH-S3 removes
+// stages, stageOrder, predicates and the five verb kinds.
+export const verbEffectSchema = z.enum(["Read", "TransactRead", "SessionWrite", "WorkWrite", "ModelWrite"]);
+/** A gate's condition once SH-S3 wires it into `layout`: the subject, or one page field at one value. */
+export const gateWhenSchema = z.union([
+  z.literal("subject"),
+  z.strictObject({ field: ref, value: z.string() }),
+]);
+export type GateWhen = z.output<typeof gateWhenSchema>;
 const verb = {
   input: ref,
   label: z.string(),
+  effect: verbEffectSchema.optional(),
   review: z.enum(["none", "shown"]),
   deps: dependencies,
   captures: refs,
@@ -241,6 +252,8 @@ export const RouteGraphJson = z.strictObject({
   /** ADR 0035 rule 8: the reading whose data is the Goal; the kernel draws its unresolved list first. */
   goal: ref.optional(),
   verbs: z.record(ref, routeVerbJsonSchema),
+  /** Verb ids on the band, the first primary. A verb is on the band or in exactly one pane. */
+  band: refs.optional(),
   panes: z.record(ref, pane),
   layout,
   stages: z.record(ref, z.strictObject({ word: z.string(), panes: refs, verbs: refs })),
