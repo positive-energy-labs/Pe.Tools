@@ -6,6 +6,7 @@
  */
 import type { LossResult, Row } from "./losses.ts";
 import type { DuctSnapshot } from "./types.ts";
+import { familyTypeName as typeLabel } from "@pe/agent-contracts/subject-ref";
 
 export type LossPart = "unit" | "duct" | "terminal";
 
@@ -24,10 +25,6 @@ export interface LossGroup {
 }
 
 /** Family and type as one name; a Revit-internal family (`Damper_Volume_Round`) yields to its type. */
-const typeLabel = (node: { family?: string | null; type?: string | null }) => {
-  const family = node.family?.includes("_") && node.type?.trim() ? null : node.family;
-  return [...new Set([family, node.type].map((v) => v?.trim()).filter(Boolean))].join(" ");
-};
 
 /**
  * The groups of one run's rows, in bar order: unit end, then ducts and fittings, then grille; within a

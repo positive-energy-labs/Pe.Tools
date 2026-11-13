@@ -24,6 +24,14 @@ export {
   type HomeWrite,
   type StoredNotice,
 } from "./store.ts";
+export { writeGenerated } from "./store.ts";
+
+const generatedFile: unique symbol = Symbol("generated-file");
+/** Disposable build output, outside content homes and product state. Only its kind mints a file. */
+export type GeneratedFile = { readonly path: string; readonly [generatedFile]: true };
+export const generatedKind = (segments: readonly string[]) => ({
+  in: (root: string): GeneratedFile => ({ path: under(root, segments), [generatedFile]: true }),
+});
 
 import { mintHomePath, mintStatePath, type HomePath, type StatePath } from "./store-paths.ts";
 export type { HomePath, StatePath } from "./store-paths.ts";

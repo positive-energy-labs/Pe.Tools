@@ -26,7 +26,6 @@ import {
 } from "./tiers";
 import type { LedgerProps, RosterProps } from "./types";
 import { branchesKnown, Worksheet } from "./worksheet-table";
-import { FindingVerb } from "#/route/slots/findings/verb";
 
 const rosterState = (row: FanPort) =>
   row.complete
@@ -83,7 +82,6 @@ export function Roster({ props }: { props: RosterProps }) {
     ),
     revit: [fan.unitId],
     title: `Open ${labelOf(fan)}`,
-    actions: <FindingVerb subject={stableFanKey(fan)} name={labelOf(fan)} action={props.finding} />,
   });
   // The roster pane clips; the list scrolls in its own Scroll, as the /ducts systems pane does.
   return (

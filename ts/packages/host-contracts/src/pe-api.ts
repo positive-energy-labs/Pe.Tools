@@ -1453,7 +1453,7 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     origin: "host-local",
     displayName: "Point At",
     description:
-      "Show the person a subject or a route place in this thread's 'Pea is pointing at' list and highlight it, without changing their selection, URL or camera. target is a SubjectRef code, or the route's attention field text (route:<r>.view fields). Kept until the person dismisses it; keeping it as a finding is findings.say.",
+      "Highlight a subject or route place for the person in this thread, without changing their selection, URL or camera. target is a SubjectRef code, or the route's attention field text (route:<r>.view fields). It remains until pointers.dismiss; a durable note is a separate findings.say.",
     intent: "Read",
     visibility: "DefaultVisible",
     costTier: "Cheap",

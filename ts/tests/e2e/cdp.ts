@@ -368,22 +368,25 @@ export const revit = {
 };
 
 /**
- * Waits for the route to bind a Revit session. The first paint reads "the bridge is disconnected"
- * even when it is connected, so only a bounded wait without a bound state is a PRECONDITION (no
- * slot). Bound = the LOG's `target session-… › <openId>` line, or the families pane with no
- * disconnected line (the chat plugin pane may not draw the LOG).
+ * The shown document chip of a Place bound to a live Revit document. The shell's DocumentPicker
+ * (apps/web/src/shell/document-picker.ts) sets `data-bound-document` to the openId only while the
+ * Place's target is a document a connected Revit lists as open; unbound, it is absent.
+ */
+export const BOUND = "[data-bound-document] [data-list-trigger]";
+/** Unit ESP cell address emitted by route/slots/sheet/pane.tsx for fans/sheet.ts's esp binding. */
+export const FANS_ESP_ROW = '[data-pane-id="sheet-inputs"] [data-sheet-address^="esp:"]';
+export const DOCUMENT_CHOOSER = '[data-list-trigger][aria-label="Choose a document"]';
+const CHOOSE = "Choose a document";
+
+/**
+ * Waits for the route to bind a live Revit document (BOUND). The first paint is unbound even when
+ * Revit is connected, so only a bounded wait without a bound state is a PRECONDITION (no slot).
  */
 export async function requireRevit(page: Page, ms = 60_000) {
-  const bound = async () => {
-    const text = await page.text();
-    return (
-      /target session-\S+ › \S+/.test(text) ||
-      (/FAMILIES IN SCOPE/i.test(text) && !/BRIDGE IS DISCONNECTED/i.test(text))
-    );
-  };
-  // A new thread may drop the URL's ?target: bind it through the Situation sentence instead.
+  const bound = async () => (await page.count(BOUND)) > 0;
+  // A new thread may drop the URL's ?target: bind it through the document chooser instead.
   if (!(await page.until(bound, "the URL target", 5_000).catch(() => false)))
-    if (/no document selected/i.test(await page.text())) await bindTarget(page);
+    if (await page.has(CHOOSE)) await bindTarget(page);
   await page.until(bound, "the route to bind a Revit session", ms).catch(() => {
     throw new Error(
       `PRECONDITION: no Revit bridge after ${ms / 1000}s; this journey runs in the joint-hold slot`,
@@ -392,25 +395,17 @@ export async function requireRevit(page: Page, ms = 60_000) {
 }
 
 /**
- * Bind the document through the Situation ladder as a person does: "Choose session" → E2E_SESSION
- * (else the first session) → the document titled E2E_DOC. E2E_DOC unset is a PRECONDITION.
+ * Bind the document through the shell's chooser as a person does: "Choose a document" → the option
+ * titled E2E_DOC, in session E2E_SESSION when set (an option reads `title`, then its session).
+ * E2E_DOC unset is a PRECONDITION.
  */
 async function bindTarget(page: Page) {
   const doc = process.env.E2E_DOC;
   if (!doc) throw new Error("PRECONDITION: no document bound and E2E_DOC (its title) is unset");
   const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const session = process.env.E2E_SESSION;
-  // The ladder's name is its first unbound rung: "Choose session" until a session is chosen.
-  if (await page.has("Choose session", SITUATION)) {
-    await page.click("Choose session", SITUATION);
-    if (session) await page.click(new RegExp(`^${esc(session)}(\\s|$)`));
-    else await page.clickAt('[role="option"]');
-  }
-  const option = new RegExp(`^${esc(doc)}(\\s|$)`);
-  // The ladder may drill in place or close after the session pick; reopen on "Choose document".
-  if (!(await page.until(() => page.has(option), "document option", 3_000).catch(() => false)))
-    await page.click("Choose document", SITUATION);
-  await page.click(option);
+  await page.click(CHOOSE);
+  await page.click(new RegExp(`^${esc(doc)}${session ? `\\s+${esc(session)}$` : "(\\s|$)"}`));
 }
 
 /** A chip is a listbox button named `name` in the composer (Model, Access). */

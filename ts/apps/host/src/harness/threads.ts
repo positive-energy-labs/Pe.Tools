@@ -1014,13 +1014,13 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
       return () => void headListeners.delete(listener);
     },
     /** The `thread-head` Reading: the current head, then every set. */
-    observe(threadId: string, listener: (value: { value: ThreadHead }) => void) {
+    observe(threadId: string, listener: (value: { value: ThreadHead & { pointers: readonly Pointer[] } }) => void) {
       const notify = (id: string, head: ThreadHead) => {
-        if (id === threadId) listener({ value: head });
+        if (id === threadId) listener({ value: { ...head, pointers: storedPointers(threadId) } });
       };
       headListeners.add(notify);
       queueMicrotask(() => {
-        if (headListeners.has(notify)) listener({ value: readHead(threadId) });
+        if (headListeners.has(notify)) notify(threadId, readHead(threadId));
       });
       return () => void headListeners.delete(notify);
     },
@@ -2320,6 +2320,7 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
     const t = threads.get(threadId)!;
     t.meta.pointers = pointers;
     writeMeta(t);
+    for (const listener of headListeners) listener(threadId, readHead(threadId));
     return { threadId, pointers };
   };
   const service = {

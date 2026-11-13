@@ -1,14 +1,13 @@
 import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { randomUUID } from "node:crypto";
-
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
+import { basename, dirname } from "node:path";
+import { generatedKind, writeGenerated } from "@pe/host-contracts/kinds";
 import { routeStartupOwner, routeStartupSourceHash, currentRouteStartupProjection, readRouteStartupReceipt } from "@pe/host-contracts/route-startup";
 import type { RouteStartupProjection } from "@pe/host-contracts/route-startup";
 
 declare const __PE_SOURCE_COMMIT__: string;
+const sourceClosure = generatedKind(["source-closure.generated.json"]);
 
 /** ADR 0029 rule 4 exception: this source bootstrap runs before the Effect graph has a process scope.
  * Builtin closures are untracked build output that the host graph imports from disk under jiti.
@@ -41,15 +40,8 @@ export async function prepareDevRouteProjection(): Promise<RouteStartupProjectio
   if (!current) throw new Error("Route sources changed during startup projection; retry startup.");
   // The host graph still imports ignored closure pins from disk before linking under jiti.
   for (const [path, text] of Object.entries(receipt.projections)) {
-    if (!path.endsWith("source-closure.generated.json")) continue;
-    try { if (await readFile(path, "utf8") === text) continue; }
-    catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
-    await mkdir(dirname(path), { recursive: true });
-    const temp = `${path}.${process.pid}.${randomUUID()}`;
-    try {
-      await writeFile(temp, text);
-      await rename(temp, path);
-    } finally { await rm(temp, { force: true }); }
+    if (basename(path) !== "source-closure.generated.json") continue;
+    writeGenerated(sourceClosure.in(dirname(path)), text);
   }
   if (!currentRouteStartupProjection(root, receipt))
     throw new Error("Route sources changed during startup publication; retry startup.");

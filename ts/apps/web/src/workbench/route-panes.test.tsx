@@ -76,7 +76,13 @@ const hostEvents = vi.hoisted(() => {
   const listeners = new Set<(event: unknown) => void>();
   return { listeners, emit: (event: unknown) => [...listeners].forEach((each) => each(event)) };
 });
-vi.mock("#/chat/chat-shell", () => ({ ChatShell: () => <div data-chat-probe="" /> }));
+vi.mock("../shell/typed-shell", async (actual) => {
+  const real = await actual<typeof import("../shell/typed-shell")>();
+  const { RouteBand } = await import("../navigation/route-controls");
+  return { ...real, TypedShell: (props: Parameters<typeof real.TypedShell>[0]) => props.module.spec.key === "chat"
+    ? <><RouteBand route="chat"><span data-slot="situation-band">Pea controls</span></RouteBand><div data-chat-probe="" /></>
+    : <real.TypedShell {...props} /> };
+});
 vi.mock("#/route/situation-ladder", async () => ({ ChatPlanIntent: (await import("react")).createContext(null) }));
 vi.mock("#/host/resource-stream", async (actual) => {
   const { useEffect } = await import("react");
@@ -196,6 +202,17 @@ async function mount(entry = "/pea?thread=T", strict = false, restore = false, v
   return router;
 }
 const tools = () => document.querySelector<HTMLElement>('[data-pane-id="tools"]')!;
+
+test("the dock puts each route band in its pane head and draws no Pea context row", async () => {
+  await mount("/fans?fixture=layout");
+  const pea = document.querySelector('[data-pane-id="pea"]')!;
+  const band = pea.querySelector('[data-slot="situation-band"]')!;
+  expect(band).not.toBeNull();
+  expect(band.closest('[data-slot="pane-body"]')).toBeNull();
+  await waitFor(() => expect(tools().querySelector('[data-slot="situation-band"]')).not.toBeNull());
+  expect(tools().querySelector('[data-slot="situation-band"]')!.closest('[data-slot="pane-body"]')).toBeNull();
+  expect(screen.queryByLabelText("Pea context")).toBeNull();
+});
 
 test("a tab press expands the tools on that Place; a Work press restores its Page without a remount", async () => {
   await seedPlaces([

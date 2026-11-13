@@ -56,6 +56,7 @@ import type {
   StoredLog,
   DerivedDir,
   DerivedFile,
+  GeneratedFile,
 } from "./kinds.ts";
 
 const errno = (error: unknown) => (error as NodeJS.ErrnoException).code ?? "";
@@ -126,6 +127,12 @@ function writeAtomic(path: string, bytes: Uint8Array | string): void {
     rmSync(temporary, { force: true });
     throw error;
   }
+}
+
+/** Build output has no authored bytes to preserve. Publish atomically only when bytes differ. */
+export function writeGenerated(file: GeneratedFile, bytes: Uint8Array | string): void {
+  if (readOrNull(file.path)?.equals(Buffer.from(bytes))) return;
+  writeAtomic(file.path, bytes);
 }
 
 /**

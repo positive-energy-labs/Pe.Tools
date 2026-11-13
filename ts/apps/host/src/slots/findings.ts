@@ -1,5 +1,6 @@
 import { hostState } from "../host-ownership.ts";
 import { Effect } from "effect";
+import { subjectName } from "@pe/agent-contracts/subject-ref";
 import { z } from "zod";
 import { address, bindWork, commands, refusalText, workHandle, workHandleSchema, type ActionAdmission, type Caller, type RouteStatePatch, type WorkKey } from "@pe/agent-contracts";
 import {
@@ -149,7 +150,7 @@ export const findingsExecutors = (workspace: RouteWorkspace | undefined, bridge:
           });
           if (!parsed.success) throw stepRefused(z.prettifyError(parsed.error));
           const finding = parsed.data;
-          const { revision } = await write(workspace, work, by, ctx, `${finding.kind} on ${finding.subject}`, { path: ["findings", finding.id], value: finding });
+          const { revision } = await write(workspace, work, by, ctx, `${finding.kind} on ${subjectName(finding.subject)}`, { path: ["findings", finding.id], value: finding });
           return { id: finding.id, revision };
         }),
     }),
