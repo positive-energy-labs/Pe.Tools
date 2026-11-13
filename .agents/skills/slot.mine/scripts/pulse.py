@@ -10,6 +10,9 @@ figure inside its band is not printed unless --all, so a quiet run prints the pa
 else. Exit 1 when a ratchet or a health count rose. `--map` names the file whose
 `Estimate: <branch> <hours>h` lines it scores; a slice whose branch does not exist is "not started".
 
+Hours are the time between the two commits, so pace is comparable only between ranges that each
+start where a run started.
+
 ponytail: conflict cost is lines inside conflict markers over lines merged; it stands in for time
 and cannot see a clean merge that breaks behavior. Bands are the constants below; tune them on data.
 """
@@ -147,6 +150,7 @@ def main(argv):
             if show_all or not ESTIMATE_BAND[0] <= ratio <= ESTIMATE_BAND[1]:
                 print('estimate %s: %sh planned, %.1fh from first commit to merge = %.1fx' % (branch, est, actual, ratio))
         if idle: print('not started (no branch): ' + ', '.join(idle))
+    if red: print('exit 1: a ratchet or a health count rose')
     return 1 if red else 0
 
 

@@ -841,6 +841,7 @@ def window(db, tids):
 
 
 def main():
+    sys.stdout.reconfigure(encoding='utf-8')  # thread titles hold characters the Windows console codec refuses
     a = argparse.ArgumentParser(); a.add_argument("--out", required=True); a.add_argument("--tree", action="store_true"); a.add_argument("--branch"); a.add_argument("--base"); a.add_argument("--cycles", action="append", default=[])
     a.add_argument("threads", nargs="+"); a = a.parse_args()
     if a.branch and not a.base: sys.exit("--branch needs --base: the commit the run started from")

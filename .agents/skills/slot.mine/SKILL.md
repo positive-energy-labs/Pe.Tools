@@ -31,7 +31,7 @@ python .agents/skills/slot.mine/scripts/retro.py --out .artifacts/runs/retro-YYY
 
 `retro.py --tree` also writes `swimlanes.html`, and `swimlanes.py <run-dir>` redraws it from `retro.json` without measuring (it exits non-zero and names the `retro.py` command if the json is missing or was written without `--tree`): every run of the roots and their descendants as bars split by activity, waits colored by cause, arrows between threads, cache misses, keepalive hits, model changes and compactions, a churn curve per slice, the landmark, and toggles per layer.
 
-`retro.py` resolves each thread to its native Claude session or Codex rollout through T3's state database. Without `--tree` it counts the main thread only. `--tree` follows child threads only, so a partner that was launched as its own top-level thread is passed as a second root, and a thread shared by two runs is measured whole, with no window. It prices tokens from T3's model rates. An unpriced model gets an empty cost, never a zero. T3 search is bounded, so a count drawn from it is a floor. The landed figure is a ladder (strong, then +weak, then +unknown). Unknown is never a failure, and a deleted branch is `unknown`, not unmerged.
+`retro.py` resolves each thread to its native Claude session or Codex rollout through T3's state database. Without `--tree` it counts the main thread only. `--tree` follows child threads only, so a partner that was launched as its own top-level thread is passed as a second root. The threads of a run are the `T3-Thread` trailers on its commits: `git log --format="%(trailers:key=T3-Thread,valueonly)" <base>..<tip>`, sorted and counted, lists them, and each one outside the root's tree is a partner root. A run's base is the commit that landed its plan, which its map names, and its tip is the last merge of its integration branch into main; a branch name is not the tip, because a later run may move it. Also, and a thread shared by two runs is measured whole, with no window. It prices tokens from T3's model rates. An unpriced model gets an empty cost, never a zero. T3 search is bounded, so a count drawn from it is a floor. The landed figure is a ladder (strong, then +weak, then +unknown). Unknown is never a failure, and a deleted branch is `unknown`, not unmerged.
 
 `corpus` runs from the checkout root:
 
@@ -43,7 +43,7 @@ python .agents/skills/slot.mine/scripts/corpus/run.py --project <t3-project-id> 
 - The stages `t3,native,commits,epochs,survival,samples,page` each write their artifact to the run directory, so `--stages` reruns one stage.
 - An owner turn is `landed.owner_turn` (createdBy user, with source web or mobile). Agent text relayed through the user role is `relay`.
 - Commit attribution tries trailer, commit line, patch-id, then first mention (weak), and prints coverage by commits and by lines.
-- Never ask agents for their roles. A separate labelling loop (`pass.retro`, `corpus/label_brief.md`) writes `roles.json`, and `render.py --run <dir> --roles roles.json` re-renders the page.
+- Never ask agents for their roles. A separate labelling loop (`pass.retro`, `scripts/corpus/label_brief.md`) writes `roles.json`, and `render.py --run <dir> --roles roles.json` re-renders the page.
 - `corpus/run.py --help` gives the stage contracts.
 
 For the retained Claude and Codex session stores, run from the checkout root:
