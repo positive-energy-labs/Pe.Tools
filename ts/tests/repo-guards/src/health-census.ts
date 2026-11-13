@@ -35,28 +35,41 @@ export const perFileRises = (name: (typeof PER_FILE)[number], actual: Count, bas
 
 /**
  * Written exceptions to the one write door (routes MAP slice 2): files that keep writes of their
- * own, each carrying `STORE-EXCEPTION: ADR 0039` and its end condition at the site. A listed file
- * without both is red; a marker in an unlisted file is red, so no file declares itself exempt.
+ * own. Each listed file carries `STORE-EXCEPTION: ADR 0039` at its sites, and every marker line
+ * names its end condition by the word in EXCEPTIONS (the end is "T3 replaces thread/provider
+ * persistence", worded per site). A listed file with no marker, a marker line without its end
+ * condition, or a marker in an unlisted file is red, so no file declares itself exempt.
  */
 export const STORE_EXCEPTION = "STORE-EXCEPTION: ADR 0039";
 export const EXCEPTIONS: Record<string, string> = {
-  "ts/apps/host/src/harness/thread-store.ts": "T3 replaces thread/provider persistence",
-  "ts/apps/host/src/harness/threads.ts": "T3 replaces thread/provider persistence",
-  "ts/apps/host/src/harness/providers.ts": "T3 replaces thread/provider persistence",
+  "ts/apps/host/src/harness/thread-store.ts": "T3",
+  "ts/apps/host/src/harness/threads.ts": "T3",
+  "ts/apps/host/src/harness/providers.ts": "T3",
 };
 
 /** Problems with the written exceptions, given each in-scope production file's text. */
 export function exceptionProblems(sources: Record<string, string>): string[] {
   const problems: string[] = [];
-  for (const [file, end] of Object.entries(EXCEPTIONS)) {
-    const text = sources[file];
-    if (text === undefined) problems.push(`${file}: listed as a store exception but not found`);
-    else if (!text.split("\n").some((line) => line.includes(STORE_EXCEPTION) && line.includes(end)))
-      problems.push(`${file}: the written exception is gone; the site needs "${STORE_EXCEPTION}" with its end condition "${end}"`);
+  for (const [file, text] of Object.entries(sources)) {
+    const end = EXCEPTIONS[file];
+    const lines = text.split("\n");
+    // A marker reads with the comment lines that continue it, so a wrapped end condition counts.
+    const block = (i: number) => {
+      let end = i + 1;
+      while (end < lines.length && /^\s*(\/\/|\*(?!\/))/.test(lines[end]!)) end++;
+      return lines.slice(i, end).join(" ");
+    };
+    const markers = lines.flatMap((line, i) => (line.includes(STORE_EXCEPTION) ? [[i + 1, block(i)] as const] : []));
+    if (end === undefined) {
+      if (markers.length) problems.push(`${file}: carries ${STORE_EXCEPTION} but is not in EXCEPTIONS (health-census.ts)`);
+      continue;
+    }
+    if (!markers.length) problems.push(`${file}: the written exception is gone; the site needs "${STORE_EXCEPTION}" and its end condition (${end})`);
+    for (const [line, text] of markers)
+      if (!new RegExp(`\\b${end}\\b`).test(text)) problems.push(`${file}:${line}: ${STORE_EXCEPTION} names no end condition (${end})`);
   }
-  for (const [file, text] of Object.entries(sources))
-    if (!(file in EXCEPTIONS) && text.includes(STORE_EXCEPTION))
-      problems.push(`${file}: carries ${STORE_EXCEPTION} but is not in EXCEPTIONS (health-census.ts)`);
+  for (const file of Object.keys(EXCEPTIONS))
+    if (!(file in sources)) problems.push(`${file}: listed as a store exception but not found`);
   return problems;
 }
 

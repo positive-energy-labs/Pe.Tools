@@ -29,10 +29,15 @@ describe("production health counts", () => {
 
   it("an exception whose marker is removed, or a marker nobody listed, is red", () => {
     const [listed, end] = Object.entries(EXCEPTIONS)[0]!;
-    const sources = Object.fromEntries(Object.entries(EXCEPTIONS).map(([file, e]) => [file, `// ${STORE_EXCEPTION}; ends when ${e}.`]));
+    const sources = Object.fromEntries(Object.entries(EXCEPTIONS).map(([file, e]) => [file, `// ${STORE_EXCEPTION}; ends when ${e} replaces this.`]));
     expect(exceptionProblems(sources)).toEqual([]);
     expect(exceptionProblems({ ...sources, [listed]: "// a plain comment" })).toEqual([
-      `${listed}: the written exception is gone; the site needs "${STORE_EXCEPTION}" with its end condition "${end}"`,
+      `${listed}: the written exception is gone; the site needs "${STORE_EXCEPTION}" and its end condition (${end})`,
+    ]);
+    // A wrapped comment carries its end condition; code after the comment does not.
+    expect(exceptionProblems({ ...sources, [listed]: `// ${STORE_EXCEPTION}; kept\n// until ${end} replaces it.\nx;` })).toEqual([]);
+    expect(exceptionProblems({ ...sources, [listed]: `x;\n// ${STORE_EXCEPTION}; kept for now.\nconst ${end} = 1;` })).toEqual([
+      `${listed}:2: ${STORE_EXCEPTION} names no end condition (${end})`,
     ]);
     expect(exceptionProblems({ ...sources, "ts/apps/host/src/x.ts": `// ${STORE_EXCEPTION}` })).toEqual([
       `ts/apps/host/src/x.ts: carries ${STORE_EXCEPTION} but is not in EXCEPTIONS (health-census.ts)`,
