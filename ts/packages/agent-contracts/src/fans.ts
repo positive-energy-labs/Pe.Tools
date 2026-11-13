@@ -1,4 +1,3 @@
-import { upgradeSettingsWork } from "./work-settings-upgrade.ts";
 /** /fans Work (FANSPLIT, routes LEDGER 2026-11-03): the fan-side cells, split out of the ducts Work. */
 import { z } from "zod";
 import { decode, subjectRefCodeSchema } from "./subject-ref.ts";
@@ -55,7 +54,6 @@ export const neutralFansWork: FansRouteDocument = fansDocumentSchema.parse({});
  * read it; `fans/route.ts` names it as its Work, so the host registry binds this same object.
  */
 export const fansRouteState = {
-  upgrade: (raw: unknown) => upgradeSettingsWork(raw, 1, ["parameters", "designFriction"]),
   route: "fans",
   title: "Fans",
   description: fansDocumentSchema.description ?? "Inspect fan paths, inputs and pressure requirements",

@@ -39,9 +39,8 @@ import {
 import { requirePackageEnabled, activePackages, projectPodIds } from "./package-lifecycle.ts";
 import { shippedPodsSettled } from "./installed-pods.ts";
 import { LocalOpError } from "./local-error.ts";
-import { hostOwnership } from "./host-ownership.ts";
+import { hostState } from "./host-ownership.ts";
 import { productPathNames } from "@pe/host-contracts/contracts";
-import { stateTree } from "@pe/host-contracts/service-identity";
 import { sha256Hex, writeAtomic, writeHomeFile } from "@pe/host-contracts/store";
 import {
   localOpFileError,
@@ -74,7 +73,7 @@ export type PodContext = {
 export const writeHome = (path: string, bytes: Uint8Array | string, expectSha256: string | null) =>
   writeHomeFile(path, bytes, {
     expectSha256,
-    blobRoot: stateTree(hostOwnership.rootPath).blobs,
+    blobRoot: hostState().blobs,
   });
 
 /** Only for undoing a newly created Pod member after failed publication; never delete a later edit.

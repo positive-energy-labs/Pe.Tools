@@ -247,35 +247,6 @@ test("historical selectors and pagination make zero acquisitions; corruption and
   await expect(f.api.read(read(source))).rejects.toThrow("integrity");
 });
 
-test("analysis reads the driver's pre-h2 ducts and fans through the upgraded Work door", async () => {
-  const f = fixture();
-  const resolve = f.sources.resolve;
-  f.sources.resolve = async target => ({ ...(await resolve(target)), address: "C:/fixture.rvt" });
-  const store = fileRouteDocumentStore(join(f.root, "work"));
-  for (const spec of [ductsRouteState, fansRouteState]) {
-    const record = JSON.parse(readFileSync(new URL(`./fixtures/pre-h2-work/planted-${spec.route}.json`, import.meta.url), "utf8"));
-    const key = bindWork(spec.route, address("C:/fixture.rvt"));
-    const value = JSON.parse(JSON.stringify(record.value).replaceAll(
-      JSON.stringify(record.value.history[0].write.key.target).slice(1, -1), JSON.stringify(key.target).slice(1, -1)));
-    await store.setState({ targetKey: workKey(key), route: spec.route, value });
-  }
-  const routes = createPeRoutes({ registrations: [{ spec: ductsRouteState }, { spec: fansRouteState }],
-    heads: { observe: () => () => {} }, store, ductsAnalysis: f.sources });
-  const response = await routes.fetch(new Request("http://local/pe/ducts/analysis", {
-    method: "POST", headers: { "content-type": "application/json" },
-    body: JSON.stringify({ source: { kind: "fresh", target: f.target }, selector: { kind: "equipment", id: 1 } }),
-  }));
-  expect(response.status, await response.clone().text()).toBe(200);
-  for (const spec of [ductsRouteState, fansRouteState]) {
-    const key = bindWork(spec.route, address("C:/fixture.rvt"));
-    const saved = await store.getState({ targetKey: workKey(key), route: spec.route });
-    expect(saved).toMatchObject({ schemaVersion: spec.schemaVersion });
-    expect(spec.schema.safeParse((saved as { doc: unknown }).doc).success).toBe(true);
-    if (spec.route === "ducts") expect(saved).toHaveProperty(
-      ["doc", "kinds", '["SunTherm M Series Vertical Air Handler","Mortex MSVT18"]', "edit", "value", "kind"], "muas");
-  }
-});
-
 test("the declared host route reads canonical Work and unreadable Work refuses before acquisition", async () => {
   const f = fixture();
   const resolve = f.sources.resolve;
