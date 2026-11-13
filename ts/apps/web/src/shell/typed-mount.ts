@@ -67,20 +67,6 @@ type Publication = DrawContext<any, any, any, any>["value"]["publication"];
 type Snapshot = ReadingState<any> & { readonly publication: Publication; readonly hash?: string };
 // The one-to-one mapping from a read's outcome (routes CONTRACTS.md, "Reading state"): a refusal over a
 // held value is `stale`, alone it is `refused`; a read in flight over a held value is `refreshing`, alone `reading`.
-const traced = z.object({ name: z.string(), args: z.unknown(), hash: z.string().optional() });
-/** F1: the source inputs a value was read from that the Work `own` does not own, each with its hash.
- *  A derived read (`compute`, or a dotted read name) is left out, because it moves when its sources
- *  do; so is `own`'s Work. ponytail: the host's trace does not mark a source input, so the dotted
- *  name is the test; have the host mark it if a source input is ever given a dotted name. */
-const elsewhere = (trace: readonly unknown[], own: string) => {
-  const sources = new Map<string, string>();
-  for (const entry of trace) {
-    const { name, args, hash } = traced.parse(entry);
-    if (name === "compute" || name.includes(".") || (name === "work" && z.object({ owner: z.literal(own) }).safeParse(args).success)) continue;
-    sources.set(`${name} ${canonicalRouteInput(args)}`, hash ?? "");
-  }
-  return sources;
-};
 const unavailable = (reason: string, value?: unknown, publication: Publication = null): Snapshot =>
   value === undefined ? { state: "refused", reason, publication } : { state: "stale", value, reason, publication };
 const reading = (value?: unknown, publication: Publication = null): Snapshot =>
@@ -88,8 +74,6 @@ const reading = (value?: unknown, publication: Publication = null): Snapshot =>
 const inFlight = (snapshot: Snapshot) => snapshot.state === "reading" || snapshot.state === "refreshing";
 
 /** Typed routes execute declarations directly. No graph admission, body slots or reading scheduler. */
-/** The Work moved past the revision a press named: the host said so, or this mount's own fence did. */
-class StaleRevision extends Error {}
 export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerprint: RouteFingerprint,
   ports: { work?: WorkJournalDoor; sources?: Record<string, UseSource>; findings?: Parameters<typeof createTimelineClient>[0]; timeline?: TimelineClient; readings?: Pick<Readings, "subscribe"> } = {}) {
   const cleanups: (() => void)[] = [];
@@ -187,8 +171,6 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
   };
   let renderedBasis: InvocationToken | null = null;
   const reads = new Map<import("../route/host-read").HostRead, { snapshot: Snapshot; args: string; stop(): void }>();
-  // F1: the trace of each core value this mount has shown, by evaluation, so a press can name what its drawing was read from.
-  const drawnFrom = new Map<string, readonly unknown[]>();
   const dependencies = () => Object.fromEntries([...reads].filter(([read,r])=>read === spec.core && r.snapshot.state === "ready").map(([read,r])=>[read.key,r.snapshot.hash??""]));
   const workSchema:z.ZodObject=edits?.work.schema ?? z.strictObject({});
   const gate = createRouteScopeGate({
@@ -298,10 +280,6 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
               !!packet.value && !packet.value.coverage.unknown.length && !packet.value.coverage.refused.length;
             record.snapshot = current ? { state: "ready", value: publication!.data, publication, hash: packet.value!.evaluation }
               : unavailable(valueRefusal(frame.reason ?? packet.reason ?? "Incomplete Value", read.key), publication?.data??valueOf(record.snapshot), publication??record.snapshot.publication);
-            if (read === spec.core && record.snapshot.state === "ready" && record.snapshot.hash && record.snapshot.publication) {
-              drawnFrom.set(record.snapshot.hash, record.snapshot.publication.trace);
-              if (drawnFrom.size > 32) drawnFrom.delete(drawnFrom.keys().next().value ?? "");
-            }
           } catch (error) { record.snapshot = unavailable(valueRefusal(error, read.key), valueOf(record.snapshot), record.snapshot.publication); }
         } else if (frame.kind !== "log") record.snapshot = frame.kind === "failure"?unavailable(valueRefusal(frame.error, read.key),valueOf(record.snapshot),record.snapshot.publication):reading(valueOf(record.snapshot),record.snapshot.publication);
         notify();
@@ -419,18 +397,9 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     const issued = gate.invocation(gate.capture("draw"), dependencies());
     return renderedBasis = issued.ok ? issued.value : null;
   };
-  // D17, the own-press rule (implementor ruling 2026-11-13, reopenable). `sending` is each owner's
-  // press still in flight from this mount; `pressed` is each owner's presses this mount has had
-  // acknowledged, keyed by the revision they left from, with when they were made and acknowledged
-  // on one clock.
-  // ponytail: `pressed` grows by one small entry per acknowledged press for the mount's life.
-  const sending = new WeakMap<object, Promise<void>>();
-  const pressed = new WeakMap<object, Map<number, { to: number; made: number; landed: number }>>();
-  let clock = 0;
   const submit = async (record: typeof owners extends Map<string, infer R> ? R : never, request: WorkWrite, token: InvocationToken) => {
     requireWritable();
     const result = await settleWork(door.submitWork(record.scope, request, token));
-    if (result.kind === "refused" && "code" in result.refusal && result.refusal.code === "stale_revision") throw new StaleRevision(result.refusal.error);
     if (result.kind !== "accepted") throw Error(result.kind === "refused" ? result.refusal.error : "Work write did not settle");
     const ack = result.ack;
     if (record.handle && ack.revision > record.handle.revision) {
@@ -763,84 +732,26 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
           const groups = new Map<string,RouteStatePatch[]>();
           for (const p of patches) { const id=ownerOf(p.path.map(String),preferred); groups.set(id,[...(groups.get(id)??[]),p]); }
           await Promise.all([...groups].map(async ([id, patches]) => {
-            // D17, the own-press rule. A press names the revision its cell was drawn at. When that
-            // revision is refused as stale, by the host or by this mount's own fence, the press is
-            // rebuilt once on the current doc, but only when every revision change since its drawing
-            // is this mount's own press, made before this one and still unacknowledged when this one
-            // was made: the person pressed twice on one drawing before the page could follow.
-            // Anything else keeps it refused, with its input retained: another writer, a press made
-            // after this one (C122: a delayed press never lands over a newer one), a Page that moved
-            // while it waited, and a press already acknowledged when this one was made (H30, C121:
-            // a drawing kept past an acknowledged edit is an old basis and never recomputes).
-            // Nothing waits before its first send.
-            const record=drawnOwners.get(id)!, drawn=handles.get(id)!, ahead=sending.get(record), admission=record.lease.entry;
-            const made=++clock, acknowledged=pressed.get(record)??new Map<number,{to:number;made:number;landed:number}>();
-            pressed.set(record,acknowledged);
-            let settle:()=>void=()=>{};
-            const mine=new Promise<void>(resolve=>{settle=resolve;});
-            sending.set(record,mine);
-            let intent: ReturnType<typeof admission.retain> | undefined;
-            const build=(handle:WorkHandle,doc:unknown)=>{
-              const applied=applyPatches(record.config.state,{version:1,revision:handle.revision,doc},"human",patches,handle.revision,false,true);
-              if (!applied.ok) throw Error(applied.error);
-              // Scalar cells travel whole; record cells keep their narrow keys (host inverse authority).
-              const normalized=[...new Set(patches.map(p=>String(p.path[0])))].flatMap(key => bare(record.config.state.schema.shape[key]!) instanceof z.ZodRecord
-                ? patches.filter(p=>String(p.path[0])===key) : [{path:[key],value:(applied.envelope.doc as any)[key]}]);
-              const label=id===own ? detail.label : `${detail.label} · from /${id}`;
-              const write:WorkWrite={kind:"apply",expectedRevision:handle.revision,press:crypto.randomUUID(),patches:normalized,...z.object({label:z.string(),meta:z.json().optional()}).parse(edits!.describe({...detail,label}))};
-              return {write,label};
-            };
-            // `rebuilt` is the rebuilt press's own invocation: its Value is still refreshing after the presses before it.
-            const dispatch=async(write:WorkWrite,handle:WorkHandle,rebuilt:InvocationToken|null)=>{
-              requireWritable();
-              if (!rebuilt && (!basis() || !gate.current(token))) throw new StaleRevision("Stale accepted Work basis");
-              if (owners.get(id)!==record || !record.ready || canonicalRouteInput(record.handle)!==canonicalRouteInput(handle)) throw new StaleRevision("Owning Work changed since this cell was drawn");
-              const sent=await submit(record,write,rebuilt??token);
-              acknowledged.set(sent.write.base,{to:sent.revision,made,landed:++clock});
-              return sent.revision;
-            };
+            const record=drawnOwners.get(id)!, handle=handles.get(id)!;
+            const applied=applyPatches(record.config.state,{version:1,revision:handle.revision,doc:docs.get(id)},"human",patches,handle.revision,false,true);
+            if (!applied.ok) throw Error(applied.error);
+            // Scalar cells travel whole; record cells keep their narrow keys (host inverse authority).
+            const normalized=[...new Set(patches.map(p=>String(p.path[0])))].flatMap(key => bare(record.config.state.schema.shape[key]!) instanceof z.ZodRecord
+              ? patches.filter(p=>String(p.path[0])===key) : [{path:[key],value:(applied.envelope.doc as any)[key]}]);
+            const label=id===own ? detail.label : `${detail.label} · from /${id}`;
+            const write:WorkWrite={kind:"apply",expectedRevision:handle.revision,press:crypto.randomUUID(),patches:normalized,...z.object({label:z.string(),meta:z.json().optional()}).parse(edits!.describe({...detail,label}))};
+            const admission=record.lease.entry, intent=admission.retain(write,label);
+            notify();
             try {
-              const first=build(drawn,docs.get(id));
-              intent=admission.retain(first.write,first.label);
-              notify();
-              try { await dispatch(first.write,drawn,null); }
-              catch(error) {
-                if (!(error instanceof StaleRevision)) throw error;
-                // An earlier press still in flight is acknowledged, or refused, before this one is judged.
-                if (ahead) await ahead;
-                // Walk from the drawn revision across this mount's own presses that were in flight when this one was made.
-                let reached=drawn.revision;
-                for (let step=acknowledged.get(reached); step&&step.made<made&&step.landed>made; step=acknowledged.get(reached)) reached=step.to;
-                if (reached===drawn.revision||owners.get(id)!==record||!record.ready||record.handle?.revision!==reached) throw error;
-                // The rebuild belongs to the Page the press was made on. A Page that moved while the press
-                // waited (another subject, or the same one again) retired that press: it stays refused.
-                const now=gate.read();
-                if (!now||now.pageEpoch!==token.pageEpoch||now.pageRevision!==token.pageRevision) throw error;
-                // F1: the rebuild crosses only what this Work moved. A source the drawing was read from
-                // that is owned elsewhere (another route's Work, the model, a file) and has moved since
-                // keeps the press refused. Reads derived from this Work may move: that is the own edit.
-                if (spec.core) {
-                  const from=drawnFrom.get(token.dependencies[spec.core.key]??""), to=reads.get(spec.core)?.snapshot.publication?.trace;
-                  if (!from||!to) throw error;
-                  const since=elsewhere(to,id);
-                  for (const [source,hash] of elsewhere(from,id)) if (since.has(source)&&since.get(source)!==hash) throw error;
-                }
-                const issued=gate.invocation(gate.capture("draw"),dependencies());
-                if (!issued.ok) throw error;
-                // The refused input stays retained until its replacement is. A rebuild that fails on the
-                // acknowledged doc throws here, and the catch below refuses the original input, still visible.
-                const next=build(record.handle,record.doc);
-                const kept=admission.retain(next.write,next.label);
-                admission.discard(intent);
-                intent=kept;
-                notify();
-                await dispatch(next.write,record.handle,issued.value);
-              }
+              requireWritable();
+              if (!basis() || !gate.current(token)) throw Error("Stale accepted Work basis");
+              if (owners.get(id)!==record || !record.ready || canonicalRouteInput(record.handle)!==canonicalRouteInput(handle)) throw Error("Owning Work changed since this cell was drawn");
+              await submit(record,write,token);
               admission.discard(intent);
             } catch(error) {
-              if (intent) admission.refuse(intent,error instanceof Error?error.message:String(error));
+              admission.refuse(intent,error instanceof Error?error.message:String(error));
               throw error;
-            } finally { if (sending.get(record)===mine) sending.delete(record); settle(); notify(); }
+            } finally { notify(); }
           }));
           return null;
         } catch(error) { return {code:"refused",message:error instanceof Error?error.message:String(error)}; }
