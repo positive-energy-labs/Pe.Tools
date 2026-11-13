@@ -29,7 +29,7 @@ export function OpsBody({ ctx }: { ctx: OpsContext }) {
           list={list}
           aria-label="Operation receipts"
           empty={{
-            message: !ctx.value.current ? ctx.value.reason : "No receipts",
+            message: "No receipts",
             exit: "Run a semantic command to create a receipt",
           }}
           row={(row) => ({ label: row.key, meta: row.state, sub: row.startedAt, title: row.id })}

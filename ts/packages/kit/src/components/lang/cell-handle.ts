@@ -76,7 +76,7 @@ export function handleCellProps({
   const history = { label };
   const reason =
     cell.refusal ??
-    (reading && !reading.current
+    (reading && reading.state !== "ready"
       ? (reading.reason ?? "Read the current Value before editing")
       : null) ??
     facts.capReason;
@@ -90,7 +90,7 @@ export function handleCellProps({
   const drawn = cellFromDraft(cell.value, {
     ...facts,
     fresh: cell.freshness && cell.freshness !== "current" ? cell.freshness :
-      reading && !reading.current ? (reading.value === undefined ? "never" : "stale") : facts.fresh,
+      reading && reading.state !== "ready" ? (reading.value === undefined ? "never" : "stale") : facts.fresh,
     value: options
       ? (option?.label ?? (value == null ? "—" : format(value)))
       : value == null

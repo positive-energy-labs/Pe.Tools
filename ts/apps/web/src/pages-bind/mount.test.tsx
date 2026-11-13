@@ -36,7 +36,7 @@ const mount = () => {
   });
   const ctx = {
     page: { read: () => ({ page: oneName("snowdon-ducts--tour"), view: false, query: {}, fragment: "" }) },
-    value: { current: true, value: null },
+    value: { state: "ready", value: null },
     verb: () => ({ run: vi.fn() }),
   };
   return render(<BindBody ctx={ctx as never} />);

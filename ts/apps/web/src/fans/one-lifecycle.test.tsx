@@ -44,7 +44,7 @@ test("typed panes share declared Values; recorded Fans and Ducts use frozen Work
 });
 
 
-test("optional Work, explicit demand and invocation arguments share one typed scope", async () => {
+test("optional Work and invocation arguments share one typed scope", async () => {
   const {z}=await import("zod");
   const {route,field}=await import("../route/typed-route");
   const {handle}=await import("@pe/agent-contracts/handle");
@@ -52,7 +52,7 @@ test("optional Work, explicit demand and invocation arguments share one typed sc
   const {hostRead}=await import("../route/host-read");
   const {valueRead,workFingerprintSchema}=await import("@pe/agent-contracts");
   const source=vi.fn();
-  const read=hostRead({...valueRead("probe.value",z.object({}),z.object({answer:z.number()})),demand:"explicit"});
+  const read=hostRead({...valueRead("probe.value",z.object({}),z.object({answer:z.number()}))});
   const declaration={key:"wave4-probe",address:"/",name:"Probe",needs:"host" as const,directory:reference.data.directory,
     fields:{member:field(z.string(),"","query")},core:{...read,args:()=>({})},
     panes:{main:{title:"Probe",purpose:"Scope falsifier",read,body:"scroll" as const,draw:(ctx:any)=>scrollBody(ctx)}},layout:{kind:"pane" as const,id:"main"}};
@@ -84,10 +84,10 @@ test("optional Work, explicit demand and invocation arguments share one typed sc
   const mounted=mountTypedRoute(module,input,fingerprint,{work:door,sources:{"probe.value":{kind:"use",open:source}}});
   try {
     const stop=mounted.subscribe(()=>{});mounted.page.query({member:"A"});
-    expect(source).not.toHaveBeenCalled();expect(door.submit).not.toHaveBeenCalled();
+    expect(door.submit).not.toHaveBeenCalled();
     expect(calls.every(key=>(key as {work:string}).work === "A")).toBe(true);
     mounted.page.query({member:"B"});expect(mounted.owner()?.handle?.key).toMatchObject({binding:"workspace",work:"B"});
-    mounted.refresh(module.spec.core);expect(source).toHaveBeenCalledOnce();
+    mounted.refresh(module.spec.core);expect(source).toHaveBeenCalled();
     expect(mounted.placement()).toEqual({band:["start","echo"],panes:{main:[]}});
     expect(mounted.kernelVerb("findings.write")).toMatchObject({label:"Write finding",effect:"WorkWrite"});
     expect(()=>mounted.verb("nope")).toThrow("Unknown verb nope");
@@ -119,7 +119,7 @@ test("cell undo targets the exact owner press and leaves the other owner staged"
     workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`),{work:door});
   const ctx=()=>mount.draw("main") as import("../route/typed-route").DrawContext<unknown,{},import("zod").z.output<typeof schema>,never>;
   try {
-    await vi.waitFor(()=>expect(ctx().cells.ready).toBe(true));
+    await vi.waitFor(()=>expect(ctx().cells.state.state).toBe("ready"));
     expect(await ctx().cells.at(["cells","one"],"undo-a").stage(1,{label:"First owner"})).toBeNull();
     expect(await ctx().cells.at(["cells","two"],"undo-b").stage(2,{label:"Second owner"})).toBeNull();
     expect(await ctx().cells.at(["cells","one"],"undo-a").undo()).toBeNull();

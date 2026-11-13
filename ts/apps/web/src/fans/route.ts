@@ -42,6 +42,8 @@ export const sheet = read(
     sheetPath: page.sheetPath,
   }),
 );
+// The roster pane draws this read: the sheet refuses a fan it cannot find ("choose it from the roster"),
+// and the roster is the control that clears that refusal.
 const roster = read(hostRead(reads.sheet, sheetValueFixtures), () => ({
   fan: [],
   sheetPath: "",
@@ -86,6 +88,7 @@ export const module = route({
       subjectList: true,
       title: "Fans",
       purpose: "Open fan ports",
+      read: roster,
       bindings,
       body: "scroll",
       draw: draw("scroll", () => import("./mount.tsx"), "RosterBody"),

@@ -141,14 +141,11 @@ function SettingCell({ ctx, cell, schema }: { ctx: Ctx; cell: SheetCell; schema:
 export function SheetPane({ ctx: { draw: ctx, slot, field } }: { ctx: { draw: Ctx; slot: SheetSlot; field?: string } }) {
   const [typedOnly, setTypedOnly] = useState(false);
   const search = useRouteSearchSlice((s) => s);
-  const read = ctx.value.value ?? undefined;
+  // A sheet over Work alone names no read: its pane has no value.
+  const read = ctx.value?.value ?? undefined;
   const cells = sheetCells(slot, { rows: rowsOf(slot, ctx, field), work: ctx.cells?.doc ?? null, model: [], read });
   const shown = typedOnly ? typedCells(cells) : cells;
   const from = read !== undefined ? slot.from?.(read, search) : null;
-  // The read's own states come first: failed with its reason, computing, or the sheet's empty state and exit.
-  const value = ctx.value as { status?: string; reason?: string };
-  if (value.status === "failed" && read === undefined) return <p role="alert">{value.reason}</p>;
-  if (read === undefined && value.status === "pending") return <p role="status">computing</p>;
   const empty = slot.empty?.(read ?? null);
   const said = read !== undefined ? slot.note?.(read) : null;
   const note = said ? <p role="note" className="min-w-0 text-ink-2" data-sheet-note="">{said}</p> : null;

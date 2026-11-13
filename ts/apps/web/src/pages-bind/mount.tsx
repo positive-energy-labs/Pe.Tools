@@ -45,7 +45,7 @@ export function BindBody({ ctx }: { ctx: BindContext }) {
   return (
     <>
       {/* The kernel draws the Page chooser from the subject slot (pane head); a route draws no second one. */}
-      {!ctx.value.current && <p role="status">{ctx.value.reason}</p>}
+      {ctx.value.reason && <p role="status">{ctx.value.reason}</p>}
       <BindPicker
         slug={slug}
         reading={reading?.slug === slug ? reading.value : null}

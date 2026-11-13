@@ -51,6 +51,10 @@ export const roster = read(hostRead(reads.roster));
 export const network = read(hostRead(reads.network), args);
 export const pricing = read(hostRead(reads.pricing), args);
 export type DuctsDrawContext = ContextOf<typeof fields, typeof pricing, typeof import("../../../../packages/agent-contracts/src/ducts.ts").ductsRouteState, typeof import("@pe/agent-contracts").ductsSheetEditsSchema>;
+/** What every ducts pane shares, whichever read it names: the pane's own `value` is not part of it. */
+export type DuctsReads = Omit<DuctsDrawContext, "value">;
+/** The systems pane draws the roster, so it still lists systems while pricing is read or refused. */
+export type DuctsSystemsContext = DuctsReads & Pick<ContextOf<typeof fields, typeof roster>, "value">;
 const evidence = (
   data: DuctsDrawContext["value"]["value"],
   work: DuctsDrawContext["cells"]["doc"],
@@ -100,6 +104,7 @@ export const module = route({
       subjectList: true,
       title: "Systems",
       purpose: "Choose a system to inspect",
+      read: roster,
       bindings,
       body: "scroll",
       draw: draw("scroll", () => import("./proto/e/screen.tsx"), "SystemsPane"),

@@ -6,7 +6,7 @@ import { Code, stringify } from "@pe/kit/lang/code";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { NativeObservationScope } from "#/revit/observation";
 import type { DocumentRef } from "@pe/agent-contracts";
-import { nameOf } from "#/route/typed-route";
+import { nameOf, refusalOf } from "#/route/typed-route";
 import type { OpsContext } from "./route";
 import { requestOf } from "./form";
 import { OpForm, seedValues, type FormValues } from "./form";
@@ -28,7 +28,7 @@ export function Operation({ ctx }: { ctx: OpsContext }) {
     [failure, setFailure] = useState<string | null>(null);
   const operations = observed?.operations ?? [];
   const selected = operations.find((entry) => entry.key === nameOf(page.op));
-  const note = !ctx.value.current ? ctx.value.reason : observed?.bridgeCatalogError;
+  const note = observed?.bridgeCatalogError;
 
   const Output = value ? outputRenderers[value.op] : undefined;
   useEffect(() => {
@@ -91,9 +91,7 @@ export function Operation({ ctx }: { ctx: OpsContext }) {
             refusal={
               isMutation(selected)
                 ? "Use a semantic command with Plan and Apply for mutations"
-                : !ctx.value.current
-                  ? ctx.value.reason
-                  : null
+                : refusalOf(ctx.value)
             }
             onClick={() =>
               void ctx

@@ -1,3 +1,4 @@
+import { refusalOf, valueOf } from "./typed-route";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
 import { snapshot as workSnapshot } from "../../../host/tests/host-read-graph.test-support";
 import { stableFanKey } from "../ducts/sheet/model";
@@ -382,7 +383,7 @@ async function journey(module: TypedRoute = fans) {
     m.refresh();
     return vi.waitFor(
       () => {
-        expect(m.value()).toMatchObject({ current: true });
+        expect(m.value()).toMatchObject({ state: "ready" });
         if (m.owner()?.ready) expect(m.problem()).toBeNull();
       },
       { timeout: 20_000 },
@@ -553,7 +554,7 @@ test("JW2 receive Pea proposals, accept and deny individual cells without changi
   try {
     await j.start();
     const by: Caller = { kind: "pea", context: "jw", thread: "jw-proposals" };
-    const stored = structuredClone(j.m.value().value.sheetSnapshot);
+    const stored = structuredClone(valueOf(j.m.value()).sheetSnapshot);
     expect(
       stored.nodes.length,
       "H20: proposal journey starts with actual recorded native facts",
@@ -595,7 +596,7 @@ test("JW2 receive Pea proposals, accept and deny individual cells without changi
     await j.ready();
     expect(j.m.owner()!.doc.flows[terminalB]?.edit, "H20: deny clears the proposed edit").toBeNull();
     expect(
-      j.m.value().value.sheetSnapshot,
+      valueOf(j.m.value()).sheetSnapshot,
       "H20: stored native facts survive proposal transitions",
     ).toEqual(stored);
     expect(j.m.owner()!.doc.flows[terminalA].edit.value).toEqual({ cfm: 250 });
@@ -658,7 +659,7 @@ test("JM H12 leave a Page with drawn cells, inspect it, and refuse both old edit
     const cell = j.cells().at(["flows", terminalA]), before = structuredClone(j.m.owner()!.doc);
     const receipts = (await j.journal.list()).length;
     j.depart();
-    expect(j.m.value().value, "H12: departure preserves inspection").toBeDefined();
+    expect(valueOf(j.m.value()), "H12: departure preserves inspection").toBeDefined();
     expect(await cell.stage({ cfm: 700 }, { label: "Late airflow" }), "H12: captured cell cannot write after departure").toMatchObject({ code: "refused" });
     await expect(planned(j.m.verb("losses")).plan(), "H12: departure cannot acquire a new native plan").rejects.toThrow("Place");
     expect(j.m.owner()!.doc).toEqual(before);
@@ -872,11 +873,14 @@ test("JZ a null Place target refuses Work before dispatch but still permits clie
     await j.start();
     const unbound = j.mount(false, { target: null });
     await vi.waitFor(() => expect(unbound.owner()?.ready).toBe(true));
-    expect(unbound.value().current, "A targetless Page cannot borrow document Value authority").toBe(false);
+    expect(unbound.value().state === "ready", "A targetless Page cannot borrow document Value authority").toBe(false);
     const before = structuredClone(unbound.owner()!.doc), revision = unbound.owner()!.handle!.revision;
     const count = j.writes.length;
-    const cells = unbound.draw("sheet-inputs", ctx => ctx.cells) as DrawContext<any, any, any, any>["cells"];
-    expect(await cells.at(["flows", terminalA]).stage({ cfm: 330 }), "No target means no write authority").toMatchObject({ code: "unavailable" });
+    // The read is value-less, so the shell draws its line and no body: there is no cell to stage through.
+    // The refused stage over a held value keeps its witness in rooms.test.tsx ("Unsafe").
+    let drew = false;
+    unbound.draw("sheet-inputs", () => { drew = true; return null; });
+    expect(drew, "No target means no body, so no write authority").toBe(false);
     expect(j.writes).toHaveLength(count);
     expect(unbound.owner()!.doc).toEqual(before);
     expect(unbound.owner()!.handle!.revision).toBe(revision);
@@ -902,17 +906,17 @@ test("JZ released reads resume once after custody returns through an unchanged a
       read: () => new URLSearchParams(), write() {}, subscribe(notify) { listeners.add(notify); return () => { listeners.delete(notify); }; },
     } }, { sources: { "fans.sheet": source } });
     await Promise.allSettled([...tasks]);
-    expect(m.value().current).toBe(true);
-    const initial = reads, retained = m.value().value;
+    expect(m.value().state === "ready").toBe(true);
+    const initial = reads, retained = valueOf(m.value());
     expect(initial).toBeGreaterThan(0);
     m.release(); current = false;
     const stop = m.subscribe(() => {});
     expect(reads, "A hidden Place cannot acquire another native read").toBe(initial);
-    expect(m.value().value).toEqual(retained);
+    expect(valueOf(m.value())).toEqual(retained);
     current = true; listeners.forEach(notify => notify());
     await vi.waitFor(() => expect(reads, "Address notification resumes each declared read once").toBe(initial * 2));
     await Promise.allSettled([...tasks]);
-    expect(m.value().current).toBe(true);
+    expect(m.value().state === "ready").toBe(true);
     listeners.forEach(notify => notify());
     expect(reads, "An equal current address cannot duplicate the subscription").toBe(initial * 2);
     stop();
@@ -960,11 +964,11 @@ test.each(["accepted", "refused"] as const)("JZ audit member switch keeps a late
   } finally { held?.release.resolve(); await j.close(); }
 }, 60_000);
 
-test("JZ audit explicit demand refuses malformed HTTP Value data and recovers without exposing it", async () => {
+test("JZ audit a read refuses malformed HTTP Value data and recovers without exposing it", async () => {
   const { route } = await import("./typed-route");
   const j = await journey(), tasks = new Set<Promise<unknown>>();
   let opened = 0, corrupt = true;
-  const read = { ...fans.spec.core!, demand: "explicit" as const };
+  const read = { ...fans.spec.core! };
   const module = route({ ...fans.spec, edits: undefined, verbs: {}, band: [], subject: undefined, reads: {}, core: read,
     panes: { main: { title: "Explicit Fan read", purpose: "Inspect a demanded Value", read, body: "scroll", draw: () => scrollBody(null) } },
     layout: { kind: "pane", id: "main" } });
@@ -979,24 +983,22 @@ test("JZ audit explicit demand refuses malformed HTTP Value data and recovers wi
   } };
   try {
     const m = j.mount(false, {}, { sources: { "fans.sheet": source } }, module);
-    expect(opened, "Explicit reads are idle until demand").toBe(0);
-    expect(m.value().value).toBeUndefined();
-    m.refresh(read); await Promise.allSettled([...tasks]);
+    await Promise.allSettled([...tasks]);
     expect(opened).toBe(1);
-    expect(m.value().current).toBe(false);
-    expect(m.value().value, "Malformed wire data is never drawn").toBeUndefined();
+    expect(m.value().state === "ready").toBe(false);
+    expect(valueOf(m.value()), "Malformed wire data is never drawn").toBeUndefined();
     const failed = m.value();
-    if (failed.current) throw Error("Malformed Value became current");
-    expect(failed.reason).toMatch(/reading|contract|unavailable/i);
-    expect(failed.reason).not.toMatch(/ZodError|invalid_type|expected.*object/i);
+    if (failed.state === "ready") throw Error("Malformed Value became current");
+    expect(refusalOf(failed)).toMatch(/reading|contract|unavailable/i);
+    expect(refusalOf(failed)).not.toMatch(/ZodError|invalid_type|expected.*object/i);
     corrupt = false; m.refresh(read); await Promise.allSettled([...tasks]);
-    expect(m.value().current).toBe(true);
-    const before = m.value().value;
+    expect(m.value().state === "ready").toBe(true);
+    const before = valueOf(m.value());
     corrupt = true; m.refresh(read); await Promise.allSettled([...tasks]);
-    expect(m.value().current).toBe(false);
-    expect(m.value().value, "A malformed replacement retains the last decoded Value").toEqual(before);
+    expect(m.value().state === "ready").toBe(false);
+    expect(valueOf(m.value()), "A malformed replacement retains the last decoded Value").toEqual(before);
     corrupt = false; m.refresh(read); await Promise.allSettled([...tasks]);
-    expect(m.value().current).toBe(true);
+    expect(m.value().state === "ready").toBe(true);
   } finally { await Promise.allSettled(tasks); await j.close(); }
 }, 60_000);
 
@@ -1089,7 +1091,7 @@ test("JZ cut two Places retain independent Page pose selection Value and inactiv
   try {
     const a = place("a"); await j.settle();
     a.m.page.pose({ contextRadiusFt: 11 }); a.m.page.select([{ kind: "focus", id: "audit:a" }]);
-    await j.settle(); const beforeA = a.m.page.read(), valueA = a.m.value().value, urlA = address.read();
+    await j.settle(); const beforeA = a.m.page.read(), valueA = valueOf(a.m.value()), urlA = address.read();
     expect(valueA).toBeDefined(); a.p.remember(beforeA); a.p.setVisible(false); a.m.release();
     active = "b"; address.write(new URLSearchParams("target=two"));
     const b = place("b"); await j.settle();
@@ -1101,11 +1103,11 @@ test("JZ cut two Places retain independent Page pose selection Value and inactiv
     expect(a.p.fixture).toBeNull();
     expect(() => a.m.page.pose({ contextRadiusFt: 99 })).toThrow();
     expect(a.m.page.read()).toEqual(beforeA); expect(b.m.page.read()).toEqual(beforeB);
-    expect(a.m.value().value).toEqual(valueA); expect(a.p.memory()).toEqual(beforeA);
+    expect(valueOf(a.m.value())).toEqual(valueA); expect(a.p.memory()).toEqual(beforeA);
     active = "none"; address.write(urlA); active = "a"; a.p.setVisible(true);
     const resumed = a.m.subscribe(() => {}); await j.settle();
     expect(a.p.state(() => { throw Error("Reveal must retain its typed mount"); })).toBe(a.m);
-    expect(a.m.page.read()).toEqual(beforeA); expect(b.m.page.read()).toEqual(beforeB); expect(a.m.value().current).toBe(true);
+    expect(a.m.page.read()).toEqual(beforeA); expect(b.m.page.read()).toEqual(beforeB); expect(a.m.value().state === "ready").toBe(true);
     resumed();
   } finally { places.forEach(p => p.dispose()); await j.close(); }
 }, 60_000);

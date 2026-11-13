@@ -1,12 +1,21 @@
 import { useRef, useMemo } from "react";
+import type { ReadingState } from "@pe/agent-contracts";
+import { refusalOf } from "../route/typed-route";
 import type { OpenContext } from "./open-fields";
 import type { RunVerb } from "../route/typed-route";
-import type { OpenOwner } from "./context";
 type OpenVerb = "start" | "open" | "close" | "stop" | "restart";
+/** What the owner reads: a pane's draw context, or the mount itself where no pane is drawn (the companion
+ *  controls), so the reading may be value-less. `/sessions` passes the three verbs it declares. */
+export type OpenSource<V extends OpenVerb = OpenVerb> = {
+  verb(id: NoInfer<V>): RunVerb;
+  readonly value: ReadingState<OpenContext["value"]["value"]>;
+  // A pane's typed Page port, or the mount's own.
+  readonly page: OpenContext["page"] | Pick<import("../shell/typed-mount").TypedMount["page"], "read" | "pose" | "query">;
+};
+import type { OpenOwner } from "./context";
 const openActions: readonly OpenVerb[] = ["start", "open", "close", "stop", "restart"];
-/** `/sessions` passes the three verbs it declares; its context holds those and no others. */
 export function useOpenTypedOwner<V extends OpenVerb = OpenVerb>(
-  ctx: Omit<OpenContext, "verb"> & { verb(id: NoInfer<V>): RunVerb },
+  ctx: OpenSource<V>,
   actions: readonly V[] = openActions as readonly V[],
 ): OpenOwner {
   const current = useRef(ctx);
@@ -35,21 +44,17 @@ export function useOpenTypedOwner<V extends OpenVerb = OpenVerb>(
         readings: {
           mount: () => () => {},
           get: (id: string) => {
-            const ctx = current.current;
+            const { value } = current.current;
             return {
-              status: ctx.value.current
-                ? "complete"
-                : ctx.value.status === "pending"
-                  ? "pending"
-                  : "failed",
-              current: ctx.value.current,
-              value: ctx.value.value?.[id as "machine" | "recents" | "threads"],
-              error: ctx.value.current ? null : ctx.value.reason,
+              status: value.state === "ready" ? "complete" : value.state === "reading" || value.state === "refreshing" ? "pending" : "failed",
+              current: value.state === "ready",
+              value: "value" in value ? value.value[id as "machine" | "recents" | "threads"] : undefined,
+              error: refusalOf(value),
             };
           },
         },
         control: (id: V, input: any) => ({
-          refusal: current.current.value.current ? null : current.current.value.reason,
+          refusal: refusalOf(current.current.value),
           run: async () => {
             try {
               if (input.refusal) throw Error(input.refusal);

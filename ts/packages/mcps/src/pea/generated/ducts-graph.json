@@ -672,7 +672,7 @@
       "label": "Systems",
       "purpose": "Choose a system to inspect",
       "draws": [
-        "value"
+        "roster"
       ],
       "verbs": []
     },

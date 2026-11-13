@@ -1,3 +1,4 @@
+import { refusalOf, valueOf } from "./typed-route";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
 import { stableFanKey } from "../ducts/sheet/model";
 import { systemCode } from "../ducts/identity";
@@ -35,7 +36,7 @@ test("JZ Ducts chooser search box does not move across recorded Reading settleme
       await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
       const input = document.querySelector<HTMLInputElement>('input[aria-label="Search systems"]')!;
       const { x, y, width, height } = input.getBoundingClientRect();
-      return { x, y, width, height, reading: !!document.querySelector('[data-startup]'), connected: input.isConnected,
+      return { x, y, width, height, reading: !!document.querySelector('[data-reading="reading"]'), connected: input.isConnected,
         statuses: Array.from(document.querySelectorAll('[role="status"], [role="alert"]')).map(n => ({ text: n.textContent, y: n.getBoundingClientRect().y, height: n.getBoundingClientRect().height })) };
     });
     const before = await measure();
@@ -155,7 +156,7 @@ test("JZ Plan route switch: Ducts reads preserve the Fans seal; changed Work sta
     await j.ready();
     const source = publicationSource({ read: (ctx, publication, release) => j.host.send(publication.generation,
       (ctx.args as { fan: string[] }).fan, undefined, publication.subscription, release) });
-    const row = j.mount.value(fans.spec.reads!.roster).value.rows.find((row: { mark: string }) => row.mark === "MUAS-1")!;
+    const row = valueOf(j.mount.value(fans.spec.reads!.roster)).rows.find((row: { mark: string }) => row.mark === "MUAS-1")!;
     for (const route of ["fans", "ducts"])
       expect((await j.host.workspace.start(bindWork(route, path, undefined, ref), {}, "human")).ok).toBe(true);
     const work = createWorkFeedClient(
@@ -174,17 +175,17 @@ test("JZ Plan route switch: Ducts reads preserve the Fans seal; changed Work sta
     mounted = mountTypedRoute(fans, { ...j.input, memory: () => ({ fan: { kind: "ids", ids: [stableFanKey(row)] } }) }, fingerprint,
       { work, sources: { "fans.sheet": source } });
     mounted.subscribe(() => {});
-    await vi.waitFor(() => expect(mounted!.value().current).toBe(true), { timeout: 20_000 });
+    await vi.waitFor(() => expect(mounted!.value().state === "ready").toBe(true), { timeout: 20_000 });
     // One stream for the tab, carrying each read's invalidation as a key.
     await vi.waitFor(() => expect(watched.size).toBeGreaterThan(0));
     expect(streams.size).toBe(1);
-    const before = mounted.value().value;
+    const before = valueOf(mounted.value());
     held = j.host.holdNative();
     j.host.changed();
     await held.entered.promise;
-    expect(mounted.value(), "H05: a host dirty event immediately withdraws current authority").toMatchObject({ current: false, value: before });
+    expect(mounted.value(), "H05: a host dirty event immediately withdraws current authority").toMatchObject({ state: expect.stringMatching(/^(refreshing|stale)$/), value: before });
     held.release.resolve();
-    await vi.waitFor(() => expect(mounted!.value().current).toBe(true), { timeout: 20_000 });
+    await vi.waitFor(() => expect(mounted!.value().state === "ready").toBe(true), { timeout: 20_000 });
     await vi.waitFor(() => expect(mounted!.work(), mounted!.problem() ?? "Work ready").not.toBeNull());
     const key = mounted.work()!.handle.key;
     const staged = await j.host.workspace.apply(key, "fans", "human", [
@@ -193,13 +194,13 @@ test("JZ Plan route switch: Ducts reads preserve the Fans seal; changed Work sta
     ], mounted.work()!.revision);
     expect(staged.ok).toBe(true);
     mounted.refresh();
-    await vi.waitFor(() => expect(mounted!.value().current).toBe(true), { timeout: 20_000 });
+    await vi.waitFor(() => expect(mounted!.value().state === "ready").toBe(true), { timeout: 20_000 });
     await planned(mounted.verb("losses")).plan();
     expect(mounted.review("losses")).toMatchObject({ stale: false, preview: expect.anything() });
     const sealed = mounted.value().publication!;
     // Reopening a source creates a new subscription/consumption, as on page reload.
     mounted.refresh();
-    await vi.waitFor(() => expect(mounted!.value().current).toBe(true), { timeout: 20_000 });
+    await vi.waitFor(() => expect(mounted!.value().state === "ready").toBe(true), { timeout: 20_000 });
     expect(mounted.value().publication!.inputs).not.toBe(sealed.inputs);
     expect(mounted.value().publication!.data).toEqual(sealed.data);
     expect(mounted.review("losses"), "identical sealed inputs remain Apply-eligible after reconnect").toMatchObject({ stale: false, preview: expect.anything() });
@@ -207,7 +208,7 @@ test("JZ Plan route switch: Ducts reads preserve the Fans seal; changed Work sta
     mounted.release();
     await vi.waitFor(() => expect(watched.size, "B05: hiding releases the read's watch").toBe(0));
     mounted.subscribe(() => {});
-    await vi.waitFor(() => expect(mounted!.value().current).toBe(true), { timeout: 20_000 });
+    await vi.waitFor(() => expect(mounted!.value().state === "ready").toBe(true), { timeout: 20_000 });
     expect(mounted.review("losses"), "show reacquires identical inputs without retiring the Plan").toMatchObject({ stale: false, preview: expect.anything() });
     expect(mounted.writeRefusal()).toBeNull();
     mounted.release();
@@ -224,15 +225,15 @@ test("JZ Plan route switch: Ducts reads preserve the Fans seal; changed Work sta
       workFingerprintSchema.parse(`builtin-closure:${builtinEnrollments.find(e => e.routeKey === "ducts")!.closure.fingerprint}`), { work, sources });
     try {
       await ductMount.whenReady();
-      const system = ductMount.value(ducts.spec.reads!.roster).value.systems[0]!.name;
+      const system = valueOf(ductMount.value(ducts.spec.reads!.roster)).systems[0]!.name;
       ductMount.page.subject({ kind: "ids", ids: [systemCode(system)] });
       await ductMount.whenReady();
-      expect(ductMount.value().value.network.systemReads.completed).toEqual([systemRoster.systems[0]!.id]);
+      expect(valueOf(ductMount.value()).network.systemReads.completed).toEqual([systemRoster.systems[0]!.id]);
     } finally { ductMount.dispose(); unregister(); }
     // The Driver recording has identical native content at admission generations :24 and :31.
     nativeGeneration = "incarnation:31";
     mounted.subscribe(() => {});
-    await vi.waitFor(() => expect(mounted!.value().current).toBe(true), { timeout: 20_000 });
+    await vi.waitFor(() => expect(mounted!.value().state === "ready").toBe(true), { timeout: 20_000 });
     expect(mounted.value().publication!.data).toEqual(sealed.data);
     expect(mounted.review("losses"), "return from a Ducts read preserves the sealed Plan").toMatchObject({ stale: false, preview: expect.anything() });
     expect(mounted.writeRefusal()).toBeNull();
@@ -241,7 +242,7 @@ test("JZ Plan route switch: Ducts reads preserve the Fans seal; changed Work sta
     ], mounted.work()!.revision);
     expect(changed.ok).toBe(true);
     mounted.refresh();
-    await vi.waitFor(() => expect(mounted!.value().current).toBe(true), { timeout: 20_000 });
+    await vi.waitFor(() => expect(mounted!.value().state === "ready").toBe(true), { timeout: 20_000 });
     expect(mounted.review("losses")).toMatchObject({ stale: true, rows: [], cells: [] });
     await expect(planned(mounted.verb("losses")).apply()).rejects.toThrow(/stale/i);
     mounted.dispose();
@@ -257,14 +258,14 @@ test("JM H02/B05 select a Fan whose native walk is malformed and inspect the ref
   const j = await journey({ snapshot: malformed });
   try {
     await j.ready();
-    const before = j.mount.value().value;
-    const roster = j.mount.value(fans.spec.reads!.roster).value.rows;
+    const before = valueOf(j.mount.value());
+    const roster = valueOf(j.mount.value(fans.spec.reads!.roster)).rows;
     const row = roster.find((row: { mark: string }) => row.mark === "MUAS-1")!;
     j.mount.page.subject({ kind: "ids", ids: [stableFanKey(row)] });
-    await vi.waitFor(() => expect(j.mount.value(), "H02: malformed native output cannot become current data").toMatchObject({ current: false, status: "unavailable" }));
-    expect(j.mount.value().value, "B05: the last admitted Value survives").toEqual(before);
+    await vi.waitFor(() => expect(j.mount.value(), "H02: malformed native output cannot become current data").toMatchObject({ state: expect.stringMatching(/^(stale|refused)$/) }));
+    expect(valueOf(j.mount.value()), "B05: the last admitted Value survives").toEqual(before);
     const refused = j.mount.value();
-    expect(!refused.current && refused.reason, "B05: failure gives human recovery words").not.toMatch(/invalid_type|expected.*array|ZodError/);
+    expect((refused.state !== "ready") && refusalOf(refused), "B05: failure gives human recovery words").not.toMatch(/invalid_type|expected.*array|ZodError/);
   } finally { await j.close(); }
 }, 60_000);
 
@@ -432,37 +433,35 @@ test("JX2 retain the pane through waiting, a refused subject, hiding and returni
   let held: ReturnType<typeof gate> | undefined;
   try {
     await j.ready();
-    const old = j.mount.value().value;
+    const old = valueOf(j.mount.value());
     held = j.delay();
     j.mount.refresh();
     await held.entered.promise;
     expect(
       j.mount.value(),
       "B05: waiting retains the answer and admits it is pending",
-    ).toMatchObject({ current: false, status: "pending", value: old });
+    ).toMatchObject({ state: "refreshing", value: old });
     held.release.resolve();
     await j.ready();
-    const retained = j.mount.value().value;
+    const retained = valueOf(j.mount.value());
     j.mount.page.subject({ kind: "ids", ids: [stableFanKey({ uniqueId: "missing-fan", portIndex: 0 })] });
     await vi.waitFor(() =>
       expect(j.mount.value(), "B05: refusal is honest and preserves the last answer").toMatchObject(
         {
-          current: false,
-          status: "unavailable",
+          state: "stale",
           value: retained,
           reason: expect.stringContaining("unavailable"),
         },
       ),
     );
     j.mount.release();
-    expect(j.mount.value().value, "B05: hiding retains the completed answer").toEqual(retained);
+    expect(valueOf(j.mount.value()), "B05: hiding retains the completed answer").toEqual(retained);
     const resume = j.mount.subscribe(() => {});
     try {
       j.mount.page.subject({ kind: "ids", ids: [] });
       await j.ready();
       expect(j.mount.value(), "B05: return can publish an honest current answer").toMatchObject({
-        current: true,
-        status: "ready",
+        state: "ready",
       });
     } finally {
       resume();
@@ -608,10 +607,10 @@ async function compareSystemAnswers() {
         expect(
           mount.value(),
           `H23: both systems publish a current host Value: ${JSON.stringify(mount.value())}`,
-        ).toMatchObject({ current: true }),
+        ).toMatchObject({ state: "ready" }),
       { timeout: 20_000 },
     );
-    const result = ductsPricingData.parse(mount.value().value);
+    const result = ductsPricingData.parse(valueOf(mount.value()));
     const first = result.analysis.systems.find((row) => row.name === "SA 1")!;
     const second = result.analysis.systems.find((row) => row.name === "SA 2")!;
     expect(
@@ -635,14 +634,14 @@ async function compareSystemAnswers() {
       "H23: requested system coverage is explicit",
     ).toEqual([]);
     mount.page.subject({ kind: "ids", ids: [] });
-    await vi.waitFor(() => expect(mount.value(ducts.spec.reads!.network).current).toBe(true), { timeout: 20_000 });
-    const unread = ductsNetworkData.parse(mount.value(ducts.spec.reads!.network).value);
+    await vi.waitFor(() => expect(mount.value(ducts.spec.reads!.network).state === "ready").toBe(true), { timeout: 20_000 });
+    const unread = ductsNetworkData.parse(valueOf(mount.value(ducts.spec.reads!.network)));
     expect(unread.systemReads.completed, "H23: none reads no systems").toEqual([]);
     // SubjectRef Work outside this acquisition cannot become current pricing or complete zeros.
     await vi.waitFor(() => expect(mount.value()).toMatchObject({
-      current: false, status: "unavailable", reason: expect.stringContaining("Work subject is absent from the acquisition"),
+      state: expect.stringMatching(/^(stale|refused)$/), reason: expect.stringContaining("Work subject is absent from the acquisition"),
     }));
-    const unpriced = ductsRosterData.parse(mount.value(ducts.spec.reads!.roster).value);
+    const unpriced = ductsRosterData.parse(valueOf(mount.value(ducts.spec.reads!.roster)));
     expect(
       unpriced.rows.every((row) => row.total === null),
       "H23: unread systems retain unknown pressure, never complete zeros",
@@ -1034,11 +1033,11 @@ test("JZ H19 wait beyond the browser budget, then inspect queue and conflict ref
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     await vi.advanceTimersByTimeAsync((Math.max(HOST_READ_WAIT_S, NATIVE_READ_WAIT_S) + 1) * 1000);
     expect(j.host.nativeCalls, "H19: browser waiting does not duplicate native dispatch").toBe(calls);
-    expect(j.mount.value(), "H19: slow read is still pending").toMatchObject({ current: false, status: "pending" });
+    expect(j.mount.value(), "H19: slow read is still pending").toMatchObject({ state: expect.stringMatching(/^(reading|refreshing)$/) });
     vi.useRealTimers();
     held.release.resolve();
     await j.ready();
-    expect(j.mount.value().current, "H19: original late answer lands").toBe(true);
+    expect(j.mount.value().state === "ready", "H19: original late answer lands").toBe(true);
     const f = await nativeFixture();
     try {
       let attempts = 0;
