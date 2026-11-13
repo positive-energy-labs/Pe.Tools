@@ -43,7 +43,6 @@ import { sha256Hex,
   writeHome,
   writeState,
   homeKind,
-  stateKind,
   type StoredFile,
   type StateRoot,
 } from "@pe/host-contracts/kinds";
@@ -53,11 +52,7 @@ export const podMemberKind = homeKind({
   place: (_parts: readonly string[]) => "Pod member",
   segments: (parts: readonly string[]) => parts,
 });
-const runOutputKind = stateKind({
-  schema: z.unknown(),
-  place: (_run: string, _parts: readonly string[]) => "Run output",
-  segments: (run: string, parts: readonly string[]) => [run, ...parts],
-});
+import { runFileKind } from "./run-files.ts";
 import { z } from "zod";
 import {
   localOpFileError,
@@ -420,11 +415,11 @@ export const writeRun = (
       const folder = join(runsDirectory(pod, ctx).path, runId);
       yield* makeDirectory(folder, key);
       for (const [name, content] of Object.entries(files))
-        // Run output is machine state, so it takes the kernel's atomic write, not the home door.
+        // Run output is kept machine evidence, so replacement preserves the prior bytes.
         yield* Effect.try({
           try: () =>
             writeState(
-              runOutputKind.in(runsDirectory(pod, ctx), runId, name.split(/[\\\\/]/)),
+              runFileKind.in(runsDirectory(pod, ctx), runId, name.split(/[\\\\/]/)),
               content,
             ),
           catch: (error) => localOpFileError(key, error),

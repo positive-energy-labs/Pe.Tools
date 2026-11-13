@@ -10,7 +10,7 @@
  */
 import { randomUUID } from "node:crypto";
 import { readdir, readFile, stat } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { Clock, Context, Effect, Layer, Schema } from "effect";
 import { HttpRouter, HttpServerResponse as Response } from "effect/http";
 import {
@@ -62,7 +62,7 @@ export class PictureCaptures {
     private readonly maxBytes: number,
     private readonly now: () => number,
   ) {
-    this.blobs = join(storage.path, "blobs");
+    this.blobs = dirname(pictureKind.in(storage, "0".repeat(64)).path);
     this.receipts = receiptsKind.in(storage).path;
   }
 

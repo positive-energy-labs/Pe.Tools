@@ -230,7 +230,7 @@ describe("keep: a person's file is listed \"can't read, kept\", its bytes never 
   const kinds = [
     {
       name: "Pod on and off choices",
-      file: () => join(root, "plugins.json"),
+      file: () => stateMachine(root).pluginDecisions,
       read: (path: string) => lifecycle(path).ready,
       // `product:skills` is always installed, so this write reaches the file's own door.
       write: async (path: string) => {
@@ -241,7 +241,7 @@ describe("keep: a person's file is listed \"can't read, kept\", its bytes never 
     },
     {
       name: "Pod route trust",
-      file: () => join(root, "route-trust.json"),
+      file: () => stateMachine(root).routeTrust,
       read: (path: string) =>
         createPodRoutes(lifecycle(join(root, "none.json")), { machine: stateMachine(storedParent(path)) }).list(),
       write: (path: string) =>

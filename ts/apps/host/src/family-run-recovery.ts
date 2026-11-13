@@ -4,15 +4,9 @@ import { join } from "node:path";
 import { z } from "zod";
 import {
   read as readStoredFile,
-  keptStateKind,
   type StateDirectory,
 } from "@pe/host-contracts/kinds";
-const runEvidenceKind = keptStateKind({
-  schema: z.unknown(),
-  quiet: true,
-  place: (_run: string, _file: string) => "Family run output",
-  segments: (run: string, file: string) => [run, file],
-});
+import { runFileKind } from "./run-files.ts";
 import {
   canonicalRouteInput,
   familyNativeApplyResultSchema,
@@ -65,7 +59,7 @@ const object = (value: unknown): Record<string, unknown> | null =>
 // it open mid-write (PodRuns.cs writes in place). So a file that does not decode is kept, silently, and
 // reads as "not evidence": the outcome stays unknown and is retried. Never discarded, never noticed.
 const json = (storage: StateDirectory, run: string, file: string): unknown => {
-  const read = readStoredFile(runEvidenceKind.in(storage, run, file));
+  const read = readStoredFile(runFileKind.in(storage, run, [file]));
   return read.kind === "ok" ? read.value : null;
 };
 

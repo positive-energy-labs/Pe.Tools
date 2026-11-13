@@ -9,6 +9,7 @@ import { targetHomes } from "../src/call-route.ts";
 import { bindPackageLifecycle, createPackageLifecycle } from "../src/package-lifecycle.ts";
 import { listPods, readMember, writeMember, writeRun, runsDirectory } from "../src/settings.ts";
 import { hostState } from "../src/host-ownership.ts";
+import { sha256Hex } from "@pe/host-contracts/kinds";
 
 test("a custom Pods root leaves pod and podless output in machine state, like C# PodRuns", () => {
   expect(runsDirectory("site", { podsRoot: "X:/custom/Pods" }).path).toBe(join(hostState().runs, "site"));
@@ -50,6 +51,13 @@ afterEach(() => {
   vi.unstubAllEnvs();
   rmSync(user, { recursive: true, force: true });
   rmSync(drive, { recursive: true, force: true });
+});
+
+test("a run writer preserves prior evidence without a checked read", async () => {
+  const folder = await run(writeRun("mine", "kept-run", { "result.json": "prior evidence" }));
+  await run(writeRun("mine", "kept-run", { "result.json": "replacement evidence" }));
+  expect(readFileSync(join(folder, "result.json"), "utf8")).toBe("replacement evidence");
+  expect(readFileSync(join(hostState().blobs, "sha256", sha256Hex("prior evidence")), "utf8")).toBe("prior evidence");
 });
 
 // Mutants, each run red once (2026-11-11): `productPodsRoots` ignores its pointer; and

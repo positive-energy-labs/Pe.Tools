@@ -71,13 +71,14 @@ async function shippedPodsRoot(options: TransferOptions & { ledger?: ReturnType<
   const fingerprint = createHash("sha256").update(JSON.stringify(listing.packages.map(pod =>
     [pod.id, pod.members.map(member => [member.path, member.sha256])]))).digest("hex");
   const machine = options.machine ?? options.ledger?.machine ?? hostState();
-  const shipped = join(machine.shippedPods, fingerprint);
+  const shipped = dirname(shippedArchiveKind.in(machine, fingerprint, "archive").path);
   for (const pod of listing.packages) {
-    const archivePath = join(shipped, `${pod.id}.zip`);
+    const file = shippedArchiveKind.in(machine, fingerprint, pod.id);
+    const archivePath = file.path;
     await writePodExport(await preparePodExport(
       { pod: pod.id, archivePath },
       { podsRoot: examples, captures: options.captures }, listing,
-    ), shippedArchiveKind.in(machine, fingerprint, pod.id));
+    ), file);
   }
   return shipped;
 }
