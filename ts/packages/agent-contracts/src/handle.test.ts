@@ -1,9 +1,10 @@
 import { expect, expectTypeOf, test } from "vite-plus/test";
 import { z } from "zod";
+import type { OpRequestOf } from "@pe/host-contracts/operation-types";
 import { contract, handle, native, type CommandHandle, type InputOf } from "./handle.ts";
 import { commands } from "./semantic-actions.ts";
 
-test("handle() mints a command from today's table, with its plan when it is a sealed write", () => {
+test("handle() mints a command from the generated table, with its plan when it is a sealed write", () => {
   const apply = handle("sheet.apply");
   expect(apply).toMatchObject({ key: "sheet.apply", effect: "ModelWrite", via: "command" });
   expect(apply.plan.key).toBe(commands["sheet.apply"].writeBoundary.previewKey);
@@ -17,10 +18,13 @@ test("handle() mints a command from today's table, with its plan when it is a se
   expect("plan" in handle("sheet.plan")).toBe(false);
 });
 
-test("handle() mints a pe-api route key, and the door reads its transport from `via`", () => {
+test("handle() mints a pe-api route key and a raw native key, and the door reads the transport from `via`", () => {
   const bind = handle("page.bind");
   expect(bind).toMatchObject({ key: "page.bind", effect: "SessionWrite", via: { route: "page.bind" } });
   expectTypeOf(bind).toExtend<CommandHandle<"page.bind">>();
+  const raw = handle("ducts.apply");
+  expect(raw).toMatchObject({ key: "ducts.apply", effect: "ModelWrite", via: "command" });
+  expectTypeOf<InputOf<typeof raw>>().toEqualTypeOf<OpRequestOf<"ducts.apply">>();
 });
 
 test("handle() refuses a key in neither table", () => {

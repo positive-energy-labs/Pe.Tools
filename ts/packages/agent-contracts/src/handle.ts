@@ -1,7 +1,7 @@
 /**
  * Handles (ADR 0042): the one minted name for a command or a read. Frozen before wave 0 of kernel
  * crusade 2 (docs/features/routes/CONTRACTS.md, "Handles, reads, bindings, projection"). The shapes
- * are final; K1 swaps the table behind `handle()`, K3 fills `contract()`.
+ * are final; `handle()` reads K1's generated table, K3 fills `contract()`.
  */
 import { z } from "zod";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
@@ -14,9 +14,9 @@ import type {
 } from "@pe/host-contracts/operation-types";
 import type { PeRouteInput, PeRouteOutput } from "@pe/host-contracts/pe-api";
 import type { CatalogAxes } from "./catalog.ts";
-import { commandCatalogAxes } from "./command-axes.ts";
-import { httpRoutes, nativeEntry, peRoutes } from "./pe-api.ts";
-import { hostActions } from "./semantic-actions.ts";
+import { commandTable, type CommandKey } from "./command-axes.ts";
+import { nativeEntry, type httpRoutes } from "./pe-api.ts";
+import type { hostActions } from "./semantic-actions.ts";
 import type { SubjectKeyKind } from "./subject-ref.ts";
 import { publicationSchema, type Publication } from "./value.ts";
 
@@ -56,31 +56,29 @@ export type InputOf<H> = H extends CommandHandle<string, infer I> ? I : never;
 
 type Commands = typeof hostActions;
 type Routes = typeof httpRoutes;
-/** Every key of today's axes table; K1's generated table widens it to the raw native commands. */
-export type CommandKey = keyof Commands & keyof typeof commandCatalogAxes;
-/** Until K1 generates one table, a pe-api route key is typed from `route-axes.ts` through `peRoutes`. */
-export type RouteKey = Exclude<keyof Routes & string, CommandKey>;
-type ApplyKey = {
-  [K in CommandKey]: Commands[K] extends { writeBoundary: { phase: "apply" } } ? K : never;
-}[CommandKey];
-export type CommandInput<K extends CommandKey | RouteKey> = K extends CommandKey
+type Row<K extends CommandKey> = (typeof commandTable)[K];
+/** The generated table (K1) names every key: semantic commands, raw native commands, pe-api routes. */
+export type { CommandKey };
+/** A semantic command's own schema first, then the native DTO, then the pe-api route. */
+export type CommandInput<K extends CommandKey> = K extends keyof Commands
   ? z.input<Commands[K]["input"]>
-  : K extends RouteKey
-    ? PeRouteInput<Routes, K>
-    : never;
-export type CommandOutput<K extends CommandKey | RouteKey> = K extends CommandKey
+  : K extends HostOperationKey
+    ? OpRequestOf<K>
+    : K extends keyof Routes
+      ? PeRouteInput<Routes, K>
+      : unknown;
+export type CommandOutput<K extends CommandKey> = K extends keyof Commands
   ? Commands[K] extends { result: z.ZodType }
     ? z.output<Commands[K]["result"]>
     : unknown
-  : K extends RouteKey
-    ? PeRouteOutput<Routes, K>
-    : never;
-/** Today's table says `Unset` where the contract has no member; `handle()` refuses it at the mint. */
-export type CommandEffect<K extends CommandKey | RouteKey> = K extends CommandKey
-  ? Extract<(typeof commandCatalogAxes)[K]["effect"], Effect>
-  : Effect;
+  : K extends HostOperationKey
+    ? OpResponseOf<K>
+    : K extends keyof Routes
+      ? PeRouteOutput<Routes, K>
+      : unknown;
+export type CommandEffect<K extends CommandKey> = Extract<Row<K>["effect"], Effect>;
 /** A sealed write's plan is required on its handle, so a verb declaration can demand `present`. */
-type Planned<K, I> = K extends ApplyKey
+type Planned<K extends CommandKey, I> = Row<K> extends { plan: string }
   ? { readonly plan: CommandHandle<string, I, unknown, "Read" | "TransactRead"> }
   : unknown;
 
@@ -88,29 +86,23 @@ const effects = ["Read", "TransactRead", "SessionWrite", "WorkWrite", "ModelWrit
 const costs = ["Cheap", "Bounded", "Expensive", "Mutation"] as const;
 const mint = <H>(shape: Omit<H, typeof minted>) => Object.freeze(shape) as H;
 const commandHandles = new Map<string, CommandHandle>();
-export function handle<K extends CommandKey | RouteKey>(
+export function handle<K extends CommandKey>(
   key: K,
 ): CommandHandle<K, CommandInput<K>, CommandOutput<K>, CommandEffect<K>> &
   Planned<K, CommandInput<K>> {
   type Minted = ReturnType<typeof handle<K>>;
   const made = commandHandles.get(key);
   if (made) return made as Minted;
-  const isCommand = Object.hasOwn(hostActions, key) && Object.hasOwn(commandCatalogAxes, key);
-  if (!isCommand && !Object.hasOwn(peRoutes, key)) throw Error(`No command or route: ${key}`);
-  const effect = isCommand
-    ? commandCatalogAxes[key as CommandKey].effect
-    : peRoutes[key as RouteKey].catalog.effect;
-  if (effect === "Unset") throw Error(`${key} declares no Effect`);
-  const boundary = isCommand
-    ? (hostActions[key as CommandKey] as { writeBoundary?: { phase: string; previewKey?: string } })
-        .writeBoundary
-    : undefined;
+  if (!Object.hasOwn(commandTable, key)) throw Error(`No command or route: ${key}`);
+  const row: { effect: string; via: CommandHandle["via"]; plan?: string } = commandTable[key];
+  if (!(effects as readonly string[]).includes(row.effect))
+    throw Error(`${key} declares no Effect`);
   const result = mint<CommandHandle>({
     key,
-    effect,
-    via: isCommand ? "command" : { route: key },
-    ...(boundary?.phase === "apply"
-      ? { plan: handle(boundary.previewKey as CommandKey) as CommandHandle<string, unknown, unknown, "Read" | "TransactRead"> }
+    effect: row.effect as Effect,
+    via: row.via,
+    ...(row.plan
+      ? { plan: handle(row.plan as CommandKey) as CommandHandle<string, unknown, unknown, "Read" | "TransactRead"> }
       : {}),
   });
   commandHandles.set(key, result);

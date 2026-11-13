@@ -131,9 +131,10 @@ export interface ReadHandle<K extends string = string, I = unknown, D = unknown>
   readonly demand?: "mount" | "explicit";
 }
 export type InputOf<H> = H extends CommandHandle<string, infer I> ? I : never;
-export declare function handle<K extends CommandKey | RouteKey>(key: K): CommandHandle<K, CommandInput<K>, CommandOutput<K>, CommandEffect<K>> & Planned<K, CommandInput<K>>;
-// As landed: CommandKey is every key of commandCatalogAxes (hostActions); RouteKey is a pe-api route id, minted with
-// via: { route }, until K1's one table. Planned makes `plan` required on a sealed write, so VerbDecl's `H extends { plan: object }` holds.
+export declare function handle<K extends CommandKey>(key: K): CommandHandle<K, CommandInput<K>, CommandOutput<K>, CommandEffect<K>> & Planned<K, CommandInput<K>>;
+// As landed: CommandKey is every key of K1's generated commandTable (semantic commands, raw native commands, pe-api routes);
+// effect, plan and via come from its row. Input and output: hostActions first, then OpRequestOf/OpResponseOf, then the pe-api route.
+// Planned makes `plan` required on a sealed write, so VerbDecl's `H extends { plan: object }` holds.
 // CatalogReadKey lives in C/handle.ts; the host door re-exports it.
 export declare function native<K extends CatalogReadKey>(key: K): ReadHandle<K, OpRequestOf<K>, OpResponseOf<K>>;
 export declare function contract<K extends string, I, D>(key: K, def: {

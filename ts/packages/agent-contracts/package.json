@@ -56,7 +56,6 @@
       "import": "./src/ducts-guide.ts"
     },
     "./value": "./src/value.ts",
-    "./handle": "./src/handle.ts",
     "./takeoff-adoption": "./src/takeoff-adoption.ts",
     "./takeoff-read": "./src/takeoff-read.ts",
     "./slots": "./src/slots/index.ts",
