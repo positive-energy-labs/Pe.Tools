@@ -30,6 +30,7 @@ import {
 import { dirname, join, resolve } from "node:path";
 import { z } from "zod";
 import { productPathNames } from "./contracts/product.ts";
+import type { GeneratedFile } from "./kinds.ts";
 
 export const sha256Hex = (bytes: Uint8Array | string) =>
   createHash("sha256").update(bytes).digest("hex");
@@ -102,6 +103,12 @@ export function writeAtomic(path: string, bytes: Uint8Array | string): void {
     rmSync(temporary, { force: true });
     throw error;
   }
+}
+
+/** Build output has no authored bytes to preserve. Publish atomically only when bytes differ. */
+export function writeGenerated(file: GeneratedFile, bytes: Uint8Array | string): void {
+  if (readOrNull(file)?.equals(Buffer.from(bytes))) return;
+  writeAtomic(file, bytes);
 }
 
 export type HomeWrite =
