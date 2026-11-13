@@ -80,6 +80,8 @@ Copy each into both briefs verbatim from the cited lines.
 8. **`ScriptCaller`** (writer A, both halves). `enum ScriptCaller { Agent, Person }`; `ExecuteRevitScriptRequest` gains a trailing `ScriptCaller Caller = ScriptCaller.Agent`; the host sets `caller: guards(caller) ? "Agent" : "Person"` over anything the input carried; a succeeded receipt whose result has `held` yields one `waits` row with verb `held`.
 9. **Capture policy** (writer D, then SI-S3). `sight.md:110`. `native-output.ts` tests `capture: true` from `call-policy.ts` and passes the call's own key to both schemas. SI-S3 adds the focus key as one policy row.
 
+**SI-S3 seeing disclosure (k2/lens).** Capture, lens and show-elements return `lens: {basis, viewId}` and `hidden: {what, count, why}[]`. The only kinds are Links, ScopeBoxes, Levels, Grids, ReferencePlanes, Spaces, Zones, Rooms and Areas. Counts are host-document instances in a category whose visibility switch is off, including unloaded link instances, never linked-document element counts or visible/occluded counts. Filters, phases, worksets and individual hiding are not evaluated. The lens op reports PeDefault basis and reason because it sets those switches. A referenced view reports UserView basis and NotEvaluated reason because the reader does not infer who set its switches. No LensUse exists. Show-elements preserves its target visibility evidence as `hiddenElementIds`.
+
 ### Frozen in code (k2/freeze-native)
 
 Contracts 2, 3, 4, 7 and 8 are now code, and the code is the contract. No consumer exists yet: nothing fills or reads these.

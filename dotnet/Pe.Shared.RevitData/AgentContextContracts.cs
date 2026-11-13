@@ -366,12 +366,29 @@ public sealed record RevitViewImageRestore(bool Held, IReadOnlyList<string> Left
 
 /// <param name="Width">Delivered PNG width in pixels, read from the final file (not the export width it was cut from).</param>
 /// <param name="Warning">Why the image is far smaller than asked, in words; null when it is not.</param>
+public sealed record Lens(LensBasis Basis, long ViewId);
+
+[JsonConverter(typeof(StringEnumConverter))]
+public enum LensBasis { UserView, PeDefault }
+
+/// <summary>Host-document instance count for a category whose visibility switch is off, not a visible/occluded count.
+/// Does not evaluate filters, phases, worksets, individual hiding, or linked-document contents.</summary>
+public sealed record Hidden(HiddenKind What, int Count, HiddenWhy Why);
+
+[JsonConverter(typeof(StringEnumConverter))]
+public enum HiddenKind { Links, ScopeBoxes, Levels, Grids, ReferencePlanes, Spaces, Zones, Rooms, Areas }
+
+[JsonConverter(typeof(StringEnumConverter))]
+public enum HiddenWhy { PeDefault, NotEvaluated }
+
 public record RevitViewImageData(
     RevitAgentContextHandle View,
     string FilePath,
     long ByteSize,
     int Width,
     int Height,
+    Lens Lens,
+    IReadOnlyList<Hidden> Hidden,
     string? Warning = null,
     int? ViewScale = null,
     RevitViewImageModelRect? ModelRect = null,

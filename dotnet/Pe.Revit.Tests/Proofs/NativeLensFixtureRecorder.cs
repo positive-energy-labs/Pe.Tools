@@ -29,7 +29,7 @@ public sealed class NativeLensFixtureRecorder {
             var method = typeof(RevitDataRequestService).GetMethod("LensCore", BindingFlags.Static | BindingFlags.NonPublic)!;
             var wrapper = Activator.CreateInstance(method.GetParameters()[1].ParameterType,
                 BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance, null, [doc], null);
-            var response = (RevitLensData)method.Invoke(null, [request, wrapper])!;
+            var response = (RevitLensData)method.Invoke(null, [request, wrapper, new Pe.Revit.Operations.SessionWrite(doc)])!;
             var settings = RevitDataJson.CreateSerializerSettings();
             settings.DefaultValueHandling = DefaultValueHandling.Include;
             settings.NullValueHandling = NullValueHandling.Include;
@@ -38,6 +38,35 @@ public sealed class NativeLensFixtureRecorder {
                 modelCopy = model, date = DateTime.UtcNow.ToString("O"), rung = "fresh"
             }, Formatting.Indented, settings));
             Assert.That(response.Boxed, Is.EqualTo(1));
+            Assert.That(response.Lens.Basis, Is.EqualTo(LensBasis.PeDefault));
+            var view = (View)doc.GetElement(response.ViewId.ToElementId());
+            foreach (var item in Pe.Revit.DocumentData.AgentContext.RevitViewImageExporter.LensCategories) {
+                if (!view.CanCategoryBeHidden(new ElementId(item.Category))) continue;
+                Assert.That(view.GetCategoryHidden(new ElementId(item.Category)), Is.True);
+                Assert.That(response.Hidden.Single(h => h.What == item.Kind).Count,
+                    Is.EqualTo(new FilteredElementCollector(doc).OfCategory(item.Category).WhereElementIsNotElementType().GetElementCount()));
+            }
+            var transactions = new List<string>();
+            void Changed(object sender, Autodesk.Revit.DB.Events.DocumentChangedEventArgs args) {
+                if (args.GetDocument().Equals(doc)) transactions.AddRange(args.GetTransactionNames());
+            }
+            ui.Application.DocumentChanged += Changed;
+            RevitViewImageData image;
+            try {
+                // Planted offender proves this monitor would reject a committed crop/category transaction.
+                using (var offender = new Transaction(doc, "SI-S3 mutant unfocused-write")) {
+                    offender.Start();
+                    view.DetailLevel = ViewDetailLevel.Fine;
+                    offender.Commit();
+                }
+                var red = Assert.Throws<AssertionException>(() => Assert.That(transactions, Is.Empty));
+                Console.WriteLine($"[PE_LENS_MUTANT_RED] unfocused-write: {red!.Message}");
+                transactions.Clear();
+                image = Pe.Revit.DocumentData.AgentContext.RevitViewImageExporter.Export(doc, view, 600);
+            } finally { ui.Application.DocumentChanged -= Changed; }
+            Assert.That(transactions, Is.Empty, "unfocused capture must open no transaction");
+            File.WriteAllText(Path.Combine(output, "image.json"), JsonConvert.SerializeObject(image, Formatting.Indented, settings));
+            Console.WriteLine($"[PE_LENS_CAPTURE] output={output} links={new FilteredElementCollector(doc).OfClass(typeof(RevitLinkInstance)).GetElementCount()} transactions={transactions.Count}");
         } finally { RevitFamilyFixtureHarness.CloseDocument(doc); }
     }
 }

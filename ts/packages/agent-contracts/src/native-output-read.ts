@@ -2,12 +2,11 @@ import { z } from "zod";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import { generatedJsonSchema, nativeResponseSchema } from "@pe/host-contracts/native-schemas";
 import type { HostOperationKey, OpResponseOf } from "@pe/host-contracts/operation-types";
-import { captureReceiptSchema, type CaptureReceipt } from "./capture.ts";
+import { captureReceiptSchema, VIEW_IMAGE_KEY, FOCUSED_VIEW_IMAGE_KEY, type ViewImageKey, type CaptureReceipt } from "./capture.ts";
 
 /** The read and its focused twin (a SessionWrite) answer the same image; the host keeps both as captures. */
-type ViewImageKey = "revit.context.view-image" | "revit.context.view-image.focus";
 export const isViewImage = (key: string): key is ViewImageKey =>
-  key === "revit.context.view-image" || key === "revit.context.view-image.focus";
+  key === VIEW_IMAGE_KEY || key === FOCUSED_VIEW_IMAGE_KEY;
 export type NativeReadOutput<K extends HostOperationKey> = K extends ViewImageKey
   ? Omit<OpResponseOf<K>,"filePath"> & {capture:CaptureReceipt;imageUrl:string|null} : OpResponseOf<K>;
 const viewImage=(key:ViewImageKey)=>{

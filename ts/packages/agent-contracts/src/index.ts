@@ -48,6 +48,7 @@ export * from "./work-timeline.ts";
 
 export * from "./bind-read.ts";
 export * from "./captures-read.ts";
+export type { CaptureDisclosure } from "./capture.ts";
 export * from "./chat-read.ts";
 export * from "./duct-loss-read.ts";
 export * from "./ducts-read.ts";
