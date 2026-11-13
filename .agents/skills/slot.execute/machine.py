@@ -248,6 +248,10 @@ def main():
     show_all = "--all" in argv
     args = [a for a in argv if not a.startswith("--")]
     verb = args[0] if args else "admit"
+    if verb == "admit" or verb in FLOORS_GIB:
+        from reservation import own_job
+        # Only this diagnostic and its children: interpreter exit/timeout closes the job, never SDK services.
+        _admission_job = own_job(None)
     if verb == "admit":
         return safe_admit(args[1] if len(args) > 1 else "suite", as_json)
     if verb == "who":

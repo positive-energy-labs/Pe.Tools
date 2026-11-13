@@ -1,5 +1,6 @@
 """Deterministic setup boundary tests. No discovery, copies or native processes may escape."""
 import json
+import ctypes
 import subprocess
 import sys
 import tempfile
@@ -106,6 +107,66 @@ class AdmissionTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0)  # shell exit status deliberately hides the setup refusal
         self.assertIn("HOLD", result.stderr)
         self.assertNotIn("ACQUISITION", result.stdout + result.stderr)
+
+    @unittest.skipUnless(sys.platform == "win32", "Windows admission process tree")
+    def test_timeout_reaps_real_discovery_child(self):
+        # Run the real diagnostic; only its CIM argv and physical-memory reading are fixtures.
+        import time
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            machine = root / ".agents/skills/slot.execute/machine.py"
+            machine.parent.mkdir(parents=True)
+            pidfile = root / "child.pid"
+            source = a.CHECKOUT / ".agents/skills/slot.execute/machine.py"
+            child = "import os,time,pathlib; pathlib.Path(" + repr(str(pidfile)) + ").write_text(str(os.getpid())); time.sleep(30)"
+            machine.write_text(
+                "import sys,subprocess,importlib.util\n"
+                f"sys.path.insert(0,{str(source.parent)!r})\n"
+                f"spec=importlib.util.spec_from_file_location('exact_machine',{str(source)!r})\n"
+                "m=importlib.util.module_from_spec(spec); spec.loader.exec_module(m)\n"
+                "real_run=subprocess.run\n"
+                "def discovery(argv,*args,**kwargs):\n"
+                " assert argv[0]=='powershell',argv\n"
+                f" return real_run([sys.executable,'-c',{child!r}],*args,**kwargs)\n"
+                "m.subprocess.run=discovery\nm.free_gib=lambda:(30,64)\nsys.exit(m.main())\n",
+                encoding="utf8",
+            )
+            driver = root / "driver.py"
+            driver.write_text(
+                f"import sys,pathlib\nsys.path.insert(0,{str(Path(a.__file__).parent)!r})\n"
+                f"import acceptance as a\na.CHECKOUT=pathlib.Path({str(root)!r})\n"
+                "a.owner_home=lambda: (_ for _ in ()).throw(AssertionError('ACQUISITION'))\n"
+                "a.setup('timeout',[])\n", encoding="utf8",
+            )
+            k = ctypes.WinDLL("kernel32", use_last_error=True)
+            k.OpenProcess.argtypes = [ctypes.c_ulong, ctypes.c_int, ctypes.c_ulong]
+            k.OpenProcess.restype = ctypes.c_void_p
+            k.WaitForSingleObject.argtypes = [ctypes.c_void_p, ctypes.c_ulong]
+            k.TerminateProcess.argtypes = [ctypes.c_void_p, ctypes.c_uint]
+            k.CloseHandle.argtypes = [ctypes.c_void_p]
+            process = subprocess.Popen([sys.executable, str(driver)], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            handle = None
+            try:
+                deadline = time.monotonic() + 5
+                while not pidfile.exists() and process.poll() is None and time.monotonic() < deadline:
+                    time.sleep(.02)
+                self.assertTrue(pidfile.exists(), "diagnostic must actually spawn its discovery child")
+                handle = k.OpenProcess(0x100000 | 1, False, int(pidfile.read_text()))
+                self.assertTrue(handle)
+                stdout, stderr = process.communicate(timeout=12)
+                self.assertNotEqual(process.returncode, 0)
+                self.assertIn("HOLD", stderr)
+                self.assertNotIn("ACQUISITION", stdout + stderr)
+                self.assertEqual(k.WaitForSingleObject(handle, 2000), 0, "discovery child survived refusal")
+            finally:
+                if process.poll() is None:
+                    process.kill()
+                    process.communicate(timeout=5)
+                if handle:
+                    if k.WaitForSingleObject(handle, 0) != 0:
+                        k.TerminateProcess(handle, 1)
+                        k.WaitForSingleObject(handle, 5000)
+                    k.CloseHandle(handle)
 
 
 if __name__ == "__main__":
