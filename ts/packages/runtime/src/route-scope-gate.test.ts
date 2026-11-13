@@ -189,7 +189,7 @@ function fixture(prepare?: Options["preparePage"]) {
   };
   return { owner, read, invocation, enter, dependencies, issuer };
 }
-test.each(["ack-first", "stream-first"])("%s publishes once and retains full receipt", (order) => {
+test.each(["ack-first", "stream-first"])("%s publishes once without a browser history", (order) => {
   const f = fixture();
   const invocation = f.invocation();
   const publications: number[] = [];
@@ -205,7 +205,7 @@ test.each(["ack-first", "stream-first"])("%s publishes once and retains full rec
 
   expect(f.owner.acceptPage(invocation, { search: "review" }).kind).toBe("accepted");
 });
-test("A?B?A never revives an attempt; original receipt survives", () => {
+test("A?B?A never revives an attempt; a late acknowledgement cannot publish", () => {
   const f = fixture();
   const invocation = f.invocation();
   const first = f.owner.read()!;
@@ -243,7 +243,7 @@ test("same identity enter publishes Page and unloaded Work atomically", () => {
   expect(f.owner.read()?.scope).not.toBe(previous.scope);
   expect(f.owner.acceptWork(f.read, snapshot()).kind).toBe("refused");
 });
-test("disposal releases observers; late success retains original inverse and provenance", () => {
+test("disposal releases observers and late success cannot publish", () => {
   const f = fixture();
   const invocation = f.invocation();
   let published = 0;
@@ -260,7 +260,7 @@ test("disposal releases observers; late success retains original inverse and pro
     "refused",
   );
 });
-test("partial then failed late delivery retains only confirmed writes", () => {
+test("partial and failed late delivery cannot publish into another Work", () => {
   const f = fixture();
   const invocation = f.invocation();
   f.enter(other);
@@ -290,7 +290,7 @@ test("accepted Work carries the host's handle, and a contiguous ack advances tha
   expect(f.owner.read()?.work?.handle).toEqual({ key, revision: 2 });
   expect(f.owner.read()?.work?.revision).toBe(2);
 });
-test("snapshot before ack preserves history without republishing", () => {
+test("snapshot before ack does not republish", () => {
   const f = fixture();
   const invocation = f.invocation();
   let publications = 0;
@@ -304,7 +304,7 @@ test("snapshot before ack preserves history without republishing", () => {
   expect(publications).toBe(1);
 
 });
-test("equal revision conflicts recover without overwriting Work or history", () => {
+test("equal revision conflicts recover without overwriting Work", () => {
   const f = fixture();
   f.owner.acceptWork(f.invocation(), { kind: "ack", write: ack() });
   expect(f.owner.acceptWork(f.read, snapshot(1, 99))).toMatchObject({
@@ -327,7 +327,7 @@ test("snapshot then contradictory delta recovers", () => {
   });
   expect(f.owner.read()?.work?.value.amount).toBe(1);
 });
-test("gap retains receipts, snapshot recovers, replay reconciles older deltas", () => {
+test("a gap requests recovery, a snapshot recovers, and older deltas cannot regress Work", () => {
   const f = fixture();
   expect(f.owner.acceptWork(f.invocation(), { kind: "ack", write: ack(3) })).toMatchObject({
     kind: "recover",
@@ -341,7 +341,7 @@ test("gap retains receipts, snapshot recovers, replay reconciles older deltas", 
   expect(f.owner.acceptWork(f.read, { kind: "stream", write: ack(2) }).kind).toBe("duplicate");
 
 });
-test("contiguous deltas fill a gap without losing buffered receipt", () => {
+test("contiguous deltas fill a gap", () => {
   const f = fixture();
   f.owner.acceptWork(f.read, { kind: "stream", write: ack(2) });
   f.owner.acceptWork(f.read, { kind: "stream", write: ack() });
@@ -516,7 +516,7 @@ test("superseding a write attempt retires its Page but preserves its successful 
 
 });
 
-test("a route without Work constructs without schema, hash or journal", () => {
+test("a route without Work constructs without Work acceptance services", () => {
   const { work: _work, ...withoutWork } = builtinData;
   const declaration = { ...withoutWork, capabilities: [] } as const;
   const options: ScopeGateOptions<typeof declaration, typeof schemas> = {
