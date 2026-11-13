@@ -67,7 +67,7 @@ export async function nativeFixture(
         Layer.mergeAll(
           admittedBuiltinsLayer(saved),
           RunRegistry.layer.pipe(Layer.provide(NodeCrypto.layer)),
-          RevitBridgeLive,
+          RevitBridgeLive.pipe(Layer.provide(ActionJournalService.live(null, join(dir, "bridge-receipts")))),
           CaptureStore.layer(join(dir, "captures")),
         ),
         scope,

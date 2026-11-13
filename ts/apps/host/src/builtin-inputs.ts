@@ -506,7 +506,8 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
             ? (async () => {
                 const { target } = z.object({ target: documentRefSchema.optional() }).parse(args);
                 const pointer = target ? (await invoke(inventory.document(target))).projectHome : null;
-                return readFamilySpec(args, pointer);
+                const { target: _target, ...member } = args as Record<string, unknown>;
+                return readFamilySpec(member, pointer);
               })()
             : Promise.reject(Error(`Unknown file input ${name}`)),
       );

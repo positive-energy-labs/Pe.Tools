@@ -1,3 +1,4 @@
+import { catalogsFor } from "./ducts-files.ts";
 import { workElementId } from "@pe/ducts-domain/work-subject";
 import { elementLabeler } from "@pe/ducts-domain/element-label";
 import { ductWriteEvidence } from "@pe/ducts-domain/write-evidence";
@@ -256,7 +257,7 @@ export function ductsExecutors(
           losses: async () => {
             const tables = await readNative("ducts.tables", { ids: TABLE_IDS });
             const grids = toGrids(tables);
-            const catalogs = await runPods(deps, deps.files!.ductCatalogs);
+            const catalogs = await runPods(deps, catalogsFor(deps.files!, pointer));
             const layers = () => ({
               snapshot,
               firm,

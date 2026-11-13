@@ -17,3 +17,13 @@ test("schedule capture through /actions writes the target document's project Pod
   expect(receipt, JSON.stringify(receipt)).toMatchObject({ state: "succeeded" });
   expect(await readFile(join(f.pod, "settings/schedule/project.json"), "utf8")).toBe("{}");
 });
+
+// M3: a push carrying a project-only Pod must pass the target pointer at preparation.
+test("schedule push prepares with the target project-only Pod", async () => {
+  await projectFixture(false);
+  const { setup } = await import("./schedule-recorded-fixture.ts");
+  const f = await setup({ projectHome: "Projects/Example", pod: "project-only" });
+  f.select("fresh-schedule-04-revit.detail.schedules");
+  const result = await f.submit();
+  expect(result, JSON.stringify(result)).toMatchObject({ state: "succeeded", result: { applied: 2 } });
+});

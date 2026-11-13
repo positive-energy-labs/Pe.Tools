@@ -543,7 +543,8 @@ export function createPeRoutes(options: PeRoutesOptions) {
       try {
         const query = url.searchParams;
         const catalog = await options.capabilityCatalog.read({
-          bridgeSessionId: query.get("session") ?? undefined,
+          bridgeSessionId: scope.binding === "open" ? scope.open.session : query.get("session") ?? undefined,
+          openDocumentId: scope.binding === "open" ? scope.open.openId : undefined,
           session: query.has("sdk")
             ? sdkSessionSelectionSchema.parse(JSON.parse(query.get("sdk")!))
             : undefined,
