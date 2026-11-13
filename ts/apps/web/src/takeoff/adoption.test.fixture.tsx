@@ -249,7 +249,7 @@ export async function journey(options: { unreadable?: { elementId: number | null
       actions.push({ key: command.key, input: command.input });
       if (command.key === "takeoffs.initialize") carriers = "ready";
       const result =
-        command.key === commands["takeoffs.adopt"].writeBoundary.previewKey
+        command.key === commands["takeoffs.adopt"].writeBoundary.previewKey || command.key === commands["takeoffs.initialize"].writeBoundary.previewKey
           ? {
               previewOnly: true,
               derivedRequest: {},

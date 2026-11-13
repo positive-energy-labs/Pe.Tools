@@ -302,7 +302,7 @@ export async function fansPlanJourney(journey: "watched publications" | "externa
    fireEvent.click(screen.getByRole("button",{name:/^MUAS-1.*1 staged$/}));
    fireEvent.click(await screen.findByRole("option",{name:/^None/}));
    await vi.waitFor(()=>expect(trace.mounts.at(-1).owner().handle.revision).toBe(4),{timeout:20000});
-   await expect(trace.mounts.at(-1).run("losses",true)).rejects.toThrow("Review is stale; prepare it again");
+   await expect(trace.mounts.at(-1).verb("losses").apply()).rejects.toThrow("Review is stale; prepare it again");
    expect(trace.submit).toHaveBeenCalledTimes(2);
  }catch(error){
    if(process.env.PE_F05_EVIDENCE)writeFileSync(`${process.env.PE_F05_EVIDENCE}.failure`,String((error as Error).stack??error));

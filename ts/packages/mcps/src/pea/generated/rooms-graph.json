@@ -144,6 +144,7 @@
       "kind": "command",
       "input": "none",
       "label": "Partition view",
+      "effect": "ModelWrite",
       "review": "shown",
       "deps": {
         "page": [
@@ -168,6 +169,7 @@
       "kind": "command",
       "input": "none",
       "label": "Write room fields",
+      "effect": "ModelWrite",
       "review": "shown",
       "deps": {
         "page": [
@@ -192,6 +194,7 @@
       "kind": "command",
       "input": "none",
       "label": "Merge rooms",
+      "effect": "ModelWrite",
       "review": "shown",
       "deps": {
         "page": [
@@ -213,6 +216,11 @@
       "intent": "merge"
     }
   },
+  "band": [
+    "partition",
+    "apply",
+    "merge"
+  ],
   "panes": {
     "main": {
       "label": "Rooms",
@@ -220,11 +228,7 @@
       "draws": [
         "value"
       ],
-      "verbs": [
-        "partition",
-        "apply",
-        "merge"
-      ]
+      "verbs": []
     },
     "goal": {
       "label": "Unresolved",
@@ -232,11 +236,7 @@
       "draws": [
         "value"
       ],
-      "verbs": [
-        "partition",
-        "apply",
-        "merge"
-      ]
+      "verbs": []
     }
   },
   "layout": {

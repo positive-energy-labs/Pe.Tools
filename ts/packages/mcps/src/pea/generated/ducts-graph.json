@@ -566,6 +566,7 @@
       "kind": "command",
       "input": "none",
       "label": "Write to Revit",
+      "effect": "ModelWrite",
       "review": "shown",
       "deps": {
         "page": [
@@ -598,6 +599,7 @@
       "kind": "command",
       "input": "none",
       "label": "Heal",
+      "effect": "ModelWrite",
       "review": "shown",
       "deps": {
         "page": [
@@ -630,6 +632,7 @@
       "kind": "command",
       "input": "none",
       "label": "Make the fan",
+      "effect": "ModelWrite",
       "review": "shown",
       "deps": {
         "page": [
@@ -659,6 +662,11 @@
       "intent": "assign"
     }
   },
+  "band": [
+    "losses",
+    "heal",
+    "assign"
+  ],
   "panes": {
     "e-systems": {
       "label": "Systems",
@@ -666,11 +674,7 @@
       "draws": [
         "value"
       ],
-      "verbs": [
-        "losses",
-        "heal",
-        "assign"
-      ]
+      "verbs": []
     },
     "e-sidebar": {
       "label": "System tree",
@@ -678,11 +682,7 @@
       "draws": [
         "value"
       ],
-      "verbs": [
-        "losses",
-        "heal",
-        "assign"
-      ]
+      "verbs": []
     },
     "e-rules-all": {
       "label": "All-systems rules",
@@ -690,11 +690,7 @@
       "draws": [
         "value"
       ],
-      "verbs": [
-        "losses",
-        "heal",
-        "assign"
-      ]
+      "verbs": []
     },
     "e-rules": {
       "label": "This system’s rules",
@@ -702,11 +698,7 @@
       "draws": [
         "value"
       ],
-      "verbs": [
-        "losses",
-        "heal",
-        "assign"
-      ]
+      "verbs": []
     },
     "e-picture": {
       "label": "Picture",
@@ -714,11 +706,7 @@
       "draws": [
         "value"
       ],
-      "verbs": [
-        "losses",
-        "heal",
-        "assign"
-      ]
+      "verbs": []
     },
     "design": {
       "label": "Design",
@@ -726,11 +714,7 @@
       "draws": [
         "value"
       ],
-      "verbs": [
-        "losses",
-        "heal",
-        "assign"
-      ]
+      "verbs": []
     },
     "e-inbox": {
       "label": "Rulings",
@@ -738,11 +722,7 @@
       "draws": [
         "value"
       ],
-      "verbs": [
-        "losses",
-        "heal",
-        "assign"
-      ]
+      "verbs": []
     }
   },
   "layout": {

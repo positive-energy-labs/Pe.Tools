@@ -286,11 +286,12 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
   // `ops.read` and `page.bind` beside them.
   const declared = (key: string): Command | undefined => hostActions[key as keyof typeof hostActions];
   /** A command that carries the route's Work handle cannot run before that Work exists (a raw
-   *  `work: null` decode error was the 2b drive's /pods "Open saved bytes"); it says why instead. */
+   *  `work: null` decode error was the 2b drive's /pods "Open saved bytes"); it refuses with the Work's
+   *  own reason ("Start this Work to edit"), as the cells do. */
   const workRefusal = (key: string) => {
     const work = declared(key)?.work;
     if (!work || work.optional || owners.get(own)?.handle) return null;
-    return !edits ? "This view keeps no Work" : owners.get(own)?.absent ? "Start this Work first" : "Reading Work...";
+    return !edits ? "This view keeps no Work" : owners.get(own)?.problem ?? "Reading Work...";
   };
   const writeRefusal = () => input.fixture !== null ? "Fixture has no native writes" : basisRefusal();
   // Settlement includes every demanded reading, not only the core write basis.
@@ -757,6 +758,9 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
   } catch (error) { cleanups.reverse().forEach(stop => stop()); throw error; }
 }
 export type TypedMount = ReturnType<typeof mountTypedRoute>;
+/** For a holder of only the id (a test, a harness): the handle as the kind it must be, or a throw. */
+export const planned = (verb: VerbHandle): PlannedVerb => { if (!("plan" in verb)) throw Error(`${verb.label} has no plan`); return verb; };
+export const direct = (verb: VerbHandle): RunVerb => { if (!("run" in verb)) throw Error(`${verb.label} is reviewed: plan it`); return verb; };
 async function settleNative(submission: ReturnType<WorkJournalDoor["submit"]>,receipt=false) {
   return new Promise<unknown>((resolve,reject)=>submission.accepted.subscribe(outcome=>{
     if(outcome.kind==="pending") return;

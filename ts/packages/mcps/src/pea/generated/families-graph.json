@@ -86,7 +86,8 @@
       "kind": "command",
       "input": "none",
       "label": "Read families",
-      "review": "shown",
+      "effect": "SessionWrite",
+      "review": "none",
       "deps": {
         "page": [],
         "work": [
@@ -113,7 +114,8 @@
       "kind": "command",
       "input": "none",
       "label": "Stop family read",
-      "review": "shown",
+      "effect": "SessionWrite",
+      "review": "none",
       "deps": {
         "page": [],
         "work": [
@@ -140,6 +142,7 @@
       "kind": "command",
       "input": "none",
       "label": "Apply families",
+      "effect": "ModelWrite",
       "review": "shown",
       "deps": {
         "page": [],
@@ -164,6 +167,7 @@
       "intent": "apply"
     }
   },
+  "band": [],
   "panes": {
     "main": {
       "label": "Families",

@@ -100,7 +100,7 @@ test("choose adoption views, edit the actual Work, initialize and adopt through 
       stage: "Adoption",
     });
     fireEvent.click(screen.getByRole("button", { name: "adopt" }));
-    await waitFor(() => expect(j.actions.map((row) => row.key), j.mount.action("adopt").failure ?? screen.queryByRole("alert")?.textContent ?? "").toContain("takeoffs.adopt"), { timeout: 20000 });
+    await waitFor(() => expect(j.actions.map((row) => row.key), j.mount.verb("adopt").failure ?? screen.queryByRole("alert")?.textContent ?? "").toContain("takeoffs.adopt"), { timeout: 20000 });
     expect(j.actions.map((row) => row.key)).toContain(
       commands["takeoffs.adopt"].writeBoundary.previewKey,
     );

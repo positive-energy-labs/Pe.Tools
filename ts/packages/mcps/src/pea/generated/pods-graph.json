@@ -128,7 +128,8 @@
       "kind": "command",
       "input": "none",
       "label": "Open saved bytes",
-      "review": "shown",
+      "effect": "SessionWrite",
+      "review": "none",
       "deps": {
         "page": [
           "member"
@@ -151,7 +152,8 @@
       "kind": "command",
       "input": "none",
       "label": "Adopt disk bytes and replace edits",
-      "review": "shown",
+      "effect": "SessionWrite",
+      "review": "none",
       "deps": {
         "page": [
           "member"
@@ -174,7 +176,8 @@
       "kind": "command",
       "input": "none",
       "label": "Save staged member",
-      "review": "shown",
+      "effect": "SessionWrite",
+      "review": "none",
       "deps": {
         "page": [
           "member"
@@ -197,7 +200,8 @@
       "kind": "command",
       "input": "none",
       "label": "Save as new member",
-      "review": "shown",
+      "effect": "SessionWrite",
+      "review": "none",
       "deps": {
         "page": [
           "member"
@@ -217,6 +221,12 @@
       "intent": "saveNew"
     }
   },
+  "band": [
+    "open",
+    "adopt",
+    "save",
+    "saveNew"
+  ],
   "panes": {
     "members": {
       "label": "Members",
@@ -224,12 +234,7 @@
       "draws": [
         "inventory"
       ],
-      "verbs": [
-        "open",
-        "adopt",
-        "save",
-        "saveNew"
-      ]
+      "verbs": []
     },
     "runs": {
       "label": "Runs",
@@ -237,12 +242,7 @@
       "draws": [
         "value"
       ],
-      "verbs": [
-        "open",
-        "adopt",
-        "save",
-        "saveNew"
-      ]
+      "verbs": []
     },
     "sheet": {
       "label": "Sheet",
@@ -250,12 +250,7 @@
       "draws": [
         "value"
       ],
-      "verbs": [
-        "open",
-        "adopt",
-        "save",
-        "saveNew"
-      ]
+      "verbs": []
     },
     "goal": {
       "label": "Unresolved",
@@ -263,12 +258,7 @@
       "draws": [
         "value"
       ],
-      "verbs": [
-        "open",
-        "adopt",
-        "save",
-        "saveNew"
-      ]
+      "verbs": []
     }
   },
   "layout": {

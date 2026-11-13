@@ -68,7 +68,7 @@ test("a family is a name SubjectRef over its saved member, and the roster lists 
 });
 
 test("Open member takes the member from the subject and its exact bytes from the roster", () => {
-  const open = module.spec.commands.open as { input(context: object): unknown };
+  const open = module.spec.verbs.open as { input(context: object): unknown };
   expect(open.input({ page: { member: picked }, value: { pods } })).toEqual({ source: { ...box, sha256: "a".repeat(64) } });
   expect(open.input({ page: { member: { kind: "ids", ids: [] } }, value: { pods } })).toEqual({});
 });

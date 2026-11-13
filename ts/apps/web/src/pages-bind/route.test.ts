@@ -35,13 +35,11 @@ test("slice 10 bind: the Page is a name SubjectRef subject from the Page roster;
   ]);
   expect(decode(options[1]!.id)).toEqual({ ok: true, value: { keyKind: "name", key: ["todo"] } });
   const page = { page: oneName("todo"), view: false, query: {}, fragment: "", selected: [] };
-  const bind = spec.commands.bind as { input(c: object, s: unknown): unknown };
-  const read = spec.commands.read as { input(c: object): unknown };
+  const bind = spec.verbs.bind as { input(c: object, s: unknown): unknown };
   expect(bind.input({ page }, { kind: "unbind" })).toEqual({
     slug: "todo",
     binding: { kind: "unbind" },
   });
-  expect(read.input({ page })).toEqual({ slug: "todo" });
   expect(nameOf(oneName(""))).toBe("");
   // One capability, one choice path: the body draws no slug input beside the kernel's Page picker.
   expect(readFileSync(new URL("mount.tsx", import.meta.url), "utf8")).not.toMatch(

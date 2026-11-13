@@ -112,7 +112,8 @@
       "kind": "command",
       "input": "none",
       "label": "Bind",
-      "review": "shown",
+      "effect": "SessionWrite",
+      "review": "none",
       "deps": {
         "page": [
           "page"
@@ -127,28 +128,9 @@
       ],
       "entry": "page.bind",
       "intent": "bind"
-    },
-    "read": {
-      "kind": "command",
-      "input": "none",
-      "label": "Read binding",
-      "review": "shown",
-      "deps": {
-        "page": [
-          "page"
-        ],
-        "work": [],
-        "readings": [
-          "value"
-        ]
-      },
-      "captures": [
-        "value"
-      ],
-      "entry": "bind.target",
-      "intent": "read"
     }
   },
+  "band": [],
   "panes": {
     "main": {
       "label": "Bind Page",
@@ -157,8 +139,7 @@
         "value"
       ],
       "verbs": [
-        "bind",
-        "read"
+        "bind"
       ]
     }
   },
@@ -173,8 +154,7 @@
         "main"
       ],
       "verbs": [
-        "bind",
-        "read"
+        "bind"
       ]
     }
   },

@@ -98,7 +98,8 @@
       "kind": "command",
       "input": "none",
       "label": "Start Revit and open",
-      "review": "shown",
+      "effect": "SessionWrite",
+      "review": "none",
       "deps": {
         "page": [],
         "work": [],
@@ -116,7 +117,8 @@
       "kind": "command",
       "input": "none",
       "label": "Stop Revit",
-      "review": "shown",
+      "effect": "SessionWrite",
+      "review": "none",
       "deps": {
         "page": [],
         "work": [],
@@ -134,7 +136,8 @@
       "kind": "command",
       "input": "none",
       "label": "Hot reload Revit",
-      "review": "shown",
+      "effect": "SessionWrite",
+      "review": "none",
       "deps": {
         "page": [],
         "work": [],
@@ -149,6 +152,7 @@
       "intent": "restart"
     }
   },
+  "band": [],
   "panes": {
     "sessions": {
       "label": "Sessions",

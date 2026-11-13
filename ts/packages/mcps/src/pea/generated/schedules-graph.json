@@ -135,7 +135,8 @@
       "kind": "command",
       "input": "none",
       "label": "Read schedule",
-      "review": "shown",
+      "effect": "SessionWrite",
+      "review": "none",
       "deps": {
         "page": [
           "workspaceId"
@@ -160,7 +161,8 @@
       "kind": "command",
       "input": "none",
       "label": "Bind schedule",
-      "review": "shown",
+      "effect": "SessionWrite",
+      "review": "none",
       "deps": {
         "page": [
           "workspaceId"
@@ -185,6 +187,7 @@
       "kind": "command",
       "input": "none",
       "label": "Apply cells",
+      "effect": "ModelWrite",
       "review": "shown",
       "deps": {
         "page": [
@@ -207,6 +210,7 @@
       "intent": "push"
     }
   },
+  "band": [],
   "panes": {
     "grid": {
       "label": "Schedules",

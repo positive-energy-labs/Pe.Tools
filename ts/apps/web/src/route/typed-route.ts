@@ -17,7 +17,10 @@ import { subjectSchema } from "@pe/agent-contracts/route-kernel-codecs";
 import type { PlanHandle as importPlanHandle } from "@pe/kit/lang/write-action";
 import { z } from "zod";
 import type { Publication } from "@pe/agent-contracts/value";
-import { handle, type CommandHandle, type Effect, type InputOf } from "@pe/agent-contracts/handle";
+// The command half of the handles only: `handle.ts` also holds the native catalog, which no Pod bundle may reach.
+import { handle, type CommandHandle, type Effect, type InputOf } from "../../../../packages/agent-contracts/src/command-handle.ts";
+/** A Pod declares its verbs with this: the same mint the builtin routes take from the contracts package. */
+export { handle };
 import type { KernelVerbKey } from "./slots/findings/index.ts";
 import { picturePoseSchemas, pictureSlotData, sheetSlotData, writesRevit, SHEET_COMMANDS, type Goal, type PictureScope, type PictureSlot, type SheetSlot } from "@pe/agent-contracts/slots";
 
@@ -195,9 +198,12 @@ export type VerbDecl<C extends VerbScope, H extends CommandHandle = CommandHandl
   readonly handle: H;
   readonly label: string;
   readonly input?: (ctx: VerbContext<C>, supplied?: any) => Unbound<InputOf<H>>;
-} & (H extends { plan: object }
-  ? { present(result: unknown, ctx: VerbContext<C> & { readonly value: C["value"]; readonly doc: C["doc"] }): Presentation }
-  : { present?: never });
+} & (CommandHandle extends H
+  // A handle whose key is erased (a mounted spec declared again) keeps whatever it had.
+  ? { present?(result: unknown, ctx: VerbContext<C> & { readonly value: C["value"]; readonly doc: C["doc"] }): Presentation }
+  : H extends { plan: object }
+    ? { present(result: unknown, ctx: VerbContext<C> & { readonly value: C["value"]; readonly doc: C["doc"] }): Presentation }
+    : { present?: never });
 /** A declared verb as the shell holds it, whatever its handle. */
 export type AnyVerb = {
   readonly handle: CommandHandle;

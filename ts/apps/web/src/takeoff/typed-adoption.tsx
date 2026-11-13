@@ -48,10 +48,10 @@ export function AdoptionBody({ ctx }: { ctx: AdoptionContext }) {
     const { id } = pending;
     setPending(null);
     const action = ctx.verb(id);
+    // Both writes are sealed: the staged Work is the person's review, so one press plans and applies it.
     void (async () => {
       await action.plan();
-      // Adopt applies its own plan; Initialize's review is the band's to apply.
-      if (id === "adopt") await action.apply();
+      await action.apply();
     })().catch((error) => setProblem(String(error)));
   }, [pending, ctx.value, ctx.cells.ready]);
   const stage = async (id: "initialize" | "adopt") => {

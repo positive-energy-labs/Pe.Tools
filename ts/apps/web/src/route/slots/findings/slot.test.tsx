@@ -24,17 +24,17 @@ const pod = route({
   layout: paneLayout("main"),
 } as never);
 
-test("a Pod's sheet row keyed by a SubjectRef shows the person's Finding verb, which runs the `finding` command the mount adds", async () => {
-  // route() is the Pod surface and stays catalog-free: the mount adds `finding`, never the declaration.
-  expect(pod.spec.commands).not.toHaveProperty("finding");
+test("a Pod's sheet row keyed by a SubjectRef shows the person's Finding verb, which runs the kernel verb the mount holds", async () => {
+  // route() is the Pod surface and stays catalog-free: a kernel verb is the mount's, never the declaration's.
+  expect(pod.spec.verbs).toEqual({});
   const run = vi.fn(async (_id: string, _input: unknown) => null);
   const ctx = { cells: { doc: {}, at: () => ({ owner: { route: "pod-sizing", label: "Sizing" }, refusal: null, value: {}, transitions: () => [], stage: async () => null, clear: async () => null }) },
-    page: { read: () => ({}) }, value: { status: "ready", current: true, value: {} }, write: (id: string) => ({ run: (input: unknown) => run(id, input), refusal: null }) };
+    page: { read: () => ({}) }, value: { status: "ready", current: true, value: {} }, verb: (id: string) => ({ run: (input: unknown) => run(id, input), refusal: null }) };
   render(<RegistryContext value={makeAtomRegistry()}><SheetPane ctx={{ draw: ctx as never, slot: sheet }} /></RegistryContext>);
   // The pipe row has the verb; the slot-name row ("fanFlow") is no subject and has none.
   expect(screen.getAllByRole("button", { name: /^Write a finding on / }).map((b) => b.getAttribute("aria-label"))).toEqual(["Write a finding on Pipe size"]);
   fireEvent.click(screen.getByRole("button", { name: "Write a finding on Pipe size" }));
   fireEvent.change(await screen.findByRole("textbox", { name: "finding text" }), { target: { value: "riser undersized" } });
   fireEvent.click(screen.getByRole("button", { name: "Write note on Pipe size" }));
-  await vi.waitFor(() => expect(run).toHaveBeenCalledWith("finding", expect.objectContaining({ subject: pipe, kind: "note", text: "riser undersized" })));
+  await vi.waitFor(() => expect(run).toHaveBeenCalledWith("findings.write", expect.objectContaining({ subject: pipe, kind: "note", text: "riser undersized" })));
 });

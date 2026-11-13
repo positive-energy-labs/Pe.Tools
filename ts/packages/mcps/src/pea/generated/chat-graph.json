@@ -53,6 +53,7 @@
     }
   },
   "verbs": {},
+  "band": [],
   "panes": {
     "threads": {
       "label": "Threads",

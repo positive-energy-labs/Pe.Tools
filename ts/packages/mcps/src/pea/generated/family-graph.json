@@ -196,7 +196,8 @@
       "kind": "command",
       "input": "none",
       "label": "Read family",
-      "review": "shown",
+      "effect": "Read",
+      "review": "none",
       "deps": {
         "page": [
           "member"
@@ -222,7 +223,8 @@
       "kind": "command",
       "input": "none",
       "label": "Read saved family",
-      "review": "shown",
+      "effect": "Read",
+      "review": "none",
       "deps": {
         "page": [
           "member"
@@ -248,7 +250,8 @@
       "kind": "command",
       "input": "none",
       "label": "Open member",
-      "review": "shown",
+      "effect": "Read",
+      "review": "none",
       "deps": {
         "page": [
           "member"
@@ -274,7 +277,8 @@
       "kind": "command",
       "input": "none",
       "label": "Attach PDF",
-      "review": "shown",
+      "effect": "SessionWrite",
+      "review": "none",
       "deps": {
         "page": [
           "member"
@@ -300,7 +304,8 @@
       "kind": "command",
       "input": "none",
       "label": "Save family to pod",
-      "review": "shown",
+      "effect": "SessionWrite",
+      "review": "none",
       "deps": {
         "page": [
           "member"
@@ -326,6 +331,7 @@
       "kind": "command",
       "input": "none",
       "label": "Build .rfa",
+      "effect": "ModelWrite",
       "review": "shown",
       "deps": {
         "page": [
@@ -352,6 +358,7 @@
       "kind": "command",
       "input": "none",
       "label": "Apply family",
+      "effect": "ModelWrite",
       "review": "shown",
       "deps": {
         "page": [
@@ -375,6 +382,14 @@
       "intent": "apply"
     }
   },
+  "band": [
+    "read",
+    "saved",
+    "open",
+    "capture",
+    "build",
+    "apply"
+  ],
   "panes": {
     "workspace": {
       "label": "Family",
@@ -383,13 +398,7 @@
         "value"
       ],
       "verbs": [
-        "read",
-        "saved",
-        "open",
-        "attach",
-        "capture",
-        "build",
-        "apply"
+        "attach"
       ]
     },
     "goal": {
@@ -398,15 +407,7 @@
       "draws": [
         "value"
       ],
-      "verbs": [
-        "read",
-        "saved",
-        "open",
-        "attach",
-        "capture",
-        "build",
-        "apply"
-      ]
+      "verbs": []
     }
   },
   "layout": {

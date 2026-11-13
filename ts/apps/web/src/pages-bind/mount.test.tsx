@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
 import { oneName } from "#/route/typed-route";
 import type { PageTargetReading } from "@pe/agent-contracts";
-import { cleanup, fireEvent, render } from "@testing-library/react";
+import { cleanup, render } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 
 vi.mock("../machine/bay", () => ({ useThreadSummaries: () => null }));
+const stream = vi.hoisted(() => ({ subscribe: vi.fn() }));
+vi.mock("../host/resource-stream", () => ({ peReadings: stream }));
 vi.mock("#/host/resource-state", () => ({
   useInventory: () => ({ state: "absent" }),
   previousOf: () => undefined,
@@ -28,24 +30,21 @@ const reading: PageTargetReading = {
   write: null,
 };
 const mount = () => {
-  const run = vi.fn(async () => reading);
+  stream.subscribe.mockReset().mockImplementation((_reading: unknown, deliver: (frame: unknown) => void) => {
+    deliver({ kind: "snapshot", value: reading });
+    return () => {};
+  });
   const ctx = {
     page: { read: () => ({ page: oneName("snowdon-ducts--tour"), view: false, query: {}, fragment: "" }) },
     value: { current: true, value: null },
-    write: () => ({ run }),
+    verb: () => ({ run: vi.fn() }),
   };
-  return { run, screen: render(<BindBody ctx={ctx as never} />) };
+  return render(<BindBody ctx={ctx as never} />);
 };
 
-test("a pressed reading draws, though the host names the Page by its key", async () => {
-  const { screen } = mount();
-  fireEvent.click(screen.getByRole("button", { name: "Read current binding" }));
+test("a chosen Page's target draws from its Reading without a press, though the host names the Page by its key", async () => {
+  const screen = mount();
   expect(await screen.findByText("choose: missing")).toBeTruthy();
   expect(screen.queryByText("no reading yet")).toBeNull();
-});
-
-test("a chosen Page is read without a press, so a reload shows its binding", async () => {
-  const { screen, run } = mount();
-  expect(await screen.findByText("choose: missing")).toBeTruthy();
-  expect(run).toHaveBeenCalledTimes(1);
+  expect(stream.subscribe).toHaveBeenCalledWith({ kind: "page-target", slug: "snowdon-ducts--tour" }, expect.any(Function));
 });

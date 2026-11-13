@@ -58,6 +58,7 @@
   },
   "readings": {},
   "verbs": {},
+  "band": [],
   "panes": {
     "main": {
       "label": "Design System",

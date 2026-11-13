@@ -71,6 +71,7 @@
     }
   },
   "verbs": {},
+  "band": [],
   "panes": {
     "captures": {
       "label": "Captures",

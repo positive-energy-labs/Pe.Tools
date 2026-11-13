@@ -217,6 +217,7 @@
       "kind": "command",
       "input": "none",
       "label": "Initialize",
+      "effect": "ModelWrite",
       "review": "shown",
       "deps": {
         "page": [],
@@ -242,6 +243,7 @@
       "kind": "command",
       "input": "none",
       "label": "Adopt",
+      "effect": "ModelWrite",
       "review": "shown",
       "deps": {
         "page": [],
@@ -264,6 +266,10 @@
       "intent": "adopt"
     }
   },
+  "band": [
+    "initialize",
+    "adopt"
+  ],
   "panes": {
     "adoption": {
       "label": "View adoption",
@@ -271,10 +277,7 @@
       "draws": [
         "value"
       ],
-      "verbs": [
-        "initialize",
-        "adopt"
-      ]
+      "verbs": []
     }
   },
   "layout": {

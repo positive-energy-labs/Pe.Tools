@@ -49,7 +49,7 @@ test("/pods declares subject, sheet, goal and query, and keeps no hand-drawn spe
   expect(data.goal).toBe("value");
   expect(data.sheet?.bindings.fields).toMatchObject({ kind: "local", per: "subject", json: true });
   // A local-only sheet never reaches Revit, so the kernel adds no sheet write verb; Save is the route's own.
-  expect(Object.keys(spec.commands).sort()).toEqual(["adopt", "open", "save", "saveNew"]);
+  expect(Object.keys(spec.verbs).sort()).toEqual(["adopt", "open", "save", "saveNew"]);
   // A person can Start this Work: the route seeds an empty one for Open saved bytes to fill.
   expect(spec.edits?.seed?.({} as never, null)).toEqual({ basis: null, fields: {} });
   // The title rides the sheet's head, the first pane after the subject list.

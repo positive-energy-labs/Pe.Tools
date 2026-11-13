@@ -94,7 +94,8 @@
       "kind": "command",
       "input": "none",
       "label": "Run read",
-      "review": "shown",
+      "effect": "Read",
+      "review": "none",
       "deps": {
         "page": [
           "op"
@@ -110,11 +111,12 @@
       "entry": "ops.read",
       "intent": "run"
     },
-    "control": {
+    "action.read": {
       "kind": "command",
       "input": "none",
-      "label": "Receipt control",
-      "review": "shown",
+      "label": "Read receipt",
+      "effect": "Read",
+      "review": "none",
       "deps": {
         "page": [
           "op"
@@ -127,10 +129,74 @@
       "captures": [
         "value"
       ],
-      "entry": "ops.receipt-control",
-      "intent": "control"
+      "entry": "action.read",
+      "intent": "action.read"
+    },
+    "action.recover": {
+      "kind": "command",
+      "input": "none",
+      "label": "Recover action",
+      "effect": "SessionWrite",
+      "review": "none",
+      "deps": {
+        "page": [
+          "op"
+        ],
+        "work": [],
+        "readings": [
+          "value"
+        ]
+      },
+      "captures": [
+        "value"
+      ],
+      "entry": "action.recover",
+      "intent": "action.recover"
+    },
+    "action.resume": {
+      "kind": "command",
+      "input": "none",
+      "label": "Resume action",
+      "effect": "SessionWrite",
+      "review": "none",
+      "deps": {
+        "page": [
+          "op"
+        ],
+        "work": [],
+        "readings": [
+          "value"
+        ]
+      },
+      "captures": [
+        "value"
+      ],
+      "entry": "action.resume",
+      "intent": "action.resume"
+    },
+    "action.cancel": {
+      "kind": "command",
+      "input": "none",
+      "label": "Cancel action",
+      "effect": "SessionWrite",
+      "review": "none",
+      "deps": {
+        "page": [
+          "op"
+        ],
+        "work": [],
+        "readings": [
+          "value"
+        ]
+      },
+      "captures": [
+        "value"
+      ],
+      "entry": "action.cancel",
+      "intent": "action.cancel"
     }
   },
+  "band": [],
   "panes": {
     "main": {
       "label": "Ops",
@@ -140,7 +206,10 @@
       ],
       "verbs": [
         "run",
-        "control"
+        "action.read",
+        "action.recover",
+        "action.resume",
+        "action.cancel"
       ]
     }
   },
@@ -156,7 +225,10 @@
       ],
       "verbs": [
         "run",
-        "control"
+        "action.read",
+        "action.recover",
+        "action.resume",
+        "action.cancel"
       ]
     }
   },

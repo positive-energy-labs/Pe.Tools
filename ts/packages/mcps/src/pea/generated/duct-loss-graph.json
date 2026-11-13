@@ -133,6 +133,7 @@
     }
   },
   "verbs": {},
+  "band": [],
   "panes": {
     "wheel": {
       "label": "Wheel",

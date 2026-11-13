@@ -40,7 +40,7 @@ const handle = (value: object, stage = vi.fn(async () => null)) => ({
 });
 const drawn = (read: object, doc: Record<string, unknown>, at: (path: readonly string[]) => object, only: keyof typeof fansSheet.bindings) => {
   const slot = { ...fansSheet, bindings: { [only]: fansSheet.bindings[only] } };
-  const ctx = { cells: { doc, at }, page: { read: () => ({}) }, value: { status: "ready", current: true, value: read }, write: () => ({ run: async () => null, refusal: null }) };
+  const ctx = { cells: { doc, at }, page: { read: () => ({}) }, value: { status: "ready", current: true, value: read }, verb: () => ({ run: async () => null, refusal: null }) };
   return render(<RegistryContext value={makeAtomRegistry()}><SheetPane ctx={{ draw: ctx as never, slot }} /></RegistryContext>);
 };
 const snapshot = { nodes: [], segments: [], slots: { fanStatic: "Old ESP" } };
@@ -70,7 +70,7 @@ test("F6 a staged unit role draws its option label with its author, never its ob
  */
 const refused = { refused: "no-shared-root" } as const;
 const paneOf = (slot: typeof designSheet | typeof fansSheet, read: object) =>
-  render(<RegistryContext value={makeAtomRegistry()}><SheetPane ctx={{ draw: { cells: { doc: {}, at: () => handle({}) }, page: { read: () => ({}) }, write: () => ({ run: async () => null, refusal: null }),
+  render(<RegistryContext value={makeAtomRegistry()}><SheetPane ctx={{ draw: { cells: { doc: {}, at: () => handle({}) }, page: { read: () => ({}) }, verb: () => ({ run: async () => null, refusal: null }),
     value: { status: "ready", current: true, value: read } } as never, slot: slot as never }} /></RegistryContext>);
 
 test("/ducts with no shared root: a firm criterion is the engine default, and the fix line is drawn", () => {

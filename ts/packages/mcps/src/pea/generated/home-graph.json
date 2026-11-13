@@ -94,6 +94,7 @@
   },
   "readings": {},
   "verbs": {},
+  "band": [],
   "panes": {
     "main": {
       "label": "Home",
