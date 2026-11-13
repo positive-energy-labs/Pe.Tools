@@ -86,6 +86,12 @@ interface WorkIntentOptions {
   derive?: (work: unknown) => unknown;
 }
 
+/** Host admission context accompanies derived intent, but is never a native DTO field. */
+export const workAdmissionSchema = z.strictObject({
+  work: workHandleSchema,
+  readWorks: z.record(z.string(), workHandleSchema).optional(),
+});
+
 /**
  * A Work command takes only its Work handle. A caller that sends the authored fields here is told
  * where they go, in the refusal, so nobody reads this file to learn it.
@@ -93,8 +99,8 @@ interface WorkIntentOptions {
 const workWriteInputSchema = (route: string, key?: string, authored?: z.ZodType | null) =>
   z.strictObject(
     {
+      ...workAdmissionSchema.shape,
       work: route === ANY_ROUTE ? workHandleSchema : workHandleForRoute(route),
-      readWorks: z.record(z.string(), workHandleSchema).optional(),
     },
     {
       error: (issue) => {
