@@ -127,7 +127,7 @@ type TabHistory = {
 };
 const historyOf = (state: unknown) => (state ?? {}) as TabHistory;
 
-/** This window's Places, and the moves between them; the selected `?thread` rides along unchanged. */
+/** The host's Places and this window's moves; the selected `?thread` rides along unchanged. */
 export function useRouteTabs() {
   const { store, threads } = useWorkbench();
   useSyncExternalStore(publicRoutes.subscribe, publicRoutes.revision, publicRoutes.revision);
