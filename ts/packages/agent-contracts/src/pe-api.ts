@@ -245,7 +245,7 @@ function hostRouteAxes(leaves: readonly CatalogLink[]): Record<PeRouteId, Catalo
   const reads = [
     ...new Set(
       [...hostOpCatalog, ...tsOnlyOperationCatalog]
-        .filter((op) => op.intent === "Read")
+        .filter((op) => (op.effect === "Read" || op.effect === "TransactRead"))
         .map((op) => op.key),
     ),
   ];

@@ -1,13 +1,14 @@
+import * as contracts from "./contract.ts";
 import type { ContextOf, Verbs } from "../route/defaults";
 import { handle } from "@pe/agent-contracts/handle";
 import { read } from "../route/defaults";
 import { z } from "zod";
-import { familyDraftRouteState, routeStatePatchSchema, valueRead } from "@pe/agent-contracts";
+import { familyDraftRouteState, routeStatePatchSchema } from "@pe/agent-contracts";
 import { familyPageSchema } from "./page";
 import { route, field } from "../route/defaults";
 import { hostRead } from "../route/host-read";
 import { draw } from "../route/draw";
-import { familyArgs, familyData } from "@pe/agent-contracts";
+
 import { presentFamilyPlan } from "./review";
 import { podMemberCode, podMemberOfCode, type Immutable } from "@pe/agent-contracts";
 import { split, subjectSchema } from "../route/defaults";
@@ -39,7 +40,7 @@ export const query = {
   hidden: field(address.hidden, {}, "query"),
 };
 export const loaded = read(
-  hostRead(valueRead("family.workspace", familyArgs, familyData)),
+  hostRead(contracts.workspace),
   (page: Parameters<typeof member>[0]) => ({ member: member(page) }),
 );
 export const edits = z.array(routeStatePatchSchema);

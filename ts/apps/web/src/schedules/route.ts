@@ -10,7 +10,7 @@ import {
   splitScheduleCellKey,
   showCellValue,
 } from "@pe/agent-contracts";
-import { reads } from "./reads.ts";
+import * as reads from "./contract.ts";
 import { route, field, subjectSchema, namesOf } from "../route/defaults.ts";
 import { subjectCode } from "../../../../packages/agent-contracts/src/subject-ref.ts";
 import { hostRead } from "../route/host-read.ts";

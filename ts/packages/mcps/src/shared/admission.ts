@@ -62,7 +62,7 @@ const caller = (context: AdmissionContext) => new HostRpcCaller(context);
  * A host-only op keeps its hand-written intent: pointers.point is a SessionWrite that needs no
  * write consent, so its effect alone would send it through the command door.
  */
-export const opWrites = (op: Pick<HostOperationDefinition, "key" | "effect" | "intent">): boolean =>
+export const opWrites = (op: Pick<HostOperationDefinition, "key" | "effect"> & { intent?: string }): boolean =>
   isTsOnlyOperationKey(op.key)
     ? op.intent !== "Read"
     : op.effect === "SessionWrite" || op.effect === "ModelWrite";

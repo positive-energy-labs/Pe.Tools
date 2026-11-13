@@ -1,16 +1,14 @@
+import * as contracts from "./contract.ts";
 import { z } from "zod";
 import { route, field, read, paneLayout, type ContextOf, type Verbs } from "../route/defaults";
 import type { ReadingState } from "@pe/agent-contracts";
 import { hostRead } from "../route/host-read";
 import { draw } from "../route/draw";
 import { handle } from "@pe/agent-contracts/handle";
-import {
-  takeoffsRouteState,
-  valueRead,
+import { takeoffsRouteState,
   routeStatePatchSchema,
-  canonicalRouteInput,
-} from "@pe/agent-contracts";
-import { adoptionArgs, adoptionData, viewCatalogueArgs, viewCatalogueData } from "@pe/agent-contracts/takeoff-read";
+  canonicalRouteInput, } from "@pe/agent-contracts";
+
 import {
   threadListFields,
   threadSearchDefault,
@@ -31,7 +29,7 @@ export const fields = {
   stage: field(z.literal("adopt"), "adopt", "stage", "push"),
 };
 export const loaded = read(
-  hostRead(valueRead("takeoffs.adoption", adoptionArgs, adoptionData)),
+  hostRead(contracts.adoption),
   (page: { views: readonly string[] | "all"; zones: readonly string[] | "all"; work: string }) => ({
     views: page.views,
     zones: page.zones,
@@ -39,7 +37,7 @@ export const loaded = read(
   }),
 );
 export const viewCatalogue = read(
-  hostRead(valueRead("takeoffs.views", viewCatalogueArgs, viewCatalogueData)),
+  hostRead(contracts.views),
   (page: { work: string }) => ({ work: page.work }),
 );
 export const patches = z.array(routeStatePatchSchema);

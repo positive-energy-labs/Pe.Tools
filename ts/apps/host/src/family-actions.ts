@@ -118,7 +118,7 @@ export const sourceRunOutput = async (pod: string | null | undefined, deps: PodD
 export type PodDependencies = {
   parsePdf?: (request: import("@pe/mcps/family-pdf").FamilyPdfRequest) => Promise<unknown>;
   podsRoot?: string;
-  runPods?: <A, E>(effect: Effect.Effect<A, E, FileSystem.FileSystem>) => Promise<A>;
+  runPods?: <A, E>(effect: Effect.Effect<A, E, FileSystem.FileSystem>, options?: { signal?: AbortSignal }) => Promise<A>;
 };
 export type FamilyActionDependencies = TakeoffActionDependencies &
   PodDependencies & {
@@ -194,11 +194,12 @@ const draftContent = (spec: string) => {
 export const runPods = <A, E>(
   deps: PodDependencies,
   effect: Effect.Effect<A, E, FileSystem.FileSystem>,
+  options?: { signal?: AbortSignal },
 ) =>
   deps.runPods
-    ? deps.runPods(effect)
+    ? deps.runPods(effect, options)
     : // effect-edge: island, phase 5
-      Effect.runPromise(effect.pipe(Effect.provide(NodeFileSystem.layer)));
+      Effect.runPromise(effect.pipe(Effect.provide(NodeFileSystem.layer)), options);
 
 /** Pod context whose composition runs in the exact admitted session and document lifetime. */
 export const podContext = async (

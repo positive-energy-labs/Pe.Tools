@@ -1,3 +1,4 @@
+import { native } from "@pe/agent-contracts/handle";
 import {
   canonicalRouteInput,
   ductsDesign,
@@ -45,7 +46,7 @@ export const espOptions = read("fans.esp-options", {
     if (!units.length)
       return { espOptions: null, espOptionsError: "No unit identities in this fan scope" };
     try {
-      const response = await ctx.native("revit.catalog.field-options", {
+      const response = await ctx.read(native("revit.catalog.field-options"), {
         target: { kind: "document", ref: target },
         request: {
           key: "parameter-identities",
@@ -145,7 +146,7 @@ const walk = read("fans.walk", {
       throw Error("Fan walk requires a seed");
     return {
       seed: args.request.selector.unitId,
-      snapshot: (await ctx.native("ducts.snapshot.walk", args)).body,
+      snapshot: (await ctx.read(native("ducts.snapshot.walk"), args)).body,
     };
   },
 });
@@ -178,12 +179,12 @@ const sheetModel = read("fans.calculation", {
               ...tolerances,
             },
     };
-    const response = await ctx.native("ducts.snapshot.walk", {
+    const response = await ctx.read(native("ducts.snapshot.walk"), {
       role: "acquire",
       request: acquisition,
       target: { kind: "document", ref: request.target },
     });
-    const tables = await ctx.native("ducts.tables", {
+    const tables = await ctx.read(native("ducts.tables"), {
       role: "acquire",
       request: tableRequest,
       target: { kind: "document", ref: request.target },
@@ -506,7 +507,7 @@ export const fanRoster = read("fans.roster", {
     const saved = await ctx.read(designLayers, target),
       design = ductsDesign(saved.ducts, saved.fans);
     const slots = ductParameterSlots(saved.settings);
-    const response = await ctx.native("ducts.snapshot.roster", {
+    const response = await ctx.read(native("ducts.snapshot.roster"), {
       role: "acquire",
       target: { kind: "document", ref: target },
       request: { ...(Object.keys(slots).length ? { slots } : {}), selector: { kind: "roster" } },

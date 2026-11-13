@@ -24,6 +24,7 @@
     "packages/browser/src/attached-guardian.ts": 1,
     "packages/browser/src/keeper.ts": 1,
     "packages/mcps/src/shared/host-rpc-caller.ts": 1,
+    "apps/web/src/machine/open-contract.ts": 0,
     "apps/web/src/route/slots/findings/notes.tsx": 0,
     "apps/web/src/route/slots/subject-name.ts": 0,
     "packages/agent-contracts/src/command-handle.ts": 0

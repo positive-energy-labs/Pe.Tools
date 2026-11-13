@@ -29,7 +29,7 @@ export function generateCommandTable(
       subject: op.subject as CatalogAxes["subject"],
       touches: op.touches.split(", ") as CatalogAxes["touches"],
       effect: op.effect as CatalogAxes["effect"], cost: op.costTier, cardinality: "One",
-      ...(op.rollsBack ? { rollsBack: true } : {}),
+      ...(op.effect === "TransactRead" ? { rollsBack: true } : {}),
     };
     table[op.key] = { axes, effect: axes.effect, via: "command" };
   }

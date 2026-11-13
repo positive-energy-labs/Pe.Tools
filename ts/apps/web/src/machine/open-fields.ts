@@ -1,5 +1,6 @@
+import * as contracts from "./open-contract.ts";
 import { z } from "zod";
-import { valueRead, openData } from "@pe/agent-contracts";
+
 import { field, read, type ContextOf, type Verbs } from "../route/defaults";
 import { hostRead } from "../route/host-read";
 import { EMPTY_DRAFT } from "./open-model";
@@ -27,5 +28,5 @@ export const fields = {
     "query",
   ),
 };
-export const loaded = read(hostRead(valueRead("open.documents", z.object({}), openData)));
+export const loaded = read(hostRead(contracts.documents));
 export type OpenContext = ContextOf<typeof fields, typeof loaded, never, never, Verbs<"start" | "open" | "close" | "stop" | "restart">>;

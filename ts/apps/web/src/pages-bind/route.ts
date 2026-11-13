@@ -1,13 +1,13 @@
+import * as contracts from "./contract.ts";
 import type { ContextOf, Verbs } from "../route/defaults";
 import { handle } from "@pe/agent-contracts/handle";
 import { read } from "../route/defaults";
 import { paneLayout } from "../route/defaults";
 import { z } from "zod";
-import { valueRead } from "@pe/agent-contracts";
 import { route, field, subjectSchema, oneName, nameOf } from "../route/defaults";
 import { hostRead } from "../route/host-read";
 import { draw } from "../route/draw";
-import { bindData } from "@pe/agent-contracts";
+
 /** The Page is the subject (keyKind `name`, tuple `[slug]`); `view` shows it in place of the binding choice. */
 export const fields = {
   page: field(subjectSchema(1), { kind: "ids", ids: [] }, "subject", "push"),
@@ -18,7 +18,7 @@ export const query = {
   query: field(z.record(z.string(), z.string()), {}, "query"),
   fragment: field(z.string(), "", "query"),
 };
-export const loaded = read(hostRead(valueRead("bind.picker", z.object({}), bindData)));
+export const loaded = read(hostRead(contracts.picker));
 export type BindContext = ContextOf<typeof fields & typeof query, typeof loaded, never, never, Verbs<"bind">>;
 export const module = route({
   key: "bind",

@@ -1,3 +1,5 @@
+import * as contracts from "./contract.ts";
+import { body } from "@pe/host/read-graph";
 import { z } from "zod";
 import type { Read } from "@pe/host/read-graph";
 import { workRead } from "@pe/host/reads/inputs";
@@ -13,14 +15,11 @@ import {
   schedulesViewArgs,
   schedulesViewData,
 } from "../../../../packages/agent-contracts/src/schedules-read.ts";
-import { read, documentMark } from "@pe/host/read-graph";
+import { documentMark } from "@pe/host/read-graph";
 import { scheduleOutcome } from "./schedule-outcome.ts";
 
 /** One selected schedule owns one workspace Work, independently of its native capture. */
-export const schedulesView: Read<z.output<typeof schedulesViewArgs>, z.output<typeof schedulesViewData>> = read("schedules.view", {
-  input: schedulesViewArgs,
-  output: schedulesViewData,
-  async run(ctx, args) {
+export const schedulesView: Read<z.output<typeof schedulesViewArgs>, z.output<typeof schedulesViewData>> = body(contracts.view, async function(ctx, args) {
     await ctx.read(documentMark, args.target);
     const catalog = await ctx.read(scheduleCatalog, {
       kind: "schedule-reading",
@@ -73,7 +72,6 @@ export const schedulesView: Read<z.output<typeof schedulesViewArgs>, z.output<ty
         };
       },
     );
-  },
-});
+  });
 
 export const reads: { view: typeof schedulesView } = { view: schedulesView };
