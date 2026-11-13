@@ -180,6 +180,14 @@ type VerbDecl<C, H extends CommandHandle = CommandHandle> = {
 // Specification: verbs keyed by verb id; band: verb ids; panes[id].verbs: verb ids. A verb is in band or in exactly one pane.
 ```
 
+As landed (k2/verbs):
+
+- `VerbContext<C>` is `{ page, target, work, value, doc }`; `present` gets it with `value` and `doc` present. `input` returns the handle's input without `work` and `readWorks`, which the mount binds. Without `input`, what the press supplies is the input.
+- A body names its verbs apart from the route, as `ContextOf<F, R, W, E, Verbs<run ids, plan ids>>`. `ctx.verb(id)` returns a `RunVerb` (`run`) or a `PlannedVerb` (`plan`, `apply`, `cancel`, `read`); an id the route did not declare fails `tsc` at the route's `draw`.
+- `handle()` and the command types live in `C/command-handle.ts`, which imports the generated table and types only. `C/handle.ts` re-exports it and keeps `native()` and `contract()`. `route()` imports the command half, because `handle.ts` reaches the native catalog and a Pod bundle may not. A Pod takes `handle` from `@pe/web/route`.
+- A route module's `entries` still names each verb's command and plan by key, for the linker, with the generated table's axes and no schema.
+- `mount.verb(id)` returns the union; `planned(verb)` and `direct(verb)` in `typed-mount.ts` narrow it for a holder of only the id.
+
 **Read lifetime.** Home `H/reads/read-ownership.ts`, Picture's file. Writer C codes against it.
 
 ```ts
