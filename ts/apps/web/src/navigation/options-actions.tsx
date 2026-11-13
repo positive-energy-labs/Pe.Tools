@@ -1,8 +1,8 @@
 import { Gauge, MessageCircle } from "lucide-react";
 import { Button } from "@pe/kit/lang/button";
-import { HotkeyCommand } from "#/components/lang/hotkey-command";
-import { startFeedback } from "#/components/feedback-picker";
-import { RouteControlsOutlet, useRouteControlPresence } from "#/navigation/route-controls";
+import { HotkeyCommand } from "../components/lang/hotkey-command";
+import { startFeedback } from "../components/feedback-picker";
+import { RouteControlsOutlet, useRouteControlPresence } from "./route-controls";
 
 /** Commands retain their real callbacks and never become persisted options. */
 export function SettingsActions({ close }: { close?: () => void }) {
