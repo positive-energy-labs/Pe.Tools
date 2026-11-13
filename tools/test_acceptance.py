@@ -129,7 +129,39 @@ def test_host_wait(tmp: Path) -> None:
         sleeper.kill()
 
 
+def test_teardown_home(tmp: Path) -> None:
+    names = ("load", "service", "census", "processes", "revit_pids", "log")
+    prior = {name: getattr(a, name) for name in names}
+    keep = os.environ.get("PE_ACCEPT_KEEP_HOME")
+    try:
+        for retained in (False, True):
+            for failed in (False, True):
+                with tempfile.TemporaryDirectory(prefix="pe-accept-") as directory:
+                    home = Path(directory) / "Pe.Tools"
+                    home.mkdir()
+                    a.load = lambda _: {"home": str(home), "lane": "dev", "sessions": [], "revitBefore": []}
+                    a.service = lambda _: None
+                    def census(*_):
+                        if failed: raise RuntimeError("census failed")
+                    a.census = census
+                    a.processes = lambda: []
+                    a.revit_pids = lambda: []
+                    a.log = lambda *_: None
+                    if retained: os.environ["PE_ACCEPT_KEEP_HOME"] = "1"
+                    else: os.environ.pop("PE_ACCEPT_KEEP_HOME", None)
+                    try:
+                        a.teardown("cleanup")
+                        assert not failed
+                    except RuntimeError:
+                        assert failed
+                    assert home.exists() == retained, (retained, failed)
+    finally:
+        for name, value in prior.items(): setattr(a, name, value)
+        if keep is None: os.environ.pop("PE_ACCEPT_KEEP_HOME", None)
+        else: os.environ["PE_ACCEPT_KEEP_HOME"] = keep
+
+
 with tempfile.TemporaryDirectory() as t:
-    for test in (test_pod_build_skip, test_pick_models, test_copy_hashed, test_isolated_home, test_host_wait):
+    for test in (test_pod_build_skip, test_pick_models, test_copy_hashed, test_isolated_home, test_host_wait, test_teardown_home):
         test(Path(tempfile.mkdtemp(dir=t)))
 print("ok")
