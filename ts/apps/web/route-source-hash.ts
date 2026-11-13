@@ -142,6 +142,8 @@ export async function buildBuiltinClosure(
         lib: { entry, formats: ["es"] },
         rolldownOptions: {
           ...options.config?.build?.rolldownOptions,
+          // Same anchor as route-module-hash: the bundle is discarded, but no cwd may reach a hash.
+          cwd: options.root,
           external: [...externals.keys()],
         },
       },
