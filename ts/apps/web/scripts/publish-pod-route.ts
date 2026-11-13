@@ -1,16 +1,18 @@
-import {createJiti} from "jiti";
+import { createJiti } from "jiti";
 import { readFile, writeFile } from "node:fs/promises";
 import { resolve, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createHash } from "node:crypto";
 import { publishPodRoute } from "../pod-route-authoring.ts";
 import type { RouteGraphJson } from "../../../packages/agent-contracts/src/route-kernel-data.ts";
 
-/** node scripts/publish-pod-route.ts <absolute-pod-directory> <route-slug> */
-const [directory, slug] = process.argv.slice(2);
+/** node scripts/publish-pod-route.ts <absolute-pod-directory> <route-slug> [--check] */
+const [directory, slug, mode] = process.argv.slice(2);
+if (mode !== undefined && mode !== "--check") throw Error(`Unknown mode: ${mode}`);
 if (!directory || !slug) throw Error("Expected Pod directory and route slug");
 const root = resolve(directory);
 const entry = join(root, "routes", slug, "module.ts");
-const { module } = (await createJiti(import.meta.url,{fsCache:false}).import(entry)) as {
+const { module } = (await createJiti(import.meta.url, { fsCache: false }).import(entry)) as {
   module: { data: RouteGraphJson };
 };
 const repo = fileURLToPath(new URL("../../../../", import.meta.url));
@@ -35,6 +37,31 @@ const result = await publishPodRoute({
   ),
 });
 const manifestFile = join(root, "pod.json");
+if (mode === "--check") {
+  const artifactFile = join(root, result.declaration.artifact);
+  const checked = JSON.parse(await readFile(artifactFile, "utf8"));
+  const hashes = (wire: {
+    executables: {
+      client: string;
+      entry: string;
+      members: { path: string; bytes: ArrayLike<number> }[];
+    }[];
+  }) =>
+    wire.executables.map(({ client, entry, members }) => ({
+      client,
+      entry,
+      members: members.map(({ path, bytes }) => ({
+        path,
+        sha256: createHash("sha256").update(Buffer.from(bytes)).digest("hex"),
+      })),
+    }));
+  if (JSON.stringify(hashes(checked)) !== JSON.stringify(hashes(result.artifact)))
+    throw Error(
+      `${artifactFile}: stale executables; from ts/apps/web run node scripts/publish-pod-route.ts "${root}" ${slug}`,
+    );
+  console.log(`${artifactFile}: executables match current source`);
+  process.exit(0);
+}
 const manifest = JSON.parse(await readFile(manifestFile, "utf8"));
 // Strict manifest admission rejects legacy entries rather than silently converting them.
 const { podRouteDeclarationSchema } =
