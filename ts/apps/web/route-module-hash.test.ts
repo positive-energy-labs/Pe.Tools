@@ -1,6 +1,7 @@
 import { expect, test, vi } from "vite-plus/test";
-import { readFileSync, readdirSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { readFileSync, readdirSync, existsSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { z } from "zod";
+import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { buildRouteArtifact, routeModuleHash } from "./route-module-hash.ts";
 import { routeSourceHash } from "./route-source-hash.ts";
@@ -93,7 +94,9 @@ import {
   createRouteAdmission,
   createAdmittedRouteRegistry,
 } from "../../packages/agent-contracts/src/route-module.ts";
-import { join } from "node:path";
+import { dirname, basename, join } from "node:path";
+import { createJiti } from "jiti";
+import { publishPodRoute } from "./pod-route-authoring.ts";
 import * as React from "react";
 import { loadRouteArtifact } from "./src/route/route-artifact.ts";
 
@@ -324,12 +327,16 @@ const repoRoot = fileURLToPath(new URL("../../../", import.meta.url));
 const podsRoot = join(repoRoot, "examples/pods");
 const exampleArtifacts = readdirSync(podsRoot, { withFileTypes: true })
   .filter((pod) => pod.isDirectory() && existsSync(join(podsRoot, pod.name, "routes")))
-  .flatMap((pod) => readdirSync(join(podsRoot, pod.name, "routes"), { withFileTypes: true })
-    .filter((route) => route.isDirectory())
-    .map((route) => join("examples/pods", pod.name, "routes", route.name, "route.artifact")))
+  .flatMap((pod) =>
+    readdirSync(join(podsRoot, pod.name, "routes"), { withFileTypes: true })
+      .filter((route) => route.isDirectory())
+      .map((route) => join("examples/pods", pod.name, "routes", route.name, "route.artifact")),
+  )
   .filter((artifact) => existsSync(join(repoRoot, artifact)));
 const artifactContracts = z.object({
-  contracts: z.array(z.object({ id: z.string(), bytes: z.array(z.number().int().min(0).max(255)) })).min(1),
+  contracts: z
+    .array(z.object({ id: z.string(), bytes: z.array(z.number().int().min(0).max(255)) }))
+    .min(1),
 });
 
 test("the example Pod contract freshness census finds artifacts", () => {
@@ -337,8 +344,79 @@ test("the example Pod contract freshness census finds artifacts", () => {
 });
 
 test.each(exampleArtifacts)("example Pod contracts match current source: %s", (artifact) => {
-  const { contracts } = artifactContracts.parse(JSON.parse(readFileSync(join(repoRoot, artifact), "utf8")));
+  const { contracts } = artifactContracts.parse(
+    JSON.parse(readFileSync(join(repoRoot, artifact), "utf8")),
+  );
   for (const contract of contracts)
-    expect(Buffer.from(contract.bytes).equals(readFileSync(join(repoRoot, contract.id))),
-      `${artifact}: ${contract.id} is stale; republish this Pod route`).toBe(true);
+    expect(
+      Buffer.from(contract.bytes).equals(readFileSync(join(repoRoot, contract.id))),
+      `${artifact}: ${contract.id} is stale; republish this Pod route`,
+    ).toBe(true);
 });
+
+// Self-consistent fingerprints cannot witness source freshness. Reuse the publisher,
+// including its generated host entry, rather than maintaining a second build recipe.
+test.each(exampleArtifacts)(
+  "example Pod executables match current source: %s",
+  async (artifact) => {
+    const routeRoot = dirname(join(repoRoot, artifact));
+    const root = dirname(dirname(routeRoot));
+    const slug = basename(routeRoot);
+    const entry = join(routeRoot, "module.ts");
+    const { module } = await createJiti(import.meta.url, { fsCache: false }).import<{
+      module: { data: Parameters<typeof publishPodRoute>[0]["data"] };
+    }>(entry);
+    const checked = JSON.parse(readFileSync(join(repoRoot, artifact), "utf8"));
+    const fresh = await publishPodRoute({
+      entry,
+      root,
+      slug,
+      data: module.data,
+      name: module.data.name,
+      description: module.data.directory.summary,
+      contracts: artifactContracts.parse(checked).contracts.map(({ id }) => ({
+        id,
+        bytes: readFileSync(join(repoRoot, id)),
+      })),
+    });
+    const executableHashes = (wire: {
+      executables: {
+        client: string;
+        entry: string;
+        members: { path: string; bytes: number[] }[];
+      }[];
+    }) =>
+      wire.executables.map(({ client, entry, members }) => ({
+        client,
+        entry,
+        members: members.map(({ path, bytes }) => ({
+          path,
+          sha256: createHash("sha256").update(Buffer.from(bytes)).digest("hex"),
+        })),
+      }));
+    const expected = executableHashes(JSON.parse(Buffer.from(fresh.bytes).toString("utf8")));
+    const message = `${artifact}: stale executables; from ts/apps/web run node scripts/publish-pod-route.ts "${root}" ${slug}`;
+    const check = (file: string) => {
+      expect(executableHashes(JSON.parse(readFileSync(file, "utf8"))), message).toEqual(expected);
+    };
+
+    const temp = join(repoRoot, ".artifacts/tmp/artifact-freshness", crypto.randomUUID());
+    mkdirSync(temp, { recursive: true });
+    try {
+      const file = join(temp, "route.artifact");
+      writeFileSync(file, fresh.bytes);
+      check(file);
+      const stale = JSON.parse(Buffer.from(fresh.bytes).toString("utf8"));
+      stale.executables[0].members[0].bytes[0] ^= 1;
+      writeFileSync(file, JSON.stringify(stale));
+      expect(() => check(file)).toThrow("stale executables");
+      console.info(
+        `${artifact}: fresh temporary copy accepted; stale executable temporary copy rejected`,
+      );
+    } finally {
+      rmSync(temp, { recursive: true, force: true });
+    }
+    check(join(repoRoot, artifact));
+  },
+  30_000,
+);
