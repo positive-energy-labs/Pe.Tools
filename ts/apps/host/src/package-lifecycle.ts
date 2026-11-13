@@ -258,14 +258,18 @@ export function createPackageLifecycle(
     refresh: (initial = false) => {
       // An action may have written after discovery captured its bytes. Queue a fresh census
       // behind that scan rather than joining its stale snapshot. Background readers join neither.
-      const next = (inFlight ?? settled).catch(() => ready).then(() => {
-        if (closed || initial) return initialListing;
-        return synchronize();
-      });
+      const next = (inFlight ?? settled)
+        .catch(() => ready)
+        .then(() => {
+          if (closed || initial) return initialListing;
+          return synchronize();
+        });
       inFlight = next;
-      void next.finally(() => {
-        if (inFlight === next) inFlight = undefined;
-      }).catch(() => {});
+      void next
+        .finally(() => {
+          if (inFlight === next) inFlight = undefined;
+        })
+        .catch(() => {});
       settled = next;
       return next;
     },

@@ -508,7 +508,7 @@
     "ts/apps/host/src/native-recording.ts": 1,
     "ts/apps/host/src/navigation.ts": 8,
     "ts/apps/host/src/notice-feed.ts": 2,
-    "ts/apps/host/src/package-lifecycle.ts": 2,
+    "ts/apps/host/src/package-lifecycle.ts": 1,
     "ts/apps/host/src/packages.ts": 2,
     "ts/apps/host/src/page-export.ts": 8,
     "ts/apps/host/src/page-libraries.ts": 2,

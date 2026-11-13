@@ -9,7 +9,11 @@ import { builtinData } from "../../../packages/agent-contracts/src/route-kernel.
 import { createContributionContent } from "../src/pe-routes.ts";
 import { createPluginsHandler } from "../src/plugins-handler.ts";
 import { createPodRoutes } from "../src/pod-routes.ts";
-import { bindPackageLifecycle, createPackageLifecycle, requirePackageEnabled } from "../src/package-lifecycle.ts";
+import {
+  bindPackageLifecycle,
+  createPackageLifecycle,
+  requirePackageEnabled,
+} from "../src/package-lifecycle.ts";
 import * as filesystem from "node:fs/promises";
 import * as packages from "../src/packages.ts";
 import { createServer } from "node:http";
@@ -102,11 +106,17 @@ test("an action after discovery captures bytes gets its own fresh reconciliation
   const captured = Promise.withResolvers<void>();
   const release = Promise.withResolvers<void>();
   let calls = 0;
-  const lifecycle = createPackageLifecycle({ machine: stateMachine(root), packages: async () => {
-    const listing = await packages.listPackages(join(root, "user/Pods"));
-    if (++calls === 2) { captured.resolve(); await release.promise; }
-    return listing;
-  } });
+  const lifecycle = createPackageLifecycle({
+    machine: stateMachine(root),
+    packages: async () => {
+      const listing = await packages.listPackages(join(root, "user/Pods"));
+      if (++calls === 2) {
+        captured.resolve();
+        await release.promise;
+      }
+      return listing;
+    },
+  });
   try {
     await lifecycle.ready;
     lifecycle.requestRefresh();
@@ -153,7 +163,8 @@ test("a slow filesystem scan leaves inventory, routes and unrelated HTTP reads a
   await put(join(root, "user"), "late/pod.json", '{"id":"late"}');
   const entered = Promise.withResolvers<void>();
   const release = Promise.withResolvers<void>();
-  const { lstat: original } = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
+  const { lstat: original } =
+    await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
   const scan = vi.spyOn(filesystem, "lstat").mockImplementation(async (...args) => {
     entered.resolve();
     await release.promise;
