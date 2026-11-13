@@ -81,3 +81,23 @@ test.each(["prepareDevRouteProjection", "prepareSourceClosures"] as const)("%s r
     vi.resetModules();
   }
 });
+
+test.each(["prepareDevRouteProjection", "prepareSourceClosures"] as const)("%s refuses freshness lost during publication", async (entry) => {
+  const root = await mkdtemp(join(tmpdir(), "racing-closure-"));
+  const path = join(root, "source-closure.generated.json");
+  vi.resetModules();
+  vi.doMock("@pe/host-contracts/route-startup", async (original) => ({
+    ...(await original<typeof import("@pe/host-contracts/route-startup")>()),
+    readRouteStartupReceipt: () => ({ checkout: "c", sourceHash: "h", projections: { [path]: "whole closure" } }),
+    currentRouteStartupProjection: () => false,
+  }));
+  try {
+    const bootstrap = await import("../src/source-closures.ts");
+    await expect(bootstrap[entry]()).rejects.toThrow("Route sources changed during startup publication");
+    expect(await readFile(path, "utf8")).toBe("whole closure");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+    vi.doUnmock("@pe/host-contracts/route-startup");
+    vi.resetModules();
+  }
+});
