@@ -46,7 +46,7 @@ import { ref, path } from "../../../host/tests/host-read-graph.test-support";
 import { publicationSource } from "../host/publication-source";
 import { routeRegistry } from "./registry";
 
-const render = (node: import("react").ReactNode) => renderView(<StandaloneBand>{node}</StandaloneBand>);
+const render = (node: import("react").ReactNode) => renderView(node, { wrapper: StandaloneBand });
 
 test("JZ Families History offers published values and marks ambiguous publications Unavailable", async () => {
   const browserHref = window.location.href;
