@@ -38,6 +38,9 @@ public abstract record Touched {
     private Touched() { }
     public abstract string Kind { get; }
 
+    private static int Count(int value) =>
+        value >= 0 ? value : throw new ArgumentOutOfRangeException(nameof(value), value, "A change count is never negative.");
+
     public sealed record None : Touched {
         public override string Kind => "none";
     }
@@ -50,16 +53,26 @@ public abstract record Touched {
         public override string Kind => "restored";
     }
 
-    public sealed record RestoreFailed(List<ViewLeft> Views) : Touched {
+    public sealed record RestoreFailed : Touched {
+        public RestoreFailed(List<ViewLeft> views) =>
+            this.Views = views.Count != 0 ? views : throw new ArgumentException("restoreFailed names at least one view.", nameof(views));
+
+        public List<ViewLeft> Views { get; }
         public override string Kind => "restoreFailed";
     }
 
     public sealed record Wrote(List<string> Transactions, int Added, int Modified, int Deleted) : Touched {
+        public int Added { get; } = Count(Added);
+        public int Modified { get; } = Count(Modified);
+        public int Deleted { get; } = Count(Deleted);
         public override string Kind => "wrote";
     }
 
     /// <summary>A commit the op's scope did not allow. The call fails; the runner does not roll it back.</summary>
     public sealed record Unauthorized(List<string> Transactions, int Added, int Modified, int Deleted) : Touched {
+        public int Added { get; } = Count(Added);
+        public int Modified { get; } = Count(Modified);
+        public int Deleted { get; } = Count(Deleted);
         public override string Kind => "unauthorized";
     }
 

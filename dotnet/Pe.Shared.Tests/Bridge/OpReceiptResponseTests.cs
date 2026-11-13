@@ -35,7 +35,36 @@ public class OpReceiptResponseTests {
     private static JObject Fixture() => JObject.Parse(File.ReadAllText(
         Path.Combine(AppContext.BaseDirectory, "receipt-response.fixture.json")));
 
-    // A `refused-` row is a shape the TS reader refuses; the factories below cannot build one.
+    private static readonly Newtonsoft.Json.JsonSerializer Camel = Newtonsoft.Json.JsonSerializer.Create(new() {
+        ContractResolver = new Newtonsoft.Json.Serialization.CamelCasePropertyNamesContractResolver()
+    });
+
+    // The only way from a fixture row to a response is a factory: a payload key is Ok, an error is Failed.
+    private static OpReceiptResponse Build(JObject row) {
+        var extra = row.Properties().Select(p => p.Name).Except(["payload", "touched", "evidence", "error", "statusCode", "outcome"]).ToList();
+        if (extra.Count != 0) throw new FormatException($"Unknown field {extra[0]}");
+        var touched = row["touched"]!.ToObject<Touched>(Camel)!;
+        JRaw? Raw(string name) => row[name] is { } token ? new JRaw(token.ToString(Newtonsoft.Json.Formatting.None)) : null;
+        if (row.ContainsKey("payload")) return OpReceiptResponse.Ok(Raw("payload"), touched, Raw("evidence"));
+        return OpReceiptResponse.Failed(
+            row.Value<string>("error") ?? throw new FormatException("Neither payload nor error"),
+            row.Value<int?>("statusCode") ?? throw new FormatException("A failure states its status code"),
+            touched, row.Value<string>("outcome"));
+    }
+
+    // Every `refused-` row is a shape the TS reader refuses. C# refuses each too: five in the contract
+    // (Ok and the Touched constructors), three because no factory takes that shape. Mutant: drop the
+    // Unauthorized throw in Ok and refused-success-unauthorized builds.
+    [Test]
+    public void No_refused_fixture_row_can_be_built_and_every_other_row_rebuilds_to_its_own_bytes() {
+        foreach (var row in Fixture().Properties()) {
+            if (row.Name.StartsWith("refused-"))
+                Assert.That(() => Build((JObject)row.Value), Throws.Exception, row.Name);
+            else
+                Assert.That(JToken.DeepEquals(JToken.Parse(Build((JObject)row.Value).ToJson()), row.Value), Is.True, row.Name);
+        }
+    }
+
     [Test]
     public void Every_fixture_case_is_what_the_bridge_writes() {
         var fixture = Fixture();
