@@ -2,7 +2,12 @@ import { machineFixture } from "../../agent-contracts/tests/machine-fixture.ts";
 import { expect, test, vi } from "vite-plus/test";
 import { createHash } from "node:crypto";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
-import { address, emptyThreadHead, type ThreadHead } from "@pe/agent-contracts";
+import {
+  address,
+  emptyThreadHead,
+  type CaptureDisclosure,
+  type ThreadHead,
+} from "@pe/agent-contracts";
 import { checkoutRootFrom } from "@pe/host-contracts/service-identity";
 import { createPeaMcpServer } from "../src/server.ts";
 import { fakeRuntimeHost } from "./runtime-host-fixture.ts";
@@ -95,7 +100,18 @@ test("capture_view refuses null and named targets before host work and preserves
     if (url.pathname === "/pe/scope/self") return Response.json({ thread: "capture", ...head });
     if (url.pathname === "/ops")
       return Response.json({
-        operations: [{subject:"None",touches:"Metadata",effect:"Read",cardinality:"One",costTier:"Cheap", key: "revit.context.view-image", intent: "Read", needs: "document" }],
+        operations: [
+          {
+            subject: "None",
+            touches: "Metadata",
+            effect: "Read",
+            cardinality: "One",
+            costTier: "Cheap",
+            key: "revit.context.view-image",
+            intent: "Read",
+            needs: "document",
+          },
+        ],
       });
     if (url.pathname === capturePath) {
       expect(url.origin).toBe("http://127.0.0.1:9");
@@ -111,7 +127,13 @@ test("capture_view refuses null and named targets before host work and preserves
       "revit.context.view-image",
     );
     return Response.json(
-      { view: { label: "Selected view" }, byteSize: reportedSize, width: 1500, height: 1500 },
+      {
+        view: { label: "Selected view" },
+        byteSize: reportedSize,
+        width: 1500,
+        height: 1500,
+        ...({ lens: { basis: "UserView", viewId: 1 }, hidden: [] } satisfies CaptureDisclosure),
+      },
       {
         headers: { "x-pe-capture-id": "capture-1", "x-pe-capture-url": returnedCapturePath },
       },
@@ -148,7 +170,7 @@ test("capture_view refuses null and named targets before host work and preserves
     };
     paths.length = 0;
     const captured = await client.callTool({ name: "capture_view", arguments: {} });
-    expect(captured.isError).not.toBe(true);
+    expect(captured.isError, JSON.stringify(captured.content)).not.toBe(true);
     const content = captured.content as Array<{
       type: string;
       text?: string;
