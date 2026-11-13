@@ -21,11 +21,11 @@ public sealed class SceneArtifactReceiptProofTests {
             id == 1 ? 0 : 3, id == 1 ? 3 : 0, bounds, id <= 2, (long)BuiltInCategory.OST_DuctCurves,
             id == 1 ? SceneRepresentation.Mesh : SceneRepresentation.Run,
             id == 1 ? null : new SceneRun([0, 0, 0], [10, 0, 0], SceneRunShape.Rectangular, 2, 1, null, [0, 1, 0]))).ToArray();
-        var stamp = new Stamp("host-document", 7, Stamp.HostInternalFt, DateTime.UtcNow, [], true,
-            new Resolved([SourceKind.Host], ["Ducts"], [PrimKind.Solid, PrimKind.Mesh], [], []));
+        var stamp = new SpatialEvidence("host-document", 7, DateTime.UtcNow, SpatialEvidence.HostInternalFt,
+            new Resolved([SourceKind.Host], ["Ducts"], [PrimKind.Solid, PrimKind.Mesh], [], []), [], [], []);
         var work = new SceneWork(count, 0, 0, 12, AcquiredTriangles: 0, ContextGeometryCalls: 0);
         var metadata = new SceneMetadata("space-scene-v5", stamp, bounds, 1, rows, [1, 2, count + 1], 3,
-            [new SceneSource("source-document", null, [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1], SceneSourceState.Loaded, "source", null)],
+            [new SceneSource(new("host-document", null), "source-document", null, [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1], SceneSourceState.Loaded, "source", null)],
             "context", [new SceneUnavailableElement(count + 1, "missing-focus", "Ducts", "Unavailable native body.")],
             work, new SceneCompleteness(false, 0, 0, "missing-bounds"), [], new SceneLevels([], [], new SceneLevelWork(0, 0, 0)));
         var directory = Path.Combine(Path.GetTempPath(), "scene-receipt-proof-" + Guid.NewGuid().ToString("N"));
@@ -72,8 +72,8 @@ public sealed class SceneArtifactReceiptProofTests {
             };
             var rpc = JsonConvert.SerializeObject(receipt, settings);
             Assert.That(Encoding.UTF8.GetByteCount(rpc), Is.LessThan(4096));
-            Assert.That(JObject.Parse(rpc).DescendantsAndSelf().OfType<JArray>(), Is.Empty,
-                "Growing membership, source and unavailable arrays must never cross the receipt transport.");
+            Assert.That(((JObject)JObject.Parse(rpc)["scene"]!).DescendantsAndSelf().OfType<JArray>(), Is.Empty,
+                "The count receipt stays bounded; concrete evidence is the separate native evidence member.");
             var small = SceneReceipt.From(metadata with { Elements = rows.Take(1).ToArray() });
             Assert.That(Math.Abs(JsonConvert.SerializeObject(small, settings).Length
                 - JsonConvert.SerializeObject(receipt.Scene, settings).Length), Is.LessThan(32));

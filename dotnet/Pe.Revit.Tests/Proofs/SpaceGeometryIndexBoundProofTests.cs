@@ -57,5 +57,6 @@ public sealed class SpaceGeometryIndexBoundProofTests {
 
     private static LinkedGeometryStore.Geometry Sample(long id) => new([
         new PrimRow(0, id, id.ToString(), "Generic Models", PrimKind.Solid, new Aabb(0, 0, 0, 2, 2, 0), 1)
-    ], [new Tri { A = Vector3.Zero, B = new Vector3(2, 0, 0), C = new Vector3(0, 2, 0), Prim = 0 }]);
+    ], [new Tri { A = Vector3.Zero, B = new Vector3(2, 0, 0), C = new Vector3(0, 2, 0), Prim = 0 }],
+        new Acquisition(new Pe.Revit.Space.Placement("test", null), id.ToString(), AcquisitionOutcome.Acquired, AcquisitionReason.None));
 }

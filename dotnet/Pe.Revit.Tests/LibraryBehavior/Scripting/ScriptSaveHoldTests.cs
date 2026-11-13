@@ -6,7 +6,7 @@ namespace Pe.Revit.Tests;
 
 /// <summary>
 ///     ADR 0038 rule 5 on real Revit: a project save or synchronize that fires inside a Pea script run is
-///     cancelled at the pre-event and the run reports "held"; a family save and a save outside a run go
+///     cancelled at the pre-event and the run reports "held"; a person's script, family save and save outside a run go
 ///     through. This is assumption A of the homes MAP. Every test writes only under a temp folder: with
 ///     PE_SAVE_HOLD_FIXTURE naming the detached Chadds clone the project is a copy of it, and without it
 ///     a blank project. Each "not held" test carries a sentinel (the pre-event was seen), so a pass
@@ -18,10 +18,21 @@ public sealed class ScriptSaveHoldTests {
     private const string SaveScript = "doc!.Save();";
 
     // Mutants, each run red once. "never cancels": delete `args.Cancel();` in ScriptSaveHold.Hold; the bytes
-    // and the modified time change. "scope never set": delete `using var run = ScriptRunScope.Enter();` in
+    // and the modified time change. "scope never set": delete `using var run = ScriptRunScope.Enter(request.Caller);` in
     // RevitScriptExecutionService.Execute; nothing is held and the file is written.
     [Test]
-    public void A_script_save_of_a_project_is_cancelled_and_reported_held(UIApplication uiApplication) {
+    public void A_script_save_of_a_project_is_cancelled_and_reported_held(UIApplication uiApplication) =>
+        ProjectSave(uiApplication, null);
+
+    [Test]
+    public void An_agent_script_save_of_a_project_is_held(UIApplication uiApplication) =>
+        ProjectSave(uiApplication, ScriptCaller.Agent);
+
+    [Test]
+    public void A_persons_script_save_of_a_project_writes_the_file(UIApplication uiApplication) =>
+        ProjectSave(uiApplication, ScriptCaller.Person);
+
+    private static void ProjectSave(UIApplication uiApplication, ScriptCaller? caller) {
         var directory = RevitFamilyFixtureHarness.CreateTemporaryOutputDirectory(nameof(A_script_save_of_a_project_is_cancelled_and_reported_held));
         var path = ProjectCopy(uiApplication.Application, directory);
         var document = uiApplication.Application.OpenDocumentFile(path);
@@ -30,12 +41,19 @@ public sealed class ScriptSaveHoldTests {
             Touch(document);
             var before = Stamp(path);
 
-            var result = Run(uiApplication, document, SaveScript);
+            var result = Run(uiApplication, document, SaveScript, caller);
 
             TestContext.Out.WriteLine($"status={result.Status}; diagnostics={string.Join(" | ", result.Diagnostics.Select(d => d.Message))}");
-            Assert.That(result.Held, Does.StartWith("Held, not done: ").And.Contain(document.Title).And.Contain("presses Save in Revit"));
-            Assert.That(Stamp(path), Is.EqualTo(before), "a held save leaves the file's bytes and modified time alone");
-            Assert.That(document.IsModified, Is.True, "the unsaved change is still the person's to save");
+            if (caller == ScriptCaller.Person) {
+                Assert.That(result.Status, Is.EqualTo(ScriptExecutionStatus.Succeeded));
+                Assert.That(result.Held, Is.Null);
+                Assert.That(Stamp(path).Sha256, Is.Not.EqualTo(before.Sha256), "the person's script saves the changed project");
+                Assert.That(document.IsModified, Is.False);
+            } else {
+                Assert.That(result.Held, Does.StartWith("Held, not done: ").And.Contain(document.Title).And.Contain("presses Save in Revit"));
+                Assert.That(Stamp(path), Is.EqualTo(before), "a held save leaves the file's bytes and modified time alone");
+                Assert.That(document.IsModified, Is.True, "the unsaved change is still the person's to save");
+            }
         } finally { _ = document.Close(false); }
     }
 
@@ -151,10 +169,12 @@ public sealed class ScriptSaveHoldTests {
         } finally { _ = local.Close(false); }
     }
 
-    private static ExecuteRevitScriptData Run(UIApplication uiApplication, Document document, string script) =>
-        RevitScriptExecutionService.CreateDefault(() => uiApplication).Execute(document,
-            new ExecuteRevitScriptRequest(script, PermissionMode: ScriptPermissionMode.NoTransaction),
+    private static ExecuteRevitScriptData Run(UIApplication uiApplication, Document document, string script, ScriptCaller? caller = null) {
+        var request = new ExecuteRevitScriptRequest(script, PermissionMode: ScriptPermissionMode.NoTransaction);
+        if (caller is { } explicitCaller) request = request with { Caller = explicitCaller };
+        return RevitScriptExecutionService.CreateDefault(() => uiApplication).Execute(document, request,
             "save-hold-" + Guid.NewGuid().ToString("N"));
+    }
 
     private static string SaveAsScript(string path) =>
         $"doc!.SaveAs(@\"{path}\", new SaveAsOptions {{ OverwriteExistingFile = true }});";

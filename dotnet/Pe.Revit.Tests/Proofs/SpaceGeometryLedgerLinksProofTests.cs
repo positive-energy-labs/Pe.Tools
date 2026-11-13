@@ -91,7 +91,7 @@ public sealed class SpaceGeometryLedgerLinksProofTests {
             using var bytes = new MemoryStream();
             var scene = Scene.Write(document, new SceneRequest(Bounds: new Aabb(-2, -2, -2, 3, 3, 3),
                 ContextRepresentation: SceneContextRepresentation.Meshes), bytes);
-            return scene.Stamp.GeometryCost!;
+            return scene.Evidence.GeometryCost!;
         }
     }
 }

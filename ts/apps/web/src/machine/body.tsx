@@ -15,12 +15,12 @@ import {
   type GroupKey,
 } from "./model";
 import { RevitGroup } from "./revit";
-import { OpenControlScope } from "#/open/context";
+import { OpenControlScope } from "./context";
 import { HostGroup } from "./host";
 import { ProviderSetup } from "./pea";
 import { useProviders } from "#/workbench/provider/providers";
-import { SettingsProjection } from "#/settings/options";
-import { SettingsActions } from "#/settings/options-actions";
+import { SettingsProjection } from "../navigation/options";
+import { SettingsActions } from "../navigation/options-actions";
 import { OsNoticeSettings } from "./os-notices";
 import { StartupSettings } from "./startup";
 import { ShareSettings } from "./share";

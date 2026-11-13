@@ -61,7 +61,7 @@ public sealed class SpaceSymbolGeometryProofTests {
             var copied = Copied(subject, options, toHost);
             var actual = new List<Tri>();
             var rows = new List<PrimRow>();
-            Ingest.Element(subject, 0, 0, actual, toHost, rows, false);
+            Ingest.Element(subject, 0, 0, actual, toHost, rows, new GeometryRead(), false);
 
             Assert.That(copied.Count, Is.GreaterThan(0), "The reference must contain real triangles.");
             Assert.That(actual.Count, Is.EqualTo(copied.Count), "Nested symbol geometry must not be truncated.");
@@ -93,7 +93,7 @@ public sealed class SpaceSymbolGeometryProofTests {
                 Assert.That(geometry!.OfType<Solid>().Any(), Is.True, "Fixture must exercise the direct body path.");
             var expected = Copied(subject, options, Transform.Identity);
             var actual = new List<Tri>();
-            Ingest.Element(subject, 0, 0, actual, Transform.Identity, [], false);
+            Ingest.Element(subject, 0, 0, actual, Transform.Identity, [], new GeometryRead(), false);
             Assert.That(Canonical(actual), Is.EqualTo(Canonical(expected)));
             Assert.That(actual.SelectMany(t => new[] { t.A.X, t.B.X, t.C.X }).Max(), Is.EqualTo(7));
         } finally { document.Close(false); }

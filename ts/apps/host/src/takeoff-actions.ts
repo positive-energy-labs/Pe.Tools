@@ -174,6 +174,7 @@ export function takeoffExecutors(
     }));
   return {
     "takeoffs.initialize": command(commands["takeoffs.initialize"], preparedCarrierSchema, {
+      seal: (p) => ({ request: { process: p.process } }),
       bind: (ctx) => bindCarrier(ctx),
       run: (ctx, execution) =>
         runCarrier(ctx, execution, captures, bridge, ctx.admission.input.stage, () =>
@@ -285,6 +286,7 @@ export function takeoffExecutors(
         }),
     }),
     "takeoffs.sync": command(commands["takeoffs.sync"], preparedSyncSchema, {
+      seal: (p) => ({ request: { process: p.process, edits: p.edits, decisions: p.decisions, capture: p.capture.id } }),
       bind: async (ctx) => {
         const { target, process } = await bindModel(ctx, bridge, deps);
         const { input } = ctx.admission;
@@ -351,13 +353,11 @@ export function takeoffExecutors(
       },
       run: (ctx, execution) => {
         const { input } = ctx.admission;
-        const admission = ctx.admission;
         const target = modelTarget(ctx);
         const base = input.work;
-        const frozen = execution.prepared;
-        const submitted = { edits: frozen.edits, decisions: frozen.decisions };
-        const capture = frozen.capture;
-        const native = nativeFor(ctx, execution, bridge, frozen.process);
+        const { process, edits: stagedEdits, decisions, capture } = execution.prepared;
+        const submitted = { edits: stagedEdits, decisions };
+        const native = nativeFor(ctx, execution, bridge, process);
         return Effect.gen(function* () {
           captures.invalidate(target);
           const selected = new Set(input.zones);
@@ -464,7 +464,7 @@ export function takeoffExecutors(
                 } satisfies RhvacSyncRequest;
               });
           const syncFile = deps.syncFile;
-          const expectedVersion = admission.input.fileVersion as string;
+          const expectedVersion = input.fileVersion as string;
           const result = yield* execution.step(
             "file",
             "rhvac.sync",

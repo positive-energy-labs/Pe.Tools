@@ -31,13 +31,13 @@ public sealed class SpaceScopedVerbProofTests {
             Assert.That(sweep.Segments.Single().ClosestPoint![2], Is.EqualTo(wholeSweep.Segments.Single().ClosestPoint![2]).Within(1e-9));
             Assert.That(sweep.Segments.Single().Verdict, Is.EqualTo("NEAR"));
             Assert.That(sweep.Segments.Single().Nearest!.ElementId, Is.EqualTo(under));
-            Assert.That(sweep.Stamp.Sources.Single().Elements, Is.EqualTo(1), "Only the lower block lies within the sweep's reach.");
+            Assert.That(sweep.Evidence.Acquisition.Count, Is.EqualTo(1), "Only the lower block lies within the sweep's reach.");
 
             var at = new XYZ(0.5, 0.5, 5);
             var probe = Verbs.Probe(doc, at);
             Assert.That(Json(new[] { probe.Floor, probe.Ceiling }), Is.EqualTo(Json(new[] { Verbs.Probe(whole, at).Floor, Verbs.Probe(whole, at).Ceiling })));
             Assert.That((probe.Floor!.Handle.ElementId, probe.Ceiling!.Handle.ElementId), Is.EqualTo((under, over)));
-            Assert.That(probe.Stamp.Sources.Single().Elements, Is.EqualTo(2), "The far block is never loaded.");
+            Assert.That(probe.Evidence.Acquisition.Count, Is.EqualTo(2), "The far block is never loaded.");
 
             var clip = new Aabb(-5, -5, 0, 5, 5, 0);
             var slice = Verbs.Slice(doc, 0.25, 0.75, xyClip: clip);

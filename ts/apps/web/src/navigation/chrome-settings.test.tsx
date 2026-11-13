@@ -13,7 +13,7 @@ import { ChromeSettings } from "./chrome-settings";
 import { RouteControlsProvider } from "./route-controls";
 import { SurfaceHostProvider } from "./surface-host";
 
-vi.mock("#/settings/options", () => ({
+vi.mock("./options", () => ({
   SettingsProjection: ({ subject }: { subject?: string }) => <p>{subject} registered settings</p>,
 }));
 afterEach(() => {

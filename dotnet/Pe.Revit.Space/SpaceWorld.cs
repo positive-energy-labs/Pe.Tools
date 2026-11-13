@@ -44,7 +44,7 @@ public static class SpaceWorld {
     ///     What one question can touch, and nothing more: every source placement loads only the elements whose bounds meet
     ///     <paramref name="reach" /> (host-frame boxes as 8 corners; default the scope itself), through the /ducts context
     ///     read: one quick filter per placement, ids counted before any load, triangle-less classes never loaded. A verb
-    ///     asks this world only inside <paramref name="scope" />; a question outside it throws instead of answering CLEAR.
+    ///     asks this world only inside <paramref name="scope" />; a question outside it refuses unacquired geometry.
     ///     Every source is planned before geometry acquisition; the stamp reports estimated and retained cost.
     ///     <paramref name="curves" /> reads CAD ribbons: a site DWG's ribbons were 2.6 M of a 10 ft Cleremont Sweep's
     ///     2.75 M triangles, and no default question asks for Curve2D.
@@ -105,6 +105,11 @@ public static class SpaceWorld {
 /// <summary>One operation's source documents, triangles and query indexes.</summary>
 public sealed class World {
     private readonly List<Partition> _partitions = [];
+    private IReadOnlyList<SourceObservation> _observations = [];
+    internal IReadOnlyList<IReadOnlyList<double>>? Reach { get; set; }
+    internal string Representation { get; set; } = "native-mesh";
+    internal bool AcquisitionRequested { get; set; }
+    internal Aabb? QuestionScope { get; set; }
     internal GeometryLedger.Read? Acquisition { get; set; }
     public GeometryCost? GeometryCost => this.Acquisition?.Report();
 
@@ -120,9 +125,9 @@ public sealed class World {
     public DateTime BuiltUtc { get; private set; }
     internal IReadOnlyList<Partition> Partitions => this._partitions;
     internal Document HostDocument => this._partitions[0].Doc;
-    private readonly List<(long LinkInstanceId, string Name, SceneSourceState State, Transform Transform)> _unread = [];
+    private readonly List<(long LinkInstanceId, string UniqueId, string Name, SceneSourceState State, Transform Transform)> _unread = [];
     /// <summary>Link placements with no readable document: unloaded, or unavailable on this machine.</summary>
-    internal IReadOnlyList<(long LinkInstanceId, string Name, SceneSourceState State, Transform Transform)> Unread => this._unread;
+    internal IReadOnlyList<(long LinkInstanceId, string UniqueId, string Name, SceneSourceState State, Transform Transform)> Unread => this._unread;
 
     internal void InitializeSources(Document host) {
         this._partitions.Add(new Partition(0, host, SourceKind.Host, null, Transform.Identity, SpaceWorld.HostGeneration(host)));
@@ -136,12 +141,18 @@ public sealed class World {
                 var type = host.GetElement(link.GetTypeId()) as RevitLinkType;
                 var state = type?.GetLinkedFileStatus() is LinkedFileStatus.Unloaded or LinkedFileStatus.LocallyUnloaded
                     or LinkedFileStatus.InClosedWorkset ? SceneSourceState.Unloaded : SceneSourceState.Unavailable;
-                this._unread.Add((link.Id.Value(), type?.Name ?? link.Name, state, link.GetTotalTransform()));
+                this._unread.Add((link.Id.Value(), link.UniqueId, type?.Name ?? link.Name, state, link.GetTotalTransform()));
                 continue;
             }
             var kind = linked.Title.IndexOf(".ifc", StringComparison.OrdinalIgnoreCase) >= 0 ? SourceKind.IfcLink : SourceKind.RevitLink;
             this._partitions.Add(new Partition(source++, linked, kind, link.Id.Value(), link.GetTotalTransform(), generation, link.UniqueId));
         }
+        foreach (var partition in this._partitions)
+            partition.Placement = new Placement(this.HostDocumentKey, partition.LinkInstanceUniqueId);
+        this._observations = this._partitions.Select(p => new SourceObservation(p.Placement, p.DocumentKey,
+            new SourceRevision(RevisionKind.Observed, SpaceWorld.Epoch(p.Doc), Version(p.Doc), null), Matrix(p.Transform), SceneSourceState.Loaded))
+            .Concat(this._unread.Select(p => new SourceObservation(new Placement(this.HostDocumentKey, p.UniqueId), null,
+                new SourceRevision(RevisionKind.Unavailable, null, null, RevisionUnavailableReason.SourceUnread), Matrix(p.Transform), p.State))).ToArray();
         // Unsaved tracker keys use the SDK open id, not GetDocumentKey's wrapper hash.
         var ledgerHost = PeDocumentIdentity.TryGetOpenId(host, out var openId)
             ? DocumentKey.For(host, openId).Value : this.HostDocumentKey;
@@ -151,6 +162,7 @@ public sealed class World {
 
     internal void BuildAll(Document host) {
         this.InitializeSources(host);
+        this.AcquisitionRequested = true;
         var plans = this._partitions.Select(p => {
             using var collector = new FilteredElementCollector(p.Doc).WhereElementIsNotElementType();
             return ReachPlan.Empty(p) with { Keep = collector.ToElementIds().ToArray() };
@@ -162,6 +174,8 @@ public sealed class World {
 
     internal void BuildWithin(Document host, IReadOnlyList<XYZ[]> reach) {
         this.InitializeSources(host);
+        this.AcquisitionRequested = true;
+        this.Reach = reach.Select(box => (IReadOnlyList<double>)box.SelectMany(p => new[] { p.X, p.Y, p.Z }).ToArray()).ToArray();
         var scope = this.Scope!.Value;
         // Plan every source and CAD ribbon reach before geometry acquisition.
         var plans = this._partitions.Select(partition => partition.Plan(reach, scope.Corners(), obstacles: true)).ToList();
@@ -182,11 +196,36 @@ public sealed class World {
             throw new ArgumentException("This Space world was read without CAD ribbons; prepare one with curves for a Curve2D question.");
     }
 
-    internal Stamp StampFor(IEnumerable<Partition> touched, Filter filter) {
+    internal SpatialEvidence EvidenceFor(IEnumerable<Partition> touched, Filter filter) {
         var seen = touched as IReadOnlyList<Partition> ?? touched.ToList();
-        return new Stamp(this.HostDocumentKey, this.CurrentEpoch, Stamp.HostInternalFt, this.BuiltUtc,
-            this._partitions.Select(p => p.Row).ToList(), this.BuiltUtc != default, Resolve(seen, filter)) { GeometryCost = this.GeometryCost };
+        var sources = this._observations;
+        var outcomes = seen.SelectMany(p => p.Outcomes).Where(a => filter.Exclusions is null || !filter.Exclusions.Any(e =>
+            e.Placement == a.Placement && e.SubjectUniqueId == a.SubjectUniqueId
+            && sources.Any(s => s.Placement == a.Placement && s.DocumentKey == e.DocumentKey))).ToArray();
+        var acquisition = outcomes.GroupBy(a => (a.Placement, a.SubjectUniqueId)).Select(g => g.OrderBy(a => a.Outcome switch {
+            AcquisitionOutcome.Failed => 0, AcquisitionOutcome.Partial => 1, AcquisitionOutcome.Deferred => 2,
+            AcquisitionOutcome.Approximate => 3, _ => 4
+        }).First()).ToArray();
+        var gaps = sources.Where(s => s.Availability != SceneSourceState.Loaded)
+            .Select(s => new CoverageGap(s.Placement, null, CoverageReason.SourceUnread, 1))
+            .Concat(outcomes.Where(a => a.Outcome is AcquisitionOutcome.Partial or AcquisitionOutcome.Failed or AcquisitionOutcome.Deferred or AcquisitionOutcome.Approximate)
+                .Select(a => new CoverageGap(a.Placement, a.SubjectUniqueId, a.Outcome switch {
+                    AcquisitionOutcome.Partial => CoverageReason.PartialGeometry, AcquisitionOutcome.Failed => CoverageReason.FailedGeometry,
+                    AcquisitionOutcome.Deferred => CoverageReason.Deferred, _ => CoverageReason.Approximate
+                }, 1))).Distinct().ToArray();
+        return new SpatialEvidence(this.HostDocumentKey, this.CurrentEpoch, this.BuiltUtc, SpatialEvidence.HostInternalFt,
+            Resolve(seen, filter), sources, acquisition, gaps) { GeometryCost = this.GeometryCost };
     }
+
+    private static string? Version(Document document) {
+        try { using var version = Document.GetDocumentVersion(document); return version.VersionGUID == Guid.Empty ? null : version.VersionGUID.ToString("D"); }
+        catch { return null; }
+    }
+
+    private static IReadOnlyList<double> Matrix(Transform t) => [
+        t.BasisX.X, t.BasisX.Y, t.BasisX.Z, 0, t.BasisY.X, t.BasisY.Y, t.BasisY.Z, 0,
+        t.BasisZ.X, t.BasisZ.Y, t.BasisZ.Z, 0, t.Origin.X, t.Origin.Y, t.Origin.Z, 1
+    ];
 
     /// <summary>
     ///     Spells out the gate the verb ran under. A null axis on the filter is replaced by what the
@@ -202,5 +241,5 @@ public sealed class World {
         // Layers are echoed only when they were a gate. Empty means no layer restriction was in
         // force, which the Kinds line already makes decisive: without Curve2D nothing has a layer.
         filter.Layers?.ToList() ?? [],
-        filter.ExcludeElementIds?.ToList() ?? []);
+        filter.Exclusions?.ToList() ?? [], this.QuestionScope ?? this.Scope, this.Reach, this.Representation, this.AcquisitionRequested);
 }

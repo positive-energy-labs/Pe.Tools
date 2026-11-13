@@ -249,7 +249,7 @@
     "ts/apps/web/src/machine/update.tsx#AutomaticUpdates:BindingElement",
     "ts/apps/web/src/machine/update.tsx#UpdateGroup:BindingElement",
     "ts/apps/web/src/navigation/ledger.tsx#:import { currentFixture } from \"#/shell/fixture-lane\";",
-    "ts/apps/web/src/open/bay.tsx#PatchBayBody:BindingElement",
+    "ts/apps/web/src/machine/bay.tsx#PatchBayBody:BindingElement",
     "ts/apps/web/src/open/route.tsx#BayBody:PropertyAccessExpression",
     "ts/apps/web/src/pods/route.tsx#Members:PropertyAccessExpression",
     "ts/apps/web/src/pods/route.tsx#ProductLink/destination/search:PropertyAccessExpression",
@@ -290,7 +290,6 @@
   "uncheckedRegistry": [],
   "malformedSources": [],
   "dynamicModules": [
-    "ts/apps/host/src/package-lifecycle.ts#createPackageLifecycle/synchronize/setup/module:import",
     "ts/apps/host/src/pod-artifact.ts#admitPodArtifact/loaded:import",
     "ts/apps/web/scripts/heal-click-proof.ts#{ chromium }:require",
     "ts/apps/web/scripts/heal-review-proof.ts#{ chromium }:require",

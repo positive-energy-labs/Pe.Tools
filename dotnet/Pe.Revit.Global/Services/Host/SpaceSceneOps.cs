@@ -50,7 +50,7 @@ internal static class SpaceSceneOps {
             using (var sha = SHA256.Create()) id = BitConverter.ToString(sha.ComputeHash(input)).Replace("-", "").ToLowerInvariant();
             var path = Path.Combine(root, id + ".bin");
             if (!File.Exists(path)) File.Move(temp, path);
-            return new SceneArtifact(SceneReceipt.From(metadata), id, $"/pe/space/scenes/{id}/artifact", new FileInfo(path).Length);
+            return new SceneArtifact(SceneReceipt.From(metadata), id, $"/pe/space/scenes/{id}/artifact", new FileInfo(path).Length, metadata.Evidence);
         } finally {
             if (File.Exists(temp)) File.Delete(temp);
         }
