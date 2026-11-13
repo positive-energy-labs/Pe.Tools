@@ -3,17 +3,18 @@ using Pe.Revit.FamilyFoundry.Verify;
 using Pe.Shared.HostContracts.Operations;
 using Pe.Shared.RevitData.Families;
 using FamilyDocument = Pe.Revit.Operations.FamilyDocument;
+using TransactRead = Pe.Revit.Operations.TransactRead;
 
 namespace Pe.App.Host;
 
 internal static class FamilyVerifyBridgeOps {
-    [Op("family.look", OpSubject.FamilyDocument, OpTouches.Geometry, OpEffect.TransactRead, RollsBack = true, Does = "Inspect every selected family type and Yes/No toggle off/on: geometry census in inches and geometry-only plan, X/Y elevations and isometric PNGs. Rolls back all family changes. Family editor images can draw invisible geometry; read the visibility census too.", Title = "Look at Family", Finds = ["family", "verify", "images", "geometry", "toggle"], Cost = OpCost.Expensive, Thread = OpThread.Revit, UsesTransactions = true)]
-    private static FamilyLookData Look(FamilyLookRequest request, FamilyDocument document) =>
-        WithoutDialogs(() => document.Value.LookFamily(request));
+    [Op("family.look", OpSubject.FamilyDocument, OpTouches.Geometry, Does = "Inspect every selected family type and Yes/No toggle off/on: geometry census in inches and geometry-only plan, X/Y elevations and isometric PNGs. Rolls back all family changes. Family editor images can draw invisible geometry; read the visibility census too.", Title = "Look at Family", Finds = ["family", "verify", "images", "geometry", "toggle"], Cost = OpCost.Expensive, Thread = OpThread.Revit)]
+    private static FamilyLookData Look(FamilyLookRequest request, FamilyDocument document, TransactRead scope) =>
+        WithoutDialogs(() => scope.Run("family.look", () => document.Value.LookFamily(request)));
 
-    [Op("family.loadTest", OpSubject.FamilyDocument, OpTouches.Geometry, OpEffect.TransactRead, RollsBack = true, Does = "Load the open family into a disposable project, place each selected type, export plan/elevation/3D PNGs and inspect project warnings, resolved failures, nested name duplicates and exposed instance connectors. Closes the scratch project without saving and never saves the family.", Title = "Test Family Load", Finds = ["family", "verify", "load", "warnings", "duplicates", "connectors"], Cost = OpCost.Expensive, Thread = OpThread.Revit, UsesTransactions = true)]
-    private static FamilyLoadTestData LoadTest(FamilyLoadTestRequest request, FamilyDocument document) =>
-        WithoutDialogs(() => document.Value.LoadTestFamily(request));
+    [Op("family.loadTest", OpSubject.FamilyDocument, OpTouches.Geometry, Does = "Load the open family into a disposable project, place each selected type, export plan/elevation/3D PNGs and inspect project warnings, resolved failures, nested name duplicates and exposed instance connectors. Closes the scratch project without saving and never saves the family.", Title = "Test Family Load", Finds = ["family", "verify", "load", "warnings", "duplicates", "connectors"], Cost = OpCost.Expensive, Thread = OpThread.Revit)]
+    private static FamilyLoadTestData LoadTest(FamilyLoadTestRequest request, FamilyDocument document, TransactRead scope) =>
+        WithoutDialogs(() => document.Value.LoadTestFamily(request, scope));
 
     private static T WithoutDialogs<T>(Func<T> run) {
         var dialogs = new List<(bool IsError, string Message)>();

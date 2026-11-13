@@ -94,56 +94,21 @@ public sealed record HostOperationDefinition(
     HostOperationAgentMetadata? Metadata = null,
     OpNeeds Needs = OpNeeds.Nothing,
     OpActor Actor = OpActor.Any,
-    bool UsesTransactions = false,
     Type? ArtifactMetadataType = null,
     OpCardinality Cardinality = OpCardinality.One,
-    bool Internal = false,
-    bool RollsBack = false
+    bool Internal = false
 ) {
+    // Catalog columns derived from the effect, so no op can declare one that disagrees with its scope.
+    public bool RollsBack => this.Effect == OpEffect.TransactRead;
+    /// <summary>Includes rolled-back previews and transactions in disposable documents.</summary>
+    public bool UsesTransactions => this.Effect != OpEffect.Read;
+
     public HostOperationAgentMetadata AgentMetadata => EnrichMetadata(
         this.Key,
         this.RequestType,
         this.Metadata ?? HostOperationAgentMetadata.Create(
             this.DisplayName ?? this.Key
         )
-    );
-
-    public static HostOperationDefinition Create<TRequest, TResponse>(
-        string key,
-        OpSubject subject,
-        OpTouches touches,
-        OpEffect effect,
-        string? displayName = null,
-        HostOperationAgentMetadata? metadata = null
-    ) => new(
-        key,
-        typeof(TRequest),
-        typeof(TResponse),
-        subject,
-        touches,
-        effect,
-        true,
-        displayName,
-        metadata
-    );
-
-    public static HostOperationDefinition CreateInternal<TRequest, TResponse>(
-        string key,
-        OpSubject subject,
-        OpTouches touches,
-        OpEffect effect,
-        string? displayName = null,
-        HostOperationAgentMetadata? metadata = null
-    ) => new(
-        key,
-        typeof(TRequest),
-        typeof(TResponse),
-        subject,
-        touches,
-        effect,
-        false,
-        displayName,
-        metadata
     );
 
     private static HostOperationAgentMetadata EnrichMetadata(

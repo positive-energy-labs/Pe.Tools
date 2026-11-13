@@ -9,6 +9,7 @@ import {
 import type { HostOperationKey } from "@pe/host-contracts/operation-types";
 import { leaf, read, nativeArgs, nativeRead, type InputPort, RefusedPartition } from "./evaluator.ts";
 import type { RouteWorkspace, WorkReadContext } from "@pe/runtime";
+import { workTimelineInput } from "./work-timeline.ts";
 import type { HostMarks } from "../document-marks.ts";
 import type { WorkInputRunner } from "../work-inputs.ts";
 import type { InputConsumption } from "../input-occurrence.ts";
@@ -48,6 +49,8 @@ export interface ReadSources {
     target: z.output<typeof executionTargetSchema>,
     version: string | undefined,
     role: "acquire" | "validate" | "join" | "beyond" | "none",
+    /** The read's own lifetime (evaluator.ts): the native call stops when the read's last subscriber released. */
+    signal?: AbortSignal,
   ) => Promise<Response>;
 }
 export function inputPort(options: {
@@ -59,6 +62,8 @@ export function inputPort(options: {
   origin: () => unknown;
   revision: InputPort["revision"];
   leaves?: import("@pe/agent-contracts").HostRouteModule["leaves"];
+  /** Absent on a lane with no action journal: the Timeline is then refused, never built without receipts. */
+  timeline?: import("./work-timeline.ts").HostTimeline;
 }): InputPort {
   const port: InputPort = {
     evaluation: options.evaluation,
@@ -66,7 +71,7 @@ export function inputPort(options: {
       return options.origin();
     },
     revision: options.revision,
-    async take(name, raw, context) {
+    async take(name, raw, context, signal) {
       const source = options.source;
       const custom = options.leaves?.[name];
       if (custom)
@@ -96,6 +101,11 @@ export function inputPort(options: {
           ? { ...(await source.workKey(ref)), route: request.route }
           : bindWork(request.route, null);
       }
+      if (name === "work-timeline") {
+        if (!options.timeline) throw Error("The Timeline needs the host's action journal");
+        const { works, by } = workTimelineInput.input.parse(raw);
+        return options.timeline.read(works, by);
+      }
       if (name === "work") {
         const { owner, scope } = z.object({ owner: z.string(), scope: workKeySchema }).parse(raw);
         // Pure evaluator compositions inspect Work without a recording owner.
@@ -115,6 +125,7 @@ export function inputPort(options: {
             args.target,
             args.version,
             args.role ?? "none",
+            signal,
           );
         } catch (error) {
           if (

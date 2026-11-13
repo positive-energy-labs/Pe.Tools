@@ -4,7 +4,7 @@
  * moves no digest, and a C# op edit still reddens `ops-catalog-hash.ts` in the gate.
  */
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -14,6 +14,23 @@ import { ROUTES_CS } from "../../../packages/agent-contracts/scripts/route-links
 
 const repo = resolve(import.meta.dirname, "../../../..");
 const generator = readFileSync(resolve(repo, "ts/apps/web/scripts/route-graphs.ts"), "utf8");
+
+test("closure-only preparation never rewrites tracked route projections", () => {
+  const paths = [
+    "ts/packages/agent-contracts/src/routes/table.generated.ts",
+    "ts/apps/host/src/routes.generated.ts",
+  ].map((path) => resolve(repo, path));
+  const before = paths.map((path) => ({ bytes: readFileSync(path), modified: statSync(path).mtimeMs }));
+  const run = spawnSync(process.execPath, ["scripts/route-graphs.ts", "--builtin-closure-only"], {
+    cwd: resolve(repo, "ts/apps/web"),
+    encoding: "utf8",
+  });
+  expect(run.status, run.stderr).toBe(0);
+  for (const [index, path] of paths.entries()) {
+    expect(readFileSync(path)).toEqual(before[index]!.bytes);
+    expect(statSync(path).mtimeMs, path).toBe(before[index]!.modified);
+  }
+}, 600_000);
 
 // Runs the real generator (every builtin closure is built), so this is the suite's long pole.
 test("codegen:routes owns the C# launch rows: its check goes red when only they are stale", () => {

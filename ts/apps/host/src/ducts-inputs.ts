@@ -1,7 +1,7 @@
 /**
  * The host side of the inputs resolver (ducts LEDGER 2026-10-29): load the layers the pure
  * `resolveInputs` reads (Work's staged edits, the firm file) and turn a sheet's `edits` into Work
- * patches. `Settings/ducts.json` in the project home, then in the firm home (read through `ctx.firm`),
+ * patches. `Settings/ducts.json` in the project home, then in the firm home (read through `ctx.files.firm`),
  * is the base under Work and the model store; a criterion neither states runs on the engine default
  * below and is labelled `default`, so a sheet never prices on an unnamed constant.
  */
@@ -27,7 +27,7 @@ export const FIRM_SEED: DuctsFirm = {
   criteria: DUCTS_DEFAULT_CRITERIA,
 };
 
-/** The ducts firm file as read through `ctx.firm("ducts", …)` / `DuctFiles.firm("ducts")`, or refused without a firm home. */
+/** The ducts firm file as read through `ctx.files.firm("ducts", …)` / `DuctFiles.firm("ducts")`, or refused without a firm home. */
 export type FirmReading = FirmValue<DuctsFirmFile>;
 
 /**

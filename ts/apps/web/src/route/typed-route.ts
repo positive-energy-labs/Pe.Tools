@@ -17,7 +17,7 @@ export { oneName, nameOf } from "../../../../packages/agent-contracts/src/subjec
 import { subjectSchema } from "@pe/agent-contracts/route-kernel-codecs";
 import type { PlanHandle as importPlanHandle } from "@pe/kit/lang/write-action";
 import { z } from "zod";
-import type { Publication } from "./host-read.ts";
+import type { Publication } from "@pe/agent-contracts/value";
 import { picturePoseSchemas, pictureSlotData, sheetSlotData, writesRevit, SHEET_COMMANDS, type Goal, type PictureScope, type PictureSlot, type SheetSlot } from "@pe/agent-contracts/slots";
 
 // Generated metadata keeps command schemas out of Pod bundles. The host decodes inputs.

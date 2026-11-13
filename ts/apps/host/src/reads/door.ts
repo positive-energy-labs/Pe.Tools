@@ -6,25 +6,49 @@
  * here, never the reverse (the one edge back is the `ReadContext` type, erased).
  */
 import { z } from "zod";
-import { documentRefSchema, executionTargetSchema } from "@pe/agent-contracts/target";
+import { documentRefSchema } from "@pe/agent-contracts/target";
 import { workKeySchema } from "@pe/agent-contracts/route-state";
 import { settingTiersSchema } from "@pe/agent-contracts/tiered-setting";
-import { nativeOutputAssets, nativeOutputSchema, type NativeReadOutput } from "@pe/agent-contracts/native-output-read";
+import { nativeArgs, nativeOutputAssets, nativeReadInput, nativeReadValue, type NativeArgs, type NativeValue } from "@pe/agent-contracts/native-output-read";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
-import { nativeRequestSchema } from "@pe/host-contracts/native-schemas";
-import type { hostOpSafety } from "@pe/host-contracts/generated";
-import type { HostOperationKey, OpRequestOf } from "@pe/host-contracts/operation-types";
+import type { ReadHandle } from "@pe/agent-contracts/handle";
+import type { HostOperationKey } from "@pe/host-contracts/operation-types";
 import type { ReadContext } from "./evaluator.ts";
 export type { ReadContext } from "./evaluator.ts";
+export type { CatalogReadKey } from "@pe/agent-contracts/handle";
 
 export interface Read<I, O> {
   readonly name: string;
   readonly input: z.ZodType<I>;
   readonly output: z.ZodType<O>;
   readonly run: (ctx: ReadContext, args: I) => Promise<O> | O;
+  /** The handle a `body()` serves; host registration joins its `uses` to bodies. */
+  readonly contract?: ReadHandle<string, I, O>;
 }
 export const read = <I, O>(name: string, definition: Omit<Read<I, O>, "name">): Read<I, O> =>
   Object.freeze({ name, ...definition });
+const bodies = new Map<string, Read<any, any>>();
+/**
+ * The host half of a read handle: its body, registered under the handle's key so `ctx.read(handle)`
+ * finds it. `read(name, def)` above stays until the route reads are converted (k2/read-sweep).
+ */
+export function body<K extends string, I, D>(
+  h: ReadHandle<K, I, D>,
+  run: (ctx: ReadContext, args: I) => Promise<D> | D,
+): Read<I, D> {
+  if (bodies.has(h.key)) throw Error(`Read '${h.key}' already has a body`);
+  const made = read(h.key, { input: h.input, output: h.data, run, contract: h });
+  bodies.set(h.key, made);
+  return made;
+}
+/** The body a handle names: a route's `body()`, or the native door for a catalog Read. A handle with none is a contract nobody serves, and the read says so. */
+export function bodyOf<I, D>(h: Pick<ReadHandle<string, I, D>, "key">): Read<I, D> {
+  const made =
+    bodies.get(h.key) ??
+    (hostOpCatalog.some((op) => op.key === h.key) ? nativeRead(h.key as HostOperationKey) : undefined);
+  if (!made) throw Error(`Read '${h.key}' has no body on this host`);
+  return made as Read<I, D>;
+}
 export interface Leaf<I, O> {
   readonly name: string;
   readonly input: z.ZodType<I>;
@@ -63,36 +87,7 @@ export const assetFile = leaf(
   z.string().regex(/^[0-9a-f]{64}$/),
   false,
 );
-type Safety = typeof hostOpSafety;
-/** Read intent, and Read effect or a rolled-back TransactRead: the keys a read may take. */
-export type CatalogReadKey = {
-  [K in keyof Safety]: Safety[K] extends { intent: "Read" } & (
-    | { effect: "Read" }
-    | { effect: "TransactRead"; rollsBack: true }
-  )
-    ? K
-    : never;
-}[keyof Safety] &
-  HostOperationKey;
-const role = z.enum(["acquire", "validate", "join", "beyond", "none"]);
-export const nativeArgs = z.object({
-  key: z.string(),
-  request: z.unknown(),
-  target: executionTargetSchema,
-  version: z.string().optional(),
-  // Retained ducts bodies name their role; every other read leaves it out.
-  role: role.optional(),
-});
-export type NativeArgs<K extends HostOperationKey> = {
-  request: OpRequestOf<K>;
-  target: z.output<typeof executionTargetSchema>;
-  version?: string;
-  role?: z.output<typeof role>;
-};
-export type NativeValue<K extends HostOperationKey> = {
-  body: NativeReadOutput<K>;
-  version: string | null;
-};
+export { nativeArgs, type NativeArgs, type NativeValue };
 const nativeLeaf = leaf(
   "native",
   nativeArgs,
@@ -112,8 +107,8 @@ export function nativeRead<K extends HostOperationKey>(
     !(operation.effect === "Read" || (operation.effect === "TransactRead" && operation.rollsBack))
   )
     throw Error(`Input is not a catalog Read/Read: ${key}`);
-  const input = nativeArgs.omit({ key: true }).extend({ request: nativeRequestSchema(key) });
-  const output = z.object({ body: nativeOutputSchema(key), version: z.string().nullable() });
+  const input = nativeReadInput(key);
+  const output = nativeReadValue(key);
   const handle = read(`input.native.${key}`, {
     input,
     output,

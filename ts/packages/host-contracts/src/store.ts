@@ -1,4 +1,8 @@
 /**
+ * The functions here take bare paths. `kinds.ts` is the door over them (routes CONTRACTS K-A2):
+ * a declared kind mints the path and carries the rule. The store sweeps move every caller there;
+ * what is left exported here afterwards is `kinds.ts`'s own imports.
+ *
  * The store kernel (ADR 0039; ADR 0037 rules 5 to 7): one atomic write for machine state, one write
  * door into a home, and one decode at the trust boundary that carries the two failure policies.
  * Nothing here throws on a file that does not decode, so no stored file can stop the host.
@@ -32,24 +36,45 @@ export const sha256Hex = (bytes: Uint8Array | string) =>
 
 const errno = (error: unknown) => (error as NodeJS.ErrnoException).code ?? "";
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
-const readOrNull = (path: string): Buffer | null => {
-  try {
-    return readFileSync(path);
-  } catch (error) {
-    if (errno(error) === "ENOENT") return null;
-    throw error;
-  }
-};
-
 /** Windows refuses a rename while a scanner or the indexer holds the target; the hold ends in milliseconds. */
 const TRANSIENT = new Set(["EPERM", "EBUSY", "EACCES"]);
 const pause = (ms: number) => void Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+
+/** The file's bytes, or null when it is missing. A passing hold is waited out, as a rename is. */
+const readOrNull = (path: string): Buffer | null => {
+  for (let attempt = 0; ; attempt++)
+    try {
+      return readFileSync(path);
+    } catch (error) {
+      if (errno(error) === "ENOENT") return null;
+      if (attempt >= 3 || !TRANSIENT.has(errno(error))) throw error;
+      pause(25 * 2 ** attempt);
+    }
+};
+
+/**
+ * State files this process kept though their class is discard (unreadable, or no copy could be
+ * made), each with the blob root their bytes are owed to. Their owner reads them as absent and
+ * will write a fresh file, so `writeAtomic` settles the debt first: it rests the bytes that are
+ * there, or it refuses the write.
+ * ponytail: per process. A writer that never read the file in this process is not guarded; every
+ * state owner reads before it writes. Move the debt to a file beside the notices if that changes.
+ */
+const owed = new Map<string, string>();
 
 /**
  * Machine state, no compare: a temp file in the same directory, then a rename over the target. A
  * reader sees the old bytes or the new ones, never a torn file. Creates the parent directory.
  */
 export function writeAtomic(path: string, bytes: Uint8Array | string): void {
+  const blobRoot = owed.get(resolve(path));
+  if (blobRoot) {
+    // Throws while the file is still unreadable or the copy still fails: the write is refused
+    // and the kept bytes stay.
+    const prior = readOrNull(path);
+    if (prior) restBlob(blobRoot, sha256Hex(prior), prior);
+    owed.delete(resolve(path));
+  }
   mkdirSync(dirname(path), { recursive: true });
   // A random name keeps two writers from tearing one temp file; a failed write removes its own.
   const temporary = `${path}.${randomUUID()}.tmp`;
@@ -130,7 +155,7 @@ export function writeHomeFile(
  * it returns only when the blob reads back as these bytes, and throws otherwise. A caller removes
  * or overwrites the original only after this returned.
  */
-function restBlob(blobRoot: string, sha256: string, bytes: Uint8Array): string {
+export function restBlob(blobRoot: string, sha256: string, bytes: Uint8Array): string {
   const blob = join(blobRoot, "sha256", sha256);
   const rests = () => {
     const copy = readOrNull(blob);
@@ -198,7 +223,7 @@ export type StoredRead<T> =
   | { kind: "ok"; value: T; sha256: string }
   | { kind: "missing" }
   | { kind: "kept"; reason: string }
-  | { kind: "discarded"; reason: string };
+  | { kind: "discarded"; reason: string; blob: string };
 
 const oneLine = (why: string) => why.replace(/\s+/g, " ").slice(0, 500);
 
@@ -252,14 +277,15 @@ function refuse(path: string, bytes: Buffer | null, policy: StoredPolicy, why: s
     return reason;
   };
   const kept = (reason: string) => ({ kind: "kept", reason: note("keep", oneLine(reason)) }) as const;
-  if (policy.class === "keep" || !bytes) return kept(why);
+  if (policy.class === "keep") return kept(why);
+  const blobRoot =
+    policy.blobRoot ?? join(dirname(policy.notices), productPathNames.blobsDirectoryName);
+  // Until the set-aside below completes, a write over this path owes its bytes a copy.
+  owed.set(resolve(path), blobRoot);
+  if (!bytes) return kept(why);
   let blob: string;
   try {
-    blob = restBlob(
-      policy.blobRoot ?? join(dirname(policy.notices), productPathNames.blobsDirectoryName),
-      sha256Hex(bytes),
-      bytes,
-    );
+    blob = restBlob(blobRoot, sha256Hex(bytes), bytes);
   } catch (error) {
     return kept(`Kept, because its bytes could not be copied aside (${message(error)}). ${why}`);
   }
@@ -272,12 +298,13 @@ function refuse(path: string, bytes: Buffer | null, policy: StoredPolicy, why: s
     return kept(`Kept, because it could not be read again (${message(error)}). ${why}`);
   }
   const reason = note("discard", oneLine(`Prior bytes: ${blob}. ${why}`));
+  owed.delete(resolve(path));
   try {
     rmSync(path, { force: true });
   } catch {
     // A held file stays; its bytes rest in the blob store and its notice does not repeat.
   }
-  return { kind: "discarded", reason } as const;
+  return { kind: "discarded", reason, blob } as const;
 }
 
 /**
@@ -380,15 +407,15 @@ export function discardStored(
   path: string,
   policy: Extract<StoredPolicy, { class: "discard" }>,
   reason: string,
-): void {
+): Exclude<StoredRead<never>, { kind: "ok" }> {
   let bytes: Buffer | null;
   try {
     bytes = readOrNull(path);
   } catch (error) {
     // Not a readable file (a folder, a held file): it is kept, and the notice says why.
-    return void refuse(path, null, policy, `${reason} (${message(error)})`);
+    return refuse(path, null, policy, `${reason} (${message(error)})`);
   }
-  if (bytes) refuse(path, bytes, policy, reason);
+  return bytes ? refuse(path, bytes, policy, reason) : { kind: "missing" };
 }
 
 /**
@@ -406,8 +433,8 @@ ${producer}`);
 export const derivedName = (key: string, bytes: Uint8Array | string) => `${key}.${sha256Hex(bytes)}`;
 
 /** An owner refuses one derived file it decoded: discard class (ADR 0039), one notice, the bytes rest in the blob store. */
-export const discardDerived = (store: DerivedStore, path: string, reason: string) =>
-  discardStored(path, { class: "discard", place: "Derived file", notices: store.notices, blobRoot: store.blobRoot }, reason);
+export const discardDerived = (store: DerivedStore, path: string, reason: string): void =>
+  void discardStored(path, { class: "discard", place: "Derived file", notices: store.notices, blobRoot: store.blobRoot }, reason);
 
 /**
  * The file a key names, proven by its own hash. One whose name does not match its bytes is skipped

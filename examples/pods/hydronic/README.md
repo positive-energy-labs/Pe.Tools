@@ -4,7 +4,7 @@ Sizes each pipe of one hydronic piping system: the smallest catalog diameter who
 
 - `routes/sizing/size.ts`: the product. Pure math, no Revit, no kernel.
 - `routes/sizing/schema.ts`: Work (two limits plus the chosen diameter per pipe UniqueId) and the Value the core returns.
-- `routes/sizing/host.ts`: the core read, a Goal. It reads the target document's Work (`ctx.work(key, target.ref)`), the firm file's max friction (`ctx.firm`, `Settings/hydronic.json` in the firm home), the system's pipes and segment sizes (`ctx.native("mep.system.members" | "mep.segment.sizes")`), and calls `size`.
+- `routes/sizing/host.ts`: the core read, a Goal. It reads the target document's Work (`ctx.work(key, target.ref)`), the firm file's max friction (`ctx.files.firm`, `Settings/hydronic.json` in the firm home), the system's pipes and segment sizes (`ctx.native("mep.system.members" | "mep.segment.sizes")`), and calls `size`.
 - `routes/sizing/module.ts`: the route declaration. `sheet` binds `chosen` to each pipe's `Diameter` (mm); `goal` is the core, so the kernel draws the unresolved list first.
 - `routes/sizing/sizing.test.ts`: the math, the published artifact's admission, the kernel doors this Pod uses, and one `kernel gap:` test per capability the kernel does not yet offer a Pod.
 

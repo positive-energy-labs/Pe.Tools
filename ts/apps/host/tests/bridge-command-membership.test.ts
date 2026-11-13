@@ -33,8 +33,11 @@ test("every advertised native preview admits a direct Pea call and agrees with C
     "revit.apply.parameter-links.preview",
   ]);
   for (const op of previews) {
-    expect(op.effect, op.key).toBe("TransactRead");
-    expect(op.rollsBack, op.key).toBe(true);
+    // The effect is the handler's scope. The parameter-links preview opens no transaction, so it
+    // takes no scope and is a Read; the two duct previews rehearse inside a rollback.
+    const rehearses = op.key !== "revit.apply.parameter-links.preview";
+    expect(op.effect, op.key).toBe(rehearses ? "TransactRead" : "Read");
+    expect(op.rollsBack, op.key).toBe(rehearses);
     expect(op.intent, op.key).toBe("Read");
     expect(op.internal, op.key).toBe(false);
     expect(commandLeafRefusal(op.key, undefined)).toBeNull();

@@ -27,7 +27,7 @@ vi.mock("./psc1", () => ({
     meshes: { id: new TextDecoder().decode(buffer), instances: [], positions: new Float32Array(0) },
     metadata: {
       elements: [],
-      stamp: { sources: [] },
+      evidence: { sources: [] },
       omittedElements: 0,
       unavailableElements: [],
       completeness: new TextDecoder().decode(buffer).startsWith("limited-")

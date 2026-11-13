@@ -1,5 +1,5 @@
 import { contextHeaders } from "./callers.ts";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vite-plus/test";
@@ -7,8 +7,8 @@ import { Effect, Layer } from "effect";
 import { HttpRouter } from "effect/http";
 import { createShare, shareIntentFile, tailscaleCommand, shareRoute } from "../src/share.ts";
 import { requestIdentityLayer } from "../src/request-identity.ts";
-import { readStoredNotices } from "@pe/host-contracts/store";
-import { storedNoticesPath } from "../src/notice-feed.ts";
+import { readStoredNotices, sha256Hex } from "@pe/host-contracts/store";
+import { storedBlobsPath, storedNoticesPath } from "../src/notice-feed.ts";
 
 test("fake tailscale binary: foreign rule refused; own changes re-read status; observations stay bounded", async () => {
   const dir = await mkdtemp(join(tmpdir(), "pe-share-fake-"));
@@ -262,6 +262,35 @@ test("a share intent that does not decode is discarded on the request that meets
     ).toMatchObject([{ class: "discard", place: "Sharing" }]);
   } finally {
     await app.dispose();
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+// Preservation rule (K-A1): a file is replaced only after its bytes are kept. Mutant, run red:
+// in `host-contracts/src/store.ts` `writeAtomic`, drop the `owed` block (the save then lands over
+// bytes that have no copy). The planted copy failure is a folder where this file's blob would rest.
+test("a share intent whose bytes cannot be copied aside is kept, and no save lands over it", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "pe-share-kept-"));
+  const path = join(dir, "intent.json");
+  const torn = `{ torn ${crypto.randomUUID()}`;
+  const blob = join(storedBlobsPath(), "sha256", sha256Hex(torn));
+  try {
+    await writeFile(path, torn);
+    await mkdir(blob, { recursive: true });
+    const intent = shareIntentFile(path);
+    expect(await intent.load!()).toBeNull();
+    expect(await readFile(path, "utf8")).toBe(torn);
+    expect(readStoredNotices(storedNoticesPath()).filter((n) => n.path === path)).toMatchObject([
+      { class: "keep", place: "Sharing", reason: expect.stringContaining("could not be copied aside") },
+    ]);
+    await expect(intent.save!({ desired: "on", mapping: null })).rejects.toThrow();
+    expect(await readFile(path, "utf8")).toBe(torn);
+    // Once a copy can be made, the save rests the kept bytes first and then lands.
+    await rm(blob, { recursive: true });
+    await intent.save!({ desired: "on", mapping: null });
+    expect(await readFile(blob, "utf8")).toBe(torn);
+    expect(await intent.load!()).toEqual({ desired: "on", mapping: null });
+  } finally {
     await rm(dir, { recursive: true, force: true });
   }
 });

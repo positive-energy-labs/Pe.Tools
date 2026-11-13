@@ -5,12 +5,12 @@ import { SceneMemory } from "./scene-memory";
 const scene = (epoch = 1, document = "a", builtUtc = "now", sourceEpoch = epoch): SceneData => ({
   positions: new Float32Array(9),
   metadata: {
-    stamp: {
-      epoch,
-      hostDocumentKey: document,
-      builtUtc,
+    evidence: {
+      revision: epoch,
+      documentKey: document,
+      observedAt: builtUtc,
       sources: [
-        { documentKey: document, linkInstanceId: null, builtAtEpoch: sourceEpoch, dirty: false },
+        { documentKey: document, placement: { hostDocumentKey: document, linkUniqueId: null }, revision: { kind: "observed", epoch: sourceEpoch }, availability: "loaded", toHost: [] },
       ],
     },
     elements: [],

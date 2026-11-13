@@ -21,10 +21,11 @@ export interface RouteStateSpec<TSchema extends z.ZodType> {
   /** Search words for this route's edit door. */
   finds?: readonly string[];
   schema: TSchema;
-  /** Current decoded Work schema stamp, independent of the transport envelope version. */
+  /**
+   * Current decoded Work schema stamp, independent of the transport envelope version. There is no
+   * migration: stored Work at another stamp is set aside with its bytes kept and one notice.
+   */
   schemaVersion?: number;
-  /** Route-owned exception to discard: upgrade known stored Work before decoding. */
-  upgrade?: (raw: unknown) => { value: unknown; reason?: string } | null;
   editable?: readonly import("./command.ts").WorkPath[];
   /** Domain-derived bookkeeping after an authored edit, before validation. */
   reconcileEdit?: (next: unknown, patches: readonly RouteStatePatch[]) => unknown;
