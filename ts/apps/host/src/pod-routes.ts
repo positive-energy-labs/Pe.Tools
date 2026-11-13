@@ -30,7 +30,7 @@ export function registerAdmittedHostRoute(
         {
           ...("reads" in bindings ? bindings.reads : {}),
           [`route:${route.data.key}`]: routeDeclarationRead({
-            data: route.data as contracts.RouteGraphWire,
+            data: contracts.RouteGraphWire.parse(route.data),
             schemas: captured.bindings.schemas,
           }),
         },
