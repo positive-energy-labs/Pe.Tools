@@ -160,7 +160,7 @@ test("JZ Plan route switch: Ducts reads preserve the Fans seal; changed Work sta
       expect((await j.host.workspace.start(bindWork(route, path, undefined, ref), {}, "human")).ok).toBe(true);
     const work = createWorkFeedClient(
       { subscribe: observeResources(j.host.workspace, { observe: () => () => {} }), dirty() {} },
-      { write: (key, write) => j.host.workspace.write(key, key.route, "human", write),
+      { write: (key, write) => j.host.workspace.write(key, key.route, "human", write, async () => []),
         // Native preview is recorded; publications and Work use the real host graph.
         submit: async command => actionReceiptSchema.parse({ ...command, state: "succeeded",
           steps: [], prepared: { state: "unprepared" }, recovery: [],
@@ -295,7 +295,7 @@ async function journey(recorded: Parameters<typeof fixture>[1] = {}) {
   const work = createWorkFeedClient(
     { subscribe: observeResources(host.workspace, { observe: () => () => {} }), dirty() {} },
     {
-      write: (key, write) => host.workspace.write(key, key.route, "human", write),
+      write: (key, write) => host.workspace.write(key, key.route, "human", write, async () => []),
       submit: () => {
         throw Error("Unexpected native action in read journey");
       },
@@ -571,7 +571,7 @@ async function compareSystemAnswers() {
   const work = createWorkFeedClient(
     { subscribe: observeResources(host.workspace, { observe: () => () => {} }), dirty() {} },
     {
-      write: (key, write) => host.workspace.write(key, key.route, "human", write),
+      write: (key, write) => host.workspace.write(key, key.route, "human", write, async () => []),
       submit: () => {
         throw Error("Read journey has no native writes");
       },
@@ -974,7 +974,7 @@ test("JX4 Families apply readback cannot overwrite a newer manual read or certif
     ).toBe(latest!.id);
     broken = false;
     const door = createWorkFeedClient({ subscribe: observeResources(workspace, { observe: () => () => {} }), dirty() {} }, {
-      write: (key, write) => workspace.write(key, key.route, "human", write),
+      write: (key, write) => workspace.write(key, key.route, "human", write, async () => []),
       submit: async command => {
         const response = await withInvocationContext({ caller }, () => web.handler(new Request("http://host/actions", {
           method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(command),

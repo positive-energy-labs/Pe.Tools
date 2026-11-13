@@ -17,7 +17,7 @@ async function journey() {
   const work = createWorkFeedClient(
     { subscribe: observeResources(host.workspace, { observe: () => () => {} }), dirty() {} },
     {
-      write: (key, write) => host.workspace.write(key, key.route, "human", write),
+      write: (key, write) => host.workspace.write(key, key.route, "human", write, async () => []),
       submit: () => {
         throw Error("This read journey must never submit a native action");
       },

@@ -235,7 +235,7 @@ export async function journey(options: { unreadable?: { elementId: number | null
   const feed = createWorkFeedClient(
     readings,
     {
-      write: (key, write) => host.workspace.write(key, key.route, "human", write),
+      write: (key, write) => host.workspace.write(key, key.route, "human", write, async () => []),
       submit: async command => {
         const response = await host.request(new Request("http://host/actions", {method:"POST", headers:{"content-type":"application/json"}, body:JSON.stringify(command)}));
         expect([200,202],await response.clone().text()).toContain(response.status);

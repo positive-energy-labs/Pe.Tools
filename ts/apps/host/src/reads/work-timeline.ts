@@ -16,7 +16,7 @@ import {
   type WorkTimeline,
 } from "@pe/agent-contracts";
 import { FINDINGS_OWNER } from "@pe/agent-contracts/slots";
-import { mergeTimeline, sameStep, type RouteWorkspace, type TimelinePart } from "@pe/runtime";
+import { mergeTimeline, sameStep, type RouteWorkspace, type TimelinePart, type TimelineReceipts } from "@pe/runtime";
 import type { ActionJournal } from "../action-journal.ts";
 import { leaf, read } from "./door.ts";
 import type { DocumentRow } from "../session-inventory.ts";
@@ -55,18 +55,20 @@ export const timelineReceipts = async (journal: Pick<ActionJournal, "read">): Pr
   );
 
 /** The host Timeline (ADR 0042): one read and one step door over the Work journals and every registered source. */
-export function hostTimeline(workspace: RouteWorkspace, journal: Pick<ActionJournal, "read">, documents: () => Promise<readonly DocumentRow[]> = async () => []) {
+export function hostTimeline(workspace: RouteWorkspace, source: Pick<ActionJournal, "read"> | TimelineReceipts, documents: () => Promise<readonly DocumentRow[]> = async () => []) {
+  /** The action journal, or the reader a host with no journal of its own supplies. */
+  const receiptsNow: TimelineReceipts = typeof source === "function" ? source : () => timelineReceipts(source);
   const parts = async (works: readonly WorkKey[], by: WorkAuthor, receipts: readonly ActionStatus[]) =>
     documents().then((docs) => Promise.all([workspace.timeline(works, by, receipts), ...[...sources].map((source) => source.read(works, by, docs))]));
   return {
     async read(works: readonly WorkKey[], by: WorkAuthor): Promise<WorkTimeline> {
       const members = timelineMembers(works);
-      return mergeTimeline(await parts(members, by, await timelineReceipts(journal))).timeline;
+      return mergeTimeline(await parts(members, by, await receiptsNow())).timeline;
     },
     /** The same door for a person and Pea: the caller sends back the step it was shown. */
     async step(request: WorkStepRequest, caller: Caller, by: WorkAuthor): Promise<unknown> {
       const members = timelineMembers(request.works);
-      const receipts = await timelineReceipts(journal);
+      const receipts = await receiptsNow();
       const next = mergeTimeline(await parts(members, by, receipts))[request.direction];
       if (!next) return refuse("refused", `Nothing to ${request.direction}`, "Re-read the Timeline.");
       if (!sameStep(next.candidate.ref, request.expected))
@@ -78,7 +80,7 @@ export function hostTimeline(workspace: RouteWorkspace, journal: Pick<ActionJour
         );
       if (next.candidate.refusal) return refuse("refused", next.candidate.refusal, "Re-read the Timeline.");
       return next.source === 0
-        ? workspace.step(members, by, request.direction, request.expected, receipts)
+        ? workspace.step(members, by, request.direction, request.expected, receiptsNow)
         : [...sources][next.source - 1]!.step(request.direction, request.expected, caller);
     },
   };

@@ -237,6 +237,7 @@ async function journey(module: TypedRoute = fans) {
   );
   const api = createPeRoutes({
     workspace: host.workspace,
+    journal,
     registrations: [],
     navigation: { threads: async () => [], documents: async () => [{ ...ref, address: path }] },
   });

@@ -55,7 +55,7 @@ test("a person's finding on a fan port draws one mark on the port's geometry in 
     store: { getState: async () => structuredClone(saved), setState: async ({ value }) => void (saved = structuredClone(value)) },
   });
   const post = native.actions({ workspace: host });
-  const routes = createPeRoutes({ workspace: host, registrations: [{ spec: findingsWork }] });
+  const routes = createPeRoutes({ workspace: host, journal: native.journal, registrations: [{ spec: findingsWork }] });
   // The browser's Pe client, answered by the host's own route door as the person.
   const browser = createPeClient("http://host", (url, init) =>
     withInvocationContext({ caller: human }, () => routes.fetch(new Request(url, init))));
