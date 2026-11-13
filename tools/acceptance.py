@@ -297,7 +297,25 @@ def http(state: dict, who: str, method: str, path: str, body: bytes | None = Non
         return {"status": status, "body": text}
 
 
+def require_setup_admission() -> None:
+    # Point-in-time check only, not a reservation or memory cap over persistent SDK services.
+    try:
+        reading = subprocess.run(
+            [sys.executable, str(CHECKOUT / ".agents/skills/slot.execute/machine.py"),
+             "admit", "revit-drive", "--json"],
+            capture_output=True, text=True, timeout=8,
+        )
+        verdict = json.loads(reading.stdout)
+    except (OSError, subprocess.SubprocessError, ValueError) as error:
+        sys.exit(f"HOLD setup: machine admission failed: {error}")
+    if (reading.returncode != 0 or not isinstance(verdict, dict)
+            or verdict.get("verdict") != "ADMIT" or verdict.get("kind") != "revit-drive"
+            or "error" in verdict):
+        sys.exit(f"HOLD setup: machine admission refused: {reading.stdout.strip()}")
+
+
 def setup(run: str, args: list[str]) -> None:
+    require_setup_admission()  # Includes the host-timeout resume path, before discovery or acquisition.
     owner = owner_home()
     installed = "--installed" in args
     if installed and "--web" in args:
