@@ -41,7 +41,7 @@ export function ScopeBody({ page }: Body) {
     <>
       {snapshot?.unreadable?.map((blob, index) => (
         <OutcomeLine key={index} kind="refused" label="can't read, kept"
-          says={`${blob.parameter} / ${blob.elementId == null ? "Project Information" : `element ${blob.elementId}`}: ${blob.reason}`} />
+          says={`${blob.parameter} / ${blob.elementId == null ? "Project Information" : "Element name unavailable"}: ${blob.reason}`} />
       ))}
     <Ladder
       disabled={!snapshot || !document}
