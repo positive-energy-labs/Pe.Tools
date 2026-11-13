@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { createPluginRuntime, type PluginContext } from "@pe/agent-contracts";
+import { createPluginRuntime } from "@pe/agent-contracts";
 import { z } from "zod";
 import {
   listPackages,
@@ -149,42 +149,12 @@ export function createPackageLifecycle(
       await runtime.install(
         {
           id,
-          async setup(context) {
+          setup(context) {
             const errors = pod.diagnostics.filter((d) =>
               ["PackageMemberInvalid", "DuplicatePodId"].includes(d.code),
             );
             if (errors.length) throw Error(errors.map((d) => d.message).join("; "));
             context.contribute(id, { kind: "package", package: pod });
-            const cleanups: (() => void | Promise<void>)[] = [];
-            try {
-              for (const member of pod.members.filter((m) =>
-                /^plugins\/[^/]+\/index\.js$/.test(m.path),
-              )) {
-                // This is trusted local host code, not a sandbox. Import the captured version, never reread disk.
-                const module = await import(
-                  `data:text/javascript;base64,${Buffer.from(member.bytes).toString("base64")}#${member.sha256}`
-                );
-                if (typeof module.default?.setup !== "function")
-                  throw Error(`${member.path} must export a plugin with setup`);
-                const hooksOnly: PluginContext<never> = {
-                  id,
-                  hook: (name, observer) => context.hook(name, observer),
-                  contribute() {
-                    throw Error("Pod contributions follow admitted paths");
-                  },
-                };
-                const cleanup = await module.default.setup(Object.freeze(hooksOnly));
-                if (cleanup !== undefined && typeof cleanup !== "function")
-                  throw Error(`${member.path} returned invalid cleanup`);
-                if (cleanup) cleanups.push(cleanup);
-              }
-            } catch (error) {
-              for (const cleanup of cleanups.reverse()) await cleanup();
-              throw error;
-            }
-            return async () => {
-              for (const cleanup of cleanups.reverse()) await cleanup();
-            };
           },
         },
         decisions[id] === true || ((initial || known) && decisions[id] !== false),
@@ -218,7 +188,6 @@ export function createPackageLifecycle(
     packages: () =>
       runtime.contributions().flatMap((c) => (c.kind === "package" ? [c.package] : [])),
     skills: () => runtime.contributions().flatMap((c) => (c.kind === "skill" ? [c.skill] : [])),
-    emit: runtime.emit,
     close: async () => {
       await ready;
       await runtime.close();

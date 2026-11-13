@@ -9,15 +9,15 @@ import { useMemo, type ReactNode } from "react";
 
 import { EmptyState } from "@pe/kit/lang/empty";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
-import { PidChip } from "#/components/lang/process";
+import { PidChip } from "../components/lang/process";
 import { StateCell } from "@pe/kit/lang/cell";
 import { Switcher } from "@pe/kit/lang/switcher";
 import type { Column, QueryCommand, TableState } from "@pe/kit/table/model";
 import { Table } from "@pe/kit/table/table";
-import { TableFrame } from "#/components/master-table/table-frame";
+import { TableFrame } from "../components/master-table/table-frame";
 import { queryWords, quoted, readClause } from "@pe/kit/table/view";
-import { pidOf } from "#/machine/session";
-import { accessOf, type DocRow } from "#/open/model";
+import { pidOf } from "./session";
+import { accessOf, type DocRow } from "./open-model";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 const folderOf = (path: string) => path.replace(/[\\/][^\\/]+$/, "");

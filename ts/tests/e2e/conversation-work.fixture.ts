@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { resolve, join } from "node:path";
 import { pathToFileURL } from "node:url";
+import { stateRoot, stateTree } from "../../packages/host-contracts/src/service-identity.ts";
 
 export const CONVERSATION_THREADS = {
   office: "cac00000-0000-4000-8000-000000000001",
@@ -13,7 +14,7 @@ export const UNSAVED_REF = { session: "closed-session", openId: "unsaved-open" }
 export const NAMES_TURN = "cac00000-0000-4000-8000-000000000021";
 
 export async function workEvidence(home: string) {
-  const dir = join(resolve(home), ".local-state", "state", "route-work");
+  const dir = stateTree(stateRoot("dev", resolve(home), home)).work;
   return Promise.all(
     (await readdir(dir))
       .filter((file) => file.endsWith(".json"))

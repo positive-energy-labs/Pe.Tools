@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { route, field, paneLayout, type ContextOf } from "../route/defaults";
-import { fields as openFields, loaded, module as open } from "../open/route";
+import { fields as openFields, loaded } from "../machine/open-fields";
+import { module as open } from "../open/route";
 import { draw } from "../route/draw";
 export const fields = { ...openFields, session: field(z.string(), "", "pose", "push") };
 export type SessionContext = ContextOf<typeof fields, typeof loaded>;

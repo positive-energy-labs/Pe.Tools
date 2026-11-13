@@ -28,6 +28,7 @@ import {
   canonicalRouteInput,
 } from "@pe/agent-contracts";
 import { admitScript, consentedRead } from "./control.ts";
+import { guards } from "./guards.ts";
 import {
   isTsOnlyOperationKey,
   tsOnlyOperationSchemas,
@@ -373,7 +374,7 @@ export function gatewayExecutor(
         },
       };
     },
-    run: ({ admission }: CommandContext, execution: ActionExecution) => Effect.suspend(() => {
+    run: ({ admission, caller }: CommandContext, execution: ActionExecution) => Effect.suspend(() => {
       const prepared = execution.prepared as z.infer<typeof preparedGatewaySchema>;
       const capturedScript = prepared.kind === "native-leaf" ? prepared.script : undefined;
       if (
@@ -382,9 +383,12 @@ export function gatewayExecutor(
         !capturedScript?.sourceBundle
       )
         throw refused("Original script has no sealed source bundle");
-      const input = capturedScript
+      const capturedInput = capturedScript
         ? { ...admission.input, sourceBundle: capturedScript.sourceBundle }
         : admission.input;
+      const input = key === "scripting.execute"
+        ? { ...capturedInput, caller: guards(caller) ? "Agent" : "Person" }
+        : capturedInput;
       return execution.step(
         prepared.kind === "native-leaf" ? "native" : "file",
         key,

@@ -11,7 +11,7 @@ namespace Pe.Revit.Space;
 
 /// <summary>One operation's buffered geometry pack and derived offset index. No geometry or native object is retained.</summary>
 internal sealed class LinkedGeometryStore(string directory) : IDisposable {
-    private const int Schema = 1;
+    private const int Schema = 2;
     private const int PackMagic = 0x314B5047; // GPK1.
     private const int RecordHeaderBytes = 32 + 4 + 32; // Key, payload length, checksum.
     private const long MaxEntryBytes = 32L * 1024 * 1024;
@@ -22,7 +22,7 @@ internal sealed class LinkedGeometryStore(string directory) : IDisposable {
     private SHA256? _hash;
     private bool _operation;
     private bool _unavailable;
-    internal sealed record Geometry(PrimRow[] Rows, Tri[] Triangles);
+    internal sealed record Geometry(PrimRow[] Rows, Tri[] Triangles, Acquisition Acquisition);
     private string PackPath => Path.Combine(directory, "geometry.pack");
     private static string Root => ProductRuntimeLayout.Current.Cache.ResolveModuleCachePath("space-linked-geometry");
 
@@ -114,10 +114,11 @@ internal sealed class LinkedGeometryStore(string directory) : IDisposable {
                 var triangleBytes = geometry.Triangles.LongLength * 40;
                 if (triangleBytes + RecordHeaderBytes > MaxEntryBytes) return geometry;
                 var rows = JsonConvert.SerializeObject(geometry.Rows);
-                if (triangleBytes + Encoding.UTF8.GetByteCount(rows) + 16 + RecordHeaderBytes > MaxEntryBytes) return geometry;
+                var acquisition = JsonConvert.SerializeObject(geometry.Acquisition);
+                if (triangleBytes + Encoding.UTF8.GetByteCount(rows) + Encoding.UTF8.GetByteCount(acquisition) + 24 + RecordHeaderBytes > MaxEntryBytes) return geometry;
                 using var payload = new MemoryStream();
                 using (var writer = new BinaryWriter(payload, Encoding.UTF8, true)) {
-                    writer.Write(Schema); writer.Write(rows); writer.Write(geometry.Triangles.Length);
+                    writer.Write(Schema); writer.Write(rows); writer.Write(acquisition); writer.Write(geometry.Triangles.Length);
                     foreach (var triangle in geometry.Triangles) {
                         Write(triangle.A); Write(triangle.B); Write(triangle.C); writer.Write(triangle.Prim);
                     }
@@ -170,6 +171,12 @@ internal sealed class LinkedGeometryStore(string directory) : IDisposable {
         using var reader = new BinaryReader(new MemoryStream(bytes));
         if (reader.ReadInt32() != Schema) throw new InvalidDataException("Geometry schema mismatch");
         var rows = JsonConvert.DeserializeObject<PrimRow[]>(reader.ReadString()) ?? throw new InvalidDataException("Missing geometry rows");
+        var acquisition = JsonConvert.DeserializeObject<Acquisition>(reader.ReadString()) ?? throw new InvalidDataException("Missing acquisition evidence");
+        if (acquisition.Placement is null || string.IsNullOrEmpty(acquisition.SubjectUniqueId)
+            || acquisition.Outcome is not (AcquisitionOutcome.Acquired or AcquisitionOutcome.Empty or AcquisitionOutcome.Partial or AcquisitionOutcome.Failed or AcquisitionOutcome.OutsideScope)
+            || rows.Any(r => r.UniqueId != acquisition.SubjectUniqueId)
+            || (rows.Length > 0) != (acquisition.Outcome is AcquisitionOutcome.Acquired or AcquisitionOutcome.Partial))
+            throw new InvalidDataException("Invalid acquisition evidence");
         var count = reader.ReadInt32();
         if (count < 0 || count > MaxEntryBytes / 40 || rows.Any(r => r.Triangles < 0)
             || rows.Sum(r => (long)r.Triangles) != count || reader.BaseStream.Length - reader.BaseStream.Position != count * 40L)
@@ -180,7 +187,7 @@ internal sealed class LinkedGeometryStore(string directory) : IDisposable {
             B = new Vector3(reader.ReadSingle(), reader.ReadSingle(), reader.ReadSingle()),
             C = new Vector3(reader.ReadSingle(), reader.ReadSingle(), reader.ReadSingle()), Prim = reader.ReadInt32()
         };
-        return new Geometry(rows, triangles);
+        return new Geometry(rows, triangles, acquisition);
     }
 
     public void Dispose() {

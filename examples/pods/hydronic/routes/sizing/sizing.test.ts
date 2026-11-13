@@ -94,7 +94,7 @@ describe("kernel gaps", () => {
     expect(await hostDoors()).toContain("nativeRead");
   });
   // Closed by slice 7: the read binds the target document's Work (ctx.work with the document ref; the
-  // evaluator resolves its key, host tests/slots-sheet.test.ts), takes the firm layer (ctx.firm) and both
+  // evaluator resolves its key, host tests/slots-sheet.test.ts), takes the firm layer (ctx.files.firm) and both
   // generic MEP reads (ctx.native). A Pod host imports no read-graph value. Run against a recording ReadContext.
   test("kernel doors: pod-document-work (4) and firm-file-layer (3)", async () => {
     const calls: string[] = [];
@@ -104,10 +104,10 @@ describe("kernel gaps", () => {
         calls.push(`work:${owner}:${JSON.stringify(scope)}`);
         return { doc: work.parse({ maxVelocity: 2 }), revision: 1 };
       },
-      firm: async (owner: string, _schema: unknown, seed: { maxFriction: number }) => {
+      files: { firm: async (owner: string, _schema: unknown, seed: { maxFriction: number }) => {
         calls.push(`firm:${owner}`);
         return { firm: { maxFriction: 250 }, path: "Settings/hydronic.json", present: true, seed };
-      },
+      } },
       native: async (key: string, args: { request: { systemUniqueId?: string } }) => {
         calls.push(`native:${key}:${args.request.systemUniqueId ?? ""}`);
         return { body: key === "mep.segment.sizes" ? { segments: [] }

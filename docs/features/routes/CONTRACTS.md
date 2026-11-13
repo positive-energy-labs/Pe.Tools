@@ -49,10 +49,69 @@ Copy each into both briefs verbatim from the cited lines.
 3. **Receipt response shape** (writer B and writer E). New, from finding 2, and not yet written anywhere: the object `BridgeAgent` writes to the response file and `native-receipts.ts` reads. It must carry the payload, `touched` and the evidence. The lead writes it in phase 0.
 4. **Evidence interfaces** (writer B lift; writer C implements). `sight.md:98-104`. `IObserved { DocumentKey; Revision? }` and `IEvidenced<out TEvidence>`. A null revision stays unknown.
 5. **`SpatialEvidence` wire shape** (writer C gives; the TS decode writer takes). `picture.md:96-108`.
+
+   Native PI-P1 implements `IEvidenced<SpatialEvidence>` on every Space answer, including `SceneArtifact`. The answer member is `evidence`; `stamp` and `fresh` are removed. PSC1 metadata uses `evidence` and format `space-scene-v6`. `SceneReceipt` keeps bounded counts and observation `revision`/`observedAt`; the artifact answer supplies concrete evidence separately. The C# authority is `dotnet/Pe.Revit.Space/Coverage.cs`:
+
+   ```ts
+   type Placement = { hostDocumentKey: string; linkUniqueId: string | null };
+   type SubjectExclusion = { documentKey: string; placement: Placement; subjectUniqueId: string };
+   type SourceRevision = { kind: 'observed' | 'unavailable'; epoch: number | null;
+     version: string | null; reason: 'not-recorded' | 'source-unread' | null };
+   type SourceObservation = { placement: Placement; documentKey: string | null;
+     revision: SourceRevision; toHost: readonly number[]; availability: 'loaded' | 'unloaded' | 'unavailable' };
+   type Acquisition = { placement: Placement; subjectUniqueId: string;
+     outcome: 'acquired' | 'empty' | 'partial' | 'failed' | 'deferred' | 'approximate' | 'outside-scope';
+     reason: 'none' | 'geometry-read' | 'triangulate' | 'budget' | 'unsupported' };
+   type CoverageGap = { placement: Placement; subjectUniqueId: string | null;
+     reason: 'source-unread' | 'partial-geometry' | 'failed-geometry' | 'deferred' | 'approximate'; count: number };
+   type SpatialEvidence = { documentKey: string; revision: number | null; observedAt: string;
+     frame: 'host-internal-ft'; resolved: Resolved; sources: readonly SourceObservation[];
+     acquisition: readonly Acquisition[]; coverage: readonly CoverageGap[]; geometryCost?: GeometryCost | null };
+   // Resolved keeps sources/categories/kinds/layers, replaces excludedElementIds with exclusions: SubjectExclusion[],
+   // and adds scope: Aabb|null, reach: number[][]|null (eight host-frame XYZ corners per box),
+   // representation: string, acquisitionRequested: boolean. Inventory/status sets acquisitionRequested=false.
+   // SweepSegment keeps index/verdict/nearest/closestPoint; minGapFt is nullable. Adds surfaceObservation:
+   // 'observed'|'none-observed', clearanceReason:'containment-unsupported'. Verdict is HIT|NEAR|UNKNOWN.
+   ```
+
+   Geometry packs use schema 2 and retain acquisition with triangles. Old packs recapture. Approximate scene primitives remain drawable and disclose an `approximate` gap; they cannot certify exact collision coverage. Full placement membership, including unread sources, is authoritative. Generation is owned by Kernel, decode by `k2/evidence-decode`.
 6. **`NativeAnswer`** (writer D edits; K3 and writer E consume). `picture.md:124-131`, corrected: it replaces the existing `F` parameter at `request-contracts.d.ts:68`.
 7. **`ReadOwnership`** (writer D gives; K3 and writer E call). `picture.md:141-159`. Writer E calls `open` at admission, `requestStop` from Stop, `settle` before the parent settles.
 8. **`ScriptCaller`** (writer A, both halves). `enum ScriptCaller { Agent, Person }`; `ExecuteRevitScriptRequest` gains a trailing `ScriptCaller Caller = ScriptCaller.Agent`; the host sets `caller: guards(caller) ? "Agent" : "Person"` over anything the input carried; a succeeded receipt whose result has `held` yields one `waits` row with verb `held`.
 9. **Capture policy** (writer D, then SI-S3). `sight.md:110`. `native-output.ts` tests `capture: true` from `call-policy.ts` and passes the call's own key to both schemas. SI-S3 adds the focus key as one policy row.
+
+### Frozen in code (k2/freeze-native)
+
+Contracts 2, 3, 4, 7 and 8 are now code, and the code is the contract. No consumer exists yet: nothing fills or reads these.
+
+| Contract | C# | TS |
+|---|---|---|
+| 2 `Touched`, `ViewRef` | `dotnet/Pe.Shared.HostContracts/Bridge/Touched.cs` | `touchedSchema`, `viewRefSchema` in `C/action-receipts.ts` |
+| 3 receipt response | `OpReceiptResponse` in the same file | `nativeReceiptResponseSchema` in `C/action-receipts.ts` |
+| 4 evidence | `IObserved`, `IEvidenced<out TEvidence>` in `dotnet/Pe.Shared.RevitData/Evidence.cs` | `observedSchema` in `C/action-receipts.ts` |
+| 7 read ownership | none | `H/reads/read-ownership.ts` |
+| 8 `ScriptCaller` | `dotnet/Pe.Shared.HostContracts/Scripting/ScriptContracts.cs`, with `ExecuteRevitScriptRequest.Caller` | generated `scripting.execute` request |
+
+**Evidence lives in `Pe.Shared.RevitData`, not `Pe.Shared.HostContracts`** as `sight.md` C8 said. The op runner references RevitData directly and `Pe.Revit.Space` reaches it through `Pe.Revit`. Space does not reference HostContracts, and it should not take the bridge protocol to state what it observed.
+
+**Receipt response shape (contract 3).** The one object `BridgeAgent` writes to an op receipt's response file. `pe-revit op result` returns it as `response`, and `H/native-receipts.ts` reads it after a lost socket. It replaces the bare payload on success and the bare `{error, statusCode, outcome}` on failure. `OpReceiptResponse.ToJson()` is the only writer of the bytes.
+
+```ts
+type NativeReceiptResponse =
+  | { payload: unknown; touched: Touched; evidence?: Observed }                      // verdict ok
+  | { error: string; statusCode: number; outcome?: string; touched: Touched };       // failed, cancelled, refused
+type Observed = { documentKey: string; revision?: number } & Record<string, unknown>; // the domain's own members ride beside
+```
+
+- A success has `payload` and no `error`. A failure has `error` and no `payload`. A response without `touched` does not parse.
+- A failure carries `touched` because a failed or cancelled call may still have written (`unauthorized`, `unknown`).
+- `evidence` is the response's `IEvidenced<T>.Evidence`. It is absent when the response type declares none. An absent `revision` is unknown, never 0.
+- The verdict stays on the SDK receipt and is not repeated in the file.
+- Both languages assert `ts/packages/agent-contracts/tests/fixtures/receipt-response.fixture.json`: C# that it writes those bytes, TS that it parses them with nothing dropped.
+
+**The live path carries the same facts.** `BridgeResponse` gains `EvidenceJson` and `Touched`, and `BridgeTerminal` gains `Touched` (the restore outcome of a call that finished after its socket was lost). In `ts/packages/host-contracts/src/contracts/bridge-protocol.ts` both arrive as `unknown`, because that package cannot import agent-contracts; the reader decodes with `touchedSchema`. An absent `touched` on the socket is unknown, never `none`.
+
+**`ReadOwner.native`** returns `NativeAnswer<OpResponseOf<K>>` until contract 6 replaces the second parameter with `OpEvidenceOf<K>`; writer D edits that line with it.
 
 ## Handles, reads, bindings, projection (reader C)
 
@@ -75,13 +134,18 @@ export interface ReadHandle<K extends string = string, I = unknown, D = unknown>
   readonly [minted]: true;
   readonly key: K;
   readonly input: z.ZodType<I>;
+  readonly data: z.ZodType<D>;                          // added at the freeze: body() decodes a result with it
   readonly output: z.ZodType<Publication<D>>;           // Publication moves to C/value.ts
   readonly axes: CatalogAxes;                           // joined from uses: effect max, cost max, touches union
   readonly keyedBy: Readonly<Record<string, RowKey>>;   // dotted collection path; an unnamed collection is unkeyed
   readonly demand?: "mount" | "explicit";
 }
 export type InputOf<H> = H extends CommandHandle<string, infer I> ? I : never;
-export declare function handle<K extends CommandKey>(key: K): CommandHandle<K, CommandInput<K>, CommandOutput<K>, CommandEffect<K>>;
+export declare function handle<K extends CommandKey>(key: K): CommandHandle<K, CommandInput<K>, CommandOutput<K>, CommandEffect<K>> & Planned<K, CommandInput<K>>;
+// As landed: CommandKey is every key of K1's generated commandTable (semantic commands, raw native commands, pe-api routes);
+// effect, plan and via come from its row. Input and output: hostActions first, then OpRequestOf/OpResponseOf, then the pe-api route.
+// Planned makes `plan` required on a sealed write, so VerbDecl's `H extends { plan: object }` holds.
+// CatalogReadKey lives in C/handle.ts; the host door re-exports it.
 export declare function native<K extends CatalogReadKey>(key: K): ReadHandle<K, OpRequestOf<K>, OpResponseOf<K>>;
 export declare function contract<K extends string, I, D>(key: K, def: {
   input: z.ZodType<I>; data: z.ZodType<D>;
@@ -91,6 +155,8 @@ export declare function contract<K extends string, I, D>(key: K, def: {
 
 // H/reads/door.ts and evaluator.ts — the host half, frozen in the same commit
 export declare function body<K extends string, I, D>(h: ReadHandle<K, I, D>, run: (ctx: ReadContext, args: I) => Promise<D> | D): Read<I, D>;
+// As landed: read(name, def) and ctx.read(body | leaf) stay beside these until k2/read-sweep converts the route reads.
+// ctx.firm and ctx.settings are gone. bodyOf(handle) is the registry lookup.
 interface ReadContext {
   read<I, D>(h: ReadHandle<string, I, D>, args: I): Promise<D>;   // by handle; the registry resolves the body by key
   readonly files: {

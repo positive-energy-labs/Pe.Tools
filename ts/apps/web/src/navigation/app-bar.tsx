@@ -32,7 +32,7 @@ import { useSurfaceHost } from "./surface-host";
 import { startFeedback } from "#/components/feedback-picker";
 import "./app-bar.css";
 import { RecordedSourceChip } from "#/machine/devices";
-import { PageBindingChip } from "#/pages-bind/chip";
+import { PageBindingChip } from "./chip";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 type LaunchWindow = Window & {

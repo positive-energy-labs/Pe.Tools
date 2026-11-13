@@ -83,7 +83,11 @@ const ThreadRecord = Schema.toType(
 );
 export type Meta = Types.Mutable<typeof ThreadRecord.Type>;
 
-/** `meta.json` text to a record; `providerName` names a pre-provider thread's harness. */
+/**
+ * STORE-EXCEPTION: ADR 0039, harness/ threads remain outside the store kernel until T3
+ * replaces this persistence. Keep the pre-provider identity defaults: removing them hides
+ * a person's existing chat with only a log line. Retire them when T3 can open those chats.
+ */
 export const decodeThreadMeta = Effect.fn("thread.meta")(function* (
   text: string,
   providerName: (harness: Meta["harness"]) => string,
@@ -110,6 +114,7 @@ export const replayThreadEvents = Effect.fn("thread.replay")(function* (
   path: string,
   text: string,
 ) {
+  // STORE-EXCEPTION: ADR 0039; T3 replaces this event decode and its logged skipped-line policy.
   const events: HarnessEvent[] = [];
   const skipped: number[] = [];
   for (const [index, line] of text.split("\n").entries()) {
@@ -164,6 +169,7 @@ export const loadThread = Effect.fn("thread.load")(function* (
     Effect.map((replay) => replay.events),
     Effect.mapError(unreadable),
   );
+  // STORE-EXCEPTION: ADR 0039; T3 replaces this decode and its logged skipped-thread policy.
   const meta = yield* fs.readFileString(join(dir, "meta.json")).pipe(
     Effect.flatMap((text) => decodeThreadMeta(text, providerName)),
     Effect.mapError(unreadable),

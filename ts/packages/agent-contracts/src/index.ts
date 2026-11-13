@@ -44,6 +44,7 @@ export { workFeedFailureMessage } from "./work-journal-door.ts";
 export type { WorkFeedFailure } from "./work-journal-door.ts";
 export { presentationSchema } from "./route-kernel-bodies.ts";
 export * from "./history.ts";
+export * from "./work-timeline.ts";
 
 export * from "./bind-read.ts";
 export * from "./captures-read.ts";
@@ -68,3 +69,5 @@ export { blobRefSchema, blobUploadSchema, type BlobRef, type BlobUpload } from "
 
 export * from "./subject-ref.ts";
 export * from "./notice-feed.ts";
+
+export type { ParamSpec } from "./family-param-spec.ts";

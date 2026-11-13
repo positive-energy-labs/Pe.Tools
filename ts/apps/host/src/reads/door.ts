@@ -12,10 +12,11 @@ import { settingTiersSchema } from "@pe/agent-contracts/tiered-setting";
 import { nativeOutputAssets, nativeOutputSchema, type NativeReadOutput } from "@pe/agent-contracts/native-output-read";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import { nativeRequestSchema } from "@pe/host-contracts/native-schemas";
-import type { hostOpSafety } from "@pe/host-contracts/generated";
+import type { ReadHandle } from "@pe/agent-contracts/handle";
 import type { HostOperationKey, OpRequestOf } from "@pe/host-contracts/operation-types";
 import type { ReadContext } from "./evaluator.ts";
 export type { ReadContext } from "./evaluator.ts";
+export type { CatalogReadKey } from "@pe/agent-contracts/handle";
 
 export interface Read<I, O> {
   readonly name: string;
@@ -25,6 +26,26 @@ export interface Read<I, O> {
 }
 export const read = <I, O>(name: string, definition: Omit<Read<I, O>, "name">): Read<I, O> =>
   Object.freeze({ name, ...definition });
+const bodies = new Map<string, Read<any, any>>();
+/**
+ * The host half of a read handle: its body, registered under the handle's key so `ctx.read(handle)`
+ * finds it. `read(name, def)` above stays until the route reads are converted (k2/read-sweep).
+ */
+export function body<K extends string, I, D>(
+  h: ReadHandle<K, I, D>,
+  run: (ctx: ReadContext, args: I) => Promise<D> | D,
+): Read<I, D> {
+  if (bodies.has(h.key)) throw Error(`Read '${h.key}' already has a body`);
+  const made = read(h.key, { input: h.input, output: h.data, run });
+  bodies.set(h.key, made);
+  return made;
+}
+/** The body a handle names. A handle with none is a contract nobody serves, and the read says so. */
+export function bodyOf<I, D>(h: ReadHandle<string, I, D>): Read<I, D> {
+  const made = bodies.get(h.key);
+  if (!made) throw Error(`Read '${h.key}' has no body on this host`);
+  return made;
+}
 export interface Leaf<I, O> {
   readonly name: string;
   readonly input: z.ZodType<I>;
@@ -63,17 +84,6 @@ export const assetFile = leaf(
   z.string().regex(/^[0-9a-f]{64}$/),
   false,
 );
-type Safety = typeof hostOpSafety;
-/** Read intent, and Read effect or a rolled-back TransactRead: the keys a read may take. */
-export type CatalogReadKey = {
-  [K in keyof Safety]: Safety[K] extends { intent: "Read" } & (
-    | { effect: "Read" }
-    | { effect: "TransactRead"; rollsBack: true }
-  )
-    ? K
-    : never;
-}[keyof Safety] &
-  HostOperationKey;
 const role = z.enum(["acquire", "validate", "join", "beyond", "none"]);
 export const nativeArgs = z.object({
   key: z.string(),
