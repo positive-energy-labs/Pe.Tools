@@ -170,7 +170,9 @@ export function createFixtureWorkDoor(
         try {
           if (scope.reading && !owners[scope.reading]) throw Error("A Work reading is read-only");
           initialize(scope.key);
-          return workOutcome(await workspace.write(scope.key, scope.key.route, "human", write));
+          // A fixture runs no command, so no Revit write exists to hold a step; a restore still meets
+          // the Timeline's own-step admission in the workspace.
+          return workOutcome(await workspace.write(scope.key, scope.key.route, "human", write, async () => []));
         } catch (error) {
           return failedWrite(error);
         }

@@ -140,7 +140,7 @@ test("JZ Families History offers published values and marks ambiguous publicatio
       return response.json();
     } });
     const feed = createWorkFeedClient({ subscribe: () => () => {}, dirty() {} }, {
-      write: (key, write) => j.host.workspace.write(key, key.route, "human", write),
+      write: (key, write) => j.host.workspace.write(key, key.route, "human", write, async () => []),
       submit() { throw Error("This lifecycle journey writes through HTTP"); },
     });
     // Work observations come from HTTP inspection; publication invalidations use host SSE above.
@@ -623,7 +623,7 @@ test("JZ Fans undo after apply: public write journey leaves an honest toolbar re
   };
   const read = observeResources(f.saved, undefined, f.observeHostResource);
   const connected = createWorkFeedClient({ subscribe: read, dirty() {} }, {
-    write: (key, write) => f.saved.write(key, key.route, "human", write),
+    write: (key, write) => f.saved.write(key, key.route, "human", write, async () => []),
     submit: async command => {
       const response = await f.post("/actions", command);
       expect(response.ok, await response.clone().text()).toBe(true);

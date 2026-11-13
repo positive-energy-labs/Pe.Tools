@@ -165,19 +165,20 @@ export class Publications {
     this.retainedBytes.delete(id);
     this.pruneKeys();
   }
-  async publish<I, O>(
+  /** A recipe's data type is its own; a publication leaves this door as the wire carries it, unknown. */
+  async publish<I>(
     id: string,
     generation: number,
-    definition: Read<I, O>,
+    definition: Read<I, unknown>,
     args: I,
     port: InputPort,
-    keep?: (publication: Publication<O>) => Promise<() => void>,
+    keep?: (publication: Publication<unknown>) => Promise<() => void>,
     admitted = this.admission(id, generation),
-  ): Promise<Publication<O>> {
+  ): Promise<Publication<unknown>> {
     try {
     const key = fingerprint([definition.name, definition.input.parse(args)]);
     let slot = this.slots.get(id);
-    const obsolete = (): Publication<O> =>
+    const obsolete = (): Publication<unknown> =>
       immutable({ key, generation, version: 0, value: null, state: "superseded" });
     if (
       !admitted.current() || (slot &&
@@ -212,7 +213,7 @@ export class Publications {
       schemaId(definition.input),
       schemaId(definition.output),
     ]);
-    let flight = owner.flights.get(flightKey) as Flight<Publication<O>> | undefined;
+    let flight = owner.flights.get(flightKey);
     // One lease per subscriber. A retiring flight refuses the join, and the read starts again.
     let lease: ReadLease | undefined;
     try {
@@ -237,7 +238,7 @@ export class Publications {
       // nobody would read again: the host re-evaluates a raced read itself. A slot that retains a
       // Value keeps the labelled old Value and its publication event instead.
       // ponytail: three evaluations, no backoff; an input that outruns the read is a lasting refusal.
-      const settle = async (left: number): Promise<Value<O>> => {
+      const settle = async (left: number): Promise<Value<unknown>> => {
         try {
           return await evaluate(definition, args, tracked);
         } catch (error) {
@@ -293,11 +294,11 @@ export class Publications {
       const retained = previous?.value
         ? immutable({ ...previous.value, freshness: "refresh-needed" as const })
         : null;
-      const result: Publication<O> = immutable({
+      const result: Publication<unknown> = immutable({
         key: previous?.key ?? key,
         generation,
         version: previous?.version ?? 0,
-        value: retained as Value<O> | null,
+        value: retained,
         state: "refresh-needed",
         reason: error instanceof Error ? error.message : String(error),
       });

@@ -1,6 +1,6 @@
-import { readFindings } from "../route/host";
+import { peReadings, type Readings } from "#/host/resource-stream";
 import { findingCommand } from "../route/slots/findings/index.ts";
-import { FINDINGS_DOORS, FINDINGS_OWNER, type Finding } from "@pe/agent-contracts/slots";
+import { FINDINGS_OWNER, findingsWorkSchema, type Finding } from "@pe/agent-contracts/slots";
 import { hostReadSource } from "./host-read-source.ts";
 import { z } from "zod";
 import { readableRefusal } from "../route/readable-refusal";
@@ -70,7 +70,7 @@ const inFlight = (snapshot: Snapshot) => snapshot.state === "reading" || snapsho
 
 /** Typed routes execute declarations directly. No graph admission, body slots or reading scheduler. */
 export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerprint: RouteFingerprint,
-  ports: { work?: WorkJournalDoor; sources?: Record<string, UseSource>; findings?: Parameters<typeof readFindings>[1]; timeline?: TimelineClient } = {}) {
+  ports: { work?: WorkJournalDoor; sources?: Record<string, UseSource>; findings?: Parameters<typeof createTimelineClient>[0]; timeline?: TimelineClient; readings?: Pick<Readings, "subscribe"> } = {}) {
   const cleanups: (() => void)[] = [];
   try {
   // Every route carries the kernel's one command, the person's `finding` (ADR 0035 rule 9); a route's own
@@ -142,7 +142,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
       const result = await timelineClient.step({ direction, works: timelineWorks(), expected });
       if (!disposed && input.custody.current()) {
         if (result) connectTimeline();
-        loadFindings();
+        watchFindings();
       }
       return result;
     } catch (error) { return { message: error instanceof Error ? error.message : String(error) }; }
@@ -421,25 +421,34 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
       return {ready:true,refusal:null,label:ids.length===1?options.find(o=>o.id===ids[0])!.label:ids.length?`${ids.length} ${spec.subject?.noun ?? "Subject"}s`:"",link:`${module.data.address}?${link}`};
     } catch { return refused(`${spec.subject?.noun ?? "Subject"} is malformed`); }
   };
-  // The document's findings Work (ADR 0035 rule 9), for the kernel's picture pane: read on first ask, when the
-  // route's Work key arrives, after this Place's own finding write or undo, and on refresh. The key is the one the
-  // findings history door uses: the route's own document-bound Work key, as the host resolved it; a route whose
-  // Work is keyed by a member, or that keeps none, binds the document itself.
-  // ponytail: Pea's write shows on the next of those; subscribe the findings Work's acks if it must show at once.
-  let findings: readonly Finding[] = [], findingsAt: string | null = null, findingsRead = 0;
+  // The document's findings Work (ADR 0035 rule 9), for the kernel's drawing: the host's `work` Reading of the
+  // findings key, subscribed on first ask and again when the key changes. Pea's write and a person's arrive the
+  // same way, with no reload. The key is the one the findings history door uses: the route's own document-bound
+  // Work key, as the host resolved it; a route whose Work is keyed by a member, or that keeps none, binds the
+  // document itself.
+  let findings: readonly Finding[] = [], findingsAt: string | null = null, stopFindings = () => {};
+  cleanups.push(() => stopFindings());
   const findingsKey = () => (!edits?.key && owners.get(own)?.handle?.key)
     || (input.work.address || input.work.open ? bindWork(FINDINGS_OWNER, input.work.address, undefined, input.work.open ?? undefined) : null);
-  const loadFindings = () => {
-    const key = findingsKey();
-    if (findingsAt === null || input.fixture !== null || input.history || !key) return;
-    findingsAt = workKey(key);
-    // Only the newest read lands; a read the host fails keeps what the pane shows and is a fault.
-    const read = ++findingsRead;
-    void readFindings(key, ports.findings).then((answer) => {
-      if (disposed || read !== findingsRead) return;
-      if (!answer) throw Error("The host did not answer the findings read");
-      findings = answer; notify();
-    }).catch((error) => reportFault({ code: "reading.failed", routeCode: spec.key, readingKind: FINDINGS_OWNER }, error));
+  const watchFindings = () => {
+    const key = findingsKey(), at = key ? workKey(key) : "";
+    if (findingsAt === at) return;
+    findingsAt = at; findings = []; stopFindings(); stopFindings = () => {};
+    if (input.fixture !== null || input.history || !key) return;
+    const fault = (error: unknown) => reportFault({ code: "reading.failed", routeCode: spec.key, readingKind: FINDINGS_OWNER }, error);
+    // A frame can arrive inside `subscribe`, while a pane is drawing: that value is returned, never notified.
+    let subscribing = true;
+    stopFindings = (ports.readings ?? peReadings).subscribe({ ...key, route: FINDINGS_OWNER, kind: "work" }, (frame) => {
+      if (disposed) return;
+      if (frame.kind === "failure") return fault(Error(frame.error));
+      if (frame.kind !== "snapshot") return;
+      // No findings Work yet reads as null: none said. One that does not decode keeps what is drawn and is a fault.
+      const parsed = z.object({ doc: findingsWorkSchema }).nullable().safeParse(frame.value);
+      if (!parsed.success) return fault(parsed.error);
+      findings = parsed.data ? Object.values(parsed.data.doc.findings) : [];
+      if (!subscribing) notify();
+    });
+    subscribing = false;
   };
   const results = new Map<string,unknown>();
   const pending = new Set<string>();
@@ -469,7 +478,6 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
         if (queryPage && (disposed || !input.custody.current() || gate.read()?.pageEpoch !== queryPage))
           throw Error("This read finished for an earlier Page; run it again");
         results.set(id,result); syncReads(true);
-        if (cmd.entry === FINDINGS_DOORS.write) loadFindings();
         return result;
       } catch(error) {
         // A request or an answer its contract refuses reads as one sentence, as a Value does (`valueRefusal`);
@@ -574,7 +582,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
         run:(supplied)=>perform(false,supplied),plan:()=>perform(),apply:()=>perform(true),
         cancel:()=>mounted.cancel(id),read:()=>mounted.review(id)};
     },
-    findings: () => { const key = findingsKey(); if (findingsAt !== (key ? workKey(key) : "")) { findingsAt = ""; loadFindings(); } return findings; },
+    findings: () => { watchFindings(); return findings; },
     stopCommand: (id:string) => {requireWritable();return cancelAction(id);},
     attention: {
       write: (page:object) => Object.fromEntries(Object.keys(spec.fields).map(key=>[key,JSON.stringify((page as Record<string,unknown>)[key])])),
@@ -629,7 +637,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     },
     // A named read refreshes with the rest: every read is demanded at mount.
     refresh: (_read?:import("../route/host-read").HostRead) => {
-      requireCurrent(); syncReads(true); loadFindings();
+      requireCurrent(); syncReads(true);
     }, run, result:(id:string)=>results.get(id),
     review: (id: string) => { const r=reviews.get(id)??applyingReviews.get(id); if(!r) return null;
       const stale = !reviewCurrent(id, r.token, r.signature);

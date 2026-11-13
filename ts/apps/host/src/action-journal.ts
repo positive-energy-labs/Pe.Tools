@@ -966,6 +966,8 @@ export class ActionJournal implements ReceiptReader {
         return { read: workspace.read.bind(workspace), view: workspace.view.bind(workspace), publish: owner.publish.bind(owner) };
       },
       consumed,
+      clock: { now: () => new Date(this.now()).toISOString() },
+      ids: { mint: randomUUID },
       selectWork: async (spec, handle, select) => {
         if (handle.key.route !== spec.route)
           throw refused("Work belongs to another tool", "work.route");
