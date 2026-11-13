@@ -128,7 +128,7 @@ const actions: Action[] = [
     name: "pickDocument",
     skipWhen: async ({ page }) => {
       const v = await idle(page);
-      return !!v && !v.unbound && new URL(v.url).searchParams.has("target");
+      return !!v && !v.unbound;
     },
     can: async ({ page }) => { const v = await idle(page); return !!v && v.unbound && !v.picker && (await page.has("Choose a document", R("Situation"))); },
     async act(c) {
@@ -306,7 +306,10 @@ const rules: Rule[] = [
           const members = g.querySelectorAll("[data-fitting]").length;
           if (members !== (count[1] === "Hide" ? Number(count[2]) : 0)) return `${name}: ${members} members drawn`;
           if (g.getAttribute("data-fitting-source") === "not priced") {
-            const reason = (button?.nextElementSibling as HTMLElement | null)?.innerText ?? "";
+            const reason = [...g.querySelectorAll("span")]
+              .filter((e) => e.getClientRects().length)
+              .map((e) => e.innerText.trim())
+              .find((text) => /^not priced \/ .+/.test(text)) ?? "";
             const warning = (g.querySelector('[data-tone="alarm"]') as HTMLElement | null)?.innerText ?? "";
             if (!/^[1-9]\d* not priced$/.test(warning) || !/not priced \/ .+/.test(reason)) return `unpriced group: ${warning}, reason ${reason}`;
           }
