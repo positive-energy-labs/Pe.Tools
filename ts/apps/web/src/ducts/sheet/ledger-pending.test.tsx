@@ -56,7 +56,7 @@ test("a Work ESP is labelled by its resolved source, never as a Revit write", ()
   expect(view.container.querySelector(FANS_LEDGER_ESP)?.textContent).toBe("2.6581");
   inputs.units[String(sheet.overview.fan.unitId)]!.esp = {
     value: 1.25,
-    source: "Revit",
+    source: "model",
     units: "in-wg",
     version: 5,
     status: "valid",
