@@ -13,7 +13,6 @@ test("the Pod read door imports only zod and effect-free subpaths", () => {
     "@pe/agent-contracts/tiered-setting", // Imports only zod, already admitted by this door.
     "@pe/agent-contracts/native-output-read",
     "@pe/host-contracts/catalog",
-    "@pe/host-contracts/native-schemas",
     "type @pe/agent-contracts/handle", // Types only: the mints import the command table, the door does not.
     "type @pe/host-contracts/operation-types",
     "type ./evaluator.ts",

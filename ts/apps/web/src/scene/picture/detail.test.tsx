@@ -8,7 +8,7 @@ it("discloses generated read cost and padding, and acquires only on a click", ()
   const onRead = vi.fn();
   const metadata = {
     effectiveContextPaddingFt: 5,
-    stamp: {
+    evidence: {
       geometryCost: {
         plannedCount: 12,
         newlyTessellatedCount: 7,

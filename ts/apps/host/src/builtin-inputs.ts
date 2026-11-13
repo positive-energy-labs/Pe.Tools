@@ -27,7 +27,8 @@ import {
 } from "./input-occurrence.ts";
 import type { TakingObserver } from "./native-recording.ts";
 import { inputPort, type ReadSources } from "./reads/inputs.ts";
-import { Publications, fingerprint } from "./reads/evaluator.ts";
+import { fingerprint } from "./reads/evaluator.ts";
+import { Publications } from "./reads/publications.ts";
 import { History, localHistory } from "./reads/history.ts";
 import { historyRoutes } from "./reads/history-routes.ts";
 import { historyPoseSchema, addressSchema, sameAddress } from "@pe/agent-contracts";

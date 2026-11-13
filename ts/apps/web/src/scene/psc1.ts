@@ -12,7 +12,7 @@ import { spaceElementKey } from "@pe/agent-contracts";
 
 /** The artifact's metadata, as the op declares it. */
 export type Psc1Metadata = RevitDetailSpaceScene.Artifact.SceneMetadata;
-export const SCENE_FORMAT = "space-scene-v5";
+export const SCENE_FORMAT = "space-scene-v6";
 
 type SceneBoxFrame = RevitDetailSpaceScene.Artifact.SceneBoxFrame;
 const BOX_FRAMES = { bounds: true, symbol: true, triangles: true, link: true } satisfies Record<
@@ -147,7 +147,7 @@ export function decodeScene(buffer: ArrayBuffer): { metadata: Psc1Metadata; mesh
   )
     throw Error("Invalid scene completeness metadata");
   if (
-    metadata.stamp?.frame !== "host-internal-ft" ||
+    metadata.evidence?.frame !== "host-internal-ft" ||
     !Number.isInteger(metadata.triangles) ||
     metadata.triangles < 0 ||
     !validBounds(metadata.bounds) ||
@@ -180,7 +180,7 @@ export function decodeScene(buffer: ArrayBuffer): { metadata: Psc1Metadata; mesh
     return {
       key: spaceElementKey({
         uniqueId: h.uniqueId,
-        hostDocumentKey: metadata.stamp.hostDocumentKey,
+        hostDocumentKey: metadata.evidence.documentKey,
         linkInstanceUniqueId: h.linkInstanceUniqueId,
       }),
       // A linked element's id means nothing to the host document's selection.

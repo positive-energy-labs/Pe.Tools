@@ -1,4 +1,5 @@
 import { targetHomes } from "./call-route.ts";
+import { readPlaces, writePlaces } from "./places.ts";
 import { workKeySchema as mountedWorkKeySchema } from "@pe/agent-contracts";
 import type { DocumentRef, Receipt } from "@pe/agent-contracts";
 import { held, heldSendRequestSchema } from "@pe/agent-contracts";
@@ -441,6 +442,8 @@ export function createPeRoutes(options: PeRoutesOptions) {
       if (!read) return json({ error: "Host read graph is unavailable" }, 503);
       return json(await read(await request.json()));
     }
+    if (declared.id === "places.get") return json(readPlaces());
+    if (declared.id === "places.put") return json(writePlaces(await request.json()));
     if (declared.id === "ducts.analysis" || declared.id === "ducts.analysis-artifact") {
       if (!options.ductsAnalysis) return json({ error: "Ducts analysis is unavailable" }, 503);
       try {

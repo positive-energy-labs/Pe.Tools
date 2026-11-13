@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { expect, test } from "vite-plus/test";
 import fixture from "./fixtures/chadds-flat-overview.json";
-import { decodeScene } from "./psc1";
+import { decodeScene, SCENE_FORMAT } from "./psc1";
 import { primitiveEdges, instancePositions } from "./primitives";
 import { prepareGeometry } from "./prepare-geometry";
 import { prepareFaceBatches } from "./face-batches";
@@ -9,6 +9,9 @@ import { createFacePicker } from "./picking";
 
 // Raw PSC1 wire inputs, not an assertion into production metadata types.
 function artifact(metadata: unknown) {
+  // Synthetic v6 envelope for historical geometry; no production migration path.
+  metadata = { ...(metadata as object), format: SCENE_FORMAT,
+    evidence: { documentKey: fixture.metadata.stamp.hostDocumentKey, frame: "host-internal-ft" } };
   const json = new TextEncoder().encode(JSON.stringify(metadata));
   const offset = Math.ceil((8 + json.length) / 4) * 4;
   const buffer = new ArrayBuffer(offset);
