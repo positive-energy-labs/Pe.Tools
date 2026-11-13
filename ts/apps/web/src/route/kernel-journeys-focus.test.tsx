@@ -1934,8 +1934,11 @@ test("JZ audit Schedules keyed edits preserve a sibling stale mark and narrow in
   });
   const work: WorkJournalDoor = { ...native, open: () => ({ subscribe(deliver) {
     let closed = false;
-    void host.view().then(state => { if (!closed) deliver({ kind: "ready", history: { from: 0, acks: [] }, snapshot: { handle: { key: host.scope, revision: state.revision }, revision: state.revision, value: state.doc } }); });
-    return () => { closed = true; };
+    const stop = host.observeWork(host.scope,
+      () => { void host.view().then(state => { if (!closed) deliver({ kind: "ready", history: { from: 0, acks: [] }, snapshot: { handle: { key: host.scope, revision: state.revision }, revision: state.revision, value: state.doc } }); }); },
+      ack => { if (!closed) deliver({ kind: "ack", ack }); },
+      error => { throw error; });
+    return () => { closed = true; stop(); };
   } }) };
   // Keep the real schemas while bounding TypeScript's recursive JSON-schema expansion.
   const spec = (schedules as TypedRoute).spec;
