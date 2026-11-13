@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { routeDirectory } from "../../../agent-contracts/src/generated/route-directory.ts";
 import {
   capabilityPrincipals,
   nativePrincipals,
@@ -47,9 +48,41 @@ export function dynamicCapabilityProvider(sources: CapabilitySources): Capabilit
   return [
     ...podCapabilities(),
     // V3: every admitted route's Work is a Pea door, builtin or Pod; a builtin registration already listed is not repeated.
-    ...[...sources.routes, ...(sources.admittedRoutes?.() ?? []).flatMap((view) =>
-      view.work && !sources.routes.some((spec) => spec.route === view.work!.route) ? [view.work] : [])].flatMap(routeRows),
+    ...[
+      ...sources.routes,
+      ...(sources.admittedRoutes?.() ?? []).flatMap((view) =>
+        view.work && !sources.routes.some((spec) => spec.route === view.work!.route)
+          ? [view.work]
+          : [],
+      ),
+    ].flatMap(routeRows),
     ...viewRoutes(sources.admittedRoutes?.() ?? []).flatMap(routeViewRows),
+    ...[
+      ...new Set([
+        ...routeDirectory.map((row) => row.key),
+        ...(sources.admittedRoutes?.() ?? []).map((row) => row.key),
+      ]),
+    ]
+      .filter(
+        (key) =>
+          !sources.routes.some((route) => route.route === key) &&
+          !(sources.admittedRoutes?.() ?? []).some((row) => row.work?.route === key),
+      )
+      .map(
+        (key): Capability => ({
+          key: `route:${key}`,
+          kind: "route-doc",
+          title: key,
+          description: `Read the current ${key} route graph, field schemas and verb input schemas from the host.`,
+          needs: "nothing",
+          effect: "query",
+          mutates: false,
+          principal: capabilityPrincipals(false),
+          input: {},
+          source: "route graph",
+          rank: 1,
+        }),
+      ),
     ...sources.packages.flatMap(packageRows),
     ...sources.skills.map(skillRow),
     ...(sources.pages ?? []),
@@ -74,10 +107,7 @@ export function opRow(op: OpsCatalogEntry): Capability {
     needs: op.needs === "nothing" && !isTsOnlyOperationKey(op.key) ? "session" : op.needs,
     effect: opWrites(op) ? "command" : "query",
     mutates: opWrites(op),
-    principal: capabilityPrincipals(
-      opWrites(op),
-      op.principal ?? nativePrincipals(op.actor),
-    ),
+    principal: capabilityPrincipals(opWrites(op), op.principal ?? nativePrincipals(op.actor)),
     input: parseSchema(op.requestSchemaJson),
     output: op.responseSchemaJson ? parseSchema(op.responseSchemaJson) : undefined,
     source: "catalog",
@@ -91,12 +121,20 @@ function routeViewRows({ key: route, title, fields: admitted, builtin }: ViewRou
   // An admitted route projects its keys from the admitted graph's agent policy; the browser owner
   // holds the codecs, so each settable key is the text the view shows (ADR 0030 rule 10).
   const settable = admitted && agentFields(admitted, "set").map(([key]) => key);
-  const { policy, words, keys, fields, finds = [] } = settable
+  const {
+    policy,
+    words,
+    keys,
+    fields,
+    finds = [],
+  } = settable
     ? {
         policy: "Read the view, then patch a key in the form the view shows it.",
         words: undefined,
         keys: agentFields(admitted!).map(([key]) => key),
-        fields: z.object(Object.fromEntries(settable.map((key) => [key, z.string()]))),
+        fields: z.object(
+          Object.fromEntries(settable.map((key) => [key, spec?.fields.shape[key] ?? z.string()])),
+        ),
         finds: spec ? spec.finds : [],
       }
     : spec!; // `viewRoute` gives a route without admitted fields only for a builtin address.
@@ -155,7 +193,7 @@ function routeRows(spec: RouteStateSpec<z.ZodType>): Capability[] {
     key: `route:${spec.route}`,
     kind: "route-doc",
     title: spec.title,
-    description: `Read the ${spec.title} document you co-edit with the user: current doc, revision and handle. Pass input {schema: true} only when you need its JSON Schema. ${spec.description} ${scopeHint}`,
+    description: `Read the ${spec.title} document you co-edit with the user: current doc, revision, handle and host route graph with real field and verb input schemas. Pass input {schema: true} only when you need its JSON Schema. ${spec.description} ${scopeHint}`,
     needs: "nothing",
     effect: "query",
     mutates: false,

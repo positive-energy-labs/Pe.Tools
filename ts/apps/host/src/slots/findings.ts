@@ -137,7 +137,7 @@ export const findingsExecutors = (workspace: RouteWorkspace | undefined, bridge:
     [say]: command(commands[say], commands[say].input.required({ work: true }), {
       bind: (ctx) => binding(ctx, ctx.admission),
       run: (ctx, execution) =>
-        step(say, ctx, execution as ActionExecution, async (workspace, by) => {
+        step(say, ctx, execution, async (workspace, by) => {
           const { work, verdict, ...said } = execution.prepared;
           const stamp = { by, at: ctx.clock.now() };
           // The door's input already refused a verdict its kind does not admit; the record has no shape for one.
@@ -156,7 +156,7 @@ export const findingsExecutors = (workspace: RouteWorkspace | undefined, bridge:
     [rule]: command(commands[rule], commands[rule].input.required({ work: true }), {
       bind: (ctx) => binding(ctx, ctx.admission),
       run: (ctx, execution) =>
-        step(rule, ctx, execution as ActionExecution, async (workspace, by) => {
+        step(rule, ctx, execution, async (workspace, by) => {
           const { work, id, value } = execution.prepared;
           const finding = await one(ctx.work, work.key, id);
           if (value !== null && !admitsVerdict(finding.kind, value))
@@ -171,7 +171,7 @@ export const findingsExecutors = (workspace: RouteWorkspace | undefined, bridge:
     [retract]: command(commands[retract], commands[retract].input.required({ work: true }), {
       bind: (ctx) => binding(ctx, ctx.admission),
       run: (ctx, execution) =>
-        step(retract, ctx, execution as ActionExecution, async (workspace, by) => {
+        step(retract, ctx, execution, async (workspace, by) => {
           const { work, id } = execution.prepared;
           const finding = await one(ctx.work, work.key, id);
           return write(workspace, work, by, ctx, `retract ${finding.kind} ${id}`, { path: ["findings", id] });

@@ -14,7 +14,8 @@ import {
 } from "@pe/host-contracts/kinds";
 import { hostState } from "./host-ownership.ts";
 import { admitPodArtifact, loadPodHostEntry, verifyPodArtifact } from "./pod-artifact.ts";
-import { registeredReads } from "./reads/routes.ts";
+import { registeredReads, routeDeclarationRead } from "./reads/routes.ts";
+import { RouteGraphWire } from "../../../packages/agent-contracts/src/route-kernel-data.ts";
 
 /** Builtin source admission and verified Pod-byte admission share this host-owned door.
  * The caller supplies the exact authenticated handle, never a browser schema or migration. */
@@ -32,7 +33,13 @@ export function registerAdmittedHostRoute(
     if (captured) {
       const bindings = host ?? captured.bindings;
       unregister = registeredReads.register(
-        "reads" in bindings ? bindings.reads : undefined,
+        {
+          ...("reads" in bindings ? bindings.reads : {}),
+          [`route:${route.data.key}`]: routeDeclarationRead({
+            data: RouteGraphWire.parse(route.data),
+            schemas: captured.bindings.schemas,
+          }),
+        },
         "leaves" in bindings ? bindings.leaves : undefined,
       );
     }

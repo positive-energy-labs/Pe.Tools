@@ -23,8 +23,11 @@ import { readLines } from "@pe/host-contracts/kinds";
 function homeHistory() {
   const root = mkdtempSync(join(tmpdir(), "pe-tier-history-"));
   vi.stubEnv("PE_TOOLS_PRODUCT_HOME", root);
-  mkdirSync(join(root, "Settings"), { recursive: true });
-  const path = join(root, "Settings", "ducts.json");
+  const firm = join(root, "firm");
+  vi.stubEnv("PE_TOOLS_SHARED_ROOT", firm);
+  mkdirSync(join(firm, "Settings"), { recursive: true });
+  writeFileSync(join(firm, "pe-home.json"), JSON.stringify({ tier: "firm" }));
+  const path = join(firm, "Settings", "ducts.json");
   writeFileSync(path, '{"designFriction":0.07}');
   const owner = journalAt(join(root, "actions.json"), Date.now);
   const registrations = [{ spec: { route: "ducts", title: "Ducts", description: "Proof", schema: z.object({}) } }];
@@ -36,9 +39,9 @@ function homeHistory() {
     path,
     read: () => timeline.read(works, "human"),
     save(value: number) {
-      const wrote = tiers.writeSettingTier({ owner: "ducts", tier: "user", path: ["designFriction"], value, expectedSha256: sha256Hex(readFileSync(path)) }, { caller: human });
+      const wrote = tiers.writeSettingTier({ owner: "ducts", tier: "firm", path: ["designFriction"], value, expectedSha256: sha256Hex(readFileSync(path)) }, { caller: human });
       if (!wrote.ok) throw Error(wrote.message);
-      const row = tiers.homeWriteSource.rows({ owner: "ducts", homes: [root] }).findLast(row => row.path === path && row.sha256 === wrote.sha256);
+      const row = tiers.homeWriteSource.rows({ owner: "ducts", homes: [firm] }).findLast(row => row.path === path && row.sha256 === wrote.sha256);
       if (!row) throw Error("Expected the saved home row");
       return { home: path, sha256: wrote.sha256, label: row.place };
     },
@@ -105,6 +108,10 @@ test("home Timeline refuses undo when the prior blob is missing", async () => {
 test("Pea's first home write records its caller and refuses undo with a reason, keeping the file", async () => {
   const root = mkdtempSync(join(tmpdir(), "pe-tier-first-"));
   vi.stubEnv("PE_TOOLS_PRODUCT_HOME", root);
+  const firm = join(root, "firm");
+  vi.stubEnv("PE_TOOLS_SHARED_ROOT", firm);
+  mkdirSync(firm, { recursive: true });
+  writeFileSync(join(firm, "pe-home.json"), JSON.stringify({ tier: "firm" }));
   const owner = journalAt(join(root, "actions.json"), Date.now);
   const server = await serveRoutes(callRouteOver(owner, captureStore(join(root, "captures"))).pipe(Layer.provide(testHostInputs)), detachedBridge());
   const caller = approvedPea("tier-first");
@@ -113,7 +120,7 @@ test("Pea's first home write records its caller and refuses undo with a reason, 
     const headers = { "content-type": "application/json", ...contextHeaders({ kind: "pea", thread: caller.thread, run: caller.run, root: caller.root }) };
     const id = randomUUID();
     const posted = await fetch(`${server.base}/actions`, { method: "POST", headers, body: JSON.stringify({ id, key: "settings.tiers.write", target: { kind: "host" },
-      input: { owner: "ducts", tier: "user", path: ["designFriction"], value: 0.08, expectedSha256: null } }) });
+      input: { owner: "ducts", tier: "firm", path: ["designFriction"], value: 0.08, expectedSha256: null } }) });
     expect(posted.status, await posted.clone().text()).toBeLessThan(300);
     const [receipt] = await (await fetch(`${server.base}/actions?id=${id}&wait=10000`, { headers })).json();
     expect(receipt).toMatchObject({ state: "succeeded", result: { priorSha256: null } });

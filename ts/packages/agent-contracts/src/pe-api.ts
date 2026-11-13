@@ -501,12 +501,12 @@ function routedCommandAxes(route: PeRouteId): Declaration {
   const rows = Object.entries(commandTable).filter(([, row]) => row.via !== "command" && row.via.route === route);
   if (!rows.length) throw Error(`No commands declare route ${route}`);
   const axes = rows.map(([, row]) => row.axes);
-  const subjects = [...new Set(axes.map((row) => row.subject))];
+  const [subject, ...others] = new Set(axes.map((row) => row.subject));
   const effects = ["Read", "TransactRead", "SessionWrite", "WorkWrite", "ModelWrite"];
   const costs = ["Cheap", "Bounded", "Expensive", "Mutation"];
   const effect = axes.map((row) => row.effect).reduce((a, b) => effects.indexOf(a) >= effects.indexOf(b) ? a : b);
   return {
-    subject: subjects.length === 1 ? subjects[0]! : "Session",
+    subject: subject !== undefined && !others.length ? subject : "Session",
     touches: [...new Set(axes.flatMap((row) => row.touches))],
     effect,
     cost: axes.map((row) => row.cost).reduce((a, b) => costs.indexOf(a) >= costs.indexOf(b) ? a : b),

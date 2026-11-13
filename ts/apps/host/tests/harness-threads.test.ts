@@ -55,6 +55,7 @@ import { createUpdateReader, type UpdateRunner } from "../src/update-reader.ts";
 import type { Envelope } from "@pe/host-contracts/pe-revit-contract";
 import { sdkBinary, sdkCommand } from "./sdk-replay.ts";
 import { commandRegistry } from "../src/command-registry.ts";
+import { recordNativeTerminal } from "../src/action-dispatch.ts";
 import { createPeRoutes, fileRouteDocumentStore } from "../src/pe-routes.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
 import { sdkSessions } from "./native-receipt-fixture.ts";
@@ -240,6 +241,9 @@ test.each(["claude", "codex"] as const)(
               storeRevision: 1,
               systemsAfter: [],
             };
+            // Explicit terminal evidence for this controlled fixture, never inferred from the catalog.
+            await recordNativeTerminal(requestId!, preview ? { kind: "none" }
+              : { kind: "wrote", transactions: ["Apply equipment flow"], added: 0, modified: 1, deleted: 0 });
           } else throw Error(`Unexpected bridge op ${op}`);
           return { value, target: { session: "A", document: address, documentRef: target } };
         });
@@ -426,7 +430,7 @@ test.each(["claude", "codex"] as const)(
       expect(await journal.wait("apply")).toMatchObject({
         state: "succeeded",
         steps: [
-          { kind: "native", state: "succeeded", dispatchedAt: expect.any(String) },
+          { kind: "native", state: "succeeded", dispatchedAt: expect.any(String), touched: { kind: "wrote", modified: 1 } },
           { kind: "publication", state: "succeeded" },
         ],
       });

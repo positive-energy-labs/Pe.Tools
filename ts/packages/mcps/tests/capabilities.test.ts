@@ -24,14 +24,14 @@ import { commands } from "@pe/agent-contracts";
 import { fakeRuntimeHost } from "./runtime-host-fixture.ts";
 import { createServer } from "node:http";
 import { once } from "node:events";
-import bindGraph from "../src/pea/generated/bind-graph.json" with { type: "json" };
-import opsGraph from "../src/pea/generated/ops-graph.json" with { type: "json" };
-import { RouteGraphJson } from "../../agent-contracts/src/route-kernel-data.ts";
 import { createHash } from "node:crypto";
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
 import { contextFetch, withInvocationContext } from "@pe/runtime/context";
 import { createMcpDoor } from "../../../apps/host/src/mcp-route.ts";
+import { projectRouteRead } from "../../../apps/host/src/reads/routes.ts";
+import { routeRegistry } from "../../../apps/host/src/routes.generated.ts";
+import { z } from "zod";
 import {
   admitCrossing,
   bindControl,
@@ -67,6 +67,18 @@ const packages: PackageProjection[] = [
   },
 ];
 const admittedSkills = builtinPeaSkillSnapshots();
+
+test("host route read joins the fans field and losses input to their real schemas", () => {
+  const host = routeRegistry.fans!.host;
+  const graph = projectRouteRead(host);
+  const fan = host.data.fields.fan!;
+  if (!("schema" in fan)) throw Error("fans must declare its field schema");
+  expect(graph.fields.fan).toMatchObject({
+    schema: z.toJSONSchema(host.schemas[fan.schema]!, { io: "input" }),
+  });
+  expect(graph.verbs.losses!.input).toEqual(z.toJSONSchema(commands["sheet.apply"].input));
+  expect(() => projectRouteRead({ ...host, schemas: {} })).toThrow("missing field schema");
+});
 
 function catalog(): CapabilityCatalog {
   return {
@@ -239,7 +251,7 @@ test.each(["http", "stdio"])(
           reads.push({ key, ref });
           return key === "revit.context.view-image"
             ? Response.json(
-                { view: { label: "User view" }, byteSize: image.length, width: 1500, height: 1500 },
+                { view: { label: "User view" }, lens: { basis: "UserView", viewId: 1 }, hidden: [], byteSize: image.length, width: 1500, height: 1500 },
                 { headers: { "x-pe-capture-id": "f-a", "x-pe-capture-url": capturePath } },
               )
             : Response.json({ families: 3 });
@@ -507,7 +519,14 @@ test("Pea discovers the sheet plan, decodes any route's handle, and previews Duc
       "fans",
       "human",
       [
-        { path: ["flows", elementSubject(capturedWalk.nodes.find((node) => node.id === 8718801)!), "edit"], value: { value: { cfm: 250 } } },
+        {
+          path: [
+            "flows",
+            elementSubject(capturedWalk.nodes.find((node) => node.id === 8718801)!),
+            "edit",
+          ],
+          value: { value: { cfm: 250 } },
+        },
       ],
       0,
     );
@@ -532,7 +551,13 @@ test("Pea discovers the sheet plan, decodes any route's handle, and previews Duc
       if (path === "/ops") return Response.json({ operations: [] });
       return path.startsWith("/pe/")
         ? f.api.fetch(request)
-        : f.request(request, { kind: "pea", context: "context-t1", thread: "t1", run: peaRun, root: peaRun });
+        : f.request(request, {
+            kind: "pea",
+            context: "context-t1",
+            thread: "t1",
+            run: peaRun,
+            root: peaRun,
+          });
     });
     const head: Head = {
       thread: "t1",
@@ -585,14 +610,22 @@ test("an exact-open turn Target reads and writes route Work under its document's
     // The host Timeline's read: the step it offers Pea for the Works the tool names.
     if (url.pathname === "/pe/reads/value") {
       timelineReads.push(JSON.parse(String(init?.body)));
-      return Response.json({ value: { data: { rows: [], undo: step, redo: null, refusal: { undo: null, redo: null } } } });
+      return Response.json({
+        value: { data: { rows: [], undo: step, redo: null, refusal: { undo: null, redo: null } } },
+      });
     }
     if (!url.pathname.includes("/route-state/")) throw Error(`unexpected ${url.pathname}`);
     routeCalls.push(url);
     if (url.pathname.endsWith("/history")) historyBodies.push(JSON.parse(String(init?.body)));
     if (url.pathname.endsWith("/apply")) revision++;
     return url.searchParams.get("target") === projectA
-      ? Response.json({ route: "families", revision, handle: { key: familiesWork, revision }, doc: {}, ok: true })
+      ? Response.json({
+          route: "families",
+          revision,
+          handle: { key: familiesWork, revision },
+          doc: {},
+          ok: true,
+        })
       : Response.json({ error: "unknown route 'families'" }, { status: 404 });
   });
   const open: Head = {
@@ -637,7 +670,10 @@ test("an exact-open turn Target reads and writes route Work under its document's
     expect(routeCalls.at(-1)!.pathname).toBe("/pe/route-state/families/history");
     expect(routeCalls.at(-1)!.searchParams.get("target")).toBe(projectA);
     expect(historyBodies).toEqual([{ direction: "undo", works: [familiesWork], expected: step }]);
-    expect(timelineReads.find((read) => !read.release)).toMatchObject({ read: "work.timeline", args: { works: [familiesWork] } });
+    expect(timelineReads.find((read) => !read.release)).toMatchObject({
+      read: "work.timeline",
+      args: { works: [familiesWork] },
+    });
     routeCalls.splice(-2);
 
     // A Chat document that closed has no Address to key by: refuse, never read Target-less Work.
@@ -674,7 +710,16 @@ test("a linked catalog route dispatches through its declared transport whatever 
     called.push(`${init?.method ?? "GET"} ${url.pathname}`);
     return Response.json({ rows: [] });
   });
-  const done = (await run(peDo, { key: "route:reads.value", input: { read: "fans.roster", args: { target: { session: "b1", openId: "A" } }, subscription: "presentation-kind", generation: 0 }, timeoutSeconds: 30 })) as {
+  const done = (await run(peDo, {
+    key: "route:reads.value",
+    input: {
+      read: "fans.roster",
+      args: { target: { session: "b1", openId: "A" } },
+      subscription: "presentation-kind",
+      generation: 0,
+    },
+    timeoutSeconds: 30,
+  })) as {
     ok: boolean;
     result: unknown;
   };
@@ -699,6 +744,8 @@ test("ADR 0021: a thread with several targets refuses a call with no override; a
       return Response.json({ ok: true, revision: 3, doc: {} });
     }
     const body = JSON.parse(typeof init?.body === "string" ? init.body : "{}");
+    if (url.pathname === "/pe/reads/value" && body.read?.startsWith("route:"))
+      return Response.json({ value: { data: projectRouteRead(routeRegistry[body.read.slice(6)]!.host) } });
     if (body.key === "bridge.sessions.list")
       return Response.json({
         sessions: [
@@ -962,29 +1009,48 @@ test("Pea dispatches roster and sheet through the registered read door without a
     if (path === "/pe/capabilities") return Response.json(catalog());
     const request = JSON.parse(init?.body as string);
     if (path === "/pe/reads/value" && request.read === "fans.roster") {
-      expect(request).toEqual({ read: "fans.roster", args: { target }, subscription: "pea-roster", generation: 0 });
+      expect(request).toEqual({
+        read: "fans.roster",
+        args: { target },
+        subscription: "pea-roster",
+        generation: 0,
+      });
       return Response.json({ target, rows: [] });
     }
     if (path === "/pe/reads/value" && request.read === "ducts.sheet") {
-      expect(request).toMatchObject({ read: "ducts.sheet", subscription: "pea-sheet", generation: 0, args: {
-        target,
-        mode: "fan",
-        unitId: 14577391,
-        portIndex: 2,
-      } });
+      expect(request).toMatchObject({
+        read: "ducts.sheet",
+        subscription: "pea-sheet",
+        generation: 0,
+        args: {
+          target,
+          mode: "fan",
+          unitId: 14577391,
+          portIndex: 2,
+        },
+      });
       if (fail) return Response.json({ error: "Stale sheet basis" }, { status: 409 });
       return Response.json({ target, kind: "overview", mode: "fan", basis: "observation" });
     }
     throw Error(`Unexpected guide request ${path}`);
   });
   expect(
-    await run(peRead, { key: "route:reads.value", input: { read: "fans.roster", args: { target }, subscription: "pea-roster", generation: 0 }, timeoutSeconds: 30 }),
+    await run(peRead, {
+      key: "route:reads.value",
+      input: { read: "fans.roster", args: { target }, subscription: "pea-roster", generation: 0 },
+      timeoutSeconds: 30,
+    }),
   ).toMatchObject({
     ok: true,
     target: { session: "s1", document: "open-1" },
     result: { rows: [] },
   });
-  const input = { read: "ducts.sheet", args: { target, mode: "fan", unitId: 14577391, portIndex: 2 }, subscription: "pea-sheet", generation: 0 };
+  const input = {
+    read: "ducts.sheet",
+    args: { target, mode: "fan", unitId: 14577391, portIndex: 2 },
+    subscription: "pea-sheet",
+    generation: 0,
+  };
   expect(await run(peRead, { key: "route:reads.value", input, timeoutSeconds: 30 })).toMatchObject({
     ok: true,
     result: { kind: "overview", basis: "observation" },
@@ -1097,18 +1163,25 @@ test("route:ducts.set-view with no mounted view opens only through an explicit c
 });
 
 test("person-only admin routes expose no Page fields in builtin or admitted capability discovery", () => {
-  for (const admitted of [[], [bindGraph, opsGraph]]) {
+  for (const admitted of [
+    [],
+    ["bind", "ops"].map((key) => ({ key, name: key, address: `/${key}`, fields: {} })),
+  ]) {
     const rows = buildCapabilities({
-      ops: [], routes: [], packages: [], skills: [],
-      admittedRoutes: () => admitted.map(graph => {
-        const data = RouteGraphJson.parse(graph);
-        return { key: data.key, title: data.name, address: data.address, fields: data.fields };
-      }),
+      ops: [],
+      routes: [],
+      packages: [],
+      skills: [],
+      admittedRoutes: () =>
+        admitted.map((graph) => {
+          const data = graph;
+          return { key: data.key, title: data.name, address: data.address, fields: data.fields };
+        }),
     });
     for (const key of ["bind", "ops"]) {
-      expect(rows.filter(row => row.key.startsWith(`route:${key}.`))).toEqual([]);
+      expect(rows.filter((row) => row.key.startsWith(`route:${key}.`))).toEqual([]);
     }
-    expect(rows.some(row => row.key === "route:ducts.set-view")).toBe(true);
+    expect(rows.some((row) => row.key === "route:ducts.set-view")).toBe(true);
   }
 });
 
@@ -1128,8 +1201,10 @@ test("an admitted route's view rows project keys from its agent policy, never th
   const view = rows.find((row) => row.key === "route:fans.view")!;
   expect(view.description).toContain("its keys (fan, viewport; settable: fan)");
   const set = rows.find((row) => row.key === "route:fans.set-view")!;
-  expect(JSON.stringify(set.input)).toContain('"fan":{"type":"string"}');
+  expect(set.input).toMatchObject({ anyOf: [{ properties: { fan: { type: "string", description: "Encoded page field" } } }, {}] });
   expect(JSON.stringify(set.input)).not.toContain('"viewport"');
   // A legacy route keeps its own lease projection.
-  expect(rows.find((row) => row.key === "route:ducts.view")!.description).not.toContain("settable: fan)");
+  expect(rows.find((row) => row.key === "route:ducts.view")!.description).not.toContain(
+    "settable: fan)",
+  );
 });

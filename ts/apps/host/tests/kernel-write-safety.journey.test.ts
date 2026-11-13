@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test, vi } from "vite-plus/test";
 import { RouteWorkspace } from "@pe/runtime";
-import { address, catalogWorkSpecs, tools, roomEditKey, type Caller, type WorkKey } from "@pe/agent-contracts";
+import { address, catalogWorkSpecs, tools, roomEditKey, type Caller, type Touched, type WorkKey } from "@pe/agent-contracts";
 import { fixtureNative } from "./fixture-native.ts";
 import { nativeRecordings, nativeRecordingRequest } from "./native-recordings.ts";
 import { testRegistry } from "./effect-test.ts";
@@ -241,14 +241,22 @@ test("E7 recovery reads the original native UUID and resume never dispatches a s
   const f = await fixture();
   try {
     expect(await f.submit("plan", "parameter-links.apply.plan")).toMatchObject({ state: "succeeded" });
+    const touched: Touched = { kind: "wrote", transactions: ["Apply parameter links"], added: 0, modified: 1, deleted: 0 };
+    f.native.reportTouched("revit.apply.parameter-links", touched);
     f.native.loseNextReply("revit.apply.parameter-links");
     const original = await f.apply();
-    expect(original).toMatchObject({ state: "unknown" });
+    expect(original).toMatchObject({ state: "unknown", steps: expect.arrayContaining([
+      expect.objectContaining({ transport: "bridge", touched: { kind: "unknown", reason: "process-exit" } }),
+    ]) });
     f.native.makeLostReplyRecoverable();
     const connection = await f.native.connect();
     await f.native.deliverLostReply(connection);
     await f.control("recover", original.id);
-    expect(await f.native.journal.wait(original.id)).toMatchObject({ steps: expect.arrayContaining([expect.objectContaining({ key: "revit.apply.parameter-links", state: "succeeded" })]) });
+    // The fake pid is already dead, so its late socket reply may be unknown to the mailbox.
+    // The exact op receipt must still replace that host-created uncertainty, without a new write.
+    expect(await f.native.journal.wait(original.id)).toMatchObject({ steps: expect.arrayContaining([
+      expect.objectContaining({ key: "revit.apply.parameter-links", state: "succeeded", transport: "bridge", bridgeReply: "touched", touched }),
+    ]) });
     await f.control("resume", original.id);
     expect(await f.native.journal.wait(original.id)).toMatchObject({ state: "succeeded" });
     expect(f.native.calls.filter(c => c.key === "revit.apply.parameter-links")).toHaveLength(1);

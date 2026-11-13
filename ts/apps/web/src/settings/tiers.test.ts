@@ -22,7 +22,7 @@ import { firmLayer } from "../../../host/src/ducts-inputs.ts";
 import { SETTING_WRITE_PLACE, storedBlobsPath, storedNoticesPath } from "../../../host/src/notice-feed.ts";
 import { resolveFirm } from "../../../host/src/reads/door.ts";
 import { readSettingTiers, writeSettingTier, watchSettingTiers } from "../../../host/src/tiered-settings.ts";
-import { ductsSettings } from "../ducts/design-sheet.ts";
+import { ductsSettings } from "@pe/agent-contracts/setting-owners";
 import { sheetCells } from "../route/slots/sheet/index.ts";
 
 import { price } from "@pe/ducts-domain/pricing";
@@ -150,7 +150,7 @@ test("FS steps 1, 2, 6 and 7: the sheet's tier label is the home the host served
   // Step 7: the firm home is unmounted. Nothing is "firm"; the sheet says the home was not found.
   rmSync(join(firm, "pe-home.json"));
   at = await sheet();
-  const labels = JSON.stringify([at.cell("terminalDropInWg"), at.cell("velocitySupplyFpm"), at.criteria, at.terminalDrop].map((value) => JSON.parse(JSON.stringify(value, (key, inner) => (key === "setting" || key === "ref" ? undefined : inner)))));
+  const labels = JSON.stringify([at.cell("terminalDropInWg"), at.cell("velocitySupplyFpm"), at.criteria, at.terminalDrop].map((value) => JSON.parse(JSON.stringify(value, (key, inner) => (key === "setting" || key === "home" || key === "domain" || key === "ref" ? undefined : inner)))));
   expect(labels).not.toContain('"firm"');
   expect(labels).not.toContain('"project"');
   for (const cell of ["terminalDropInWg", "velocitySupplyFpm", "autoJoinGapIn"] as const)
@@ -305,4 +305,12 @@ test("an outside project rewrite invalidates once and the sheet reads its value 
   } finally {
     watching.close();
   }
+});
+
+test("an unregistered owner is invalid even before a home can be resolved", () => {
+  expect(writeSettingTier({ owner: "not-declared", tier: "firm", path: ["x"], value: 1, expectedSha256: null }, { pointer }))
+    .toMatchObject({ ok: false, status: 422 });
+});
+test.each([["user", ["designFriction"]], ["project", ["criteria"]]] as const)("an owner cannot write undeclared tier/path %s %j", (tier, path) => {
+  expect(writeSettingTier({ owner: "ducts", tier, path, value: null, expectedSha256: null }, { pointer })).toMatchObject({ ok: false, status: 422 });
 });

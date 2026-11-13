@@ -107,16 +107,19 @@ public sealed record SceneWork(int BroadCandidates, int ExtractedElements, int E
 public sealed record SceneReceipt(string Format, string Frame, string HostDocumentKey, long? Revision, DateTime ObservedAt,
     Aabb Bounds, int Triangles, int Elements, int FocusElements, int ContextElements, int RequestedElements,
     int OmittedElements, int UnavailableElements, int Sources, int UnreadSources, int DetachedElements, string Phase,
-    SceneWork Work, SceneCompleteness Completeness, SceneLevelReceipt Levels,
-    IReadOnlyDictionary<long, SceneLinkEnvelopeCount> LinkEnvelopes) {
+    SceneWork Work, SceneCompleteness Completeness, SceneLevelReceipt Levels) {
     public static SceneReceipt From(SceneMetadata scene) => new(scene.Format, scene.Evidence.Frame,
         scene.Evidence.DocumentKey, scene.Evidence.Revision, scene.Evidence.ObservedAt, scene.Bounds, scene.Triangles,
         scene.Elements.Count, scene.Elements.Count(element => element.Focus), scene.Elements.Count(element => !element.Focus),
         scene.RequestedElementIds.Count, scene.OmittedElements, scene.UnavailableElements.Count, scene.Sources.Count,
         scene.Sources.Count(source => source.State != SceneSourceState.Loaded), scene.DetachedElementIds.Count,
-        scene.Phase, scene.Work, scene.Completeness, SceneLevelReceipt.From(scene.Levels), scene.LinkEnvelopes);
+        scene.Phase, scene.Work, scene.Completeness, SceneLevelReceipt.From(scene.Levels));
 }
-public sealed record SceneArtifact(SceneReceipt Scene, string Id, string Url, long Bytes, SpatialEvidence Evidence) : IEvidenced<SpatialEvidence>;
+public sealed record SceneArtifact(SceneReceipt Scene, SceneEvidence Evidence) : IEvidenced<SceneEvidence> {
+    public string Id => this.Evidence.Artifact.Id;
+    public string Url => this.Evidence.Artifact.Url;
+    public long Bytes => this.Evidence.Artifact.Bytes;
+}
 
 /// <summary>Bounded native meshes and explicit scene primitives in host internal feet.</summary>
 public static class Scene {
