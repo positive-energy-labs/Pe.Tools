@@ -78,7 +78,7 @@ async function podJourney() {
   const work = createWorkFeedClient({
     subscribe: observeResources(host.workspace, { observe: () => () => {} }), dirty() {},
   }, {
-    write: (key, write) => host.workspace.write(key, key.route, "human", write),
+    write: (key, write) => host.workspace.write(key, key.route, "human", write, async () => []),
     submit: () => { throw Error("This Pod has no native action"); },
   });
   const loader = createPodRouteLoader(async (entry) => {
@@ -606,7 +606,7 @@ test("JZ Open machine census: sampling drift lists documents; content conflict n
     return () => {};
   } });
   const work = createWorkFeedClient({ subscribe: observeResources(host.workspace, { observe: () => () => {} }), dirty() {} }, {
-    write: (key, write) => host.workspace.write(key, key.route, "human", write), submit: () => { throw Error("No native actions"); },
+    write: (key, write) => host.workspace.write(key, key.route, "human", write, async () => []), submit: () => { throw Error("No native actions"); },
   });
   let packet: unknown;
   const read = async (subscription: string) => {

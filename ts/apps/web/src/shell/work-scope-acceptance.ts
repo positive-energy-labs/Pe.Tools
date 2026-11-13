@@ -12,7 +12,7 @@ import type {
   WorkReduction,
   ScopeToken,
 } from "../../../../packages/agent-contracts/src/route-kernel-page";
-import type { RouteGraphJson } from "../../../../packages/agent-contracts/src/route-kernel-data";
+import type { RouteGraphWire as RouteGraphJson } from "../../../../packages/agent-contracts/src/route-kernel-data";
 import { acquireWorkJournal } from "./journal";
 
 export interface WorkScopeAcceptance {

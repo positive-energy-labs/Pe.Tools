@@ -50,7 +50,7 @@ function fixture(limits?: { maxCount: number; maxBytes: number }) {
   const step = async (by: "human" | "pea", direction: "undo" | "redo") => {
     const next = (await host.timeline([key], by, []))[direction];
     return next
-      ? host.step([key], by, direction, next.ref, [])
+      ? host.step([key], by, direction, next.ref, async () => [])
       : ({ ok: false, error: `Nothing to ${direction}` } as const);
   };
   return {
@@ -213,7 +213,7 @@ test("a delayed Work read cannot clear accepted undo history", async () => {
   journal.observe({ revision: written.revision - 1, doc: { a: 0, b: 0 } });
   expect(journal.read().undo).toHaveLength(1);
   expect(
-    await journal.undo((write) => f.host.write(f.key, f.key.route, "human", write)),
+    await journal.undo((write) => f.host.write(f.key, f.key.route, "human", write, async () => [])),
   ).toMatchObject({ ok: true });
 });
 
@@ -300,7 +300,7 @@ test("a fresh history acquisition during undo interrupts the old cursor without 
   });
   journal.restoreView(snapshot, history);
   if (!request || !finish) throw Error("Restore did not dispatch");
-  const accepted = await f.host.write(f.key, f.key.route, "human", request);
+  const accepted = await f.host.write(f.key, f.key.route, "human", request, async () => []);
   finish(accepted);
   expect(await undo).toMatchObject({ ok: false, code: "interrupted" });
   expect(journal.read().undo).toHaveLength(0);

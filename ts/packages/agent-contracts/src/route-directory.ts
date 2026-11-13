@@ -2,7 +2,7 @@ import type { RouteGraphJson } from "./route-kernel-data.ts";
 import type { RouteDirectory } from "./route-graph.ts";
 
 /** Shared directory input for web, Pea and the generated C# route table. */
-export function projectKernelDirectory(data: RouteGraphJson): RouteDirectory {
+export function projectKernelDirectory(data: Pick<RouteGraphJson, "directory" | "address" | "name">): RouteDirectory {
   const { group, summary, ...metadata } = data.directory;
   return { ...metadata, path: data.address, title: data.name, category: group, blurb: summary };
 }

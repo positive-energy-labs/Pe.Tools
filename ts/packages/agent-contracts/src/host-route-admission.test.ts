@@ -12,9 +12,11 @@ import {
 } from "./route-module.ts";
 import type { BuiltinClosure } from "./route-module.ts";
 
+const { stages: _stages, stageOrder: _order, predicates: _predicates, ...wireData } = builtinData;
 const base: HostRouteModule = {
   data: {
-    ...builtinData,
+    ...wireData,
+    verbs: {}, band: [],
     work: { route: builtinData.key, schema: "work", version: 2, },
   },
   schemas: { work: z.object({ amount: z.number() }) },

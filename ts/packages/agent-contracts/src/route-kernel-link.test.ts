@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vite-plus/test";
 import { z } from "zod";
 import type { CatalogLink } from "./catalog.ts";
 import { INVALID } from "./page-keys.ts";
-import { decodeRouteGraph, linkRouteBodies, routeBindingSchema } from "./route-bodies.ts";
+import { decodeRouteGraph, linkRouteBodies, linkRouteGates, routeBindingSchema } from "./route-bodies.ts";
 import { projectKernelDirectory } from "./route-directory.ts";
 import { orderedListField } from "./route-field.ts";
 import { canonicalRouteJson } from "./route-graph.ts";
@@ -30,6 +30,15 @@ import {
   type RouteAdmissionEvidence,
 } from "./route-module.ts";
 const bytes = new TextEncoder().encode("export const bodies = {};\n");
+it("links field gates to schema values rather than stage tables", () => {
+  const graph = { ...builtinData, fields: { ...builtinData.fields, stage: { ...builtinData.fields.search, role: "stage" as const, schema: "stage" } },
+    layout: { kind: "gate" as const, when: { field: "stage", value: "inspect" }, child: builtinData.layout } };
+  const table = { ...schemas, stage: z.enum(["inspect", "write"]) };
+  expect(linkRouteGates(graph, table)).toEqual([]);
+  expect(linkRouteGates({ ...graph, layout: { ...graph.layout, when: { field: "stage", value: "missing" } } }, table)).toMatchObject([{ path: "layout.when" }]);
+  expect(linkRouteGates({ ...graph, layout: { ...graph.layout, when: { field: "missing", value: "inspect" } } }, table)).toMatchObject([{ path: "layout.when" }]);
+  expect(linkRouteGates({ ...graph, subject: undefined, layout: { ...graph.layout, when: "subject" } }, table)).toMatchObject([{ path: "layout.when" }]);
+});
 const contracts = new TextEncoder().encode("kernel, schemas and codecs v1\n");
 const digest = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
 const baseCatalog: readonly CatalogLink[] = Object.entries(entries).map(([key, entry]) => ({

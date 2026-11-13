@@ -152,7 +152,7 @@ export interface SplitOptions {
 export type LayoutNode =
   | ({ kind: "split"; id: string; children: readonly LayoutNode[] } & SplitOptions)
   | { kind: "pane"; id: string }
-  | { kind: "gate"; when: string; child: LayoutNode };
+  | { kind: "gate"; when: string | import("./route-kernel-data.ts").GateWhen; child: LayoutNode };
 
 export const split = (
   id: string,
@@ -700,7 +700,13 @@ export function validateRouteGraph<P, W>(
             refuse("missing-pane", "layout", `Unknown pane '${node.id}'`);
           break;
         case "gate":
-          if (
+          if (typeof node.when === "object") {
+            const field = graph.fields[node.when.field];
+            if (!field || !("schema" in field) || !field.schema.safeParse(node.when.value).success)
+              refuse("unknown-gate", "layout", `Invalid field gate '${node.when.field}'`);
+          } else if (node.when === "subject" && graph.subjectField) {
+            // The subject gate is data, independent of executable stage/predicate ids.
+          } else if (
             !Object.hasOwn(graph.stages, node.when) &&
             !Object.hasOwn(graph.predicates ?? {}, node.when)
           )

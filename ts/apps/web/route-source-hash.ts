@@ -4,7 +4,7 @@ import { isAbsolute, relative } from "node:path";
 import { build, type InlineConfig, type Plugin } from "vite-plus";
 import ts from "typescript";
 import { canonicalRouteJson } from "../../packages/agent-contracts/src/route-graph.ts";
-import { RouteGraphJson } from "../../packages/agent-contracts/src/route-kernel-data.ts";
+import { RouteGraphWire as RouteGraphJson } from "../../packages/agent-contracts/src/route-kernel-data.ts";
 
 /** Text inputs normalize CRLF to LF only; bare CR is significant. Binary assets stay exact. */
 export const routeSourceHash = (source: string | Uint8Array) =>

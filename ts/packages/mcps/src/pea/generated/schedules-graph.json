@@ -132,81 +132,25 @@
   },
   "verbs": {
     "read": {
-      "kind": "command",
-      "input": "none",
-      "label": "Read schedule",
-      "review": "shown",
-      "deps": {
-        "page": [
-          "workspaceId"
-        ],
-        "work": [
-          "writeIntent",
-          "basis",
-          "cells",
-          "takenAt"
-        ],
-        "readings": [
-          "value"
-        ]
-      },
-      "captures": [
-        "value"
-      ],
       "entry": "schedule.grid.read",
-      "intent": "read"
+      "label": "Read schedule",
+      "effect": "SessionWrite",
+      "review": "none"
     },
     "bind": {
-      "kind": "command",
-      "input": "none",
-      "label": "Bind schedule",
-      "review": "shown",
-      "deps": {
-        "page": [
-          "workspaceId"
-        ],
-        "work": [
-          "writeIntent",
-          "basis",
-          "cells",
-          "takenAt"
-        ],
-        "readings": [
-          "value"
-        ]
-      },
-      "captures": [
-        "value"
-      ],
       "entry": "schedule.grid.bind",
-      "intent": "bind"
+      "label": "Bind schedule",
+      "effect": "SessionWrite",
+      "review": "none"
     },
     "push": {
-      "kind": "command",
-      "input": "none",
-      "label": "Apply cells",
-      "review": "shown",
-      "deps": {
-        "page": [
-          "workspaceId"
-        ],
-        "work": [
-          "writeIntent",
-          "basis",
-          "cells",
-          "takenAt"
-        ],
-        "readings": [
-          "value"
-        ]
-      },
-      "captures": [
-        "value"
-      ],
       "entry": "schedule.grid.push",
-      "intent": "push"
+      "label": "Apply cells",
+      "effect": "ModelWrite",
+      "review": "shown"
     }
   },
+  "band": [],
   "panes": {
     "grid": {
       "label": "Schedules",
@@ -214,34 +158,13 @@
       "draws": [
         "value"
       ],
-      "verbs": [
-        "read",
-        "bind",
-        "push"
-      ]
+      "verbs": []
     }
   },
   "layout": {
     "kind": "pane",
     "id": "grid"
   },
-  "stages": {
-    "main": {
-      "word": "Schedules",
-      "panes": [
-        "grid"
-      ],
-      "verbs": [
-        "read",
-        "bind",
-        "push"
-      ]
-    }
-  },
-  "stageOrder": [
-    "main"
-  ],
-  "predicates": {},
   "cells": {},
   "workFields": {
     "basis": {
