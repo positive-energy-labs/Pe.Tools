@@ -66,8 +66,12 @@ A profile entirely inside a closed solid can miss every boundary triangle.
 [Bvh.BoxTriangle](../../../dotnet/Pe.Revit.Space/Bvh.cs) does not report penetration depth through
 its negative gap magnitude. `PrimKind.Solid` records an ingestion source kind; it does not
 certify a closed, consistently wound exported surface.
-A clash product still needs pair enumeration, containment handling and explicit unknown
-results where the acquired geometry cannot support a verdict.
+Sweep reports attributed HIT/NEAR surface witnesses. With no supporting witness it reports
+UNKNOWN, a nullable minGapFt, none-observed surface observation and containment-unsupported.
+Complete acquisition alone cannot establish clearance. SpatialEvidence preserves partial,
+failed, empty and unread outcomes through disk reuse. Scene approximations carry coverage
+gaps. A clash product still needs pair enumeration and containment handling before it can
+claim positive clearance.
 
 **Fidelity and clash tolerance answer different questions.** Native vertex containment and
 mesh replay establish representation fidelity on named inputs, not arbitrary solid intersection.

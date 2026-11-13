@@ -116,19 +116,6 @@ public sealed record PrimRow(
     HeightRole HeightRole = HeightRole.None
 );
 
-/// <summary>One row per partition. Carried inside every <see cref="Stamp" />.</summary>
-public sealed record SourceRow(
-    int Source,
-    string DocumentKey,
-    long? LinkInstanceId,
-    SourceKind Kind,
-    long BuiltAtEpoch,
-    bool Dirty,
-    int Elements,
-    int Triangles,
-    int Skipped
-);
-
 /// <summary>Axis-aligned bounds in host internal feet.</summary>
 public readonly record struct Aabb(
     double MinX,
@@ -212,23 +199,12 @@ public sealed record Resolved(
     IReadOnlyList<string> Categories,
     IReadOnlyList<PrimKind> Kinds,
     IReadOnlyList<string> Layers,
-    IReadOnlyList<long> ExcludedElementIds
+    IReadOnlyList<SubjectExclusion> Exclusions,
+    Aabb? Scope = null,
+    IReadOnlyList<IReadOnlyList<double>>? Reach = null,
+    string Representation = "native-mesh",
+    bool AcquisitionRequested = true
 );
-
-/// <summary>Provenance and freshness. Every answer embeds one; it is not optional.</summary>
-public sealed record Stamp(
-    string HostDocumentKey,
-    long Epoch,
-    string Frame,
-    DateTime BuiltUtc,
-    IReadOnlyList<SourceRow> Sources,
-    bool Fresh,
-    Resolved Resolved
-) {
-    /// <summary>The only frame this library speaks. A reader that sees another value must refuse.</summary>
-    public GeometryCost? GeometryCost { get; init; }
-    public const string HostInternalFt = "host-internal-ft";
-}
 
 /// <summary>What a verb is allowed to look at. Null means no restriction on that axis.</summary>
 public sealed record Filter(
@@ -236,7 +212,7 @@ public sealed record Filter(
     IReadOnlyList<string>? Categories = null,
     IReadOnlyList<PrimKind>? Kinds = null,
     IReadOnlyList<string>? Layers = null,
-    IReadOnlyList<long>? ExcludeElementIds = null
+    IReadOnlyList<SubjectExclusion>? Exclusions = null
 ) {
     public static readonly Filter Default = new();
 
@@ -245,17 +221,17 @@ public sealed record Filter(
     /// <summary>
     ///     A null Kinds means the two obstructing kinds, never Curve2D: a DWG ribbon has to be asked
     ///     for by name. A set Layers means only rows carrying a matching layer, which excludes every
-    ///     Solid and Mesh row by construction. ExcludeElementIds drops named elements outright, which
+    ///     Solid and Mesh row by construction. Exclusions drops document-qualified placed elements, which
     ///     is the only way to ask "everything except me": a duct swept along its own centerline
     ///     otherwise reports itself, and dropping its whole category drops every other duct too.
     ///     ponytail: linear scan of the exclusion list per row. It holds one duct and its fittings,
     ///     not a thousand; make it a HashSet when someone excludes a whole system.
     /// </summary>
-    public bool Wants(PrimRow row) =>
+    public bool Wants(PrimRow row, string documentKey, Placement placement) =>
         (this.Kinds is null ? row.Kind is PrimKind.Solid or PrimKind.Mesh : this.Kinds.Contains(row.Kind))
         && (this.Categories is null || this.Categories.Contains(row.Category, StringComparer.OrdinalIgnoreCase))
         && (this.Layers is null || Matches(row.Layer, this.Layers))
-        && (this.ExcludeElementIds is null || !this.ExcludeElementIds.Contains(row.ElementId));
+        && (this.Exclusions is null || !this.Exclusions.Any(e => e.DocumentKey == documentKey && e.Placement == placement && e.SubjectUniqueId == row.UniqueId));
 
     /// <summary>Exact name or a trailing-star prefix, case insensitive. No other wildcard.</summary>
     private static bool Matches(string? layer, IReadOnlyList<string> patterns) {

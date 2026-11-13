@@ -10,16 +10,16 @@ public class CSharpStorePolicyTests {
     public void Torn_geometry_tail_keeps_the_complete_prefix() {
         var folder = Path.Combine(Path.GetTempPath(), "pe-pack-" + Guid.NewGuid().ToString("N"));
         try {
-            using (var store = new LinkedGeometryStore(folder)) store.Read("first", () => new([], []));
+            using (var store = new LinkedGeometryStore(folder)) store.Read("first", () => new([], [], new Acquisition(new Pe.Revit.Space.Placement("test", null), "empty", AcquisitionOutcome.Empty, AcquisitionReason.None)));
             var path = Path.Combine(folder, "geometry.pack");
             var prefix = new FileInfo(path).Length;
-            using (var store = new LinkedGeometryStore(folder)) store.Read("torn", () => new([], []));
+            using (var store = new LinkedGeometryStore(folder)) store.Read("torn", () => new([], [], new Acquisition(new Pe.Revit.Space.Placement("test", null), "empty", AcquisitionOutcome.Empty, AcquisitionReason.None)));
             using (var stream = new FileStream(path, FileMode.Open, FileAccess.Write)) stream.SetLength(stream.Length - 4);
             using (var store = new LinkedGeometryStore(folder).Open()) {
                 Assert.That(File.Exists(path), Is.True, "A torn tail is not a corrupt header");
                 Assert.That(new FileInfo(path).Length, Is.EqualTo(prefix));
                 store.Read("first", () => throw new AssertionException("The complete prefix must stay cached"));
-                var captured = new LinkedGeometryStore.Geometry([], []);
+                var captured = new LinkedGeometryStore.Geometry([], [], new Acquisition(new Pe.Revit.Space.Placement("test", null), "empty", AcquisitionOutcome.Empty, AcquisitionReason.None));
                 Assert.That(store.Read("torn", () => captured), Is.SameAs(captured));
             }
         } finally { if (Directory.Exists(folder)) Directory.Delete(folder, true); }
@@ -30,8 +30,8 @@ public class CSharpStorePolicyTests {
         var folder = Path.Combine(Path.GetTempPath(), "pe-pack-" + Guid.NewGuid().ToString("N"));
         try {
             using (var store = new LinkedGeometryStore(folder).Open()) {
-                store.Read("bad", () => new([], []));
-                store.Read("good", () => new([], []));
+                store.Read("bad", () => new([], [], new Acquisition(new Pe.Revit.Space.Placement("test", null), "empty", AcquisitionOutcome.Empty, AcquisitionReason.None)));
+                store.Read("good", () => new([], [], new Acquisition(new Pe.Revit.Space.Placement("test", null), "empty", AcquisitionOutcome.Empty, AcquisitionReason.None)));
             }
             var path = Path.Combine(folder, "geometry.pack");
             using (var stream = new FileStream(path, FileMode.Open, FileAccess.Write)) {
@@ -39,7 +39,7 @@ public class CSharpStorePolicyTests {
                 stream.WriteByte(0xFF);
             }
             using (var store = new LinkedGeometryStore(folder).Open()) {
-                var captured = new LinkedGeometryStore.Geometry([], []);
+                var captured = new LinkedGeometryStore.Geometry([], [], new Acquisition(new Pe.Revit.Space.Placement("test", null), "empty", AcquisitionOutcome.Empty, AcquisitionReason.None));
                 Assert.That(store.Read("bad", () => captured), Is.SameAs(captured));
                 store.Read("good", () => throw new AssertionException("An unrelated entry must stay cached"));
             }
@@ -59,7 +59,7 @@ public class CSharpStorePolicyTests {
             File.WriteAllText(pack, "bad");
             using (var store = new LinkedGeometryStore(folder).Open()) {
                 Assert.That(File.Exists(pack), Is.False);
-                var captured = new LinkedGeometryStore.Geometry([], []);
+                var captured = new LinkedGeometryStore.Geometry([], [], new Acquisition(new Pe.Revit.Space.Placement("test", null), "empty", AcquisitionOutcome.Empty, AcquisitionReason.None));
                 Assert.That(store.Read("test", () => captured), Is.SameAs(captured));
             }
         } finally { Directory.Delete(folder, true); }

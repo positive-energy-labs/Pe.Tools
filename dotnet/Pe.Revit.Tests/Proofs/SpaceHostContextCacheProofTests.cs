@@ -55,9 +55,9 @@ public sealed class SpaceHostContextCacheProofTests {
             using (var cached = LinkedGeometryStore.For(document, null, Transform.Identity, interiorGeneration)) {
                 var triangles = new List<Tri>();
                 var rows = new List<PrimRow>();
-                Ingest.Element(interior, 0, 0, triangles, Transform.Identity, rows, false);
+                Ingest.Element(interior, 0, 0, triangles, Transform.Identity, rows, new GeometryRead(), false);
                 cached!.Read(interior.UniqueId + "/mesh", () => new LinkedGeometryStore.Geometry(
-                    rows.Select(row => row with { Category = "cached-interior-proof" }).ToArray(), triangles.ToArray()));
+                    rows.Select(row => row with { Category = "cached-interior-proof" }).ToArray(), triangles.ToArray(), new Acquisition(new Pe.Revit.Space.Placement(document.GetDocumentKey(), null), interior.UniqueId, AcquisitionOutcome.Acquired, AcquisitionReason.None)));
             }
             var partition = new Pe.Revit.Space.Partition(0, document, SourceKind.Host, null, Transform.Identity, interiorGeneration);
             partition.BuildElements([interior], SpaceWorld.Epoch(document), new Aabb(-4, -4, -4, 5, 5, 5));
