@@ -129,6 +129,7 @@ export const takeoffActions = definitions;
 
 export const ductsActions = {
   "ducts.refresh": {
+    catalogEffect: "Read",
     says: "Read this document's duct snapshots and pricing inputs again.",
     needs: "project-document",
     effect: "query",
@@ -438,6 +439,7 @@ export const sheetCommands = workWriteCommands(ANY_ROUTE, SHEET_COMMANDS.apply, 
 
 export const commands = {
   "work.start": {
+    catalogEffect: "SessionWrite",
     says:"Start this Work", needs:"nothing", effect:"command", dirties:[],
     input:z.object({key:workKeySchema,seed:z.json()}),
   } as const,
@@ -473,6 +475,8 @@ export function commandTarget(
 
 export const actionControls = {
   "action.read": {
+    via: { route: "actions.read" },
+    catalogEffect: "Read",
     says: "Read the original action and its individual file/native/publication outcomes without Revit.",
     dirties: ["receipts"],
     needs: "nothing",
@@ -480,6 +484,8 @@ export const actionControls = {
     input: z.object({ id: z.string().min(1) }),
   },
   "action.recover": {
+    via: { route: "action.recover" },
+    catalogEffect: "SessionWrite",
     says: "Read durable native evidence for the original action; uncertain outcomes remain blocked.",
     dirties: ["receipts"],
     needs: "nothing",
@@ -487,6 +493,8 @@ export const actionControls = {
     input: z.object({ id: z.string().min(1) }),
   },
   "action.resume": {
+    via: { route: "action.resume" },
+    catalogEffect: "SessionWrite",
     says: "Explicitly authorize remaining effects of a recovered original action. Completed effects never repeat.",
     dirties: ["receipts"],
     needs: "nothing",
@@ -494,6 +502,8 @@ export const actionControls = {
     input: z.object({ id: z.string().min(1) }),
   },
   "action.cancel": {
+    via: { route: "action.cancel" },
+    catalogEffect: "SessionWrite",
     says: "Stop the running action at the operation's next checkpoint. Work already written to Revit stands.",
     dirties: ["receipts"],
     needs: "nothing",
@@ -516,12 +526,15 @@ export const preparedTakeoffSchema = z.strictObject({
 /** Discovery projects the same portable command contracts used by invocation. */
 export const hostActions = {
   "ops.read": {
+    via: { route: "operation.call" },
     native: [...hostOpCatalog, ...tsOnlyOperationCatalog].filter((op) => op.intent === "Read").map((op) => op.key),
     says: "Read one native operation through the guarded operation door.",
     needs: "nothing", effect: "query", dirties: [],
     input: z.object({ op: z.object({ key: z.string(), intent: z.string() }).passthrough(), request: z.unknown() }),
   } as const,
   "page.bind": {
+    via: { route: "page.bind" },
+    catalogEffect: "SessionWrite",
     says: "Bind a Page to its exact execution target.",
     needs: "nothing", effect: "command", dirties: [],
     input: z.object({ slug: z.string().min(1), binding: z.unknown() }),

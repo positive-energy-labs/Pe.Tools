@@ -298,6 +298,8 @@ export function peRouteTable<S extends PeApiSchemas>(schemas: S) {
       "gateway",
       "read",
     ),
+    "family.readings": route("POST", "/family/readings", object, z.unknown(), "read", "gateway", "read"),
+    "schedules.readings": route("POST", "/schedules/readings", object, z.unknown(), "read", "gateway", "read"),
     "captures.list": route(
       "GET",
       "/captures",

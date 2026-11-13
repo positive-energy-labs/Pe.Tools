@@ -28,16 +28,25 @@ test("receipt controls select their existing transport and SessionWrite scope", 
 
 test("findings write doors use WorkWrite and plans preserve their native read scope", () => {
   const table = generateCommandTable();
-  for (const key of ["findings.say", "findings.rule", "findings.retract"]) {
-    const writes = generateCommandTable({ [key]: { ...hostActions["findings.list"], effect: "command" as const } }, []);
-    expect(writes[key]!.effect).toBe("WorkWrite");
-  }
+  const writes = Object.entries(hostActions).filter(([key, action]) =>
+    key.startsWith("findings.") && "catalogEffect" in action && action.catalogEffect === "WorkWrite");
+  expect(writes.length).toBeGreaterThan(0);
+  for (const [key] of writes) expect(table[key]!.effect).toBe("WorkWrite");
   expect(table["sheet.apply"]!.plan).toBe("sheet.plan");
   expect(table["sheet.plan"]!.effect).toBe("Read");
 });
 
 test("findings.list is Read because listing writes no Work", () => {
   expect(generateCommandTable()["findings.list"]!.effect).toBe("Read");
+});
+
+test("a local effect comes from its definition rather than the command name", () => {
+  const definition = { ...hostActions["findings.list"], catalogEffect: "WorkWrite" as const };
+  expect(generateCommandTable({ "arbitrary.name": definition }, [])["arbitrary.name"]!.effect).toBe("WorkWrite");
+  expect(() => generateCommandTable({ unclassified: {
+    says: "No declared effect", input: hostActions["findings.list"].input,
+    needs: "nothing", effect: "query", dirties: [],
+  } }, [])).toThrow("declare catalogEffect or native dependencies");
 });
 
 test("tracked browser table is fresh and contains data alone", () => {

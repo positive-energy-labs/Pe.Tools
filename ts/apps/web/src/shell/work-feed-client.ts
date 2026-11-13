@@ -31,6 +31,7 @@ import { opResponseSchema } from "../host/catalog-client";
 import type { ActionAdmission } from "@pe/agent-contracts/semantic-actions";
 import type { CommandHandle } from "@pe/agent-contracts/handle";
 import { handle } from "@pe/agent-contracts/handle";
+import { httpRoutes } from "@pe/agent-contracts/pe-api";
 import { HOST_RPC_BRIDGE_SESSION_HEADER, HOST_RPC_DOCUMENT_HEADER } from "@pe/host-contracts/operation-types";
 
 type DirectAnswer = { state: "answered"; result: unknown };
@@ -66,10 +67,10 @@ export async function sendCommand(
       headers[HOST_RPC_BRIDGE_SESSION_HEADER] = admission.target.ref.session;
       headers[HOST_RPC_DOCUMENT_HEADER] = admission.target.ref.openId;
     } else if (admission.target.kind === "session") headers[HOST_RPC_BRIDGE_SESSION_HEADER] = admission.target.session;
-  } else if (route === "/family/readings" || route === "/schedules/readings") {
-    path = route;
+  } else if (route === "family.readings" || route === "schedules.readings") {
+    path = httpRoutes[route].path;
     const { work, ...input } = admission.input;
-    const scope = route === "/family/readings" && command.key !== "family.saved"
+    const scope = route === "family.readings" && command.key !== "family.saved"
       ? workHandleSchema.parse(work).key : undefined;
     body = { key: command.key, input,
       target: admission.target.kind === "document" ? admission.target.ref : undefined,
