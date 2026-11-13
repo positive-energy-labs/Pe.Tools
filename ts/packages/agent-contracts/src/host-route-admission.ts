@@ -1,8 +1,8 @@
 import type { z } from "zod";
 import { z as hostZ } from "zod";
 import type { RouteFingerprint } from "./route-kernel-admission.ts";
-import type { RouteDiagnostic, RouteGraphJson } from "./route-kernel-data.ts";
-import { RouteGraphJson as hostGraphSchema } from "./route-kernel-data.ts";
+import type { RouteDiagnostic, RouteGraphWire as RouteGraphJson } from "./route-kernel-data.ts";
+import { RouteGraphWire as hostGraphSchema } from "./route-kernel-data.ts";
 import type { RouteStateSpec, RouteWriteAdmission } from "./route-state.ts";
 
 declare const hostAdmission: unique symbol;

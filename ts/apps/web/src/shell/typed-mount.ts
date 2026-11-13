@@ -12,6 +12,7 @@ function valueRefusal(error: unknown, read: string): string {
   return readableRefusal(error, `Value unavailable (${read}): the model reading does not match its contract. Refresh to try again.`);
 }
 import { decodeField } from "../route/field-codec";
+import { visibleReads } from "../route/typed-route";
 import {
   applyPatches,
   bindWork,
@@ -201,7 +202,11 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
   }
   };
   syncWork();
-  const allReads = new Set([spec.core,...Object.values(spec.reads ?? {}),...Object.values(spec.panes).map(p=>p.read)].filter((read):read is import("../route/host-read").HostRead=>!!read));
+  const allReads = { [Symbol.iterator]() {
+    const active = visibleReads(spec, page);
+    for (const [read, record] of reads) if (!active.has(read)) { record.stop(); reads.delete(read); }
+    return active[Symbol.iterator]();
+  } };
   const syncReads = (force = false) => {
     if (disposed || released || !input.custody.current()) return;
     for (const read of allReads) {
@@ -264,7 +269,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     return { kind: "accepted", changed: true } as const;
   };
   const moveRole = (role:"pose"|"query", patch:Record<string,unknown>, history?:"push"|"replace") => {
-    for (const key of Object.keys(patch)) if (spec.fields[key]?.role !== role) throw Error(`${key} is not a ${role} field`);
+    for (const key of Object.keys(patch)) if (spec.fields[key]?.role !== role && !(role === "pose" && spec.fields[key]?.role === "stage")) throw Error(`${key} is not a ${role} field`);
     return move(patch,history);
   };
   // The Page the address holds; an address without `selected` keeps the current selection.

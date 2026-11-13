@@ -753,35 +753,13 @@
   },
   "verbs": {
     "losses": {
-      "kind": "command",
-      "input": "none",
-      "label": "Write to Revit",
-      "review": "shown",
-      "deps": {
-        "page": [
-          "fan"
-        ],
-        "work": [
-          "writeIntent",
-          "calculation",
-          "terminalDrops",
-          "componentDrops",
-          "esp",
-          "equipmentFlows",
-          "roles",
-          "flows"
-        ],
-        "readings": [
-          "value"
-        ]
-      },
-      "captures": [
-        "value"
-      ],
       "entry": "sheet.apply",
-      "intent": "losses"
+      "label": "Write to Revit",
+      "effect": "ModelWrite",
+      "review": "shown"
     }
   },
+  "band": [],
   "panes": {
     "sheet-roster": {
       "label": "Fans",
@@ -789,9 +767,7 @@
       "draws": [
         "roster"
       ],
-      "verbs": [
-        "losses"
-      ]
+      "verbs": []
     },
     "sheet-inputs": {
       "label": "Inputs",
@@ -799,9 +775,7 @@
       "draws": [
         "value"
       ],
-      "verbs": [
-        "losses"
-      ]
+      "verbs": []
     },
     "sheet-picture": {
       "label": "Picture",
@@ -809,9 +783,7 @@
       "draws": [
         "value"
       ],
-      "verbs": [
-        "losses"
-      ]
+      "verbs": []
     },
     "sheet-ledger": {
       "label": "Ledger",
@@ -819,9 +791,7 @@
       "draws": [
         "value"
       ],
-      "verbs": [
-        "losses"
-      ]
+      "verbs": []
     }
   },
   "layout": {
@@ -874,24 +844,6 @@
       }
     }
   },
-  "stages": {
-    "sheet": {
-      "word": "Fans",
-      "panes": [
-        "sheet-roster",
-        "sheet-inputs",
-        "sheet-picture",
-        "sheet-ledger"
-      ],
-      "verbs": [
-        "losses"
-      ]
-    }
-  },
-  "stageOrder": [
-    "sheet"
-  ],
-  "predicates": {},
   "cells": {},
   "workFields": {},
   "seeds": {},

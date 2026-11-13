@@ -109,46 +109,19 @@
   },
   "verbs": {
     "bind": {
-      "kind": "command",
-      "input": "none",
-      "label": "Bind",
-      "review": "shown",
-      "deps": {
-        "page": [
-          "page"
-        ],
-        "work": [],
-        "readings": [
-          "value"
-        ]
-      },
-      "captures": [
-        "value"
-      ],
       "entry": "page.bind",
-      "intent": "bind"
+      "label": "Bind",
+      "effect": "SessionWrite",
+      "review": "none"
     },
     "read": {
-      "kind": "command",
-      "input": "none",
-      "label": "Read binding",
-      "review": "shown",
-      "deps": {
-        "page": [
-          "page"
-        ],
-        "work": [],
-        "readings": [
-          "value"
-        ]
-      },
-      "captures": [
-        "value"
-      ],
       "entry": "bind.target",
-      "intent": "read"
+      "label": "Read binding",
+      "effect": "Read",
+      "review": "none"
     }
   },
+  "band": [],
   "panes": {
     "main": {
       "label": "Bind Page",
@@ -156,32 +129,13 @@
       "draws": [
         "value"
       ],
-      "verbs": [
-        "bind",
-        "read"
-      ]
+      "verbs": []
     }
   },
   "layout": {
     "kind": "pane",
     "id": "main"
   },
-  "stages": {
-    "main": {
-      "word": "Bind",
-      "panes": [
-        "main"
-      ],
-      "verbs": [
-        "bind",
-        "read"
-      ]
-    }
-  },
-  "stageOrder": [
-    "main"
-  ],
-  "predicates": {},
   "cells": {},
   "workFields": {},
   "seeds": {},

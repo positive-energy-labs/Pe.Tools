@@ -10,7 +10,10 @@ import {
   writeBuiltinClosurePin,
 } from "./route-source-hash.ts";
 import { canonicalRouteJson } from "../../packages/agent-contracts/src/route-graph.ts";
-import { builtinData } from "../../packages/agent-contracts/src/route-kernel.fixtures.ts";
+import { builtinData as bodyData } from "../../packages/agent-contracts/src/route-kernel.fixtures.ts";
+// Source identity witnesses the emitted discovery graph, independently of body-kind fixtures.
+const { stages: _stages, stageOrder: _order, predicates: _predicates, ...baseData } = bodyData;
+const builtinData = { ...baseData, verbs: {}, band: [] };
 const roots: string[] = [];
 afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });

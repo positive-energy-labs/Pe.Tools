@@ -174,7 +174,7 @@ export type WorkPatch<S extends z.ZodType> =
               : never);
       }[keyof Shape & string]
     : never;
-export type WorkPatches<G extends RouteGraphJson, S extends SchemaTable> = readonly WorkPatch<
+export type WorkPatches<G extends import("./route-kernel-data.ts").RouteStateGraph, S extends SchemaTable> = readonly WorkPatch<
   WorkSchema<G, S>
 >[];
 
