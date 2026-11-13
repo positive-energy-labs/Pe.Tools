@@ -361,7 +361,7 @@ internal sealed class BridgeAgent : IDisposable {
                 request.RequestId,
                 responseBytes
             );
-            CompleteOpReceipt(receipt, BridgeWire.Verdicts.Ok, new OpReceiptResponse(
+            CompleteOpReceipt(receipt, BridgeWire.Verdicts.Ok, OpReceiptResponse.Ok(
                 new JRaw(payloadJson), touched, ran.EvidenceJson is null ? null : new JRaw(ran.EvidenceJson)));
             await this.WriteFrameAsync(frame, cancellationToken).ConfigureAwait(false);
             Log.Information(
@@ -378,8 +378,8 @@ internal sealed class BridgeAgent : IDisposable {
                 request.OperationKey,
                 request.RequestId
             );
-            CompleteOpReceipt(receipt, BridgeWire.Verdicts.Cancelled, new OpReceiptResponse(
-                null, touched, Error: message, StatusCode: BridgeOperationExceptions.CancelledStatusCode));
+            CompleteOpReceipt(receipt, BridgeWire.Verdicts.Cancelled, OpReceiptResponse.Failed(
+                message, BridgeOperationExceptions.CancelledStatusCode, touched));
             throw;
         } catch (BridgeOperationException ex) {
             var totalMs = GetElapsedMilliseconds(startedAt);
@@ -412,7 +412,7 @@ internal sealed class BridgeAgent : IDisposable {
             // not `failed`. `op result` reads the verdict; conflating them would tell an agent its
             // op broke when it was simply refused.
             CompleteOpReceipt(receipt, ex.StatusCode == 423 ? BridgeWire.Verdicts.Refused : BridgeWire.Verdicts.Failed,
-                new OpReceiptResponse(null, touched, Error: ex.Message, StatusCode: ex.StatusCode));
+                OpReceiptResponse.Failed(ex.Message, ex.StatusCode, touched));
             await this.WriteFrameAsync(errorFrame, cancellationToken).ConfigureAwait(false);
         } catch (Exception ex) {
             var totalMs = GetElapsedMilliseconds(startedAt);
@@ -441,8 +441,8 @@ internal sealed class BridgeAgent : IDisposable {
                 request.OperationKey,
                 request.RequestId
             );
-            CompleteOpReceipt(receipt, BridgeWire.Verdicts.Failed, new OpReceiptResponse(
-                null, touched, Error: ex.Message, StatusCode: BridgeOperationExceptions.UnexpectedStatusCode));
+            CompleteOpReceipt(receipt, BridgeWire.Verdicts.Failed, OpReceiptResponse.Failed(
+                ex.Message, BridgeOperationExceptions.UnexpectedStatusCode, touched));
             await this.WriteFrameAsync(errorFrame, cancellationToken).ConfigureAwait(false);
         } finally {
             if (deferred)
@@ -483,8 +483,8 @@ internal sealed class BridgeAgent : IDisposable {
         Touched touched = outcome is RevitTaskOutcome.TimedOut or RevitTaskOutcome.AbandonedStillRunning or RevitTaskOutcome.CancelledCooperatively
             ? new Touched.Unknown(TouchedUnknownReason.CancelledMidEffect)
             : new Touched.None();
-        CompleteOpReceipt(receipt, verdict, new OpReceiptResponse(
-            null, touched, Error: message, StatusCode: statusCode, Outcome: outcome.ToString()));
+        CompleteOpReceipt(receipt, verdict, OpReceiptResponse.Failed(
+            message, statusCode, touched, outcome.ToString()));
         Log.Warning(
             "Host bridge Revit task ended without a value: OperationKey={OperationKey}, RequestId={RequestId}, Outcome={Outcome}, Verdict={Verdict}",
             request.OperationKey,

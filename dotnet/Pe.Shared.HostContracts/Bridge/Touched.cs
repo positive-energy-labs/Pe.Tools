@@ -33,8 +33,7 @@ public enum TouchedUnknownReason {
 ///     The TS twin is <c>touchedSchema</c> in agent-contracts <c>action-receipts.ts</c>; both assert
 ///     <c>receipt-response.fixture.json</c>. <c>Kind</c> is the wire discriminator.
 /// </summary>
-// ponytail: write-only in C#. The bridge sends this and the host reads it; add a JsonConverter keyed on
-// `kind` when a C# reader exists.
+[JsonConverter(typeof(TouchedConverter))]
 public abstract record Touched {
     private Touched() { }
     public abstract string Kind { get; }
@@ -78,14 +77,25 @@ public abstract record Touched {
 ///     <c>IEvidenced&lt;T&gt;.Evidence</c>, absent when the response type declares none. The verdict stays on the
 ///     SDK receipt and is not repeated here.
 /// </summary>
-public sealed record OpReceiptResponse(
-    JRaw? Payload,
-    Touched Touched,
-    JRaw? Evidence = null,
-    string? Error = null,
-    int? StatusCode = null,
-    string? Outcome = null
-) {
+public sealed record OpReceiptResponse {
+    private OpReceiptResponse(Touched touched) => this.Touched = touched;
+
+    public JRaw? Payload { get; private init; }
+    public Touched Touched { get; }
+    public JRaw? Evidence { get; private init; }
+    public string? Error { get; private init; }
+    public int? StatusCode { get; private init; }
+    public string? Outcome { get; private init; }
+
+    /// <summary>A success always writes its <c>payload</c> key, as JSON <c>null</c> when the op returned nothing.</summary>
+    public static OpReceiptResponse Ok(JRaw? payload, Touched touched, JRaw? evidence = null) =>
+        touched is Touched.Unauthorized
+            ? throw new ArgumentException("A success cannot carry touched: unauthorized; that call fails.", nameof(touched))
+            : new OpReceiptResponse(touched) { Payload = payload ?? new JRaw("null"), Evidence = evidence };
+
+    public static OpReceiptResponse Failed(string error, int statusCode, Touched touched, string? outcome = null) =>
+        new(touched) { Error = error, StatusCode = statusCode, Outcome = outcome };
+
     // The bytes are the contract, so the shape serializes itself and no caller's settings can change them.
     private static readonly JsonSerializerSettings Json = new() {
         NullValueHandling = NullValueHandling.Ignore,
@@ -93,4 +103,35 @@ public sealed record OpReceiptResponse(
     };
 
     public string ToJson() => JsonConvert.SerializeObject(this, Json);
+}
+
+/// <summary>
+///     Reads a <see cref="Touched" /> by its <c>kind</c>; a bridge frame carries one back to a C# reader.
+///     Writing stays the default, which emits <c>Kind</c> with the case's own members.
+/// </summary>
+public sealed class TouchedConverter : JsonConverter<Touched> {
+    public override bool CanWrite => false;
+
+    public override void WriteJson(JsonWriter writer, Touched? value, JsonSerializer serializer) =>
+        throw new NotSupportedException();
+
+    public override Touched? ReadJson(JsonReader reader, Type objectType, Touched? existingValue, bool hasExistingValue,
+        JsonSerializer serializer) {
+        if (reader.TokenType == JsonToken.Null) return null;
+        var json = JObject.Load(reader);
+        T Get<T>(string name) =>
+            (json.GetValue(name, StringComparison.OrdinalIgnoreCase)
+             ?? throw new JsonSerializationException($"touched is missing '{name}'")).ToObject<T>(serializer)!;
+        var kind = Get<string>("kind");
+        return kind switch {
+            "none" => new Touched.None(),
+            "rolledBack" => new Touched.RolledBack(),
+            "restored" => new Touched.Restored(Get<List<ViewRef>>("views")),
+            "restoreFailed" => new Touched.RestoreFailed(Get<List<ViewLeft>>("views")),
+            "wrote" => new Touched.Wrote(Get<List<string>>("transactions"), Get<int>("added"), Get<int>("modified"), Get<int>("deleted")),
+            "unauthorized" => new Touched.Unauthorized(Get<List<string>>("transactions"), Get<int>("added"), Get<int>("modified"), Get<int>("deleted")),
+            "unknown" => new Touched.Unknown(Get<TouchedUnknownReason>("reason")),
+            _ => throw new JsonSerializationException($"Unknown touched kind '{kind}'")
+        };
+    }
 }
