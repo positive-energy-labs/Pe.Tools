@@ -1,4 +1,5 @@
 import { expect, test } from "vite-plus/test";
+import { readFileSync } from "node:fs";
 import { linkedCatalog } from "@pe/agent-contracts/pe-api";
 import { FINDING_KINDS, FINDINGS_DOORS, findingSchema, findingsWork, type Finding } from "@pe/agent-contracts/slots";
 import { subjectCode, uniqueIdSchema } from "../../../../../../packages/agent-contracts/src/subject-ref.ts";
@@ -12,6 +13,11 @@ import { findingMark, kernelVerbs } from "./index.ts";
 const port = subjectCode({ keyKind: "UniqueId", key: uniqueIdSchema.parse("9e9fb89e-a9db-4d9a-8f35-b8fbc2303423-00d3da72"), sub: { port: 1 } });
 const said = { by: "pea", at: "2026-11-10T12:00:00.000Z" } as const;
 const claim: Finding = { id: "p1", subject: port, kind: "claim", text: "pea on p1", said, verdict: { ...said, value: "no" } };
+
+test.each(["families/matrix.tsx", "families/pivot-grid.tsx", "fans/mount.tsx", "ducts/proto/e/screen.tsx", "ducts/sheet/view.tsx"])("%s never mounts finding verbs or pointer citations", path => {
+    const source = readFileSync(new URL(`../../../${path}`, import.meta.url), "utf8");
+    expect(source, path).not.toMatch(/route\/slots\/findings|FindingVerb|PointerCite|pointerRefs/);
+});
 
 test("slice 9: a note with a verdict is refused; every door is in the catalog Pea reads; the kernel verbs are the write doors", () => {
   // The contract: a note has no verdict key; the kinds and their verdicts are closed.

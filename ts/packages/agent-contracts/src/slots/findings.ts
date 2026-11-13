@@ -92,6 +92,14 @@ const sayInput = z
 /** What a caller sends to `findings.say`. The host mints the id and stamps the author and the time. */
 export type FindingInput = z.output<typeof sayInput>;
 
+/** The route guide projects every findings door; the table cannot omit one. */
+export const findingsGuide: Readonly<Record<(typeof FINDINGS_DOORS)[keyof typeof FINDINGS_DOORS], string>> = {
+  [FINDINGS_DOORS.say]: "Say a note, claim or check on a SubjectRef. A verdict is optional. The host stamps author and time.",
+  [FINDINGS_DOORS.rule]: "Rule on a claim or check, or withdraw its ruling with null. The original statement and author stay.",
+  [FINDINGS_DOORS.retract]: "Retract a finding. Either author may retract it; Timeline can undo the step.",
+  [FINDINGS_DOORS.list]: "Read this document's findings, optionally on one subject. Notes live in findings Work, never rooms Work.",
+};
+
 /**
  * The four doors (`workCommand`). The host addresses the findings Work of the admitted document from
  * the target, never from the handle; a findings handle gives only its revision, the compare-and-set.

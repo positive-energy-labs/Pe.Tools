@@ -2,7 +2,7 @@ import { PaneOverlay } from "@pe/kit/lang/pane";
 import { ButtonGroup } from "@pe/kit/lang/button-group";
 import { SvgTip } from "@pe/kit/lang/tooltip";
 /**
- * The plan's feedback layer (V6 calm): a tools bar with two marks and a note, the drawn marks,
+ * The plan's feedback layer (V6 calm): a tools bar and the drawn feedback marks,
  * one count badge per region with cards, and the card projected beside its room. A draft is
  * client-local until it drops; on drop it is edit. Escape cancels, `v` returns to look.
  */
