@@ -15,6 +15,7 @@ const pageExportKind = stateKind({
   place: (_sha: string) => "Page export",
   segments: (sha: string) => [`${sha}.html`],
 });
+
 export type PageExportInput = {
   directory: string;
   /** Where the export is kept: the Page's machine-state folder, never the Page's own folder in a home. */
@@ -251,10 +252,6 @@ window.pe = pe;
     ? html.replace(/<head\b[^>]*>/i, (head) => head + pinned)
     : pinned + html;
   const sha256 = sha(html);
-  const path = await writeArtifact(
-    input.exports.path,
-    pageExportKind.in(input.exports, sha256),
-    html,
-  );
+  const path = await writeArtifact(input.exports.path, pageExportKind.in(input.exports, sha256), html);
   return { html, sha256, path, provenance };
 }

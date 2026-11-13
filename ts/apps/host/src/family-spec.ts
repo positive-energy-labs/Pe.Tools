@@ -1,5 +1,4 @@
-import { blobRefSchema, FAMILY_MEMBER_DIR, isFamilyMember, type Consumed,
-} from "@pe/agent-contracts";
+import { blobRefSchema, FAMILY_MEMBER_DIR, isFamilyMember, type Consumed } from "@pe/agent-contracts";
 import { put, get } from "./action-blobs.ts";
 import { createHash } from "node:crypto";
 import { open, readFile } from "node:fs/promises";
@@ -167,10 +166,7 @@ const preparedSpecSchema = z.strictObject({
   assets: z.array(assetSchema),
 });
 
-export function familySpecExecutor(
-  deps: PodDependencies = {},
-  bridge?: RevitBridge["Service"],
-): CommandExecutor {
+export function familySpecExecutor(deps: PodDependencies = {}, bridge?: RevitBridge["Service"]): CommandExecutor {
   const parsePdf = deps.parsePdf ?? parseFamilyPdf;
   return command(commands["family.attach-spec"], preparedSpecSchema, {
     bind: async (ctx) => {
@@ -195,10 +191,7 @@ export function familySpecExecutor(
       const pods: PodContext = bridge ? await podContext(deps, bridge, ctx.admission.target.kind === "document" ? ctx.admission.target.ref : undefined) : { podsRoot: deps.podsRoot };
       const root = await runPods(deps, podFolder(member.pod, pods));
       // The parse and any vendor download are kept once for the project the Pod, or the PDF, sits in.
-      const store = derivedFor(
-        hostOwnership.rootPath,
-        root, ...("path" in source ? [source.path] : []),
-      );
+      const store = derivedFor(hostOwnership.rootPath, root, ...("path" in source ? [source.path] : []));
       // Every refusal here names the next step: the caller is a person or Pea, neither reads this file.
       const save = `Save the open family first: stage writeIntent["family.capture"].edit = { "value": { "pod": "${member.pod}" } } in Family Work and run family.capture; it files the family under ${FAMILY_MEMBER_DIR} and returns the member to attach to.`;
       if (!isFamilyMember(member.path))
@@ -239,8 +232,7 @@ export function familySpecExecutor(
         throw sourceRefused(
           "Source is not a PDF: its bytes do not begin with %PDF-. Export or print it to PDF and attach that.",
         );
-      if ("url" in source)
-        writeDerivedIn(store, derivedKey(source.url, "fetch/1"), Buffer.from(bytes));
+      if ("url" in source) writeDerivedIn(store, derivedKey(source.url, "fetch/1"), Buffer.from(bytes));
       const sha256 = createHash("sha256").update(Buffer.from(bytes)).digest("hex");
       const sourceFact: Consumed[] =
         "path" in source
@@ -329,8 +321,7 @@ export function familySpecExecutor(
         },
       };
     },
-    run: (ctx, execution) =>
-      Effect.gen(function* () {
+    run: (ctx, execution) => Effect.gen(function* () {
       const { member, doc, specPath, assets } = execution.prepared as z.infer<
         typeof preparedSpecSchema
       >;

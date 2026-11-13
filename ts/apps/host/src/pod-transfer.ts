@@ -1,8 +1,7 @@
 /** Transport consumes packages.ts's captured members; source bytes and local custody stay distinct. */
 import { randomUUID } from "node:crypto";
 import { constants } from "node:fs";
-import { copyFile, cp, lstat, mkdir, readFile, readdir, rename, rm, rmdir, stat,
-} from "node:fs/promises";
+import { copyFile, cp, lstat, mkdir, readFile, readdir, rename, rm, rmdir, stat } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { crc32, deflateRawSync, inflateRawSync } from "node:zlib";
 import { message, packageIdSchema, packageMemberPathSchema } from "@pe/agent-contracts";
@@ -78,7 +77,7 @@ export async function preparePodExport(
   snapshot?: PackageListing,
 ) {
   const archivePath = zipPath(request.archivePath);
-  const listing = snapshot ?? (await listPackages(options.podsRoot));
+  const listing = snapshot ?? await listPackages(options.podsRoot);
   const pod = unique(listing, request.pod);
   const captured = await capturePackage(pod).catch((error: unknown) => {
     throw new TransferRefused(`Pod '${request.pod}' is not exportable: ${message(error)}`);

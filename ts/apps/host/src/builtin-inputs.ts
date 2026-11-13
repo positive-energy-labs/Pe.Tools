@@ -1,8 +1,7 @@
 import { catalogsFor } from "./ducts-files.ts";
 import { z } from "zod";
 import { admitNativeCaller } from "./native-read-policy.ts";
-import { captureInput, replayInput, nativeInputIdentity, type RecordedInput,
-} from "./native-recording.ts";
+import { captureInput, replayInput, nativeInputIdentity, type RecordedInput } from "./native-recording.ts";
 import { CaptureStore } from "./takeoff-captures.ts";
 import { takeoffSnapshotInput } from "../../web/src/takeoff/host.ts";
 import { projectTakeoffSnapshot } from "@pe/mcps/takeoff-ops";
@@ -316,12 +315,7 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
             ).pipe(
               Effect.catch(() => {
                 const at = writer.capture.begin();
-                return at === null
-                  ? Effect.void
-                  : writer.capture.stop(at, "observer", {
-                      site: "builtin",
-                      op: current.recipe.key,
-                    });
+                return at === null ? Effect.void : writer.capture.stop(at, "observer", { site: "builtin", op: current.recipe.key });
               }),
             );
         }),
@@ -468,7 +462,7 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
         );
     const complete = (current: InputConsumption) => scoped(current)(sealed(current));
     const activeFrames = new Map<InputConsumption, symbol>();
-      let closingResources = false;
+    let closingResources = false;
     const closeResources = () => {
       if (consumption && closingResources && !activeFrames.size) void invoke(consumption.close);
     };
@@ -503,24 +497,22 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
           })();
       return scoped(current)(effect);
     };
-      const takeFile = (name: string, args: unknown, current: InputConsumption) =>
-        takeOwner(current, { kind: "files", file: canonicalJson([name, json(args)]) }, () =>
-          name === "takeoff-capture"
-            ? (async () => {
+    const takeFile = (name: string, args: unknown, current: InputConsumption) =>
+      takeOwner(current, { kind: "files", file: canonicalJson([name, json(args)]) }, () =>
+        name === "takeoff-capture"
+          ? (async () => {
               if (Option.isNone(takeoffs)) throw Error("Takeoff capture store is unavailable");
               const { target, snapshot: body, views } = takeoffSnapshotInput.parse(args);
               const row = await invoke(inventory.document(target));
               if (!row.address || !sameAddress(row.address, addressSchema.parse(body.reading.at))) throw Error("Snapshot returned a different document");
               const sessions = await invoke(inventory.list());
-                const title = sessions.sessions
-                  .find((session) => session.sessionId === target.session)
-                  ?.openDocuments?.find((doc) => doc.openId === target.openId)?.title;
+              const title = sessions.sessions.find(session => session.sessionId === target.session)?.openDocuments?.find(doc => doc.openId === target.openId)?.title;
               if (!title) throw Error("Snapshot document is no longer open");
               return takeoffs.value.retain(projectTakeoffSnapshot(body, title, views), { kind: "live", target },
                 async () => { const current = await invoke(inventory.document(target));
                   if (!current.address || !sameAddress(current.address, row.address!)) throw Error("Snapshot target changed before retention"); });
-              })()
-            : name === "settings"
+            })()
+          : name === "settings"
           ? (async () => {
               // The project tier is the home the target model's pointer names (homes freeze shape 4).
               const { owner, target } = settingsFile.input.parse(args);
@@ -537,8 +529,8 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
                 return readFamilySpec(member, pointer);
               })()
             : Promise.reject(Error(`Unknown file input ${name}`)),
-        );
-      const sources = (current: InputConsumption): ReadSources => {
+      );
+    const sources = (current: InputConsumption): ReadSources => {
       const context = Context.add(admitted, CurrentInputConsumption, current);
       const invoke = <A, E>(effect: Effect.Effect<A, E, RequestIdentityKey | HostNativeRead>) =>
         runPods({}, Effect.provide(effect, context));
@@ -555,7 +547,7 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
         });
       const document = (ref: import("@pe/agent-contracts").DocumentRef) =>
         invoke(documentRead(ref));
-        return {
+      return {
         file: (name, args) =>
           name === "firm"
             ? invoke(files.firm(String(args)))
@@ -570,33 +562,28 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
           run: scoped(current),
           work: workReadContext(current, scoped(current)),
         },
-          resource: (request) =>
+        resource: (request) =>
           // The session inventory is no resource adapter's (`fallback` refuses it). A graph read takes
           // it from the owner the stream door uses (`retainedResource`), as that owner's own taking:
           // inside `takeOwner` it would be one taking nested in another on the same consumption.
           (request as { kind: string }).kind === "inventory"
-              ? invoke(inventory.list())
-              : takeOwner(
-                  current,
+            ? invoke(inventory.list())
+            : takeOwner(
+            current,
             { kind: "resource", key: "snapshot", args: canonicalJson(json(request)) },
-                  () => {
+            () => {
               if ((request as { kind: string }).kind === "captures")
                 return (async () => {
                   const captures = await pictures!.list();
                   return { captures };
                 })();
               const resource = readingRequestSchema.parse(request);
-                    if (resource.kind === "takeoff-saved")
-                      return (async () => {
+              if (resource.kind === "takeoff-saved") return (async () => {
                 if (Option.isNone(takeoffs)) throw Error("Takeoff capture store is unavailable");
                 if (resource.id) return resource.text ? takeoffs.value.savedText(resource.id) : takeoffs.value.saved(resource.id);
-                        return (await takeoffs.value.list(resource.document ? addressSchema.parse(resource.document) : undefined))
-                  .map(({ snapshot, ...capture }) => ({
-                          ...capture,
-                          document: snapshot.reading.at,
-                          title: snapshot.world.docName,
-                        }));
-                      })();
+                return (await takeoffs.value.list(resource.document ? addressSchema.parse(resource.document) : undefined))
+                  .map(({ snapshot, ...capture }) => ({ ...capture, document: snapshot.reading.at, title: snapshot.world.docName }));
+              })();
               return new Promise((resolve, reject) => {
                 let settled = false,
                   stop = () => {};
@@ -617,8 +604,8 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
                 );
                 if (settled) stop();
               });
-                  },
-                ),
+            },
+          ),
         call: async (key, input, target, version, role) => {
           const chosen = executionTargetSchema.parse(target);
           const safety = hostOpSafety[key as keyof typeof hostOpSafety];
@@ -648,14 +635,14 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
             await invoke(retained(current, { key, input, scope }, { version }, role, documentRead)),
           );
         },
-        };
       };
-      const observeFrame = (
+    };
+    const observeFrame = (
       reading: Parameters<ResourceObserver>[0],
       publish: Parameters<ResourceObserver>[1],
       after: Parameters<ResourceObserver>[2],
-        recordedFrame?: InputConsumption,
-      ) => {
+      recordedFrame?: InputConsumption,
+    ) => {
       if (
         !recorded &&
         !["work", "work-acks", "ducts-snapshot", "ducts-tables", "inventory"].includes(reading.kind)
@@ -671,8 +658,8 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
       }
       const frameRuns = new WeakMap<WorkCarriage, WorkInputRunner>();
       const readyFrames = new Set<InputConsumption>();
-        const frameOwner = Symbol();
-        let released = false;
+      const frameOwner = Symbol();
+      let released = false;
       const frameRecipe: ConsumerRecipe = {
         key: "resource.frame",
         input: json(reading),
@@ -841,7 +828,7 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
           release();
         };
       };
-        const release = markReadings(marks, async (ref, key, at, carriage, update) => {
+      const release = markReadings(marks, async (ref, key, at, carriage, update) => {
         const runFrame = carriage ? frameRuns.get(carriage) : undefined;
         if (!runFrame) {
           if (!ref) return null;
@@ -853,8 +840,8 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
             problem: "recording.context",
           });
         }
-          return runFrame(
-            Effect.gen(function* () {
+        return runFrame(
+          Effect.gen(function* () {
             const active = yield* Effect.serviceOption(CurrentInputConsumption);
             if (Option.isNone(active))
               return yield* new InvalidRead({
@@ -881,9 +868,9 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
             if (independent) activeFrames.set(current, frameOwner);
             readyFrames.delete(current);
             if (!update && carriage) frameRuns.set(carriage, scoped(current));
-              return yield* Effect.tryPromise({
-                try: async () => {
-                  try {
+            return yield* Effect.tryPromise({
+              try: async () => {
+                try {
                   if (released)
                     throw new InvalidRead({
                       message: "Resource subscription is closed",
@@ -895,28 +882,23 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
                     await scoped(current)(
                       current.linkReadSet("subscription", carriage.subscription),
                     );
-                    if (ref && writer && !writer.capture.truncated())
-                      await scoped(current)(
+                  if (ref && writer && !writer.capture.truncated())
+                    await scoped(current)(
                       inventory.document(ref).pipe(
                         Effect.provideService(RequestIdentity, identity),
-                          Effect.catch(() => {
+                        Effect.catch(() => {
                           const at = writer.capture.begin();
-                            return at === null
-                              ? Effect.void
-                              : writer.capture.stop(at, "unsupported", {
-                                  site: "builtin",
-                                  op: "inventory.document",
-                                });
-                          }),
-                        ),
-                      );
+                          return at === null ? Effect.void : writer.capture.stop(at, "unsupported", { site: "builtin", op: "inventory.document" });
+                        }),
+                      ),
+                    );
                   const value = ref ? await scoped(current)(marks.readFrame(ref, key, at)) : null;
                   if (!released) await complete(current);
-                    return value;
-                  } finally {
+                  return value;
+                } finally {
                   await finishFrame(current);
                 }
-                },
+              },
               catch: (error) =>
                 isDoorFailure(error)
                   ? error
@@ -925,10 +907,10 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
                       status: 409,
                       problem: "recording.context",
                     }),
-              });
-            }),
-          );
-        })(observeResources(workspace, undefined, retainedResource, work))(reading, publish, after);
+            });
+          }),
+        );
+      })(observeResources(workspace, undefined, retainedResource, work))(reading, publish, after);
       return () => {
         released = true;
         release();
@@ -938,7 +920,7 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
           for (const [current, owner] of activeFrames)
             if (owner === frameOwner) void finishFrame(current);
       };
-      };
+    };
     const observe: ResourceObserver = (reading, publish, after) => {
       // A read publication's invalidation rides the tab's one stream (HTTP/1.1 gives an origin 6
       // sockets; a stream per read starved the rest). Metadata only, per caller: the value travels
@@ -1020,7 +1002,7 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
       };
     };
     const source = consumption ? sources(consumption) : undefined;
-      return {
+    return {
       ...(graph && source
         ? {
             readGraph: async () => {
@@ -1094,37 +1076,32 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
             ),
           ),
       }),
-        observe,
+      observe,
       closeResources: () => {
         closingResources = true;
         closeResources();
       },
-        resourceOwner: connectionOwner,
-        finish: async (result) => {
+      resourceOwner: connectionOwner,
+      finish: async (result) => {
         if (stream) {
           if (consumption && ("error" in result || !result.response.ok))
             await invoke(consumption.close);
           return;
         }
-          try {
+        try {
           if ("response" in result && result.response.ok) {
             if (!graph?.publication || !history || !writer || !historyDocument.success)
               await complete(consumption!);
           }
         } catch {
           const at = writer?.capture.begin();
-            if (at != null)
-              await invoke(
-                writer!.capture.stop(at, "io", {
-                  site: "builtin", op: consumption?.recipe.key ?? "read.finish",
-                }),
-              );
-          } finally {
+          if (at != null) await invoke(writer!.capture.stop(at, "io", { site: "builtin", op: consumption?.recipe.key ?? "read.finish" }));
+        } finally {
           admission?.close();
           if (consumption) await invoke(consumption.close);
         }
-        },
-      };
+      },
+    };
     } catch (error) {
       admission?.close();
       throw error;
@@ -1178,12 +1155,7 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
           yield* inventory.document({ session: session.sessionId, openId: openDocumentId }).pipe(
             Effect.catch(() => {
               const at = writer.capture.begin();
-              return at === null
-                ? Effect.void
-                : writer.capture.stop(at, "unsupported", {
-                    site: "builtin",
-                    op: "inventory.document",
-                  });
+              return at === null ? Effect.void : writer.capture.stop(at, "unsupported", { site: "builtin", op: "inventory.document" });
             }),
           );
         return response;

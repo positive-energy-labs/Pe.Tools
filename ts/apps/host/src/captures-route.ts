@@ -16,7 +16,8 @@ import { HttpRouter, HttpServerResponse as Response } from "effect/http";
 import {
   captureReceiptSchema,
   captureUrl,
-  type CaptureReceipt } from "@pe/agent-contracts";
+  type CaptureReceipt,
+} from "@pe/agent-contracts";
 import {
   appendLine,
   readLines,

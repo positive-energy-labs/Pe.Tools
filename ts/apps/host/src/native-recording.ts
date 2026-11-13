@@ -200,11 +200,7 @@ export const inputBindingKey = (input: RecordedInput, scope: string) =>
 export type TakingObserver = (taking: Taking) => Effect.Effect<void, DoorFailure>;
 
 /** A consumer's fixed host recipe: its build-bound key, actual validated input and exact scope. */
-const consumerRecipe = Schema.Struct({
-  key: Schema.String,
-  input: Schema.Json,
-  scope: Schema.String,
-});
+const consumerRecipe = Schema.Struct({ key: Schema.String, input: Schema.Json, scope: Schema.String });
 // Host-minted ids only; decoded before any path is built.
 const readSetIdName = Schema.String.check(
   Schema.makeFilter((id) => /^[0-9a-f-]{36}$/.test(id) || "Read-set id is not host minted"),
@@ -220,12 +216,7 @@ export const readSetRecordSchema = Schema.Struct({
   recipe: consumerRecipe,
   state: Schema.Literals(["complete", "incomplete"]),
   inputs: Schema.Array(
-    Schema.Struct({
-      input: recordedInput,
-      scope: Schema.String,
-      start: Schema.Number,
-      takingId: Schema.String,
-    }),
+    Schema.Struct({ input: recordedInput, scope: Schema.String, start: Schema.Number, takingId: Schema.String }),
   ),
   children: Schema.Array(
     Schema.Struct({ recipe: consumerRecipe, start: Schema.Number, readSetId: readSetIdName }),
@@ -366,17 +357,13 @@ const loadBundle = Effect.fn("Recording.load")(function* (
     }
   }
   // A crash between the blob and taking append must not recover uncharged disk capacity.
-  for (const name of yield* io(() =>
-    readdir(observations).catch((error: unknown) => (missing(error) ? [] : Promise.reject(error))),
-  )) {
+  for (const name of yield* io(() => readdir(observations).catch((error: unknown) => missing(error) ? [] : Promise.reject(error)))) {
     const sha = yield* Schema.decodeUnknownEffect(sha256Name)(name.endsWith(".json") ? name.slice(0, -5) : null)
       .pipe(Effect.mapError(() => refuse("tamper", "Observation filename is not a SHA-256")));
     if (!stored.has(sha)) used += (yield* io(() => stat(join(observations, name)))).size;
   }
   const names = yield* io(() =>
-    readdir(join(dir, READ_SETS)).catch((error: unknown) =>
-      missing(error) ? [] : Promise.reject(error),
-    ),
+    readdir(join(dir, READ_SETS)).catch((error: unknown) => (missing(error) ? [] : Promise.reject(error))),
   );
   const sets: string[] = [];
   for (const name of names) {
@@ -453,8 +440,7 @@ const loadBundle = Effect.fn("Recording.load")(function* (
         Effect.mapError(() => refuse("tamper", `Observation ${sha} is not JSON`)),
       );
     }),
-    coverage: () => [...new Set(takings.flatMap((taking) => taking.input.kind === "publication" ? [] : [taking.input.kind])),
-    ],
+    coverage: () => [...new Set(takings.flatMap((taking) => taking.input.kind === "publication" ? [] : [taking.input.kind]))],
     truncation,
     readSets: {
       ids: () => sets.slice(),
@@ -825,10 +811,8 @@ const captured = <A, E, R>(
             ),
       ),
     );
-    if (Exit.isFailure(kept))
-      yield* writer.capture.stop(at, reasonOf(kept.cause), { site: Exit.isFailure(exit) ? "failure" : "json",
-        op,
-      });
+    if (Exit.isFailure(kept)) yield* writer.capture.stop(at, reasonOf(kept.cause),
+      { site: Exit.isFailure(exit) ? "failure" : "json", op });
     return yield* exit;
   });
 /** A live failure as its recorded outcome, or null for an interrupted read, which is no taking. */
@@ -847,38 +831,29 @@ const capturing = (store: RecordingWriter, observed: TakingObserver) =>
       return {
         resolve: live.resolve,
         read: (request) =>
-          captured(
-            store,
-            request.key,
-            live.read(request),
-            (exit) =>
-              Effect.gen(function* () {
-                const outcome: Outcome | null = Exit.isSuccess(exit)
-                  ? {
-                      kind: "answered",
+          captured(store, request.key, live.read(request), (exit) =>
+            Effect.gen(function* () {
+              const outcome: Outcome | null = Exit.isSuccess(exit)
+                ? {
+                    kind: "answered",
                     value: exit.value.value,
-                      answer: {
+                    answer: {
                       nativeRequestId: exit.value.nativeRequestId,
                       actualTarget: exit.value.actualTarget,
-                        freshness: { freshnessGeneration: exit.value.freshness.freshnessGeneration,
-                        },
+                      freshness: { freshnessGeneration: exit.value.freshness.freshnessGeneration },
                       cost: exit.value.cost,
                       nativeOutcome: exit.value.outcome,
-                      },
-                    }
-                  : yield* failedOutcome(exit);
+                    },
+                  }
+                : yield* failedOutcome(exit);
               if (outcome === null) return null;
-                const input = {
-                  input: {
-                    kind: "native" as const,
-                    key: request.key,
-                    args: yield* argsOf(request),
-                  },
+              const input = {
+                input: { kind: "native" as const, key: request.key, args: yield* argsOf(request) },
                 scope: yield* scopeOf(request),
                 outputVersion: yield* versionOf(request.key),
-                };
+              };
               return { input, outcome };
-              }),
+            }),
             observed,
             nativeOccurrence(request),
           ),
@@ -888,9 +863,7 @@ const capturing = (store: RecordingWriter, observed: TakingObserver) =>
 /** A native read's occurrence, when its input and scope are JSON; otherwise it has none to reserve. */
 const nativeOccurrence = (request: NativeReadInput): Effect.Effect<Occurrence | undefined> =>
   Effect.all([argsOf(request), scopeOf(request)]).pipe(
-    Effect.map(([args, scope]) => ({ input: { kind: "native" as const, key: request.key, args },
-      scope,
-    })),
+    Effect.map(([args, scope]) => ({ input: { kind: "native" as const, key: request.key, args }, scope })),
     Effect.orElseSucceed(() => undefined),
   );
 

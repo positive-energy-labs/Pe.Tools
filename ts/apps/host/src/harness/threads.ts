@@ -469,9 +469,7 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
       threads.set(id, fresh(meta, events));
       // Backfill only observed context. Work documents and native admission stay untouched.
       if (before !== JSON.stringify(meta.workContext))
-        writeJson(
-          join(options.root.path, id, "meta.json"), redactKeys(meta, options.providers.keys()),
-        );
+        writeJson(join(options.root.path, id, "meta.json"), redactKeys(meta, options.providers.keys()));
     } catch (error) {
       startup.skipped.push(
         `harness thread ${join(options.root.path, id)} skipped: it does not parse (${String(error)})`,
@@ -571,9 +569,7 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
 
   // meta.json is a door too: a harness's session title can echo a key, so it takes the one redaction set.
   const writeMeta = (t: Thread) =>
-    writeJson(
-      join(options.root.path, t.meta.id, "meta.json"), redactKeys(t.meta, options.providers.keys()),
-    );
+    writeJson(join(options.root.path, t.meta.id, "meta.json"), redactKeys(t.meta, options.providers.keys()));
 
   function append(t: Thread, event: Append): HarnessEvent {
     const keys = options.providers.keys();
@@ -842,9 +838,13 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
 
   function isActivity(event: HarnessEvent) {
     return (
-      ["prompt", "turn_end", "error", "question_request", "question_resolved"].includes(
-        event.kind,
-      ) ||
+      [
+        "prompt",
+        "turn_end",
+        "error",
+        "question_request",
+        "question_resolved",
+      ].includes(event.kind) ||
       (event.kind === "update" &&
         ["agent_message_chunk", "agent_thought_chunk", "tool_call", "tool_call_update"].includes(
           String(event.update.sessionUpdate),
@@ -2238,8 +2238,9 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
   // and the turn ends in an error.
   for (const t of threads.values()) {
     const resolved = new Set(
-      t.events.flatMap((e) => (
-        e.kind === "question_resolved" ? [e.requestId] : [])),
+      t.events.flatMap((e) =>
+        e.kind === "question_resolved" ? [e.requestId] : [],
+      ),
     );
     for (const e of t.events)
       if (e.kind === "question_request" && !resolved.has(e.requestId))

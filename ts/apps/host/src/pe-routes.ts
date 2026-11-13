@@ -235,13 +235,10 @@ const historyBody = peRoutes["work.history"].body;
 const json = (value: unknown, status = 200) => Response.json(value, { status });
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
-const historicalPeRefusal = (inputs: HostInputContext["Service"] | undefined, method: string, id: string,
-) => {
+const historicalPeRefusal = (inputs: HostInputContext["Service"] | undefined, method: string, id: string) => {
   if (inputs?.lane.kind !== "recording") return null;
-  if (![...graphRouteIds, "work.get", "work.list", "resources.stream", "resources.subscriptions", "features.get",
-    ].includes(id))
-    return method === "GET" ? new InvalidRead({ message: "Recording does not cover this route owner", status: 409, problem: "recording.coverage",
-        })
+  if (![...graphRouteIds, "work.get", "work.list", "resources.stream", "resources.subscriptions", "features.get"].includes(id))
+    return method === "GET" ? new InvalidRead({ message: "Recording does not cover this route owner", status: 409, problem: "recording.coverage" })
       : inputs.check({ kind: "work", verb: "edit" });
   const needs = id.startsWith("work.") ? ["work" as const] : [];
   for (const input of needs) { const refusal = inputs.check({ kind: "input", input }); if (refusal) return refusal; }
@@ -474,11 +471,8 @@ export function createPeRoutes(options: PeRoutesOptions) {
     if (method === "GET" && declared.id === "family.spec") {
       const scope = readSessionScope(Object.fromEntries(request.headers));
       const document = scope.bridgeSessionId && scope.openDocumentId && invocation.document
-          ? await invocation.document({
-              session: scope.bridgeSessionId,
-              openId: scope.openDocumentId,
-            })
-          : null;
+        ? await invocation.document({ session: scope.bridgeSessionId, openId: scope.openDocumentId })
+        : null;
       return familySpecAsset(url, undefined, document?.projectHome);
     }
     const parts = url.pathname.split("/").slice(2).map(decodeURIComponent); // drop "", "pe"
@@ -550,8 +544,7 @@ export function createPeRoutes(options: PeRoutesOptions) {
       try {
         const query = url.searchParams;
         const catalog = await options.capabilityCatalog.read({
-          bridgeSessionId:
-            scope.binding === "open" ? scope.open.session : (query.get("session") ?? undefined),
+          bridgeSessionId: scope.binding === "open" ? scope.open.session : query.get("session") ?? undefined,
           openDocumentId: scope.binding === "open" ? scope.open.openId : undefined,
           session: query.has("sdk")
             ? sdkSessionSelectionSchema.parse(JSON.parse(query.get("sdk")!))
@@ -961,7 +954,7 @@ export function createContributionContent(options: {
     await lifecycle.refresh();
     snapshot = undefined;
     options.changed?.();
-  }).catch((error) => {
+  }).catch(error => {
     bootstrapProblem = `Shipped Pods unavailable: ${String(error)}`;
     snapshot = undefined;
     options.changed?.();
@@ -1541,8 +1534,7 @@ export const makeHostPeRoutes = Effect.fn("peRoutes.make")(hostPeRoutes);
 /** Same declared Pe doors, with request-local source ports and no surrounding live services. */
 const addPeHttpRoutes = (router: HttpRouter.HttpRouter,
   handlers: Readonly<Record<string, (request: Request, context: Context.Context<RequestIdentityKey>) => Promise<Response>>>,
-  inputs?: HostInputContext["Service"],
-) => Effect.gen(function* () {
+  inputs?: HostInputContext["Service"]) => Effect.gen(function* () {
   for (const route of Object.values(peRoutes)) {
     const handle = handlers[route.owner];
     if (!handle) continue;
@@ -1550,8 +1542,7 @@ const addPeHttpRoutes = (router: HttpRouter.HttpRouter,
       const context = yield* Effect.context<RequestIdentityKey>();
       const declared = matchPeRoute(request.method, new URL(request.originalUrl, "http://host").pathname)!;
       if (request.headers["x-pe-history-point"] && ![...graphRouteIds, "features.get", "capabilities.list"].includes(declared.id))
-        return yield* new InvalidRead({ message: "needs live Revit", status: 409, problem: "history.read-only",
-            });
+        return yield* new InvalidRead({ message: "needs live Revit", status: 409, problem: "history.read-only" });
       const denied = historicalPeRefusal(inputs, request.method, declared.id);
       if (denied) return yield* denied;
       let failure: import("@pe/host-internal/request-contracts").DoorFailure | undefined;
@@ -1567,8 +1558,7 @@ const addPeHttpRoutes = (router: HttpRouter.HttpRouter,
       }));
       if (failure) return yield* Effect.fail(failure);
       return response;
-    }),
-      );
+    }));
   }
 });
 

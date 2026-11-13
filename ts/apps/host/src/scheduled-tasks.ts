@@ -102,6 +102,7 @@ export const scheduledTasksKind = stateKind<z.infer<typeof taskSchema>[], [name?
   place: (_name: string = "scheduled-tasks.json") => "Scheduled tasks",
   segments: (name: string = "scheduled-tasks.json") => [name],
 });
+
 export function createScheduledTasks(options: {
   file: StoredFile<z.infer<typeof taskSchema>[], "state">;
   receipts: ReceiptReader;

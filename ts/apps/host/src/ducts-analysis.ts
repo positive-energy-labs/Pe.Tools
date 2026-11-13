@@ -322,9 +322,7 @@ export function createDuctsAnalysis(sources: DuctsAnalysisSources) {
       throw Error("Analysis artifact integrity failed");
     return bytes;
   };
-  async function acquire(
-    target: DocumentRef, selector: DuctsAnalysisRequest["selector"],
-  ): Promise<Artifact> {
+  async function acquire(target: DocumentRef, selector: DuctsAnalysisRequest["selector"]): Promise<Artifact> {
     const began = Date.now();
     const beforeMark = sources.marks.changedAt(target);
     const observedSince = sources.marks.observedSince;
@@ -378,18 +376,12 @@ export function createDuctsAnalysis(sources: DuctsAnalysisSources) {
       ...(Object.keys(slots).length ? { slots } : {}),
       ...(staged.labelParameter ? { labelParameter: staged.labelParameter } : {}),
     };
-    (await read("ducts.snapshot.roster", {
-      ...readOptions,
-      selector: { kind: "roster" },
-    })) as DuctSnapshot;
+    await read("ducts.snapshot.roster", { ...readOptions, selector: { kind: "roster" } }) as DuctSnapshot;
     const scope = selector.kind === "equipment" || selector.kind === "terminal"
       ? { kind: "from", unitId: selector.id }
       : null;
     if (!scope) throw Error("Fresh analysis requires an equipment or terminal subject; read the roster first. Document/group projections remain available on saved artifacts.");
-    const snapshot = (await read("ducts.snapshot.walk", {
-      ...readOptions,
-      selector: scope,
-    })) as DuctSnapshot;
+    const snapshot = await read("ducts.snapshot.walk", { ...readOptions, selector: scope }) as DuctSnapshot;
     const tables = await read("ducts.tables", { ids: [...TABLE_IDS] });
     const catalogs = await sources.catalogs(observation.projectHome);
     const inputJson = JSON.stringify({
@@ -475,11 +467,7 @@ export function createDuctsAnalysis(sources: DuctsAnalysisSources) {
     const work = ductsDocumentSchema.parse(input.work);
     if (input.snapshot.storeError) throw Error("Apply request provenance store is unreadable");
     if (artifact.acquisition.length !== 3) throw Error("Apply request acquisitions are incomplete");
-    for (const [index, key] of [
-      "ducts.snapshot.roster",
-      "ducts.snapshot.walk",
-      "ducts.tables",
-    ].entries()) {
+    for (const [index, key] of ["ducts.snapshot.roster", "ducts.snapshot.walk", "ducts.tables"].entries()) {
       const row = artifact.acquisition[index]!;
       const raw = Buffer.from(row.bodyUtf8, "utf8");
       if (
@@ -650,7 +638,9 @@ function project(
     freshness: artifact.freshness,
   });
   const { snapshot, flows, groups, selectedTerminals, reached, equipment } = assessment;
-  const findings = [...assessment.findings];
+  const findings = [
+    ...assessment.findings,
+  ];
   const nodes = new Map(snapshot.nodes.map((node) => [node.id, node]));
   const baseRow = (node: DuctSnapshot["nodes"][number] | undefined, elementId: number) => ({
     id: elementId,

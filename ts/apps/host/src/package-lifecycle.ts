@@ -51,7 +51,8 @@ export async function activateImportedPackage(id: string, podsRoot: string) {
  * not decode is refused with a notice and its bytes stay. Defaults hold, and no choice is saved
  * over it until a person fixes or removes the file.
  */
-const storedDecisions = (file: DecisionsFile) => readFile(file);
+const storedDecisions = (file: DecisionsFile) =>
+  readFile(file);
 const readDecisions = async (file: DecisionsFile) => {
   const read = storedDecisions(file);
   return read.kind === "ok" ? read.value : {};

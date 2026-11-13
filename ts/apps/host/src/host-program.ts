@@ -32,24 +32,18 @@ export type HostInputSelection =
   | { readonly kind: "recording"; readonly directory: string; readonly at: string | null; readonly bindings?: ReadonlyMap<string, string> };
 
 /** One exact process flag: --recording <directory>; all other host flags keep their existing owner. */
-export const recordingInputSelection = (argv: readonly string[],
-): Effect.Effect<HostInputSelection | undefined, InvalidRead> => {
+export const recordingInputSelection = (argv: readonly string[]): Effect.Effect<HostInputSelection | undefined, InvalidRead> => {
   const flags = argv.filter((arg) => arg.toLowerCase().startsWith("--recording"));
   if (!flags.length) return Effect.succeed(undefined);
   // Historical entry cannot inherit the live launcher's incumbent-eviction authority.
   if (argv.includes("--take-over-host"))
-    return Effect.fail(new InvalidRead({ message: "Recording cannot take over another host", status: 400, problem: "recording.argument",
-      }),
-    );
+    return Effect.fail(new InvalidRead({ message: "Recording cannot take over another host", status: 400, problem: "recording.argument" }));
   const directory = argv[argv.indexOf("--recording") + 1];
   if (flags.length !== 1 || flags[0] !== "--recording" || !directory?.trim() || directory.startsWith("-") || directory.includes("\0"))
-    return Effect.fail(new InvalidRead({ message: "Use --recording <directory> exactly once", status: 400, problem: "recording.argument",
-      }),
-    );
+    return Effect.fail(new InvalidRead({ message: "Use --recording <directory> exactly once", status: 400, problem: "recording.argument" }));
   return Effect.try({
     try: (): HostInputSelection => ({ kind: "recording", directory: resolve(directory), at: null }),
-    catch: () => new InvalidRead({ message: "Invalid --recording directory", status: 400, problem: "recording.argument",
-      }),
+    catch: () => new InvalidRead({ message: "Invalid --recording directory", status: 400, problem: "recording.argument" }),
   });
 };
 
@@ -57,24 +51,16 @@ export const recordingInputSelection = (argv: readonly string[],
 export const hostInputs = (stamp: ReceiptStamp | null, selection: HostInputSelection) => Effect.gen(function* () {
   if (selection.kind === "live" && selection.capture === "off")
     return yield* HostInputContext.pipe(Effect.provide(HostInputContext.layer({ kind: "live" })));
-  if (!stamp) return yield* new InvalidRead({ message: "Recording requires an admitted host build", status: 409, problem: "recording.identity",
-      });
-  const identity = { build: JSON.stringify({ version: stamp.version, build: stamp.build, commit: stamp.commit }), catalog: nativeCatalogIdentity(),
-    };
+  if (!stamp) return yield* new InvalidRead({ message: "Recording requires an admitted host build", status: 409, problem: "recording.identity" });
+  const identity = { build: JSON.stringify({ version: stamp.version, build: stamp.build, commit: stamp.commit }), catalog: nativeCatalogIdentity() };
   const bounds = { maxBytes: 256 * 1024 * 1024, maxTakings: 10_000 };
   if (selection.kind === "recording") {
-    if (selection.at !== null) return yield* new InvalidRead({ message: "Timeline recording points are not available yet", status: 409, problem: "recording.point",
-        });
+    if (selection.at !== null) return yield* new InvalidRead({ message: "Timeline recording points are not available yet", status: 409, problem: "recording.point" });
     const reader = yield* openRecordingReader(selection.directory, identity, bounds);
-    return yield* HostInputContext.pipe(Effect.provide(HostInputContext.layer({ kind: "recording", recordingStore: reader, at: null, bindings: selection.bindings && new Map(selection.bindings),
-          }),
-        ),
-      );
+    return yield* HostInputContext.pipe(Effect.provide(HostInputContext.layer({ kind: "recording", recordingStore: reader, at: null, bindings: selection.bindings && new Map(selection.bindings) })));
   }
-  const storage = hostState().directory(
-      "recordings", createHash("sha256").update(identity.build).digest("hex"), identity.catalog, hostOwnership.serviceName, "history",
-    );
-    const directory = storage.path;
+  const storage = hostState().directory("recordings", createHash("sha256").update(identity.build).digest("hex"), identity.catalog, hostOwnership.serviceName, "history");
+  const directory = storage.path;
   // Automatic capture is ancillary to live input: a store that cannot open stops recording before
   // its first taking, not the host. That now covers every writer error, so a `takings.jsonl` line
   // torn by a crash (`recording.tamper`) no longer fails host start (ADR 0039: nothing stops the
@@ -92,21 +78,12 @@ export const hostInputs = (stamp: ReceiptStamp | null, selection: HostInputSelec
           sha256: null,
           reason: `Recording is off for this build (${error.problem}): ${error.message}`,
         });
-          return {
-            kind: "live",
-            captureSetup: {
-              at: 1,
-              stoppedAt: Date.now(),
-              reason: "setup",
-              site: "builtin",
-              op: "capture.setup",
-            },
-          };
-        }),
-      ),
-    );
+        return { kind: "live", captureSetup: { at: 1, stoppedAt: Date.now(), reason: "setup", site: "builtin", op: "capture.setup" } };
+      }),
+    ),
+  );
   return yield* HostInputContext.pipe(Effect.provide(HostInputContext.layer(lane)));
-  });
+});
 /**
  * The journal is built in the program scope, and the launch scope (the bridge, the server) nests
  * inside it. The nesting is the order: the bridge releases first, so its last queue facts meet an

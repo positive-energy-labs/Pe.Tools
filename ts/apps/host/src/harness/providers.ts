@@ -22,8 +22,7 @@ import { Spawner } from "./spawner.ts";
 import { MessagesReply, ModelList, ResponsesReply } from "./edge-schemas.ts";
 import { z } from "zod";
 import { productProvidersPath } from "../product-paths.ts";
-import { harnessKeyRole, keyRefusalText, resolveKey, sharedKeys,
-} from "@pe/host-contracts/shared-keys";
+import { harnessKeyRole, keyRefusalText, resolveKey, sharedKeys } from "@pe/host-contracts/shared-keys";
 import { adapterCli, adapterLogin, adapters, openAdapter, stopChild } from "./adapter.ts";
 import { classifyEndpointFailure } from "./endpoint-failure.ts";
 import { mergePath } from "./user-shell.ts";
@@ -863,11 +862,7 @@ export function createProviders(options: ProvidersOptions) {
       if ("refused" in key) {
         const message = keyRefusalText(key.refused, harnessKeyRole[record.harness]);
         return finish({
-          readiness: {
-            state: "refused",
-            step: "endpoint",
-            message, failure: classifyEndpointFailure(message),
-          },
+          readiness: { state: "refused", step: "endpoint", message, failure: classifyEndpointFailure(message) },
           models: [],
           traits: [],
           probedAt: probedAt(),

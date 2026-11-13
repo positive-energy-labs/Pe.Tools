@@ -912,7 +912,13 @@ export function createThreadReceiptAdapter(
   } as const;
   const accept = (id: string, _title: string, event: HarnessEvent) => {
     if (
-      !["prompt", "turn_end", "error", "question_request", "question_resolved"].includes(event.kind)
+      ![
+        "prompt",
+        "turn_end",
+        "error",
+        "question_request",
+        "question_resolved",
+      ].includes(event.kind)
     )
       return;
     const failure = event.kind === "error" ? event.failure?.kind : undefined;

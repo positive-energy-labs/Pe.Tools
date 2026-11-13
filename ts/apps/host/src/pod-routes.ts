@@ -68,9 +68,7 @@ export const trustKind = keptStateKind({
 /** Trusted browser extensions have the shell's authority. Trust is local, explicit and content-pinned. */
 export function createPodRoutes(
   lifecycle: ReturnType<typeof createPackageLifecycle>,
-  options: {
-    machine?: StateRoot; workspace?: RouteWorkspace; bridge?: RevitBridge["Service"];
-  } = {},
+  options: { machine?: StateRoot; workspace?: RouteWorkspace; bridge?: RevitBridge["Service"] } = {},
 ) {
   const file = trustKind.in(options.machine ?? hostState());
   const registrations = new Map<string, { hash: string; dispose: () => void }>();
@@ -79,7 +77,8 @@ export function createPodRoutes(
   // A person's trust decisions, so `keep` (MAP decision log 92bdf2df names `route-trust.json`). A
   // file that does not decode is refused with a notice and its bytes stay. Every route reads as
   // untrusted, and no decision is saved over it until a person fixes or removes the file.
-  const stored = () => readFile(file);
+  const stored = () =>
+    readFile(file);
   const decisions = async () => {
     const read = stored();
     return read.kind === "ok" ? read.value : {};
