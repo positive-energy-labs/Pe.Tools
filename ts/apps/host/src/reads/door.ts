@@ -11,7 +11,7 @@ import { workKeySchema } from "@pe/agent-contracts/route-state";
 import { settingTiersSchema } from "@pe/agent-contracts/tiered-setting";
 import { nativeArgs, nativeOutputAssets, nativeReadInput, nativeReadValue, type NativeArgs, type NativeValue } from "@pe/agent-contracts/native-output-read";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
-import type { ReadHandle } from "@pe/agent-contracts/handle";
+import type { AnyReadHandle, ReadHandle } from "@pe/agent-contracts/handle";
 import type { HostOperationKey } from "@pe/host-contracts/operation-types";
 import type { ReadContext } from "./evaluator.ts";
 export type { ReadContext } from "./evaluator.ts";
@@ -23,11 +23,13 @@ export interface Read<I, O> {
   readonly output: z.ZodType<O>;
   readonly run: (ctx: ReadContext, args: I) => Promise<O> | O;
   /** The handle a `body()` serves; host registration joins its `uses` to bodies. */
-  readonly contract?: ReadHandle<string, I, O>;
+  readonly contract?: AnyReadHandle;
 }
 export const read = <I, O>(name: string, definition: Omit<Read<I, O>, "name">): Read<I, O> =>
   Object.freeze({ name, ...definition });
-const bodies = new Map<string, Read<any, any>>();
+/** A read with its input and output erased: what a table of bodies holds. */
+type ErasedRead = Read<any, any>;
+const bodies = new Map<string, ErasedRead>();
 /**
  * The host half of a read handle: its body, registered under the handle's key so `ctx.read(handle)`
  * finds it. `read(name, def)` above stays until the route reads are converted (k2/read-sweep).
@@ -43,12 +45,12 @@ export function body<K extends string, I, D>(
 }
 /** The body a handle names: a route's `body()`, or the native door for a catalog Read. A handle with none is a contract nobody serves, and the read says so. */
 export function bodyOf<I, D>(h: Pick<ReadHandle<string, I, D>, "key">): Read<I, D> {
-  const made =
-    bodies.get(h.key) ??
-    (hostOpCatalog.some((op) => op.key === h.key) ? nativeRead(h.key as HostOperationKey) : undefined);
+  const native: ErasedRead | undefined = isOperation(h.key) ? nativeRead(h.key) : undefined;
+  const made = bodies.get(h.key) ?? native;
   if (!made) throw Error(`Read '${h.key}' has no body on this host`);
-  return made as Read<I, D>;
+  return made;
 }
+const isOperation = (key: string): key is HostOperationKey => hostOpCatalog.some((op) => op.key === key);
 export interface Leaf<I, O> {
   readonly name: string;
   readonly input: z.ZodType<I>;

@@ -44,7 +44,9 @@ const pathLabel = (ack: WorkWriteAck) =>
 export function timelineJournal(work: TimelineWork, receipts: readonly ActionStatus[]): WorkJournal {
   const journal = createWorkJournal(work.key);
   const identity = workKey(work.key);
-  for (const ack of work.acks) journal.accept({ ...ack, replay: true });
+  // An ack stored without a stamp sorts first. The journal would otherwise read the clock, and the
+  // same history would then project differently on each read.
+  for (const ack of work.acks) journal.accept({ ...ack, at: ack.at ?? 0, replay: true });
   if (work.snapshot) journal.observe(work.snapshot);
   for (const receipt of receipts)
     journal.record({

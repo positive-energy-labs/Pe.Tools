@@ -16,7 +16,7 @@ import { SdkDriver } from "../src/sdk-session.ts";
 import { serveRoutes } from "./real-server.ts";
 import { mintContext, retireContext } from "../src/control.ts";
 import { HOST_CONTEXT_HEADER } from "@pe/host-contracts/contracts";
-import type { Caller } from "@pe/agent-contracts";
+import type { Caller, Touched } from "@pe/agent-contracts";
 import { sdkSessions } from "./native-receipt-fixture.ts";
 import { join } from "node:path";
 import { readFileSync } from "node:fs";
@@ -59,13 +59,17 @@ export async function fixtureNative(
   let emitDocumentChange: (() => Promise<void>) | undefined;
   let loseReply: string | undefined;
   let refuseDeliveredReply: string | undefined;
-  let lostReply: { requestId: string; operation: string; openDocumentId: string | null; value: unknown } | undefined;
+  let lostReply: { requestId: string; operation: string; openDocumentId: string | null; value: unknown; touched?: Touched } | undefined;
+  const touched = new Map<string, Touched>();
   const recoveryReplies = new Map<string, NonNullable<typeof lostReply>>();
   const calls: { key: string; input: unknown; action: string | null | undefined }[] = [];
   const tokens = new Map<string, string>();
   const handlers: Promise<{ close(): Promise<void> }>[] = [];
   return {
     bridge, journal, calls,
+    // Controlled scenario evidence, separate from the unchanged pre-touched recordings.
+    // Never infer a clean outcome from the operation catalog or the retained payload's status.
+    reportTouched(operation: string, value: Touched) { touched.set(operation, value); },
     onRequest(listener: (key: string) => Promise<void>) { beforeReply = listener; },
     loseNextReply(operation: string) { loseReply = operation; },
     refuseNextDeliveredReply(operation: string) { refuseDeliveredReply = operation; },
@@ -78,7 +82,7 @@ export async function fixtureNative(
       const reply = lostReply; lostReply = undefined;
       await settle(Queue.offer(socket.incoming, JSON.stringify({ kind: "Response", response: {
         requestId: reply.requestId, openDocumentId: reply.openDocumentId, ok: true, statusCode: 200,
-        payloadJson: JSON.stringify(reply.value),
+        payloadJson: JSON.stringify(reply.value), touched: reply.touched,
         metrics: { requestBytes: 0, responseBytes: 0, revitExecutionMs: 0, roundTripMs: 0, serializationMs: 0 },
       } })));
     },
@@ -109,12 +113,12 @@ export async function fixtureNative(
         if (!reply) return readSdk(args);
         const step = (await journal.list()).flatMap(row => row.steps).find(step => step.id === reply.requestId);
         if (!step?.process) throw Error("No admitted native process for recovery");
-        // SDK envelope adaptation rebinds correlation only. The native DTO is the unchanged,
-        // validated real recording; production SDK decoders and receipt matching still decide.
+        // The retained DTO stays unchanged. Explicit scenario evidence supplies the current
+        // OpReceiptResponse frame; production decoders and exact receipt matching still decide.
         const envelope = JSON.parse(readFileSync(join(import.meta.dirname, "sdk-envelopes/op-result.ok.json"), "utf8"));
         envelope.result.requestId = reply.requestId;
         Object.assign(envelope.result.receipt, { requestId: reply.requestId, key: reply.operation, pid: step.process.pid, processStartUtc: step.process.processStartUtc });
-        envelope.result.response = reply.value;
+        envelope.result.response = { payload: reply.value, touched: reply.touched };
         return JSON.stringify(envelope);
       } };
       const web = serveRoutes(Layer.mergeAll(routes, callRouteOver(journal, captures, dependencies, composition)).pipe(
@@ -189,11 +193,12 @@ export async function fixtureNative(
                 continue;
               }
               loseReply = undefined;
-              lostReply = { requestId: req.requestId, operation: req.operationKey, openDocumentId: req.openDocumentId ?? null, value };
+              lostReply = { requestId: req.requestId, operation: req.operationKey, openDocumentId: req.openDocumentId ?? null, value,
+                touched: touched.get(req.operationKey) };
               yield* Fiber.interrupt(socket.connection);
               continue;
             }
-            response = { ok: true, statusCode: 200, payloadJson: JSON.stringify(value) };
+            response = { ok: true, statusCode: 200, payloadJson: JSON.stringify(value), touched: touched.get(req.operationKey) };
           } catch (error) {
             response = { ok: false, statusCode: 409, errorMessage: String(error) };
           }

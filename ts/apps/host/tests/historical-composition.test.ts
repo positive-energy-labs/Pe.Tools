@@ -185,8 +185,8 @@ test("journal, Work and pointer owners refuse before storage or executor access"
   const work = { route: "/fans" } as WorkKey;
   for (const run of [
     () => workspace.apply(work, "/fans", "human", [], 0),
-    () => workspace.step([work], "human", "undo", { work, revision: 0, label: "" }, []),
-    () => workspace.step([work], "human", "redo", { work, revision: 0, label: "" }, []),
+    () => workspace.step([work], "human", "undo", { work, revision: 0, label: "" }, async () => []),
+    () => workspace.step([work], "human", "redo", { work, revision: 0, label: "" }, async () => []),
     () => workspace.publish(work, "/fans", [], 0),
   ]) await expect(Promise.resolve().then(async () => { await run(); })).rejects.toMatchObject({ problem: "recording.historical" });
   let mutations = 0; const pointers = threadPointerPort(inputs);

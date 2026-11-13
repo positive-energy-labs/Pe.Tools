@@ -32,7 +32,8 @@ export const receiptBarrier = (entry: TimelineEntry): TimelineBarrier | null => 
   if (receipt?.state === "succeeded" && !receipt.effects.length) return null;
   return entry.kind === "receipt" &&
     entry.paths?.length &&
-    (!entry.outcome || ["succeeded", "outcome-unknown"].includes(entry.outcome.state))
+    // A write still running holds what it consumed; only a terminal outcome releases it.
+    (!entry.outcome || ["running", "succeeded", "outcome-unknown"].includes(entry.outcome.state))
     ? (structuredClone(entry) as TimelineBarrier)
     : null;
 };
@@ -178,7 +179,13 @@ export function createWorkJournal(key: WorkKey) {
     const receipt = (entry.basis as { receipt?: ActionStatus } | undefined)?.receipt;
     if (receipt?.consumes.length) writes.set(receipt.id, structuredClone(receipt));
     const barrier = receiptBarrier(entry);
-    if (!barrier) return;
+    if (!barrier) {
+      // The same receipt, now terminal without a write (failed, cancelled, refused), lets go.
+      for (const step of [...undo, ...redo])
+        if (entry.receiptId && step.barrier?.receiptId === entry.receiptId && step.barrier.outcome?.state === "running")
+          delete step.barrier;
+      return;
+    }
     for (const step of [...undo, ...redo])
       if (
         !step.barrier &&

@@ -53,6 +53,8 @@ export interface ReadHandle<K extends string = string, I = unknown, D = unknown>
   readonly keyedBy: Readonly<Record<string, RowKey>>;
   readonly demand?: "mount" | "explicit";
 }
+/** A read handle with its input and data erased: what a registry or a `uses` list holds. */
+export type AnyReadHandle = Pick<ReadHandle, typeof minted | "key" | "axes">;
 export type InputOf<H> = H extends CommandHandle<string, infer I> ? I : never;
 
 type Commands = typeof hostActions;
@@ -121,8 +123,12 @@ export type CatalogReadKey = {
     : never;
 }[keyof Safety] &
   HostOperationKey;
-// The mint alone restores a cached handle's keyed DTO types; storage keeps no unkeyed schema type.
-const nativeHandles = new Map<CatalogReadKey, object>();
+// Only `native()` writes this table, under the handle's own key, so the key says which handle it is.
+const nativeHandles = new Map<string, AnyReadHandle>();
+const mintedFor = <K extends CatalogReadKey>(
+  h: AnyReadHandle | undefined,
+  key: K,
+): h is ReadHandle<K, NativeArgs<K>, NativeValue<K>> => h?.key === key;
 /**
  * A catalog Read as a handle; refuses every other key, as the host's native door does. Its input is
  * the native read's whole input (request, target, and a retained body's version and role) and its
@@ -133,7 +139,7 @@ export function native<K extends CatalogReadKey>(
 ): ReadHandle<K, NativeArgs<K>, NativeValue<K>> {
   type Minted = ReadHandle<K, NativeArgs<K>, NativeValue<K>>;
   const made = nativeHandles.get(key);
-  if (made) return made as Minted;
+  if (mintedFor(made, key)) return made;
   const op = hostOpCatalog.find((op) => op.key === key);
   if (
     !op ||
@@ -147,7 +153,7 @@ export function native<K extends CatalogReadKey>(
     key,
     input: nativeReadInput(key),
     data,
-    output: publicationSchema(data) as z.ZodType<Publication<NativeValue<K>>>,
+    output: publicationSchema(data),
     axes: { subject, touches, effect, cost, cardinality, ...(rollsBack ? { rollsBack } : {}) },
     keyedBy: {},
   });
@@ -159,25 +165,24 @@ const highest = <T extends string>(order: readonly string[], values: readonly T[
   values.reduce((a, b) => (order.indexOf(b) > order.indexOf(a) ? b : a), floor);
 /** Whether a dotted path names a row collection (an array or a record) in a data schema. */
 function rows(schema: z.ZodType, path: readonly string[]): boolean {
-  const def = schema._zod.def as {
-    type: string;
-    shape?: Record<string, z.ZodType>;
-    innerType?: z.ZodType;
-    left?: z.ZodType;
-    right?: z.ZodType;
-    options?: readonly z.ZodType[];
-  };
-  if (def.innerType) return rows(def.innerType, path);
-  if (def.left && def.right) return rows(def.left, path) || rows(def.right, path);
-  if (def.options) return def.options.some((option) => rows(option, path));
+  // The public `def`, read member by member and checked: a wrapper has `innerType`, an intersection
+  // `left` and `right`, a union `options`, an object `shape`. A member that is no schema is not followed.
+  const def = schema.def;
+  const part = (name: string): unknown => Reflect.get(def, name);
+  const within = (child: unknown) => child instanceof z.ZodType && rows(child, path);
+  if (part("innerType") !== undefined) return within(part("innerType"));
+  if (part("left") !== undefined) return within(part("left")) || within(part("right"));
+  const options = part("options");
+  if (Array.isArray(options)) return options.some(within);
   const [head, ...rest] = path;
   if (head === undefined) return def.type === "array" || def.type === "record";
-  const child = def.shape?.[head];
-  return !!child && rows(child, rest);
+  const shape = part("shape");
+  const child: unknown = typeof shape === "object" && shape !== null ? Reflect.get(shape, head) : undefined;
+  return child instanceof z.ZodType && rows(child, rest);
 }
-const used = new WeakMap<ReadHandle<string, any, any>, readonly string[]>();
+const used = new WeakMap<AnyReadHandle, readonly string[]>();
 /** The keys a contract said it uses; the host joins them to bodies when the read registers. */
-export const usesOf = (h: ReadHandle<string, any, any>): readonly string[] => used.get(h) ?? [];
+export const usesOf = (h: AnyReadHandle): readonly string[] => used.get(h) ?? [];
 /**
  * A route read's contract: schemas the browser and the host share, axes joined from what it uses.
  * `input` is the host's input, `target` included; the browser door supplies `target` from the mount.
@@ -189,7 +194,7 @@ export function contract<K extends string, I, D>(
   def: {
     input: z.ZodType<I>;
     data: z.ZodType<D>;
-    uses: readonly (ReadHandle<string, any, any> | CatalogReadKey)[];
+    uses: readonly (AnyReadHandle | CatalogReadKey)[];
     subject?: CatalogAxes["subject"];
     keyedBy?: Readonly<Record<string, RowKey>>;
     demand?: "mount" | "explicit";
@@ -205,7 +210,7 @@ export function contract<K extends string, I, D>(
     key,
     input: def.input,
     data: def.data,
-    output: publicationSchema(def.data) as z.ZodType<Publication<D>>,
+    output: publicationSchema(def.data),
     // A read that uses nothing native keeps the axes `valueRead` gave every host read.
     axes: {
       subject: def.subject ?? "Document",
