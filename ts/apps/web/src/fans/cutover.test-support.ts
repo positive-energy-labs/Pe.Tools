@@ -240,7 +240,7 @@ export async function createWitness(
   };
   const places = new Map<string, ReturnType<typeof placeInput>>();
   function mount(
-    route: {typed: unknown; data: import("@pe/agent-contracts").RouteGraphJson; workFingerprint: import("@pe/agent-contracts").RouteFingerprint},
+    route: {typed: unknown; data: import("@pe/agent-contracts").RouteGraphWire; workFingerprint: import("@pe/agent-contracts").RouteFingerprint},
     initial = new URLSearchParams(),
     place: string = route.data.key,
   ) {

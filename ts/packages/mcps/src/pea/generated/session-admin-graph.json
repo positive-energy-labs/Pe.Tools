@@ -95,60 +95,25 @@
   },
   "verbs": {
     "start": {
-      "kind": "command",
-      "input": "none",
-      "label": "Start Revit and open",
-      "review": "shown",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": [
-          "value"
-        ]
-      },
-      "captures": [
-        "value"
-      ],
       "entry": "instances.start",
-      "intent": "start"
+      "label": "Start Revit and open",
+      "effect": "SessionWrite",
+      "review": "none"
     },
     "stop": {
-      "kind": "command",
-      "input": "none",
-      "label": "Stop Revit",
-      "review": "shown",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": [
-          "value"
-        ]
-      },
-      "captures": [
-        "value"
-      ],
       "entry": "instances.stop",
-      "intent": "stop"
+      "label": "Stop Revit",
+      "effect": "SessionWrite",
+      "review": "none"
     },
     "restart": {
-      "kind": "command",
-      "input": "none",
-      "label": "Hot reload Revit",
-      "review": "shown",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": [
-          "value"
-        ]
-      },
-      "captures": [
-        "value"
-      ],
       "entry": "instances.restart",
-      "intent": "restart"
+      "label": "Hot reload Revit",
+      "effect": "SessionWrite",
+      "review": "none"
     }
   },
+  "band": [],
   "panes": {
     "sessions": {
       "label": "Sessions",
@@ -156,34 +121,13 @@
       "draws": [
         "value"
       ],
-      "verbs": [
-        "start",
-        "stop",
-        "restart"
-      ]
+      "verbs": []
     }
   },
   "layout": {
     "kind": "pane",
     "id": "sessions"
   },
-  "stages": {
-    "main": {
-      "word": "Sessions",
-      "panes": [
-        "sessions"
-      ],
-      "verbs": [
-        "start",
-        "stop",
-        "restart"
-      ]
-    }
-  },
-  "stageOrder": [
-    "main"
-  ],
-  "predicates": {},
   "cells": {},
   "workFields": {},
   "seeds": {},

@@ -25,7 +25,7 @@ export const member = (page: { member: Immutable<z.output<ReturnType<typeof subj
  */
 export const fields = {
   member: field(subjectSchema(1), { kind: "ids", ids: [] }, "subject", "push"),
-  stage: field(address.stage, "audit", "pose", "push"),
+  stage: field(address.stage, "audit", "stage", "push"),
   pane: field(address.pane, "spec", "pose"),
   overlay: field(address.overlay, "draft", "pose", "push"),
   drill: field(address.drill, "", "pose", "push"),

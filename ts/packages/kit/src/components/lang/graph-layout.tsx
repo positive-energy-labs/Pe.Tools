@@ -17,7 +17,7 @@ export type GraphLayoutState = Readonly<Record<string, GraphPaneState>>;
 export interface GraphLayoutViewProps {
   layout: LayoutNode;
   panes: Readonly<Record<string, PaneDecl>>;
-  active: (when: string) => boolean;
+  active: (when: Extract<LayoutNode, { kind: "gate" }>["when"]) => boolean;
   bodies: Readonly<Record<string, (pane: PaneApi) => ReactNode>>;
   /** Device state. Omit to retain it locally for this mounted graph. */
   state?: { panes: GraphLayoutState; onChange: (next: GraphLayoutState) => void };

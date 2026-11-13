@@ -2,7 +2,7 @@ import { z } from "zod";
 import { Button } from "@pe/kit/lang/button";
 import { NarrowChip } from "@pe/kit/lang/chip";
 import { ListPopup } from "@pe/kit/lang/list-popup";
-import type { RouteGraphJson } from "@pe/agent-contracts";
+import type { RouteGraphWire as RouteGraphJson } from "@pe/agent-contracts";
 import { canonicalEnvironmentInput as identity } from "../../../../packages/agent-contracts/src/route-kernel-environment";
 import { openSet, type OpenSet } from "./open-set.neutral";
 const rosterSchema = z.array(z.object({ id: z.unknown(), label: z.string() }));
