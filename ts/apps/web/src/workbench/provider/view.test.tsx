@@ -21,6 +21,8 @@ import { useTranscript } from "./use-workbench";
 import { WorkbenchContext } from "./thread-summary";
 import { WorkbenchProvider } from "./view";
 import { machineFixture } from "../../../../../packages/agent-contracts/tests/machine-fixture.ts";
+import { useThreadHead } from "#/chat/composer-head";
+import { Ladder } from "#/route/ladder";
 import { useRouteTabs } from "../tabs";
 
 const client = vi.hoisted(() => ({
@@ -70,6 +72,7 @@ vi.mock("#/host/resource-state", () => {
   const host = { known: true };
   return {
     previousOf: () => undefined,
+    useReading: () => ({ state: "absent" }),
     useReadingSlice: (_request: unknown, select: (reading: unknown) => unknown) =>
       select({ state: "absent" }),
     useHostStatusSlice: () => host,
@@ -252,6 +255,24 @@ test.each([false, true])("review probe: a ?target naming a document that is not 
   expect(draftTarget).toEqual(missing ? null : { kind: "open", ref: { session: "s1", openId: "B" } });
 });
 
+function DraftDocumentControl() {
+  const head = useThreadHead();
+  return <Ladder
+    disabled={head.stale}
+    title="Draft document"
+    face="control"
+    levels={[{
+      key: "document",
+      label: "A.rvt",
+      placeholder: "choose document",
+      multi: true,
+      options: [{ id: "A", label: "A.rvt" }],
+      checked: () => head.targets.length > 0,
+      pick: () => { void head.toggle({ kind: "open", ref: { session: "s1", openId: "A" } }); },
+    }]}
+  />;
+}
+
 test("on /fans?target=A a new thread's draft binds to A among two open documents, and its first Send seeds A", async () => {
   sessionStorage.clear();
   const doc = (openId: string) => ({ openId, title: `${openId}.rvt`, address: `C:/Jobs/${openId}.rvt`, isFamilyDocument: false, isActive: true });
@@ -260,6 +281,7 @@ test("on /fans?target=A a new thread's draft binds to A among two open documents
     component: () => (
       <WorkbenchProvider>
         <Probe />
+        <DraftDocumentControl />
         <Outlet />
       </WorkbenchProvider>
     ),
@@ -280,6 +302,14 @@ test("on /fans?target=A a new thread's draft binds to A among two open documents
   await screen.findByText("fans");
   expect(router.state.location.search).not.toHaveProperty("thread");
   expect(draftTarget).toEqual({ kind: "open", ref: { session: "s1", openId: "A" } });
+  const control = screen.getByRole("button", { name: "Choose document" });
+  expect(control.hasAttribute("disabled")).toBe(false);
+  fireEvent.click(control);
+  fireEvent.click(await screen.findByRole("option", { name: "A.rvt" }));
+  await waitFor(() => expect(draftTarget).toBeNull());
+  // Toggling the same document back on restores the first-Send seed.
+  fireEvent.click(screen.getByRole("option", { name: "A.rvt" }));
+  await waitFor(() => expect(draftTarget).toEqual({ kind: "open", ref: { session: "s1", openId: "A" } }));
   await act(() => send!("size it"));
   expect(client.create).toHaveBeenCalledTimes(1);
   expect(client.target).toHaveBeenCalledTimes(1);

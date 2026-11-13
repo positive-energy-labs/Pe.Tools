@@ -106,7 +106,7 @@ const documentAddress = (
  * The thread's head, or the draft's own target before the first send creates a thread. A draft
  * holds one document; more are added once the thread exists.
  */
-function useThreadHead(_handle: ChatHandle) {
+export function useThreadHead() {
   const { currentThreadId, draftTarget, setDraftTarget } = useWorkbench();
   // SHIM: live head stays outside Value until the shared thread Page/carry contract is available.
   // Scope PUTs publish thread-head snapshots; the existing body cache is not invalidated by them.
@@ -118,6 +118,8 @@ function useThreadHead(_handle: ChatHandle) {
   };
   return {
     ...scope,
+    // A local draft has no host snapshot that can become stale.
+    stale: false,
     targets: draftTarget ? [{ request: draftTarget, admission: null }] : [],
     set,
     toggle: async (target: DocumentRequest) =>
@@ -130,7 +132,7 @@ function useThreadHead(_handle: ChatHandle) {
 export function useChatSituation(handle: ChatHandle) {
   const { currentThreadId, threads, missingThread } = useWorkbench();
   const title = useTranscript(selectTitle);
-  const head = useThreadHead(handle);
+  const head = useThreadHead();
   const machine = previousOf(chatReading<Machine>(handle, "machine"));
   const inventory = machineInventory(machine);
   const requests = headRequests(head);
