@@ -1446,15 +1446,14 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     subject: "None",
     touches: "Metadata",
     cardinality: "One",
-    // Read intent permits the metadata door without write consent; SessionWrite records its
-    // thread-meta effect. Neither pointing nor dismissing changes Revit, Work, selection or camera.
+    // Pointing writes thread meta through the action door, never Revit or Work.
     effect: "SessionWrite",
     principal: ["pea"],
     origin: "host-local",
     displayName: "Point At",
     description:
       "Highlight a subject or route place for the person in this thread, without changing their selection, URL or camera. target is a SubjectRef code, or the route's attention field text (route:<r>.view fields). It remains until pointers.dismiss; a durable note is a separate findings.say.",
-    intent: "Read",
+    intent: "Mutate",
     visibility: "DefaultVisible",
     costTier: "Cheap",
     needs: "nothing",
@@ -1490,7 +1489,7 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     origin: "host-local",
     displayName: "Dismiss Pointer",
     description: "Remove one pointer from this thread's list by id.",
-    intent: "Read",
+    intent: "Mutate",
     visibility: "DefaultVisible",
     costTier: "Cheap",
     needs: "nothing",
@@ -1806,7 +1805,7 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     displayName: "Compose Pod Member",
     description:
       "Validate a member or unsaved draft: JSON schema structure in the host (offline), composition and semantic checks through the Revit session when one is attached. Without a session, $include/$preset members report that composition needs Revit.",
-    intent: "Read",
+    intent: "Mutate",
     visibility: "DefaultVisible",
     costTier: "Bounded",
     needs: "nothing",

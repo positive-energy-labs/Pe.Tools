@@ -351,6 +351,10 @@ export function gatewayExecutor(
             break;
           }
           case "host.shell.open":
+          // Thread metadata and composition results are host-owned, with no external write.
+          case "pointers.point":
+          case "pointers.dismiss":
+          case "pod.member.compose":
           case "aps.auth.login":
           case "aps.auth.logout":
             break;

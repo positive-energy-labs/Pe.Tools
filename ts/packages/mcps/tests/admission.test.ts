@@ -423,13 +423,13 @@ import { opWrites } from "../src/shared/admission.ts";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import { tsOnlyOperationCatalog } from "@pe/host-contracts/operation-types";
 // Mutant: make opWrites read `intent` for a native op and the first two lines go red.
-test("a native op writes by its effect; a host-only op keeps its declared intent", () => {
+test("native and host-local ops select the write door by effect, regardless of intent", () => {
   const native = { key: "revit.context.view-image.focus", intent: "Read" } as const;
   expect(opWrites({ ...native, effect: "SessionWrite" })).toBe(true);
   expect(opWrites({ ...native, effect: "TransactRead", intent: "Mutate" })).toBe(false);
   for (const op of hostOpCatalog)
     expect(opWrites(op), op.key).toBe(op.effect === "SessionWrite" || op.effect === "ModelWrite");
-  const point = tsOnlyOperationCatalog.find((op) => op.key === "pointers.point")!;
-  expect(point.effect).toBe("SessionWrite");
-  expect(opWrites(point)).toBe(false);
+  for (const op of tsOnlyOperationCatalog) {
+    expect(opWrites(op), op.key).toBe(op.effect === "SessionWrite" || op.effect === "ModelWrite");
+  }
 });
