@@ -79,7 +79,7 @@ test("typed-only filter: the sheet pane's chrome narrows to the cells Work stage
     owner: { route: "t", label: "typed" }, refusal: null, value: path[0] === "a" ? doc.a : {},
     transitions: () => [], stage: async () => null, clear: async () => null,
   });
-  const ctx = { cells: { doc, at: handle }, page: { read: () => ({}) }, value: { status: "ready", current: true, value: {} } };
+  const ctx = { cells: { doc, at: handle }, page: { read: () => ({}) }, value: { state: "ready", value: {} } };
   const slot = { draft: true as const, bindings: { a: local({ kind: "number" }, "route", { label: "Alpha" }), b: local({ kind: "number" }, "route", { label: "Beta", default: 2 }) } };
   render(<RegistryContext value={makeAtomRegistry()}><SheetPane ctx={{ draw: ctx as never, slot }} /></RegistryContext>);
   expect(screen.getByText("Beta")).toBeTruthy();
@@ -89,7 +89,7 @@ test("typed-only filter: the sheet pane's chrome narrows to the cells Work stage
 });
 
 test("empty state: a sheet whose read has nothing for it says so and where to go, instead of drawing cells", () => {
-  const ctx = { cells: { doc: {}, at: () => { throw Error("no cell is drawn"); } }, page: { read: () => ({}) }, value: { status: "ready", current: true, value: { open: null } } };
+  const ctx = { cells: { doc: {}, at: () => { throw Error("no cell is drawn"); } }, page: { read: () => ({}) }, value: { state: "ready", value: { open: null } } };
   const slot = { draft: true as const, empty: (read: { open: unknown }) => (read.open ? null : "Open a fan from the roster."), bindings: { a: local({ kind: "number" }) } };
   render(<RegistryContext value={makeAtomRegistry()}><SheetPane ctx={{ draw: ctx as never, slot }} /></RegistryContext>);
   expect(screen.getByText("Open a fan from the roster.")).toBeTruthy();
@@ -104,7 +104,7 @@ test.each([null, { kind: "document" as const, ref: { session: "session", openId:
   action.mockResolvedValue({ state: "succeeded", result: { tier: "firm", path: "shared/Settings/ducts.json" } });
   const slot = { bindings: { allowance: setting("ducts", ["criteria", "allowanceInWg", "return"], { kind: "number" }, ["firm"], { label: "Return allowance" }) } };
   const ctx = { target, cells: { doc: {} }, page: { read: () => ({}) }, refresh,
-    value: { status: "ready", current: true, value: { settings: { ducts: [
+    value: { state: "ready", value: { settings: { ducts: [
       { tier: "firm", home: "shared", name: "shared", path: "shared/Settings/ducts.json", sha256: "prior", json: { criteria: { allowanceInWg: { return: 0.2 } } } },
     ] } } } };
   Object.assign(ctx.cells, { at: (path: readonly string[]) => homeHandle(path, ctx.value.value, async input => {
@@ -134,7 +134,7 @@ test.each(["refused", "stale"])("a %s stale-hash save re-reads the tier and draw
   function Pane() {
     const [value, setValue] = useState(read);
     const ctx = { cells: { doc: {} }, page: { read: () => ({}) }, refresh: () => setValue(read()),
-      value: { status: "ready", current: true, value } };
+      value: { state: "ready", value } };
     Object.assign(ctx.cells, { at: (path: readonly string[]) => homeHandle(path, value, async input => {
       try {
         const receipt = await action({ input });
@@ -205,7 +205,7 @@ test("an options domain uses its native handle and retains an unavailable stored
   const stage = vi.fn(async () => null);
   const ctx = { target: { kind: "document", ref: { session: "session", openId: "open" } }, cells: { doc: {}, at: () => ({
     owner: { route: "test", label: "Work" }, value: {}, refusal: null, stage, clear: async () => null, transitions: () => [],
-  }) }, page: { read: () => ({}) }, value: { status: "ready", current: true, value: {} } };
+  }) }, page: { read: () => ({}) }, value: { state: "ready", value: {} } };
   const slot = { bindings: { slot: local({ kind: "options", handle: native("revit.catalog.field-options"),
     input: { key: "parameter-identities" }, persist: "label", mode: "suggestion" }, "route", { label: "Slot", default: "Missing flow" }) } };
   try {
