@@ -85,6 +85,20 @@ class TeardownTests(unittest.TestCase):
         a.teardown("fixture")
         self.assertFalse(self.container.exists())
 
+    @unittest.skipUnless(os.name == "nt", "Windows extended temp namespace")
+    def test_existing_extended_temp_prefix(self):
+        owned = self.container / "pe-accept-namespaced"
+        home = owned / "Pe.Tools"
+        home.mkdir(parents=True)
+        (home / "sentinel").write_text("owned")
+        extended = "\\\\?\\" + str(self.container)
+        self.state["home"] = "\\\\?\\" + str(home)
+        with patch.dict(os.environ, {name: extended for name in ("TMPDIR", "TEMP", "TMP")}):
+            with patch.object(tempfile, "tempdir", None):
+                self.assertEqual(Path(tempfile.gettempdir()).resolve(), Path(extended).resolve())
+                a.teardown("fixture")
+        self.assertFalse(owned.exists())
+
     def test_refused_homes(self):
         cases = {
             "installed": (self.home, "installed", False),
