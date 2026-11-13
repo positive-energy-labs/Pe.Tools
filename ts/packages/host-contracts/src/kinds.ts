@@ -32,6 +32,14 @@ import {
   type StoredRead,
 } from "./store.ts";
 export { derivedKey, sha256Hex, type HomeWrite, type StoredNotice } from "./store.ts";
+export { writeGenerated } from "./store.ts";
+
+declare const generatedFile: unique symbol;
+/** Disposable build output, outside content homes and product state. Only its kind mints a file. */
+export type GeneratedFile = string & { readonly [generatedFile]: true };
+export const generatedKind = (segments: readonly string[]) => ({
+  in: (root: string): GeneratedFile => under<GeneratedFile>(root, segments),
+});
 
 declare const where: unique symbol;
 /** A path inside a content home. Only a home kind mints one. */
