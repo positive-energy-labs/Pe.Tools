@@ -1,14 +1,15 @@
 import { randomUUID } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { expect, test, vi } from "vite-plus/test";
 import { readStoredNotices, sha256Hex } from "@pe/host-contracts/store";
 import { noticeRows, storedBlobsPath, storedNoticesPath } from "../src/notice-feed.ts";
 import { bootHost } from "./real-server.ts";
 import { BRIDGE_CONTRACT_VERSION, BRIDGE_PATH, HOST_RUNTIME_SERVICE_QUERY, type BridgeFrame } from "@pe/host-contracts/contracts";
 import { ownedSession } from "./callers.ts";
-import { hostOwnership } from "../src/host-ownership.ts";
+import { hostOwnership, hostState } from "../src/host-ownership.ts";
+import { homeWritesKind } from "../src/tiered-settings.ts";
 import { bindWork, workTimelineSchema } from "@pe/agent-contracts";
 
 vi.mock("../src/pe-revit-launch.ts", async original => ({
@@ -33,6 +34,9 @@ test.each(["firm", "project"] as const)("settings.tiers.write crosses /actions, 
   const host = await bootHost();
   let socket: WebSocket | undefined;
   try {
+    const isolatedRoot = process.env.PE_TEST_HOME_ROOT;
+    if (!isolatedRoot) throw Error("Expected isolated test state");
+    expect(relative(isolatedRoot, homeWritesKind.in(hostState()).path)).not.toMatch(/^\.\.(?:[\\/]|$)/);
     let target: unknown = { kind: "host" };
     let documentRef: { session: string; openId: string } | undefined;
     if (tier === "project") {

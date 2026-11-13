@@ -245,7 +245,7 @@ export const touchedSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("unauthorized"), ...changed }),
   z.strictObject({
     kind: z.literal("unknown"),
-    reason: z.enum(["lost-response", "cancelled-mid-effect", "process-exit", "posted-command"]),
+    reason: z.enum(["lost-response", "cancelled-mid-effect", "process-exit", "posted-command", "overlapped"]),
   }),
 ]);
 export type Touched = z.infer<typeof touchedSchema>;

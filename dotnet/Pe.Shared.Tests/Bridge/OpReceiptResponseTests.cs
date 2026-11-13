@@ -29,6 +29,7 @@ public class OpReceiptResponseTests {
             new Touched.Unknown(TouchedUnknownReason.CancelledMidEffect), "CancelledMidEffect"),
         ["failed-lost-response"] = OpReceiptResponse.Failed("socket lost", 503, new Touched.Unknown(TouchedUnknownReason.LostResponse)),
         ["failed-process-exit"] = OpReceiptResponse.Failed("process ended", 503, new Touched.Unknown(TouchedUnknownReason.ProcessExit)),
+        ["ok-unknown-overlapped"] = OpReceiptResponse.Ok(new JRaw("""{"count":3}"""), new Touched.Unknown(TouchedUnknownReason.Overlapped)),
         ["failed-posted-command"] = OpReceiptResponse.Failed("refused", 423, new Touched.Unknown(TouchedUnknownReason.PostedCommand)),
     };
 
@@ -109,4 +110,12 @@ public class OpReceiptResponseTests {
                 Fixture()[name]!["touched"]), Is.True, $"{name}: {wire}");
         }
     }
+
+    // Purger N4. Mutant: drop either `?? throw` in Failed and a null reaches the file as a missing key.
+    [Test]
+    public void A_factory_refuses_a_null_error_or_a_null_touched() => Assert.Multiple(() => {
+        Assert.That(() => OpReceiptResponse.Failed(null!, 500, new Touched.None()), Throws.ArgumentNullException);
+        Assert.That(() => OpReceiptResponse.Failed("failed", 500, null!), Throws.ArgumentNullException);
+        Assert.That(() => OpReceiptResponse.Ok(null, null!), Throws.ArgumentNullException);
+    });
 }
