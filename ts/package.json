@@ -22,7 +22,7 @@
     "test:route-chaos": "vp test run --config tests/e2e/route-chaos.config.ts",
     "journey:routes": "node --import jiti/register tests/e2e/route-chaos-launch.ts",
     "journey:conversation-work": "node --import jiti/register tests/e2e/route-chaos-launch.ts --suite conversation-work",
-    "codegen": "pnpm --filter @pe/host-contracts codegen",
+    "codegen": "python ../.agents/skills/slot.execute/machine.py run codegen -- vp run --no-cache --fail-if-no-match --filter @pe/host-contracts codegen",
     "verify": "node scripts/verify.ts",
     "gate": "node scripts/gate.ts",
     "test": "vp run -r test",
