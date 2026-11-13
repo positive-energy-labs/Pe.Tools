@@ -10,6 +10,7 @@ import { expect, test } from "vite-plus/test";
 import { decode } from "../../packages/agent-contracts/src/subject-ref.ts";
 import { FANS_ESP_ROW } from "./cdp.ts";
 import { workEvidence } from "./conversation-work.fixture.ts";
+import { marks, settled } from "./marks.ts";
 import { connectTypedPage, type TypedPage } from "./typed-page.ts";
 
 const FANS_PANES = ["sheet-roster", "sheet-inputs", "sheet-picture", "sheet-ledger"];
@@ -387,6 +388,13 @@ test("H1: a MUAS-1 ESP write refuses for its shared type and MUAS-2 keeps its va
       );
     await expect
       .poll(staged, { timeout: 30_000, message: "MUAS-1 ESP staged in fans Work" })
+      .toBe(true);
+    // D17: the edit moved Work to r2 and the page follows it. While it does, the scope cell is
+    // locked or its option is not drawn yet (lane-c, ccafa5f7), so the journey presses on a settled
+    // page, as every journey does (marks.ts). The race itself, a pick behind the page's own
+    // unacknowledged edit, is the product's and is witnessed in kernel-journeys-work.test.ts.
+    await expect
+      .poll(async () => settled(await marks(page)), { timeout: 180_000, message: "page settled after the ESP edit" })
       .toBe(true);
     // The person scopes the write to this fan, then re-reads the sheet the edits made stale.
     await press(page, '[data-choice-cell="Write scope"]', "^None");

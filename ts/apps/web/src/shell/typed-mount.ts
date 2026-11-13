@@ -76,6 +76,8 @@ const reading = (value?: unknown, publication: Publication = null): Snapshot =>
 const inFlight = (snapshot: Snapshot) => snapshot.state === "reading" || snapshot.state === "refreshing";
 
 /** Typed routes execute declarations directly. No graph admission, body slots or reading scheduler. */
+/** The host refused a Work write because the Work moved past the revision the write named. */
+class StaleRevision extends Error {}
 export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerprint: RouteFingerprint,
   ports: { work?: WorkJournalDoor; sources?: Record<string, UseSource>; findings?: Parameters<typeof undoOwnFinding>[1]; readings?: Pick<Readings, "subscribe"> } = {}) {
   const cleanups: (() => void)[] = [];
@@ -351,10 +353,13 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     const issued = gate.invocation(gate.capture("draw"), dependencies());
     return renderedBasis = issued.ok ? issued.value : null;
   };
+  /** Each owner's unacknowledged press from this mount: the press a stale refusal may be explained by (D17). */
+  const sending = new WeakMap<object, Promise<{ from: number; to: number } | null>>();
   const entries = () => disposed ? [] : [...owners.values()].flatMap(o => o.lease.entry.journal.entries()).sort((a,b) => a.at-b.at);
   const submit = async (record: typeof owners extends Map<string, infer R> ? R : never, request: WorkWrite, token: InvocationToken) => {
     requireWritable();
     const result = await settleWork(door.submitWork(record.scope, request, token));
+    if (result.kind === "refused" && "code" in result.refusal && result.refusal.code === "stale_revision") throw new StaleRevision(result.refusal.error);
     if (result.kind !== "accepted") throw Error(result.kind === "refused" ? result.refusal.error : "Work write did not settle");
     const ack = result.ack;
     if (record.handle && ack.revision > record.handle.revision) {
@@ -721,26 +726,51 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
           const groups = new Map<string,RouteStatePatch[]>();
           for (const p of patches) { const id=ownerOf(p.path.map(String),preferred); groups.set(id,[...(groups.get(id)??[]),p]); }
           await Promise.all([...groups].map(async ([id, patches]) => {
-            const record=drawnOwners.get(id)!, handle=handles.get(id)!;
-            const applied=applyPatches(record.config.state,{version:1,revision:handle.revision,doc:docs.get(id)},"human",patches,handle.revision,false,true);
-            if (!applied.ok) throw Error(applied.error);
-            // Scalar cells travel whole; record cells keep their narrow keys (host inverse authority).
-            const normalized=[...new Set(patches.map(p=>String(p.path[0])))].flatMap(key => bare(record.config.state.schema.shape[key]!) instanceof z.ZodRecord
-              ? patches.filter(p=>String(p.path[0])===key) : [{path:[key],value:(applied.envelope.doc as any)[key]}]);
-            const label=id===own ? detail.label : `${detail.label} · from /${id}`;
-            const write:WorkWrite={kind:"apply",expectedRevision:handle.revision,press:crypto.randomUUID(),patches:normalized,...z.object({label:z.string(),meta:z.json().optional()}).parse(edits!.describe({...detail,label}))};
-            const journal=record.lease.entry.journal, intent=journal.retainIntent(write,label);
-            notify();
-            try {
+            // D17: a press made while this mount's earlier press on the same Work is unacknowledged was
+            // drawn at the same revision, so the host refuses it as stale for the person's own edit.
+            // That one refusal is retried once, on the revision the press ahead of it produced and
+            // rebuilt on the acknowledged doc. The fence holds for everything else: a press ahead of
+            // nothing, or whose Work was moved by anything but the press ahead of it, stays refused
+            // (C122), and nothing waits before its first send.
+            const record=drawnOwners.get(id)!, drawn=handles.get(id)!, ahead=sending.get(record), journal=record.lease.entry.journal;
+            type Ack={from:number;to:number}|null;
+            let settle!:(ack:Ack)=>void, ack:Ack=null;
+            const mine=new Promise<Ack>(resolve=>{settle=resolve;});
+            sending.set(record,mine);
+            let intent: ReturnType<typeof journal.retainIntent> | undefined;
+            const send=async(handle:WorkHandle,doc:unknown,rebased:boolean)=>{
+              const applied=applyPatches(record.config.state,{version:1,revision:handle.revision,doc},"human",patches,handle.revision,false,true);
+              if (!applied.ok) throw Error(applied.error);
+              // Scalar cells travel whole; record cells keep their narrow keys (host inverse authority).
+              const normalized=[...new Set(patches.map(p=>String(p.path[0])))].flatMap(key => bare(record.config.state.schema.shape[key]!) instanceof z.ZodRecord
+                ? patches.filter(p=>String(p.path[0])===key) : [{path:[key],value:(applied.envelope.doc as any)[key]}]);
+              const label=id===own ? detail.label : `${detail.label} · from /${id}`;
+              const write:WorkWrite={kind:"apply",expectedRevision:handle.revision,press:crypto.randomUUID(),patches:normalized,...z.object({label:z.string(),meta:z.json().optional()}).parse(edits!.describe({...detail,label}))};
+              intent=journal.retainIntent(write,label);
+              notify();
               requireWritable();
-              if (!basis() || !gate.current(token)) throw Error("Stale accepted Work basis");
+              // A retried press's Value is still refreshing after the press ahead of it; its basis is that acknowledgement.
+              const issued=rebased?gate.invocation(gate.capture("draw"),dependencies()):null;
+              if (rebased ? !issued!.ok : !basis() || !gate.current(token)) throw Error("Stale accepted Work basis");
               if (owners.get(id)!==record || !record.ready || canonicalRouteInput(record.handle)!==canonicalRouteInput(handle)) throw Error("Owning Work changed since this cell was drawn");
-              await submit(record,write,token);
-              journal.discardIntent(intent);
+              return (await submit(record,write,issued?.ok?issued.value:token)).revision;
+            };
+            try {
+              let to:number;
+              try { to=await send(drawn,docs.get(id),false); }
+              catch(error) {
+                const prior=error instanceof StaleRevision&&ahead?await ahead:null;
+                if (!prior||prior.from!==drawn.revision||owners.get(id)!==record||!record.ready||record.handle?.revision!==prior.to) throw error;
+                if (intent) journal.discardIntent(intent);
+                intent=undefined;
+                to=await send(record.handle,record.doc,true);
+              }
+              if (intent) journal.discardIntent(intent);
+              ack={from:drawn.revision,to};
             } catch(error) {
-              journal.refuseIntent(intent,error instanceof Error?error.message:String(error));
+              if (intent) journal.refuseIntent(intent,error instanceof Error?error.message:String(error));
               throw error;
-            } finally { notify(); }
+            } finally { if (sending.get(record)===mine) sending.delete(record); settle(ack); notify(); }
           }));
           return null;
         } catch(error) { return {code:"refused",message:error instanceof Error?error.message:String(error)}; }

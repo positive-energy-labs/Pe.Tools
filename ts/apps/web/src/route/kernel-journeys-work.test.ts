@@ -1112,3 +1112,22 @@ test("JZ cut two Places retain independent Page pose selection Value and inactiv
     resumed();
   } finally { places.forEach(p => p.dispose()); await j.close(); }
 }, 60_000);
+
+// D17 (fans-reds H1): the person edits a cell and picks the Write scope before that edit's
+// acknowledgement lands. Both cells were drawn at one revision; the pick must not be refused for
+// the page's own unacknowledged edit ("the document moved to r2").
+test("D17 a pick made while the page's own edit is unacknowledged sticks", async () => {
+  const j = await journey();
+  try {
+    await j.start();
+    const cells = j.cells(), revision = j.m.owner()!.handle!.revision;
+    const edit = cells.at(["flows", terminalA]).stage({ cfm: 240 }, { label: "Terminal A airflow" });
+    const pick = cells.at(["writeIntent"]).stage({ walk: { unitId: 1, portIndex: 0 } }, { label: "Write scope" });
+    expect(await edit).toBeNull();
+    expect(await pick).toBeNull();
+    await j.ready();
+    expect(j.m.owner()!.handle!.revision).toBe(revision + 2);
+    expect(j.m.owner()!.doc.flows[terminalA].edit.value).toEqual({ cfm: 240 });
+    expect(j.m.owner()!.doc.writeIntent.edit.value).toEqual({ walk: { unitId: 1, portIndex: 0 } });
+  } finally { await j.close(); }
+});
