@@ -470,7 +470,11 @@ def teardown(run: str) -> None:
             container = home.parent
             if (home.name == "Pe.Tools" and container.name.startswith("pe-accept-")
                     and container.parent == Path(tempfile.gettempdir()).resolve()):
-                shutil.rmtree(container)
+                target = str(container)
+                if os.name == "nt" and not target.startswith("\\\\?\\"):
+                    # Recording history can exceed MAX_PATH; container is already resolved and guarded.
+                    target = "\\\\?\\UNC\\" + target[2:] if target.startswith("\\\\") else "\\\\?\\" + target
+                shutil.rmtree(target)
 
 
 def processes() -> list[dict]:

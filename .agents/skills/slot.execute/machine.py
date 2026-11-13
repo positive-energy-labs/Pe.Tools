@@ -241,6 +241,9 @@ def main():
         except (OSError, ValueError, TimeoutError, sqlite3.Error) as error:
             print(f"HOLD: {error}", file=sys.stderr)
             return 3
+    if "--help" in argv or "-h" in argv:
+        print(__doc__)
+        return 0
     as_json = "--json" in argv
     show_all = "--all" in argv
     args = [a for a in argv if not a.startswith("--")]
