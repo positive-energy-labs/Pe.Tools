@@ -50,7 +50,7 @@ beforeAll(async () => {
       yield* Effect.raceFirst(
         Layer.launch(
           makeHttpLive({
-          inputs: testInputContext(),
+            inputs: testInputContext(),
             capabilities: { revit: false },
             lifecycle: { handle, latch },
             nodeServer,
@@ -251,12 +251,20 @@ test("unsent draft remains current across real offline/online stream recovery", 
 test("empty persisted thread stays fenced until its real host reread lands", async () => {
   const page = await browser!.newPage();
   const responses: { status: number; url: string }[] = [];
+  const subscriptions: { connection: string | null; add: { kind: string; thread?: string }[] }[] =
+    [];
   const evidence: Record<string, unknown> = {};
   const draft = "Unsent durable-thread draft: do not send.";
   let release = () => {};
-  page.on("response", (response: any) =>
-    responses.push({ status: response.status(), url: response.url() }),
-  );
+  page.on("response", (response: import("playwright-core").Response) => {
+    responses.push({ status: response.status(), url: response.url() });
+    const url = new URL(response.url());
+    if (response.ok() && url.pathname === "/pe/resource-subscriptions")
+      subscriptions.push({
+        connection: url.searchParams.get("connection"),
+        add: response.request().postDataJSON().add,
+      });
+  });
   try {
     await page.goto(`${baseUrl}/pea`, { waitUntil: "domcontentloaded" });
     await expect
@@ -297,17 +305,22 @@ test("empty persisted thread stays fenced until its real host reread lands", asy
       })
       .toBeGreaterThan(0);
     const follows = () =>
-      responses.filter((response) => {
-        const url = new URL(response.url);
-        return (
-          url.pathname === "/pe/resources" &&
-          JSON.parse(url.searchParams.get("keys") ?? "[]").some(
+      subscriptions.filter(
+        (subscription) =>
+          subscription.connection &&
+          responses.some((response) => {
+            const url = new URL(response.url);
+            return (
+              response.status === 200 &&
+              url.pathname === "/pe/resources" &&
+              url.searchParams.get("connection") === subscription.connection
+            );
+          }) &&
+          subscription.add.some(
             (key: { kind: string; thread?: string }) =>
               key.kind === "thread" && key.thread === created.id,
-          )
-        );
-      }).length;
-    // TODO: full host run intermittently sees no empty-thread /pe/resources response in 15 s; instrumented rerun passes. Prove attachment versus response flushing before changing this wait.
+          ),
+      ).length;
     await expect.poll(follows, { timeout: 15_000 }).toBeGreaterThan(0);
     expect(
       await page.evaluate(
@@ -335,9 +348,11 @@ test("empty persisted thread stays fenced until its real host reread lands", asy
         await route.continue();
       },
     );
+    const followed = follows();
     await page.context().setOffline(true);
     await new Promise((resolve) => setTimeout(resolve, 1_000));
     await page.context().setOffline(false);
+    await expect.poll(follows, { timeout: 15_000 }).toBeGreaterThan(followed);
     await expect.poll(() => blocked, { timeout: 15_000 }).toBeGreaterThan(0);
     await expect
       .poll(() => page.locator("[data-composer-send] [role='alert']").allTextContents(), {
@@ -377,7 +392,7 @@ test("empty persisted thread stays fenced until its real host reread lands", asy
     if (SCRATCH) {
       writeFileSync(
         join(SCRATCH, "durable-thread-reconnect.json"),
-        JSON.stringify({ ...evidence, responses }, null, 2),
+        JSON.stringify({ ...evidence, responses, subscriptions }, null, 2),
       );
       writeFileSync(join(SCRATCH, "durable-thread-reconnect.html"), await page.content());
       await page.screenshot({ path: join(SCRATCH, "durable-thread-reconnect.png") });
