@@ -126,7 +126,11 @@ const actions: Action[] = [
   },
   {
     name: "pickDocument",
-    can: async ({ page }) => (await page.has("Choose a document", R("Situation"))) && !(await view(page)).picker,
+    skipWhen: async ({ page }) => {
+      const v = await idle(page);
+      return !!v && !v.unbound && new URL(v.url).searchParams.has("target");
+    },
+    can: async ({ page }) => { const v = await idle(page); return !!v && v.unbound && !v.picker && (await page.has("Choose a document", R("Situation"))); },
     async act(c) {
       const { page } = c;
       await press(page, { role: "button", name: "Choose a document", within: R("Situation") });
@@ -189,11 +193,11 @@ const actions: Action[] = [
   },
   {
     name: "readInputs",
-    can: async ({ page }) => { const v = await idle(page); return !!v && picked(v).length === 1 && (await page.has(/^Show the \d+ fittings$/, R("Inputs"))); },
+    can: async ({ page }) => { const v = await idle(page); return !!v && picked(v).length === 1 && (await page.count(R("Inputs"))) > 0; },
     async act(c) {
       // A read: what the Inputs pane names for this fan, journaled through the draw record.
       const counts = await c.page.evaluate(() => {
-        const s = [...document.querySelectorAll('[aria-label="Sheet inputs"]')].find((e) => e.getClientRects().length);
+        const s = [...document.querySelectorAll('[aria-label="Inputs"]')].find((e) => e.getClientRects().length);
         return { inputs: s?.querySelectorAll("input").length ?? 0, sources: (s as HTMLElement | undefined)?.innerText.match(/· from \/\w+/g)?.length ?? 0 };
       });
       c.draw("inputs", [`${counts.inputs} values, ${counts.sources} sourced`]);
@@ -215,18 +219,18 @@ const actions: Action[] = [
   },
   {
     name: "explainFitting",
-    can: async ({ page }) => { const v = await idle(page); return !!v && picked(v).length === 1 && (await page.has(/^(Show|Hide) the \d+ fittings$/, R("Inputs"))); },
+    can: async ({ page }) => { const v = await idle(page); return !!v && picked(v).length === 1 && (await page.has(/^(Show|Hide) the \d+ fittings$/, R("Fittings"))); },
     async act(c) {
       const names = await c.page.evaluate(() =>
-        [...new Set([...document.querySelectorAll('[aria-label="Inputs"] button')]
+        [...new Set([...document.querySelectorAll('[aria-label="Fittings"] button')]
           .filter((b) => b.getClientRects().length)
           .map((b) => b.getAttribute("aria-label") ?? "")
           .filter((n) => /^(Show|Hide) the \d+ fittings$/.test(n)))],
       );
       const name = c.draw("fitting", names);
       const after = name.replace(/^(Show|Hide)/, (w) => (w === "Show" ? "Hide" : "Show"));
-      await press(c.page, { role: "button", name, within: R("Inputs") });
-      return async () => (await c.page.has(after, R("Inputs"))) && !!(await idle(c.page));
+      await press(c.page, { role: "button", name, within: R("Fittings") });
+      return async () => (await c.page.has(after, R("Fittings"))) && !!(await idle(c.page));
     },
   },
   {
@@ -287,6 +291,35 @@ const actions: Action[] = [
 ];
 
 const rules: Rule[] = [
+  {
+    says: "Expanded fitting groups show their stated member count; unpriced groups name why, and unmatched members show no numeric loss.",
+    async holds({ page }) {
+      await quiet(page);
+      return page.evaluate(() => {
+        const groups = [...document.querySelectorAll('[aria-label="Fittings"] [data-fitting-group]')]
+          .filter((e) => e.getClientRects().length);
+        for (const g of groups) {
+          const button = g.querySelector("button");
+          const name = button?.getAttribute("aria-label") ?? "";
+          const count = /^(Show|Hide) the (\d+) fittings$/.exec(name);
+          if (!count) return `fitting group has no named expansion control`;
+          const members = g.querySelectorAll("[data-fitting]").length;
+          if (members !== (count[1] === "Hide" ? Number(count[2]) : 0)) return `${name}: ${members} members drawn`;
+          if (g.getAttribute("data-fitting-source") === "not priced") {
+            const reason = (button?.nextElementSibling as HTMLElement | null)?.innerText ?? "";
+            const warning = (g.querySelector('[data-tone="alarm"]') as HTMLElement | null)?.innerText ?? "";
+            if (!/^[1-9]\d* not priced$/.test(warning) || !/not priced \/ .+/.test(reason)) return `unpriced group: ${warning}, reason ${reason}`;
+          }
+          for (const member of g.querySelectorAll("[data-fitting]")) {
+            const note = (member.lastElementChild as HTMLElement | null)?.innerText ?? "";
+            const loss = (member.children[1] as HTMLElement | undefined)?.innerText.trim();
+            if (/no rule matches/i.test(note) && loss !== "—") return `unmatched fitting shows loss ${loss}: ${note}`;
+          }
+        }
+        return true;
+      });
+    },
+  },
   {
     says: "The detail names the fan that was selected.",
     async holds({ page }) {
