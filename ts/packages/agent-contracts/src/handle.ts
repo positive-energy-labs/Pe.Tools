@@ -9,13 +9,14 @@ import type { hostOpSafety } from "@pe/host-contracts/generated";
 import { nativeReadInput, nativeReadValue, type NativeArgs, type NativeValue } from "./native-output-read.ts";
 import type {
   HostOperationKey,
+  OpKey,
   OpRequestOf,
   OpResponseOf,
 } from "@pe/host-contracts/operation-types";
 import type { PeRouteInput, PeRouteOutput } from "@pe/host-contracts/pe-api";
-import type { CatalogAxes } from "./catalog.ts";
+import { nativeAxes, type CatalogAxes } from "./catalog.ts";
 import { commandTable, type CommandKey } from "./command-axes.ts";
-import { nativeEntry, type httpRoutes } from "./pe-api.ts";
+import type { httpRoutes } from "./pe-api.ts";
 import type { hostActions } from "./semantic-actions.ts";
 import type { SubjectKeyKind } from "./subject-ref.ts";
 import { publicationSchema, type Publication } from "./value.ts";
@@ -62,7 +63,7 @@ export type { CommandKey };
 /** A semantic command's own schema first, then the native DTO, then the pe-api route. */
 export type CommandInput<K extends CommandKey> = K extends keyof Commands
   ? z.input<Commands[K]["input"]>
-  : K extends HostOperationKey
+  : K extends OpKey
     ? OpRequestOf<K>
     : K extends keyof Routes
       ? PeRouteInput<Routes, K>
@@ -71,7 +72,7 @@ export type CommandOutput<K extends CommandKey> = K extends keyof Commands
   ? Commands[K] extends { result: z.ZodType }
     ? z.output<Commands[K]["result"]>
     : unknown
-  : K extends HostOperationKey
+  : K extends OpKey
     ? OpResponseOf<K>
     : K extends keyof Routes
       ? PeRouteOutput<Routes, K>
@@ -86,6 +87,8 @@ const effects = ["Read", "TransactRead", "SessionWrite", "WorkWrite", "ModelWrit
 const costs = ["Cheap", "Bounded", "Expensive", "Mutation"] as const;
 const mint = <H>(shape: Omit<H, typeof minted>) => Object.freeze(shape) as H;
 const commandHandles = new Map<string, CommandHandle>();
+const isPlan = (command: CommandHandle): command is CommandHandle<string, unknown, unknown, "Read" | "TransactRead"> =>
+  command.effect === "Read" || command.effect === "TransactRead";
 export function handle<K extends CommandKey>(
   key: K,
 ): CommandHandle<K, CommandInput<K>, CommandOutput<K>, CommandEffect<K>> &
@@ -94,16 +97,14 @@ export function handle<K extends CommandKey>(
   const made = commandHandles.get(key);
   if (made) return made as Minted;
   if (!Object.hasOwn(commandTable, key)) throw Error(`No command or route: ${key}`);
-  const row: { effect: string; via: CommandHandle["via"]; plan?: string } = commandTable[key];
-  if (!(effects as readonly string[]).includes(row.effect))
-    throw Error(`${key} declares no Effect`);
+  const row = commandTable[key];
+  const plan = "plan" in row ? handle(row.plan) : undefined;
+  if (plan && !isPlan(plan)) throw Error(`${key} declares a plan that writes`);
   const result = mint<CommandHandle>({
     key,
-    effect: row.effect as Effect,
+    effect: row.effect,
     via: row.via,
-    ...(row.plan
-      ? { plan: handle(row.plan as CommandKey) as CommandHandle<string, unknown, unknown, "Read" | "TransactRead"> }
-      : {}),
+    ...(plan ? { plan } : {}),
   });
   commandHandles.set(key, result);
   return result as Minted;
@@ -120,7 +121,8 @@ export type CatalogReadKey = {
     : never;
 }[keyof Safety] &
   HostOperationKey;
-const nativeHandles = new Map<string, ReadHandle<string, any, any>>();
+// The mint alone restores a cached handle's keyed DTO types; storage keeps no unkeyed schema type.
+const nativeHandles = new Map<CatalogReadKey, object>();
 /**
  * A catalog Read as a handle; refuses every other key, as the host's native door does. Its input is
  * the native read's whole input (request, target, and a retained body's version and role) and its
@@ -139,7 +141,7 @@ export function native<K extends CatalogReadKey>(
     !(op.effect === "Read" || (op.effect === "TransactRead" && op.rollsBack))
   )
     throw Error(`Not a catalog Read: ${key}`);
-  const { subject, touches, effect, cost, cardinality, rollsBack } = nativeEntry(op);
+  const { subject, touches, effect, cost, cardinality, rollsBack } = nativeAxes(op);
   const data = nativeReadValue(key);
   const result = mint<Minted>({
     key,
