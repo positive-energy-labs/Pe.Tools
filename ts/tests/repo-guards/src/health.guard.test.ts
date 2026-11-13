@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import baseline from "./health.baseline.json" with { type: "json" };
-import { census, isProduction, rises, total, type Health } from "./health-census.ts";
+import { census, fsWriteCount, isProduction, PER_FILE, rises, total, type Health } from "./health-census.ts";
 
 // Each count only falls: remove the cast, suppression or mark, or split the file, then
 // `vp run ratchets:tighten`. A total may not rise; code may move between files.
@@ -14,6 +14,28 @@ describe("production health counts", () => {
         `${name}: ${now}; the baseline is ${was}`,
       ).toEqual([]);
     });
+
+  for (const name of PER_FILE)
+    it(`${name} rise in no file, and a new file starts at 0`, () => {
+      expect(rises(actual[name], baseline[name]), `${name} hold per file; the owning module is the only door`).toEqual([]);
+    });
+
+  it("counts every filesystem mutation spelling and nothing that only reads", () => {
+    const sample = `
+      import { writeFileSync, rename as move, readFileSync } from "node:fs";
+      import * as fsp from "node:fs/promises";
+      import { promises } from "fs";
+      import { mkdir } from "fs/promises";
+      writeFileSync("a", "b"); move("a", "b"); readFileSync("a");
+      fsp.appendFile("a", "b"); fsp.readFile("a"); promises.rm("a"); mkdir("d");
+      const program = Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        yield* fs.writeFileString("a", "b"); yield* fs.readFileString("a");
+        yield* fs.makeDirectory("d").pipe(Effect.orDie);
+      });
+      const other = { rm() {} }; other.rm(); rename("x");`;
+    expect(fsWriteCount("ts/apps/host/src/planted.ts", sample)).toBe(7);
+  });
 
   it("names the file whose count rose, and reads production files only", () => {
     expect(rises({ "a.ts": 2, "new.cs": 1 }, { "a.ts": 1, "b.ts": 3 })).toEqual([
