@@ -25,7 +25,6 @@
   "fans/route.ts -> ducts/sheet/input-history.neutral",
   "fans/route.ts -> ducts/sheet/model",
   "fans/route.ts -> ducts/sheet/value-fixtures",
-  "fans/sheet.ts -> ducts/identity",
   "machine/notice.tsx -> chat/question-form",
   "navigation/ledger.tsx -> chat/thread-navigation",
   "ops/actions.ts uses callCompose",
