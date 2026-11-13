@@ -19,13 +19,14 @@ import { FINDINGS_OWNER } from "@pe/agent-contracts/slots";
 import { mergeTimeline, sameStep, type RouteWorkspace, type TimelinePart } from "@pe/runtime";
 import type { ActionJournal } from "../action-journal.ts";
 import { leaf, read } from "./door.ts";
+import type { DocumentRow } from "../session-inventory.ts";
 
 /**
  * A second source of Timeline rows and steps beside the Work journals (contract K-A5). It answers
  * for the Works of one Place: its rows oldest first, and the caller's next step each way.
  */
 export interface TimelineSource {
-  read(works: readonly WorkKey[], by: WorkAuthor): Promise<TimelinePart> | TimelinePart;
+  read(works: readonly WorkKey[], by: WorkAuthor, documents: readonly DocumentRow[]): Promise<TimelinePart> | TimelinePart;
   /** Takes the step the Timeline chose from this source; the result is the door's response. */
   step(direction: "undo" | "redo", expected: StepRef, caller: Caller): Promise<unknown>;
 }
@@ -54,9 +55,9 @@ export const timelineReceipts = async (journal: Pick<ActionJournal, "read">): Pr
   );
 
 /** The host Timeline (ADR 0042): one read and one step door over the Work journals and every registered source. */
-export function hostTimeline(workspace: RouteWorkspace, journal: Pick<ActionJournal, "read">) {
+export function hostTimeline(workspace: RouteWorkspace, journal: Pick<ActionJournal, "read">, documents: () => Promise<readonly DocumentRow[]> = async () => []) {
   const parts = async (works: readonly WorkKey[], by: WorkAuthor, receipts: readonly ActionStatus[]) =>
-    Promise.all([workspace.timeline(works, by, receipts), ...[...sources].map((source) => source.read(works, by))]);
+    documents().then((docs) => Promise.all([workspace.timeline(works, by, receipts), ...[...sources].map((source) => source.read(works, by, docs))]));
   return {
     async read(works: readonly WorkKey[], by: WorkAuthor): Promise<WorkTimeline> {
       const members = timelineMembers(works);
