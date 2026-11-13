@@ -4,7 +4,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test } from "vite-plus/test";
-import { actionReceiptSchema, address, workHandle, type WorkKey } from "@pe/agent-contracts";
+import { actionReceiptSchema, address, workHandle, workTimelineSchema, type WorkKey } from "@pe/agent-contracts";
 import { createPeClient } from "@pe/agent-contracts/pe-api";
 import { withInvocationContext } from "@pe/runtime/context";
 import { findingsWork, findingsWorkSchema } from "@pe/agent-contracts/slots";
@@ -114,7 +114,7 @@ test("the person undoes their own finding through the host Timeline; Pea's newer
         const turn = ++generation;
         deliver(null, "Refreshing Timeline");
         const answer = await graphRoute("reads.value", { read: "work.timeline", args: { works }, subscription: "finding-timeline", generation: 0 }, undefined, "human").evaluate(timeline);
-        if (!closed && turn === generation) deliver(answer);
+        if (!closed && turn === generation) deliver(workTimelineSchema.parse(answer));
       };
       const work = host.subscribeUncaptured(() => { void refresh(); });
       const receipts = native.journal.subscribe({ kinds: ["action"] }, () => { void refresh(); });

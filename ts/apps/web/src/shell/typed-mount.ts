@@ -204,6 +204,8 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
       try {
         if (state.kind === "ready") {
           accept(record, state.snapshot.handle, state.snapshot.value);
+          for (const ack of state.history.acks)
+            if (workKey(ack.key) === workKey(scope.key)) lease.entry.accept(ack.press);
         } else if (state.kind === "ack" && record.handle) {
           const ack = state.ack;
           if (ack.revision > record.handle.revision) {

@@ -611,7 +611,7 @@ test("JM H27 interleave a second writer, refuse the original undo and keep its n
     await vi.waitFor(() => expect(j.m.owner()!.doc.flows[terminalA].edit.value).toEqual({ cfm: 500 }));
     await j.ready();
     const before = structuredClone(j.m.owner()!.doc), revision = j.m.owner()!.handle!.revision;
-    const undo = await j.host.workspace.step([j.key()], "human", "undo", step, []);
+    const undo = await j.host.workspace.step([j.key()], "human", "undo", step, async () => []);
     expect(undo, "H27: a changed affected path refuses its original inverse").toMatchObject({ ok: false });
     expect(j.m.owner()!.doc, "H27: conflicting undo changes no path").toEqual(before);
     expect(j.m.owner()!.handle!.revision, "H27: no inverse retry writes a new revision").toBe(revision);

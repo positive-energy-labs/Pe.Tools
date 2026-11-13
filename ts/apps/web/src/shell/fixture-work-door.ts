@@ -35,7 +35,7 @@ export function fixtureTimeline(workspace: RouteWorkspace, receipts: () => Promi
       void refresh(); return () => { closed = true; stop(); stopReceipts?.(); };
     },
     async step(request) {
-      const result = await workspace.step(request.works, "human", request.direction, request.expected, await receipts());
+      const result = await workspace.step(request.works, "human", request.direction, request.expected, async () => receipts());
       return result.ok ? null : { message: "error" in result ? result.error : JSON.stringify(result) };
     },
   };
