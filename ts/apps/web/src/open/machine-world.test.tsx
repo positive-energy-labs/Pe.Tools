@@ -9,7 +9,7 @@ import { sdkSchema } from "@pe/host-contracts/decoders";
 import { peFind } from "../../../../packages/mcps/src/pea/capability-tools.ts";
 import { fakeRuntimeHost } from "../../../../packages/mcps/tests/runtime-host-fixture.ts";
 import { machineOwner, type PromiseMachineSources } from "../../../host/tests/effect-test.ts";
-import { BAY_YOURS_25, CHECKOUT_HOT, MACHINE_SEEDS } from "../design-system/open-examples";
+import { BAY_YOURS_25, CHECKOUT_HOT, MACHINE_SEEDS } from "../machine/open-examples";
 
 beforeEach(() => {
   vi.stubGlobal(

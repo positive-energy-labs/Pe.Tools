@@ -23,7 +23,7 @@ vi.mock("#/host/resource-stream", () => ({
     },
   },
 }));
-import { PageBindingChip } from "./chip";
+import { PageBindingChip } from "../navigation/chip";
 
 const writes: PageTargetReading = {
   page: "page:@pages/todo",
