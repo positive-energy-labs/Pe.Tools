@@ -1347,19 +1347,22 @@ async function timelineStep(
 }
 
 async function routeGraph(route: string): Promise<unknown> {
-  const response = await createPeClient(base(), fetch).response("reads.value", {
-    body: {
-      read: `route:${route}`,
-      args: {},
-      subscription: `pea-route:${route}:${crypto.randomUUID()}`,
-      generation: 0,
-      release: true,
-    },
-  });
-  if (!response.ok) throw Error(`Route graph ${route} unavailable: ${await response.text()}`);
-  const publication = await response.json();
-  if (!publication.value) throw Error(`Route graph ${route} has no current value`);
-  return publication.value.data;
+  const client = createPeClient(base(), fetch);
+  const body = {
+    read: `route:${route}`,
+    args: {},
+    subscription: `pea-route:${route}:${crypto.randomUUID()}`,
+    generation: 0,
+  };
+  try {
+    const response = await client.response("reads.value", { body });
+    if (!response.ok) throw Error(`Route graph ${route} unavailable: ${await response.text()}`);
+    const publication = await response.json();
+    if (!publication.value) throw Error(`Route graph ${route} has no current value`);
+    return publication.value.data;
+  } finally {
+    await client.response("reads.value", { body: { ...body, release: true } }).catch(() => {});
+  }
 }
 
 async function routeFetch(

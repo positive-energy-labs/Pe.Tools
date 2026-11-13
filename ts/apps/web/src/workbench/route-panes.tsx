@@ -22,7 +22,10 @@ import { RouteTabActions, RouteTabs } from "./route-tabs";
 import { RouteRetention } from "./route-retention";
 import { DOCK_PANES } from "./dock-layout";
 import { paneFrame } from "#/route/body";
+import { readLayoutState, writeLayoutState } from "#/shell/layout-state";
 
+/** Where the dock keeps its device layout (the Pea fold); the tools width keeps its own key. */
+const DOCK_LAYOUT = "pe.dock";
 /** Under these a side folds to its rail: Pea reads thin, a tool needs room for its table. */
 const DOCK_FLOOR = { pea: 140, tools: 420 };
 
@@ -61,9 +64,14 @@ export function RouteDock({
     if (plan && plan.route !== tabs.route) store.actions.cancelPlan();
   }, [plan, tabs.route, store]);
   // Route view state never controls the conversation pane.
-  const [layout, setLayout] = useState<GraphLayoutState>({
-    tools: { folded: !tabs.route }, pea: { folded: false },
-  });
+  // D10 (implementor ruling 2026-11-13, reopenable): the Pea fold is device state, kept the way the
+  // tools width beside it is (`pe.toolsWidth`), so a collapsed Pea stays collapsed across loads.
+  // Only Pea's fold is kept, and only beside an open tool: the tools fold follows the open Place,
+  // and a load with no tool never opens on two rails.
+  const [layout, setLayout] = useState<GraphLayoutState>(() => ({
+    tools: { folded: !tabs.route },
+    pea: { folded: Boolean(tabs.route) && readLayoutState(DOCK_LAYOUT).pea?.folded === true },
+  }));
   useLayoutEffect(
     () =>
       setLayout((prior) => ({
@@ -122,7 +130,10 @@ export function RouteDock({
           tools: { label: "tools", purpose: "Retained tool routes", draws: [], verbs: [] },
         }}
         active={() => true}
-        state={{ panes: layout, onChange: setLayout }}
+        state={{ panes: layout, onChange: (next) => {
+          setLayout(next);
+          writeLayoutState(DOCK_LAYOUT, { pea: { folded: next.pea?.folded === true } });
+        } }}
         bodies={{
           pea: (frame) =>
             frame(

@@ -20,6 +20,7 @@ import { harnessEventSchema } from "@pe/agent-contracts";
 import { useTranscript } from "./use-workbench";
 import { WorkbenchContext } from "./thread-summary";
 import { WorkbenchProvider } from "./view";
+import { machineFixture } from "../../../../../packages/agent-contracts/tests/machine-fixture.ts";
 import { useRouteTabs } from "../tabs";
 
 const client = vi.hoisted(() => ({
@@ -55,8 +56,12 @@ vi.mock("./providers", () => {
     useProviders: () => providers,
   };
 });
-// No composer document: the machine has none to offer.
-vi.mock("#/machine/use-machine", () => ({ useMachineSlice: () => null }));
+// No composer document unless a test sets a machine reading: the machine has none to offer.
+const machine = vi.hoisted(() => ({ reading: null as unknown }));
+vi.mock("#/machine/use-machine", () => ({
+  useMachineSlice: (select: (reading: unknown) => unknown) =>
+    machine.reading ? select(machine.reading) : null,
+}));
 vi.mock("#/host/resource-stream", async (actual) => ({
   ...(await actual<typeof import("#/host/resource-stream")>()),
   useHostEvents: () => {},
@@ -73,14 +78,20 @@ vi.mock("#/host/resource-state", () => {
 vi.mock("#/navigation/surface-host", () => ({ useSurfaceHost: () => ({ surface: "web" }) }));
 vi.mock("#/host/pe-client", () => ({ peClient: { call } }));
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  machine.reading = null;
+  vi.clearAllMocks();
+});
 beforeEach(() => seedPlaces([]));
 
 let send: ((text: string) => Promise<void>) | null = null;
 let openThread: ((id: string) => void) | null = null;
+let draftTarget: unknown;
 function Probe() {
   useRouteTabs();
   const context = useContext(WorkbenchContext)!;
+  draftTarget = context.draftTarget;
   send = (text) => context.sendPrompt({ text } as never);
   openThread = context.openThread;
   return null;
@@ -220,4 +231,87 @@ test("a streamed chat chunk updates the transcript without rendering a route pan
   expect(transcriptRenders).toBeGreaterThan(transcriptBefore);
   expect(paneRenders).toBe(paneBefore);
   expect(composerRenders).toBe(composerBefore);
+});
+
+// Row 12 (owner ruling 2026-11-13): a docked thread binds to the document the URL's `?target` names,
+// including a draft with no id yet. The draft's document is the workbench's `draftTarget`, which
+// the composer's picker draws (chat/composer-head.tsx `useThreadHead`).
+test.each([false, true])("review probe: a ?target naming a document that is not open leaves the sole other document unbound: %s", async (missing) => {
+  sessionStorage.clear();
+  const doc = (openId: string) => ({ openId, title: `${openId}.rvt`, address: `C:/Jobs/${openId}.rvt`, isFamilyDocument: false, isActive: true });
+  machine.reading = { state: "ready", observation: machineFixture([{ session: "s1", documents: [doc("B")] }]) };
+  const root = createRootRoute({ component: () => <WorkbenchProvider><Probe /><Outlet /></WorkbenchProvider> });
+  const router = createRouter({
+    routeTree: root.addChildren([createRoute({ getParentRoute: () => root, path: "/fans", component: () => <p>fans</p> })]),
+    history: createMemoryHistory({ initialEntries: [missing ? "/fans?target=C%3A%2FJobs%2FA.rvt" : "/fans"] }),
+  });
+  await router.load();
+  client.threads.mockImplementation(async () => []);
+  render(<RegistryContext.Provider value={appAtomRegistry}><RouterProvider router={router} /></RegistryContext.Provider>);
+  await screen.findByText("fans");
+  expect(draftTarget).toEqual(missing ? null : { kind: "open", ref: { session: "s1", openId: "B" } });
+});
+
+test("on /fans?target=A a new thread's draft binds to A among two open documents, and its first Send seeds A", async () => {
+  sessionStorage.clear();
+  const doc = (openId: string) => ({ openId, title: `${openId}.rvt`, address: `C:/Jobs/${openId}.rvt`, isFamilyDocument: false, isActive: true });
+  machine.reading = { state: "ready", observation: machineFixture([{ session: "s1", documents: [doc("A"), doc("B")] }]) };
+  const root = createRootRoute({
+    component: () => (
+      <WorkbenchProvider>
+        <Probe />
+        <Outlet />
+      </WorkbenchProvider>
+    ),
+  });
+  const router = createRouter({
+    routeTree: root.addChildren([
+      createRoute({ getParentRoute: () => root, path: "/fans", component: () => <p>fans</p> }),
+    ]),
+    history: createMemoryHistory({ initialEntries: ["/fans?target=C%3A%2FJobs%2FA.rvt"] }),
+  });
+  await router.load();
+  client.threads.mockImplementation(async () => []);
+  render(
+    <RegistryContext.Provider value={appAtomRegistry}>
+      <RouterProvider router={router} />
+    </RegistryContext.Provider>,
+  );
+  await screen.findByText("fans");
+  expect(router.state.location.search).not.toHaveProperty("thread");
+  expect(draftTarget).toEqual({ kind: "open", ref: { session: "s1", openId: "A" } });
+  await act(() => send!("size it"));
+  expect(client.create).toHaveBeenCalledTimes(1);
+  expect(client.target).toHaveBeenCalledTimes(1);
+  expect(JSON.stringify(client.target.mock.calls[0])).toContain('"openId":"A"');
+});
+
+// Review of c6bd362b, probe 2: a `?target` that names a document which is not open binds nothing.
+// The sole open document is the default only when the URL names no document.
+test("a ?target naming a document that is not open leaves the draft unbound, never the sole open document", async () => {
+  sessionStorage.clear();
+  const doc = (openId: string) => ({ openId, title: `${openId}.rvt`, address: `C:/Jobs/${openId}.rvt`, isFamilyDocument: false, isActive: true });
+  machine.reading = { state: "ready", observation: machineFixture([{ session: "s1", documents: [doc("B")] }]) };
+  const root = createRootRoute({ component: () => <WorkbenchProvider><Probe /><Outlet /></WorkbenchProvider> });
+  const router = createRouter({
+    routeTree: root.addChildren([
+      createRoute({ getParentRoute: () => root, path: "/fans", component: () => <p>fans</p> }),
+    ]),
+    history: createMemoryHistory({ initialEntries: ["/fans?target=C%3A%2FJobs%2FA.rvt"] }),
+  });
+  await router.load();
+  client.threads.mockImplementation(async () => []);
+  render(
+    <RegistryContext.Provider value={appAtomRegistry}>
+      <RouterProvider router={router} />
+    </RegistryContext.Provider>,
+  );
+  await screen.findByText("fans");
+  expect(draftTarget).toBeNull();
+  await act(() => send!("size it"));
+  expect(client.create).toHaveBeenCalledTimes(1);
+  expect(client.target, "nothing seeds the chat with B").not.toHaveBeenCalled();
+  // With no pin, the same machine's sole document is the default, as before.
+  act(() => router.history.push("/fans"));
+  await waitFor(() => expect(draftTarget).toEqual({ kind: "open", ref: { session: "s1", openId: "B" } }));
 });

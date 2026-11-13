@@ -30,13 +30,14 @@ import { commandCatalogAxes } from "@pe/agent-contracts/command-axes";
 import { fillBody, scrollBody, type Body, type BodyKind } from "./body.ts";
 export { scrollBody, fillBody, type Body, type BodyKind } from "./body.ts";
 
+import type { FieldCodec } from "./field-codec";
 type Field = {
   schema: z.ZodType;
   initial: unknown;
   role: "pose" | "query" | "subject" | "stage";
   url: "push" | "replace";
   share?: false;
-  codec?: "list-search" | "text";
+  codec?: FieldCodec;
 };
 export const whenSubject = (child: string | LayoutJson): LayoutJson => ({
   kind: "gate", when: "subject", child: typeof child === "string" ? { kind: "pane", id: child } : child,

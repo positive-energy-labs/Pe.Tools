@@ -62,8 +62,9 @@ test("Pea enumerates Pod members and proposes revision-checked Work without rout
           args: {},
           subscription: expect.stringMatching(/^pea-route:pods:/),
           generation: 0,
-          release: true,
         });
+        if (JSON.parse(await bodyText(init)).release)
+          return Response.json({ value: null, state: "superseded" });
         graphReads++;
         return Response.json({
           key: "route:pods",

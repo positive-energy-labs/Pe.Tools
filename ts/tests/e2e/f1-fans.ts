@@ -4,6 +4,7 @@
 // the document picker offers only options in it).
 import { DOCUMENT_CHOOSER, WEB, type Page } from "./cdp.ts";
 import { fanPortsAgree, part } from "./fan-ports.ts";
+import { fanRosterLabel } from "./fan-roster.ts";
 import { LAYER, marks, settled, type Marks } from "./marks.ts";
 import { run, type Action, type Rule } from "./walk.ts";
 
@@ -103,7 +104,7 @@ const settledOn = (page: Page, label: string | null) => async () => {
   const sel = picked(v).map((r) => r.label);
   return label === null ? sel.length === 0 : sel.length === 1 && sel[0] === label && v.heading !== null;
 };
-const option = (label: string) => ({ role: "option", name: new RegExp(`^${esc(label)}`), within: R("fans") });
+const option = (label: string) => ({ role: "option", name: fanRosterLabel(label), within: R("fans") });
 async function press(page: Page, target: Parameters<Page["gestures"]["click"]>[0]) {
   const r = await page.gestures.click(target);
   if (r.outcome !== "done") throw new Error(`ASSERT press ${JSON.stringify(target, (_, v) => (v instanceof RegExp ? String(v) : v))}: ${JSON.stringify(r)}`);
