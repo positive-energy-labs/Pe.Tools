@@ -72,6 +72,14 @@ public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) :
             targetDirectories.Length,
             string.Join(", ", targetDirectories)
         );
+        // Install once before the parallel payload builds can race to populate a fresh workspace.
+        await context.Shell.Command.ExecuteCommandLineTool(
+            new GenericCommandLineToolOptions("vp") {
+                Arguments = ["i", "--frozen-lockfile", "--prefer-offline"]
+            },
+            new CommandExecutionOptions { WorkingDirectory = Path.Combine(rootDirectory.Path, "ts") },
+            cancellationToken
+        );
         var unsignedNode = PrepareUnsignedNode(signing);
         try {
             await Task.WhenAll(
