@@ -194,7 +194,7 @@ test("JZ Families History offers published values and marks ambiguous publicatio
     });
     expect(badRow.getAttribute("href")).toBeNull();
     expect(badRow.getAttribute("aria-disabled")).toBe("true");
-    expect(await screen.findByText("Unavailable: Ambiguous pane at this point")).toBeTruthy();
+    expect(badRow.closest("[data-key]")!.textContent).toContain("Unavailable: Ambiguous pane at this point");
     // Every enabled menu entry is opened through the host's HTTP replay door and typed mount.
     const available = listed.points.flatMap((point: any) => point.history.poses
       .filter((pose: any) => pose.route === "families" && !listed.unavailable.some((item: any) => item.point === point.id && item.instance === pose.instance))
@@ -1961,7 +1961,7 @@ test("JZ audit Schedules keyed edits preserve a sibling stale mark and narrow in
     expect(last.write.inverse.filter((p: { path: string[] }) => p.path[0] === "cells").map((p: { path: string[] }) => p.path)).toEqual([["cells", "1::2"]]);
     await waitFor(() => expect(mount.timeline()?.undo?.label).toBe("Delete first cell"));
     expect(await mount.stepTimeline("undo")).toBeNull();
-    expect(mount.owner()!.doc).toEqual(reviewed);
+    await waitFor(() => expect(mount.owner()!.doc).toEqual(reviewed));
     expect(await cells().patch([{ path: ["cells"], value: reviewed.cells }], { label: "Replace collection deliberately" })).toBeNull();
     expect(mount.owner()!.doc.basis.stale ?? []).toEqual([]);
   } finally { mount.pendingEdits().forEach(intent => mount.discardIntent(intent.id)); mount.dispose(); }
