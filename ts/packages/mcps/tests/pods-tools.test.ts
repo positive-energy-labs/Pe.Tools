@@ -1,7 +1,9 @@
 import { machineFixture } from "../../agent-contracts/tests/machine-fixture.ts";
 import { withInvocationContext } from "@pe/runtime/context";
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { settingsRouteState, workWriteSchema } from "@pe/agent-contracts";
+import { settingsRouteState, workWriteSchema, type Publication } from "@pe/agent-contracts";
+import { projectRouteRead } from "../../../apps/host/src/reads/routes.ts";
+import { routeRegistry } from "../../../apps/host/src/routes.generated.ts";
 import { tsOnlyOperationCatalog } from "@pe/host-contracts/operation-types";
 import { RouteWorkspace } from "../../runtime/src/route-workspace.ts";
 import { createRouteRegistrations } from "../src/pea/routes.ts";
@@ -28,6 +30,8 @@ test("Pea enumerates Pod members and proposes revision-checked Work without rout
     });
     const scope = { binding: "workspace", route: "pods", target: null, work: "member-a" } as const;
     const member = { pod: "demo", path: "settings/a.json" };
+    const graph = projectRouteRead(routeRegistry.pods!.host!);
+    let graphReads = 0;
     // The host owns observed member bytes; authors can only change shared Work.
     await runtime.publish(
       scope,
@@ -51,6 +55,32 @@ test("Pea enumerates Pod members and proposes revision-checked Work without rout
           }),
         });
       if (url.pathname === "/ops") return Response.json({ operations: tsOnlyOperationCatalog });
+      if (url.pathname === "/pe/reads/value") {
+        expect(init?.method).toBe("POST");
+        expect(JSON.parse(await bodyText(init))).toMatchObject({
+          read: "route:pods",
+          args: {},
+          subscription: expect.stringMatching(/^pea-route:pods:/),
+          generation: 0,
+          release: true,
+        });
+        graphReads++;
+        return Response.json({
+          key: "route:pods",
+          generation: 0,
+          version: 1,
+          state: "current",
+          value: {
+            data: graph,
+            evaluation: "pods-fixture",
+            inputs: "pods-fixture",
+            trace: [],
+            coverage: { requested: [], covered: [], unknown: [], refused: [] },
+            origin: null,
+            freshness: "current",
+          },
+        } satisfies Publication<typeof graph>);
+      }
       if (url.pathname === "/call") {
         expect(JSON.parse(await bodyText(init)).key).toBe("pod.list");
         return Response.json({
@@ -84,7 +114,7 @@ test("Pea enumerates Pod members and proposes revision-checked Work without rout
     });
     expect(await run(peRead, { key: "route:pods", workspaceId: "member-a" })).toMatchObject({
       ok: true,
-      result: { revision: 1, doc: { basis: { member } } },
+      result: { revision: 1, doc: { basis: { member } }, graph },
     });
     const edit = {
       key: "route:pods.edit",
@@ -108,5 +138,6 @@ test("Pea enumerates Pod members and proposes revision-checked Work without rout
       result: { doc: { basis: { sha256: "v1" }, fields: { "/x": { edit: { value: 2 } } } } },
     });
     expect(registrations.every((row) => !("handlers" in row))).toBe(true);
+    expect(graphReads).toBe(2);
     expect(settingsRouteState).not.toHaveProperty("commands");
   }));

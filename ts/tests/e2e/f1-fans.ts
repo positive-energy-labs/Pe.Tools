@@ -2,7 +2,7 @@
 //   node tests/e2e/f1-fans.ts [--seed N] [--walk 30] [--steps open,selectFan,...]
 // Env: CDP_PORT, CDP_TARGET (own browser), E2E_WEB, E2E_SESSION (the run's controlled session id;
 // the document picker offers only options in it).
-import { WEB, type Page } from "./cdp.ts";
+import { DOCUMENT_CHOOSER, WEB, type Page } from "./cdp.ts";
 import { fanPortsAgree, part } from "./fan-ports.ts";
 import { LAYER, marks, settled, type Marks } from "./marks.ts";
 import { run, type Action, type Rule } from "./walk.ts";
@@ -28,7 +28,7 @@ type View = Marks & {
 // The marks are read first, so the drawing read after them is never older than the settledness it is paired with.
 const view = async (page: Page): Promise<View> => ({ ...(await marks(page)), ...(await drawn(page)) });
 const drawn = (page: Page) =>
-  page.evaluate((): Omit<View, keyof Marks> => {
+  page.evaluate((chooser: string): Omit<View, keyof Marks> => {
     const shown = (e: Element) =>
       e.getClientRects().length > 0 && e.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true });
     const first = (sel: string) => [...document.querySelectorAll(sel)].find(shown) ?? null;
@@ -77,8 +77,8 @@ const drawn = (page: Page) =>
       .filter((b) => !(b.getAttribute("aria-label") ?? "").startsWith("Close "));
     return {
       url: location.href,
-      // Route-specific wait left: an unbound Place carries neither mark, so its sentence is read.
-      unbound: /choose an exact document again/i.test(text(tools)),
+      // The unbound picker is drawn outside the Situation and tools bands.
+      unbound: !!first(chooser),
       rows,
       heading: esp ? text(esp.querySelector("h3")) : null,
       tab: text(places.find((b) => b.getAttribute("aria-pressed") === "true") ?? null) || null,
@@ -88,7 +88,7 @@ const drawn = (page: Page) =>
       alerts: [...(tools?.querySelectorAll('[role="alert"],[data-tone="caution"]') ?? [])].filter(shown).map((e) => text(e)),
       places: places.length,
     };
-  });
+  }, DOCUMENT_CHOOSER);
 
 const picked = (v: View) => v.rows.filter((r) => r.selected);
 const idle = async (page: Page) => {
@@ -130,10 +130,10 @@ const actions: Action[] = [
       const v = await idle(page);
       return !!v && !v.unbound;
     },
-    can: async ({ page }) => { const v = await idle(page); return !!v && v.unbound && !v.picker && (await page.has("Choose a document", R("Situation"))); },
+    can: async ({ page }) => { const v = await idle(page); return !!v && v.unbound && !v.picker && (await page.has("Choose a document")); },
     async act(c) {
       const { page } = c;
-      await press(page, { role: "button", name: "Choose a document", within: R("Situation") });
+      await press(page, { role: "button", name: "Choose a document" });
       const session = process.env.E2E_SESSION ?? "";
       // Only documents in this run's own session: the disposable copy, never the owner's.
       const docs = await page.until(async () => {

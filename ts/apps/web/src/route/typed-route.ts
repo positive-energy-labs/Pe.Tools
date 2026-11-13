@@ -359,11 +359,11 @@ export function route<D, const F extends Fields, W extends z.ZodObject, Edit ext
   const sheet = spec.sheet ? sheetSlotData(spec.sheet) : undefined;
   // ADR 0035 rules 2, 3 and 8: a filled sheet, goal or picture slot is a kernel-drawn pane and, for a sheet that writes Revit,
   // the one sheet pair as the route's `sheet` verb. A route that declares either itself keeps its own.
-  const declaredVerbs = (spec.verbs ?? {}) as Readonly<Record<string, AnyVerb>>;
+  const declaredVerbs: Readonly<Record<string, AnyVerb>> = spec.verbs ?? {};
   const sheetVerb: Readonly<Record<string, AnyVerb>> = sheet && writesRevit(sheet) && !Object.values(declaredVerbs).some((verb) => verb.handle.key === SHEET_COMMANDS.apply)
     ? { sheet: { handle: handle(SHEET_COMMANDS.apply), label: "Write to Revit",
         present: (result: unknown) => {
-          const writes = (result as { writes?: readonly unknown[] }).writes?.length ?? 0;
+          const writes = typeof result === "object" && result !== null && "writes" in result && Array.isArray(result.writes) ? result.writes.length : 0;
           return `Write ${writes} parameter value${writes === 1 ? "" : "s"} to Revit`;
         } } }
     : {};
@@ -444,10 +444,15 @@ export function route<D, const F extends Fields, W extends z.ZodObject, Edit ext
   const gateErrors = linkRouteGates(data, schemas);
   if (gateErrors.length) throw Error(gateErrors.map(error => `${error.path}: ${error.message}`).join("; "));
   const host:HostRouteModule={data,schemas,...(work?{workState:work,readWorks:Object.keys(owners).filter(id=>id!==work.route)}:{})};
+  const axes: Readonly<Record<string, EntryContract["axes"]>> = commandCatalogAxes;
   const entries:Record<string,EntryContract>=Object.fromEntries([...[...readIds.keys()].map(read=>[read.key,read]),
     // The linker finds a verb's entry by key; its axes are the generated table's, and no schema rides along.
     ...Object.values(verbTable).flatMap(verb=>[verb.handle,...(verb.handle.plan?[verb.handle.plan]:[])])
-      .map(h=>[h.key,{input:z.looseObject({}),output:z.unknown(),axes:commandCatalogAxes[h.key as keyof typeof commandCatalogAxes]}])]);
+      .map(h=>{
+        const declared = axes[h.key];
+        if (!declared) throw Error(`No generated axes for ${h.key}`);
+        return [h.key,{input:z.looseObject({}),output:z.unknown(),axes:declared}];
+      })]);
   return {spec:normalized,data,host,entries};
 }
 export type TypedRoute = ReturnType<typeof route<any, Fields, z.ZodObject, z.ZodType, Record<string, HostRead>, HostRead, {}, Readonly<Record<string, CommandHandle>>>>;
