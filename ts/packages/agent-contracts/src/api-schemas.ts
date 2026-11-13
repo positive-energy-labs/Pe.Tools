@@ -98,3 +98,4 @@ export * from "./ducts-read.ts";
 export {valueReadRequest,valueReadResponse} from "./value.ts";
 
 export { blobRefSchema, blobUploadSchema } from "./blob-ref.ts";
+export { placesFileSchema } from "./places.ts";

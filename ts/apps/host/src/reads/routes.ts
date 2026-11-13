@@ -1,4 +1,5 @@
 import { routeRegistry } from "../routes.generated.ts";
+import { placesRead, readPlaces } from "../places.ts";
 import { valueReadRequest, type HostRouteModule } from "@pe/agent-contracts";
 import {
   evaluate,
@@ -83,6 +84,7 @@ export function readRegistry(modules: readonly Pick<HostRouteModule, "reads" | "
   return { reads, leaves, register };
 }
 export const registeredReads: HostReadRegistry = readRegistry(Object.values(routeRegistry).map((route) => route.host));
+registeredReads.register({ places: placesRead }, { places: async () => readPlaces() });
 /** HTTP adapters select a read; composition and freshness belong to the evaluator. */
 export function graphRoute(id: string, raw: unknown, registry: HostReadRegistry = registeredReads) {
   if (!graphRouteIds.includes(id)) throw Error(`Unknown read door: ${id}`);
