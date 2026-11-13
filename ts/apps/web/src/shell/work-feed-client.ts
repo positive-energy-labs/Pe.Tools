@@ -48,6 +48,7 @@ export async function sendCommand(
   let path: string;
   let method = "POST";
   let body: unknown = admission.input;
+  let nativeKey: string | undefined;
   const headers: Record<string, string> = { "content-type": "application/json" };
   if (route === "actions.read") {
     path = "/actions?id=" + encodeURIComponent(String(admission.input.id));
@@ -59,8 +60,9 @@ export async function sendCommand(
     method = "PUT";
     body = admission.input.binding;
   } else if (route === "operation.call") {
-    const op = admission.input.op as { key?: string; intent?: string } | undefined;
-    if (!op?.key || op.intent?.toLowerCase() !== "read") throw Error("ops.read requires a native Read");
+    const op = z.object({ key: z.string(), intent: z.string() }).parse(admission.input.op);
+    if (op.intent.toLowerCase() !== "read") throw Error("ops.read requires a native Read");
+    nativeKey = op.key;
     path = "/call";
     body = { key: op.key, request: admission.input.request };
     if (admission.target.kind === "document") {
@@ -89,9 +91,9 @@ export async function sendCommand(
     if (!row) throw Error("Original action not found");
     return { state: "answered", result: row };
   }
-  return { state: "answered", result: route === "operation.call"
-    ? { kind: "value", value: await ports.decode((admission.input.op as { key: string }).key, result), elapsedMs: Math.round(performance.now() - started),
-        op: (admission.input.op as { key: string }).key, request: admission.input.request,
+  return { state: "answered", result: nativeKey !== undefined
+    ? { kind: "value", value: await ports.decode(nativeKey, result), elapsedMs: Math.round(performance.now() - started),
+        op: nativeKey, request: admission.input.request,
         document: admission.target.kind === "document" ? admission.target.ref : null } : result };
 }
 
@@ -120,9 +122,10 @@ import { completion, workOutcome, failedWrite } from "./work-door-observation";
 // The shared Reading transport outlives shell/target remounts in this tab. A registration
 // mismatch latches until reload; recreating a client must never retry against other bytes.
 const reloadFailures = new WeakMap<Readings, Map<string, WorkFeedFailure>>();
+const isCommandKey = (key: string): key is keyof typeof commandTable => Object.hasOwn(commandTable, key);
 export const browserWorkPorts = { write: writeRouteWork, submit: (admission: ActionAdmission) => {
-  if (!Object.hasOwn(commandTable, admission.key)) throw Error(`Unknown command: ${admission.key}`);
-  return sendCommand(handle(admission.key as keyof typeof commandTable), admission);
+  if (!isCommandKey(admission.key)) throw Error(`Unknown command: ${admission.key}`);
+  return sendCommand(handle(admission.key), admission);
 } };
 /** Kernel door (ADR 0026) for a surface that must follow one receipt to its end, e.g. a confirmed outward send. */
 export const followAction = (id: string) => waitForAction(id);

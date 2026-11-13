@@ -32,14 +32,19 @@ export interface CatalogLink extends CatalogAxes {
   derive?: NonNullable<import("./command.ts").Command["derivation"]>["derive"];
   preview?: NonNullable<import("./command.ts").Command["derivation"]>["preview"];
 }
+function axis<T extends string>(values: Record<string, T>, value: string): T {
+  const found = Object.values(values).find((candidate) => candidate === value);
+  if (found === undefined) throw Error(`Unknown native axis: ${value}`);
+  return found;
+}
 /** The native metadata projection shared by host catalog rows and browser read handles. */
 export function nativeAxes(op: HostOperationDefinition): CatalogAxes {
   return {
-    subject: op.subject as CatalogAxes["subject"],
-    touches: op.touches.split(", ") as CatalogAxes["touches"],
-    effect: op.effect as CatalogAxes["effect"],
+    subject: axis(opSubject, op.subject),
+    touches: op.touches.split(", ").map((touch) => axis(opTouches, touch)),
+    effect: axis(opEffect, op.effect),
     cost: op.costTier,
-    cardinality: op.cardinality as CatalogAxes["cardinality"],
+    cardinality: axis(opCardinality, op.cardinality),
     internal: op.internal,
     rollsBack: op.rollsBack,
   };

@@ -87,6 +87,8 @@ const effects = ["Read", "TransactRead", "SessionWrite", "WorkWrite", "ModelWrit
 const costs = ["Cheap", "Bounded", "Expensive", "Mutation"] as const;
 const mint = <H>(shape: Omit<H, typeof minted>) => Object.freeze(shape) as H;
 const commandHandles = new Map<string, CommandHandle>();
+const isPlan = (command: CommandHandle): command is CommandHandle<string, unknown, unknown, "Read" | "TransactRead"> =>
+  command.effect === "Read" || command.effect === "TransactRead";
 export function handle<K extends CommandKey>(
   key: K,
 ): CommandHandle<K, CommandInput<K>, CommandOutput<K>, CommandEffect<K>> &
@@ -95,16 +97,14 @@ export function handle<K extends CommandKey>(
   const made = commandHandles.get(key);
   if (made) return made as Minted;
   if (!Object.hasOwn(commandTable, key)) throw Error(`No command or route: ${key}`);
-  const row: { effect: string; via: CommandHandle["via"]; plan?: string } = commandTable[key];
-  if (!(effects as readonly string[]).includes(row.effect))
-    throw Error(`${key} declares no Effect`);
+  const row = commandTable[key];
+  const plan = "plan" in row ? handle(row.plan) : undefined;
+  if (plan && !isPlan(plan)) throw Error(`${key} declares a plan that writes`);
   const result = mint<CommandHandle>({
     key,
-    effect: row.effect as Effect,
+    effect: row.effect,
     via: row.via,
-    ...(row.plan
-      ? { plan: handle(row.plan as CommandKey) as CommandHandle<string, unknown, unknown, "Read" | "TransactRead"> }
-      : {}),
+    ...(plan ? { plan } : {}),
   });
   commandHandles.set(key, result);
   return result as Minted;
