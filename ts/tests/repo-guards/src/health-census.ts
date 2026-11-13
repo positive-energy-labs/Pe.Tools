@@ -3,8 +3,10 @@
 // Before this guard they had none and rose in steps at landings (casts 101 to 151 and
 // suppressions 57 to 106 in two weeks).
 // `node src/health-census.ts` prints the census; `--tighten` lowers the baseline to it.
-// ponytail: the first three are lines matched by a regex, not the type checker. A count that
-// needs the checker gets its own census, as test-casts has.
+// `casts` is a syntax-tree count in TypeScript (kaitpw, 2026-11-13: casts and `any` are a sign of
+// bad design and may not rise anywhere): every `as T` except `as const`, every `<T>x`, and every
+// `any` written as a type. It ratchets per file. In C# it counts `(dynamic)` lines.
+// ponytail: suppressions and todos are lines matched by a regex.
 // `fsWrites` (kernel crusade 2, slice 1 / ST5) is a syntax-tree count: one per call that mutates
 // the filesystem through node:fs, node:fs/promises or an Effect `FileSystem`, in production files
 // of the host and the packages it stores through. It ratchets per file, not by total: a write
@@ -19,15 +21,17 @@ export type Count = Record<string, number>;
 export type Health = { casts: Count; suppressions: Count; todos: Count; longFiles: Count; fsWrites: Count };
 
 /** Ratchets that hold per file: no file may rise, whatever the total does. */
-export const PER_FILE = ["fsWrites"] as const satisfies readonly (keyof Health)[];
+export const PER_FILE = ["casts", "fsWrites"] as const satisfies readonly (keyof Health)[];
 
 /**
  * The doors: files a per-file count may rise in, because writes consolidate into them (the store is
  * the one write door, routes CONTRACTS K-A2). Their calls still count toward the total.
  */
 export const OWNERS: Record<(typeof PER_FILE)[number], readonly string[]> = {
+  casts: [],
   fsWrites: ["ts/packages/host-contracts/src/store.ts"],
 };
+export const NAMES = ["casts", "suppressions", "todos", "longFiles", "fsWrites"] as const satisfies readonly (keyof Health)[];
 
 /** Per-file rises outside the named owners. */
 export const perFileRises = (name: (typeof PER_FILE)[number], actual: Count, baseline: Count) =>
@@ -140,10 +144,29 @@ export function fsWriteCount(path: string, text: string): number {
   return count;
 }
 
+/** TypeScript type escapes: `as T` (not `as const`), `<T>x`, and `any` as a type. */
+export function castCount(path: string, text: string): number {
+  const kind = path.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS;
+  const ast = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true, kind);
+  let count = 0;
+  const visit = (node: ts.Node) => {
+    if (
+      (ts.isAsExpression(node) && !(ts.isTypeReferenceNode(node.type) && node.type.typeName.getText(ast) === "const")) ||
+      ts.isTypeAssertionExpression(node) ||
+      node.kind === ts.SyntaxKind.AnyKeyword
+    )
+      count++;
+    ts.forEachChild(node, visit);
+  };
+  visit(ast);
+  return count;
+}
+
 const repoRoot = resolve(import.meta.dirname, "../../../..");
 const LONG = 600;
-const lines: Record<Exclude<keyof Health, "longFiles" | "fsWrites">, RegExp> = {
-  casts: /\bas (any|unknown as)\b|\(dynamic\)|\bas never\b/,
+const DYNAMIC = /\(dynamic\)/;
+const LINE_COUNTS = ["suppressions", "todos"] as const satisfies readonly (keyof Health)[];
+const lines: Record<(typeof LINE_COUNTS)[number], RegExp> = {
   suppressions:
     /@ts-(ignore|expect-error)|(eslint|oxlint)-disable|#pragma warning disable|SuppressMessage/,
   todos: /\b(TODO|HACK|FIXME|XXX)\b/,
@@ -151,7 +174,7 @@ const lines: Record<Exclude<keyof Health, "longFiles" | "fsWrites">, RegExp> = {
 
 export const isProduction = (path: string) =>
   /\.(tsx?|cs)$/.test(path) &&
-  !/\.d\.ts$|\.(test|spec|guard|journey|gen|generated)\.|(^|\/)(tests?|__tests__|fixtures?|generated)\/|Tests?\//.test(
+  !/\.d\.ts$|\.(test|test-support|spec|guard|journey|gen|generated|fixture)\.|(^|\/)(tests?|__tests__|fixtures?|generated)\/|Tests?\//.test(
     path,
   );
 
@@ -177,13 +200,20 @@ export function census(): Health {
     }
     const text = source.split("\n");
     if (text.length > LONG) health.longFiles[file] = 1;
-    for (const [name, pattern] of Object.entries(lines)) {
-      const hits = text.filter((line) => pattern.test(line)).length;
-      if (hits) health[name as keyof typeof lines][file] = hits;
+    const casts = file.endsWith(".cs") ? text.filter((line) => DYNAMIC.test(line)).length : castCount(file, source);
+    if (casts) health.casts[file] = casts;
+    for (const name of LINE_COUNTS) {
+      const hits = text.filter((line) => lines[name].test(line)).length;
+      if (hits) health[name][file] = hits;
     }
   }
   return health;
 }
+
+const isCount = (value: unknown): value is Count =>
+  typeof value === "object" && value !== null && Object.values(value).every((n) => typeof n === "number");
+const isHealth = (value: unknown): value is Health =>
+  typeof value === "object" && value !== null && NAMES.every((name) => name in value && isCount(Reflect.get(value, name)));
 
 /** The files whose count rose, as `file: baseline -> actual`. */
 export const rises = (actual: Count, baseline: Count) =>
@@ -194,11 +224,10 @@ export const rises = (actual: Count, baseline: Count) =>
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const path = join(import.meta.dirname, "health.baseline.json");
   const actual = census();
-  const names = Object.keys(actual) as (keyof Health)[];
+  const names = NAMES;
   if (process.argv.includes("--tighten")) {
-    const baseline = existsSync(path)
-      ? (JSON.parse(readFileSync(path, "utf8")) as Health)
-      : undefined;
+    const parsed: unknown = existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : undefined;
+    const baseline = isHealth(parsed) ? parsed : undefined;
     for (const name of PER_FILE)
       if (baseline?.[name] && perFileRises(name, actual[name], baseline[name]).length)
         throw new Error(
