@@ -104,3 +104,18 @@ describe("catalog dependency graph", () => {
       expect(["Read", "TransactRead"]).toContain(byKey.get(row.previewBy!)?.effect);
   });
 });
+
+import { hostOpCatalog } from "@pe/host-contracts/catalog";
+import { callPolicies } from "./call-policy.ts";
+import { isViewImage, nativeOutputSchema } from "./native-output-read.ts";
+// The host projects a call's picture when its policy says capture, and a command step when
+// isViewImage says so. One list drifting from the other hands a host file path to a caller.
+test("the capture policy rows are exactly the view-image keys, and the focused twin is the SessionWrite", () => {
+  const captures = Object.entries(callPolicies).filter(([, row]) => row.capture).map(([key]) => key);
+  expect(captures.sort()).toEqual(hostOpCatalog.map((op) => op.key).filter(isViewImage).sort());
+  const effect = (key: string) => hostOpCatalog.find((op) => op.key === key)?.effect;
+  expect(effect("revit.context.view-image")).toBe("Read");
+  expect(effect("revit.context.view-image.focus")).toBe("SessionWrite");
+  for (const key of captures)
+    expect(JSON.stringify(nativeOutputSchema(key as never).toJSONSchema()), key).not.toContain("filePath");
+});
