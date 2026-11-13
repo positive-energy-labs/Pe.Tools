@@ -129,8 +129,14 @@ export function useLedgerList(
         return followAction(id);
       })
       .then((receipt) => {
-        if (receipt.state !== "succeeded")
-          setRefusal(`Not sent: ${"error" in receipt ? receipt.error : "Send outcome unavailable"}. Ask Pea to send it again.`);
+        if (receipt.state === "succeeded") return;
+        const reason = "error" in receipt ? receipt.error : "the host gave no outcome";
+        // Only a failed or cancelled receipt says nothing left; an interrupted send may have arrived.
+        setRefusal(
+          receipt.state === "failed" || receipt.state === "cancelled"
+            ? `Not sent: ${reason}. Ask Pea to send it again.`
+            : `The send may have arrived: ${reason}. Check the destination before asking Pea to send it again.`,
+        );
       })
       .catch((cause: unknown) => setRefusal(String(cause)))
       .finally(() => setResuming(null));

@@ -60,7 +60,7 @@ vi.mock("#/navigation/state", () => ({
 vi.mock("#/route/pod-route-context", () => ({ usePodRoutes: () => null }));
 afterEach(cleanup);
 
-test.each(["failed", "succeeded"] as const)("Confirm follows a %s send receipt in Activity", async (state) => {
+test.each(["failed", "unknown", "succeeded"] as const)("Confirm follows a %s send receipt in Activity", async (state) => {
   const { Ledger } = await import("./ledger");
   const { LEDGER_PRESENTATIONS } = await import("./ledger-model");
   const running = actionReceiptSchema.parse({
@@ -71,7 +71,8 @@ test.each(["failed", "succeeded"] as const)("Confirm follows a %s send receipt i
   });
   const terminal = actionReceiptSchema.parse({
     ...running, state,
-    ...(state === "failed" ? { error: "LLAMA_CLOUD_API_KEY is not set", status: 502 } : { result: {} }),
+    ...(state === "failed" ? { error: "LLAMA_CLOUD_API_KEY is not set", status: 502 }
+      : state === "unknown" ? { error: "The host stopped during the send", status: 503 } : { result: {} }),
   });
   let finish!: (response: Response) => void;
   const fetchReceipt = vi.fn()
@@ -92,7 +93,11 @@ test.each(["failed", "succeeded"] as const)("Confirm follows a %s send receipt i
     await act(async () => { finish(Response.json([terminal])); });
     if (state === "failed")
       expect(await screen.findByText("Not sent: LLAMA_CLOUD_API_KEY is not set. Ask Pea to send it again.")).toBeTruthy();
-    else
+    else if (state === "unknown") {
+      // An interrupted send may already have left; the row must not claim it did not.
+      expect(await screen.findByText(/^The send may have arrived: The host stopped during the send\./)).toBeTruthy();
+      expect(screen.queryByText(/Not sent:/)).toBeNull();
+    } else
       expect(screen.queryByText(/Not sent:/)).toBeNull();
   } finally {
     feed.rows = before;
