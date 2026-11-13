@@ -373,6 +373,9 @@ export const revit = {
  * Place's target is a document a connected Revit lists as open; unbound, it is absent.
  */
 export const BOUND = "[data-bound-document] [data-list-trigger]";
+/** Unit ESP cell address emitted by route/slots/sheet/pane.tsx for fans/sheet.ts's esp binding. */
+export const FANS_ESP_ROW = '[data-pane-id="sheet-inputs"] [data-sheet-address^="esp:"]';
+export const DOCUMENT_CHOOSER = '[data-list-trigger][aria-label="Choose a document"]';
 const CHOOSE = "Choose a document";
 
 /**
