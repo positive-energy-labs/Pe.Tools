@@ -13,7 +13,93 @@ import { serveRoutes } from "./real-server.ts";
 import { bindWork } from "@pe/agent-contracts";
 import { RouteWorkspace } from "@pe/runtime";
 import { hostTimeline } from "../src/reads/work-timeline.ts";
-import { approvedPea } from "./callers.ts";
+import { approvedPea, human, pea } from "./callers.ts";
+import { withInvocationContext } from "@pe/runtime/context";
+import { createPeRoutes } from "../src/pe-routes.ts";
+import { hostState } from "../src/host-ownership.ts";
+import { readLines } from "@pe/host-contracts/kinds";
+
+function homeHistory() {
+  const root = mkdtempSync(join(tmpdir(), "pe-tier-history-"));
+  vi.stubEnv("PE_TOOLS_PRODUCT_HOME", root);
+  mkdirSync(join(root, "Settings"), { recursive: true });
+  const path = join(root, "Settings", "ducts.json");
+  writeFileSync(path, '{"designFriction":0.07}');
+  const owner = journalAt(join(root, "actions.json"), Date.now);
+  const registrations = [{ spec: { route: "ducts", title: "Ducts", description: "Proof", schema: z.object({}) } }];
+  const workspace = new RouteWorkspace({ registrations, store: { getState: async () => null, setState: async () => {} } });
+  const timeline = hostTimeline(workspace, owner);
+  const routes = createPeRoutes({ workspace, registrations, journal: owner });
+  const works = [bindWork("ducts", null, "home-history")];
+  return {
+    path,
+    read: () => timeline.read(works, "human"),
+    save(value: number) {
+      const wrote = tiers.writeSettingTier({ owner: "ducts", tier: "user", path: ["designFriction"], value, expectedSha256: sha256Hex(readFileSync(path)) }, { caller: human });
+      if (!wrote.ok) throw Error(wrote.message);
+      const row = tiers.homeWriteSource.rows({ owner: "ducts", homes: [root] }).findLast(row => row.path === path && row.sha256 === wrote.sha256);
+      if (!row) throw Error("Expected the saved home row");
+      return { home: path, sha256: wrote.sha256, label: row.place };
+    },
+    async step(expected: unknown, caller = human, direction = "undo") {
+      const response = await withInvocationContext({ caller }, () => routes.fetch(new Request("http://host/pe/route-state/ducts/history?work=home-history", {
+        method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ direction, works, expected }),
+      })));
+      return response.json();
+    },
+    async close() { await owner.close(); vi.unstubAllEnvs(); rmSync(root, { recursive: true, force: true }); },
+  };
+}
+
+test("home-write step doors refuse Pea naming a human save, preserving the file", async () => {
+  const f = homeHistory();
+  try {
+    const ref = f.save(0.08), caller = pea("foreign-home");
+    const before = readFileSync(f.path);
+    expect(await f.step(ref, caller)).toMatchObject({ ok: false });
+    expect(readFileSync(f.path)).toEqual(before);
+    // ST7b-no-author: the source door must guard even when called without the outer selector.
+    expect(() => tiers.homeWriteSource.step(ref, caller)).toThrow("Only the save's author");
+    expect(readFileSync(f.path)).toEqual(before);
+  } finally { await f.close(); }
+});
+
+test("home undo consumes the newest write, exposes the older write and explains redo", async () => {
+  const f = homeHistory();
+  try {
+    const older = f.save(0.08), latest = f.save(0.09);
+    expect(await f.step(latest)).toMatchObject({ ok: true });
+    const log = readLines(tiers.homeWritesKind.in(hostState()));
+    expect(log.kind).toBe("ok");
+    // ST7b-no-consumption-record: successful undo keeps its durable provenance.
+    expect(log.kind === "ok" && log.values.some(row => row.kind === "home-undo" && row.path === f.path && row.sha256 === latest.sha256)).toBe(true);
+    expect((await f.read()).undo).toMatchObject(older);
+    expect((await f.read()).redo).toBeNull();
+    expect((await f.read()).refusal.redo).toContain("redo is not supported");
+    // ST7b-silent-redo: the command door carries the same explanation.
+    expect(await f.step(latest, human, "redo")).toMatchObject({ ok: false, error: expect.stringContaining("redo is not supported") });
+    // Model death after restoration but before the completion append by removing only that row.
+    if (log.kind !== "ok") throw Error("Expected the home-write log");
+    writeFileSync(tiers.homeWritesKind.in(hostState()).path, log.values.filter(row => !(row.kind === "home-undo" && row.path === f.path && row.sha256 === latest.sha256)).map(row => JSON.stringify(row)).join("\n") + "\n");
+    expect((await f.read()).undo).toMatchObject(older);
+    expect(await f.step(older)).toMatchObject({ ok: true });
+    expect((await f.read()).undo).toBeNull();
+  } finally { await f.close(); }
+});
+
+test("home Timeline refuses undo when the prior blob is missing", async () => {
+  const f = homeHistory();
+  try {
+    const prior = readFileSync(f.path);
+    const ref = f.save(0.08);
+    expect((await f.read()).rows).toContainEqual(expect.objectContaining({ path: f.path, undoable: true }));
+    rmSync(join(hostState().blobs, "sha256", sha256Hex(prior)));
+    // ST7b-ignore-missing-blob: deleting the rested check must make this flag lie.
+    expect((await f.read()).rows).toContainEqual(expect.objectContaining({ path: f.path, undoable: false }));
+    expect((await f.read()).refusal.undo).toContain("prior bytes are unavailable");
+    expect(sha256Hex(readFileSync(f.path))).toBe(ref.sha256);
+  } finally { await f.close(); }
+});
 
 test("Pea's first home write records its caller and refuses undo with a reason, keeping the file", async () => {
   const root = mkdtempSync(join(tmpdir(), "pe-tier-first-"));
