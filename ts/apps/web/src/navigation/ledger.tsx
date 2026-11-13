@@ -8,7 +8,7 @@ import { Scroll } from "@pe/kit/lang/scroll";
 import { Button } from "@pe/kit/lang/button";
 import { NOTICE_GROUPS, type NoticeRow } from "@pe/agent-contracts";
 import { peClient } from "#/host/pe-client";
-import { waitForAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
+import { followAction } from "#/shell/work-feed-client";
 import { relativeThreadAge } from "#/chat/thread-navigation";
 import { usePodRoutes } from "#/route/pod-route-context";
 import { previousOf } from "#/host/resource-state";
@@ -126,7 +126,7 @@ export function useLedgerList(
       .call("outward.confirm", { params: { id } })
       .then(({ id }) => {
         if (typeof id !== "string" || !id) throw Error("The host returned no send receipt.");
-        return waitForAction(id);
+        return followAction(id);
       })
       .then((receipt) => {
         if (receipt.state !== "succeeded")

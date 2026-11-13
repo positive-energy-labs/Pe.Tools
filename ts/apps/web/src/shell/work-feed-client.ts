@@ -17,7 +17,7 @@ import type {
 } from "../../../../packages/agent-contracts/src/work-journal-door";
 import { peReadings, type Readings } from "../host/resource-stream";
 import { writeRouteWork } from "../route/host";
-import { submitAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
+import { submitAction, waitForAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 import type {
   AcceptedResult,
   WorkWriteOutcome,
@@ -51,6 +51,8 @@ import { completion, workOutcome, failedWrite } from "./work-door-observation";
 // mismatch latches until reload; recreating a client must never retry against other bytes.
 const reloadFailures = new WeakMap<Readings, Map<string, WorkFeedFailure>>();
 export const browserWorkPorts = { write: writeRouteWork, submit: submitAction };
+/** Kernel door (ADR 0026) for a surface that must follow one receipt to its end, e.g. a confirmed outward send. */
+export const followAction = (id: string) => waitForAction(id);
 
 /** Complete Work and native journal client over the existing host doors. */
 export function createWorkFeedClient(
