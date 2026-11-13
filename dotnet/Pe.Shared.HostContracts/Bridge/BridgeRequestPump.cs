@@ -36,12 +36,8 @@ public sealed class BridgeRequestPump(
         }
     }
 
-    [Op("op.cancel", OpSubject.None, OpTouches.Metadata, OpEffect.SessionWrite,
-        Does = "Signal cooperative cancellation to one in-flight bridge request, named by the requestId it was sent under. The operation stops at its next checkpoint and answers with a cancelled outcome; work already committed inside Revit is not undone, and an operation that never checks its token cannot be interrupted.",
-        Title = "Cancel Bridge Request",
-        Intent = OpIntent.Mutate, Actor = OpActor.Any,
-        Finds = ["cancel", "stop", "abort", "request", "timeout"],
-        Tier = OpTier.Expert)]
+    // The `op.cancel` handler is BridgeAgent.CancelAsync, not this method: a SessionWrite op takes its scope in
+    // its signature, and this assembly references no Revit to name one.
     public Task<OpCancelData> CancelAsync(OpCancelRequest request, CancellationToken cancellationToken) {
         // Never queued behind anything: reaching an op that is hogging Revit is the whole point.
         var requestId = request.RequestId ?? string.Empty;

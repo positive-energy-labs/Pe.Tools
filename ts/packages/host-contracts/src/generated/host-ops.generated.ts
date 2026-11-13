@@ -6035,7 +6035,7 @@ export namespace RevitContextSummary {
   }
 }
 
-/** Export a view exactly as the user sees it (templates, VG overrides, temporary hide/isolate all apply) to a PNG and return its path. Target the active view (omit target), a view/sheet/viewport by id or name, or a schedule placed on a sheet. Optional focus crops to element ids, the current selection, or a scope box. The view exports unmodified, with all the user's settings; focus capture sets a temporary crop box (clearing any scope box, annotation crop on so the export spans only the crop) and restores it afterward (editable document only). A cropped view's image is exactly its model crop, cut from the export (which covers the view's whole outline) at the requested width (the response gives the delivered width and height, and a warning when a crop that is a small part of the view comes back a thumbnail), and returns registration: the model XY of the image's top-left, top-right and bottom-left corners plus the image sha256, which places pixels under model geometry even on a rotated crop. */
+/** Export a view exactly as the user sees it (templates, VG overrides, temporary hide/isolate all apply) to a PNG and return its path. Target the active view (omit target), a view/sheet/viewport by id or name, or a schedule placed on a sheet (captured as placed, so a sheet-filtered schedule shows that sheet's rows). Changes nothing and opens no transaction; to crop to element ids, the selection or a scope box, or to see a sheet-filtered schedule whole, call revit.context.view-image.focus. A cropped view's image is exactly its model crop, cut from the export (which covers the view's whole outline) at the requested width (the response gives the delivered width and height, and a warning when a crop that is a small part of the view comes back a thumbnail), and returns registration: the model XY of the image's top-left, top-right and bottom-left corners plus the image sha256, which places pixels under model geometry even on a rotated crop. */
 export namespace RevitContextViewImage {
   export namespace Req {
     export interface Request {
@@ -6107,6 +6107,7 @@ export namespace RevitContextViewImage {
       sheetNumber?: null | string;
       registration?: null | RevitViewImageRegistration;
       registrationRefusal?: null | RevitViewImageRegistrationRefusal;
+      restore?: null | RevitViewImageRestore;
       /**
        * Host captures route for exactly the registered PNG (the host keeps every taking), keyed by ImageSha256;
        * null exactly when Registration is. FilePath stays the host-side record.
@@ -6145,6 +6146,139 @@ export namespace RevitContextViewImage {
       topLeft: number[];
       topRight: number[];
       bottomLeft: number[];
+    }
+    /**
+     * Whether a focused capture put the view back. When Held is false the image is still good, and
+     * Left names what the captured view still carries: crop, scopeBox, annotationCrop, sheetFilter.
+     *
+     */
+    export interface RevitViewImageRestore {
+      held: boolean;
+      left: string[];
+    }
+  }
+}
+
+/** Capture a view cropped to element ids, the current selection or a scope box, or a sheet-filtered schedule with all its rows. Commits a temporary change to that view (crop box set, any scope box cleared, annotation crop on; or the schedule's sheet filter lifted), exports the PNG, then commits its undo. Needs an editable document. The answer's restore says whether the undo held; when it did not, the image is still returned and restore.left names what the view still carries (crop, scopeBox, annotationCrop, sheetFilter). Same request and image as revit.context.view-image. */
+export namespace RevitContextViewImageFocus {
+  export namespace Req {
+    export interface Request {
+      target?: null | RevitViewImageTarget;
+      focus?: null | RevitViewImageFocus;
+      marginPercent?: number;
+      pixelSize?: number;
+    }
+    /**
+     * What to capture. Omit entirely to capture the active view. Id/UniqueId accept a view,
+     * sheet, viewport (dereferenced to its view), or schedule (must be placed on a sheet).
+     * Name matches view name, sheet name, sheet number, or schedule name — exact first, then
+     * unique substring. OnSheet (sheet number or name) disambiguates names that appear on
+     * multiple sheets and selects which placement of a schedule to capture.
+     *
+     */
+    export interface RevitViewImageTarget {
+      id?: number | null;
+      uniqueId?: null | string;
+      name?: null | string;
+      onSheet?: null | string;
+    }
+    /**
+     * Optional crop: exactly one of ElementIds, Selection, or ScopeBox. The view is exported
+     * with a temporary crop box around the focus (rolled back afterwards), so graphics stay
+     * exactly what the user sees. Requires an editable document; not supported on sheets.
+     *
+     */
+    export interface RevitViewImageFocus {
+      elementIds?: number[] | null;
+      selection?: boolean;
+      scopeBox?: null | string;
+    }
+  }
+  export namespace Res {
+    export type RevitAgentContextHandleKind =
+      | "Document"
+      | "View"
+      | "Sheet"
+      | "Element"
+      | "Schedule"
+      | "Category"
+      | "Family";
+    /**
+     * Why a view image carries no RevitViewImageRegistration.
+     */
+    export type RevitViewImageRegistrationRefusal =
+      | "NoCrop"
+      | "NoImage"
+      | "DegenerateCrop"
+      | "AspectDisagrees"
+      | "CropOutsideImage";
+
+    export interface Response {
+      view: RevitAgentContextHandle;
+      filePath: string;
+      byteSize: number;
+      /**
+       * Delivered PNG width in pixels, read from the final file (not the export width it was cut from).
+       */
+      width: number;
+      height: number;
+      /**
+       * Why the image is far smaller than asked, in words; null when it is not.
+       */
+      warning?: null | string;
+      viewScale?: number | null;
+      modelRect?: null | RevitViewImageModelRect;
+      sheetNumber?: null | string;
+      registration?: null | RevitViewImageRegistration;
+      registrationRefusal?: null | RevitViewImageRegistrationRefusal;
+      restore?: null | RevitViewImageRestore;
+      /**
+       * Host captures route for exactly the registered PNG (the host keeps every taking), keyed by ImageSha256;
+       * null exactly when Registration is. FilePath stays the host-side record.
+       *
+       */
+      imageUrl?: null | string;
+    }
+    export interface RevitAgentContextHandle {
+      kind: RevitAgentContextHandleKind;
+      documentKey: string;
+      elementId?: number | null;
+      uniqueId?: null | string;
+      label: string;
+      categoryName?: null | string;
+    }
+    /**
+     * Axis-aligned model-space XY bounds (feet) of the view's crop, when known. Not a pixel mapping on a
+     *                 rotated crop; use RevitViewImageRegistration to place pixels.
+     */
+    export interface RevitViewImageModelRect {
+      minX: number;
+      minY: number;
+      maxX: number;
+      maxY: number;
+    }
+    /**
+     * Where the PNG sits in the model: model XY (feet) of the image's top-left, top-right and bottom-left pixel
+     * corners, so a rotated crop stays honest. ImageSha256 binds it to exactly this file.
+     * When absent, RegistrationRefusal says why.
+     *
+     */
+    export interface RevitViewImageRegistration {
+      width: number;
+      height: number;
+      imageSha256: string;
+      topLeft: number[];
+      topRight: number[];
+      bottomLeft: number[];
+    }
+    /**
+     * Whether a focused capture put the view back. When Held is false the image is still good, and
+     * Left names what the captured view still carries: crop, scopeBox, annotationCrop, sheetFilter.
+     *
+     */
+    export interface RevitViewImageRestore {
+      held: boolean;
+      left: string[];
     }
   }
 }
@@ -11400,6 +11534,7 @@ export interface HostOps {
   "revit.context.show-elements": { request: RevitContextShowElements.Req.Request; response: RevitContextShowElements.Res.Response };
   "revit.context.summary": { request: RevitContextSummary.Req.Request; response: RevitContextSummary.Res.Response };
   "revit.context.view-image": { request: RevitContextViewImage.Req.Request; response: RevitContextViewImage.Res.Response };
+  "revit.context.view-image.focus": { request: RevitContextViewImageFocus.Req.Request; response: RevitContextViewImageFocus.Res.Response };
   "revit.context.view-rendering-state": { request: RevitContextViewRenderingState.Req.Request; response: RevitContextViewRenderingState.Res.Response };
   "revit.context.visible-summary": { request: RevitContextVisibleSummary.Req.Request; response: RevitContextVisibleSummary.Res.Response };
   "revit.detail.data-tables": { request: RevitDetailDataTables.Req.Request; response: RevitDetailDataTables.Res.Response };
@@ -11505,6 +11640,7 @@ export const hostOpKeys = [
   "revit.context.show-elements",
   "revit.context.summary",
   "revit.context.view-image",
+  "revit.context.view-image.focus",
   "revit.context.view-rendering-state",
   "revit.context.visible-summary",
   "revit.detail.data-tables",
@@ -11588,7 +11724,7 @@ export const hostOpSafety = {
   "pod.member.compose": {"intent":"Read","costTier":"Cheap","usesTransactions":false,"subject":"None","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
   "revit.apply.command.execute": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true,"subject":"Document","touches":"Metadata","effect":"ModelWrite","cardinality":"One","internal":true,"rollsBack":false},
   "revit.apply.parameter-links": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true,"subject":"Document","touches":"Topology","effect":"ModelWrite","cardinality":"One","internal":true,"rollsBack":false},
-  "revit.apply.parameter-links.preview": {"intent":"Read","costTier":"Mutation","usesTransactions":false,"subject":"Document","touches":"Topology","effect":"TransactRead","cardinality":"One","internal":false,"rollsBack":true},
+  "revit.apply.parameter-links.preview": {"intent":"Read","costTier":"Mutation","usesTransactions":false,"subject":"Document","touches":"Topology","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
   "revit.apply.parameter-values": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true,"subject":"Elements","touches":"Metadata","effect":"ModelWrite","cardinality":"One","internal":true,"rollsBack":false},
   "revit.apply.parameters-service-cache.refresh": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true,"subject":"None","touches":"Metadata","effect":"SessionWrite","cardinality":"One","internal":false,"rollsBack":false},
   "revit.catalog.concept-evidence": {"intent":"Read","costTier":"Cheap","usesTransactions":false,"subject":"Document","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
@@ -11609,7 +11745,8 @@ export const hostOpSafety = {
   "revit.context.lens": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true,"subject":"Elements","touches":"Geometry","effect":"SessionWrite","cardinality":"One","internal":false,"rollsBack":false},
   "revit.context.show-elements": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true,"subject":"Elements","touches":"Metadata","effect":"SessionWrite","cardinality":"One","internal":false,"rollsBack":false},
   "revit.context.summary": {"intent":"Read","costTier":"Cheap","usesTransactions":false,"subject":"Document","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
-  "revit.context.view-image": {"intent":"Read","costTier":"Cheap","usesTransactions":true,"subject":"View","touches":"Geometry","effect":"TransactRead","cardinality":"One","internal":false,"rollsBack":true},
+  "revit.context.view-image": {"intent":"Read","costTier":"Cheap","usesTransactions":false,"subject":"View","touches":"Geometry","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
+  "revit.context.view-image.focus": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true,"subject":"View","touches":"Geometry","effect":"SessionWrite","cardinality":"One","internal":false,"rollsBack":false},
   "revit.context.view-rendering-state": {"intent":"Read","costTier":"Cheap","usesTransactions":false,"subject":"View","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
   "revit.context.visible-summary": {"intent":"Read","costTier":"Cheap","usesTransactions":false,"subject":"View","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
   "revit.detail.data-tables": {"intent":"Read","costTier":"Bounded","usesTransactions":false,"subject":"Document","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
