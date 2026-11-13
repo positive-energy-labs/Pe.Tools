@@ -390,7 +390,8 @@ export function createPeRoutes(options: PeRoutesOptions) {
       // Undo is per author on every Work (ADR 0042); the URL's Work is checked like any write and
       // the step is chosen across `works`, to which the host adds the document's findings Work.
       run: (_scope: WorkKey, _route: string, by: "pea" | "human", body: unknown, caller: Caller) =>
-        hostTimeline(work, options.journal ?? telemetryOf(options).journal).step(
+        hostTimeline(work, options.journal ?? telemetryOf(options).journal, async () =>
+          (await options.navigation?.documents() ?? []) as DocumentRow[]).step(
           body as z.infer<typeof historyBody>,
           caller,
           by,
@@ -1327,6 +1328,7 @@ function* hostPeRoutes(
               session: session.sessionId!,
               openId: document.openId,
               address: document.address ?? null,
+              projectHome: document.projectHome ?? null,
             }))
           : [],
       );

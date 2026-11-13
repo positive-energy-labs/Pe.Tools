@@ -1121,12 +1121,12 @@ const localEntries = {
     const { owner } = yield* decodeRequest("settings.tiers.read", request);
     return { tiers: readSettingTiers(owner, (yield* targetHomes(bridge, scope)).pointer) };
   }),
-  "settings.tiers.write": Effect.fnUntraced(function* ({ request, scope, bridge, action }: LocalCall) {
+  "settings.tiers.write": Effect.fnUntraced(function* ({ request, scope, bridge, action, caller }: LocalCall) {
     const key = "settings.tiers.write";
     const input = yield* decodeRequest(key, request);
     const { pointer } = yield* targetHomes(bridge, scope);
     const wrote = yield* Effect.try({
-      try: () => writeSettingTier(input, { pointer, receiptId: action?.receiptId, expectedPath: action?.settingPath }),
+      try: () => writeSettingTier(input, { pointer, caller, receiptId: action?.receiptId, expectedPath: action?.settingPath }),
       catch: (error) => new LocalOpError(key, error instanceof Error ? error.message : String(error), 500),
     });
     if (!wrote.ok) return yield* Effect.fail(new StepFailure(wrote.message, wrote.status, "refused"));
@@ -1359,7 +1359,7 @@ function executeGatewayLocal(
   // The journal Layer holds the node and HTTP services; the picture store is this route's value.
   if (!linkedCatalog().entries.get(key)?.call?.shell)
     return dispatchTsOnlyOperation(key, input, scope, bridge, captures, {
-      caller: { kind: "anonymous" }, action,
+      caller: action?.caller ?? { kind: "anonymous" }, action,
     }).pipe(Effect.provideService(PictureCaptureStore, pictures));
   return Effect.flatMap(decodeRequest("host.shell.open", input), (input) =>
     openShellPath(input, launch),
