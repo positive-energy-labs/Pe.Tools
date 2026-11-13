@@ -1,8 +1,9 @@
 import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { randomUUID } from "node:crypto";
 
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { routeStartupOwner, routeStartupSourceHash, currentRouteStartupProjection, readRouteStartupReceipt } from "@pe/host-contracts/route-startup";
 import type { RouteStartupProjection } from "@pe/host-contracts/route-startup";
@@ -17,13 +18,10 @@ declare const __PE_SOURCE_COMMIT__: string;
  * Browser-worker/ACP adapter modes never load the host graph. */
 export async function prepareSourceClosures() {
   if (typeof __PE_SOURCE_COMMIT__ !== "undefined") return;
-  await promisify(execFile)(process.execPath, [
-    fileURLToPath(new URL("../../web/scripts/route-graphs.ts", import.meta.url)),
-    "--builtin-closure-only",
-  ]);
+  await prepareDevRouteProjection();
 }
 
-/** Dev alone hands the complete producer result to its frontend; pack/source-only keep their lane.
+/** Source hosts share one producer receipt. Dev also hands the result to its frontend.
  * The producer (18 route closure builds, about a minute) is NOT on the start path while the receipt
  * its last full run left (`codegen:routes`, or an earlier start) is still current by content hash.
  * tests/source-closures.test.ts holds that. A miss produces, and the producer stores a new receipt. */
@@ -42,8 +40,14 @@ export async function prepareDevRouteProjection(): Promise<RouteStartupProjectio
   // The host graph still imports ignored closure pins from disk before linking under jiti.
   for (const [path, text] of Object.entries(receipt.projections)) {
     if (!path.endsWith("source-closure.generated.json")) continue;
+    try { if (await readFile(path, "utf8") === text) continue; }
+    catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
     await mkdir(dirname(path), { recursive: true });
-    await writeFile(path, text);
+    const temp = `${path}.${process.pid}.${randomUUID()}`;
+    try {
+      await writeFile(temp, text);
+      await rename(temp, path);
+    } finally { await rm(temp, { force: true }); }
   }
   return current ? receipt : undefined;
 }
