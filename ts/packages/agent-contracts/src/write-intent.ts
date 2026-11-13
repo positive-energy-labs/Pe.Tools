@@ -228,10 +228,12 @@ export function workWriteCommands<
   };
   // A Pod entry carries its own axes; its preview inherits them as a Read plan (a Pod cannot rehearse in Revit).
   const axes = (definition as { axes?: import("./catalog.ts").CatalogAxes }).axes;
+  const previewEffect = axes ? "Read" : "TransactRead";
   const previewDefinition = (options.preview?.definition ?? {
     ...definition,
+    catalogEffect: previewEffect,
     says: `Preview, nothing committed: ${definition.says}`,
-    ...(axes ? { axes: { ...axes, effect: "Read" } } : {}),
+    ...(axes ? { axes: { ...axes, effect: previewEffect } } : {}),
   }) as PC;
   return {
     [key]: entry(definition, "apply"),

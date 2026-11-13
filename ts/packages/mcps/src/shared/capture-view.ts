@@ -4,6 +4,7 @@ import { contextFetch as fetch } from "@pe/runtime/context";
 import { defaultReadImageMaxBytes, readImage, type ReadImageResult } from "./read-image.ts";
 import z from "zod";
 import type { HostRpcCaller } from "./host-rpc-caller.ts";
+import type { CaptureDisclosure } from "@pe/agent-contracts";
 
 const captureViewInputSchema = z.object({
   target: z
@@ -61,7 +62,7 @@ const captureViewInputSchema = z.object({
     ),
 });
 
-type RevitViewImageData = {
+type RevitViewImageData = CaptureDisclosure & {
   view: { label?: string; elementId?: number };
   byteSize: number;
   width: number;
@@ -102,6 +103,8 @@ export function createCaptureViewTool(createHostRpcCaller: () => Promise<HostRpc
       if (!capture)
         return { text: "capture_view: the host answered without keeping a capture", isError: true };
       const extras = [
+        `lens ${data.lens.basis} (view ${data.lens.viewId})`,
+        ...data.hidden.map(item => `hidden ${item.what}: ${item.count} host-document instances (${item.why}; category switch only)`),
         data.sheetNumber ? `on sheet ${data.sheetNumber}` : null,
         data.viewScale ? `1:${data.viewScale}` : null,
         data.modelRect

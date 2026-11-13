@@ -115,7 +115,9 @@ export async function journey(options: { unreadable?: { elementId: number | null
           snapshot: {
             status: {
               systems: [],
-              carriers: { stage: "Adoption", status: carriers, missingCarrierGuids: [] },
+              carriers: { stage: "Adoption", status: carriers,
+                missingCarrierGuids: carriers === "needs-initialization"
+                  ? ["00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002"] : [] },
             },
             unreadable: options.unreadable ?? [],
             zoneFrs: [],
@@ -250,7 +252,8 @@ export async function journey(options: { unreadable?: { elementId: number | null
       actions.push({ key: command.key, input: command.input });
       if (command.key === "takeoffs.initialize") carriers = "ready";
       const result =
-        command.key === commands["takeoffs.adopt"].writeBoundary.previewKey
+        command.key === commands["takeoffs.adopt"].writeBoundary.previewKey ||
+        command.key === commands["takeoffs.initialize"].writeBoundary.previewKey
           ? {
               previewOnly: true,
               derivedRequest: {},

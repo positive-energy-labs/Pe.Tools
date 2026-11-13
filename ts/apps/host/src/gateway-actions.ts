@@ -83,7 +83,7 @@ export const gatewayNativeLeaves = (key: string): readonly string[] =>
   isTsOnlyOperationKey(key) ? [] : ["host.ops.catalog", key];
 
 /** A host-leaf operation, run on the journal-owned attempt fiber with the journal's services. */
-export type GatewayLocalContext = { receiptId: string; settingPath?: string };
+export type GatewayLocalContext = { receiptId: string; settingPath?: string; caller: import("@pe/agent-contracts").Caller };
 export type GatewayLocal = (key: string, input: unknown, scope?: HostSessionScope, context?: GatewayLocalContext) => Effect.Effect<unknown, unknown, AttemptHost>;
 
 /** Generated native metadata is the fallback contract; public semantic implementations are hidden. */
@@ -416,7 +416,7 @@ export function gatewayExecutor(
               );
             return local(key, input, admission.target.kind === "document"
               ? { bridgeSessionId: admission.target.ref.session, openDocumentId: admission.target.ref.openId }
-              : undefined, { receiptId: admission.id, settingPath: prepared.settingPath });
+              : undefined, { receiptId: admission.id, settingPath: prepared.settingPath, caller });
           }
           const target = admission.target;
           if (target.kind !== "document" && target.kind !== "session")

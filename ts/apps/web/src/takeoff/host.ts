@@ -134,6 +134,7 @@ export const reads = {
         rows,
         initialize: {
           request: { stage: snapshot?.carriers.stage ?? "Adoption" },
+          missingCarrierGuids: snapshot?.carriers.missingCarrierGuids ?? [],
           refusal:
             refusal ??
             (snapshot?.carriers.status === "needs-initialization"

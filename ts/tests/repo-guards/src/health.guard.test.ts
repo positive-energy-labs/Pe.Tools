@@ -1,15 +1,15 @@
 import { describe, expect, it } from "vite-plus/test";
 import baseline from "./health.baseline.json" with { type: "json" };
 import {
-  census, EXCEPTIONS, exceptionProblems, fsWriteCount, isProduction, PER_FILE, perFileRises, rises, STORE_EXCEPTION,
-  storeScopeSources, total, type Health,
+  census, escapeCounts, EXCEPTIONS, exceptionProblems, fsWriteCount, isProduction, NAMES, PER_FILE, perFileRises, rises,
+  STORE_EXCEPTION, storeScopeSources, total,
 } from "./health-census.ts";
 
 // Each count only falls: remove the cast, suppression or mark, or split the file, then
 // `vp run ratchets:tighten`. A total may not rise; code may move between files.
 describe("production health counts", () => {
   const actual = census();
-  for (const name of Object.keys(actual) as (keyof Health)[])
+  for (const name of NAMES)
     it(`${name} do not rise above the baseline`, () => {
       const [now, was] = [total(actual[name]), total(baseline[name])];
       expect(
@@ -22,6 +22,16 @@ describe("production health counts", () => {
     it(`${name} rise in no file, and a new file starts at 0`, () => {
       expect(perFileRises(name, actual[name], baseline[name]), `${name} hold per file; only a named owner (OWNERS) may absorb writes`).toEqual([]);
     });
+
+  it("counts every cast and `any`, and every non-null `!`, from the syntax tree; `as const` is no cast", () => {
+    const sample = `
+      const a = x as Foo; const b = y as unknown as Bar; const c = <Baz>z; const d = [1] as const;
+      function f(p: any): Promise<any> { return p; }
+      const name = "as any"; // as Foo in a comment
+      const e = q!; const g = r satisfies S;`;
+    expect(escapeCounts("ts/apps/host/src/planted.ts", sample)).toEqual({ casts: 6, nonNull: 1 });
+    expect(escapeCounts("ts/apps/web/src/planted.tsx", "const v = <div>{x! as Y}</div>; a !== b;")).toEqual({ casts: 1, nonNull: 1 });
+  });
 
   it("each written store exception stands at its site with its end condition", () => {
     expect(exceptionProblems(storeScopeSources())).toEqual([]);

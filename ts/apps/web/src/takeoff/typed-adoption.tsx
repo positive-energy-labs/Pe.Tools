@@ -54,10 +54,8 @@ export function AdoptionBody({ ctx }: { ctx: AdoptionContext }) {
     setPending(null);
     const action = ctx.write(id);
     void (async () => {
-      if (id === "adopt") {
-        await action.plan();
-        await action.apply();
-      } else await action.run();
+      await action.plan();
+      await action.apply();
     })().catch((error) => setProblem(String(error)));
   }, [pending, core, ctx.cells.state.state]);
   const stage = async (id: "initialize" | "adopt") => {

@@ -31,10 +31,15 @@ test.each<Touched>([
     prepared: { state: "ready", value: null }, recovery: [], startedAt: "2026-11-12T00:00:00Z",
   });
   const rows = noticeRows({ ...sources, receipts: [{ revision: 1, action: receipt }] }, 0);
-  expect(rows).toHaveLength(1);
-  expect(rows[0]).toMatchObject({ key: "native:capture-step", verb: touched.kind });
+  expect(rows.filter((row) => row.key === "native:capture-step"))
+    .toMatchObject([{ verb: touched.kind }]);
+  expect(rows).toHaveLength(unauthorized ? 2 : 1);
+  if (unauthorized) expect(rows[0]).toMatchObject({ key: "action:capture", verb: "failed" });
   // Re-reading the same terminal projects the same notice identity, never a second post.
-  expect(noticeRows({ ...sources, receipts: [{ revision: 2, action: receipt }] }, 1)).toEqual(rows);
+  const next = noticeRows({ ...sources, receipts: [{ revision: 2, action: receipt }] }, 1);
+  expect(next.filter((row) => row.key === "native:capture-step"))
+    .toEqual(rows.filter((row) => row.key === "native:capture-step"));
+  if (unauthorized) expect(next.find((row) => row.key === "action:capture")?.revision).toBe(2);
 });
 
 test("recovered restored capture is quiet; a bare payload cannot prove restoration", async () => {

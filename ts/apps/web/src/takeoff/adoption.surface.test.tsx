@@ -8,6 +8,26 @@ import { gate, ref } from "../../../host/tests/host-read-graph.test-support";
 import { loaded } from "./route";
 import { journey, Drawing } from "./adoption.test.fixture";
 
+test("Initialize plan names the host reading's missing shared parameters before writing", async () => {
+  const j = await journey();
+  try {
+    await j.ready();
+    const owner = j.mount.owner();
+    if (!owner?.handle) throw Error("Expected initialized Takeoffs Work");
+    await j.host.workspace.publish(j.key, "takeoffs", [{
+      path: ["writeIntent", "takeoffs.initialize"],
+      value: { edit: { value: { stage: "Adoption" } } },
+    }], owner.handle.revision);
+    await j.ready();
+    await j.mount.action("initialize").plan();
+    const review = j.mount.action("initialize").read();
+    expect(review?.rows).toHaveLength(2);
+    expect(review?.rows.join(" ")).toContain("00000000-0000-4000-8000-000000000001");
+    expect(review?.rows.join(" ")).toContain("00000000-0000-4000-8000-000000000002");
+    expect(j.actions.map((row) => row.key)).not.toContain("takeoffs.initialize");
+  } finally { await j.close(); }
+});
+
 test("view choices stay pending for a slow native catalogue, arrive before capture, retain named failures and only then report a completed empty catalogue", async () => {
   const catalogue = gate(), snapshot = gate();
   const j = await journey({ catalogue, snapshot });

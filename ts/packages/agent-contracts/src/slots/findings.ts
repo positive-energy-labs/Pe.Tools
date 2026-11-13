@@ -68,6 +68,7 @@ export type FindingInput = z.output<typeof findingInputSchema>;
  */
 export const findingsCommands = {
   [FINDINGS_DOORS.list]: workCommand(FINDINGS_OWNER, {
+    catalogEffect: "Read",
     says: "List this document's findings, oldest first, optionally only those on one subject (a SubjectRef code).",
     needs: "project-document",
     effect: "query",
@@ -75,6 +76,7 @@ export const findingsCommands = {
     dirties: [],
   }),
   [FINDINGS_DOORS.write]: workCommand(FINDINGS_OWNER, {
+    catalogEffect: "WorkWrite",
     says: "Write one finding on a subject of this document (a note, a yes/no/not-this claim, or a pass/fail check) into its findings Work. Writing the same id replaces it. Never changes Revit.",
     needs: "project-document",
     effect: "command",
