@@ -41,12 +41,13 @@ function fixture() {
   return { root, put, receipt, projections, sourceHash };
 }
 
-test("only unrelated test body edits retain the receipt; imported tests and ignored dependency bytes invalidate", () => {
+test("test bodies stay conservative, including inputs outside builtin closures", () => {
   const f = fixture();
   writeRouteStartupReceipt(f.root, f.sourceHash, f.projections);
   expect(readRouteStartupReceipt(f.root)).toEqual(f.receipt);
   f.put("ts/tests/unrelated.test.ts", "export const test = 2;\n");
-  expect(readRouteStartupReceipt(f.root)).toEqual(f.receipt);
+  expect(readRouteStartupReceipt(f.root)).toBeUndefined();
+  f.put("ts/tests/unrelated.test.ts", "export const test = 1;\n");
   for (const id of ["ts/tests/imported.test.ts", "ts/node_modules/dep/index.js"]) {
     const original = readFileSync(join(f.root, id), "utf8");
     f.put(id, original + "// edited\n");

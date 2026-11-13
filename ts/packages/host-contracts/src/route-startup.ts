@@ -15,9 +15,7 @@ export const routeStartupReceiptPath = (root: string) =>
 
 export const routeStartupOwner = (root: string) => realpathSync(root).toLowerCase();
 
-/** Keep the whole discovery/resolution inventory. Test bodies are checked through the resolved
- * closure if imported; changing an unimported test cannot change a projection. Keep scripts,
- * fixtures, config and production sources conservative rather than guessing their dependencies. */
+/** Include every discovery/resolution input: legacy graph imports can fall outside builtin closures. */
 export function routeStartupSourceHash(root: string) {
   const files = execFileSync("git", ["ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", "ts", "examples"], { cwd: root, maxBuffer: 16 * 1024 * 1024 })
     .toString().split("\0").filter(Boolean).sort();
@@ -25,8 +23,6 @@ export function routeStartupSourceHash(root: string) {
   const hash = createHash("sha256").update(JSON.stringify(process.versions)).update("\0");
   for (const file of files) {
     hash.update(file).update("\0");
-    // Names still participate: additions/deletions can change module resolution and discovery.
-    if (/\.(?:test|spec)\.[cm]?[jt]sx?$/.test(file)) continue;
     try { hash.update(readFileSync(resolve(root, file))); }
     catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;

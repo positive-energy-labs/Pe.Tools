@@ -12,6 +12,7 @@ vi.mock("node:child_process", async (original) => ({
 vi.mock("@pe/host-contracts/route-startup", async (original) => ({
   ...(await original<typeof import("@pe/host-contracts/route-startup")>()),
   readRouteStartupReceipt: () => undefined,
+  currentRouteStartupProjection: () => true,
 }));
 
 test("only a source host runs the closure producer; packed Node and SEA inline closures", async () => {
@@ -39,6 +40,7 @@ test.each(["prepareDevRouteProjection", "prepareSourceClosures"] as const)("%s p
   vi.doMock("@pe/host-contracts/route-startup", async (original) => ({
     ...(await original<typeof import("@pe/host-contracts/route-startup")>()),
     readRouteStartupReceipt: () => receipt,
+    currentRouteStartupProjection: () => true,
   }));
   try {
     const bootstrap = await import("../src/source-closures.ts");
@@ -51,6 +53,28 @@ test.each(["prepareDevRouteProjection", "prepareSourceClosures"] as const)("%s p
     expect((await stat(path)).mtimeMs).toBe(before);
     expect(await readdir(join(root, "route"))).toEqual(["source-closure.generated.json"]);
     expect(execFile).not.toHaveBeenCalled();
+  } finally {
+    await rm(root, { recursive: true, force: true });
+    vi.doUnmock("@pe/host-contracts/route-startup");
+    vi.resetModules();
+  }
+});
+
+test.each(["prepareDevRouteProjection", "prepareSourceClosures"] as const)("%s refuses a stale producer before publishing closures", async (entry) => {
+  const root = await mkdtemp(join(tmpdir(), "stale-closure-"));
+  const path = join(root, "source-closure.generated.json");
+  vi.resetModules();
+  vi.doMock("@pe/host-contracts/route-startup", async (original) => ({
+    ...(await original<typeof import("@pe/host-contracts/route-startup")>()),
+    readRouteStartupReceipt: () => undefined,
+    currentRouteStartupProjection: () => false,
+  }));
+  execFile.mockImplementationOnce((_file, _args, _options, done) =>
+    done(null, { stdout: JSON.stringify({ [path]: "stale closure" }) }));
+  try {
+    const bootstrap = await import("../src/source-closures.ts");
+    await expect(bootstrap[entry]()).rejects.toThrow("Route sources changed during startup projection");
+    await expect(readFile(path)).rejects.toThrow();
   } finally {
     await rm(root, { recursive: true, force: true });
     vi.doUnmock("@pe/host-contracts/route-startup");

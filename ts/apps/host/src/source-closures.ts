@@ -25,7 +25,7 @@ export async function prepareSourceClosures() {
  * The producer (18 route closure builds, about a minute) is NOT on the start path while the receipt
  * its last full run left (`codegen:routes`, or an earlier start) is still current by content hash.
  * tests/source-closures.test.ts holds that. A miss produces, and the producer stores a new receipt. */
-export async function prepareDevRouteProjection(): Promise<RouteStartupProjection | undefined> {
+export async function prepareDevRouteProjection(): Promise<RouteStartupProjection> {
   const root = fileURLToPath(new URL("../../../../", import.meta.url));
   let receipt = readRouteStartupReceipt(root);
   let current = !!receipt;
@@ -37,6 +37,8 @@ export async function prepareDevRouteProjection(): Promise<RouteStartupProjectio
     receipt = { checkout: routeStartupOwner(root), sourceHash, projections: JSON.parse(stdout) };
     current = currentRouteStartupProjection(root, receipt);
   }
+  // Refuse a source/producer race before the host links the closures it produced.
+  if (!current) throw new Error("Route sources changed during startup projection; retry startup.");
   // The host graph still imports ignored closure pins from disk before linking under jiti.
   for (const [path, text] of Object.entries(receipt.projections)) {
     if (!path.endsWith("source-closure.generated.json")) continue;
@@ -49,5 +51,7 @@ export async function prepareDevRouteProjection(): Promise<RouteStartupProjectio
       await rename(temp, path);
     } finally { await rm(temp, { force: true }); }
   }
-  return current ? receipt : undefined;
+  if (!currentRouteStartupProjection(root, receipt))
+    throw new Error("Route sources changed during startup publication; retry startup.");
+  return receipt;
 }
