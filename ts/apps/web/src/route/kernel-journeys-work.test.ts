@@ -34,7 +34,8 @@ import { RequestIdentity, admittedRequestIdentity } from "../../../host/src/requ
 import { bindControl } from "../../../host/src/control";
 import { testRegistry } from "../../../host/tests/effect-test";
 import { module as fans } from "../fans/route";
-import { mountTypedRoute } from "../shell/typed-mount";
+import { direct, mountTypedRoute, planned } from "../shell/typed-mount";
+import { handle } from "@pe/agent-contracts/handle";
 import type { PlaceInput } from "../shell/typed-place";
 import { createWorkFeedClient } from "../shell/work-feed-client";
 import { routeInput } from "./host";
@@ -307,6 +308,8 @@ async function journey(module: TypedRoute = fans) {
   };
   let heldWrite: ReturnType<typeof gate> | undefined;
   let beforeWrite: ReturnType<typeof gate> | undefined;
+  let answered: { key: string; result: unknown; held?: ReturnType<typeof gate> } | undefined;
+  const submits: string[] = [];
   const writes: WorkWrite[] = [];
   const work = createWorkFeedClient(source, {
     write: async (key, body) => {
@@ -319,6 +322,14 @@ async function journey(module: TypedRoute = fans) {
       return result;
     },
     submit: async (command) => {
+      submits.push(command.key);
+      if (answered?.key === command.key) {
+        const held = answered.held; answered.held = undefined;
+        if (held) { held.entered.resolve(); await held.release.promise; }
+        return actionReceiptSchema.parse({ state: "succeeded", result: answered.result, id: command.id, key: command.key,
+          caller: who, basis: null, target: command.target, input: command.input, steps: [],
+          prepared: { state: "unprepared" }, recovery: [], startedAt: new Date().toISOString() });
+      }
       const response = await request("/actions", command);
       expect([200, 202], await response.clone().text()).toContain(response.status);
       await journal.wait(command.id);
@@ -399,6 +410,11 @@ async function journey(module: TypedRoute = fans) {
     holdStream() { streamHeld = true; },
     flushStream() { streamHeld = false; streamQueue.splice(0).forEach(deliver => deliver()); },
     holdWrite() { heldWrite = gate(); return heldWrite; },
+    /** The door answers `key` itself with `result`, and never asks the host. */
+    answer(key: string, result: unknown) { answered = { key, result }; },
+    /** Holds the next answered submit at the door. */
+    holdSubmit() { answered!.held = gate(); return answered!.held; },
+    submits,
     depart() {
       current = false;
     },
@@ -646,7 +662,7 @@ test("JM H12 leave a Page with drawn cells, inspect it, and refuse both old edit
     j.depart();
     expect(valueOf(j.m.value()), "H12: departure preserves inspection").toBeDefined();
     expect(await cell.stage({ cfm: 700 }, { label: "Late airflow" }), "H12: captured cell cannot write after departure").toMatchObject({ code: "refused" });
-    await expect(j.m.action("losses").plan(), "H12: departure cannot acquire a new native plan").rejects.toThrow("Place");
+    await expect(planned(j.m.verb("losses")).plan(), "H12: departure cannot acquire a new native plan").rejects.toThrow("Place");
     expect(j.m.owner()!.doc).toEqual(before);
     expect((await j.journal.list()).length, "H12: neither path submits a native action").toBe(receipts);
   } finally { await j.close(); }
@@ -794,37 +810,29 @@ test("JZ C718/C675/C676/C730 atomic press, isolated cell undo, root addressing a
 
 // A command read cannot publish into a Page generation that did not invoke it.
 test("JZ direct query drops a retired Page reply after A-B-A and discloses the refusal", async () => {
-  const { z } = await import("zod");
-  const { queryAction } = await import("./typed-actions");
-  const held = gate();
-  let j: Awaited<ReturnType<typeof journey>>;
-  const module = { ...fans, spec: { ...fans.spec, commands: { ...fans.spec.commands,
-    audit: { ...queryAction({ key: "fans.audit-generation", input: z.strictObject({}),
-      run: async () => {
-        held.entered.resolve();
-        await held.release.promise;
-        return j.host.send(901, []);
-      } }), label: "Read fan" },
+  // A verb whose handle reads: the findings list, through the same door as every command.
+  const module = { ...fans, spec: { ...fans.spec, band: [...fans.spec.band, "audit"], verbs: { ...fans.spec.verbs,
+    audit: { handle: handle("findings.list"), label: "Read fan" },
   } } };
-  j = await journey(module);
+  const j = await journey(module);
   try {
     await j.start();
+    j.answer("findings.list", { findings: [] });
     const pageA = j.m.page.read().fan, tokenA = j.m.workBasis()!;
-    const pending = j.m.action("audit").run({}).then(value => ({ value }), error => ({ error }));
+    const held = j.holdSubmit();
+    const pending = direct(j.m.verb("audit")).run({}).then(value => ({ value }), error => ({ error }));
     await held.entered.promise;
     j.m.page.subject({ kind: "ids", ids: [] });
     j.m.page.subject(pageA);
     expect(j.m.current(tokenA), "A-B-A retires the original generation").toBe(false);
     held.release.resolve();
     const outcome = await pending;
-    expect(outcome).toHaveProperty("error", expect.any(Error));
-    expect(j.m.result("audit"), "Retired query output never enters the current result slot").toBeUndefined();
-    expect(j.m.action("audit").failure, "The waiting user sees why their read did not land").toMatch(/earlier Page/);
+    expect(outcome, "A retired Page's read never answers as a success").toHaveProperty("error", expect.any(Error));
+    expect(j.m.verb("audit").failure, "The waiting user sees why their read did not land").toMatch(/earlier Page/);
     expect(j.writes).toHaveLength(0);
-    const current = await j.m.action("audit").run({});
-    expect(j.m.result("audit"), "A fresh invocation can publish normally").toEqual(current);
-    expect(j.m.action("audit").failure).toBeNull();
-  } finally { held.release.resolve(); await j.close(); }
+    await expect(direct(j.m.verb("audit")).run({}), "A fresh invocation answers normally").resolves.toBeDefined();
+    expect(j.m.verb("audit").failure).toBeNull();
+  } finally { await j.close(); }
 }, 60_000);
 
 test("JZ raw Work patch paths and ambiguous operation fields refuse atomically at HTTP", async () => {
@@ -962,7 +970,7 @@ test("JZ audit a read refuses malformed HTTP Value data and recovers without exp
   const j = await journey(), tasks = new Set<Promise<unknown>>();
   let opened = 0, corrupt = true;
   const read = { ...fans.spec.core! };
-  const module = route({ ...fans.spec, edits: undefined, commands: {}, subject: undefined, reads: {}, core: read,
+  const module = route({ ...fans.spec, edits: undefined, verbs: {}, band: [], subject: undefined, reads: {}, core: read,
     panes: { main: { title: "Explicit Fan read", purpose: "Inspect a demanded Value", read, body: "scroll", draw: () => scrollBody(null) } },
     layout: { kind: "pane", id: "main" } });
   const source: UseSource = { kind: "use", open(ctx, deliver) {
@@ -996,35 +1004,33 @@ test("JZ audit a read refuses malformed HTTP Value data and recovers without exp
 }, 60_000);
 
 test("JZ audit validation readiness and per-action busy admission prevent dispatch", async () => {
-  const { z } = await import("zod");
-  const { queryAction } = await import("./typed-actions");
-  const held = gate();
-  let calls = 0, j: Awaited<ReturnType<typeof journey>>;
-  const module = { ...fans, spec: { ...fans.spec, commands: { ...fans.spec.commands,
-    audit: { ...queryAction({ key: "fans.audit-admission", input: z.strictObject({ n: z.number() }),
-      run: async input => { calls++; if (typeof input.n === "number") { held.entered.resolve(); await held.release.promise; }
-        return j.host.send(910 + calls, []); } }), label: "Read fan" },
+  const module = { ...fans, spec: { ...fans.spec, band: [...fans.spec.band, "audit"], verbs: { ...fans.spec.verbs,
+    audit: { handle: handle("findings.list"), label: "Read fan" },
   } } };
-  j = await journey(module);
+  const j = await journey(module);
+  const calls = () => j.submits.filter((key) => key === "findings.list").length;
   try {
     await j.ready();
     expect(await j.cells().at(["flows", terminalA]).stage({ cfm: 220 })).toMatchObject({ code: "unavailable" });
     expect(j.writes).toHaveLength(0);
+    expect(j.m.verb("audit").refusal, "A verb that carries the Work handle refuses before the Work exists").toBe("Start this Work to edit");
+    await expect(direct(j.m.verb("audit")).run({})).rejects.toThrow("Start this Work to edit");
+    expect(calls(), "A refused press dispatches nothing").toBe(0);
     await j.start();
-    await expect(j.m.action("audit").run({ n: "bad" })).rejects.toThrow();
-    expect(calls).toBe(0);
-    const first = j.m.action("audit").run({ n: 1 });
+    j.answer("findings.list", { findings: [] });
+    const held = j.holdSubmit();
+    const first = direct(j.m.verb("audit")).run({});
     await held.entered.promise;
-    const duplicate = j.m.action("audit").run({ n: 2 }).then(value => ({ value }), error => ({ error }));
+    const duplicate = direct(j.m.verb("audit")).run({}).then(value => ({ value }), error => ({ error }));
     held.release.resolve();
     await first;
     expect(await duplicate).toHaveProperty("error", expect.objectContaining({ message: "Action already pending" }));
-    expect(calls).toBe(1);
-    expect(j.m.action("audit").pending).toBe(false);
-    await j.m.action("audit").run({ n: 3 });
-    expect(calls).toBe(2);
+    expect(calls()).toBe(1);
+    expect(j.m.verb("audit").pending).toBe(false);
+    await direct(j.m.verb("audit")).run({});
+    expect(calls()).toBe(2);
     expect(j.writes).toHaveLength(0);
-  } finally { held.release.resolve(); await j.close(); }
+  } finally { await j.close(); }
 }, 60_000);
 
 test("JZ audit page Bind validates its live HTTP contract before dispatch and persists the valid binding", async () => {

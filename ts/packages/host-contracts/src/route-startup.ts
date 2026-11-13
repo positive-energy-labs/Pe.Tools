@@ -15,12 +15,12 @@ export const routeStartupReceiptPath = (root: string) =>
 
 export const routeStartupOwner = (root: string) => realpathSync(root).toLowerCase();
 
-/** Include discovery/config inputs and new files, not just the previous import closure. */
+/** Include every discovery/resolution input: legacy graph imports can fall outside builtin closures. */
 export function routeStartupSourceHash(root: string) {
   const files = execFileSync("git", ["ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", "ts", "examples"], { cwd: root, maxBuffer: 16 * 1024 * 1024 })
     .toString().split("\0").filter(Boolean).sort();
   if (!files.length) throw Error("Route startup requires checkout sources");
-  const hash = createHash("sha256");
+  const hash = createHash("sha256").update(JSON.stringify(process.versions)).update("\0");
   for (const file of files) {
     hash.update(file).update("\0");
     try { hash.update(readFileSync(resolve(root, file))); }
@@ -36,7 +36,7 @@ export function routeStartupSourceHash(root: string) {
 /** Check resolved dependency bytes too, including ignored node_modules and fixture inputs. */
 export function currentRouteStartupProjection(root: string, receipt: RouteStartupProjection) {
   try {
-    if (receipt.checkout !== routeStartupOwner(root) || receipt.sourceHash !== routeStartupSourceHash(root)) return false;
+    if (!noIgnoredRouteInput(root) || receipt.checkout !== routeStartupOwner(root) || receipt.sourceHash !== routeStartupSourceHash(root)) return false;
     const closures = Object.entries(receipt.projections).filter(([id]) => id.endsWith("/source-closure.generated.json") || id.endsWith("\\source-closure.generated.json"));
     if (!closures.length) return false;
     const checked = new Map<string, string>();
@@ -67,20 +67,21 @@ export function currentRouteStartupProjection(root: string, receipt: RouteStartu
   }
 }
 
-/** The freshness check hashes what git lists, and the producer finds routes by reading the folder. A route
- * folder git ignores is therefore invisible to the check, so the receipt is off while one exists.
+/** The producer discovers route.ts and graph.ts on disk, including ignored files and folders.
+ * Those inputs are invisible to the git inventory, so the receipt is off while one exists.
  * `git check-ignore` exits 1 when none of the paths is ignored. */
-const noIgnoredRouteFolder = (root: string) => {
+const noIgnoredRouteInput = (root: string) => {
   const source = resolve(root, "ts/apps/web/src");
-  return spawnSync("git", ["check-ignore", ...readdirSync(source, { withFileTypes: true })
-    .filter((d) => d.isDirectory() && existsSync(join(source, d.name, "route.ts")))
-    .map((d) => join(source, d.name))], { cwd: source }).status === 1;
+  const paths = readdirSync(source, { withFileTypes: true })
+    .filter((d) => d.isDirectory())
+    .flatMap((d) => ["route.ts", "graph.ts"].map((name) => join(source, d.name, name)))
+    .filter(existsSync);
+  return !paths.length || spawnSync("git", ["check-ignore", ...paths], { cwd: source }).status === 1;
 };
 
 /** The stored receipt while it is still current, else undefined: the producer remains authority. */
 export function readRouteStartupReceipt(root: string): RouteStartupProjection | undefined {
   try {
-    if (!noIgnoredRouteFolder(root)) return undefined;
     const receipt = JSON.parse(readFileSync(routeStartupReceiptPath(root), "utf8")) as RouteStartupProjection;
     return currentRouteStartupProjection(root, receipt) ? receipt : undefined;
   } catch {
@@ -91,7 +92,7 @@ export function readRouteStartupReceipt(root: string): RouteStartupProjection | 
 /** `sourceHash` is the hash taken BEFORE producing: an edit during the run, or a producer run that
  * rewrote tracked output, leaves no receipt rather than one the sources never matched. */
 export function writeRouteStartupReceipt(root: string, sourceHash: string, projections: Record<string, string>) {
-  if (!noIgnoredRouteFolder(root) || routeStartupSourceHash(root) !== sourceHash) return;
+  if (!noIgnoredRouteInput(root) || routeStartupSourceHash(root) !== sourceHash) return;
   const path = routeStartupReceiptPath(root);
   mkdirSync(dirname(path), { recursive: true });
   const temp = `${path}.${process.pid}`;

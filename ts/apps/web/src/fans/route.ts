@@ -1,5 +1,5 @@
 import type { ContextOf } from "../route/defaults";
-import { command } from "../route/typed-actions.ts";
+import { handle } from "@pe/agent-contracts/handle";
 import { bindings, fanScope } from "./bindings";
 import { read } from "../route/defaults";
 import { stageField } from "../route/defaults";
@@ -130,17 +130,18 @@ export const module = route({
     history: editMetaSchema,
     describe: describeInputHistory,
   },
-  commands: {
+  verbs: {
     losses: {
-      ...command("sheet.apply"),
+      handle: handle("sheet.apply"),
       label: "Write to Revit",
-      present: (result, data, work) =>
+      present: (result, { value: data, doc: work }) =>
         presentLosses(result, {
           page: { stage: "sheet" },
           readings: { sheetSnapshot: { value: data.sheetSnapshot }, fansWork: { value: work } },
         }),
     },
   },
+  band: ["losses"],
   layout: split(
     "h",
     [

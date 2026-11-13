@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { valueRead, openData } from "@pe/agent-contracts";
-import { field, read, type ContextOf } from "../route/defaults";
+import { field, read, type ContextOf, type Verbs } from "../route/defaults";
 import { hostRead } from "../route/host-read";
 import { EMPTY_DRAFT } from "./open-model";
 export const fields = {
@@ -28,4 +28,4 @@ export const fields = {
   ),
 };
 export const loaded = read(hostRead(valueRead("open.documents", z.object({}), openData)));
-export type OpenContext = ContextOf<typeof fields, typeof loaded, never, never>;
+export type OpenContext = ContextOf<typeof fields, typeof loaded, never, never, Verbs<"start" | "open" | "close" | "stop" | "restart">>;

@@ -1,5 +1,5 @@
-import type { ContextOf } from "../route/defaults";
-import { queryAction } from "../route/typed-actions.ts";
+import type { ContextOf, Verbs } from "../route/defaults";
+import { handle } from "@pe/agent-contracts/handle";
 import { read } from "../route/defaults";
 import { paneLayout } from "../route/defaults";
 import { z } from "zod";
@@ -8,7 +8,6 @@ import { route, field, subjectSchema, oneName } from "../route/defaults";
 import { hostRead } from "../route/host-read";
 import { draw } from "../route/draw";
 import { opsArgs, opsData } from "@pe/agent-contracts";
-import { opRead, receiptControlRpc } from "./actions";
 /** The op is the subject (keyKind `name`, tuple `[op key]`); the receipt in view is route-owned query. */
 export const fields = { op: field(subjectSchema(1), { kind: "ids", ids: [] }, "subject", "push") };
 export const query = { actionId: field(z.string(), "", "query", "push") };
@@ -16,7 +15,8 @@ export const loaded = read(
   hostRead(valueRead("ops.workspace", opsArgs, opsData)),
   (page: { actionId: string }) => ({ actionId: page.actionId }),
 );
-export type OpsContext = ContextOf<typeof fields & typeof query, typeof loaded, never, never>;
+export const receiptControls = ["action.read", "action.recover", "action.resume", "action.cancel"] as const;
+export type OpsContext = ContextOf<typeof fields & typeof query, typeof loaded, never, never, Verbs<"run" | (typeof receiptControls)[number]>>;
 export const module = route({
   key: "ops",
   name: "Ops",
@@ -55,17 +55,16 @@ export const module = route({
       purpose: "Inspect requests, read results and control original receipts",
       body: "scroll",
       draw: draw("scroll", () => import("./mount"), "OpsBody"),
+      verbs: ["run", "action.read", "action.recover", "action.resume", "action.cancel"],
     },
   },
-  commands: {
-    // Both verbs take what only the pane holds (the request form, the receipt in view): `pane`.
-    run: { ...queryAction(opRead), label: "Run read", pane: true, input: (_context, supplied) => supplied },
-    control: {
-      ...queryAction(receiptControlRpc),
-      label: "Receipt control",
-      pane: true,
-      input: (_context, supplied) => supplied,
-    },
+  verbs: {
+    // Every verb takes what only the pane holds: the request form, or the receipt in view.
+    run: { handle: handle("ops.read"), label: "Run read" },
+    "action.read": { handle: handle("action.read"), label: "Read receipt" },
+    "action.recover": { handle: handle("action.recover"), label: "Recover action" },
+    "action.resume": { handle: handle("action.resume"), label: "Resume action" },
+    "action.cancel": { handle: handle("action.cancel"), label: "Cancel action" },
   },
   layout: paneLayout("main"),
 });

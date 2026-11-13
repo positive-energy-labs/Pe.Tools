@@ -1,15 +1,13 @@
-import type { ContextOf } from "../route/defaults";
-import { rpcAction, queryAction } from "../route/typed-actions.ts";
+import type { ContextOf, Verbs } from "../route/defaults";
+import { handle } from "@pe/agent-contracts/handle";
 import { read } from "../route/defaults";
 import { paneLayout } from "../route/defaults";
 import { z } from "zod";
 import { valueRead } from "@pe/agent-contracts";
-import { pageBindRpc } from "../../../../packages/mcps/src/shared/rpc-client";
 import { route, field, subjectSchema, oneName, nameOf } from "../route/defaults";
 import { hostRead } from "../route/host-read";
 import { draw } from "../route/draw";
 import { bindData } from "@pe/agent-contracts";
-import { readPageTarget } from "./client";
 /** The Page is the subject (keyKind `name`, tuple `[slug]`); `view` shows it in place of the binding choice. */
 export const fields = {
   page: field(subjectSchema(1), { kind: "ids", ids: [] }, "subject", "push"),
@@ -21,7 +19,7 @@ export const query = {
   fragment: field(z.string(), "", "query"),
 };
 export const loaded = read(hostRead(valueRead("bind.picker", z.object({}), bindData)));
-export type BindContext = ContextOf<typeof fields & typeof query, typeof loaded, never, never>;
+export type BindContext = ContextOf<typeof fields & typeof query, typeof loaded, never, never, Verbs<"bind">>;
 export const module = route({
   key: "bind",
   name: "Bind",
@@ -58,22 +56,15 @@ export const module = route({
       purpose: "Choose a Page binding",
       body: "scroll",
       draw: draw("scroll", () => import("./mount"), "BindBody"),
+      // The pane holds the binding the person chose.
+      verbs: ["bind"],
     },
   },
-  commands: {
+  verbs: {
     bind: {
-      ...rpcAction(pageBindRpc),
+      handle: handle("page.bind"),
       label: "Bind",
       input: ({ page }, binding) => ({ slug: nameOf(page.page), binding }),
-    },
-    read: {
-      ...queryAction({
-        key: "bind.target",
-        input: z.object({ slug: z.string().min(1) }),
-        run: ({ slug }) => readPageTarget(slug),
-      }),
-      label: "Read binding",
-      input: ({ page }) => ({ slug: nameOf(page.page) }),
     },
   },
   layout: paneLayout("main"),

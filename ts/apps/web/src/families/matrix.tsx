@@ -11,14 +11,15 @@ import { TypeGrid } from "./pivot-grid";
 import { useCellCollection } from "@pe/kit/lang/cell";
 import { useMeasuredParse } from "#/host/measured-parse";
 import { FindingVerb } from "#/route/slots/findings/verb";
+import { FINDINGS_DOORS } from "@pe/agent-contracts/slots";
 import { joinRows } from "./families-matrix";
 import { subjectCode } from "../../../../packages/agent-contracts/src/subject-ref.ts";
 export function FamiliesMatrix({ ctx }: { ctx: FamiliesDrawContext }) {
   const [failure, setFailure] = useState<string | null>(null);
-  const run = async (id: string, input?: unknown) => {
+  const run = async (id: "read" | "stop", input?: unknown) => {
     try {
       setFailure(null);
-      await ctx.write(id).run(input);
+      await ctx.verb(id).run(input);
     } catch (error) {
       setFailure(error instanceof Error ? error.message : String(error));
     }
@@ -114,7 +115,7 @@ export function FamiliesMatrix({ ctx }: { ctx: FamiliesDrawContext }) {
         <Button label="Stop family read" onClick={() => run("stop")}>
           Stop
         </Button>
-        <PreviewAction handle={ctx.write("apply")} label="Apply families" />
+        <PreviewAction handle={ctx.verb("apply")} label="Apply families" />
       </ButtonGroup>
       {shown?.progress && shown.progress.state !== "complete" && (
         <OutcomeLine
@@ -148,7 +149,7 @@ export function FamiliesMatrix({ ctx }: { ctx: FamiliesDrawContext }) {
           <FindingVerb
             subject={subjectCode({ keyKind: "name", key: [type.familyName, type.typeName] })}
             name={`${type.familyName} · ${type.typeName}`}
-            action={ctx.write("finding")}
+            action={ctx.verb(FINDINGS_DOORS.say)}
           />
         )}
         edit={{

@@ -6,6 +6,7 @@ import { useRouteSearchSlice } from "#/route/activity";
 import { useAdmittedSubject } from "#/shell/subject";
 
 import type { FansSheetEdits, SubjectRefCode } from "@pe/agent-contracts";
+import { FINDINGS_DOORS } from "@pe/agent-contracts/slots";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
 import type { SubjectKey } from "@pe/kit/lang/attention";
 import { SubjectTextContext } from "@pe/kit/lang/reach";
@@ -89,7 +90,7 @@ export function RosterBody({ ctx }: { ctx: SheetContext }) {
           roster: roster,
           picked: pickedFans === "all" ? roster.map(stableFanKey) : pickedFans,
           open: open,
-          finding: ctx.write("finding"),
+          finding: ctx.verb(FINDINGS_DOORS.say),
           busy: busy,
           loading: busy,
         }}

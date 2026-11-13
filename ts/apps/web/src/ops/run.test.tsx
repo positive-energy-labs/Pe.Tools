@@ -31,15 +31,16 @@ const KEY = "revit.detail.space-status";
  * Status builds no world, so `Stamp.BuiltUtc` is C#'s `default(DateTime)`; `spelling` is how the
  * bridge serializer wrote it.
  */
-const answer = (builtUtc: string) => ({
-  stamp: {
-    hostDocumentKey: "chadds-r4",
-    epoch: 12,
+const answer = (observedAt: string) => ({
+  evidence: {
+    documentKey: "chadds-r4",
+    revision: 12,
+    observedAt,
     frame: "host-internal-ft",
-    builtUtc,
+    resolved: { sources: [], categories: [], kinds: ["Solid", "Mesh"], layers: [], exclusions: [], representation: "solid", acquisitionRequested: false },
     sources: [],
-    fresh: false,
-    resolved: { sources: [], categories: [], kinds: ["Solid", "Mesh"], layers: [], excludedElementIds: [] },
+    acquisition: [],
+    coverage: [],
   },
   built: false,
   pendingIds: 0,
@@ -111,7 +112,7 @@ test("the band draws no verb whose input only the pane holds; the pane's Run is 
 
 /*
  * Gate c80e644a, /ops (b) and fix line 4: Revit answered, the client's catalog schema refused
- * `stamp.builtUtc`, and the person read the zod issue list with its regex. A refused answer is one
+ * a zone-less timestamp, and the person read the zod issue list with its regex. A refused answer is one
  * failure line in the pane; the issue list goes to the diagnostics log.
  */
 test("an answer the catalog schema refuses draws one failure line, and its detail goes to the log", async () => {
@@ -122,12 +123,13 @@ test("an answer the catalog schema refuses draws one failure line, and its detai
     f.mount.page.subject(oneName(KEY));
     fireEvent.click(await runButton());
     const line = await within(pane()).findByText("Read refused", {}, WAIT);
-    expect(line.parentElement!.textContent).toContain("stamp.builtUtc");
+    expect(line.parentElement!.textContent).toContain("evidence.observedAt");
     for (const dump of ["invalid_format", "pattern", "[{", '"code"'])
       expect(document.body.textContent, dump).not.toContain(dump);
     expect(io.fault).toHaveBeenCalledWith(
       expect.objectContaining({ code: "action.failed", routeCode: "ops", readingKind: "ops.read" }),
-      expect.objectContaining({ issues: [expect.objectContaining({ path: ["stamp", "builtUtc"] })] }),
+      // The door carries the refusal as text, so the log gets the issue list as the error's message.
+      expect.objectContaining({ message: expect.stringContaining('"observedAt"') }),
     );
   } finally { f.close(); }
 }, 60_000);

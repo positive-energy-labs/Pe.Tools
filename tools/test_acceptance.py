@@ -7,6 +7,21 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import acceptance as a
 
 
+def test_help(tmp: Path) -> None:
+    script = Path(a.__file__).resolve()
+    for args in (["--help"], ["-h"], ["setup", "--help"], ["setup", "-h"]):
+        result = subprocess.run([sys.executable, str(script), *args], cwd=tmp,
+                                capture_output=True, text=True, timeout=5)
+        assert result.returncode == 0 and "Native acceptance harness" in result.stdout, result
+    prior, calls = a.sdk, []
+    try:
+        a.sdk = lambda *args: calls.append(args)
+        a.main(["sdk", "run", "guide", "session", "--help"])
+        assert calls == [("run", "guide", ["session", "--help"])], calls
+    finally:
+        a.sdk = prior
+
+
 def touch(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("x")
@@ -162,6 +177,6 @@ def test_teardown_home(tmp: Path) -> None:
 
 
 with tempfile.TemporaryDirectory() as t:
-    for test in (test_pod_build_skip, test_pick_models, test_copy_hashed, test_isolated_home, test_host_wait, test_teardown_home):
+    for test in (test_help, test_pod_build_skip, test_pick_models, test_copy_hashed, test_isolated_home, test_host_wait, test_teardown_home):
         test(Path(tempfile.mkdtemp(dir=t)))
 print("ok")

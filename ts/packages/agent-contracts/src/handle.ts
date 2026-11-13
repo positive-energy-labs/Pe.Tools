@@ -9,36 +9,13 @@ import type { hostOpSafety } from "@pe/host-contracts/generated";
 import { nativeReadInput, nativeReadValue, type NativeArgs, type NativeValue } from "./native-output-read.ts";
 import type {
   HostOperationKey,
-  OpKey,
-  OpRequestOf,
-  OpResponseOf,
 } from "@pe/host-contracts/operation-types";
-import type { PeRouteInput, PeRouteOutput } from "@pe/host-contracts/pe-api";
 import { nativeAxes, type CatalogAxes } from "./catalog.ts";
-import { commandTable, type CommandKey } from "./command-axes.ts";
-import type { httpRoutes } from "./pe-api.ts";
-import type { hostActions } from "./semantic-actions.ts";
 import type { SubjectKeyKind } from "./subject-ref.ts";
 import { publicationSchema, type Publication } from "./value.ts";
 
-export type Effect = "Read" | "TransactRead" | "SessionWrite" | "WorkWrite" | "ModelWrite";
-declare const minted: unique symbol;
-export interface CommandHandle<
-  K extends string = string,
-  I = unknown,
-  O = unknown,
-  E extends Effect = Effect,
-> {
-  readonly [minted]: true;
-  readonly key: K;
-  readonly effect: E;
-  readonly plan?: CommandHandle<string, I, unknown, "Read" | "TransactRead">;
-  /** K6: the door picks the transport from this. */
-  readonly via: "command" | { route: string };
-  /** Type only: no schema reaches the browser through a command handle. */
-  readonly _input?: I;
-  readonly _output?: O;
-}
+import { effects, mint, type minted } from "./command-handle.ts";
+export * from "./command-handle.ts";
 export type RowKey = { kind: SubjectKeyKind; sub?: "port" | "field" };
 export interface ReadHandle<K extends string = string, I = unknown, D = unknown> {
   readonly [minted]: true;
@@ -55,63 +32,7 @@ export interface ReadHandle<K extends string = string, I = unknown, D = unknown>
 }
 /** A read handle with its input and data erased: what a registry or a `uses` list holds. */
 export type AnyReadHandle = Pick<ReadHandle, typeof minted | "key" | "axes">;
-export type InputOf<H> = H extends CommandHandle<string, infer I> ? I : never;
-
-type Commands = typeof hostActions;
-type Routes = typeof httpRoutes;
-type Row<K extends CommandKey> = (typeof commandTable)[K];
-/** The generated table (K1) names every key: semantic commands, raw native commands, pe-api routes. */
-export type { CommandKey };
-/** A semantic command's own schema first, then the native DTO, then the pe-api route. */
-export type CommandInput<K extends CommandKey> = K extends keyof Commands
-  ? z.input<Commands[K]["input"]>
-  : K extends OpKey
-    ? OpRequestOf<K>
-    : K extends keyof Routes
-      ? PeRouteInput<Routes, K>
-      : unknown;
-export type CommandOutput<K extends CommandKey> = K extends keyof Commands
-  ? Commands[K] extends { result: z.ZodType }
-    ? z.output<Commands[K]["result"]>
-    : unknown
-  : K extends OpKey
-    ? OpResponseOf<K>
-    : K extends keyof Routes
-      ? PeRouteOutput<Routes, K>
-      : unknown;
-export type CommandEffect<K extends CommandKey> = Extract<Row<K>["effect"], Effect>;
-/** A sealed write's plan is required on its handle, so a verb declaration can demand `present`. */
-type Planned<K extends CommandKey, I> = Row<K> extends { plan: string }
-  ? { readonly plan: CommandHandle<string, I, unknown, "Read" | "TransactRead"> }
-  : unknown;
-
-const effects = ["Read", "TransactRead", "SessionWrite", "WorkWrite", "ModelWrite"] as const;
 const costs = ["Cheap", "Bounded", "Expensive", "Mutation"] as const;
-const mint = <H>(shape: Omit<H, typeof minted>) => Object.freeze(shape) as H;
-const commandHandles = new Map<string, CommandHandle>();
-const isPlan = (command: CommandHandle): command is CommandHandle<string, unknown, unknown, "Read" | "TransactRead"> =>
-  command.effect === "Read" || command.effect === "TransactRead";
-export function handle<K extends CommandKey>(
-  key: K,
-): CommandHandle<K, CommandInput<K>, CommandOutput<K>, CommandEffect<K>> &
-  Planned<K, CommandInput<K>> {
-  type Minted = ReturnType<typeof handle<K>>;
-  const made = commandHandles.get(key);
-  if (made) return made as Minted;
-  if (!Object.hasOwn(commandTable, key)) throw Error(`No command or route: ${key}`);
-  const row = commandTable[key];
-  const plan = "plan" in row ? handle(row.plan) : undefined;
-  if (plan && !isPlan(plan)) throw Error(`${key} declares a plan that writes`);
-  const result = mint<CommandHandle>({
-    key,
-    effect: row.effect,
-    via: row.via,
-    ...(plan ? { plan } : {}),
-  });
-  commandHandles.set(key, result);
-  return result as Minted;
-}
-
 type Safety = typeof hostOpSafety;
 /** Read intent, and Read effect or a rolled-back TransactRead: the keys a read may take. */
 export type CatalogReadKey = {
