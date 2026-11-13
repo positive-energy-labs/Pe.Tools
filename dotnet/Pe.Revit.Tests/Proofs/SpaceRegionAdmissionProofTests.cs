@@ -21,7 +21,7 @@ public sealed class SpaceRegionAdmissionProofTests {
             region.AdmitSweep(inside);
             var sweep = Verbs.Sweep(doc, inside, 1, 0.5, 1.5);
             Assert.That(sweep.Segments.Single().Nearest!.ElementId, Is.EqualTo(under));
-            Assert.That(sweep.Stamp.Sources.Single().Elements, Is.EqualTo(1), "Region is admission: the upper block inside the region is never read.");
+            Assert.That(sweep.Evidence.Acquisition.Count, Is.EqualTo(1), "Region is admission: the upper block inside the region is never read.");
 
             Assert.Throws<ArgumentException>(() => region.AdmitSweep([new XYZ(-2, 0.5, 2.25), new XYZ(8, 0.5, 2.25)]),
                 "A polyline point outside the region is refused.");
@@ -51,7 +51,7 @@ public sealed class SpaceRegionAdmissionProofTests {
             Blocks(doc, out _, out _);
             XYZ[] line = [new(-2, 0.5, 2.25), new(3, 0.5, 2.25)];
             var answer = Verbs.Sweep(doc, line, 1, 0.5, 1.5, Ribbons);
-            Assert.That(answer.Segments.Single().Verdict, Is.EqualTo("CLEAR"), "A Curve2D question reads ribbons and answers.");
+            Assert.That(answer.Segments.Single().Verdict, Is.EqualTo("UNKNOWN"), "No surface witness cannot certify clearance.");
             var regionWorld = SpaceWorld.Prepare(doc, new Aabb(-5, -5, 0, 5, 5, 12));
             Assert.Throws<ArgumentException>(() => Verbs.Sweep(regionWorld, line, 1, 0.5, 1.5, Ribbons),
                 "The defect this replaces: a region-prepared world carries no ribbons and refuses Curve2D.");
@@ -95,10 +95,10 @@ public sealed class SpaceRegionAdmissionProofTests {
             using var bytes = new MemoryStream();
             var scene = Scene.Write(doc, new SceneRequest([first]), bytes);
             Assert.That(scene.Elements.Select(e => e.Handle.ElementId), Does.Contain(second));
-            Assert.That(scene.Stamp.GeometryCost!.PlannedCount, Is.EqualTo(2));
-            Assert.That(scene.Stamp.GeometryCost.PlannedCost, Is.Zero);
-            Assert.That(scene.Stamp.GeometryCost.NewlyTessellatedCount, Is.Zero);
-            Assert.That(scene.Stamp.GeometryCost.CumulativeTessellatedCount, Is.Zero);
+            Assert.That(scene.Evidence.GeometryCost!.PlannedCount, Is.EqualTo(2));
+            Assert.That(scene.Evidence.GeometryCost.PlannedCost, Is.Zero);
+            Assert.That(scene.Evidence.GeometryCost.NewlyTessellatedCount, Is.Zero);
+            Assert.That(scene.Evidence.GeometryCost.CumulativeTessellatedCount, Is.Zero);
             Assert.That(scene.Work.NativeGeometryCalls, Is.Zero);
             Assert.That(scene.Triangles, Is.Zero);
         } finally { GeometryLedger.Closed(doc.GetDocumentKey()); doc.Close(false); }
@@ -114,11 +114,11 @@ public sealed class SpaceRegionAdmissionProofTests {
             var firstRead = Scene.Write(doc, request, bytes);
             Assert.That(firstRead.RequestedContextPaddingFt, Is.EqualTo(2));
             Assert.That(firstRead.EffectiveContextPaddingFt, Is.EqualTo(5));
-            Assert.That(firstRead.Stamp.GeometryCost!.NewlyTessellatedCount, Is.GreaterThan(0));
+            Assert.That(firstRead.Evidence.GeometryCost!.NewlyTessellatedCount, Is.GreaterThan(0));
             using var repeat = new MemoryStream();
             var next = Scene.Write(doc, request, repeat);
-            Assert.That(next.Stamp.GeometryCost!.NewlyTessellatedCount, Is.Zero);
-            Assert.That(next.Stamp.GeometryCost.CumulativeTessellatedCount, Is.EqualTo(firstRead.Stamp.GeometryCost.CumulativeTessellatedCount));
+            Assert.That(next.Evidence.GeometryCost!.NewlyTessellatedCount, Is.Zero);
+            Assert.That(next.Evidence.GeometryCost.CumulativeTessellatedCount, Is.EqualTo(firstRead.Evidence.GeometryCost.CumulativeTessellatedCount));
             Assert.That(SpaceWorld.Prepare(doc).GeometryCost!.PlannedCount, Is.GreaterThanOrEqualTo(3));
         } finally { GeometryLedger.Closed(doc.GetDocumentKey()); doc.Close(false); }
     }

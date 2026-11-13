@@ -190,7 +190,7 @@ public sealed class RailNetworkTests {
     }
 
     private static PartitionAnswer RunRailsWithRejections(double[] zone, RoomProposal[] proposals, double[][] rejected, params double[][][] walls) {
-        var stamp = new Stamp("doc", 0, Stamp.HostInternalFt, DateTime.UnixEpoch, [], true, new Resolved([], [], [], [], []));
+        var stamp = new SpatialEvidence("doc", 0, DateTime.UnixEpoch, SpatialEvidence.HostInternalFt, new Resolved([], [], [], [], []), [], [], []);
         var elements = walls.Select((w, k) => new SliceElement(new Handle("doc", k + 1, "u" + (k + 1), null, "Walls", PrimKind.Solid), w)).ToList();
         var knee = new SliceAnswer(stamp, new Searched(0, 0, 0, 0, 0), elements, elements.Sum(e => e.Pieces.Count), 0);
         var input = new PartitionInput(knee, knee with { Elements = [] }, [zone], 0, Knobs.Default, [], "test", proposals, Rejected: rejected);

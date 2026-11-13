@@ -1,12 +1,13 @@
 import {
   opSubject,
   opTouches,
-  opEffect,
+  opEffect as nativeOpEffect,
   opCardinality,
   opCost,
 } from "@pe/host-contracts/generated";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
-export { opSubject, opTouches, opEffect, opCardinality, opCost };
+export const opEffect = { ...nativeOpEffect, WorkWrite: "WorkWrite" } as const;
+export { opSubject, opTouches, opCardinality, opCost };
 type Value<T> = T[keyof T];
 export interface CatalogAxes {
   subject: Value<typeof opSubject>;
