@@ -5,7 +5,7 @@ import { afterEach, expect, test } from "vite-plus/test";
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from "@tanstack/react-router";
 import { KeyScopeHost } from "@pe/kit/keys";
 import { podMemberCode, settingsCandidate, settingsRouteState, workFingerprintSchema } from "@pe/agent-contracts";
-import { sheetCells } from "../route/slots/sheet/index.ts";
+import { memberFields, fieldsNote } from "./fields.tsx";
 import { module as pods } from "./route";
 import { TypedChrome } from "../shell/typed-shell";
 import { mountTypedRoute } from "../shell/typed-mount";
@@ -37,7 +37,7 @@ const source = (key: string, data: unknown): UseSource => ({
   open(_ctx, deliver) { deliver({ kind: "complete", revision: 1, value: publication(key, data) }); return () => {}; },
 });
 
-/** /pods at a picked member, mounted as the shell mounts it: the kernel draws its sheet pane. */
+/** /pods at a picked member, mounted as the shell mounts its route-local member editor. */
 function mountPods(fields: Record<string, never> = {}) {
   const mount = mountTypedRoute(pods, {
     address: { read: () => new URLSearchParams(), write() {}, subscribe: () => () => {} },
@@ -59,11 +59,11 @@ function mountPods(fields: Record<string, never> = {}) {
   return { mount, close() { view.unmount(); mount.dispose(); } };
 }
 
-/* purge-2 integrity 2: the sheet pane the kernel adds had no read, so the mount gave it "No read declared". */
+/* The member pane must keep the core read when arbitrary JSON moves outside the binding grammar. */
 test("the /pods sheet pane draws the picked member's cells from the core read", async () => {
   const pods = mountPods();
   try {
-    await waitFor(() => expect(pods.mount.value()).toMatchObject({ current: true }));
+    await waitFor(() => expect(pods.mount.value()).toMatchObject({ state: "ready" }));
     expect(await screen.findByText("maxSystems")).toBeTruthy();
     expect(screen.getByText("names")).toBeTruthy();
     expect(screen.queryByText("Pick a member on the left to edit its Work")).toBeNull();
@@ -84,16 +84,15 @@ const hiddenEdits = {
 const sheetNote = "Save also writes staged edits these cells do not show: /limits/depth, delete /limits/old, delete /names, the whole file as raw text";
 
 test("staged edits no cell shows are named: beneath a key on its row, and every one on the sheet's note", () => {
-  const slot = pods.spec.sheet!;
   const read = author(hiddenEdits);
-  const cells = sheetCells(slot, { rows: [], work: read.work, model: [], read });
+  const cells = memberFields(read);
   expect(cells.map((c) => [c.label, c.value, c.source, c.note])).toEqual([
     ["maxSystems", 26, "work", undefined],
     ["limits", { depth: 3, old: 1 }, "model", "Save also writes beneath this key: /limits/depth, delete /limits/old"],
   ]);
-  expect(slot.note?.(read)).toBe(sheetNote);
+  expect(fieldsNote(read)).toBe(sheetNote);
   // A sheet whose every staged edit has its own cell says nothing more.
-  expect(slot.note?.(author({ "/maxSystems": hiddenEdits["/maxSystems"]! }))).toBeNull();
+  expect(fieldsNote(author({ "/maxSystems": hiddenEdits["/maxSystems"]! }))).toBeNull();
 });
 
 test("the /pods sheet pane draws that note above the cells Save will write past", async () => {

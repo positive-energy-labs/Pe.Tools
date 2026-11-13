@@ -1,5 +1,6 @@
 import { blobRefSchema } from "./blob-ref.ts";
 import { z } from "zod";
+import type { GraphJsonValue } from "./route-graph.ts";
 import {
   canonicalWorkKey,
   workKeySchema,
@@ -12,6 +13,8 @@ import { documentRefSchema, executionTargetSchema, type ExecutionTarget } from "
 import { nativeProcessSchema } from "./native-process.ts";
 import { packageDiagnosticSchema } from "./contribution.ts";
 import { heldSchema } from "./guards.ts";
+import type { PeApiSchemas, PeRouteTable } from "@pe/host-contracts/pe-api";
+type CommandRouteId = keyof PeRouteTable<PeApiSchemas>;
 
 export const workHandleSchema = z.strictObject({
   key: workKeySchema,
@@ -47,6 +50,7 @@ const observed = <K extends string, P extends z.ZodRawShape, E extends z.ZodType
 ) => z.strictObject({ kind: z.literal(kind), probe: z.strictObject(probe), expected });
 const sha = z.string();
 const memberHash = z.strictObject({ path: z.string(), sha256: sha });
+const jsonValue: z.ZodType<GraphJsonValue> = z.json();
 export const directorySnapshotSchema = z.strictObject({
   members: z.array(memberHash),
   diagnostics: z.array(packageDiagnosticSchema),
@@ -61,7 +65,7 @@ export const consumedSchema = z.discriminatedUnion("kind", [
   observed(
     "work",
     { handle: workHandleSchema, paths: pathsSchema, edits: pathsSchema.optional() },
-    z.json(),
+    jsonValue,
   ),
   observed("member", { pod: z.string(), path: z.string() }, sha.nullable()).extend({
     bytesBase64: z.string().optional(),
@@ -171,7 +175,11 @@ export interface Command<I = unknown, R = unknown> {
   dirties: readonly ActionReadingKey[];
   needs: ActionNeed;
   principal?: readonly import("./principal.ts").Principal[];
+  /** Execution category; catalogEffect is the mutation scope. */
   effect: "query" | "command";
+  /** Local scope; absent only when native leaves own the effect. */
+  catalogEffect?: Exclude<import("./catalog.ts").CatalogAxes["effect"], "Unset">;
+  via?: { readonly route: CommandRouteId };
   input: z.ZodType<I>;
   result?: z.ZodType<R>;
   /** Executable hooks, shared with the host write boundary; never unresolved symbol names. */

@@ -7,11 +7,6 @@ using System.Runtime.ExceptionServices;
 
 namespace Pe.Shared.HostContracts.Operations;
 
-public enum OpIntent {
-    Read,
-    Mutate
-}
-
 public enum OpCost {
     Cheap,
     Bounded,
@@ -23,6 +18,10 @@ public enum OpCost {
 public enum OpSubject { Unset = 0, None, Document, FamilyDocument, View, Elements, System, Region, Session }
 [Flags]
 public enum OpTouches { Unset = 0, Metadata = 1, Topology = 2, Geometry = 4 }
+/// <summary>
+///     Closed. An op does not declare its effect: it is the scope type in the handler's signature
+///     (Pe.Revit.Operations.TransactRead, SessionWrite or ModelWrite), and a handler with no scope is a Read.
+/// </summary>
 public enum OpEffect { Unset = 0, Read, TransactRead, SessionWrite, ModelWrite }
 public enum OpCardinality { One, Many }
 
@@ -45,28 +44,23 @@ public enum OpThread {
 }
 
 [AttributeUsage(AttributeTargets.Method)]
-public sealed class OpAttribute(string key, OpSubject subject, OpTouches touches, OpEffect effect) : Attribute {
+public sealed class OpAttribute(string key, OpSubject subject, OpTouches touches) : Attribute {
     public string Key { get; } = key;
     public string? Title { get; init; }
     public required string Does { get; init; }
     public string[]? Finds { get; init; }
-    public OpIntent Intent { get; init; } = OpIntent.Read;
     public OpSubject Subject { get; } = subject;
     public OpTouches Touches { get; } = touches;
-    public OpEffect Effect { get; } = effect;
     public OpCardinality Cardinality { get; init; } = OpCardinality.One;
     public bool Internal { get; init; }
-    public bool RollsBack { get; init; }
     public OpCost Cost { get; init; } = OpCost.Cheap;
     public OpTier Tier { get; init; } = OpTier.Escalation;
     public string? Example { get; init; }
     public bool IsPublic { get; init; } = true;
     public OpThread Thread { get; init; } = OpThread.Any;
-    /// <summary>Includes rolled-back previews and transactions in disposable documents.</summary>
-    public bool UsesTransactions { get; init; }
     /// <summary>The full metadata contract stored in the exported artifact, separate from its bounded RPC receipt.</summary>
     public Type? ArtifactMetadata { get; init; }
-    internal OpActor? DeclaredActor { get; private set; }
+    internal OpActor? DeclaredActor { get; set; }
     public OpActor Actor { get => this.DeclaredActor ?? OpActor.Any; init => this.DeclaredActor = value; }
 }
 
@@ -98,7 +92,11 @@ public sealed class Op {
 
     internal bool SameHandler(Op other) => this._method == other._method;
 
-    public async Task<object?> ExecuteAsync(string payloadJson, object? document, CancellationToken cancellationToken, string? derivedCommand = null) {
+    /// <summary>
+    ///     The one invocation point. <paramref name="scope" /> is the Pe.Revit.Operations scope for this op's effect,
+    ///     built by the runner, which reads it back afterwards to state what the call touched. A Read gets none.
+    /// </summary>
+    public async Task<object?> ExecuteAsync(string payloadJson, object? document, object? scope, CancellationToken cancellationToken, string? derivedCommand = null) {
         OpCallGate.Require(this.Definition, derivedCommand, payloadJson);
         object? request;
         try {
@@ -119,6 +117,8 @@ public sealed class Op {
         var arguments = new List<object?> { request };
         if (this.Definition.Needs != OpNeeds.Nothing)
             arguments.Add(document ?? throw new InvalidOperationException($"Bridge op '{this.Key}' has no resolved document."));
+        if (this.Definition.Effect != OpEffect.Read)
+            arguments.Add(scope ?? throw new InvalidOperationException($"Bridge op '{this.Key}' was handed no {this.Definition.Effect} scope."));
         if (this._method.GetParameters().Last().ParameterType == typeof(CancellationToken))
             arguments.Add(cancellationToken);
         object? result;
@@ -223,29 +223,24 @@ public static class OpRegistry {
             : null;
         int EnumValue(string name, int fallback) => Named(name) is { } value ? Convert.ToInt32(value) : fallback;
 
-        if ((OpIntent)EnumValue(nameof(OpAttribute.Intent), (int)OpIntent.Read) == OpIntent.Mutate && Named(nameof(OpAttribute.Actor)) is null)
-            throw new InvalidOperationException($"[Op({data.ConstructorArguments[0].Value})] must declare Actor for mutation.");
         return new OpAttribute(
             (string)data.ConstructorArguments[0].Value!,
             (OpSubject)Convert.ToInt32(data.ConstructorArguments[1].Value),
-            (OpTouches)Convert.ToInt32(data.ConstructorArguments[2].Value),
-            (OpEffect)Convert.ToInt32(data.ConstructorArguments[3].Value)) {
+            (OpTouches)Convert.ToInt32(data.ConstructorArguments[2].Value)) {
             Title = Named(nameof(OpAttribute.Title)) as string,
             Does = Named(nameof(OpAttribute.Does)) as string
                    ?? throw new InvalidOperationException("[Op] requires Does."),
             Finds = Strings(nameof(OpAttribute.Finds)),
-            Intent = (OpIntent)EnumValue(nameof(OpAttribute.Intent), (int)OpIntent.Read),
             Cardinality = (OpCardinality)EnumValue(nameof(OpAttribute.Cardinality), 0),
             Internal = Named(nameof(OpAttribute.Internal)) as bool? ?? false,
-            RollsBack = Named(nameof(OpAttribute.RollsBack)) as bool? ?? false,
             Cost = (OpCost)EnumValue(nameof(OpAttribute.Cost), (int)OpCost.Cheap),
             Tier = (OpTier)EnumValue(nameof(OpAttribute.Tier), (int)OpTier.Escalation),
             Example = Named(nameof(OpAttribute.Example)) as string,
             IsPublic = Named(nameof(OpAttribute.IsPublic)) as bool? ?? true,
             Thread = (OpThread)EnumValue(nameof(OpAttribute.Thread), (int)OpThread.Any),
-            UsesTransactions = Named(nameof(OpAttribute.UsesTransactions)) as bool? ?? false,
             ArtifactMetadata = Named(nameof(OpAttribute.ArtifactMetadata)) as Type,
-            Actor = (OpActor)EnumValue(nameof(OpAttribute.Actor), (int)OpActor.Any)
+            // Left unset when the attribute names no Actor, so Define can require one of a write.
+            DeclaredActor = Named(nameof(OpAttribute.Actor)) is { } actor ? (OpActor)Convert.ToInt32(actor) : null
         };
     }
 
@@ -263,30 +258,42 @@ public static class OpRegistry {
                            && method.ReturnType.GetGenericTypeDefinition().FullName == typeof(Task<>).FullName
             ? method.ReturnType.GetGenericArguments()[0]
             : method.ReturnType;
+        // (request[, document][, scope][, CancellationToken]). The middle two are told apart by type, in that order.
         var hasCancellationToken = parameters.Length > 1
                                    && parameters[^1].ParameterType.FullName == typeof(CancellationToken).FullName;
-        var documentParameter = parameters.Length - (hasCancellationToken ? 1 : 0) == 2 ? parameters[1].ParameterType : null;
-        var needs = GetNeeds(documentParameter);
-        var signatureIsValid = parameters.Length is >= 1 and <= 3
-                               && parameters.Length == 1 + (documentParameter == null ? 0 : 1) + (hasCancellationToken ? 1 : 0)
+        var middle = parameters.Skip(1).Take(parameters.Length - 1 - (hasCancellationToken ? 1 : 0))
+            .Select(parameter => parameter.ParameterType).ToList();
+        var effect = middle.Count == 0 ? OpEffect.Read : GetEffect(middle[^1]);
+        if (effect != OpEffect.Read) middle.RemoveAt(middle.Count - 1);
+        var signatureIsValid = parameters.Length >= 1 && middle.Count <= 1
                                && responseType.FullName != typeof(void).FullName
                                && method.ReturnType.FullName != typeof(Task).FullName;
         if (!signatureIsValid)
             throw new InvalidOperationException(
-                $"[Op(\"{attribute.Key}\")] on '{method.DeclaringType?.FullName}.{method.Name}' must return TResponse or Task<TResponse> and accept a request, optional RevitDocument/ProjectDocument/FamilyDocument, and optional CancellationToken."
+                $"[Op(\"{attribute.Key}\")] on '{method.DeclaringType?.FullName}.{method.Name}' must return TResponse or Task<TResponse> and accept a request, optional RevitDocument/ProjectDocument/FamilyDocument, optional TransactRead/SessionWrite/ModelWrite scope, and optional CancellationToken, in that order."
             );
+        var needs = GetNeeds(middle.SingleOrDefault());
 
         resolveRuntimeType ??= type => type;
         var definition = Define(
             attribute,
             resolveRuntimeType(parameters[0].ParameterType),
             resolveRuntimeType(responseType),
-            needs
+            needs,
+            effect
         );
         return definition with {
             ArtifactMetadataType = attribute.ArtifactMetadata is { } artifact ? resolveRuntimeType(artifact) : null
         };
     }
+
+    /// <summary>The effect is the scope type, by name: this assembly references no Revit, and typegen reads metadata only.</summary>
+    private static OpEffect GetEffect(Type parameter) => parameter.FullName switch {
+        "Pe.Revit.Operations.TransactRead" => OpEffect.TransactRead,
+        "Pe.Revit.Operations.SessionWrite" => OpEffect.SessionWrite,
+        "Pe.Revit.Operations.ModelWrite" => OpEffect.ModelWrite,
+        _ => OpEffect.Read
+    };
 
     private static OpNeeds GetNeeds(Type? documentParameter) => documentParameter?.FullName switch {
         null => OpNeeds.Nothing,
@@ -301,14 +308,16 @@ public static class OpRegistry {
         OpAttribute attribute,
         Type requestType,
         Type responseType,
-        OpNeeds needs = OpNeeds.Nothing
+        OpNeeds needs = OpNeeds.Nothing,
+        OpEffect effect = OpEffect.Read
     ) {
-        if (attribute.Intent == OpIntent.Mutate && attribute.DeclaredActor is null)
+        var writes = effect is OpEffect.SessionWrite or OpEffect.ModelWrite;
+        if (writes && attribute.DeclaredActor is null)
             throw new InvalidOperationException($"[Op({attribute.Key})] must declare Actor for mutation.");
         var metadata = HostOperationAgentMetadata.Create(
             attribute.Does,
             attribute.Finds,
-            (HostOperationIntent)attribute.Intent,
+            writes ? HostOperationIntent.Mutate : HostOperationIntent.Read,
             (HostOperationCostTier)attribute.Cost,
             attribute.Tier switch {
                 OpTier.Default => HostOperationVisibility.DefaultVisible,
@@ -323,16 +332,15 @@ public static class OpRegistry {
             attribute.Key,
             requestType,
             responseType,
-            attribute.Subject, attribute.Touches, attribute.Effect,
+            attribute.Subject, attribute.Touches, effect,
             attribute.IsPublic,
             attribute.Title,
             metadata,
             needs,
             attribute.Actor,
-            attribute.UsesTransactions || attribute.Intent == OpIntent.Mutate,
             attribute.ArtifactMetadata,
             attribute.Cardinality,
-            attribute.Internal, attribute.RollsBack
+            attribute.Internal
         );
         Validate(definition);
         return definition;
@@ -511,8 +519,6 @@ public static class OpCallGate {
     public static void Require(HostOperationDefinition definition, string? derivedCommand, string? payloadJson = null) {
         if (definition.Internal && string.IsNullOrWhiteSpace(derivedCommand))
             throw BridgeOperationExceptions.BadRequest($"'{definition.Key}' is internal; invoke its derived command.");
-        if (definition.Effect == OpEffect.TransactRead && !definition.RollsBack)
-            throw BridgeOperationExceptions.BadRequest($"'{definition.Key}' must declare rollback.");
         if (definition.Effect is OpEffect.Read or OpEffect.TransactRead
             && definition.Touches.HasFlag(OpTouches.Geometry) && definition.Subject == OpSubject.Document
             && definition.Needs != OpNeeds.FamilyDocument)

@@ -1,3 +1,4 @@
+import { hostState } from "../src/host-ownership.ts";
 import { testInputContext } from "./effect-test.ts";
 import { ActionJournalService } from "../src/receipt-services.ts";
 import { readFileSync } from "node:fs";
@@ -10,7 +11,7 @@ import { expect, test, vi } from "vite-plus/test";
 import { HOST_RPC_BRIDGE_SESSION_HEADER } from "@pe/host-contracts/operation-types";
 import { makeHttpLive } from "../src/app.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
-import { productAgentPath } from "../src/product-paths.ts";
+
 import type { ServiceHostHandle } from "@pe/host-contracts/pe-service-host";
 import { readServiceFile } from "@pe/host-contracts/pe-service";
 
@@ -170,7 +171,7 @@ test("host boundary: service file, status, static SPA, /pe routes, graceful shut
     expect(
       await waitFor(async () => {
         try {
-          return readFileSync(join(productAgentPath(), ".codex", "config.toml"), "utf8");
+          return readFileSync(join(hostState().agent, ".codex", "config.toml"), "utf8");
         } catch {
           return null;
         }

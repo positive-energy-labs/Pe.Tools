@@ -1,3 +1,6 @@
+import { native } from "@pe/agent-contracts/handle";
+import * as contracts from "./contract.ts";
+import { body } from "@pe/host/read-graph";
 import {
   FAN_READ_MAX,
   ductsDesign,
@@ -70,10 +73,7 @@ const openFan = read("fans.open", {
 });
 
 /** The Fans read owns the join; its adapter has no untracked Work/file/native access. */
-export const fansSheet = read("fans.sheet", {
-  input: fansReadArgs,
-  output: fansSheetData,
-  async run(ctx, args) {
+export const fansSheet = body(contracts.sheet, async function(ctx, args) {
     const fans = await ctx.read(fanRoster, { target: args.target });
     const chosen =
       args.fan === "all"
@@ -145,7 +145,7 @@ export const fansSheet = read("fans.sheet", {
       ),
     ].sort((a, b) => a - b);
     const geometry = ids.length
-      ? await ctx.native("ducts.snapshot.walk", {
+      ? await ctx.read(native("ducts.snapshot.walk"), {
           role: "acquire",
           request: {
             slots: ductParameterSlots(settings),
@@ -175,7 +175,6 @@ export const fansSheet = read("fans.sheet", {
           }
         : { kind: "absent" },
     }));
-  },
-});
+  });
 
 export const reads = { sheet: fansSheet, roster: fanRoster, pressureSheet: ductSheet };

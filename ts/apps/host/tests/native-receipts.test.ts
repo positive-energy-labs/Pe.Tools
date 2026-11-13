@@ -17,10 +17,21 @@ const step: ActionStep = {
   key: "takeoffs.partition",
   kind: "native",
   input: { zoneRegion: 1 },
+  transport: "sdk",
   state: "unknown",
   error: "reply lost",
   status: 503,
 };
+
+test("process-exit recovery marks only a dispatched bridge request uncertain", async () => {
+  const envelope = JSON.parse(sdkEnvelope({ requestId: step.id, state: "abandoned" }));
+  envelope.diagnostics = [{ code: "op.process-dead", detail: "Original process exited", fix: null }];
+  const read = async () => JSON.stringify(envelope);
+  const bridge = await readNativeReceipt({ ...step, transport: "bridge", dispatchedAt: "2026-11-13T00:00:00Z" }, originalProcess, read);
+  expect(bridge.step).toMatchObject({ state: "failed", transport: "bridge", touched: { kind: "unknown", reason: "process-exit" } });
+  const sdk = await readNativeReceipt({ ...step, transport: "sdk", dispatchedAt: "2026-11-13T00:00:00Z" }, originalProcess, read);
+  expect(sdk.step).not.toHaveProperty("touched");
+});
 test("original process freeze requires one exact bridge incarnation before native dispatch", async () => {
   expect(await readOriginalProcess(42, 1000, sdkSessions)).toEqual(originalProcess);
   await expect(readOriginalProcess(42, 1001, sdkSessions)).rejects.toThrow(/Cannot prove/);
@@ -47,7 +58,7 @@ test("production SDK reader uses exact generated selector; mismatched or unresol
     startedUtc: originalProcess.processStartUtc,
     completedUtc: "1970-01-01T00:00:02.0000000Z",
   };
-  const result = { state: "ok", requestId: step.id, receipt, response: { written: true } };
+  const result = { state: "ok", requestId: step.id, receipt, response: { payload: { written: true }, touched: { kind: "wrote", transactions: [], added: 0, modified: 1, deleted: 0 } } };
   const read = async (args: readonly string[]) => {
     const selector = {
       requestId: step.id,
@@ -66,8 +77,11 @@ test("production SDK reader uses exact generated selector; mismatched or unresol
     await writeFile(file, sdkEnvelope(result));
     expect((await readNativeReceipt(step, originalProcess, read)).step).toMatchObject({
       id: step.id,
+      transport: "sdk",
       state: "succeeded",
       result: { written: true },
+      touched: result.response.touched,
+      opReceipt: { requestId: step.id, key: step.key, verdict: "ok" },
     });
     for (const altered of [
       { ...result, requestId: "another-request" },
@@ -92,7 +106,7 @@ test("production SDK reader uses exact generated selector; mismatched or unresol
         ...result,
         state: "failed",
         receipt: { ...receipt, verdict: "failed" },
-        response: { error: "central unreachable", statusCode: 409 },
+        response: { error: "central unreachable", statusCode: 409, touched: { kind: "none" } },
       }),
     );
     expect((await readNativeReceipt(step, originalProcess, read)).step).toEqual({
@@ -103,6 +117,10 @@ test("production SDK reader uses exact generated selector; mismatched or unresol
       state: "failed",
       error: "central unreachable",
       status: 409,
+      transport: "sdk",
+      opReceipt: { requestId: step.id, key: step.key, pid: originalProcess.pid,
+        processStartUtc: originalProcess.processStartUtc, verdict: "failed" },
+      touched: { kind: "none" },
     });
     await writeFile(
       file,
@@ -110,7 +128,7 @@ test("production SDK reader uses exact generated selector; mismatched or unresol
         ...result,
         state: "refused",
         receipt: { ...receipt, verdict: "refused" },
-        response: { error: "queue refusal", statusCode: 423, outcome: "RefusedQueueUnresponsive" },
+        response: { error: "queue refusal", statusCode: 423, outcome: "RefusedQueueUnresponsive", touched: { kind: "none" } },
       }),
     );
     expect((await readNativeReceipt(step, originalProcess, read)).step).toMatchObject({
@@ -124,7 +142,7 @@ test("production SDK reader uses exact generated selector; mismatched or unresol
         ...result,
         state: "cancelled",
         receipt: { ...receipt, verdict: "cancelled" },
-        response: { error: "stopped at checkpoint", statusCode: 499 },
+        response: { error: "stopped at checkpoint", statusCode: 499, touched: { kind: "rolledBack" } },
       }),
     );
     expect((await readNativeReceipt(step, originalProcess, read)).step).toMatchObject({
@@ -170,7 +188,7 @@ test("production SDK reader uses exact generated selector; mismatched or unresol
       }),
     );
     expect((await readNativeReceipt(step, originalProcess, read)).step).toEqual(step);
-    await writeFile(file, sdkEnvelope({ ...result, response: null }));
+    await writeFile(file, sdkEnvelope({ ...result, response: { payload: null, touched: { kind: "none" } } }));
     expect((await readNativeReceipt(step, originalProcess, read)).step).toMatchObject({
       state: "succeeded",
       result: null,

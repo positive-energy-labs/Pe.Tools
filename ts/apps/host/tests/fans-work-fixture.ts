@@ -1,3 +1,5 @@
+import { stateFixture } from "../../../tests/isolated-home/storage.ts";
+import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { actAs } from "./callers.ts";
 import { nativeReadRoot } from "../src/app.ts";
 import { HostNativeRead } from "@pe/host-internal/native-read";
@@ -5,7 +7,7 @@ import { NativeReads } from "../src/native-reads.ts";
 import type { RequestIdentityData } from "@pe/host-internal/request-contracts";
 import { testHostInputs, journalAt, callRouteOver } from "./effect-test.ts";
 import { testDuctFiles } from "./effect-test.ts";
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { NodeCrypto, NodeServices, NodeHttpClient } from "@effect/platform-node";
@@ -30,7 +32,7 @@ import { RunRegistry } from "../src/run-registry.ts";
 import { bindControl } from "../src/control.ts";
 import { hostResourceObserver } from "../src/resource-adapters.ts";
 import type { ReadSources } from "../src/reads/inputs.ts";
-import { Publications } from "../src/reads/evaluator.ts";
+import { Publications } from "../src/reads/publications.ts";
 import { graphRoute } from "../src/reads/routes.ts";
 import { sheetPort } from "./ducts-read.fixture.ts";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
@@ -60,15 +62,15 @@ export async function nativeFixture(
   try {
     const saved = new RouteWorkspace({
       registrations: [],
-      store: fileRouteDocumentStore(join(dir, "work")),
+      store: fileRouteDocumentStore(stateFixture(join(dir, "work"))),
     });
     const context = await settle(
       Layer.buildWithScope(
         Layer.mergeAll(
           admittedBuiltinsLayer(saved),
           RunRegistry.layer.pipe(Layer.provide(NodeCrypto.layer)),
-          RevitBridgeLive.pipe(Layer.provide(ActionJournalService.live(null, join(dir, "bridge-receipts")))),
-          CaptureStore.layer(join(dir, "captures")),
+          RevitBridgeLive.pipe(Layer.provide(ActionJournalService.live(null, stateFixture(join(dir, "bridge-receipts"))))),
+          CaptureStore.layer(stateFixture(join(dir, "captures"))),
         ),
         scope,
       ),
@@ -346,7 +348,7 @@ export async function nativeFixture(
       journal,
       workspace: saved,
       registrations: [],
-      store: fileRouteDocumentStore(join(dir, "work")),
+      store: fileRouteDocumentStore(stateFixture(join(dir, "work"))),
       heads: { observe: () => () => {} },
       navigation: {
         threads: async () => [],

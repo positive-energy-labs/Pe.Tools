@@ -1,18 +1,18 @@
+import { native } from "@pe/agent-contracts/handle";
+import * as contracts from "./contract.ts";
+import { body } from "@pe/host/read-graph";
 import { z } from "zod";
-import {
-  readingRequestSchema,
-  executionTargetSchema,
+import { readingRequestSchema,
   takeoffsRouteState,
   takeoffCaptureSchema,
   takeoffCaptureSummarySchema,
   stagedAdoptChoices,
   candidateRegionSchema,
   documentRefSchema,
-  nativeOutputSchema,
-} from "@pe/agent-contracts";
-import { adoptionArgs, adoptionData, viewCatalogueArgs, viewCatalogueData } from "@pe/agent-contracts/takeoff-read";
+  nativeOutputSchema, } from "@pe/agent-contracts";
+import { adoptionData } from "@pe/agent-contracts/takeoff-read";
 import { adoptDrafts } from "@pe/agent-contracts/takeoff-adoption";
-import { leaf, read, documentMark } from "@pe/host/read-graph";
+import { leaf, documentMark } from "@pe/host/read-graph";
 import { projectTakeoffViews } from "../../../../packages/mcps/src/shared/takeoff-ops.ts";
 import { workRead, workBinding } from "@pe/host/reads/inputs";
 const captured = leaf("resource", readingRequestSchema, takeoffCaptureSchema.nullable());
@@ -23,10 +23,7 @@ export const takeoffSnapshotInput = z.object({
 });
 const retained = leaf("file:takeoff-capture", takeoffSnapshotInput, takeoffCaptureSchema, false);
 const captures = leaf("resource", readingRequestSchema, z.array(takeoffCaptureSummarySchema));
-const viewCatalogue = read("takeoffs.views", {
-  input: viewCatalogueArgs.extend({ target: executionTargetSchema }),
-  output: viewCatalogueData,
-  async run(ctx, args) {
+const viewCatalogue = body(contracts.views, async function(ctx, args) {
     const { target } = args;
     if (target.kind !== "document") throw Error("Choose an open project document");
     await ctx.read(documentMark, target.ref);
@@ -38,7 +35,7 @@ const viewCatalogue = read("takeoffs.views", {
         capturedViews: [],
       };
     }
-    const index = (await ctx.native("revit.catalog.project-index", {
+    const index = (await ctx.read(native("revit.catalog.project-index"), {
       target, request: {
         sections: ["Views"], includeUnplacedViews: true, projection: { view: "Handles" },
       },
@@ -48,14 +45,10 @@ const viewCatalogue = read("takeoffs.views", {
       viewOptions: index.views.map((row) => ({ id: row.name, label: row.name })),
       capturedViews: projectTakeoffViews(index),
     };
-  },
-});
+  });
 export const reads = {
   views: viewCatalogue,
-  adoption: read("takeoffs.adoption", {
-    input: adoptionArgs.extend({ target: executionTargetSchema }),
-    output: adoptionData,
-    async run(ctx, args) {
+  adoption: body(contracts.adoption, async function(ctx, args) {
       const { target } = args;
       if (target.kind !== "document") throw Error("Choose an open project document");
       await ctx.read(documentMark, target.ref);
@@ -79,7 +72,7 @@ export const reads = {
             target: target.ref,
             views: catalogue.capturedViews,
             snapshot: (
-              await ctx.native("takeoffs.snapshot", {
+              await ctx.read(native("takeoffs.snapshot"), {
                 target,
                 request: { views: zones.length ? [] : views, zoneGuids: zones },
               })
@@ -92,7 +85,7 @@ export const reads = {
         : (
             await Promise.all(
               views.map((view) =>
-                ctx.native("takeoffs.candidates", {
+                ctx.read(native("takeoffs.candidates"), {
                   target,
                   request: { view },
                 }),
@@ -134,6 +127,7 @@ export const reads = {
         rows,
         initialize: {
           request: { stage: snapshot?.carriers.stage ?? "Adoption" },
+          missingCarrierGuids: snapshot?.carriers.missingCarrierGuids ?? [],
           refusal:
             refusal ??
             (snapshot?.carriers.status === "needs-initialization"
@@ -147,6 +141,5 @@ export const reads = {
           refusal: refusal ?? (grouped.size ? null : "Select regions to adopt"),
         },
       });
-    },
-  }),
+    }),
 };

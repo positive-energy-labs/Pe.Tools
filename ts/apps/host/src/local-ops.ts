@@ -1,3 +1,4 @@
+import { hostState } from "./host-ownership.ts";
 import { spawn } from "node:child_process";
 import { isAbsolute, join, normalize, resolve } from "node:path";
 import { Effect, FileSystem } from "effect";
@@ -22,7 +23,7 @@ import { readFileStringOrEmpty, statOrNull } from "./files/index.ts";
 import type { PeaRuntimeCapabilities } from "@pe/runtime";
 import { resolveHostVersion } from "./host-lifecycle.ts";
 import { hostCapabilities, hostOwnership } from "./host-ownership.ts";
-import { productAgentPath } from "./product-paths.ts";
+
 import { homesFound } from "@pe/host-contracts/product-paths";
 import { processCustody } from "./machine.ts";
 
@@ -40,7 +41,7 @@ const RUNTIME_IDENTITY = `pe-host-ts/${process.version}`;
 
 function resolvePeaWorld() {
   // The agent's working directory, not a home: the id follows the one place Pea works in.
-  const root = resolve(productAgentPath());
+  const root = resolve(hostState().agent);
   return {
     id: `pea:${Buffer.from(root).toString("base64url")}`,
     root,

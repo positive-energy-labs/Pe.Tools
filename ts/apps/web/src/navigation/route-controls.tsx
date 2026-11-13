@@ -10,10 +10,10 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { useRouterState } from "@tanstack/react-router";
-import { HostedChrome } from "#/route/hosted-chrome";
+import { DockBand } from "../shell/pane-actions";
 import { routePath } from "./model";
 
-export type RouteControlName = "controls" | "lamp" | "situation" | "palette" | "inspector";
+export type RouteControlName = "controls" | "lamp" | "palette" | "inspector";
 export type SituationSignal = {
   kind: "history" | "failure" | "busy" | "health" | "ready" | "unbound";
   tone: "nav" | "alarm" | "commit" | "caution" | "done";
@@ -21,6 +21,8 @@ export type SituationSignal = {
   stamp: string;
 };
 type Slot = {
+  band: HTMLElement | null;
+  setBand: (node: HTMLElement | null) => void;
   elements: Partial<Record<RouteControlName, HTMLElement | null>>;
   owners: Partial<Record<RouteControlName, symbol | null>>;
   claim: (slot: RouteControlName, owner: symbol) => void;
@@ -45,10 +47,28 @@ type Slot = {
 };
 type PagePalette = { owner: symbol; open: boolean; set: (open: boolean) => void };
 const Context = createContext<Slot | null>(null);
-export function useHasGlobalNavigation() {
-  return useContext(Context) != null;
+/** The shell owns the band outlet. Routes cannot claim or replace the Situation slot. */
+export function BandOutlet({ className }: { className?: string }) {
+  return <div ref={useContext(Context)?.setBand} className={className} />;
+}
+export function useHasBand() {
+  return useContext(Context)?.band != null;
+}
+export function RouteBand({ route, children }: { route: string; children: ReactNode }) {
+  const shell = useContext(Context), dock = useContext(DockBand);
+  const primary = useIsPrimaryRoute(route);
+  const target = dock ? dock.node : primary ? shell?.band : null;
+  const [host] = useState(() => typeof document === "undefined" ? null : document.createElement("div"));
+  useLayoutEffect(() => {
+    if (!target || !host) return;
+    host.className = "contents";
+    target.replaceChildren(host);
+    return () => host.remove();
+  }, [target, host]);
+  return target && host ? createPortal(children, host) : null;
 }
 export function RouteControlsProvider({ children }: { children: ReactNode }) {
+  const [band, setBand] = useState<HTMLElement | null>(null);
   const [elements, setElements] = useState<Slot["elements"]>({});
   const [owners, setOwners] = useState<Slot["owners"]>({});
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -88,6 +108,7 @@ export function RouteControlsProvider({ children }: { children: ReactNode }) {
   return (
     <Context
       value={{
+        band, setBand,
         elements,
         setElement,
         owners,
@@ -185,7 +206,7 @@ export function usePublishSituationSignal(route: string, value: SituationSignal)
 export function useSituationPresentation(route: string) {
   const slot = useContext(Context);
   const primary = useIsPrimaryRoute(route);
-  return !primary || !slot?.owners.situation || slot.drawerOpen;
+  return !primary || !slot?.band || slot.drawerOpen;
 }
 export function usePublishSituationPresentation(open: boolean) {
   const setOpen = useContext(Context)?.setDrawerOpen;
@@ -199,7 +220,7 @@ export function useRouteControlPresence(slot: RouteControlName) {
 }
 export function useIsPrimaryRoute(route: string) {
   const slot = useContext(Context);
-  const hosted = useContext(HostedChrome);
+  const hosted = useContext(DockBand);
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   return slot != null && hosted == null && pathname === routePath(route);
 }
@@ -244,7 +265,7 @@ export function PrimaryRouteControls({
   children: ReactNode;
 }) {
   const slot = useContext(Context);
-  const hosted = useContext(HostedChrome);
+  const hosted = useContext(DockBand);
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const token = useRef(Symbol(route)).current;
   const [portalHost] = useState(() => {

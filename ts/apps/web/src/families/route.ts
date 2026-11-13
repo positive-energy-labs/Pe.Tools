@@ -1,5 +1,5 @@
-import type { ContextOf } from "../route/defaults";
-import { command, sessionCommand } from "../route/typed-actions.ts";
+import type { ContextOf, Verbs } from "../route/defaults";
+import { handle } from "@pe/agent-contracts/handle";
 import { read } from "../route/defaults";
 import { paneLayout } from "../route/defaults";
 import { z } from "zod";
@@ -11,7 +11,7 @@ import {
   cellPatches,
   showFamilyCell,
 } from "@pe/agent-contracts";
-import { reads } from "./reads.ts";
+import * as reads from "./contract.ts";
 import { route, field } from "../route/defaults.ts";
 import { hostRead } from "../route/host-read.ts";
 import { draw } from "../route/draw.tsx";
@@ -37,7 +37,7 @@ export const edit = z.object({
   current: z.string(),
 });
 export const view = read(hostRead(reads.view));
-export type FamiliesDrawContext = ContextOf<typeof fields, typeof view, typeof import("@pe/agent-contracts").familiesRouteState, typeof edit>;
+export type FamiliesDrawContext = ContextOf<typeof fields, typeof view, typeof import("@pe/agent-contracts").familiesRouteState, typeof edit, Verbs<"read" | "stop", "apply">>;
 export const module = route({
   key: "families",
   name: "Families",
@@ -67,6 +67,7 @@ export const module = route({
       // ground (design ledger default 6, 2026-11-11).
       ground: "artifact",
       draw: draw("scroll", () => import("./matrix.tsx"), "FamiliesMatrix"),
+      verbs: ["read", "stop", "apply"],
     },
   },
   edits: {
@@ -87,9 +88,9 @@ export const module = route({
     history: z.object({ label: z.string() }),
     describe: (detail) => ({ label: detail.label }),
   },
-  commands: {
+  verbs: {
     read: {
-      ...sessionCommand("families.read"),
+      handle: handle("families.read"),
       label: "Read families",
       input: ({ work }, supplied) => {
         if (!work) throw Error("Wait for Families Work before reading");
@@ -102,7 +103,7 @@ export const module = route({
       },
     },
     stop: {
-      ...sessionCommand("families.cancel-read"),
+      handle: handle("families.cancel-read"),
       label: "Stop family read",
       input: ({ page, value }) => {
         const readId = value?.activeReadId || page.readId;
@@ -111,9 +112,9 @@ export const module = route({
       },
     },
     apply: {
-      ...command("families.apply"),
+      handle: handle("families.apply"),
       label: "Apply families",
-      present: (_result, _data, work) => ({
+      present: (_result, { doc: work }) => ({
         sentence: "Review family parameter changes",
         rows: Object.entries(work.cells).flatMap(([key, cell]) => {
           if (!cell.edit) return [];

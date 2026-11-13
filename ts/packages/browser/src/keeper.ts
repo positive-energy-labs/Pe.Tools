@@ -4,9 +4,11 @@ import { appendFile, mkdir, open, readFile, rm, writeFile } from "node:fs/promis
 import { join, resolve } from "node:path";
 import { spawn } from "node:child_process";
 import { Effect, Semaphore } from "effect";
-import type { KeeperConfig, SessionInfo, SessionReceipt, Viewport } from "./browser.ts";
+import type { SessionInfo, SessionReceipt, Viewport } from "./browser.ts";
+import { decodeKeeperConfig } from "./keeper-config.ts";
 import { connectCdp, type CdpClient } from "./cdp.ts";
 import { getBrowserEndpoint, getProtocol } from "./protocol.ts";
+import { stateDirectory } from "@pe/host-contracts/service-identity";
 import { CLOSE_BUDGET_MS, publishJson, publishSessionReceipt } from "./receipts.ts";
 import { acquireAttachment, releaseAttachment, type AttachmentLock } from "./attachment-lock.ts";
 import { guardianClient } from "./attached-guardian.ts";
@@ -93,8 +95,9 @@ async function holdViewport(cdp: CdpClient, targetId: string, want: Viewport): P
 }
 
 export async function runBrowserKeeper(configFile: string): Promise<void> {
-  const config: KeeperConfig = JSON.parse(await readFile(configFile, "utf8"));
-  const directory = join(config.home, config.id);
+  const config = decodeKeeperConfig(JSON.parse(await readFile(configFile, "utf8")));
+  const storage = stateDirectory(config.home, config.id);
+  const directory = storage.path;
   const viewport = config.open?.viewport ?? defaultViewport;
   const receiptFile = join(directory, "session.json");
   const trace = (phase: string, detail?: unknown) =>
@@ -131,7 +134,7 @@ export async function runBrowserKeeper(configFile: string): Promise<void> {
   let errorCode: string | undefined;
   let errorData: unknown;
   const writeReceipt = async (status: "active" | "closed") => {
-    await publishSessionReceipt(receiptFile, {
+    await publishSessionReceipt(storage, {
       ...(receipt ?? { controlPort: 0, token: config.token }),
       info,
       status,
@@ -170,7 +173,7 @@ export async function runBrowserKeeper(configFile: string): Promise<void> {
           closing = true;
           const deadlineMs = Date.now() + CLOSE_BUDGET_MS;
           yield* ignore(() =>
-            publishJson(join(directory, "closing.json"), { receiptId: info.receiptId, deadlineMs }),
+            publishJson(storage, "closing.json", { receiptId: info.receiptId, deadlineMs }),
           );
           yield* ignore(() => trace("cleanup.begin"));
           for (const operation of pending.values()) operation.controller.abort();
@@ -333,7 +336,7 @@ export async function runBrowserKeeper(configFile: string): Promise<void> {
           };
           attachmentLock = await acquireAttachment(info.endpoint, {
             id: info.id,
-            home: config.home,
+            home: config.home.path,
             receipt: receiptFile,
             receiptId: info.receiptId,
           });
@@ -348,6 +351,7 @@ export async function runBrowserKeeper(configFile: string): Promise<void> {
             JSON.stringify({
               endpoint: info.endpoint,
               receipt: receiptFile,
+              storage,
               lock: attachmentLock,
               timeoutMs: config.attach?.timeoutMs ?? 20000,
             }),

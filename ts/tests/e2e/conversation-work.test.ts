@@ -1282,7 +1282,18 @@ test("persisted Work edit, stale writer, subject switch and undo share the real 
         { timeout: 20_000 },
       )
       .toBe(true);
-    const undone = await request(target, "history", { direction: "undo", expectedRevision: 3 });
+    // The Timeline's step door (ADR 0042): read the step the host offers this person, send it back.
+    const works = [(await request(target)).body.handle.key];
+    const timeline = await page.read<{ value?: { data?: { undo?: unknown } } }>(`(async () => {
+      const { hostFetch } = await import('/src/host/runtime.ts');
+      const read = ${JSON.stringify({ read: "work.timeline", args: { works }, subscription: "http-journey-undo", generation: 0 })};
+      const post = (body) => hostFetch('/pe/reads/value', { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+      const shown = await (await post(read)).json();
+      await post({ ...read, release: true });
+      return shown;
+    })()`);
+    expect(timeline.value?.data?.undo, "the Timeline offers the person's edit").toMatchObject({ revision: 3 });
+    const undone = await request(target, "history", { direction: "undo", works, expected: timeline.value!.data!.undo });
     expect(undone.body).toMatchObject({
       ok: true,
       write: { by: "human", kind: "restore", base: 3, revision: 4 },

@@ -7,7 +7,7 @@ import { runtimeRoot } from "@pe/runtime/runtime-owner";
 import z from "zod";
 import { createPeClient } from "@pe/agent-contracts/pe-api";
 import { contextFetch, invocationContext } from "@pe/runtime/context";
-import { derivedKey, writeDerived } from "@pe/host-contracts/store";
+import { derivedKey, writeDerivedIn } from "@pe/host-contracts/kinds";
 import {
   llamaParser,
   parsedPagesSchema,
@@ -205,7 +205,7 @@ ${full.slice(0, MAX_TEXT_CHARS)}`,
       totalPages: parsed.totalPages,
       pages: parsed.pages.map((page) => ({ pageNum: page.pageNum, text: page.text })),
     };
-    writeDerived(store, key, JSON.stringify(kept));
+    writeDerivedIn(store, key, JSON.stringify(kept));
   }
   const pageTexts = kept.pages;
   const counted = hosted

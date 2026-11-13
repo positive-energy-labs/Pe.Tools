@@ -8,11 +8,13 @@
  * replace `name === derivedName(key, bytes)` with `true` (the forged file is then served).
  */
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, sep } from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
-import { readStoredNotices, storedNoticesFile } from "@pe/host-contracts/store";
+import { notices as storedNotices } from "@pe/host-contracts/kinds";
+import { stateTree } from "@pe/host-contracts/service-identity";
 import { withInvocationContext } from "@pe/runtime/context";
 import { runtimeRoot } from "@pe/runtime/runtime-owner";
 import { sendHeldParse, sha256Of } from "../src/shared/held-parse.ts";
@@ -99,7 +101,9 @@ test("person A parses a document once; person B, same project home, parses nothi
       calls.push(`${method} ${url.pathname}`);
       if (url.pathname === "/pe/outward/held") {
         const body = JSON.parse(String(init?.body ?? (await request?.text())));
-        return Response.json({ held: { ...body, id: "h1", at: "2026-11-12T00:00:00.000Z", thread: "t1" }, message: "Held" });
+        return Response.json({ held: { ...body, id: "h1", at: "2026-11-12T00:00:00.000Z", thread: "t1" },
+          message: "Held",
+        });
       }
       if (method === "POST") return Response.json({ id: "job-1", project_id: "p", status: "PENDING" });
       return Response.json({
@@ -144,11 +148,13 @@ test("person A parses a document once; person B, same project home, parses nothi
     expect(existsSync(join(dir, person, ".local-state", "state", "Derived"))).toBe(false);
 });
 
-test("a derived file whose name does not match its bytes is refused and discarded with one notice", async () => {
+test("a derived file whose name does not match its bytes is refused and skipped with one notice, and its bytes are kept", async () => {
   become("a");
   await read({ path: file, pages: "1" });
   const [name] = readdirSync(derived);
-  const forged = JSON.stringify({ totalPages: 1, pages: [{ pageNum: 1, text: "FORGED 9.99 IN WG" }] });
+  const forged = JSON.stringify({
+    totalPages: 1, pages: [{ pageNum: 1, text: "FORGED 9.99 IN WG" }],
+  });
   writeFileSync(join(derived, name!), forged);
   expect(mismatched(derived)).toEqual([name]);
 
@@ -159,9 +165,13 @@ test("a derived file whose name does not match its bytes is refused and discarde
   expect(parses.count).toBe(2);
   await read({ path: file, pages: "1" });
   expect(parses.count).toBe(2);
-  const notices = readStoredNotices(storedNoticesFile(runtimeRoot()));
-  expect(notices.map((n) => [n.class, n.path, n.sha256])).toEqual([["discard", join(derived, name!), sha(Buffer.from(forged))]]);
+  const notices = storedNotices(stateTree(runtimeRoot()));
+  expect(notices.map((n) => [n.class, n.path, n.sha256])).toEqual([["keep", join(derived, name!), sha(Buffer.from(forged))],
+  ]);
+  // The reader removed nothing (K-A1). B's own parse then wrote the true bytes under that name
+  // through the write door, which rested the forged bytes in B's blob store first.
   expect(mismatched(derived)).toEqual([]);
+  expect(readFileSync(join(runtimeRoot(), "state", "Blobs", "sha256", sha(Buffer.from(forged))), "utf8")).toBe(forged);
 });
 
 test("with no project home the parse lands under the machine state root, never the user home or a temp folder", async () => {

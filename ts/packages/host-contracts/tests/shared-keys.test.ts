@@ -2,7 +2,12 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { keyRefusalText, resolveKey } from "../src/shared-keys.ts";
+import { keyRefusalText, resolveKey as resolve } from "../src/shared-keys.ts";
+
+import { stateTree } from "../src/service-identity.ts";
+const machine = stateTree(mkdtempSync(join(tmpdir(), "pe-keys-machine-")));
+const resolveKey = (user: string | null, role: Parameters<typeof resolve>[1]) =>
+  resolve(user, role, machine);
 
 afterEach(() => vi.unstubAllEnvs());
 const sharedWith = (text: string) => {

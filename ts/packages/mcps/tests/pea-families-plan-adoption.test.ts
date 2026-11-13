@@ -1,5 +1,6 @@
 import { expect, onTestFinished, test } from "vite-plus/test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { rm } from "node:fs/promises";
+import { mkdtemp, stateFixture } from "../../../tests/isolated-home/storage.ts";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect, Exit, Layer, Scope } from "effect";
@@ -29,7 +30,7 @@ async function fixture() {
   const scope = Scope.makeUnsafe();
   const workspace = new RouteWorkspace({
     registrations: [],
-    store: fileRouteDocumentStore(join(dir, "work")),
+    store: fileRouteDocumentStore(stateFixture(join(dir, "work"))),
   });
   await Effect.runPromise(Layer.buildWithScope(admittedBuiltinsLayer(workspace), scope));
   const ref = { session: "B", openId: "open-B" };
@@ -75,7 +76,7 @@ async function fixture() {
       id?: string,
     ) =>
       Effect.promise(async () => {
-        if (id) await markDispatched(id);
+        if (id) await markDispatched(id, "bridge");
         dispatched.push(operation);
         const value =
           operation === "revit.catalog.loaded-families"
@@ -263,6 +264,9 @@ test("R7 Families HTTP applies reserve the adopted Plan across distinct outer pr
     f.invoke("second-apply", turn.token, "families.apply"),
   ]);
   expect(rows.map((row) => row.state).sort()).toEqual(["failed", "succeeded"]);
-  expect(rows.find((row) => row.state === "failed")).toMatchObject({ notDispatched: true, steps: [] });
+  expect(rows.find((row) => row.state === "failed")).toMatchObject({
+    notDispatched: true,
+    steps: [],
+  });
   expect(f.dispatched.filter((operation) => operation === "families.apply")).toHaveLength(1);
 });

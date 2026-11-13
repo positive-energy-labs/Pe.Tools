@@ -22,7 +22,7 @@ export function pageLink(href: string, frontend: string) {
     const page = {
       page: oneName(slug),
       view: true,
-      query: url.search.slice(1),
+      query: Object.fromEntries(url.searchParams),
       fragment: url.hash.slice(1),
     };
     return { slug, page, href: routeAddress("bind").link(page) };

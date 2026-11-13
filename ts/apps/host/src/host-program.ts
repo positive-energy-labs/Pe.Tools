@@ -1,6 +1,5 @@
 import { createHash } from "node:crypto";
-import { productPathNames } from "@pe/host-contracts/contracts";
-import { noteStored } from "@pe/host-contracts/store";
+import { note, type StateDirectory } from "@pe/host-contracts/kinds";
 import type { ReceiptStamp } from "@pe/agent-contracts";
 import { HostInputContext } from "./input-context.ts";
 import {
@@ -10,7 +9,6 @@ import {
   type HostInputLane,
 } from "./native-recording.ts";
 import { InvalidRead } from "./native-reads.ts";
-import { storedNoticesPath } from "./notice-feed.ts";
 
 import { linkedCatalog } from "@pe/agent-contracts/pe-api";
 import { execFile, spawn } from "node:child_process";
@@ -22,7 +20,7 @@ import { serviceFilePath, type ServiceFile } from "@pe/host-contracts/pe-service
 import type { ServiceHostHandle } from "@pe/host-contracts/pe-service-host";
 import { openWindow, prepareHostBinding, resolveHostVersion } from "./host-lifecycle.ts";
 import { makeHttpLive, resolveWebRoot } from "./app.ts";
-import { hostCapabilities, hostOwnership } from "./host-ownership.ts";
+import { hostCapabilities, hostOwnership, hostState } from "./host-ownership.ts";
 import { trayOwnerArguments } from "@pe/host-contracts/service-identity";
 import { makeInstalledUpdateReader } from "./update-route.ts";
 import { ActionJournalService } from "./receipt-services.ts";
@@ -60,18 +58,19 @@ export const hostInputs = (stamp: ReceiptStamp | null, selection: HostInputSelec
     const reader = yield* openRecordingReader(selection.directory, identity, bounds);
     return yield* HostInputContext.pipe(Effect.provide(HostInputContext.layer({ kind: "recording", recordingStore: reader, at: null, bindings: selection.bindings && new Map(selection.bindings) })));
   }
-  const directory = join(hostOwnership.rootPath, productPathNames.stateDirectoryName, "recordings", createHash("sha256").update(identity.build).digest("hex"), identity.catalog, hostOwnership.serviceName, "history");
+  const storage = hostState().directory("recordings", createHash("sha256").update(identity.build).digest("hex"), identity.catalog, hostOwnership.serviceName, "history");
+  const directory = storage.path;
   // Automatic capture is ancillary to live input: a store that cannot open stops recording before
   // its first taking, not the host. That now covers every writer error, so a `takings.jsonl` line
   // torn by a crash (`recording.tamper`) no longer fails host start (ADR 0039: nothing stops the
   // host). The bundle is never opened for writing and its bytes stay, so tamper stays strict as
   // evidence; the stop is one notice, de-duplicated by the bundle's path. An explicit
   // `--recording` read above still fails on the same problems, because that is what was asked for.
-  const lane = yield* openRecordingWriter(directory, identity, bounds).pipe(
+  const lane = yield* openRecordingWriter(storage, identity, bounds).pipe(
     Effect.map((writer): HostInputLane => ({ kind: "live", captureStore: writer })),
     Effect.catch((error) =>
       Effect.sync((): HostInputLane => {
-        noteStored(storedNoticesPath(), {
+        note(hostState(), {
           class: "keep",
           place: "Recording history",
           path: directory,
@@ -89,7 +88,7 @@ export const hostInputs = (stamp: ReceiptStamp | null, selection: HostInputSelec
  * inside it. The nesting is the order: the bridge releases first, so its last queue facts meet an
  * open journal, and the journal's Layer is the one closer. Tests build these two, not their own copy.
  */
-export const openJournal = (stamp: ReceiptStamp | null, dir?: string) =>
+export const openJournal = (stamp: ReceiptStamp | null, dir?: StateDirectory) =>
   Layer.build(ActionJournalService.live(stamp, dir));
 export const launchOverJournal = <J, ROut, E, R>(
   journal: Context.Context<J>,

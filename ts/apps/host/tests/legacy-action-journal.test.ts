@@ -1,6 +1,7 @@
+import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { journalAt } from "./effect-test.ts";
 import { randomUUID } from "node:crypto";
-import { mkdtemp, readFile, writeFile, readdir, rm } from "node:fs/promises";
+import { readFile, writeFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test, expect } from "vite-plus/test";

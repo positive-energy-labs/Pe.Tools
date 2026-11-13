@@ -60,6 +60,10 @@ The route kernel and every web route's shared shape ([ADR 0026](../../adr/0026-o
 - 2026-11-12, kaitpw: route-specific product code is out of kernel crusade 2, even where it touches a primitive. "any overly specific product code that its related to the deep primitive stuff can be left out too".
 - 2026-11-12, kaitpw ("take the defaults"): an unknown setting owner stays a 422 refusal; a subject is stored as kind and subject and named by one namer, never as a label string.
 
+- 2026-11-13, native step `effect` testimony was retired by `0817458c` under [MAP slice 7](MAP.md#ordered-deletable-slices): catalog effects grant scope, while terminal `touched` states what remains changed. The Fans refusal witness keeps its review, no-Apply and unchanged-Work assertions and checks that the retired field is absent.
+
+- 2026-11-13, `fedd433a` implements [MAP slice 12](MAP.md#ordered-deletable-slices): a docked route owns the band in its pane head; the duplicate `Pea context` row is retired. Folding retains the bound Place and adds no context row.
+
 ## Tried & rejected
 
 - 2026-11-04, dynamic `new URL` for nested Pod artifact paths excludes the nested file from Vite's emitted lookup and requests `undefined`; use literal bundled asset URLs. [Artifact law](../../../ts/apps/web/src/route/pod-fixtures.test.ts). (FIXTURE0)
@@ -208,7 +212,6 @@ The route kernel and every web route's shared shape ([ADR 0026](../../adr/0026-o
 
 - 2026-11-09 drive of /ducts and /fans (`.artifacts/tmp/timeline-spike/`): undo pressed on /fans undid the Ducts step but the Fans head read "you undid · r1"; the /fans Timeline popover listed Ducts entries and not Fans r1; redo right after undo refused "The selected history entry is no longer last"; undo refuses while the route re-reads after each edit; a second /fans tab lost its document ("Document unavailable; choose an exact document again.").
 - Join History points into the Work Timeline and delete the `HistoryRail` row; link points to steps and receipts through `reason.receipt`, receipt `snapshots` and ack `receiptId` (fields exist, no data uses them). See [ADR 0034](../../adr/0034-timeline-per-work-places-on-host.md).
-- Move Places from sessionStorage (`workbench/tabs.ts` `pe.places`) to a host store per device; live cross-window sync may follow.
 - Fix the web/host key drift that sends `PUT /pe/route-view/chat` to a 404 (`publish` in `route/view-bridge.ts`, called with `route: spec.key` by `shell/typed-shell.tsx`; the chat contract is `pea`, `chat/route.ts`).
 - Measure History replay and index the taking scan in `ts/apps/host/src/recording-points.ts` (formerly `history.ts:271`); the 16,629,415-byte Fans replay took 363 s; remove the labelled 600 s allowance (`ts/apps/host/tests/recorded-fans-graph.test.ts:717`) after proof. Evidence: `.artifacts/runs/kernel-crusade-20261104/takeover/WAVE-5.md:40`.
 - Measure full-web-suite setup and transform cost before tuning; the recorded run took 1389 s, with setup 1116 s and transform 574 s. Evidence: `.artifacts/runs/kernel-crusade-20261104/takeover/WAVE-5.md:105`.

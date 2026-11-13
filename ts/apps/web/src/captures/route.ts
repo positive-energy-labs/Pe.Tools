@@ -1,17 +1,14 @@
+import * as contracts from "./contract.ts";
 import type { ContextOf } from "../route/defaults";
 import { read } from "../route/defaults";
 import { paneLayout } from "../route/defaults";
 import { z } from "zod";
-import { valueRead } from "../../../../packages/agent-contracts/src/value.ts";
 import { field, route } from "../route/defaults.ts";
 import { hostRead } from "../route/host-read.ts";
 import { draw } from "../route/draw.tsx";
 
-import {
-  capturesArgs,
-  capturesValue,
-} from "../../../../packages/agent-contracts/src/captures-read.ts";
-export const loaded = read(hostRead(valueRead("captures.browse", capturesArgs, capturesValue)));
+import {  } from "../../../../packages/agent-contracts/src/captures-read.ts";
+export const loaded = read(hostRead(contracts.browse));
 export const fields = {
   focus: field(z.string(), "", "pose"),
   open: field(z.array(z.string()), [], "pose"),

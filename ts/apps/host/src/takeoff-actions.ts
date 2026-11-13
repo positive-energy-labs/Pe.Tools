@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { nativeRequestSchema } from "@pe/host-contracts/decoders";
+import { nativeRequestInput } from "./native-input.ts";
 import type { HostOperationKey } from "@pe/host-contracts/operation-types";
 import { lifetime } from "./document-lifetime.ts";
 import { command, io, nativeStep, refused, type CommandContext } from "./command-executor.ts";
@@ -144,7 +145,7 @@ export function takeoffExecutors(
   const bindCarrier = async (ctx: CommandContext, select?: () => Promise<void>) => {
     // Validate the final leaf before carrier preparation can make its first model write.
     const action = ctx.admission.key.replace(/\.preview$/, "");
-    const { work: _work, ...input } = ctx.admission.input;
+    const input = nativeRequestInput(ctx.admission.input);
     const leaf = action === "takeoffs.initialize" ? "takeoffs.initialize-carrier" : action;
     const requests = action === "takeoffs.adopt" ? z.array(z.unknown()).parse(input.views) : [
       action.endsWith(".partition") ? { ...input, runId: ctx.admission.id } : input,
@@ -174,6 +175,7 @@ export function takeoffExecutors(
     }));
   return {
     "takeoffs.initialize": command(commands["takeoffs.initialize"], preparedCarrierSchema, {
+      seal: (p) => ({ request: { process: p.process } }),
       bind: (ctx) => bindCarrier(ctx),
       run: (ctx, execution) =>
         runCarrier(ctx, execution, captures, bridge, ctx.admission.input.stage, () =>
@@ -199,9 +201,8 @@ export function takeoffExecutors(
       bind: (ctx) => bindCarrier(ctx),
       run: (ctx, execution) =>
         runCarrier(ctx, execution, captures, bridge, "Materialization", (native) => {
-          const { work: _work, ...input } = ctx.admission.input;
           return value(ctx, native, "takeoffs.partition", {
-            ...input,
+            ...nativeRequestInput(ctx.admission.input),
             runId: ctx.admission.id,
           });
         }),
@@ -220,8 +221,7 @@ export function takeoffExecutors(
         ),
       run: (ctx, execution) =>
         runCarrier(ctx, execution, captures, bridge, "Rooms", (native) => {
-          const { work: _work, ...input } = ctx.admission.input;
-          return value(ctx, native, "rooms.partition", { ...input, runId: ctx.admission.id });
+          return value(ctx, native, "rooms.partition", { ...nativeRequestInput(ctx.admission.input), runId: ctx.admission.id });
         }),
     }),
     "rooms.draw": command(commands["rooms.draw"], preparedCarrierSchema, {
@@ -229,8 +229,7 @@ export function takeoffExecutors(
       bind: (ctx) => bindCarrier(ctx, () => selectRooms(ctx, () => [])),
       run: (ctx, execution) =>
         runCarrier(ctx, execution, captures, bridge, "Rooms", (native) => {
-          const { work: _work, ...input } = ctx.admission.input;
-          return value(ctx, native, "rooms.draw", input);
+          return value(ctx, native, "rooms.draw", nativeRequestInput(ctx.admission.input));
         }),
     }),
     // TODO: docs/features/routes/LEDGER.md#s7-1cd8580b01 rooms.write native receipts report only a count; retain edits until receipts identify confirmed guid/field cells.
@@ -280,11 +279,11 @@ export function takeoffExecutors(
         ),
       run: (ctx, execution) =>
         runCarrier(ctx, execution, captures, bridge, "Rooms", (native) => {
-          const { work: _work, ...input } = ctx.admission.input;
-          return value(ctx, native, "rooms.merge", input);
+          return value(ctx, native, "rooms.merge", nativeRequestInput(ctx.admission.input));
         }),
     }),
     "takeoffs.sync": command(commands["takeoffs.sync"], preparedSyncSchema, {
+      seal: (p) => ({ request: { process: p.process, edits: p.edits, decisions: p.decisions, capture: p.capture.id } }),
       bind: async (ctx) => {
         const { target, process } = await bindModel(ctx, bridge, deps);
         const { input } = ctx.admission;
@@ -351,13 +350,11 @@ export function takeoffExecutors(
       },
       run: (ctx, execution) => {
         const { input } = ctx.admission;
-        const admission = ctx.admission;
         const target = modelTarget(ctx);
         const base = input.work;
-        const frozen = execution.prepared;
-        const submitted = { edits: frozen.edits, decisions: frozen.decisions };
-        const capture = frozen.capture;
-        const native = nativeFor(ctx, execution, bridge, frozen.process);
+        const { process, edits: stagedEdits, decisions, capture } = execution.prepared;
+        const submitted = { edits: stagedEdits, decisions };
+        const native = nativeFor(ctx, execution, bridge, process);
         return Effect.gen(function* () {
           captures.invalidate(target);
           const selected = new Set(input.zones);
@@ -464,7 +461,7 @@ export function takeoffExecutors(
                 } satisfies RhvacSyncRequest;
               });
           const syncFile = deps.syncFile;
-          const expectedVersion = admission.input.fileVersion as string;
+          const expectedVersion = input.fileVersion as string;
           const result = yield* execution.step(
             "file",
             "rhvac.sync",

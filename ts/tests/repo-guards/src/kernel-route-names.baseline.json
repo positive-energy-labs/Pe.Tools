@@ -10,7 +10,10 @@
     "ts/apps/host/src/reads/history.ts",
     "ts/apps/host/src/reads/inputs.ts",
     "ts/apps/host/src/reads/invalidations.ts",
+    "ts/apps/host/src/reads/publications.ts",
+    "ts/apps/host/src/reads/read-ownership.ts",
     "ts/apps/host/src/reads/routes.ts",
+    "ts/apps/host/src/reads/work-timeline.ts",
     "ts/apps/host/src/work-inputs.ts",
     "ts/apps/host/src/work-receipt-feed.ts",
     "ts/apps/host/src/work-start.ts",
@@ -23,7 +26,6 @@
     "ts/apps/web/src/shell/work-document.ts",
     "ts/apps/web/src/shell/work-door-observation.ts",
     "ts/apps/web/src/shell/work-feed-client.ts",
-    "ts/apps/web/src/shell/work-scope-acceptance.ts",
     "ts/apps/web/src/shell/work-scope.ts",
     "ts/apps/web/src/shell/work-writes.ts",
     "ts/packages/agent-contracts/src/write-intent.ts",
@@ -40,7 +42,8 @@
     "ts/packages/runtime/src/route-view-store.ts",
     "ts/packages/runtime/src/route-workspace.ts",
     "ts/packages/runtime/src/runtime-owner.ts",
-    "ts/packages/runtime/src/work-journal.ts"
+    "ts/packages/runtime/src/work-journal.ts",
+    "ts/packages/runtime/src/work-timeline.ts"
   ],
   "sites": {
     "routeNames": [

@@ -1,8 +1,8 @@
-import { harnessThreadSummarySchema } from "@pe/agent-contracts";
+import { harnessThreadSummarySchema, pageTargetReadingSchema } from "@pe/agent-contracts";
 import { useEffect, useState } from "react";
 import type { PageTargetReading, PageChoice } from "@pe/agent-contracts";
-import { Button } from "@pe/kit/lang/button";
 import { inventoryOf } from "../host/resource-state";
+import { peReadings } from "../host/resource-stream";
 import { BindPicker } from "./bind-picker";
 import { nameOf } from "#/route/typed-route";
 import type { BindContext } from "./route";
@@ -14,23 +14,22 @@ export function BindBody({ ctx }: { ctx: BindContext }) {
   // is kept with the slug it was read for, so one identity is compared in one form.
   const [reading, setReading] = useState<{ slug: string; value: PageTargetReading } | null>(null),
     [outcome, setOutcome] = useState<{ ok: boolean; message: string } | null>(null);
-  const read = () =>
-    ctx
-      .write("read")
-      .run()
-      .then((value) => setReading({ slug, value: value as PageTargetReading }));
-  const readShown = () =>
-    void read().catch((error) => setOutcome({ ok: false, message: String(error) }));
-  // A chosen Page is read on arrival; the button re-reads.
+  // The Page's target is a Reading on the tab's one stream, as the Page chip reads it: the host serves
+  // it on arrival and again when the binding moves, so nothing here asks twice.
   useEffect(() => {
-    if (slug && !page.view) readShown();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- one read per chosen Page
+    if (!slug || page.view) return;
+    return peReadings.subscribe({ kind: "page-target", slug }, (frame) => {
+      if (frame.kind === "failure") return setOutcome({ ok: false, message: frame.error });
+      if (frame.kind !== "snapshot") return;
+      const next = pageTargetReadingSchema.safeParse(frame.value);
+      if (next.success) setReading({ slug, value: next.data });
+      else setOutcome({ ok: false, message: next.error.message });
+    });
   }, [slug, page.view]);
   const bind = async (choice: PageChoice) => {
     try {
-      await ctx.write("bind").run(choice);
+      await ctx.verb("bind").run(choice);
       setOutcome({ ok: true, message: "Bound. The Page chip follows within 5 s." });
-      await read();
     } catch (error) {
       setOutcome({ ok: false, message: String(error) });
     }
@@ -46,14 +45,7 @@ export function BindBody({ ctx }: { ctx: BindContext }) {
   return (
     <>
       {/* The kernel draws the Page chooser from the subject slot (pane head); a route draws no second one. */}
-      <Button
-        label="Read current binding"
-        refusal={!slug ? "Choose a Page" : null}
-        onClick={readShown}
-      >
-        Read binding
-      </Button>
-      {!ctx.value.current && <p role="status">{ctx.value.reason}</p>}
+      {ctx.value.reason && <p role="status">{ctx.value.reason}</p>}
       <BindPicker
         slug={slug}
         reading={reading?.slug === slug ? reading.value : null}

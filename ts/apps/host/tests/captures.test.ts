@@ -1,3 +1,7 @@
+import { stateFixture, stateMachine } from "../../../tests/isolated-home/storage.ts";
+import { notices as storedNotices } from "@pe/host-contracts/kinds";
+import { dirname as storedParent } from "node:path";
+import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { actAs } from "./callers.ts";
 import { existsSync } from "node:fs";
 import { fixtureNative } from "./fixture-native.ts";
@@ -20,9 +24,8 @@ import { sdkSessions } from "./native-receipt-fixture.ts";
 
 import { NodeHttpClient, NodeServices } from "@effect/platform-node";
 import { createHash } from "node:crypto";
-import { appendFile, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { readStoredNotices } from "@pe/host-contracts/store";
-import { storedNoticesPath } from "../src/notice-feed.ts";
+import { appendFile, readFile, rm, writeFile } from "node:fs/promises";
+
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Context, Effect, Layer } from "effect";
@@ -80,7 +83,7 @@ test.skipIf(!existsSync((nativeRecordings("retained-view-image").responses["revi
     ).pipe(
       nativeReadRoot(Layer.succeed(SdkDriver, (args) => Effect.promise(() => sdkSessions(args)))),
       Layer.provide(Layer.mergeAll(DuctFiles.layer(), HostDocumentMarks.layer)),
-      Layer.provideMerge(PictureCaptureStore.layer(join(dir, "store"), 0)),
+      Layer.provideMerge(PictureCaptureStore.layer(stateFixture(join(dir, "store")), 0)),
       HttpRouter.provideRequest(Layer.mergeAll(NodeServices.layer, NodeHttpClient.layerUndici)),
       Layer.provideMerge(Layer.succeed(RevitBridge, bridge)),
     ),
@@ -120,7 +123,7 @@ test("Work start validates seeds and cannot overwrite a winner under an open run
   const dir = await mkdtemp(join(tmpdir(), "pe-work-start-"));
   const workspace = new RouteWorkspace({
     registrations: [],
-    store: fileRouteDocumentStore(join(dir, "work")),
+    store: fileRouteDocumentStore(stateFixture(join(dir, "work"))),
   });
   workspace.register({
     spec: {
@@ -147,7 +150,7 @@ test("Work start validates seeds and cannot overwrite a winner under an open run
     callRouteOver(journal, undefined, { workspace, sdk: sdkSessions }).pipe(
       nativeReadRoot(Layer.succeed(SdkDriver, (args) => Effect.promise(() => sdkSessions(args)))),
       Layer.provide(Layer.mergeAll(DuctFiles.layer(), HostDocumentMarks.layer)),
-      Layer.provideMerge(PictureCaptureStore.layer(join(dir, "pictures"))),
+      Layer.provideMerge(PictureCaptureStore.layer(stateFixture(join(dir, "pictures")))),
       HttpRouter.provideRequest(Layer.mergeAll(NodeServices.layer, NodeHttpClient.layerUndici)),
       Layer.provideMerge(Layer.succeed(RevitBridge, detachedBridge())),
     ),
@@ -209,7 +212,7 @@ test("a torn last receipt line leaves every other receipt listed, posts one noti
   const facts = { origin: "human", document: { title: "Sample.rvt" }, view: { name: "Level 1" }, focus: null, registration: null } as const;
   const receipts = join(root, "receipts.jsonl");
   const posted = () =>
-    readStoredNotices(storedNoticesPath()).filter((notice) => notice.path === receipts);
+    storedNotices(stateMachine(receipts)).filter((notice) => notice.path === receipts);
   try {
     const first = await store.keep(Buffer.from("one"), facts);
     const second = await store.keep(Buffer.from("two"), facts);

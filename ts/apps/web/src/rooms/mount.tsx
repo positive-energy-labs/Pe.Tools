@@ -1,3 +1,4 @@
+import { refusalOf } from "#/route/typed-route";
 import { useContext, useState } from "react";
 import { AttentionDocument, elementKey, useAttention } from "@pe/kit/lang/attention";
 import { type Mark } from "@pe/agent-contracts";
@@ -244,7 +245,7 @@ function RoomsWorkspace({ ctx }: { ctx: RoomsContext }) {
           />
           <Button
             label="Stage partition view"
-            refusal={!page.view ? "Choose a level and plan view" : ctx.cells.refusal}
+            refusal={!page.view ? "Choose a level and plan view" : refusalOf(ctx.cells.state)}
             onClick={() => {
               const rejected = Object.values(ctx.cells.doc?.marks ?? {}).flatMap((cell) =>
                 cell.edit?.value?.kind === "reject" && cell.edit.value.anchor.view === page.view
@@ -261,7 +262,7 @@ function RoomsWorkspace({ ctx }: { ctx: RoomsContext }) {
           </Button>
           <Button
             label="Stage selected room merge"
-            refusal={selected.length < 2 ? "Select two or more rooms" : ctx.cells.refusal}
+            refusal={selected.length < 2 ? "Select two or more rooms" : refusalOf(ctx.cells.state)}
             onClick={() => void stage("rooms.merge", { view: page.view, guids: selected })}
           >
             Stage room merge

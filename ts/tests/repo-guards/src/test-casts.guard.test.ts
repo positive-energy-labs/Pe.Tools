@@ -5,14 +5,12 @@ import { census, rises, type TestCasts } from "./test-casts-census.ts";
 // A test that casts to a production type duplicates that type's constructor and hides the fields
 // the cast skipped (the duct builders in `@pe/ducts-domain/test-snapshot` exposed invalid
 // provenances and kinds the casts had carried). The count only falls: replace a cast with the
-// production-owned builder, then `vp run ratchets:tighten`.
+// production-owned builder, then `vp run ratchets:tighten`. The count holds per file too, so a new
+// test file starts at 0: a fall elsewhere never pays for a new cast.
 describe("casts to production types in test files", () => {
-  it("do not rise above the baseline", () => {
+  it("rise in no file, and a new file starts at 0", () => {
     const actual = census();
-    expect(
-      actual.total <= baseline.total ? [] : rises(actual, baseline),
-      `${actual.total} casts in ${actual.testFiles} test files; the baseline is ${baseline.total}`,
-    ).toEqual([]);
+    expect(rises(actual, baseline), `${actual.total} casts in ${actual.testFiles} test files; the baseline is ${baseline.total}`).toEqual([]);
     expect(actual.total).toBeLessThanOrEqual(baseline.total);
   }, 600_000);
 

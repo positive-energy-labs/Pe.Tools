@@ -5,6 +5,7 @@ import {
   admittedRouteEntries,
   routeAddress,
   viewRoutes,
+  ROUTE_DIRECTORY,
   agentFields,
   parseContributionKey,
   type Capability,
@@ -14,6 +15,7 @@ import {
 } from "@pe/agent-contracts";
 import { isTsOnlyOperationKey } from "@pe/host-contracts/operation-types";
 import type { HostOperationDefinition } from "@pe/host-contracts/contracts";
+import { opWrites } from "../shared/admission.ts";
 import type { SkillSnapshot } from "./skill-publication.ts";
 import type { CapabilitySources } from "./capabilities.ts";
 export type OpsCatalogEntry = HostOperationDefinition & {
@@ -46,9 +48,41 @@ export function dynamicCapabilityProvider(sources: CapabilitySources): Capabilit
   return [
     ...podCapabilities(),
     // V3: every admitted route's Work is a Pea door, builtin or Pod; a builtin registration already listed is not repeated.
-    ...[...sources.routes, ...(sources.admittedRoutes?.() ?? []).flatMap((view) =>
-      view.work && !sources.routes.some((spec) => spec.route === view.work!.route) ? [view.work] : [])].flatMap(routeRows),
+    ...[
+      ...sources.routes,
+      ...(sources.admittedRoutes?.() ?? []).flatMap((view) =>
+        view.work && !sources.routes.some((spec) => spec.route === view.work!.route)
+          ? [view.work]
+          : [],
+      ),
+    ].flatMap(routeRows),
     ...viewRoutes(sources.admittedRoutes?.() ?? []).flatMap(routeViewRows),
+    ...[
+      ...new Set([
+        ...ROUTE_DIRECTORY.map((row) => row.key),
+        ...(sources.admittedRoutes?.() ?? []).map((row) => row.key),
+      ]),
+    ]
+      .filter(
+        (key) =>
+          !sources.routes.some((route) => route.route === key) &&
+          !(sources.admittedRoutes?.() ?? []).some((row) => row.work?.route === key),
+      )
+      .map(
+        (key): Capability => ({
+          key: `route:${key}`,
+          kind: "route-doc",
+          title: key,
+          description: `Read the current ${key} route graph, field schemas and verb input schemas from the host.`,
+          needs: "nothing",
+          effect: "query",
+          mutates: false,
+          principal: capabilityPrincipals(false),
+          input: {},
+          source: "route graph",
+          rank: 1,
+        }),
+      ),
     ...sources.packages.flatMap(packageRows),
     ...sources.skills.map(skillRow),
     ...(sources.pages ?? []),
@@ -71,12 +105,9 @@ export function opRow(op: OpsCatalogEntry): Capability {
     // [Op(Finds = ...)] is the op's search vocabulary; without it "point at" or "highlight" never reach the op.
     ...(op.searchTerms?.length ? { finds: [...op.searchTerms] } : {}),
     needs: op.needs === "nothing" && !isTsOnlyOperationKey(op.key) ? "session" : op.needs,
-    effect: op.intent !== "Read" ? "command" : "query",
-    mutates: op.intent !== "Read",
-    principal: capabilityPrincipals(
-      op.intent !== "Read",
-      op.principal ?? nativePrincipals(op.actor),
-    ),
+    effect: opWrites(op) ? "command" : "query",
+    mutates: opWrites(op),
+    principal: capabilityPrincipals(opWrites(op), op.principal ?? nativePrincipals(op.actor)),
     input: parseSchema(op.requestSchemaJson),
     output: op.responseSchemaJson ? parseSchema(op.responseSchemaJson) : undefined,
     source: "catalog",
@@ -90,12 +121,20 @@ function routeViewRows({ key: route, title, fields: admitted, builtin }: ViewRou
   // An admitted route projects its keys from the admitted graph's agent policy; the browser owner
   // holds the codecs, so each settable key is the text the view shows (ADR 0030 rule 10).
   const settable = admitted && agentFields(admitted, "set").map(([key]) => key);
-  const { policy, words, keys, fields, finds = [] } = settable
+  const {
+    policy,
+    words,
+    keys,
+    fields,
+    finds = [],
+  } = settable
     ? {
         policy: "Read the view, then patch a key in the form the view shows it.",
         words: undefined,
         keys: agentFields(admitted!).map(([key]) => key),
-        fields: z.object(Object.fromEntries(settable.map((key) => [key, z.string()]))),
+        fields: z.object(
+          Object.fromEntries(settable.map((key) => [key, spec?.fields.shape[key] ?? z.string()])),
+        ),
         finds: spec ? spec.finds : [],
       }
     : spec!; // `viewRoute` gives a route without admitted fields only for a builtin address.
@@ -154,7 +193,7 @@ function routeRows(spec: RouteStateSpec<z.ZodType>): Capability[] {
     key: `route:${spec.route}`,
     kind: "route-doc",
     title: spec.title,
-    description: `Read the ${spec.title} document you co-edit with the user: current doc, revision and handle. Pass input {schema: true} only when you need its JSON Schema. ${spec.description} ${scopeHint}`,
+    description: `Read the ${spec.title} document you co-edit with the user: current doc, revision, handle and host route graph with real field and verb input schemas. Pass input {schema: true} only when you need its JSON Schema. ${spec.description} ${scopeHint}`,
     needs: "nothing",
     effect: "query",
     mutates: false,
@@ -167,7 +206,7 @@ function routeRows(spec: RouteStateSpec<z.ZodType>): Capability[] {
     key: `route:${spec.route}.edit`,
     kind: "route-doc",
     title: `${spec.title}: edit`,
-    description: `Edit shared Work with expectedRevision from the read. Each cell holds one staged edit; either author may replace it and the last writer wins, shown with its author. Attribution and host evidence are host-owned. Omit value to delete an authored key. To take back an edit, use route:${spec.route}.history, never a null or cleared value. ${spec.finds?.join(" ") ?? ""} ${scopeHint}`,
+    description: `Edit shared Work with expectedRevision from the read. Each cell holds one staged edit; either author may replace it and the last writer wins, shown with its author. Attribution and host evidence are host-owned. Omit value to delete an authored key. To take back your own edit, use route:${spec.route}.history, never a null or cleared value. ${spec.finds?.join(" ") ?? ""} ${scopeHint}`,
     finds:
       spec.route === "ducts"
         ? ["duct network", "network work"]
@@ -193,7 +232,7 @@ function routeRows(spec: RouteStateSpec<z.ZodType>): Capability[] {
     key: `route:${spec.route}.history`,
     kind: "route-doc",
     title: `${spec.title}: undo or redo`,
-    description: `Undo or redo the last step of this Work's one journal, the same step the user's Undo takes: undo restores the Work exactly as it was before the step (no null placeholders) as one new revision, and redo puts it back. The step may be yours or the user's; the result's write names who made it. Refuses, writing nothing, when the step's values changed elsewhere or nothing is left to undo. ${scopeHint}`,
+    description: `Undo or redo your own last step through the host Timeline, the door the user's Undo uses for theirs: undo restores what your step changed (no null placeholders) as one new revision, and redo puts it back. It never takes the user's step. Refuses, writing nothing, when a Revit write already consumed the step, when its values changed elsewhere, or when you have no step left. ${scopeHint}`,
     finds: ["undo", "redo", "revert", "take back", "roll back edit"],
     needs: "nothing",
     effect: "command",

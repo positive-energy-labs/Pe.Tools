@@ -132,7 +132,7 @@ test("pending Values retain Rooms navigation while edits refuse, then reject lat
   const {RoomsProvider}=await import("./workspace");
   const {mountTypedRoute}=await import("../shell/typed-mount");
   const {createFixtureWorkDoor}=await import("../shell/fixture-work-door");
-  const {retainedValueLabel}=await import("../shell/typed-shell");
+  const {retainedLine}=await import("../shell/reading-line");
   const {workFingerprintSchema}=await import("@pe/agent-contracts");
   const frames:Parameters<import("../shell/source-contract").UseSource["open"]>[1][]=[];
   let search=new URLSearchParams();
@@ -148,28 +148,28 @@ test("pending Values retain Rooms navigation while edits refuse, then reject lat
   const emit=(index:number,label:string)=>frames[index]!({kind:"complete",revision:1,value:packet(label)});
   function Chooser(){useSyncExternalStore(mount.subscribe,mount.revision,mount.revision);const current=ctx();return <RoomsProvider ctx={current}>
     <ScopeBody ctx={current} page={roomsPageSchema.parse({view:current.page.read().view})} verbs={()=>null}/>
-    <output>{retainedValueLabel(current.value)}</output></RoomsProvider>;}
+    <output>{retainedLine(current.value)}</output></RoomsProvider>;}
   try {
     emit(0,"Fixture level");
-    await vi.waitFor(()=>expect(ctx().cells.ready).toBe(true));
+    await vi.waitFor(()=>expect(ctx().cells.state.state).toBe("ready"));
     render(<Chooser/>);
     fireEvent.click(screen.getByRole("button",{name:"Choose level"}));
     fireEvent.click(await screen.findByRole("option",{name:/Fixture level/}));
     expect(mount.page.read().view).toBe("First view");
-    expect(ctx().value).toMatchObject({current:false,status:"pending",publication:{freshness:"refresh-needed"}});
+    expect(ctx().value).toMatchObject({state: "refreshing", publication:{freshness:"refresh-needed"}});
     expect(screen.getByText("Showing previous Value; refreshing")).toBeTruthy();
-    expect(ctx().cells.ready).toBe(false);
+    expect(ctx().cells.state.state).not.toBe("ready");
     expect(await ctx().cells.at(["edits",roomEditKey(DEMO_ROOMS.regions[0]!.guid,"name")]).stage("Unsafe")).not.toBeNull();
     fireEvent.click(await screen.findByRole("option",{name:"Second view"}));
     expect(mount.page.read().view).toBe("Second view");
     await act(async()=>emit(frames.length-1,"Replacement floor"));
-    expect(ctx().value.current).toBe(true);
+    expect(ctx().value.state === "ready").toBe(true);
     expect(screen.queryByText("Showing previous Value; refreshing")).toBeNull();
     await act(async()=>emit(0,"Late old floor"));
     expect(ctx().value.value?.snapshot.levels[0]!.name).toBe("Replacement floor");
     await act(async()=>mount.refresh());
     await act(async()=>frames.at(-1)!({kind:"failure",error:"Offline"}));
     expect(screen.getByText("Showing previous Value; refresh needed")).toBeTruthy();
-    expect(ctx().cells.ready).toBe(false);
+    expect(ctx().cells.state.state).not.toBe("ready");
   } finally {cleanup();mount.dispose();}
 });

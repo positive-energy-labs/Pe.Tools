@@ -6,8 +6,6 @@ internal sealed class Partition {
     private PrimRow[] _prims = [];
     private int[] _start = [0];
     private readonly LinkedGeometryStore? _store;
-    private bool _scene;
-    private int _sceneElements, _sceneTriangles;
 
     public Partition(int source, Document doc, SourceKind kind, long? linkInstanceId, Transform transform, string? generation = null, string? linkInstanceUniqueId = null) {
         this.Source = source;
@@ -17,6 +15,7 @@ internal sealed class Partition {
         this.LinkInstanceUniqueId = linkInstanceUniqueId;
         this.Transform = transform;
         this.DocumentKey = doc.GetDocumentKey();
+        this.Placement = new Placement(this.DocumentKey, linkInstanceUniqueId);
         this.Bvh = Bvh.Build([]);
         this._store = generation is null ? null : LinkedGeometryStore.For(doc, linkInstanceId, transform, generation);
     }
@@ -28,6 +27,9 @@ internal sealed class Partition {
     public string? LinkInstanceUniqueId { get; }
     public Transform Transform { get; }
     public string DocumentKey { get; }
+    internal Placement Placement { get; set; } = null!;
+    internal List<Acquisition> Outcomes { get; } = [];
+    internal bool Wants(Filter filter, PrimRow row) => filter.Wants(row, this.DocumentKey, this.Placement);
 
     public Tri[] Tris => this._tris;
     public PrimRow[] Prims => this._prims;
@@ -40,14 +42,7 @@ internal sealed class Partition {
     /// resolving an unfiltered answer costs nothing per call.</summary>
     public IReadOnlyList<string> Categories { get; private set; } = [];
     public Bvh Bvh { get; private set; }
-    public long BuiltAtEpoch { get; private set; }
-    public bool Dirty { get; set; } = true;
     public int Skipped { get; private set; }
-
-    public SourceRow Row => new(
-        this.Source, this.DocumentKey, this.LinkInstanceId, this.Kind,
-        this.BuiltAtEpoch, this.Dirty, this._scene ? this._sceneElements : this._prims.Length,
-        this._scene ? this._sceneTriangles : this._tris.Length, this.Skipped);
 
     /// <summary>The verb ingest: every given element whole, curves included, then the query tree. Without
     ///     <paramref name="elements" /> it walks the whole document, which only status, rows and tree ask for.</summary>
@@ -56,6 +51,7 @@ internal sealed class Partition {
         var sink = new List<Tri>();
         var rows = new List<PrimRow>();
         this.Skipped = 0;
+        this.Outcomes.Clear();
         foreach (var element in elements ?? new FilteredElementCollector(this.Doc).WhereElementIsNotElementType()) {
             if (!Ingest.Allowed(element)) { this.Skipped++; continue; }
             if (this.ReadElement(element, sink, rows, includeCurves, null) == 0) this.Skipped++;
@@ -63,8 +59,6 @@ internal sealed class Partition {
         // ponytail: List doubling means the sink peaks near 1.5x the final array before ToArray
         // trims it. That is transient garbage, not resident. A chunked writer would remove it.
         this.Adopt(sink.ToArray(), rows.ToArray());
-        this.BuiltAtEpoch = epoch;
-        this.Dirty = false;
     }
 
     internal void BuildElements(IEnumerable<Element> elements, long epoch, Aabb? region = null) {
@@ -72,28 +66,33 @@ internal sealed class Partition {
         var sink = new List<Tri>();
         var rows = new List<PrimRow>();
         this.Skipped = 0;
+        this.Outcomes.Clear();
         foreach (var element in elements) {
             if (!Ingest.Allowed(element)) continue;
             if (this.ReadElement(element, sink, rows, false, region) == 0) this.Skipped++;
         }
         // Scene capture only clips and writes triangles; it never traverses a triangle BVH.
         this.Adopt(sink.ToArray(), rows.ToArray(), false);
-        this.BuiltAtEpoch = epoch;
-        this.Dirty = false;
     }
 
     private int ReadElement(Element element, List<Tri> sink, List<PrimRow> rows, bool includeCurves, Aabb? region) {
         // A host boundary element needs native per-solid rejection before the element's row bounds and
         // Medium/Fine choice are derived. An uncropped cached row cannot reconstruct those decisions.
-        if (this._store is null || (this.Kind == SourceKind.Host && region is { } bounds && !this.InsideRegion(element, bounds)))
-            return Ingest.Element(element, this.Source, rows.Count, sink, this.Transform, rows, includeCurves, region);
+        if (this._store is null || (this.Kind == SourceKind.Host && region is { } bounds && !this.InsideRegion(element, bounds))) {
+            var read = new GeometryRead();
+            var count = Ingest.Element(element, this.Source, rows.Count, sink, this.Transform, rows, read, includeCurves, region);
+            this.Outcomes.Add(read.Finish(this.Placement, element.UniqueId, count));
+            return count;
+        }
         // Disk rows are uncropped and source-neutral. The caller's region is applied only after capture.
         var captured = this._store.Read(element.UniqueId + (includeCurves ? "/curves" : "/mesh"), () => {
             var triangles = new List<Tri>();
             var prims = new List<PrimRow>();
-            Ingest.Element(element, 0, 0, triangles, this.Transform, prims, includeCurves);
-            return new LinkedGeometryStore.Geometry(prims.ToArray(), triangles.ToArray());
+            var read = new GeometryRead();
+            Ingest.Element(element, 0, 0, triangles, this.Transform, prims, read, includeCurves);
+            return new LinkedGeometryStore.Geometry(prims.ToArray(), triangles.ToArray(), read.Finish(this.Placement, element.UniqueId, prims.Count));
         });
+        this.Outcomes.Add(captured.Acquisition with { Placement = this.Placement });
         var start = 0;
         var added = 0;
         foreach (var row in captured.Rows) {
@@ -112,27 +111,11 @@ internal sealed class Partition {
         return added;
     }
 
-    internal void BeginScene(long epoch) { this._scene = true; this.BuiltAtEpoch = epoch; this.Dirty = false; }
     internal void RecordScene(LinkedGeometryStore.Geometry geometry) {
-        this._sceneElements += geometry.Rows.Length; this._sceneTriangles += geometry.Triangles.Length;
         this.Categories = this.Categories.Concat(geometry.Rows.Select(row => row.Category)).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
     }
 
     internal IDisposable? OpenScene() => this._store?.Open();
-
-    internal LinkedGeometryStore.Geometry CaptureScene(Element element, Aabb? region, SceneBudget budget, bool coarse = false) {
-        LinkedGeometryStore.Geometry Capture(Aabb? bounds) {
-            var triangles = new List<Tri>();
-            var rows = new List<PrimRow>();
-            Ingest.Element(element, 0, 0, triangles, this.Transform, rows, false, bounds, budget, coarse);
-            return new LinkedGeometryStore.Geometry(rows.ToArray(), triangles.ToArray());
-        }
-        budget.Check();
-        var result = coarse || this._store is null || (this.Kind == SourceKind.Host && region is { } box && !this.InsideRegion(element, box))
-            ? Capture(region)
-            : this._store.Read(element.UniqueId + "/mesh", () => Capture(null));
-        return result;
-    }
 
     /// <summary>
     ///     The one context query of this source instance, split in two so planning precedes acquisition:

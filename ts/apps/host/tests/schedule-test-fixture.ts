@@ -1,7 +1,9 @@
+import { stateFixture } from "../../../tests/isolated-home/storage.ts";
+import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { ownedSession } from "./callers.ts";
 import { testDocumentMarks, journalAt, callRouteOver } from "./effect-test.ts";
 import { graphRoute } from "../src/reads/routes.ts";
-import { Publications } from "../src/reads/evaluator.ts";
+import { Publications } from "../src/reads/publications.ts";
 import { inputPort } from "../src/reads/inputs.ts";
 import { DuctFiles } from "../src/ducts-files.ts";
 import { HostDocumentMarks, hostMarks } from "../src/document-marks.ts";
@@ -11,7 +13,7 @@ import { createPeClient, httpRoutes, servePeRoute } from "@pe/agent-contracts/pe
 import { afterEach, expect, vi } from "vite-plus/test";
 import { Effect, Layer } from "effect";
 import { HttpEffect, HttpRouter } from "effect/http";
-import { mkdtemp, rm } from "node:fs/promises";
+import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -27,6 +29,7 @@ import { BridgeError, type HostBridgeEvent } from "../src/bridge.ts";
 import { hostResourceObserver, markReadings } from "../src/resource-adapters.ts";
 
 import { createPeRoutes, fileRouteDocumentStore } from "../src/pe-routes.ts";
+import { timelineReceipts } from "../src/reads/work-timeline.ts";
 import { sdkSessions, originalProcess } from "./native-receipt-fixture.ts";
 import { markDispatched } from "../src/action-dispatch.ts";
 import { replayAnswer } from "./sdk-replay.ts";
@@ -71,6 +74,9 @@ export async function setup(options: { cold?: boolean } = {}) {
   let capabilities: ReturnType<typeof createCapabilityCatalogSource>;
   const publications = new Publications();
   const app = createPeRoutes({
+    // The Timeline reads this host's receipts: a restore through /apply is refused without them.
+    // `owner` is reopened on restart, so the routes follow the current one.
+    timelineReceipts: () => timelineReceipts(owner),
     readGraph: async (request) => {
       const graph = graphRoute("reads.value", request);
       const publication = graph.publication!;
@@ -92,7 +98,7 @@ export async function setup(options: { cold?: boolean } = {}) {
       }));
     },
     capabilityCatalog: { read: (scope) => capabilities.read(scope) },
-    store: fileRouteDocumentStore(join(dir, "work")),
+    store: fileRouteDocumentStore(stateFixture(join(dir, "work"))),
     heads: { observe: () => () => {} },
     observeHostResource: (request, publish) => observeHost(request, publish),
     // As the host boots: one mark holder per bridge, shared by every Reading and every push.
@@ -178,7 +184,7 @@ export async function setup(options: { cold?: boolean } = {}) {
     invoke: (key: string, input: unknown, session?: string, openId?: string | null, id?: string) =>
       Effect.tryPromise({
         try: async () => {
-          if (id) await markDispatched(id);
+          if (id) await markDispatched(id, "bridge");
           sent.push({ key, input, session: session!, openId: openId!, id });
           if (key === "revit.catalog.schedules") {
             onCatalog();
@@ -349,6 +355,7 @@ export async function setup(options: { cold?: boolean } = {}) {
   };
   return {
     dir,
+    workspace: work,
     get base() {
       return server.base;
     },

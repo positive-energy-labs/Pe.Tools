@@ -1,3 +1,4 @@
+import { refusalOf } from "../route/typed-route";
 ﻿import { useSyncExternalStore } from "react";
 import { cleanup, waitFor } from "@testing-library/react";
 import { expect } from "vite-plus/test";
@@ -114,7 +115,9 @@ export async function journey(options: { unreadable?: { elementId: number | null
           snapshot: {
             status: {
               systems: [],
-              carriers: { stage: "Adoption", status: carriers, missingCarrierGuids: [] },
+              carriers: { stage: "Adoption", status: carriers,
+                missingCarrierGuids: carriers === "needs-initialization"
+                  ? ["00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002"] : [] },
             },
             unreadable: options.unreadable ?? [],
             zoneFrs: [],
@@ -233,7 +236,7 @@ export async function journey(options: { unreadable?: { elementId: number | null
   const feed = createWorkFeedClient(
     readings,
     {
-      write: (key, write) => host.workspace.write(key, key.route, "human", write),
+      write: (key, write) => host.workspace.write(key, key.route, "human", write, async () => []),
       submit: async command => {
         const response = await host.request(new Request("http://host/actions", {method:"POST", headers:{"content-type":"application/json"}, body:JSON.stringify(command)}));
         expect([200,202],await response.clone().text()).toContain(response.status);
@@ -249,7 +252,8 @@ export async function journey(options: { unreadable?: { elementId: number | null
       actions.push({ key: command.key, input: command.input });
       if (command.key === "takeoffs.initialize") carriers = "ready";
       const result =
-        command.key === commands["takeoffs.adopt"].writeBoundary.previewKey
+        command.key === commands["takeoffs.adopt"].writeBoundary.previewKey ||
+        command.key === commands["takeoffs.initialize"].writeBoundary.previewKey
           ? {
               previewOnly: true,
               derivedRequest: {},
@@ -316,8 +320,8 @@ export async function journey(options: { unreadable?: { elementId: number | null
       waitFor(
         () => {
           const value = mount.value();
-          expect(value.current, value.current ? "" : value.reason).toBe(true);
-          if (!options.route) expect(mount.value(viewCatalogue).current).toBe(true);
+          expect(value.state === "ready", (value.state === "ready") ? "" : refusalOf(value) ?? "").toBe(true);
+          if (!options.route) expect(mount.value(viewCatalogue).state === "ready").toBe(true);
           expect(mount.workBasis()).toBeTruthy();
         },
         { timeout: 20000 },

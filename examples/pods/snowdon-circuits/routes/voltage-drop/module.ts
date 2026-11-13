@@ -1,8 +1,9 @@
+import { calculation } from "./contract.ts";
 import { z } from "zod";
-import { valueRead } from "@pe/agent-contracts/value";
+
 import { route, read, paneLayout, scrollBody } from "@pe/web/route";
 import { hostRead } from "@pe/web/host-read";
-import { key, initial, inputs, workState, args, value } from "./schema.ts";
+import { key, initial, inputs, workState } from "./schema.ts";
 export { initial };
 export const module = route({
   key,
@@ -23,7 +24,7 @@ export const module = route({
     satellites: [],
   },
   fields: {},
-  core: read(hostRead(valueRead(`${key}.calculation`, args, value))),
+  core: read(hostRead(calculation)),
   edits: {
     work: workState,
     seed: () => workState.schema.parse({}),
@@ -40,9 +41,7 @@ export const module = route({
       body: "scroll",
       draw: (ctx) =>
         scrollBody(
-          ctx.value.current
-            ? `Copper voltage-drop worksheet\nAuthored inputs\n${JSON.stringify(ctx.value.value, null, 2)}\nCopper K method at 75 C, unity power factor, negligible reactance. No model facts are inferred.`
-            : ctx.value.reason,
+          `Copper voltage-drop worksheet\nAuthored inputs\n${JSON.stringify(ctx.value.value, null, 2)}\nCopper K method at 75 C, unity power factor, negligible reactance. No model facts are inferred.`,
         ),
     },
   },

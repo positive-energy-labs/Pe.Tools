@@ -41,7 +41,7 @@ import {
   resolveHostVersion,
   ServiceFileLive,
 } from "./host-lifecycle.ts";
-import { hostOwnership } from "./host-ownership.ts";
+import { hostOwnership, hostState } from "./host-ownership.ts";
 import { prepareAgentDirectory } from "./agent-directory.ts";
 import { getHostStatus } from "./local-ops.ts";
 import { currentMachine } from "./machine.ts";
@@ -50,7 +50,7 @@ import { isNavigation, opsCatalogRoute, type SpaFallback } from "./ops-catalog.t
 import { pagesRoute } from "./pages-route.ts";
 import { peApiErrorsLayer, peRoutesLayer } from "./pe-routes.ts";
 import { ReceiptExport, type ReceiptExporter } from "./receipt-export.ts";
-import { createDevices, type Devices } from "./remote-device.ts";
+import { createDevices, devicesKind, type Devices } from "./remote-device.ts";
 import { requestIdentityLayer } from "./request-identity.ts";
 import { RequestIdentity } from "./request-services.ts";
 import { RunRegistry } from "./run-registry.ts";
@@ -319,11 +319,11 @@ function liveHttpLive(options: HttpLiveOptions) {
       installed: hostOwnership.lane === "installed",
       port,
       run: tailscaleCommand(),
-      ...shareIntentFile(join(hostOwnership.rootPath, "state", "share.json")),
+      ...shareIntentFile(hostState()),
     });
   const devices =
     options.devices ??
-    createDevices(join(hostOwnership.rootPath, "state", hostOwnership.serviceName, "devices.json"));
+    createDevices(devicesKind.in(hostState(), hostOwnership.serviceName));
   bindControl({ deviceThread: (device) => devices.active(device).thread });
   const identity = requestIdentityLayer({
     devices,

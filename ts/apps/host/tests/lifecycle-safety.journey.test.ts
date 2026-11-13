@@ -1,4 +1,5 @@
-import { mkdtemp, readFile, writeFile, rm } from "node:fs/promises";
+import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
+import { readFile, writeFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { expect, test } from "vite-plus/test";

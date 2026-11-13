@@ -3,7 +3,9 @@ import { z } from "zod";
 import { canonicalRouteInput as canonicalJson } from "@pe/agent-contracts";
 import { documentRefSchema } from "@pe/agent-contracts/target";
 import type { SettingTierRead } from "@pe/agent-contracts/tiered-setting";
+import type { ReadHandle } from "@pe/agent-contracts/handle";
 import {
+  bodyOf,
   firm as firmFile,
   settingsFile,
   firmOwner,
@@ -49,7 +51,7 @@ const wireValue = <T>(value: T): T => {
   return JSON.parse(JSON.stringify(value));
 };
 const schemaIds = new WeakMap<z.ZodType, string>();
-const schemaId = (schema: z.ZodType) => {
+export const schemaId = (schema: z.ZodType) => {
   let id = schemaIds.get(schema);
   if (!id) {
     id = fingerprint(
@@ -107,7 +109,8 @@ export interface Value<T> {
 export interface InputPort {
   readonly evaluation: string;
   readonly origin: unknown;
-  readonly take: (name: string, args: unknown, context?:ReadContext) => Promise<unknown>;
+  /** `signal` is the read's own lifetime: aborted when its last subscriber released. Never a write's or a restoration's. */
+  readonly take: (name: string, args: unknown, context?:ReadContext, signal?: AbortSignal) => Promise<unknown>;
   /** Synchronous event revision: also fences a change while final validation is awaiting I/O. */
   readonly revision: (name: string, args: unknown) => number;
 }
@@ -117,15 +120,20 @@ export class RefusedPartition extends Error {}
 const moved = (name: string, args: unknown, when = "while this was being read") =>
   `The ${name === "resource" && typeof args === "object" && args && "kind" in args ? String(args.kind) : name} input changed ${when}.`;
 export interface ReadContext {
+  /** By handle: the registry resolves the body by key. By body or leaf until the route reads are converted (k2/read-sweep). */
+  read<I, D>(h: ReadHandle<string, I, D>, args: I): Promise<D>;
   read<I, O>(read: Read<I, O> | Leaf<I, O>, args: I): Promise<O>;
   /** Work by key, or a target document's Work for `owner` given its document ref (a Pod's door: no module import). */
   work(owner: string, scope: unknown): Promise<unknown>;
   /** The one native door: any catalog Read, typed and decoded by the host's generated catalog. */
   native<K extends CatalogReadKey>(key: K, args: NativeArgs<K>): Promise<NativeValue<K>>;
-  /** The firm file layer (ADR 0026): the firm's per-owner `<owner>.json` decoded by `schema`, else `seed` with why. */
-  firm<T>(owner: string, schema: z.ZodType<T>, seed: T): Promise<FirmValue<T>>;
-  /** Every home tier's per-owner settings file for the target model (ADR 0037 rule 8), most specific first. */
-  settings(owner: string, target: z.output<typeof documentRefSchema> | null): Promise<SettingTierRead[]>;
+  /** The read side of the store: each is a recorded, invalidated input, never a plain file read. */
+  readonly files: {
+    /** The firm file layer (ADR 0026): the firm's per-owner `<owner>.json` decoded by `schema`, else `seed` with why. */
+    firm<T>(owner: string, schema: z.ZodType<T>, seed: T): Promise<FirmValue<T>>;
+    /** Every home tier's per-owner settings file for the target model (ADR 0037 rule 8), most specific first. */
+    tiers(owner: string, target: z.output<typeof documentRefSchema> | null): Promise<SettingTierRead[]>;
+  };
   collect<K, I, O>(
     keys: readonly K[],
     options: {
@@ -162,8 +170,14 @@ export async function evaluate<I, O>(
     refused: { keys: string[]; reason: string }[] = [];
   const reason = (error: unknown) => (error instanceof Error ? error.message : String(error));
   const ctx: ReadContext = {
-    read: <A, B>(definition: Read<A, B> | Leaf<A, B>, input: A): Promise<B> => {
+    read: <A, B>(named: Read<A, B> | Leaf<A, B> | ReadHandle<string, A, B>, input: A): Promise<B> => {
       if (closed) return Promise.reject(Error("This evaluation is closed"));
+      let definition: Read<A, B> | Leaf<A, B>;
+      try {
+        definition = "key" in named ? bodyOf(named) : named;
+      } catch (error) {
+        return Promise.reject(error);
+      }
       const args = immutable(wireValue(definition.input.parse(input)));
       const recipe = fingerprint([
         definition.name,
@@ -211,9 +225,11 @@ export async function evaluate<I, O>(
       return ctx.read(workInput, { owner, scope: key });
     },
     native: (key, args) => ctx.read(nativeRead(key), args),
-    firm: async (owner, schema, seed) =>
-      resolveFirm(await ctx.read(firmFile, firmOwner.parse(owner)), schema, seed),
-    settings: (owner, target) => ctx.read(settingsFile, { owner: firmOwner.parse(owner), target }),
+    files: {
+      firm: async (owner, schema, seed) =>
+        resolveFirm(await ctx.read(firmFile, firmOwner.parse(owner)), schema, seed),
+      tiers: (owner, target) => ctx.read(settingsFile, { owner: firmOwner.parse(owner), target }),
+    },
     collect: async (keys, options) => {
       if (!Number.isSafeInteger(options.batch) || options.batch < 1)
         throw Error("Batch must be a positive integer");
@@ -307,284 +323,4 @@ export async function evaluate<I, O>(
   if (Buffer.byteLength(JSON.stringify(value)) > 32 * 1024 * 1024)
     throw Error("Read Value exceeds the 32 MiB bound; data was not clipped");
   return immutable(value);
-}
-
-export interface Publication<T> {
-  readonly key: string;
-  readonly generation: number;
-  readonly version: number;
-  readonly value: Value<T> | null;
-  readonly state: "current" | "refresh-needed" | "superseded";
-  readonly reason?: string;
-}
-type Dependency = Pick<Trace, "name" | "args">;
-type Pending = { inputs: Dependency[]; superseded: boolean };
-type Slot = { generation: number; key: string; published?: Publication<unknown>; attempt: number; pending?: Pending };
-/** One entry per (read,args), one generation per client subscription; no client acknowledgement. */
-export class Publications {
-  private readonly slots = new Map<string, Slot>();
-  private readonly released = new Map<string, number>();
-  private readonly admissions = new Map<string, number>();
-  private readonly retainedBytes = new Map<string, number>();
-  private bytes = 0;
-  private readonly keys = new Map<
-    string,
-    { version: number; flights: Map<string, Promise<Publication<unknown>>> }
-  >();
-  private readonly listeners = new Map<string, Set<() => void>>();
-  private readonly flightInputs = new WeakMap<Promise<Publication<unknown>>, Pending>();
-  constructor(
-    private readonly capacity = 128,
-    private readonly byteLimit = 128 * 1024 * 1024,
-  ) {}
-  observe(id: string, notify: (publication: Publication<unknown>) => void) {
-    const listeners = this.listeners.get(id) ?? new Set<() => void>();
-    const listener = () => {
-      const value = this.slots.get(id)?.published;
-      if (value) notify(value);
-    };
-    listeners.add(listener);
-    this.listeners.set(id, listeners);
-    listener();
-    return () => {
-      listeners.delete(listener);
-      if (!listeners.size) this.listeners.delete(id);
-    };
-  }
-  private notify(id: string) {
-    const listeners = this.listeners.get(id);
-    for (const listener of listeners ?? []) {
-      try {
-        listener();
-      } catch {
-        listeners?.delete(listener);
-      }
-    }
-  }
-  history() {
-    return immutable(
-      Object.fromEntries(
-        [...this.slots.keys()].flatMap((id) => {
-          const published = this.publication(id);
-          return published
-            ? [
-                [
-                  id,
-                  {
-                    key: published.key,
-                    version: published.version,
-                    evaluation: published.value?.evaluation,
-                  },
-                ],
-              ]
-            : [];
-        }),
-      ),
-    );
-  }
-  /** Retained bytes do not make a released or superseded subscription open. */
-  publication(id: string) {
-    const slot = this.slots.get(id), published = slot?.published;
-    if (!slot?.key || !published || published.generation !== slot.generation || published.key !== slot.key) return undefined;
-    return published;
-  }
-  invalidate(matches: (trace: Dependency) => boolean) {
-    for (const [id, slot] of this.slots) {
-      const previous = slot.published;
-      const pending = slot.pending?.inputs.some((input) => input.name === "work" && matches(input));
-      if (pending || previous?.value?.trace.some(matches)) {
-        // Work creation or editing replaces the pending basis, including the first publication.
-        if (pending && slot.pending) { slot.pending.superseded = true; slot.attempt++; slot.pending = undefined; }
-        slot.published = immutable({
-          key: previous?.key ?? slot.key, generation: slot.generation, version: previous?.version ?? 0,
-          state: "refresh-needed",
-          value: previous?.value ? { ...previous.value, freshness: "refresh-needed" } : null,
-        });
-        this.notify(id);
-      }
-    }
-  }
-  /** Pin only this ID's release fence before opening inputs; close on every request exit. */
-  admission(id: string, generation: number) {
-    this.admissions.set(id, (this.admissions.get(id) ?? 0) + 1);
-    const allowed = generation > (this.released.get(id) ?? -1);
-    let closed = false;
-    return {
-      current: () => !closed && allowed && generation > (this.released.get(id) ?? -1),
-      close: () => {
-        if (closed) return;
-        closed = true;
-        const remaining = this.admissions.get(id)! - 1;
-        if (remaining) this.admissions.set(id, remaining);
-        else this.admissions.delete(id);
-        this.pruneReleased();
-      },
-    };
-  }
-  private pruneReleased() {
-    // Keep every pinned fence plus at most capacity recent, unpinned tombstones.
-    let recent = this.capacity;
-    for (const id of [...this.released.keys()].reverse())
-      if (!this.admissions.has(id) && recent-- <= 0) this.released.delete(id);
-  }
-  private pruneKeys() {
-    const used = new Set<string>();
-    for (const slot of this.slots.values()) {
-      used.add(slot.key);
-      if (slot.published) used.add(slot.published.key);
-    }
-    for (const [key, owner] of this.keys)
-      if (!used.has(key) && !owner.flights.size) this.keys.delete(key);
-  }
-  release(id: string, generation: number) {
-    const slot = this.slots.get(id);
-    if (generation < (slot?.generation ?? -1) ||
-      generation < (this.released.get(id) ?? -1)) return;
-    this.released.delete(id);
-    this.released.set(id, generation);
-    this.pruneReleased();
-    if (slot) {
-      // A detached flight still closes over this slot until it settles.
-      slot.published = undefined;
-      slot.pending = undefined;
-    }
-    this.slots.delete(id);
-    this.bytes -= this.retainedBytes.get(id) ?? 0;
-    this.retainedBytes.delete(id);
-    this.pruneKeys();
-  }
-  async publish<I, O>(
-    id: string,
-    generation: number,
-    definition: Read<I, O>,
-    args: I,
-    port: InputPort,
-    keep?: (publication: Publication<O>) => Promise<() => void>,
-    admitted = this.admission(id, generation),
-  ): Promise<Publication<O>> {
-    try {
-    const key = fingerprint([definition.name, definition.input.parse(args)]);
-    let slot = this.slots.get(id);
-    const obsolete = (): Publication<O> =>
-      immutable({ key, generation, version: 0, value: null, state: "superseded" });
-    if (
-      !admitted.current() || (slot &&
-      (generation < slot.generation || (generation === slot.generation && key !== slot.key)))
-    )
-      return obsolete();
-    if (!slot) {
-      if (this.slots.size >= this.capacity) throw Error("Read subscription capacity reached");
-    }
-    let owner = this.keys.get(key);
-    if (!owner) {
-      if (this.keys.size >= 512) throw Error("Read key capacity reached");
-      owner = { version: 0, flights: new Map() };
-      this.keys.set(key, owner);
-    }
-    if (!slot) {
-      slot = { generation, key, attempt: 0 };
-      this.slots.set(id, slot);
-    }
-    slot.generation = generation;
-    slot.key = key;
-    this.pruneKeys();
-    const attempt = ++slot.attempt;
-    const mine = () =>
-      this.slots.get(id) === slot && slot.generation === generation && slot.key === key && slot.attempt === attempt;
-    // Share only the same admitted input set. Equal args cannot substitute another recording's inputs.
-    const flightKey = fingerprint([
-      key,
-      generation,
-      port.evaluation,
-      definition.run.toString(),
-      schemaId(definition.input),
-      schemaId(definition.output),
-    ]);
-    let flight = owner.flights.get(flightKey) as Promise<Publication<O>> | undefined;
-    const pending = (flight && this.flightInputs.get(flight)) ?? { inputs: [], superseded: false };
-    slot.pending = pending;
-    if (!flight) {
-      const tracked: InputPort = {
-        ...port,
-        take: (name, args, context) => {
-          if (pending.superseded) throw new RefreshNeeded("Work basis superseded");
-          pending.inputs.push({ name, args });
-          return port.take(name, args, context);
-        },
-      };
-      // A first publication has no Value to label stale, and its refusal sends no event (below), so
-      // nobody would read again: the host re-evaluates a raced read itself. A slot that retains a
-      // Value keeps the labelled old Value and its publication event instead.
-      // ponytail: three evaluations, no backoff; an input that outruns the read is a lasting refusal.
-      const settle = async (left: number): Promise<Value<O>> => {
-        try {
-          return await evaluate(definition, args, tracked);
-        } catch (error) {
-          if (!(error instanceof RefreshNeeded) || !left || pending.superseded) throw error;
-          return settle(left - 1);
-        }
-      };
-      flight = settle(slot.published?.value ? 0 : 2).then((value) => {
-        const version = ++owner.version;
-        return immutable({ key, generation, version, value, state: "current" as const });
-      });
-      owner.flights.set(flightKey, flight);
-      this.flightInputs.set(flight, pending);
-      void flight
-        .finally(() => {
-          if (owner.flights.get(flightKey) === flight) owner.flights.delete(flightKey);
-          this.pruneKeys();
-        })
-        .catch(() => {});
-    }
-    try {
-      const result = await flight;
-      if (!mine()) return obsolete();
-      const published = immutable({ ...result, generation });
-      const bytes = Buffer.byteLength(JSON.stringify(published));
-      const nextBytes = this.bytes - (this.retainedBytes.get(id) ?? 0) + bytes;
-      if (nextBytes > this.byteLimit)
-        throw Error("Published Values exceed the shared byte bound; old Value retained");
-      const dependencies = keep ? published.value!.trace.filter((trace) => trace.outcome === "answered")
-        .map((trace) => ({ trace, revision: port.revision(trace.name, trace.args) })) : [];
-      const commit = await keep?.(published);
-      if (!mine()) return obsolete();
-      if (dependencies.some(({ trace, revision }) => port.revision(trace.name, trace.args) !== revision))
-        throw new RefreshNeeded("Inputs invalidated while persisting the publication");
-      const retainedBytes = this.bytes - (this.retainedBytes.get(id) ?? 0) + bytes;
-      if (retainedBytes > this.byteLimit) throw Error("Published Values exceed the shared byte bound; old Value retained");
-      this.bytes = retainedBytes;
-      this.retainedBytes.set(id, bytes);
-      slot.published = published;
-      this.pruneKeys();
-      commit?.();
-      this.notify(id);
-      return published;
-    } catch (error) {
-      if (!mine()) return obsolete();
-      const previous = slot.published;
-      const retained = previous?.value
-        ? immutable({ ...previous.value, freshness: "refresh-needed" as const })
-        : null;
-      const result: Publication<O> = immutable({
-        key: previous?.key ?? key,
-        generation,
-        version: previous?.version ?? 0,
-        value: retained as Value<O> | null,
-        state: "refresh-needed",
-        reason: error instanceof Error ? error.message : String(error),
-      });
-      // Old data retains its original key/version, but its non-current label is host-owned too.
-      if (previous?.value) {
-        slot.published = result;
-        if (previous.state === "current") this.notify(id);
-      }
-      return result;
-    } finally {
-      if (slot.pending === pending) slot.pending = undefined;
-    }
-    } finally {
-      admitted.close();
-    }
-  }
 }

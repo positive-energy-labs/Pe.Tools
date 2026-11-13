@@ -8,8 +8,6 @@ import {
   type WorkWrite,
 } from "@pe/agent-contracts";
 import { peRoutes } from "@pe/agent-contracts/pe-api";
-import { FINDINGS_OWNER, findingsWorkSchema, type Finding } from "@pe/agent-contracts/slots";
-import { z } from "zod";
 import type { WorkAdmission } from "./route-discovery";
 export function routeInput(route: string, key: WorkKey) {
   const query: Record<string, string> = {};
@@ -41,45 +39,6 @@ export async function writeRouteWork(
     }
   );
 }
-
-/**
- * The person's undo of their own last finding (ADR 0035 rule 9): the findings Work's history door
- * at its current revision. The host takes the author from the caller, so Pea's findings stay.
- */
-export async function undoOwnFinding(
-  key: WorkKey,
-  client: Pick<typeof peClient, "response"> = peClient,
-): Promise<{ message: string } | null> {
-  const input = routeInput(FINDINGS_OWNER, { ...key, route: FINDINGS_OWNER });
-  const read = await client.response("work.get", input);
-  const revision = read.ok
-    ? z.object({ revision: z.number().int() }).safeParse(await read.json()).data?.revision
-    : undefined;
-  if (revision === undefined) return { message: "No findings on this document to undo" };
-  const response = await client.response("work.history", {
-    ...input,
-    body: { direction: "undo", expectedRevision: revision },
-  });
-  const wire = (await response.json().catch(() => null)) as { ok?: boolean; error?: unknown } | null;
-  return response.ok && wire?.ok !== false
-    ? null
-    : { message: String(wire?.error ?? `Undo failed (${response.status})`) };
-}
-
-/** This document's findings, as the host's findings Work holds them; none before the first is written, null when unread. */
-export async function readFindings(
-  key: WorkKey,
-  client: Pick<typeof peClient, "response"> = peClient,
-): Promise<readonly Finding[] | null> {
-  const read = await client.response("work.get", routeInput(FINDINGS_OWNER, { ...key, route: FINDINGS_OWNER }));
-  if (read.status === 404) return [];
-  const doc = read.ok ? z.object({ doc: findingsWorkSchema }).safeParse(await read.json()).data?.doc : undefined;
-  return doc ? Object.values(doc.findings) : null;
-}
-
-/** How many of this document's findings a person wrote; null when unread. */
-export const ownFindingsLeft = async (key: WorkKey, client?: Pick<typeof peClient, "response">): Promise<number | null> =>
-  (await readFindings(key, client))?.filter((finding) => finding.by === "person").length ?? null;
 
 export type RouteWriteResponse = { status: number; result: RouteStateWriteResult | null };
 type WorkInput = { params: { route: string }; query: Record<string, string> };

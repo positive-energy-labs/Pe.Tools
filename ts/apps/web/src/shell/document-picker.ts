@@ -36,7 +36,10 @@ export function DocumentPicker({
   const key = (ref: { session: string; openId: string }) => JSON.stringify(ref);
   const selected = target?.kind === "document" ? key(target.ref) : null;
   const chosen = options.find((option) => key(option.ref) === selected)?.label;
-  return createElement(ListPopup<(typeof options)[number]>, {
+  // `data-bound-document` is the bound signal scripts wait on (tests/e2e/cdp.ts requireRevit): the
+  // openId, present only while the Place's target is a document a connected Revit lists as open.
+  const bound = chosen && target?.kind === "document" ? target.ref.openId : undefined;
+  return createElement("span", { className: "contents", "data-bound-document": bound }, createElement(ListPopup<(typeof options)[number]>, {
     anchor: "trigger",
     face: "control",
     // The name says what is chosen, and that pressing changes it.
@@ -56,5 +59,5 @@ export function DocumentPicker({
       search.set("target", JSON.stringify({ kind: "open", ref: option.ref }));
       place.address.write(search, "push");
     },
-  });
+  }));
 }

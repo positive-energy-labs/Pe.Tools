@@ -2,7 +2,7 @@ import { decodePeRevitPayload } from "@pe/host-contracts/pe-revit-cli";
 import {
   nativeProcessSchema,
   nativeReceiptSchema as receiptSchema,
-  nativeReceiptFailureSchema as responseFailure,
+  nativeReceiptResponseSchema,
   type NativeProcess,
   nativeVerdictSchema,
   type ReceiptFact,
@@ -98,7 +98,17 @@ export async function readNativeReceipt(
     localRef: { requestId: step.id, key: step.key, process: original },
   };
   const unchanged = () => ({ step, evidence, observation });
-  const intent = { id: step.id, key: step.key, kind: step.kind, input: step.input };
+  const intent = { id: step.id, key: step.key, kind: step.kind, input: step.input,
+    ...(step.transport === "bridge" ? { transport: step.transport,
+      ...(step.touched ? { touched: step.touched } : {}),
+      ...(step.nativeEvidence ? { nativeEvidence: step.nativeEvidence } : {}),
+      ...(step.bridgeReply ? { bridgeReply: step.bridgeReply } : {}),
+    } : "opReceipt" in step ? { transport: step.transport, opReceipt: step.opReceipt,
+      touched: step.touched, ...(step.nativeEvidence ? { nativeEvidence: step.nativeEvidence } : {}),
+    } : { transport: step.transport }),
+    ...(step.process ? { process: step.process } : {}),
+    ...(step.dispatchedAt ? { dispatchedAt: step.dispatchedAt } : {}),
+  };
   const codes = evidence.diagnostics.map((diagnostic) => diagnostic.code);
   const replaced =
     successor !== undefined &&
@@ -119,6 +129,8 @@ export async function readNativeReceipt(
         state: "failed",
         error: `Revit process ${original.pid} ended before '${step.key}' recorded an outcome`,
         status: 503,
+        ...(step.transport === "bridge" && step.dispatchedAt && step.bridgeReply !== "touched"
+          ? { touched: { kind: "unknown" as const, reason: "process-exit" as const } } : {}),
         evidence: {
           result: {
             process: original,
@@ -133,17 +145,24 @@ export async function readNativeReceipt(
   // Settled only when the answer is the receipt's own terminal verdict with its response: not
   // `running`, not a dead incarnation's bare receipt, not a superseded or late answer.
   if (!("response" in result) || !receipt.success || !matches) return unchanged();
-  if (receipt.data.verdict === "ok" && result.response !== undefined)
+  const decoded = nativeReceiptResponseSchema.safeParse(result.response);
+  if (!decoded.success) return unchanged();
+  const response = decoded.data;
+  // The C# op receipt supplies evidence, never a replacement for the host's dispatch fact.
+  const terminal = intent.transport === "bridge"
+    ? { ...intent, bridgeReply: "touched" as const, touched: response.touched }
+    : { ...intent, opReceipt: receipt.data, touched: response.touched };
+  if (receipt.data.verdict === "ok" && "payload" in response)
     return {
-      step: { ...intent, state: "succeeded", result: result.response },
+      step: { ...terminal, state: "succeeded", result: response.payload,
+        ...(response.evidence ? { nativeEvidence: response.evidence } : {}) },
       evidence,
       observation,
     };
-  const failed = responseFailure.safeParse(result.response);
-  if (!failed.success) return unchanged();
-  const { error, statusCode: status, outcome: nativeOutcome } = failed.data;
+  if (!("error" in response)) return unchanged();
+  const { error, statusCode: status, outcome: nativeOutcome } = response;
   if (receipt.data.verdict === "cancelled" && status === 499)
-    return { step: { ...intent, state: "cancelled", error, status }, evidence, observation };
+    return { step: { ...terminal, state: "cancelled", error, status }, evidence, observation };
   // A coarse failed/rejected verdict cannot establish dispatch. Use the native typed outcome only.
   if (
     nativeOutcome &&
@@ -152,14 +171,14 @@ export async function readNativeReceipt(
     )
   )
     return {
-      step: { ...intent, state: "failed", error, status, nativeOutcome, notDispatched: true },
+      step: { ...terminal, state: "failed", error, status, nativeOutcome, notDispatched: true },
       evidence,
       observation,
     };
   if (receipt.data.verdict === "failed")
     return {
       step: {
-        ...intent,
+        ...terminal,
         state: "failed",
         error,
         status,

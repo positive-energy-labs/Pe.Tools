@@ -1,4 +1,6 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { stateFixture } from "../../../tests/isolated-home/storage.ts";
+import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
+import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect, Exit, Layer } from "effect";
@@ -31,7 +33,7 @@ const recording = async (): Promise<HostInputLane> => {
   const dir = await mkdtemp(join(tmpdir(), "pe-input-lane-"));
   dirs.push(dir);
   const reader = await Effect.runPromise(
-    openRecordingWriter(dir, identity, bounds).pipe(
+    openRecordingWriter(stateFixture(dir), identity, bounds).pipe(
       Effect.andThen(openRecordingReader(dir, identity, bounds)),
     ),
   );

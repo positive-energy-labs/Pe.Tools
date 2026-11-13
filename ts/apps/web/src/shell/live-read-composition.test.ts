@@ -1,3 +1,4 @@
+import { mkdtemp, stateFixture } from "../../../../tests/isolated-home/storage.ts";
 import { Context, Effect, Fiber, Layer, Schema, Option } from "effect";
 import { expect, test, vi } from "vite-plus/test";
 import {
@@ -11,7 +12,7 @@ import { hostOwnership } from "../../../host/src/host-ownership.ts";
 import { HostDocumentMarks } from "../../../host/src/document-marks.ts";
 import { HostSessionInventory } from "../../../host/src/session-inventory.ts";
 import { DuctFiles } from "../../../host/src/ducts-files.ts";
-import { Publications } from "../../../host/src/reads/evaluator.ts";
+import { Publications } from "../../../host/src/reads/publications.ts";
 import { RevitBridge } from "../../../host/src/bridge.ts";
 import { SdkSession } from "../../../host/src/sdk-session.ts";
 import { bootHost } from "../../../host/tests/real-server.ts";
@@ -19,7 +20,7 @@ import { connectTestBridge } from "../../../host/tests/bridge-fixture.ts";
 import { hostInputs } from "../../../host/src/host-program.ts";
 import { admittedReceiptStamps } from "../../../host/src/receipt-export.ts";
 import { watch } from "node:fs";
-import { mkdir, writeFile, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { HostInputContext } from "../../../host/src/input-context.ts";
 import { openRecordingWriter } from "../../../host/src/native-recording.ts";
@@ -287,7 +288,7 @@ test("a stopped recording preserves live Fans but cannot hide a late closed targ
   if (automatic.lane.kind !== "live" || !automatic.lane.captureStore)
     throw Error("Expected an automatic recording");
   const writer = await Effect.runPromise(
-    openRecordingWriter(dir, automatic.lane.captureStore.identity, {
+    openRecordingWriter(stateFixture(dir), automatic.lane.captureStore.identity, {
       maxBytes: 256 * 1024 * 1024,
       maxTakings: 10000,
     }),

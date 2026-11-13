@@ -9,13 +9,14 @@ import { afterEach, expect, test, vi } from "vite-plus/test";
 import { actionReceiptSchema, address, type WorkKey } from "@pe/agent-contracts";
 import { createPeClient } from "@pe/agent-contracts/pe-api";
 import { findingsWork, findingsWorkSchema } from "@pe/agent-contracts/slots";
+import { workReadings } from "../findings/readings.test-support";
 import { RouteWorkspace } from "@pe/runtime";
 import { withInvocationContext } from "@pe/runtime/context";
 import { human } from "../../../../../host/tests/callers";
 import { fixtureNative } from "../../../../../host/tests/fixture-native";
 import { createPeRoutes } from "../../../../../host/src/pe-routes";
 import { createWitness } from "../../../fans/cutover.test-support";
-import { RosterBody } from "../../../fans/mount";
+import { Notes } from "../findings/notes.tsx";
 import type { ModelPicture } from "#/scene/picture/model";
 import { SceneMeshes } from "#/scene/types";
 import { makeAtomRegistry } from "../../../shell/owner";
@@ -55,7 +56,7 @@ test("a person's finding on a fan port draws one mark on the port's geometry in 
     store: { getState: async () => structuredClone(saved), setState: async ({ value }) => void (saved = structuredClone(value)) },
   });
   const post = native.actions({ workspace: host });
-  const routes = createPeRoutes({ workspace: host, registrations: [{ spec: findingsWork }] });
+  const routes = createPeRoutes({ workspace: host, journal: native.journal, registrations: [{ spec: findingsWork }] });
   // The browser's Pe client, answered by the host's own route door as the person.
   const browser = createPeClient("http://host", (url, init) =>
     withInvocationContext({ caller: human }, () => routes.fetch(new Request(url, init))));
@@ -68,7 +69,7 @@ test("a person's finding on a fan port draws one mark on the port's geometry in 
         const response = await post(command, human);
         expect(response.status, await response.clone().text()).toBeLessThan(400);
         return actionReceiptSchema.parse(await native.journal.wait(command.id));
-      }, browser);
+      }, browser, workReadings(host));
     await waitFor(() => expect(f.typed.owner()?.ready).toBe(true));
     // The shell's own drawing of each pane, redrawn when the mount publishes.
     const Shown = ({ id, children }: { id: string; children?: (ctx: never) => ReactNode }) => {
@@ -76,18 +77,22 @@ test("a person's finding on a fan port draws one mark on the port's geometry in 
       return <>{f.typed.draw(id, (ctx) => children ? children(ctx as never) : <TypedPane mount={f.typed} id={id} ctx={ctx} />) as ReactNode}</>;
     };
     render(<RegistryContext value={makeAtomRegistry()}>
-      <Shown id="sheet-roster">{(ctx) => <RosterBody ctx={ctx} />}</Shown>
+      <Notes mount={f.typed} />
       <Shown id="sheet-picture" />
     </RegistryContext>);
 
-    // The person writes a check on the first fan port's roster row.
-    const trigger = (await screen.findAllByRole("button", { name: /^Write a finding on / }))[0]!;
-    const name = trigger.getAttribute("aria-label")!.replace("Write a finding on ", "");
-    fireEvent.click(trigger);
-    const pop = await screen.findByLabelText(`Finding on ${name}`);
+    // The person writes through the shell on the first fan port in the declared roster.
+    const subject = f.typed.spec.subject;
+    if (!subject) throw Error("Fans must declare its subject roster");
+    const roster = f.typed.value(subject.read ?? f.typed.spec.core);
+    if (!("value" in roster)) throw Error("Read the fan roster first");
+    const first = subject.options(roster.value)[0];
+    if (!first) throw Error("The fixture must have a fan port");
+    fireEvent(document, new CustomEvent("pe:findings", { detail: { route: "fans", code: first.id } }));
+    const pop = await screen.findByRole("dialog");
     fireEvent.change(within(pop).getByLabelText("finding text"), { target: { value: "port static reads low" } });
-    fireEvent.click(within(pop).getByRole("button", { name: `Write note on ${name}` }));
-    await waitFor(() => expect(submitted.map((c) => c.key)).toEqual(["findings.write"]), { timeout: 20_000 });
+    fireEvent.click(within(pop).getByRole("button", { name: "Write finding" }));
+    await waitFor(() => expect(submitted.map((c) => c.key)).toEqual(["findings.say"]), { timeout: 20_000 });
     const key: WorkKey = { ...submitted[0]!.input.work!.key, route: "findings" };
     const written = async () => Object.values(findingsWorkSchema.parse((await host.view(key, "findings"))?.doc ?? {}).findings);
     await waitFor(async () => expect(await written()).toHaveLength(1), { timeout: 20_000 });

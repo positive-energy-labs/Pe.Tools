@@ -1,5 +1,6 @@
+import { stateSegments } from "@pe/host-contracts/service-identity";
 import { createHash } from "node:crypto";
-import { createPluginRuntime, type PluginContext } from "@pe/agent-contracts";
+import { createPluginRuntime } from "@pe/agent-contracts";
 import { z } from "zod";
 import {
   listPackages,
@@ -8,9 +9,15 @@ import {
   type AdmittedPackage,
   type PodsRoots,
 } from "./packages.ts";
-import { readStored, writeAtomic } from "@pe/host-contracts/store";
-import { storedNoticesPath } from "./notice-feed.ts";
-import { productPluginDecisionsPath, productPodsRootPath } from "./product-paths.ts";
+import {
+  read as readFile,
+  writeState,
+  keptStateKind,
+  type StateRoot,
+  type StoredFile,
+} from "@pe/host-contracts/kinds";
+import { hostState } from "./host-ownership.ts";
+import { productPodsRootPath } from "./product-paths.ts";
 import {
   builtinPeaSkillSnapshots,
   type SkillSnapshot,
@@ -20,6 +27,12 @@ type Contribution =
   | { kind: "package"; package: AdmittedPackage }
   | { kind: "skill"; skill: SkillSnapshot };
 const decisionsSchema = z.record(z.string(), z.boolean());
+export const decisionsKind = keptStateKind({
+  schema: decisionsSchema,
+  place: () => "Pod on and off choices",
+  segments: () => stateSegments("pluginDecisions"),
+});
+type DecisionsFile = StoredFile<z.infer<typeof decisionsSchema>, "state-kept">;
 let serving: ReturnType<typeof createPackageLifecycle> | undefined;
 export function bindPackageLifecycle(
   lifecycle: ReturnType<typeof createPackageLifecycle> | undefined,
@@ -39,14 +52,10 @@ export async function activateImportedPackage(id: string, podsRoot: string) {
  * not decode is refused with a notice and its bytes stay. Defaults hold, and no choice is saved
  * over it until a person fixes or removes the file.
  */
-const storedDecisions = (path: string) =>
-  readStored(path, decisionsSchema, {
-    class: "keep",
-    place: "Pod on and off choices",
-    notices: storedNoticesPath(),
-  });
-const readDecisions = async (path: string) => {
-  const read = storedDecisions(path);
+const storedDecisions = (file: DecisionsFile) =>
+  readFile(file);
+const readDecisions = async (file: DecisionsFile) => {
+  const read = storedDecisions(file);
   return read.kind === "ok" ? read.value : {};
 };
 /**
@@ -69,7 +78,7 @@ export async function requirePackageEnabled(
     await serving.ready;
     if (!serving.active(id)) throw Error(`Pod '${id}' is inactive`);
   }
-  if ((await readDecisions(productPluginDecisionsPath()))[`pod:${id}`] === false)
+  if ((await readDecisions(decisionsKind.in(hostState())))[`pod:${id}`] === false)
     throw Error(`Pod '${id}' is disabled`);
 }
 /** Inactive scopes stay visible through plugin inventory, never through their doors. */
@@ -87,11 +96,11 @@ export async function activePackages(
 export function createPackageLifecycle(
   options: {
     packages?: typeof listPackages;
-    decisionsPath?: string;
+    machine?: StateRoot;
     changed?: () => void;
   } = {},
 ) {
-  const decisionsPath = options.decisionsPath ?? productPluginDecisionsPath();
+  const decisionsFile = decisionsKind.in(options.machine ?? hostState());
   let decisions: Record<string, boolean> = {};
   let initialized = false;
   const signatures = new Map<string, string>();
@@ -104,19 +113,20 @@ export function createPackageLifecycle(
   const runtime = createPluginRuntime<Contribution>({
     changed,
     persist: async (id, enabled) => {
-      const stored = storedDecisions(decisionsPath);
+      const stored = storedDecisions(decisionsFile);
       if (stored.kind === "kept")
         throw Error(
           `Pod on and off choices can't be read, so the file is kept and this choice is not saved: ${stored.reason}`,
         );
       const next = { ...decisions, [id]: enabled };
-      writeAtomic(decisionsPath, JSON.stringify(next));
+      writeState(decisionsFile, JSON.stringify(next));
       decisions = next;
     },
   });
   const ready = initialize();
+  let settled: Promise<unknown> = ready;
   async function initialize() {
-    decisions = await readDecisions(decisionsPath);
+    decisions = await readDecisions(decisionsFile);
     await runtime.install(
       {
         id: "product:skills",
@@ -149,42 +159,12 @@ export function createPackageLifecycle(
       await runtime.install(
         {
           id,
-          async setup(context) {
+          setup(context) {
             const errors = pod.diagnostics.filter((d) =>
               ["PackageMemberInvalid", "DuplicatePodId"].includes(d.code),
             );
             if (errors.length) throw Error(errors.map((d) => d.message).join("; "));
             context.contribute(id, { kind: "package", package: pod });
-            const cleanups: (() => void | Promise<void>)[] = [];
-            try {
-              for (const member of pod.members.filter((m) =>
-                /^plugins\/[^/]+\/index\.js$/.test(m.path),
-              )) {
-                // This is trusted local host code, not a sandbox. Import the captured version, never reread disk.
-                const module = await import(
-                  `data:text/javascript;base64,${Buffer.from(member.bytes).toString("base64")}#${member.sha256}`
-                );
-                if (typeof module.default?.setup !== "function")
-                  throw Error(`${member.path} must export a plugin with setup`);
-                const hooksOnly: PluginContext<never> = {
-                  id,
-                  hook: (name, observer) => context.hook(name, observer),
-                  contribute() {
-                    throw Error("Pod contributions follow admitted paths");
-                  },
-                };
-                const cleanup = await module.default.setup(Object.freeze(hooksOnly));
-                if (cleanup !== undefined && typeof cleanup !== "function")
-                  throw Error(`${member.path} returned invalid cleanup`);
-                if (cleanup) cleanups.push(cleanup);
-              }
-            } catch (error) {
-              for (const cleanup of cleanups.reverse()) await cleanup();
-              throw error;
-            }
-            return async () => {
-              for (const cleanup of cleanups.reverse()) await cleanup();
-            };
           },
         },
         decisions[id] === true || ((initial || known) && decisions[id] !== false),
@@ -194,7 +174,8 @@ export function createPackageLifecycle(
     return listing;
   }
   return {
-    ready,
+    // Inventory readers join the current census, including bootstrap's pending reconciliation.
+    get ready() { return settled; },
     observeChanges(listener: () => void) {
       listeners.add(listener);
       return () => {
@@ -203,10 +184,13 @@ export function createPackageLifecycle(
     },
     initialized: () => initialized,
     /** Explicit import, activation and update reconcile setup/cleanup; inventory reads use listing. */
-    refresh: async (initial = false) => {
-      await ready;
-      const listing = initial ? initialListing : undefined;
-      return listing ?? synchronize();
+    refresh: (initial = false) => {
+      const next = settled.catch(() => ready).then(() => {
+        const listing = initial ? initialListing : undefined;
+        return listing ?? synchronize();
+      });
+      settled = next;
+      return next;
     },
     listing: () => initialListing!,
     inventory: runtime.inventory,
@@ -218,7 +202,6 @@ export function createPackageLifecycle(
     packages: () =>
       runtime.contributions().flatMap((c) => (c.kind === "package" ? [c.package] : [])),
     skills: () => runtime.contributions().flatMap((c) => (c.kind === "skill" ? [c.skill] : [])),
-    emit: runtime.emit,
     close: async () => {
       await ready;
       await runtime.close();

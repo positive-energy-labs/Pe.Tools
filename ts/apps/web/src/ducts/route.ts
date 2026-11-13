@@ -1,6 +1,6 @@
 import type { ContextOf } from "../route/defaults";
 import { systemCode } from "./identity";
-import { command } from "../route/typed-actions.ts";
+import { handle } from "@pe/agent-contracts/handle";
 import { bindings } from "./bindings";
 import { read } from "../route/defaults";
 import { stageField } from "../route/defaults";
@@ -26,7 +26,7 @@ import { draw } from "../route/draw.tsx";
 import { fillBody, scrollBody } from "../route/body.ts";
 import { overlay } from "../route/slots/picture/overlay.tsx";
 import { describeInputHistory, editMetaSchema } from "./sheet/input-history.neutral.ts";
-import { reads } from "./reads.ts";
+import * as reads from "./contract.ts";
 import { presentLosses, presentHeal, presentFan } from "./reviews.ts";
 import { designSheet } from "./design-sheet.ts";
 
@@ -51,6 +51,10 @@ export const roster = read(hostRead(reads.roster));
 export const network = read(hostRead(reads.network), args);
 export const pricing = read(hostRead(reads.pricing), args);
 export type DuctsDrawContext = ContextOf<typeof fields, typeof pricing, typeof import("../../../../packages/agent-contracts/src/ducts.ts").ductsRouteState, typeof import("@pe/agent-contracts").ductsSheetEditsSchema>;
+/** What every ducts pane shares, whichever read it names: the pane's own `value` is not part of it. */
+export type DuctsReads = Omit<DuctsDrawContext, "value">;
+/** The systems pane draws the roster, so it still lists systems while pricing is read or refused. */
+export type DuctsSystemsContext = DuctsReads & Pick<ContextOf<typeof fields, typeof roster>, "value">;
 const evidence = (
   data: DuctsDrawContext["value"]["value"],
   work: DuctsDrawContext["cells"]["doc"],
@@ -100,6 +104,7 @@ export const module = route({
       subjectList: true,
       title: "Systems",
       purpose: "Choose a system to inspect",
+      read: roster,
       bindings,
       body: "scroll",
       draw: draw("scroll", () => import("./proto/e/screen.tsx"), "SystemsPane"),
@@ -160,23 +165,24 @@ export const module = route({
     history: editMetaSchema,
     describe: describeInputHistory,
   },
-  commands: {
+  verbs: {
     losses: {
-      ...command("sheet.apply"),
+      handle: handle("sheet.apply"),
       label: "Write to Revit",
-      present: (result, data, work) => presentLosses(result, evidence(data, work)),
+      present: (result, { value: data, doc: work }) => presentLosses(result, evidence(data, work)),
     },
     heal: {
-      ...command("ducts.apply-heal"),
+      handle: handle("ducts.apply-heal"),
       label: "Heal",
-      present: (result, data, work) => presentHeal(result, evidence(data, work)),
+      present: (result, { value: data, doc: work }) => presentHeal(result, evidence(data, work)),
     },
     assign: {
-      ...command("ducts.apply-assign-fan"),
+      handle: handle("ducts.apply-assign-fan"),
       label: "Make the fan",
-      present: (result, data, work) => presentFan(result, evidence(data, work)),
+      present: (result, { value: data, doc: work }) => presentFan(result, evidence(data, work)),
     },
   },
+  band: ["losses", "heal", "assign"],
   layout: split(
     "h",
     [

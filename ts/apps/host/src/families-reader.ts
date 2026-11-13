@@ -3,8 +3,7 @@ import { Clock, Context, Effect, Layer, Semaphore } from "effect";
 import { randomUUID } from "node:crypto";
 import { copyFile, mkdir, mkdtemp, rm } from "node:fs/promises";
 import { z } from "zod";
-import { readStored, writeAtomic } from "@pe/host-contracts/store";
-import { storedNoticesPath } from "./notice-feed.ts";
+import { read as readStoredFile, writeState, stateKind } from "@pe/host-contracts/kinds";
 import { join } from "node:path";
 import { freemem } from "node:os";
 import { productScratchPath } from "@pe/host-contracts/service-identity";
@@ -161,14 +160,15 @@ async function readFamiliesProgressively(
       active.delete(requestId);
     }
   };
-  const costsPath = join(captures.directory, "families", "read-costs.json");
+  const costsFile = stateKind({
+    schema: z.object({ startupMs: z.number().min(1_000), families: z.record(z.string(), z.object({ ms: z.number(), types: z.number() })),
+    }),
+    place: () => "Family read timings",
+    segments: () => ["families", "read-costs.json"],
+  }).in(captures.storage);
   let costs: Costs = { startupMs: 180_000, families: {} };
   // Derived (ADR 0039): a damaged timing file is discarded with a notice and the estimate starts cold.
-  const stored = readStored(
-    costsPath,
-    z.object({ startupMs: z.number().min(1_000), families: z.record(z.string(), z.object({ ms: z.number(), types: z.number() })) }),
-    { class: "discard", place: "Family read timings", notices: storedNoticesPath() },
-  );
+  const stored = readStoredFile(costsFile);
   if (stored.kind === "ok") costs = stored.value;
   const samples: Sample[] = [];
   let folder: Promise<string> | undefined;
@@ -383,7 +383,7 @@ async function readFamiliesProgressively(
         console.error("families-reader: asynchronous operation failed", error);
       });
     try {
-      writeAtomic(costsPath, JSON.stringify(costs));
+      writeState(costsFile, JSON.stringify(costs));
     } catch {
       // Costs only order the next read; a failed write loses nothing.
     }

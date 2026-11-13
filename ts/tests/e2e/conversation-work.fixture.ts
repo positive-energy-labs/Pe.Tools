@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { resolve, join } from "node:path";
 import { pathToFileURL } from "node:url";
+import { stateRoot, stateScope, stateTree } from "../../packages/host-contracts/src/service-identity.ts";
 
 export const CONVERSATION_THREADS = {
   office: "cac00000-0000-4000-8000-000000000001",
@@ -13,7 +14,7 @@ export const UNSAVED_REF = { session: "closed-session", openId: "unsaved-open" }
 export const NAMES_TURN = "cac00000-0000-4000-8000-000000000021";
 
 export async function workEvidence(home: string) {
-  const dir = join(resolve(home), ".local-state", "state", "route-work");
+  const dir = stateTree(stateRoot("dev", resolve(home), home)).work;
   return Promise.all(
     (await readdir(dir))
       .filter((file) => file.endsWith(".json"))
@@ -45,9 +46,14 @@ export async function seedConversationWork(homeInput: string, artifactInput: str
   const { RouteWorkspace } = await import("../../packages/runtime/src/route-workspace.ts");
   const { createRouteRegistrations } = await import("../../packages/mcps/src/pea/routes.ts");
   const { fileRouteDocumentStore } = await import("../../apps/host/src/route-document-store.ts");
-  const paths = await import("../../apps/host/src/product-paths.ts");
+  const { homeDirs } = await import("../../packages/host-contracts/src/product-paths.ts");
+  const { productPathNames } = await import("../../packages/host-contracts/src/contracts/product.ts");
+  const machine = stateTree(stateRoot("dev", home, home));
+  // Authored Pages use the user home, first in the canonical home order; Page state is separate.
+  const [pagesRoot] = homeDirs(productPathNames.pagesDirectoryName);
+  if (!pagesRoot) throw Error("Seed requires a user Pages home");
   for (const slug of ["chadds-duct-readiness", "chadds-duct-detail"]) {
-    const page = join(paths.productPagesRootPath(), slug);
+    const page = join(pagesRoot, slug);
     await mkdir(page, { recursive: true });
     await writeFile(
       join(page, "index.html"),
@@ -59,7 +65,7 @@ export async function seedConversationWork(homeInput: string, artifactInput: str
   const unsavedScope = bindWork("fans", null, undefined, UNSAVED_REF);
   const workspace = new RouteWorkspace({
     registrations: createRouteRegistrations(),
-    store: fileRouteDocumentStore(paths.productRouteWorkPath()),
+    store: fileRouteDocumentStore(stateScope(machine, machine.work)),
   });
   // Seed through the same admitted builtin enrollment as the HTTP host, not the legacy registry.
   const { Effect, Layer } = await import("effect");
@@ -129,7 +135,7 @@ export async function seedConversationWork(homeInput: string, artifactInput: str
   for (const [kind, id] of Object.entries(CONVERSATION_THREADS)) {
     const office = kind === "office";
     const unsaved = kind === "unsaved";
-    const dir = join(paths.productHarnessThreadsPath(), id);
+    const dir = join(machine.harnessThreads, id);
     await mkdir(dir, { recursive: true });
     await writeFile(
       join(dir, "meta.json"),

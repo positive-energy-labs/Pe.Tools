@@ -1,10 +1,11 @@
-
+import { stateFixture } from "../../../tests/isolated-home/storage.ts";
+import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { HostNativeRead } from "@pe/host-internal/native-read";
 import { NativeReads } from "../src/native-reads.ts";
 
 
 import { testDuctFiles } from "./effect-test.ts";
-import { mkdtemp, rm } from "node:fs/promises";
+import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { NodeCrypto } from "@effect/platform-node";
@@ -31,7 +32,7 @@ import { RunRegistry } from "../src/run-registry.ts";
 import { bindControl } from "../src/control.ts";
 import { hostResourceObserver } from "../src/resource-adapters.ts";
 import type { ReadSources } from "../src/reads/inputs.ts";
-import { Publications } from "../src/reads/evaluator.ts";
+import { Publications } from "../src/reads/publications.ts";
 import { graphRoute } from "../src/reads/routes.ts";
 import { sheetPort } from "./ducts-read.fixture.ts";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
@@ -51,7 +52,7 @@ export async function nativeFixture(
 ) {
   const scope = Scope.makeUnsafe();
   const dir = await mkdtemp(join(tmpdir(), "fans-recorded-"));
-  const saved = new RouteWorkspace({ registrations: [], store: fileRouteDocumentStore(join(dir, "work")) });
+  const saved = new RouteWorkspace({ registrations: [], store: fileRouteDocumentStore(stateFixture(join(dir, "work"))) });
   const context = await settle(Layer.buildWithScope(Layer.mergeAll(admittedBuiltinsLayer(saved),
     RunRegistry.layer.pipe(Layer.provide(NodeCrypto.layer))), scope));
   const clock = clockMode === "test" ? await settle(Layer.buildWithScope(TestClock.layer(), scope)) : Context.empty();
@@ -125,7 +126,7 @@ export async function nativeFixture(
     const api = createPeRoutes({
       workspace: saved,
       registrations: [],
-      store: fileRouteDocumentStore(join(dir, "work")),
+      store: fileRouteDocumentStore(stateFixture(join(dir, "work"))),
       heads: { observe: () => () => {} },
       navigation: {
         threads: async () => [],

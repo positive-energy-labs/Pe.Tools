@@ -1,7 +1,9 @@
+import { stateFixture } from "../../../tests/isolated-home/storage.ts";
+import { mkdtempSync } from "../../../tests/isolated-home/storage.ts";
 import { testInputContext } from "./effect-test.ts";
 import { ActionJournalService } from "../src/receipt-services.ts";
 import { machineFixture } from "../../../packages/agent-contracts/tests/machine-fixture.ts";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer as createNodeServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -150,7 +152,7 @@ test("the host-owned /pe surface answers without Revit", async () => {
     await reader.cancel();
     expect(JSON.parse(frame.slice(frame.indexOf("data: ") + 6))).toMatchObject({
       kind: "snapshot",
-      value: { targets: [], revision: 1 },
+      value: { targets: [], revision: 1, pointers: [] },
     });
     const routeList = await fetch(`${base}/pe/route-state`);
     expect(routeList.status).toBe(200);
@@ -204,7 +206,7 @@ test("one admitted content snapshot publishes exact skill bytes and retains froz
     writeFileSync(join(folder, path), text);
   }
   const content = createContributionContent({
-    worldRoot: home,
+    worldRoot: stateFixture(home),
     homeRoot: home,
     packages: async () => {
       listings++;

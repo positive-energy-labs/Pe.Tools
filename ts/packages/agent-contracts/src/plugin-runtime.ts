@@ -1,4 +1,4 @@
-import type { Plugin, PluginContext, PluginHookName, PluginHooks, PluginStatus } from "./plugin.ts";
+import type { Plugin, PluginContext, PluginStatus } from "./plugin.ts";
 
 type Entry<T> = { plugin: Plugin<T>; status: PluginStatus; dispose: (() => Promise<void>) | null };
 /** One scoped registration path for builtin and authored contributions. Installation is explicit. */
@@ -7,10 +7,6 @@ export function createPluginRuntime<T>(
 ) {
   const entries = new Map<string, Entry<T>>();
   const contributions = new Map<string, { owner: string; value: T }>();
-  const hooks = new Map<
-    PluginHookName,
-    Set<{ owner: Entry<T>; run: (event: never) => void | Promise<void> }>
-  >();
   let tail: Promise<unknown> = Promise.resolve();
   const serial = <R>(work: () => Promise<R>): Promise<R> => {
     const next = tail.catch((error) => { console.error("plugin-runtime: asynchronous operation failed", error); }).then(work);
@@ -48,18 +44,6 @@ export function createPluginRuntime<T>(
         contributions.set(key, row);
         const dispose = () => {
           if (contributions.get(key) === row) contributions.delete(key);
-        };
-        cleanup.push(dispose);
-        return { dispose };
-      },
-      hook(name, observer) {
-        requireActive();
-        let callbacks = hooks.get(name);
-        if (!callbacks) hooks.set(name, (callbacks = new Set()));
-        const row = { owner: entry, run: observer as (event: never) => void | Promise<void> };
-        callbacks.add(row);
-        const dispose = () => {
-          callbacks.delete(row);
         };
         cleanup.push(dispose);
         return { dispose };
@@ -106,29 +90,10 @@ export function createPluginRuntime<T>(
     inventory: () => [...entries.values()].map((e) => ({ ...e.status })),
     contributions: () => [...contributions.values()].map((c) => c.value),
     active: (id: string) => entries.get(id)?.status.status === "active",
-    emit: async <N extends PluginHookName>(name: N, event: PluginHooks[N]) => {
-      const immutable = freeze(structuredClone(event));
-      for (const row of [...(hooks.get(name) ?? [])]) {
-        if (!hooks.get(name)?.has(row) || !row.owner.dispose) continue;
-        try {
-          await row.run(immutable as never);
-        } catch (error) {
-          row.owner.status.error = `${name}: ${String(error)}`;
-        }
-      }
-    },
     close: () =>
       serial(async () => {
         for (const entry of entries.values()) await deactivate(entry);
         entries.clear();
       }),
   };
-}
-
-function freeze<T>(value: T): T {
-  if (value !== null && typeof value === "object") {
-    for (const child of Object.values(value)) freeze(child);
-    Object.freeze(value);
-  }
-  return value;
 }

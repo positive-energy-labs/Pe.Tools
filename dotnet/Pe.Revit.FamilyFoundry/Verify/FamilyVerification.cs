@@ -64,7 +64,8 @@ public static class FamilyVerification {
         } finally { group.RollBack(); }
     }
 
-    public static FamilyLoadTestData LoadTestFamily(this Document familyDocument, FamilyLoadTestRequest request) {
+    /// <summary>Everything this commits lands in a scratch project it opens and closes unsaved, so the scope holds it as disposable.</summary>
+    public static FamilyLoadTestData LoadTestFamily(this Document familyDocument, FamilyLoadTestRequest request, Pe.Revit.Operations.TransactRead scope) {
         var output = OutputDirectory(request.OutDir);
         var typeNames = Types(familyDocument, request.Types).Select(t => t.Name).ToList();
         var app = familyDocument.Application;
@@ -79,6 +80,7 @@ public static class FamilyVerification {
         Document? project = null;
         try {
             project = string.IsNullOrWhiteSpace(template) ? app.NewProjectDocument(UnitSystem.Imperial) : app.NewProjectDocument(template);
+            return scope.InDisposable(project, "family.loadTest", () => {
             var existing = new FilteredElementCollector(project).OfClass(typeof(Family)).Cast<Family>().Any(f => f.Name == familyDocument.OwnerFamily.Name);
             var options = new LoadOptions(familyDocument.OwnerFamily.Name);
             var loaded = familyDocument.LoadFamily(project, options);
@@ -140,6 +142,7 @@ public static class FamilyVerification {
                 .Concat(loadedFamilies.GroupBy(f => f.Name).Where(g => g.Count() > 1).Select(g => g.Key)).Distinct().ToList();
             return new FamilyLoadTestData(loaded.Name, existing, options.Rows, nested, duplicates, rows, warnings, failures.Rows,
                 Export(project, output, "loadTest", views));
+            });
         } finally {
             try { project?.Close(false); }
             finally { app.FailuresProcessing -= OnFailures; }

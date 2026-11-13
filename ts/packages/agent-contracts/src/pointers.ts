@@ -1,6 +1,6 @@
 /*
- * Pointers is the shell list per thread (ADR 0030 rule 10), "Pea is pointing at", kept until dismissed.
- * The thread stores it and the route owns its highlight; it has no journal (ADR 0035 rule 9). A
+ * Pointers are transient citations per thread (ADR 0030 rule 10), kept until dismissed.
+ * Thread meta stores them and the kernel draws their highlight; there is no journal (ADR 0035 rule 9). A
  * Pointer highlights; it never writes the page's selection, its attention fields or the camera.
  */
 

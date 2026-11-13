@@ -83,7 +83,7 @@ test("6.1b two Places on one route, one hidden mid-read: every aria-busy in the 
     // The hidden Place releases its reads as Activity hides it (TypedPlace's effect cleanup); its read never answers.
     act(() => { hiddenCustody.current = false; hidden.release(); });
     await act(async () => complete(shownFrames.at(-1)!));
-    expect(hidden.value().status).toBe("pending");
+    expect(["reading", "refreshing"]).toContain(hidden.value().state);
     await settled(document.body);
     expect(document.querySelectorAll('[aria-busy="true"]')).toHaveLength(0);
   } finally { cleanup(); shown.dispose(); hidden.dispose(); }

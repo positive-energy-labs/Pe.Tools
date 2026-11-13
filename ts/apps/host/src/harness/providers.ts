@@ -1,4 +1,4 @@
-import { hostOwnership } from "../host-ownership.ts";
+import { hostOwnership, hostState } from "../host-ownership.ts";
 import { matchPeRoute } from "@pe/agent-contracts/pe-api";
 import { spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
@@ -21,7 +21,7 @@ import { Cause, Effect, Exit, Schema, Scope } from "effect";
 import { Spawner } from "./spawner.ts";
 import { MessagesReply, ModelList, ResponsesReply } from "./edge-schemas.ts";
 import { z } from "zod";
-import { productProvidersPath } from "../product-paths.ts";
+
 import { harnessKeyRole, keyRefusalText, resolveKey, sharedKeys } from "@pe/host-contracts/shared-keys";
 import { adapterCli, adapterLogin, adapters, openAdapter, stopChild } from "./adapter.ts";
 import { classifyEndpointFailure } from "./endpoint-failure.ts";
@@ -160,7 +160,7 @@ function authEnv(record: ProviderRecord, modelId?: string): Record<string, strin
     supports_websockets: false,
   };
   const codexHome = join(
-    dirname(productProvidersPath()),
+    dirname(hostState().providers),
     "codex-endpoints",
     createHash("sha256").update(record.id).digest("hex"),
   );
@@ -195,12 +195,12 @@ function authEnv(record: ProviderRecord, modelId?: string): Record<string, strin
  * role (ADR 0037 rule 9). A refusal is an endpoint refusal naming why, never key bytes.
  */
 function endpointKey(record: EndpointRecord): string {
-  const key = resolveKey(record.auth.apiKey, harnessKeyRole[record.harness]);
+  const key = resolveKey(record.auth.apiKey, harnessKeyRole[record.harness], hostState());
   if ("refused" in key) throw new Refusal(keyRefusalText(key.refused, harnessKeyRole[record.harness]));
   return key.value;
 }
 const sharedKeyValues = () => {
-  const shared = sharedKeys();
+  const shared = sharedKeys(hostState());
   return "keys" in shared ? Object.values(shared.keys) : [];
 };
 
@@ -538,6 +538,7 @@ const storedSchema = z.object({
   ),
 });
 
+// STORE-EXCEPTION: ADR 0039; harness/ provider writes stay local until T3 replaces this persistence.
 function writeJson(path: string, value: unknown) {
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(`${path}.tmp`, JSON.stringify(value, null, 2));
@@ -683,9 +684,11 @@ export function createProviders(options: ProvidersOptions) {
   };
   let providerReadError: string | null = null;
 
+  // STORE-EXCEPTION: ADR 0039; harness/ providers keep credential bytes and refuse saves after
+  // a bad decode. Retire this exception when T3 replaces provider persistence.
   /** Re-read before writes so external damage cannot be replaced by a cached valid list. */
   const stored = (): EndpointRecord[] => {
-    const path = productProvidersPath();
+    const path = hostState().providers;
     try {
       const parsed = existsSync(path)
         ? storedSchema.parse(JSON.parse(readFileSync(path, "utf8")))
@@ -716,10 +719,11 @@ export function createProviders(options: ProvidersOptions) {
     stored();
     return [...new Set([...knownKeys, ...sharedKeyValues()])];
   };
+  // STORE-EXCEPTION: ADR 0039; T3 replaces this provider writer; unreadable key bytes must stay.
   const save = (records: EndpointRecord[]) => {
     stored();
     if (providerReadError) throw Error(providerReadError);
-    writeJson(productProvidersPath(), { providers: records });
+    writeJson(hostState().providers, { providers: records });
   };
   const records = (): ProviderRecord[] => [
     ...harnessIds.map((harness) => ({
@@ -747,7 +751,11 @@ export function createProviders(options: ProvidersOptions) {
             kind: "endpoint",
             baseUrl: record.auth.baseUrl,
             keyLast4: (() => {
-              const key = resolveKey(record.auth.apiKey, harnessKeyRole[record.harness]);
+              const key = resolveKey(
+                record.auth.apiKey,
+                harnessKeyRole[record.harness],
+                hostState(),
+              );
               return "refused" in key ? "" : key.value.slice(-4);
             })(),
           },
@@ -850,7 +858,7 @@ export function createProviders(options: ProvidersOptions) {
     const finish = (probed: Probed) => finishProbe(record, probed, detail);
     // A key that resolves nowhere refuses at the endpoint step before any child or request.
     if (record.auth.kind === "endpoint") {
-      const key = resolveKey(record.auth.apiKey, harnessKeyRole[record.harness]);
+      const key = resolveKey(record.auth.apiKey, harnessKeyRole[record.harness], hostState());
       if ("refused" in key) {
         const message = keyRefusalText(key.refused, harnessKeyRole[record.harness]);
         return finish({
@@ -970,7 +978,7 @@ export function createProviders(options: ProvidersOptions) {
     try {
       if (/\s/.test(apiKey)) throw new Refusal("API key contains whitespace");
       // No key of your own: the firm keys.json entry for this harness's role, or a refusal.
-      const key = resolveKey(apiKey, harnessKeyRole[input.harness]);
+      const key = resolveKey(apiKey, harnessKeyRole[input.harness], hostState());
       if ("refused" in key) throw new Refusal(keyRefusalText(key.refused, harnessKeyRole[input.harness]));
       baseUrl = normalizeBaseUrl(input.harness, input.auth.baseUrl);
     } catch (error) {

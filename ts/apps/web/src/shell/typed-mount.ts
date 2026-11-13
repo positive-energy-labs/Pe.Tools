@@ -1,6 +1,7 @@
-import { ownFindingsLeft, readFindings, undoOwnFinding } from "../route/host";
-import { findingCommand } from "../route/slots/findings/index.ts";
-import { FINDINGS_DOORS, FINDINGS_OWNER, type Finding } from "@pe/agent-contracts/slots";
+import { homeHandle } from "../route/slots/sheet/index.ts";
+import { peReadings, type Readings } from "#/host/resource-stream";
+import { kernelVerbs, type KernelVerbKey } from "../route/slots/findings/index.ts";
+import { FINDINGS_OWNER, findingsWorkSchema, type Finding } from "@pe/agent-contracts/slots";
 import { hostReadSource } from "./host-read-source.ts";
 import { z } from "zod";
 import { readableRefusal } from "../route/readable-refusal";
@@ -11,11 +12,13 @@ function valueRefusal(error: unknown, read: string): string {
   return readableRefusal(error, `Value unavailable (${read}): the model reading does not match its contract. Refresh to try again.`);
 }
 import { decodeField } from "../route/field-codec";
+import { visibleReads } from "../route/typed-route";
 import {
   applyPatches,
   bindWork,
   cellPatches,
   commands,
+  hostActions,
   commandTarget,
   canonicalRouteInput,
   workKey,
@@ -33,19 +36,23 @@ import {
   type WorkScope,
   type RouteFingerprint,
   type InvocationToken,
-  type RouteStateWriteResult,
 } from "@pe/agent-contracts";
-import { ANY_ROUTE } from "@pe/agent-contracts";
+import { ANY_ROUTE, writeSettingTier } from "@pe/agent-contracts";
 import { createRouteScopeGate } from "@pe/runtime/route-scope-gate";
 import { applicationWorkRegistry, createApplicationWorkRegistry } from "./application-work-registry";
-import { createWorkFeedClient } from "./work-feed-client";
+import { createWorkFeedClient, createTimelineClient, type TimelineClient } from "./work-feed-client";
 import { createFixtureWorkDoor } from "./fixture-work-door";
 import { publicationPose, recordedWorkDoor } from "./history";
 import { settleWork } from "./work-door-observation";
 import { freezePage } from "./freeze-page";
 import type { PlaceInput } from "./typed-place";
 import type { ReadingContext, UseSource } from "./source-contract";
-import type { DrawContext, EditFailure, EditHistory, TypedRoute } from "../route/typed-route";
+import type { AnyVerb, DrawContext, EditFailure, EditHistory, PlannedVerb, RunVerb, TypedRoute, VerbContext, VerbHandle } from "../route/typed-route";
+import { handle } from "@pe/agent-contracts/handle";
+import type { Command } from "../../../../packages/agent-contracts/src/command.ts";
+import { reasonOf, refusalOf, valueOf } from "../route/typed-route";
+import type { ReadingState } from "@pe/agent-contracts";
+import { absentLine, failureLine } from "./reading-line";
 import { cancelAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 import { observeSubject, subjectScopeKey, type SubjectState } from "./subject";
 
@@ -55,19 +62,23 @@ export type RouteReadiness =
   | { kind: "ready" }
   | { kind: "pending" | "blocked"; reason: string };
 
-type Value = DrawContext<any, any, any, any>["value"];
-const unavailable = (reason: string, value?: any, publication: Value["publication"] = null): Extract<Value,{current:false}> =>
-  ({ current: false, status: "unavailable", reason, publication, ...(value === undefined ? {} : { value }) });
+type Publication = DrawContext<any, any, any, any>["value"]["publication"];
+/** A read as the mount holds it: its state, the publication it came from, and the hash of a ready value. */
+type Snapshot = ReadingState<any> & { readonly publication: Publication; readonly hash?: string };
+// The one-to-one mapping from a read's outcome (routes CONTRACTS.md, "Reading state"): a refusal over a
+// held value is `stale`, alone it is `refused`; a read in flight over a held value is `refreshing`, alone `reading`.
+const unavailable = (reason: string, value?: unknown, publication: Publication = null): Snapshot =>
+  value === undefined ? { state: "refused", reason, publication } : { state: "stale", value, reason, publication };
+const reading = (value?: unknown, publication: Publication = null): Snapshot =>
+  value === undefined ? { state: "reading", publication } : { state: "refreshing", value, publication };
+const inFlight = (snapshot: Snapshot) => snapshot.state === "reading" || snapshot.state === "refreshing";
 
 /** Typed routes execute declarations directly. No graph admission, body slots or reading scheduler. */
 export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerprint: RouteFingerprint,
-  ports: { work?: WorkJournalDoor; sources?: Record<string, UseSource>; findings?: Parameters<typeof undoOwnFinding>[1] } = {}) {
+  ports: { work?: WorkJournalDoor; sources?: Record<string, UseSource>; findings?: Parameters<typeof createTimelineClient>[0]; timeline?: TimelineClient; readings?: Pick<Readings, "subscribe"> } = {}) {
   const cleanups: (() => void)[] = [];
   try {
-  // Every route carries the kernel's one command, the person's `finding` (ADR 0035 rule 9); a route's own
-  // id wins. A Workless mount (a Page projection) has it too, so a shared row body draws it refused, not
-  // thrown. The mount adds it, not `route()`: its contract is the catalog, and `route()` is the Pod surface.
-  const spec = { ...module.spec, commands: { finding: findingCommand, ...module.spec.commands } } as TypedRoute["spec"];
+  const spec = module.spec;
   const edits = spec.edits;
   const own = edits?.work.route ?? spec.key;
   const ownerConfigs = edits?.owners ?? {};
@@ -106,13 +117,64 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     return bindWork(own,input.work.address,undefined,input.work.open ?? undefined);
   };
   let key = selectedKey();
+  let timelineState: import("@pe/agent-contracts").WorkTimeline | null = null;
+  let timelineProblem: string | null = "Reading Timeline";
+  const problems = new Map<string,string>();
+  const stepProblemBasis = new Map<string,string>();
+  const timelineBasis = (value: typeof timelineState) => canonicalRouteInput(value && [
+    [value.undo, value.redo].map(step => step && ("work" in step
+      ? { work: step.work, revision: step.revision } : { home: step.home, sha256: step.sha256 })),
+    value.rows.flatMap(row => "revision" in row ? [{ work: row.work, revision: row.revision }] : []),
+  ]);
+  let stopTimeline = () => {};
+  const timelineClient = ports.timeline ?? (input.fixture === null && !input.history ? createTimelineClient(ports.findings) : null);
+  const timelineWorks = () => [...owners.values()].map(owner => owner.handle?.key ?? owner.scope.key);
+  const connectTimeline = () => {
+    stopTimeline(); timelineState = null;
+    timelineProblem = input.history ? "Recorded Timeline is read-only" : "Timeline unavailable";
+    const works = timelineWorks();
+    if (!timelineClient || !works.length) return;
+    let closed = false;
+    const stop = timelineClient.open(works, (value, reason) => {
+      if (closed || disposed) return;
+      if (value) for (const direction of ["undo", "redo"]) {
+        const id = `work.${direction}`, basis = stepProblemBasis.get(id);
+        if (basis !== undefined && basis !== timelineBasis(value)) { problems.delete(id); stepProblemBasis.delete(id); }
+      }
+      timelineState = value ? freezePage(value) : null; timelineProblem = reason ?? null; notify();
+    });
+    stopTimeline = () => { closed = true; stop(); };
+  };
+  cleanups.push(() => stopTimeline());
+  const stepTimeline = async (direction: "undo" | "redo") => {
+    const id = `work.${direction}`;
+    const basis = timelineBasis(timelineState);
+    problems.delete(id); stepProblemBasis.delete(id); notify();
+    const refused = (message: string) => {
+      if (!disposed && input.custody.current() && (!timelineState || basis === timelineBasis(timelineState))) {
+        problems.set(id, message); stepProblemBasis.set(id, basis); notify();
+      }
+      return { message };
+    };
+    try {
+      requireWritable();
+      const expected = timelineState?.[direction];
+      if (!timelineClient || !expected || timelineProblem || timelineState?.refusal[direction])
+        return refused(timelineProblem ?? timelineState?.refusal[direction] ?? `Nothing to ${direction}`);
+      const result = await timelineClient.step({ direction, works: timelineWorks(), expected });
+      if (!disposed && input.custody.current()) {
+        if (result) connectTimeline();
+        watchFindings();
+      }
+      return result ? refused(result.message) : null;
+    } catch (error) { return refused(error instanceof Error ? error.message : String(error)); }
+  };
   let renderedBasis: InvocationToken | null = null;
-  const reads = new Map<import("../route/host-read").HostRead, { snapshot: Value; args: string; stop(): void }>();
-  const dependencies = () => Object.fromEntries([...reads].filter(([read,r])=>read === spec.core && r.snapshot.current).map(([read,r])=>[read.key,r.snapshot.current?r.snapshot.hash??"":""]));
+  const reads = new Map<import("../route/host-read").HostRead, { snapshot: Snapshot; args: string; stop(): void }>();
+  const dependencies = () => Object.fromEntries([...reads].filter(([read,r])=>read === spec.core && r.snapshot.state === "ready").map(([read,r])=>[read.key,r.snapshot.hash??""]));
   const workSchema:z.ZodObject=edits?.work.schema ?? z.strictObject({});
   const gate = createRouteScopeGate({
     workSchema, hashWork: canonicalRouteInput,
-    journal: key => owners.get(key.route)!.lease.entry.journal,
     dependencies,
     preparePage: (_page, patch) => ({ ok: true, value: { page: patch, changed: true, membership: "unresolved" } }),
   });
@@ -137,7 +199,6 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     if (record.handle?.revision === handle.revision && canonicalRouteInput(record.doc) !== canonicalRouteInput(parsed))
       throw Error("Contradictory Work revision; refresh this route");
     record.absent=false; record.handle = freezePage(handle); record.doc = freezePage(parsed); record.ready = true; record.problem = null; record.failure = null; record.failed = false;
-    record.lease.entry.journal.observe({ revision: handle.revision, doc: parsed });
     if (handle.key.route === own) gate.acceptWork(workAttempt,
       { kind: "snapshot", handle, value: parsed, hash: canonicalRouteInput(parsed) });
   };
@@ -149,7 +210,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     ownerStops.splice(0).reverse().forEach(stop=>stop()); owners.clear();
     key=next; renderedBasis=null;
     gate.enter({target:input.target,work:key},page); workAttempt=gate.capture("work");
-    if(!key) return;
+    if(!key) { connectTimeline(); return; }
   for (const [id, config] of Object.entries(ownerConfigs)) {
     const scope: WorkScope = { route: spec.key, fingerprint, key: { ...key, route: id },
       target: input.target, subject: null };
@@ -158,7 +219,6 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
       ready: false, absent:false, problem: null as string | null, failure: null as WorkFeedFailure | null, failed: false, lease };
     owners.set(id, record);
     ownerStops.push(() => lease.release());
-    lease.entry.connect(scope, door);
     const stopJournal = lease.entry.subscribe(notify);
     ownerStops.push(stopJournal);
     const stopFeed = door.open(scope).subscribe(state => {
@@ -166,7 +226,8 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
       try {
         if (state.kind === "ready") {
           accept(record, state.snapshot.handle, state.snapshot.value);
-          lease.entry.restore(state);
+          for (const ack of state.history.acks)
+            if (workKey(ack.key) === workKey(scope.key)) lease.entry.accept(ack.press);
         } else if (state.kind === "ack" && record.handle) {
           const ack = state.ack;
           if (ack.revision > record.handle.revision) {
@@ -175,7 +236,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
             if (!result.ok) throw Error("error" in result ? result.error : "Work acknowledgement was refused");
             accept(record, { key: ack.key, revision: ack.revision }, result.envelope.doc);
           }
-          lease.entry.journal.accept(ack);
+          lease.entry.accept(ack.press);
         } else if (state.kind !== "ack") {
           record.ready = false;
           record.absent=state.kind === "absent";
@@ -189,22 +250,25 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     }, notify);
     ownerStops.push(stopFeed);
   }
+  connectTimeline();
   };
   syncWork();
-  const allReads = new Set([spec.core,...Object.values(spec.reads ?? {}),...Object.values(spec.panes).map(p=>p.read)].filter((read):read is import("../route/host-read").HostRead=>!!read));
-  const demanded = new Set<import("../route/host-read").HostRead>();
+  const allReads = { [Symbol.iterator]() {
+    const active = visibleReads(spec, page);
+    for (const [read, record] of reads) if (!active.has(read)) { record.stop(); reads.delete(read); }
+    return active[Symbol.iterator]();
+  } };
   const syncReads = (force = false) => {
     if (disposed || released || !input.custody.current()) return;
     for (const read of allReads) {
-      if(read.demand === "explicit" && !demanded.has(read)) continue;
       const project = "args" in read && typeof read.args === "function" ? read.args : spec.core?.args ?? (()=>({}));
       const args = read.input.parse(project(page as never)), signature = canonicalRouteInput(args);
       if (!force && signature === reads.get(read)?.args) continue;
       const previous = reads.get(read)?.snapshot;
-      const retained=previous?.publication?freezePage({...previous.publication,freshness:"refresh-needed" as const}):null;
+      const retained: Publication=previous?.publication?freezePage({...previous.publication,freshness:"refresh-needed" as const}):null;
       reads.get(read)?.stop();
       const controller = new AbortController();
-      const record: {snapshot:Value;args:string;stop():void} = { args: signature, snapshot: { ...unavailable("Reading...", previous?.value,retained),status:"pending" }, stop: () => controller.abort() };
+      const record: {snapshot:Snapshot;args:string;stop():void} = { args: signature, snapshot: reading(valueOf(previous),retained), stop: () => controller.abort() };
       reads.set(read, record);
       const deliver = (frame: Parameters<UseSource["open"]>[1] extends (arg: infer P) => any ? P : never) => {
         if (controller.signal.aborted || disposed || reads.get(read) !== record) return;
@@ -214,10 +278,10 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
             const publication = freezePage(packet.value);
             const current = frame.kind === "complete" && frame.fresh !== false && packet.state === "current" &&
               !!packet.value && !packet.value.coverage.unknown.length && !packet.value.coverage.refused.length;
-            record.snapshot = current ? { status: "ready", current: true, value: publication!.data, publication, hash: packet.value!.evaluation }
-              : unavailable(valueRefusal(frame.reason ?? packet.reason ?? "Incomplete Value", read.key), publication?.data??record.snapshot.value, publication??record.snapshot.publication);
-          } catch (error) { record.snapshot = unavailable(valueRefusal(error, read.key), record.snapshot.value, record.snapshot.publication); }
-        } else if (frame.kind !== "log") record.snapshot = frame.kind === "failure"?unavailable(valueRefusal(frame.error, read.key),record.snapshot.value,record.snapshot.publication):{...unavailable("Reading...",record.snapshot.value,record.snapshot.publication),status:"pending"};
+            record.snapshot = current ? { state: "ready", value: publication!.data, publication, hash: packet.value!.evaluation }
+              : unavailable(valueRefusal(frame.reason ?? packet.reason ?? "Incomplete Value", read.key), publication?.data??valueOf(record.snapshot), publication??record.snapshot.publication);
+          } catch (error) { record.snapshot = unavailable(valueRefusal(error, read.key), valueOf(record.snapshot), record.snapshot.publication); }
+        } else if (frame.kind !== "log") record.snapshot = frame.kind === "failure"?unavailable(valueRefusal(frame.error, read.key),valueOf(record.snapshot),record.snapshot.publication):reading(valueOf(record.snapshot),record.snapshot.publication);
         notify();
       };
       if (input.fixture !== null) {
@@ -256,7 +320,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     return { kind: "accepted", changed: true } as const;
   };
   const moveRole = (role:"pose"|"query", patch:Record<string,unknown>, history?:"push"|"replace") => {
-    for (const key of Object.keys(patch)) if (spec.fields[key]?.role !== role) throw Error(`${key} is not a ${role} field`);
+    for (const key of Object.keys(patch)) if (spec.fields[key]?.role !== role && !(role === "pose" && spec.fields[key]?.role === "stage")) throw Error(`${key} is not a ${role} field`);
     return move(patch,history);
   };
   // The Page the address holds; an address without `selected` keeps the current selection.
@@ -270,7 +334,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
   });
   cleanups.push(stopAddress);
   const valueAfterWork = () => [...owners.values()].some(owner => owner.ready && owner.config.value && spec.core &&
-    canonicalRouteInput(owner.doc) !== canonicalRouteInput(reads.get(spec.core)?.snapshot.value?.[owner.config.value!]))
+    canonicalRouteInput(owner.doc) !== canonicalRouteInput(valueOf(reads.get(spec.core)?.snapshot)?.[owner.config.value!]))
     ? "Refreshing Value after Work changed" : null;
   const basisRefusal = () => {
     if (input.readOnly || input.history) return "needs live Revit";
@@ -279,33 +343,33 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     const owner = [...owners.values()].find(o=>!o.ready);
     if (owner) return owner.problem ?? "Reading Work...";
     const core = spec.core ? reads.get(spec.core)?.snapshot : undefined;
-    if (spec.core && !core?.current) return core?.reason ?? "Reading Value...";
+    if (spec.core && core?.state !== "ready") return core ? reasonOf(core) : "Reading Value...";
     return valueAfterWork();
   };
-  /** A catalog command that carries the route's Work handle cannot run before that Work exists (a raw
-   *  `work: null` decode error was the 2b drive's /pods "Open saved bytes"); it says why instead. */
-  const workCommandRefusal = (entry: string) => {
-    const catalog = commands[entry as keyof typeof commands];
-    if (!catalog || !("work" in catalog) || !catalog.work || owners.get(own)?.handle) return null;
-    return owners.get(own)?.absent ? "Start this Work first" : "Reading Work...";
+  // The binding lookup: `hostActions` holds the semantic commands and the direct reads, receipt controls,
+  // `ops.read` and `page.bind` beside them.
+  const declared = (key: string): Command | undefined => hostActions[key as keyof typeof hostActions];
+  /** A command that carries the route's Work handle cannot run before that Work exists (a raw
+   *  `work: null` decode error was the 2b drive's /pods "Open saved bytes"); it refuses with the Work's
+   *  own reason ("Start this Work to edit"), as the cells do. */
+  const workRefusal = (key: string) => {
+    const work = declared(key)?.work;
+    if (!work || work.optional || owners.get(own)?.handle) return null;
+    return !edits ? "This view keeps no Work" : owners.get(own)?.problem ?? "Reading Work...";
   };
   const writeRefusal = () => input.fixture !== null ? "Fixture has no native writes" : basisRefusal();
   // Settlement includes every demanded reading, not only the core write basis.
   const readiness = (): RouteReadiness => {
     if (disposed || released || !input.custody.current()) return { kind: "blocked", reason: "Place is inactive or retired" };
     for (const owner of owners.values()) {
-      // Known absence is settled: Start remains available, while edit admission still refuses.
       if (owner.absent) continue;
-      const journal = owner.lease.entry.journal.read();
-      if (journal.busy || journal.intents.some(intent => intent.status === "pending") ||
-          owner.ready && journal.revision !== owner.handle?.revision)
+      if (owner.lease.entry.pending().some(intent => intent.status === "pending"))
         return { kind: "pending", reason: "Acknowledging Work..." };
       if (!owner.ready) return { kind: owner.failure || owner.problem && owner.problem !== "Reading Work..." ? "blocked" : "pending", reason: owner.problem ?? "Reading Work..." };
     }
     for (const read of allReads) {
-      if (read.demand === "explicit" && !demanded.has(read)) continue;
-      const value = reads.get(read)?.snapshot;
-      if (!value?.current) return { kind: !value || value.status === "pending" ? "pending" : "blocked", reason: value?.reason ?? "Reading..." };
+      const value = reads.get(read)?.snapshot ?? reading();
+      if (value.state !== "ready") return { kind: inFlight(value) ? "pending" : "blocked", reason: reasonOf(value) };
     }
     // Recorded and fixture views can settle without granting native write authority.
     const reason = valueAfterWork();
@@ -333,7 +397,6 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     const issued = gate.invocation(gate.capture("draw"), dependencies());
     return renderedBasis = issued.ok ? issued.value : null;
   };
-  const entries = () => disposed ? [] : [...owners.values()].flatMap(o => o.lease.entry.journal.entries()).sort((a,b) => a.at-b.at);
   const submit = async (record: typeof owners extends Map<string, infer R> ? R : never, request: WorkWrite, token: InvocationToken) => {
     requireWritable();
     const result = await settleWork(door.submitWork(record.scope, request, token));
@@ -343,30 +406,11 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
       const applied = applyPatches(record.config.state, { version: 1, revision: record.handle.revision, doc: record.doc }, ack.by, ack.patches, ack.base, true, true);
       if (applied.ok) accept(record, { key: ack.key, revision: ack.revision }, applied.envelope.doc);
     }
-    record.lease.entry.journal.accept(ack); notify();
+    record.lease.entry.accept(ack.press); notify();
     return { ok: true, revision: ack.revision, handle: { key: ack.key, revision: ack.revision }, write: ack } as const;
   };
-  const restore = async (direction: "undo" | "redo", press?: string) => {
-    const step = press ? entries().find(e => e.press === press) : entries().filter(e => e.state === (direction === "undo" ? "applied" : "undone")).at(-1);
-    const record = [...owners.values()].find(o => o.lease.entry.journal.entries().some(e => e.press === step?.press));
-    const token = basis();
-    if (!record?.ready || !token) return { ok: false, code: "write-refused", message: basisRefusal() ?? "Work unavailable" } as const;
-    return record.lease.entry.journal[direction](async request => {
-      try { return await submit(record, request, token); }
-      catch (error) { return { ok: false, kind: "refused", error: String(error), hint: "Read Work again" } as RouteStateWriteResult; }
-    }, step?.press);
-  };
-  const history = { get entries() { return entries(); }, undo: (press?: string) => restore("undo",press),
-    redo: (press?: string) => restore("redo",press), revert: async (press?: string) => {
-      const record=[...owners.values()].find(o=>o.lease.entry.journal.read().undo.at(-1)?.press===(press??entries().filter(e=>e.state==="applied").at(-1)?.press));
-      const step=record?.lease.entry.journal.read().undo.at(-1),token=basis();
-      if(!record?.ready||!step||!token||step.barrier||step.superseded) throw Error("History step is blocked");
-      return submit(record,{kind:"apply",expectedRevision:record.handle!.revision,press:crypto.randomUUID(),label:`Revert ${step.label}`,
-        patches:step.transitions.slice(0,step.cursor).reverse().flatMap(t=>t.inverse)},token);
-    } };
   const reviews = new Map<string, { preview: z.output<typeof writePreviewSchema>; input: Record<string, unknown>; token: InvocationToken; signature: string; presentation: any }>();
   const applyingReviews = new Map<string, ReturnType<typeof reviews.get>>();
-  const problems = new Map<string,string>();
   const plans = new Map<string,InvocationToken>();
   const workSignature = () => canonicalRouteInput([...owners].map(([id,o]) => [id,o.ready,o.handle]));
   // Plans seal Work, target and native reads, not the browser-owned Page pose (ADR 0033).
@@ -394,7 +438,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
       const field = subjectSpec.field;
       const subject = spec.fields[field]!.schema.parse(search[field] === undefined ? page[field] : JSON.parse(String(search[field]))) as {kind:string;ids?:string[];active?:string};
       const core = reads.get(subjectSpec.read ?? spec.core!)?.snapshot;
-      if (!core?.current) return refused(core?.reason ?? "Reading the subject roster");
+      if (core?.state !== "ready") return refused(core ? reasonOf(core) : "Reading the subject roster");
       const options=subjectSpec.options(core.value), ids=subject.kind==="all"?options.map(o=>o.id):subject.ids??[];
       if (ids.some(id=>!options.some(o=>o.id===id))) return refused(`A ${spec.subject?.noun ?? "Subject"} in this link is not in this model; choose it again from the roster`);
       if (canonicalRouteInput(subject)!==canonicalRouteInput(page[field])) return null;
@@ -404,76 +448,94 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
       return {ready:true,refusal:null,label:ids.length===1?options.find(o=>o.id===ids[0])!.label:ids.length?`${ids.length} ${spec.subject?.noun ?? "Subject"}s`:"",link:`${module.data.address}?${link}`};
     } catch { return refused(`${spec.subject?.noun ?? "Subject"} is malformed`); }
   };
-  const findingMoves: import("./timeline").TimelineEntry[] = [];
-  // The document's findings Work (ADR 0035 rule 9), for the kernel's picture pane: read on first ask, when the
-  // route's Work key arrives, after this Place's own finding write or undo, and on refresh. The key is the one the
-  // findings history door uses: the route's own document-bound Work key, as the host resolved it; a route whose
-  // Work is keyed by a member, or that keeps none, binds the document itself.
-  // ponytail: Pea's write shows on the next of those; subscribe the findings Work's acks if it must show at once.
-  let findings: readonly Finding[] = [], findingsAt: string | null = null, findingsRead = 0;
+  // The document's findings Work (ADR 0035 rule 9), for the kernel's drawing: the host's `work` Reading of the
+  // findings key, subscribed on first ask and again when the key changes. Pea's write and a person's arrive the
+  // same way, with no reload. The key is the one the findings history door uses: the route's own document-bound
+  // Work key, as the host resolved it; a route whose Work is keyed by a member, or that keeps none, binds the
+  // document itself.
+  let findings: readonly Finding[] = [], findingsAt: string | null = null, stopFindings = () => {};
+  cleanups.push(() => stopFindings());
   const findingsKey = () => (!edits?.key && owners.get(own)?.handle?.key)
     || (input.work.address || input.work.open ? bindWork(FINDINGS_OWNER, input.work.address, undefined, input.work.open ?? undefined) : null);
-  const loadFindings = () => {
-    const key = findingsKey();
-    if (findingsAt === null || input.fixture !== null || input.history || !key) return;
-    findingsAt = workKey(key);
-    // Only the newest read lands; a read the host fails keeps what the pane shows and is a fault.
-    const read = ++findingsRead;
-    void readFindings(key, ports.findings).then((answer) => {
-      if (disposed || read !== findingsRead) return;
-      if (!answer) throw Error("The host did not answer the findings read");
-      findings = answer; notify();
-    }).catch((error) => reportFault({ code: "reading.failed", routeCode: spec.key, readingKind: FINDINGS_OWNER }, error));
+  const watchFindings = () => {
+    const key = findingsKey(), at = key ? workKey(key) : "";
+    if (findingsAt === at) return;
+    findingsAt = at; findings = []; stopFindings(); stopFindings = () => {};
+    if (input.fixture !== null || input.history || !key) return;
+    const fault = (error: unknown) => reportFault({ code: "reading.failed", routeCode: spec.key, readingKind: FINDINGS_OWNER }, error);
+    // A frame can arrive inside `subscribe`, while a pane is drawing: that value is returned, never notified.
+    let subscribing = true;
+    stopFindings = (ports.readings ?? peReadings).subscribe({ ...key, route: FINDINGS_OWNER, kind: "work" }, (frame) => {
+      if (disposed) return;
+      if (frame.kind === "failure") return fault(Error(frame.error));
+      if (frame.kind !== "snapshot") return;
+      // No findings Work yet reads as null: none said. One that does not decode keeps what is drawn and is a fault.
+      const parsed = z.object({ doc: findingsWorkSchema }).nullable().safeParse(frame.value);
+      if (!parsed.success) return fault(parsed.error);
+      findings = parsed.data ? Object.values(parsed.data.doc.findings) : [];
+      if (!subscribing) notify();
+    });
+    subscribing = false;
   };
-  const results = new Map<string,unknown>();
   const pending = new Set<string>();
-  const run = async (id: string, apply = false, supplied?:unknown) => {
+  type Verb = AnyVerb;
+  const verbContext = (work: WorkHandle | null): VerbContext => ({ page, target: input.target, work,
+    value: spec.core ? valueOf(reads.get(spec.core)?.snapshot) : undefined, doc: owners.get(own)?.doc ?? undefined });
+  /** A verb whose handle has no plan: one send through the one door, which picks the transport from the handle. */
+  const send = async (id: string, verb: Verb, supplied?: unknown) => {
     requireWritable();
     if (input.fixture !== null) throw Error("Fixture has no native writes");
-    const cmd = spec.commands[id];
-    if(!cmd) throw Error(`Unknown command ${id}`);
     problems.delete(id); notify();
-    if("kind" in cmd) {
-      const queryPage = cmd.kind === "query" ? gate.read()?.pageEpoch : null;
-      const handle=owners.get(own)?.handle ?? null;
-      const context={page:page as never,target:input.target,work:handle,value:spec.core?reads.get(spec.core)?.snapshot.value:undefined};
-      try {
-        const proposed=cmd.input?.(context,supplied) ?? supplied ?? {};
-        const catalog=commands[cmd.entry as keyof typeof commands];
-        const request=cmd.contract.input.parse(catalog && "work" in catalog && catalog.work
-          ? {...z.record(z.string(),z.unknown()).parse(proposed),work:handle} : proposed);
-        let result:unknown;
-        if(cmd.kind === "session" || cmd.kind === "catalog") {
-          const completion=await settleNative(door.submit({id:crypto.randomUUID(),key:cmd.entry,
-            target:commandTarget(cmd.entry,z.record(z.string(),z.unknown()).parse(request),input.target?.kind === "document"?input.target.ref:undefined),
-            input:z.record(z.string(),z.unknown()).parse(request)}),true);
-          const receipt=z.object({receiptId:z.string(),result:z.unknown().optional()}).parse(completion);
-          result=catalog && "result" in catalog ? cmd.contract.output.parse(receipt.result) : {kind:"void",receiptId:receipt.receiptId};
-        } else result=await cmd.invoke!(request,{target:input.target ?? {kind:"host"},work:handle});
-        if (queryPage && (disposed || !input.custody.current() || gate.read()?.pageEpoch !== queryPage))
-          throw Error("This read finished for an earlier Page; run it again");
-        results.set(id,result); syncReads(true);
-        if (cmd.entry === FINDINGS_DOORS.write) loadFindings();
-        return result;
-      } catch(error) {
-        // A request or an answer its contract refuses reads as one sentence, as a Value does (`valueRefusal`);
-        // the issue list (a whole regex, for a format) is diagnostics' and never the person's.
-        const raw=error instanceof Error?error.message:String(error);
-        const at=error instanceof z.ZodError?error.issues[0]?.path.join("."):"";
-        const said=readableRefusal(error,`${cmd.label} does not match its contract${at?` at ${at}`:""}. The detail is in the log.`);
-        problems.set(id,said);
-        if(said === raw) throw error;
-        reportFault({code:"action.failed",routeCode:spec.key,readingKind:cmd.entry},error);
-        throw Error(said,{cause:error});
-      }
-      finally {notify();}
+    const key = verb.handle.key;
+    // A read answers the Page it was asked from; a write lands whatever the Page did meanwhile.
+    const readPage = verb.handle.effect === "Read" ? gate.read()?.pageEpoch : null;
+    try {
+      const refusal = workRefusal(key);
+      if (refusal) throw Error(refusal);
+      const work = owners.get(own)?.handle ?? null;
+      const proposed = z.record(z.string(), z.unknown()).parse(verb.input?.(verbContext(work), supplied) ?? supplied ?? {});
+      // The host decodes the input (K2): a malformed one returns as its typed refusal.
+      const request = declared(key)?.work && work ? { ...proposed, work } : proposed;
+      // A journaled command resolves its own target; a route keeps the Place's (`ops.read` runs on a host, a session or a document).
+      const target = verb.handle.via === "command"
+        ? commandTarget(key, request, input.target?.kind === "document" ? input.target.ref : undefined)
+        : input.target ?? { kind: "host" as const };
+      const receipt = z.object({ receiptId: z.string().optional(), result: z.unknown().optional() })
+        .parse(await settleNative(door.submit({ id: crypto.randomUUID(), key, target, input: request }), true));
+      const answered = declared(key);
+      const result = verb.handle.via !== "command" || (answered && "result" in answered) ? receipt.result : { kind: "void", receiptId: receipt.receiptId };
+      if (readPage && (disposed || !input.custody.current() || gate.read()?.pageEpoch !== readPage))
+        throw Error("This read finished for an earlier Page; run it again");
+      syncReads(true);
+      return result;
+    } catch (error) {
+      // A refusal that is a validator's issue list reads as one sentence, as a Value does (`valueRefusal`);
+      // the list (a whole regex, for a format) is diagnostics' and never the person's.
+      const raw = error instanceof Error ? error.message : String(error);
+      // The door carries a refusal as its sentence, so a validator's issue list arrives as that text.
+      let issues: unknown = error instanceof z.ZodError ? error.issues : null;
+      if (!issues) try { issues = JSON.parse(raw); } catch { /* A domain sentence. */ }
+      const at = z.array(z.object({ path: z.array(z.union([z.string(), z.number()])) })).safeParse(issues).data?.[0]?.path.join(".");
+      const said = readableRefusal(error, `${verb.label} does not match its contract${at ? ` at ${at}` : ""}. The detail is in the log.`);
+      problems.set(id, said);
+      if (said === raw) throw error;
+      reportFault({ code: "action.failed", routeCode: spec.key, readingKind: key }, error);
+      throw Error(said, { cause: error });
     }
+    finally { notify(); }
+  };
+  /** A verb whose handle has a plan: plan, seal, and apply only the sealed review. */
+  const review = async (id: string, verb: Verb, apply: boolean, supplied?: unknown) => {
+    requireWritable();
+    if (input.fixture !== null) throw Error("Fixture has no native writes");
+    problems.delete(id); notify();
+    const key = verb.handle.key;
     if (apply) {
       const held = reviews.get(id);
       if (!held || !reviewCurrent(id, held.token, held.signature)) throw Error("Review is stale; prepare it again");
       applyingReviews.set(id,held); reviews.delete(id); notify();
       try {
-        const result = await settleNative(door.submit({ id: crypto.randomUUID(), key: cmd.entry, target: input.target!, input: held.input }));
+        const result = await settleNative(door.submit({ id: crypto.randomUUID(), key, target: input.target!, input: held.input }));
         syncReads(true); return result;
       } finally {applyingReviews.delete(id);notify();}
     }
@@ -481,29 +543,47 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     try {
       if (!basis() || [...owners.values()].some(o => !o.ready)) throw Error(basisRefusal() ?? "Work unavailable");
       const core = spec.core ? reads.get(spec.core)?.snapshot : undefined;
-      if (!core?.current) throw Error(core?.reason ?? "Read the current Value before planning");
+      if (core?.state !== "ready") throw Error(core ? reasonOf(core) : "Read the current Value before planning");
       const issued=gate.invocation(gate.capture(`plan:${id}`),dependencies());
       if(!issued.ok) throw Error(issued.reason);
       token=issued.value; plans.set(id,token); reviews.delete(id);
-      const contract = commands[cmd.entry as keyof typeof commands];
+      const binding = declared(key)?.work;
       // A door every route shares (the sheet pair, ANY_ROUTE) takes the asking route's own Work.
-      const primary = owners.get("work" in contract && contract.work && contract.work.route !== ANY_ROUTE ? contract.work.route : own)!.handle!;
-      const proposed=cmd.input?.({page:page as never,target:input.target,work:primary,value:core.value},supplied) ?? supplied ?? {};
-      const request = cmd.planContract.input.parse({ ...z.record(z.string(),z.unknown()).parse(proposed), work: primary,
-        readWorks: Object.fromEntries([...owners].filter(([id]) => id !== primary.key.route).map(([id,o]) => [id,o.handle])) });
+      const primary = owners.get(binding && binding.route !== ANY_ROUTE ? binding.route : own)!.handle!;
+      const proposed=verb.input?.(verbContext(primary),supplied) ?? supplied ?? {};
+      const request = { ...z.record(z.string(),z.unknown()).parse(proposed), work: primary,
+        readWorks: Object.fromEntries([...owners].filter(([id]) => id !== primary.key.route).map(([id,o]) => [id,o.handle])) };
       const signature = workSignature();
-      const data = spec.core ? reads.get(spec.core)?.snapshot.value : undefined, doc = owners.get(own)!.doc;
-      const result = await settleNative(door.submit({ id: token.id, key: cmd.plan, target: input.target!, input: z.record(z.string(),z.unknown()).parse(request) }));
-      const preview = writePreviewSchema.parse(cmd.planContract.output.parse(result));
-      const handle = z.object({ handle: workHandleSchema }).parse(preview.seal.work).handle;
-      if (canonicalRouteInput(handle) !== canonicalRouteInput(primary)) throw Error("Preview sealed a different Work");
+      const context = verbContext(primary);
+      const result = await settleNative(door.submit({ id: token.id, key: verb.handle.plan!.key, target: input.target!, input: request }));
+      const preview = writePreviewSchema.parse(result);
+      const sealed = z.object({ handle: workHandleSchema }).parse(preview.seal.work).handle;
+      if (canonicalRouteInput(sealed) !== canonicalRouteInput(primary)) throw Error("Preview sealed a different Work");
       if (!reviewCurrent(id, token, signature)) throw staleReview(token, signature);
-      const presented=presentationSchema.parse(cmd.present(preview,data,doc));
-      reviews.set(id, { preview, input: request as Record<string,unknown>, token, signature,
+      const presented=presentationSchema.parse(verb.present!(preview,context));
+      reviews.set(id, { preview, input: request, token, signature,
         presentation: typeof presented === "string" ? {sentence:presented,rows:[]} : presented });
       problems.delete(id);
     } catch (error) { if(!token || plans.get(id)===token) problems.set(id,error instanceof Error?error.message:String(error)); throw error; }
     finally { notify(); }
+  };
+  /** One press at a time per verb; a failure is kept for the handle to draw. */
+  const press = async (id: string, act: () => Promise<unknown>) => {
+    if(pending.has(id)) throw Error("Action already pending");
+    pending.add(id); notify();
+    try { return await act(); }
+    catch(error) { if (!problems.has(id)) problems.set(id,error instanceof Error?error.message:String(error)); throw error; }
+    finally {pending.delete(id);notify();}
+  };
+  const verbRefusal = (verb: Verb) => input.readOnly || input.history ? "needs live Revit" : input.fixture !== null ? "Fixture has no native actions"
+    : verb.handle.plan ? basisRefusal() : workRefusal(verb.handle.key);
+  const handleOf = (id: string, verb: Verb): VerbHandle => {
+    const facts = { label: verb.label, effect: verb.handle.effect, get pending(){return pending.has(id);},
+      get refusal(){return verbRefusal(verb);}, get failure(){return problems.get(id)??null;} };
+    return verb.handle.plan
+      ? Object.defineProperties({ plan:(supplied?:unknown)=>press(id,()=>review(id,verb,false,supplied)), apply:()=>press(id,()=>review(id,verb,true)),
+          cancel:()=>mounted.cancel(id), read:()=>mounted.review(id) }, Object.getOwnPropertyDescriptors(facts)) as PlannedVerb
+      : Object.defineProperties({ run:(supplied?:unknown)=>press(id,()=>send(id,verb,supplied)) }, Object.getOwnPropertyDescriptors(facts)) as RunVerb;
   };
   syncReads();
   const mounted = {
@@ -511,7 +591,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     whenReady: () => whenSettled(false),
     whenWritable: () => whenSettled(true),
     absentOwners:()=>[...owners].filter(([id,owner])=>id!==own&&owner.absent).map(([route])=>route),
-    startAction():import("../route/typed-route").ActionHandle|null {
+    startAction(): RunVerb | null {
       if([...owners.values()].some(record=>!record.ready&&!record.absent)) return null;
       const absent=[...owners].filter(([,record])=>record.absent);
       if(!absent.length||!edits?.seed||!key||input.readOnly||input.history) return null;
@@ -539,43 +619,23 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
         } catch(error){problems.set("work.start",error instanceof Error?error.message:String(error));throw error;}
         finally{pending.delete("work.start");notify();}
       };
-      return {label:"Start",get pending(){return pending.has("work.start");},get refusal(){return refusal();},
-        get failure(){return problems.get("work.start")??null;},
-        run,plan:run,apply:run,cancel:()=>{},read:()=>null};
+      return {label:"Start",effect:handle("work.start").effect,get pending(){return pending.has("work.start");},get refusal(){return refusal();},
+        get failure(){return problems.get("work.start")??null;},run};
     },
-    action(id: string): import("../route/typed-route").ActionHandle {
-      const command=spec.commands[id];
-      if(!command) throw Error(`Unknown command ${id}`);
-      const perform=async(apply=false,supplied?:unknown)=>{
-        if(pending.has(id)) throw Error("Action already pending");
-        pending.add(id); notify();
-        try { return await run(id,apply,supplied); }
-        catch(error) { problems.set(id,error instanceof Error?error.message:String(error)); throw error; }
-        finally {pending.delete(id);notify();}
-      };
-      return {label:command.label, get pending(){return pending.has(id);},
-        get refusal(){return mounted.commandRefusal(id);}, get failure(){return problems.get(id)??null;},
-        run:(supplied)=>perform(false,supplied),plan:()=>perform(),apply:()=>perform(true),
-        cancel:()=>mounted.cancel(id),read:()=>mounted.review(id)};
+    /** Who draws each verb (routes CONTRACTS.md, "Placement on a mount"): the band's ids, the first primary, and each pane's. */
+    placement: () => ({ band: spec.band, panes: Object.fromEntries(Object.entries(spec.panes).map(([id, pane]) => [id, pane.verbs ?? []])) as Readonly<Record<string, readonly string[]>> }),
+    verb(id: string): VerbHandle {
+      const verb = spec.verbs[id];
+      if(!verb) throw Error(`Unknown verb ${id}`);
+      return handleOf(id, verb);
     },
-    journal: () => {
-      const journals=[...owners.values()].map(o=>o.lease.entry.journal.read()),base=owners.get(own)?.lease.entry.journal.read() ?? {revision:null,from:0,busy:false,receipts:[],undo:[],redo:[],moves:[],last:null};
-      return freezePage({...base, undo:journals.flatMap(j=>j.undo).sort((a,b)=>a.at-b.at), redo:journals.flatMap(j=>j.redo).sort((a,b)=>a.at-b.at),
-        intents:journals.flatMap(j=>j.intents), moves:journals.flatMap(j=>j.moves).sort((a,b)=>a.at-b.at), last:journals.flatMap(j=>j.last?[j.last]:[]).sort((a,b)=>a.step.at-b.step.at).at(-1)??null});
+    /** A kernel verb: on every route, declared by none, never placed. This only reads the kernel's table. */
+    kernelVerb(key: KernelVerbKey): RunVerb {
+      const verb = kernelVerbs[key];
+      if(!verb) throw Error(`Unknown kernel verb ${key}`);
+      return handleOf(`kernel:${key}`, verb) as RunVerb;
     },
-    discardIntent(id: string) { for (const owner of owners.values()) owner.lease.entry.journal.discardIntent(id); notify(); },
-    // The person's own findings live in the document's findings Work, not this route's: their undo is that door's.
-    undoFinding: async () => {
-      const key = findingsKey();
-      if (!key) return { message: "Wait for this route's Work before undoing a finding" };
-      const refused = await undoOwnFinding(key, ports.findings);
-      // ponytail: the History entry lives for this Place; a durable one needs the findings Work's own moves here.
-      if (!refused) { findingMoves.push({ kind: "feed", at: new Date().toISOString(), verb: "findings.undo", subject: { message: "you undid your last finding" } }); loadFindings(); notify(); }
-      return refused;
-    },
-    findings: () => { const key = findingsKey(); if (findingsAt !== (key ? workKey(key) : "")) { findingsAt = ""; loadFindings(); } return findings; },
-    ownFindingsLeft: () => { const key = findingsKey(); return key ? ownFindingsLeft(key, ports.findings) : Promise.resolve(null); },
-    restoreWork: restore, journalRefusal: () => input.readOnly || input.history ? "needs live Revit" : [...owners.values()].some(o=>!o.ready)?"Work unavailable":null,
+    findings: () => { watchFindings(); return findings; },
     stopCommand: (id:string) => {requireWritable();return cancelAction(id);},
     attention: {
       write: (page:object) => Object.fromEntries(Object.keys(spec.fields).map(key=>[key,JSON.stringify((page as Record<string,unknown>)[key])])),
@@ -589,9 +649,9 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
           value = text;
         }
         if (subject?.field === key && !field.schema.safeParse(value).success) {
-          const reading = reads.get(subject.read ?? spec.core!)?.snapshot;
-          if (!reading?.current) throw Error("Read the subject roster before choosing a name");
-          const options = subject.options(reading.value);
+          const roster = reads.get(subject.read ?? spec.core!)?.snapshot;
+          if (roster?.state !== "ready") throw Error("Read the subject roster before choosing a name");
+          const options = subject.options(roster.value);
           const resolve = (name: unknown) => {
             if (typeof name !== "string") throw Error("A subject name must be text");
             const exact = options.filter(option => option.id === name || option.label === name);
@@ -606,49 +666,60 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
         return [key, field.schema.parse(value)];
       })),
     }, current: (token:InvocationToken) => gate.current(token),
-    value: (read: import("../route/host-read").HostRead | undefined = spec.core) => read ? reads.get(read)?.snapshot ?? unavailable(read.demand === "explicit"?"Press Read":"Reading...") : unavailable("No read declared"),
+    // ponytail: a read the route never declared has not run; no caller draws this state (a pane with no read always draws).
+    value: (read: import("../route/host-read").HostRead | undefined = spec.core): Snapshot => read ? reads.get(read)?.snapshot ?? reading() : { state: "not-yet-run", publication: null },
     owner: (id = own) => owners.get(id),
     page: { read: () => page, pose: (patch: any, intent?: "gesture"|"named") => moveRole("pose",patch,intent === "gesture"?"replace":intent === "named"?"push":undefined), query: (patch: any) => moveRole("query",patch), select: (selected: any) => move({selected}), subject: (subject: any) => {if(!spec.subject) throw Error("No subject declared");return move({ [spec.subject.field]: subject },"push");} },
-    subscribe(listener: () => void) { released = false; listeners.add(listener); syncReads(); return () => { listeners.delete(listener); }; },
+    subscribe(listener: () => void) { const resume = released; released = false; listeners.add(listener); if (resume) connectTimeline(); syncReads(); return () => { listeners.delete(listener); }; },
     available: () => !disposed && input.custody.current(),
     /** The URL write is flushed: the address alone, without Place memory, decodes to this Page
      *  (slice 6.1, `data-url-settled`); a reload reads only the address. */
-    urlCurrent: () => canonicalRouteInput(addressPage(false)) === canonicalRouteInput(page), target: () => input.target, revision: () => revision, work: () => gate.read()?.work ?? null, workBasis: basis, history,
-    // A row verb runs on this route's own Work handle: before the Work is ready it refuses with the Work's own
-    // reason ("Start this Work to edit"), as the cells do, instead of failing a press nobody sees. Any other
-    // catalog command that carries the Work handle refuses through workCommandRefusal.
-    commandRefusal:(id:string)=> input.readOnly || input.history ? "needs live Revit" : input.fixture !== null ? "Fixture has no native actions"
-      : "kind" in spec.commands[id]! ? ("row" in spec.commands[id]! && spec.commands[id]!.row ? (!edits ? "This view keeps no Work to write findings into" : !owners.get(own)?.ready ? owners.get(own)?.problem ?? "Reading Work..." : null) : workCommandRefusal(spec.commands[id]!.entry)) : basisRefusal(),
+    urlCurrent: () => canonicalRouteInput(addressPage(false)) === canonicalRouteInput(page), target: () => input.target, revision: () => revision, work: () => gate.read()?.work ?? null, workBasis: basis,
     problem: () => edits?basisRefusal():null, writeRefusal,
-    /** The basis that failed (a Work feed failure, a thrown read, a failed core reading), as distinct
+    /** The basis that failed (a Work feed failure, a thrown read), as distinct
      *  from a state such as "Start this Work to edit": failures draw as a pane failure line. */
     failure: () => {
       if (!edits) return null;
       const owner = [...owners.values()].find(o => !o.ready && o.failed);
-      if (owner) return owner.problem;
-      const core = spec.core ? reads.get(spec.core)?.snapshot : undefined;
-      return core?.status === "failed" ? core.reason ?? "Reading failed" : null;
+      return owner ? owner.problem : null;
     },
-    refresh: (read?:import("../route/host-read").HostRead) => {
-      requireCurrent(); for(const selected of read?[read]:allReads) demanded.add(selected); syncReads(true); loadFindings();
-    }, run, result:(id:string)=>results.get(id),
+    // A named read refreshes with the rest: every read is demanded at mount.
+    refresh: (_read?:import("../route/host-read").HostRead) => {
+      requireCurrent(); syncReads(true);
+    },
     review: (id: string) => { const r=reviews.get(id)??applyingReviews.get(id); if(!r) return null;
       const stale = !reviewCurrent(id, r.token, r.signature);
       return { preview: stale || !reviews.has(id) ? undefined : r.preview, sentence: stale ? null : r.presentation.sentence,
         rows: stale ? [] : r.presentation.rows, cells: stale ? [] : r.presentation.cells, stale }; },
     reviewProblem: (id: string) => problems.get(id) ?? null,
     cancel: (id: string) => { const token=plans.get(id);if(token) gate.retire(token.token);plans.delete(id);reviews.delete(id);notify(); },
-    timeline: () => [...[...owners.values()].flatMap(o => o.lease.entry.timeline()), ...findingMoves],
-    draw(id: string, render?: (ctx: DrawContext<any,any,any,any>)=>unknown) {
+    timeline: () => disposed ? null : timelineState,
+    stepTimeline,
+    timelineRefusal: () => input.readOnly ? "needs live Revit" : timelineProblem,
+    pendingEdits: () => [...owners.values()].flatMap(o => o.lease.entry.pending()),
+    discardIntent(id: string) { for (const owner of owners.values()) owner.lease.entry.discard(id); notify(); },
+    // A caller that draws one known pane may name that pane's context type; the mount does not check it.
+    draw<C = DrawContext<any,any,any,any>>(id: string, render?: (ctx: C)=>unknown) {
       const pane = spec.panes[id]!;
-      const value = pane.read ? reads.get(pane.read)?.snapshot ?? unavailable(pane.read.demand === "explicit"?"Press Read":"Reading...") : unavailable("No read declared");
-      const core = spec.core ? reads.get(spec.core)?.snapshot ?? unavailable("Reading...") : unavailable("No read declared");
+      // A pane that names a read draws only over a present value: the shell's one line stands in for
+      // reading, refused and not-yet-run, so a body never meets a missing value. A pane with no read always draws.
+      const value = pane.read ? mounted.value(pane.read) : undefined;
+      // A failed basis outranks the wait it causes: the core pane says what failed, not that it is reading.
+      const failed = pane.read === spec.core ? mounted.failure() : null;
+      if (value && !("value" in value)) return failed ? failureLine(failed) : absentLine(value);
+      const core = mounted.value();
       const token = basis();
       const drawnOwners = new Map(owners);
       const handles = new Map([...owners].map(([id,o]) => [id,o.handle]));
       const docs = new Map([...owners].map(([id,o]) => [id,o.doc]));
-      const ready = !!token && (!pane.read || value.current);
-      const refusal = ready ? null : basisRefusal() ?? (!value.current ? value.reason : "Read the current Value before editing");
+      const ready = !!token && (!value || value.state === "ready");
+      const why = basisRefusal() ?? (value && refusalOf(value)) ?? "Read the current Value before editing";
+      const refusal = ready ? null : why;
+      const doc = owners.get(own)?.doc ?? null;
+      // Work readiness is the same union: absent Work has not run (Start runs it); a held doc that cannot be edited is refreshing or stale.
+      const state: ReadingState<unknown> = ready ? { state: "ready", value: doc } : owners.get(own)?.absent ? { state: "not-yet-run" }
+        : readiness().kind === "pending" ? (doc === null ? { state: "reading" } : { state: "refreshing", value: doc, reason: why })
+        : doc === null ? { state: "refused", reason: why } : { state: "stale", value: doc, reason: why };
       const ownerOf = (path: readonly string[], preferred?: string) => {
         const id = preferred ?? (Object.hasOwn(edits!.work.schema.shape,path[0]!) ? own : [...owners].find(([,o]) => Object.hasOwn(o.config.state.schema.shape,path[0]!))?.[0]);
         if (!id || !owners.has(id) || !Object.hasOwn(owners.get(id)!.config.state.schema.shape,path[0]!)) throw Error(`No owning Work for ${path.join(".")}`);
@@ -669,16 +740,16 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
               ? patches.filter(p=>String(p.path[0])===key) : [{path:[key],value:(applied.envelope.doc as any)[key]}]);
             const label=id===own ? detail.label : `${detail.label} · from /${id}`;
             const write:WorkWrite={kind:"apply",expectedRevision:handle.revision,press:crypto.randomUUID(),patches:normalized,...z.object({label:z.string(),meta:z.json().optional()}).parse(edits!.describe({...detail,label}))};
-            const journal=record.lease.entry.journal, intent=journal.retainIntent(write,label);
+            const admission=record.lease.entry, intent=admission.retain(write,label);
             notify();
             try {
               requireWritable();
               if (!basis() || !gate.current(token)) throw Error("Stale accepted Work basis");
               if (owners.get(id)!==record || !record.ready || canonicalRouteInput(record.handle)!==canonicalRouteInput(handle)) throw Error("Owning Work changed since this cell was drawn");
               await submit(record,write,token);
-              journal.discardIntent(intent);
+              admission.discard(intent);
             } catch(error) {
-              journal.refuseIntent(intent,error instanceof Error?error.message:String(error));
+              admission.refuse(intent,error instanceof Error?error.message:String(error));
               throw error;
             } finally { notify(); }
           }));
@@ -686,48 +757,48 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
         } catch(error) { return {code:"refused",message:error instanceof Error?error.message:String(error)}; }
       };
       const cells: DrawContext<any, any, any, any>["cells"] = {
-        doc: owners.get(own)?.doc ?? null, basis: token, ready, refusal, history,
+        doc, basis: token, state,
         owner(path) { const route=ownerOf(path); return {route,label:route===own?"Work":`from /${route}`}; },
         at(path,preferred,facts={}) {
+          if (path[0] === "setting") return homeHandle(path, valueOf(core), async request => {
+            requireWritable();
+            try {
+              if (core.state !== "ready") throw Error(reasonOf(core));
+              await settleNative(door.submit({ id: crypto.randomUUID(), key: writeSettingTier.key,
+                target: input.target?.kind === "document" ? input.target : { kind: "host" }, input: request }));
+            } finally { mounted.refresh(); }
+          });
           const route=ownerOf(path,preferred), address=[...path];
           const value=address.reduce((doc,key)=>doc?.[key],owners.get(route)!.doc)??{};
           const cellPatch=(patches: readonly RouteStatePatch[],detail?:EditHistory) => facts.readOnly
             ? Promise.resolve({code:"read-only",message:"This cell is read-only"}) : patch(patches,detail,route);
           const clear=(detail?:EditHistory)=>cellPatch(cellPatches(address.slice(0,-1),address.at(-1)!,value,{kind:"clear"}),detail);
-          const record=owners.get(route)!;
           const accepted = value.edit;
           const accept=(detail?:EditHistory) => {
             if(!accepted) return Promise.resolve({code:"not-staged",message:"This cell is no longer staged"});
             const {by:_by,at:_at,base:_base,...rung}=accepted;
             return cellPatch([{path:[...address,"edit"],value:rung}],detail);
           };
-          // A cell may undo only a press whose entire footprint is this address.
-          const step=record.lease.entry.journal.read().undo.findLast(step=>!step.barrier&&!step.superseded&&step.transitions.every(t=>t.paths.every(p=>address.every((key,i)=>String(p[i])===key))));
-          const undo=async():Promise<EditFailure>=>{
-            if(!ready||!token||!gate.current(token)||canonicalRouteInput(record.handle)!==canonicalRouteInput(handles.get(route))) return {code:"stale-cell",message:"Owning Work changed since this cell was drawn"};
-            if(!step) return {code:"no-cell-undo",message:"No isolated edit for this cell"};
-            const result=await restore("undo",step.press);
-            return result.ok?null:{code:"undo-refused",message:"message" in result?String(result.message):"Cell undo refused"};
-          };
           return {owner:{route,label:route===own?"Work":`from /${route}`},value, facts:{...facts,baseline:facts.baseline??value.base?.value},
-            freshness:ready?"current":owners.get(route)!.doc===null&&core.value===undefined?"never":"stale", refusal: facts.readOnly ? "This cell is read-only" : refusal, clear, accept,deny:clear,undo,
+            freshness:ready?"current":owners.get(route)!.doc===null&&valueOf(core)===undefined?"never":"stale", refusal: facts.readOnly ? "This cell is read-only" : refusal, clear, accept,deny:clear,
             delete:(detail)=>cellPatch([{path:address}],detail),
             stage:(value2,detail)=> facts.readOnly ? Promise.resolve({code:"read-only",message:"This cell is read-only"}) :
               patch(cellPatches(address.slice(0,-1),address.at(-1)!,value,
                 Object.hasOwn(facts,"baseline")&&canonicalRouteInput(value2)===canonicalRouteInput(facts.baseline)?{kind:"clear"}:{kind:"set",rung:{value:value2}}),detail,route),
-            transitions:(detail)=>!ready?[]:[...(value.edit?[{kind:"clear" as const,run:()=>clear(detail)},...(value.edit.by==="pea"?[{kind:"take" as const,run:()=>accept(detail)},{kind:"unsuggest" as const,run:()=>clear(detail)}]:[])]:[]),...(step?[{kind:"undo" as const,run:undo}]:[])]};
+            transitions:(detail)=>!ready?[]:[...(value.edit?[{kind:"clear" as const,run:()=>clear(detail)},...(value.edit.by==="pea"?[{kind:"take" as const,run:()=>accept(detail)},{kind:"unsuggest" as const,run:()=>clear(detail)}]:[])]:[])]};
         },
-        label(input,label) { const foreign=[...new Set(edits!.patches(input,core.value).map(p=>ownerOf(p.path.map(String))))].filter(id=>id!==own); return foreign.length?`${label} · ${foreign.map(id=>`from /${id}`).join(", ")}`:label; },
+        label(input,label) { const foreign=[...new Set(edits!.patches(input,valueOf(core)).map(p=>ownerOf(p.path.map(String))))].filter(id=>id!==own); return foreign.length?`${label} · ${foreign.map(id=>`from /${id}`).join(", ")}`:label; },
         patch,
-        edit: (edit,detail)=>patch(()=>edits!.patches(edits!.input.parse(edit),core.value),detail),
+        edit: (edit,detail)=>patch(()=>edits!.patches(edits!.input.parse(edit),valueOf(core)),detail),
       };
-      return (render ?? ((ctx: DrawContext<any,any,any,any>) => pane.draw(ctx).node))({ target: input.target, refresh:mounted.refresh, read:(read:import("../route/host-read").HostRead)=>mounted.value(read), value, page: mounted.page, cells, selection:{read:()=>page.selected,set:(selected:any)=>move({selected})},
-        write:mounted.action } as any);
+      return (render ?? ((ctx: DrawContext<any,any,any,any>) => pane.draw(ctx).node))({ target: input.target, refresh:mounted.refresh, read:(read:import("../route/host-read").HostRead)=>mounted.value(read), absent:absentLine, value, page: mounted.page, cells, selection:{read:()=>page.selected,set:(selected:any)=>move({selected})},
+        // A route's own id wins over a kernel verb of the same name.
+        verb:(id:string)=>Object.hasOwn(spec.verbs,id)||!Object.hasOwn(kernelVerbs,id)?mounted.verb(id):mounted.kernelVerb(id as KernelVerbKey) } as any);
     },
     // Retaining hidden read connections was a Plan-identity workaround; content fingerprints
-    // now survive reconnect. Keep Work journals/receipts connected so pending edits settle.
+    // now survive reconnect. Keep Work feeds connected so pending edits settle.
     // Read release preserves write authority; disposal and Place custody fence writes.
-    release() { if (disposed || released) return; released = true; notify(); for (const r of reads.values()) { r.args=""; r.stop(); } },
+    release() { if (disposed || released) return; released = true; stopTimeline(); timelineState = null; timelineProblem = "Timeline is inactive"; notify(); for (const r of reads.values()) { r.args=""; r.stop(); } },
     dispose() { if (disposed) return; disposed=true; publish(); cleanups.splice(0).reverse().forEach(stop => stop()); listeners.clear(); },
   };
   const stopSubject=observeSubject(spec.key,{current:()=>!disposed&&!released&&input.custody.current(),read:subjectState,subscribe:mounted.subscribe});
@@ -736,6 +807,9 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
   } catch (error) { cleanups.reverse().forEach(stop => stop()); throw error; }
 }
 export type TypedMount = ReturnType<typeof mountTypedRoute>;
+/** For a holder of only the id (a test, a harness): the handle as the kind it must be, or a throw. */
+export const planned = (verb: VerbHandle): PlannedVerb => { if (!("plan" in verb)) throw Error(`${verb.label} has no plan`); return verb; };
+export const direct = (verb: VerbHandle): RunVerb => { if (!("run" in verb)) throw Error(`${verb.label} is reviewed: plan it`); return verb; };
 async function settleNative(submission: ReturnType<WorkJournalDoor["submit"]>,receipt=false) {
   return new Promise<unknown>((resolve,reject)=>submission.accepted.subscribe(outcome=>{
     if(outcome.kind==="pending") return;

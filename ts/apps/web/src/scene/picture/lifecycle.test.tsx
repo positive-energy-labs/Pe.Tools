@@ -30,7 +30,7 @@ vi.mock("../psc1", () => ({
     ),
     metadata: {
       elements: [],
-      stamp: { sources: [] },
+      evidence: { sources: [] },
       omittedElements: 0,
       unavailableElements: [],
       completeness: { complete: true },

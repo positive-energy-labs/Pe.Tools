@@ -1,3 +1,4 @@
+import { stateSegments } from "@pe/host-contracts/service-identity";
 import type { RevitBridge } from "./bridge.ts";
 import * as contracts from "@pe/agent-contracts";
 import { z } from "zod";
@@ -5,11 +6,16 @@ import { type PodRouteDescriptor } from "@pe/agent-contracts";
 import type { RouteWorkspace } from "@pe/runtime";
 import type { HostAdmittedRoute } from "../../../packages/agent-contracts/src/host-route-admission.ts";
 import type { createPackageLifecycle } from "./package-lifecycle.ts";
-import { productRouteTrustPath } from "./product-paths.ts";
-import { readStored, writeAtomic } from "@pe/host-contracts/store";
-import { storedNoticesPath } from "./notice-feed.ts";
+import {
+  read as readFile,
+  writeState,
+  keptStateKind,
+  type StateRoot,
+} from "@pe/host-contracts/kinds";
+import { hostState } from "./host-ownership.ts";
 import { admitPodArtifact, loadPodHostEntry, verifyPodArtifact } from "./pod-artifact.ts";
-import { registeredReads } from "./reads/routes.ts";
+import { registeredReads, routeDeclarationRead } from "./reads/routes.ts";
+import { RouteGraphWire } from "../../../packages/agent-contracts/src/route-kernel-data.ts";
 
 /** Builtin source admission and verified Pod-byte admission share this host-owned door.
  * The caller supplies the exact authenticated handle, never a browser schema or migration. */
@@ -27,7 +33,13 @@ export function registerAdmittedHostRoute(
     if (captured) {
       const bindings = host ?? captured.bindings;
       unregister = registeredReads.register(
-        "reads" in bindings ? bindings.reads : undefined,
+        {
+          ...("reads" in bindings ? bindings.reads : {}),
+          [`route:${route.data.key}`]: routeDeclarationRead({
+            data: RouteGraphWire.parse(route.data),
+            schemas: captured.bindings.schemas,
+          }),
+        },
         "leaves" in bindings ? bindings.leaves : undefined,
       );
     }
@@ -55,12 +67,18 @@ export function registerAdmittedHostRoute(
 
 const trustSchema = z.record(z.string(), z.string().regex(/^pod-bytes:[a-f0-9]{64}$/));
 
+export const trustKind = keptStateKind({
+  schema: trustSchema,
+  place: () => "Pod route trust",
+  segments: () => stateSegments("routeTrust"),
+});
+
 /** Trusted browser extensions have the shell's authority. Trust is local, explicit and content-pinned. */
 export function createPodRoutes(
   lifecycle: ReturnType<typeof createPackageLifecycle>,
-  options: { trustPath?: string; workspace?: RouteWorkspace; bridge?: RevitBridge["Service"] } = {},
+  options: { machine?: StateRoot; workspace?: RouteWorkspace; bridge?: RevitBridge["Service"] } = {},
 ) {
-  const path = options.trustPath ?? productRouteTrustPath();
+  const file = trustKind.in(options.machine ?? hostState());
   const registrations = new Map<string, { hash: string; dispose: () => void }>();
   let closed = false;
   let tail = Promise.resolve();
@@ -68,11 +86,7 @@ export function createPodRoutes(
   // file that does not decode is refused with a notice and its bytes stay. Every route reads as
   // untrusted, and no decision is saved over it until a person fixes or removes the file.
   const stored = () =>
-    readStored(path, trustSchema, {
-      class: "keep",
-      place: "Pod route trust",
-      notices: storedNoticesPath(),
-    });
+    readFile(file);
   const decisions = async () => {
     const read = stored();
     return read.kind === "ok" ? read.value : {};
@@ -172,7 +186,7 @@ export function createPodRoutes(
         const trust = read.kind === "ok" ? read.value : {};
         if (trusted) trust[key] = hash;
         else delete trust[key];
-        writeAtomic(path, JSON.stringify(trust));
+        writeState(file, JSON.stringify(trust));
       });
       tail = write.catch((error) => {
         console.error("pod-routes: asynchronous operation failed", error);

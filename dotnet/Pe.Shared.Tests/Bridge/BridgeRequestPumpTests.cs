@@ -48,6 +48,32 @@ public sealed class BridgeRequestPumpTests {
         );
     }
 
+    // Purger N5. Mutant: pass null for touched in the pump's catch and the frame carries none.
+    [Test]
+    public async Task ACancelledOpThatAlreadyWroteSaysSoOnTheSocket() {
+        using var pair = await WebSocketPair.ConnectAsync();
+        var started = new TaskCompletionSource();
+        var wrote = new Touched.Wrote(["PE place duct"], 1, 0, 0);
+        using var shutdown = new CancellationTokenSource();
+        var pump = new BridgeRequestPump(pair.Client, async (request, token) => {
+            started.TrySetResult();
+            try { await Task.Delay(Timeout.Infinite, token); }
+            catch (OperationCanceledException cancelled) { throw new OpCancelledException(wrote, cancelled); }
+        });
+        _ = pump.RunAsync(shutdown.Token);
+        await pair.Server.WriteAsync(RequestFrame("slow"), CancellationToken.None);
+        await started.Task.WaitAsync(Patience);
+        _ = await pump.CancelAsync(new OpCancelRequest("slow"), CancellationToken.None);
+        var frame = await pair.Server.ReadAsync(CancellationToken.None).WaitAsync(Patience);
+        shutdown.Cancel();
+
+        Assert.Multiple(() => {
+            Assert.That(frame?.Response?.StatusCode, Is.EqualTo(499));
+            Assert.That(frame?.Response?.Touched, Is.InstanceOf<Touched.Wrote>());
+            Assert.That((frame?.Response?.Touched as Touched.Wrote)?.Transactions, Is.EqualTo(new[] { "PE place duct" }));
+        });
+    }
+
     [Test]
     public async Task CancelByIdEndsTheRunningOpWithACancelledOutcome() {
         using var pair = await WebSocketPair.ConnectAsync();

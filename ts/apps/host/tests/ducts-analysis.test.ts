@@ -1,3 +1,5 @@
+import { stateFixture } from "../../../tests/isolated-home/storage.ts";
+import { mkdtempSync } from "../../../tests/isolated-home/storage.ts";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
 import { bindWork, address, workKey } from "@pe/agent-contracts";
 import * as tieredSettings from "../src/tiered-settings.ts";
@@ -22,7 +24,7 @@ import { price, applyRequest } from "@pe/ducts-domain/pricing";
 import { TEST_SLOTS } from "@pe/ducts-domain/sheet/test-inputs";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { createHash } from "node:crypto";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { gzipSync, gunzipSync } from "node:zlib";
@@ -144,7 +146,7 @@ function fixture() {
   const files = testDuctFiles();
   const sources: DuctsAnalysisSources = {
     catalogs: () => settle(files.ductCatalogs),
-    root,
+    root: stateFixture(root),
     producer: {
       version: "purpose-1",
       lane: "dev",
@@ -245,35 +247,6 @@ test("historical selectors and pagination make zero acquisitions; corruption and
   const artifactPath = join(f.root, `${initial.analysisId}.json`);
   writeFileSync(artifactPath, readFileSync(artifactPath, "utf8") + " ");
   await expect(f.api.read(read(source))).rejects.toThrow("integrity");
-});
-
-test("analysis reads the driver's pre-h2 ducts and fans through the upgraded Work door", async () => {
-  const f = fixture();
-  const resolve = f.sources.resolve;
-  f.sources.resolve = async target => ({ ...(await resolve(target)), address: "C:/fixture.rvt" });
-  const store = fileRouteDocumentStore(join(f.root, "work"));
-  for (const spec of [ductsRouteState, fansRouteState]) {
-    const record = JSON.parse(readFileSync(new URL(`./fixtures/pre-h2-work/planted-${spec.route}.json`, import.meta.url), "utf8"));
-    const key = bindWork(spec.route, address("C:/fixture.rvt"));
-    const value = JSON.parse(JSON.stringify(record.value).replaceAll(
-      JSON.stringify(record.value.history[0].write.key.target).slice(1, -1), JSON.stringify(key.target).slice(1, -1)));
-    await store.setState({ targetKey: workKey(key), route: spec.route, value });
-  }
-  const routes = createPeRoutes({ registrations: [{ spec: ductsRouteState }, { spec: fansRouteState }],
-    heads: { observe: () => () => {} }, store, ductsAnalysis: f.sources });
-  const response = await routes.fetch(new Request("http://local/pe/ducts/analysis", {
-    method: "POST", headers: { "content-type": "application/json" },
-    body: JSON.stringify({ source: { kind: "fresh", target: f.target }, selector: { kind: "equipment", id: 1 } }),
-  }));
-  expect(response.status, await response.clone().text()).toBe(200);
-  for (const spec of [ductsRouteState, fansRouteState]) {
-    const key = bindWork(spec.route, address("C:/fixture.rvt"));
-    const saved = await store.getState({ targetKey: workKey(key), route: spec.route });
-    expect(saved).toMatchObject({ schemaVersion: spec.schemaVersion });
-    expect(spec.schema.safeParse((saved as { doc: unknown }).doc).success).toBe(true);
-    if (spec.route === "ducts") expect(saved).toHaveProperty(
-      ["doc", "kinds", '["SunTherm M Series Vertical Air Handler","Mortex MSVT18"]', "edit", "value", "kind"], "muas");
-  }
 });
 
 test("the declared host route reads canonical Work and unreadable Work refuses before acquisition", async () => {

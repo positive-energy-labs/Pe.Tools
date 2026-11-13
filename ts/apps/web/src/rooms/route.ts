@@ -1,14 +1,15 @@
+import * as contracts from "./contract.ts";
 import type { ContextOf } from "../route/defaults";
-import { command } from "../route/typed-actions.ts";
+import { handle } from "@pe/agent-contracts/handle";
 import { bindings } from "./bindings";
 import { read } from "../route/defaults";
 import { z } from "zod";
-import { roomsRouteState, routeStatePatchSchema, valueRead } from "@pe/agent-contracts";
+import { roomsRouteState, routeStatePatchSchema } from "@pe/agent-contracts";
 import { roomsPageSchema } from "./page";
 import { route, field } from "../route/defaults";
 import { hostRead } from "../route/host-read";
 import { draw } from "../route/draw";
-import { roomsArgs, roomsData } from "@pe/agent-contracts";
+
 import { split, subjectSchema } from "../route/defaults";
 import { levelOrder, regionCode, roomRows, type RoomsRegion } from "./rows.ts";
 const address = roomsPageSchema.shape;
@@ -21,7 +22,7 @@ const room = subjectSchema(512);
  */
 export const fields = {
   room: field(room, { kind: "ids", ids: [] }, "subject", "push"),
-  stage: field(address.stage, "partition", "pose", "push"),
+  stage: field(address.stage, "partition", "stage", "push"),
   layers: field(address.layers, [], "pose"),
   viewport: field(address.viewport, null, "pose"),
   // The feedback mark pinned on the plan; empty pins the first mark of the picked rooms.
@@ -29,7 +30,7 @@ export const fields = {
 };
 export const query = { view: field(address.view, "", "query", "push") };
 export const loaded = read(
-  hostRead(valueRead("rooms.workspace", roomsArgs, roomsData)),
+  hostRead(contracts.workspace),
   (page: { view: string }) => ({ view: page.view }),
 );
 export const edits = z.array(routeStatePatchSchema);
@@ -87,22 +88,23 @@ export const module = route({
     history: z.object({ label: z.string() }),
     describe: (history) => ({ label: history.label }),
   },
-  commands: {
+  verbs: {
     partition: {
-      ...command("rooms.partition"),
+      handle: handle("rooms.partition"),
       label: "Partition view",
       present: () => ({ sentence: "Partition the staged plan view", rows: [] }),
     },
     apply: {
-      ...command("rooms.write"),
+      handle: handle("rooms.write"),
       label: "Write room fields",
       present: () => ({ sentence: "Write the staged room fields", rows: [] }),
     },
     merge: {
-      ...command("rooms.merge"),
+      handle: handle("rooms.merge"),
       label: "Merge rooms",
       present: () => ({ sentence: "Merge the staged room selection", rows: [] }),
     },
   },
+  band: ["partition", "apply", "merge"],
   layout: split("h", ["main", "goal"], { id: "rooms-main", size: 320, sized: "end" }),
 });

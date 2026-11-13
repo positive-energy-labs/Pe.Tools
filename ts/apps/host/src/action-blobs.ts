@@ -1,27 +1,20 @@
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
 import { blobRefSchema, type BlobRef } from "@pe/agent-contracts";
-import { sha256Hex, writeArtifact } from "./page-artifacts.ts";
-import { hostOwnership } from "./host-ownership.ts";
+import { rest, rested } from "@pe/host-contracts/kinds";
+import { hostState } from "./host-ownership.ts";
 import { refused } from "./command-executor.ts";
 
 // PictureCaptures owns PNG observations. This store owns arbitrary command input/output bytes.
-const root = () => join(hostOwnership.rootPath, "state", "host", hostOwnership.serviceName, "blobs");
 export async function put(bytes: Uint8Array, fileName: string): Promise<BlobRef> {
-  const digest = sha256Hex(bytes);
-  await writeArtifact(root(), join(root(), digest), Buffer.from(bytes));
+  const { sha256: digest } = rest(hostState(), bytes);
   return { digest, size: bytes.byteLength, fileName };
 }
 export async function get(ref: BlobRef): Promise<Buffer> {
   blobRefSchema.parse(ref);
-  let bytes: Buffer;
-  try { bytes = await readFile(join(root(), ref.digest)); }
-  catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT")
-      throw refused(`Stored bytes are missing for ${ref.fileName} (${ref.digest})`, "blob.missing");
-    throw error;
-  }
-  if (bytes.length !== ref.size || sha256Hex(bytes) !== ref.digest)
+  const found = rested(hostState(), ref.digest);
+  if (found.kind !== "ok")
+    throw refused(`Stored bytes are ${found.kind === "kept" ? `unreadable: ${found.reason}` : found.kind} for ${ref.fileName} (${ref.digest})`, `blob.${found.kind === "kept" ? "unreadable" : found.kind}`);
+  const bytes = found.bytes;
+  if (bytes.length !== ref.size)
     throw refused(`Stored bytes failed integrity for ${ref.fileName} (${ref.digest})`, "blob.corrupt");
   return bytes;
 }

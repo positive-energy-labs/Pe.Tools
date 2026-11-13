@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { resolve, basename, dirname } from "node:path";
+import { hostState } from "./host-ownership.ts";
 import { createHash } from "node:crypto";
 import { readSettingTiers } from "./tiered-settings.ts";
 import { targetHomes } from "./call-route.ts";
@@ -11,6 +12,7 @@ import {
   installArchive,
   preparePodExport,
   writePodExport,
+  archiveExportKind,
 } from "./pod-transfer.ts";
 import { z } from "zod";
 import { CommandRejected, StepFailure, io, nativeStep, refused, type CommandContext, type CommandExecutor } from "./command-executor.ts";
@@ -18,6 +20,8 @@ import { scratchPageDirectory } from "./page-libraries.ts";
 import { resolveSdkSession, SdkSession } from "./sdk-session.ts";
 import { freezeScript, requireScriptSuccess } from "./operation-script.ts";
 import { validateNativeInput } from "./native-input.ts";
+import { projectNativeOutput } from "./native-output.ts";
+import { isViewImage } from "@pe/agent-contracts/native-output-read";
 import { Effect, Schema } from "effect";
 import {
   commands,
@@ -28,6 +32,7 @@ import {
   canonicalRouteInput,
 } from "@pe/agent-contracts";
 import { admitScript, consentedRead } from "./control.ts";
+import { guards } from "./guards.ts";
 import {
   isTsOnlyOperationKey,
   tsOnlyOperationSchemas,
@@ -80,7 +85,7 @@ export const gatewayNativeLeaves = (key: string): readonly string[] =>
   isTsOnlyOperationKey(key) ? [] : ["host.ops.catalog", key];
 
 /** A host-leaf operation, run on the journal-owned attempt fiber with the journal's services. */
-export type GatewayLocalContext = { receiptId: string; settingPath?: string };
+export type GatewayLocalContext = { receiptId: string; settingPath?: string; caller: import("@pe/agent-contracts").Caller };
 export type GatewayLocal = (key: string, input: unknown, scope?: HostSessionScope, context?: GatewayLocalContext) => Effect.Effect<unknown, unknown, AttemptHost>;
 
 /** Generated native metadata is the fallback contract; public semantic implementations are hidden. */
@@ -156,7 +161,7 @@ export function gatewayExecutor(
       let process: NativeProcess | undefined;
       let script: Awaited<ReturnType<typeof freezeScript>>;
       requireEligibleCaller(metadata, caller, "/actions");
-      if (metadata.intent !== "Mutate" && key !== "scripting.execute")
+      if ((metadata.effect === "Read" || metadata.effect === "TransactRead") && key !== "scripting.execute")
         throw refused("Only catalogued commands enter action admission");
       const expected = key === "settings.tiers.write" && target
         ? { kind: "document" as const, ref: target }
@@ -373,7 +378,7 @@ export function gatewayExecutor(
         },
       };
     },
-    run: ({ admission }: CommandContext, execution: ActionExecution) => Effect.suspend(() => {
+    run: ({ admission, caller }: CommandContext, execution: ActionExecution) => Effect.suspend(() => {
       const prepared = execution.prepared as z.infer<typeof preparedGatewaySchema>;
       const capturedScript = prepared.kind === "native-leaf" ? prepared.script : undefined;
       if (
@@ -382,9 +387,12 @@ export function gatewayExecutor(
         !capturedScript?.sourceBundle
       )
         throw refused("Original script has no sealed source bundle");
-      const input = capturedScript
+      const capturedInput = capturedScript
         ? { ...admission.input, sourceBundle: capturedScript.sourceBundle }
         : admission.input;
+      const input = key === "scripting.execute"
+        ? { ...capturedInput, caller: guards(caller) ? "Agent" : "Person" }
+        : capturedInput;
       return execution.step(
         prepared.kind === "native-leaf" ? "native" : "file",
         key,
@@ -405,23 +413,39 @@ export function gatewayExecutor(
                   : installed;
               });
             if (exported)
-              return io(() =>
-                writePodExport(exported as Awaited<ReturnType<typeof preparePodExport>>),
-              );
+              return io(() => {
+                const captured = exported as Awaited<ReturnType<typeof preparePodExport>>;
+                return writePodExport(captured, archiveExportKind.in(
+                  hostState().home({ root: dirname(captured.result.archivePath), tier: "user" }), basename(captured.result.archivePath),
+                ));
+              });
             return local(key, input, admission.target.kind === "document"
               ? { bridgeSessionId: admission.target.ref.session, openDocumentId: admission.target.ref.openId }
-              : undefined, { receiptId: admission.id, settingPath: prepared.settingPath });
+              : undefined, { receiptId: admission.id, settingPath: prepared.settingPath, caller });
           }
           const target = admission.target;
           if (target.kind !== "document" && target.kind !== "session")
             return Effect.fail(refused("Native target required"));
-          return nativeStep(
+          const step = nativeStep(
             bridge,
             target.kind === "document" ? target.ref : { session: target.session },
             key,
             input,
             requestId,
           );
+          // A capture command (the focused view image) keeps its picture as the read door does, so
+          // its result names the capture and never a path on the host's disk.
+          return isViewImage(key)
+            ? step.pipe(
+                Effect.flatMap((value) =>
+                  projectNativeOutput(pictures, key, value, input,
+                    { openDocumentId: target.kind === "document" ? target.ref.openId : null }, caller),
+                ),
+                Effect.mapError((error) =>
+                  error instanceof StepFailure ? error : new StepFailure(error.message, error.status, "failed"),
+                ),
+              )
+            : step;
         },
         {
           process: prepared.kind === "native-leaf" ? prepared.process : undefined,

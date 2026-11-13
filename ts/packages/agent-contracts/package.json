@@ -44,6 +44,7 @@
       "types": "./src/semantic-actions.ts",
       "import": "./src/semantic-actions.ts"
     },
+    "./handle": "./src/handle.ts",
     "./command-axes": {
       "types": "./src/command-axes.ts",
       "import": "./src/command-axes.ts"
@@ -60,12 +61,16 @@
     "./slots": "./src/slots/index.ts",
     "./target": "./src/target.ts",
     "./tiered-setting": "./src/tiered-setting.ts",
-    "./native-output-read": "./src/native-output-read.ts"
+    "./native-output-read": "./src/native-output-read.ts",
+    "./setting-owners": "./src/setting-owners.ts",
+    "./criterion-words": "./src/criterion-words.neutral.ts"
   },
   "publishConfig": {
     "access": "public"
   },
   "scripts": {
+    "codegen": "node --import jiti/register scripts/command-axes.ts",
+    "codegen:check": "node --import jiti/register scripts/command-axes.ts --check",
     "build": "vp pack",
     "dev": "vp pack --watch",
     "test": "vp test",

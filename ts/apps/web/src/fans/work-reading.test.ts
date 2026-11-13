@@ -74,7 +74,7 @@ test("the host refuses cross-route patches, /fans admits no /ducts feed, and rea
   expect(fanCalls()).toEqual(calls);
   await vi.waitFor(() =>
     expect(f.fans.readingStatus("value").snapshot).toMatchObject({
-      current: true,
+      state: "ready",
       value: {
         value: {
           data: {

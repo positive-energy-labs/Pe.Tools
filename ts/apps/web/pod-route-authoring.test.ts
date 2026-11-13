@@ -69,7 +69,8 @@ test("Snowdon publishes deterministic browser and host bytes; tampering either r
     await expect(loadPodRoute(row, changed, evaluate)).rejects.toThrow("differ");
     await expect(loadPodHostEntry(changed.artifact, row.fingerprint)).rejects.toThrow("differ");
   }
-}, 30000);
+// Two independent web/host builds prove determinism: 25 s in isolation, over 30 s on the loaded writer.
+}, 120_000);
 
 test("Snowdon computes copper voltage drop only in its tracked host read", async () => {
   const { calculation } =

@@ -71,6 +71,7 @@ export function unstale(
 }
 export const scheduleActions = {
   "schedule.grid.read": {
+    catalogEffect: "SessionWrite",
     native: ["revit.detail.schedules"],
     says: "Read the selected schedule and bind its immutable capture to that schedule's reviewed Work without dropping authored cells.",
     needs: "project-document",
@@ -84,6 +85,7 @@ export const scheduleActions = {
     result: scheduleReadingSchema,
   },
   "schedule.grid.bind": {
+    catalogEffect: "SessionWrite",
     says: "Bind immutable host schedule evidence to shared Work at an expected revision; retain authored cells and mark changed native bindings stale.",
     needs: "nothing",
     effect: "command",
@@ -104,6 +106,7 @@ export const scheduleActions = {
     input: z.object({ pod: z.string().min(1).optional() }),
   },
   "schedule.capture": {
+    catalogEffect: "SessionWrite",
     says: "Capture one schedule as a new spec member in the route's pod and write its run; returns the member address, sha256, and run.",
     needs: "project-document",
     effect: "command",
@@ -122,8 +125,11 @@ export const scheduleActions = {
     input: z.object({ source: podMemberSourceSchema }),
   },
 } as const;
+export const scheduleReadingRoute = "schedules.readings";
 export const scheduleReads = {
   "schedule.grid.catalog": {
+    via: { route: scheduleReadingRoute },
+    catalogEffect: "Read",
     says: "Read schedules from the exact selected document without changing authored Work.",
     dirties: [],
     needs: "project-document",
@@ -131,6 +137,8 @@ export const scheduleReads = {
     input: z.object({}),
   },
   "schedule.grid.snapshot": {
+    via: { route: "schedules.readings" },
+    catalogEffect: "Read",
     says: "Read one schedule and its bindings. Returns immutable reading ID and subject workspaceId. Read/propose route:schedules with this workspaceId; stage against basis.captureId. Reading never deletes cells.",
     dirties: [],
     needs: "project-document",
@@ -142,6 +150,8 @@ export const scheduleReads = {
     }),
   },
   "schedule.grid.work": {
+    via: { route: "schedules.readings" },
+    catalogEffect: "Read",
     says: "Read the latest retained schedule reading for a subject Work address, or null when none is retained. This is dated evidence, not a fresh native read.",
     dirties: [],
     needs: "nothing",
@@ -149,6 +159,8 @@ export const scheduleReads = {
     input: z.object({ workspaceId: z.string().min(1) }),
   },
   "schedule.grid.history": {
+    via: { route: "schedules.readings" },
+    catalogEffect: "Read",
     says: "List every retained schedule reading of a subject Work address, newest first: its History. Each row's id opens with schedule.grid.saved.",
     dirties: [],
     needs: "nothing",
@@ -156,6 +168,8 @@ export const scheduleReads = {
     input: z.object({ workspaceId: z.string().min(1) }),
   },
   "schedule.grid.saved": {
+    via: { route: "schedules.readings" },
+    catalogEffect: "Read",
     says: "Read an original immutable schedule snapshot and its exact target without Revit.",
     dirties: [],
     needs: "nothing",

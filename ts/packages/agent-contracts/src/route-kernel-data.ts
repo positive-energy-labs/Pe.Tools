@@ -80,9 +80,19 @@ export const routeReadingJsonSchema = z.union([
     ...readingPolicy,
   }),
 ]);
+// Effects and field gates belong to discovery. The body protocol below retains executable
+// verb signatures; RouteGraphWire projects one neutral verb shape for readers.
+export const verbEffectSchema = z.enum(["Read", "TransactRead", "SessionWrite", "WorkWrite", "ModelWrite"]);
+/** A gate's condition once SH-S3 wires it into `layout`: the subject, or one page field at one value. */
+export const gateWhenSchema = z.union([
+  z.literal("subject"),
+  z.strictObject({ field: ref, value: z.string() }),
+]);
+export type GateWhen = z.output<typeof gateWhenSchema>;
 const verb = {
   input: ref,
   label: z.string(),
+  effect: verbEffectSchema.optional(),
   review: z.enum(["none", "shown"]),
   deps: dependencies,
   captures: refs,
@@ -136,7 +146,7 @@ const pane = z.strictObject({
 });
 export type LayoutJson =
   | { readonly kind: "pane"; readonly id: string }
-  | { readonly kind: "gate"; readonly when: string; readonly child: LayoutJson }
+  | { readonly kind: "gate"; readonly when: GateWhen; readonly child: LayoutJson }
   | {
       readonly kind: "split";
       readonly id: string;
@@ -155,7 +165,7 @@ export type LayoutJson =
 const layout: z.ZodType<LayoutJson> = z.lazy(() =>
   z.discriminatedUnion("kind", [
     z.strictObject({ kind: z.literal("pane"), id: ref }),
-    z.strictObject({ kind: z.literal("gate"), when: ref, child: layout }),
+    z.strictObject({ kind: z.literal("gate"), when: gateWhenSchema, child: layout }),
     z.strictObject({
       kind: z.literal("split"),
       id: ref,
@@ -241,6 +251,8 @@ export const RouteGraphJson = z.strictObject({
   /** ADR 0035 rule 8: the reading whose data is the Goal; the kernel draws its unresolved list first. */
   goal: ref.optional(),
   verbs: z.record(ref, routeVerbJsonSchema),
+  /** Verb ids on the band, the first primary. A verb is on the band or in exactly one pane. */
+  band: refs.optional(),
   panes: z.record(ref, pane),
   layout,
   stages: z.record(ref, z.strictObject({ word: z.string(), panes: refs, verbs: refs })),
@@ -274,6 +286,37 @@ export const RouteGraphJson = z.strictObject({
   observe: refs,
 });
 export type RouteGraphJson = Immutable<z.output<typeof RouteGraphJson>>;
+/** Discovery is a projection, not the executable body protocol. Body kinds remain in
+ * RouteGraphJson until their execution owners retire those signatures. */
+export const RouteGraphWire = RouteGraphJson.omit({ stages: true, stageOrder: true, predicates: true }).extend({
+  verbs: z.record(ref, z.strictObject({ entry: ref, label: z.string(), effect: verbEffectSchema, review: z.enum(["none", "shown"]) })),
+  band: refs,
+});
+export type RouteGraphWire = Immutable<z.output<typeof RouteGraphWire>>;
+/** Page and Work ownership do not depend on discovery or body verb protocols. */
+export type RouteStateGraph = Pick<RouteGraphJson, "fields" | "work">;
+/** Keep gate linking neutral: a Pod declaration must not pull in the executable catalog. */
+export function linkRouteGates(data: Pick<RouteGraphWire, "key" | "version" | "layout" | "fields" | "subject" | "panes">, schemas: Readonly<Record<string, z.ZodType>>): RouteDiagnostic[] {
+  const errors: RouteDiagnostic[] = [];
+  const fail = (path: string, reference: string, expected: string, message: string) => errors.push({
+    path, reference, expected, message, namespace: data.key, version: data.version, source: null, code: "reference",
+  });
+  const walk = (node: LayoutJson, path: string) => {
+    if (node.kind === "pane") {
+      if (!Object.hasOwn(data.panes, node.id)) fail(`${path}.id`, node.id, "declared pane", "Unknown pane");
+    } else if (node.kind === "split") node.children.forEach((child, i) => walk(child, `${path}.children.${i}`));
+    else {
+      const condition = node.when;
+      const field = condition === "subject" ? undefined : data.fields[condition.field];
+      const schema = field && "schema" in field ? schemas[field.schema] : undefined;
+      const valid = condition === "subject" ? !!data.subject : !!schema?.safeParse(condition.value).success;
+      if (!valid) fail(`${path}.when`, condition === "subject" ? "subject" : condition.field, "declared field value", "Gate must name a declared subject or an accepted field value");
+      walk(node.child, `${path}.child`);
+    }
+  };
+  walk(data.layout, "layout");
+  return errors;
+}
 export type FieldJson = RouteGraphJson["fields"][string];
 export type ReadingDependencies = RouteGraphJson["readings"][string]["deps"];
 

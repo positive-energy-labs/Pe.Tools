@@ -1,3 +1,5 @@
+import { hostState } from "../src/host-ownership.ts";
+import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { fixtureNative } from "./fixture-native.ts";
 import { testHostInputs, callRouteOver } from "./effect-test.ts";
 import { pictureCaptures } from "./effect-test.ts";
@@ -8,19 +10,20 @@ import { pictureCaptures } from "./effect-test.ts";
 import { captureStore } from "./effect-test.ts";
 import { afterEach, beforeEach, expect, test } from "vite-plus/test";
 import { Layer } from "effect";
-import { mkdir, mkdtemp, open, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, open, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
 import { basename, join } from "node:path";
 import { serveRoutes } from "./real-server.ts";
 import { mintContext } from "../src/control.ts";
 import { productPathNames } from "@pe/host-contracts/contracts";
+import { commandTable } from "@pe/agent-contracts/command-axes";
 
 const homeVariable = productPathNames.productHomeVariable;
 import type { PictureCaptures } from "../src/captures-route.ts";
 import { listPackages } from "../src/packages.ts";
-import { exportPod, importPod, importRecordPath, placePod, writeZip } from "../src/pod-transfer.ts";
-import { productPluginDecisionsPath } from "../src/product-paths.ts";
+import { exportPod, importPod, importRecordFile, placePod, writeZip } from "../src/pod-transfer.ts";
+
 
 let root: string;
 let pods: string;
@@ -49,7 +52,7 @@ beforeEach(async () => {
 });
 afterEach(async () => {
   await web.close();
-  await rm(productPluginDecisionsPath(), { force: true });
+  await rm(hostState().pluginDecisions, { force: true });
   if (previousHome === undefined) delete process.env[homeVariable];
   else process.env[homeVariable] = previousHome;
   await native.close();
@@ -109,7 +112,7 @@ test("identity duplicate checks include disabled siblings with invalid members",
   const large = await open(join(pods, "twin/assets/oversize.bin"), "r+");
   await large.truncate(64 * 1024 * 1024 + 1);
   await large.close();
-  const decisions = productPluginDecisionsPath();
+  const decisions = hostState().pluginDecisions;
   await mkdir(join(decisions, ".."), { recursive: true });
   await writeFile(decisions, '{"pod:same":false}');
   const result = await call("pod.list", { projection: "identity", folder: "default" });
@@ -119,7 +122,7 @@ test("identity duplicate checks include disabled siblings with invalid members",
 
 test("identity fully admits its target and observes manifest replacement and new duplicate claims", async () => {
   await writePod("default", { "pod.json": '{"id":"before"}', "settings/kept.json": "{}" });
-  const decisions = productPluginDecisionsPath();
+  const decisions = hostState().pluginDecisions;
   await mkdir(join(decisions, ".."), { recursive: true });
   await writeFile(decisions, '{"pod:before":false}');
   expect((await call("pod.list", { projection: "identity", folder: "default" })).status).toBe(400);
@@ -262,7 +265,7 @@ test("export vendors, ports the project, closes captures; import into a renamed 
   // The import record is machine state, keyed by pod id beside this owner's Pods root: nothing
   // machine-derived lands in the pod, and no machine path is stored (homes freeze shape 6).
   await expect(read("imported.json")).rejects.toThrow();
-  const record = await readFile(importRecordPath("ducts", { podsRoot: otherPods }), "utf8");
+  const record = await readFile(importRecordFile("ducts").path, "utf8");
   expect(JSON.parse(record)).toMatchObject({
     archiveSha256: exported.archiveSha256,
     archive: basename(archivePath),
@@ -363,6 +366,7 @@ test("an entry that inflates past its declared size is refused (decompression bo
 });
 
 test("pod.promote wraps a scratch Page byte for byte, unbound, without touching the original", async () => {
+  expect(commandTable["pod.promote"]).toMatchObject({ effect: "SessionWrite", via: "command" });
   const pages = join(root, "Documents", "Pe.Tools", "Pages");
   const html = "<!doctype html><title>Notes</title><script src=/pages/pe.js></script>";
   await mkdir(join(pages, "notes", ".state"), { recursive: true });

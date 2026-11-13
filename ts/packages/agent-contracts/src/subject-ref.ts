@@ -16,7 +16,7 @@ import { z } from "zod";
  * decode accepts only the canonical spelling (decode(code) re-encodes to exactly code).
  */
 declare const subjectRefCode: unique symbol;
-export type SubjectRefCode = string & { readonly [subjectRefCode]: true };
+export type SubjectRefCode = `${string}:${string}` & { readonly [subjectRefCode]: true };
 declare const uniqueId: unique symbol;
 /** A Revit UniqueId; an integer-only ElementId is refused, it is session-local and never identity. */
 export type UniqueId = string & { readonly [uniqueId]: true };
@@ -73,6 +73,23 @@ export const subjectRefSchema = z.discriminatedUnion("keyKind", [
   z.strictObject({ ...common, keyKind: z.literal("group"), key: text }),
 ]);
 export type SubjectRef = z.output<typeof subjectRefSchema>;
+/** One family/type spelling for subjects and domain readouts. */
+export function familyTypeName(node: { family?: string | null; type?: string | null }): string {
+  const family = node.family?.includes("_") && node.type?.trim() ? null : node.family;
+  return [...new Set([family, node.type].map(v => v?.trim()).filter(Boolean))].join(" · ");
+}
+
+/** Names come from the current roster, then the subject itself; unknown elements never expose a raw code. */
+export function subjectName(code: string, roster: readonly { id: string; label: string }[] = []): string {
+  const parsed = decode(code);
+  if (!parsed.ok) return "subject";
+  const ref = parsed.value;
+  const base = subjectCode({ ...ref, sub: undefined });
+  const known = roster.find(row => row.id === base)?.label;
+  const name = known ?? (ref.keyKind === "name" ? ref.key.length === 2 ? familyTypeName({ family: ref.key[0], type: ref.key[1] }) : ref.key.join(" · ")
+    : ref.keyKind === "UniqueId" ? `element ${ref.key.slice(0, 8)}` : ref.key);
+  return ref.sub ? `${name} · ${"port" in ref.sub ? `port ${ref.sub.port}` : ref.sub.field}` : name;
+}
 export type SubjectPlacement = z.output<typeof placementSchema>;
 export type SubjectSub = z.output<typeof subSchema>;
 

@@ -1,4 +1,6 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { stateFixture } from "../../../tests/isolated-home/storage.ts";
+import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
+import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -26,7 +28,7 @@ const runtime = <A>(
   dir: string,
   admitted: ReceiptStamp | null,
   program: Effect.Effect<A, never, ActionJournalService | HostLogService>,
-) => Effect.runPromise(Effect.scoped(program).pipe(Effect.provide(ActionJournalService.live(admitted, dir))));
+) => Effect.runPromise(Effect.scoped(program).pipe(Effect.provide(ActionJournalService.live(admitted, stateFixture(dir)))));
 
 test("each runtime scope owns its journal; the log mirrors commits in order and drains on close", async () => {
   const dir = await mkdtemp(join(tmpdir(), "pe-host-receipts-"));
@@ -74,7 +76,7 @@ test("a non-host stamp fails runtime construction; no later stamp mutation exist
     Effect.scoped(Effect.gen(function* () {
       return yield* ActionJournalService;
     })).pipe(
-      Effect.provide(ActionJournalService.live(stamp("web"), dir)),
+      Effect.provide(ActionJournalService.live(stamp("web"), stateFixture(dir))),
     ),
   );
   expect(Exit.isFailure(exit) && String(exit.cause)).toContain("requires a host stamp");
@@ -99,7 +101,7 @@ test("journal facts and their mirrored log entries take the runtime Clock; advan
           mirrored: log.read(0).entries.map(({ at, event }) => [at, event.kind === "receipt" && event.receipt.at]),
         };
       }),
-    ).pipe(Effect.provide(ActionJournalService.live(null, dir)), Effect.provide(TestClock.layer())),
+    ).pipe(Effect.provide(ActionJournalService.live(null, stateFixture(dir))), Effect.provide(TestClock.layer())),
   );
   expect(facts).toEqual([first, later]);
   expect(mirrored).toEqual([

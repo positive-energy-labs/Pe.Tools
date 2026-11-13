@@ -20,6 +20,8 @@
 import { compile } from "json-schema-to-typescript";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { HOST_RPC_BRIDGE_SESSION_HEADER } from "../src/contracts/bridge-protocol.ts";
 
 type CatalogEntry = {
@@ -29,11 +31,8 @@ type CatalogEntry = {
   effect: string;
   cardinality: string;
   internal: boolean;
-  rollsBack: boolean;
   displayName?: string | null;
-  intent: string;
   costTier: string;
-  usesTransactions: boolean;
   description: string;
   requestSchemaJson: string;
   responseSchemaJson: string;
@@ -226,9 +225,9 @@ chunks.push(
   "export const hostOpSafety = {",
   ...operations.map(
     (op) =>
-      `  ${JSON.stringify(op.key)}: ${JSON.stringify({ intent: op.intent, costTier: op.costTier, usesTransactions: op.usesTransactions, subject: op.subject, touches: op.touches, effect: op.effect, cardinality: op.cardinality, internal: op.internal, rollsBack: op.rollsBack })},`,
+      `  ${JSON.stringify(op.key)}: ${JSON.stringify({ costTier: op.costTier, subject: op.subject, touches: op.touches, effect: op.effect, cardinality: op.cardinality, internal: op.internal })},`,
   ),
-  "} as const satisfies Record<keyof HostOps, { intent: string; costTier: string; usesTransactions: boolean; subject: string; touches: string; effect: string; cardinality: string; internal: boolean; rollsBack: boolean }>;",
+  "} as const satisfies Record<keyof HostOps, { costTier: string; subject: string; touches: string; effect: string; cardinality: string; internal: boolean }>;",
   "",
 );
 
@@ -237,13 +236,13 @@ const catalogOutput = [
   ...banner,
   "/** Host-only C# discovery metadata. Runtime availability is reported separately by the host. */",
   'import type { HostOperationDefinition } from "../contracts/operation-vocabulary.ts";',
-  "type CatalogEntry = HostOperationDefinition & { readonly requestSchemaJson: string; readonly responseSchemaJson: string; readonly description: string; readonly artifactSchemaJson?: string } & (",
+  'type CatalogEntry = Omit<HostOperationDefinition, "intent" | "rollsBack" | "usesTransactions"> & { readonly requestSchemaJson: string; readonly responseSchemaJson: string; readonly description: string; readonly artifactSchemaJson?: string } & (',
   ...operations.map(
     (op) =>
       `  | { readonly key: ${JSON.stringify(op.key)}${op.artifactSchemaJson ? "; readonly artifactSchemaJson: string" : ""} }`,
   ),
   ");",
-  `export const hostOpCatalog: readonly CatalogEntry[] = ${JSON.stringify(operations, null, 2)};`,
+  `export const hostOpCatalog: readonly CatalogEntry[] = ${JSON.stringify(operations.map((op) => Object.fromEntries(Object.entries(op).filter(([key]) => !["intent", "rollsBack", "usesTransactions"].includes(key)))), null, 2)};`,
   "",
 ].join("\n");
 const outputs = [
@@ -269,6 +268,7 @@ if (checkMode) {
   console.log(
     `Host contracts and catalog are in sync with ${catalogSource} (${operations.length} operations).`,
   );
+  regenerateCommandTable(true);
   process.exit(0);
 }
 
@@ -276,4 +276,17 @@ for (const [path, content] of outputs) {
   await mkdir(dirname(path), { recursive: true });
   await writeFile(path, content, "utf8");
   console.log(`Wrote ${operations.length} operations to ${path}`);
+}
+regenerateCommandTable(false);
+
+function regenerateCommandTable(check: boolean) {
+  // Custom outputs are isolated artifacts; only the checkout catalog refreshes its command table.
+  if (resolve(outPath) !== DEFAULT_OUT) return;
+  // A fresh process reads the just-written catalog, not this process's cached modules.
+  const cwd = fileURLToPath(new URL("../../agent-contracts/", import.meta.url));
+  const result = spawnSync(process.execPath,
+    ["--import", "jiti/register", "scripts/command-axes.ts", ...(check ? ["--check"] : [])],
+    { cwd, stdio: "inherit" });
+  if (result.error) throw result.error;
+  if (result.status !== 0) process.exit(result.status ?? 1);
 }

@@ -7,6 +7,7 @@ export { createRoot } from "react-dom/client";
 export { ArtifactFrame } from "./components/lang/artifact-frame";
 export {
   GraphLayoutView,
+  graphTeaching,
   type GraphLayoutViewProps,
   type GraphLayoutState,
   type GraphPaneState,

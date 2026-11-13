@@ -9,12 +9,17 @@ import {
   actionReceiptSchema,
   held,
   noticeFeedSchema,
-  type ActionReceipt,
   type HarnessEvent,
   type NoticeFeed,
   type ReadingFrame,
 } from "@pe/agent-contracts";
 import { createNoticeFeed, noticeRows, type NoticeSources } from "../src/notice-feed.ts";
+import { Effect } from "effect";
+import { gatewayExecutor } from "../src/gateway-actions.ts";
+import { detachedBridge, testJournal } from "./effect-test.ts";
+import { approvedPea } from "./callers.ts";
+import type { PictureCaptures } from "../src/captures-route.ts";
+import { z } from "zod";
 
 const NOW = Date.parse("2026-11-10T12:00:00Z");
 const at = "2026-11-10T11:59:00.000Z";
@@ -37,18 +42,50 @@ const thread = (
     lifecycle: { status: "active", explicitUnread: false, readSeq },
     events: log,
   }) as unknown as NoticeSources["threads"][number];
-const receipt = (id: string, state: string, revision = 1, error?: string) => ({
+const receipt = (id: string, state: "failed" | "unknown" | "succeeded", revision = 1, error?: string) => ({
   revision,
-  action: {
+  action: actionReceiptSchema.parse({
     id,
     key: "revit.ducts.resize",
     state,
-    caller: { kind: "pea" },
+    caller: { kind: "pea", context: "notice", thread: "t1" },
     startedAt: at,
-    ...(error ? { error } : {}),
-  } as unknown as ActionReceipt,
+    basis: null, target: { kind: "host" }, input: {}, steps: [],
+    prepared: { state: "ready", value: null }, recovery: [],
+    ...(state === "succeeded" ? { result: null } : { error: error ?? "Outcome unknown", status: 503 }),
+  }),
 });
 const none: NoticeSources = { threads: [], receipts: [], works: [], machine: null, stored: [], held: [] };
+
+test("a succeeded script's held result is one notice, with nothing pending", async () => {
+  const journal = testJournal();
+  const result = { status: "Succeeded", held: "Held, not done: the person presses Save in Revit." };
+  const executor = gatewayExecutor("scripting.execute", detachedBridge(),
+    () => Effect.succeed(result), {} as PictureCaptures);
+  journal.bindCommands({ probe: async () => null, resolve: () => ({
+    ...executor,
+    definition: async () => ({ says: "Run script", needs: "nothing", effect: "command", dirties: [], input: z.record(z.string(), z.unknown()) }),
+    bind: async () => ({ effects: [], prepare: async () => ({ kind: "host-leaf" }) }),
+  }) });
+  await journal.invoke({
+    id: "script-held", key: "scripting.execute", target: { kind: "host" },
+    input: { scriptContent: "doc.Save();" },
+  }, { caller: approvedPea("script-held"), basis: null });
+  const action = await journal.wait("script-held");
+  expect(action).toMatchObject({ state: "succeeded", result });
+  const now = Date.parse(action.startedAt);
+  const rows = noticeRows({ ...none, receipts: [{ revision: 1, action }] }, now);
+  expect(rows).toMatchObject([{
+    key: "action:script-held", group: "waits", verb: "held", says: result.held,
+  }]);
+  expect(rows).toHaveLength(1);
+  expect(action.state).toBe("succeeded");
+  expect(action.recovery).toEqual([]);
+  expect(action.steps).toMatchObject([{ state: "succeeded" }]);
+  expect(action.refusal).toBeUndefined();
+  if (action.state !== "succeeded") throw Error("script did not settle");
+  expect(noticeRows({ ...none, receipts: [{ revision: 2, action: { ...action, result: { held: null } } }] }, now)).toEqual([]);
+});
 
 test.each(["stale", "invalid"] as const)("a %s tier-write refusal keeps its outcome verb in Failed", (kind) => {
   const action = actionReceiptSchema.parse({

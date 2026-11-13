@@ -11,7 +11,7 @@ const personField = <S extends z.ZodType>(schema: S, url: "push" | "replace") =>
 /** Every route's address, by route key. A row with `module` is a builtin declared in that web folder. */
 export const routeAddresses = {
 "bind": { path: "/bind" as const, title: "Bind", fields: {
-"query": personField((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","propertyNames":{"type":"string"},"additionalProperties":{"type":"string"}}) as z.ZodType<Immutable<{}>>).default({}), "replace"),
+"query": personField((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","propertyNames":{"type":"string"},"additionalProperties":{"type":"string"}}) as z.ZodType<Immutable<{} & Record<string, string>>>).default({}), "replace"),
 "fragment": personField((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","type":"string"}) as z.ZodType<Immutable<string>>).default(""), "replace"),
 "page": personField(subjectSchema(1).default({"kind":"ids","ids":[]}), "push"),
 "view": personField((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","type":"boolean"}) as z.ZodType<Immutable<boolean>>).default(false), "replace"),
@@ -64,7 +64,7 @@ selected: {...field(focusSelectionSchema,"replace"),agent:undefined}
 "pod": field((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","default":"","type":"string","maxLength":512}) as z.ZodType<Immutable<string>>).default(""), "push"),
 "query": field((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","default":"","type":"string","maxLength":4096}) as z.ZodType<Immutable<string>>).default(""), "replace"),
 "sort": field((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","default":{"columns":[]},"type":"object","properties":{"columns":{"type":"array","items":{"type":"object","properties":{"key":{"type":"string"},"dir":{"type":"string","enum":["asc","desc"]}},"required":["key","dir"]}}},"required":["columns"]}) as z.ZodType<Immutable<{"columns": Array<{"key": string; "dir": "asc" | "desc"}>}>>).default({"columns":[]}), "replace"),
-"hidden": field((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","default":{},"type":"object","propertyNames":{"type":"string"},"additionalProperties":{"type":"boolean","const":true}}) as z.ZodType<Immutable<{}>>).default({}), "replace"),
+"hidden": field((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","default":{},"type":"object","propertyNames":{"type":"string"},"additionalProperties":{"type":"boolean","const":true}}) as z.ZodType<Immutable<{} & Record<string, true>>>).default({}), "replace"),
 "member": field(subjectSchema(1).default({"kind":"ids","ids":[]}), "push"),
 "stage": field((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","default":"audit","type":"string","enum":["audit","apply","history"]}) as z.ZodType<Immutable<"audit" | "apply" | "history">>).default("audit"), "push"),
 "pane": field((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","default":"spec","type":"string","enum":["spec","output"]}) as z.ZodType<Immutable<"spec" | "output">>).default("spec"), "replace"),
@@ -149,7 +149,7 @@ selected: {...field(focusSelectionSchema,"replace"),agent:undefined}
 "zones": field((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","anyOf":[{"type":"array","items":{"type":"string"}},{"type":"string","const":"all"}]}) as z.ZodType<Immutable<Array<string> | "all">>).default([]), "push"),
 "work": field((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","type":"string"}) as z.ZodType<Immutable<string>>).default(""), "push"),
 "r10": field((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","type":"string"}) as z.ZodType<Immutable<string>>).default(""), "push"),
-"stage": field((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","type":"string","const":"adopt"}) as z.ZodType<Immutable<"adopt">>).default("adopt"), "replace"),
+"stage": field((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","type":"string","const":"adopt"}) as z.ZodType<Immutable<"adopt">>).default("adopt"), "push"),
 selected: {...field(focusSelectionSchema,"replace"),agent:undefined}
 }, agent: { policy: "Use the route fields as declared." }, module: "takeoff" },
 } satisfies Record<string, RouteDeclaration>;

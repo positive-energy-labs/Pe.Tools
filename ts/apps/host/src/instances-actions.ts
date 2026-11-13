@@ -1,3 +1,4 @@
+import { hostState } from "./host-ownership.ts";
 import {
   commands,
   nativeProcessSchema,
@@ -56,7 +57,7 @@ import {
   type Acquisition,
   type AcquisitionIntent,
 } from "./acquisition.ts";
-import { productPeaWorkPath } from "./product-paths.ts";
+
 import { resolveStartProject } from "./session-route.ts";
 import { readMachineSession } from "./machine.ts";
 import { downloadCloudVersion } from "./cloud-version.ts";
@@ -544,7 +545,7 @@ async function prepareAcquisition(
       project,
       acquisition: planAcquisition(
         ctx.admission.id,
-        deps.peaWork ?? productPeaWorkPath(),
+        deps.peaWork ?? hostState().peaWork,
         process,
         launch,
         hint,
@@ -574,7 +575,7 @@ async function bindLaunch(
   if (start?.owner === "pea" || launch)
     facts.effects.push({
       kind: "directory",
-      path: acquisitionRoot(deps.peaWork ?? productPeaWorkPath(), ctx.admission.id),
+      path: acquisitionRoot(deps.peaWork ?? hostState().peaWork, ctx.admission.id),
     });
   return {
     ...facts,
@@ -953,7 +954,7 @@ export function instancesExecutors(deps: InstancesActionDependencies = {}) {
       }),
     }),
     "instances.handover": handoverCommand(read),
-    "instances.cleanup": cleanupCommand(read, deps.peaWork ?? productPeaWorkPath()),
+    "instances.cleanup": cleanupCommand(read, deps.peaWork ?? hostState().peaWork),
   };
   const controls = {
     recover: (step: ActionStep) => recoverSdkStep(step, read),

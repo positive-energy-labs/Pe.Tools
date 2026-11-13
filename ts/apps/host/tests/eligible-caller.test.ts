@@ -1,10 +1,11 @@
+import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { Context, Effect, Layer } from "effect";
 import { HttpRouter, HttpServerResponse } from "effect/http";
 import { NodeHttpClient, NodeServices } from "@effect/platform-node";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import { HostNativeRead } from "@pe/host-internal/native-read";
 import { expect, test, vi } from "vite-plus/test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { callRouteOver, detachedBridge, journalAt, sessionView, testHostInputs } from "./effect-test.ts";
@@ -65,7 +66,7 @@ test.each(["/call", "/native"])("eligible caller witness at %s", async (door) =>
     method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ key, request: input }),
   }), Context.make(RequestIdentity, admittedRequestIdentity(caller, { bridgeSessionId: "bridge-a", openDocumentId: "open-a" })));
   try {
-    expect(definition.intent).toBe("Read");
+    expect(definition.effect).toBe("Read");
     const refused = await send(pea());
     expect(refused.status, await refused.clone().text()).toBe(403);
     expect(await refused.json()).toMatchObject({ refusal: { code: "human.only", door: door === "/call" ? "/call" : "native-read" } });

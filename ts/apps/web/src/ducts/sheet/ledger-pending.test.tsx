@@ -5,6 +5,7 @@ import type { LedgerProps } from "./types";
 import { Ledger } from "./view";
 import { openFanSheetSchema as openSheetSchema } from "@pe/agent-contracts";
 import fixture from "./sheet.fixture.json";
+import { FANS_LEDGER_ESP } from "../../../../../tests/e2e/cdp.ts";
 
 afterEach(cleanup);
 
@@ -25,30 +26,43 @@ test("a Work ESP is labelled by its resolved source, never as a Revit write", ()
     cfm: { value: null, source: "none", units: "cfm", version: null, status: "missing" },
     esp: { value: 2.658079, source: "Work", units: "in-wg", version: 4, status: "valid" },
   };
-  const view = render(
-    <Ledger
-      props={{
-        sheet,
-        inputs,
-        busy: false,
-        loading: false,
-        error: null,
-        blockers: [],
-        taken: [],
-        changeInputs() {},
-        closerOf() {
-          throw Error("No closer in this fixture");
-        },
-        close() {},
-        closeMany() {},
-        focusedBlocker: null,
-        focusBlocker() {},
-      }}
-    />,
+  const draw = () => (
+    <div data-pane-id="sheet-ledger">
+      <Ledger
+        props={{
+          sheet,
+          inputs,
+          busy: false,
+          loading: false,
+          error: null,
+          blockers: [],
+          taken: [],
+          changeInputs() {},
+          closerOf() {
+            throw Error("No closer in this fixture");
+          },
+          close() {},
+          closeMany() {},
+          focusedBlocker: null,
+          focusBlocker() {},
+        }}
+      />
+    </div>
   );
+  const view = render(draw());
   expect(view.getByText("required (Work)")).toBeTruthy();
   expect(view.getByText("2.6581")).toBeTruthy();
   expect(view.queryByText("required (written)")).toBeNull();
+  expect(view.container.querySelector(FANS_LEDGER_ESP)?.textContent).toBe("2.6581");
+  inputs.units[String(sheet.overview.fan.unitId)]!.esp = {
+    value: 1.25,
+    source: "model",
+    units: "in-wg",
+    version: 5,
+    status: "valid",
+  };
+  view.rerender(draw());
+  expect(view.container.querySelector(FANS_LEDGER_ESP)?.textContent).toBe("1.2500");
 });
 test("a recomputing sheet does not claim that no fan is open", () => {
   const props: LedgerProps = {

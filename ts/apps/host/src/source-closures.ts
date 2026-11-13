@@ -1,13 +1,15 @@
 import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-
-import { mkdir, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
+import { basename, dirname } from "node:path";
+import { generatedKind, writeGenerated } from "@pe/host-contracts/kinds";
 import { routeStartupOwner, routeStartupSourceHash, currentRouteStartupProjection, readRouteStartupReceipt } from "@pe/host-contracts/route-startup";
 import type { RouteStartupProjection } from "@pe/host-contracts/route-startup";
 
 declare const __PE_SOURCE_COMMIT__: string;
+const sourceClosure = generatedKind(["source-closure.generated.json"]);
+const mark = (phase: string) =>
+  process.env.PE_START_TIMING && console.error(`PE_START_TIMING ${phase} ${Math.round(performance.now())}`);
 
 /** ADR 0029 rule 4 exception: this source bootstrap runs before the Effect graph has a process scope.
  * Builtin closures are untracked build output that the host graph imports from disk under jiti.
@@ -17,33 +19,36 @@ declare const __PE_SOURCE_COMMIT__: string;
  * Browser-worker/ACP adapter modes never load the host graph. */
 export async function prepareSourceClosures() {
   if (typeof __PE_SOURCE_COMMIT__ !== "undefined") return;
-  await promisify(execFile)(process.execPath, [
-    fileURLToPath(new URL("../../web/scripts/route-graphs.ts", import.meta.url)),
-    "--builtin-closure-only",
-  ]);
+  await prepareDevRouteProjection();
 }
 
-/** Dev alone hands the complete producer result to its frontend; pack/source-only keep their lane.
+/** Source hosts share one producer receipt. Dev also hands the result to its frontend.
  * The producer (18 route closure builds, about a minute) is NOT on the start path while the receipt
  * its last full run left (`codegen:routes`, or an earlier start) is still current by content hash.
  * tests/source-closures.test.ts holds that. A miss produces, and the producer stores a new receipt. */
-export async function prepareDevRouteProjection(): Promise<RouteStartupProjection | undefined> {
+export async function prepareDevRouteProjection(): Promise<RouteStartupProjection> {
   const root = fileURLToPath(new URL("../../../../", import.meta.url));
+  mark("receipt-check");
   let receipt = readRouteStartupReceipt(root);
+  mark(receipt ? "receipt-hit" : "receipt-miss");
   let current = !!receipt;
   if (!receipt) {
     const sourceHash = routeStartupSourceHash(root);
     const { stdout } = await promisify(execFile)(process.execPath, [
       fileURLToPath(new URL("../../web/scripts/route-graphs.ts", import.meta.url)), "--runtime",
     ], { maxBuffer: 16 * 1024 * 1024 });
+    mark("receipt-produced");
     receipt = { checkout: routeStartupOwner(root), sourceHash, projections: JSON.parse(stdout) };
     current = currentRouteStartupProjection(root, receipt);
   }
+  // Refuse a source/producer race before the host links the closures it produced.
+  if (!current) throw new Error("Route sources changed during startup projection; retry startup.");
   // The host graph still imports ignored closure pins from disk before linking under jiti.
   for (const [path, text] of Object.entries(receipt.projections)) {
-    if (!path.endsWith("source-closure.generated.json")) continue;
-    await mkdir(dirname(path), { recursive: true });
-    await writeFile(path, text);
+    if (basename(path) !== "source-closure.generated.json") continue;
+    writeGenerated(sourceClosure.in(dirname(path)), text);
   }
-  return current ? receipt : undefined;
+  if (!currentRouteStartupProjection(root, receipt))
+    throw new Error("Route sources changed during startup publication; retry startup.");
+  return receipt;
 }

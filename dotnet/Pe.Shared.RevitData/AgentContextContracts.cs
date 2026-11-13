@@ -358,6 +358,28 @@ public record RevitViewImageModelRect(
     double MaxY
 );
 
+/// <summary>
+///     Whether a focused capture put the view back. When <see cref="Held" /> is false the image is still good, and
+///     <see cref="Left" /> names what the captured view still carries: crop, scopeBox, annotationCrop, sheetFilter.
+/// </summary>
+public sealed record RevitViewImageRestore(bool Held, IReadOnlyList<string> Left);
+
+/// <summary>The view used, without inferring who configured a referenced view.</summary>
+public sealed record Lens(LensBasis Basis, long ViewId);
+
+[JsonConverter(typeof(StringEnumConverter))]
+public enum LensBasis { UserView, PeDefault }
+
+/// <summary>Host-document instance count for a category whose visibility switch is off, not a visible/occluded count.
+/// Does not evaluate filters, phases, worksets, individual hiding, or linked-document contents.</summary>
+public sealed record Hidden(HiddenKind What, int Count, HiddenWhy Why);
+
+[JsonConverter(typeof(StringEnumConverter))]
+public enum HiddenKind { Links, ScopeBoxes, Levels, Grids, ReferencePlanes, Spaces, Zones, Rooms, Areas }
+
+[JsonConverter(typeof(StringEnumConverter))]
+public enum HiddenWhy { PeDefault, NotEvaluated }
+
 /// <param name="Width">Delivered PNG width in pixels, read from the final file (not the export width it was cut from).</param>
 /// <param name="Warning">Why the image is far smaller than asked, in words; null when it is not.</param>
 public record RevitViewImageData(
@@ -366,13 +388,17 @@ public record RevitViewImageData(
     long ByteSize,
     int Width,
     int Height,
+    Lens Lens,
+    IReadOnlyList<Hidden> Hidden,
     string? Warning = null,
     int? ViewScale = null,
     RevitViewImageModelRect? ModelRect = null,
     string? SheetNumber = null,
     RevitViewImageRegistration? Registration = null,
     // Why Registration is absent; null exactly when it is present.
-    RevitViewImageRegistrationRefusal? RegistrationRefusal = null
+    RevitViewImageRegistrationRefusal? RegistrationRefusal = null,
+    // Null when the capture changed nothing; a focused capture says whether its temporary change was undone.
+    RevitViewImageRestore? Restore = null
 ) {
     /// <summary>
     ///     Host captures route for exactly the registered PNG (the host keeps every taking), keyed by <see cref="RevitViewImageRegistration.ImageSha256" />;

@@ -1,10 +1,10 @@
 import { createContext, useContext, useMemo } from "react";
 
-/** A drawing's accepted Value handle. Availability is owned by its producer. */
+/** A drawing's accepted Value handle: the route kernel's reading state, read structurally (`ready`,
+ * `refreshing` and `stale` carry a value; `reading` is in flight). Availability is owned by its producer. */
 export interface ValueHandle<Data> {
+  readonly state: string;
   readonly value?: Data;
-  readonly current: boolean;
-  readonly status: string;
   readonly reason?: string;
 }
 
@@ -34,12 +34,13 @@ export function valueRows<Data, Row>(
 ) {
   return {
     items: value.value === undefined ? [] : rows(value.value),
-    status: value.current
-      ? ("ready" as const)
-      : value.status === "pending"
-        ? ("pending" as const)
-        : ("failed" as const),
-    failure: value.current ? undefined : value.reason,
+    status:
+      value.state === "ready"
+        ? ("ready" as const)
+        : value.state === "reading" || value.state === "refreshing"
+          ? ("pending" as const)
+          : ("failed" as const),
+    failure: value.state === "ready" ? undefined : value.reason,
   };
 }
 

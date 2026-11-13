@@ -16,7 +16,7 @@ export function DetailedRead({
   refusal?: string | null;
   onRead: () => void;
 }) {
-  const cost = metadata?.stamp.geometryCost;
+  const cost = metadata?.evidence.geometryCost;
   return (
     <>
       <Button kind="quiet"

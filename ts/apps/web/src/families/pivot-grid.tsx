@@ -1,4 +1,6 @@
 import { RevitTarget } from "@pe/kit/lang/revit-target";
+import { useMention } from "@pe/kit/lang/attention";
+import { subjectCode } from "@pe/agent-contracts/subject-ref";
 import {
   memo,
   useCallback,
@@ -77,7 +79,6 @@ export const TypeGrid = memo(function TypeGrid({
   scroller,
   landed = null,
   empty,
-  typeVerb,
 }: {
   rows: readonly PivotRow[];
   types: readonly TypeRow[];
@@ -88,9 +89,8 @@ export const TypeGrid = memo(function TypeGrid({
   /** The cell a Work chip located: revealed, focused and outlined until the next locate (N4). */
   landed?: { row: number; col: number; n: number } | null;
   empty?: ReactNode;
-  /** A verb in each type's column head (a person's finding on that type). */
-  typeVerb?: (type: TypeRow) => ReactNode;
 }) {
+  const mention = useMention();
   const [viewport, setViewport] = useState({ top: 0, left: 0, width: 900, height: 500 });
   const frame = useRef(0);
   const pendingFocus = useRef<{ row: number; col: number } | null>(null);
@@ -314,6 +314,7 @@ export const TypeGrid = memo(function TypeGrid({
                 <TooltipHint content={`${type.familyName} · ${type.typeName}`} key={type.key}>
                   <div
                     role="columnheader"
+                    {...mention(subjectCode({ keyKind: "name", key: [type.familyName, type.typeName] }))}
                     aria-colindex={colStart + offset + 2}
                     aria-label={`${type.familyName} · ${type.typeName}`}
                     className="t-small flex items-center gap-1 border-b border-l px-1"
@@ -327,7 +328,6 @@ export const TypeGrid = memo(function TypeGrid({
                     }}
                   >
                     <span className="min-w-0 flex-1 truncate">{type.typeName}</span>
-                    {typeVerb?.(type)}
                   </div>
                 </TooltipHint>
               ))}

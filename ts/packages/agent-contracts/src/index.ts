@@ -1,4 +1,7 @@
 export * from "./api-schemas.ts";
+export { familyReadingRoute, savedFamilyRead } from "./family-actions.ts";
+export { scheduleReadingRoute } from "./schedule-actions.ts";
+export * from "./spatial-evidence.ts";
 export * from "./route-module.ts";
 // Attention projects admitted codecs (ADR 0030 rule 10); the shell takes them through the barrel.
 export type { RouteBindings } from "./route-bodies.ts";
@@ -24,8 +27,8 @@ export * from "./duct-catalog.ts";
 export * from "./input-lane.ts";
 export * from "./recording-points.ts";
 
-export type { Immutable, RouteGraphJson } from "./route-kernel-data.ts";
-export type { BodyBindings, WorkPatch, PaneContext, BodyContext, ReadingSnapshot } from "./route-kernel-bodies.ts";
+export type { Immutable, RouteGraphJson, RouteGraphWire, GateWhen } from "./route-kernel-data.ts";
+export type { BodyBindings, WorkPatch, PaneContext, BodyContext, ReadingState, Present } from "./route-kernel-bodies.ts";
 export type { HostRouteModule, HostAdmittedRoute, HostWorkRegistration } from "./host-route-admission.ts";
 export { jsonCodec } from "./route-kernel-codecs.ts";
 export { captureHostModule } from "./host-route-admission.ts";
@@ -44,9 +47,11 @@ export { workFeedFailureMessage } from "./work-journal-door.ts";
 export type { WorkFeedFailure } from "./work-journal-door.ts";
 export { presentationSchema } from "./route-kernel-bodies.ts";
 export * from "./history.ts";
+export * from "./work-timeline.ts";
 
 export * from "./bind-read.ts";
 export * from "./captures-read.ts";
+export type { CaptureDisclosure } from "./capture.ts";
 export * from "./chat-read.ts";
 export * from "./duct-loss-read.ts";
 export * from "./ducts-read.ts";
@@ -68,3 +73,6 @@ export { blobRefSchema, blobUploadSchema, type BlobRef, type BlobUpload } from "
 
 export * from "./subject-ref.ts";
 export * from "./notice-feed.ts";
+
+export type { ParamSpec } from "./family-param-spec.ts";
+export * from "./places.ts";

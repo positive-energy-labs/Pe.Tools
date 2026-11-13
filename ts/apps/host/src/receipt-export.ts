@@ -8,8 +8,11 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } fr
 import { join } from "node:path";
 import { PostHog } from "posthog-node";
 import { z } from "zod";
-import { readStored } from "@pe/host-contracts/store";
-import { storedNoticesPath } from "./notice-feed.ts";
+import {
+  read as readStoredFile,
+  keptStateKind,
+  type StateDirectory,
+} from "@pe/host-contracts/kinds";
 import {
   receiptSchema,
   receiptStampSchema,
@@ -25,7 +28,7 @@ import { analyticsConfig, readOrCreateInstallId, writeFatalEvidence } from "@pe/
 import { isAnyOperationKey, isTsOnlyOperationKey } from "@pe/host-contracts/operation-types";
 import { ActionJournal } from "./action-journal.ts";
 import { ActionJournalService } from "./receipt-services.ts";
-import { hostOwnership, hostStateDir } from "./host-ownership.ts";
+import { hostOwnership, hostState } from "./host-ownership.ts";
 import { subscribeReceiptProducers, type NativeReceiptProducer } from "./bridge.ts";
 import type { UpdateFact } from "./update-reader.ts";
 
@@ -375,6 +378,11 @@ function stamped(
 export type AgentReportContext = { turnId: string | null; provider: string; model: string | null };
 
 const feedbackSchema = peRoutes["feedback.submit"].body;
+const savedFeedbackKind = keptStateKind({
+  schema: z.object({ feedback: feedbackSchema }),
+  place: (_id: string) => "Saved feedback",
+  segments: (id: string) => ["feedback", `${id}.json`],
+});
 const diagnosticsSchema = peRoutes["diagnostics.submit"].body;
 const agentFeedbackSchema = peRoutes["agent-feedback.submit"].body;
 /** One kept agent-feedback JSONL row: the report plus the host's stamps and local joins. */
@@ -427,7 +435,7 @@ type FeedbackDelivery =
 
 export function createReceiptExport(options: {
   journal: ActionJournal;
-  root: string;
+  root: StateDirectory;
   stamps: ProducerStamps;
   client?: PostHog;
   send?: (event: ExportEvent, signal: AbortSignal) => Promise<void>;
@@ -537,11 +545,10 @@ export function createReceiptExport(options: {
     let event: ExportEvent | null;
     try {
       // A person's words (ADR 0039 keep): a note that does not decode is refused and its bytes stay.
-      const saved = readStored(r.body.localRef.path, z.object({ feedback: feedbackSchema }), {
-        class: "keep",
-        place: "Saved feedback",
-        notices: storedNoticesPath(),
-      });
+      const file = savedFeedbackKind.in(options.root, id);
+      if (file.path !== r.body.localRef.path)
+        throw Error("Saved feedback identity does not match its address");
+      const saved = readStoredFile(file);
       if (saved.kind !== "ok") throw Error(saved.kind === "missing" ? "The saved feedback is missing" : saved.reason);
       const { component: ui_component, ...content } = saved.value.feedback;
       event = projectReceipt(r, { ...content, ui_component });
@@ -584,8 +591,8 @@ export function createReceiptExport(options: {
   // Agent feedback is kept in its JSONL first; a delivered id is appended beside it only after
   // PostHog took the event. Every undelivered row is replayed at the next start under its
   // feedbackId as the event uuid, so a resend is the same event.
-  const agentFeedbackLog = join(options.root, "agent-feedback.jsonl");
-  const deliveredLog = join(options.root, "agent-feedback.delivered");
+  const agentFeedbackLog = join(options.root.path, "agent-feedback.jsonl");
+  const deliveredLog = join(options.root.path, "agent-feedback.delivered");
   const exportAgentFeedback = (row: AgentFeedbackRow) => {
     const host = stamps.host;
     if (!host || !send) return;
@@ -642,8 +649,8 @@ export function createReceiptExport(options: {
     record,
     async submitFeedback(feedback: z.infer<typeof feedbackSchema>, browserBuild?: string | null) {
       const id = randomUUID();
-      const path = join(options.root, "feedback", `${id}.json`);
-      mkdirSync(join(options.root, "feedback"), { recursive: true });
+      const path = savedFeedbackKind.in(options.root, id).path;
+      mkdirSync(join(options.root.path, "feedback"), { recursive: true });
       writeFileSync(path, JSON.stringify({ feedback }), { flag: "wx" });
       await record(
         { kind: "feedback", explicitHumanSubmit: true, localRef: { feedbackId: id, path } },
@@ -678,7 +685,7 @@ export function createReceiptExport(options: {
         harnessProvider: context?.provider ?? null,
         harnessModel: context?.model ?? null,
       };
-      mkdirSync(options.root, { recursive: true });
+      mkdirSync(options.root.path, { recursive: true });
       appendFileSync(agentFeedbackLog, `${JSON.stringify(row)}\n`);
       exportAgentFeedback(row);
       return { feedbackId };
@@ -824,7 +831,7 @@ export class ReceiptExport extends Context.Service<ReceiptExport, ReceiptExporte
             journal,
             stamps,
             client,
-            root: hostStateDir(),
+            root: hostState().directory("host", hostOwnership.serviceName),
           });
           if (!stamps.host)
             exporter.track(exporter.record({ kind: "diagnostic", code: "identity.unavailable" }));

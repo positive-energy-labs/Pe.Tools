@@ -14,8 +14,7 @@ function Closers({ closers, label, empty }: { closers: readonly Closer[]; label:
     row={(c) => ({ label: c.says, meta: resolverOf(c) })} />;
 }
 
-export function GoalPane({ ctx: { goal } }: { ctx: { goal: Goal | undefined } }) {
-  if (!goal) return <p role="status">computing</p>;
+export function GoalPane({ ctx: { goal } }: { ctx: { goal: Goal } }) {
   const view = goalView(goal);
   return (
     <section aria-label="Goal">

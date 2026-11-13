@@ -13,7 +13,6 @@ import { dirname, isAbsolute } from "node:path";
 import ts from "typescript";
 import { routeFingerprint } from "../../packages/agent-contracts/src/route-module.ts";
 import type { RouteFingerprintInput } from "../../packages/agent-contracts/src/route-kernel-admission.ts";
-import type { RouteGraphJson } from "../../packages/agent-contracts/src/route-kernel-data.ts";
 import {
   sharedContractId,
   type SharedRouteModule,
@@ -29,7 +28,7 @@ export async function buildRouteArtifact(options: {
   readonly source?: string;
   readonly hostEntry?: { readonly entry: string; readonly source: string };
   readonly root?: string;
-  readonly data: RouteGraphJson;
+  readonly data: RouteFingerprintInput["data"];
   readonly contracts: readonly { readonly id: string; readonly bytes: Uint8Array }[];
   readonly shared?: readonly SharedRouteModule[];
 }): Promise<RouteArtifactBytes> {

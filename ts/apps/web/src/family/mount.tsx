@@ -1,3 +1,4 @@
+import { refusalOf } from "#/route/typed-route";
 import { settingsCandidate, familyDraftSchema } from "@pe/agent-contracts";
 import { useState } from "react";
 import { Button } from "@pe/kit/lang/button";
@@ -28,9 +29,9 @@ function Workspace({ ctx }: { ctx: FamilyContext }) {
     pod = page.pod || open?.pod || "";
   const [failure, setFailure] = useState<string | null>(null);
   const [destination, setDestination] = useState<{ pod: string; text: string } | null>(null);
-  const run = async (id: string, input: unknown) => {
+  const run = async (id: "attach", input: unknown) => {
     try {
-      await ctx.write(id).run(input);
+      await ctx.verb(id).run(input);
       setFailure(null);
     } catch (error) {
       setFailure(String(error));
@@ -42,13 +43,6 @@ function Workspace({ ctx }: { ctx: FamilyContext }) {
     <div className="@container flex min-h-0 flex-1 flex-col">
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-(--gutter) @min-[1100px]:grid-cols-[minmax(0,2fr)_minmax(20rem,1fr)]">
         <div className="flex min-h-0 min-w-0 flex-col gap-(--gutter)">
-          {!ctx.value.current && (
-            <OutcomeLine
-              kind={ctx.value.status === "pending" ? "busy" : "error"}
-              label="Family reading"
-              says={ctx.value.reason}
-            />
-          )}
           {data?.profileError && (
             <OutcomeLine
               kind="error"
@@ -85,7 +79,7 @@ function Workspace({ ctx }: { ctx: FamilyContext }) {
             </label>
             <Button
               label="Stage family save"
-              refusal={!pod ? "Choose a destination pod" : ctx.cells.refusal}
+              refusal={!pod ? "Choose a destination pod" : refusalOf(ctx.cells.state)}
               onClick={() =>
                 void ctx.cells.patch(
                   [
@@ -140,7 +134,7 @@ function Workspace({ ctx }: { ctx: FamilyContext }) {
           {data?.profile && (
             <Button
               label="Stage family build"
-              refusal={ctx.cells.refusal}
+              refusal={refusalOf(ctx.cells.state)}
               onClick={() =>
                 void ctx.cells.patch(
                   [

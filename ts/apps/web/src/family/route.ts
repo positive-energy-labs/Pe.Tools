@@ -1,14 +1,14 @@
-import type { ContextOf } from "../route/defaults";
-import { command, sessionCommand, queryAction, catalogAction } from "../route/typed-actions.ts";
+import * as contracts from "./contract.ts";
+import type { ContextOf, Verbs } from "../route/defaults";
+import { handle } from "@pe/agent-contracts/handle";
 import { read } from "../route/defaults";
 import { z } from "zod";
-import { familyDraftRouteState, routeStatePatchSchema, valueRead } from "@pe/agent-contracts";
+import { familyDraftRouteState, routeStatePatchSchema } from "@pe/agent-contracts";
 import { familyPageSchema } from "./page";
-import { familyQueries } from "../../../../packages/mcps/src/shared/query-client";
 import { route, field } from "../route/defaults";
 import { hostRead } from "../route/host-read";
 import { draw } from "../route/draw";
-import { familyArgs, familyData } from "@pe/agent-contracts";
+
 import { presentFamilyPlan } from "./review";
 import { podMemberCode, podMemberOfCode, type Immutable } from "@pe/agent-contracts";
 import { split, subjectSchema } from "../route/defaults";
@@ -25,7 +25,7 @@ export const member = (page: { member: Immutable<z.output<ReturnType<typeof subj
  */
 export const fields = {
   member: field(subjectSchema(1), { kind: "ids", ids: [] }, "subject", "push"),
-  stage: field(address.stage, "audit", "pose", "push"),
+  stage: field(address.stage, "audit", "stage", "push"),
   pane: field(address.pane, "spec", "pose"),
   overlay: field(address.overlay, "draft", "pose", "push"),
   drill: field(address.drill, "", "pose", "push"),
@@ -40,11 +40,11 @@ export const query = {
   hidden: field(address.hidden, {}, "query"),
 };
 export const loaded = read(
-  hostRead(valueRead("family.workspace", familyArgs, familyData)),
+  hostRead(contracts.workspace),
   (page: Parameters<typeof member>[0]) => ({ member: member(page) }),
 );
 export const edits = z.array(routeStatePatchSchema);
-export type FamilyContext = ContextOf<typeof fields & typeof query, typeof loaded, typeof import("@pe/agent-contracts").familyDraftRouteState, typeof edits>;
+export type FamilyContext = ContextOf<typeof fields & typeof query, typeof loaded, typeof import("@pe/agent-contracts").familyDraftRouteState, typeof edits, Verbs<"attach">>;
 export const module = route({
   key: "family",
   name: "Family",
@@ -89,6 +89,8 @@ export const module = route({
       purpose: "Review the family and its cut-sheet evidence",
       body: "scroll",
       draw: draw("scroll", () => import("./mount"), "FamilyBody"),
+      // The pane holds the PDF this verb attaches.
+      verbs: ["attach"],
     },
   },
   edits: {
@@ -101,19 +103,18 @@ export const module = route({
     history: z.object({ label: z.string() }),
     describe: (history) => ({ label: history.label }),
   },
-  commands: {
+  verbs: {
     read: {
-      ...queryAction(familyQueries["family.read"]),
+      handle: handle("family.read"),
       label: "Read family",
       input: ({ work }) => ({ readId: crypto.randomUUID(), expectedRevision: work!.revision }),
     },
     saved: {
-      ...queryAction(familyQueries["family.saved"]),
+      handle: handle("family.saved"),
       label: "Read saved family",
-      input: (_context, supplied) => supplied,
     },
     open: {
-      ...catalogAction("family.observe"),
+      handle: handle("family.observe"),
       label: "Open member",
       // The subject names the member; the roster names the exact bytes it adopts.
       input: ({ page, value }) => {
@@ -123,24 +124,24 @@ export const module = route({
       },
     },
     attach: {
-      ...sessionCommand("family.attach-spec"),
+      handle: handle("family.attach-spec"),
       label: "Attach PDF",
-      input: (_context, supplied) => supplied,
     },
     capture: {
-      ...sessionCommand("family.capture"),
+      handle: handle("family.capture"),
       label: "Save family to pod",
     },
     build: {
-      ...command("family.build"),
+      handle: handle("family.build"),
       label: "Build .rfa",
       present: () => ({ sentence: "Build the staged saved family member", rows: [] }),
     },
     apply: {
-      ...command("family.apply"),
+      handle: handle("family.apply"),
       label: "Apply family",
       present: (result) => presentFamilyPlan(result),
     },
   },
+  band: ["read", "saved", "open", "capture", "build", "apply"],
   layout: split("h", ["workspace", "goal"], { id: "family-main", size: 320, sized: "end" }),
 });

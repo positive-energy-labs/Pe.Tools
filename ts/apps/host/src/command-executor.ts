@@ -121,6 +121,14 @@ export interface CommandContext {
     ) => WorkSelection<z.output<S>>,
   ): Promise<z.output<S>>;
   read: { receipts(id?: string): ActionReceipt[] };
+  /**
+   * The command's clock and id leaves: an executor that stamps a time or mints an id asks here,
+   * never `new Date()` or `randomUUID()`. Findings is the first consumer.
+   * ponytail: no recorded-input kind yet. A recording refuses writes and the only consumer is a write
+   * door, so nothing could replay one; add the `clock` and `id` kinds with the first recorded consumer.
+   */
+  readonly clock: { /** ISO time. */ now(): string };
+  readonly ids: { mint(): string };
 }
 export interface CommandBinding {
   consumes?: Consumed[];
@@ -163,6 +171,7 @@ export interface CommandExecutor {
 export type CommandRegistry = (key: string) => CommandExecutor;
 /** Resource I/O only. Control hooks belong to the stable registry entries. */
 export interface CommandResources {
+  readonly readOwnership?: import("./reads/read-ownership.ts").ReadOwnership;
   work?: RouteWorkspace;
   workReads?: (admission: ActionAdmission) => CommandWorkReads;
   /** `moment` is the gate that asks; absent means the strongest reading. */
