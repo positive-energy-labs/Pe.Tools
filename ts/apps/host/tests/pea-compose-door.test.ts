@@ -10,6 +10,16 @@ import { machineFixture } from "../../../packages/agent-contracts/tests/machine-
 import { readAction } from "../../../packages/mcps/src/shared/takeoff-action-client.ts";
 import { fixtureNative } from "./fixture-native.ts";
 import { approvedPea } from "./callers.ts";
+import { localRead, readLocal } from "../src/local-inputs.ts";
+
+test("the bridge-free compose reader is available without catalog intent and refuses to resolve native directives", async () => {
+  expect(() => localRead("pod.member.compose")).not.toThrow();
+  expect(await readLocal("pod.member.compose", {
+    path: "settings/member.json", content: JSON.stringify({ $preset: "@local/base.json" }),
+  })).toMatchObject({
+    composed: null, diagnostics: [expect.objectContaining({ code: "CompositionNeedsRevit" })],
+  });
+});
 
 test("Pea composes a Pod member draft through actions and reads the composed result from its durable receipt", async () => {
   const root = await mkdtemp(join(tmpdir(), "pe-compose-door-"));

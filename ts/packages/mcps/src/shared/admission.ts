@@ -59,7 +59,7 @@ export const CANCEL_KEY = "op.cancel";
 const caller = (context: AdmissionContext) => new HostRpcCaller(context);
 
 /** Effects select the door for both host-local and native operations. */
-export const opWrites = (op: Pick<HostOperationDefinition, "key" | "effect"> & { intent?: string }): boolean =>
+export const opWrites = (op: Pick<HostOperationDefinition, "key" | "effect">): boolean =>
   !isReadEffect(op.effect);
 
 export async function readCapabilityIntent(

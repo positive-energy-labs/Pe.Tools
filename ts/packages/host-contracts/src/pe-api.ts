@@ -1433,7 +1433,6 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     displayName: "Saved Takeoffs captures",
     description:
       "Read durable geometry without Revit. With captureId, return that immutable dated capture. Otherwise list capture identities, times and documents; optional document filters the list. Migrated captures explicitly have unknown original target provenance and are never live evidence.",
-    intent: "Read",
     visibility: "DefaultVisible",
     costTier: "Cheap",
     needs: "nothing",
@@ -1453,7 +1452,6 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     displayName: "Point At",
     description:
       "Highlight a subject or route place for the person in this thread, without changing their selection, URL or camera. target is a SubjectRef code, or the route's attention field text (route:<r>.view fields). It remains until pointers.dismiss; a durable note is a separate findings.say.",
-    intent: "Mutate",
     visibility: "DefaultVisible",
     costTier: "Cheap",
     needs: "nothing",
@@ -1471,7 +1469,6 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     origin: "host-local",
     displayName: "Pointers",
     description: "List what this thread is pointing at, newest last.",
-    intent: "Read",
     visibility: "DefaultVisible",
     costTier: "Cheap",
     needs: "nothing",
@@ -1489,7 +1486,6 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     origin: "host-local",
     displayName: "Dismiss Pointer",
     description: "Remove one pointer from this thread's list by id.",
-    intent: "Mutate",
     visibility: "DefaultVisible",
     costTier: "Cheap",
     needs: "nothing",
@@ -1508,7 +1504,6 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     displayName: "Open Path",
     description:
       "Open an existing absolute file or directory path with the operating system default handler. No Revit session is needed.",
-    intent: "Mutate",
     visibility: "EscalationVisible",
     costTier: "Mutation",
     needs: "nothing",
@@ -1526,7 +1521,6 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     displayName: "Open RHVAC Project",
     description:
       "Extract an Elite RHVAC .r10 Manual J project to JSON: building totals, systems, and rooms with identifiers. Runs the repo's 32-bit Jet lane; no Revit session needed.",
-    intent: "Read",
     visibility: "DefaultVisible",
     costTier: "Bounded",
     needs: "nothing",
@@ -1544,7 +1538,6 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     displayName: "RHVAC Assemblies",
     description:
       "Distinct construction assemblies per category (floors/roofs/walls/glass/doors) used in an .r10 file, with U-values (glass: + SHGC). The editor's assembly picker source.",
-    intent: "Read",
     visibility: "DefaultVisible",
     costTier: "Bounded",
     needs: "nothing",
@@ -1562,7 +1555,6 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     displayName: "Sync RHVAC Project",
     description:
       "One atomic sync of an .r10 IN PLACE: seed systems, insert new rooms, update existing ones, optionally drop the template's blank seed room. Refuses while RHVAC holds the file, works on a copy, validates, then swaps with a timestamped backup. Returns each inserted room's assigned identifier plus the file identity to pair with Revit provenance.",
-    intent: "Mutate",
     visibility: "DefaultVisible",
     costTier: "Mutation",
     needs: "nothing",
@@ -1590,7 +1582,6 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     displayName: "Open .r10 in RHVAC",
     description:
       "Open an .r10 file with its Windows file association (Elite RHVAC). Fire-and-forget: the shell owns the app, and load recalculation is a manual step in RHVAC.",
-    intent: "Mutate",
     visibility: "DefaultVisible",
     costTier: "Cheap",
     needs: "nothing",
@@ -1608,7 +1599,6 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     displayName: "List .r10 files",
     description:
       "List the .r10 Manual J project files in one host-visible folder. The legal-options source for a route's .r10 binding; a missing folder is an empty list with exists=false.",
-    intent: "Read",
     visibility: "DefaultVisible",
     costTier: "Cheap",
     needs: "nothing",
@@ -1626,7 +1616,6 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     displayName: "RHVAC Takeoff Snapshots",
     description:
       "Raw takeoff TSV snapshots (<dir>/takeoff/*.tsv) and room-map.json found next to an .r10 file. Empty result when none exist.",
-    intent: "Read",
     visibility: "DefaultVisible",
     costTier: "Cheap",
     needs: "nothing",
@@ -1644,7 +1633,6 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     displayName: "Pods",
     description:
       "Every installed pod under Pods in the content home: manifest id, name, version, folder, entrypoints, and members with sha256 and $schema. Members only — runs under output/ answer to pod.runs. Diagnostics cover the manifest only; a bad member never hides its siblings.",
-    intent: "Read",
     visibility: "DefaultVisible",
     costTier: "Cheap",
     needs: "nothing",
@@ -1662,7 +1650,6 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     displayName: "Capture Pod",
     description:
       "One installed pod's frozen execution input by manifest id: admitted member bytes (memberBundle), entrypoints and canonical contribution keys, read once from its admitted package. A pod with error diagnostics refuses. No Revit session is needed.",
-    intent: "Read",
     visibility: "ExpertOnly",
     costTier: "Cheap",
     needs: "nothing",
@@ -1680,7 +1667,6 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     displayName: "Export Pod",
     description:
       "Export an installed pod (by manifest id) as a .zip archive at an absolute path, without Revit. Foreign $include/$preset fragments are vendored under settings/_vendor/<id>/ with references rewritten to @local/_vendor/<id>/...; PeScripts.csproj is made portable; captures a member names travel as captures/<sha>.png. Bindings, grants and run output never travel. Every rewrite is reported with hashes before and after; a missing capture or foreign member refuses.",
-    intent: "Mutate",
     visibility: "DefaultVisible",
     costTier: "Mutation",
     needs: "nothing",
@@ -1698,7 +1684,6 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     displayName: "Import Pod",
     description:
       "Import a pod .zip archive into a new folder under Pods in the content home (default: the manifest id), without Revit. Bounded, all-or-nothing: refuses an installed id, an existing folder, host state, traversal, links, case twins or oversized entries. Bytes land unchanged; the import record (archive sha256, archive name, date) is this machine's state, not a file in the pod; Pages start unbound; carried captures join this host's store by hash.",
-    intent: "Mutate",
     visibility: "DefaultVisible",
     costTier: "Mutation",
     needs: "nothing",
@@ -1716,7 +1701,6 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     displayName: "Promote Page to Pod",
     description:
       "Wrap a scratch Page (Pages/<page>/ in the content home) as a new pod <id> holding pages/<page>/ byte for byte, so it can be exported and shared. The HTML is never rewritten; the scratch Page stays; the binding does not travel. Returns the promoted Page's key.",
-    intent: "Mutate",
     visibility: "DefaultVisible",
     costTier: "Mutation",
     needs: "nothing",
@@ -1734,7 +1718,6 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     displayName: "Pod Runs",
     description:
       "One pod's run receipts in this machine's state (Runs/<pod id>/<runId>/), newest first, optionally narrowed to one member path. A run folder with no readable receipt still lists, with the reason.",
-    intent: "Read",
     visibility: "DefaultVisible",
     costTier: "Cheap",
     needs: "nothing",
@@ -1751,7 +1734,6 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     origin: "host-local",
     displayName: "Read Pod Member",
     description: "Read one pod member's exact text and sha256, addressed as { pod, path }.",
-    intent: "Read",
     visibility: "DefaultVisible",
     costTier: "Cheap",
     needs: "nothing",
@@ -1769,7 +1751,6 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     displayName: "Write Pod Member",
     description:
       "Create a new pod member; refuses an existing path. Returns the written sha256. Capture and save-as-new use this.",
-    intent: "Mutate",
     visibility: "EscalationVisible",
     costTier: "Mutation",
     needs: "nothing",
@@ -1787,7 +1768,6 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     displayName: "Save Pod Member",
     description:
       "Overwrite an existing pod member only when expectedSha256 names its current bytes. Returns the new sha256.",
-    intent: "Mutate",
     visibility: "EscalationVisible",
     costTier: "Mutation",
     needs: "nothing",
@@ -1805,7 +1785,6 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     displayName: "Compose Pod Member",
     description:
       "Validate a member or unsaved draft: JSON schema structure in the host (offline), composition and semantic checks through the Revit session when one is attached. Without a session, $include/$preset members report that composition needs Revit.",
-    intent: "Mutate",
     visibility: "DefaultVisible",
     costTier: "Bounded",
     needs: "nothing",
@@ -1823,7 +1802,6 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     displayName: "Read Setting Tiers",
     description:
       "Read Settings/<owner>.json from the user home, the target model's project home and the firm home. Each tier names its home, or says why none was found; the most specific tier that states a value serves it.",
-    intent: "Read",
     visibility: "DefaultVisible",
     costTier: "Cheap",
     needs: "nothing",
@@ -1841,7 +1819,6 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     displayName: "Save Setting At Tier",
     description:
       "Save one value at { owner, tier, path } in that home's Settings/<owner>.json, only when expectedSha256 names the file's current bytes (null: no file yet). A null value removes it from the tier. The prior bytes are kept and one notice names the file, the writer and the receipt.",
-    intent: "Mutate",
     visibility: "EscalationVisible",
     costTier: "Mutation",
     needs: "nothing",
@@ -1859,7 +1836,6 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     displayName: "APS Auth Status",
     description:
       "Autodesk Platform Services persisted-token status for the requested scope profile.",
-    intent: "Read",
     visibility: "EscalationVisible",
     costTier: "Cheap",
     needs: "nothing",
@@ -1877,7 +1853,6 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     origin: "host-local",
     displayName: "APS Auth Login",
     description: "Begin an Autodesk Platform Services auth flow and persist the resulting token.",
-    intent: "Mutate",
     visibility: "EscalationVisible",
     costTier: "Bounded",
     needs: "nothing",
@@ -1895,7 +1870,6 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     origin: "host-local",
     displayName: "APS Auth Logout",
     description: "Clear the persisted Autodesk Platform Services token.",
-    intent: "Mutate",
     visibility: "EscalationVisible",
     costTier: "Cheap",
     needs: "nothing",
@@ -1913,7 +1887,6 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     displayName: "APS Access Token",
     description:
       "Fetch a valid Autodesk Platform Services access token for the requested scope profile.",
-    intent: "Read",
     visibility: "EscalationVisible",
     costTier: "Bounded",
     needs: "nothing",
@@ -1931,7 +1904,6 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     displayName: "Session Topology",
     description:
       "The operator's map in one snapshot: host identity/health plus every connected Revit session (custody, lane, pe-revit session id, pid, open documents). Replaces the host.status + bridge.sessions.list join; observedAtUtc stamps freshness (host clock).",
-    intent: "Read",
     visibility: "DefaultVisible",
     costTier: "Cheap",
     needs: "nothing",
@@ -1949,7 +1921,6 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     displayName: "Host Status",
     description:
       "Host process health: contract versions, bridge connectivity, lane, and agent-runtime availability.",
-    intent: "Read",
     visibility: "ExpertOnly",
     costTier: "Cheap",
     needs: "nothing",
@@ -1967,7 +1938,6 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     displayName: "Bridge Session Summary",
     description:
       "Active Revit session summary: open document, available modules, and runtime assemblies.",
-    intent: "Read",
     visibility: "EscalationVisible",
     costTier: "Cheap",
     needs: "nothing",
@@ -1984,7 +1954,6 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     origin: "host-local",
     displayName: "Bridge Sessions",
     description: "All connected Revit bridge sessions (process id, version, open documents).",
-    intent: "Read",
     visibility: "ExpertOnly",
     costTier: "Cheap",
     needs: "nothing",
@@ -2001,7 +1970,6 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     origin: "host-local",
     displayName: "Tail Logs",
     description: "Tail the host and Revit add-in log files for diagnostics.",
-    intent: "Read",
     visibility: "EscalationVisible",
     costTier: "Cheap",
     needs: "nothing",

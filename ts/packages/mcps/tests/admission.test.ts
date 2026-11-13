@@ -426,7 +426,8 @@ import { tsOnlyOperationCatalog } from "@pe/host-contracts/operation-types";
 test("native and host-local ops select the write door by effect, regardless of intent", () => {
   const native = { key: "revit.context.view-image.focus", intent: "Read" } as const;
   expect(opWrites({ ...native, effect: "SessionWrite" })).toBe(true);
-  expect(opWrites({ ...native, effect: "TransactRead", intent: "Mutate" })).toBe(false);
+  const read = { ...native, effect: "TransactRead", intent: "Mutate" } as const;
+  expect(opWrites(read)).toBe(false);
   for (const op of hostOpCatalog)
     expect(opWrites(op), op.key).toBe(op.effect === "SessionWrite" || op.effect === "ModelWrite");
   for (const op of tsOnlyOperationCatalog) {
