@@ -1,7 +1,17 @@
 import { expect, test, vi } from "vite-plus/test";
-import { readFileSync, readdirSync, existsSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import {
+  readFileSync,
+  readdirSync,
+  existsSync,
+  mkdirSync,
+  writeFileSync,
+  rmSync,
+  cpSync,
+  symlinkSync,
+} from "node:fs";
 import { z } from "zod";
-import { createHash } from "node:crypto";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { buildRouteArtifact, routeModuleHash } from "./route-module-hash.ts";
 import { routeSourceHash } from "./route-source-hash.ts";
@@ -95,8 +105,6 @@ import {
   createAdmittedRouteRegistry,
 } from "../../packages/agent-contracts/src/route-module.ts";
 import { dirname, basename, join } from "node:path";
-import { createJiti } from "jiti";
-import { publishPodRoute } from "./pod-route-authoring.ts";
 import * as React from "react";
 import { loadRouteArtifact } from "./src/route/route-artifact.ts";
 
@@ -354,69 +362,54 @@ test.each(exampleArtifacts)("example Pod contracts match current source: %s", (a
     ).toBe(true);
 });
 
-// Self-consistent fingerprints cannot witness source freshness. Reuse the publisher,
-// including its generated host entry, rather than maintaining a second build recipe.
+// Run the publisher outside Vitest's transforms and test-mode environment.
+const publishEnvironment = { ...process.env };
+delete publishEnvironment.NODE_ENV;
+const publish = promisify(execFile);
+const publisher = join(repoRoot, "ts/apps/web/scripts/publish-pod-route.ts");
+const cli = (root: string, slug: string, check = false) =>
+  publish(process.execPath, [publisher, root, slug, ...(check ? ["--check"] : [])], {
+    cwd: join(repoRoot, "ts/apps/web"),
+    env: publishEnvironment,
+    timeout: 30_000,
+  });
+
 test.each(exampleArtifacts)(
-  "example Pod executables match current source: %s",
+  "CLI-published example passes freshness and rejects changed executable: %s",
   async (artifact) => {
     const routeRoot = dirname(join(repoRoot, artifact));
     const root = dirname(dirname(routeRoot));
     const slug = basename(routeRoot);
-    const entry = join(routeRoot, "module.ts");
-    const { module } = await createJiti(import.meta.url, { fsCache: false }).import<{
-      module: { data: Parameters<typeof publishPodRoute>[0]["data"] };
-    }>(entry);
-    const checked = JSON.parse(readFileSync(join(repoRoot, artifact), "utf8"));
-    const fresh = await publishPodRoute({
-      entry,
-      root,
-      slug,
-      data: module.data,
-      name: module.data.name,
-      description: module.data.directory.summary,
-      contracts: artifactContracts.parse(checked).contracts.map(({ id }) => ({
-        id,
-        bytes: readFileSync(join(repoRoot, id)),
-      })),
-    });
-    const executableHashes = (wire: {
-      executables: {
-        client: string;
-        entry: string;
-        members: { path: string; bytes: number[] }[];
-      }[];
-    }) =>
-      wire.executables.map(({ client, entry, members }) => ({
-        client,
-        entry,
-        members: members.map(({ path, bytes }) => ({
-          path,
-          sha256: createHash("sha256").update(Buffer.from(bytes)).digest("hex"),
-        })),
-      }));
-    const expected = executableHashes(JSON.parse(Buffer.from(fresh.bytes).toString("utf8")));
-    const message = `${artifact}: stale executables; from ts/apps/web run node scripts/publish-pod-route.ts "${root}" ${slug}`;
-    const check = (file: string) => {
-      expect(executableHashes(JSON.parse(readFileSync(file, "utf8"))), message).toEqual(expected);
-    };
-
-    const temp = join(repoRoot, ".artifacts/tmp/artifact-freshness", crypto.randomUUID());
-    mkdirSync(temp, { recursive: true });
+    // Preserve the Pod's depth so its repo-relative tsconfig extends still resolves.
+    const temp = join(repoRoot, ".artifacts/artifact-freshness", crypto.randomUUID());
     try {
-      const file = join(temp, "route.artifact");
-      writeFileSync(file, fresh.bytes);
-      check(file);
-      const stale = JSON.parse(Buffer.from(fresh.bytes).toString("utf8"));
+      cpSync(root, temp, {
+        recursive: true,
+        filter: (source) => basename(source) !== "node_modules",
+      });
+      symlinkSync(join(root, "node_modules"), join(temp, "node_modules"), "junction");
+      await cli(temp, slug);
+      const green = await cli(temp, slug, true);
+      console.info(green.stdout.trim());
+      const file = join(temp, "routes", slug, "route.artifact");
+      const stale = JSON.parse(readFileSync(file, "utf8"));
       stale.executables[0].members[0].bytes[0] ^= 1;
       writeFileSync(file, JSON.stringify(stale));
-      expect(() => check(file)).toThrow("stale executables");
-      console.info(
-        `${artifact}: fresh temporary copy accepted; stale executable temporary copy rejected`,
-      );
+      await expect(cli(temp, slug, true)).rejects.toThrow("stale executables");
+      console.info(`${artifact}: CLI check rejected one-byte executable edit`);
     } finally {
       rmSync(temp, { recursive: true, force: true });
     }
-    check(join(repoRoot, artifact));
+  },
+  90_000,
+);
+
+test.each(exampleArtifacts)(
+  "example Pod executables match CLI publisher: %s",
+  async (artifact) => {
+    const routeRoot = dirname(join(repoRoot, artifact));
+    const result = await cli(dirname(dirname(routeRoot)), basename(routeRoot), true);
+    console.info(result.stdout.trim());
   },
   30_000,
 );
