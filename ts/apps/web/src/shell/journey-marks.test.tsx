@@ -36,7 +36,7 @@ function held(typed: ReturnType<typeof roomsProbe>, frames: Parameters<UseSource
 }
 const complete = (deliver: Parameters<UseSource["open"]>[1]) => deliver({ kind: "complete", revision: 1, value: { key: "busy", generation: 0, version: 1, state: "current", value: {
   data: { ...GOAL, roomsWork: roomsRouteState.schema.parse({}), handle: null, snapshot: DEMO_ROOMS, trace: null, traceError: null, plan: null, planError: null },
-  evaluation: "busy", inputs: "busy", origin: { kind: "fixture" }, trace: [], freshness: "current",
+  evaluation: "busy", inputs: "busy", origin: { kind: "fixture" }, works: [], trace: [], freshness: "current",
   coverage: { requested: [], covered: [], unknown: [], refused: [] } } } });
 const router = (component: () => React.ReactNode) =>
   createRouter({ routeTree: createRootRoute({ component }), history: createMemoryHistory({ initialEntries: ["/"] }) });
@@ -60,7 +60,7 @@ test("6.1 a pane whose reading is pending says aria-busy, and clears it when the
     expect(pane.getAttribute("aria-busy")).toBe("true");
     await act(async () => frames.at(-1)!({ kind: "complete", revision: 1, value: { key: "busy", generation: 0, version: 1, state: "current", value: {
       data: { ...GOAL, roomsWork: roomsRouteState.schema.parse({}), handle: null, snapshot: DEMO_ROOMS, trace: null, traceError: null, plan: null, planError: null },
-      evaluation: "busy", inputs: "busy", origin: { kind: "fixture" }, trace: [], freshness: "current",
+      evaluation: "busy", inputs: "busy", origin: { kind: "fixture" }, works: [], trace: [], freshness: "current",
       coverage: { requested: [], covered: [], unknown: [], refused: [] } } } }));
     await settled(pane);
     expect(pane.getAttribute("aria-busy")).toBeNull();

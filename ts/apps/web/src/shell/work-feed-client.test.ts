@@ -31,6 +31,23 @@ test("Timeline reads host order, releases its publication, and sends the offered
   expect(response).toHaveBeenCalledWith("reads.value", expect.objectContaining({ body: expect.objectContaining({ release: true, args: { works } }) }));
 });
 const key = { binding: "host", route: "note", target: null } as const;
+
+test("the no-owner document head reads and steps the same host document scope", async () => {
+  const stop = vi.fn();
+  vi.spyOn(peReadings, "subscribe").mockReturnValue(stop);
+  const document = { binding: "open", route: "chat", target: null, open: { session: "proof", openId: "document" } } as const;
+  const expected = { work: { ...document, route: "fans" }, revision: 1, label: "Fans" };
+  const response = vi.fn(async (name: string, _input: unknown) => Response.json(name === "reads.value"
+    ? { generation: 0, version: 1, state: "current", value: { evaluation: "test", coverage: { refused: [], unknown: [] }, data: { rows: [], undo: expected, redo: null, refusal: { undo: null, redo: null } } } } : { ok: true }));
+  const client = createTimelineClient({ response }), deliver = vi.fn();
+  const close = client.open([], deliver, document);
+  try {
+    await vi.waitFor(() => expect(deliver).toHaveBeenCalledWith(expect.objectContaining({ undo: expected }), undefined));
+    expect(await client.step({ direction: "undo", works: [], document, expected })).toBeNull();
+    expect(response).toHaveBeenCalledWith("work.history", expect.objectContaining({ body: { direction: "undo", works: [], document, expected } }));
+  } finally { close(); vi.restoreAllMocks(); }
+  expect(response).toHaveBeenCalledWith("reads.value", expect.objectContaining({ body: expect.objectContaining({ release: true, args: { works: [], document } }) }));
+});
 const scope: WorkScope = {
   route: "note",
   fingerprint: workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`),

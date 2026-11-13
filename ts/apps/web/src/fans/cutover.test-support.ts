@@ -104,7 +104,7 @@ export async function createWitness(
       evaluation: `fixture:${version}`,
       inputs: "fixture",
       origin: { kind: "fixture", name: "cutover" },
-      trace: [],
+      works: [], trace: [],
       coverage: { requested: [], covered: [], unknown: [], refused: [] },
       freshness: "current",
     },
@@ -212,6 +212,7 @@ export async function createWitness(
               // Mirror host content identity; reopening a recorded source restarts its frame counter.
               evaluation: createHash("sha256").update(JSON.stringify(data)).digest("hex"),
               inputs: "fixture",
+              works: ctx.workKey ? [ctx.workKey, { ...ctx.workKey, route: "ducts" }] : [],
               origin: { kind: "fixture", name: "cutover" },
               trace: [],
               coverage: { requested: [], covered: [], unknown: [], refused: [] },

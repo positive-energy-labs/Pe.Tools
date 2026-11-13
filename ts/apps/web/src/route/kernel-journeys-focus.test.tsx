@@ -329,7 +329,7 @@ test("JZ DuctLoss numeric drafts refuse negatives without changing the URL and r
     }),
     // Only the host reading is a fixture; the page, address codec and input events are production.
     sources: { "duct-loss.result": { kind: "use", open(_ctx, deliver) {
-      deliver({ kind: "complete", value: { key: "numeric-entry", generation: 1, version: 1, state: "current", value: { data: { result: solve({ shape: "round", a: 12, b: 8, cfm: 0, length: 100, roughness: 0.0003, density: 0.075 }), error: null }, evaluation: "numeric-entry", inputs: "numeric-entry", coverage: { requested: [], covered: [], unknown: [], refused: [] }, origin: { kind: "fixture" }, trace: [], freshness: "current" } }, revision: 1 }); return () => {};
+      deliver({ kind: "complete", value: { key: "numeric-entry", generation: 1, version: 1, state: "current", value: { data: { result: solve({ shape: "round", a: 12, b: 8, cfm: 0, length: 100, roughness: 0.0003, density: 0.075 }), error: null }, evaluation: "numeric-entry", inputs: "numeric-entry", coverage: { requested: [], covered: [], unknown: [], refused: [] }, origin: { kind: "fixture" }, works: [], trace: [], freshness: "current" } }, revision: 1 }); return () => {};
     } } },
   });
   function Journey() {
@@ -1414,7 +1414,7 @@ async function pendingFamiliesChoice() {
       data: { familiesWork: doc, catalog: catalogue, categories: ["Air Terminal Tags"], observation: null,
         rows: [], facts: {}, params: [], pivotRows: [], pivotFamilies: [], outcomes: [], activeReadId: null, editRefusal: "Read these families before editing" },
       evaluation: "b03-families", inputs: "b03-families", coverage: { requested: [], covered: [], unknown: [], refused: [] },
-      origin: { kind: "fixture", name: "post-start-families" }, trace: [], freshness: "current",
+      origin: { kind: "fixture", name: "post-start-families" }, works: [], trace: [], freshness: "current",
     },
   });
   const release = Promise.withResolvers<void>();

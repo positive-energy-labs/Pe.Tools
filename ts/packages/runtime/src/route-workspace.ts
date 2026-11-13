@@ -171,7 +171,6 @@ export class RouteWorkspace {
     {
       fingerprint: RouteFingerprint;
       workRoute: string;
-      readWorks: readonly string[];
       readings: import("@pe/agent-contracts").RouteGraphJson["readings"];
       /** The admitted graph's fields: the host's attention fence reads their agent policy, never a codec. */
       fields: import("@pe/agent-contracts").AdmittedFields;
@@ -291,7 +290,6 @@ export class RouteWorkspace {
     const record = {
       fingerprint: route.workFingerprint,
       workRoute: work.route,
-      readWorks: "readWorks" in bindings ? bindings.readWorks ?? [] : [],
       readings: route.data.readings,
       fields: route.data.fields,
       sheet: route.data.sheet,
@@ -376,7 +374,7 @@ export class RouteWorkspace {
       ? reading?.kind === "work"
         ? reading.route
         : null
-      : registered.readWorks.includes(key.route) ? key.route : registered.workRoute;
+      : registered.workRoute;
     if (key.route !== workRoute)
       return {
         kind: "failed",
@@ -1054,9 +1052,7 @@ export class RouteWorkspace {
     context?: WorkReadContext,
   ): () => void {
     const { recorded, capture } = this.options;
-    // Composed reads share view()'s defaults; the primary Work keeps explicit Start semantics.
-    const registered = this.#admissions.get(admission.routeKey);
-    const orEmpty = registered?.workRoute !== scope.route && !!registered?.readWorks.includes(scope.route);
+    const orEmpty = false;
     const request = { kind: "feed", key: scope, admission, shape } as const;
     if (!recorded && !capture)
       return shape === "work"

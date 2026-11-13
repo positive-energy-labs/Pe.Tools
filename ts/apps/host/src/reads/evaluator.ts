@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
-import { canonicalRouteInput as canonicalJson } from "@pe/agent-contracts";
+import { canonicalRouteInput as canonicalJson, workKey, workKeySchema, type WorkKey } from "@pe/agent-contracts";
 import { documentRefSchema } from "@pe/agent-contracts/target";
 import type { SettingTierRead } from "@pe/agent-contracts/tiered-setting";
 import type { ReadHandle } from "@pe/agent-contracts/handle";
@@ -101,6 +101,7 @@ export interface Value<T> {
   readonly data: T;
   readonly evaluation: string;
   readonly inputs: string;
+  readonly works: readonly WorkKey[];
   readonly trace: readonly Trace[];
   readonly coverage: Coverage;
   readonly origin: unknown;
@@ -161,6 +162,7 @@ export async function evaluate<I, O>(
   const memo = new Map<string, Promise<unknown>>();
   let closed = false;
   const trace: Trace[] = [];
+  const works = new Map<string, WorkKey>();
   const checks = new Map<
     string,
     { definition: Leaf<unknown, unknown>; args: unknown; hash: string; revision: number }
@@ -179,6 +181,11 @@ export async function evaluate<I, O>(
         return Promise.reject(error);
       }
       const args = immutable(wireValue(definition.input.parse(input)));
+      if ("leaf" in definition && definition.name === workInput.name) {
+        const { owner, scope } = workInput.input.parse(args);
+        const member = workKeySchema.parse({ ...workKeySchema.parse(scope), route: owner });
+        works.set(workKey(member), member);
+      }
       const recipe = fingerprint([
         definition.name,
         args,
@@ -222,7 +229,8 @@ export async function evaluate<I, O>(
     work: async (owner, scope) => {
       const document = documentRefSchema.safeParse(scope);
       const key = document.success ? { ...(await ctx.read(workScope, document.data)), route: owner } : scope;
-      return ctx.read(workInput, { owner, scope: key });
+      const member = workKeySchema.parse({ ...workKeySchema.parse(key), route: owner });
+      return ctx.read(workInput, { owner, scope: member });
     },
     native: (key, args) => ctx.read(nativeRead(key), args),
     files: {
@@ -308,6 +316,7 @@ export async function evaluate<I, O>(
     // Caller admission and Work revision remain enforced by the write seal at Apply.
     evaluation: fingerprint([dependencies, data]),
     inputs: port.evaluation,
+    works: [...works.values()].sort((a, b) => workKey(a).localeCompare(workKey(b))),
     trace: dependencies,
     coverage: {
       requested: [...requested].sort(),

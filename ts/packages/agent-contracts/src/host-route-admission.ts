@@ -29,8 +29,6 @@ export interface HostRouteModule extends Omit<HostWorkRegistration, "spec"> {
   readonly schemas: Readonly<Record<string, z.ZodType>>;
   /** Complete neutral owner export. No hook is reconstructed from a field allowlist. */
   readonly workState?: Readonly<RouteStateSpec<z.ZodType>>;
-  /** Typed modules name Work owners directly, without executable reading slots. */
-  readonly readWorks?: readonly string[];
   readonly reads?: Readonly<Record<string, {
     readonly name:string; readonly input:z.ZodType; readonly output:z.ZodType;
     readonly run:(context:any,args:any)=>unknown;
@@ -77,7 +75,6 @@ const hostModuleSchema = hostZ.strictObject({
     hostZ.string(),
     hostZ.custom<z.ZodType>((v) => v instanceof hostZ.ZodType),
   ),
-  readWorks: hostZ.array(hostZ.string().min(1)).max(128).optional(),
   reads: hostZ.record(hostZ.string(),hostZ.object({name:hostZ.string(),input:hostZ.custom<z.ZodType>(v=>v instanceof hostZ.ZodType),
     output:hostZ.custom<z.ZodType>(v=>v instanceof hostZ.ZodType),run:hostZ.custom<(context:any,args:any)=>unknown>(v=>typeof v === "function")})).optional(),
   leaves:hostZ.record(hostZ.string(),hostZ.custom<NonNullable<HostRouteModule["leaves"]>[string]>(v=>typeof v === "function")).optional(),
@@ -93,7 +90,6 @@ export function captureHostModule(input: unknown): HostRouteModule {
   return Object.freeze({
     data: structuredClone(value.data),
     schemas: Object.freeze({ ...value.schemas }),
-    ...(value.readWorks ? {readWorks:Object.freeze([...value.readWorks])} : {}),
     ...(value.reads?{reads:Object.freeze(Object.fromEntries(Object.entries(value.reads).map(([key,read])=>[key,Object.freeze({...read})])))}:{}),
     ...(value.leaves?{leaves:Object.freeze({...value.leaves})}:{}),
     ...(Object.hasOwn(value, "admit") ? { admit: value.admit } : {}),

@@ -43,7 +43,7 @@ const rowsOf = (read: Read, ids: readonly string[]) =>
  * source is the tier the host served: `project` or `firm` only when that home's file states the
  * value; a criterion no home states is `default`, and says so when the firm home was not found.
  */
-const SOURCES: Readonly<Record<string, CellLayer["source"]>> = { "model-store": "model-store", project: "project", firm: "firm", default: "default" };
+const SOURCES: Readonly<Record<string, CellLayer["source"]>> = { Work: "work", "model-store": "model-store", project: "project", firm: "firm", default: "default" };
 const layer = (resolved: Immutable<Resolved<unknown>> | undefined, wrap: (v: unknown) => unknown, read?: Read): CellLayer | null => {
   if (!resolved || resolved.value == null) return null;
   const source = SOURCES[resolved.source] ?? "model";

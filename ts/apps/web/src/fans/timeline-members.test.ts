@@ -8,6 +8,7 @@ import { snapshot } from "../ducts/test-fixture";
 import { module as chat } from "../chat/route";
 import { mountTypedRoute } from "../shell/typed-mount";
 import { workFingerprintSchema } from "@pe/agent-contracts";
+import { z } from "zod";
 
 const closes: (() => void)[] = [];
 afterEach(() => closes.splice(0).reverse().forEach(close => close()));
@@ -16,11 +17,11 @@ test("D25: /fans Timeline names Fans, Ducts, Ducts for undo, undo, redo", async 
   let host: ReturnType<typeof hostTimeline> | undefined;
   const listeners = new Set<() => Promise<void>>();
   const timeline: TimelineClient = {
-    open(works, deliver) {
+    open(works, deliver, document) {
       let closed = false;
       const refresh = async () => {
         if (!host) return;
-        const value = await host.read(works, "human");
+        const value = await host.read(works, "human", document);
         if (!closed) deliver(value);
       };
       listeners.add(refresh);
@@ -54,6 +55,14 @@ test("D25: /fans Timeline names Fans, Ducts, Ducts for undo, undo, redo", async 
   };
   await edit(ducts, ["criteria", "velocitySupplyFpm"], 925, "Ducts supply velocity 925");
   await edit(fans, ["equipmentFlows", fan], { cfm: 1234 }, "Fans airflow 1234");
+  // A newer edit in a Work /fans never reads must not compete with either step.
+  const schedules = { ...fans, route: "schedules" };
+  closes.push(f.ws.register({ spec: { route: "schedules", title: "Schedules", description: "Unread Work", schema: z.object({ n: z.number() }) } }));
+  f.saved.set("schedules", { version: 1, schemaVersion: 1, revision: 0, doc: { n: 0 } });
+  expect(await f.ws.write(schedules, "schedules", "human", { kind: "apply", expectedRevision: 0, press: crypto.randomUUID(), patches: [{ path: ["n"], value: 1 }], label: "Unread Schedules edit" }, async () => [])).toMatchObject({ ok: true });
+  await Promise.all([...listeners].map(refresh => refresh()));
+  expect((await host.read([schedules], "human")).undo).toMatchObject({ work: schedules });
+  expect(f.typed.timeline()?.rows.some(row => "work" in row && row.work?.route === "schedules")).toBe(false);
   const before = (await f.ws.view(ducts, "ducts"))!.doc;
   // Control: the real host has the Ducts edit when given both Work keys.
   expect((await host.read([ducts], "human")).undo).toMatchObject({ work: ducts });
@@ -66,9 +75,14 @@ test("D25: /fans Timeline names Fans, Ducts, Ducts for undo, undo, redo", async 
       else expect(doc).toEqual(before);
     }
   }
+  // Revealing a retained Place must reconnect even when its membership did not change.
+  f.typed.release();
+  expect(f.typed.timeline()).toBeNull();
+  closes.push(f.typed.subscribe(() => {}));
+  await vi.waitFor(() => expect(f.typed.timeline()?.undo).toMatchObject({ work: ducts }));
 });
 
-test("D25 diagnosis: document-bound Pea has no owner, never opens Timeline, and keeps unavailable", () => {
+test("D25: document-bound Pea opens document Timeline without editable owners", () => {
   const open = vi.fn(() => () => {});
   const mount = mountTypedRoute(chat, {
     address: { read: () => new URLSearchParams(), write() {}, subscribe: () => () => {} },
@@ -82,8 +96,7 @@ test("D25 diagnosis: document-bound Pea has no owner, never opens Timeline, and 
   try {
     expect(mount.target()?.kind).toBe("document");
     expect(mount.spec.edits).toBeUndefined();
-    expect(open).not.toHaveBeenCalled();
+    expect(open).toHaveBeenCalledWith([], expect.any(Function), { route: "chat", binding: "open", target: null, open: { session: "proof", openId: "document" } });
     expect(mount.timeline()).toBeNull();
-    expect(mount.timelineRefusal()).toBe("Timeline unavailable");
   } finally { mount.dispose(); }
 });

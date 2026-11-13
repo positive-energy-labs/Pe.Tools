@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { workKeySchema, type WorkKey } from "./route-state.ts";
 
 /** A host read publishes one semantic Value; the envelope never varies by route. */
 export const publicationRequest = <S extends z.ZodType>(args: S) => z.object({
@@ -8,7 +9,7 @@ export const publicationRequest = <S extends z.ZodType>(args: S) => z.object({
 export const publicationSchema = <S extends z.ZodType>(data: S) => z.object({
   key: z.string(), generation: z.number(), version: z.number(),
   state: z.enum(["current", "refresh-needed", "superseded"]), reason: z.string().optional(),
-  value: z.object({ data, evaluation: z.string(), inputs: z.string(), trace: z.array(z.unknown()),
+  value: z.object({ data, evaluation: z.string(), inputs: z.string(), works: z.array(workKeySchema), trace: z.array(z.unknown()),
     coverage: z.object({ requested: z.array(z.string()), unknown: z.array(z.string()),
       covered: z.array(z.string()), refused: z.array(z.object({ keys: z.array(z.string()), reason: z.string() })) }),
     origin: z.unknown(), freshness: z.enum(["current", "refresh-needed"]),
@@ -25,6 +26,8 @@ export interface Publication<D = unknown> {
     data: D;
     evaluation: string;
     inputs: string;
+    /** Work leaves actually reached by this host evaluation, including absent Work. */
+    works: WorkKey[];
     coverage: {
       requested: string[];
       covered: string[];

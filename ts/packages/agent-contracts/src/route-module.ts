@@ -819,8 +819,6 @@ function admitHostProjection(
     fail("admit", "Host write admission differs from captured exports");
   if (module.admit && (!data.work?.schema || data.work.route !== data.key))
     fail("admit", "Only a Work owner declares write admission");
-  if (canonicalRouteJson(module.readWorks ?? []) !== canonicalRouteJson(captured.readWorks ?? []))
-    fail("readWorks", "Work owners differ from captured exports");
   const state = module.workState;
   const originalState = captured.workState;
   // Neutral Work exports retain captured-function authority.

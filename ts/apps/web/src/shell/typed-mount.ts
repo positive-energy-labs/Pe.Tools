@@ -127,13 +127,27 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     value.rows.flatMap(row => "revision" in row ? [{ work: row.work, revision: row.revision }] : []),
   ]);
   let stopTimeline = () => {};
+  const reads = new Map<import("../route/host-read").HostRead, { snapshot: Snapshot; args: string; stop(): void }>();
   const timelineClient = ports.timeline ?? (input.fixture === null && !input.history ? createTimelineClient(ports.findings) : null);
-  const timelineWorks = () => [...owners.values()].map(owner => owner.handle?.key ?? owner.scope.key);
-  const connectTimeline = () => {
+  const timelineWorks = () => [...new Map([
+    ...[...owners.values()].map(owner => owner.handle?.key ?? owner.scope.key),
+    ...[...reads.values()].flatMap(read => read.snapshot.publication?.works ?? []),
+  ].map(key => [workKey(key), key])).values()];
+  // The document head has no writable owner. Its host scope is independent of route read membership.
+  const timelineDocument = () => {
+    if (edits || input.target?.kind !== "document") return undefined;
+    const bound = bindWork(spec.key, input.work.address, undefined, input.work.open ?? input.target.ref);
+    return bound.binding === "address" || bound.binding === "open" ? bound : undefined;
+  };
+  let timelineMembership: string | undefined;
+  const connectTimeline = (force = false) => {
+    const works = timelineWorks(), document = timelineDocument();
+    const membership = canonicalRouteInput([works, document ?? null]);
+    if (!force && timelineMembership === membership) return;
+    timelineMembership = membership;
     stopTimeline(); timelineState = null;
     timelineProblem = input.history ? "Recorded Timeline is read-only" : "Timeline unavailable";
-    const works = timelineWorks();
-    if (!timelineClient || !works.length) return;
+    if (!timelineClient || !works.length && !document) return;
     let closed = false;
     const stop = timelineClient.open(works, (value, reason) => {
       if (closed || disposed) return;
@@ -142,7 +156,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
         if (basis !== undefined && basis !== timelineBasis(value)) { problems.delete(id); stepProblemBasis.delete(id); }
       }
       timelineState = value ? freezePage(value) : null; timelineProblem = reason ?? null; notify();
-    });
+    }, document);
     stopTimeline = () => { closed = true; stop(); };
   };
   cleanups.push(() => stopTimeline());
@@ -161,16 +175,16 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
       const expected = timelineState?.[direction];
       if (!timelineClient || !expected || timelineProblem || timelineState?.refusal[direction])
         return refused(timelineProblem ?? timelineState?.refusal[direction] ?? `Nothing to ${direction}`);
-      const result = await timelineClient.step({ direction, works: timelineWorks(), expected });
+      const document = timelineDocument();
+      const result = await timelineClient.step({ direction, works: timelineWorks(), expected, ...(document ? { document } : {}) });
       if (!disposed && input.custody.current()) {
-        if (result) connectTimeline();
+        if (result) connectTimeline(true);
         watchFindings();
       }
       return result ? refused(result.message) : null;
     } catch (error) { return refused(error instanceof Error ? error.message : String(error)); }
   };
   let renderedBasis: InvocationToken | null = null;
-  const reads = new Map<import("../route/host-read").HostRead, { snapshot: Snapshot; args: string; stop(): void }>();
   const dependencies = () => Object.fromEntries([...reads].filter(([read,r])=>read === spec.core && r.snapshot.state === "ready").map(([read,r])=>[read.key,r.snapshot.hash??""]));
   const workSchema:z.ZodObject=edits?.work.schema ?? z.strictObject({});
   const gate = createRouteScopeGate({
@@ -282,7 +296,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
               : unavailable(valueRefusal(frame.reason ?? packet.reason ?? "Incomplete Value", read.key), publication?.data??valueOf(record.snapshot), publication??record.snapshot.publication);
           } catch (error) { record.snapshot = unavailable(valueRefusal(error, read.key), valueOf(record.snapshot), record.snapshot.publication); }
         } else if (frame.kind !== "log") record.snapshot = frame.kind === "failure"?unavailable(valueRefusal(frame.error, read.key),valueOf(record.snapshot),record.snapshot.publication):reading(valueOf(record.snapshot),record.snapshot.publication);
-        notify();
+        connectTimeline(); notify();
       };
       if (input.fixture !== null) {
         try { deliver({ kind: "complete", value: read.source.provide!(input.fixture, args), revision: 1 }); }
@@ -300,7 +314,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
         }).catch(error => deliver({ kind: "failure", error }));
       }
     }
-    notify();
+    connectTimeline(); notify();
   };
   const move = (patch: Record<string, unknown>, history?: "push" | "replace") => {
     requireCurrent();
@@ -670,7 +684,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     value: (read: import("../route/host-read").HostRead | undefined = spec.core): Snapshot => read ? reads.get(read)?.snapshot ?? reading() : { state: "not-yet-run", publication: null },
     owner: (id = own) => owners.get(id),
     page: { read: () => page, pose: (patch: any, intent?: "gesture"|"named") => moveRole("pose",patch,intent === "gesture"?"replace":intent === "named"?"push":undefined), query: (patch: any) => moveRole("query",patch), select: (selected: any) => move({selected}), subject: (subject: any) => {if(!spec.subject) throw Error("No subject declared");return move({ [spec.subject.field]: subject },"push");} },
-    subscribe(listener: () => void) { const resume = released; released = false; listeners.add(listener); if (resume) connectTimeline(); syncReads(); return () => { listeners.delete(listener); }; },
+    subscribe(listener: () => void) { const resume = released; released = false; listeners.add(listener); if (resume) connectTimeline(true); syncReads(); return () => { listeners.delete(listener); }; },
     available: () => !disposed && input.custody.current(),
     /** The URL write is flushed: the address alone, without Place memory, decodes to this Page
      *  (slice 6.1, `data-url-settled`); a reload reads only the address. */

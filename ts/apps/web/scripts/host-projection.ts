@@ -85,6 +85,6 @@ export async function projectWork(
   const definition = definitions[binding.imported]!.schema
     ? `import { ${binding.imported} as ${exportName} } from ${schemaImport};\n${exported ? `export { ${exportName} };\n` : ""}`
     : `import { ${binding.imported} as ${schema} } from ${schemaImport};\n${exported ? "export " : ""}const ${exportName}={route:${JSON.stringify(typed.data.key)},title:${JSON.stringify(typed.spec.name)},description:${schema}.description??${JSON.stringify(typed.spec.directory.summary)},${schema === "schema" ? "schema" : `schema:${schema}`},schemaVersion:1};\n`;
-  const properties = `workState:work,readWorks:${JSON.stringify(typed.host.readWorks)},schemas:{[data.work!.schema!]:work.schema,[data.historyDetail!]:z.fromJSONSchema(${JSON.stringify(z.toJSONSchema(typed.host.schemas.historyDetail!, { io: "input" }))})},`;
+  const properties = `workState:work,schemas:{[data.work!.schema!]:work.schema,[data.historyDetail!]:z.fromJSONSchema(${JSON.stringify(z.toJSONSchema(typed.host.schemas.historyDetail!, { io: "input" }))})},`;
   return { definition, properties };
 }

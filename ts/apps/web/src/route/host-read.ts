@@ -72,7 +72,7 @@ export function hostRead<K extends string, D>(
                   evaluation: id,
                   inputs: id,
                   origin: { kind: "fixture", name },
-                  trace: [],
+                  works: [], trace: [],
                   freshness: "current",
                 },
               } satisfies Publication;
