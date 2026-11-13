@@ -1,3 +1,4 @@
+import { mentionWord, MENTION_KINDS } from "#/workbench/mention-kind";
 import { listOf } from "@pe/kit/lang/collection";
 // The thread's composer: fills the one `Composer` box with attachments, slash and `@` menus and
 // the pickers. Logic lives in the hooks and `useSend`.
@@ -20,7 +21,7 @@ import {
   selectRunStatus,
   selectSkillCommands,
 } from "@pe/agent-contracts/chat-state";
-import { composerAnswer } from "./question-form";
+import { composerAnswer } from "#/workbench/question-form";
 import { ListPopup } from "@pe/kit/lang/list-popup";
 import { useSend, type ChatHandle } from "#/chat/composer-head";
 import { chatReading } from "./owner-ports";
@@ -37,9 +38,7 @@ import {
   dropMention,
   liveCatalog,
   MENTION_GROUP_CAP,
-  MENTION_KINDS,
   mentionFace,
-  mentionWord,
   useMentions,
   withText,
 } from "./use-mentions";

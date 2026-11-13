@@ -46,7 +46,7 @@ import { Button } from "@pe/kit/lang/button";
 import { annotation } from "#/components/anatomy";
 import { PressContent } from "@pe/kit/anatomy/press-content";
 import { FactChip, FileChip, MentionChip } from "@pe/kit/lang/chip";
-import { mentionWord } from "#/chat/use-mentions";
+import { mentionWord } from "#/workbench/mention-kind";
 import { isPdf, openPdf } from "./open-pdf";
 import { Thumbnail } from "./thumbnail";
 import { useCopy } from "@pe/kit/lib/use-copy";

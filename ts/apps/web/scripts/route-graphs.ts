@@ -135,7 +135,9 @@ for (const key of keys) {
       const schema = field.role === "subject"
         ? `subjectSchema(${(json.oneOf as {properties?:{ids?:{maxItems?:number}}}[]).find(part=>part.properties?.ids)?.properties!.ids!.maxItems})`
         : `(z.fromJSONSchema(${JSON.stringify(json)}) as z.ZodType<Immutable<${schemaType(json)}>>)`;
-      return `${JSON.stringify(key)}: ${agent ? "field" : "personField"}(${schema}${field.initial === undefined ? ".optional()" : `.default(${JSON.stringify(field.initial)})`}, ${JSON.stringify(field.url)})`;
+      const codec = field.codec === "list-search" ? ", codec: listSearchCodec" : field.codec === "text" ? ", codec: textCodec" : "";
+      const projected = `${agent ? "field" : "personField"}(${schema}${field.initial === undefined ? ".optional()" : `.default(${JSON.stringify(field.initial)})`}, ${JSON.stringify(field.url)})`;
+      return `${JSON.stringify(key)}: ${field.share === false || codec ? `{ ...${projected}${field.share === false ? ", share: false" : ""}${codec} }` : projected}`;
     });
     // A hand address keeps its own fields; the declaration whose key it is still marks it builtin.
     const owner = contract === key ? { module: folder } : {};

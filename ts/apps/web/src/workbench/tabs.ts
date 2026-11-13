@@ -24,7 +24,7 @@ import { peClient } from "#/host/pe-client";
 import { focusQuiet } from "@pe/kit/lib/utils";
 import { useHostEvents } from "#/host/resource-stream";
 import { useSurfaceHost } from "#/navigation/surface-host";
-import type { Resumed } from "#/chat/thread-work";
+import type { Resumed } from "#/workbench/thread-work";
 import { useWorkbench } from "./provider";
 import { publicRoutes } from "#/route/route-discovery";
 import { parseTarget } from "#/route/route-target";
@@ -159,9 +159,9 @@ function holdsWork(tab: ThreadTab, route: string, resumed: Resumed): boolean {
 
 /** The route a tab holds at `pathname`: any but Pea's own page. */
 const tabRouteAt = (pathname: string) => {
-  if (pathname === routeAddress("pea").path) return null;
+  if (pathname === routeAddress("chat").path) return null;
   const route = publicRoutes.byAddress(pathname)?.manifest.key ?? routeAt(pathname);
-  return route === "pea" ? null : route;
+  return route === "chat" ? null : route;
 };
 
 type TabHistory = {
@@ -183,7 +183,7 @@ export function useRouteTabs() {
     location.pathname === "/pea" &&
     ["plugin", "focus"].some((key) => new URLSearchParams(location.searchStr).has(key));
   const route = tabRouteAt(location.pathname);
-  const carry = placeCarry(route ?? "pea", `${location.pathname}?${rawQuery(router)}`);
+  const carry = placeCarry(route ?? "chat", `${location.pathname}?${rawQuery(router)}`);
   useSubjects();
   const explicit = new Set(new URLSearchParams(location.searchStr).keys());
   const search =
@@ -361,7 +361,7 @@ export function useRouteTabs() {
     duplicate = false,
     keep = false,
   ) => {
-    if (targetRoute === "pea") {
+    if (targetRoute === "chat") {
       setFailure(`This route has no saved Place contract: ${targetRoute}`);
       return false;
     }
@@ -507,7 +507,7 @@ export function useRouteTabs() {
     },
     chat: () =>
       navigate(
-        routeAddress("pea").link({}, { target: carry.target, work: carry.work }),
+        routeAddress("chat").link({}, { target: carry.target, work: carry.work }),
         null,
       ).catch(fail),
     close: async (tab: Pick<ThreadTab, "id">) => {
@@ -517,7 +517,7 @@ export function useRouteTabs() {
         const rest = commit(read().filter((item) => item.id !== tab.id));
         if (active?.id === tab.id) {
           const next = rest[Math.min(index, rest.length - 1)];
-          await navigate(next?.link ?? routeAddress("pea").link(), next?.id ?? null, true);
+          await navigate(next?.link ?? routeAddress("chat").link(), next?.id ?? null, true);
         }
       } catch (error) {
         fail(error);

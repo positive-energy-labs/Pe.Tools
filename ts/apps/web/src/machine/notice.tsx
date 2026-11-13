@@ -20,7 +20,7 @@ import {
   type NativeMessageEvent,
 } from "@pe/host-contracts/native-adapter";
 
-import { QuestionForm } from "#/chat/question-form";
+import { QuestionForm } from "#/workbench/question-form";
 import { Button } from "@pe/kit/lang/button";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { Row } from "@pe/kit/lang/row";

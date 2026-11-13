@@ -3,7 +3,7 @@ import * as Atom from "effect/reactivity/Atom";
 import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
 
 import { createRouteOwner } from "#/shell/owner";
-import type { ClosedWork, Resumed } from "#/chat/thread-work";
+import type { ClosedWork, Resumed } from "#/workbench/thread-work";
 import { type RouteKey, type LinkPage, type Carry } from "@pe/agent-contracts";
 
 export interface ChatSearch {

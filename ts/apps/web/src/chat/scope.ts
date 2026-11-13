@@ -1,4 +1,4 @@
-import { peClient } from "#/host/pe-client";
+import { setThreadTargets } from "#/workbench/provider/harness-client";
 import { useEffect, useRef, useState } from "react";
 import { peReadings } from "#/host/resource-stream";
 import { previousOf, useReading } from "#/host/resource-state";
@@ -11,36 +11,8 @@ import {
   type Refusal,
   type ThreadHead,
   emptyThreadHead,
-  machineInventory,
-  resolveCallTarget,
   targetKey,
-  type Machine,
 } from "@pe/agent-contracts";
-
-/**
- * A new thread's visible first target: the one user document when exactly one connected Revit has
- * exactly one open, and it is not Pea's. The human's send with the chip showing it adds it
- * (ADR 0021); any other machine leaves the draft with no target.
- */
-export function soleUserDocument(machine: Machine | null): DocumentRequest | null {
-  const revits = machine
-    ? [
-        ...(machine.revit.sessions ?? []).flatMap((s) => (s.attachment ? [s.attachment] : [])),
-        ...machine.revit.unclassifiedAttachments,
-      ]
-    : [];
-  const only = revits.length === 1 && revits[0]!.documents?.length === 1 ? revits[0]! : null;
-  const document = only?.documents?.[0];
-  if (!document || document.access.kind === "pea") return null;
-  const request = {
-    kind: "open",
-    ref: { session: only!.session, openId: document.openId },
-  } as const;
-  return resolveCallTarget({ needs: "document" }, [request], machineInventory(machine!)).kind ===
-    "resolved"
-    ? request
-    : null;
-}
 
 /** A host door's refusal in the person's words: the door, the reason, then the remedy. */
 const refusalSentence = ({ reason, remedy }: Refusal) =>
@@ -84,15 +56,12 @@ export function useThreadScope(threadId: string, enabled = true, observed?: Read
       return false;
     }
     try {
-      const response = await peClient.response("scope.set", {
-        params: { id: threadId },
-        body: {
-          targets: targets.map(({ request: target, label }) => ({
-            request: target,
-            ...(label ? { label } : {}),
-          })),
-          expectedRevision: parsed.data.revision,
-        },
+      const response = await setThreadTargets(threadId, {
+        targets: targets.map(({ request: target, label }) => ({
+          request: target,
+          ...(label ? { label } : {}),
+        })),
+        expectedRevision: parsed.data.revision,
       });
       const wire = await response.json().catch((error) => { console.error("scope: asynchronous operation failed", error); return null; });
       const body = response.ok ? wire : wire?.error?.details;

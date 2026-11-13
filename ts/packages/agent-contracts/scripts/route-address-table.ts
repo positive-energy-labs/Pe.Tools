@@ -14,7 +14,6 @@ export interface AddressRow {
 
 /** Addresses no declaration projects: its fields carry codecs a JSON schema cannot. */
 export const HAND_ADDRESSES: Readonly<Record<string, readonly [name: string, file: string]>> = {
-  pea: ["peaAddress", "./pea.ts"],
   "session-admin": ["sessionAdminAddress", "./g4-splits.ts"],
   space: ["spaceAddress", "./space.ts"],
 };
@@ -29,9 +28,10 @@ export function renderAddressTable(rows: readonly AddressRow[]): string {
   const uses = (text: string) => bodies.some((body) => body.includes(text));
   const imports = [
     `import { z } from "zod";`,
+    ...(uses("listSearchCodec") ? [`import { listSearchCodec } from "../list-search.ts";`] : []),
     ...(uses("Immutable<") ? [`import type { Immutable } from "../route-kernel-data.ts";`] : []),
     `import { ${uses("subjectSchema(") ? "subjectSchema, " : ""}focusSelectionSchema } from "../route-kernel-codecs.ts";`,
-    `import { jsonCodec, type RouteDeclaration } from "../route-field.ts";`,
+    `import { jsonCodec, ${uses("textCodec") ? "textCodec, " : ""}type RouteDeclaration } from "../route-field.ts";`,
     ...sorted.flatMap((row) => {
       const hand = !row.body && HAND_ADDRESSES[row.key];
       if (!row.body && !hand) throw Error(`${row.key}: no declaration projects it and no hand file holds it`);

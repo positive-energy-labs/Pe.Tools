@@ -7,7 +7,7 @@ import { ChatShell } from "#/chat/chat-shell";
 import { EmptyState } from "@pe/kit/lang/empty";
 import { Button } from "@pe/kit/lang/button";
 import { chipRecipe } from "@pe/kit/lang/chip";
-import { useThreadWorks } from "#/chat/thread-work";
+import { useThreadWorks } from "#/workbench/thread-work";
 import {
   GraphLayoutView,
   type GraphLayoutState,
@@ -35,7 +35,7 @@ export function RouteDock({
   const views = usePlaceViews();
   const tabs = useRouteTabs();
   const pea = useRouterState({
-    select: (state) => state.location.pathname === routeAddress("pea").path,
+    select: (state) => state.location.pathname === routeAddress("chat").path,
   });
   const plan = useAtomValue(store.atoms.planIntent);
   const planRefusal = useAtomValue(store.atoms.planRefusal);

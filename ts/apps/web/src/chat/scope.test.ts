@@ -2,7 +2,7 @@ import { machineFixture } from "../../../../packages/agent-contracts/tests/machi
 import { expect, test } from "vite-plus/test";
 import { documentRequestSchema } from "@pe/agent-contracts";
 
-import { soleUserDocument } from "./scope";
+import { soleUserDocument } from "#/workbench/sole-user-document";
 
 const doc = (openId: string) => ({
   openId,

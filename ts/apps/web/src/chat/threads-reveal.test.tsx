@@ -61,7 +61,7 @@ vi.mock("#/chat/thread-palette", () => ({
   ),
 }));
 
-const handle = { selection: { read: () => [], set: () => {} } } as unknown as ChatHandle;
+const handle = { page: { read: () => ({ threadSearch: undefined, threadSort: "" }), query: () => {} }, selection: { read: () => [], set: () => {} } } as unknown as ChatHandle;
 
 beforeEach(() => {
   // Pea's surface at 1400x900 with the tools open: 683px, under threads + Pea's 643px floor.

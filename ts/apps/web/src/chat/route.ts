@@ -1,4 +1,7 @@
 import type { ContextOf } from "../route/defaults";
+import { z } from "zod";
+import { listSearchSchema, threadSearchDefault } from "@pe/agent-contracts";
+import { field } from "../route/defaults";
 import { read } from "../route/defaults";
 import { valueRead } from "../../../../packages/agent-contracts/src/value.ts";
 import { route } from "../route/defaults.ts";
@@ -7,7 +10,12 @@ import { draw } from "../route/draw.tsx";
 
 import { chatArgs, chatValue } from "../../../../packages/agent-contracts/src/chat-read.ts";
 export const loaded = read(hostRead(valueRead("chat.context", chatArgs, chatValue)));
-export const fields = {};
+export const fields = {
+  threadSearch: { ...field(listSearchSchema, threadSearchDefault(), "query"), codec: "list-search" as const },
+  threadSort: { ...field(z.enum(["", "recent", "title"]), "", "query"), codec: "text" as const },
+  turn: field(z.number().int().positive().optional(), undefined, "query"),
+  prompt: { ...field(z.string().max(200), "", "query"), share: false as const, codec: "text" as const },
+};
 export type ChatHandle = ContextOf<typeof fields, typeof loaded, never, never>;
 /** `minOtherSize` is Pea's floor: the chat column's reading measure (`--chat-measure` in
  * chat-shell.css) between its two side lanes, in px at comfort density. Layout is data, so the
@@ -28,6 +36,7 @@ export const chatLayout = {
 } as const;
 export const module = route({
   key: "chat",
+  agent: false,
   address: "/pea",
   name: "Pea",
   needs: "host",
@@ -64,5 +73,5 @@ export const module = route({
   layout: chatLayout,
 });
 
-/** RouteDock owns this retained surface; the URL uses the conversation address contract. */
-export const router = { contract: "pea", dock: true } as const;
+/** RouteDock retains this ordinary route at /pea. */
+export const router = { dock: true } as const;

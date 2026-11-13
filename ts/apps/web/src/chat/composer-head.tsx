@@ -41,7 +41,7 @@ import {
 import { useTranscript, useWorkbench } from "#/workbench/provider";
 
 import { useHeadWorks } from "./head-works";
-import { targetClosure, targetLabel } from "./thread-navigation";
+import { targetClosure, targetLabel } from "#/workbench/thread-navigation";
 import { ProposalHead } from "./proposal-head";
 import { ComposerOpenMode } from "./composer-open";
 import { ComposerPending } from "./composer-pending";
