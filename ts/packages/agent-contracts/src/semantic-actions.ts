@@ -10,6 +10,8 @@ import { nativeProcessSchema } from "./action-receipts.ts";
 import { z } from "zod";
 import { executionTargetSchema } from "./target.ts";
 import { workKeySchema } from "./route-state.ts";
+import { hostOpCatalog } from "@pe/host-contracts/catalog";
+import { tsOnlyOperationCatalog } from "@pe/host-contracts/operation-types";
 
 import type { Command } from "./command.ts";
 export type { ActionNeed } from "./command.ts";
@@ -481,7 +483,7 @@ export const actionControls = {
     says: "Read durable native evidence for the original action; uncertain outcomes remain blocked.",
     dirties: ["receipts"],
     needs: "nothing",
-    effect: "query",
+    effect: "command",
     input: z.object({ id: z.string().min(1) }),
   },
   "action.resume": {
@@ -514,6 +516,7 @@ export const preparedTakeoffSchema = z.strictObject({
 /** Discovery projects the same portable command contracts used by invocation. */
 export const hostActions = {
   "ops.read": {
+    native: [...hostOpCatalog, ...tsOnlyOperationCatalog].filter((op) => op.intent === "Read").map((op) => op.key),
     says: "Read one native operation through the guarded operation door.",
     needs: "nothing", effect: "query", dirties: [],
     input: z.object({ op: z.object({ key: z.string(), intent: z.string() }).passthrough(), request: z.unknown() }),

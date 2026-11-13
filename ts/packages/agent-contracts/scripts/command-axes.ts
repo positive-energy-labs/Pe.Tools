@@ -69,8 +69,6 @@ export function generateCommandTable(
       : key === "page.bind" ? key : key === "ops.read" ? "operation.call"
       : Object.hasOwn(familyReads, key) ? "/family/readings"
       : Object.hasOwn(scheduleReads, key) ? "/schedules/readings" : undefined;
-    // Receipt controls operate on an existing admission, never make a fresh one.
-    if (key === "action.recover" || key === "action.resume" || key === "action.cancel") axes.effect = "SessionWrite";
     table[key] = { axes, effect: axes.effect, ...(boundary?.phase === "apply" ? { plan: boundary.previewKey } : {}),
       via: route ? { route } : "command" };
   }
