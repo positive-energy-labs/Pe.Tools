@@ -16,10 +16,7 @@ import { NewThreadButton, ThreadsSidebar } from "#/chat/thread-palette";
 import { useTranscript, useTranscriptAtom, useWorkbench } from "#/workbench/provider";
 import {
   selectBreakdown,
-  selectRunStatus,
   selectTitle,
-  selectStarting,
-  selectWaitingSeconds,
 } from "@pe/agent-contracts/chat-state";
 import { EmptyState } from "@pe/kit/lang/empty";
 import { Button } from "@pe/kit/lang/button";
@@ -185,7 +182,6 @@ function ChatSurface({ target, handle }: ChatShellProps & { handle: ChatHandle }
   const {
     store,
     bodyAtom,
-    loading,
     threads,
     currentThreadId,
     prompt,
@@ -218,9 +214,6 @@ function ChatSurface({ target, handle }: ChatShellProps & { handle: ChatHandle }
   const chat = useTranscript((state) => ({
     title: selectTitle(state),
     breakdown: selectBreakdown(state),
-    runStatus: selectRunStatus(state),
-    silentFor: selectWaitingSeconds(state),
-    starting: selectStarting(state),
   }));
   useThreadPresence(activity ? null : currentThreadId);
   const situation = useChatSituation(handle);
@@ -236,24 +229,7 @@ function ChatSurface({ target, handle }: ChatShellProps & { handle: ChatHandle }
   const switching = shown.thread !== currentThreadId;
   const retryBody = useAtomRefresh(bodyAtom);
 
-  const { runStatus, silentFor, breakdown } = chat;
-  const status = {
-    text: turnFailure
-      ? "failed"
-      : loading
-        ? "loading thread state"
-        : runStatus === "waiting"
-          ? "waiting for you"
-          : chat.starting
-            ? "starting the harness"
-            : silentFor !== undefined
-              ? `waiting on the model for ${silentFor} s`
-              : runStatus === "running"
-                ? "running"
-                : "ready",
-    caution: turnFailure !== undefined,
-    detail: operationError ?? turnFailure,
-  };
+  const { breakdown } = chat;
   const title =
     chat.title ||
     threads.find((thread) => thread.id === currentThreadId)?.title ||
@@ -319,7 +295,7 @@ function ChatSurface({ target, handle }: ChatShellProps & { handle: ChatHandle }
               pickers={<ComposerPickers situation={situation} urlTarget={target} />}
               state={<ComposerState situation={situation} />}
               work={<ComposerWork situation={situation} />}
-              refusal={situation.head.refusal ?? status.detail}
+              refusal={situation.head.refusal ?? operationError ?? turnFailure}
             />
           </div>
           {/* The context bar shares the lens's side column at the composer's height. */}
