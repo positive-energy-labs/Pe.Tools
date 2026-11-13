@@ -1,4 +1,5 @@
 export * from "./api-schemas.ts";
+export * from "./spatial-evidence.ts";
 export * from "./route-module.ts";
 // Attention projects admitted codecs (ADR 0030 rule 10); the shell takes them through the barrel.
 export type { RouteBindings } from "./route-bodies.ts";

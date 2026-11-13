@@ -49,6 +49,8 @@ export interface ReadSources {
     target: z.output<typeof executionTargetSchema>,
     version: string | undefined,
     role: "acquire" | "validate" | "join" | "beyond" | "none",
+    /** The read's own lifetime (evaluator.ts): the native call stops when the read's last subscriber released. */
+    signal?: AbortSignal,
   ) => Promise<Response>;
 }
 export function inputPort(options: {
@@ -69,7 +71,7 @@ export function inputPort(options: {
       return options.origin();
     },
     revision: options.revision,
-    async take(name, raw, context) {
+    async take(name, raw, context, signal) {
       const source = options.source;
       const custom = options.leaves?.[name];
       if (custom)
@@ -123,6 +125,7 @@ export function inputPort(options: {
             args.target,
             args.version,
             args.role ?? "none",
+            signal,
           );
         } catch (error) {
           if (
