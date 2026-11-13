@@ -2,6 +2,7 @@
 
 import hashlib, json, os, shutil, subprocess, sys, tempfile
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import acceptance as a
@@ -111,6 +112,7 @@ def test_host_wait(tmp: Path) -> None:
     state = {"home": str(home), "lane": "dev", "web": False, "sessions": [], "docs": ["d.rvt"], "host": None}
     service_file = home / ".local-state" / "state" / "service" / "host-source-t.json"
     sleeper = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(120)"])
+    real_pid_alive, a.pid_alive = a.pid_alive, lambda pid: pid == sleeper.pid and sleeper.poll() is None
     resumed = []
     a.dev_session = lambda r, s, args: resumed.append(s["host"])
     def no_launch(*_, **__): raise AssertionError("a second host was launched")
@@ -141,6 +143,7 @@ def test_host_wait(tmp: Path) -> None:
             assert "exited without a service file" in str(e), e
     finally:
         a.env = real_env
+        a.pid_alive = real_pid_alive
         sleeper.kill()
 
 
@@ -176,7 +179,25 @@ def test_teardown_home(tmp: Path) -> None:
         else: os.environ["PE_ACCEPT_KEEP_HOME"] = keep
 
 
-with tempfile.TemporaryDirectory() as t:
+def no_runtime(*args, **kwargs):
+    raise AssertionError(f"unexpected runtime/discovery: {args}")
+
+
+real_popen = subprocess.Popen
+def fixture_process(argv, *args, **kwargs):
+    if (argv != [sys.executable, "-c", "import time; time.sleep(120)"]
+            and not (argv[0] == sys.executable and argv[1] == str(Path(a.__file__).resolve())
+                     and argv[-1] in ("-h", "--help"))):
+        no_runtime(argv)
+    return real_popen(argv, *args, **kwargs)
+
+
+with tempfile.TemporaryDirectory() as t, \
+        patch.object(a.subprocess, "Popen", side_effect=fixture_process), \
+        patch.object(a, "require_setup_admission"), \
+        patch.object(a, "owner_home", return_value=Path(t)), \
+        patch.multiple(a, sdk=no_runtime, dev_session=no_runtime, setup_installed=no_runtime,
+                       installed_identity=no_runtime, processes=no_runtime, revit_pids=no_runtime):
     for test in (test_help, test_pod_build_skip, test_pick_models, test_copy_hashed, test_isolated_home, test_host_wait, test_teardown_home):
         test(Path(tempfile.mkdtemp(dir=t)))
 print("ok")
