@@ -459,9 +459,10 @@ test("JP5 bootstrap replaces only unchanged imports and Home discovers the untru
       });
       const manifest = JSON.parse(await readFile(resolve(source, "pod.json"), "utf8"));
       const current = manifest.routes[0];
-      manifest.routes = [{ sourcePath: "routes/voltage-drop/index.js", name: current.name, description: current.description }];
+      // Reuse a shipped member: an extra legacy file would test the deliberate member-removal refusal.
+      manifest.routes = [{ sourcePath: "routes/voltage-drop/module.ts", name: current.name, description: current.description }];
       await writeFile(resolve(source, "pod.json"), JSON.stringify(manifest));
-      await writeFile(resolve(source, "routes/voltage-drop/index.js"), "throw Error('Obsolete Pod must never execute');");
+      await writeFile(resolve(source, "routes/voltage-drop/module.ts"), "throw Error('Obsolete Pod must never execute');");
       const old = await exportPod({ pod: manifest.id, archivePath: resolve(host.dir, "old.zip") },
         { podsRoot: resolve(host.dir, "old"), captures });
       // An earlier shipped import, as the bootstrap left it: the import record in the state root its
