@@ -33,6 +33,41 @@ export const OWNERS: Record<(typeof PER_FILE)[number], readonly string[]> = {
 export const perFileRises = (name: (typeof PER_FILE)[number], actual: Count, baseline: Count) =>
   rises(actual, baseline).filter((line) => !OWNERS[name].some((owner) => line.startsWith(`${owner}:`)));
 
+/**
+ * Written exceptions to the one write door (routes MAP slice 2): files that keep writes of their
+ * own, each carrying `STORE-EXCEPTION: ADR 0039` and its end condition at the site. A listed file
+ * without both is red; a marker in an unlisted file is red, so no file declares itself exempt.
+ */
+export const STORE_EXCEPTION = "STORE-EXCEPTION: ADR 0039";
+export const EXCEPTIONS: Record<string, string> = {
+  "ts/apps/host/src/harness/thread-store.ts": "T3 replaces thread/provider persistence",
+  "ts/apps/host/src/harness/threads.ts": "T3 replaces thread/provider persistence",
+  "ts/apps/host/src/harness/providers.ts": "T3 replaces thread/provider persistence",
+};
+
+/** Problems with the written exceptions, given each in-scope production file's text. */
+export function exceptionProblems(sources: Record<string, string>): string[] {
+  const problems: string[] = [];
+  for (const [file, end] of Object.entries(EXCEPTIONS)) {
+    const text = sources[file];
+    if (text === undefined) problems.push(`${file}: listed as a store exception but not found`);
+    else if (!text.split("\n").some((line) => line.includes(STORE_EXCEPTION) && line.includes(end)))
+      problems.push(`${file}: the written exception is gone; the site needs "${STORE_EXCEPTION}" with its end condition "${end}"`);
+  }
+  for (const [file, text] of Object.entries(sources))
+    if (!(file in EXCEPTIONS) && text.includes(STORE_EXCEPTION))
+      problems.push(`${file}: carries ${STORE_EXCEPTION} but is not in EXCEPTIONS (health-census.ts)`);
+  return problems;
+}
+
+/** The in-scope production sources the fsWrites count and the exceptions read. */
+export const storeScopeSources = (): Record<string, string> =>
+  Object.fromEntries(
+    productionFiles()
+      .filter((file) => FS_SCOPE.test(file) && /\.tsx?$/.test(file))
+      .map((file) => [file, readFileSync(join(repoRoot, file), "utf8")]),
+  );
+
 const FS_SCOPE = /^ts\/(apps\/host|packages\/(host-contracts|host-internal|runtime))\//;
 const FS_MODULES = new Set(["fs", "node:fs", "fs/promises", "node:fs/promises"]);
 const NODE_MUTATORS = new Set(
@@ -107,9 +142,8 @@ export const isProduction = (path: string) =>
 
 export const total = (count: Count) => Object.values(count).reduce((sum, n) => sum + n, 0);
 
-export function census(): Health {
-  const health: Health = { casts: {}, suppressions: {}, todos: {}, longFiles: {}, fsWrites: {} };
-  const files = execFileSync("git", ["ls-files", "--cached", "--others", "--exclude-standard"], {
+const productionFiles = () =>
+  execFileSync("git", ["ls-files", "--cached", "--others", "--exclude-standard"], {
     cwd: repoRoot,
     encoding: "utf8",
     maxBuffer: 1 << 28,
@@ -117,7 +151,10 @@ export function census(): Health {
     .split("\n")
     .filter((path) => isProduction(path) && existsSync(join(repoRoot, path)))
     .sort();
-  for (const file of files) {
+
+export function census(): Health {
+  const health: Health = { casts: {}, suppressions: {}, todos: {}, longFiles: {}, fsWrites: {} };
+  for (const file of productionFiles()) {
     const source = readFileSync(join(repoRoot, file), "utf8");
     if (FS_SCOPE.test(file) && /\.tsx?$/.test(file)) {
       const writes = fsWriteCount(file, source);
