@@ -40,7 +40,14 @@ import type {
   WorkFeedFailure,
 } from "../../agent-contracts/src/work-journal-door.ts";
 import { OwnerReads, type OwnerValue } from "./owner-read.ts";
-import { createWorkJournal } from "./work-journal.ts";
+import {
+  projectWorks,
+  sameStep,
+  timelineJournal,
+  type TimelinePart,
+  type TimelineWork,
+} from "./work-timeline.ts";
+import type { ActionStatus, StepRef } from "@pe/agent-contracts";
 
 export interface RouteWorkspaceRegistration extends HostWorkRegistration {
   /** Captured neutral schema; presentation decoding belongs at the host write boundary. */
@@ -60,9 +67,11 @@ export type RouteWorkspaceEvent = {
 
 export interface RouteDocumentStore {
   getState(input: { targetKey: string; route: string }): Promise<unknown>;
-  setState(input: { targetKey: string; route: string; value: unknown; reason?: string;
-    /** Rest the exact prior file bytes before a schema upgrade replaces them. */
-    preservePrior?: boolean }): Promise<void>;
+  /**
+   * `value: null` sets the stored Work aside with its bytes kept and one notice. With a `reason`
+   * the runtime refused it; without one a person cleared their own Work.
+   */
+  setState(input: { targetKey: string; route: string; value: unknown; reason?: string }): Promise<void>;
   /** Enumerates canonical persisted records without materializing absent Work. */
   listState?(): Promise<{
     records: { targetKey: string; route: string; value: unknown }[];
@@ -738,36 +747,73 @@ export class RouteWorkspace {
     });
   }
 
+  /** Each Work's value and retained acks as the Timeline reads them; an unregistered route is no member. */
+  async #timelineWorks(works: readonly WorkKey[]): Promise<TimelineWork[]> {
+    const read: TimelineWork[] = [];
+    for (const key of works) {
+      const view = await this.#read(key, key.route, true, true);
+      if (view)
+        read.push({
+          key,
+          snapshot: { revision: view.revision, doc: view.doc },
+          acks: view.history?.acks ?? [],
+        });
+    }
+    return read;
+  }
+
   /**
-   * Undo or redo the last step of this Work's one journal, whoever wrote it (ADR 0028 noun 4), or
-   * with `own` the caller's own last step, leaving the other author's (findings, ADR 0035 rule 9).
-   * The restore is the same write a person's Undo sends: one `restore` revision whose inverse is
-   * the redo. It refuses, writing nothing, when the step's paths changed elsewhere.
+   * The Works' rows and this author's next step each way (ADR 0042). `receipts` is every action
+   * receipt the host holds: it is a required argument, so no caller can build the Timeline without
+   * the Revit-write barrier.
+   */
+  async timeline(
+    works: readonly WorkKey[],
+    by: WorkAuthor,
+    receipts: readonly ActionStatus[],
+  ): Promise<TimelinePart> {
+    if (this.options.recorded) throw Error("A recorded workspace has no Timeline");
+    return projectWorks(await this.#timelineWorks(works), receipts, by);
+  }
+
+  /**
+   * Undo or redo the caller's own last step across these Works (ADR 0042: per author on every
+   * Work). The restore is one `restore` revision whose inverse is the redo. It refuses, writing
+   * nothing, when `expected` is not the step it would take, when a Revit write consumed the step,
+   * or when the step's paths changed elsewhere.
    */
   async step(
-    scope: WorkKey,
-    route: string,
+    works: readonly WorkKey[],
     by: WorkAuthor,
     direction: "undo" | "redo",
-    expectedRevision: number,
-    own = false,
+    expected: StepRef,
+    receipts: readonly ActionStatus[],
   ): Promise<RouteStateWriteResult> {
     this.#authorize(direction);
-    const snapshot = await this.viewUncaptured(scope, route);
-    if (!snapshot || snapshot.revision !== expectedRevision)
-      return refuse("refused", "Work changed before restoring", "Re-read Work.", "stale_revision");
-    const journal = createWorkJournal(scope);
-    for (const { write } of this.#inverses.get(workKey(scope)) ?? [])
-      journal.accept({ ...write, replay: true });
-    journal.observe(snapshot);
+    const read = await this.#timelineWorks(works);
+    const journals = read.map((work) => timelineJournal(work, receipts));
+    const candidate = projectWorks(read, receipts, by, journals)[direction];
+    if (!candidate) return refuse("refused", `Nothing to ${direction}`, "Re-read the Timeline.");
+    if (!sameStep(candidate.ref, expected))
+      return refuse(
+        "refused",
+        `The Timeline changed: ${direction} would now take "${candidate.ref.label}"`,
+        "Re-read the Timeline.",
+        "stale_revision",
+      );
+    if (candidate.refusal) return refuse("refused", candidate.refusal, "Re-read the Timeline.");
+    const index = read.findIndex(
+      (work) => "work" in candidate.ref && workKey(work.key) === workKey(candidate.ref.work),
+    );
+    const scope = read[index]!.key;
     let accepted: RouteStateWriteResult | undefined;
-    const result = await journal[direction](async (write) => {
-      accepted = await this.write(scope, route, by, write);
+    const result = await journals[index]![direction](async (write) => {
+      accepted = await this.write(scope, scope.route, by, write);
       return accepted;
-    }, undefined, own ? by : undefined);
+    }, undefined, by);
     return result.ok && accepted
       ? accepted
-      : refuse("refused", result.ok ? "Nothing restored" : result.message, "Re-read Work history.");
+      : refuse("refused", result.ok ? "Nothing restored" : result.message, "Re-read the Timeline.");
   }
 
   /** Observations and conditional retirement are host facts, never raw client edits. */
@@ -1100,24 +1146,16 @@ export class RouteWorkspace {
     }
   }
 
+  /** Decode, or set aside: stored Work that is not this spec's is never migrated (MAP invariant). */
   async #decodeStored(targetKey: string, spec: RouteStateSpec<z.ZodType>, raw: unknown) {
     if (raw == null) return null;
-    let upgrade: ReturnType<NonNullable<typeof spec.upgrade>>;
-    let envelope: RouteEnvelope<unknown>;
     try {
-      upgrade = spec.upgrade?.(raw) ?? null;
-      envelope = parseEnvelope(upgrade?.value ?? raw, spec);
+      return { raw, envelope: parseEnvelope(raw, spec) };
     } catch (error) {
       await this.#store.setState({ targetKey, route: spec.route, value: null,
         reason: error instanceof Error ? error.message : String(error) });
       return null;
     }
-    if (upgrade) {
-      raw = { ...upgrade.value as object, doc: envelope.doc };
-      await this.#store.setState({ targetKey, route: spec.route, value: raw,
-        reason: upgrade.reason, preservePrior: true });
-    }
-    return { raw, envelope };
   }
 
   #load(

@@ -8,7 +8,17 @@ Paths: `C/` is `ts/packages/agent-contracts/src/`, `W/` is `ts/apps/web/src/`, `
 
 **K-A1. Store, day one (ST1).** No exported signature in `store.ts` changes. `readStored` returns `{ kind: "kept", reason }` for any file it could not read, in either class. A `discard` removes the file only after `restBlob` returned; if the copy fails the result is `kept` and one notice posts. `readDerived` never deletes: a name that does not match its bytes is skipped with one notice.
 
-**K-A2. Kinds (ST4a), from storage.md C1.** `Kind<T, At, Args>` with `at: "home" | "state" | "state-kept"`; `Kind.in(root, ...args)` is the only way to a `StoredFile<T, At>`; `read(file)`, `writeHome(file, bytes, expectSha256): HomeWrite`, `writeState(file, bytes)`. `Stored<T>` is `ok | missing | kept | set-aside`. No exported function takes or returns a bare `string` path.
+**K-A2. Kinds (ST4a), as built on k2/store.** Home `ts/packages/host-contracts/src/kinds.ts`, imported as `@pe/host-contracts/kinds`. `Kind<T, At, Args>` with `at: "home" | "state" | "state-kept"`; `Kind.in(root, ...args)` is the only way to a `StoredFile<T, At>`; `read(file)`, `writeHome(file, bytes, expectSha256): HomeWrite`, `writeState(file, bytes)`. `Stored<T>` is `ok | missing | kept | set-aside`, and `set-aside` carries `blob: StatePath`. No function in `kinds.ts` takes or returns a bare `string` path. What the plan text did not have, each found while building it:
+
+- A kind is declared with `stateKind`, `keptStateKind` or `homeKind({ place, schema, segments, parse?, quiet? })`. A segment that is not one name (`..`, a separator, empty) throws at `in`.
+- A state kind's root is `StateRoot`, minted only by `stateTree(root)` in `service-identity.ts`; the host's is `hostState()` in `H/host-ownership.ts`. `stateTree` is the one table of machine-state paths, and its rows are `StatePath`.
+- A home kind's root is `HomeRoot`, a proven `Home` bound to this machine: `stateTree(root).home(home)`. The binding is where `writeHome` gets the blob root and a kept read gets the notice file, so no caller passes either.
+- A state file an owner refuses after decoding, and a person's clear: `setAside(file, reason)`, the one set-aside door, bytes kept and one notice. A clear has no door of its own and no undo hook (kaitpw, 2026-11-13: "whatever is occam ... set aside is fine with me, i dont think i care about it being undo-able tho").
+- Append logs: `stateLog({ place, schema, segments })`, then `readLines(log)` and `appendLine(log, value)`.
+- Derived folders: `derivedIn(homeRoot | stateRoot)`, then `readDerivedIn`, `writeDerivedIn`, `refuseDerived`. A refused derived file in a home is kept with a notice; in machine state it is set aside.
+- Notices and blobs: `notices(machine)`, `note(machine, notice)`, `rest(machine, bytes)`, `rested(machine, sha256)`. `rest` is the one blob writer.
+- `store.ts` keeps the functions that take bare paths until the store sweeps (ST4b to d) move their callers; a sweep deletes each export when its last outside caller goes. `kinds.ts` holds no filesystem write, so `OWNERS.fsWrites` still names `store.ts` alone.
+- Kernel rules every kind inherits (K-A1 plus two): no write lands over a state file that was kept until its bytes rest in the blob store, and a passing lock on a read is waited out.
 
 **K-A3. Timeline (C1), from chrome.md 3.1.** Home `agent-contracts/src/work-timeline.ts`. `StepRef = { work: WorkKey; revision: number; label: string } | { home: string; sha256: string; label: string }`. `WorkTimeline = { rows; undo: StepRef | null; redo: StepRef | null; refusal: { undo: string | null; redo: string | null } }`. `WorkTimelineArgs = { works: readonly WorkKey[] }`. `WorkStepRequest = { direction: "undo" | "redo"; works: readonly WorkKey[]; expected: StepRef }`. The host refuses when `expected` is not the step it would take. Rows are in host order; the browser never sorts by `at`. `by` is `"human" | "pea"`.
 
@@ -16,7 +26,7 @@ Paths: `C/` is `ts/packages/agent-contracts/src/`, `W/` is `ts/apps/web/src/`, `
 
 **K-A5. Home-write row (ST7a against C2), from storage.md C3.** `HomeWriteRow = { kind: "home-write"; place; path; sha256; priorSha256: string | null; by: Caller; at: string; owner; tier: "user" | "project" | "firm"; home }`. `HomeWriteSource = { rows(filter: { owner: string; homes: readonly string[] }): HomeWriteRow[]; step(ref: { home: string; sha256: string }, by: Caller): HomeWrite }`, declared in `apps/host/src/tiered-settings.ts`. The Timeline arm is `HomeWriteRow & { undoable: boolean }`. C2 leaves one registration point for a second source; ST7a registers it.
 
-**K-A6. Places (C9 against ST4a).** `placesKind: Kind<PlacesFile, "state", []>` at `state\places.json`, declared in `apps/host/src/places.ts`, written only by `writeState`. Focus stays per window in `sessionStorage` (`pe.place.focus`).
+**K-A6. Places (C9 against ST4a).** `placesKind: Kind<PlacesFile, "state", []>` at `state\places.json`, declared in `apps/host/src/places.ts` with `stateKind` from `@pe/host-contracts/kinds`, minted by `placesKind.in(hostState())`, written only by `writeState`. Focus stays per window in `sessionStorage` (`pe.place.focus`).
 
 The five lines K-A4 names (findings Work as a Timeline member):
 
@@ -69,6 +79,8 @@ Copy each into both briefs verbatim from the cited lines.
 7. **`ReadOwnership`** (writer D gives; K3 and writer E call). `picture.md:141-159`. Writer E calls `open` at admission, `requestStop` from Stop, `settle` before the parent settles.
 8. **`ScriptCaller`** (writer A, both halves). `enum ScriptCaller { Agent, Person }`; `ExecuteRevitScriptRequest` gains a trailing `ScriptCaller Caller = ScriptCaller.Agent`; the host sets `caller: guards(caller) ? "Agent" : "Person"` over anything the input carried; a succeeded receipt whose result has `held` yields one `waits` row with verb `held`.
 9. **Capture policy** (writer D, then SI-S3). `sight.md:110`. `native-output.ts` tests `capture: true` from `call-policy.ts` and passes the call's own key to both schemas. SI-S3 adds the focus key as one policy row.
+
+**SI-S3 seeing disclosure (k2/lens).** Capture, lens and show-elements return `lens: {basis, viewId}` and `hidden: {what, count, why}[]`. The only kinds are Links, ScopeBoxes, Levels, Grids, ReferencePlanes, Spaces, Zones, Rooms and Areas. Counts are host-document instances in a category whose visibility switch is off, including unloaded link instances, never linked-document element counts or visible/occluded counts. Filters, phases, worksets and individual hiding are not evaluated. The lens op reports PeDefault basis and reason because it sets those switches. A referenced view reports UserView basis and NotEvaluated reason because the reader does not infer who set its switches. No LensUse exists. Show-elements preserves its target visibility evidence as `hiddenElementIds`.
 
 ### Frozen in code (k2/freeze-native)
 
@@ -156,6 +168,37 @@ interface ReadContext {
 }
 ```
 
+### As landed (k2/read-contract)
+
+Where this differs from the frozen text above, this is the contract.
+
+**The native handle's input.** `native(key)` is `ReadHandle<K, NativeArgs<K>, NativeValue<K>>`, not `OpRequestOf<K>` to `OpResponseOf<K>`:
+
+```ts
+type NativeArgs<K> = { request: OpRequestOf<K>; target: ExecutionTarget; version?: string; role?: "acquire" | "validate" | "join" | "beyond" | "none" };
+type NativeValue<K> = { body: NativeReadOutput<K>; version: string | null };
+```
+
+- Reason: a native read cannot run without a target, and the ducts and fans bodies pass `role` and read back `version` (`W/ducts/host.ts:33-44`, `W/ducts/fan-sheet.ts:181-191`). A bare request would need a second door for those.
+- So `ctx.read(native(key), args)` and `ctx.native(key, args)` are the same read, with the same body, input and value. `bodyOf(native(key))` is the host's native body; nobody registers one. k2/read-sweep can delete `ctx.native`.
+- The schemas and both types live once, in `C/native-output-read.ts` (`nativeReadInput`, `nativeReadValue`). The handle and the host door both decode with them. `H/reads/door.ts` re-exports the types.
+- A binding that names `native("revit.catalog.field-options")` as its options read supplies `request`; the door supplies `target`.
+
+**`contract()`.**
+
+- `input` is the host's input, `target` included where the body takes one. The browser door adds `target` from the mount, so a pane supplies the input without it. k2/read-sweep writes that one place; no `contract.ts` declares a second input.
+- Effect, cost and touches join from `uses`. Subject and cardinality do not join: `contract()` takes an optional `subject` (default `"Document"`), and cardinality is `"One"`. The freeze took the first use's subject, which called `open.documents` and `chat.context` Document reads; the nine reads that take no model say `subject: "None"`.
+- `uses` names every catalog Read the body reaches, through its host-only recipes too, and a `ReadHandle` where the body reads another contract. The 13 host-only recipes have no contract (cut), so `ducts.pricing` and `fans.sheet` name the natives under `fans.roster` and `fans.esp-options`.
+- `usesOf(handle)` returns the keys a contract uses. It is a side table: `ReadHandle` gained no field.
+- A `keyedBy` path that is not an array or a record in `data` throws when the contract is minted. Keyed today: `fans.sheet` (`rows`, `fans.rows`), `ducts.roster` (`rows`), `ducts.network` (`nodes`, `segments`, `groups`, `systems`), `rooms.workspace` (`snapshot.regions`), `families.view` (`pivotFamilies`). `pods.roster` is unkeyed: its `pods` schema is a decoded Effect schema the check cannot see into.
+
+**The 15 `contract.ts` files** (19 reads) are `W/<route>/contract.ts` for captures, chat, duct-loss, ducts, families, family, fans, open, ops, pages-bind, pods, rooms, schedules, settings and takeoff. Each export is named as the route's `reads` key. `H/tests/read-contract.test.ts` holds each one equal to the schemas the host registers under that key, so the sweep is a move, not a rewrite. Keys are the host's: `ducts.roster`, not `ducts.roster.value`.
+
+**Host registration.** `body(handle, run)` keeps its handle on the `Read` (`contract`). `readRegistry` and `register` throw `Host read <name> uses '<key>', which has no body on this host` when a used key has neither a `body()` nor a native body. Bodies register when their module loads, so the order of routes does not matter.
+
+**Read lifetime.** `Publications` holds a flight per shared evaluation and one lease per subscriber. `release`, a superseding publish and an invalidated pending basis each release the slot's lease; the last release aborts the read's own signal. A retiring flight refuses a join, and the next subscriber starts its own read. The signal is the fourth argument of `InputPort.take` and the last of `ReadSources.call`; nothing reads it there yet (PI-P2's consumer edit, in k2/read-sweep). `Publications` takes an `StartFlight` as its third constructor argument: pass `(run) => ownership.flight(owner, run)` to bind flights to a `ReadOwner`. The default is `startFlight` from `H/reads/read-ownership.ts`: the lease count and the read's signal with no causal owner. `ReadOwnership.flight` is built on the same function.
+
+**Firm settings file.** `readSettingsFile(path)` in `H/tiered-settings.ts` is the one reader of a `Settings/<owner>.json` file. `DuctFiles.firm` reads through it. A firm file that is JSON but not an object is now an error (`The file is not a JSON object`) instead of a schema refusal, and a byte-order mark no longer fails the parse.
 
 **Handle and read context.** The TypeScript in section 1. Writers A, C, D, G.
 

@@ -94,7 +94,7 @@
       "kind": "command",
       "input": "none",
       "label": "Run read",
-      "effect": "Read",
+      "effect": "SessionWrite",
       "review": "none",
       "deps": {
         "page": [

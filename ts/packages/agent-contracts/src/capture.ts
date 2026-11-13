@@ -4,8 +4,13 @@
  * one receipt. Host, web and the `capture_view` tool read this file, so they cannot disagree.
  */
 import { z } from "zod";
+import type { OpResponseOf } from "@pe/host-contracts/operation-types";
 
 export const VIEW_IMAGE_KEY = "revit.context.view-image";
+export const FOCUSED_VIEW_IMAGE_KEY = "revit.context.view-image.focus";
+export type ViewImageKey = typeof VIEW_IMAGE_KEY | typeof FOCUSED_VIEW_IMAGE_KEY;
+/** C# owns the disclosed lens and category counts; consumers use the generated response. */
+export type CaptureDisclosure = Pick<OpResponseOf<typeof VIEW_IMAGE_KEY>, "lens" | "hidden">;
 
 const shaSchema = z.string().regex(/^[0-9a-f]{64}$/);
 

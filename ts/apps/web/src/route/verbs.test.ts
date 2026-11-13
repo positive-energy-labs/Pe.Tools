@@ -75,7 +75,7 @@ test("the wire says who draws each verb, its effect, and whether it is reviewed"
   expect(schedules.data.verbs.read).toMatchObject({ entry: "schedule.grid.read", review: "none" });
   // `/ops`: a receipt control carries its own effect, never a Read's.
   expect(ops.data.verbs["action.cancel"]).toMatchObject({ entry: "action.cancel", effect: "SessionWrite", review: "none" });
-  expect(ops.data.verbs.run).toMatchObject({ entry: "ops.read", effect: "Read" });
+  expect(ops.data.verbs.run).toMatchObject({ entry: "ops.read", effect: handle("ops.read").effect });
   // No command schema rides a route module: a verb's entry is its axes and nothing it could parse with.
   expect(schedules.entries["schedule.grid.push"]!.input.safeParse({ anything: 1 }).success).toBe(true);
 });

@@ -1,5 +1,5 @@
 import { callPolicies, type CallPolicy } from "./call-policy.ts";
-import { commandCatalogAxes } from "./command-axes.ts";
+import { commandCatalogAxes, commandTable, type CommandKey } from "./command-axes.ts";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import { tsOnlyOperationCatalog } from "@pe/host-contracts/operation-types";
 import type { HostOperationDefinition } from "@pe/host-contracts/contracts";
@@ -8,6 +8,7 @@ import type { Command } from "./command.ts";
 import { capabilityPrincipals } from "./capability.ts";
 import {
   commandLink,
+  nativeAxes,
   link,
   requireLinkedCatalog,
   type CatalogLink,
@@ -149,13 +150,7 @@ export function nativeEntry(op: HostOperationDefinition): CatalogRow {
   return {
     key: op.key,
     call: callPolicies[op.key],
-    subject: op.subject as CatalogRow["subject"],
-    touches: op.touches.split(", ") as CatalogRow["touches"],
-    effect: op.effect as CatalogRow["effect"],
-    cost: op.costTier,
-    cardinality: op.cardinality as CatalogRow["cardinality"],
-    internal: op.internal,
-    rollsBack: op.rollsBack,
+    ...nativeAxes(op),
     // A native write leaf with a `<key>.plan` (Read) or `<key>.preview` (rehearsal) sibling is bound to it,
     // so the linker checks its axis (ADR 0030 rule 4).
     ...[`${op.key}.plan`, `${op.key}.preview`]
@@ -256,13 +251,17 @@ function hostRouteAxes(leaves: readonly CatalogLink[]): Record<PeRouteId, Catalo
   ];
   // The registry resolves both semantic commands and raw gateway operations.
   const commands = leaves.map((row) => row.key);
-  const declarations = {
+  const doorOnly = {
+    "family.readings": routedCommandAxes("family.readings"),
+    "schedules.readings": routedCommandAxes("schedules.readings"),
     "families.readings": axes("None", "One", ["Metadata"], "Read", "Cheap", []),
     "takeoffs.observations": axes("None", "One", ["Metadata"], "Read", "Cheap", []),
     "captures.list": axes("None", "One", ["Metadata"], "Read", "Cheap", []),
     "ducts.catalogs": axes("None", "One", ["Metadata"], "Read", "Cheap", []),
     "notices.presence": axes("Session", "One", ["Metadata"], "SessionWrite", "Cheap", []),
     "features.get": axes("None", "One", ["Metadata"], "Read", "Cheap", []),
+    "places.get": axes("None", "One", ["Metadata"], "Read", "Cheap", []),
+    "places.put": axes("None", "One", ["Metadata"], "SessionWrite", "Cheap", []),
     "machine.bootstrap": axes("Session", "One", ["Metadata"], "SessionWrite", "Mutation", []),
     // /call refuses raw mutations except the human-only RHVAC launcher. Reads can retain
     // captures and execute scripts, including transactional previews; budget conservatively.
@@ -283,18 +282,6 @@ function hostRouteAxes(leaves: readonly CatalogLink[]): Record<PeRouteId, Catalo
       commands,
     ),
     "actions.read": axes("Session", "One", ["Metadata"], "Read", "Bounded", []),
-    "action.cancel": axes("Session", "One", ["Metadata"], "SessionWrite", "Mutation", [
-      "op.cancel",
-    ]),
-    "action.recover": axes("Session", "One", ["Metadata"], "SessionWrite", "Bounded", []),
-    "action.resume": axes(
-      "Session",
-      "One",
-      ["Metadata", "Topology", "Geometry"],
-      "ModelWrite",
-      "Mutation",
-      commands,
-    ),
     "providers.list": axes("None", "One", ["Metadata"], "Read", "Cheap", []),
     "providers.add": axes("None", "One", ["Metadata"], "SessionWrite", "Mutation", []),
     "provider.get": axes("None", "One", ["Metadata"], "Read", "Cheap", []),
@@ -477,8 +464,12 @@ function hostRouteAxes(leaves: readonly CatalogLink[]): Record<PeRouteId, Catalo
     "page.events": axes("None", "One", ["Metadata"], "Read", "Bounded", []),
     "page.snapshot": axes("None", "One", ["Metadata"], "SessionWrite", "Bounded", []),
     "page.text": axes("None", "One", ["Metadata"], "SessionWrite", "Bounded", []),
-    "page.bind": axes("Session", "One", ["Metadata"], "SessionWrite", "Bounded", []),
-  } satisfies Record<PeRouteId, Declaration>;
+  } satisfies Record<Exclude<PeRouteId, CommandKey>, Declaration>;
+  const declarations: Partial<Record<PeRouteId, Declaration>> = { ...doorOnly };
+  for (const [key, row] of Object.entries(commandTable))
+    if (api.isPeRouteId(key)) declarations[key] = { ...row.axes, uses: [] };
+  for (const key of Object.keys(httpRoutes))
+    if (!Object.hasOwn(declarations, key)) throw Error(`HTTP door ${key} has no policy`);
   const entries = new Map(leaves.map((row) => [row.key, row]));
   for (const [id, declaration] of Object.entries(declarations))
     entries.set(`route:${id}`, { key: `route:${id}`, ...declaration });
@@ -503,4 +494,24 @@ function hostRouteAxes(leaves: readonly CatalogLink[]): Record<PeRouteId, Catalo
       return [id, { ...row, touches: touches(row) }];
     }),
   ) as Record<PeRouteId, CatalogLink>;
+}
+
+/** A multiplexed read door's budget is the union of its declared commands, not another policy. */
+function routedCommandAxes(route: PeRouteId): Declaration {
+  const rows = Object.entries(commandTable).filter(([, row]) => row.via !== "command" && row.via.route === route);
+  if (!rows.length) throw Error(`No commands declare route ${route}`);
+  const axes = rows.map(([, row]) => row.axes);
+  const subjects = [...new Set(axes.map((row) => row.subject))];
+  const effects = ["Read", "TransactRead", "SessionWrite", "WorkWrite", "ModelWrite"];
+  const costs = ["Cheap", "Bounded", "Expensive", "Mutation"];
+  const effect = axes.map((row) => row.effect).reduce((a, b) => effects.indexOf(a) >= effects.indexOf(b) ? a : b);
+  return {
+    subject: subjects.length === 1 ? subjects[0]! : "Session",
+    touches: [...new Set(axes.flatMap((row) => row.touches))],
+    effect,
+    cost: axes.map((row) => row.cost).reduce((a, b) => costs.indexOf(a) >= costs.indexOf(b) ? a : b),
+    cardinality: "One",
+    ...(effect === "TransactRead" ? { rollsBack: true } : {}),
+    uses: rows.map(([key]) => `command:${key}`),
+  };
 }

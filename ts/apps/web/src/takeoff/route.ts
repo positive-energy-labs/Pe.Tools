@@ -95,10 +95,14 @@ export const module = route({
           throw Error("Prepare Initialize from the current reading");
         return {};
       },
-      present: () => ({
-        sentence: "Write the shared parameters the current document is missing.",
-        rows: [],
-      }),
+      present: (_preview, { value: data }) => {
+        const missing = data.initialize.missingCarrierGuids;
+        if (!missing.length) throw Error("Read the missing shared parameters before initializing");
+        return {
+          sentence: `${data.initialize.request.stage}: bind ${missing.length} missing shared parameters.`,
+          rows: missing.map((guid) => `Bind shared parameter ${guid}`),
+        };
+      },
     },
     adopt: {
       handle: handle("takeoffs.adopt"),

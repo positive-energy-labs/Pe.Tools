@@ -25,6 +25,8 @@ test("handle() mints a pe-api route key and a raw native key, and the door reads
   const raw = handle("ducts.apply");
   expect(raw).toMatchObject({ key: "ducts.apply", effect: "ModelWrite", via: "command" });
   expectTypeOf<InputOf<typeof raw>>().toEqualTypeOf<OpRequestOf<"ducts.apply">>();
+  const local = handle("host.shell.open");
+  expectTypeOf<InputOf<typeof local>>().toEqualTypeOf<OpRequestOf<"host.shell.open">>();
 });
 
 test("handle() refuses a key in neither table", () => {

@@ -1,4 +1,5 @@
 export * from "./api-schemas.ts";
+export * from "./spatial-evidence.ts";
 export * from "./route-module.ts";
 // Attention projects admitted codecs (ADR 0030 rule 10); the shell takes them through the barrel.
 export type { RouteBindings } from "./route-bodies.ts";
@@ -48,6 +49,7 @@ export * from "./work-timeline.ts";
 
 export * from "./bind-read.ts";
 export * from "./captures-read.ts";
+export type { CaptureDisclosure } from "./capture.ts";
 export * from "./chat-read.ts";
 export * from "./duct-loss-read.ts";
 export * from "./ducts-read.ts";
@@ -71,3 +73,4 @@ export * from "./subject-ref.ts";
 export * from "./notice-feed.ts";
 
 export type { ParamSpec } from "./family-param-spec.ts";
+export * from "./places.ts";

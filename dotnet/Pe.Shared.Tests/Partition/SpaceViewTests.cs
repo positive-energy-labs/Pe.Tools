@@ -80,8 +80,8 @@ public sealed class SpaceViewTests {
             Assert.That(filter.Wants(solid, "doc", host), Is.False);
             Assert.That(filter.Wants(curve with { UniqueId = "other" }, "doc", host), Is.True);
             Assert.That(filter.Wants(curve with { ElementId = 10 }, "doc", host), Is.False);
-            Assert.That(filter.Wants(curve with { ElementId = 10 }, "linked", new("doc", "link-a")), Is.True);
-            Assert.That(filter.Wants(curve with { ElementId = 10 }, "linked", new("doc", "link-b")), Is.True);
+            Assert.That(filter.Wants(curve with { ElementId = 10 }, "linked", host), Is.True);
+            Assert.That(filter.Wants(curve with { ElementId = 10 }, "doc", new("doc", "link-a")), Is.True);
         });
     }
 

@@ -27,6 +27,7 @@ const catalogClient: CatalogWorkClient = {
   },
   submit: async (admission) => {
     const result = await browserWorkPorts.submit(admission);
+    if (result.state === "answered") throw Error("A Work review requires a journaled command");
     if (result.state === "detached") throw Error("Write transport detached; inspect History before retrying");
     return result;
   },

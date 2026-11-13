@@ -465,7 +465,11 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
       // A refusal that is a validator's issue list reads as one sentence, as a Value does (`valueRefusal`);
       // the list (a whole regex, for a format) is diagnostics' and never the person's.
       const raw = error instanceof Error ? error.message : String(error);
-      const said = readableRefusal(error, `${verb.label} was refused: its input does not match the command. The detail is in the log.`);
+      // The door carries a refusal as its sentence, so a validator's issue list arrives as that text.
+      let issues: unknown = error instanceof z.ZodError ? error.issues : null;
+      if (!issues) try { issues = JSON.parse(raw); } catch { /* A domain sentence. */ }
+      const at = z.array(z.object({ path: z.array(z.union([z.string(), z.number()])) })).safeParse(issues).data?.[0]?.path.join(".");
+      const said = readableRefusal(error, `${verb.label} does not match its contract${at ? ` at ${at}` : ""}. The detail is in the log.`);
       problems.set(id, said);
       if (said === raw) throw error;
       reportFault({ code: "action.failed", routeCode: spec.key, readingKind: key }, error);

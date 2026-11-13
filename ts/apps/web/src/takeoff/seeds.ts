@@ -7,9 +7,12 @@ import {
   type TakeoffsRouteDocument,
   type Seed,
 } from "@pe/agent-contracts";
-import type { TakeoffPage, TakeoffReadingKey } from "./actions";
 import { projectMockModel } from "./proto/project-model";
 import { mockModel } from "./proto/mock";
+
+/** The page fields a takeoff seed sets, and the readings it can supply. */
+type TakeoffPage = { views: string[]; zones: string[]; stage: "adopt" | "audit" | "sync"; r10: string };
+type TakeoffReadingKey = "snapshot" | "rhvacVersion" | "inventory" | "receipts";
 
 const FIXTURE_AT = address("C:\\Fixtures\\project-a Residence.rvt");
 const DEMO_TARGET = { kind: "document", ref: { session: "demo", openId: "demo" } } as const;
@@ -75,7 +78,7 @@ const allZones = model.zones.map((zone) => zone.zone.guid);
 const seed = (
   title: string,
   page: Partial<TakeoffPage>,
-  readings: Partial<Record<TakeoffReadingKey, unknown>>,
+  readings: Partial<Record<TakeoffReadingKey, unknown>> & { snapshot?: TakeoffSnapshot },
   failure?: { action: string; message: string },
 ): Seed<TakeoffsRouteDocument, TakeoffReadingKey, TakeoffPage> => ({
   title,
@@ -91,7 +94,7 @@ const seed = (
             target: DEMO_TARGET.ref,
             capture: {
               id: "0".repeat(64),
-              capturedAt: (readings.snapshot as TakeoffSnapshot).reading.observedAt,
+              capturedAt: readings.snapshot.reading.observedAt,
               provenance: { kind: "live", target: DEMO_TARGET.ref },
               snapshot: readings.snapshot,
             },

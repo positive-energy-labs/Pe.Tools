@@ -4,8 +4,29 @@ import { expect, test } from "vite-plus/test";
 import { commands } from "@pe/agent-contracts";
 import { adoptionData } from "@pe/agent-contracts/takeoff-read";
 import { gate, ref } from "../../../host/tests/host-read-graph.test-support";
+import { planned } from "../shell/typed-mount";
 import { loaded } from "./route";
 import { journey, Drawing } from "./adoption.test.fixture";
+
+test("Initialize plan names the host reading's missing shared parameters before writing", async () => {
+  const j = await journey();
+  try {
+    await j.ready();
+    const owner = j.mount.owner();
+    if (!owner?.handle) throw Error("Expected initialized Takeoffs Work");
+    await j.host.workspace.publish(j.key, "takeoffs", [{
+      path: ["writeIntent", "takeoffs.initialize"],
+      value: { edit: { value: { stage: "Adoption" } } },
+    }], owner.handle.revision);
+    await j.ready();
+    await planned(j.mount.verb("initialize")).plan();
+    const review = planned(j.mount.verb("initialize")).read();
+    expect(review?.rows).toHaveLength(2);
+    expect(review?.rows.join(" ")).toContain("00000000-0000-4000-8000-000000000001");
+    expect(review?.rows.join(" ")).toContain("00000000-0000-4000-8000-000000000002");
+    expect(j.actions.map((row) => row.key)).not.toContain("takeoffs.initialize");
+  } finally { await j.close(); }
+});
 
 test("view choices stay pending for a slow native catalogue, arrive before capture, retain named failures and only then report a completed empty catalogue", async () => {
   const catalogue = gate(), snapshot = gate();

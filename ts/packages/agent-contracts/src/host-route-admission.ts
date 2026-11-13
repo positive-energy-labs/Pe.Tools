@@ -34,6 +34,8 @@ export interface HostRouteModule extends Omit<HostWorkRegistration, "spec"> {
   readonly reads?: Readonly<Record<string, {
     readonly name:string; readonly input:z.ZodType; readonly output:z.ZodType;
     readonly run:(context:any,args:any)=>unknown;
+    /** The handle a `body()` serves; registration joins its `uses`. */
+    readonly contract?: import("./handle.ts").ReadHandle<string, any, any>;
   }>>;
   readonly leaves?: Readonly<Record<string,(args:unknown,services:HostLeafServices)=>Promise<unknown>>>;
 
@@ -61,7 +63,6 @@ const workStateFields = {
   finds: hostZ.array(hostZ.string()).optional(),
   schema: hostZ.custom<z.ZodType>((v) => v instanceof hostZ.ZodType),
   schemaVersion: hostZ.number().int().positive().optional(),
-  upgrade: hostZ.custom<RouteStateSpec<z.ZodType>["upgrade"]>((v) => typeof v === "function").optional(),
   editable: hostZ.array(hostZ.array(hostZ.union([hostZ.string(), hostZ.number()]))).optional(),
   reconcileEdit: hostZ
     .custom<RouteStateSpec<z.ZodType>["reconcileEdit"]>((v) => typeof v === "function")
