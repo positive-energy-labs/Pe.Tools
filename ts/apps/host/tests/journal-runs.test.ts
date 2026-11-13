@@ -1,5 +1,7 @@
+import { stateFixture } from "../../../tests/isolated-home/storage.ts";
+import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { detachedBridge, settle, testRegistry, journalAt } from "./effect-test.ts";
-import { mkdtemp, mkdir, writeFile, rm, readFile } from "node:fs/promises";
+import { mkdir, writeFile, rm, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vite-plus/test";
@@ -29,7 +31,7 @@ async function files() {
   runs.open(run);
   bindControl({ runs, acquired: () => null });
   const bridge = detachedBridge();
-  const captures = new TakeoffCaptures(join(dir, "captures"), join(dir, "aps.json"), () =>
+  const captures = new TakeoffCaptures(stateFixture(join(dir, "captures")), join(dir, "aps.json"), () =>
     new Date().toISOString(),
   );
   const path = join(dir, "journal.jsonl");

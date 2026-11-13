@@ -1,4 +1,6 @@
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync, renameSync, rmSync } from "node:fs";
+import { stateFixture } from "../../../tests/isolated-home/storage.ts";
+import { mkdtempSync } from "../../../tests/isolated-home/storage.ts";
+import { mkdirSync, readdirSync, readFileSync, writeFileSync, renameSync, rmSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -75,7 +77,7 @@ test("a firm PostHog key exports receipts yet never lands in a receipt file or a
   });
   const stamp = receiptGoldenEnvelope.stamp!;
   const exporter = createReceiptExport({
-    journal: journalAt(join(dir, "journal.json"), Date.now), root: dir, client,
+    journal: journalAt(join(dir, "journal.json"), Date.now), root: stateFixture(dir), client,
     stamps: { host: { ...stamp, component: "host" }, web: null },
   });
   try {

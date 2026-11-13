@@ -1,3 +1,5 @@
+import { stateFixture } from "../../../tests/isolated-home/storage.ts";
+import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { serviceHeaders, contextHeaders } from "./callers.ts";
 import { fixtureNative } from "./fixture-native.ts";
 import { RouteWorkspace } from "@pe/runtime";
@@ -5,7 +7,7 @@ import { address, bindWork, tools } from "@pe/agent-contracts";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
 import { testHostInputs, callRouteOver } from "./effect-test.ts";
 import { Layer } from "effect";
-import { mkdtemp, rm } from "node:fs/promises";
+import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, test } from "vite-plus/test";
@@ -21,7 +23,7 @@ beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), "pe-refusal-doors-"));
   native = await fixtureNative(join(root, "native"));
   journal = native.journal;
-  const workspace = new RouteWorkspace({ registrations: [{ spec: tools.takeoffs.work }], store: fileRouteDocumentStore(join(root, "work")) });
+  const workspace = new RouteWorkspace({ registrations: [{ spec: tools.takeoffs.work }], store: fileRouteDocumentStore(stateFixture(join(root, "work"))) });
   server = await serveRoutes(callRouteOver(journal, undefined, { workspace }).pipe(Layer.provide(testHostInputs)), native.bridge);
   const response = await post("/actions", { id: "human-action", key: "work.start", target: { kind: "host" },
     input: { key: bindWork("takeoffs", address("C:/Models/guard.rvt")), seed: tools.takeoffs.work.schema.parse({}) } },

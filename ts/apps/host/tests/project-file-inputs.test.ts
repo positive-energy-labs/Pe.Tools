@@ -1,3 +1,4 @@
+import { stateFixture } from "../../../tests/isolated-home/storage.ts";
 import { afterEach, expect, test } from "vite-plus/test";
 import { Context, Effect, Layer } from "effect";
 import { HttpRouter } from "effect/http";
@@ -33,7 +34,7 @@ test("file inputs retain the target pointer for project Catalogs and family spec
     run: (ctx, args) => ctx.read(leaf(`file:${args.name}`, z.unknown(), z.unknown()), args.args) });
   const unregister = registeredReads.register({ witness: definition }); closes.push(async () => unregister());
   const inputs = await settle(HostInputContext.pipe(Effect.provide(HostInputContext.layer({ kind: "live" }))));
-  const web = HttpRouter.toWebHandler(readInputRoutes(inputs, { store: fileRouteDocumentStore(join(f.dir, "file-work")), live: {
+  const web = HttpRouter.toWebHandler(readInputRoutes(inputs, { store: fileRouteDocumentStore(stateFixture(join(f.dir, "file-work"))), live: {
     owner: new DuctsReadings(), files: DuctFiles.layer(),
     native: Layer.succeed(HostNativeRead, { resolve: () => Effect.die("Unexpected native read"), read: () => Effect.die("Unexpected native read") }),
     marks: Layer.succeed(HostDocumentMarks, hostMarks({ changedAt: () => null, subscribe: () => () => {} })),

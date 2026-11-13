@@ -1,4 +1,6 @@
 import { createHash } from "node:crypto";
+import { notices as storedNotices } from "@pe/host-contracts/kinds";
+import { stateDirectory, stateTree } from "@pe/host-contracts/service-identity";
 import path from "node:path";
 import { captureDirectory } from "../../../apps/host/src/packages.ts";
 import { access, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
@@ -8,7 +10,6 @@ import { afterEach, expect, test, vi } from "vite-plus/test";
 import {
   bundledPeaSkills,
   publishPeaSkills,
-  resolvePeaSkillPaths,
   retiredPeaSkillNames,
 } from "../src/pea/skills.ts";
 import { buildCapabilities } from "../src/pea/capabilities.ts";
@@ -25,19 +26,21 @@ afterEach(() => {
 async function world(prefix: string) {
   const root = await mkdtemp(join(tmpdir(), prefix));
   const home = join(root, "home");
-  const agent = join(root, "agent");
+  const storage = stateTree(root).directory("Agent");
+  const agent = storage.path;
   return {
     root,
     home,
     agent,
-    options: { productHomePath: home, agentPath: agent, captureDirectory },
+    projections: [stateDirectory(storage, ".agents", "skills").path, stateDirectory(storage, ".claude", "skills").path],
+    options: { productHomePath: home, agent: storage, captureDirectory },
   };
 }
 
 test("one admitted user revision reaches both harnesses, discovery and reads after its source changes", async () => {
   fakeRuntimeHost("http://127.0.0.1:9");
   vi.stubEnv("PE_CONTEXT", "");
-  const { root: temp, home, agent, options } = await world("pe-skill-cut-");
+  const { root: temp, home, options, projections } = await world("pe-skill-cut-");
   try {
     await mkdir(join(home, "Skills", "office"), { recursive: true });
     const content = "---\nname: office\ndescription: Office rules.\n---\n\nExact bytes.\r\n";
@@ -46,7 +49,7 @@ test("one admitted user revision reaches both harnesses, discovery and reads aft
     const snapshot = await publishPeaSkills(options);
     const skill = snapshot.skills.find((s) => s.key === "skill:@skills/skills/office")!;
     expect(skill.content).toBe(content);
-    for (const root of resolvePeaSkillPaths(agent)) {
+    for (const root of projections) {
       expect(await readFile(join(root, "office", "SKILL.md"), "utf8")).toBe(content);
       expect(await readFile(join(root, "office", "support.txt"), "utf8")).toBe("support\r\n");
     }
@@ -100,9 +103,9 @@ test("one admitted user revision reaches both harnesses, discovery and reads aft
 });
 
 test("a harness root is never read back as a source: copies there publish nothing and write nothing into the home", async () => {
-  const { root: temp, home, agent, options } = await world("pe-skill-readback-");
+  const { root: temp, home, options, projections } = await world("pe-skill-readback-");
   try {
-    const roots = resolvePeaSkillPaths(agent);
+    const roots = projections;
     for (const [i, root] of roots.entries()) {
       await mkdir(join(root, "office"), { recursive: true });
       await writeFile(join(root, "office", "SKILL.md"), `copy ${i}`);
@@ -121,16 +124,23 @@ test("a harness root is never read back as a source: copies there publish nothin
 });
 
 test("a corrupt projection receipt cannot turn skill retirement into a path escape", async () => {
-  const { root: temp, agent, options } = await world("pe-skill-receipt-");
+  const { root: temp, agent, options, projections } = await world("pe-skill-receipt-");
   try {
-    const root = resolvePeaSkillPaths(agent)[0]!;
+    const root = projections[0]!;
     await mkdir(root, { recursive: true });
     await writeFile(
       join(root, ".pe-projection.json"),
       JSON.stringify({ "../../outside": "a".repeat(64) }),
     );
     await writeFile(join(agent, "outside"), "keep");
-    await expect(publishPeaSkills(options)).rejects.toThrow();
+    await publishPeaSkills(options);
+    const prior =
+      JSON.stringify({ "../../outside": "a".repeat(64) });
+    const sha = createHash("sha256").update(prior).digest("hex");
+    expect(storedNotices(options.agent.machine)).toMatchObject([
+      { class: "discard", path: join(root, ".pe-projection.json"), sha256: sha },
+    ]);
+    expect(await readFile(join(options.agent.machine.blobs, "sha256", sha), "utf8")).toBe(prior);
     expect(await readFile(join(agent, "outside"), "utf8")).toBe("keep");
   } finally {
     await rm(temp, { recursive: true, force: true });
@@ -138,9 +148,9 @@ test("a corrupt projection receipt cannot turn skill retirement into a path esca
 });
 
 test("a same-named skill folder without a receipt is overwritten by the product's skill", async () => {
-  const { root: temp, agent, options } = await world("pe-skill-shipped-");
+  const { root: temp, options, projections } = await world("pe-skill-shipped-");
   try {
-    const roots = resolvePeaSkillPaths(agent);
+    const roots = projections;
     for (const [i, root] of roots.entries()) {
       await mkdir(join(root, "build-pod"), { recursive: true });
       await writeFile(join(root, "build-pod", "SKILL.md"), `older projection ${i}`);
@@ -161,9 +171,9 @@ test("a same-named skill folder without a receipt is overwritten by the product'
 });
 
 test("materialization deletes a retired skill folder only when the product receipt proves its bytes", async () => {
-  const { root: temp, agent, options } = await world("pe-skill-retirement-");
+  const { root: temp, options, projections } = await world("pe-skill-retirement-");
   try {
-    const [codexRoot, claudeRoot] = resolvePeaSkillPaths(agent);
+    const [codexRoot, claudeRoot] = projections;
     const retiredName = retiredPeaSkillNames[0]!;
     const userOwned = path.join(codexRoot!, "my-office-standards", "SKILL.md");
     const receipted = path.join(codexRoot!, retiredName, "SKILL.md");
@@ -186,7 +196,7 @@ test("materialization deletes a retired skill folder only when the product recei
 
     // A folder a person or an agent left in a harness root stays where it is and is no source.
     expect(materialized.skills.map((skill) => skill.name)).not.toContain("my-office-standards");
-    for (const root of resolvePeaSkillPaths(agent))
+    for (const root of projections)
       for (const skill of bundledPeaSkills)
         expect(await readFile(path.join(root, skill.name, "SKILL.md"), "utf8")).toBe(
           `${skill.content.trimEnd()}\n`,

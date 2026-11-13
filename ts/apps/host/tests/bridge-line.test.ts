@@ -1,3 +1,4 @@
+import { mkdtemp, stateFixture } from "../../../tests/isolated-home/storage.ts";
 import { DispatchLimits } from "@pe/host-internal/dispatch";
 import { bindActionDispatch } from "../src/action-dispatch.ts";
 import { Cause, Context, Effect, Exit, Fiber, Layer, Queue, Scope } from "effect";
@@ -9,7 +10,7 @@ import { connectTestBridge } from "./bridge-fixture.ts";
 import { ActionJournalService } from "../src/receipt-services.ts";
 import type { ActionJournal } from "../src/action-journal.ts";
 import { effectTest, journalAt } from "./effect-test.ts";
-import { mkdtemp, rm } from "node:fs/promises";
+import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { actionReceiptSchema } from "@pe/agent-contracts";
@@ -420,7 +421,7 @@ effectTest(`a dispatched bridge request preserves its evidence: ${mode}`, () =>
   Effect.gen(function* () {
     const directory = yield* Effect.promise(() => mkdtemp(join(tmpdir(), "pe-bridge-unknown-")));
     yield* Effect.addFinalizer(() => Effect.promise(() => rm(directory, { recursive: true, force: true })));
-    const services = yield* Layer.build(ActionJournalService.live(null, directory));
+    const services = yield* Layer.build(ActionJournalService.live(null, stateFixture(directory)));
     const journal = Context.get(services, ActionJournalService);
     const { bridge, bridgeScope, target, sent, frame, close, life, socketOf } = yield* harness.pipe(Effect.provideService(ActionJournalService, journal));
     yield* Effect.addFinalizer(() => Scope.close(bridgeScope, Exit.void));

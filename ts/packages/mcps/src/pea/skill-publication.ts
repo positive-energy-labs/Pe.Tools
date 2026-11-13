@@ -1,14 +1,19 @@
 import { createHash } from "node:crypto";
-import { lstat, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { writeAtomic } from "@pe/host-contracts/store";
+import {
+  read as readStoredFile,
+  writeState,
+  stateKind,
+  type StateDirectory,
+} from "@pe/host-contracts/kinds";
+import { stateDirectory } from "@pe/host-contracts/service-identity";
 import { contributionKey, type ContributionSource } from "@pe/agent-contracts";
 import { z } from "zod";
 import {
   bundledPeaSkills,
   retiredPeaSkillNames,
   resolvePeaProductHomePath,
-  resolvePeaSkillPaths,
   type PeaProductHomeOptions,
 } from "./skills.ts";
 
@@ -25,7 +30,7 @@ type SkillDirectoryCapture = (
 ) => Promise<{ members: SkillFile[]; diagnostics: { severity: string; message: string }[] }>;
 export type SkillPublicationOptions = PeaProductHomeOptions & {
   /** The agent's working directory: the projections land under it, never in a home. */
-  agentPath: string;
+  agent: StateDirectory;
   captureDirectory: SkillDirectoryCapture;
 };
 export type SkillPublication = { skills: SkillSnapshot[]; notices: string[] };
@@ -35,6 +40,12 @@ const projectionReceipt = z.record(
   z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*(?:--[a-z0-9]+(?:-[a-z0-9]+)*)?$/),
   z.string().regex(/^[a-f0-9]{64}$/),
 );
+
+const projectionReceiptKind = stateKind({
+  schema: projectionReceipt,
+  place: () => "Skill projection receipt",
+  segments: () => [receiptName],
+});
 
 export function skillSnapshot(packageId: string, name: string, files: SkillFile[]): SkillSnapshot {
   const entry = files.find((f) => f.path === "SKILL.md");
@@ -71,7 +82,10 @@ export async function publishPeaSkills(
     return admitted.members.map(({ path, bytes, sha256 }) => ({ path, bytes, sha256 }));
   };
   const home = resolvePeaProductHomePath(options);
-  const roots = resolvePeaSkillPaths(options.agentPath);
+  const roots = [
+    stateDirectory(options.agent, ".agents", "skills"),
+    stateDirectory(options.agent, ".claude", "skills"),
+  ];
   const bundled = builtins;
   const canonicalRoot = join(home, "Skills");
   const personal = new Map<string, SkillFile[]>();
@@ -80,28 +94,23 @@ export async function publishPeaSkills(
   const proven = roots.map(() => new Set<string>());
   for (const name of await directories(canonicalRoot))
     personal.set(name, await capture(join(canonicalRoot, name)));
-  const managed = await Promise.all(
-    roots.map(async (root) => {
-      try {
-        return projectionReceipt.parse(JSON.parse(await readFile(join(root, receiptName), "utf8")));
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === "ENOENT") return {};
-        throw error;
-      }
-    }),
-  );
+  const managed = roots.map((root) => {
+    const result = readStoredFile(projectionReceiptKind.in(root));
+    return result.kind === "ok" ? result.value : {};
+  });
   for (const [i, root] of roots.entries()) {
-    for (const name of await directories(root)) {
+    for (const name of await directories(root.path)) {
       const receipt = managed[i]![name];
-      if (receipt && receipt === signature(await capture(join(root, name)))) proven[i]!.add(name);
+      if (receipt && receipt === signature(await capture(join(root.path, name))))
+        proven[i]!.add(name);
       else if (retiredPeaSkillNames.includes(name))
         notices.push(
-          `Skill folder ${join(root, name)} carries a retired product name but no matching product receipt, so it was left untouched; delete it if it is not yours.`,
+          `Skill folder ${join(root.path, name)} carries a retired product name but no matching product receipt, so it was left untouched; delete it if it is not yours.`,
         );
       // ponytail: product skills overwrite same-named folders outright (kaitpw 2026-10-17); owed: user edits that survive product updates.
       else if (!receipt && !bundled.some((s) => s.name === name) && !personal.has(name))
         notices.push(
-          `Skill folder ${join(root, name)} is not a source, so only that harness sees it; move it to ${join(canonicalRoot, name)} to publish it.`,
+          `Skill folder ${join(root.path, name)} is not a source, so only that harness sees it; move it to ${join(canonicalRoot, name)} to publish it.`,
         );
     }
   }
@@ -121,16 +130,17 @@ export async function publishPeaSkills(
   }
   // Admission completes before any destination changes.
   for (const root of roots) {
-    await mkdir(root, { recursive: true });
+    await mkdir(root.path, { recursive: true });
     const receipt: Record<string, string> = {};
     for (const [name, skill] of destinations) {
-      await rm(join(root, name), { recursive: true, force: true });
-      await writeFiles(join(root, name), skill.files);
+      await rm(join(root.path, name), { recursive: true, force: true });
+      await writeFiles(stateDirectory(root, name), skill.files);
       receipt[name] = signature(skill.files);
     }
     for (const name of proven[roots.indexOf(root)]!)
-      if (!destinations.has(name)) await rm(join(root, name), { recursive: true, force: true });
-    await writeFile(join(root, receiptName), JSON.stringify(receipt));
+      if (!destinations.has(name))
+        await rm(join(root.path, name), { recursive: true, force: true });
+    writeState(projectionReceiptKind.in(root), JSON.stringify(receipt));
   }
   return { skills, notices };
 }
@@ -156,9 +166,11 @@ async function directories(root: string) {
     throw error;
   }
 }
-async function writeFiles(root: string, files: readonly SkillFile[]) {
-  for (const file of files) {
-    const path = join(root, file.path);
-    writeAtomic(path, file.bytes);
-  }
+const skillFileKind = stateKind({
+  schema: z.unknown(),
+  place: (_parts: readonly string[]) => "Skill projection",
+  segments: (parts: readonly string[]) => parts,
+});
+async function writeFiles(root: StateDirectory, files: readonly SkillFile[]) {
+  for (const file of files) writeState(skillFileKind.in(root, file.path.split("/")), file.bytes);
 }

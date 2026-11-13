@@ -1,3 +1,4 @@
+import { mkdtemp, stateFixture } from "../../../../tests/isolated-home/storage.ts";
 // @vitest-environment jsdom
 import { stableFanKey } from "../ducts/sheet/model";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
@@ -9,7 +10,7 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { StandaloneBand } from "./band.test-support";
 import { browserWorkPorts, createWorkFeedClient } from "./work-feed-client";
 import { createRootRoute, createRouter, createMemoryHistory, RouterProvider } from "@tanstack/react-router";
-import { mkdtemp, rm } from "node:fs/promises";
+import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import { openRecordingWriter, nativeCatalogIdentity } from "../../../host/src/native-recording";
 import { HostInputContext } from "../../../host/src/input-context";
@@ -105,7 +106,7 @@ export async function fansPlanJourney(journey: "watched publications" | "externa
  if(!testRoot) throw Error("Fans journeys require the isolated test home");
  const dir=await mkdtemp(join(testRoot,"pe-f05-bisect-"));
  const stamp=admittedReceiptStamps().host!;
- const captureStore=await Effect.runPromise(openRecordingWriter(dir,{build:JSON.stringify({version:stamp.version,build:stamp.build,commit:stamp.commit}),catalog:nativeCatalogIdentity()},{maxBytes:256*1024*1024,maxTakings:10000}));
+ const captureStore=await Effect.runPromise(openRecordingWriter(stateFixture(dir),{build:JSON.stringify({version:stamp.version,build:stamp.build,commit:stamp.commit}),catalog:nativeCatalogIdentity()},{maxBytes:256*1024*1024,maxTakings:10000}));
  const inputs=await Effect.runPromise(HostInputContext.pipe(Effect.provide(HostInputContext.layer({kind:"live",captureStore}))));
  const writer=inputs.lane.kind==="live"?inputs.lane.captureStore:undefined;
  if(writer){const stop=writer.capture.stop;vi.spyOn(writer.capture,"stop").mockImplementation((at,reason,source)=>{trace.stops.push({at,reason,stack:new Error().stack});return stop(at,reason,source);});}

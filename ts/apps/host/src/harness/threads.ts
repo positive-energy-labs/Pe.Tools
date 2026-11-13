@@ -175,7 +175,7 @@ export type HarnessThreadsOptions = {
   /** Current exact observations enrich remembered names; they never rebind a target. */
   observeDocument?: ObserveDocument;
   /** State directory holding one directory per thread. */
-  root: string;
+  root: import("@pe/host-contracts/kinds").StateDirectory;
   /** The harness child's cwd: the Pea world root. */
   worldRoot: string;
   /** The Pea MCP server the child launches, bound to its thread by the `PE_CONTEXT` token. */
@@ -462,17 +462,17 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
     for (const listener of summaryListeners) listener();
   };
   /** Heads of ids that are not harness threads: an MCP child or the web may name a thread first. */
-  const headsDir = join(options.root, ".heads");
+  const headsDir = join(options.root.path, ".heads");
   for (const { id, meta, events } of startup.loaded) {
     try {
       const before = JSON.stringify(meta.workContext);
       threads.set(id, fresh(meta, events));
       // Backfill only observed context. Work documents and native admission stay untouched.
       if (before !== JSON.stringify(meta.workContext))
-        writeJson(join(options.root, id, "meta.json"), redactKeys(meta, options.providers.keys()));
+        writeJson(join(options.root.path, id, "meta.json"), redactKeys(meta, options.providers.keys()));
     } catch (error) {
       startup.skipped.push(
-        `harness thread ${join(options.root, id)} skipped: it does not parse (${String(error)})`,
+        `harness thread ${join(options.root.path, id)} skipped: it does not parse (${String(error)})`,
       );
     }
   }
@@ -518,11 +518,11 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
   /** A new thread on disk, spawned now so the model and trait pickers fill before the first prompt. */
   function create(meta: Meta, events: HarnessEvent[] = []): Thread {
     const t = fresh(meta, events);
-    mkdirSync(join(options.root, meta.id), { recursive: true });
+    mkdirSync(join(options.root.path, meta.id), { recursive: true });
     writeMeta(t);
     // STORE-EXCEPTION: ADR 0039; retire this thread-event writer when T3 owns thread persistence.
     writeFileSync(
-      join(options.root, meta.id, "events.jsonl"),
+      join(options.root.path, meta.id, "events.jsonl"),
       events.map((e) => `${JSON.stringify(e)}\n`).join(""),
     );
     threads.set(meta.id, t);
@@ -569,7 +569,7 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
 
   // meta.json is a door too: a harness's session title can echo a key, so it takes the one redaction set.
   const writeMeta = (t: Thread) =>
-    writeJson(join(options.root, t.meta.id, "meta.json"), redactKeys(t.meta, options.providers.keys()));
+    writeJson(join(options.root.path, t.meta.id, "meta.json"), redactKeys(t.meta, options.providers.keys()));
 
   function append(t: Thread, event: Append): HarnessEvent {
     const keys = options.providers.keys();
@@ -587,7 +587,7 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
       throw Error("Turn element event exceeds the byte bound");
     // STORE-EXCEPTION: ADR 0039; retire this event append when T3 owns thread persistence.
     appendFileSync(
-      join(options.root, t.meta.id, "events.jsonl"),
+      join(options.root.path, t.meta.id, "events.jsonl"),
       `${line}
 `,
     );
@@ -1541,7 +1541,7 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
         result = await live.conn.prompt({
           sessionId: live.sessionId,
           prompt: promptBlocks(
-            join(options.root, t.meta.id, "attachments", turnId),
+            join(options.root.path, t.meta.id, "attachments", turnId),
             refeed ? `${refeed}\n\n${text}` : text,
             attachments,
             mentions,
@@ -1981,7 +1981,7 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
       case "thread.remove":
         threads.delete(t.meta.id);
         await stop(t);
-        rmSync(join(options.root, t.meta.id), { recursive: true, force: true });
+        rmSync(join(options.root.path, t.meta.id), { recursive: true, force: true });
         options.log.forget(
           ({ event }) =>
             (event.kind === "thread" && event.thread === t.meta.id) ||
@@ -2476,7 +2476,7 @@ export const makeHarnessThreads = Effect.fn("HarnessThreads.make")(function* (
   options: HarnessThreadsOptions,
 ) {
   const loaded = yield* loadThreads(
-    options.root,
+    options.root.path,
     (harness) => options.providers.get(harness)?.name ?? harness,
   );
   const clock = yield* Clock.clockWith(Effect.succeed);

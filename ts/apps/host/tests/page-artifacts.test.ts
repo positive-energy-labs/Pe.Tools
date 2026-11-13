@@ -1,4 +1,6 @@
-import { mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
+import { artifactFixture } from "./storage.ts";
+import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
+import { mkdir, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test } from "vite-plus/test";
@@ -18,11 +20,11 @@ test("immutable concurrent writers keep exact consumed bytes and refuse a confli
   const root = await fixture(),
     path = join(root, "exports", "same.html");
   const bytes = Buffer.from("original");
-  const pending = writeArtifact(root, path, bytes);
+  const pending = writeArtifact(root, artifactFixture(path), bytes);
   bytes.fill(0);
-  await Promise.all([pending, writeArtifact(root, path, "original")]);
+  await Promise.all([pending, writeArtifact(root, artifactFixture(path), "original")]);
   expect(await readFile(path, "utf8")).toBe("original");
-  await expect(writeArtifact(root, path, "different")).rejects.toThrow("collision");
+  await expect(writeArtifact(root, artifactFixture(path), "different")).rejects.toThrow("collision");
   expect(await readdir(join(root, "exports"))).toEqual(["same.html"]);
 });
 
@@ -30,14 +32,14 @@ test("redirected export directories and existing artifact links cannot cross the
   const root = await fixture(),
     outside = await fixture();
   await symlink(outside, join(root, "exports"), "junction");
-  await expect(writeArtifact(root, join(root, "exports", "file.html"), "secret")).rejects.toThrow(
+  await expect(writeArtifact(root, artifactFixture(join(root, "exports", "file.html")), "secret")).rejects.toThrow(
     "outside",
   );
   expect(await readdir(outside)).toEqual([]);
   await writeFile(join(outside, "file.html"), "original");
   // Windows junctions require no symlink privilege and exercise the existing-path refusal.
   await symlink(outside, join(root, "file.html"), "junction");
-  await expect(writeArtifact(root, join(root, "file.html"), "original")).rejects.toThrow("outside");
+  await expect(writeArtifact(root, artifactFixture(join(root, "file.html")), "original")).rejects.toThrow("outside");
   expect(await readFile(join(outside, "file.html"), "utf8")).toBe("original");
 });
 
@@ -45,7 +47,9 @@ test("replacement retains adjacent state; publication validation stays strict wh
   const root = await fixture();
   await mkdir(join(root, "page", ".state"), { recursive: true });
   await writeFile(join(root, "page", ".state", "binding.json"), "retained");
-  await writeArtifact(root, join(root, "page", "index.html"), "exact authored bytes", true);
+  await writeArtifact(root,
+    artifactFixture(join(root, "page", "index.html")), "exact authored bytes",
+  );
   expect(await readFile(join(root, "page", "index.html"), "utf8")).toBe("exact authored bytes");
   expect(await readFile(join(root, "page", ".state", "binding.json"), "utf8")).toBe("retained");
   expect(() => validatePageHtml("<title>fragment</title>")).toThrow("HTML");

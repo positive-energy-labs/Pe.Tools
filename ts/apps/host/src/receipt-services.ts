@@ -1,20 +1,21 @@
-import { join } from "node:path";
+import { stateDirectory } from "@pe/host-contracts/service-identity";
+import type { StateDirectory, StoredFile } from "@pe/host-contracts/kinds";
 import { Clock, Context, Effect, FiberMap, Layer, Option } from "effect";
 import { NodeFileSystem, NodeHttpClient, NodePath } from "@effect/platform-node";
 import type { HttpClient } from "effect/http";
 import { receiptStampSchema, type ReceiptStamp } from "@pe/agent-contracts";
-import { ActionJournal, type AttemptHost, type FiberOwner } from "./action-journal.ts";
+import { ActionJournal, journalKind, type AttemptHost, type FiberOwner } from "./action-journal.ts";
 import { HostLog } from "./host-log.ts";
-import { hostStateDir } from "./host-ownership.ts";
+import { hostState, hostOwnership } from "./host-ownership.ts";
 
 /** The host's one HostLog, opened under the state directory with the runtime Clock. */
 export class HostLogService extends Context.Service<HostLogService, HostLog>()("pe/HostLog") {
-  static layer(dir: string = hostStateDir()) {
+  static layer(dir: StateDirectory = hostState().directory("host", hostOwnership.serviceName)) {
     return Layer.effect(
       HostLogService,
       Effect.gen(function* () {
         const clock = yield* Clock.clockWith(Effect.succeed);
-        return new HostLog(join(dir, "log"), () => clock.currentTimeMillisUnsafe());
+        return new HostLog(stateDirectory(dir, "log"), () => clock.currentTimeMillisUnsafe());
       }),
     );
   }
@@ -39,7 +40,7 @@ const fiberOwner = Effect.fnUntraced(function* () {
  * scope never interrupts an attempt.
  */
 export const makeActionJournal = Effect.fn("ActionJournal.make")(function* (
-  path: string,
+  path: StoredFile<unknown, "state">,
   now: () => number,
   stamp?: () => ReceiptStamp | null,
   retain?: number,
@@ -66,7 +67,7 @@ export class ActionJournalService extends Context.Service<ActionJournalService, 
    */
   static layer(
     stamp: ReceiptStamp | null,
-    dir: string = hostStateDir(),
+    dir: StateDirectory = hostState().directory("host", hostOwnership.serviceName),
     http: Layer.Layer<HttpClient.HttpClient> = NodeHttpClient.layerUndici,
   ) {
     return Layer.effect(
@@ -81,7 +82,7 @@ export class ActionJournalService extends Context.Service<ActionJournalService, 
         let stop = () => {};
         yield* Effect.addFinalizer(() => Effect.sync(() => stop()));
         const journal = yield* makeActionJournal(
-          join(dir, "partition-operations.json"),
+          journalKind.in(dir, "partition-operations.json"),
           () => clock.currentTimeMillisUnsafe(),
           () => admitted,
         );
@@ -92,7 +93,7 @@ export class ActionJournalService extends Context.Service<ActionJournalService, 
   }
   /** The same journal over an exact file, without the log: what tests and tools own directly. */
   static at(
-    path: string,
+    path: StoredFile<unknown, "state">,
     now: () => number,
     stamp: (() => ReceiptStamp | null) | undefined,
     retain: number | undefined,
@@ -105,7 +106,7 @@ export class ActionJournalService extends Context.Service<ActionJournalService, 
   /** The journal with its log: both services, for a runtime that owns them. */
   static live(
     stamp: ReceiptStamp | null,
-    dir: string = hostStateDir(),
+    dir: StateDirectory = hostState().directory("host", hostOwnership.serviceName),
     http?: Layer.Layer<HttpClient.HttpClient>,
   ) {
     return ActionJournalService.layer(stamp, dir, http).pipe(

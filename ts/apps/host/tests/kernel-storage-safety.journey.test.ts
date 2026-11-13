@@ -1,10 +1,12 @@
-import { copyFile, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { notices as storedNotices } from "@pe/host-contracts/kinds";
+import { stateMachine } from "../../../tests/isolated-home/storage.ts";
+import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
+import { copyFile, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test, vi } from "vite-plus/test";
 import { ADMISSION_RESEND_HEADER } from "@pe/agent-contracts";
-import { readStoredNotices, sha256Hex } from "@pe/host-contracts/store";
-import { storedBlobsPath, storedNoticesPath } from "../src/notice-feed.ts";
+import { sha256Hex } from "@pe/host-contracts/kinds";
 import { setup } from "./schedule-recorded-fixture.ts";
 import { fixtureNative } from "./fixture-native.ts";
 
@@ -52,10 +54,10 @@ test("E8 corrupt journal is discarded with one notice, and a real action then ru
       discarded: expect.any(String),
     });
     expect(
-      readStoredNotices(storedNoticesPath()).filter((notice) => notice.path === path),
+      storedNotices(stateMachine(dir)).filter((notice) => notice.path === path),
     ).toMatchObject([{ class: "discard", place: "Action journal", sha256: sha256Hex(corrupt) }]);
     // Nothing is lost: the discarded bytes rest in the blob store under the hash the notice names.
-    expect(await readFile(join(storedBlobsPath(), "sha256", sha256Hex(corrupt)))).toEqual(corrupt);
+    expect(await readFile(join(stateMachine(dir).blobs, "sha256", sha256Hex(corrupt)))).toEqual(corrupt);
   } finally {
     await cold.close();
     await rm(dir, { recursive: true, force: true });
@@ -110,7 +112,7 @@ test("E8 a re-sent admission that a discarded journal does not know is refused, 
       await cold.close();
       cold = undefined;
       // The notice is only the feed's row: losing the whole file changes nothing for the guard.
-      await rm(storedNoticesPath(), { force: true });
+      await rm(stateMachine(dir).notices, { force: true });
     }
     // The guard reads the discard, not the re-send: a journal that kept its history (here, one
     // that never existed) admits the same re-sent bytes, because it knows it never ran them.

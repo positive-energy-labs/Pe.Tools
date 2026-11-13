@@ -1,14 +1,17 @@
+import { hostState } from "../src/host-ownership.ts";
+import { stateFixture } from "../../../tests/isolated-home/storage.ts";
+import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { registryService, harnessThreads, testSpawner } from "./effect-test.ts";
 import { asCaller, human } from "./callers.ts";
 import { HostLog } from "../src/host-log.ts";
 import { emptyThreadLifecycle } from "@pe/agent-contracts";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import { createServer, type Server } from "node:http";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { createProviders } from "../src/harness/providers.ts";
-import { productProvidersPath } from "../src/product-paths.ts";
+
 import { hostOwnership } from "../src/host-ownership.ts";
 // Process journeys spawn real harness children, so machine load moves their time. Budget is 3x the
 // slowest solo run (10.8 s, 2026-11-04); the 15 s default stays for unit files (vite.config.ts:59).
@@ -67,9 +70,9 @@ test("the refusal logged and copied contains neither endpoint key nor URL query 
   vi.stubEnv("TEST_SECRET", "inherited-secret");
   const logged = vi.spyOn(console, "log").mockImplementation(() => {});
   try {
-    await mkdir(dirname(productProvidersPath()), { recursive: true });
+    await mkdir(dirname(hostState().providers), { recursive: true });
     await writeFile(
-      productProvidersPath(),
+      hostState().providers,
       JSON.stringify({
         providers: [{ ...add, id: "claude-synthetic", auth: { ...add.auth, baseUrl } }],
       }),
@@ -98,7 +101,7 @@ test.each([
 ])(
   "unreadable provider state stays intact and the host still lists subscriptions: %s",
   async (bytes) => {
-    const path = productProvidersPath();
+    const path = hostState().providers;
     await mkdir(dirname(path), { recursive: true });
     await writeFile(path, bytes);
     const providers = createProviders({ spawner: testSpawner(), probeOnStart: false });
@@ -220,7 +223,7 @@ test("old readiness remains inspectable without periodic paid inference, and a f
 });
 
 test("known keys still redact thread output after their provider file becomes unreadable", async () => {
-  const path = productProvidersPath();
+  const path = hostState().providers;
   await mkdir(dirname(path), { recursive: true });
   await writeFile(
     path,
@@ -267,7 +270,7 @@ test("two adds sharing an identity produce one saved key, and failed validation 
       providers.fetch(request("providers", "POST", input)),
     ]);
     expect(responses.map((response) => response.status).sort((a, b) => a - b)).toEqual([200, 409]);
-    expect(JSON.parse(await readFile(productProvidersPath(), "utf8")).providers).toHaveLength(1);
+    expect(JSON.parse(await readFile(hostState().providers, "utf8")).providers).toHaveLength(1);
     const record = providers.get("claude-synthetic")!;
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(Date.now() + 61_000);
@@ -318,9 +321,9 @@ async function sharedKeyProbe(userKey: string, sharedKeys: Record<string, string
   const providers = createProviders({ spawner: testSpawner(), probeOnStart: false });
   const logged = vi.spyOn(console, "log").mockImplementation(() => {});
   try {
-    await mkdir(dirname(productProvidersPath()), { recursive: true });
+    await mkdir(dirname(hostState().providers), { recursive: true });
     await writeFile(
-      productProvidersPath(),
+      hostState().providers,
       JSON.stringify({
         providers: [{ ...add, id: "claude-synthetic", auth: { ...add.auth, apiKey: userKey, baseUrl } }],
       }),
@@ -365,9 +368,9 @@ test("witness: a thread event and meta echoing a shared key are written redacted
   await writeFile(join(shared, "pe-home.json"), `{"tier":"firm"}`);
   await writeFile(join(shared, "keys.json"), JSON.stringify({ "anthropic.api-key": "shared-firm-key" }));
   vi.stubEnv("PE_TOOLS_SHARED_ROOT", shared);
-  await mkdir(dirname(productProvidersPath()), { recursive: true });
+  await mkdir(dirname(hostState().providers), { recursive: true });
   await writeFile(
-    productProvidersPath(),
+    hostState().providers,
     JSON.stringify({ providers: [{ ...add, id: "claude-synthetic", auth: { ...add.auth, apiKey: "" } }] }),
   );
   const providers = createProviders({ spawner: testSpawner(), probeOnStart: false });
@@ -384,7 +387,7 @@ test("witness: a thread event and meta echoing a shared key are written redacted
   );
   await writeFile(join(threadsRoot, "thread", "events.jsonl"), "");
   const threads = await harnessThreads({
-    root: threadsRoot, log: new HostLog(join(threadsRoot, ".log"), Date.now), worldRoot: threadsRoot,
+    root: stateFixture(threadsRoot), log: new HostLog(stateFixture(join(threadsRoot, ".log")), Date.now), worldRoot: threadsRoot,
     mcpServer: () => ({ name: "unused", command: "unused", args: [], env: [] }), providers,
     runs: registryService(),
   });

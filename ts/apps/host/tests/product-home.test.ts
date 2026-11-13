@@ -1,9 +1,10 @@
+import { hostState } from "../src/host-ownership.ts";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import { join, relative, isAbsolute, sep } from "node:path";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { Effect } from "effect";
-import { resolvePeaProductHomePath, resolvePeaSkillPaths } from "@pe/mcps";
+import { resolvePeaProductHomePath } from "@pe/mcps";
 import { productPathNames } from "@pe/host-contracts/contracts";
 import {
   checkoutRootFrom,
@@ -69,14 +70,12 @@ test("every production resolver output follows one locally selected product envi
 
 test("Work, Page state and the agent's working directory are machine state under the state root", () => {
   const state = join(hostOwnership.rootPath, "state");
-  const agent = productPaths.productAgentPath();
+  const agent = hostState().agent;
   expect(agent).toBe(join(state, "Agent"));
-  expect(productPaths.productRouteWorkPath()).toBe(join(state, "Work"));
-  expect(productPaths.productPageStatePath()).toBe(join(state, "Pages"));
-  expect(productPaths.productT3Path()).toBe(join(state, "T3"));
-  // The harness projections follow the agent's working directory, and the Pea world is that directory.
-  for (const path of resolvePeaSkillPaths(agent))
-    expect(relative(agent, path).startsWith(".."), path).toBe(false);
+  expect(hostState().work).toBe(join(state, "Work"));
+  expect(hostState().pages).toBe(join(state, "Pages"));
+  expect(hostState().t3).toBe(join(state, "T3"));
+  // Real projection publication is checked by home-authored-only.guard.test.ts.
   const { world } = Effect.runSync(getHostStatus({ connected: false }));
   expect(world.root).toBe(agent);
   expect(world.id).toBe(`pea:${Buffer.from(agent).toString("base64url")}`);

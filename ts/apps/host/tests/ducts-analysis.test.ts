@@ -1,3 +1,5 @@
+import { stateFixture } from "../../../tests/isolated-home/storage.ts";
+import { mkdtempSync } from "../../../tests/isolated-home/storage.ts";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
 import { bindWork, address, workKey } from "@pe/agent-contracts";
 import * as tieredSettings from "../src/tiered-settings.ts";
@@ -22,7 +24,7 @@ import { price, applyRequest } from "@pe/ducts-domain/pricing";
 import { TEST_SLOTS } from "@pe/ducts-domain/sheet/test-inputs";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { createHash } from "node:crypto";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { gzipSync, gunzipSync } from "node:zlib";
@@ -144,7 +146,7 @@ function fixture() {
   const files = testDuctFiles();
   const sources: DuctsAnalysisSources = {
     catalogs: () => settle(files.ductCatalogs),
-    root,
+    root: stateFixture(root),
     producer: {
       version: "purpose-1",
       lane: "dev",

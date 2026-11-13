@@ -10,15 +10,19 @@ import { z } from "zod";
 import { command, io, refused, type CommandExecutor } from "./command-executor.ts";
 import { guardSend } from "./guards.ts";
 import { runPods, podContext, type PodDependencies } from "./family-actions.ts";
-import { podFolder, writeHome } from "./settings.ts";
+import { podFolder, podMemberKind } from "./settings.ts";
+import { writeHome } from "@pe/host-contracts/kinds";
 import { parseFamilyPdf } from "@pe/mcps/family-pdf";
 import { readDerivedJson } from "@pe/mcps/held-parse";
 import { LLAMA_TIER, requireLlamaCloudKey } from "@pe/mcps/llama-parse";
-import { derivedStore } from "@pe/host-contracts/service-identity";
-import { derivedKey, readDerived, writeDerived, type DerivedStore } from "@pe/host-contracts/store";
+import { derivedFor } from "@pe/host-contracts/service-identity";
+import { derivedKey,
+  readDerivedIn,
+  writeDerivedIn, type DerivedDir,
+} from "@pe/host-contracts/kinds";
 import type { RevitBridge } from "./bridge.ts";
 import type { PodContext } from "./settings.ts";
-import { hostOwnership } from "./host-ownership.ts";
+import { hostOwnership, hostState } from "./host-ownership.ts";
 
 const safePath = (root: string, path: string) => {
   const full = resolve(root, path);
@@ -143,14 +147,14 @@ const assetNames = (doc: ParsedDoc) => [
  * A family parse kept in the derived store (ADR 0037 rule 6): the view and each render the parser
  * made, keyed by the PDF's bytes. Null unless every part is there, so a hit parses and fetches nothing.
  */
-function keptFamilyParse(store: DerivedStore, pdf: Uint8Array): KeptFamilyParse | null {
+function keptFamilyParse(store: DerivedDir, pdf: Uint8Array): KeptFamilyParse | null {
   const doc = readDerivedJson(store, derivedKey(pdf, FAMILY_PARSER), parsedDocViewSchema);
   if (!doc) return null;
   const assets = new Map<string, Buffer>();
   for (const name of assetNames(doc)) {
-    const asset = readDerived(store, derivedKey(pdf, `${FAMILY_PARSER}/${name}`));
+    const asset = readDerivedIn(store, derivedKey(pdf, `${FAMILY_PARSER}/${name}`));
     if (!asset) return null;
-    assets.set(name, asset.bytes);
+    assets.set(name, Buffer.from(asset.bytes));
   }
   return { doc, assets };
 }
@@ -188,7 +192,7 @@ export function familySpecExecutor(deps: PodDependencies = {}, bridge?: RevitBri
       const pods: PodContext = bridge ? await podContext(deps, bridge, ctx.admission.target.kind === "document" ? ctx.admission.target.ref : undefined) : { podsRoot: deps.podsRoot };
       const root = await runPods(deps, podFolder(member.pod, pods));
       // The parse and any vendor download are kept once for the project the Pod, or the PDF, sits in.
-      const store = derivedStore(hostOwnership.rootPath, root, ...("path" in source ? [source.path] : []));
+      const store = derivedFor(hostOwnership.rootPath, root, ...("path" in source ? [source.path] : []));
       // Every refusal here names the next step: the caller is a person or Pea, neither reads this file.
       const save = `Save the open family first: stage writeIntent["family.capture"].edit = { "value": { "pod": "${member.pod}" } } in Family Work and run family.capture; it files the family under ${FAMILY_MEMBER_DIR} and returns the member to attach to.`;
       if (!isFamilyMember(member.path))
@@ -215,7 +219,7 @@ export function familySpecExecutor(deps: PodDependencies = {}, bridge?: RevitBri
         // attach the new one by { path } or upload. Add a refresh verb if that bites.
         return {
           bytes:
-            readDerived(store, derivedKey(source.url, "fetch/1"))?.bytes ??
+            readDerivedIn(store, derivedKey(source.url, "fetch/1"))?.bytes ??
             (await readPdfUrl(source.url)),
           name: new URL(source.url).pathname || "document.pdf",
         };
@@ -229,7 +233,7 @@ export function familySpecExecutor(deps: PodDependencies = {}, bridge?: RevitBri
         throw sourceRefused(
           "Source is not a PDF: its bytes do not begin with %PDF-. Export or print it to PDF and attach that.",
         );
-      if ("url" in source) writeDerived(store, derivedKey(source.url, "fetch/1"), Buffer.from(bytes));
+      if ("url" in source) writeDerivedIn(store, derivedKey(source.url, "fetch/1"), Buffer.from(bytes));
       const sha256 = createHash("sha256").update(Buffer.from(bytes)).digest("hex");
       const sourceFact: Consumed[] =
         "path" in source
@@ -276,7 +280,7 @@ export function familySpecExecutor(deps: PodDependencies = {}, bridge?: RevitBri
               if (!response.ok) throw Error(`Spec asset download failed (${response.status})`);
               const asset = Buffer.from(await response.arrayBuffer());
               assets.set(name, asset);
-              writeDerived(store, derivedKey(pdf, `${FAMILY_PARSER}/${name}`), asset);
+              writeDerivedIn(store, derivedKey(pdf, `${FAMILY_PARSER}/${name}`), asset);
               return name;
             };
             for (const page of doc.pages) {
@@ -286,7 +290,7 @@ export function familySpecExecutor(deps: PodDependencies = {}, bridge?: RevitBri
             for (const [index, image] of doc.images.entries())
               image.url = await download(image.url, `image-${index}`);
             // Last, so a kept view always has its renders.
-            writeDerived(store, derivedKey(pdf, FAMILY_PARSER), JSON.stringify(doc));
+            writeDerivedIn(store, derivedKey(pdf, FAMILY_PARSER), JSON.stringify(doc));
             return { doc, assets };
           };
           const { doc, assets: renders } = keptFamilyParse(store, pdf) ?? (await fresh());
@@ -322,19 +326,37 @@ export function familySpecExecutor(deps: PodDependencies = {}, bridge?: RevitBri
       const { member, doc, specPath, assets } = execution.prepared as z.infer<
         typeof preparedSpecSchema
       >;
-      for (const asset of assets)
-        yield* execution.step("file", "family.spec.asset", asset, () => io(async () => {
+        const pods: PodContext = bridge
+          ? yield* io(() => podContext(deps, bridge, ctx.admission.target.kind === "document" ? ctx.admission.target.ref : undefined),
+            )
+          : { podsRoot: deps.podsRoot };
+        const directory = yield* io(() => runPods(deps, podFolder(member.pod, pods)));
+        for (const asset of assets)
+          yield* execution.step("file", "family.spec.asset", asset, () =>
+            io(async () => {
           // Through the one write door: a resumed step finds its own bytes and stops; any other
           // bytes at the path are replaced only as read, and rest in the blob store first.
           const current = await readFile(asset.path).catch(() => null);
           const held = current && createHash("sha256").update(current).digest("hex");
-          if (held !== asset.blob.digest) {
-            const wrote = writeHome(asset.path, await get(asset.blob), held);
+              if (held !== asset.blob.digest) {
+                const wrote = writeHome(
+                  podMemberKind.in(
+                    hostState().home({ root: dirname(dirname(directory)), tier: "user" }),
+                    [
+                      basename(dirname(directory)),
+                      basename(directory),
+                      ...relative(directory, asset.path).split(/[\\\\/]/),
+                    ],
+                  ),
+                  await get(asset.blob),
+                  held,
+                );
             if (!wrote.ok)
               throw Error(`Spec asset '${asset.path}' changed while it was being written.`);
-          }
+              }
           return { path: asset.path, sha256: asset.blob.digest };
-        }));
+            }),
+          );
       yield* execution.publishWork(ctx.admission.input.work!.key, "family", [
         { path: ["spec"], value: { member, doc } },
       ]);
@@ -345,7 +367,7 @@ export function familySpecExecutor(deps: PodDependencies = {}, bridge?: RevitBri
         blocks: doc.blocks.length,
         images: doc.images.length,
       };
-    }),
+      }),
     recover: async (step: ActionStep) => {
       if (step.kind !== "file" || step.key !== "family.spec.asset")
         return { step, evidence: { reason: "No independent file witness" } };

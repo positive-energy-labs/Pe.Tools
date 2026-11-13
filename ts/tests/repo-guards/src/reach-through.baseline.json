@@ -12,7 +12,7 @@
   "@pe/host -> @pe/host-internal": 2,
   "@pe/host-internal -> @pe/host-contracts": 2,
   "@pe/kit -> @pe/agent-contracts": 2,
-  "@pe/mcps -> @pe/agent-contracts": 1,
+  "@pe/mcps -> @pe/agent-contracts": 0,
   "@pe/web -> @pe/host-contracts": 2,
   "other -> @pe/browser": 2,
   "other -> @pe/ducts-domain": 2,

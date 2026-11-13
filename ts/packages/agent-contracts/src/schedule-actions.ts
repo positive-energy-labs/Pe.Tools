@@ -125,9 +125,10 @@ export const scheduleActions = {
     input: z.object({ source: podMemberSourceSchema }),
   },
 } as const;
+export const scheduleReadingRoute = "schedules.readings";
 export const scheduleReads = {
   "schedule.grid.catalog": {
-    via: { route: "schedules.readings" },
+    via: { route: scheduleReadingRoute },
     catalogEffect: "Read",
     says: "Read schedules from the exact selected document without changing authored Work.",
     dirties: [],

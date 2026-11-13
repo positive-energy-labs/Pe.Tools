@@ -300,9 +300,11 @@ export const familyActions = {
     }),
   },
 } as const;
+export const familyReadingRoute = "family.readings";
+export const savedFamilyRead = "family.saved";
 export const familyReads = {
   "family.read": {
-    via: { route: "family.readings" },
+    via: { route: familyReadingRoute },
     catalogEffect: "Read",
     says: "Read the open family's spec into the draft baseline; preserve staged cells and file no Pod member.",
     dirties: [],
@@ -321,7 +323,7 @@ export const familyReads = {
     input: z.strictObject({ readId: z.uuid() }),
     result: z.object({ cancelled: z.literal(true) }),
   },
-  "family.saved": {
+  [savedFamilyRead]: {
     via: { route: "family.readings" },
     catalogEffect: "Read",
     says: "Read an immutable saved Family reading, including historical citation IDs, without Revit.",

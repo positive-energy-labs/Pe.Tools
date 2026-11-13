@@ -1,3 +1,4 @@
+import { stateScope } from "@pe/host-contracts/service-identity";
 import { targetHomes } from "./call-route.ts";
 import { readPlaces, writePlaces } from "./places.ts";
 import { workKeySchema as mountedWorkKeySchema } from "@pe/agent-contracts";
@@ -75,7 +76,7 @@ import { createHash } from "node:crypto";
 import { unwatchFile, watchFile } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { readStoredNotices } from "@pe/host-contracts/store";
+import { notices as storedNotices } from "@pe/host-contracts/kinds";
 import { z } from "zod";
 import type { CapabilityContent } from "../../../packages/mcps/src/pea/capabilities.ts";
 import { skillSnapshot } from "../../../packages/mcps/src/pea/skill-publication.ts";
@@ -113,7 +114,7 @@ import {
 } from "./harness/user-shell.ts";
 import { resolveHostVersion } from "./host-lifecycle.ts";
 import type { HostLog } from "./host-log.ts";
-import { hostOwnership } from "./host-ownership.ts";
+import { hostOwnership, hostState } from "./host-ownership.ts";
 import { httpProblems, isDoorFailure } from "./http-problems.ts";
 import { HostInputContext } from "./input-context.ts";
 import { importShippedPods } from "./installed-pods.ts";
@@ -135,13 +136,7 @@ import {
   resumeWork,
   type NavigationSources,
 } from "./navigation.ts";
-import {
-  createNoticeFeed,
-  noticeRows,
-  noteStartupHomes,
-  storedNoticesPath,
-  type NoticeSources,
-} from "./notice-feed.ts";
+import { createNoticeFeed, noticeRows, noteStartupHomes, type NoticeSources } from "./notice-feed.ts";
 import { homeLogLines } from "@pe/host-contracts/product-paths";
 import { heldSend, heldSends, holdSend, confirmSend, subscribeHeldSends } from "./guards.ts";
 import type { ActionJournal } from "./action-journal.ts";
@@ -164,13 +159,7 @@ import {
 } from "./page-libraries.ts";
 import { createPluginsHandler } from "./plugins-handler.ts";
 import { createPodRoutes } from "./pod-routes.ts";
-import {
-  productAgentPath,
-  productDuctsAnalysesPath,
-  productHarnessThreadsPath,
-  productRouteWorkPath,
-  productUserContentRootPath,
-} from "./product-paths.ts";
+import { userRoot } from "@pe/host-contracts/product-paths";
 import { graphRouteIds } from "./reads/routes.ts";
 import {
   ReceiptExport,
@@ -182,7 +171,7 @@ import { hostResourceObserver, markReadings } from "./resource-adapters.ts";
 import { bindRevoke } from "./revoke.ts";
 import { fileRouteDocumentStore } from "./route-document-store.ts";
 import { RunRegistry } from "./run-registry.ts";
-import { createScheduledTasks } from "./scheduled-tasks.ts";
+import { createScheduledTasks, scheduledTasksKind } from "./scheduled-tasks.ts";
 import { resolveSdkSession, readSessionScope } from "./sdk-session.ts";
 import type { DocumentRow } from "./session-inventory.ts";
 import { CaptureStore, type TakeoffCaptures } from "./takeoff-captures.ts";
@@ -354,11 +343,11 @@ export function createPeRoutes(options: PeRoutesOptions) {
         // A read that discards a Work record changes this census and raises no workspace event.
         // Every discard posts to the notice file, so the file is the event, as for the notice feed.
         const discarded = () => notify();
-        watchFile(storedNoticesPath(), { interval: 2_000 }, discarded);
+        watchFile(hostState().notices, { interval: 2_000 }, discarded);
         return () => {
           releaseWork();
           releaseContext?.();
-          unwatchFile(storedNoticesPath(), discarded);
+          unwatchFile(hostState().notices, discarded);
         };
       },
       (result) => publish(resourceSnapshot(key, result)),
@@ -934,7 +923,7 @@ function workKey(url: URL, route: string, shape: "read" | "write"): WorkKey | Re
  */
 export function createContributionContent(options: {
   /** The agent's working directory: the harness skill projections land here, never in a home. */
-  worldRoot: string;
+  worldRoot: import("@pe/host-contracts/kinds").StateDirectory;
   /** The user home that authors `Skills/` and, by default, `Pages/`; the user root when omitted. */
   homeRoot?: string;
   /** Scratch Pages in read order; the home's `Pages` when omitted (an isolated test world). */
@@ -943,10 +932,10 @@ export function createContributionContent(options: {
   pages?: (packages: readonly AdmittedPackage[]) => Promise<readonly PageDescriptor[]>;
   /** Runs beside the start census, never before it: the host door does not wait for an import. */
   bootstrap?: () => Promise<unknown>;
-  decisionsPath?: string;
+  decisionsMachine?: import("@pe/host-contracts/kinds").StateRoot;
   changed?: () => void;
 }) {
-  const homeRoot = options.homeRoot ?? productUserContentRootPath();
+  const homeRoot = options.homeRoot ?? userRoot();
   const pagesRoots = options.pagesRoots ?? [join(homeRoot, "Pages")];
   const revisions = new Map<string, Map<string, unknown>>();
   const latest = new Map<string, unknown>();
@@ -956,7 +945,7 @@ export function createContributionContent(options: {
   let bootstrapProblem: string | undefined;
   let admitted: readonly AdmittedPackage[] = [];
   const lifecycle = createPackageLifecycle({
-    decisionsPath: options.decisionsPath,
+    machine: options.decisionsMachine,
     packages: options.packages,
     changed: () => {
       snapshot = undefined;
@@ -1100,7 +1089,7 @@ export function createContributionContent(options: {
             }),
     );
     const publication = await publishPeaSkills(
-      { productHomePath: homeRoot, agentPath: options.worldRoot, captureDirectory },
+      { productHomePath: homeRoot, agent: options.worldRoot, captureDirectory },
       packagedSkills,
       lifecycle.skills(),
     );
@@ -1202,14 +1191,14 @@ function* hostPeRoutes(
   const inputContext = yield* Effect.serviceOption(HostInputContext);
   const sourceRoot = hostOwnership.sourceRoot;
   // Host startup prepares this fixed machine-state directory before any harness can spawn.
-  const worldRoot = productAgentPath();
+  const worldRoot = hostState().agent;
   // Unbound is a working state (ADR 0037 rule 2): the host starts, and the feed says where it looked.
   noteStartupHomes();
   // One host log line per home, with its tier and how it was found; with no firm home, where it looked.
   for (const line of homeLogLines()) yield* Effect.logInfo(line);
   let invalidateCatalog = () => {};
   const content = createContributionContent({
-    worldRoot,
+    worldRoot: stateScope(hostState(), hostState().agent),
     pagesRoots: productPagesRoots(),
     changed: () => invalidateCatalog(),
     bootstrap: async () => {
@@ -1252,7 +1241,7 @@ function* hostPeRoutes(
     prepare: () => content.read(),
     providers,
     updatePending: update.automaticPending,
-    root: productHarnessThreadsPath(),
+    root: stateScope(hostState(), hostState().harnessThreads),
     log: hostLog,
     worldRoot,
     // The same kernel the Pea MCP server declares, for the harness that cannot read it from there.
@@ -1291,7 +1280,7 @@ function* hostPeRoutes(
   hostWork?.pointers?.bind(threads.pointers);
   const stopWorkContext = bridge?.subscribe(() => threads.refreshWorkContexts());
   const scheduler = createScheduledTasks({
-    path: join(hostOwnership.rootPath, "state", hostOwnership.serviceName, "scheduled-tasks.json"),
+    file: scheduledTasksKind.in(hostState().directory(hostOwnership.serviceName)),
     receipts: journal,
     evidence: (since, before) =>
       new Set(eligibleThreads(threads.historySnapshot(), since, before).map((t) => t.id)),
@@ -1374,7 +1363,7 @@ function* hostPeRoutes(
             receipts: [...noticeCache.receipts.values()],
             works: noticeCache.works,
             machine,
-            stored: readStoredNotices(storedNoticesPath()),
+            stored: storedNotices(hostState()),
             held: heldSends(),
           },
           Date.now(),
@@ -1401,9 +1390,9 @@ function* hostPeRoutes(
         routes.workspace.subscribeUncaptured(readWorks),
         bridge?.subscribe(readWorks) ?? (() => {}),
         // A refusal is posted by whichever store met the bad file, so the file is the event.
-        () => unwatchFile(storedNoticesPath(), changed),
+        () => unwatchFile(hostState().notices, changed),
       ];
-      watchFile(storedNoticesPath(), { interval: 2_000 }, changed);
+      watchFile(hostState().notices, { interval: 2_000 }, changed);
       try {
         releases.push(hostMachineFace.observe(() => changed()));
       } catch {
@@ -1465,7 +1454,7 @@ function* hostPeRoutes(
     workspace: hostWork?.workspace,
     registrations,
     ductsAnalysis: {
-      root: productDuctsAnalysesPath(),
+      root: stateScope(hostState(), hostState().ductsAnalyses),
       producer: { version: resolveHostVersion(), ...hostOwnership },
       marks,
       catalogs: (pointer) => runPods({}, catalogsFor(files, pointer)),
@@ -1496,7 +1485,7 @@ function* hostPeRoutes(
       },
       call: ductsNativeRead(hostBaseUrl),
     },
-    ...(hostWork ? {} : { store: fileRouteDocumentStore(productRouteWorkPath()) }),
+    ...(hostWork ? {} : { store: fileRouteDocumentStore(stateScope(hostState(), hostState().work)) }),
     heads: threads.heads,
     turnElementNames: (request) =>
       threads.readTurnElementNames(request, (operation, input, ref) => {

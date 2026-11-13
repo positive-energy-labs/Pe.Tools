@@ -1,11 +1,11 @@
 import { z } from "zod";
-import { routeDirectory } from "../../../agent-contracts/src/generated/route-directory.ts";
 import {
   capabilityPrincipals,
   nativePrincipals,
   admittedRouteEntries,
   routeAddress,
   viewRoutes,
+  ROUTE_DIRECTORY,
   agentFields,
   parseContributionKey,
   type Capability,
@@ -59,7 +59,7 @@ export function dynamicCapabilityProvider(sources: CapabilitySources): Capabilit
     ...viewRoutes(sources.admittedRoutes?.() ?? []).flatMap(routeViewRows),
     ...[
       ...new Set([
-        ...routeDirectory.map((row) => row.key),
+        ...ROUTE_DIRECTORY.map((row) => row.key),
         ...(sources.admittedRoutes?.() ?? []).map((row) => row.key),
       ]),
     ]

@@ -4,8 +4,8 @@
  * `keys.json` (a flat `{ role: value }` map), then refuses with a typed reason: never a default.
  */
 import { z } from "zod";
-import { firmHome, firmKeysPath, noFirmHomeText } from "./product-paths.ts";
-import { readStored } from "./store.ts";
+import { firmHome, noFirmHomeText } from "./product-paths.ts";
+import { homeKind, read, type StateRoot } from "./kinds.ts";
 
 /** Frozen: these are the names a firm writes into `keys.json` (homes freeze shape 9). */
 export const keyRoles = ["openai.api-key", "anthropic.api-key", "llamaparse.api-key"] as const;
@@ -21,6 +21,12 @@ export type KeyRefusal = "no-shared-root" | "no-shared-key" | "keys-unreadable";
 export type ResolvedKey = { value: string; from: "user" | "shared" } | { refused: KeyRefusal };
 
 const keysFile = z.record(z.string(), z.string().trim().min(1));
+const keysKind = homeKind({
+  schema: keysFile,
+  quiet: true,
+  place: () => "Firm keys",
+  segments: () => ["keys.json"],
+});
 
 /**
  * FOOTGUN: keys.json is plaintext on a shared mount, readable by anyone with drive access, by the
@@ -29,23 +35,27 @@ const keysFile = z.record(z.string(), z.string().trim().min(1));
  * value leaves only to the reader that asked for it by role, never into Work, receipts, logs, Pea
  * context, telemetry or error text. A refusal names the file, never its bytes.
  */
-export function sharedKeys(): { keys: Record<string, string> } | { refused: KeyRefusal } {
-  const path = firmKeysPath();
-  if (path === null) return { refused: "no-shared-root" };
+export function sharedKeys(
+  machine: StateRoot,
+): { keys: Record<string, string> } | { refused: KeyRefusal } {
+  const root = firmHome().root;
+  if (root === null) return { refused: "no-shared-root" };
   // An authored file: one that does not decode is kept and refused, and its reason stays unread
   // here because a decode reason can quote the bytes.
-  const read = readStored(path, keysFile, { class: "keep", place: "Firm keys" });
-  return read.kind === "ok"
-    ? { keys: read.value }
-    : read.kind === "missing"
+  const result = read(keysKind.in({ root, tier: "firm", machine }));
+  return result.kind === "ok"
+    ? { keys: result.value }
+    : result.kind === "missing"
       ? { keys: {} }
       : { refused: "keys-unreadable" };
 }
 
 /** The person's own key wins; else the firm key of that role; else a typed refusal. */
-export function resolveKey(user: string | null | undefined, role: KeyRole): ResolvedKey {
+export function resolveKey(user: string | null | undefined, role: KeyRole,
+  machine: StateRoot,
+): ResolvedKey {
   if (user?.trim()) return { value: user.trim(), from: "user" };
-  const shared = sharedKeys();
+  const shared = sharedKeys(machine);
   if ("refused" in shared) return shared;
   const value = Object.hasOwn(shared.keys, role) ? shared.keys[role] : undefined;
   return value ? { value, from: "shared" } : { refused: "no-shared-key" };

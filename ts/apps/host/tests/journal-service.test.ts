@@ -1,6 +1,8 @@
+import { stateFixture } from "../../../tests/isolated-home/storage.ts";
+import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { Context, Deferred, Effect, Exit, Fiber, Layer, Queue, Scope } from "effect";
 import { expect, test, vi } from "vite-plus/test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ActionJournal } from "../src/action-journal.ts";
@@ -41,7 +43,7 @@ effectTest("the journal Layer closes the journal after the bridge releases, and 
     // The production composition (host-program): the journal in the program scope, the bridge in
     // the launch scope nested inside it. Closing the program scope once is the whole shutdown.
     const program = yield* Scope.make();
-    const receipts = yield* openJournal(null, dir).pipe(Scope.provide(program));
+    const receipts = yield* openJournal(null, stateFixture(dir)).pipe(Scope.provide(program));
     const up = yield* Deferred.make<RevitBridge["Service"]>();
     const probe = Layer.effectDiscard(RevitBridge.pipe(Effect.flatMap((bridge) => Deferred.succeed(up, bridge)))).pipe(
       Layer.provide(RevitBridgeLive),

@@ -1,6 +1,7 @@
+import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { pictureCaptures, journalAt } from "./effect-test.ts";
 import { createServer } from "node:http";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { inflateSync } from "node:zlib";

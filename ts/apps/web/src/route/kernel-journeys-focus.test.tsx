@@ -1,3 +1,4 @@
+import { stateFixture } from "../../../../tests/isolated-home/storage.ts";
 import { fixtureTimeline } from "../shell/fixture-work-door";
 import { timelineReceipts } from "../../../host/src/reads/work-timeline";
 import { refusalOf, valueOf } from "./typed-route";
@@ -1537,7 +1538,7 @@ test("JZ B05 retain Family Work and its spec across folding, first-thread promot
     pages: [{ page: 1, width: 612, height: 792, screenshotUrl: null, markdown: "Retained specification" }],
     blocks: [{ id: "page-1-block-1", page: 1, kind: "text", md: "Retained specification", bboxes: [] }],
   } } });
-  await fileRouteDocumentStore(join(host.dir, "work")).setState({ targetKey: workKey(key), route: "family",
+  await fileRouteDocumentStore(stateFixture(join(host.dir, "work"))).setState({ targetKey: workKey(key), route: "family",
     value: { version: 1, schemaVersion: 1, revision: 3, doc, history: [] } });
   const transport = createPeClient("", (input, init) => withInvocationContext({ caller: who }, () =>
     api.fetch(new Request(new URL(String(input), "http://host"), init))));

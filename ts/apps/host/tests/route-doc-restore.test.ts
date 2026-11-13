@@ -1,5 +1,7 @@
+import { stateFixture } from "../../../tests/isolated-home/storage.ts";
+import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { afterEach, expect, test } from "vite-plus/test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
@@ -48,7 +50,7 @@ const schema = z.object({
 async function fixture() {
   const directory = await mkdtemp(join(tmpdir(), "pe-work-restore-"));
   directories.push(directory);
-  const store = fileRouteDocumentStore(directory);
+  const store = fileRouteDocumentStore(stateFixture(directory));
   const scope: WorkKey = { binding: "host", route: "restore-proof", target: null };
   const spec = {
     route: scope.route,
@@ -137,7 +139,7 @@ test("HTTP apply overwrites client by with the principal, and restore preserves 
   });
   expect(restored.doc.cells.a.edit.by).toBe("pea");
   expect(JSON.stringify(restored.doc)).toBe(JSON.stringify((before as { doc: unknown }).doc));
-  const reopened = fileRouteDocumentStore(directories.at(-1)!);
+  const reopened = fileRouteDocumentStore(stateFixture(directories.at(-1)!));
   expect(
     await reopened.getState({ targetKey: workKey(h.scope), route: h.scope.route }),
   ).toMatchObject({ revision: 3, doc: restored.doc });

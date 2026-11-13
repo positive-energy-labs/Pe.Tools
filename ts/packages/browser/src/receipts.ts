@@ -1,6 +1,13 @@
 import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { writeAtomic } from "@pe/host-contracts/store";
+import { writeState, stateKind, type StateDirectory } from "@pe/host-contracts/kinds";
+import { z } from "zod";
+type PublicationName = "session.json" | "terminal.json" | "closing.json" | "attached-cleanup.json";
+const receiptKind = stateKind({
+  schema: z.unknown(),
+  place: (name: PublicationName) => `Browser ${name}`,
+  segments: (name: PublicationName) => [name],
+});
 import type { SessionReceipt } from "./browser.ts";
 import { BrowserError } from "./errors.ts";
 // One owner budget covers graceful root exit, joined job termination, and profile cleanup.
@@ -83,12 +90,20 @@ export async function readSessionReceipt(
 }
 
 /** Ready and terminal are immutable separate publications, each with one writer. */
-export async function publishJson(destination: string, value: unknown): Promise<void> {
-  writeAtomic(destination, JSON.stringify(value, null, 2));
+export async function publishJson(
+  storage: StateDirectory,
+  name: PublicationName,
+  value: unknown,
+): Promise<void> {
+  writeState(receiptKind.in(storage, name), JSON.stringify(value, null, 2));
 }
-export async function publishSessionReceipt(file: string, receipt: SessionReceipt): Promise<void> {
+export async function publishSessionReceipt(
+  storage: StateDirectory,
+  receipt: SessionReceipt,
+): Promise<void> {
   await publishJson(
-    receipt.status === "closed" ? join(dirname(file), "terminal.json") : file,
+    storage,
+    receipt.status === "closed" ? "terminal.json" : "session.json",
     receipt,
   );
 }

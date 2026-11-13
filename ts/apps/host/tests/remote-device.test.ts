@@ -1,7 +1,8 @@
 import { serviceHeaders } from "./callers.ts";
 import { expect, test } from "vite-plus/test";
 import { readRequestIdentity, type IdentityOptions } from "../src/request-identity.ts";
-import { createDevices, DEVICE_COOKIE } from "../src/remote-device.ts";
+import { createDevices, devicesKind, DEVICE_COOKIE } from "../src/remote-device.ts";
+import { stateTree } from "@pe/host-contracts/service-identity";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -39,8 +40,9 @@ test("five wrong attempts exhaust a code across transports, including the correc
 test("access-084: one device persists across LAN, tailnet and SSH; revoke refuses its next request", async () => {
   const root = mkdtempSync(join(tmpdir(), "pe-k-device-"));
   try {
-    const path = join(root, "devices.json");
-    let devices = createDevices(path);
+    const file = devicesKind.in(stateTree(root), "test");
+    const path = file.path;
+    let devices = createDevices(file);
     const pairing = devices.pair("browser");
     const claimed = devices.claim(
       pairing.code,
@@ -50,7 +52,7 @@ test("access-084: one device persists across LAN, tailnet and SSH; revoke refuse
     );
     expect(() => devices.claim(pairing.code, "Replay", "tailnet")).toThrow("device.pairing");
     expect(readFileSync(path, "utf8")).not.toContain(claimed.token);
-    devices = createDevices(path);
+    devices = createDevices(file);
     expect(devices.list().environmentId).toBe(pairing.environmentId);
     const settings = { ...options, devices };
     expect(
@@ -83,7 +85,7 @@ test("access-084: one device persists across LAN, tailnet and SSH; revoke refuse
         settings,
       ),
     ).toMatchObject({ refusal: { code: "device.revoked" } });
-    expect(() => createDevices(path).authenticate(claimed.token, "ssh")).toThrow("device.revoked");
+    expect(() => createDevices(file).authenticate(claimed.token, "ssh")).toThrow("device.revoked");
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
