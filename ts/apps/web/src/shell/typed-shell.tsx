@@ -157,7 +157,7 @@ export function TypedChrome({ mount, document, recorded, thread }: { mount: Type
     {visible ? <Notes key={doc} mount={mount} /> : null}
     {visible ? <PointerCite route={spec.key} thread={thread} fields={spec.fields} doc={doc} /> : null}
     <ScopeKeys keys={actionScopeKeys((["undo","redo"] as const).map(direction=>({id:`work.${direction}`,label:direction,bindings:direction==="undo"?["Mod+Z"]:["Mod+Shift+Z","Mod+Y"],
-      options:{ignoreInputs:true},invoke:()=>{if(visible) void mount.history[direction]();}})))} />
+      options:{ignoreInputs:true},invoke:()=>{if(visible) void mount.stepTimeline(direction);}})))} />
     <RouteBand route={spec.key}>{head}</RouteBand>
     <GraphLayoutView
       layout={layout(spec.layout)}
@@ -197,7 +197,7 @@ function bandVerbs(mount: TypedMount): ReactNode[] {
 }
 /** Band timeline: the Timeline head over the recorded points and the Work history. */
 function BandTimeline({ mount, recorded }: { mount: TypedMount; recorded?: ReactNode }) {
-  if (!mount.spec.edits && !mount.target() && mount.timeline().length === 0) return null;
+  if (!mount.spec.edits && !mount.target() && !mount.timeline()?.rows.length) return null;
   return <TimelineHead owner={mount} history={<>{recorded}<GraphHistory owner={mount} /></>} />;
 }
 /** The layout's `subject` gate: open when the Page holds a subject. */

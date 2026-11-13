@@ -27,6 +27,31 @@ const open = () =>
     providers: createProviders({ spawner: testSpawner(), shellPath: async () => "", probeOnStart: false }),
   });
 
+test("standalone heads stream empty pointers without admitting pointer mutations", async () => {
+  const threads = await open();
+  const frames: unknown[] = [];
+  const stop = threads.heads.observe("standalone", frame => frames.push(frame.value));
+  try {
+    await Promise.resolve();
+    expect(frames).toEqual([{ targets: [], revision: 0, pointers: [] }]);
+    const response = await actAs(human, () => threads.fetch(new Request("http://host/pe/scope/standalone", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ targets: [], expectedRevision: 0 }),
+    })));
+    expect(response.status).toBe(200);
+    expect(frames.at(-1)).toEqual({ targets: [], revision: 1, pointers: [] });
+    expect(() => threads.pointers.read("standalone")).toThrow("Unknown thread");
+    expect(() => threads.pointers.point("standalone", {
+      route: "fans", target: {}, label: "missing",
+    })).toThrow("Unknown thread");
+    expect(() => threads.pointers.dismiss("standalone", "missing")).toThrow("Unknown thread");
+  } finally {
+    stop();
+    await threads.close();
+  }
+});
+
 test("a pointer lives in thread meta: it survives a host reload and leaves only by dismissal", async () => {
   const first = await open();
   const created = await actAs(human, () =>

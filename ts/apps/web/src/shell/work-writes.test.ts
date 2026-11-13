@@ -72,7 +72,6 @@ test("refused input survives release, shares conflict admission, and clears only
         .ok,
     ).toBe(true);
     expect(next.writer.pending()).toEqual([]);
-    expect(next.writer.journal.read().undo.map(({ press }) => press)).toEqual(["head-take"]);
     await next.writer.write({ ...fresh, closed: true }, { ...retry, press: "closed-edit" }, port);
     expect(next.writer.pending()[0]!.press).toBe("closed-edit");
     next.writer.discard("closed-edit");
@@ -168,7 +167,6 @@ test("a transport failure retains the edit and an acknowledgement for another Wo
       (await held.writer.write(scope, request, async () => ({ ok: true, revision: 1, handle: { key: ack.key, revision: 1 }, write: ack })))
         .ok,
     ).toBe(false);
-    expect(held.writer.journal.read().undo).toEqual([]);
     expect(held.writer.pending()).toEqual([request]);
     held.writer.discard("failed");
   } finally {

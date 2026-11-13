@@ -2,7 +2,8 @@ import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react
 import { z } from "zod";
 import { historyPointSchema, historyListSchema, type Address } from "@pe/agent-contracts";
 import { Button } from "@pe/kit/lang/button";
-import { ListPopup } from "@pe/kit/lang/list-popup";
+import { ListView } from "@pe/kit/lang/list-view";
+import { useList } from "@pe/kit/lang/collection";
 import { historyRequest, historySnapshotSchema, pointHref, type HistorySnapshot } from "./history.ts";
 import type { AdmittedAddressPort } from "./typed-address.ts";
 
@@ -102,36 +103,14 @@ export function RecordedPoints({
       id: `${point.id}:${pose?.instance ?? "unavailable"}`,
     }));
   });
+  const list = useList({ items, keyOf: item => item.id, search: item => ({ text: [item.label] }), select: "none" });
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <ListPopup
-        anchor="trigger"
-        face="control"
-        triggerLabel="Open History"
-        trigger={`History · ${rows.length}`}
-        aria-label="Recorded points"
-        items={items}
-        keyOf={(item) => item.id}
-        labelOf={(item) => item.label}
-        filter="substring"
-        select="single"
-        selected={items
-          .filter((item) => item.point.id === snapshot?.point.id)
-          .map((item) => item.id)}
-        empty="No recorded points"
-        row={(item) => ({
-          label: item.label,
-          meta: new Date(item.point.at).toLocaleString(),
-          sub: item.refusal ? `Unavailable: ${item.refusal}` : undefined,
-        })}
-        onPick={(item) => {
-          if (!item.pose || item.refusal) {
-            setProblem(item.refusal ?? "This route was never published at this point");
-            return;
-          }
-          window.location.assign(pointHref(item.point, item.pose.instance));
-        }}
-      />
+    <div>
+      <ListView list={list} aria-label="Recorded points"
+        row={item => ({ label: <a data-point={item.id} href={item.pose && !item.refusal ? pointHref(item.point, item.pose.instance) : undefined}
+          aria-disabled={!!item.refusal}>{item.label}</a>, meta: new Date(item.point.at).toLocaleString(),
+          sub: item.refusal ? `Unavailable: ${item.refusal}` : undefined })}
+        empty={{ message: "No recorded points", exit: "Capture a point" }} />
       {snapshot ? (
         <>
           <span data-tone="caution">

@@ -93,6 +93,7 @@ export function projectWorks(
         by: ack.by,
         label: ack.label ?? step?.label ?? pathLabel(ack),
         state: found?.undone ? "undone" : step?.superseded ? "superseded" : step?.barrier ? "blocked" : "applied",
+        ...(step?.notWritten ? { notWritten: step.notWritten } : {}),
         ...(step?.superseded
           ? { blockedBy: { reason: step.superseded.message } }
           : receipt

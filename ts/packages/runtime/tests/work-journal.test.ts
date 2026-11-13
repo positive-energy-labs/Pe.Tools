@@ -9,7 +9,6 @@ import {
 } from "@pe/agent-contracts";
 import { RouteWorkspace } from "../src/route-workspace.ts";
 import { createWorkJournal } from "../src/work-journal.ts";
-import { createWorkJournal as browserJournal } from "../../../apps/web/src/shell/journal.ts";
 
 function fixture(limits?: { maxCount: number; maxBytes: number }) {
   const key = bindWork("history-proof", null, "one");
@@ -89,10 +88,9 @@ function fixture(limits?: { maxCount: number; maxBytes: number }) {
   };
 }
 
-test("web and Pea share the reducer; a two-write press restores as one step across restart", async () => {
-  expect(browserJournal).toBe(createWorkJournal);
+test("the host retains the reducer; a two-write press restores as one step across restart", async () => {
   const f = fixture();
-  const web = browserJournal(f.key);
+  const web = createWorkJournal(f.key);
   web.accept((await f.edit("human", "two-writes", 1)).write);
   web.accept((await f.edit("human", "two-writes", 2)).write);
   expect(web.read().undo).toHaveLength(1);
@@ -129,7 +127,7 @@ test("durable replay exceeds 100 writes, deduplicates delivery, and scopes equal
   await f.edit("pea", "same", 2);
   for (let i = 3; i <= 131; i++) await f.edit("pea", null, i);
   f.restart();
-  const web = browserJournal(f.key);
+  const web = createWorkJournal(f.key);
   const stop = f.host.observeAccepted(f.key, (ack) => {
     web.accept(ack);
     web.accept(ack);
@@ -206,7 +204,7 @@ test("receipt-confirmed retirement is committed history after restart, never cha
 
 test("a delayed Work read cannot clear accepted undo history", async () => {
   const f = fixture();
-  const journal = browserJournal(f.key);
+  const journal = createWorkJournal(f.key);
   const written = await f.edit("human", "edit", 2);
   journal.accept(written.write);
   journal.observe({ revision: written.revision, doc: written.doc });

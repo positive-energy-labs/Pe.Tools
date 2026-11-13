@@ -50,7 +50,6 @@ test("a subject move preserves the same Work but retires prior scope authority",
   const owner = createRouteScopeGate<typeof builtinData, typeof schemas>({
     workSchema: schemas.work,
     hashWork: canonicalRouteInput,
-    journal: createWorkJournal,
     dependencies: () => ({}),
     scopeFields: ["search"],
     identityForPage: (next) => ({ target: null, work: next.search === "other Work" ? other : key }),
@@ -161,22 +160,11 @@ test("current checks lease continuations and independently moved Page", () => {
 });
 type Options = ScopeGateOptions<typeof builtinData, typeof schemas>;
 function fixture(prepare?: Options["preparePage"]) {
-  const journals = new Map<string, ReturnType<typeof createWorkJournal>>();
   const dependencies = { total: "hash-1" };
   const issuer = createRouteTokenIssuer();
-  const journal = (k = key) => {
-    const id = canonicalRouteInput(k);
-    let value = journals.get(id);
-    if (!value) {
-      value = createWorkJournal(k);
-      journals.set(id, value);
-    }
-    return value;
-  };
   const owner = createRouteScopeGate<typeof builtinData, typeof schemas>({
     workSchema: schemas.work,
     hashWork: canonicalRouteInput,
-    journal,
     issuer,
     dependencies: () => dependencies,
     preparePage:
@@ -199,9 +187,9 @@ function fixture(prepare?: Options["preparePage"]) {
     if (!result.ok) throw new Error(result.reason);
     return result.value;
   };
-  return { owner, read, invocation, journal, enter, dependencies, issuer };
+  return { owner, read, invocation, enter, dependencies, issuer };
 }
-test.each(["ack-first", "stream-first"])("%s publishes once and retains full receipt", (order) => {
+test.each(["ack-first", "stream-first"])("%s publishes once without a browser history", (order) => {
   const f = fixture();
   const invocation = f.invocation();
   const publications: number[] = [];
@@ -213,11 +201,11 @@ test.each(["ack-first", "stream-first"])("%s publishes once and retains full rec
   expect((order === "ack-first" ? second() : first()).kind).toBe("duplicate");
   expect(publications).toEqual([1]);
   expect(f.owner.read()?.work?.value.amount).toBe(1);
-  expect(f.journal().read().receipts).toHaveLength(1);
-  expect(f.journal().read().undo[0]?.transitions[0]?.inverse).toEqual(ack().inverse);
+
+
   expect(f.owner.acceptPage(invocation, { search: "review" }).kind).toBe("accepted");
 });
-test("A?B?A never revives an attempt; original receipt survives", () => {
+test("A?B?A never revives an attempt; a late acknowledgement cannot publish", () => {
   const f = fixture();
   const invocation = f.invocation();
   const first = f.owner.read()!;
@@ -228,7 +216,7 @@ test("A?B?A never revives an attempt; original receipt survives", () => {
   expect(f.owner.acceptWork(f.read, snapshot(4))).toEqual({ kind: "refused", reason: "retired" });
   expect(f.owner.acceptWork(invocation, { kind: "ack", write: ack() }).kind).toBe("receipt-only");
   expect(f.owner.read()?.work).toBeNull();
-  expect(f.journal().read().receipts).toEqual([ack()]);
+
   expect(f.owner.acceptPage(invocation, { search: "late" }).kind).toBe("refused");
 });
 test("same-key refresh retires only its channel; attempt is not revision", () => {
@@ -255,7 +243,7 @@ test("same identity enter publishes Page and unloaded Work atomically", () => {
   expect(f.owner.read()?.scope).not.toBe(previous.scope);
   expect(f.owner.acceptWork(f.read, snapshot()).kind).toBe("refused");
 });
-test("disposal releases observers; late success retains original inverse and provenance", () => {
+test("disposal releases observers and late success cannot publish", () => {
   const f = fixture();
   const invocation = f.invocation();
   let published = 0;
@@ -265,18 +253,14 @@ test("disposal releases observers; late success retains original inverse and pro
     f.owner.acceptWork(invocation, { kind: "ack", write: ack(1, 1, { receiptId: "native" }) }).kind,
   ).toBe("receipt-only");
   expect(f.owner.acceptWork(f.read, snapshot(2))).toEqual({ kind: "refused", reason: "closed" });
-  expect(f.journal().read().receipts[0]).toMatchObject({
-    receiptId: "native",
-    inverse: ack().inverse,
-    by: "human",
-  });
+
   expect(published).toBe(0);
   expect(f.owner.read()).toBeNull();
   expect(fixture().owner.acceptWork(invocation, { kind: "ack", write: ack() }).kind).toBe(
     "refused",
   );
 });
-test("partial then failed late delivery retains only confirmed writes", () => {
+test("partial and failed late delivery cannot publish into another Work", () => {
   const f = fixture();
   const invocation = f.invocation();
   f.enter(other);
@@ -285,12 +269,7 @@ test("partial then failed late delivery retains only confirmed writes", () => {
   ).toBe("receipt-only");
   // Second write failed: no ack exists; its late Page result cannot publish either.
   expect(f.owner.acceptPage(invocation, { search: "failed" }).kind).toBe("refused");
-  expect(
-    f
-      .journal()
-      .read()
-      .receipts.map((r) => r.revision),
-  ).toEqual([1]);
+
   expect(f.owner.read()?.scope.identity.work).toEqual(other);
   expect(f.owner.read()?.page).toEqual(page);
 });
@@ -301,7 +280,7 @@ test("stale snapshots and old acknowledgements cannot regress Work", () => {
   expect(f.owner.acceptWork(f.read, snapshot(1)).kind).toBe("duplicate");
   expect(f.owner.acceptWork(invocation, { kind: "ack", write: ack(2) }).kind).toBe("duplicate");
   expect(f.owner.read()?.work?.revision).toBe(5);
-  expect(f.journal().read().receipts[0]).toEqual(ack(2));
+
 });
 test("accepted Work carries the host's handle, and a contiguous ack advances that one handle", () => {
   const f = fixture();
@@ -311,7 +290,7 @@ test("accepted Work carries the host's handle, and a contiguous ack advances tha
   expect(f.owner.read()?.work?.handle).toEqual({ key, revision: 2 });
   expect(f.owner.read()?.work?.revision).toBe(2);
 });
-test("snapshot before ack preserves history without republishing", () => {
+test("snapshot before ack does not republish", () => {
   const f = fixture();
   const invocation = f.invocation();
   let publications = 0;
@@ -320,12 +299,12 @@ test("snapshot before ack preserves history without republishing", () => {
   expect(f.owner.acceptWork(invocation, { kind: "ack", write: ack() })).toEqual({
     kind: "duplicate",
     revision: 1,
-    receipt: "recorded",
+    receipt: "none",
   });
   expect(publications).toBe(1);
-  expect(f.journal().read().receipts).toEqual([ack()]);
+
 });
-test("equal revision conflicts recover without overwriting Work or history", () => {
+test("equal revision conflicts recover without overwriting Work", () => {
   const f = fixture();
   f.owner.acceptWork(f.invocation(), { kind: "ack", write: ack() });
   expect(f.owner.acceptWork(f.read, snapshot(1, 99))).toMatchObject({
@@ -337,7 +316,7 @@ test("equal revision conflicts recover without overwriting Work or history", () 
     reason: "contradiction",
   });
   expect(f.owner.read()?.work?.value.amount).toBe(1);
-  expect(f.journal().read().receipts).toEqual([ack()]);
+
 });
 test("snapshot then contradictory delta recovers", () => {
   const f = fixture();
@@ -348,7 +327,7 @@ test("snapshot then contradictory delta recovers", () => {
   });
   expect(f.owner.read()?.work?.value.amount).toBe(1);
 });
-test("gap retains receipts, snapshot recovers, replay reconciles older deltas", () => {
+test("a gap requests recovery, a snapshot recovers, and older deltas cannot regress Work", () => {
   const f = fixture();
   expect(f.owner.acceptWork(f.invocation(), { kind: "ack", write: ack(3) })).toMatchObject({
     kind: "recover",
@@ -356,18 +335,13 @@ test("gap retains receipts, snapshot recovers, replay reconciles older deltas", 
     reason: "gap",
   });
   expect(f.owner.read()?.work?.revision).toBe(0);
-  expect(f.journal().read().receipts).toEqual([ack(3)]);
+
   expect(f.owner.acceptWork(f.read, snapshot(3)).kind).toBe("published");
   expect(f.owner.acceptWork(f.read, { kind: "stream", write: ack(3) }).kind).toBe("duplicate");
   expect(f.owner.acceptWork(f.read, { kind: "stream", write: ack(2) }).kind).toBe("duplicate");
-  expect(
-    f
-      .journal()
-      .read()
-      .receipts.map((r) => r.revision),
-  ).toEqual([2, 3]);
+
 });
-test("contiguous deltas fill a gap without losing buffered receipt", () => {
+test("contiguous deltas fill a gap", () => {
   const f = fixture();
   f.owner.acceptWork(f.read, { kind: "stream", write: ack(2) });
   f.owner.acceptWork(f.read, { kind: "stream", write: ack() });
@@ -405,7 +379,7 @@ test("foreign, copied, proxied and wrong-Work tokens refuse", () => {
   expect(f.owner.acceptWork(invocation, { kind: "ack", write: ack(1, 1, { key: other }) })).toEqual(
     { kind: "refused", reason: "wrong-work" },
   );
-  expect(f.journal().read().receipts).toEqual([]);
+
 });
 test("published snapshots and token identity are frozen", () => {
   const f = fixture();
@@ -539,10 +513,10 @@ test("superseding a write attempt retires its Page but preserves its successful 
   f.owner.capture("write");
   expect(f.owner.acceptWork(invocation, { kind: "ack", write: ack() }).kind).toBe("receipt-only");
   expect(f.owner.read()?.work?.revision).toBe(0);
-  expect(f.journal().read().receipts).toEqual([ack()]);
+
 });
 
-test("a route without Work constructs without schema, hash or journal", () => {
+test("a route without Work constructs without Work acceptance services", () => {
   const { work: _work, ...withoutWork } = builtinData;
   const declaration = { ...withoutWork, capabilities: [] } as const;
   const options: ScopeGateOptions<typeof declaration, typeof schemas> = {

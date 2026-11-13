@@ -353,6 +353,7 @@ export async function setup(options: { cold?: boolean } = {}) {
   };
   return {
     dir,
+    workspace: work,
     get base() {
       return server.base;
     },
