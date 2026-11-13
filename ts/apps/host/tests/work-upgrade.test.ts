@@ -224,7 +224,8 @@ test("upgrade strips obsolete history snapshots and refuses undo without losing 
     expect(saved).toMatchObject({ history: [{ after: staged }] });
     expect(saved).not.toHaveProperty("history.0.after.designFriction");
     // The public undo door must refuse the obsolete patch, without throwing or changing Work.
-    await expect(workspace.step(key, spec.route, "human", "undo", 7)).resolves.toMatchObject({
+    const shown = (await workspace.timeline([key], "human", [])).undo!.ref;
+    await expect(workspace.step([key], "human", "undo", shown, [])).resolves.toMatchObject({
       ok: false, kind: "refused",
     });
     expect(await workspace.readUncaptured(key, spec.route)).toEqual(upgraded);
