@@ -15,6 +15,8 @@ session ids and host this run recorded; anything else it finds is printed as res
 """
 
 import hashlib, json, os, re, shutil, subprocess, sys, tempfile, time, urllib.error, urllib.request
+from concurrent.futures import ThreadPoolExecutor
+from itertools import batched
 from pathlib import Path
 
 CHECKOUT = Path(__file__).resolve().parents[1]
@@ -93,16 +95,23 @@ def pick_models(args: list[str], default: Path) -> list[list[str]]:
 
 
 def owner_files(roots: list[str]) -> dict:
+    def read(path):
+        # Fresh stat preserves post-enumeration edits and per-file failures.
+        try:
+            stat = os.stat(path)
+        except OSError:
+            return None
+        return path, [stat.st_size, stat.st_mtime_ns]
+
     files = {}
-    for root in roots:
-        for dirpath, _, names in os.walk(root):
-            for name in names:
-                path = os.path.join(dirpath, name)
-                try:
-                    stat = os.stat(path)
-                except OSError:
-                    continue
-                files[path] = [stat.st_size, stat.st_mtime_ns]
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        for root in roots:
+            for dirpath, _, names in os.walk(root):
+                for batch in batched(names, 64):
+                    for entry in pool.map(read, (os.path.join(dirpath, name) for name in batch)):
+                        if entry is not None:
+                            path, metadata = entry
+                            files[path] = metadata
     return files
 
 
