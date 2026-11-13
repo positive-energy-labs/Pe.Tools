@@ -2,7 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect } from "effect";
-import { expect, test } from "vite-plus/test";
+import { expect, test, vi } from "vite-plus/test";
 import { address, bindWork, workHandle, type Caller } from "@pe/agent-contracts";
 import { withInvocationContext } from "@pe/runtime/context";
 import { findingSchema, findingsWork, type Finding, type FindingInput } from "@pe/agent-contracts/slots";
@@ -191,9 +191,7 @@ test("findings.say twice mints two ids from ids.mint() and two times from clock.
     clock: { now: () => `2026-11-12T12:00:0${minted.length}.000Z` },
     ids: { mint: () => { minted.push(`minted-${minted.length + 1}`); return minted.at(-1)!; } },
   };
-  const presses: (string | null | undefined)[] = [];
-  const write = workspace.write.bind(workspace);
-  workspace.write = ((...args: Parameters<typeof write>) => { presses.push(args[3].press); return write(...args); }) as typeof write;
+  const written = vi.spyOn(workspace, "write");
   const executors = findingsExecutors(workspace, null as never);
   const run = async (door: keyof typeof executors, prepared: object) => {
     const work = workHandle(key, (await workspace.view(key, "findings"))?.revision ?? 0);
@@ -215,7 +213,7 @@ test("findings.say twice mints two ids from ids.mint() and two times from clock.
     verdict: { by: "person", at: "2026-11-12T12:00:05.000Z", value: "yes" },
   }] });
   // K-A4 line 3: no two writes of the findings Work share a press.
-  expect(presses).toEqual(["finding:minted-2", "finding:minted-4", "finding:minted-5", "finding:minted-6", "finding:minted-7"]);
+  expect(written.mock.calls.map(([, , , write]) => write.press)).toEqual(["finding:minted-2", "finding:minted-4", "finding:minted-5", "finding:minted-6", "finding:minted-7"]);
 });
 
 /* purge-2 integrity 1: the refusal sat on apply alone, so a start seed carried a forged author into the Work. */

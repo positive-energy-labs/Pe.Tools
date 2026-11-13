@@ -8,7 +8,8 @@ export const workReadings = (workspace: RouteWorkspace, seen: unknown[] = []): P
     seen.push(request);
     if (request.kind !== "work") throw Error(`This witness answers the work Reading only, not ${request.kind}`);
     const { kind: _kind, admission: _admission, ...key } = request;
-    return workspace.observe(key as WorkKey, key.route, (answer) =>
-      listener(("error" in answer ? { kind: "failure", key: "", error: answer.error } : { kind: "snapshot", key: "", value: answer.value }) as never), true);
+    const work: WorkKey = key;
+    return workspace.observe(work, work.route, (answer) =>
+      listener("error" in answer ? { kind: "failure", key: "", error: answer.error } : { kind: "snapshot", key: "", value: answer.value }), true);
   },
 });
