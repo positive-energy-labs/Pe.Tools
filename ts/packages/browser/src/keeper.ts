@@ -4,7 +4,8 @@ import { appendFile, mkdir, open, readFile, rm, writeFile } from "node:fs/promis
 import { join, resolve } from "node:path";
 import { spawn } from "node:child_process";
 import { Effect, Semaphore } from "effect";
-import type { KeeperConfig, SessionInfo, SessionReceipt, Viewport } from "./browser.ts";
+import type { SessionInfo, SessionReceipt, Viewport } from "./browser.ts";
+import { decodeKeeperConfig } from "./keeper-config.ts";
 import { connectCdp, type CdpClient } from "./cdp.ts";
 import { getBrowserEndpoint, getProtocol } from "./protocol.ts";
 import { stateDirectory } from "@pe/host-contracts/service-identity";
@@ -94,7 +95,7 @@ async function holdViewport(cdp: CdpClient, targetId: string, want: Viewport): P
 }
 
 export async function runBrowserKeeper(configFile: string): Promise<void> {
-  const config: KeeperConfig = JSON.parse(await readFile(configFile, "utf8"));
+  const config = decodeKeeperConfig(JSON.parse(await readFile(configFile, "utf8")));
   const storage = stateDirectory(config.home, config.id);
   const directory = storage.path;
   const viewport = config.open?.viewport ?? defaultViewport;

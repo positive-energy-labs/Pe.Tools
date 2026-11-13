@@ -1,3 +1,4 @@
+import { hostState } from "../src/host-ownership.ts";
 import { notices as storedNotices } from "@pe/host-contracts/kinds";
 import { stateMachine, stateFixture } from "../../../tests/isolated-home/storage.ts";
 import { dirname as storedParent } from "node:path";
@@ -20,10 +21,10 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { Effect } from "effect";
 import { afterEach, beforeEach, describe, expect, test } from "vite-plus/test";
-import { sha256Hex } from "@pe/host-contracts/store";
+import { sha256Hex } from "@pe/host-contracts/kinds";
 import { hostInputs } from "../src/host-program.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
-import { noticeRows, storedBlobsPath, storedNoticesPath } from "../src/notice-feed.ts";
+import { noticeRows } from "../src/notice-feed.ts";
 import { createPackageLifecycle } from "../src/package-lifecycle.ts";
 import { listPackages } from "../src/packages.ts";
 import { createPodRoutes } from "../src/pod-routes.ts";
@@ -59,7 +60,7 @@ const holds = (path: string, bytes: string) =>
   existsSync(path) && readFileSync(path, "utf8") === bytes;
 /** Whether the blob store holds these exact bytes under their hash (`state\\Blobs\\sha256\\<hash>`). */
 const rests = (bytes: string) => {
-  const blob = join(storedBlobsPath(), "sha256", sha256Hex(bytes));
+  const blob = join(hostState().blobs, "sha256", sha256Hex(bytes));
   const local = join(stateTree(root).blobs, "sha256", sha256Hex(bytes));
   return [blob, local, join(stateMachine(root).blobs, "sha256", sha256Hex(bytes))].some(
     (file) => existsSync(file) && readFileSync(file, "utf8") === bytes,

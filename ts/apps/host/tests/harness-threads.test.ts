@@ -1,3 +1,4 @@
+import { hostState } from "../src/host-ownership.ts";
 import { stateFixture } from "../../../tests/isolated-home/storage.ts";
 import { updateFixture } from "./storage.ts";
 import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
@@ -49,7 +50,7 @@ import {
 } from "../src/harness/threads.ts";
 import * as adapter from "../src/harness/adapter.ts";
 import { claudeSessionMeta } from "../src/harness/manifest.ts";
-import { productProvidersPath } from "../src/product-paths.ts";
+
 import { createUpdateReader, type UpdateRunner } from "../src/update-reader.ts";
 import type { Envelope } from "@pe/host-contracts/pe-revit-contract";
 import { sdkBinary, sdkCommand } from "./sdk-replay.ts";
@@ -906,7 +907,7 @@ test("an endpoint provider is checked before save, and every thread carries its 
     );
     expect((await add("codex", "vps", `${origin}/ok/v1`, codexKey)).status).toBe(409);
     expect((await call("POST", "/pe/providers/codex-vps/open-login")).status).toBe(409);
-    expect(JSON.parse(await readFile(productProvidersPath(), "utf8")).providers).toHaveLength(2);
+    expect(JSON.parse(await readFile(hostState().providers, "utf8")).providers).toHaveLength(2);
 
     // The CLI and web select a draft model immediately after creating a thread, while
     // its adapter is still connecting. No readiness poll belongs in either caller.
@@ -1020,7 +1021,7 @@ test("an endpoint provider is checked before save, and every thread carries its 
     expect((await call("POST", "/pe/threads", { providerId: "codex-vps" })).status).toBe(400);
   } finally {
     server.close();
-    await rm(productProvidersPath(), { force: true });
+    await rm(hostState().providers, { force: true });
   }
   // Every probe child now dies by tree kill (two awaited taskkill.exe runs on win32): 11.6 s -> 47 s
   // measured 2026-11-02. The cost is the Spawner closing a live leader, not this test.

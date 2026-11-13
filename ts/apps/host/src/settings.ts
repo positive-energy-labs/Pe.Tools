@@ -39,7 +39,6 @@ import { requirePackageEnabled, activePackages, projectPodIds } from "./package-
 import { shippedPodsSettled } from "./installed-pods.ts";
 import { LocalOpError } from "./local-error.ts";
 import { hostState } from "./host-ownership.ts";
-import { productPathNames } from "@pe/host-contracts/contracts";
 import { sha256Hex,
   writeHome,
   writeState,
@@ -48,8 +47,7 @@ import { sha256Hex,
   type StoredFile,
   type StateRoot,
 } from "@pe/host-contracts/kinds";
-import { stateDirectory } from "@pe/host-contracts/service-identity";
-export { writeHome } from "@pe/host-contracts/kinds";
+import { stateDirectory, stateScope, stateTree } from "@pe/host-contracts/service-identity";
 export const podMemberKind = homeKind({
   schema: z.unknown(),
   place: (_parts: readonly string[]) => "Pod member",
@@ -124,21 +122,16 @@ export function rollbackHomeMembers(writes: readonly HomeMemberUndo[]): string[]
 
 /**
  * One pod's run output, `state\Runs\<pod-id>` (homes freeze shape 7); a run no pod owns goes to
- * `_no-pod`. A run is machine state and never sits in a home. An owner that supplies its own Pods
- * root (the demo lane, a test) keeps its runs in `Runs` beside it, outside the product's state.
+ * `_no-pod`. A custom Pods root changes authored input, never the machine that owns run output.
+ * This agrees with C# ProductRuntimeStateLayout.RunPath, independent of the Pods location.
  */
 export const runsDirectory = (
   pod: string | null | undefined,
-  ctx: Pick<PodContext, "machine"> = {},
-) =>
-  stateDirectory(
-    ctx.machine ?? hostState(),
-    productPathNames.runsDirectoryName, pod ?? productPathNames.podlessRunsDirectoryName,
-  );
-export const runsFolder = (
-  pod: string | null | undefined,
-  ctx: Pick<PodContext, "podsRoot" | "machine"> = {},
-) => runsDirectory(pod, ctx).path;
+  ctx: Pick<PodContext, "machine" | "podsRoot"> = {},
+) => {
+  const machine = ctx.machine ?? hostState();
+  return pod ? stateDirectory(stateScope(machine, machine.runs), pod) : stateScope(machine, machine.podlessRuns);
+};
 
 const ajv = new Ajv({ allErrors: true, strict: false, allowUnionTypes: true });
 // ponytail: one host-wide write lane; per-member locks only if unrelated writes contend.
@@ -233,7 +226,7 @@ export const listRuns = Effect.fnUntraced(function* (
 ) {
   // The pod must exist and be enabled; its runs sit under machine state, keyed by its id.
   yield* podFolder(request.pod, ctx);
-  const folder = runsFolder(request.pod, ctx);
+  const folder = runsDirectory(request.pod, ctx).path;
   const entries = yield* readDirectoryEntriesOrEmpty(folder, "pod.runs");
   const runs: PodRuns["runs"][number][] = [];
   /** The member each run wrote, from its `written-member.json` output (a capture's product). */
@@ -424,7 +417,7 @@ export const writeRun = (
     Effect.gen(function* () {
       const key = "pod.run.write";
       yield* podFolder(pod, ctx);
-      const folder = join(runsFolder(pod, ctx), runId);
+      const folder = join(runsDirectory(pod, ctx).path, runId);
       yield* makeDirectory(folder, key);
       for (const [name, content] of Object.entries(files))
         // Run output is machine state, so it takes the kernel's atomic write, not the home door.
@@ -508,11 +501,10 @@ const writablePath = Effect.fnUntraced(function* (
   const directory = yield* podFolder(request.pod, ctx);
   const home = podHome(directory, ctx.pointer);
   return podMemberKind.in(
-    {
+    stateTree(dirname((ctx.machine ?? hostState()).state)).home({
       root: dirname(dirname(directory)),
       tier: home?.tier ?? "user",
-      machine: ctx.machine ?? hostState(),
-    },
+    }),
     [
       basename(dirname(directory)),
       basename(directory),

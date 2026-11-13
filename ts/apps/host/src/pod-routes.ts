@@ -1,3 +1,4 @@
+import { stateSegments } from "@pe/host-contracts/service-identity";
 import type { RevitBridge } from "./bridge.ts";
 import * as contracts from "@pe/agent-contracts";
 import { z } from "zod";
@@ -62,7 +63,7 @@ const trustSchema = z.record(z.string(), z.string().regex(/^pod-bytes:[a-f0-9]{6
 export const trustKind = keptStateKind({
   schema: trustSchema,
   place: () => "Pod route trust",
-  segments: () => ["route-trust.json"],
+  segments: () => stateSegments("routeTrust"),
 });
 
 /** Trusted browser extensions have the shell's authority. Trust is local, explicit and content-pinned. */

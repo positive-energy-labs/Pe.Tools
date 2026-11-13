@@ -1,3 +1,4 @@
+import { stateScope } from "@pe/host-contracts/service-identity";
 import { catalogsFor } from "./ducts-files.ts";
 import { z } from "zod";
 import { admitNativeCaller } from "./native-read-policy.ts";
@@ -1341,7 +1342,7 @@ export const defaultReadOwner = (
     };
     return yield* makeReadOwner(inputs, {
       ...options,
-      store: options.store ?? fileRouteDocumentStore(hostState().directory("Work")),
+      store: options.store ?? fileRouteDocumentStore(stateScope(hostState(), hostState().work)),
       live: { ...live, owner: ductsReadings(yield* RevitBridge) },
     });
   });

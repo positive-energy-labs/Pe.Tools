@@ -156,10 +156,19 @@ test("a state log decodes per line, and a derived folder is read and written by 
 test("the blob store has one writer, and reads back only bytes that match their hash", () => {
   const { sha256, blob: path } = rest(machine, "bytes");
   expect(path).toBe(blob("bytes"));
-  expect(rested(machine, sha256)?.toString()).toBe("bytes");
+  expect(rested(machine, sha256)).toEqual({ kind: "ok", bytes: Buffer.from("bytes") });
   writeFileSync(path, "tampered");
-  expect(rested(machine, sha256)).toBeNull();
-  expect(rested(machine, "../../etc")).toBeNull();
+  expect(rested(machine, sha256)).toEqual({ kind: "corrupt" });
+  expect(rested(machine, "../../etc")).toEqual({ kind: "corrupt" });
+});
+
+test("a caller without a keep check cannot overwrite a decision without preserving its bytes", () => {
+  const file = trustKind.in(machine);
+  const prior = "{ unreadable decision";
+  writeState(file, prior);
+  read(file);
+  writeState(file, JSON.stringify({ name: "replacement" }));
+  expect(rested(machine, sha256Hex(prior))).toEqual({ kind: "ok", bytes: Buffer.from(prior) });
 });
 
 /** Typechecked only: never called. */

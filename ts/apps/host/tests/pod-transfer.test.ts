@@ -1,3 +1,4 @@
+import { hostState } from "../src/host-ownership.ts";
 import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { fixtureNative } from "./fixture-native.ts";
 import { testHostInputs, callRouteOver } from "./effect-test.ts";
@@ -21,7 +22,7 @@ const homeVariable = productPathNames.productHomeVariable;
 import type { PictureCaptures } from "../src/captures-route.ts";
 import { listPackages } from "../src/packages.ts";
 import { exportPod, importPod, importRecordFile, placePod, writeZip } from "../src/pod-transfer.ts";
-import { productPluginDecisionsPath } from "../src/product-paths.ts";
+
 
 let root: string;
 let pods: string;
@@ -50,7 +51,7 @@ beforeEach(async () => {
 });
 afterEach(async () => {
   await web.close();
-  await rm(productPluginDecisionsPath(), { force: true });
+  await rm(hostState().pluginDecisions, { force: true });
   if (previousHome === undefined) delete process.env[homeVariable];
   else process.env[homeVariable] = previousHome;
   await native.close();
@@ -110,7 +111,7 @@ test("identity duplicate checks include disabled siblings with invalid members",
   const large = await open(join(pods, "twin/assets/oversize.bin"), "r+");
   await large.truncate(64 * 1024 * 1024 + 1);
   await large.close();
-  const decisions = productPluginDecisionsPath();
+  const decisions = hostState().pluginDecisions;
   await mkdir(join(decisions, ".."), { recursive: true });
   await writeFile(decisions, '{"pod:same":false}');
   const result = await call("pod.list", { projection: "identity", folder: "default" });
@@ -120,7 +121,7 @@ test("identity duplicate checks include disabled siblings with invalid members",
 
 test("identity fully admits its target and observes manifest replacement and new duplicate claims", async () => {
   await writePod("default", { "pod.json": '{"id":"before"}', "settings/kept.json": "{}" });
-  const decisions = productPluginDecisionsPath();
+  const decisions = hostState().pluginDecisions;
   await mkdir(join(decisions, ".."), { recursive: true });
   await writeFile(decisions, '{"pod:before":false}');
   expect((await call("pod.list", { projection: "identity", folder: "default" })).status).toBe(400);

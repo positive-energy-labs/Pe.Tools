@@ -21,7 +21,7 @@ import { Cause, Effect, Exit, Schema, Scope } from "effect";
 import { Spawner } from "./spawner.ts";
 import { MessagesReply, ModelList, ResponsesReply } from "./edge-schemas.ts";
 import { z } from "zod";
-import { productProvidersPath } from "../product-paths.ts";
+
 import { harnessKeyRole, keyRefusalText, resolveKey, sharedKeys } from "@pe/host-contracts/shared-keys";
 import { adapterCli, adapterLogin, adapters, openAdapter, stopChild } from "./adapter.ts";
 import { classifyEndpointFailure } from "./endpoint-failure.ts";
@@ -160,7 +160,7 @@ function authEnv(record: ProviderRecord, modelId?: string): Record<string, strin
     supports_websockets: false,
   };
   const codexHome = join(
-    dirname(productProvidersPath()),
+    dirname(hostState().providers),
     "codex-endpoints",
     createHash("sha256").update(record.id).digest("hex"),
   );
@@ -688,7 +688,7 @@ export function createProviders(options: ProvidersOptions) {
   // a bad decode. Retire this exception when T3 replaces provider persistence.
   /** Re-read before writes so external damage cannot be replaced by a cached valid list. */
   const stored = (): EndpointRecord[] => {
-    const path = productProvidersPath();
+    const path = hostState().providers;
     try {
       const parsed = existsSync(path)
         ? storedSchema.parse(JSON.parse(readFileSync(path, "utf8")))
@@ -723,7 +723,7 @@ export function createProviders(options: ProvidersOptions) {
   const save = (records: EndpointRecord[]) => {
     stored();
     if (providerReadError) throw Error(providerReadError);
-    writeJson(productProvidersPath(), { providers: records });
+    writeJson(hostState().providers, { providers: records });
   };
   const records = (): ProviderRecord[] => [
     ...harnessIds.map((harness) => ({

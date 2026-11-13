@@ -10,9 +10,10 @@ export async function put(bytes: Uint8Array, fileName: string): Promise<BlobRef>
 }
 export async function get(ref: BlobRef): Promise<Buffer> {
   blobRefSchema.parse(ref);
-  const bytes = rested(hostState(), ref.digest);
-  if (!bytes)
-    throw refused(`Stored bytes are missing or corrupt for ${ref.fileName} (${ref.digest})`, "blob.missing");
+  const found = rested(hostState(), ref.digest);
+  if (found.kind !== "ok")
+    throw refused(`Stored bytes are ${found.kind === "kept" ? `unreadable: ${found.reason}` : found.kind} for ${ref.fileName} (${ref.digest})`, `blob.${found.kind === "kept" ? "unreadable" : found.kind}`);
+  const bytes = found.bytes;
   if (bytes.length !== ref.size)
     throw refused(`Stored bytes failed integrity for ${ref.fileName} (${ref.digest})`, "blob.corrupt");
   return bytes;

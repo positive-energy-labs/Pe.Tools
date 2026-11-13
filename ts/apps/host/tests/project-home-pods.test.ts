@@ -7,7 +7,13 @@ import { tmpdir } from "node:os";
 import { join, relative, isAbsolute } from "node:path";
 import { targetHomes } from "../src/call-route.ts";
 import { bindPackageLifecycle, createPackageLifecycle } from "../src/package-lifecycle.ts";
-import { listPods, readMember, writeMember, writeRun, runsFolder } from "../src/settings.ts";
+import { listPods, readMember, writeMember, writeRun, runsDirectory } from "../src/settings.ts";
+import { hostState } from "../src/host-ownership.ts";
+
+test("a custom Pods root leaves pod and podless output in machine state, like C# PodRuns", () => {
+  expect(runsDirectory("site", { podsRoot: "X:/custom/Pods" }).path).toBe(join(hostState().runs, "site"));
+  expect(runsDirectory(null, { podsRoot: "X:/custom/Pods" }).path).toBe(hostState().podlessRuns);
+});
 
 // Homes slice 6, the project pointer (MAP freeze shape 4): a call that targets a document reads
 // that document's project home between the user and firm homes. The temp folder stands for the
@@ -108,7 +114,7 @@ test("the pointer a call reads is its target document's, from the bridge's open-
 // M2: filing runs under the Pod's content home violates ADR 0037 rule 6.
 test("a project-only Pod files run bytes outside every content home", async () => {
   const folder = await run(writeRun("site", "project-run", { "receipt.json": "project run" }, { pointer }));
-  expect(folder).toBe(join(runsFolder("site"), "project-run"));
+  expect(folder).toBe(join(runsDirectory("site").path, "project-run"));
   for (const home of [user, project, process.env.PE_TOOLS_SHARED_ROOT!]) {
     const rel = relative(home, folder);
     expect(isAbsolute(rel) || rel.startsWith(".."), `${folder} must be outside ${home}`).toBe(true);

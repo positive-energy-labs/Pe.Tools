@@ -1,6 +1,7 @@
 /** Pure stored-value contracts and content identity; I/O stays in store.ts. */
 import { createHash } from "node:crypto";
 import { z } from "zod";
+import type { At, StoredFile, Stored } from "./kinds.ts";
 import type { HomePath, StatePath } from "./store-paths.ts";
 
 export const sha256Hex = (bytes: Uint8Array | string) =>
@@ -55,3 +56,37 @@ export type DerivedStore<P extends HomePath | StatePath> = {
   notices: StatePath;
   blobRoot: StatePath;
 };
+
+export function policyOf(
+  file: StoredFile<unknown, "state">,
+): Extract<ReadRule, { class: "discard" }>;
+export function policyOf(
+  file: StoredFile<unknown, "home" | "state-kept">,
+): Extract<ReadRule, { class: "keep" }>;
+export function policyOf(file: StoredFile<unknown, At>): ReadRule;
+export function policyOf(file: StoredFile<unknown, At>): ReadRule {
+  const { parse, quiet } = file.kind;
+  return file.kind.at === "state"
+    ? {
+        class: "discard",
+        place: file.place,
+        parse,
+        notices: file.machine.notices,
+        blobRoot: file.machine.blobs,
+      }
+    : {
+        class: "keep",
+        place: file.place,
+        parse,
+        notices: quiet ? undefined : file.machine.notices,
+      };
+}
+export function settled(
+  read: Exclude<StoredRead<never>, { kind: "ok" }>,
+): Exclude<Stored<never>, { kind: "ok" }>;
+export function settled<T>(read: StoredRead<T>): Stored<T>;
+export function settled<T>(read: StoredRead<T>): Stored<T> {
+  return read.kind === "discarded"
+    ? { kind: "set-aside", reason: read.reason, blob: read.blob }
+    : read;
+}

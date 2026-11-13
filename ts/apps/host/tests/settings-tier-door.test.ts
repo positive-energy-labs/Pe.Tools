@@ -7,8 +7,8 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { expect, test, vi } from "vite-plus/test";
-import { sha256Hex } from "@pe/host-contracts/store";
-import { noticeRows, storedBlobsPath, storedNoticesPath } from "../src/notice-feed.ts";
+import { sha256Hex } from "@pe/host-contracts/kinds";
+import { noticeRows } from "../src/notice-feed.ts";
 import { bootHost } from "./real-server.ts";
 import { BRIDGE_CONTRACT_VERSION, BRIDGE_PATH, HOST_RUNTIME_SERVICE_QUERY, type BridgeFrame } from "@pe/host-contracts/contracts";
 import { ownedSession } from "./callers.ts";
@@ -104,10 +104,10 @@ test.each(["firm", "project"] as const)("settings.tiers.write crosses /actions, 
     expect(sha256Hex(bytes)).not.toBe(sha256Hex(prior));
     expect(JSON.parse(bytes.toString())).toMatchObject({ criteria: { allowanceInWg: { return: 0.35 } } });
     expect(receipt.result.sha256).toBe(sha256Hex(bytes));
-    expect(readFileSync(join(storedBlobsPath(), "sha256", sha256Hex(prior)))).toEqual(prior);
+    expect(readFileSync(join(hostState().blobs, "sha256", sha256Hex(prior)))).toEqual(prior);
     // Mutant H9-notice: omit the action receipt id from the saved-setting notice.
-    expect(storedNotices(stateMachine(storedParent(storedNoticesPath()))).find(notice => notice.path === path)?.reason).toContain(receipt.id);
-    expect(storedNotices(stateMachine(storedParent(storedNoticesPath()))).filter(notice => notice.path === path)).toMatchObject([
+    expect(storedNotices(stateMachine(storedParent(hostState().notices))).find(notice => notice.path === path)?.reason).toContain(receipt.id);
+    expect(storedNotices(stateMachine(storedParent(hostState().notices))).filter(notice => notice.path === path)).toMatchObject([
       { class: "keep", sha256: sha256Hex(bytes), reason: expect.stringContaining(sha256Hex(prior)) },
     ]);
     const works = [bindWork("ducts", null, documentRef ? undefined : "tier-proof", documentRef)];

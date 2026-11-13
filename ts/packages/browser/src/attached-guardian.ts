@@ -6,17 +6,9 @@ import { Effect, Semaphore } from "effect";
 import { connectCdp, type CdpClient, type CommandOptions } from "./cdp.ts";
 import { BrowserError } from "./errors.ts";
 import { evaluator } from "./evaluate.ts";
-import { releaseAttachment, type AttachmentLock } from "./attachment-lock.ts";
+import { releaseAttachment } from "./attachment-lock.ts";
 import { publishJson } from "./receipts.ts";
-import type { StateDirectory } from "@pe/host-contracts/kinds";
-
-interface GuardianConfig {
-  storage: StateDirectory;
-  endpoint: string;
-  receipt: string;
-  lock: AttachmentLock;
-  timeoutMs: number;
-}
+import { decodeGuardianConfig } from "./keeper-config.ts";
 interface Forward {
   id: number;
   method: string;
@@ -88,7 +80,7 @@ export function guardianClient(pipe: CdpClient): CdpClient {
 }
 
 export async function runAttachedGuardian(configFile: string): Promise<void> {
-  const config: GuardianConfig = JSON.parse(await readFile(configFile, "utf8"));
+  const config = decodeGuardianConfig(JSON.parse(await readFile(configFile, "utf8")));
   const directory = dirname(config.receipt);
   const owned = new Set<string>();
   const creates = new Set<Promise<void>>();

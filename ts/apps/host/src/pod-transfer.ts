@@ -6,8 +6,8 @@ import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { crc32, deflateRawSync, inflateRawSync } from "node:zlib";
 import { message, packageIdSchema, packageMemberPathSchema } from "@pe/agent-contracts";
 import { scriptPodMemberBounds } from "@pe/host-contracts/generated";
-import { writeState, homeKind, stateKind, type StateRoot } from "@pe/host-contracts/kinds";
-import { stateDirectory } from "@pe/host-contracts/service-identity";
+import { writeHome, writeState, homeKind, stateKind, type StateRoot, type StoredFile } from "@pe/host-contracts/kinds";
+import { stateDirectory, stateTree } from "@pe/host-contracts/service-identity";
 import { hostState } from "./host-ownership.ts";
 import { z } from "zod";
 import type { PodExport, PodImport, PodPromote } from "@pe/host-contracts/operation-types";
@@ -26,9 +26,9 @@ import { scratchPageDirectory } from "./page-libraries.ts";
 import { activateImportedPackage } from "./package-lifecycle.ts";
 import { sha256Hex as sha256, validatePageHtml, writeArtifact } from "./page-artifacts.ts";
 import { StepFailure } from "./command-executor.ts";
-import { rollbackHomeMembers, writeHome, podMemberKind, type HomeMemberUndo } from "./settings.ts";
+import { rollbackHomeMembers, podMemberKind, type HomeMemberUndo } from "./settings.ts";
 
-const archiveExportKind = homeKind({
+export const archiveExportKind = homeKind({
   schema: z.unknown(),
   place: (_name: string) => "Pod archive export",
   segments: (name: string) => [name],
@@ -67,7 +67,11 @@ export async function exportPod(
   request: { pod: string; archivePath: string },
   options: TransferOptions = {},
 ): Promise<PodExport> {
-  return writePodExport(await preparePodExport(request, options));
+  const prepared = await preparePodExport(request, options);
+  return writePodExport(prepared, archiveExportKind.in(
+    stateTree(dirname((options.machine ?? hostState()).state)).home({ root: dirname(prepared.result.archivePath), tier: "user" }),
+    basename(prepared.result.archivePath),
+  ));
 }
 
 /** Freeze the archive and its dependency versions at command admission. */
@@ -127,14 +131,13 @@ export async function preparePodExport(
 /** Write exactly the captured bytes. The locator is the immutable admitted destination. */
 export async function writePodExport(
   prepared: Pick<Awaited<ReturnType<typeof preparePodExport>>, "bytesBase64" | "result">,
+  file: StoredFile<unknown, "state" | "home">,
 ): Promise<PodExport> {
   const { archivePath } = prepared.result;
+  if (resolve(file.path) !== resolve(archivePath)) throw new TransferRefused("Archive destination changed after admission.");
   await writeArtifact(
     dirname(archivePath),
-    archiveExportKind.in(
-      hostState().home({ root: dirname(archivePath), tier: "user" }),
-      basename(archivePath),
-    ),
+    file,
     Buffer.from(prepared.bytesBase64, "base64"),
   );
   return prepared.result;
@@ -365,7 +368,7 @@ export async function installArchive(
       for (let parent = dirname(target); parent !== directory; parent = dirname(parent)) directories.add(parent);
       // A write may throw after creating bytes. Undo still uses only our intended hash.
       const file = podMemberKind.in(
-        { root: dirname(podsRoot), tier: "user", machine: options.machine ?? hostState() },
+        stateTree(dirname((options.machine ?? hostState()).state)).home({ root: dirname(podsRoot), tier: "user" }),
         [basename(podsRoot), folder, ...path.split("/")],
       );
       writes.push({ file, sha256: sha256(bytes), prior: null });

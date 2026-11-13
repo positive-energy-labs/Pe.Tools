@@ -14,7 +14,7 @@ import { basename, join } from "node:path";
 import { Effect } from "effect";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import { fansSheetData, ductsFirmSchema, ductsDocumentSchema, fansDocumentSchema, ductParameterSlots, neutralFansWork, type DuctsCriteriaCell } from "@pe/agent-contracts";
-import { readStoredNotices } from "@pe/host-contracts/store";
+import { readStoredNotices } from "@pe/host-contracts/kinds";
 import { resolveCriteria, resolveInputs } from "@pe/ducts-domain/sheet/index";
 import { nodeOf, snapshotOf } from "@pe/ducts-domain/test-snapshot";
 import { DuctFiles } from "../../../host/src/ducts-files.ts";

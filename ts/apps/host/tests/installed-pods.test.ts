@@ -15,11 +15,12 @@ import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { PictureCaptures } from "../src/captures-route.ts";
-import { storedNoticesPath } from "../src/notice-feed.ts";
+
 import { importShippedPods } from "../src/installed-pods.ts";
 import { listPackages } from "../src/packages.ts";
 import { exportPod, importPod, importRecordFile, readZip, writeZip } from "../src/pod-transfer.ts";
 import * as settings from "../src/settings.ts";
+import * as store from "@pe/host-contracts/kinds";
 import { productPodsRootPath } from "../src/product-paths.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
 import { shippedPodUpdateRefusals } from "../src/shipped-pod-status.ts";
@@ -63,7 +64,7 @@ test("a torn import resumes missing members and publishes its manifest last", as
   const member = join(directory, "pages", "tour", "index.html");
   await mkdir(dirname(member), { recursive: true });
   await writeFile(member, "<title>Tour</title>");
-  const writes = vi.spyOn(settings, "writeHome");
+  const writes = vi.spyOn(store, "writeHome");
   await expect(importPod({ archivePath: join(shipped, "example.zip") }, { podsRoot: pods, captures }))
     .resolves.toMatchObject({ id: "example" });
   expect(await readFile(join(directory, "pod.json"), "utf8")).toContain('"example"');
@@ -94,9 +95,9 @@ test("a shipped example resumes a torn folder on restart, even if previously rec
 });
 
 test.each(["io", "cas"] as const)("import rolls back a second-member failure (%s) and a retry succeeds", async (mode) => {
-  const write = settings.writeHome;
+  const write = store.writeHome;
   let count = 0;
-  const spy = vi.spyOn(settings, "writeHome").mockImplementation((...args) => {
+  const spy = vi.spyOn(store, "writeHome").mockImplementation((...args) => {
     if (++count === 2) {
       if (mode === "io") throw Error("injected second-member failure");
       return { ok: false, kind: "conflict", actualSha256: null };
@@ -111,10 +112,10 @@ test.each(["io", "cas"] as const)("import rolls back a second-member failure (%s
 });
 
 test.each([true, false])("a throwing second write rolls back only matching bytes (%s)", async (matching) => {
-  const write = settings.writeHome;
+  const write = store.writeHome;
   let count = 0;
   let torn = "";
-  vi.spyOn(settings, "writeHome").mockImplementation((...args) => {
+  vi.spyOn(store, "writeHome").mockImplementation((...args) => {
     if (++count !== 2) return write(...args);
     torn = args[0].path;
     write(...args);
@@ -133,10 +134,10 @@ test.each([true, false])("a throwing second write rolls back only matching bytes
 });
 
 test("rollback names a directory kept because a concurrent writer added a file", async () => {
-  const write = settings.writeHome;
+  const write = store.writeHome;
   let count = 0;
   let directory = "";
-  vi.spyOn(settings, "writeHome").mockImplementation((...args) => {
+  vi.spyOn(store, "writeHome").mockImplementation((...args) => {
     if (++count === 2) {
       directory = dirname(args[0].path);
       writeFileSync(join(directory, "later.txt"), "mine");
@@ -179,9 +180,9 @@ test.each(["io", "cas"] as const)("update rolls back a second-member failure (%s
   await rm(join(shipped, "example.zip"));
   await exportPod({ pod: "example", archivePath: join(shipped, "example.zip") },
     { podsRoot: join(root, "examples"), captures });
-  const write = settings.writeHome;
+  const write = store.writeHome;
   let count = 0;
-  const spy = vi.spyOn(settings, "writeHome").mockImplementation((...args) => {
+  const spy = vi.spyOn(store, "writeHome").mockImplementation((...args) => {
     if (++count === 2) {
       if (mode === "io") throw Error("injected second-member failure");
       return { ok: false, kind: "conflict", actualSha256: null };
@@ -203,10 +204,10 @@ test.each(["import", "update"] as const)("%s rollback keeps and names a concurre
     await exportPod({ pod: "example", archivePath: join(shipped, "example.zip") },
       { podsRoot: join(root, "examples"), captures });
   }
-  const write = settings.writeHome;
+  const write = store.writeHome;
   let count = 0;
   let first = "";
-  vi.spyOn(settings, "writeHome").mockImplementation((...args) => {
+  vi.spyOn(store, "writeHome").mockImplementation((...args) => {
     if (++count === 1) first = args[0].path;
     if (count === 2) {
       writeFileSync(first, "concurrent edit");
@@ -228,7 +229,7 @@ test.each(["import", "update"] as const)("%s rollback keeps and names a concurre
 test("host-start examples use the override home and the write door, never the Documents home", async () => {
   const override = join(root, "override");
   vi.stubEnv("PE_TOOLS_PRODUCT_HOME", override);
-  const writes = vi.spyOn(settings, "writeHome");
+  const writes = vi.spyOn(store, "writeHome");
   // Observe resolution before any import: a real-home mutant fails without touching personal files.
   expect(productPodsRootPath()).toBe(join(override, "Pods"));
   const report = await importShippedPods({ shippedRoot: shipped, ledger: ledgerFixture(ledger), captures });
@@ -266,7 +267,7 @@ test("a dev host with a missing checkout example directory still starts with one
 test("a shipped update uses home CAS without moving the pod, and keeps a later user edit", async () => {
   await boot();
   const member = join(pods, "example", "pages", "tour", "index.html");
-  const writes = vi.spyOn(settings, "writeHome");
+  const writes = vi.spyOn(store, "writeHome");
   const update = async (html: string) => {
     await writeFile(join(root, "examples", "example", "pages", "tour", "index.html"), html);
     await rm(join(shipped, "example.zip"));
@@ -378,8 +379,8 @@ test("rollback undoes repeated writes to one member newest first", async () => {
   const path = join(root, "member.txt");
   await writeFile(path, "original");
   const hash = (bytes: string) => createHash("sha256").update(bytes).digest("hex");
-  expect(settings.writeHome(authoredFixture(path), "first", hash("original")).ok).toBe(true);
-  expect(settings.writeHome(authoredFixture(path), "second", hash("first")).ok).toBe(true);
+  expect(store.writeHome(authoredFixture(path), "first", hash("original")).ok).toBe(true);
+  expect(store.writeHome(authoredFixture(path), "second", hash("first")).ok).toBe(true);
   expect(settings.rollbackHomeMembers([
     { file: authoredFixture(path), sha256: hash("first"), prior: Buffer.from("original") },
     { file: authoredFixture(path), sha256: hash("second"), prior: Buffer.from("first") },
@@ -396,9 +397,9 @@ test("a failed last non-manifest write never exposes a manifest during import", 
   await writeFile(join(shipped, "example.zip"), writeZip(ordered));
   const directory = join(pods, "example");
   const manifest = join(directory, "pod.json");
-  const write = settings.writeHome;
+  const write = store.writeHome;
   const observations: boolean[] = [];
-  const spy = vi.spyOn(settings, "writeHome").mockImplementation((...args) => {
+  const spy = vi.spyOn(store, "writeHome").mockImplementation((...args) => {
     observations.push(existsSync(manifest));
     if (args[0].path === join(directory, "z-last.txt")) throw Error("last member failed");
     const result = write(...args);

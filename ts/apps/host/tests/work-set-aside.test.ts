@@ -17,8 +17,8 @@ import { join } from "node:path";
 import { expect, test } from "vite-plus/test";
 import { bindWork, workKey, ductsRouteState, fansRouteState } from "@pe/agent-contracts";
 import { RouteWorkspace } from "@pe/runtime";
-import { sha256Hex } from "@pe/host-contracts/store";
-import { storedBlobsPath, storedNoticesPath } from "../src/notice-feed.ts";
+import { sha256Hex } from "@pe/host-contracts/kinds";
+
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
 
 const blobOf = (bytes: Uint8Array, path: string) => join(stateMachine(path).blobs, "sha256", sha256Hex(bytes));

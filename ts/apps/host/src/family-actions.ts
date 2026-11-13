@@ -115,8 +115,6 @@ export const sourceRunDirectory = async (pod: string | null | undefined, deps: P
   return runsDirectory(pod, pods);
 };
 
-export const sourceRunOutput = async (...args: Parameters<typeof sourceRunDirectory>) =>
-  (await sourceRunDirectory(...args)).path;
 
 /** Pod I/O runs against the product Pods root unless an owner (the demo lane) supplies its own. */
 export type PodDependencies = {
@@ -552,7 +550,7 @@ export function familyExecutors(
     Promise.all(
       [...new Set(sources.map((x) => x.source.root.id))].map(async (pod) => ({
         kind: "directory" as const,
-        path: await sourceRunOutput(pod, deps, await podsFor(ctx)),
+        path: (await sourceRunDirectory(pod, deps, await podsFor(ctx))).path,
       })),
     );
   const native = (
@@ -1165,7 +1163,7 @@ export function familyExecutors(
         ? [
             ...paths.map((path) => ({ kind: "member" as const, pod: input.pod!, path })),
             {
-              kind: "directory" as const, path: await sourceRunOutput(input.pod, deps, await podsFor(ctx)),
+              kind: "directory" as const, path: (await sourceRunDirectory(input.pod, deps, await podsFor(ctx))).path,
             },
           ]
         : [],

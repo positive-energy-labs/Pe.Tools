@@ -1,3 +1,4 @@
+import { stateSegments } from "@pe/host-contracts/service-identity";
 import { createHash } from "node:crypto";
 import { createPluginRuntime } from "@pe/agent-contracts";
 import { z } from "zod";
@@ -29,7 +30,7 @@ const decisionsSchema = z.record(z.string(), z.boolean());
 export const decisionsKind = keptStateKind({
   schema: decisionsSchema,
   place: () => "Pod on and off choices",
-  segments: () => ["plugins.json"],
+  segments: () => stateSegments("pluginDecisions"),
 });
 type DecisionsFile = StoredFile<z.infer<typeof decisionsSchema>, "state-kept">;
 let serving: ReturnType<typeof createPackageLifecycle> | undefined;

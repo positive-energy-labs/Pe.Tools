@@ -10,13 +10,14 @@ import { z } from "zod";
 import {
   note,
   read as readStoredFile,
+  writeHome,
   writeState,
   stateKind,
   type StateDirectory,
 } from "@pe/host-contracts/kinds";
 import { sha256Hex, validatePageHtml, writeArtifact } from "./page-artifacts.ts";
 import { scriptingWorkspaceIdentity } from "@pe/host-contracts/contracts";
-import { stateDirectory } from "@pe/host-contracts/service-identity";
+import { stateDirectory, stateTree, stateSegments } from "@pe/host-contracts/service-identity";
 import { hostOwnership, hostState } from "./host-ownership.ts";
 import {
   archiveId,
@@ -32,7 +33,7 @@ import { captureDirectory, isPackageMember, listPackages, productPodsRoots, type
 import { shippedPodUpdateRefusals } from "./shipped-pod-status.ts";
 import { activateImportedPackage } from "./package-lifecycle.ts";
 import { productPodsRootPath } from "./product-paths.ts";
-import { rollbackHomeMembers, writeHome, podMemberKind, type HomeMemberUndo } from "./settings.ts";
+import { rollbackHomeMembers, podMemberKind, type HomeMemberUndo } from "./settings.ts";
 
 type ShippedPodOutcome =
   | { archive: string; sha256: string; outcome: "imported"; id: string; folder: string }
@@ -47,6 +48,10 @@ const originalArchiveKind = stateKind({
   schema: z.unknown(),
   place: (_sha: string) => "Shipped Pod original",
   segments: (sha: string) => [`${sha}.zip`],
+});
+const shippedArchiveKind = stateKind({
+  schema: z.unknown(), place: (_fingerprint: string, _id: string) => "Shipped Pod archive",
+  segments: (fingerprint: string, id: string) => [...stateSegments("shippedPods"), fingerprint, `${id}.zip`],
 });
 
 const ledgerSchema = z.object({
@@ -65,13 +70,14 @@ async function shippedPodsRoot(options: TransferOptions & { ledger?: ReturnType<
   // archives are shared safely across hosts, and unchanged examples need no export or rewrite.
   const fingerprint = createHash("sha256").update(JSON.stringify(listing.packages.map(pod =>
     [pod.id, pod.members.map(member => [member.path, member.sha256])]))).digest("hex");
-  const shipped = join(dirname((options.ledger ?? ledgerKind.in(options.machine ?? hostState())).path), "shipped-pods", fingerprint);
+  const machine = options.machine ?? options.ledger?.machine ?? hostState();
+  const shipped = join(machine.shippedPods, fingerprint);
   for (const pod of listing.packages) {
     const archivePath = join(shipped, `${pod.id}.zip`);
     await writePodExport(await preparePodExport(
       { pod: pod.id, archivePath },
       { podsRoot: examples, captures: options.captures }, listing,
-    ));
+    ), shippedArchiveKind.in(machine, fingerprint, pod.id));
   }
   return shipped;
 }
@@ -272,11 +278,10 @@ async function offer(
               const prior = fresh.members.find((m) => m.path === member);
               const target = join(installed.directory, member);
               const file = podMemberKind.in(
-                {
+                stateTree(dirname((options.machine ?? hostState()).state)).home({
                   root: dirname(dirname(installed.directory)),
                   tier: "user",
-                  machine: options.machine ?? hostState(),
-                },
+                }),
                 [
                   basename(dirname(installed.directory)),
                   basename(installed.directory),

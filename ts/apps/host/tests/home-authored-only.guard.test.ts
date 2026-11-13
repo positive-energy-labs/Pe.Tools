@@ -17,7 +17,7 @@ import { cp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, relative, sep } from "node:path";
 import { afterEach, expect, test } from "vite-plus/test";
-import { resolvePeaSkillPaths } from "@pe/mcps";
+import { stateDirectory } from "@pe/host-contracts/service-identity";
 import { writePeaCodexProjectConfig } from "../src/harness/user-shell.ts";
 import { importShippedPods } from "../src/installed-pods.ts";
 import { listPackages } from "../src/packages.ts";
@@ -99,7 +99,7 @@ async function bootstrap(machine: Machine, home: string) {
   const pods = join(home, "Pods");
   const agent = agentOf(machine);
   // What an agent leaves in its own harness root: the deleted read-back copied it into `Skills/`.
-  const stray = join(resolvePeaSkillPaths(agent)[1]!, "stray");
+  const stray = stateDirectory(stateFixture(agent), ".claude", "skills", "stray").path;
   await mkdir(stray, { recursive: true });
   await writeFile(join(stray, "SKILL.md"), `written by an agent on ${machine.name}`);
   const content = createContributionContent({

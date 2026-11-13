@@ -1,3 +1,4 @@
+import { hostState } from "../src/host-ownership.ts";
 import { stateMachine } from "../../../tests/isolated-home/storage.ts";
 import { notices as storedNotices } from "@pe/host-contracts/kinds";
 import { dirname as storedParent } from "node:path";
@@ -142,14 +143,14 @@ test("outbox and host writers post to the notice feed's contract path", async ()
   const { readOutbox, writeOutbox } = await import("@pe/runtime/context");
   const { runtimeRoot, resolveLaneAndRoot } = await import("@pe/runtime/runtime-owner");
   const { hostOwnership } = await import("../src/host-ownership.ts");
-  const { storedNoticesPath, noteNoFirmHome } = await import("../src/notice-feed.ts");
+  const { noteNoFirmHome } = await import("../src/notice-feed.ts");
   const { createHash } = await import("node:crypto");
   const { dirname } = await import("node:path");
   const slot = `notice-path-${crypto.randomUUID()}`;
   const file = join(runtimeRoot(), "state", resolveLaneAndRoot().serviceName, "invocation-outbox",
     `${createHash("sha256").update(slot).digest("hex")}.json`);
   expect(runtimeRoot()).toBe(hostOwnership.rootPath);
-  expect(storedNoticesPath()).toBe(stateTree(runtimeRoot()).notices);
+  expect(hostState().notices).toBe(stateTree(runtimeRoot()).notices);
   mkdirSync(dirname(file), { recursive: true });
   writeFileSync(file, "{torn");
   const looked = [slot];
@@ -157,7 +158,7 @@ test("outbox and host writers post to the notice feed's contract path", async ()
     expect(() => readOutbox(slot)).toThrow(file);
     expect(() => writeOutbox(slot, { id: slot })).toThrow(file);
     noteNoFirmHome({ root: null, looked });
-    const notices = storedNotices(stateMachine(storedParent(storedNoticesPath())));
+    const notices = storedNotices(stateMachine(storedParent(hostState().notices)));
     expect(notices.filter(notice => notice.path === file)).toMatchObject([
       { class: "keep", place: "Pending action" },
     ]);

@@ -1,3 +1,4 @@
+import { hostState } from "../src/host-ownership.ts";
 import { stateFixture } from "../../../tests/isolated-home/storage.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
 import { stateMachine } from "../../../tests/isolated-home/storage.ts";
@@ -16,7 +17,7 @@ import { fileRouteDocumentStore } from "../src/route-document-store.ts";
 // Driver defect (gate 7e350aba): the sidebar kept "Work partly read" after the only unreadable Work
 // record was discarded. The cause was the host: a read that discards raises no workspace event, so
 // the `thread-work` Reading was never read again. The notice file is the event.
-// Mutant, run red once (2026-11-12): drop the `watchFile(storedNoticesPath(), …)` beside
+// Mutant, run red once (2026-11-12): drop the `watchFile(hostState().notices, …)` beside
 // `work.subscribeUncaptured` in `pe-routes.ts`.
 test("after a read discards the only unreadable Work record, the thread-work Reading says so", async () => {
   const dir = await mkdtemp(join(tmpdir(), "pe-thread-work-discard-"));

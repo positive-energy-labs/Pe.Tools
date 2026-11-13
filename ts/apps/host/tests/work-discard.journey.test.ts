@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { expect, test } from "vite-plus/test";
 import { z } from "zod";
 import { bindWork, workKey } from "@pe/agent-contracts";
-import { storedNoticesPath } from "../src/notice-feed.ts";
+
 import { createPeRoutes } from "../src/pe-routes.ts";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
 import { human, actAs } from "./callers.ts";

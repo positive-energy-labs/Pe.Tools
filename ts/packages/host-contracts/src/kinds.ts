@@ -5,6 +5,8 @@ import { productPathNames } from "./contracts/product.ts";
 import type { Home } from "./product-paths.ts";
 export {
   derivedKey,
+  derivedName,
+  storedNoticeSchema,
   sha256Hex,
   read,
   writeHome,
@@ -39,6 +41,21 @@ export type StateRoot = {
   readonly notices: StatePath;
   readonly blobs: StatePath;
   readonly derived: StatePath;
+  readonly work: StatePath;
+  readonly pages: StatePath;
+  readonly runs: StatePath;
+  readonly podlessRuns: StatePath;
+  readonly t3: StatePath;
+  readonly agent: StatePath;
+  readonly apsCredentials: StatePath;
+  readonly apsTokens: StatePath;
+  readonly harnessThreads: StatePath;
+  readonly ductsAnalyses: StatePath;
+  readonly peaWork: StatePath;
+  readonly providers: StatePath;
+  readonly pluginDecisions: StatePath;
+  readonly routeTrust: StatePath;
+  readonly shippedPods: StatePath;
 };
 /** A proven home, bound to the machine whose blob store keeps what a write into it replaces (ADR 0037 rule 7). Minted by `stateTree(root).home(home)`. */
 export type HomeRoot = Home & { readonly machine: StateRoot };

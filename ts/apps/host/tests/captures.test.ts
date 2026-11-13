@@ -25,7 +25,7 @@ import { sdkSessions } from "./native-receipt-fixture.ts";
 import { NodeHttpClient, NodeServices } from "@effect/platform-node";
 import { createHash } from "node:crypto";
 import { appendFile, readFile, rm, writeFile } from "node:fs/promises";
-import { storedNoticesPath } from "../src/notice-feed.ts";
+
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Context, Effect, Layer } from "effect";

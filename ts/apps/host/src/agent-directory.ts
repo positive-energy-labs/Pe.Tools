@@ -1,25 +1,26 @@
+import { stateSegments } from "@pe/host-contracts/service-identity";
 import { existsSync, mkdirSync, readFileSync, realpathSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { productPathNames } from "@pe/host-contracts/contracts";
 import { note, stateKind, writeState } from "@pe/host-contracts/kinds";
 import { z } from "zod";
 import { peaAgentInstructions } from "@pe/mcps";
-import { productAgentPath } from "./product-paths.ts";
+
 import { hostOwnership, hostState } from "./host-ownership.ts";
 const instructionsKind = stateKind({
   schema: z.string(),
   parse: (text) => text,
   place: () => "Agent instructions",
-  segments: () => ["Agent", productPathNames.agentInstructionsFileName],
+  segments: () => [...stateSegments("agent"), productPathNames.agentInstructionsFileName],
 });
 
 /** Refuse checkout inheritance before composing a host that can spawn a harness child. */
 export function prepareAgentDirectory(): void {
-  const agent = productAgentPath();
+  const agent = hostState().agent;
   // The dev default lives under .artifacts in the checkout by design; fence only dev overrides.
   if (hostOwnership.lane === "dev" && process.env[productPathNames.productHomeVariable]?.trim()) {
     // Resolve the nearest existing ancestor too, so a junction cannot hide a checkout.
-    let existing = agent;
+    let existing: string = agent;
     while (!existsSync(existing)) existing = dirname(existing);
     for (let ancestor = realpathSync(existing); ; ancestor = dirname(ancestor)) {
       if (existsSync(join(ancestor, ".git")))

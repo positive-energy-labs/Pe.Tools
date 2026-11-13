@@ -1,3 +1,4 @@
+import { stateScope } from "@pe/host-contracts/service-identity";
 import { targetHomes } from "./call-route.ts";
 import { readPlaces, writePlaces } from "./places.ts";
 import { workKeySchema as mountedWorkKeySchema } from "@pe/agent-contracts";
@@ -135,13 +136,7 @@ import {
   resumeWork,
   type NavigationSources,
 } from "./navigation.ts";
-import {
-  createNoticeFeed,
-  noticeRows,
-  noteStartupHomes,
-  storedNoticesPath,
-  type NoticeSources,
-} from "./notice-feed.ts";
+import { createNoticeFeed, noticeRows, noteStartupHomes, type NoticeSources } from "./notice-feed.ts";
 import { homeLogLines } from "@pe/host-contracts/product-paths";
 import { heldSend, heldSends, holdSend, confirmSend, subscribeHeldSends } from "./guards.ts";
 import type { ActionJournal } from "./action-journal.ts";
@@ -164,8 +159,7 @@ import {
 } from "./page-libraries.ts";
 import { createPluginsHandler } from "./plugins-handler.ts";
 import { createPodRoutes } from "./pod-routes.ts";
-import {
-  productAgentPath, productUserContentRootPath } from "./product-paths.ts";
+import { userRoot } from "@pe/host-contracts/product-paths";
 import { graphRouteIds } from "./reads/routes.ts";
 import {
   ReceiptExport,
@@ -349,11 +343,11 @@ export function createPeRoutes(options: PeRoutesOptions) {
         // A read that discards a Work record changes this census and raises no workspace event.
         // Every discard posts to the notice file, so the file is the event, as for the notice feed.
         const discarded = () => notify();
-        watchFile(storedNoticesPath(), { interval: 2_000 }, discarded);
+        watchFile(hostState().notices, { interval: 2_000 }, discarded);
         return () => {
           releaseWork();
           releaseContext?.();
-          unwatchFile(storedNoticesPath(), discarded);
+          unwatchFile(hostState().notices, discarded);
         };
       },
       (result) => publish(resourceSnapshot(key, result)),
@@ -941,7 +935,7 @@ export function createContributionContent(options: {
   decisionsMachine?: import("@pe/host-contracts/kinds").StateRoot;
   changed?: () => void;
 }) {
-  const homeRoot = options.homeRoot ?? productUserContentRootPath();
+  const homeRoot = options.homeRoot ?? userRoot();
   const pagesRoots = options.pagesRoots ?? [join(homeRoot, "Pages")];
   const revisions = new Map<string, Map<string, unknown>>();
   const latest = new Map<string, unknown>();
@@ -1197,14 +1191,14 @@ function* hostPeRoutes(
   const inputContext = yield* Effect.serviceOption(HostInputContext);
   const sourceRoot = hostOwnership.sourceRoot;
   // Host startup prepares this fixed machine-state directory before any harness can spawn.
-  const worldRoot = productAgentPath();
+  const worldRoot = hostState().agent;
   // Unbound is a working state (ADR 0037 rule 2): the host starts, and the feed says where it looked.
   noteStartupHomes();
   // One host log line per home, with its tier and how it was found; with no firm home, where it looked.
   for (const line of homeLogLines()) yield* Effect.logInfo(line);
   let invalidateCatalog = () => {};
   const content = createContributionContent({
-    worldRoot: hostState().directory("Agent"),
+    worldRoot: stateScope(hostState(), hostState().agent),
     pagesRoots: productPagesRoots(),
     changed: () => invalidateCatalog(),
     bootstrap: async () => {
@@ -1247,7 +1241,7 @@ function* hostPeRoutes(
     prepare: () => content.read(),
     providers,
     updatePending: update.automaticPending,
-    root: hostState().directory("harness-threads"),
+    root: stateScope(hostState(), hostState().harnessThreads),
     log: hostLog,
     worldRoot,
     // The same kernel the Pea MCP server declares, for the harness that cannot read it from there.
@@ -1396,9 +1390,9 @@ function* hostPeRoutes(
         routes.workspace.subscribeUncaptured(readWorks),
         bridge?.subscribe(readWorks) ?? (() => {}),
         // A refusal is posted by whichever store met the bad file, so the file is the event.
-        () => unwatchFile(storedNoticesPath(), changed),
+        () => unwatchFile(hostState().notices, changed),
       ];
-      watchFile(storedNoticesPath(), { interval: 2_000 }, changed);
+      watchFile(hostState().notices, { interval: 2_000 }, changed);
       try {
         releases.push(hostMachineFace.observe(() => changed()));
       } catch {
@@ -1460,7 +1454,7 @@ function* hostPeRoutes(
     workspace: hostWork?.workspace,
     registrations,
     ductsAnalysis: {
-      root: hostState().directory("ducts", "analyses"),
+      root: stateScope(hostState(), hostState().ductsAnalyses),
       producer: { version: resolveHostVersion(), ...hostOwnership },
       marks,
       catalogs: (pointer) => runPods({}, catalogsFor(files, pointer)),
@@ -1491,7 +1485,7 @@ function* hostPeRoutes(
       },
       call: ductsNativeRead(hostBaseUrl),
     },
-    ...(hostWork ? {} : { store: fileRouteDocumentStore(hostState().directory("Work")) }),
+    ...(hostWork ? {} : { store: fileRouteDocumentStore(stateScope(hostState(), hostState().work)) }),
     heads: threads.heads,
     turnElementNames: (request) =>
       threads.readTurnElementNames(request, (operation, input, ref) => {

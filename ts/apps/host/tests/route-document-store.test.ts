@@ -1,7 +1,7 @@
-import { stateFixture } from "../../../tests/isolated-home/storage.ts";
+import { stateFixture, stateMachine } from "../../../tests/isolated-home/storage.ts";
 import { mkdtempSync } from "../../../tests/isolated-home/storage.ts";
 import { expect, test, vi } from "vite-plus/test";
-import { readFileSync, readdirSync, rmSync } from "node:fs";
+import { readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
@@ -22,6 +22,16 @@ vi.mock("node:fs", async (load) => {
       real.renameSync(...args);
     },
   };
+});
+
+test("a clear reports kept when the prior bytes cannot be copied aside", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "pe-work-clear-kept-"));
+  const store = fileRouteDocumentStore(stateFixture(dir));
+  const key = { targetKey: "clear-kept", route: "fans" };
+  await store.setState({ ...key, value: { important: "keep me" } });
+  writeFileSync(stateMachine(dir).blobs, "blocks the copy");
+  await expect(store.setState({ ...key, value: null })).rejects.toMatchObject({ kind: "kept" });
+  expect(await store.getState(key)).toEqual({ important: "keep me" });
 });
 
 test("two interleaved Work writers publish complete records without sharing staging files", async () => {

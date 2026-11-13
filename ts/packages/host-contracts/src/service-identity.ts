@@ -21,6 +21,7 @@ import {
   type HomeRoot,
   type StateDirectory,
   type StateRoot,
+  type StatePath,
 } from "./kinds.ts";
 export {
   HOST_RUNTIME_SERVICE_HEADER,
@@ -140,6 +141,7 @@ export function stateTree(root: string) {
     providers: state("providers.json"),
     pluginDecisions: state("plugins.json"),
     routeTrust: state("route-trust.json"),
+    shippedPods: state("shipped-pods"),
   };
   const machine: StateRoot = paths;
   return {
@@ -148,6 +150,20 @@ export function stateTree(root: string) {
     /** Bind a proven home to this machine, whose blob store keeps what a write into the home replaces. */
     home: (home: Home): HomeRoot => ({ ...home, machine }),
   };
+}
+
+/** Relative segments of a named row, obtained from the table instead of re-spelled by callers. */
+export function stateSegments(row: keyof StateRoot): string[] {
+  const layout = stateTree("");
+  return relative(layout.state, layout[row]).split(/[\\/]/).filter(Boolean);
+}
+
+/** Bind a table row to its machine, retaining the machine's one notice and blob root. */
+export function stateScope(machine: StateRoot, path: StatePath): StateDirectory {
+  const scope = relative(machine.state, path);
+  if (scope === ".." || scope.startsWith(`..${sep}`) || isAbsolute(scope))
+    throw Error(`State scope belongs to another machine: ${path}`);
+  return { path, machine };
 }
 
 export function stateDirectory(

@@ -11,7 +11,7 @@ import { Effect, Layer } from "effect";
 import { HttpRouter } from "effect/http";
 import { createShare, shareIntentFile, tailscaleCommand, shareRoute } from "../src/share.ts";
 import { requestIdentityLayer } from "../src/request-identity.ts";
-import { sha256Hex } from "@pe/host-contracts/store";
+import { sha256Hex } from "@pe/host-contracts/kinds";
 import { stateTree } from "@pe/host-contracts/service-identity";
 import { shareKind } from "../src/share.ts";
 

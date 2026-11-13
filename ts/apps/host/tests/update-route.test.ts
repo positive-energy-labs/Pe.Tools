@@ -11,8 +11,8 @@ import { HttpRouter } from "effect/http";
 import { expect, test, vi } from "vite-plus/test";
 import type { Envelope, UpdatePlan, UpdateReceipt } from "@pe/host-contracts/pe-revit-contract";
 import type { ServiceHostHandle } from "@pe/host-contracts/pe-service-host";
-import { sha256Hex } from "@pe/host-contracts/store";
-import { storedBlobsPath, storedNoticesPath } from "../src/notice-feed.ts";
+import { sha256Hex } from "@pe/host-contracts/kinds";
+
 import {
   createUpdateReader,
   UpdateReader,

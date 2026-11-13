@@ -50,7 +50,8 @@ export function fileRouteDocumentStore(root: StateDirectory): RouteDocumentStore
       if (value == null) {
         // One door for every set-aside (owner ruling, 2026-11-13): with a reason the runtime
         // refused the record, without one a person cleared their own Work. Bytes kept, one notice.
-        setAside(file, reason ?? "Cleared.");
+        const result = setAside(file, reason ?? "Cleared.");
+        if (result.kind === "kept") throw Object.assign(new Error(result.reason), result);
         return;
       }
       writeState(

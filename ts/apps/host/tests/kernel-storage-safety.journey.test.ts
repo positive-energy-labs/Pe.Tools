@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test, vi } from "vite-plus/test";
 import { ADMISSION_RESEND_HEADER } from "@pe/agent-contracts";
-import { sha256Hex } from "@pe/host-contracts/store";
+import { sha256Hex } from "@pe/host-contracts/kinds";
 import { setup } from "./schedule-recorded-fixture.ts";
 import { fixtureNative } from "./fixture-native.ts";
 

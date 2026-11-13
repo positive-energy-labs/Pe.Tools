@@ -1,3 +1,4 @@
+import { stateSegments } from "@pe/host-contracts/service-identity";
 import { Buffer } from "node:buffer";
 import { randomUUID } from "node:crypto";
 import { createServer, type Server } from "node:http";
@@ -17,13 +18,13 @@ import { z } from "zod";
 import { LocalOpError } from "./local-error.ts";
 import { runHostChild } from "./host-child.ts";
 import { hostState } from "./host-ownership.ts";
-import { productApsCredentialsPath, productApsTokensPath } from "./product-paths.ts";
+
 
 const APS_AUTH_BASE_URL = "https://developer.api.autodesk.com/authentication/v2";
 const tokensKind = stateKind({
   place: () => "Autodesk sign-in",
   schema: z.unknown(),
-  segments: () => ["aps-auth", "tokens.json"],
+  segments: () => stateSegments("apsTokens"),
 });
 const CALLBACK_PORT = 8080;
 const CALLBACK_URI = `http://localhost:${CALLBACK_PORT}/api/aps/callback/oauth`;
@@ -448,7 +449,7 @@ const readApsCredentials = Effect.fnUntraced(function* (
 });
 
 function apsCredentialsPath(): string {
-  return productApsCredentialsPath();
+  return hostState().apsCredentials;
 }
 
 const loadPersistedToken = Effect.fnUntraced(function* (key: string) {
@@ -471,7 +472,7 @@ const deletePersistedTokensByClientId = Effect.fnUntraced(function* (clientId: s
 
 const loadPersistedTokenMap = Effect.fnUntraced(function* () {
   const fs = yield* FileSystem.FileSystem;
-  const fileResult = yield* Effect.result(fs.readFileString(productApsTokensPath()));
+  const fileResult = yield* Effect.result(fs.readFileString(hostState().apsTokens));
   if (fileResult._tag === "Failure" || !fileResult.success.trim())
     return new Map<string, PersistedTokenRecord>();
 
@@ -531,10 +532,10 @@ const writePersistedTokenMap = Effect.fnUntraced(function* (
   );
   const fs = yield* FileSystem.FileSystem;
   yield* fs
-    .makeDirectory(dirname(productApsTokensPath()), { recursive: true })
+    .makeDirectory(dirname(hostState().apsTokens), { recursive: true })
     .pipe(Effect.mapError((error) => new LocalOpError("aps.auth.token", error.message)));
   yield* fs
-    .writeFileString(productApsTokensPath(), `${JSON.stringify({ entries }, null, 2)}\n`)
+    .writeFileString(hostState().apsTokens, `${JSON.stringify({ entries }, null, 2)}\n`)
     .pipe(Effect.mapError((error) => new LocalOpError("aps.auth.token", error.message)));
 });
 

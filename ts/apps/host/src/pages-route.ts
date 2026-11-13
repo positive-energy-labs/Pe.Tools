@@ -1,3 +1,4 @@
+import { stateScope } from "@pe/host-contracts/service-identity";
 import { targetHomes } from "./call-route.ts";
 import { readSessionScope } from "./sdk-session.ts";
 import {
@@ -434,7 +435,7 @@ export function createPagesHandler(
   live: PageLive = noLive,
   journal?: ActionJournal,
   /** Where Page state lives: one folder per slug under the machine state root, never in a home. */
-  stored: StateDirectory = hostState().directory("Pages"),
+  stored: StateDirectory = stateScope(hostState(), hostState().pages),
 ) {
   /**
    * Where a slug's folder is: `<root>/<slug>`, or for `<id>--<page>` the folder of the one admitted
