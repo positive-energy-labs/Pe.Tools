@@ -296,6 +296,6 @@ test("a ?target naming a document that is not open leaves the draft unbound, nev
   expect(client.create).toHaveBeenCalledTimes(1);
   expect(client.target, "nothing seeds the chat with B").not.toHaveBeenCalled();
   // With no pin, the same machine's sole document is the default, as before.
-  await act(() => router.navigate({ to: "/fans", search: {} }));
+  act(() => router.history.push("/fans"));
   await waitFor(() => expect(draftTarget).toEqual({ kind: "open", ref: { session: "s1", openId: "B" } }));
 });
