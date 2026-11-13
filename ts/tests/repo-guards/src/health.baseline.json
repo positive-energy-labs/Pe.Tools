@@ -61,7 +61,6 @@
     "ts/packages/agent-contracts/src/host-route-admission.ts": 1,
     "ts/packages/agent-contracts/src/page-keys.ts": 2,
     "ts/packages/agent-contracts/src/pe-api.ts": 1,
-    "ts/packages/agent-contracts/src/plugin-runtime.ts": 1,
     "ts/packages/agent-contracts/src/route-address.ts": 1,
     "ts/packages/agent-contracts/src/route-field.ts": 1,
     "ts/packages/agent-contracts/src/route-graph.ts": 3,
