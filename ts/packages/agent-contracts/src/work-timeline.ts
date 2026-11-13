@@ -44,6 +44,8 @@ export const timelineRowSchema = z.union([
     by,
     label: z.string(),
     state: z.enum(["applied", "undone", "superseded", "blocked"]),
+    /** A rejected write consumed this edit without writing it to the model. */
+    notWritten: z.strictObject({ invocation: z.string(), reason: z.string(), rejected: z.boolean() }).optional(),
     /** Why undo stops here, when it does. */
     blockedBy: z
       .union([

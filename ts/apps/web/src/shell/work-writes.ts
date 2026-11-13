@@ -9,7 +9,7 @@ import {
   type WorkWriteAck,
 } from "@pe/agent-contracts";
 import type { MountScope } from "./work-scope";
-import { acquireWorkJournal, type JournalDetail } from "./journal";
+type JournalDetail = { label: string; meta?: unknown };
 
 interface WriteHistory {
   entry: JournalDetail;
@@ -64,7 +64,7 @@ const refused = (error: string): RouteStateWriteResult => ({
 });
 const writers = new Map<string, ReturnType<typeof createWorkWriter>>();
 
-/** The same identity owns admission, refused intents and the journal in every mount. */
+/** The same identity owns admission and refused input in every mount. */
 export function acquireWorkWriter(key: WorkKey) {
   const id = workKey(key);
   let writer = writers.get(id);
@@ -77,7 +77,6 @@ export function acquireWorkWriter(key: WorkKey) {
 
 function createWorkWriter(key: WorkKey, remove: () => void) {
   const identity = workKey(key);
-  const held = acquireWorkJournal(key);
   const pending = new Map<
     string,
     { request: WorkWrite; label: JournalDetail & { internal?: true }; history?: WriteHistory }
@@ -98,20 +97,16 @@ function createWorkWriter(key: WorkKey, remove: () => void) {
   const retire = () => {
     if (retired || readers || running || pending.size) return;
     retired = true;
-    held.release();
     remove();
   };
   const settle = () => {
     conflict = null;
-    held.journal.hold(false);
   };
   const accept = (ack: WorkWriteAck) => {
     if (workKey(ack.key) !== identity) return;
     const intent = ack.press ? pending.get(ack.press) : undefined;
-    held.journal.accept(ack, intent && { ...intent.label, ...intent.history?.entry });
     if (ack.press) {
       if (intent) {
-        held.journal.describe(ack.press, { ...intent.label, ...intent.history?.entry });
         intent.history?.accepted(ack);
       }
       pending.delete(ack.press);
@@ -123,7 +118,6 @@ function createWorkWriter(key: WorkKey, remove: () => void) {
     const work = scope.work;
     if (work && workKey(work.handle.key) === identity) {
       observedRevision = Math.max(observedRevision, work.handle.revision);
-      held.journal.observe({ revision: work.handle.revision, doc: work.doc });
     }
     if (
       conflict !== null &&
@@ -144,7 +138,6 @@ function createWorkWriter(key: WorkKey, remove: () => void) {
     sequential = false,
   ): Promise<RouteStateWriteResult> => {
     request = structuredClone(request);
-    if (names.cells || names.workFields) held.journal.name((patches) => writeLabel(patches, names));
     const cells = names.cells ?? [];
     if (request.kind === "apply" && request.press)
       pending.set(request.press, { request, label: writeLabel(request.patches, names), history });
@@ -215,8 +208,6 @@ function createWorkWriter(key: WorkKey, remove: () => void) {
         )
           result = refused("The acknowledgement does not match this Work edit");
         else {
-          if (Object.hasOwn(result, "doc"))
-            held.journal.observe({ revision: ack.revision, doc: result.doc });
           acknowledged.set(ack.base, {
             revision: ack.revision,
             ...(Object.hasOwn(result, "doc") ? { doc: result.doc } : {}),
@@ -226,11 +217,9 @@ function createWorkWriter(key: WorkKey, remove: () => void) {
       } else if (
         result.code === "stale_revision" &&
         scope.work?.handle.revision === request.expectedRevision &&
-        observedRevision <= request.expectedRevision &&
-        (held.journal.read().revision ?? 0) <= request.expectedRevision
+        observedRevision <= request.expectedRevision
       ) {
         conflict = request.expectedRevision;
-        held.journal.hold(true);
       }
     } catch (cause) {
       result = refused(cause instanceof Error ? cause.message : String(cause));
@@ -243,7 +232,6 @@ function createWorkWriter(key: WorkKey, remove: () => void) {
     return result;
   };
   const writer = {
-    journal: held.journal,
     /** The mounted route supplies derived history for the same writer chat and composer use. */
     describeWrites(describe: DescribeWrite) {
       historians.add(describe);

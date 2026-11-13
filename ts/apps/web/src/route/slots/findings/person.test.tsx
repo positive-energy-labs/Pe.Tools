@@ -4,7 +4,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test } from "vite-plus/test";
-import { actionReceiptSchema, address, workHandle, type WorkKey } from "@pe/agent-contracts";
+import { actionReceiptSchema, address, workHandle, workTimelineSchema, type WorkKey } from "@pe/agent-contracts";
 import { createPeClient } from "@pe/agent-contracts/pe-api";
 import { withInvocationContext } from "@pe/runtime/context";
 import { findingsWork, findingsWorkSchema } from "@pe/agent-contracts/slots";
@@ -15,6 +15,8 @@ import { createPeRoutes } from "../../../../../host/src/pe-routes";
 import { graphRoute } from "../../../../../host/src/reads/routes";
 import { inputPort } from "../../../../../host/src/reads/inputs";
 import { hostTimeline } from "../../../../../host/src/reads/work-timeline";
+import { TimelineButtons } from "../../../shell/situation-band";
+import { createTimelineClient, type TimelineClient } from "../../../shell/work-feed-client";
 import { GraphHistory } from "../../../shell/graph-history";
 import { observeWorkReceipts } from "../../../../../host/src/work-receipt-feed";
 import { createWitness } from "../../../fans/cutover.test-support";
@@ -84,7 +86,7 @@ test("a person writes a finding from the /fans roster row; the host's findings.s
  * Fans Work) and the History entry offered no undo. The person's latest finding's History row now
  * carries "Undo finding", which goes to the findings Work's history door as the person.
  */
-test("the person undoes their own finding from its History row; Pea's newer finding stays", async () => {
+test("the person undoes their own finding through the host Timeline; Pea's newer finding stays", async () => {
   const dir = await mkdtemp(join(tmpdir(), "pe-findings-undo-"));
   const native = await fixtureNative(join(dir, "native"));
   const socket = await native.connect();
@@ -103,6 +105,21 @@ test("the person undoes their own finding from its History row; Pea's newer find
   // The browser's Pe client, answered by the host's own route door as the person.
   const browser = createPeClient("http://host", (url, init) =>
     withInvocationContext({ caller: human }, () => routes.fetch(new Request(url, init))));
+  const client: TimelineClient = {
+    step: createTimelineClient(browser).step,
+    open(works, deliver) {
+      let closed = false, generation = 0;
+      const refresh = async () => {
+        const turn = ++generation;
+        deliver(null, "Refreshing Timeline");
+        const answer = await graphRoute("reads.value", { read: "work.timeline", args: { works }, subscription: "finding-timeline", generation: 0 }, undefined, "human").evaluate(timeline);
+        if (!closed && turn === generation) deliver(workTimelineSchema.parse(answer));
+      };
+      const work = host.subscribeUncaptured(() => { void refresh(); });
+      const receipts = native.journal.subscribe({ kinds: ["action"] }, () => { void refresh(); });
+      void refresh(); return () => { closed = true; work(); receipts(); };
+    },
+  };
   const submitted: { key: string; input: { work?: { key: WorkKey } } }[] = [];
   const closes: (() => void)[] = [];
   try {
@@ -115,7 +132,7 @@ test("the person undoes their own finding from its History row; Pea's newer find
         const response = await post(command, human);
         expect(response.status, await response.clone().text()).toBeLessThan(400);
         return actionReceiptSchema.parse(await native.journal.wait(command.id));
-      }, browser, workReadings(host));
+      }, browser, workReadings(host), client);
     await waitFor(() => expect(f.typed.owner()?.ready).toBe(true));
     render(<Notes mount={f.typed} />);
     fireEvent(document, new CustomEvent("pe:findings", { detail: { route: "fans", code: subjectCode({ keyKind: "name", key: ["Fan", "Type"] }) } }));
@@ -135,16 +152,14 @@ test("the person undoes their own finding from its History row; Pea's newer find
     expect(pea.status, await pea.clone().text()).toBeLessThan(400);
     expect(await native.journal.wait("pea-write")).toMatchObject({ state: "succeeded" });
     await waitFor(async () => expect(await authors()).toEqual([["person note", "person"], ["pea note", "pea"]]));
-    render(<GraphHistory owner={f.typed} />);
-    fireEvent.click(await screen.findByRole("button", { name: "Undo your last finding" }, { timeout: 20_000 }));
+    await waitFor(() => expect(f.typed.timeline()?.undo).toBeTruthy());
+    const label = f.typed.timeline()!.undo!.label;
+    render(<><TimelineButtons owner={f.typed} /><GraphHistory owner={f.typed} /></>);
+    fireEvent.click(await screen.findByRole("button", { name: `Undo ${label}` }));
     await waitFor(async () => expect(await authors()).toEqual([["pea note", "pea"]]), { timeout: 20_000 });
-    // gate-ef940d36: the undo is recorded in History, and with nothing of the person's left the verb says so.
-    expect(await screen.findByText(/you undid your last finding/)).toBeTruthy();
-    await waitFor(() => expect(screen.getByRole("button", { name: "Undo your last finding" }).getAttribute("aria-description"))
-      .toBe("Nothing of yours left to undo: Pea's findings are Pea's to undo"));
-    // The reason is on the page, not only in the control's description (drive 10: a disabled Undo gave no reason).
-    expect(screen.getByText("Nothing of yours left to undo: Pea's findings are Pea's to undo")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Undo your last finding" }));
+    await waitFor(() => expect(f.typed.timeline()?.rows.some(row => row.kind === "restore")).toBe(true));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Undo" }).getAttribute("aria-disabled")).toBe("true"));
+    expect(await f.typed.stepTimeline("undo")).toMatchObject({ message: expect.any(String) });
     expect(await authors()).toEqual([["pea note", "pea"]]);
   } finally {
     closes.reverse().forEach((close) => close());

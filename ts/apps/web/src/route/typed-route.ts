@@ -9,7 +9,6 @@ import type {
   LayoutJson,
   InvocationToken,
   EntryContract,
-  WorkHistoryPort,
   Many,
 } from "@pe/agent-contracts";
 import { subjectOf, type SubjectRefCode } from "../../../../packages/agent-contracts/src/subject-ref.ts";
@@ -149,7 +148,6 @@ export interface OwnedCell {
   readonly freshness: "current" | "stale" | "never";
   accept(history?: EditHistory): Promise<EditFailure>;
   deny(history?: EditHistory): Promise<EditFailure>;
-  undo(): Promise<EditFailure>;
   readonly owner: { route: string; label: string };
   readonly value: import("@pe/agent-contracts").CellLike;
   readonly refusal: string | null;
@@ -163,7 +161,6 @@ export interface EditableCells<W, Edit> {
   readonly basis: InvocationToken | null;
   /** Work readiness as one reading state: `ready` is editable, absent Work is `not-yet-run`. */
   readonly state: ReadingState<W>;
-  readonly history: WorkHistoryPort<any>;
   owner(path: readonly string[]): { route: string; label: string };
   at(path: readonly [string, ...string[]], owner?: string, facts?: CellFacts): OwnedCell;
   label(input: Edit, label: string): string;

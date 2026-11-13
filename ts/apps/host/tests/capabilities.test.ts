@@ -152,7 +152,7 @@ test("the host-owned /pe surface answers without Revit", async () => {
     await reader.cancel();
     expect(JSON.parse(frame.slice(frame.indexOf("data: ") + 6))).toMatchObject({
       kind: "snapshot",
-      value: { targets: [], revision: 1 },
+      value: { targets: [], revision: 1, pointers: [] },
     });
     const routeList = await fetch(`${base}/pe/route-state`);
     expect(routeList.status).toBe(200);
