@@ -117,7 +117,7 @@ test("F6 the real Inputs pane renders an acknowledged role edit as a choice labe
   expect(roles.every((role) => !role.textContent?.includes('{"role"'))).toBe(true);
 });
 
-test("/ducts design sheet stages each criterion in /ducts Work, and Fans Work never moves", async () => {
+test("an admitted network pane runs no sibling body when another pane is hidden", async () => {
   const f = await createWitness(closes);
   await vi.waitFor(() => expect(f.owner.readingStatus("roster").snapshot.current).toBe(true));
   f.owner.controls.subject({ kind: "ids", ids: [systemCode("SA")] });
@@ -201,7 +201,7 @@ test("no open fan is absence and every sheet pane renders without a native decod
 
 
 
-test("/fans edits Ducts criteria and a criterion choice in place through the ducts owner handle", async () => {
+test("/ducts design sheet stages each criterion in /ducts Work, and Fans Work never moves", async () => {
   const f = await createWitness(closes, new Map(), {
     "ducts.sheet": { kind: "use", open(_ctx, deliver) {
       deliver({ kind: "complete", revision: 1, value: {
