@@ -129,7 +129,7 @@ export function useFamilyStore(ctx: FamilyContext) {
     },
     [work?.doc, member],
   );
-  const profile = ctx.value.current ? data?.profile : null;
+  const profile = ctx.value.state === "ready" ? data?.profile : null;
   // Selecting a saved member is inspection; only an explicit Open replaces the document draft.
   const snapshot = useMemo(() => {
     if (member)
@@ -184,7 +184,7 @@ export function useFamilyStore(ctx: FamilyContext) {
   // Capture/build receipts belong to shell History; this Value exposes no native evidence sheet.
   const evidence: EvidenceSlice | null = null;
   const attached = work?.doc.spec;
-  const fileSpec = ctx.value.current ? data?.spec : null;
+  const fileSpec = ctx.value.state === "ready" ? data?.spec : null;
   const spec = useMemo(() => {
     if (!member) return null;
     const doc =
@@ -337,7 +337,7 @@ export function useFamilyStore(ctx: FamilyContext) {
     docMode: page.doc,
     drillType,
     inspect,
-    busy:ctx.value.status === "pending"?{key:"read"}:null,
+    busy:ctx.value.state === "refreshing"?{key:"read"}:null,
     failure: editState.failure,
     editFailure: editState.failure,
     actions,

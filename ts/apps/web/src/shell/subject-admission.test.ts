@@ -22,7 +22,7 @@ test("admitted Fans uses its actual picker labels and decoded subject; foreign a
   const input = placeInput(admittedRouterAddress(history));
   const mount = nativeTestAdapter(mountTypedRoute(presenter.typed,input,presenter.workFingerprint),createWorkFeedClient());
   mounts.push(mount);
-  await waitFor(() => expect(mount.readingStatus("value").snapshot.current).toBe(true));
+  await waitFor(() => expect(mount.readingStatus("value").snapshot.state === "ready").toBe(true));
   const options = z
     .array(z.object({ id: z.unknown(), label: z.string() }))
     .parse(mount.picker("fan"));

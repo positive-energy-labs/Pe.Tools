@@ -31,9 +31,8 @@ function useWorkspace(ctx: RoomsContext) {
   };
   const view = page.view;
   const snapshot = data?.snapshot ?? null;
-  const error =
-    !value.current && value.status !== "pending" ? (value.reason ?? "Read failed") : null;
-  const pending = value.status === "pending";
+  const error = value.state === "stale" ? (value.reason ?? "Read failed") : null;
+  const pending = value.state === "refreshing";
   const document = ctx.target?.kind === "document" ? ctx.target.ref : null;
   const work = data?.handle ? { doc: data.roomsWork, handle: data.handle } : null;
   const levelNames = useMemo(() => levelOrder(snapshot?.levels ?? []), [snapshot]);

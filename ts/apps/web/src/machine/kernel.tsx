@@ -1,8 +1,7 @@
 import { mountTypedRoute, type TypedMount } from "../shell/typed-mount";
 import { currentFixture } from "../shell/fixture-name";
 import { routeRegistry } from "../route/registry";
-import type { OpenContext } from "./open-fields";
-import { useOpenTypedOwner } from "./typed-owner";
+import { useOpenTypedOwner, type OpenSource } from "./typed-owner";
 import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { OpenOwnerContext } from "./context";
 export {
@@ -32,9 +31,11 @@ export function OpenControls({ children }: { children: ReactNode }) {
 }
 function Controls({ mount, children }: { mount: TypedMount; children: ReactNode }) {
   useSyncExternalStore(mount.subscribe, mount.revision, mount.revision);
-  return mount.draw("documents", ctx => <ControlOwner ctx={ctx}>{children}</ControlOwner>) as ReactNode;
+  // The companion controls draw no pane: they read the mount, so the app's children stay drawn while the
+  // machine reading is value-less (a pane's `draw` would hand them the shell's one line instead).
+  return <ControlOwner ctx={{ value: mount.value(), write: mount.action, page: mount.page }}>{children}</ControlOwner>;
 }
-function ControlOwner({ ctx, children }: { ctx: OpenContext; children: ReactNode }) {
+function ControlOwner({ ctx, children }: { ctx: OpenSource; children: ReactNode }) {
   const owner = useOpenTypedOwner(ctx);
   return <OpenOwnerContext value={owner}>{children}</OpenOwnerContext>;
 }

@@ -356,8 +356,8 @@ function receiptRow(
 
 function nativeTouchedRows(receipt: ActionReceipt): NoticeDraft[] {
   return receipt.steps.flatMap((step): NoticeDraft[] => {
-    if (step.transport !== "bridge" || step.state === "running") return [];
-    if (!step.touched && (step.bridgeReply === "missing-touched" || step.bridgeReply === "invalid-touched"))
+    if ((step.transport !== "bridge" && !("opReceipt" in step)) || step.state === "running") return [];
+    if (step.transport === "bridge" && !step.touched && (step.bridgeReply === "missing-touched" || step.bridgeReply === "invalid-touched"))
       return [{ key: `native:${step.id}`, group: "failed" as const, revision: 0,
         verb: step.bridgeReply, what: step.key, where: callerWord(receipt.caller),
         says: step.bridgeReply === "missing-touched"

@@ -269,7 +269,7 @@
       "label": "View adoption",
       "purpose": "Choose views and stage designer region names and system tags",
       "draws": [
-        "value"
+        "views"
       ],
       "verbs": [
         "initialize",

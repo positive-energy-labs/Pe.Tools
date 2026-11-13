@@ -53,7 +53,6 @@ export function BindBody({ ctx }: { ctx: BindContext }) {
       >
         Read binding
       </Button>
-      {!ctx.value.current && <p role="status">{ctx.value.reason}</p>}
       <BindPicker
         slug={slug}
         reading={reading?.slug === slug ? reading.value : null}

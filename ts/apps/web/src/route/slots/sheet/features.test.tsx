@@ -69,7 +69,7 @@ test("typed-only filter: the sheet pane's chrome narrows to the cells Work stage
     owner: { route: "t", label: "typed" }, refusal: null, value: path[0] === "a" ? doc.a : {},
     transitions: () => [], stage: async () => null, clear: async () => null,
   });
-  const ctx = { cells: { doc, at: handle }, page: { read: () => ({}) }, value: { status: "ready", current: true, value: {} } };
+  const ctx = { cells: { doc, at: handle }, page: { read: () => ({}) }, value: { state: "ready", value: {} } };
   const slot = { draft: true as const, bindings: { a: local(z.number(), "route", { label: "Alpha" }), b: local(z.number(), "route", { label: "Beta", default: 2 }) } };
   render(<RegistryContext value={makeAtomRegistry()}><SheetPane ctx={{ draw: ctx as never, slot }} /></RegistryContext>);
   expect(screen.getByText("Beta")).toBeTruthy();
@@ -79,7 +79,7 @@ test("typed-only filter: the sheet pane's chrome narrows to the cells Work stage
 });
 
 test("empty state: a sheet whose read has nothing for it says so and where to go, instead of drawing cells", () => {
-  const ctx = { cells: { doc: {}, at: () => { throw Error("no cell is drawn"); } }, page: { read: () => ({}) }, value: { status: "ready", current: true, value: { open: null } } };
+  const ctx = { cells: { doc: {}, at: () => { throw Error("no cell is drawn"); } }, page: { read: () => ({}) }, value: { state: "ready", value: { open: null } } };
   const slot = { draft: true as const, empty: (read: { open: unknown }) => (read.open ? null : "Open a fan from the roster."), bindings: { a: local(z.number()) } };
   render(<RegistryContext value={makeAtomRegistry()}><SheetPane ctx={{ draw: ctx as never, slot }} /></RegistryContext>);
   expect(screen.getByText("Open a fan from the roster.")).toBeTruthy();
@@ -94,7 +94,7 @@ test.each([null, { kind: "document" as const, ref: { session: "session", openId:
   action.mockResolvedValue({ state: "succeeded", result: { tier: "firm", path: "shared/Settings/ducts.json" } });
   const slot = { bindings: { allowance: setting("ducts", ["criteria", "allowanceReturnInWg"], z.number(), ["firm"], { label: "Return allowance" }) } };
   const ctx = { target, cells: { doc: {} }, page: { read: () => ({}) }, refresh,
-    value: { status: "ready", current: true, value: { settings: { ducts: [
+    value: { state: "ready", value: { settings: { ducts: [
       { tier: "firm", home: "shared", name: "shared", path: "shared/Settings/ducts.json", sha256: "prior", json: { criteria: { allowanceReturnInWg: 0.2 } } },
     ] } } } };
   render(<RegistryContext value={makeAtomRegistry()}><SheetPane ctx={{ draw: ctx as never, slot }} /></RegistryContext>);
@@ -119,7 +119,7 @@ test.each(["refused", "stale"])("a %s stale-hash save re-reads the tier and draw
   function Pane() {
     const [value, setValue] = useState(read);
     const ctx = { cells: { doc: {} }, page: { read: () => ({}) }, refresh: () => setValue(read()),
-      value: { status: "ready", current: true, value } };
+      value: { state: "ready", value } };
     return <SheetPane ctx={{ draw: ctx as never, slot }} />;
   }
   render(<RegistryContext value={makeAtomRegistry()}><Pane /></RegistryContext>);

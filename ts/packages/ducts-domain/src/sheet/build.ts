@@ -328,7 +328,7 @@ class Pricer {
     const st = w.states[s]!;
     const e = st.el;
     const f = flows.leg.get(legKey(s, out));
-    const cfm = share ? share.cfm : f ? f.cfm : 0;
+    const cfm = share ? share.cfm : f?.cfm ?? null;
     const kind: Leg["kind"] = isSegment(e) ? "duct" : e.kind === "cap" ? "fitting" : e.kind;
     const leg: Leg = {
       id,

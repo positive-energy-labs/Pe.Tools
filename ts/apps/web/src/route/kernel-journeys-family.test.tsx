@@ -105,7 +105,7 @@ const cell = (row: string, column: string) => {
 };
 const clearButtons = (scope: HTMLElement) => within(scope).queryAllByRole("button", { name: "clear" });
 const ready = (mount: mounts.TypedMount) =>
-  waitFor(() => { expect(mount.readiness().kind).toBe("ready"); expect(mount.value().current).toBe(true); }, { timeout: 10_000 });
+  waitFor(() => { expect(mount.readiness().kind).toBe("ready"); expect(mount.value().state === "ready").toBe(true); }, { timeout: 10_000 });
 const click = async (button: HTMLElement) => act(async () => fireEvent.click(button));
 const typeInto = async (scope: HTMLElement, text: string) => {
   const input = scope.querySelector<HTMLInputElement>("input")!;
