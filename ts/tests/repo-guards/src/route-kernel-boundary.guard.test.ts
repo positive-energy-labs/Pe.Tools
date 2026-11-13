@@ -44,9 +44,10 @@ it("allows narrow PagePort contracts and the admitted registry door", () => {
 
 it("keeps admitted Place composition private without permitting body or re-export escapes", () => {
   const actual = boundaryCensus({
-    "ts/apps/web/src/chat/owner.tsx": `import { useWorkbench } from 'provider.ts'; const mode = place.fixture; export const ChatOwner = () => null;`,
-    "ts/apps/web/src/chat/chat-shell.tsx": `import { ChatOwner } from '#/chat/owner';`,
-    "ts/apps/web/src/route/builtin-routes.tsx": `const ChatRoute = () => import('#/chat/chat-shell');`,
+    "ts/apps/web/src/workbench/provider/view.tsx": `import { useWorkbench } from 'provider.ts'; export const WorkbenchOwner = () => null;`,
+    "ts/apps/web/src/workbench/thread-view.tsx": `import { WorkbenchOwner } from '#/workbench/provider/view';`,
+    "ts/apps/web/src/route/builtin-routes.tsx": `const WorkbenchRoute = () => import('#/workbench/thread-view');`,
+    "ts/apps/web/src/shell/typed-mount.ts": `const mode = place.fixture;`,
     "provider.ts": `import { appAtomRegistry } from '#/shell/owner'; export const useWorkbench = () => appAtomRegistry;`,
     "ts/apps/web/src/example/body.ts": `import { useWorkbench } from 'provider.ts'; const mode = state.fixture;`,
   });
@@ -55,9 +56,9 @@ it("keeps admitted Place composition private without permitting body or re-expor
   expect(actual.fixtureMode).toHaveLength(1);
   expect(actual.fixtureMode![0]).toContain("example/body.ts");
   const escape = boundaryCensus({
-    "ts/apps/web/src/chat/owner.tsx": `export { createViewOwner } from '#/route/view-owner';`,
-    "ts/apps/web/src/example/body.ts": `import { createViewOwner } from '#/chat/owner';`,
-    "ts/apps/web/src/route/builtin-routes.tsx": `import { appAtomRegistry } from '#/shell/owner';`,
+    "ts/apps/web/src/route/builtin-routes.tsx": `export { createViewOwner } from '#/route/view-owner';`,
+    "ts/apps/web/src/example/body.ts": `import { createViewOwner } from '#/route/builtin-routes';`,
+    "ts/apps/web/src/router.tsx": `import { appAtomRegistry } from '#/shell/owner';`,
   });
   expect(escape.rawPageImports).toHaveLength(3);
 });
