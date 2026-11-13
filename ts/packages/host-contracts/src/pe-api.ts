@@ -131,6 +131,7 @@ function route<const P extends string, B extends z.ZodType, O extends z.ZodType>
 /** The schemas a route table names; each domain owner supplies its own. */
 export type PeApiSchemas = Record<
   | "addProviderRequestSchema"
+  | "placesFileSchema"
   | "providerSchema"
   | "createThreadRequestSchema"
   | "updateThreadRequestSchema"
@@ -273,6 +274,8 @@ export function peRouteTable<S extends PeApiSchemas>(schemas: S) {
   });
   /** Public HTTP transport authority. Domain schemas stay with their domain owners. */
   const peRoutes = {
+    "places.get": route("GET", "/pe/places", none, schemas.placesFileSchema as S["placesFileSchema"], "read", "pe", "read"),
+    "places.put": route("PUT", "/pe/places", schemas.placesFileSchema as S["placesFileSchema"], schemas.placesFileSchema as S["placesFileSchema"], "human", "pe", "human"),
     "families.readings": route(
       "GET",
       "/families/readings",
