@@ -7,6 +7,7 @@ import { afterEach, expect, test, vi } from "vite-plus/test";
 import { createWitness } from "../fans/cutover.test-support";
 import { makeAtomRegistry } from "../shell/owner";
 import { systemCode } from "./identity";
+import { pricing } from "./contract";
 import { noTerminalSnapshot } from "./no-terminal.fixture";
 
 const closes: (() => void)[] = [];
@@ -26,7 +27,7 @@ test("rules panes settle when the selected system has nothing to price, never 'L
     throw Error("fixture no longer refuses");
   })();
   const f = await createWitness(closes, new Map(), {
-    "ducts.pricing.value": { kind: "use", open: (_ctx, deliver) => deliver({ kind: "failure", error: refusal }) },
+    [pricing.key]: { kind: "use", open: (_ctx, deliver) => deliver({ kind: "failure", error: refusal }) },
   });
   await vi.waitFor(() => expect(f.owner.readingStatus("roster").snapshot.state === "ready").toBe(true));
   f.owner.controls.subject({ kind: "ids", ids: [systemCode("SA")] });

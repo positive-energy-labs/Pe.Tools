@@ -1,4 +1,5 @@
 import { refusalOf, valueOf } from "../route/typed-route";
+import { pricing } from "./contract";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
 // @vitest-environment jsdom
 import { RegistryContext } from "@effect/atom-react";
@@ -22,7 +23,8 @@ vi.mock("./proto/e/tree-sidebar", () => ({
     return <p>Tree body</p>;
   },
 }));
-vi.mock("./proto/e/picture", () => ({
+vi.mock("./proto/e/picture", async (actual) => ({
+  ...(await actual<typeof import("./proto/e/picture")>()),
   DuctsPicture: () => {
     leaves.picture();
     return <p>Picture body</p>;
@@ -53,7 +55,7 @@ function registry() {
 }
 
 test("F16 the sidebar navigates the document roster before pricing and keeps atomic all/clear", async () => {
-  const f = await createWitness(closes, new Map(), { "ducts.pricing.value": { kind: "use", open() {} } });
+  const f = await createWitness(closes, new Map(), { [pricing.key]: { kind: "use", open() {} } });
   await vi.waitFor(() => expect(f.owner.readingStatus("roster").snapshot.state === "ready").toBe(true));
   expect(valueOf(f.owner.readingStatus("value").snapshot)).toBeFalsy();
   render(<RegistryContext value={registry()}>
@@ -226,7 +228,11 @@ test("/ducts design sheet stages each criterion in /ducts Work, and Fans Work ne
   const fans0 = f.fans.work()?.revision;
   // /ducts' design sheet stages each criterion in /ducts Work (ruling 2026-11-10); Fans Work never moves.
   const view = render(<RegistryContext value={registry()}>{nodeFor(f.owner, "design")}</RegistryContext>);
-  const field = await vi.waitFor(() => view.container.querySelector('[data-sheet-address="criteria:terminalDropInWg"]')!);
+  const field = await vi.waitFor(() => {
+    const cell = view.container.querySelector('[data-sheet-address="criteria.terminalDropInWg"]');
+    if (!cell) throw Error("Waiting for the terminal drop cell");
+    return cell;
+  });
   const input = field.querySelector<HTMLInputElement>("input.dl-cell-input")!;
   fireEvent.change(input, { target: { value: "0.07" } });
   fireEvent.keyDown(input, { key: "Enter", code: "Enter" });
@@ -234,7 +240,7 @@ test("/ducts design sheet stages each criterion in /ducts Work, and Fans Work ne
   expect(f.owner.work()?.value).toMatchObject({ criteria: { terminalDropInWg: { edit: { value: 0.07 } } } });
   view.rerender(<RegistryContext value={registry()}>{nodeFor(f.owner, "design")}</RegistryContext>);
   // A criterion choice stages its own cell the same way.
-  const split = view.container.querySelector<HTMLElement>('[data-sheet-address="criteria:splitPolicy"]')!;
+  const split = view.container.querySelector<HTMLElement>('[data-sheet-address="criteria.splitPolicy"]')!;
   fireEvent.click(split.querySelector<HTMLElement>("button")!);
   const pick = await vi.waitFor(() => {
     const options = [...document.querySelectorAll<HTMLElement>('[role="option"]')];
@@ -247,7 +253,7 @@ test("/ducts design sheet stages each criterion in /ducts Work, and Fans Work ne
   expect(f.owner.work()?.value).toMatchObject({ criteria: { splitPolicy: { edit: { value: expect.any(String) } } } });
   // Clearing the typed criterion is the cell's own clear verb; it returns to the layer underneath.
   view.rerender(<RegistryContext value={registry()}>{nodeFor(f.owner, "design")}</RegistryContext>);
-  fireEvent.click(within(view.container.querySelector<HTMLElement>('[data-sheet-address="criteria:terminalDropInWg"]')!).getByRole("button", { name: "clear" }));
+  fireEvent.click(within(view.container.querySelector<HTMLElement>('[data-sheet-address="criteria.terminalDropInWg"]')!).getByRole("button", { name: "clear" }));
   await vi.waitFor(() => expect(f.owner.work()?.revision).toBe(ducts0 + 3));
   expect((f.owner.work()?.value as { criteria?: Record<string, { edit?: unknown }> }).criteria?.terminalDropInWg?.edit ?? undefined).toBeUndefined();
   expect(f.fans.work()?.revision).toBe(fans0);
