@@ -75,7 +75,7 @@ async function fixture() {
       id?: string,
     ) =>
       Effect.promise(async () => {
-        if (id) await markDispatched(id);
+        if (id) await markDispatched(id, "bridge");
         dispatched.push(operation);
         const value =
           operation === "revit.catalog.loaded-families"
