@@ -40,7 +40,7 @@ public sealed class RecordedProbes {
             return answer;
         }
         this.Misses++;
-        return new ProbeAnswer(input.Knee.Stamp, input.Knee.Searched,
+        return new ProbeAnswer(input.Knee.Evidence, input.Knee.Searched,
             new ProbeHit(Stub, 0.0, input.LevelZ), new ProbeHit(Stub, 9.0, input.LevelZ + 9.0), 200.0, 0.0);
     };
 

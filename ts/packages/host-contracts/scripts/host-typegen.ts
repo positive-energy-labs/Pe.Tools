@@ -20,6 +20,8 @@
 import { compile } from "json-schema-to-typescript";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { HOST_RPC_BRIDGE_SESSION_HEADER } from "../src/contracts/bridge-protocol.ts";
 
 type CatalogEntry = {
@@ -269,6 +271,7 @@ if (checkMode) {
   console.log(
     `Host contracts and catalog are in sync with ${catalogSource} (${operations.length} operations).`,
   );
+  regenerateCommandTable(true);
   process.exit(0);
 }
 
@@ -276,4 +279,15 @@ for (const [path, content] of outputs) {
   await mkdir(dirname(path), { recursive: true });
   await writeFile(path, content, "utf8");
   console.log(`Wrote ${operations.length} operations to ${path}`);
+}
+regenerateCommandTable(false);
+
+function regenerateCommandTable(check: boolean) {
+  // A fresh process reads the just-written catalog, not this process's cached modules.
+  const cwd = fileURLToPath(new URL("../../agent-contracts/", import.meta.url));
+  const result = spawnSync(process.execPath,
+    ["--import", "jiti/register", "scripts/command-axes.ts", ...(check ? ["--check"] : [])],
+    { cwd, stdio: "inherit" });
+  if (result.error) throw result.error;
+  if (result.status !== 0) process.exit(result.status ?? 1);
 }

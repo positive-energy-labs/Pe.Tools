@@ -2,7 +2,7 @@
 import type { Machine, MachineSession } from "@pe/agent-contracts";
 import { Button } from "@pe/kit/lang/button";
 import { PidChip } from "#/components/lang/process";
-import { useLifecycle } from "#/open/lifecycle";
+import { useLifecycle } from "./lifecycle";
 import { useDestination } from "#/navigation/state";
 import { BootstrapAlignment } from "./bootstrap";
 import {

@@ -26,7 +26,7 @@ test("slice 9: a note with a verdict is refused; every door is in the catalog Pe
     expect.arrayContaining(Object.values(FINDINGS_DOORS).map((door) => `command:${door}`)),
   );
   const { list: _list, ...writes } = FINDINGS_DOORS;
-  expect(Object.entries(kernelVerbs).map(([key, verb]) => [key, verb.handle.entry])).toEqual(Object.values(writes).map((door) => [door, door]));
+  expect(Object.entries(kernelVerbs).map(([key, verb]) => [key, verb.handle.key])).toEqual(Object.values(writes).map((door) => [door, door]));
 });
 
 test("slice 9: one mark draws on the port's geometry", () => {

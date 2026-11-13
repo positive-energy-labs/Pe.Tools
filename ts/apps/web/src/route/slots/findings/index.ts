@@ -1,4 +1,5 @@
 import { FINDINGS_DOORS, type Finding, type Mark } from "@pe/agent-contracts/slots";
+import { handle } from "@pe/agent-contracts/handle";
 import { catalogAction } from "../../typed-actions.ts";
 import { resolveMark, type Captured } from "../picture/index.ts";
 
@@ -16,9 +17,9 @@ import { resolveMark, type Captured } from "../picture/index.ts";
  * kernel draws pointers.
  */
 export const kernelVerbs = {
-  [FINDINGS_DOORS.say]: { handle: catalogAction(FINDINGS_DOORS.say), label: "Say finding" },
-  [FINDINGS_DOORS.rule]: { handle: catalogAction(FINDINGS_DOORS.rule), label: "Rule on finding" },
-  [FINDINGS_DOORS.retract]: { handle: catalogAction(FINDINGS_DOORS.retract), label: "Retract finding" },
+  [FINDINGS_DOORS.say]: { handle: handle(FINDINGS_DOORS.say), label: "Say finding" },
+  [FINDINGS_DOORS.rule]: { handle: handle(FINDINGS_DOORS.rule), label: "Rule on finding" },
+  [FINDINGS_DOORS.retract]: { handle: handle(FINDINGS_DOORS.retract), label: "Retract finding" },
 } as const;
 export type KernelVerbKey = keyof typeof kernelVerbs;
 
@@ -37,7 +38,7 @@ export function findingMark(finding: Finding, captured: readonly Captured[]): Ma
  * is the catalog (pod-surface.guard.test.ts).
  */
 export const findingCommand = {
-  ...kernelVerbs[FINDINGS_DOORS.say].handle,
+  ...catalogAction(FINDINGS_DOORS.say),
   label: "Write finding", row: true as const,
   input: (_context: unknown, supplied: unknown) => supplied,
 };

@@ -1,4 +1,4 @@
-import type { ReadingState } from "#/shell/source-contract";
+import type { ReadingState } from "../shell/source-contract";
 /**
  * THE PATCH BAY (host MAP round 4, promoted 2026-10-12): documents are jacks on the left (the
  * master table with its filters), Revits are sockets on the right (one `SessionCard` each, plus a
@@ -29,25 +29,25 @@ import {
 import { ArmingStrip } from "@pe/kit/lang/arming-strip";
 import { ArtifactFrame } from "@pe/kit/lang/artifact-frame";
 import { Button } from "@pe/kit/lang/button";
-import { Connectors, type Connection } from "#/components/lang/connector";
+import { Connectors, type Connection } from "../components/lang/connector";
 import { EmptyState } from "@pe/kit/lang/empty";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { Row } from "@pe/kit/lang/row";
 import { useList } from "@pe/kit/lang/collection";
 import { ListView } from "@pe/kit/lang/list-view";
 import { Scroll } from "@pe/kit/lang/scroll";
-import { docKey, heldRowParts, SessionCard, type SessionDocument } from "#/components/lang/session";
+import { docKey, heldRowParts, SessionCard, type SessionDocument } from "../components/lang/session";
 import { Switcher } from "@pe/kit/lang/switcher";
 import type { QueryCommand } from "@pe/kit/table/model";
 import { queryWords, readClause, visibleRows } from "@pe/kit/table/view";
 
-import { keyOf, pidOf, processOf, selectionOf } from "#/machine/session";
+import { keyOf, pidOf, processOf, selectionOf } from "./session";
 
 import { OpenControlScope, outcomeOf, useOpenKernel, useOpenOwner } from "./context";
 import type { OutcomeKind } from "@pe/kit/lang/outcome";
 import type { TableState } from "@pe/kit/table/model";
 
-import { documentColumns, ModelTable } from "./documents";
+import { documentColumns, ModelTable } from "./open-documents";
 import { factsOf, useLifecycle } from "./lifecycle";
 import {
   accessOf,
@@ -61,8 +61,8 @@ import {
   type DocRow,
   type LaunchDraft,
   type LaunchPlan,
-} from "./model";
-import { BAY_THREADS } from "../design-system/open-examples";
+} from "./open-model";
+import { BAY_THREADS } from "./open-examples";
 import type { RecentDocument } from "@pe/host-contracts/pe-revit-contract";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 

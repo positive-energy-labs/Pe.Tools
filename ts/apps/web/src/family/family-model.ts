@@ -1,3 +1,4 @@
+import type { ParamSpec } from "@pe/agent-contracts";
 import { measuredValueSchema, showCellValue, type MeasuredValue } from "@pe/agent-contracts";
 
 /**
@@ -7,20 +8,6 @@ import { measuredValueSchema, showCellValue, type MeasuredValue } from "@pe/agen
 
 // ── the document shape ──────────────────────────────────────────────────────────────────────────
 
-export interface ParamSpec {
-  dataType?: string;
-  shared?: boolean;
-  sharedGuid?: string;
-  sharedSpecId?: string;
-  sharedVisible?: boolean;
-  sharedUserModifiable?: boolean;
-  tooltip?: string;
-  propertiesGroup?: string;
-  value?: string | number | boolean | MeasuredValue;
-  formula?: string;
-  /** Absent means TYPE (Revit's default). */
-  isInstance?: boolean;
-}
 
 interface SketchCurveSpec {
   kind: string;

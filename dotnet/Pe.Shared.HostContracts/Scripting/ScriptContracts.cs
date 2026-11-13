@@ -39,7 +39,9 @@ public record ExecuteRevitScriptRequest(
     string? SourceName = null,
     ScriptPermissionMode PermissionMode = ScriptPermissionMode.ReadOnly,
     int TimeoutSeconds = 600,
-    ScriptPodSourceBundle? SourceBundle = null
+    ScriptPodSourceBundle? SourceBundle = null,
+    // Host-stamped over anything the input carried; a run with no stamp is the agent's and is held (ADR 0038).
+    ScriptCaller Caller = ScriptCaller.Agent
 );
 
 public record ScriptPodSourceFile(string Path, string BytesBase64);
@@ -154,6 +156,13 @@ public enum ScriptExecutionStatus {
     PolicyRejected,
     Cancelled,
     TimedOut
+}
+
+/// <summary>Who started a script run. Only a <c>Person</c>'s run may save or synchronize a project document.</summary>
+[JsonConverter(typeof(StringEnumConverter))]
+public enum ScriptCaller {
+    Agent,
+    Person
 }
 
 [JsonConverter(typeof(StringEnumConverter))]

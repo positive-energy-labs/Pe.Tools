@@ -1,13 +1,13 @@
-import { useOpenTypedOwner } from "../open/typed-owner";
+import { useOpenTypedOwner } from "../machine/typed-owner";
 import { type Machine } from "@pe/agent-contracts";
 
 import { ListView } from "@pe/kit/lang/list-view";
 import { useList } from "@pe/kit/lang/collection";
 import { Button } from "@pe/kit/lang/button";
-import { OpenOwnerContext, useOpenOwner } from "../open/context";
+import { OpenOwnerContext, useOpenOwner } from "../machine/context";
 import { ButtonGroup } from "@pe/kit/lang/button-group";
 import { keyOf, phaseOf } from "#/machine/session";
-import { lifecycleRequest } from "../open/lifecycle";
+import { lifecycleRequest } from "../machine/lifecycle";
 import { readingList } from "#/host/resource-list";
 import type { ReadingState } from "#/shell/source-contract";
 function Sessions({

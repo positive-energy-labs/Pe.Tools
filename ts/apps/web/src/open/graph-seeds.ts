@@ -1,4 +1,4 @@
-import { BAY_RECENTS, BAY_THREADS, MACHINE_SEEDS, OPEN_SEEDS } from "../design-system/open-examples";
+import { BAY_RECENTS, BAY_THREADS, MACHINE_SEEDS, OPEN_SEEDS } from "../machine/open-examples";
 export const openSeeds = Object.assign(
   Object.fromEntries(
     Object.entries(MACHINE_SEEDS).map(([name, reading]) => [

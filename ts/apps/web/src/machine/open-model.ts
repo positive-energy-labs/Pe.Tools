@@ -19,8 +19,8 @@ import {
   type RecentDocument,
 } from "@pe/host-contracts/pe-revit-contract";
 
-import type { SessionDocument } from "#/components/lang/session";
-import { executionRefusal, keyOf, phaseOf, pidOf, selectionOf } from "#/machine/session";
+import type { SessionDocument } from "../components/lang/session";
+import { executionRefusal, keyOf, phaseOf, pidOf, selectionOf } from "./session";
 
 type HeldModel = NonNullable<MachineSession["documents"]>[number];
 

@@ -14,10 +14,11 @@ test("the Pod read door imports only zod and effect-free subpaths", () => {
     "@pe/agent-contracts/native-output-read",
     "@pe/host-contracts/catalog",
     "@pe/host-contracts/native-schemas",
-    "type @pe/host-contracts/generated",
+    "type @pe/agent-contracts/handle", // Types only: the mints import the command table, the door does not.
     "type @pe/host-contracts/operation-types",
     "type ./evaluator.ts",
     "type ./evaluator.ts",
+    "type @pe/agent-contracts/handle",
   ]);
   expect(JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).exports["./read-graph"]).toBe("./src/reads/door.ts");
 });

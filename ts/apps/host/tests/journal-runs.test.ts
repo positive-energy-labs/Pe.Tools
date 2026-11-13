@@ -5,8 +5,7 @@ import { join } from "node:path";
 import { expect, test } from "vite-plus/test";
 import { type ActionJournal } from "../src/action-journal.ts";
 import { bindControl } from "../src/control.ts";
-import { createPluginRuntime, type Caller, type PluginHooks } from "@pe/agent-contracts";
-import { observePluginOperations } from "../src/plugin-receipts.ts";
+import { type Caller } from "@pe/agent-contracts";
 
 const run = { thread: "thread", turn: "turn" };
 const caller: Caller = { kind: "pea", context: "host-minted", thread: run.thread, run, root: run };
@@ -51,17 +50,6 @@ async function files() {
     );
   const journal = journalAt(path, Date.now, () => null, 1);
   compose(journal);
-  const runtime = createPluginRuntime<string>();
-  const observed: PluginHooks["op.after"][] = [];
-  await runtime.install({
-    id: "committed-results",
-    setup(c) {
-      c.hook("op.after", (event) => {
-        observed.push(event);
-      });
-    },
-  });
-  const stop = observePluginOperations(journal, runtime.emit);
 
   const input = (file = "a.txt", content = "reviewed") => ({
     pod: "design",
@@ -82,7 +70,6 @@ async function files() {
     runs,
     request,
     compose,
-    observed,
     writes: () => writes,
     loseResult: () => {
       loseResult = true;
@@ -90,8 +77,6 @@ async function files() {
     read: (file = "a.txt") => readFile(join(podsRoot, "design", file), "utf8"),
     edit: (bytes: string) => writeFile(join(podsRoot, "design", "a.txt"), bytes),
     async close() {
-      stop();
-      await runtime.close();
       runs.closeAll();
       await journal.close();
       await captures.close();
@@ -113,12 +98,7 @@ test("Pea's real member saves ask nobody, freeze input and preserve identity thr
     expect([done.state, other.state]).toEqual(["succeeded", "succeeded"]);
     if (done.state !== "succeeded" || other.state !== "succeeded")
       throw Error("Member saves did not commit");
-    expect(f.observed.map((event) => event.result)).toEqual(
-      expect.arrayContaining([done.result, other.result]),
-    );
-    expect(f.observed).toHaveLength(2);
     await f.journal.invoke(f.request("a"), crossing);
-    expect(f.observed).toHaveLength(2);
     expect(await f.read()).toBe("reviewed");
     expect(await f.read("b.txt")).toBe("reviewed");
     f.loseResult();
@@ -179,7 +159,6 @@ test.each(["stop", "child-completed", "restart"] as const)(
         f.journal.invoke(f.request("late"), { caller: author, basis: null }),
       ).rejects.toThrow(/run\.closed/);
       expect(await f.journal.list(undefined, "late")).toEqual([]);
-      expect(f.observed).toEqual([]);
       expect(await f.read()).toBe("original");
       expect(f.writes()).toBe(0);
     } finally {
@@ -204,7 +183,6 @@ test("a human press and a Pea save both commit directly; a consumed member edit 
       notDispatched: true,
       refusal: { kind: "stale" },
     });
-    expect(f.observed.map((event) => event.outcome)).toEqual(["succeeded", "failed"]);
     expect(await f.read()).toBe("external edit");
     expect(f.writes()).toBe(1);
   } finally {

@@ -4,9 +4,9 @@ import {
   routeAddress,
   type PageTargetReading,
 } from "@pe/agent-contracts";
-import { useRouteSearch } from "#/route/activity";
-import { oneName } from "#/route/typed-route";
-import { peReadings } from "#/host/resource-stream";
+import { useRouteSearch } from "../route/activity";
+import { oneName } from "../route/typed-route";
+import { peReadings } from "../host/resource-stream";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 /** SPA chrome owns consent. Page code never draws or answers this control. */

@@ -35,7 +35,7 @@ public sealed class SpaceSceneScopeProofTests {
             var links = new[] { link };
             var generation = SpaceWorld.LinkGeneration(doc, links);
             var captures = 0;
-            LinkedGeometryStore.Geometry Capture() { captures++; return new([], []); }
+            LinkedGeometryStore.Geometry Capture() { captures++; return new([], [], new Acquisition(new Pe.Revit.Space.Placement("test", null), "empty", AcquisitionOutcome.Empty, AcquisitionReason.None)); }
             var store = LinkedGeometryStore.For(link.GetLinkDocument()!, link.Id.Value(), link.GetTotalTransform(), generation);
             Assert.That(store, Is.Not.Null, "A clean saved loaded linked snapshot is cacheable.");
             store!.Read("identity-proof", Capture);
@@ -144,7 +144,7 @@ public sealed class SpaceSceneScopeProofTests {
             Assert.That(secondWorld, Is.Not.SameAs(firstWorld), "Geometry belongs to each operation.");
             Assert.That(scoped.Elements.Select(e => e.Handle.ElementId),
                 Is.EquivalentTo(new[] { focus.Id.Value(), context.Id.Value() }));
-            Assert.That(scoped.Stamp.Fresh, Is.True);
+            Assert.That(scoped.Evidence.Revision, Is.EqualTo(SpaceWorld.Epoch(doc)));
             Assert.That(scoped.Triangles, Is.EqualTo(24));
 
             using var focusBytes = new MemoryStream();
