@@ -178,7 +178,7 @@ export async function setup(options: { cold?: boolean } = {}) {
     invoke: (key: string, input: unknown, session?: string, openId?: string | null, id?: string) =>
       Effect.tryPromise({
         try: async () => {
-          if (id) await markDispatched(id);
+          if (id) await markDispatched(id, "bridge");
           sent.push({ key, input, session: session!, openId: openId!, id });
           if (key === "revit.catalog.schedules") {
             onCatalog();

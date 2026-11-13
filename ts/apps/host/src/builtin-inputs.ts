@@ -210,7 +210,7 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
             row.state === "succeeded" &&
             row.target.kind === "document" &&
             row.steps.some(
-              (s) => s.state === "succeeded" && (s.kind !== "native" || !s.touched ||
+              (s) => s.state === "succeeded" && (s.kind !== "native" || s.transport !== "bridge" || !s.touched ||
                 ["wrote", "unauthorized", "unknown", "restoreFailed"].includes(s.touched.kind)),
             )
           )

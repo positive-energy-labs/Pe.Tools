@@ -241,7 +241,7 @@ export class HostRpcCaller {
           { door: "command", mutates: true, needs: operation?.needs ?? "document" },
         )) as ActionReceipt | DetachedAction);
       const touched = "steps" in action ? action.steps.flatMap((step) =>
-        step.touched && step.touched.kind !== "none" ? [step.touched] : []) : [];
+        step.transport === "bridge" && step.touched && step.touched.kind !== "none" ? [step.touched] : []) : [];
       const facts = touched.length ? { touched } : {};
       return action.state === "succeeded"
         ? { ok: true, key, elapsedMs: Date.now() - started, response: action.result, action, ...facts }
