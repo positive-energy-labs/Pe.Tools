@@ -2,6 +2,7 @@ import { peClient } from "#/host/pe-client";
 import { useEffect, useRef, useState } from "react";
 import { peReadings } from "#/host/resource-stream";
 import { previousOf, useReading } from "#/host/resource-state";
+import { parseTarget } from "#/route/target-codec";
 import {
   threadHeadSchema,
   putTargetResultSchema,
@@ -40,6 +41,27 @@ export function soleUserDocument(machine: Machine | null): DocumentRequest | nul
     "resolved"
     ? request
     : null;
+}
+
+/**
+ * The one open document a `?target` address pin names; none when the pin is absent, names no open
+ * document, or two Revits hold it. Owner ruling 2026-11-13 (row 12): a thread, including a draft
+ * with no id yet, binds to the document the URL names; it keeps no binding of its own to manage.
+ */
+export function pinnedDocument(
+  inventory: ReturnType<typeof machineInventory>,
+  target?: string | null,
+) {
+  const parsed = parseTarget(target);
+  if (parsed?.kind !== "address" || inventory.kind !== "ready") return null;
+  const refs = Object.entries(inventory.sessions).flatMap(([session, found]) =>
+    found.kind === "ready"
+      ? found.values
+          .filter((doc) => doc.address === parsed.address)
+          .map((doc) => ({ session, openId: doc.openId }))
+      : [],
+  );
+  return refs.length === 1 ? ({ kind: "open", ref: refs[0]! } as const) : null;
 }
 
 /** A host door's refusal in the person's words: the door, the reason, then the remedy. */

@@ -17,13 +17,13 @@ import * as Atom from "effect/reactivity/Atom";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { errorMessage } from "./use-workbench";
 import { EMPTY_HEAD, isReady, useProviders, type HeadDraft } from "./providers";
-import { routeAddress, targetKey, type DocumentRequest } from "@pe/agent-contracts";
+import { machineInventory, routeAddress, targetKey, type DocumentRequest } from "@pe/agent-contracts";
 import { demoThreads } from "#/chat/thread-navigation";
 import { useEnvironmentReading } from "#/host/environment-state";
 import type { HarnessThreadBody } from "@pe/agent-contracts";
 import { mergeThreadRoster, mergeThreadSummary } from "./thread-merge";
 import { emptyPrompt } from "../prompt";
-import { soleUserDocument } from "#/chat/scope";
+import { pinnedDocument, soleUserDocument } from "#/chat/scope";
 import { machineOf } from "#/machine/model";
 import { useMachineSlice } from "#/machine/use-machine";
 
@@ -45,6 +45,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       thread: search.thread,
       turn: search.turn,
       prompt: search.prompt,
+      target: search.target,
     }),
     structuralSharing: true,
   });
@@ -99,7 +100,12 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   // Undefined until the human picks or clears: the draft then shows the sole user document, if any.
   const [chosenTarget, setDraftTarget] = useState<DocumentRequest | null>();
   const soleDocument = useMachineSlice((reading) => soleUserDocument(machineOf(reading)));
-  const draftTarget = chosenTarget === undefined ? soleDocument : chosenTarget;
+  // Owner ruling 2026-11-13 (row 12): a draft binds to the document the URL's `?target` names, and
+  // only with no pin to the sole user document. This is the draft's one owner; the picker draws it.
+  const pinned = useMachineSlice((reading) =>
+    pinnedDocument(machineInventory(machineOf(reading) ?? undefined), search.target),
+  );
+  const draftTarget = chosenTarget === undefined ? (pinned ?? soleDocument) : chosenTarget;
   const [error, setError] = useState<string>();
 
   // `?fixture=<seed>`: the transcript shows that seed's thread and nothing is fetched.
@@ -244,7 +250,8 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       return Promise.reject(Error("This page already names a conversation; send there instead."));
     if (sendRefusal || !drafted)
       return Promise.reject(Error(sendRefusal ?? "no provider is ready"));
-    // Only the composer's visible document seeds the chat; a tool's `?target` never does.
+    // Only the composer's visible document seeds the chat. A `?target` that names one open document
+    // is that visible document (row 12); a pin that names none seeds nothing.
     const initialTargets: { request: DocumentRequest; label?: string }[] = draftTarget
       ? [{ request: draftTarget }]
       : [];

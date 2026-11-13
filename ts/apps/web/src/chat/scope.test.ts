@@ -1,8 +1,8 @@
 import { machineFixture } from "../../../../packages/agent-contracts/tests/machine-fixture.ts";
 import { expect, test } from "vite-plus/test";
-import { documentRequestSchema } from "@pe/agent-contracts";
+import { documentRequestSchema, machineInventory } from "@pe/agent-contracts";
 
-import { soleUserDocument } from "./scope";
+import { pinnedDocument, soleUserDocument } from "./scope";
 
 const doc = (openId: string) => ({
   openId,
@@ -46,4 +46,17 @@ test("two documents, two Revits, Pea's own document or no reading leave the draf
   };
   for (const machine of [twoDocs, twoRevits, peas, null])
     expect(soleUserDocument(machine)).toBeNull();
+});
+
+// Row 12 (owner ruling 2026-11-13): a thread binds to the document the URL's `?target` names.
+test("a ?target address pin names the one open document at that address, among several", () => {
+  const machine = machineFixture([{ session: "a", documents: [doc("A"), doc("B")] }]);
+  const inventory = machineInventory(machine);
+  expect(soleUserDocument(machine)).toBeNull();
+  expect(pinnedDocument(inventory, "C:/Jobs/A.rvt")).toEqual({ kind: "open", ref: { session: "a", openId: "A" } });
+  // No pin, a pin no open document holds, and a document two Revits hold all bind nothing.
+  expect(pinnedDocument(inventory, undefined)).toBeNull();
+  expect(pinnedDocument(inventory, "C:/Jobs/Closed.rvt")).toBeNull();
+  const twice = machineFixture([{ session: "a", documents: [doc("A")] }, { session: "b", documents: [doc("A")] }]);
+  expect(pinnedDocument(machineInventory(twice), "C:/Jobs/A.rvt")).toBeNull();
 });
