@@ -1,10 +1,9 @@
 import { get } from "./action-blobs.ts";
 import { SdkSession } from "./sdk-session.ts";
 import { Effect } from "effect";
-import { NodeServices } from "@effect/platform-node";
 import type { CommandResources } from "./command-executor.ts";
 import type { RevitBridge } from "./bridge.ts";
-import type { FamilyActionDependencies } from "./family-actions.ts";
+import { runPods, type FamilyActionDependencies } from "./family-actions.ts";
 import { assertFresh, assertSealed } from "./document-marks.ts";
 import { readOriginalProcess } from "./native-receipts.ts";
 import { readMember } from "./settings.ts";
@@ -16,6 +15,67 @@ import { readFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import type { ActionReceipt } from "@pe/agent-contracts";
 import { readBootstrapIdle, readBootstrapInstallation } from "./bootstrap.ts";
+import type { HostNativeRead } from "@pe/host-internal/native-read";
+import type { RequestIdentityData, NativeAnswer } from "@pe/host-internal/request-contracts";
+import type { OpResponseOf } from "@pe/host-contracts/operation-types";
+import { RequestIdentity } from "./request-services.ts";
+import { InvalidRead, type NativeReads } from "./native-reads.ts";
+import { isDoorFailure } from "./http-problems.ts";
+import { createReadOwnership, type ReadOwner } from "./reads/read-ownership.ts";
+
+export type NativeReadTerminals = Pick<NativeReads["Service"], "state" | "settle"> | { readonly kind: "recorded" };
+
+/** The command's Promise boundary owns read leases; NativeReads owns native terminal evidence. */
+export function commandReadOwnership(
+  native: HostNativeRead["Service"] | undefined,
+  terminals: NativeReadTerminals | undefined,
+) {
+  if (native && !terminals) throw Error("Native read service requires terminal observation");
+  const live = terminals && !("kind" in terminals) ? terminals : undefined;
+  const owners = new WeakMap<RequestIdentityData, ReadOwner>();
+  const lifetime = createReadOwnership({
+    native: async (identity, key, input, signal) => {
+      if (!native) throw Error("Native read service is unavailable");
+      // Cancellation detaches this read lease, never native cleanup.
+      // effect-edge: island, phase 5
+      const result = await Effect.runPromise(native.read({ key, input, scope: identity.scope }).pipe(
+        Effect.provideService(RequestIdentity, identity), Effect.result,
+      ), { signal });
+      if (result._tag === "Failure") throw result.failure;
+      return result.success as NativeAnswer<OpResponseOf<typeof key>>;
+    },
+    // No NativeReads exists on a recording lane: it dispatched no native work to clean up.
+    state: (identity) => live?.state(identity) ?? { kind: "settled", requiredDescendants: [], evidence: [] },
+    settle: async (identity) => live
+      // effect-edge: island, phase 5
+      ? Effect.runPromise(live.settle(identity))
+      : { kind: "settled", requiredDescendants: [], evidence: [] },
+  });
+  const readOwnership = {
+    ...lifetime,
+    open(identity: RequestIdentityData) {
+      const owner = lifetime.open(identity);
+      owners.set(identity, owner);
+      return owner;
+    },
+  };
+  const nativeRead: HostNativeRead["Service"] | undefined = native && {
+    resolve: native.resolve,
+    read: (request) => Effect.gen(function* () {
+      const identity = yield* RequestIdentity;
+      const owner = owners.get(identity);
+      if (!owner) return yield* native.read(request);
+      // ReadOwner's port admits again under the captured scope, never the supplied target.
+      const readOwned = owner.native as (key: string, input: unknown) => Promise<NativeAnswer<unknown>>;
+      return (yield* Effect.tryPromise({
+        try: () => readOwned(request.key, request.input),
+        catch: (error) => isDoorFailure(error) ? error
+          : new InvalidRead({ message: String(error), status: 503, problem: "read.owner" }),
+      })) as NativeAnswer<import("effect").Schema.Json>;
+    }),
+  };
+  return { readOwnership, nativeRead };
+}
 
 /** Current resource facts only. ActionJournal owns comparisons and every async fence. */
 export function commandResources(
@@ -36,8 +96,7 @@ export function commandResources(
     async target(target, needs) {
       if (target.kind !== "document" && target.kind !== "session") return;
       const session = target.kind === "document" ? target.ref.session : target.session;
-      // effect-edge: island, phase 5
-      const selected = await Effect.runPromise(SdkSession.resolve(bridge, { session }));
+      const selected = await runPods(deps, SdkSession.resolve(bridge, { session }));
       if (target.kind === "session") return;
       const document = selected.state?.openDocuments.find(
         (doc) => doc.openId === target.ref.openId,
@@ -78,11 +137,7 @@ export function commandResources(
         case "sdk-idle":
           return readBootstrapIdle(deps.sdk);
         case "member":
-          return (
-            deps.runPods ??
-            // effect-edge: island, phase 5
-            ((effect) => Effect.runPromise(effect.pipe(Effect.provide(NodeServices.layer))))
-          )(
+          return runPods(deps,
             readMember(
               { pod: dependency.probe.pod, path: dependency.probe.path },
               { podsRoot: deps.podsRoot },
@@ -116,8 +171,7 @@ export function commandResources(
           const target = dependency.probe.target;
           if (target.kind === "document" || target.kind === "session") {
             const id = target.kind === "document" ? target.ref.session : target.session;
-            // effect-edge: island, phase 5
-            const session = await Effect.runPromise(SdkSession.resolve(bridge, { session: id }));
+            const session = await runPods(deps, SdkSession.resolve(bridge, { session: id }));
             if (
               session.processId !== actual.pid ||
               session.processStartUtcUnixMs !== Date.parse(actual.processStartUtc) ||
@@ -136,8 +190,7 @@ export function commandResources(
             if (!session.documents) throw Error("SDK document census unavailable");
             return session.documents.map((doc) => doc.openId).sort();
           }
-          // effect-edge: island, phase 5
-          const session = await Effect.runPromise(
+          const session = await runPods(deps,
             SdkSession.resolve(bridge, { session: dependency.probe.session }),
           );
           if (!session.state) throw Error("Document census unavailable");

@@ -1,15 +1,14 @@
+import * as contracts from "./contract.ts";
 import { z } from "zod";
-import { route, field, read, paneLayout, type ContextOf } from "../route/defaults";
+import { route, field, read, paneLayout, type ContextOf, type Verbs } from "../route/defaults";
+import type { ReadingState } from "@pe/agent-contracts";
 import { hostRead } from "../route/host-read";
 import { draw } from "../route/draw";
-import { command, sessionCommand } from "../route/typed-actions";
-import {
-  takeoffsRouteState,
-  valueRead,
+import { handle } from "@pe/agent-contracts/handle";
+import { takeoffsRouteState,
   routeStatePatchSchema,
-  canonicalRouteInput,
-} from "@pe/agent-contracts";
-import { adoptionArgs, adoptionData, viewCatalogueArgs, viewCatalogueData } from "@pe/agent-contracts/takeoff-read";
+  canonicalRouteInput, } from "@pe/agent-contracts";
+
 import {
   threadListFields,
   threadSearchDefault,
@@ -27,10 +26,10 @@ export const fields = {
   zones: field(many, [], "query", "push"),
   work: field(z.string(), "", "query", "push"),
   r10: field(z.string(), "", "query", "push"),
-  stage: field(z.literal("adopt"), "adopt", "pose"),
+  stage: field(z.literal("adopt"), "adopt", "stage", "push"),
 };
 export const loaded = read(
-  hostRead(valueRead("takeoffs.adoption", adoptionArgs, adoptionData)),
+  hostRead(contracts.adoption),
   (page: { views: readonly string[] | "all"; zones: readonly string[] | "all"; work: string }) => ({
     views: page.views,
     zones: page.zones,
@@ -38,16 +37,24 @@ export const loaded = read(
   }),
 );
 export const viewCatalogue = read(
-  hostRead(valueRead("takeoffs.views", viewCatalogueArgs, viewCatalogueData)),
+  hostRead(contracts.views),
   (page: { work: string }) => ({ work: page.work }),
 );
 export const patches = z.array(routeStatePatchSchema);
-export type AdoptionContext = ContextOf<
-  typeof fields,
-  typeof loaded,
-  typeof takeoffsRouteState,
-  typeof patches
->;
+/** The adoption pane draws the view catalogue it chooses from: the core refuses until views and zones
+ * are chosen ("choose explicit zones"), and the chooser is the control that clears that refusal. */
+export type AdoptionContext = Omit<
+  ContextOf<typeof fields, typeof viewCatalogue, typeof takeoffsRouteState, typeof patches, Verbs<never, "initialize" | "adopt">>,
+  "read"
+> & {
+  // Named, not generic: wrapping the adoption data in the generic `read`'s `ReadingState` exceeds tsc's
+  // instantiation depth, so the present arm takes the value as the core context already types it.
+  read(read: typeof loaded): AdoptionReading;
+};
+type Adoption = ContextOf<typeof fields, typeof loaded>["value"];
+export type AdoptionReading =
+  | Pick<Adoption, "state" | "value" | "reason">
+  | Exclude<ReadingState<unknown>, { value: unknown }>;
 export const module = route({
   key: "takeoffs",
   name: "View adoption",
@@ -68,7 +75,9 @@ export const module = route({
   },
   fields,
   core: loaded,
-  reads: { views: viewCatalogue },
+  // The adoption pane draws the view catalogue, so no pane demands the core: it is declared here, among the
+  // reads that stay demanded, or the adoption reading is never read (Start, initialize and adopt all need it).
+  reads: { views: viewCatalogue, adoption: loaded },
   edits: {
     work: takeoffsRouteState,
     seed: () => takeoffsRouteState.schema.parse({}),
@@ -79,9 +88,9 @@ export const module = route({
     history: z.object({ label: z.string() }),
     describe: (history) => ({ label: history.label }),
   },
-  commands: {
+  verbs: {
     initialize: {
-      ...sessionCommand("takeoffs.initialize"),
+      handle: handle("takeoffs.initialize"),
       label: "Initialize",
       input: ({ value }) => {
         if (!value || value.initialize.refusal)
@@ -94,9 +103,17 @@ export const module = route({
           throw Error("Prepare Initialize from the current reading");
         return {};
       },
+      present: (_preview, { value: data }) => {
+        const missing = data.initialize.missingCarrierGuids;
+        if (!missing.length) throw Error("Read the missing shared parameters before initializing");
+        return {
+          sentence: `${data.initialize.request.stage}: bind ${missing.length} missing shared parameters.`,
+          rows: missing.map((guid) => `Bind shared parameter ${guid}`),
+        };
+      },
     },
     adopt: {
-      ...command("takeoffs.adopt"),
+      handle: handle("takeoffs.adopt"),
       label: "Adopt",
       input: ({ value }) => {
         if (!value || value.adopt.refusal)
@@ -118,9 +135,12 @@ export const module = route({
     adoption: {
       title: "View adoption",
       purpose: "Choose views and stage designer region names and system tags",
+      read: viewCatalogue,
       body: "scroll",
       draw: draw("scroll", () => import("./typed-adoption"), "AdoptionBody"),
     },
   },
+  // The band draws each review; the pane stages the Work a plan reads, then asks for the plan.
+  band: ["initialize", "adopt"],
   layout: paneLayout("adoption"),
 });

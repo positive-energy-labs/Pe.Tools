@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vite-plus/test";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
+import { isReadEffect } from "@pe/host-contracts/contracts";
 import { linkedCatalog } from "@pe/agent-contracts/pe-api";
 import { buildCapabilities, createRouteRegistrations } from "@pe/mcps";
 import { mkdtemp } from "node:fs/promises";
@@ -87,14 +88,14 @@ describe("sizing", () => {
 // Each red test names a capability the spec needs and a Pod cannot reach today (gaps.json); a closed one is a plain test.
 // test.fails keeps the suite green while the gap is open and fails the day the kernel closes it:
 // then make it a plain test and use the capability.
-const reads = hostOpCatalog.filter((op) => op.intent === "Read").map((op) => op.key);
+const reads = hostOpCatalog.filter((op) => isReadEffect(op.effect)).map((op) => op.key);
 const hostDoors = async () => Object.keys(await import("@pe/host/read-graph"));
 describe("kernel gaps", () => {
   test("kernel door: pod-native-read-door (2)", async () => {
     expect(await hostDoors()).toContain("nativeRead");
   });
   // Closed by slice 7: the read binds the target document's Work (ctx.work with the document ref; the
-  // evaluator resolves its key, host tests/slots-sheet.test.ts), takes the firm layer (ctx.firm) and both
+  // evaluator resolves its key, host tests/slots-sheet.test.ts), takes the firm layer (ctx.files.firm) and both
   // generic MEP reads (ctx.native). A Pod host imports no read-graph value. Run against a recording ReadContext.
   test("kernel doors: pod-document-work (4) and firm-file-layer (3)", async () => {
     const calls: string[] = [];
@@ -104,10 +105,10 @@ describe("kernel gaps", () => {
         calls.push(`work:${owner}:${JSON.stringify(scope)}`);
         return { doc: work.parse({ maxVelocity: 2 }), revision: 1 };
       },
-      firm: async (owner: string, _schema: unknown, seed: { maxFriction: number }) => {
+      files: { firm: async (owner: string, _schema: unknown, seed: { maxFriction: number }) => {
         calls.push(`firm:${owner}`);
         return { firm: { maxFriction: 250 }, path: "Settings/hydronic.json", present: true, seed };
-      },
+      } },
       native: async (key: string, args: { request: { systemUniqueId?: string } }) => {
         calls.push(`native:${key}:${args.request.systemUniqueId ?? ""}`);
         return { body: key === "mep.segment.sizes" ? { segments: [] }
@@ -132,7 +133,7 @@ describe("kernel gaps", () => {
   });
   test("kernel slot: parameter-binding (4)", () => {
     // The slot's data projection (sheetSlotDataSchema) keys bindings under `bindings`.
-    expect(module.data).toMatchObject({ sheet: { bindings: { chosen: { kind: "parameter", parameter: "Diameter" } } } });
+    expect(module.data).toMatchObject({ sheet: { bindings: { chosen: { home: { at: "parameter", parameter: "Diameter" }, domain: { kind: "number" } } } } });
   });
   test.fails("kernel gap: subjectref-codec (4)", async () => {
     // chosen is keyed by a raw UniqueId string; no SubjectRef codec exists to key it by.
@@ -170,7 +171,6 @@ describe("kernel gaps", () => {
   });
   test("kernel door: pod-parameter-write (8)", () => {
     // The parameter binding earns the one sheet pair: the Pod adds no native op (ADR 0030 rule 12).
-    expect(Object.values(module.data.verbs).map((v) => v.kind)).toContain("command");
-    expect(module.data.verbs.sheet).toMatchObject({ kind: "command", entry: "sheet.apply" });
+    expect(module.data.verbs.sheet).toMatchObject({ effect: "ModelWrite", entry: "sheet.apply" });
   });
 });

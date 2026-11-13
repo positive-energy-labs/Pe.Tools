@@ -18,7 +18,7 @@ const prepared = (buffer = new ArrayBuffer(100)): PreparedGeometry => ({
 const decoded = (): SceneData => ({
   positions: new Float32Array(9),
   metadata: {
-    stamp: { epoch: 1, hostDocumentKey: "a", sources: [] },
+    evidence: { epoch: 1, hostDocumentKey: "a", sources: [] },
     elements: [],
     completeness: {
       complete: true,

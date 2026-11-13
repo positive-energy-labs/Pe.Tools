@@ -1,3 +1,5 @@
+import { refusalOf, valueOf } from "../route/typed-route";
+import { pricing } from "./contract";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
 // @vitest-environment jsdom
 import { RegistryContext } from "@effect/atom-react";
@@ -21,7 +23,8 @@ vi.mock("./proto/e/tree-sidebar", () => ({
     return <p>Tree body</p>;
   },
 }));
-vi.mock("./proto/e/picture", () => ({
+vi.mock("./proto/e/picture", async (actual) => ({
+  ...(await actual<typeof import("./proto/e/picture")>()),
   DuctsPicture: () => {
     leaves.picture();
     return <p>Picture body</p>;
@@ -52,9 +55,9 @@ function registry() {
 }
 
 test("F16 the sidebar navigates the document roster before pricing and keeps atomic all/clear", async () => {
-  const f = await createWitness(closes, new Map(), { "ducts.pricing.value": { kind: "use", open() {} } });
-  await vi.waitFor(() => expect(f.owner.readingStatus("roster").snapshot.current).toBe(true));
-  expect(f.owner.readingStatus("value").snapshot.value).toBeFalsy();
+  const f = await createWitness(closes, new Map(), { [pricing.key]: { kind: "use", open() {} } });
+  await vi.waitFor(() => expect(f.owner.readingStatus("roster").snapshot.state === "ready").toBe(true));
+  expect(valueOf(f.owner.readingStatus("value").snapshot)).toBeFalsy();
   render(<RegistryContext value={registry()}>
     <SubjectDoor value={typedSubjectDoor(f.owner.native)}>
       {nodeFor(f.owner, "e-systems")}
@@ -70,10 +73,10 @@ test("F16 the sidebar navigates the document roster before pricing and keeps ato
 
 test("Q2a keeps kind and colour editors on ducts and fan settings on fans", async () => {
   const f = await createWitness(closes);
-  await vi.waitFor(() => expect(f.owner.readingStatus("roster").snapshot.current).toBe(true));
+  await vi.waitFor(() => expect(f.owner.readingStatus("roster").snapshot.state === "ready").toBe(true));
   f.owner.controls.subject({ kind: "ids", ids: [systemCode("SA")] });
-  await vi.waitFor(() => expect(f.owner.readingStatus("ducts").snapshot.current).toBe(true));
-  await vi.waitFor(() => expect(f.fans.readingStatus("sheetSnapshot").snapshot.current).toBe(true));
+  await vi.waitFor(() => expect(f.owner.readingStatus("ducts").snapshot.state === "ready").toBe(true));
+  await vi.waitFor(() => expect(f.fans.readingStatus("sheetSnapshot").snapshot.state === "ready").toBe(true));
   const view = render(<RegistryContext value={registry()}>
     {nodeFor(f.owner, "e-systems")}{nodeFor(f.owner, "e-rules-all")}
   </RegistryContext>);
@@ -101,7 +104,7 @@ test("Q2a keeps kind and colour editors on ducts and fan settings on fans", asyn
 
 test("F6 the real Inputs pane renders an acknowledged role edit as a choice label", async () => {
   const f = await createWitness(closes);
-  await vi.waitFor(() => expect(f.fans.readingStatus("sheetSnapshot").snapshot.current).toBe(true));
+  await vi.waitFor(() => expect(f.fans.readingStatus("sheetSnapshot").snapshot.state === "ready").toBe(true));
   await vi.waitFor(() => expect(f.fans.workBasis()).toBeTruthy());
   const unit = snapshot.nodes.find((node) => node.kind === "equipment")!;
   const id = elementSubject(unit);
@@ -119,9 +122,9 @@ test("F6 the real Inputs pane renders an acknowledged role edit as a choice labe
 
 test("an admitted network pane runs no sibling body when another pane is hidden", async () => {
   const f = await createWitness(closes);
-  await vi.waitFor(() => expect(f.owner.readingStatus("roster").snapshot.current).toBe(true));
+  await vi.waitFor(() => expect(f.owner.readingStatus("roster").snapshot.state === "ready").toBe(true));
   f.owner.controls.subject({ kind: "ids", ids: [systemCode("SA")] });
-  await vi.waitFor(() => expect(f.owner.readingStatus("ducts").snapshot.current).toBe(true));
+  await vi.waitFor(() => expect(f.owner.readingStatus("ducts").snapshot.state === "ready").toBe(true));
   f.owner.setPaneDemand("e-picture", false);
   render(<RegistryContext value={registry()}>{nodeFor(f.owner, "e-sidebar")}</RegistryContext>);
   expect(screen.getByText("Tree body")).toBeTruthy();
@@ -132,7 +135,7 @@ test("an admitted network pane runs no sibling body when another pane is hidden"
 
 test("the fan roster restores its Page query after its body is hidden and shown", async () => {
   const f = await createWitness(closes);
-  await vi.waitFor(() => expect(f.fans.readingStatus("fans").snapshot.current).toBe(true));
+  await vi.waitFor(() => expect(f.fans.readingStatus("fans").snapshot.state === "ready").toBe(true));
   f.fans.controls.query("rosterSearch", { ...emptyListSearch(), keywords: "FC" });
   const store = registry();
   const view = render(
@@ -153,12 +156,12 @@ test("a restored semantic cell selection lands on that fitting cell through the 
   const f = await createWitness(closes);
   const fitting = snapshot.nodes.find((node) => node.kind === "fitting");
   if (!fitting) throw Error("The pinned network has no fitting");
-  await vi.waitFor(() => expect(f.owner.readingStatus("roster").snapshot.current).toBe(true));
+  await vi.waitFor(() => expect(f.owner.readingStatus("roster").snapshot.state === "ready").toBe(true));
   f.owner.controls.subject({ kind: "ids", ids: [systemCode("SA")] });
   await vi.waitFor(() => {
     const state = f.owner.readingStatus("value").snapshot;
-    if (state.status === "failed") throw Error(state.reason ?? "Read failed");
-    expect(state.current).toBe(true);
+    if (state.state === "refused") throw Error(refusalOf(state) ?? "Read failed");
+    expect(state.state === "ready").toBe(true);
   });
   const subject = cellFocusSubject(snapshot, ["SA"], { segment: "componentDrops", id: fitting.id });
   expect(f.owner.page.select([{ kind: "focus", id: subject }]).kind).toBe(
@@ -189,7 +192,7 @@ test("no open fan is absence and every sheet pane renders without a native decod
   });
   for (const pane of ["sheet-roster", "sheet-inputs", "sheet-picture", "sheet-ledger"]) {
     f.fans.setPaneDemand(pane, true);
-    await vi.waitFor(() => expect(f.fans.readingStatus("sheetSnapshot").snapshot.current).toBe(true));
+    await vi.waitFor(() => expect(f.fans.readingStatus("sheetSnapshot").snapshot.state === "ready").toBe(true));
     const view = render(<RegistryContext value={registry()}>{nodeFor(f.fans, pane)}</RegistryContext>);
     if (pane === "sheet-roster") expect(view.container.textContent).toContain("FC-23");
     // The picture pane is the kernel's, loaded lazily: its empty state arrives after the first paint.
@@ -214,8 +217,8 @@ test("/ducts design sheet stages each criterion in /ducts Work, and Fans Work ne
       deliver({ kind: "complete", value: { ...snapshot, systems: [] }, revision: 1 });
     } },
   });
-  await vi.waitFor(() => expect(f.fans.readingStatus("ductsWork").snapshot.current).toBe(true));
-  await vi.waitFor(() => expect(f.fans.readingStatus("sheet").snapshot.current).toBe(true));
+  await vi.waitFor(() => expect(f.fans.readingStatus("ductsWork").snapshot.state === "ready").toBe(true));
+  await vi.waitFor(() => expect(f.fans.readingStatus("sheet").snapshot.state === "ready").toBe(true));
   await vi.waitFor(() => expect(f.fans.workBasis()).toBeTruthy());
   const acks: { route: string; label?: string }[] = [];
   closes.push(f.ws.subscribeUncaptured((event) => {
@@ -225,7 +228,11 @@ test("/ducts design sheet stages each criterion in /ducts Work, and Fans Work ne
   const fans0 = f.fans.work()?.revision;
   // /ducts' design sheet stages each criterion in /ducts Work (ruling 2026-11-10); Fans Work never moves.
   const view = render(<RegistryContext value={registry()}>{nodeFor(f.owner, "design")}</RegistryContext>);
-  const field = await vi.waitFor(() => view.container.querySelector('[data-sheet-address="criteria:terminalDropInWg"]')!);
+  const field = await vi.waitFor(() => {
+    const cell = view.container.querySelector('[data-sheet-address="criteria.terminalDropInWg"]');
+    if (!cell) throw Error("Waiting for the terminal drop cell");
+    return cell;
+  });
   const input = field.querySelector<HTMLInputElement>("input.dl-cell-input")!;
   fireEvent.change(input, { target: { value: "0.07" } });
   fireEvent.keyDown(input, { key: "Enter", code: "Enter" });
@@ -233,7 +240,7 @@ test("/ducts design sheet stages each criterion in /ducts Work, and Fans Work ne
   expect(f.owner.work()?.value).toMatchObject({ criteria: { terminalDropInWg: { edit: { value: 0.07 } } } });
   view.rerender(<RegistryContext value={registry()}>{nodeFor(f.owner, "design")}</RegistryContext>);
   // A criterion choice stages its own cell the same way.
-  const split = view.container.querySelector<HTMLElement>('[data-sheet-address="criteria:splitPolicy"]')!;
+  const split = view.container.querySelector<HTMLElement>('[data-sheet-address="criteria.splitPolicy"]')!;
   fireEvent.click(split.querySelector<HTMLElement>("button")!);
   const pick = await vi.waitFor(() => {
     const options = [...document.querySelectorAll<HTMLElement>('[role="option"]')];
@@ -246,7 +253,7 @@ test("/ducts design sheet stages each criterion in /ducts Work, and Fans Work ne
   expect(f.owner.work()?.value).toMatchObject({ criteria: { splitPolicy: { edit: { value: expect.any(String) } } } });
   // Clearing the typed criterion is the cell's own clear verb; it returns to the layer underneath.
   view.rerender(<RegistryContext value={registry()}>{nodeFor(f.owner, "design")}</RegistryContext>);
-  fireEvent.click(within(view.container.querySelector<HTMLElement>('[data-sheet-address="criteria:terminalDropInWg"]')!).getByRole("button", { name: "clear" }));
+  fireEvent.click(within(view.container.querySelector<HTMLElement>('[data-sheet-address="criteria.terminalDropInWg"]')!).getByRole("button", { name: "clear" }));
   await vi.waitFor(() => expect(f.owner.work()?.revision).toBe(ducts0 + 3));
   expect((f.owner.work()?.value as { criteria?: Record<string, { edit?: unknown }> }).criteria?.terminalDropInWg?.edit ?? undefined).toBeUndefined();
   expect(f.fans.work()?.revision).toBe(fans0);
@@ -258,7 +265,7 @@ test("a rule owner crossing without system context still lands on its rule", asy
   const url = new URL(ductsLink([], {}, { kind: "rule", key: "tap-std" }), "http://127.0.0.1");
   const destination = f.mount(f.admitted.owner, url.searchParams, "rule-no-system");
   expect(destination.page.read().selected.map((item: { id: string }) => item.id)).toEqual(["rule:tap-std"]);
-  await vi.waitFor(() => expect(destination.readingStatus("value").snapshot.current).toBe(true));
+  await vi.waitFor(() => expect(destination.readingStatus("value").snapshot.state === "ready").toBe(true));
   const view = render(<RegistryContext value={registry()}>{nodeFor(destination, "e-rules-all")}</RegistryContext>);
   const row = view.container.querySelector('[data-key="tap-std"]');
   expect(row).not.toBeNull();

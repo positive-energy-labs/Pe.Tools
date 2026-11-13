@@ -39,7 +39,7 @@
     "ts/apps/web/src/machine/startup.tsx#StartupSettings:BindingElement",
     "ts/apps/web/src/machine/update.tsx#AutomaticUpdates:BindingElement",
     "ts/apps/web/src/machine/update.tsx#UpdateGroup:BindingElement",
-    "ts/apps/web/src/open/bay.tsx#PatchBayBody:BindingElement",
+    "ts/apps/web/src/machine/bay.tsx#PatchBayBody:BindingElement",
     "ts/apps/web/src/rooms/plan.tsx#RoomsPlan:BindingElement",
     "ts/apps/web/src/route/activity.tsx#useRouteFixture:PropertyAccessExpression",
     "ts/apps/web/src/route/activity.tsx#useRouteFixture:PropertyAccessExpression",
@@ -52,7 +52,6 @@
   "uncheckedRegistry": [],
   "malformedSources": [],
   "dynamicModules": [
-    "ts/apps/host/src/package-lifecycle.ts#createPackageLifecycle/synchronize/setup/module:import",
     "ts/apps/host/src/pod-artifact.ts#admitPodArtifact/loaded:import",
     "ts/apps/web/scripts/heal-click-proof.ts#{ chromium }:require",
     "ts/apps/web/scripts/heal-review-proof.ts#{ chromium }:require",

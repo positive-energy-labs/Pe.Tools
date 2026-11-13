@@ -10,7 +10,15 @@ import {
   writeBuiltinClosurePin,
 } from "./route-source-hash.ts";
 import { canonicalRouteJson } from "../../packages/agent-contracts/src/route-graph.ts";
-import { builtinData } from "../../packages/agent-contracts/src/route-kernel.fixtures.ts";
+import { builtinData as bodyData } from "../../packages/agent-contracts/src/route-kernel.fixtures.ts";
+import {
+  currentRouteStartupProjection,
+  routeStartupOwner,
+  routeStartupSourceHash,
+} from "../../packages/host-contracts/src/route-startup.ts";
+// Source identity witnesses the emitted discovery graph, independently of body-kind fixtures.
+const { stages: _stages, stageOrder: _order, predicates: _predicates, ...baseData } = bodyData;
+const builtinData = { ...baseData, verbs: {}, band: [] };
 const roots: string[] = [];
 afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
@@ -39,6 +47,23 @@ function fixture() {
   };
   return { root, sources, options, build: () => buildBuiltinClosure(options) };
 }
+
+test("a test-named dependency is captured by the real resolver and invalidates receipt reuse", async () => {
+  const f = fixture();
+  execFileSync("git", ["init", "--quiet"], { cwd: f.root });
+  mkdirSync(join(f.root, "ts/apps/web/src/a"), { recursive: true });
+  const dependency = join(f.root, "ts/value.test.ts");
+  writeFileSync(dependency, "export const value = 1;\n");
+  writeFileSync(join(f.root, "entry.ts"), 'export { value } from "./ts/value.test.ts";\n');
+  const closure = await f.build();
+  expect(closure.envelope.modules.map(member => member.id)).toContain("ts/value.test.ts");
+  const receipt = { checkout: routeStartupOwner(f.root), sourceHash: routeStartupSourceHash(f.root),
+    projections: { [join(f.root, "ts/apps/web/src/a/source-closure.generated.json")]: canonicalRouteJson(closure) } };
+  expect(currentRouteStartupProjection(f.root, receipt)).toBe(true);
+  writeFileSync(dependency, "export const value = 2;\n");
+  expect(routeStartupSourceHash(f.root)).not.toBe(receipt.sourceHash);
+  expect(currentRouteStartupProjection(f.root, receipt)).toBe(false);
+});
 test("actual resolver closes all module kinds; source, asset and imported JSON mutations change identity; EOLs do not", async () => {
   const f = fixture();
   const first = await f.build();

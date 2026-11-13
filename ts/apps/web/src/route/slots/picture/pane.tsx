@@ -12,6 +12,7 @@ import type { SceneMeshes } from "#/scene/types";
 import type { SubjectRefCode } from "../../../../../../packages/agent-contracts/src/subject-ref.ts";
 import type { DrawContext, picturePose } from "../../typed-route.ts";
 import { findingMark } from "../findings/index.ts";
+import { subjectName } from "../subject-name.ts";
 import { elementOf, pictureSlot, type Captured } from "./index.ts";
 import { markLayer } from "./marks.ts";
 import type { PictureOverlayProps, PictureParts } from "./overlay.tsx";
@@ -38,8 +39,7 @@ export interface PicturePaneContext {
 
 const FINDINGS: LayerOption = { key: "findings", label: "findings" };
 const KERNEL_LAYERS: readonly LayerOption[] = [{ key: "meshes", label: "meshes", chord: "M" }, FINDINGS];
-// ponytail: a subject's name is its SubjectRef code until the kernel names subjects; an overlay names its own.
-const PLAIN: PictureParts = { lines: [], name: (key) => key, kinds: {}, colour: "mono", readout: { summary: null } };
+const PLAIN: PictureParts = { lines: [], name: subjectName, kinds: {}, colour: "mono", readout: { summary: null } };
 
 export function PicturePane({ ctx }: { ctx: PicturePaneContext }) {
   const { draw, slot } = ctx;
@@ -132,7 +132,7 @@ function KernelPicture({ ctx, scope, subject, parts }: { ctx: PicturePaneContext
 
   // The capture follows the pane's own read unless the overlay names another (a geometry read that outlives a re-price).
   const doc = draw.target?.kind === "document" ? draw.target.ref : null;
-  const follows = parts.source ?? { version: draw.value.current ? draw.value.hash : "", current: draw.value.current };
+  const follows = parts.source ?? { version: draw.value.state === "ready" ? draw.value.publication?.evaluation ?? "" : "", current: draw.value.state === "ready" };
   const { focus: _focus, layerOptions: _options, source: _source, label, jump, ...content } = parts;
   return (
     <Picture

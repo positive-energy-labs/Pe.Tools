@@ -1,15 +1,14 @@
+import * as contracts from "./contract.ts";
 import type { ContextOf } from "../route/defaults";
 import { z } from "zod";
 import { listSearchSchema, threadSearchDefault } from "@pe/agent-contracts";
 import { field } from "../route/defaults";
 import { read } from "../route/defaults";
-import { valueRead } from "../../../../packages/agent-contracts/src/value.ts";
 import { route } from "../route/defaults.ts";
 import { hostRead } from "../route/host-read.ts";
 import { draw } from "../route/draw.tsx";
 
-import { chatArgs, chatValue } from "../../../../packages/agent-contracts/src/chat-read.ts";
-export const loaded = read(hostRead(valueRead("chat.context", chatArgs, chatValue)));
+export const loaded = read(hostRead(contracts.context));
 export const fields = {
   threadSearch: { ...field(listSearchSchema, threadSearchDefault(), "query"), codec: "list-search" as const },
   threadSort: { ...field(z.enum(["", "recent", "title"]), "", "query"), codec: "text" as const },

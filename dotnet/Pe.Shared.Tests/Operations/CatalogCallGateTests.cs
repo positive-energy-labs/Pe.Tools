@@ -2,9 +2,9 @@ using Pe.Shared.HostContracts.Operations;
 namespace Pe.Revit.Tests;
 [TestFixture]
 public sealed class CatalogCallGateTests {
-    private static HostOperationDefinition Leaf(OpSubject subject, OpEffect effect = OpEffect.Read, bool internalLeaf = false, bool rollback = false) =>
+    private static HostOperationDefinition Leaf(OpSubject subject, OpEffect effect = OpEffect.Read, bool internalLeaf = false) =>
         new("test.leaf", typeof(NoRequest), typeof(NoRequest), Subject: subject, Touches: OpTouches.Geometry,
-            Effect: effect, Internal: internalLeaf, RollsBack: rollback);
+            Effect: effect, Internal: internalLeaf);
     [TestCase("ducts.snapshot", "{\"selector\":{\"kind\":\"ids\",\"ids\":[1]}}")]
     [TestCase("revit.catalog.electrical-circuits", "{\"options\":{\"includeNearbyProxyContext\":false}}")]
     public void Request_strings_cannot_override_declared_document_geometry(string key, string payload) {
@@ -23,9 +23,14 @@ public sealed class CatalogCallGateTests {
         Assert.DoesNotThrow(() => OpCallGate.Require(Leaf(OpSubject.FamilyDocument), null));
         Assert.DoesNotThrow(() => OpCallGate.Require(Leaf(OpSubject.Elements), null));
     }
-    [Test]
-    public void Transactional_reads_must_declare_rollback() {
-        Assert.Catch(() => OpCallGate.Require(Leaf(OpSubject.Elements, OpEffect.TransactRead), null));
-        Assert.DoesNotThrow(() => OpCallGate.Require(Leaf(OpSubject.Elements, OpEffect.TransactRead, rollback: true), null));
+    // Replaces "Transactional_reads_must_declare_rollback": no op declares rollback any more, so no gate can
+    // find it missing. The column is the effect.
+    [TestCase(OpEffect.Read, false, false)]
+    [TestCase(OpEffect.TransactRead, true, true)]
+    [TestCase(OpEffect.SessionWrite, false, true)]
+    [TestCase(OpEffect.ModelWrite, false, true)]
+    public void Rollback_and_transaction_columns_are_the_effect(OpEffect effect, bool rollsBack, bool usesTransactions) {
+        var leaf = Leaf(OpSubject.Elements, effect);
+        Assert.That((leaf.RollsBack, leaf.UsesTransactions), Is.EqualTo((rollsBack, usesTransactions)));
     }
 }

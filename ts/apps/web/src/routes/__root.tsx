@@ -1,6 +1,6 @@
 import "../route/builtin-routes";
-import {installOpenControls} from "../open/context";
-import {OpenControls} from "../open/kernel";
+import {installOpenControls} from "../machine/context";
+import {OpenControls} from "../machine/kernel";
 installOpenControls(OpenControls);
 import { useRestoreTabPage } from "../route/url";
 import { useEffect, useState } from "react";
@@ -29,7 +29,7 @@ import { AppBar } from "#/navigation/app-bar";
 import { NavigationProvider } from "#/navigation/state";
 import { RouteControlsProvider, SituationPinnedControl } from "#/navigation/route-controls";
 import { SurfaceHostProvider } from "#/navigation/surface-host";
-import { SettingsProvider } from "#/settings/options";
+import { SettingsProvider } from "../navigation/options";
 import { useSurfaceHost } from "#/navigation/surface-host";
 import { appRouteMount, appRouteByPath } from "@pe/agent-contracts";
 import { Button } from "@pe/kit/lang/button";

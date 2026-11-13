@@ -2,33 +2,13 @@ import type { EntryContract } from "../../../../packages/agent-contracts/src/rou
 import type { UseSource } from "../shell/source-contract.ts";
 import { z } from "zod";
 import type { PeRouteId } from "@pe/agent-contracts/pe-api";
-export interface Publication<D = unknown> {
-  key: string;
-  generation: number;
-  version: number;
-  state: "current" | "refresh-needed" | "superseded";
-  reason?: string;
-  value: {
-    data: D;
-    evaluation: string;
-    inputs: string;
-    coverage: {
-      requested: string[];
-      covered: string[];
-      unknown: string[];
-      refused: { keys: string[]; reason: string }[];
-    };
-    origin: unknown;
-    trace: unknown[];
-    freshness: "current" | "refresh-needed";
-  } | null;
-}
+import type { Publication } from "@pe/agent-contracts/value";
+import type { ReadHandle } from "@pe/agent-contracts/handle";
 export interface HostRead {
   key: string;
   input: z.ZodType;
   output: z.ZodType<Publication>;
   axes: EntryContract["axes"];
-  demand?: "mount" | "explicit";
   fixtures?: Readonly<Record<string, (args: any) => FixtureValue<z.ZodType<Publication>>>>;
   endpoint?: PeRouteId;
   request?(args: any, target?: import("@pe/agent-contracts").ExecutionTarget): object;
@@ -40,21 +20,36 @@ type FixtureValue<O extends z.ZodType<Publication>> = Pick<
 >;
 
 /** A host publication handle. Importing a route on the host never loads browser transport. */
-export function hostRead<I extends z.ZodType, O extends z.ZodType<Publication>>(
-  contract: {
-    key: string;
-    endpoint?: PeRouteId;
-    request?(args: z.output<I>, target?: import("@pe/agent-contracts").ExecutionTarget): object;
-    input: I;
-    output: O;
-    axes: EntryContract["axes"];
-    demand?: "mount" | "explicit";
-  },
-  fixtures?: Readonly<Record<string, (args: z.output<I>) => FixtureValue<O>>>,
-) {
+export function hostRead<K extends string, S extends z.ZodRawShape, D>(
+  contract: ReadHandle<K, z.output<z.ZodObject<S>>, D> & { input: z.ZodObject<S> },
+  fixtures?: Readonly<Record<string, (args: z.output<z.ZodObject<Omit<S, "target">>>) => FixtureValue<z.ZodType<Publication<D>>>>>,
+): HostRead & { input: z.ZodObject<Omit<S, "target">>; output: z.ZodType<Publication<D>> };
+export function hostRead<K extends string, I, D>(
+  contract: ReadHandle<K, I, D>,
+  fixtures?: Readonly<Record<string, (args: I) => FixtureValue<z.ZodType<Publication<D>>>>>,
+): HostRead & { input: z.ZodType<I>; output: z.ZodType<Publication<D>> };
+export function hostRead<K extends string, D>(
+  contract: ReadHandle<K, unknown, D>,
+  fixtures?: HostRead["fixtures"],
+): HostRead & { output: z.ZodType<Publication<D>> } {
   const { key } = contract;
+  let input: z.ZodType = contract.input;
+  if (contract.input instanceof z.ZodObject && "target" in contract.input.shape) {
+    const { target, ...shape } = contract.input.shape;
+    input = z.object(shape).clone({ ...contract.input.def, shape });
+  }
   return {
     ...contract,
+    input,
+    endpoint: "reads.value" as const,
+    request(args: z.output<typeof input>, target?: import("@pe/agent-contracts").ExecutionTarget) {
+      const shape = contract.input instanceof z.ZodObject ? contract.input.shape.target : undefined;
+      const bound = target ?? { kind: "host" as const };
+      const direct = shape instanceof z.ZodType ? shape.safeParse(bound) : undefined;
+      return { read: key, args: contract.input.parse(shape && typeof args === "object" && args !== null
+        ? { ...args, target: direct?.success ? direct.data : bound.kind === "document" ? bound.ref : bound }
+        : args) };
+    },
     fixtures,
     source: {
       kind: "use" as const,
@@ -64,9 +59,9 @@ export function hostRead<I extends z.ZodType, O extends z.ZodType<Publication>>(
             provide(name: string, args: unknown) {
               const provider = fixtures[name];
               if (!provider) throw Error(`No fixture '${name}' for ${key}`);
-              const input = contract.input.parse(args);
-              const value = provider(input);
-              const id = `fixture:${key}:${name}:${JSON.stringify(input)}`;
+              const parsed = input.parse(args);
+              const value = provider(parsed);
+              const id = `fixture:${key}:${name}:${JSON.stringify(parsed)}`;
               return {
                 key: id,
                 generation: 0,

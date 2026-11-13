@@ -1,6 +1,9 @@
+import { stateMachine, stateFixture } from "../../../tests/isolated-home/storage.ts";
+import { dirname as storedParent } from "node:path";
+import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { actAs } from "./callers.ts";
 import { expect, test, vi } from "vite-plus/test";
-import { mkdtemp, mkdir, writeFile, readFile, readdir, rm } from "node:fs/promises";
+import { mkdir, writeFile, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -8,6 +11,7 @@ import { RouteWorkspace, observeResources } from "@pe/runtime";
 import { bindWork, workKey, type ReadingFrame } from "@pe/agent-contracts";
 import { workFingerprintSchema } from "../../../packages/agent-contracts/src/route-kernel-admission.ts";
 import { builtinData } from "../../../packages/agent-contracts/src/route-kernel.fixtures.ts";
+import { podWire, podHostSource } from "./pod-wire.fixture.ts";
 import { buildRouteArtifact } from "../../web/route-module-hash.ts";
 import { createPackageLifecycle } from "../src/package-lifecycle.ts";
 import { listPackages } from "../src/packages.ts";
@@ -25,13 +29,15 @@ async function fixture(
   address = `/tool/${encodeURIComponent("route:@fixture/routes/tool/route.artifact")}`,
   initialWork = false,
 ) {
-  const data = {
+  const typed = await podWire("pod.fixture.tool", address, 2, `Fixture ${salt}`, initialWork);
+  // The native-link falsifier exercises the executable body's catalog linker.
+  const data = native ? {
     ...builtinData,
     key: "pod.fixture.tool",
     address,
     name: `Fixture ${salt}`,
     work: { schema: "work", route: "pod.fixture.tool", version: 2, },
-  };
+  } : typed.data;
   const entry = join(root, "entry.ts");
   const imports = fileURLToPath(
     new URL("../../../packages/agent-contracts/src/route-kernel.fixtures.ts", import.meta.url),
@@ -50,6 +56,10 @@ entries: {...builtinModule.entries, roster: {...builtinModule.entries.roster, ${
     entry,
     root,
     data,
+    ...(!native ? { hostEntry: {
+      entry: join(root, "host.ts"),
+      source: podHostSource(typed, fileURLToPath(import.meta.resolve("zod"))),
+    } } : {}),
     contracts: [{ id: "test-contract", bytes: new TextEncoder().encode("fixture-contract") }],
   });
   const wire = JSON.parse(
@@ -87,13 +97,13 @@ test("host and browser refuse a fingerprinted raw-slash Pod address alias", asyn
     );
     const lifecycle = createPackageLifecycle({
       packages: () => listPackages(join(root, "Pods")),
-      decisionsPath: join(root, "enabled.json"),
+      machine: stateMachine(storedParent(join(root, "enabled.json"))),
     });
     const workspace = new RouteWorkspace({
       registrations: [],
-      store: fileRouteDocumentStore(join(root, "Work")),
+      store: fileRouteDocumentStore(stateFixture(join(root, "Work"))),
     });
-    const routes = createPodRoutes(lifecycle, { workspace, trustPath: join(root, "trust.json") });
+    const routes = createPodRoutes(lifecycle, { workspace, machine: stateMachine(storedParent(join(root, "trust.json"))) });
     try {
       const [row] = await routes.list();
       await expect(routes.trust(row!.key, artifact.fingerprint, true)).rejects.toThrow("identity");
@@ -153,9 +163,9 @@ async function setup(saved: unknown = currentWork, blockRead = false, initialWor
     const artifact = await fixture(root, "first", undefined, undefined, initialWork);
     const lifecycle = createPackageLifecycle({
       packages: () => listPackages(join(root, "Pods")),
-      decisionsPath: join(root, "enabled.json"),
+      machine: stateMachine(storedParent(join(root, "enabled.json"))),
     });
-    const disk = fileRouteDocumentStore(join(root, "Work"));
+    const disk = fileRouteDocumentStore(stateFixture(join(root, "Work")));
     const key = bindWork("pod.fixture.tool", null);
     await disk.setState({
       targetKey: workKey(key),
@@ -185,7 +195,7 @@ async function setup(saved: unknown = currentWork, blockRead = false, initialWor
         },
       },
     });
-    const routes = createPodRoutes(lifecycle, { workspace, trustPath: join(root, "trust.json") });
+    const routes = createPodRoutes(lifecycle, { workspace, machine: stateMachine(storedParent(join(root, "trust.json"))) });
     const releases: (() => void)[] = [];
     const observe = observeResources(workspace, { observe: () => () => {} });
     const feed = (
@@ -397,17 +407,17 @@ test("Pea finds, reads, sets and opens a trusted Pod view through its one regist
     const { fingerprint } = await fixture(root);
     const lifecycle = createPackageLifecycle({
       packages: () => listPackages(join(root, "Pods")),
-      decisionsPath: join(root, "enabled.json"),
+      machine: stateMachine(storedParent(join(root, "enabled.json"))),
     });
     const app = createPeRoutes({
       registrations: createRouteRegistrations(),
-      store: fileRouteDocumentStore(join(root, "Work")),
+      store: fileRouteDocumentStore(stateFixture(join(root, "Work"))),
       heads: { observe: () => () => {} },
       observeHostResource: hostResourceObserver(),
     });
     const pods = createPodRoutes(lifecycle, {
       workspace: app.workspace,
-      trustPath: join(root, "trust.json"),
+      machine: stateMachine(storedParent(join(root, "trust.json"))),
     });
     // The host's capability provider wiring (pe-routes `admittedRoutes`), over this app's workspace.
     const rows = () =>

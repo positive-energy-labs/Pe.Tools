@@ -2,7 +2,11 @@ import { createHash } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
-import { readStored } from "@pe/host-contracts/store";
+import {
+  read as readStoredFile,
+  type StateDirectory,
+} from "@pe/host-contracts/kinds";
+import { runFileKind } from "./run-files.ts";
 import {
   canonicalRouteInput,
   familyNativeApplyResultSchema,
@@ -54,14 +58,14 @@ const object = (value: unknown): Record<string, unknown> | null =>
 // Run output is Revit's evidence of a native outcome, not host-derived state, and C# may still hold
 // it open mid-write (PodRuns.cs writes in place). So a file that does not decode is kept, silently, and
 // reads as "not evidence": the outcome stays unknown and is retried. Never discarded, never noticed.
-const json = (path: string): unknown => {
-  const read = readStored(path, z.unknown(), { class: "keep", place: "Family run output" });
+const json = (storage: StateDirectory, run: string, file: string): unknown => {
+  const read = readStoredFile(runFileKind.in(storage, run, [file]));
   return read.kind === "ok" ? read.value : null;
 };
 
 /** A FF run is evidence only when one immutable run names the sealed input and original Revit lifetime. */
 export async function familiesApplyRun(
-  root: string,
+  storage: StateDirectory,
   step: ActionStep,
   prepared: unknown,
   openId: string,
@@ -85,12 +89,13 @@ export async function familiesApplyRun(
     !object(request.familyNames)
   )
     return null;
+  const root = storage.path;
   const folders = await readdir(root, { withFileTypes: true }).catch(() => []);
   const matching: { run: string; input: unknown }[] = [];
   for (const folder of folders) {
     if (!folder.isDirectory() || !/^\d{8}-\d{6}-[a-f0-9]{32}$/.test(folder.name)) continue;
     const run = join(root, folder.name);
-    const raw = await json(join(run, "input.json"));
+    const raw = await json(storage, folder.name, "input.json");
     const input = inputSchema.safeParse(raw);
     if (!input.success) continue;
     const found = input.data;
@@ -135,9 +140,9 @@ export async function familiesApplyRun(
   }
   if (matching.length !== 1) return null;
   const { run, input } = matching[0]!;
-  const rawReceipt = await json(join(run, "receipt.json"));
+  const rawReceipt = await json(storage, run.slice(root.length + 1), "receipt.json");
   const receipt = receiptSchema.safeParse(rawReceipt);
-  const rawApply = await json(join(run, "apply.json"));
+  const rawApply = await json(storage, run.slice(root.length + 1), "apply.json");
   const apply = object(rawApply);
   if (
     !receipt.success ||

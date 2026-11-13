@@ -5,6 +5,8 @@ import { createPortal } from "react-dom";
  * header. Leaf module: route bodies import it without importing the chrome. */
 type Slots = { nodes: Readonly<Record<string, HTMLElement>>; slot: (pane: string) => ReactNode };
 const Context = createContext<Slots | null>(null);
+/** Separate from body actions: an inner route cannot mask its enclosing dock head. */
+export const DockBand = createContext<{ node: HTMLElement | null } | null>(null);
 export function PaneActions({ pane, children }: { pane: string; children: ReactNode }) {
   const node = useContext(Context)?.nodes[pane];
   return node ? createPortal(children, node) : null;

@@ -98,8 +98,7 @@ function HandleCells() {
   };
   const value = {
     value: [{ key: "flow" }],
-    current: !stale,
-    status: stale ? "unavailable" : "ready",
+    state: stale ? "stale" : "ready",
     reason: stale ? "Fixture Value changed; refresh before editing" : undefined,
   };
   const drawing = {

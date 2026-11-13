@@ -8,7 +8,9 @@ import {
   type DrawContext,
   type Fields,
   type ReadData,
+  type VerbHandle,
 } from "./typed-route";
+import type { CommandHandle } from "@pe/agent-contracts/handle";
 import type { HostRead } from "./host-read";
 export * from "./typed-route";
 /** A picture is declared with these; the pose fields (`picturePose`) come with `./typed-route`. */
@@ -37,11 +39,19 @@ type WorkOf<T> = T extends { schema: infer S extends z.ZodType }
     ? z.output<T>
     : never;
 /** Infer from independent declarations: drawing imports cannot form a module inference cycle. */
-export type ContextOf<F extends Fields, R = never, W = never, E = never> = DrawContext<
+export type ContextOf<
+  F extends Fields,
+  R = never,
+  W = never,
+  E = never,
+  /** The verbs the body asks for (`Verbs<run ids, plan ids>`); the route must declare each. */
+  V extends Readonly<Record<string, VerbHandle>> = {},
+> = DrawContext<
   R extends HostRead ? ReadData<R> : never,
   F,
   WorkOf<W>,
-  E extends z.ZodType ? z.output<E> : never
+  E extends z.ZodType ? z.output<E> : never,
+  V
 >;
 
 /** A pane draws the core Value unless it explicitly names another read. */
@@ -53,7 +63,8 @@ export function route<
   const Reads extends Readonly<Record<string, HostRead>>,
   SubjectRead extends HostRead,
   const Q extends QueryFields = {},
->(spec: Specification<D, F, W, Edit, Reads, SubjectRead, Q>) {
+  const V extends Readonly<Record<string, CommandHandle>> = {},
+>(spec: Specification<D, F, W, Edit, Reads, SubjectRead, Q, V>) {
   const panes = Object.fromEntries(
     Object.entries(spec.panes).map(([id, pane]) => [id, { ...pane, read: pane.read ?? spec.core }]),
   ) as typeof spec.panes;

@@ -10,10 +10,10 @@ import {
 import { resolveLaneAndRoot, runtimeRoot } from "./runtime-owner.ts";
 import { createHash } from "node:crypto";
 import { unlinkSync } from "node:fs";
-import { join } from "node:path";
 import { z } from "zod";
 import { actionAdmissionSchema } from "@pe/agent-contracts";
-import { readStored, storedNoticesFile, writeAtomic } from "@pe/host-contracts/store";
+import { read as readFile, keptStateKind, writeState } from "@pe/host-contracts/kinds";
+import { stateTree } from "@pe/host-contracts/service-identity";
 import type { InvocationContext } from "./invocation-context.browser.ts";
 export type {
   InvocationContext,
@@ -40,16 +40,12 @@ function capturedContextHash() {
       : process.env[HOST_CONTEXT_VARIABLE]?.trim()) || "human";
   return createHash("sha256").update(identity).digest("hex");
 }
-function outboxPath(slot: string) {
+function outboxFile(slot: string) {
   // The caller's slot already includes the host base. A new root must find old pending intent.
   const hash = createHash("sha256").update(slot).digest("hex");
-  return join(
-    runtimeRoot(),
-    "state",
-    resolveLaneAndRoot().serviceName,
-    "invocation-outbox",
-    `${hash}.json`,
-  );
+  return outboxKind.in(stateTree(
+    runtimeRoot()),
+    resolveLaneAndRoot().serviceName, hash);
 }
 const outboxSchema = z.looseObject({
   id: z.string(),
@@ -57,18 +53,22 @@ const outboxSchema = z.looseObject({
   sentAt: z.string().optional(),
   contextHash: z.string().optional(),
 });
+const outboxKind = keptStateKind({
+  schema: outboxSchema,
+  place: (_service: string, _hash: string) => "Pending action",
+  segments: (service: string, hash: string) => [service,
+    "invocation-outbox",
+    `${hash}.json`],
+});
 /**
  * Pending intent holds a caller's causal authority, so it is `keep` (ADR 0039): an outbox that does
  * not decode stays, posts one notice that names it, and closes its slot to every read, clear and
  * write until a person removes the file. The context mismatch below keeps its bytes the same way.
  */
 export function readOutbox(slot: string): InvocationRecord | undefined {
-  const path = outboxPath(slot);
-  const read = readStored(path, outboxSchema, {
-    class: "keep",
-    place: "Pending action",
-    notices: storedNoticesFile(runtimeRoot()),
-  });
+  const file = outboxFile(slot);
+  const path = file.path;
+  const read = readFile(file);
   if (read.kind === "missing") return undefined;
   if (read.kind !== "ok")
     throw Error(
@@ -82,7 +82,8 @@ export function readOutbox(slot: string): InvocationRecord | undefined {
   return record;
 }
 export function writeOutbox(slot: string, value?: InvocationRecord): void {
-  const path = outboxPath(slot);
+  const file = outboxFile(slot);
+  const path = file.path;
   // Clearing or acknowledging pending bytes cannot transfer their original causal authority.
   readOutbox(slot);
   if (!value) {
@@ -93,8 +94,8 @@ export function writeOutbox(slot: string, value?: InvocationRecord): void {
     }
     return;
   }
-  writeAtomic(
-    path,
+  writeState(
+    file,
     JSON.stringify(value.admission ? { ...value, contextHash: capturedContextHash() } : value),
   );
 }

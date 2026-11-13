@@ -11,13 +11,14 @@ import { Context, Effect, Layer, Schema } from "effect";
 import { HttpRouter, HttpServerResponse } from "effect/http";
 import { z } from "zod";
 import { existsSync, watch } from "node:fs";
-import { readFile, readdir } from "node:fs/promises";
+import { readdir } from "node:fs/promises";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { catalogTableSchema, ductsFirmSchema } from "@pe/agent-contracts";
 import type { DoorFailure } from "@pe/host-internal/request-contracts";
 import { firmSettingsDir } from "@pe/host-contracts/product-paths";
 import { readDuctCatalogs, productCatalogsRoots, type CatalogReading } from "./duct-catalogs.ts";
 import { firmFileSchema, firmOwner, type FirmFile } from "./reads/evaluator.ts";
+import { readSettingsFile } from "./tiered-settings.ts";
 import {
   captureInput,
   inputBindingKey,
@@ -32,23 +33,13 @@ import {
  * (ducts' is `Settings/ducts.json`); null on a machine with no firm home.
  */
 export const firmRootPath = (): string | null => firmSettingsDir();
-/** One owner's firm file as read; malformed JSON is a visible error, never a thrown defect. */
-async function readFirmFile(root: string | null, owner: string): Promise<FirmFile> {
+/** One owner's firm file, through the one settings-file reader (`tiered-settings.ts`); a malformed file is a visible error. */
+function readFirmFile(root: string | null, owner: string): FirmFile {
   // No firm home: the file has no home, so the read refuses rather than seeding silently.
   if (root === null) return { refused: "no-shared-root" };
   const path = join(root, `${firmOwner.parse(owner)}.json`);
-  let text: string;
-  try {
-    text = await readFile(path, "utf8");
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return { path };
-    return { path, error: String(error) };
-  }
-  try {
-    return { path, json: JSON.parse(text) };
-  } catch (error) {
-    return { path, error: String(error) };
-  }
+  const { sha256: _sha256, ...file } = readSettingsFile(path);
+  return { path, ...file };
 }
 const readFirmRoot = async (root: string | null) => {
   if (root === null) return [];
@@ -99,7 +90,7 @@ export class DuctFiles extends Context.Service<
   ) => {
     const firmRoot = () => typeof roots.firm === "function" ? roots.firm() : roots.firm;
     return Layer.succeed(DuctFiles, {
-      firm: (owner) => Effect.promise(() => readFirmFile(firmRoot(), owner)),
+      firm: (owner) => Effect.sync(() => readFirmFile(firmRoot(), owner)),
       ductCatalogs: Effect.promise(() => readDuctCatalogs(roots.catalogs)),
       catalogsFor: (pointer) => Effect.promise(() => readDuctCatalogs(pointer ? productCatalogsRoots(pointer) : roots.catalogs)),
       subscribe: (changed) => {

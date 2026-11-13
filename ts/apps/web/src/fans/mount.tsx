@@ -1,6 +1,5 @@
 import { workElementId } from "@pe/ducts-domain/work-subject";
-import { PointerCite } from "#/shell/pointer-list";
-import { ductElements, pointerRefs } from "../ducts/identity.ts";
+import { ductElements } from "../ducts/identity.ts";
 import { useRevitSubjectProps } from "#/revit/element-menu";
 import { useRouteSearchSlice } from "#/route/activity";
 import { useAdmittedSubject } from "#/shell/subject";
@@ -10,7 +9,8 @@ import { elementSubject } from "@pe/ducts-domain/work-subject";
 import type { SubjectKey } from "@pe/kit/lang/attention";
 import { SubjectTextContext } from "@pe/kit/lang/reach";
 import { useMemo } from "react";
-import type { FansDrawContext } from "./route.ts";
+import { sheet, type FansDrawContext } from "./route.ts";
+import { valueOf } from "#/route/typed-route";
 import { issueOf, issueSubject } from "../ducts/cell-focus";
 import { ductsLink } from "../ducts/identity.ts";
 import { subjectNamer } from "../ducts/subject-text";
@@ -54,15 +54,17 @@ export function useSheetData(ctx: SheetContext, snapshot: DuctSnapshot) {
     state: value?.sheetView ?? EMPTY_SHEET_STATE,
     fanKey: stableFanKey,
     changeInputs,
-    busy: reading.status === "pending",
+    busy: reading.state === "refreshing",
   };
 }
 export function RosterBody({ ctx }: { ctx: SheetContext }) {
   const authored = ctx.page.read();
-  const snapshot = sheetSnapshot(ctx.value.value?.sheetSnapshot);
-  const fans = ctx.value.value?.fans;
-  const roster = rosterOrder(ctx.value.value?.rows ?? fans?.rows ?? []);
-  const busy = ctx.value.status === "pending";
+  // This pane's read is the roster; the open sheet is a second reading, and it wins where it is held.
+  const opened = ctx.read(sheet), held = valueOf(opened) ?? ctx.value.value;
+  const snapshot = sheetSnapshot(held.sheetSnapshot);
+  const fans = held.fans;
+  const roster = rosterOrder(held.rows ?? fans?.rows ?? []);
+  const busy = opened.state === "reading" || opened.state === "refreshing";
   const nameOf = useMemo(
     () => ("kind" in snapshot ? (id: number) => String(id) : subjectNamer(snapshot)),
     [snapshot],
@@ -86,9 +88,8 @@ export function RosterBody({ ctx }: { ctx: SheetContext }) {
           roster: roster,
           picked: pickedFans === "all" ? roster.map(stableFanKey) : pickedFans,
           open: open,
-          finding: ctx.write("finding"),
           busy: busy,
-          loading: ctx.value.status === "pending",
+          loading: busy,
         }}
       />
       {("kind" in snapshot ? [] : sheetSystems(snapshot)).map((name) => (
@@ -105,8 +106,7 @@ export function RosterBody({ ctx }: { ctx: SheetContext }) {
   );
 }
 export function SheetEmpty({ value }: { value: SheetContext["value"] }) {
-  return value.status === "failed" ? <p role="alert">{value.reason}</p> : value.status === "pending"
-    ? <p role="status">computing</p> : <p>Open a fan from the roster.</p>;
+  return value.state === "refreshing" ? <p role="status">computing</p> : <p>Open a fan from the roster.</p>;
 }
 export function LedgerBody({ ctx }: { ctx: SheetContext }) {
   const snapshot = sheetSnapshot(ctx.value.value?.sheetSnapshot);
@@ -136,7 +136,7 @@ function LedgerContent({ ctx, snapshot }: { ctx: SheetContext; snapshot: DuctSna
       nameOf,
       wait: busy
         ? "Wait for the current read"
-        : sheet?.inputs && reading.current
+        : sheet?.inputs && reading.state === "ready"
           ? null
           : "Reading inputs detail",
       fan: sheet?.overview.fan
@@ -240,10 +240,8 @@ function LedgerContent({ ctx, snapshot }: { ctx: SheetContext; snapshot: DuctSna
         taken: state.taken,
         inputs: state.inputs,
         busy: busy,
-        loading: ctx.value.status === "pending",
-        error:
-          (reading.status === "failed" ? reading.reason : null) ??
-          (ctx.value.status === "failed" ? ctx.value.reason : null),
+        loading: ctx.value.state === "refreshing",
+        error: null,
         changeInputs: changeInputs,
         closerOf: closerOf,
         close: (closer: Closer) => changeInputs(editsFor([closer]), { label: closer.verb }),
@@ -294,12 +292,6 @@ export function SheetFrame({
   };
   return (
     <>
-      {"kind" in snapshot ? null : (
-        <PointerCite
-          route="fans"
-          refs={(place) => pointerRefs(place, snapshot, attentionDoc, (id) => nameOf(id))}
-        />
-      )}
       <SubjectTextContext.Provider value={{ doc: attentionDoc, nameOf, uniqueIdOf: elements.uniqueIdOf, go, refProps }}>
           {children}
 

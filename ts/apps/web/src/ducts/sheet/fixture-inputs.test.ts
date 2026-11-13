@@ -50,6 +50,7 @@ test("the admitted criteria editor resolves Work, and host Undo resolves the fir
     return resolveCriteria(stagedDucts(work, work), null, firm).allowanceInWg.return;
   };
   expect(current()).toMatchObject({ value: 0.35, source: "Work" });
-  expect(await f.owner.history!.undo()).toMatchObject({ ok: true });
+  await vi.waitFor(() => expect(f.owner.timeline()?.undo).toBeTruthy());
+  expect(await f.owner.stepTimeline("undo")).toBeNull();
   expect(current()).toMatchObject({ value: 0.2, source: "firm" });
 });

@@ -1,8 +1,10 @@
+import { stateFixture } from "../../../tests/isolated-home/storage.ts";
+import { mkdtempSync } from "../../../tests/isolated-home/storage.ts";
 import { registryService, harnessThreads } from "./effect-test.ts";
 import { asCaller, human } from "./callers.ts";
 import { HostLog } from "../src/host-log.ts";
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from "node:fs";
+import { mkdirSync, writeFileSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { emptyThreadLifecycle, type HarnessEvent } from "@pe/agent-contracts";
@@ -40,8 +42,8 @@ async function fixture(events: HarnessEvent[] = []) {
     events.map((event) => JSON.stringify(event)).join("\n"),
   );
   const options = {
-    root,
-    log: new HostLog(join(root, ".log"), Date.now),
+    root: stateFixture(root),
+    log: new HostLog(stateFixture(join(root, ".log")), Date.now),
     worldRoot: root,
     mcpServer: () => ({ name: "unused", command: "unused", args: [], env: [] }),
     providers: {

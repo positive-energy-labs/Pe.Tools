@@ -1,4 +1,3 @@
-import { join } from "node:path";
 import { hostProcessIdentity } from "@pe/host-contracts/contracts";
 import {
   checkoutRootFrom,
@@ -7,6 +6,7 @@ import {
   runtimeOwnerRejection,
   installedRuntimeRoot,
   productRoot,
+  stateTree,
   type HostLane,
 } from "@pe/host-contracts/service-identity";
 import type { PeaRuntimeCapabilities } from "@pe/runtime";
@@ -28,7 +28,12 @@ const NO_REVIT_ARGUMENT = "--no-revit";
 export const hostCapabilities = resolveHostCapabilities();
 export const hostOwnership = resolveHostOwnership();
 /** The one directory for this host runtime's journal, log and exporter files. */
-export const hostStateDir = () => join(hostOwnership.rootPath, "state", "host", hostOwnership.serviceName);
+/**
+ * This host's machine state: the one table of its state paths, and the root every state kind is
+ * minted from (`kind.in(hostState(), ...)`; `hostState().home(home)` binds a home to this machine).
+ */
+export const hostState = () => stateTree(hostOwnership.rootPath);
+
 
 function resolveHostCapabilities(argv: readonly string[] = process.argv): PeaRuntimeCapabilities {
   return { revit: !argv.includes(NO_REVIT_ARGUMENT) };

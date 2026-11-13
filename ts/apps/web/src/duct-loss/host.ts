@@ -1,15 +1,13 @@
-import { executionTargetSchema } from "@pe/agent-contracts";
-import { read } from "@pe/host/read-graph";
-import { ductLossArgs, ductLossData } from "@pe/agent-contracts";
+import * as contracts from "./contract.ts";
+import { body } from "@pe/host/read-graph";
+
+
+import { ductLossData } from "@pe/agent-contracts";
 import { ductInputError, solve } from "@pe/ducts-domain/duct-loss-math";
 export const reads = {
-  result: read("duct-loss.result", {
-    input: ductLossArgs.extend({ target: executionTargetSchema }),
-    output: ductLossData,
-    run: (ctx, { target: _target, ...args }) =>
+  result: body(contracts.result, (ctx, { target: _target, ...args }) =>
       ctx.compute(ductLossData, args, (input) => {
         const error = ductInputError(input);
         return { error, result: error ? null : solve(input) };
-      }),
-  }),
+      })),
 };

@@ -1,4 +1,4 @@
-import type { LayoutNode, PaneDecl } from "@pe/agent-contracts";
+import type { LayoutNode, PaneDecl, RouteGraphWire } from "@pe/agent-contracts";
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import { reduceLayout } from "./layout-graph";
 import { PaneReveal } from "./pane-reveal";
@@ -16,8 +16,10 @@ export type GraphPaneState = {
 export type GraphLayoutState = Readonly<Record<string, GraphPaneState>>;
 export interface GraphLayoutViewProps {
   layout: LayoutNode;
-  panes: Readonly<Record<string, PaneDecl>>;
-  active: (when: string) => boolean;
+  panes: Readonly<Record<string, PaneDecl | RouteGraphWire["panes"][string]>>;
+  verbs?: RouteGraphWire["verbs"];
+  band?: readonly string[];
+  active: (when: Extract<LayoutNode, { kind: "gate" }>["when"]) => boolean;
   bodies: Readonly<Record<string, (pane: PaneApi) => ReactNode>>;
   /** Device state. Omit to retain it locally for this mounted graph. */
   state?: { panes: GraphLayoutState; onChange: (next: GraphLayoutState) => void };
@@ -27,9 +29,13 @@ type Binding = { id: string; owner: string; start?: string; end?: string };
 const anchor = (node: TeachingLayout, side: PaneSide): string =>
   "axis" in node ? anchor(node[side], side) : node.id;
 
-function project(layout: LayoutNode, panes: GraphLayoutViewProps["panes"]) {
+function project(
+  layout: LayoutNode | RouteGraphWire["layout"],
+  panes: GraphLayoutViewProps["panes"],
+  verbs: RouteGraphWire["verbs"] = {},
+) {
   const bindings: Binding[] = [];
-  const visit = (node: LayoutNode): TeachingLayout => {
+  const visit = (node: LayoutNode | RouteGraphWire["layout"]): TeachingLayout => {
     if (node.kind === "gate") return visit(node.child); // Only open gates survive reduction.
     if (node.kind === "pane") {
       const declared = panes[node.id];
@@ -38,15 +44,24 @@ function project(layout: LayoutNode, panes: GraphLayoutViewProps["panes"]) {
         id: node.id,
         label: declared.label,
         purpose: declared.purpose,
+        controls: verbControls(
+          typeof declared.verbs === "function"
+            ? declared.verbs.ids
+            : "allowed" in declared.verbs
+              ? declared.verbs.allowed
+              : declared.verbs,
+          verbs,
+        ),
       };
     }
     const children = node.children.map(visit);
+    const sized = node.sized ?? "start";
     // PaneSplit is binary. Ordered n-ary splits lower to seams sizing each outer child.
     const pair = (children: readonly TeachingLayout[]): TeachingLayout => {
       if (children.length === 1) return children[0]!;
-      const start = node.sized === "start" ? children[0]! : pair(children.slice(0, -1));
-      const end = node.sized === "end" ? children.at(-1)! : pair(children.slice(1));
-      const owner = anchor(node.sized === "start" ? start : end, node.sized);
+      const start = sized === "start" ? children[0]! : pair(children.slice(0, -1));
+      const end = sized === "end" ? children.at(-1)! : pair(children.slice(1));
+      const owner = anchor(sized === "start" ? start : end, sized);
       const id = JSON.stringify([node.id, owner]);
       const startId = "axis" in start ? (node.rails?.start ? start.id : undefined) : start.id;
       const endId = "axis" in end ? (node.rails?.end ? end.id : undefined) : end.id;
@@ -55,7 +70,7 @@ function project(layout: LayoutNode, panes: GraphLayoutViewProps["panes"]) {
       return {
         id,
         axis,
-        target: node.sized,
+        target: sized,
         size: node.size,
         // An unset `minOtherSize` stays unset: PaneSplit mirrors the sized side's floor.
         minSize: node.minSize ?? SPLIT_FLOOR[axis],
@@ -75,8 +90,58 @@ function project(layout: LayoutNode, panes: GraphLayoutViewProps["panes"]) {
   return { layout: visit(layout), bindings };
 }
 
+const verbControls = (ids: readonly string[], verbs: RouteGraphWire["verbs"]) =>
+  ids.length
+    ? [
+        {
+          kind: "views" as const,
+          label: "Actions",
+          options: ids.map((key) => {
+            const verb = verbs[key];
+            if (!verb) throw Error(`Missing verb declaration ${key}`);
+            return { key, label: verb.label, says: `${verb.effect}; review ${verb.review}` };
+          }),
+        },
+      ]
+    : [];
+
+/** Reference facts preserve gated panes without claiming they are currently available. */
+export function graphTeaching({
+  layout,
+  panes,
+  verbs,
+  band,
+}: {
+  layout: LayoutNode | RouteGraphWire["layout"];
+  panes: GraphLayoutViewProps["panes"];
+  verbs: RouteGraphWire["verbs"];
+  band: readonly string[];
+}) {
+  const projected = project(layout, panes, verbs).layout;
+  return declaredTeaching(
+    band.length
+      ? {
+          id: "route-teaching",
+          axis: "vertical",
+          target: "start",
+          size: 56,
+          start: { id: "situation", label: "Situation", controls: verbControls(band, verbs) },
+          end: projected,
+        }
+      : projected,
+  );
+}
+
 /** RouteGraph owns topology and words; TeachingLayout owns Pane, split and measured teaching. */
-export function GraphLayoutView({ layout, panes, active, bodies, state }: GraphLayoutViewProps) {
+export function GraphLayoutView({
+  layout,
+  panes,
+  verbs = {},
+  band = [],
+  active,
+  bodies,
+  state,
+}: GraphLayoutViewProps) {
   const [local, setLocal] = useState<GraphLayoutState>({});
   const values = state?.panes ?? local;
   const current = useRef(values);
@@ -84,11 +149,11 @@ export function GraphLayoutView({ layout, panes, active, bodies, state }: GraphL
   const host = useRef<HTMLDivElement>(null);
   const projection = useMemo(() => {
     const reduced = reduceLayout(layout, active);
-    return reduced ? project(reduced, panes) : null;
-  }, [layout, panes, active]);
+    return reduced ? project(reduced, panes, verbs) : null;
+  }, [layout, panes, verbs, active]);
   const reference = useMemo(
-    () => (projection ? declaredTeaching(projection.layout) : []),
-    [projection],
+    () => graphTeaching({ layout, panes, verbs, band }),
+    [layout, panes, verbs, band],
   );
   const change = (update: (prior: GraphLayoutState) => GraphLayoutState) => {
     const next = update(current.current);
@@ -104,7 +169,10 @@ export function GraphLayoutView({ layout, panes, active, bodies, state }: GraphL
     const splits = [...(host.current?.querySelectorAll<HTMLElement>("[data-layout-split]") ?? [])];
     for (const { id, start, end } of projection.bindings) {
       const side = start === pane ? "start" : end === pane ? "end" : null;
-      if (!side || splits.find((node) => node.dataset.layoutSplit === id)?.dataset.paneFolded !== side)
+      if (
+        !side ||
+        splits.find((node) => node.dataset.layoutSplit === id)?.dataset.paneFolded !== side
+      )
         continue;
       const sibling = side === "start" ? end : start;
       change((prior) =>
@@ -152,7 +220,11 @@ export function GraphLayoutView({ layout, panes, active, bodies, state }: GraphL
     <TeachReference value={reference}>
       <PaneReveal value={reveal}>
         <div ref={host} className="contents">
-          <TeachingLayoutView layout={projection.layout} content={bodies} state={{ folds, sizes }} />
+          <TeachingLayoutView
+            layout={projection.layout}
+            content={bodies}
+            state={{ folds, sizes }}
+          />
         </div>
       </PaneReveal>
     </TeachReference>

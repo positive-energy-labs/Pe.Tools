@@ -1,3 +1,4 @@
+import { mkdtemp, stateFixture } from "../../../../tests/isolated-home/storage.ts";
 // @vitest-environment jsdom
 import { stableFanKey } from "../ducts/sheet/model";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
@@ -6,8 +7,10 @@ import { peRouteUrl } from "@pe/agent-contracts/pe-api";
 import { Context, Effect, Layer, Queue, Option } from "effect";
 import { expect, vi } from "vite-plus/test";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { StandaloneBand } from "./band.test-support";
+import { browserWorkPorts, createWorkFeedClient } from "./work-feed-client";
 import { createRootRoute, createRouter, createMemoryHistory, RouterProvider } from "@tanstack/react-router";
-import { mkdtemp, rm } from "node:fs/promises";
+import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import { openRecordingWriter, nativeCatalogIdentity } from "../../../host/src/native-recording";
 import { HostInputContext } from "../../../host/src/input-context";
@@ -103,7 +106,7 @@ export async function fansPlanJourney(journey: "watched publications" | "externa
  if(!testRoot) throw Error("Fans journeys require the isolated test home");
  const dir=await mkdtemp(join(testRoot,"pe-f05-bisect-"));
  const stamp=admittedReceiptStamps().host!;
- const captureStore=await Effect.runPromise(openRecordingWriter(dir,{build:JSON.stringify({version:stamp.version,build:stamp.build,commit:stamp.commit}),catalog:nativeCatalogIdentity()},{maxBytes:256*1024*1024,maxTakings:10000}));
+ const captureStore=await Effect.runPromise(openRecordingWriter(stateFixture(dir),{build:JSON.stringify({version:stamp.version,build:stamp.build,commit:stamp.commit}),catalog:nativeCatalogIdentity()},{maxBytes:256*1024*1024,maxTakings:10000}));
  const inputs=await Effect.runPromise(HostInputContext.pipe(Effect.provide(HostInputContext.layer({kind:"live",captureStore}))));
  const writer=inputs.lane.kind==="live"?inputs.lane.captureStore:undefined;
  if(writer){const stop=writer.capture.stop;vi.spyOn(writer.capture,"stop").mockImplementation((at,reason,source)=>{trace.stops.push({at,reason,stack:new Error().stack});return stop(at,reason,source);});}
@@ -154,12 +157,16 @@ export async function fansPlanJourney(journey: "watched publications" | "externa
  const root=createRootRoute({validateSearch:(s:Record<string,unknown>)=>s,component:()=> <TypedShell module={fans} fingerprint={routeRegistry.fans!.fingerprint} address={address}/>});
  const router=createRouter({routeTree:root,history:createMemoryHistory({initialEntries:["/?thread=f05-probe"]})});
  let before:any,after:any,firstSettlement:any;
+ let stopReceiptWitness = () => {};
  const sample=()=>{const {gate,options}=trace.gates.at(-1);const state=gate.read();const mount=trace.mounts.at(-1);return {pageEpoch:state.pageEpoch,pageRevision:state.pageRevision,workRevision:state.work?.revision??null,dependencies:options.dependencies(),workSignature:canonicalRouteInput(Object.keys(mount.spec.edits.owners).map(id=>{const o=mount.owner(id);return[id,o.ready,o.handle];}))};};
  try{
-   render(<RouterProvider router={router}/>);
+   render(<StandaloneBand><RouterProvider router={router}/></StandaloneBand>);
    await vi.waitFor(()=>expect(trace.mounts.at(-1)?.owner()?.scope.key.binding).toBe("address"),{timeout:20000});
    const mount=trace.mounts.at(-1);
    await mount.whenReady();
+   // ADR 0042 removed the browser journal's implicit receipt subscription; this transport witness owns its consumer.
+   if (journey === "watched publications") stopReceiptWitness = createWorkFeedClient(peReadings, browserWorkPorts)
+     .receipts(mount.owner().scope).subscribe(() => {}, () => {});
    // An open posts its pose once the host has published the Page, never before (gate-c80e644a: every open logged POST 409 /pe/history).
    const poses=()=>trace.http.filter(row=>row.url==="/pe/history"&&row.request?.kind==="page");
    await vi.waitFor(()=>expect(poses().some(row=>row.status===200)).toBe(true),{timeout:10000});
@@ -302,7 +309,7 @@ export async function fansPlanJourney(journey: "watched publications" | "externa
    fireEvent.click(screen.getByRole("button",{name:/^MUAS-1.*1 staged$/}));
    fireEvent.click(await screen.findByRole("option",{name:/^None/}));
    await vi.waitFor(()=>expect(trace.mounts.at(-1).owner().handle.revision).toBe(4),{timeout:20000});
-   await expect(trace.mounts.at(-1).run("losses",true)).rejects.toThrow("Review is stale; prepare it again");
+   await expect(trace.mounts.at(-1).verb("losses").apply()).rejects.toThrow("Review is stale; prepare it again");
    expect(trace.submit).toHaveBeenCalledTimes(2);
  }catch(error){
    if(process.env.PE_F05_EVIDENCE)writeFileSync(`${process.env.PE_F05_EVIDENCE}.failure`,String((error as Error).stack??error));
@@ -311,7 +318,7 @@ export async function fansPlanJourney(journey: "watched publications" | "externa
    releasePlan.resolve();
    firstSettlement??={inspectable:!!screen.queryByRole("button",{name:"Write to Revit"}),problem:trace.mounts.at(-1)?.reviewProblem("losses"),before,after:trace.mounts.length?sample():undefined};
    if(process.env.PE_F05_EVIDENCE)writeFileSync(process.env.PE_F05_EVIDENCE,JSON.stringify({mode,workFrames,firstSettlement,settlements:(trace as any).settlements,commandReads:(trace as any).commandReads,readEvents:(trace as any).readEvents,republication:(trace as any).republication,submits:trace.submit.mock.calls.length,results:(trace as any).results,receiptBatch,dirties,subscriptionChanges,http:trace.http,before,after,samples:trace.samples,stops:trace.stops,plans:trace.tokens.map(({token,gate})=>({id:token.id,current:gate.current(token),samePageEpoch:token.pageEpoch===gate.read()?.pageEpoch})),requests,body:document.body.textContent,problem:trace.mounts.at(-1)?.reviewProblem("losses")},null,2));
-   cleanup();unbind();peReadings.dirty=originalDirty;peReadings.close();for(const stream of streams)stream.close();vi.unstubAllGlobals();await host.close();
+   stopReceiptWitness();cleanup();unbind();peReadings.dirty=originalDirty;peReadings.close();for(const stream of streams)stream.close();vi.unstubAllGlobals();await host.close();
    // A capture write can still be landing after close; its retry keeps a cleanup error from replacing the real assertion.
    await rm(dir,{recursive:true,force:true,maxRetries:5,retryDelay:100});
  }

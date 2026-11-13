@@ -7,7 +7,7 @@ import { Button } from "@pe/kit/lang/button";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { Operation } from "./workspace";
 import { outputRenderers } from "./renderers";
-import type { OpsContext } from "./route";
+import { receiptControls, type OpsContext } from "./route";
 export function OpsBody({ ctx }: { ctx: OpsContext }) {
   const page = ctx.page.read(),
     data = ctx.value.value,
@@ -29,7 +29,7 @@ export function OpsBody({ ctx }: { ctx: OpsContext }) {
           list={list}
           aria-label="Operation receipts"
           empty={{
-            message: !ctx.value.current ? ctx.value.reason : "No receipts",
+            message: "No receipts",
             exit: "Run a semantic command to create a receipt",
           }}
           row={(row) => ({ label: row.key, meta: row.state, sub: row.startedAt, title: row.id })}
@@ -44,15 +44,15 @@ export function OpsBody({ ctx }: { ctx: OpsContext }) {
               <Output data={receipt.result} opKey={receipt.key} request={receipt.input} />
             ) : null}
             <Code code={stringify(receipt)} lang="json" />
-            {(["action.read", "action.recover", "action.resume", "action.cancel"] as const).map(
+            {receiptControls.map(
               (key) => (
                 <Button kind="quiet"
                   key={key}
                   label={key}
                   onClick={() =>
                     void ctx
-                      .write("control")
-                      .run({ key, id: receipt.id })
+                      .verb(key)
+                      .run({ id: receipt.id })
                       .then(() => ctx.refresh())
                       .catch((error) => setFailure(error instanceof Error ? error.message : String(error)))
                   }

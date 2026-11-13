@@ -1,9 +1,10 @@
+import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { detachedBridge, captureStore, journalAt } from "./effect-test.ts";
 import { afterEach, beforeEach, expect, test } from "vite-plus/test";
 import { Effect, FileSystem } from "effect";
 import { NodeServices } from "@effect/platform-node";
 import { createHash } from "node:crypto";
-import { mkdtemp, mkdir, readFile, rm, stat, utimes, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { memberWork, settingsRouteState } from "@pe/agent-contracts";

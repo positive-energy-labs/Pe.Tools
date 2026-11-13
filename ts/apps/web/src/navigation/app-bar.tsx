@@ -25,14 +25,14 @@ import { useDestination, useNavigation } from "./state";
 import { GlobalSearch } from "./global-search";
 import { openNotices, useNoticeFeed } from "./notice-feed";
 import { previousOf } from "#/host/resource-state";
-import { RouteControlsOutlet, usePalette } from "./route-controls";
+import { BandOutlet, useHasBand, RouteControlsOutlet, usePalette } from "./route-controls";
 import { useRouteControlPresence } from "./route-controls";
 import { RouteHelpButton } from "#/route/help";
 import { useSurfaceHost } from "./surface-host";
 import { startFeedback } from "#/components/feedback-picker";
 import "./app-bar.css";
 import { RecordedSourceChip } from "#/machine/devices";
-import { PageBindingChip } from "#/pages-bind/chip";
+import { PageBindingChip } from "./chip";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 type LaunchWindow = Window & {
@@ -157,7 +157,7 @@ export function AppBar() {
   // Every route's bar says how many feed rows ask for a person; the rows themselves are the overlay's.
   const notices = openNotices(previousOf(useNoticeFeed()));
   const hasRouteHelp = useRouteControlPresence("controls");
-  const hasSituation = useRouteControlPresence("situation");
+  const hasSituation = useHasBand();
   useEffect(() => {
     const node = bar.current;
     if (!node) return;
@@ -340,7 +340,7 @@ export function AppBar() {
       )}
       {/* The Situation band rides the bar itself; the Ctrl+. drawer is the narrow-bar fallback. */}
       {!compact && (
-        <RouteControlsOutlet slot="situation" as="div" className="pe-appbar-situation" />
+        <BandOutlet className="pe-appbar-situation" />
       )}
       {/* Consent never folds into the drawer: the tray's card is its sweep, so the panel draws none. */}
       <div

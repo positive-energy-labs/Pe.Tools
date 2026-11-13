@@ -86,28 +86,20 @@ export type ReadingValue<
         : Output<E, C>
       : never
   : never;
-/** Journal evidence stays attached even when preview decoding or host execution refuses. */
-type ReadingEvidence = {
-  readonly receipt?: import("./action-receipts.ts").ActionReceipt;
-  readonly refusal?: import("./command.ts").CommandRefusal | import("./caller.ts").Refusal;
-};
-export type ReadingSnapshot<T> = ReadingEvidence &
-  (
-    | {
-        readonly status: "ready";
-        readonly current: true;
-        readonly value: Immutable<T>;
-        readonly hash: string;
-      }
-    | {
-        readonly status: "pending" | "unavailable" | "failed";
-        readonly current: false;
-        readonly value?: Immutable<T>;
-        readonly reason: string;
-      }
-  );
+/** One reading, as the shell and a body see it (routes CONTRACTS.md, "Reading state"). A state with a
+ * `value` is present: `refreshing` and `stale` keep the last value while a newer one is read or refused.
+ * The shell draws the three value-less states itself; a body's `draw` receives a `Present` value. */
+export type ReadingState<T> =
+  | {
+      readonly state: "ready" | "refreshing" | "stale";
+      readonly value: Immutable<T>;
+      readonly reason?: string;
+    }
+  | { readonly state: "reading" | "not-yet-run" }
+  | { readonly state: "refused"; readonly reason: string };
+export type Present<T> = Extract<ReadingState<T>, { value: unknown }>;
 type Reads<G extends RouteGraphJson, S extends SchemaTable, E extends EntryTable, K> = {
-  readonly [R in Extract<K, keyof G["readings"]>]: ReadingSnapshot<ReadingValue<G, S, E, R>>;
+  readonly [R in Extract<K, keyof G["readings"]>]: ReadingState<ReadingValue<G, S, E, R>>;
 };
 type DepKeys<D, K extends "page" | "work" | "readings"> = D extends {
   deps: { [P in K]: readonly (infer R)[] };
@@ -182,7 +174,7 @@ export type WorkPatch<S extends z.ZodType> =
               : never);
       }[keyof Shape & string]
     : never;
-export type WorkPatches<G extends RouteGraphJson, S extends SchemaTable> = readonly WorkPatch<
+export type WorkPatches<G extends import("./route-kernel-data.ts").RouteStateGraph, S extends SchemaTable> = readonly WorkPatch<
   WorkSchema<G, S>
 >[];
 
@@ -344,7 +336,7 @@ type PickerSlots<G extends RouteGraphJson, S extends SchemaTable, E extends Entr
         B,
         `fields.${K}.picker.options`,
         "picker",
-        (reading: ReadingSnapshot<ReadingValue<G, S, E, R>>) => readonly {
+        (reading: ReadingState<ReadingValue<G, S, E, R>>) => readonly {
           readonly id: Exclude<PageOf<G, S>[K], null> extends
             | { kind: "ids"; ids: readonly (infer I)[] }
             | { kind: "all" }

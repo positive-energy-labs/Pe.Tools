@@ -163,7 +163,7 @@ export function typedSubjectDoor(mount: import("./typed-mount").TypedMount) {
     if(!spec.subject) return null;
     const subjectSpec=spec.subject;
     const update=(op:(set:ReturnType<typeof openSet<unknown>>,value:any)=>unknown)=>{
-      const value=mount.value(subjectSpec.read ?? spec.core).value;
+      const roster=mount.value(subjectSpec.read ?? spec.core),value="value" in roster?roster.value:undefined;
       const set=openSet<unknown>(canonicalRouteInput,value?subjectSpec.options(value).map(o=>o.id):[]);
       mount.page.subject(op(set,mount.page.read()[subjectSpec.field]));
     };

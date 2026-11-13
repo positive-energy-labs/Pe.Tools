@@ -9,7 +9,8 @@ import { nativeCatalogIdentity, openRecordingWriter } from "../../../host/src/na
 import type { CommandResources } from "../../../host/src/command-executor.ts";
 // @vitest-environment node
 import { test, expect, vi, beforeEach, afterEach } from "vite-plus/test";
-import { mkdtemp, mkdir, writeFile, readFile, rm } from "node:fs/promises";
+import { mkdir, writeFile, readFile, rm } from "node:fs/promises";
+import { mkdtemp, stateFixture } from "../../../../tests/isolated-home/storage.ts";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Context, Effect, Layer } from "effect";
@@ -17,7 +18,7 @@ import { NodeServices } from "../../../host/tests/family-attach-host.fixture.ts"
 import { RouteWorkspace, observeResources } from "@pe/runtime";
 import { bindWork, canonicalRouteInput, familyDraftRouteState, podMemberCode, READING_MAX_FRAME_BYTES } from "@pe/agent-contracts";
 import { module } from "./route";
-import { mountTypedRoute } from "../shell/typed-mount.ts";
+import { direct, mountTypedRoute } from "../shell/typed-mount.ts";
 import { createWorkFeedClient } from "../shell/work-feed-client.ts";
 import { admittedBuiltinsLayer, AdmittedBuiltins } from "../../../host/src/admitted-builtins.ts";
 import { Scope, Exit } from "effect";
@@ -41,10 +42,10 @@ test("Start publishes Family Work before immediate small attach and 7 MB refusal
   const dir = await mkdtemp(join(tmpdir(), "pe-attach-"));
   const member = { pod: "test", path: "settings/family/HCB.json" };
   const scope = Scope.makeUnsafe();
-  const writer = await Effect.runPromise(openRecordingWriter(join(dir, "history"), {build: "surface", catalog: nativeCatalogIdentity()}, {maxBytes: 10_000_000, maxTakings: 1000}));
+  const writer = await Effect.runPromise(openRecordingWriter(stateFixture(join(dir, "history")), {build: "surface", catalog: nativeCatalogIdentity()}, {maxBytes: 10_000_000, maxTakings: 1000}));
   const lane = {kind: "live" as const, captureStore: writer};
   const sets = Context.get(await Effect.runPromise(Layer.buildWithScope(HostInputReadSets.layer(lane), scope)), HostInputReadSets);
-  const work = new RouteWorkspace({ registrations: [], store: fileRouteDocumentStore(join(dir, "work")), capture: capturedWorkReads(writer, Effect.runPromise) });
+  const work = new RouteWorkspace({ registrations: [], store: fileRouteDocumentStore(stateFixture(join(dir, "work"))), capture: capturedWorkReads(writer, Effect.runPromise) });
   const workReads: NonNullable<CommandResources["workReads"]> = admission => {
     const read = async (method: "read" | "view", key: Parameters<RouteWorkspace["read"]>[0], route: string) => {
       const current = await Effect.runPromise(sets.open({key: `command.work.${method}`, input: JSON.parse(JSON.stringify({id: admission.id, command: admission.key, key, route})), scope: JSON.stringify(admission.target)}, null));
@@ -104,14 +105,14 @@ test("Start publishes Family Work before immediate small attach and 7 MB refusal
     expect(mount.owner()?.handle).toBeNull();
     await mount.startAction()!.run();
     startReturnHandle = mount.owner()?.handle ?? null;
-    await expect(mount.run("attach", false, {member, source: await uploadBlob({fileName: "small.pdf", base64: Buffer.from("%PDF-1.4\nsmall manufacturer source\n%%EOF").toString("base64")})})).resolves.toMatchObject({member, pages: 0});
+    await expect(direct(mount.verb("attach")).run({member, source: await uploadBlob({fileName: "small.pdf", base64: Buffer.from("%PDF-1.4\nsmall manufacturer source\n%%EOF").toString("base64")})})).resolves.toMatchObject({member, pages: 0});
     expect((await journal.list()).find(row=>row.key === "work.start")).toMatchObject({state: "succeeded", result: {revision: 1}});
     const attached = (await journal.list()).find(row=>row.key === "family.attach-spec")!;
     expect(attached).toMatchObject({state: "succeeded", input: {work: {revision: 1}}});
     expect((await work.read(bindWork("family", null), "family", workReadContext(feed, Effect.runPromise)))?.doc).toMatchObject({spec: {member, doc: {jobId: "small"}}});
     expect(JSON.parse(await readFile(join(dir, member.pod, `${member.path}.spec.json`), "utf8"))).toMatchObject({path: "settings/family/small-small.json"});
     await vi.waitFor(() => expect(mount.owner()?.handle?.revision).toBe(2));
-    const run = mount.run("attach", false, {member, source: await uploadBlob({fileName: "source.pdf", base64: (await readFile(pdf)).toString("base64")})});
+    const run = direct(mount.verb("attach")).run({member, source: await uploadBlob({fileName: "source.pdf", base64: (await readFile(pdf)).toString("base64")})});
     await expect(run).rejects.toThrow("PDF parser refused this source");
     expect(mount.reviewProblem("attach")).toContain("PDF parser refused this source");
     const receipt = (await journal.list()).find(row=>row.key === "family.attach-spec" && row.state === "failed")!;
@@ -138,7 +139,7 @@ test("resume reads prepared Family assets by digest without parsing again", asyn
   const dir = await mkdtemp(join(tmpdir(), "pe-attach-resume-"));
   const member = {pod: "test", path: "settings/family/HCB.json"};
   const key = bindWork("family", null);
-  const work = new RouteWorkspace({registrations: [{spec: familyDraftRouteState}], store: fileRouteDocumentStore(join(dir, "work"))});
+  const work = new RouteWorkspace({registrations: [{spec: familyDraftRouteState}], store: fileRouteDocumentStore(stateFixture(join(dir, "work")))});
   const bridge = detachedBridge();
   const parsePdf = vi.fn(async () => ({jobId: "retained", fileName: "source.pdf", pages: [], blocks: [], images: []}));
   const deps = {workspace: work, podsRoot: dir, parsePdf};

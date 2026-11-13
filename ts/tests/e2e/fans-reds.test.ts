@@ -7,6 +7,9 @@ import { execFileSync } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { expect, test } from "vite-plus/test";
+import { decode } from "../../packages/agent-contracts/src/subject-ref.ts";
+import { FANS_ESP_ROW } from "./cdp.ts";
+import { pickFansWriteScope } from "./fans-write-scope.ts";
 import { workEvidence } from "./conversation-work.fixture.ts";
 import { connectTypedPage, type TypedPage } from "./typed-page.ts";
 
@@ -248,10 +251,9 @@ test("resume round trip keeps /fans decodable and drawn through tabs, history an
       ids: [expect.any(String)],
     });
     const retainedSelection = async () =>
-      expect(
-        (await reading(page)).raw.fan,
-        "the journey's fan selection survives return",
-      ).toBe(selected);
+      expect((await reading(page)).raw.fan, "the journey's fan selection survives return").toBe(
+        selected,
+      );
     // The person types /ducts once (Driver step b); that opens the Ducts tab beside Fans.
     await page.send("Page.navigate", { url: new URL("/ducts", process.env.E2E_WEB!).href });
     checkpoints.push(await settle(page, "ducts typed", DUCTS_PANES, "threadSort"));
@@ -296,11 +298,18 @@ const H1_PROBE = `using Autodesk.Revit.DB;
 var units = new FilteredElementCollector(doc).OfCategory(BuiltInCategory.OST_MechanicalEquipment)
   .WhereElementIsNotElementType().Cast<FamilyInstance>()
   .Where(f => f.Symbol.LookupParameter("PE_M_Fan_ExternalStaticPressure") != null)
-  .Select(f => new { id = f.Id.Value, type = f.Symbol.FamilyName + ": " + f.Symbol.Name, typeId = f.Symbol.Id.Value,
+  .Select(f => new { id = f.Id.Value, uniqueId = f.UniqueId, type = f.Symbol.FamilyName + ": " + f.Symbol.Name, typeId = f.Symbol.Id.Value,
     espType = f.Symbol.LookupParameter("PE_M_Fan_ExternalStaticPressure").AsDouble(),
     espInstance = f.LookupParameter("PE_M_Fan_ExternalStaticPressure")?.Element.Id == f.Id }).ToList();
 Result(new { units, store = doc.ProjectInformation.LookupParameter("_PE_DuctLosses")?.AsString() });`;
-type H1Unit = { id: number; type: string; typeId: number; espType: number; espInstance: boolean };
+type H1Unit = {
+  id: number;
+  uniqueId: string;
+  type: string;
+  typeId: number;
+  espType: number;
+  espInstance: boolean;
+};
 const nativeFans = () =>
   JSON.parse(
     execFileSync(
@@ -328,18 +337,16 @@ test("H1: a MUAS-1 ESP write refuses for its shared type and MUAS-2 keeps its va
     if (await find(page, "body", "^Start$", "button"))
       await press(page, "body", "^Start$", 60_000, "button");
     // openFans opened the roster's one MUAS-1 row, port 2 (the Driver's walk). The open fan
-    // draws its own Unit ESP row; its key carries MUAS-1's element id.
+    // draws its own Unit ESP row; its address carries MUAS-1's UniqueId subject.
     const espRow = () =>
-      page.evaluate(() => {
-        const row = document.querySelector<HTMLElement>(
-          '[data-pane-id="sheet-inputs"] [data-sheet-address^="esp:"]',
-        );
+      page.evaluate((selector) => {
+        const row = document.querySelector<HTMLElement>(selector);
         const input = row?.querySelector("input");
         if (!row || !input) return null;
         input.scrollIntoView({ block: "center" });
         const r = input.getBoundingClientRect();
-        return { key: row.dataset.inputField!, x: r.left + r.width / 2, y: r.top + r.height / 2 };
-      });
+        return { key: row.dataset.sheetAddress!, x: r.left + r.width / 2, y: r.top + r.height / 2 };
+      }, FANS_ESP_ROW);
     // A cold sheet read may stay unavailable until the pane's visible Refresh, as on the roster.
     // Every fans pane draws the same readings; the roster's Refresh stays on screen at 1600 px
     // where the Inputs header clips its own.
@@ -351,10 +358,14 @@ test("H1: a MUAS-1 ESP write refuses for its shared type and MUAS-2 keeps its va
         await press(page, roster, "^Refresh$");
     }
     const row = (await espRow())!;
-    const muas1 = Number(row.key.split(":")[1]);
+    const subject = row.key.slice("esp:".length);
+    const ref = decode(subject);
+    if (!ref.ok || ref.value.keyKind !== "UniqueId")
+      throw new Error(`Invalid ESP subject: ${subject}`);
     const before = nativeFans();
-    const unit = before.units.find((u) => u.id === muas1);
-    const peers = before.units.filter((u) => u.typeId === unit?.typeId && u.id !== muas1);
+    const unit = before.units.find((u) => u.uniqueId === ref.value.key);
+    expect(unit, "the drawn ESP subject names a native unit").toBeDefined();
+    const peers = before.units.filter((u) => u.typeId === unit?.typeId && u.id !== unit?.id);
     seen.before = before;
     expect(unit?.espInstance, "MUAS-1's ESP is owned by its type").toBe(false);
     expect(peers.length, "MUAS-1's type has another unit (MUAS-2)").toBeGreaterThan(0);
@@ -380,17 +391,19 @@ test("H1: a MUAS-1 ESP write refuses for its shared type and MUAS-2 keeps its va
     const staged = async () =>
       (await workEvidence(home)).some(
         ({ record }) =>
-          record?.route === "fans" && record.value?.doc?.esp?.[muas1]?.edit?.value?.inWg === 2.6581,
+          record?.route === "fans" &&
+          record.value?.doc?.esp?.[subject]?.edit?.value?.inWg === 2.6581,
       );
     await expect
       .poll(staged, { timeout: 30_000, message: "MUAS-1 ESP staged in fans Work" })
       .toBe(true);
     // The person scopes the write to this fan, then re-reads the sheet the edits made stale.
-    await press(page, '[data-choice-cell="Write scope"]', "^None");
-    await press(page, '[role="listbox"]', "^MUAS-1 · \\d+ staged");
-    await expect
-      .poll(() => find(page, '[data-choice-cell="Write scope"]', "^MUAS-1 · "), { timeout: 30_000 })
-      .not.toBeNull();
+    await pickFansWriteScope(
+      "MUAS-1",
+      (scope, pattern) => press(page, scope, pattern),
+      (scope, pattern) =>
+        expect.poll(() => find(page, scope, pattern), { timeout: 30_000 }).not.toBeNull(),
+    );
     // The Inputs pane's reading status (PaneStatus) is absent only when every reading it draws is
     // current. Its other status cells (the write scope's) are not readings.
     const status = () =>
@@ -452,9 +465,8 @@ test("H1: a MUAS-1 ESP write refuses for its shared type and MUAS-2 keeps its va
       plan.popover ??
       (await page.evaluate(
         () =>
-          /sheet.plan\n[\w-]+ \/ you \/ [\d:]+ \/ ([^\n]+)/.exec(
-            document.body.innerText,
-          )?.[1] ?? null,
+          /sheet.plan\n[\w-]+ \/ you \/ [\d:]+ \/ ([^\n]+)/.exec(document.body.innerText)?.[1] ??
+          null,
       )));
     // Without the refusal, the person applies what the plan offers (the Driver's hazard).
     if (plan.armed) seen.apply = await press(page, "[data-write-popover]", "^Write to Revit$");

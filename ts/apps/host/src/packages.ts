@@ -18,9 +18,7 @@ import {
 import type { MemberIssue } from "@pe/host-contracts/operation-types";
 import { productPathNames } from "@pe/host-contracts/contracts";
 import { homeDirs, homes, projectHome } from "@pe/host-contracts/product-paths";
-import { hostOwnership } from "./host-ownership.ts";
 import { verifyPodArtifact } from "./pod-artifact.ts";
-import { productPodsRootPath } from "./product-paths.ts";
 import { shippedPodUpdateRefusals } from "./shipped-pod-status.ts";
 
 export type PackageEntrypoint = {
@@ -102,22 +100,6 @@ export function kindOfMember(
   if (path !== "pod.json" && path.toLowerCase().endsWith(".json")) return "member";
   return undefined;
 }
-
-/**
- * Machine state kept about pods (run output, import records, import staging): under the product's
- * `state` folder, never in a home (ADR 0037 rule 6). An owner that names its own state root keeps
- * it there. One that supplies only a Pods root (the demo lane, a test) keeps it beside that root,
- * outside the product's: such a root is never a home's `Pods`, or its state root is named too.
- */
-export const podStatePath = (
-  owner: { readonly podsRoot?: string; readonly stateRoot?: string },
-  ...segments: string[]
-) =>
-  owner.stateRoot
-    ? join(owner.stateRoot, ...segments)
-    : owner.podsRoot && resolve(owner.podsRoot) !== resolve(productPodsRootPath())
-      ? join(owner.podsRoot, "..", ...segments)
-      : join(hostOwnership.rootPath, productPathNames.stateDirectoryName, ...segments);
 
 /** The home a pod's folder sits in, by its tier and folder; undefined for a folder outside every home. */
 export const podHome = (directory: string, pointer?: string | null) => {

@@ -1,4 +1,6 @@
-import { mkdtemp, readdir, rm } from "node:fs/promises";
+import { stateFixture } from "../../../tests/isolated-home/storage.ts";
+import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
+import { readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Context, Effect, Exit, Layer, Scope } from "effect";
@@ -27,7 +29,7 @@ const open = (directory: string) =>
   Effect.gen(function* () {
     const scope = yield* Scope.make();
     const context = yield* Layer.buildWithScope(
-      CaptureStore.layer(directory, join(directory, "aps.json")),
+      CaptureStore.layer(stateFixture(directory), join(directory, "aps.json")),
       scope,
     );
     return { scope, captures: Context.get(context, CaptureStore) };

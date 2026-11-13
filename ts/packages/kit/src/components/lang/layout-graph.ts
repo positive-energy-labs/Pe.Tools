@@ -3,7 +3,7 @@ import type { LayoutNode } from "@pe/agent-contracts";
 /** Remove closed gates bottom-up, leaving no empty split tracks. Never mutates the declaration. */
 export function reduceLayout(
   tree: LayoutNode,
-  active: (when: string) => boolean,
+  active: (when: Extract<LayoutNode, { kind: "gate" }>["when"]) => boolean,
 ): LayoutNode | null {
   switch (tree.kind) {
     case "pane":

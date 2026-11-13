@@ -32,6 +32,7 @@ import {
 } from "@pe/host-contracts/operation-types";
 
 import { HostNativeRead } from "@pe/host-internal/native-read";
+import { NativeReads } from "./native-reads.ts";
 import type { NativeReadInput } from "@pe/host-internal/native-read";
 
 import { Context, Effect, Layer, Option, Schema } from "effect";
@@ -306,7 +307,7 @@ function callRoutes(
         originClass,
         requestId,
       };
-      let intent: string | undefined;
+      let effect: string | undefined;
       if (entry.admission !== "intrinsic") {
         const definition = isTsOnlyOperationKey(key)
           ? yield* Effect.tryPromise({
@@ -330,8 +331,8 @@ function callRoutes(
           resolvedSession && typeof openDocumentId === "string"
             ? { session: resolvedSession.sessionId, openId: openDocumentId }
             : undefined;
-        intent = consentedRead(caller, key, request, ref) ? "Read" : definition.intent;
-        if (intent === "Mutate" && !humanDoor) {
+        effect = consentedRead(caller, key, request, ref) ? "Read" : definition.effect;
+        if (effect !== "Read" && effect !== "TransactRead" && !humanDoor) {
           return yield* Effect.fail(
             new BridgeError(
               "Submit the original exact admission to /actions; raw mutation dispatch is retired",
@@ -340,10 +341,6 @@ function callRoutes(
             ),
           );
         }
-        if (intent !== "Read" && !humanDoor)
-          return yield* Effect.fail(
-            new BridgeError("Unknown operation intent", 409, { notDispatched: true }),
-          );
         yield* Effect.try({
           try: () => requireEligibleCaller(definition, caller, "/call"),
           catch: (error) => error,
@@ -455,7 +452,7 @@ function callRoutes(
                 isDoorFailure(error) || error instanceof BridgeError ? error : new BridgeError(String(error), 409),
               ),
             )
-          : intent === "Read" && !entry.script
+          : (effect === "Read" || effect === "TransactRead") && !entry.script
             ? yield* Effect.gen(function* () {
                 if (!resolvedSession || !bridgeSessionId)
                   return yield* new InvalidRead({
@@ -864,11 +861,16 @@ function callRoutes(
             ),
             (release) => Effect.sync(release),
           );
+          const nativeReads = Option.getOrUndefined(yield* Effect.serviceOption(NativeReads));
+          const source = yield* HostInputContext;
+          if (source.lane.kind === "live" && !nativeReads)
+            return yield* Effect.die(Error("Live command reads require native terminal observation"));
           bindCommandRuntime(
             operations,
             bridge,
             observations(),
-            { ...actionDeps, families: composition?.families, nativeRead: yield* HostNativeRead },
+            { ...actionDeps, families: composition?.families, nativeRead: yield* HostNativeRead,
+              nativeReads: nativeReads ?? { kind: "recorded" } },
             composition?.local ??
               ((key, input, scope, context) =>
                 executeGatewayLocal(key, input, bridge, observations(), actionDeps.pictures!, actionDeps.launchShell, scope, context)),
@@ -1115,12 +1117,12 @@ const localEntries = {
     const { owner } = yield* decodeRequest("settings.tiers.read", request);
     return { tiers: readSettingTiers(owner, (yield* targetHomes(bridge, scope)).pointer) };
   }),
-  "settings.tiers.write": Effect.fnUntraced(function* ({ request, scope, bridge, action }: LocalCall) {
+  "settings.tiers.write": Effect.fnUntraced(function* ({ request, scope, bridge, action, caller }: LocalCall) {
     const key = "settings.tiers.write";
     const input = yield* decodeRequest(key, request);
     const { pointer } = yield* targetHomes(bridge, scope);
     const wrote = yield* Effect.try({
-      try: () => writeSettingTier(input, { pointer, receiptId: action?.receiptId, expectedPath: action?.settingPath }),
+      try: () => writeSettingTier(input, { pointer, caller, receiptId: action?.receiptId, expectedPath: action?.settingPath }),
       catch: (error) => new LocalOpError(key, error instanceof Error ? error.message : String(error), 500),
     });
     if (!wrote.ok) return yield* Effect.fail(new StepFailure(wrote.message, wrote.status, "refused"));
@@ -1353,7 +1355,7 @@ function executeGatewayLocal(
   // The journal Layer holds the node and HTTP services; the picture store is this route's value.
   if (!linkedCatalog().entries.get(key)?.call?.shell)
     return dispatchTsOnlyOperation(key, input, scope, bridge, captures, {
-      caller: { kind: "anonymous" }, action,
+      caller: action?.caller ?? { kind: "anonymous" }, action,
     }).pipe(Effect.provideService(PictureCaptureStore, pictures));
   return Effect.flatMap(decodeRequest("host.shell.open", input), (input) =>
     openShellPath(input, launch),

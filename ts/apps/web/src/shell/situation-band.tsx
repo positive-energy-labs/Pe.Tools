@@ -1,5 +1,4 @@
 import type { TypedMount } from "./typed-mount";
-import type { WorkJournal } from "./journal";
 /**
  * ADR 0027 rule 3: the Situation is one line. The route's name and context lead, one primary verb
  * stands framed, the rest wait in an overflow, and the Timeline head closes the line. Layout only:
@@ -7,10 +6,9 @@ import type { WorkJournal } from "./journal";
  */
 import { useSyncExternalStore, type ReactNode } from "react";
 import { MoreHorizontal, Redo2, Undo2 } from "lucide-react";
-import type { VerbDecl } from "@pe/agent-contracts";
-import { Button } from "@pe/kit/lang/button";
+import { Button, ButtonOutcome } from "@pe/kit/lang/button";
 import { Popover, PopoverTrigger, SubjectPopoverContent } from "@pe/kit/lang/popover";
-import { activityTime, projectTimeline, type TimelineVerbs, type TimelineEntry } from "./timeline";
+import { activityTime } from "./timeline";
 import "./situation-band.css";
 
 export function SituationBand({
@@ -59,176 +57,33 @@ export function SituationBand({
   );
 }
 
-/**
- * The band's ranking: the verb that declares `primary`, else the stage's first model write (its
- * press previews, then applies: ADR 0027 rule 10), else the first declared. The rest keep their order.
- */
-export function rankVerbs(ids: readonly string[], verbs: Readonly<Record<string, VerbDecl>>) {
-  const primary =
-    ids.find((id) => verbs[id]?.primary) ??
-    ids.find((id) => verbs[id]?.effect === "command") ??
-    ids[0];
-  return primary === undefined ? [] : [primary, ...ids.filter((id) => id !== primary)];
-}
+export type TimelineOwner = Pick<TypedMount, "subscribe" | "revision" | "timeline" | "stepTimeline" | "timelineRefusal" | "pendingEdits" | "discardIntent" | "stopCommand" | "reviewProblem">;
 
-/** Who ran an entry: a receipt names its caller; a press on this page is yours. */
-export const entryCaller = (entry: TimelineEntry) =>
-  (entry.basis as { receipt?: { caller?: { kind: string } } } | undefined)?.receipt?.caller
-    ?.kind === "pea"
-    ? "Pea"
-    : "you";
-
-/** The Work journal behind the owner's current scope: the one history of authored edits. */
-export type JournalOwner = Pick<TypedMount, "subscribe" | "revision" | "restoreWork" | "stopCommand"> & Partial<Pick<TypedMount, "undoFinding" | "ownFindingsLeft">> & { spec?: Pick<TypedMount["spec"], "commands">; discardIntent?(id:string):void; journalRefusal(): string | null; journal(): ReturnType<WorkJournal["read"]> | null; timeline(): readonly TimelineEntry[] };
-export function useWorkJournal(owner: JournalOwner) {
+export function TimelineButtons({ owner }: { owner: TimelineOwner }) {
   useSyncExternalStore(owner.subscribe, owner.revision, owner.revision);
-  return owner.journal();
-}
-type Journal = NonNullable<ReturnType<typeof useWorkJournal>>;
-export const stepSource = (step: Journal["undo"][number]) => (step.by === "pea" ? "Pea" : "you");
-export const stepState = (journal: Journal, step: Journal["undo"][number]) =>
-  step.notWritten
-    ? step.notWritten.rejected
-      ? "not written — rejected"
-      : "not written"
-    : step.superseded
-      ? `superseded at r${step.superseded.revision}`
-      : step.barrier
-        ? (step.barrier.basis as { receiptId?: string } | undefined)?.receiptId
-          ? "applied"
-          : "blocked"
-        : journal.redo.some((entry) => entry.press === step.press)
-          ? "undone"
-          : "applied";
-
-/** The journal's latest move as words: who edited, or who undid/redid it (Pea's undo is a step too). */
-export const lastMove = (journal: Journal) => {
-  const { kind, step, by } = journal.last!;
-  const who = by === "pea" ? "Pea" : "you";
-  return kind === "apply"
-    ? `${stepSource(step)} · ${stepState(journal, step)}`
-    : `${who} ${kind === "undo" ? "undid" : "redid"}`;
-};
-
-/**
- * Undo and redo over this Work's journal, as the head and the History both draw them: the same
- * restore Mod+Z runs, refused with the journal's own reason. `words` draws the labels beside the
- * glyphs (the History); the head draws glyphs alone, their names as tooltips.
- */
-export function JournalButtons({
-  owner,
-  words = false,
-}: {
-  owner: JournalOwner;
-  words?: boolean;
-}) {
-  const journal = useWorkJournal(owner);
-  if (!journal) return null;
-  const undo = journal.undo.at(-1);
-  const redo = journal.redo.at(-1);
-  const entries = owner.timeline();
-  const verbs = Object.fromEntries(Object.entries(owner.spec?.commands ?? {}).map(([id, command]) => [id, { label: command.label, entry: command.entry }]));
-  const rows = projectTimeline(entries, verbs, journal);
-  const barrierRefusal = (step: typeof undo, direction: "undo" | "redo") => {
-    if (!step?.barrier) return null;
-    const receiptId = step.barrier.receiptId ?? (step.barrier.basis as { receiptId?: string } | undefined)?.receiptId;
-    const label = rows.find(row => row.key === `receipt:${receiptId}`)?.verb;
-    return label ? `Cannot ${direction}: '${label}' already wrote this to Revit. Reverse it in Revit.`
-      : `Cannot ${direction}: a later action changed this Work. Inspect History.`;
-  };
-  const restore = async (direction: "undo" | "redo") => {
-    const result = await owner.restoreWork(direction);
-    return result && typeof result === "object" && "ok" in result && result.ok === false && "message" in result
-      ? { message: String(result.message) } : null;
-  };
-  return (
-    <>
-      <Button kind="quiet"
-        icon={Undo2}
-        label={undo ? `Undo ${undo.label}` : "Undo"}
-        refusal={
-          owner.journalRefusal() ??
-          undo?.superseded?.message ??
-          barrierRefusal(undo, "undo") ??
-          (undo ? null : "Nothing to undo: no edit to this Work since this tab opened it")
-        }
-        onPress={() => restore("undo")}
-      >
-        {words ? "undo" : undefined}
-      </Button>
-      <Button kind="quiet"
-        icon={Redo2}
-        label={redo ? `Redo ${redo.label}` : "Redo"}
-        refusal={
-          owner.journalRefusal() ?? redo?.superseded?.message ??
-          barrierRefusal(redo, "redo") ??
-          (redo ? null : "Nothing to redo")
-        }
-        onPress={() => restore("redo")}
-      >
-        {words ? "redo" : undefined}
-      </Button>
-    </>
-  );
+  const timeline = owner.timeline();
+  return <>{(["undo", "redo"] as const).map(direction => {
+    const message = owner.reviewProblem(`work.${direction}`);
+    return <ButtonOutcome.Provider key={direction} value={message ? { kind: "refused", label: message } : null}>
+    <Button kind="quiet"
+    icon={direction === "undo" ? Undo2 : Redo2}
+    label={timeline?.[direction] ? `${direction === "undo" ? "Undo" : "Redo"} ${timeline[direction]!.label}` : direction === "undo" ? "Undo" : "Redo"}
+    refusal={owner.timelineRefusal() ?? timeline?.refusal[direction] ?? (timeline?.[direction] ? null : `Nothing to ${direction}`)}
+    onPress={async () => { await owner.stepTimeline(direction); }} /></ButtonOutcome.Provider>;
+  })}</>;
 }
 
-/**
- * The Timeline's head: the latest Work edit (who made it, its state, the Work revision), unless a
- * command ran after it; else the latest entry, in one line. The full history opens beneath it; it never takes a row of its own.
- */
-export function TimelineHead({
-  owner,
-  history,
-  verbs: declaredVerbs,
-}: {
-  owner: JournalOwner;
-  verbs?: TimelineVerbs;
-  history: ReactNode;
-}) {
+export function TimelineHead({ owner, history }: { owner: TimelineOwner; history: ReactNode }) {
   useSyncExternalStore(owner.subscribe, owner.revision, owner.revision);
-  const timeline: readonly TimelineEntry[] = owner.timeline();
-  const verbs = declaredVerbs ?? {};
-  const journal = useWorkJournal(owner);
-  const rows = projectTimeline(timeline, verbs, journal);
-  const last =
-    rows.findLast(
-      (row) =>
-        row.kind === "journal" ||
-        row.kind === "receipt" ||
-        (row.kind === "press" && verbs[row.entry.verb ?? ""]?.kind === "command"),
-    ) ?? rows.at(-1);
-  const step = last?.kind === "journal" ? last.step : undefined;
-  return (
-    <span data-slot="timeline-head" role="group" aria-label="Timeline">
-      <Popover>
-        <PopoverTrigger aria-label="Open the Timeline" data-slot="timeline-trigger">
-          {step && last?.kind === "journal" ? (
-            <>
-              <span>{step.label}</span>
-              <span data-slot="timeline-state">
-                {lastMove(journal!)} · r{journal!.revision}
-              </span>
-            </>
-          ) : last ? (
-            <>
-              <span>{last.verb}</span>
-              <span data-slot="timeline-state">
-                {entryCaller(last.entry)} · {last.outcome?.state ?? last.kind} ·{" "}
-                {activityTime(last.at)}
-              </span>
-            </>
-          ) : (
-            <span data-slot="timeline-state">No activity yet</span>
-          )}
-        </PopoverTrigger>
-        <SubjectPopoverContent
-          aria-label="Timeline"
-          className="max-h-(--available-height) overflow-y-auto p-(--gutter)"
-        >
-          {history}
-        </SubjectPopoverContent>
-      </Popover>
-      <JournalButtons owner={owner} />
-    </span>
-  );
+  const last = owner.timeline()?.rows.at(-1);
+  return <span data-slot="timeline-head" role="group" aria-label="Timeline">
+    <Popover>
+      <PopoverTrigger aria-label="Open the Timeline" data-slot="timeline-trigger">
+        <span>{last ? last.kind === "home-write" ? last.place : last.kind === "point" ? last.reason : last.label : owner.timelineRefusal() ?? "No activity yet"}</span>
+        {last && <span data-slot="timeline-state">{activityTime(last.at)}</span>}
+      </PopoverTrigger>
+      <SubjectPopoverContent aria-label="Timeline" className="max-h-(--available-height) overflow-y-auto p-(--gutter)">{history}</SubjectPopoverContent>
+    </Popover>
+    <TimelineButtons owner={owner} />
+  </span>;
 }

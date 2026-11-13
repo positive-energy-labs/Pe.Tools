@@ -10,7 +10,7 @@ import type { RoomsContext } from "./route";
 test("rooms lists unreadable blobs as can't read, kept with owner and reason", () => {
   const page = roomsPageSchema.parse({ view: DEMO_VIEW });
   const ctx = {
-    value: { current: true, status: "current", value: { snapshot: {
+    value: { state: "ready", value: { snapshot: {
       ...DEMO_ROOMS, unreadable: [{ elementId: null, parameter: "Pe.System", reason: "Broken owner envelope" }, { elementId: 123456, parameter: "Pe.Region", reason: "Broken region envelope" }],
     } } },
     page: { read: () => ({ ...page, room: { kind: "all" } }) },

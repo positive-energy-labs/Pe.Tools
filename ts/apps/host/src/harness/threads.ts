@@ -115,7 +115,6 @@ import { Spawner } from "./spawner.ts";
 import { CodexConfig } from "./edge-schemas.ts";
 import { loadThreads, type LoadedThread, type Meta } from "./thread-store.ts";
 import { isAuthRefusal, sessionOffer, type Providers } from "./providers.ts";
-import type { PluginHookName, PluginHooks } from "@pe/agent-contracts";
 import { exportThread } from "../thread-export.ts";
 import {
   readWorkContext,
@@ -176,7 +175,7 @@ export type HarnessThreadsOptions = {
   /** Current exact observations enrich remembered names; they never rebind a target. */
   observeDocument?: ObserveDocument;
   /** State directory holding one directory per thread. */
-  root: string;
+  root: import("@pe/host-contracts/kinds").StateDirectory;
   /** The harness child's cwd: the Pea world root. */
   worldRoot: string;
   /** The Pea MCP server the child launches, bound to its thread by the `PE_CONTEXT` token. */
@@ -200,7 +199,6 @@ export type HarnessThreadsOptions = {
   log: HostLog;
   /** Called only after the transcript owner commits this fact. No prompt or tool text is exported. */
   receiptFact?: (threadId: string, title: string, event: HarnessEvent) => void;
-  pluginHook?: <N extends PluginHookName>(name: N, event: PluginHooks[N]) => Promise<void>;
   /** How long Stop lets the harness end its turn after ACP cancel before it kills the child. */
   stopGraceMs?: number;
 };
@@ -409,6 +407,7 @@ function redactKeys<T>(value: T, keys: readonly string[]): T {
 }
 
 /** tmp + rename, so a crash mid-write never leaves a torn file. */
+// STORE-EXCEPTION: ADR 0039; harness/ thread writes stay local until T3 replaces this persistence.
 function writeJson(path: string, value: unknown) {
   writeFileSync(`${path}.tmp`, JSON.stringify(value, null, 2));
   renameSync(`${path}.tmp`, path);
@@ -463,17 +462,17 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
     for (const listener of summaryListeners) listener();
   };
   /** Heads of ids that are not harness threads: an MCP child or the web may name a thread first. */
-  const headsDir = join(options.root, ".heads");
+  const headsDir = join(options.root.path, ".heads");
   for (const { id, meta, events } of startup.loaded) {
     try {
       const before = JSON.stringify(meta.workContext);
       threads.set(id, fresh(meta, events));
       // Backfill only observed context. Work documents and native admission stay untouched.
       if (before !== JSON.stringify(meta.workContext))
-        writeJson(join(options.root, id, "meta.json"), redactKeys(meta, options.providers.keys()));
+        writeJson(join(options.root.path, id, "meta.json"), redactKeys(meta, options.providers.keys()));
     } catch (error) {
       startup.skipped.push(
-        `harness thread ${join(options.root, id)} skipped: it does not parse (${String(error)})`,
+        `harness thread ${join(options.root.path, id)} skipped: it does not parse (${String(error)})`,
       );
     }
   }
@@ -519,10 +518,11 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
   /** A new thread on disk, spawned now so the model and trait pickers fill before the first prompt. */
   function create(meta: Meta, events: HarnessEvent[] = []): Thread {
     const t = fresh(meta, events);
-    mkdirSync(join(options.root, meta.id), { recursive: true });
+    mkdirSync(join(options.root.path, meta.id), { recursive: true });
     writeMeta(t);
+    // STORE-EXCEPTION: ADR 0039; retire this thread-event writer when T3 owns thread persistence.
     writeFileSync(
-      join(options.root, meta.id, "events.jsonl"),
+      join(options.root.path, meta.id, "events.jsonl"),
       events.map((e) => `${JSON.stringify(e)}\n`).join(""),
     );
     threads.set(meta.id, t);
@@ -569,7 +569,7 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
 
   // meta.json is a door too: a harness's session title can echo a key, so it takes the one redaction set.
   const writeMeta = (t: Thread) =>
-    writeJson(join(options.root, t.meta.id, "meta.json"), redactKeys(t.meta, options.providers.keys()));
+    writeJson(join(options.root.path, t.meta.id, "meta.json"), redactKeys(t.meta, options.providers.keys()));
 
   function append(t: Thread, event: Append): HarnessEvent {
     const keys = options.providers.keys();
@@ -585,8 +585,9 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
       Buffer.byteLength(line) >= HARNESS_EVENT_MAX_BYTES
     )
       throw Error("Turn element event exceeds the byte bound");
+    // STORE-EXCEPTION: ADR 0039; retire this event append when T3 owns thread persistence.
     appendFileSync(
-      join(options.root, t.meta.id, "events.jsonl"),
+      join(options.root.path, t.meta.id, "events.jsonl"),
       `${line}
 `,
     );
@@ -911,9 +912,15 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
     if (t) return t.meta.head;
     const file = headFile(threadId);
     if (!existsSync(file)) return emptyThreadHead;
-    const parsed = threadHeadSchema.safeParse(JSON.parse(readFileSync(file, "utf8")));
-    if (!parsed.success) warn(`thread head ${threadId}: stored head no longer parses`);
-    return parsed.data ?? emptyThreadHead;
+    // STORE-EXCEPTION: ADR 0039; retire this standalone head decode when T3 owns thread persistence.
+    try {
+      const parsed = threadHeadSchema.safeParse(JSON.parse(readFileSync(file, "utf8")));
+      if (!parsed.success) warn(`thread head ${threadId}: stored head no longer parses`);
+      return parsed.data ?? emptyThreadHead;
+    } catch {
+      warn(`thread head ${threadId}: stored head cannot be read; its bytes are kept`);
+      return emptyThreadHead;
+    }
   }
   function writeHead(threadId: string, head: ThreadHead) {
     const t = threads.get(threadId);
@@ -1007,13 +1014,16 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
       return () => void headListeners.delete(listener);
     },
     /** The `thread-head` Reading: the current head, then every set. */
-    observe(threadId: string, listener: (value: { value: ThreadHead }) => void) {
+    observe(threadId: string, listener: (value: { value: ThreadHead & { pointers: readonly Pointer[] } }) => void) {
       const notify = (id: string, head: ThreadHead) => {
-        if (id === threadId) listener({ value: head });
+        if (id !== threadId) return;
+        // Standalone heads have no harness metadata; pointer mutations still require a stored thread.
+        const pointers = threads.has(threadId) ? storedPointers(threadId) : [];
+        listener({ value: { ...head, pointers } });
       };
       headListeners.add(notify);
       queueMicrotask(() => {
-        if (headListeners.has(notify)) listener({ value: readHead(threadId) });
+        if (headListeners.has(notify)) notify(threadId, readHead(threadId));
       });
       return () => void headListeners.delete(notify);
     },
@@ -1254,10 +1264,6 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
     writeMeta(t);
     t.session = state;
     append(t, { kind: "session", state, acpSessionId: session.sessionId });
-    await options.pluginHook?.("harness.session.started", {
-      threadId: t.meta.id,
-      sessionId: session.sessionId,
-    });
     live = { conn, sessionId: session.sessionId, configOptions };
     const notReapplied = (what: string) => (error: unknown) =>
       void append(t, {
@@ -1341,13 +1347,6 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
     t.session = "closed";
     t.retiring = spawner
       .stop(child)
-      .then(async () => {
-        if (child && t.meta.acpSessionId)
-          await options.pluginHook?.("harness.session.stopped", {
-            threadId: t.meta.id,
-            sessionId: t.meta.acpSessionId,
-          });
-      })
       .catch((error) => warn(`harness ${t.meta.id} did not stop: ${String(error)}`))
       .finally(() => {
         t.retiring = null;
@@ -1363,11 +1362,6 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
     clearIdle(t);
     await t.retiring;
     await spawner.stop(t.child);
-    if (t.child && t.meta.acpSessionId)
-      await options.pluginHook?.("harness.session.stopped", {
-        threadId: t.meta.id,
-        sessionId: t.meta.acpSessionId,
-      });
   }
 
   function scheduleIdle(t: Thread) {
@@ -1536,7 +1530,6 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
         });
       if (t.child) await retire(t);
       await options.prepare?.();
-      await options.pluginHook?.("turn.before", { threadId: t.meta.id, turnId });
       if (!t.live) append(t, { kind: "starting", turnId });
       const cancelled = () =>
         t.events.some((event) => event.kind === "cancel_requested" && event.turnId === turnId);
@@ -1548,7 +1541,7 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
         result = await live.conn.prompt({
           sessionId: live.sessionId,
           prompt: promptBlocks(
-            join(options.root, t.meta.id, "attachments", turnId),
+            join(options.root.path, t.meta.id, "attachments", turnId),
             refeed ? `${refeed}\n\n${text}` : text,
             attachments,
             mentions,
@@ -1602,9 +1595,6 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
       }
     }
     disarm(t);
-    await options
-      .pluginHook?.("turn.after", { threadId: t.meta.id, turnId, outcome })
-      .catch((error) => warn(`turn.after failed after the run closed: ${String(error)}`));
     // The run ends with its turn: Pea's commands already admitted keep going only after a completed turn.
     runs.close(
       runRef,
@@ -1991,7 +1981,7 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
       case "thread.remove":
         threads.delete(t.meta.id);
         await stop(t);
-        rmSync(join(options.root, t.meta.id), { recursive: true, force: true });
+        rmSync(join(options.root.path, t.meta.id), { recursive: true, force: true });
         options.log.forget(
           ({ event }) =>
             (event.kind === "thread" && event.thread === t.meta.id) ||
@@ -2333,6 +2323,7 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
     const t = threads.get(threadId)!;
     t.meta.pointers = pointers;
     writeMeta(t);
+    for (const listener of headListeners) listener(threadId, readHead(threadId));
     return { threadId, pointers };
   };
   const service = {
@@ -2485,7 +2476,7 @@ export const makeHarnessThreads = Effect.fn("HarnessThreads.make")(function* (
   options: HarnessThreadsOptions,
 ) {
   const loaded = yield* loadThreads(
-    options.root,
+    options.root.path,
     (harness) => options.providers.get(harness)?.name ?? harness,
   );
   const clock = yield* Clock.clockWith(Effect.succeed);

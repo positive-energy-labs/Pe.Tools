@@ -1,13 +1,15 @@
+import { stateFixture } from "../../../tests/isolated-home/storage.ts";
+import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { testDocumentMarks, captureStore } from "./effect-test.ts";
 import { graphRoute } from "../src/reads/routes.ts";
-import { Publications } from "../src/reads/evaluator.ts";
+import { Publications } from "../src/reads/publications.ts";
 import { inputPort } from "../src/reads/inputs.ts";
 import { hostMarks } from "../src/document-marks.ts";
 import { createPeClient, httpRoutes, servePeRoute } from "@pe/agent-contracts/pe-api";
 import { afterEach, expect, vi } from "vite-plus/test";
 import { Effect, Fiber, Queue } from "effect";
 import { HttpEffect, HttpRouter } from "effect/http";
-import { mkdtemp, rm } from "node:fs/promises";
+import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { scheduleGridRouteState, scheduleReadingSchema, type ScheduleReading, type ActionAdmission, type RouteStatePatch } from "@pe/agent-contracts";
@@ -64,7 +66,7 @@ export async function setup(options: { cold?: boolean; projectHome?: string; pod
       }));
     },
     capabilityCatalog: { read: (scope) => capabilities.read(scope) },
-    store: fileRouteDocumentStore(join(dir, "work")),
+    store: fileRouteDocumentStore(stateFixture(join(dir, "work"))),
     heads: { observe: () => () => {} },
     observeHostResource: (request, publish) => observeHost(request, publish),
     // As the host boots: one mark holder per bridge, shared by every Reading and every push.

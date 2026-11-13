@@ -1,7 +1,9 @@
+import { stateFixture } from "../../../tests/isolated-home/storage.ts";
+import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { Effect } from "effect";
 import { createHash } from "node:crypto";
 import { readFileSync, readdirSync } from "node:fs";
-import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Context, Exit, Layer, Scope } from "effect";
@@ -55,7 +57,7 @@ test.each([
       await writeFile(file, original);
       const work = new RouteWorkspace({
         registrations: [{ spec: settingsRouteState }],
-        store: fileRouteDocumentStore(workDir),
+        store: fileRouteDocumentStore(stateFixture(workDir)),
       });
       const observed = await work.publish(
         key,
@@ -129,7 +131,7 @@ test.each([
       }
       const restoredWork = new RouteWorkspace({
         registrations: [{ spec: settingsRouteState }],
-        store: fileRouteDocumentStore(workDir),
+        store: fileRouteDocumentStore(stateFixture(workDir)),
       });
       if (later) {
         const current = await restoredWork.read(key, "pods");

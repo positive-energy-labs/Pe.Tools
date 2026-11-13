@@ -1,9 +1,10 @@
+import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { noticeRows } from "../src/notice-feed.ts";
 import { testHostInputs, journalAt, callRouteOver } from "./effect-test.ts";
 import { Layer, Effect } from "effect";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { existsSync, symlinkSync, unlinkSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, rmdir, symlink, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, rmdir, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { instancesSessionSelection } from "@pe/agent-contracts";
@@ -1729,6 +1730,7 @@ test.each([false, true])("cleanup through /actions removes empty instance folder
   if (stray) {
     expect(await readFile(extra, "utf8")).toBe("keep me");
     expect(result.kept).toContain(extra);
+    for (const step of receipt.steps) expect(step).not.toHaveProperty("touched");
     const rows = noticeRows({ threads: [], works: [], machine: null, stored: [], held: [], receipts: [{ revision: 1, action: receipt }] }, Date.now());
     expect(rows).toMatchObject([{ detail: expect.stringContaining(`kept: ${extra}`) }]);
   }

@@ -29,5 +29,5 @@ export const MENTION_KINDS: Record<
   member: { group: "Pod members", word: "member", icon: FileJson },
 };
 /** A mention's kind word; a kind this build does not know says itself. */
-export const mentionWord = (kind: string) => MENTION_KINDS[kind as CapabilityKind]?.word ?? kind;
+export const mentionWord = (kind: string) => Object.entries(MENTION_KINDS).find(([key]) => key === kind)?.[1].word ?? kind;
 

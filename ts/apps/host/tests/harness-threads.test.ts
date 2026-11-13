@@ -1,3 +1,7 @@
+import { hostState } from "../src/host-ownership.ts";
+import { stateFixture } from "../../../tests/isolated-home/storage.ts";
+import { updateFixture } from "./storage.ts";
+import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { markReadings } from "../src/resource-adapters.ts";
 import { openRecordingWriter, openRecordingReader, nativeCatalogIdentity } from "../src/native-recording.ts";
 import { fansDocumentSchema } from "@pe/agent-contracts";
@@ -13,7 +17,7 @@ import { createPeClient, servePeRoute } from "@pe/agent-contracts/pe-api";
 import { afterAll, afterEach, beforeAll, expect, onTestFinished, test, vi } from "vite-plus/test";
 import { HostLog } from "../src/host-log.ts";
 import { createServer, type Server } from "node:http";
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -24,8 +28,6 @@ import type {
   Caller,
   HarnessEvent,
   HarnessThreadBody,
-  PluginHookName,
-  PluginHooks,
   WorkHandle,
 } from "@pe/agent-contracts";
 import { HARNESS_EVENT_MAX_BYTES, readingKey, tools, bindWork, stagedDucts, workKey, address as documentAddress } from "@pe/agent-contracts";
@@ -48,11 +50,12 @@ import {
 } from "../src/harness/threads.ts";
 import * as adapter from "../src/harness/adapter.ts";
 import { claudeSessionMeta } from "../src/harness/manifest.ts";
-import { productProvidersPath } from "../src/product-paths.ts";
+
 import { createUpdateReader, type UpdateRunner } from "../src/update-reader.ts";
 import type { Envelope } from "@pe/host-contracts/pe-revit-contract";
 import { sdkBinary, sdkCommand } from "./sdk-replay.ts";
 import { commandRegistry } from "../src/command-registry.ts";
+import { recordNativeTerminal } from "../src/action-dispatch.ts";
 import { createPeRoutes, fileRouteDocumentStore } from "../src/pe-routes.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
 import { sdkSessions } from "./native-receipt-fixture.ts";
@@ -84,7 +87,6 @@ const host = async (
   prepare?: () => Promise<unknown>,
   openConsole: (command: string, opened: () => void) => Promise<void> = async (_, opened) =>
     opened(),
-  pluginHook?: <N extends PluginHookName>(name: N, event: PluginHooks[N]) => Promise<void>,
   extra: Partial<HarnessThreadsOptions> = {},
 ): Promise<Host> => {
   const consoles: string[] = [];
@@ -98,14 +100,13 @@ const host = async (
       return { exitCode: 0, commandExitCode: 0, logPath: join(root, "console.log") };
     },
   });
-  const log = new HostLog(join(root, ".log", randomUUID()), Date.now);
+  const log = new HostLog(stateFixture(join(root, ".log", randomUUID())), Date.now);
   const threads = await harnessThreads({
     runs: registryService(),
     log,
     prepare,
-    pluginHook,
     updatePending,
-    root,
+    root: stateFixture(root),
     worldRoot: tmpdir(),
     mcpServer,
     developerInstructions: async () => "KERNEL: You are Pea.",
@@ -209,7 +210,7 @@ test.each(["claude", "codex"] as const)(
     const key = bindWork("ducts", address, undefined, target);
     const routes = createPeRoutes({
       registrations: [{ spec: tools.ducts.work }, { spec: tools.fans.work }],
-      store: fileRouteDocumentStore(join(dir, "work")),
+      store: fileRouteDocumentStore(stateFixture(join(dir, "work"))),
       heads: { observe: () => () => {} },
       navigation: { documents: async () => [{ ...target, address }], threads: async () => [] },
     });
@@ -231,7 +232,7 @@ test.each(["claude", "codex"] as const)(
           else if (op === "ducts.tables") value = { folder: "fixture", tables: {}, missing: [], unsupported: {} };
           else if (op === "ducts.apply" || op === "ducts.apply.plan") {
             const preview = op === "ducts.apply.plan";
-            await journal.markDispatched(requestId!);
+            await journal.markDispatched(requestId!, "bridge");
             if (!preview) writes.push(input);
             value = {
               previewOnly: preview,
@@ -240,6 +241,9 @@ test.each(["claude", "codex"] as const)(
               storeRevision: 1,
               systemsAfter: [],
             };
+            // Explicit terminal evidence for this controlled fixture, never inferred from the catalog.
+            await recordNativeTerminal(requestId!, preview ? { kind: "none" }
+              : { kind: "wrote", transactions: ["Apply equipment flow"], added: 0, modified: 1, deleted: 0 });
           } else throw Error(`Unexpected bridge op ${op}`);
           return { value, target: { session: "A", document: address, documentRef: target } };
         });
@@ -277,7 +281,7 @@ test.each(["claude", "codex"] as const)(
       ), readScope,
     ));
     const deps = { sdk: sdkSessions, nativeRead: Context.get(readContext, HostNativeRead), files: Context.get(readContext, DuctFiles), marks: Context.get(readContext, HostDocumentMarks) };
-    const resolve = commandRegistry(bridge, captureStore("harness-threads"), deps, () => Effect.fail(Error("No local command in this journey")));
+    const resolve = commandRegistry(bridge, captureStore(join(dir, "captures")), deps, () => Effect.fail(Error("No local command in this journey")));
     const journal = journalAt(join(dir, "journal.jsonl"), Date.now);
     journal.bindCommands({
       work: routes.workspace,
@@ -426,7 +430,7 @@ test.each(["claude", "codex"] as const)(
       expect(await journal.wait("apply")).toMatchObject({
         state: "succeeded",
         steps: [
-          { kind: "native", state: "succeeded", dispatchedAt: expect.any(String) },
+          { kind: "native", state: "succeeded", dispatchedAt: expect.any(String), touched: { kind: "wrote", modified: 1 } },
           { kind: "publication", state: "succeeded" },
         ],
       });
@@ -479,7 +483,7 @@ test("automatic update admission refuses a new Pea prompt through download and r
     return answer({ requestId, response: { requestId, key: "update.apply", result: receipt() } });
   };
   const updates = createUpdateReader({
-    path: join(root, "auto-update.json"),
+    file: updateFixture(join(root, "auto-update.json")),
     run,
     installed: true,
     pid: 123,
@@ -907,7 +911,7 @@ test("an endpoint provider is checked before save, and every thread carries its 
     );
     expect((await add("codex", "vps", `${origin}/ok/v1`, codexKey)).status).toBe(409);
     expect((await call("POST", "/pe/providers/codex-vps/open-login")).status).toBe(409);
-    expect(JSON.parse(await readFile(productProvidersPath(), "utf8")).providers).toHaveLength(2);
+    expect(JSON.parse(await readFile(hostState().providers, "utf8")).providers).toHaveLength(2);
 
     // The CLI and web select a draft model immediately after creating a thread, while
     // its adapter is still connecting. No readiness poll belongs in either caller.
@@ -1021,7 +1025,7 @@ test("an endpoint provider is checked before save, and every thread carries its 
     expect((await call("POST", "/pe/threads", { providerId: "codex-vps" })).status).toBe(400);
   } finally {
     server.close();
-    await rm(productProvidersPath(), { force: true });
+    await rm(hostState().providers, { force: true });
   }
   // Every probe child now dies by tree kill (two awaited taskkill.exe runs on win32): 11.6 s -> 47 s
   // measured 2026-11-02. The cost is the Spawner closing a live leader, not this test.
@@ -1115,6 +1119,17 @@ test("door 6: a human adds your open lifetimes with an admission; Pea's own and 
     expectedRevision: 2,
   });
   expect(twice.status).toBe(403);
+});
+
+test("a torn standalone thread head reads empty and keeps its bytes", async () => {
+  const h = await host();
+  const { createHash } = await import("node:crypto");
+  const id = "torn-standalone-head";
+  const file = join(root, ".heads", `${createHash("sha256").update(id).digest("hex")}.json`);
+  const torn = '{"targets":';
+  await writeFile(file, torn);
+  expect(h.heads.read(id)).toEqual({ targets: [], revision: 0 });
+  expect(await readFile(file, "utf8")).toBe(torn);
 });
 
 test("thread target changes preserve Pea capability and retain revocation for external grants", async () => {
@@ -1635,7 +1650,7 @@ test("Stop with a failing run close still cancels, then kills a child that ignor
       throw Error("close failed");
     },
   };
-  const h = await host(undefined, undefined, undefined, undefined, { runs, stopGraceMs: 500 });
+  const h = await host(undefined, undefined, undefined, { runs, stopGraceMs: 500 });
   const call = caller(h);
   const read = reader(h);
   const id = (await call("POST", "/pe/threads", { providerId: "claude" })).json.id as string;
@@ -1656,7 +1671,7 @@ test("Stop with a failing run close still cancels, then kills a child that ignor
 }, 30_000);
 
 test("question settlement survives a throwing persist listener and reports failure", async () => {
-  const h = await host(undefined, undefined, undefined, undefined, {
+  const h = await host(undefined, undefined, undefined, {
     receiptFact: (_id, _title, event) => {
       if (event.kind === "question_resolved") throw Error("question persist failed");
     },
@@ -1679,23 +1694,14 @@ test("question settlement survives a throwing persist listener and reports failu
 });
 
 test("Stop escalation kills the child even when the transcript disk append fails", async () => {
-  let killed = false;
-  const h = await host(
-    undefined,
-    undefined,
-    undefined,
-    async (name) => {
-      if (name === "harness.session.stopped") killed = true;
-    },
-    { stopGraceMs: 500 },
-  );
+  const h = await host(undefined, undefined, undefined, { stopGraceMs: 500 });
   const call = caller(h);
   const read = reader(h);
   const created = await call("POST", "/pe/threads", { providerId: "claude" });
   const id: string = created.json.id;
   await call("POST", `/pe/threads/${id}/prompt`, { text: "stubborn" });
   await until(read, id, (b) => lastEcho(b) === "echo: stubborn");
-  killed = false;
+  const stop = vi.spyOn(adapter, "stopChild");
   const append = h.log.append.bind(h.log);
   const fault = vi.spyOn(h.log, "append").mockImplementation((event) => {
     if (
@@ -1711,16 +1717,19 @@ test("Stop escalation kills the child even when the transcript disk append fails
   try {
     await call("POST", `/pe/threads/${id}/cancel`);
     await until(read, id, (b) => JSON.stringify(b.events).includes("ignoring cancel"));
-    await expect.poll(() => killed, { timeout: 2500 }).toBe(true);
+    await expect.poll(() => stop.mock.calls.some(([child]) =>
+      child && (child.exitCode !== null || child.signalCode !== null),
+    ), { timeout: 2500 }).toBe(true);
     expect((await call("GET", `/pe/threads/${id}`)).status).toBe(200);
   } finally {
+    stop.mockRestore();
     fault.mockRestore();
     await h.close();
   }
 });
 
 test("Stop escalation logs a retiring failure as ThreadRetireFailed", async () => {
-  const h = await host(undefined, undefined, undefined, undefined, { stopGraceMs: 50 });
+  const h = await host(undefined, undefined, undefined, { stopGraceMs: 50 });
   const call = caller(h);
   const read = reader(h);
   const created = await call("POST", "/pe/threads", { providerId: "claude" });
@@ -1751,7 +1760,7 @@ test("DocLab terminal burst replays through HTTP beside real mark capture withou
   const dir = await mkdtemp(join(root, "mark-burst-"));
   const identity = { build: "mark-burst", catalog: nativeCatalogIdentity() };
   const bounds = { maxBytes: 1024 * 1024, maxTakings: 100 };
-  const writer = await settle(openRecordingWriter(join(dir, "recording"), identity, bounds));
+  const writer = await settle(openRecordingWriter(stateFixture(join(dir, "recording")), identity, bounds));
   const live = hostMarks({ changedAt: () => null, subscribe: () => () => {} });
   const marks = await settle(HostDocumentMarks.pipe(Effect.provide(
     HostDocumentMarks.capturing(writer).pipe(Layer.provide(Layer.succeed(HostDocumentMarks, live))),
@@ -1772,7 +1781,7 @@ test("DocLab terminal burst replays through HTTP beside real mark capture withou
   let storm = false;
   const routes = createPeRoutes({
     registrations: [], heads: { observe: () => () => {} },
-    store: fileRouteDocumentStore(join(dir, "work")),
+    store: fileRouteDocumentStore(stateFixture(join(dir, "work"))),
     observeHostResource: (request, publish, after) => h.observe(request, publish, after) ?? (() => {
       for (let i = 0; i < (storm ? 65 : 1); i++)
         publish({ kind: "snapshot", key: readingKey(request), value: { takenAt: new Date(1).toISOString() } });

@@ -23,7 +23,7 @@ export const homeWriteRowSchema = z.strictObject({
   place: z.string(),
   path: z.string(),
   sha256: z.string(),
-  /** null: the file was new; undo deletes it if its hash still matches. */
+  /** null: the file was new; the source must restore absence safely or state why undo is refused. */
   priorSha256: z.string().nullable(),
   by: callerSchema,
   at: z.string(),
@@ -44,6 +44,8 @@ export const timelineRowSchema = z.union([
     by,
     label: z.string(),
     state: z.enum(["applied", "undone", "superseded", "blocked"]),
+    /** A rejected write consumed this edit without writing it to the model. */
+    notWritten: z.strictObject({ invocation: z.string(), reason: z.string(), rejected: z.boolean() }).optional(),
     /** Why undo stops here, when it does. */
     blockedBy: z
       .union([

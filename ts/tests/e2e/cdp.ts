@@ -122,7 +122,11 @@ export async function connect(
     async open(url: string) {
       const before = loadSerial;
       // Leaving a loaded Revit route can hold the old page past the 30 s command default (/fans: >30 s).
-      const navigation: any = await transport.sendRaw("Page.navigate", { url }, { timeoutMs: NAVIGATE_MS });
+      const navigation: any = await transport.sendRaw(
+        "Page.navigate",
+        { url },
+        { timeoutMs: NAVIGATE_MS },
+      );
       if (navigation.errorText) throw new Error(`Page.navigate: ${navigation.errorText}`);
       await page.until(
         async () =>
@@ -368,22 +372,28 @@ export const revit = {
 };
 
 /**
- * Waits for the route to bind a Revit session. The first paint reads "the bridge is disconnected"
- * even when it is connected, so only a bounded wait without a bound state is a PRECONDITION (no
- * slot). Bound = the LOG's `target session-… › <openId>` line, or the families pane with no
- * disconnected line (the chat plugin pane may not draw the LOG).
+ * The shown document chip of a Place bound to a live Revit document. The shell's DocumentPicker
+ * (apps/web/src/shell/document-picker.ts) sets `data-bound-document` to the openId only while the
+ * Place's target is a document a connected Revit lists as open; unbound, it is absent.
+ */
+export const BOUND = "[data-bound-document] [data-list-trigger]";
+/** Unit ESP cell address emitted by route/slots/sheet/pane.tsx for fans/sheet.ts's esp binding. */
+export const FANS_ESP_ROW = '[data-pane-id="sheet-inputs"] [data-sheet-address^="esp:"]';
+/** Resolved unit ESP, the final cell in the ledger's first numeric grid, not calculated system ESP. */
+export const FANS_LEDGER_ESP =
+  '[data-pane-id="sheet-ledger"] [data-sheet-esp] > div:first-of-type > span:last-child';
+export const DOCUMENT_CHOOSER = '[data-list-trigger][aria-label="Choose a document"]';
+const CHOOSE = "Choose a document";
+
+/**
+ * Waits for the route to bind a live Revit document (BOUND). The first paint is unbound even when
+ * Revit is connected, so only a bounded wait without a bound state is a PRECONDITION (no slot).
  */
 export async function requireRevit(page: Page, ms = 60_000) {
-  const bound = async () => {
-    const text = await page.text();
-    return (
-      /target session-\S+ › \S+/.test(text) ||
-      (/FAMILIES IN SCOPE/i.test(text) && !/BRIDGE IS DISCONNECTED/i.test(text))
-    );
-  };
-  // A new thread may drop the URL's ?target: bind it through the Situation sentence instead.
+  const bound = async () => (await page.count(BOUND)) > 0;
+  // A new thread may drop the URL's ?target: bind it through the document chooser instead.
   if (!(await page.until(bound, "the URL target", 5_000).catch(() => false)))
-    if (/no document selected/i.test(await page.text())) await bindTarget(page);
+    if (await page.has(CHOOSE)) await bindTarget(page);
   await page.until(bound, "the route to bind a Revit session", ms).catch(() => {
     throw new Error(
       `PRECONDITION: no Revit bridge after ${ms / 1000}s; this journey runs in the joint-hold slot`,
@@ -392,78 +402,65 @@ export async function requireRevit(page: Page, ms = 60_000) {
 }
 
 /**
- * Bind the document through the Situation ladder as a person does: "Choose session" → E2E_SESSION
- * (else the first session) → the document titled E2E_DOC. E2E_DOC unset is a PRECONDITION.
+ * Bind the document through the shell's chooser as a person does: "Choose a document" → the option
+ * titled E2E_DOC, in session E2E_SESSION when set (an option reads `title`, then its session).
+ * E2E_DOC unset is a PRECONDITION.
  */
 async function bindTarget(page: Page) {
   const doc = process.env.E2E_DOC;
   if (!doc) throw new Error("PRECONDITION: no document bound and E2E_DOC (its title) is unset");
   const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const session = process.env.E2E_SESSION;
-  // The ladder's name is its first unbound rung: "Choose session" until a session is chosen.
-  if (await page.has("Choose session", SITUATION)) {
-    await page.click("Choose session", SITUATION);
-    if (session) await page.click(new RegExp(`^${esc(session)}(\\s|$)`));
-    else await page.clickAt('[role="option"]');
-  }
-  const option = new RegExp(`^${esc(doc)}(\\s|$)`);
-  // The ladder may drill in place or close after the session pick; reopen on "Choose document".
-  if (!(await page.until(() => page.has(option), "document option", 3_000).catch(() => false)))
-    await page.click("Choose document", SITUATION);
-  await page.click(option);
+  await page.click(CHOOSE);
+  await page.click(new RegExp(`^${esc(doc)}${session ? `\\s+${esc(session)}$` : "(\\s|$)"}`));
 }
 
-/** A chip is a listbox button named `name` in the composer (Model, Access). */
-const CHIP = (name: string) => `button[aria-haspopup="listbox"][aria-label="${name}"]`;
-/** A chip's label: the visible chip's face. */
-const chip = (page: Page, name: string) =>
-  page.read<string>(
-    `[...document.querySelectorAll(${JSON.stringify(CHIP(name))})].find((e) => e.getClientRects().length)?.innerText.trim() ?? ""`,
-  );
-
-/** Before any Pea step (README): an OpenAI model and Trusted access, read off the chips, else BLOCKED. */
-export async function requirePea(page: Page) {
-  // "model" is the chip's placeholder until the catalog loads.
-  const model = await page.until(
-    async () => {
-      const label = await chip(page, "Model");
-      return label && label !== "model" ? label : null;
-    },
-    "the Model chip to name a model",
-    30_000,
-  );
-  if (!/^(gpt|o\d|codex)/i.test(model))
-    throw new Error(`BLOCKED: Chat model is "${model}", not an OpenAI model`);
-  const access = await chip(page, "Access");
-  if (access !== "Trusted") throw new Error(`BLOCKED: access is "${access}", not "Trusted"`);
+export const PEA_PICKER = 'button[aria-label="Choose model"]';
+const PEA_MENU = '[data-list-popup][aria-label="Choose model"]';
+export const peaChoice = () => ({
+  provider: process.env.E2E_PROVIDER ?? "Codex",
+  model: process.env.E2E_MODEL ?? "5.6 Terra",
+  trait: process.env.E2E_TRAIT ?? "Low",
+});
+type PeaChoice = ReturnType<typeof peaChoice>;
+type PeaPage = Pick<Page, "count" | "clickAt" | "click" | "until" | "read">;
+const exactChoice = (word: string) =>
+  new RegExp(`^${word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i");
+async function openPea(page: PeaPage) {
+  await page.until(async () => (await page.count(PEA_PICKER)) > 0, "the model picker", 30_000);
+  await page.clickAt(PEA_PICKER);
 }
-
-/**
- * Setup, not an assertion (lead-approved): a new thread starts on Pea's default model, so set the
- * Model chip (E2E_MODEL, default gpt-5.6-terra) and Trusted access through the real pickers.
- * requirePea then reads the chips back from the DOM.
- */
-export async function setPea(page: Page, model = process.env.E2E_MODEL ?? "gpt-5.6-terra") {
-  await page.until(
-    async () => {
-      const label = await chip(page, "Model");
-      return label && label !== "model";
-    },
-    "the Model chip to load",
-    30_000,
-  );
-  const pick = async (name: string, option: RegExp, want: string) => {
-    if ((await chip(page, name)).startsWith(want)) return;
-    await page.clickAt(CHIP(name));
-    await page.click(option);
+/** Read the ladder's selected crumbs, rather than the icon-only trigger. No Access rung exists. */
+export async function requirePea(page: PeaPage, choice: PeaChoice = peaChoice()) {
+  await openPea(page);
+  try {
     await page.until(
-      async () => (await chip(page, name)).startsWith(want),
-      `${name} = ${want}`,
+      async () => {
+        const words = await page.read<string[]>(
+          `[...document.querySelectorAll('${PEA_MENU} [data-list] > div:first-child button')].map(e => e.textContent.trim().toLowerCase())`,
+        );
+        return [choice.provider, choice.model, choice.trait].every(
+          (word, i) => words[i] === word.toLowerCase(),
+        );
+      },
+      `Pea = ${choice.provider} / ${choice.model} / ${choice.trait}`,
       10_000,
     );
-  };
-  await pick("Model", new RegExp(`^${model.replace(/[.]/g, "\\.")}\\b`), model);
-  await pick("Access", /^Trusted\b/, "Trusted");
+  } finally {
+    await page.clickAt(PEA_PICKER);
+  }
+}
+/** Select provider, model, then the first trait through the single ladder's real controls. */
+export async function setPea(page: PeaPage, choice: PeaChoice = peaChoice()) {
+  await openPea(page);
+  await page.clickAt(`${PEA_MENU} [data-list] > div:first-child > span:first-child > button`);
+  // Provider options append readiness (or the default's resolved provider) to their name.
+  await page.click(
+    new RegExp(`^${choice.provider.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:\\s|$)`, "i"),
+    `${PEA_MENU} [role="listbox"]`,
+  );
+  await page.click(exactChoice(choice.model), `${PEA_MENU} [role="listbox"]`);
+  await page.click(exactChoice(choice.trait), `${PEA_MENU} [role="listbox"]`);
 }
 
 const COMPOSER = 'textarea[aria-label="Message"]';

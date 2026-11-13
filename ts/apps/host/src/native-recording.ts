@@ -8,7 +8,14 @@ import { writeArtifact } from "./page-artifacts.ts";
 import { randomUUID, createHash } from "node:crypto";
 import { appendFile, mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { writeAtomic } from "@pe/host-contracts/store";
+import { writeState, stateKind, type StateDirectory } from "@pe/host-contracts/kinds";
+import { z } from "zod";
+const recordingMetadataKind = stateKind({
+  schema: z.unknown(),
+  place: (_folder: string, _id: string) => "Recording metadata",
+  segments: (folder: string,
+  id: string) => [folder, `${id}.json`],
+});
 import { Cause, Clock, Effect, Exit, Layer, Option, Result, Schema } from "effect";
 import { attemptFor, CurrentInputConsumption } from "./input-occurrence.ts";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
@@ -478,10 +485,11 @@ export const openRecordingReader = (
 
 /** Opens or creates the bundle capture appends to, under the same identity and bounds checks. */
 export const openRecordingWriter = Effect.fn("Recording.writer")(function* (
-  dir: string,
+  storage: StateDirectory,
   identity: RecordingIdentity,
   bounds: RecordingBounds,
 ) {
+  const dir = storage.path;
   const { reader, takings, stored, takingsPath, observations, ...loaded } = yield* loadBundle(
     dir,
     identity,
@@ -497,9 +505,11 @@ export const openRecordingWriter = Effect.fn("Recording.writer")(function* (
   let reserved = 0;
   const clock = yield* Clock.Clock;
   const writeObservation = (sha: string, bytes: string) => {
-    const path = join(observations, `${sha}.json`);
     // An opened bundle losing its observations directory is damage, not a new store.
-    const write = stat(observations).then(() => writeArtifact(observations, path, bytes))
+    const write = stat(observations)
+      .then(() =>
+        writeArtifact(observations, recordingMetadataKind.in(storage, "observations", sha), bytes),
+      )
       .then(() => {
         stored.add(sha);
       })
@@ -517,9 +527,8 @@ export const openRecordingWriter = Effect.fn("Recording.writer")(function* (
     if (used + size > bounds.maxBytes)
       return yield* refuse("full", `Recording is full; read set ${record.id} was not kept`, 507);
     used += size;
-    const path = join(dir, READ_SETS, `${record.id}.json`);
     const kept = yield* Effect.exit(
-      io(async () => writeAtomic(path, bytes)),
+      io(async () => writeState(recordingMetadataKind.in(storage, READ_SETS, record.id), bytes)),
     );
     if (Exit.isFailure(kept)) {
       used -= size;
@@ -546,9 +555,10 @@ export const openRecordingWriter = Effect.fn("Recording.writer")(function* (
           return yield* refuse("full", "Recording is full; point was not kept", 507);
         used += size;
         pointWrites.add(point.id);
-        const path = join(dir, "points", `${point.id}.json`);
         // Same reservation and atomic metadata durability as read sets. Failed IO remains charged.
-        const kept = yield* Effect.exit(io(async () => writeAtomic(path, bytes)));
+        const kept = yield* Effect.exit(
+          io(async () => writeState(recordingMetadataKind.in(storage, "points", point.id), bytes)),
+        );
         pointWrites.delete(point.id);
         if (Exit.isFailure(kept)) return yield* Effect.failCause(kept.cause);
         loaded.points.push(point.id);
@@ -565,8 +575,12 @@ export const openRecordingWriter = Effect.fn("Recording.writer")(function* (
         Effect.suspend(() => {
           if (truncated) return Effect.void;
           const op = truncationSchema.shape.op.safeParse(source.op);
-          truncated = { at, stoppedAt: clock.currentTimeMillisUnsafe(), reason,
-            site: source.site, op: op.success ? op.data : "unknown" };
+          truncated = {
+            at, stoppedAt: clock.currentTimeMillisUnsafe(),
+            reason,
+            site: source.site,
+            op: op.success ? op.data : "unknown",
+          };
           // ponytail: best-effort marker; on an already failed disk only this process knows.
           return io(() => writeFile(join(dir, TRUNCATION), JSON.stringify(truncated))).pipe(
             Effect.orElseSucceed(() => undefined),

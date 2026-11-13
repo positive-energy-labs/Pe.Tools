@@ -1,5 +1,5 @@
-import type { ContextOf } from "../route/defaults";
-import { command, sessionCommand } from "../route/typed-actions.ts";
+import type { ContextOf, Verbs } from "../route/defaults";
+import { handle } from "@pe/agent-contracts/handle";
 import { bindings } from "./bindings";
 import { read } from "../route/defaults";
 import { paneLayout } from "../route/defaults";
@@ -10,7 +10,7 @@ import {
   splitScheduleCellKey,
   showCellValue,
 } from "@pe/agent-contracts";
-import { reads } from "./reads.ts";
+import * as reads from "./contract.ts";
 import { route, field, subjectSchema, namesOf } from "../route/defaults.ts";
 import { subjectCode } from "../../../../packages/agent-contracts/src/subject-ref.ts";
 import { hostRead } from "../route/host-read.ts";
@@ -46,7 +46,7 @@ export const edit = z
     (patches) => patches.every((p) => p.path[0] === "cells" && p.path.length > 1),
     "Edit individual schedule cells",
   );
-export type SchedulesDrawContext = ContextOf<typeof fields, typeof view, typeof import("@pe/agent-contracts").scheduleGridRouteState, typeof edit>;
+export type SchedulesDrawContext = ContextOf<typeof fields, typeof view, typeof import("@pe/agent-contracts").scheduleGridRouteState, typeof edit, Verbs<"read" | "bind", "push">>;
 export const module = route({
   key: "schedules",
   name: "Schedules",
@@ -86,6 +86,7 @@ export const module = route({
       bindings,
       body: "scroll",
       draw: draw("scroll", () => import("./grid.tsx"), "SchedulesGrid"),
+      verbs: ["read", "bind", "push"],
     },
   },
   edits: {
@@ -102,9 +103,9 @@ export const module = route({
     history: z.object({ label: z.string() }),
     describe: (detail) => ({ label: detail.label }),
   },
-  commands: {
+  verbs: {
     read: {
-      ...sessionCommand("schedule.grid.read"),
+      handle: handle("schedule.grid.read"),
       label: "Read schedule",
       input: ({ work, page, value }) => {
         const row = value?.catalog.schedules.find((row) => row.workspaceId === workspace(page));
@@ -114,7 +115,7 @@ export const module = route({
       },
     },
     bind: {
-      ...sessionCommand("schedule.grid.bind"),
+      handle: handle("schedule.grid.bind"),
       label: "Bind schedule",
       input: ({ work, value }) => {
         if (!work || !value?.reading) throw Error("Read this schedule before binding");
@@ -122,9 +123,9 @@ export const module = route({
       },
     },
     push: {
-      ...command("schedule.grid.push"),
+      handle: handle("schedule.grid.push"),
       label: "Apply cells",
-      present: (_result, data, work) => {
+      present: (_result, { value: data, doc: work }) => {
         const edits = Object.entries(work.cells).filter(([, cell]) => cell.edit);
         return {
           sentence: `Apply ${edits.length} edited schedule cells`,

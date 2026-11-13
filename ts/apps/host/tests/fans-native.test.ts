@@ -186,10 +186,12 @@ test("a refused native Plan retains its review without Apply authority or model 
   expect(receipt, JSON.stringify(receipt)).toMatchObject({
     state: "succeeded",
     result: { planRefusal: expect.stringContaining("not in the document") },
-    steps: [{ kind: "native", key: "ducts.apply.plan", effect: "Read", state: "succeeded", dispatchedAt: expect.any(String) ,
+    steps: [{ kind: "native", key: "ducts.apply.plan", state: "succeeded", dispatchedAt: expect.any(String) ,
       },
     ],
   });
+  // MAP slice 7: catalog effect is scope, never terminal testimony on a step.
+  expect(receipt.steps[0]).not.toHaveProperty("effect");
   expect(receipt).not.toHaveProperty("notDispatched");
   if (receipt.state !== "succeeded") throw Error(JSON.stringify(receipt));
   expect(receipt.result).toHaveProperty("planRefusal");

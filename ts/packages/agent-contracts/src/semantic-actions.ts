@@ -10,6 +10,9 @@ import { nativeProcessSchema } from "./action-receipts.ts";
 import { z } from "zod";
 import { executionTargetSchema } from "./target.ts";
 import { workKeySchema } from "./route-state.ts";
+import { hostOpCatalog } from "@pe/host-contracts/catalog";
+import { tsOnlyOperationCatalog } from "@pe/host-contracts/operation-types";
+import { isReadEffect } from "@pe/host-contracts/contracts";
 
 import type { Command } from "./command.ts";
 export type { ActionNeed } from "./command.ts";
@@ -127,6 +130,7 @@ export const takeoffActions = definitions;
 
 export const ductsActions = {
   "ducts.refresh": {
+    catalogEffect: "Read",
     says: "Read this document's duct snapshots and pricing inputs again.",
     needs: "project-document",
     effect: "query",
@@ -294,10 +298,10 @@ export const tools = {
       ],
     },
     commands: {
-      ...workIntent("takeoffs", "takeoffs.initialize", definitions["takeoffs.initialize"]),
+      ...workWriteCommands("takeoffs", "takeoffs.initialize", definitions["takeoffs.initialize"]),
       ...workWriteCommands("takeoffs", "takeoffs.adopt", definitions["takeoffs.adopt"]),
       ...workWriteCommands("takeoffs", "takeoffs.partition", definitions["takeoffs.partition"]),
-      ...workIntent("takeoffs", "takeoffs.sync", definitions["takeoffs.sync"]),
+      ...workWriteCommands("takeoffs", "takeoffs.sync", definitions["takeoffs.sync"]),
     },
   },
   rooms: {
@@ -436,9 +440,9 @@ export const sheetCommands = workWriteCommands(ANY_ROUTE, SHEET_COMMANDS.apply, 
 
 export const commands = {
   "work.start": {
+    catalogEffect: "SessionWrite",
     says:"Start this Work", needs:"nothing", effect:"command", dirties:[],
     input:z.object({key:workKeySchema,seed:z.json()}),
-    axes:{subject:"None",touches:["Metadata"],effect:"SessionWrite",cost:"Mutation",cardinality:"One"},
   } as const,
   ...catalogWorkCommands,
   ...sheetCommands,
@@ -460,7 +464,7 @@ export function commandTarget(
   input: Record<string, unknown>,
   document?: import("./target.ts").DocumentRef,
 ): import("./target.ts").ExecutionTarget {
-  const command: Command | undefined = commands[key as keyof typeof commands];
+  const command: Command | undefined = hostActions[key as keyof typeof hostActions];
   if (command?.target) return command.target(input);
   if (command?.needs === "nothing") return { kind: "host" };
   if (document)
@@ -472,6 +476,8 @@ export function commandTarget(
 
 export const actionControls = {
   "action.read": {
+    via: { route: "actions.read" },
+    catalogEffect: "Read",
     says: "Read the original action and its individual file/native/publication outcomes without Revit.",
     dirties: ["receipts"],
     needs: "nothing",
@@ -479,13 +485,17 @@ export const actionControls = {
     input: z.object({ id: z.string().min(1) }),
   },
   "action.recover": {
+    via: { route: "action.recover" },
+    catalogEffect: "SessionWrite",
     says: "Read durable native evidence for the original action; uncertain outcomes remain blocked.",
     dirties: ["receipts"],
     needs: "nothing",
-    effect: "query",
+    effect: "command",
     input: z.object({ id: z.string().min(1) }),
   },
   "action.resume": {
+    via: { route: "action.resume" },
+    catalogEffect: "SessionWrite",
     says: "Explicitly authorize remaining effects of a recovered original action. Completed effects never repeat.",
     dirties: ["receipts"],
     needs: "nothing",
@@ -493,6 +503,8 @@ export const actionControls = {
     input: z.object({ id: z.string().min(1) }),
   },
   "action.cancel": {
+    via: { route: "action.cancel" },
+    catalogEffect: "SessionWrite",
     says: "Stop the running action at the operation's next checkpoint. Work already written to Revit stands.",
     dirties: ["receipts"],
     needs: "nothing",
@@ -514,9 +526,28 @@ export const preparedTakeoffSchema = z.strictObject({
 
 /** Discovery projects the same portable command contracts used by invocation. */
 export const hostActions = {
+  "ops.read": {
+    via: { route: "operation.call" },
+    native: [...hostOpCatalog, ...tsOnlyOperationCatalog].filter((op) => isReadEffect(op.effect)).map((op) => op.key),
+    says: "Read one native operation through the guarded operation door.",
+    needs: "nothing", effect: "query", dirties: [],
+    input: z.object({ op: z.object({ key: z.string(), effect: z.string().refine(isReadEffect, "ops.read requires a native Read") }).passthrough(), request: z.unknown() }),
+  } as const,
+  "page.bind": {
+    via: { route: "page.bind" },
+    catalogEffect: "SessionWrite",
+    says: "Bind a Page to its exact execution target.",
+    needs: "nothing", effect: "command", dirties: [],
+    input: z.object({ slug: z.string().min(1), binding: z.unknown() }),
+  } as const,
   ...commands,
   ...actionControls,
-  ...familyReads,
+  // These direct reads consume an owning Work just like journaled commands. The send door
+  // projects its handle into the existing family transport's scope, outside the read payload.
+  "family.read": workCommand("family", familyReads["family.read"]),
+  "family.cancel-read": workCommand("family", familyReads["family.cancel-read"]),
+  "family.saved": familyReads["family.saved"],
+  "parameter-links.read": workCommand("parameter-links", familyReads["parameter-links.read"]),
   ...scheduleReads,
   "instances.read": instancesReading,
 } satisfies Record<string, Command>;

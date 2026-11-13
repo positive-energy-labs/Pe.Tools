@@ -12,8 +12,17 @@ import {
   productInstallLayout,
   productPathNames,
 } from "./contracts/product.ts";
-import { documentsUserRoot, firmHome, insideTestRoot, projectHomeAbove, type Home } from "./product-paths.ts";
-import { storedNoticesFile, type DerivedStore } from "./store.ts";
+import { documentsUserRoot, firmHome, insideTestRoot, projectHomeAbove, type Home,
+} from "./product-paths.ts";
+import { mintStatePath } from "./store-paths.ts";
+import {
+  derivedIn,
+  type DerivedDir,
+  type HomeRoot,
+  type StateDirectory,
+  type StateRoot,
+  type StatePath,
+} from "./kinds.ts";
 export {
   HOST_RUNTIME_SERVICE_HEADER,
   HOST_RUNTIME_SERVICE_QUERY,
@@ -93,11 +102,23 @@ export function productRoot(owner: RuntimeOwner): string {
  * Where the machine keeps what no home may hold (homes freeze shape 7), all under the state
  * root's `state` folder, the one an MSI upgrade keeps. Pod and Page ids are unique across homes,
  * so no key names a home. Pinned by `runtime-ownership.fixture.json` `stateTree`.
+ *
+ * This is the one table that mints a machine-state path, and the only minter of the store's
+ * `StateRoot` (routes CONTRACTS K-A2): a state kind makes its path from what this returns, and
+ * nothing else joins a path onto `state`. A new machine-state location is a row here.
  */
-export function stateTree(root: string) {
+export function stateTree(root: string): StateRoot & {
+  directory(...segments: string[]): StateDirectory;
+  home(home: Home): HomeRoot;
+} {
   const state = (...segments: string[]) =>
-    join(root, productPathNames.stateDirectoryName, ...segments);
-  return {
+    mintStatePath(
+    join(root, productPathNames.stateDirectoryName, ...segments));
+  const paths = {
+    /** The `state` folder itself: every state kind's root. */
+    state: state(),
+    /** The machine's one notice file; every process that refuses a stored file posts here. */
+    notices: state(productPathNames.storedNoticesFileName),
     work: state("Work"),
     /** Page state, one folder per slug. */
     pages: state("Pages"),
@@ -111,6 +132,53 @@ export function stateTree(root: string) {
     agent: state("Agent"),
     /** Derived files of a source in no project home, `<key>.<sha256>` (the derived store's fallback). */
     derived: state(productPathNames.derivedDirectoryName),
+    apsCredentials: state("aps-auth", "credentials.json"),
+    apsTokens: state("aps-auth", "tokens.json"),
+    /** One directory per harness thread (`harness/threads.ts`): `meta.json` + `events.jsonl`. */
+    harnessThreads: state("harness-threads"),
+    /** Immutable headless Ducts calculations, including their complete effective inputs. */
+    ductsAnalyses: state("ducts", "analyses"),
+    /** The copies Pea opens, so a person's own file is never her scratch. Model copies must not upload. */
+    peaWork: state("pea-work"),
+    /** User-added endpoint providers (`harness/providers.ts`). Holds keys: state, not Documents. */
+    providers: state("providers.json"),
+    pluginDecisions: state("plugins.json"),
+    routeTrust: state("route-trust.json"),
+    shippedPods: state("shipped-pods"),
+  };
+  const machine: StateRoot = paths;
+  return {
+    ...paths,
+    directory: (...segments: string[]): StateDirectory => stateDirectory(machine, ...segments),
+    /** Bind a proven home to this machine, whose blob store keeps what a write into the home replaces. */
+    home: (home: Home): HomeRoot => ({ ...home, machine }),
+  };
+}
+
+/** Relative segments of a named row, obtained from the table instead of re-spelled by callers. */
+export function stateSegments(row: keyof StateRoot): string[] {
+  const layout = stateTree("");
+  return relative(layout.state, layout[row]).split(/[\\/]/).filter(Boolean);
+}
+
+/** Bind a table row to its machine, retaining the machine's one notice and blob root. */
+export function stateScope(machine: StateRoot, path: StatePath): StateDirectory {
+  const scope = relative(machine.state, path);
+  if (scope === ".." || scope.startsWith(`..${sep}`) || isAbsolute(scope))
+    throw Error(`State scope belongs to another machine: ${path}`);
+  return { path, machine };
+}
+
+export function stateDirectory(
+  root: StateRoot | StateDirectory,
+  ...segments: string[]
+): StateDirectory {
+  for (const segment of segments)
+    if (!segment || segment === "." || segment === ".." || /[\\\\/]/.test(segment))
+      throw Error(`Invalid state directory segment: ${segment}`);
+  return {
+    path: mintStatePath(join("path" in root ? root.path : root.state, ...segments)),
+    machine: "machine" in root ? root.machine : root,
   };
 }
 
@@ -119,14 +187,10 @@ export function stateTree(root: string) {
  * the first of `near` sits in, so every person on that project finds the same files; with no
  * project home, this machine's `state\Derived`. Never the user home, never a temp folder.
  */
-export function derivedStore(root: string, ...near: string[]): DerivedStore {
+export function derivedFor(root: string, ...near: string[]): DerivedDir {
   const tree = stateTree(root);
   const home = near.map((path) => projectHomeAbove(path)).find(Boolean);
-  return {
-    dir: home ? join(home, productPathNames.derivedDirectoryName) : tree.derived,
-    notices: storedNoticesFile(root),
-    blobRoot: tree.blobs,
-  };
+  return derivedIn(home ? tree.home({ root: home, tier: "project" }) : tree);
 }
 
 /** OS-user product state namespace, independent of product-home overrides; test isolation still applies. */
@@ -172,8 +236,10 @@ export function installedRuntimeRoot(
     !existsSync(manifest)
   )
     throw Error(`Installed ${app} must execute from an SDK install ('${manifest}' is missing).`);
-  const { product, vendor } = JSON.parse(readFileSync(manifest, "utf8")) as Record<string, unknown>;
-  if (product !== productIdentity.productName || vendor !== productIdentity.vendorName)
+  const decoded: unknown = JSON.parse(readFileSync(manifest, "utf8"));
+  if (typeof decoded !== "object" || decoded === null ||
+      !("product" in decoded) || decoded.product !== productIdentity.productName ||
+      !("vendor" in decoded) || decoded.vendor !== productIdentity.vendorName)
     throw Error(`Installed ${app} manifest '${manifest}' names another product.`);
   return insideTestRoot(root);
 }

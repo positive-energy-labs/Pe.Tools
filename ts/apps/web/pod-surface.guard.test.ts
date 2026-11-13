@@ -13,7 +13,7 @@ test("a Pod entry importing the whole @pe/web/route surface bundles without effe
   const entry = fileURLToPath(new URL("./src/route/pod-surface.entry.ts", import.meta.url));
   const built = await buildRouteArtifact({
     entry,
-    source: 'export * from "./defaults.ts";\n',
+    source: 'export * from "./defaults.ts";\nexport { handle } from "@pe/agent-contracts/handle";\n',
     root: fileURLToPath(new URL(".", import.meta.url)),
     data,
     contracts: [{ id: "surface-guard", bytes: new TextEncoder().encode("surface guard") }],
@@ -21,4 +21,9 @@ test("a Pod entry importing the whole @pe/web/route surface bundles without effe
   const bytes = new TextDecoder().decode(built.executables[0]!.members.find((m) => m.path === "route.js")!.bytes);
   expect(bytes).toContain("paneLayout");
   expect(bytes).not.toMatch(/from ["']effect/);
+  // Command metadata is data-only; the host's executable Zod command declarations stay out.
+  expect(bytes).not.toMatch(/(?:const|var|let) (?:commands|hostActions|actionControls|sheetActions)\s*=/);
+  expect(bytes).not.toContain("Unrecognized here:");
+  // SH-S6 exports reasonOf as neutral reading-state presentation, including Work absence wording.
+  // That text no longer identifies a shell dependency; the runtime/catalog checks above still do.
 }, 120_000);

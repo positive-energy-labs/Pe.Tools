@@ -52,7 +52,8 @@ test.each(["old-run", ""])(
 test("a torn outbox is refused with its file named and kept, and a re-read posts no second notice", async () => {
   const { readOutbox, writeOutbox } = await import("@pe/runtime/context");
   const { resolveLaneAndRoot, runtimeRoot } = await import("../src/runtime-owner.ts");
-  const { readStoredNotices, storedNoticesFile } = await import("@pe/host-contracts/store");
+  const { notices } = await import("@pe/host-contracts/kinds");
+  const { stateTree } = await import("@pe/host-contracts/service-identity");
   const { createHash } = await import("node:crypto");
   const { join, dirname } = await import("node:path");
   const { mkdirSync, readFileSync, writeFileSync, rmSync } = await import("node:fs");
@@ -64,10 +65,7 @@ test("a torn outbox is refused with its file named and kept, and a re-read posts
     "invocation-outbox",
     `${createHash("sha256").update(slot).digest("hex")}.json`,
   );
-  const posted = () =>
-    readStoredNotices(storedNoticesFile(runtimeRoot())).filter(
-      (notice) => notice.path === file,
-    );
+  const posted = () => notices(stateTree(runtimeRoot())).filter((notice) => notice.path === file);
   const torn = '{"id":"torn';
   mkdirSync(dirname(file), { recursive: true });
   writeFileSync(file, torn);

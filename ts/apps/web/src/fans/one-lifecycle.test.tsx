@@ -1,8 +1,9 @@
+import { contract } from "@pe/agent-contracts/handle";
 // @vitest-environment jsdom
 import { expect, test, vi } from "vite-plus/test";
 import { address } from "@pe/agent-contracts";
 import { historySnapshotSchema } from "../shell/history";
-import { mountTypedRoute } from "../shell/typed-mount";
+import { direct, mountTypedRoute, planned } from "../shell/typed-mount";
 import { scrollBody } from "../route/body";
 import type { ReadingContext } from "../shell/source-contract";
 import { createWitness } from "./cutover.test-support";
@@ -33,10 +34,10 @@ test("typed panes share declared Values; recorded Fans and Ducts use frozen Work
       expect(recorded.owner()?.ready).toBe(true);
       expect(recorded.page.read().contextRadiusFt).toBe(23);
       expect(recorded.workBasis()).toBeNull();
-      expect(recorded.journalRefusal()).toBe("needs live Revit");
+      expect(recorded.timelineRefusal()).toBe("needs live Revit");
       expect(open.mock.calls.at(-1)![0]).toMatchObject({historyPoint:history.point.id,historyPose:{instance:"recorded",route:route.data.key}});
-      await expect(recorded.run("losses")).rejects.toThrow("needs live Revit");
-    } finally { recorded.dispose(); expect(recorded.history.entries).toEqual([]); }
+      await expect(planned(recorded.verb("losses")).plan()).rejects.toThrow("needs live Revit");
+    } finally { recorded.dispose(); expect(recorded.timeline()).toBeNull(); }
     }
 
   } finally { closes.reverse().forEach(close => close()); }
@@ -44,19 +45,19 @@ test("typed panes share declared Values; recorded Fans and Ducts use frozen Work
 });
 
 
-test("optional Work, explicit demand and invocation arguments share one typed scope", async () => {
+test("optional Work and invocation arguments share one typed scope", async () => {
   const {z}=await import("zod");
   const {route,field}=await import("../route/typed-route");
-  const {sessionCommand,queryAction}=await import("../route/typed-actions");
+  const {handle}=await import("@pe/agent-contracts/handle");
   const {module:reference}=await import("./route");
   const {hostRead}=await import("../route/host-read");
-  const {valueRead,workFingerprintSchema}=await import("@pe/agent-contracts");
+  const {workFingerprintSchema}=await import("@pe/agent-contracts");
   const source=vi.fn();
-  const read=hostRead({...valueRead("probe.value",z.object({}),z.object({answer:z.number()})),demand:"explicit"});
+  const read=hostRead({...contract("probe.value", { input: z.object({}), data: z.object({answer:z.number()}), uses: [] })});
   const declaration={key:"wave4-probe",address:"/",name:"Probe",needs:"host" as const,directory:reference.data.directory,
     fields:{member:field(z.string(),"","query")},core:{...read,args:()=>({})},
     panes:{main:{title:"Probe",purpose:"Scope falsifier",read,body:"scroll" as const,draw:(ctx:any)=>scrollBody(ctx)}},layout:{kind:"pane" as const,id:"main"}};
-  const calls:unknown[]=[],queries:unknown[]=[];
+  const calls:unknown[]=[];
   const door={
     lifetime:"subscription",receipts:()=>({subscribe:()=>()=>{}}),
     open:(scope:import("@pe/agent-contracts").WorkScope)=>{calls.push(scope.key);return {subscribe:(deliver:(state:unknown)=>void)=>{
@@ -78,26 +79,30 @@ test("optional Work, explicit demand and invocation arguments share one typed sc
   const module=route({...declaration,
     edits:{work:z.object({note:z.object({edit:z.object({value:z.string()}).optional()})}),key:page=>page.member||null,
       owners:{},input:z.string(),patches:()=>[],history:z.object({label:z.string()}),describe:(detail:{label:string})=>detail},
-    commands:{start:{...sessionCommand("instances.start"),label:"Start"},echo:{...queryAction({key:"probe.echo",input:z.object({blob:z.string()}),
-      run:async(args,context)=>{queries.push({args,context});return args;}}),label:"Echo"}},
+    // `ops.read` goes by its route: it keeps the Place's target, and no Work handle rides its input.
+    verbs:{start:{handle:handle("instances.start"),label:"Start"},echo:{handle:handle("ops.read"),label:"Echo"}},band:["start","echo"],
   });
   const mounted=mountTypedRoute(module,input,fingerprint,{work:door,sources:{"probe.value":{kind:"use",open:source}}});
   try {
     const stop=mounted.subscribe(()=>{});mounted.page.query({member:"A"});
-    expect(source).not.toHaveBeenCalled();expect(door.submit).not.toHaveBeenCalled();
+    expect(door.submit).not.toHaveBeenCalled();
     expect(calls.every(key=>(key as {work:string}).work === "A")).toBe(true);
     mounted.page.query({member:"B"});expect(mounted.owner()?.handle?.key).toMatchObject({binding:"workspace",work:"B"});
-    mounted.refresh(module.spec.core);expect(source).toHaveBeenCalledOnce();
-    await mounted.run("echo",false,{blob:"invocation only"});
-    expect(queries).toEqual([{args:{blob:"invocation only"},context:{target:{kind:"host"},work:expect.objectContaining({key:expect.objectContaining({work:"B"}),revision:7})}}]);
-    await mounted.run("start",false,{year:"2026",owner:"you",addins:"on"});expect(door.submit).toHaveBeenCalledOnce();
+    mounted.refresh(module.spec.core);expect(source).toHaveBeenCalled();
+    expect(mounted.placement()).toEqual({band:["start","echo"],panes:{main:[]}});
+    expect(mounted.kernelVerb("findings.say")).toMatchObject({label:"Say finding",effect:"WorkWrite"});
+    expect(()=>mounted.verb("nope")).toThrow("Unknown verb nope");
+    const echo={op:{key:"logs.tail",effect:"Read"},request:{blob:"invocation only"}};
+    await direct(mounted.verb("echo")).run(echo);
+    expect(door.submit).toHaveBeenLastCalledWith({id:expect.any(String),key:"ops.read",target:{kind:"host"},input:echo});
+    await direct(mounted.verb("start")).run({year:"2026",owner:"you",addins:"on"});expect(door.submit).toHaveBeenCalledTimes(2);
     expect(mounted.page.read()).toMatchObject({member:"B"});expect(search.has("blob")).toBe(false);
     mounted.page.query({member:""});expect(mounted.owner()).toBeUndefined();expect(mounted.workBasis()).toBeNull();stop();
   } finally {mounted.dispose();}
 });
 
 
-test("cell undo targets the exact owner press and leaves the other owner staged",async()=>{
+test("Timeline undo takes the latest owner step, then the prior owner",async()=>{
   const {z}=await import("zod");
   const {draftCellSchema,workFingerprintSchema}=await import("@pe/agent-contracts");
   const {route}=await import("../route/typed-route");
@@ -112,14 +117,18 @@ test("cell undo targets the exact owner press and leaves the other owner staged"
   const door=createFixtureWorkDoor(primary,schema.parse({}),{"undo-b":schema},{"undo-a":schema.parse({}),"undo-b":schema.parse({})},{"undo-b":"undo-b"});
   const mount=mountTypedRoute(module,{address:{read:()=>new URLSearchParams(),write:()=>{},subscribe:()=>()=>{}},fixture:null,
     target:{kind:"host"},work:{address:null,open:{session:"undo",openId:"cells"}},custody:{current:()=>true},memory:()=>({})},
-    workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`),{work:door});
+    workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`),{work:door,timeline:door.timeline});
   const ctx=()=>mount.draw("main") as import("../route/typed-route").DrawContext<unknown,{},import("zod").z.output<typeof schema>,never>;
   try {
-    await vi.waitFor(()=>expect(ctx().cells.ready).toBe(true));
+    await vi.waitFor(()=>expect(ctx().cells.state.state).toBe("ready"));
     expect(await ctx().cells.at(["cells","one"],"undo-a").stage(1,{label:"First owner"})).toBeNull();
     expect(await ctx().cells.at(["cells","two"],"undo-b").stage(2,{label:"Second owner"})).toBeNull();
-    expect(await ctx().cells.at(["cells","one"],"undo-a").undo()).toBeNull();
+    await vi.waitFor(()=>expect(mount.timeline()?.undo?.label).toContain("Second owner"));
+    expect(await mount.stepTimeline("undo")).toBeNull();
+    expect(mount.owner("undo-b")?.doc.cells.two?.edit).toBeFalsy();
+    await vi.waitFor(()=>expect(mount.timeline()?.undo?.label).toBe("First owner"));
+    expect(await mount.stepTimeline("undo")).toBeNull();
     expect(mount.owner("undo-a")?.doc.cells.one?.edit).toBeFalsy();
-    expect(mount.owner("undo-b")?.doc.cells.two.edit.value).toBe(2);
+
   } finally {mount.dispose();}
 });

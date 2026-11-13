@@ -1,3 +1,5 @@
+import { stateFixture } from "../../../tests/isolated-home/storage.ts";
+import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { NodeServices } from "@effect/platform-node";
 import {
   address,
@@ -15,7 +17,7 @@ import type { Caller } from "@pe/agent-contracts";
 import { peRoutes } from "@pe/agent-contracts/pe-api";
 import { RouteWorkspace } from "@pe/runtime";
 import { Effect, Layer, PubSub } from "effect";
-import { mkdtemp, rm } from "node:fs/promises";
+import { rm } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -77,7 +79,7 @@ test("HTTP Work shares edits independently of thread targets and refuses forged 
     acquired: () => null,
     acquiredSession: () => null,
   });
-  const store = fileRouteDocumentStore(join(directory, "work"));
+  const store = fileRouteDocumentStore(stateFixture(join(directory, "work")));
   const app = createPeRoutes({
     registrations: [{ spec: tools.ducts.work }],
     store,
@@ -285,7 +287,7 @@ const path = "http://host/pe/route-state/test?open=session/closed";
 test("HTTP addressless Work survives workspace recreation and Save As carries it once", async () => {
   const directory = await mkdtemp(join(tmpdir(), "pe-work-"));
   try {
-    const store = fileRouteDocumentStore(join(directory, "work"));
+    const store = fileRouteDocumentStore(stateFixture(join(directory, "work")));
     const app = createPeRoutes({
       registrations,
       store,
@@ -367,7 +369,7 @@ test("host HTTP preserves addressless Work through close and replacement bridge 
           });
           const telemetry = createReceiptExport({
             journal: yield* ActionJournalService,
-            root: directory,
+            root: stateFixture(directory),
             stamps: { host: null, web: null },
           });
           yield* Effect.addFinalizer(() => Effect.promise(() => telemetry.close()));
@@ -445,7 +447,7 @@ test("host HTTP preserves addressless Work through close and replacement bridge 
             });
           });
         }),
-      ).pipe(Effect.provide(ActionJournalService.live(null, directory)), Effect.provide(Spawner.live), Effect.provide(NodeServices.layer)),
+      ).pipe(Effect.provide(ActionJournalService.live(null, stateFixture(directory))), Effect.provide(Spawner.live), Effect.provide(NodeServices.layer)),
     );
   } finally {
     if (previousLocalAppData === undefined) delete process.env.LOCALAPPDATA;

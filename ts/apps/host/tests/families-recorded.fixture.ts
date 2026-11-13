@@ -1,4 +1,5 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
+import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { address, bindWork, tools } from "@pe/agent-contracts";

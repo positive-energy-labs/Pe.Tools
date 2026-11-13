@@ -1,6 +1,8 @@
+import { mkdtemp, stateFixture, stateMachine } from "../../../../tests/isolated-home/storage.ts";
+import { fixtureTimeline } from "../shell/fixture-work-door";
 // @vitest-environment jsdom
 import { resolve } from "node:path";
-import { readFile, cp, mkdtemp, rm } from "node:fs/promises";
+import { readFile, cp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { createHash } from "node:crypto";
 import { createElement, useSyncExternalStore } from "react";
@@ -19,7 +21,7 @@ import { listPackages } from "../../../host/src/packages";
 import { createPodRoutes } from "../../../host/src/pod-routes";
 import { fileRouteDocumentStore } from "../../../host/src/route-document-store";
 import { graphRoute, registeredReads } from "../../../host/src/reads/routes";
-import { Publications } from "../../../host/src/reads/evaluator";
+import { Publications } from "../../../host/src/reads/publications";
 import { loadPodHostEntry, podArtifactSchema } from "../../../host/src/pod-artifact";
 import { createWorkFeedClient } from "../shell/work-feed-client";
 import { mountTypedRoute } from "../shell/typed-mount";
@@ -127,11 +129,11 @@ async function harness(stale = false) {
   });
   const lifecycle = createPackageLifecycle({
     packages: () => listPackages(resolve(dir, "Pods")),
-    decisionsPath: resolve(dir, "enabled.json"),
+    machine: stateMachine(dir),
   });
-  const store = fileRouteDocumentStore(resolve(dir, "Work")),
+  const store = fileRouteDocumentStore(stateFixture(resolve(dir, "Work"))),
     workspace = new RouteWorkspace({ registrations: [], store });
-  const routes = createPodRoutes(lifecycle, { workspace, trustPath: resolve(dir, "trust.json") });
+  const routes = createPodRoutes(lifecycle, { workspace, machine: stateMachine(dir) });
   const [row] = await routes.list();
   if (!row) throw Error("Missing Snowdon");
   const key = bindWork(row.workRoute, null),
@@ -176,7 +178,7 @@ async function harness(stale = false) {
     },
   };
   const work = createWorkFeedClient(source, {
-    write: (scope, write) => workspace.write(scope, scope.route, "human", write),
+    write: (scope, write) => workspace.write(scope, scope.route, "human", write, async () => []),
     submit: async () => {
       throw Error("No native command");
     },
@@ -231,7 +233,7 @@ async function harness(stale = false) {
       custody: { current: () => true },
     },
     route.fingerprint,
-    { work, sources: { [`${row.workRoute}.calculation`]: publication } },
+    { work, timeline: fixtureTimeline(workspace), sources: { [`${row.workRoute}.calculation`]: publication } },
   );
   return {
     dir,
@@ -278,11 +280,11 @@ test("Snowdon mounts typed over real host Work and tracked calculation, edits, u
       expect(screen.getByText(/Authored inputs/).textContent).toContain('"length": 300'),
     );
     expect(screen.getByText(/Copper voltage-drop worksheet/).textContent).toContain('"drop"');
-    await act(() => h.mount.history.undo());
+    await act(async () => { expect(await h.mount.stepTimeline("undo")).toBeNull(); });
     await vi.waitFor(() =>
       expect(screen.getByText(/Authored inputs/).textContent).toContain('"length": 175'),
     );
-    await act(() => h.mount.history.redo());
+    await act(async () => { expect(await h.mount.stepTimeline("redo")).toBeNull(); });
     await vi.waitFor(() =>
       expect(screen.getByText(/Authored inputs/).textContent).toContain('"length": 300'),
     );
@@ -309,16 +311,18 @@ test("a stale typed Pod remains read-only after refresh and retained return", as
   try {
     await vi.waitFor(() => expect(h.mount.owner(h.key.route)?.problem).toMatch(/older|reload/i));
     const count = h.acquired.filter((kind) => kind === "work" || kind === "work-acks").length;
-    const edit = () =>
-      h.mount.draw("calculation", (ctx) =>
-        ctx.cells.edit({ ...h.inputs, length: 300 }, { label: "Stale edit" }),
-      );
-    expect(await edit()).toMatchObject({ code: "unavailable" });
+    // A stale Pod's read is value-less: the shell draws its line and no body, so there is no cell to edit through.
+    const drawsBody = () => {
+      let body = false;
+      h.mount.draw("calculation", () => { body = true; return null; });
+      return body;
+    };
+    expect(drawsBody()).toBe(false);
     h.mount.refresh();
     h.mount.release();
     const stop = h.mount.subscribe(() => {});
     try {
-      expect(await edit()).toMatchObject({ code: "unavailable" });
+      expect(drawsBody()).toBe(false);
     } finally {
       stop();
     }

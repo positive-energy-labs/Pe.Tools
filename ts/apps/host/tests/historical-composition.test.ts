@@ -1,3 +1,5 @@
+import { stateFixture } from "../../../tests/isolated-home/storage.ts";
+import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { serviceHeaders } from "./callers.ts";
 import { journalAt } from "./effect-test.ts";
 import { sourceProvenanceSchema, type Caller, type WorkKey } from "@pe/agent-contracts";
@@ -6,7 +8,7 @@ import { RouteWorkspace } from "@pe/runtime";
 import { Context, Effect, Layer } from "effect";
 import { HttpRouter } from "effect/http";
 import { randomUUID } from "node:crypto";
-import { mkdtemp, mkdir, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import { request as httpRequest } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -33,7 +35,7 @@ const bounds = { maxBytes: 1_000_000, maxTakings: 100 };
 const key = "host.ops.catalog";
 const bundle = async () => {
   const dir = await mkdtemp(join(tmpdir(), "pe-historical-composition-")); dirs.push(dir);
-  const writer = await Effect.runPromise(openRecordingWriter(dir, identity, bounds));
+  const writer = await Effect.runPromise(openRecordingWriter(stateFixture(dir), identity, bounds));
   const schemas = await Effect.runPromise(readSchemas(key));
   const input = { input: { kind: "native" as const, key, args: "{}" }, scope: JSON.stringify(scope), outputVersion: schemas.version };
   const outcome = { kind: "answered" as const, value: { operations: [], constants: {} }, answer: {
@@ -185,8 +187,8 @@ test("journal, Work and pointer owners refuse before storage or executor access"
   const work = { route: "/fans" } as WorkKey;
   for (const run of [
     () => workspace.apply(work, "/fans", "human", [], 0),
-    () => workspace.step(work, "/fans", "human", "undo", 0),
-    () => workspace.step(work, "/fans", "human", "redo", 0),
+    () => workspace.step([work], "human", "undo", { work, revision: 0, label: "" }, async () => []),
+    () => workspace.step([work], "human", "redo", { work, revision: 0, label: "" }, async () => []),
     () => workspace.publish(work, "/fans", [], 0),
   ]) await expect(Promise.resolve().then(async () => { await run(); })).rejects.toMatchObject({ problem: "recording.historical" });
   let mutations = 0; const pointers = threadPointerPort(inputs);

@@ -1,6 +1,8 @@
+import { stateFixture } from "../../../tests/isolated-home/storage.ts";
+import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { registryService, harnessThreads, testSpawner } from "./effect-test.ts";
 import { afterAll, beforeAll, expect, test } from "vite-plus/test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { createProviders } from "../src/harness/providers.ts";
@@ -20,12 +22,37 @@ afterAll(async () => {
 const open = () =>
   harnessThreads({
     runs: registryService(),
-    root: join(root, "threads"),
-    log: new HostLog(join(root, "log"), Date.now),
+    root: stateFixture(join(root, "threads")),
+    log: new HostLog(stateFixture(join(root, "log")), Date.now),
     worldRoot: tmpdir(),
     mcpServer: () => ({ name: "pea", command: "unused", args: [], env: [] }),
     providers: createProviders({ spawner: testSpawner(), shellPath: async () => "", probeOnStart: false }),
   });
+
+test("standalone heads stream empty pointers without admitting pointer mutations", async () => {
+  const threads = await open();
+  const frames: unknown[] = [];
+  const stop = threads.heads.observe("standalone", frame => frames.push(frame.value));
+  try {
+    await Promise.resolve();
+    expect(frames).toEqual([{ targets: [], revision: 0, pointers: [] }]);
+    const response = await actAs(human, () => threads.fetch(new Request("http://host/pe/scope/standalone", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ targets: [], expectedRevision: 0 }),
+    })));
+    expect(response.status).toBe(200);
+    expect(frames.at(-1)).toEqual({ targets: [], revision: 1, pointers: [] });
+    expect(() => threads.pointers.read("standalone")).toThrow("Unknown thread");
+    expect(() => threads.pointers.point("standalone", {
+      route: "fans", target: {}, label: "missing",
+    })).toThrow("Unknown thread");
+    expect(() => threads.pointers.dismiss("standalone", "missing")).toThrow("Unknown thread");
+  } finally {
+    stop();
+    await threads.close();
+  }
+});
 
 test("a pointer lives in thread meta: it survives a host reload and leaves only by dismissal", async () => {
   const first = await open();
@@ -39,6 +66,10 @@ test("a pointer lives in thread meta: it survives a host reload and leaves only 
     ),
   );
   const id = ((await created.json()) as { id: string }).id;
+  const heads: unknown[] = [];
+  const stop = first.heads.observe(id, frame => heads.push(frame.value.pointers));
+  await Promise.resolve();
+  expect(heads).toEqual([[]]);
   // The call route reaches thread meta only through the injected port.
   const port = threadPointerPort();
   expect(() => port.read(id)).toThrow(/unavailable/);
@@ -49,13 +80,20 @@ test("a pointer lives in thread meta: it survives a host reload and leaves only 
     target: { selected: '["UniqueId:u-7"]' },
     label: "FC-1 fan flow",
   });
+  expect(heads.at(-1)).toEqual([expect.objectContaining({ label: "FC-1 fan flow" })]);
+  stop();
   await first.close();
 
   const second = await open();
   port.bind(second.pointers);
   const [pointer] = port.read(pointerThread({ kind: "human" } as never, id)).pointers;
   expect(pointer).toMatchObject({ route: "fans", label: "FC-1 fan flow", target: { selected: '["UniqueId:u-7"]' } });
+  const dismissed: unknown[] = [];
+  const release = second.heads.observe(id, frame => dismissed.push(frame.value.pointers));
+  await Promise.resolve();
   port.dismiss(id, pointer!.id);
+  expect(dismissed.at(-1)).toEqual([]);
+  release();
   await second.close();
 
   const third = await open();

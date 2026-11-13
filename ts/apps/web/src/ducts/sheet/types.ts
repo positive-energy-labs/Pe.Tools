@@ -22,8 +22,6 @@ export interface RosterProps {
   roster: readonly FanPort[];
   picked?: readonly string[];
   open: (row: FanPort) => void;
-  /** The row verb's write: a person's finding on one fan port (`findings.write`). */
-  finding: { run(finding: import("@pe/agent-contracts/slots").FindingInput): Promise<unknown>; readonly refusal: string | null };
   busy: boolean;
   loading: boolean;
 }

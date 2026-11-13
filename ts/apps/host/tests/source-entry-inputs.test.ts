@@ -1,5 +1,7 @@
+import { stateFixture } from "../../../tests/isolated-home/storage.ts";
+import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { readFileSync } from "node:fs";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -26,9 +28,11 @@ vi.mock("@pe/runtime", async (original) => ({
   readOrCreateInstallId: () => "7f183ae6-a157-4eb4-838a-931b950a0bdf",
 }));
 vi.mock("../src/host-ownership.ts", async (original) => {
+  const { stateTree } = await import("@pe/host-contracts/service-identity");
   const actual = await original<typeof import("../src/host-ownership.ts")>();
   return {
     ...actual,
+    hostState: () => stateTree(sandbox.root),
     hostOwnership: {
       ...actual.hostOwnership,
       get rootPath() {
@@ -145,7 +149,7 @@ effectTest("two dirty source builds at one HEAD refuse each other's recordings",
     });
     const bounds = { maxBytes: 1_000_000, maxTakings: 100 };
     const recording = join(dir, "recording");
-    yield* openRecordingWriter(recording, identity(first), bounds);
+    yield* openRecordingWriter(stateFixture(recording), identity(first), bounds);
     expect(
       (yield* Effect.flip(openRecordingReader(recording, identity(second), bounds))).problem,
     ).toBe("recording.mismatch");

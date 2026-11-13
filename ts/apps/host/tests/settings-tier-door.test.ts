@@ -1,14 +1,20 @@
+import { notices as storedNotices } from "@pe/host-contracts/kinds";
+import { stateMachine } from "../../../tests/isolated-home/storage.ts";
+import { dirname as storedParent } from "node:path";
+import { mkdtempSync } from "../../../tests/isolated-home/storage.ts";
 import { randomUUID } from "node:crypto";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { expect, test, vi } from "vite-plus/test";
-import { readStoredNotices, sha256Hex } from "@pe/host-contracts/store";
-import { noticeRows, storedBlobsPath, storedNoticesPath } from "../src/notice-feed.ts";
+import { sha256Hex } from "@pe/host-contracts/kinds";
+import { noticeRows } from "../src/notice-feed.ts";
 import { bootHost } from "./real-server.ts";
 import { BRIDGE_CONTRACT_VERSION, BRIDGE_PATH, HOST_RUNTIME_SERVICE_QUERY, type BridgeFrame } from "@pe/host-contracts/contracts";
 import { ownedSession } from "./callers.ts";
-import { hostOwnership } from "../src/host-ownership.ts";
+import { hostOwnership, hostState } from "../src/host-ownership.ts";
+import { homeWritesKind } from "../src/tiered-settings.ts";
+import { bindWork, workTimelineSchema } from "@pe/agent-contracts";
 
 vi.mock("../src/pe-revit-launch.ts", async original => ({
   ...(await original<typeof import("../src/pe-revit-launch.ts")>()),
@@ -32,7 +38,11 @@ test.each(["firm", "project"] as const)("settings.tiers.write crosses /actions, 
   const host = await bootHost();
   let socket: WebSocket | undefined;
   try {
+    const isolatedRoot = process.env.PE_TEST_HOME_ROOT;
+    if (!isolatedRoot) throw Error("Expected isolated test state");
+    expect(relative(isolatedRoot, homeWritesKind.in(hostState()).path)).not.toMatch(/^\.\.(?:[\\/]|$)/);
     let target: unknown = { kind: "host" };
+    let documentRef: { session: string; openId: string } | undefined;
     if (tier === "project") {
       socket = new WebSocket(`${host.base.replace("http:", "ws:")}${BRIDGE_PATH}?${HOST_RUNTIME_SERVICE_QUERY}=${hostOwnership.serviceName}`);
       await new Promise<void>((resolve, reject) => {
@@ -51,7 +61,8 @@ test.each(["firm", "project"] as const)("settings.tiers.write crosses /actions, 
       } }));
       const registered = await ack;
       expect(registered.registrationAck?.accepted).toBe(true);
-      target = { kind: "document", ref: { session: registered.registrationAck!.sessionId, openId: "target-open" } };
+      documentRef = { session: registered.registrationAck!.sessionId!, openId: "target-open" };
+      target = { kind: "document", ref: documentRef };
     }
     const headers = { "content-type": "application/json", "x-pe-context": host.terminal };
     const id = randomUUID();
@@ -93,12 +104,42 @@ test.each(["firm", "project"] as const)("settings.tiers.write crosses /actions, 
     expect(sha256Hex(bytes)).not.toBe(sha256Hex(prior));
     expect(JSON.parse(bytes.toString())).toMatchObject({ criteria: { allowanceInWg: { return: 0.35 } } });
     expect(receipt.result.sha256).toBe(sha256Hex(bytes));
-    expect(readFileSync(join(storedBlobsPath(), "sha256", sha256Hex(prior)))).toEqual(prior);
+    expect(readFileSync(join(hostState().blobs, "sha256", sha256Hex(prior)))).toEqual(prior);
     // Mutant H9-notice: omit the action receipt id from the saved-setting notice.
-    expect(readStoredNotices(storedNoticesPath()).find(notice => notice.path === path)?.reason).toContain(receipt.id);
-    expect(readStoredNotices(storedNoticesPath()).filter(notice => notice.path === path)).toMatchObject([
+    expect(storedNotices(stateMachine(storedParent(hostState().notices))).find(notice => notice.path === path)?.reason).toContain(receipt.id);
+    expect(storedNotices(stateMachine(storedParent(hostState().notices))).filter(notice => notice.path === path)).toMatchObject([
       { class: "keep", sha256: sha256Hex(bytes), reason: expect.stringContaining(sha256Hex(prior)) },
     ]);
+    const works = [bindWork("ducts", null, documentRef ? undefined : "tier-proof", documentRef)];
+    const timeline = async () => {
+      const response = await fetch(`${host.base}/pe/reads/value`, { method: "POST", headers,
+        body: JSON.stringify({ read: "work.timeline", args: { works }, subscription: randomUUID(), generation: 0 }) });
+      const wire = await response.json();
+      expect(wire, JSON.stringify(wire)).toMatchObject({ state: "current" });
+      return workTimelineSchema.parse(wire.value.data);
+    };
+    const query = documentRef ? `open=${encodeURIComponent(`${documentRef.session}/${documentRef.openId}`)}` : "work=tier-proof";
+    const undo = async (expected: unknown) => (await fetch(`${host.base}/pe/route-state/ducts/history?${query}`, {
+      method: "POST", headers, body: JSON.stringify({ direction: "undo", works, expected }),
+    })).json();
+    // Mutant ST7a-no-restore: acknowledge the undo without restoring prior bytes.
+    const shown = (await timeline()).undo;
+    expect(shown, JSON.stringify(await timeline())).toMatchObject({ home: path, sha256: sha256Hex(bytes) });
+    expect(await undo(shown)).toMatchObject({ ok: true });
+    expect(readFileSync(path)).toEqual(prior);
+    const secondId = randomUUID();
+    await fetch(`${host.base}/actions`, { method: "POST", headers,
+      body: JSON.stringify({ id: secondId, key: "settings.tiers.write", target,
+        input: { owner: "ducts", tier, path: ["criteria", "allowanceInWg", "return"], value: 0.45, expectedSha256: sha256Hex(prior) } }) });
+    const [second] = await (await fetch(`${host.base}/actions?id=${secondId}&wait=10000`, { headers })).json();
+    expect(second).toMatchObject({ state: "succeeded" });
+    const next = (await timeline()).undo;
+    expect(next).not.toBeNull();
+    // Mutant ST7a-no-cas: remove the freshness check and restore over an external edit.
+    const external = Buffer.from('{"external":true}');
+    writeFileSync(path, external);
+    expect(await undo(next)).toMatchObject({ ok: false, error: expect.stringContaining("changed since the save") });
+    expect(readFileSync(path)).toEqual(external);
   } finally {
     if (socket) {
       const closed = new Promise<void>(resolve => socket!.addEventListener("close", () => resolve(), { once: true }));

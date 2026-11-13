@@ -141,6 +141,7 @@ const applyInputSchema = z
   );
 export const familyActions = {
   "families.read": {
+    catalogEffect: "SessionWrite",
     native: ["revit.matrix.loaded-families"],
     says: "Audit the selected Families Work scope in the exact document, then bind its completed observation at the reviewed Work revision.",
     dirties: ["families"],
@@ -152,6 +153,7 @@ export const familyActions = {
     result: familiesObservationSummarySchema,
   },
   "families.cancel-read": {
+    catalogEffect: "SessionWrite",
     native: ["op.cancel"],
     says: "Cancel this exact running Families read in the selected document.",
     dirties: [],
@@ -161,6 +163,7 @@ export const familyActions = {
     result: z.strictObject({ cancelled: z.literal(true) }),
   },
   "family.attach-spec": {
+    catalogEffect: "SessionWrite",
     says: `Attach a PDF cut sheet and its parsed assets to a saved family member (under ${FAMILY_MEMBER_DIR}; family.capture with a pod staged in Work saves one and returns it). source is { path } for a file on this machine, { url }, or an uploaded blob. Cells then cite its blocks by id.`,
     needs: "nothing",
     effect: "command",
@@ -178,6 +181,7 @@ export const familyActions = {
     }),
   },
   "family.observe": {
+    catalogEffect: "Read",
     says: "Adopt a verified capture receipt or exact saved source as the Family Work baseline; edits stay editable.",
     needs: "family-document",
     effect: "query",
@@ -192,6 +196,7 @@ export const familyActions = {
       }),
   },
   "settings.observe": {
+    catalogEffect: "SessionWrite",
     autoAdopt: true,
     says: "Adopt verified saved member bytes as the shared Work baseline; replacing pending edits requires explicit intent.",
     needs: "nothing",
@@ -204,6 +209,7 @@ export const familyActions = {
     }),
   },
   "settings.write": {
+    catalogEffect: "SessionWrite",
     says: "Save the reviewed Work to its source member, or create a new member at an explicit destination.",
     needs: "nothing",
     effect: "command",
@@ -211,6 +217,7 @@ export const familyActions = {
     input: z.strictObject({ destination: podMemberSchema.optional() }),
   },
   "family.capture": {
+    catalogEffect: "SessionWrite",
     says: `Read the open family's spec. To save a new member under ${FAMILY_MEMBER_DIR}, stage writeIntent["family.capture"].edit.value.pod in route:family Work. Example: writeIntent["family.capture"].edit = { "value": { "pod": "lab" } }. Then invoke with only { work: { key, revision } } at the accepted Work revision. Optional path and spec go beside pod in edit.value; spec overrides what Revit said. With a staged pod, write the run and return the member; without one, return the spec and write nothing.`,
     needs: "family-document",
     effect: "command",
@@ -236,6 +243,7 @@ export const familyActions = {
     result: familyApplyResultSchema,
   },
   "families.capture": {
+    catalogEffect: "SessionWrite",
     says: "Capture loaded families as new spec members in the route's pod, one member per family; returns the members and what the capture saw per family.",
     needs: "project-document",
     effect: "command",
@@ -270,6 +278,7 @@ export const familyActions = {
     result: familyApplyResultSchema,
   },
   "families.save-draft": {
+    catalogEffect: "SessionWrite",
     says: "Compose the edited family drafts from reviewed Work and save each as a new Pod member.",
     needs: "nothing",
     effect: "command",
@@ -291,8 +300,12 @@ export const familyActions = {
     }),
   },
 } as const;
+export const familyReadingRoute = "family.readings";
+export const savedFamilyRead = "family.saved";
 export const familyReads = {
   "family.read": {
+    via: { route: familyReadingRoute },
+    catalogEffect: "Read",
     says: "Read the open family's spec into the draft baseline; preserve staged cells and file no Pod member.",
     dirties: [],
     needs: "family-document",
@@ -301,6 +314,8 @@ export const familyReads = {
     result: familyLiveReadSchema,
   },
   "family.cancel-read": {
+    via: { route: "family.readings" },
+    catalogEffect: "Read",
     says: "Cancel this exact running Family read.",
     dirties: [],
     needs: "family-document",
@@ -308,7 +323,9 @@ export const familyReads = {
     input: z.strictObject({ readId: z.uuid() }),
     result: z.object({ cancelled: z.literal(true) }),
   },
-  "family.saved": {
+  [savedFamilyRead]: {
+    via: { route: "family.readings" },
+    catalogEffect: "Read",
     says: "Read an immutable saved Family reading, including historical citation IDs, without Revit.",
     dirties: [],
     needs: "nothing",
@@ -316,6 +333,8 @@ export const familyReads = {
     input: z.object({ id: z.string().regex(/^[a-f0-9]{64}$/) }),
   },
   "parameter-links.read": {
+    via: { route: "family.readings" },
+    catalogEffect: "Read",
     says: "Read the stored parameter-link profile and runtime status, and optionally evaluate the authored draft, into a durable reading; writes nothing.",
     dirties: [],
     needs: "project-document",

@@ -24,11 +24,7 @@ import { readdir, mkdir, writeFile, readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { familyFixturesDir } from "../checkout-paths.ts";
 import { routeStartupSourceHash, writeRouteStartupReceipt } from "@pe/host-contracts/route-startup";
-import {
-  buildBuiltinClosures,
-  routeSourceHash,
-  writeBuiltinClosurePin,
-} from "../route-source-hash.ts";
+import { buildBuiltinClosures, writeBuiltinClosurePin } from "../route-source-hash.ts";
 const jiti = createJiti(import.meta.url, {
   fsCache: false,
   jsx: { runtime: "automatic" },
@@ -48,8 +44,6 @@ const jiti = createJiti(import.meta.url, {
     "#/": fileURLToPath(new URL("../src/", import.meta.url)),
   },
 });
-const { projectRouteGraph } =
-  await jiti.import<typeof import("@pe/agent-contracts")>("@pe/agent-contracts");
 const { canonicalRouteJson, projectKernelDirectory } =
   await jiti.import<typeof import("@pe/agent-contracts")>("@pe/agent-contracts");
 const check = process.argv.includes("--check");
@@ -62,17 +56,39 @@ const schemaType = (schema: any): string => {
   if (schema === true) return "unknown";
   if (schema === false) return "never";
   if ("const" in schema) return JSON.stringify(schema.const);
-  if (schema.enum) return schema.enum.map((value: unknown) => JSON.stringify(value)).join(" | ") || "never";
-  if (schema.anyOf || schema.oneOf) return (schema.anyOf ?? schema.oneOf).map(schemaType).join(" | ");
-  if (Array.isArray(schema.type)) return schema.type.map((type: string) => schemaType({ ...schema, type })).join(" | ");
+  if (schema.enum)
+    return schema.enum.map((value: unknown) => JSON.stringify(value)).join(" | ") || "never";
+  if (schema.anyOf || schema.oneOf)
+    return (schema.anyOf ?? schema.oneOf).map(schemaType).join(" | ");
+  if (Array.isArray(schema.type))
+    return schema.type.map((type: string) => schemaType({ ...schema, type })).join(" | ");
   switch (schema.type) {
-    case "null": return "null";
-    case "string": return "string";
-    case "number": case "integer": return "number";
-    case "boolean": return "boolean";
-    case "array": return schema.prefixItems ? `[${schema.prefixItems.map(schemaType).join(", ")}]` : `Array<${schema.items ? schemaType(schema.items) : "unknown"}>`;
-    case "object": return `{${Object.entries(schema.properties ?? {}).map(([key, value]) => `${JSON.stringify(key)}${schema.required?.includes(key) ? "" : "?"}: ${schemaType(value)}`).join("; ")}}`;
-    default: throw Error(`Unsupported generated address schema: ${JSON.stringify(schema)}`);
+    case "null":
+      return "null";
+    case "string":
+      return "string";
+    case "number":
+    case "integer":
+      return "number";
+    case "boolean":
+      return "boolean";
+    case "array":
+      return schema.prefixItems
+        ? `[${schema.prefixItems.map(schemaType).join(", ")}]`
+        : `Array<${schema.items ? schemaType(schema.items) : "unknown"}>`;
+    case "object": {
+      const properties = `{${Object.entries(schema.properties ?? {})
+        .map(
+          ([key, value]) =>
+            `${JSON.stringify(key)}${schema.required?.includes(key) ? "" : "?"}: ${schemaType(value)}`,
+        )
+        .join("; ")}}`;
+      return schema.additionalProperties
+        ? `${properties} & Record<string, ${schemaType(schema.additionalProperties)}>`
+        : properties;
+    }
+    default:
+      throw Error(`Unsupported generated address schema: ${JSON.stringify(schema)}`);
   }
 };
 const projections: Record<string, string> = {};
@@ -83,6 +99,7 @@ const checkout = fileURLToPath(new URL("../../../../", import.meta.url));
 const sourceHashBefore = check || closureOnly ? undefined : routeStartupSourceHash(checkout);
 async function emit(destination: URL, text: string) {
   const closure = destination.pathname.endsWith("/source-closure.generated.json");
+  if (closureOnly && !closure) return;
   projections[fileURLToPath(destination)] = text;
   if (runtime) return;
   if (check) {
@@ -103,32 +120,41 @@ async function emit(destination: URL, text: string) {
 }
 const root = fileURLToPath(new URL("../", import.meta.url));
 const builtinOptions = [];
-const discovered = await readdir(new URL("../src/",import.meta.url),{withFileTypes:true});
-const declarations=new Map<string,{folder:string;module:{data:{key:string}}}>();
-for(const dir of discovered.filter(d=>d.isDirectory())) {
-  const file=new URL(`../src/${dir.name}/route.ts`,import.meta.url);
-  const text=await readFile(file,"utf8").catch(()=>"");
-  if(/export\s+(?:const|let)\s+module\b/.test(text)) {
-    const {module}=await jiti.import<{module:{data:{key:string}}}>(fileURLToPath(file));
-    if(declarations.has(module.data.key)) throw Error(`Duplicate route module ${module.data.key}`);
-    declarations.set(module.data.key,{folder:dir.name,module});
+const discovered = await readdir(new URL("../src/", import.meta.url), { withFileTypes: true });
+const declarations = new Map<string, { folder: string; module: { data: { key: string } } }>();
+for (const dir of discovered.filter((d) => d.isDirectory())) {
+  const file = new URL(`../src/${dir.name}/route.ts`, import.meta.url);
+  const text = await readFile(file, "utf8").catch(() => "");
+  if (/export\s+(?:const|let)\s+module\b/.test(text)) {
+    const { module } = await jiti.import<{ module: { data: { key: string } } }>(
+      fileURLToPath(file),
+    );
+    if (declarations.has(module.data.key)) throw Error(`Duplicate route module ${module.data.key}`);
+    declarations.set(module.data.key, { folder: dir.name, module });
   }
 }
-const keys=[...declarations.keys()].sort();
-const registryFile=new URL("../../host/src/routes.generated.ts",import.meta.url);
-const registryRows:RouteRegistryInput[]=[];
-const addressRows=new Map<string,AddressRow>(
-  Object.keys(HAND_ADDRESSES).map(key=>[key,{key}]));
+const keys = [...declarations.keys()].sort();
+const registryFile = new URL("../../host/src/routes.generated.ts", import.meta.url);
+const registryRows: RouteRegistryInput[] = [];
+const addressRows = new Map<string, AddressRow>(
+  Object.keys(HAND_ADDRESSES).map((key) => [key, { key }]),
+);
 for (const key of keys) {
-  const {folder}=declarations.get(key)!;
+  const { folder } = declarations.get(key)!;
   const entry = fileURLToPath(new URL(`../src/${folder}/route.ts`, import.meta.url));
-  const { module, router } = await jiti.import<{ module: { data: unknown }; router?: {contract?:string} }>(entry);
+  const { module, router } = await jiti.import<{
+    module: { data: unknown };
+    router?: { contract?: string };
+  }>(entry);
   if ("spec" in module) {
     const typed = module as unknown as import("../src/route/typed-route.ts").TypedRoute;
-    if (!(typed.data.directory.icon in icons)) throw Error(`${key}: icon ${typed.data.directory.icon} is not a lucide-react icon name`);
+    if (!(typed.data.directory.icon in icons))
+      throw Error(`${key}: icon ${typed.data.directory.icon} is not a lucide-react icon name`);
     const contract = router?.contract ?? key;
     const { z } = await import("zod");
-    const identifier=key.replace(/[^a-zA-Z0-9_$]+([a-zA-Z0-9_$])/g,(_all,part:string)=>part.toUpperCase());
+    const identifier = key.replace(/[^a-zA-Z0-9_$]+([a-zA-Z0-9_$])/g, (_all, part: string) =>
+      part.toUpperCase(),
+    );
     const agent = typed.spec.agent !== false;
     const fields = Object.entries(typed.spec.fields).map(([key, field]) => {
       const json = z.toJSONSchema(field.schema, { io: "input" });
@@ -141,21 +167,51 @@ for (const key of keys) {
     });
     // A hand address keeps its own fields; the declaration whose key it is still marks it builtin.
     const owner = contract === key ? { module: folder } : {};
-    addressRows.set(contract, contract in HAND_ADDRESSES ? { key: contract, ...owner } : { key: contract, ...owner,
-      body: `{ path: ${JSON.stringify(typed.data.address)} as const, title: ${JSON.stringify(typed.spec.name)}, fields: {\n${fields.length ? fields.join(",\n")+"," : ""}\nselected: {...${agent ? "field" : "personField"}(focusSelectionSchema,"replace"),agent:undefined}\n}${agent ? `, agent: { policy: ${JSON.stringify(typed.spec.subject ? `Choose ${typed.spec.subject.noun} through ${typed.spec.subject.field}, using the module's local identities.` : "Use the route fields as declared.")} }` : ""} }` });
+    addressRows.set(
+      contract,
+      contract in HAND_ADDRESSES
+        ? { key: contract, ...owner }
+        : {
+            key: contract,
+            ...owner,
+            body: `{ path: ${JSON.stringify(typed.data.address)} as const, title: ${JSON.stringify(typed.spec.name)}, fields: {\n${fields.length ? fields.join(",\n") + "," : ""}\nselected: {...${agent ? "field" : "personField"}(focusSelectionSchema,"replace"),agent:undefined}\n}${agent ? `, agent: { policy: ${JSON.stringify(typed.spec.subject ? `Choose ${typed.spec.subject.noun} through ${typed.spec.subject.field}, using the module's local identities.` : "Use the route fields as declared.")} }` : ""} }`,
+          },
+    );
     // Preserve the actual imported Work export, including refinements and reconciliation.
     // JSON Schema cannot carry that authority; a second handwritten host declaration would drift.
     // The registry binds the Work where route.ts imports it (its own directory, or contracts), so
     // contracts never receive a projection that imports an app.
     let work: RouteRegistryInput["work"];
-    if(typed.spec.edits) {
-      const name=`${identifier}Work`;
-      const projected=await projectWork(entry,typed,fileURLToPath(registryFile),name,
-        specifier=>jiti.import<Record<string,{schema?:unknown}>>(specifier),false);
-      work={name,definition:projected.definition,properties:projected.properties};
+    if (typed.spec.edits) {
+      const name = `${identifier}Work`;
+      const projected = await projectWork(
+        entry,
+        typed,
+        fileURLToPath(registryFile),
+        name,
+        (specifier) => jiti.import<Record<string, { schema?: unknown }>>(specifier),
+        false,
+      );
+      work = { name, definition: projected.definition, properties: projected.properties };
     }
-    registryRows.push({key,folder,
-      ...(typed.spec.host ? {host:typed.spec.host} : {}),...(work ? {work} : {})});
+    const pageSchemas = new Set(
+      Object.values(typed.data.fields).flatMap((field) =>
+        "schema" in field ? [field.schema] : [],
+      ),
+    );
+    registryRows.push({
+      key,
+      folder,
+      schemas: Object.fromEntries(
+        [...pageSchemas].map((id) => {
+          const schema = typed.host.schemas[id];
+          if (!schema) throw Error(`Route ${key}: missing field schema ${id}`);
+          return [id, z.toJSONSchema(schema, { io: "input" })];
+        }),
+      ),
+      ...(typed.spec.host ? { host: typed.spec.host } : {}),
+      ...(work ? { work } : {}),
+    });
   }
   builtinOptions.push({
     root,
@@ -174,49 +230,24 @@ for (const key of keys) {
     },
   });
 }
-await emit(new URL("../../../packages/agent-contracts/src/routes/table.generated.ts",import.meta.url),renderAddressTable([...addressRows.values()]));
-await emit(registryFile,renderRouteRegistry(registryRows));
+await emit(
+  new URL("../../../packages/agent-contracts/src/routes/table.generated.ts", import.meta.url),
+  renderAddressTable([...addressRows.values()]),
+);
+await emit(registryFile, renderRouteRegistry(registryRows));
 const closures = await buildBuiltinClosures(builtinOptions);
 const directory = [];
 for (const [key, closure] of closures) {
   await emit(
-    new URL(`../src/${declarations.get(key)!.folder}/source-closure.generated.json`, import.meta.url),
+    new URL(
+      `../src/${declarations.get(key)!.folder}/source-closure.generated.json`,
+      import.meta.url,
+    ),
     canonicalRouteJson(closure) + "\n",
   );
   if (closureOnly) continue;
   const data = closure.envelope.data;
   directory.push({ key, directory: projectKernelDirectory(data) });
-  await emit(
-    new URL(`../../../packages/mcps/src/pea/generated/${key}-graph.json`, import.meta.url),
-    `${JSON.stringify(data, null, 2)}\n`,
-  );
-}
-for (const folder of (await readdir(new URL("../src/", import.meta.url), { withFileTypes: true }))
-  .filter((d) => d.isDirectory())
-  .sort((a, b) => a.name.localeCompare(b.name))) {
-  const files = await readdir(new URL(`../src/${folder.name}/`, import.meta.url));
-  if (!files.includes("graph.ts")) continue;
-  if (closures.has(folder.name) || [...declarations.values()].some(entry => entry.folder === folder.name)) continue;
-  if (closureOnly) continue;
-  const module = await jiti.import<Record<string, unknown>>(`../src/${folder.name}/graph.ts`);
-  const graphs = Object.entries(module).filter(([name]) => name.endsWith("Graph"));
-  for (const [, exported] of graphs) {
-    const graph = exported as Parameters<typeof projectRouteGraph>[0];
-    if (!graph || typeof graph !== "object" || !graph.key) continue;
-    if (!graph.directory) throw Error(`${graph.key} has no directory declaration`);
-    graph.moduleHash = routeSourceHash(
-      await readFile(new URL(`../src/${folder.name}/graph.ts`, import.meta.url)),
-    );
-    directory.push({
-      key: graph.key,
-      directory: graph.directory,
-    });
-    const destination = new URL(
-      `../../../packages/mcps/src/pea/generated/${graph.key}-graph.json`,
-      import.meta.url,
-    );
-    await emit(destination, `${JSON.stringify(projectRouteGraph(graph), null, 2)}\n`);
-  }
 }
 if (!closureOnly)
   await emit(
@@ -228,8 +259,13 @@ console.log(runtime ? JSON.stringify(projections) : `Projected ${directory.lengt
 // The C# launch rows project the address table and directory just written; a child process reads
 // them from disk (this process holds the stale modules). One step owns everything a route needs.
 if (!runtime && !closureOnly) {
-  const links = fileURLToPath(new URL("../../../packages/agent-contracts/scripts/route-links-cs.ts", import.meta.url));
-  if (spawnSync(process.execPath, [links, ...(check ? ["--check"] : [])], { stdio: "inherit" }).status !== 0)
+  const links = fileURLToPath(
+    new URL("../../../packages/agent-contracts/scripts/route-links-cs.ts", import.meta.url),
+  );
+  if (
+    spawnSync(process.execPath, [links, ...(check ? ["--check"] : [])], { stdio: "inherit" })
+      .status !== 0
+  )
     stale.push("dotnet/Pe.App/Host/PeRoutes.generated.cs (route-links-cs.ts)");
 }
 

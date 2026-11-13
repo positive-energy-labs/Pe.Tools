@@ -8,7 +8,6 @@ import {
   canonicalPlace,
   routeViewOpenedSchema,
   THREAD_TABS_MAX,
-  threadTabSchema,
   routeOf,
   routeAt,
   placeCarry,
@@ -28,53 +27,10 @@ import type { Resumed } from "#/workbench/thread-work";
 import { useWorkbench } from "./provider";
 import { publicRoutes } from "#/route/route-discovery";
 import { parseTarget } from "#/route/route-target";
+import { places, readFocus, focus } from "./places";
 
-/*
- * Places (tool tabs) are browser-window-local: sessionStorage only, independent of the selected
- * conversation (ADR 0022). The host keeps no tab records for web; it learns display context only
- * through `thread.place`, on three explicit moments: a Work press or a Pea open in a selected real
- * chat, and a Send while a tool is the current Place.
- */
-const PLACES = "pe.places";
-const FOCUS = "pe.place.focus";
-const PLACE_LIMIT = `This window keeps ${THREAD_TABS_MAX} Places; close one first.`;
-const read = (): ThreadTab[] => {
-  try {
-    return (
-      threadTabSchema
-        .array()
-        .max(THREAD_TABS_MAX)
-        .safeParse(JSON.parse(sessionStorage.getItem(PLACES) ?? "[]")).data ?? []
-    );
-  } catch {
-    return [];
-  }
-};
-const save = (tabs: ThreadTab[]) => {
-  try {
-    sessionStorage.setItem(PLACES, JSON.stringify(tabs));
-  } catch (error) {
-    console.warn("ts/apps/web/src/workbench/tabs.ts: fallback after failure", error);
-    /* This window keeps its mounted Places. */
-  }
-};
-const readFocus = () => {
-  try {
-    return sessionStorage.getItem(FOCUS);
-  } catch (error) {
-    console.warn("ts/apps/web/src/workbench/tabs.ts: fallback after failure", error);
-    return null;
-  }
-};
-const focus = (id: string | null) => {
-  try {
-    if (id) sessionStorage.setItem(FOCUS, id);
-    else sessionStorage.removeItem(FOCUS);
-  } catch (error) {
-    console.warn("ts/apps/web/src/workbench/tabs.ts: fallback after failure", error);
-    /* The URL still owns the Place. */
-  }
-};
+const PLACE_LIMIT = `This machine keeps ${THREAD_TABS_MAX} Places; close one first.`;
+const read = () => places.read().tabs;
 
 /** Only registered shareable fields and an explicit target/work survive in a Place. */
 function place(route: RouteKey, search: Record<string, unknown>, local: boolean) {
@@ -171,7 +127,7 @@ type TabHistory = {
 };
 const historyOf = (state: unknown) => (state ?? {}) as TabHistory;
 
-/** This window's Places, and the moves between them; the selected `?thread` rides along unchanged. */
+/** The host's Places and this window's moves; the selected `?thread` rides along unchanged. */
 export function useRouteTabs() {
   const { store, threads } = useWorkbench();
   useSyncExternalStore(publicRoutes.subscribe, publicRoutes.revision, publicRoutes.revision);
@@ -202,13 +158,12 @@ export function useRouteTabs() {
         ? unowned(route, String(rawQuery(router)), search, store.local)
         : null;
   const restoring = Object.keys(search).some((key) => !(key in location.search));
-  const [tabs, setTabs] = useState<ThreadTab[]>(read);
+  const { tabs, ready, error } = useSyncExternalStore(places.subscribe, places.read, places.read);
   const [failure, setFailure] = useState<string | null>(null);
   const fail = (error: unknown) =>
     setFailure(error instanceof Error ? error.message : String(error));
   const commit = (next: ThreadTab[]) => {
-    save(next);
-    setTabs(next);
+    places.save(next);
     if (next.length < THREAD_TABS_MAX)
       setFailure(prior => prior === PLACE_LIMIT ? null : prior);
     return next;
@@ -254,7 +209,7 @@ export function useRouteTabs() {
 
   // The visible tool is a Place: record its current link and tag history with its id.
   useEffect(() => {
-    if (!active || restoring) return;
+    if (!active || restoring || !ready) return;
     // Restoring an existing exact Place is navigation, not a new subject/native admission.
     const known = read().some((tab) => tab.id === active.id && tab.link === active.link);
     const builtin = routeOf(active.route);
@@ -295,6 +250,7 @@ export function useRouteTabs() {
     restoring,
     subject.ready,
     subject.refusal,
+    ready,
   ]);
 
   // The command id names the last explicit open this Place rendered for its conversation; it
@@ -494,11 +450,11 @@ export function useRouteTabs() {
       ? tagged.id
       : active?.id ?? null,
     active: active?.id ? { thread, id: active.id, route: active.route, link: active.link } : null,
-    ready: true,
+    ready,
     target: carry.target,
     failure: legacy
       ? "This old workspace group link is unavailable; open a route and choose its exact subject."
-      : failure,
+      : failure ?? error,
     select: (tab: ThreadTab) => select(tab).catch(fail),
     /** Expand the collapsed tools on the Place this window last showed. */
     resume: () => {
@@ -514,11 +470,12 @@ export function useRouteTabs() {
       store.actions.cancelPlan();
       try {
         const index = tabs.findIndex((item) => item.id === tab.id);
-        const rest = commit(read().filter((item) => item.id !== tab.id));
+        const rest = read().filter((item) => item.id !== tab.id);
         if (active?.id === tab.id) {
           const next = rest[Math.min(index, rest.length - 1)];
           await navigate(next?.link ?? routeAddress("chat").link(), next?.id ?? null, true);
         }
+        commit(rest);
       } catch (error) {
         fail(error);
       }

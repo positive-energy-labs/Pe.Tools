@@ -1,5 +1,7 @@
+import { stateFixture } from "../../../tests/isolated-home/storage.ts";
+import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { afterEach, expect, test } from "vite-plus/test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
@@ -14,9 +16,12 @@ import {
 } from "@pe/agent-contracts";
 import type { RouteWorkspaceEvent } from "@pe/runtime";
 import { createPeRoutes } from "../src/pe-routes.ts";
+import { hostTimeline } from "../src/reads/work-timeline.ts";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
 import { human, pea, actAs } from "./callers.ts";
 
+/** This fixture runs no command, so the journal the Timeline reads holds no receipt. */
+const noReceipts = async () => [];
 const directories: string[] = [];
 afterEach(async () => {
   for (const directory of directories.splice(0))
@@ -45,7 +50,7 @@ const schema = z.object({
 async function fixture() {
   const directory = await mkdtemp(join(tmpdir(), "pe-work-restore-"));
   directories.push(directory);
-  const store = fileRouteDocumentStore(directory);
+  const store = fileRouteDocumentStore(stateFixture(directory));
   const scope: WorkKey = { binding: "host", route: "restore-proof", target: null };
   const spec = {
     route: scope.route,
@@ -61,6 +66,7 @@ async function fixture() {
   const app = createPeRoutes({
     store,
     registrations: [{ spec }],
+    timelineReceipts: noReceipts,
     heads: { observe: () => () => {} },
   });
   const events: RouteWorkspaceEvent[] = [];
@@ -133,7 +139,7 @@ test("HTTP apply overwrites client by with the principal, and restore preserves 
   });
   expect(restored.doc.cells.a.edit.by).toBe("pea");
   expect(JSON.stringify(restored.doc)).toBe(JSON.stringify((before as { doc: unknown }).doc));
-  const reopened = fileRouteDocumentStore(directories.at(-1)!);
+  const reopened = fileRouteDocumentStore(stateFixture(directories.at(-1)!));
   expect(
     await reopened.getState({ targetKey: workKey(h.scope), route: h.scope.route }),
   ).toMatchObject({ revision: 3, doc: restored.doc });
@@ -252,11 +258,19 @@ test("an agent's HTTP write reaches a resource-stream subscriber with its host s
   again.close();
 });
 
-test("Pea's undo pops its edit off the one journal: pre-edit Work, a restore revision, and redo", async () => {
+test("undo through the Timeline door is per author: pre-edit Work, a restore revision, and redo", async () => {
   const h = await fixture();
-  const history = (direction: "undo" | "redo", expectedRevision: number, caller: Caller = pea()) =>
-    h.post({ direction, expectedRevision }, caller, "history");
-  expect(await history("undo", 0)).toMatchObject({ ok: false });
+  const author = (caller: Caller) => (caller.kind === "pea" ? "pea" : "human");
+  const shown = async (direction: "undo" | "redo", caller: Caller) =>
+    (await hostTimeline(h.app.workspace, noReceipts).read([h.scope], author(caller)))[direction];
+  /** As a client presses: it sends back the step the read shows, or a step that is not there. */
+  const history = async (direction: "undo" | "redo", caller: Caller = pea(), expected?: unknown) =>
+    h.post(
+      { direction, works: [h.scope], expected: expected ?? (await shown(direction, caller)) ?? { work: h.scope, revision: 0, label: "" } },
+      caller,
+      "history",
+    );
+  expect(await history("undo")).toMatchObject({ ok: false });
   await h.apply(width(20), 0);
   const before = ((await h.stored()) as { doc: unknown }).doc;
   const edited = await h.apply(
@@ -265,29 +279,33 @@ test("Pea's undo pops its edit off the one journal: pre-edit Work, a restore rev
     pea(),
   );
   expect(edited.write).toMatchObject({ kind: "apply", by: "pea", revision: 2 });
+  const first = await shown("undo", pea());
 
-  // The same write a person's Undo sends (route/work-journal): one restore revision, no null left.
-  const undone = await history("undo", 2);
+  // The same write a person's Undo sends: one restore revision, no null left.
+  const undone = await history("undo");
   expect(undone.write).toMatchObject({ kind: "restore", by: "pea", base: 2, revision: 3 });
   expect(undone.doc).toEqual(before);
   expect(JSON.stringify(undone.doc)).not.toContain("null");
   expect(undone.write.patches).toEqual(edited.write.inverse);
 
-  const redone = await history("redo", 3);
+  const redone = await history("redo");
   expect(redone.write).toMatchObject({ kind: "restore", by: "pea", revision: 4 });
   expect(redone.doc.cells["8781191"].edit).toMatchObject({ value: "200", by: "pea" });
-  expect(await history("redo", 4)).toMatchObject({ ok: false });
+  expect(await history("redo")).toMatchObject({ ok: false });
 
-  // A person's restore and Pea's history walk the same stack: the person's undo is Pea's redo.
-  expect((await h.restore(redone.write)).doc).toEqual(before);
-  expect((await history("redo", 5)).doc.cells["8781191"].edit.value).toBe("200");
+  // A raw restore meets the Timeline's admission: a person cannot restore Pea's write, and Work is unchanged.
+  expect(await h.restore(redone.write)).toMatchObject({ ok: false, error: expect.stringContaining("own next Timeline step") });
+  expect(((await h.stored()) as { revision: number }).revision).toBe(4);
 
-  // Undo steps through earlier edits in order, whoever made them; a new edit ends the redo branch.
-  expect((await history("undo", 6)).doc).toEqual(before);
-  expect((await history("undo", 7)).doc).toEqual(h.spec.schema.parse({}));
-  await h.apply(width(30), 8);
-  expect(await history("redo", 9)).toMatchObject({ ok: false });
-  expect(await history("undo", 3)).toMatchObject({ ok: false, code: "stale_revision" });
+  // Undo is per author on every Work (ADR 0042): Pea's undo never takes the person's width edit.
+  expect((await history("undo")).doc).toEqual(before);
+  expect(await history("undo")).toMatchObject({ ok: false, error: "Nothing to undo" });
+  expect((await history("undo", human)).doc).toEqual(h.spec.schema.parse({}));
+  // A new edit ends the redo branch, and a step shown before the Timeline moved is refused.
+  expect(await h.apply(width(30), 6)).toMatchObject({ ok: true, revision: 7 });
+  expect(await history("redo", human)).toMatchObject({ ok: false });
+  expect(await history("undo", pea(), first)).toMatchObject({ ok: false });
+  expect(await history("undo", human, first)).toMatchObject({ ok: false, code: "stale_revision" });
 });
 
 

@@ -1,4 +1,9 @@
+import { stateFixture } from "../../../../tests/isolated-home/storage.ts";
+import { fixtureTimeline } from "../shell/fixture-work-door";
+import { timelineReceipts } from "../../../host/src/reads/work-timeline";
+import { refusalOf, valueOf } from "./typed-route";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
+import { host as placesHost, seedPlaces } from "../workbench/places.test-support";
 import { snapshot as workSnapshot } from "../ducts/test-fixture";
 // @vitest-environment jsdom
 import { stableFanKey } from "../ducts/sheet/model";
@@ -8,7 +13,8 @@ import { useState, useSyncExternalStore } from "react";
 import { journey as takeoffJourney, Drawing as TakeoffDrawing } from "../takeoff/adoption.test.fixture";
 import { adoptionData } from "@pe/agent-contracts/takeoff-read";
 import { createPortal } from "react-dom";
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render as renderView, screen, waitFor, within } from "@testing-library/react";
+import { StandaloneBand } from "../shell/band.test-support";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from "@tanstack/react-router";
 import { route, scrollBody, type TypedRoute } from "./typed-route";
@@ -16,6 +22,7 @@ import { module as fans } from "../fans/route";
 import { module as ducts } from "../ducts/route";
 import { TypedChrome, TypedShell } from "../shell/typed-shell";
 import * as mounts from "../shell/typed-mount";
+import { planned } from "../shell/typed-mount";
 import { familiesRouteState, address, workFingerprintSchema, type WorkJournalDoor } from "@pe/agent-contracts";
 import { ReviewSurface } from "../shell/review-surface";
 import { RouteActivity, RouteVisibility } from "./activity";
@@ -36,10 +43,11 @@ import userEvent from "@testing-library/user-event";
 import { createServer } from "node:http";
 import { RecordedPoints } from "../shell/history-rail";
 import { historySnapshotSchema } from "../shell/history";
-import * as historyLinks from "../shell/history";
 import { ref, path } from "../../../host/tests/host-read-graph.test-support";
 import { publicationSource } from "../host/publication-source";
 import { routeRegistry } from "./registry";
+
+const render = (node: import("react").ReactNode) => renderView(node, { wrapper: StandaloneBand });
 
 test("JZ Families History offers published values and marks ambiguous publications Unavailable", async () => {
   const browserHref = window.location.href;
@@ -137,7 +145,7 @@ test("JZ Families History offers published values and marks ambiguous publicatio
       return response.json();
     } });
     const feed = createWorkFeedClient({ subscribe: () => () => {}, dirty() {} }, {
-      write: (key, write) => j.host.workspace.write(key, key.route, "human", write),
+      write: (key, write) => j.host.workspace.write(key, key.route, "human", write, async () => []),
       submit() { throw Error("This lifecycle journey writes through HTTP"); },
     });
     // Work observations come from HTTP inspection; publication invalidations use host SSE above.
@@ -150,14 +158,14 @@ test("JZ Families History offers published values and marks ambiguous publicatio
     }, routeRegistry.families!.fingerprint, { work, sources: { "families.view": source } });
     mountsToClose.push(live);
     const firstStop = live.subscribe(() => {});
-    await waitFor(() => expect(live.value().current).toBe(true));
+    await waitFor(() => expect(live.value().state === "ready").toBe(true));
     const earlier = await j.host.history("", { kind: "captured", document: path });
     const originalBinding = earlier.history.publications.find((b: any) => b.instance === lifecyclePose.instance);
     await waitFor(() => expect(streams.size).toBeGreaterThan(0));
     firstStop(); live.release();
     await waitFor(() => expect(requests.filter(r => r.release)).toHaveLength(1));
     live.subscribe(() => {});
-    await waitFor(() => expect(live.value().current).toBe(true));
+    await waitFor(() => expect(live.value().state === "ready").toBe(true));
     await waitFor(() => expect(new Set(requests.filter(r => !r.release).map(r => r.subscription)).size).toBe(2));
     await writeScope();
     // A point records what the host has published, including a Value awaiting refresh after a write.
@@ -185,18 +193,13 @@ test("JZ Families History offers published values and marks ambiguous publicatio
     expect(bad).toBeTruthy();
     expect(bad.history.publications.filter((binding: any) => binding.instance === pose.instance)).toHaveLength(2);
     render(<RecordedPoints document={path} route="families" address={address} compare={false} />);
-    fireEvent.click(await screen.findByRole("button", { name: "Open History" }));
-    const rows = await screen.findAllByRole("option");
-    const badRow = rows.find(row => row.getAttribute("data-key") === `${bad.id}:${pose.instance}`)!;
-    expect(badRow.textContent).toContain("Unavailable: Ambiguous pane at this point");
-    fireEvent.click(badRow);
-    expect(await screen.findByRole("status")).toHaveProperty("textContent", "Ambiguous pane at this point");
-    // jsdom cannot leave the document. Intercept only navigation, retaining the actual point URL.
-    const pointHref = historyLinks.pointHref;
-    let picked = "";
-    vi.spyOn(historyLinks, "pointHref").mockImplementation((point, instance) => {
-      picked = pointHref(point, instance); return "#history-picked";
+    const badRow = await waitFor(() => {
+      const link = document.querySelector(`[data-point="${bad.id}:${pose.instance}"]`);
+      expect(link).not.toBeNull(); return link!;
     });
+    expect(badRow.getAttribute("href")).toBeNull();
+    expect(badRow.getAttribute("aria-disabled")).toBe("true");
+    expect(badRow.closest("[data-key]")!.textContent).toContain("Unavailable: Ambiguous pane at this point");
     // Every enabled menu entry is opened through the host's HTTP replay door and typed mount.
     const available = listed.points.flatMap((point: any) => point.history.poses
       .filter((pose: any) => pose.route === "families" && !listed.unavailable.some((item: any) => item.point === point.id && item.instance === pose.instance))
@@ -205,13 +208,12 @@ test("JZ Families History offers published values and marks ambiguous publicatio
     for (const { point, pose: recordedPose } of available) {
       cleanup();
       render(<RecordedPoints document={path} route="families" address={address} compare={false} />);
-      fireEvent.click(await screen.findByRole("button", { name: "Open History" }));
-      const options = await screen.findAllByRole("option");
-      picked = "";
-      const option = options.find(option => option.getAttribute("data-key") === `${point.id}:${recordedPose.instance}`)!;
-      expect(option.textContent).not.toContain("Unavailable");
-      fireEvent.click(option);
-      await waitFor(() => expect(new URL(picked, base).searchParams.get("atInstance")).toBe(recordedPose.instance));
+      const option = await waitFor(() => {
+        const link = document.querySelector<HTMLAnchorElement>(`[data-point="${point.id}:${recordedPose.instance}"]`);
+        expect(link?.getAttribute("href")).toBeTruthy(); return link!;
+      });
+      const picked = option.getAttribute("href")!;
+      expect(new URL(picked, base).searchParams.get("atInstance")).toBe(recordedPose.instance);
       cleanup();
       const opened = await request(`/pe/history?at=${new URL(picked, base).searchParams.get("at")}`);
       const history = historySnapshotSchema.parse(await opened.json());
@@ -238,7 +240,7 @@ test("JZ Families History offers published values and marks ambiguous publicatio
       expect(await screen.findByRole("option", { name: "Air Terminal Tags" })).toBeTruthy();
       const binding = point.history.publications.find((b: any) => b.instance === recordedPose.instance && b.read === "families.view");
       expect(mounted.value().publication!.evaluation).toBe(binding.evaluation);
-      if (recordedPose.instance === pose.instance) expect(mounted.value().value).toEqual(first.value.data);
+      if (recordedPose.instance === pose.instance) expect(valueOf(mounted.value())).toEqual(first.value.data);
     }
   } finally {
     cleanup();
@@ -454,7 +456,9 @@ test.each(["undo after apply", "review identity", "insertText", "pointer keyboar
     address: { read: () => new URLSearchParams(search), write: next => { for (const [k,v] of next) search.set(k,v); }, subscribe: () => () => {} },
     fixture: null, target: { kind: "document", ref: host.b }, work: { address: null, open: host.b },
     custody: { current: () => true }, memory: () => ({}),
-  }, workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`), { work, sources: { "schedules.view": source } });
+  }, workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`), { work,
+    timeline: fixtureTimeline(host.workspace, () => timelineReceipts(host.owner()), changed => host.owner().subscribe({ kinds: ["action"] }, changed)),
+    sources: { "schedules.view": source } });
   function Journey() {
     useSyncExternalStore(mount.subscribe, mount.revision, mount.revision);
     return <KeyScopeHost id="schedules-cell-edit"><TypedChrome mount={mount} document={<span>Project schedules</span>} /></KeyScopeHost>;
@@ -466,8 +470,9 @@ test.each(["undo after apply", "review identity", "insertText", "pointer keyboar
     fireEvent.click(await screen.findByRole("option", { name: "Panel" }));
     fireEvent.click(await screen.findByRole("button", { name: "Start" }));
     await waitFor(() => expect(mount.work()?.handle.revision).toBe(1));
-    await waitFor(() => expect(mount.value().current).toBe(true));
-    fireEvent.click(screen.getAllByRole("button", { name: "Read schedule" })[1]!);
+    await waitFor(() => expect(mount.value().state === "ready").toBe(true));
+    // The grid draws its own verbs, so there is one Read schedule (drawn once).
+    fireEvent.click(await screen.findByRole("button", { name: "Read schedule" }));
     await waitFor(() => expect(mount.work()?.handle.revision).toBe(2));
     await waitFor(() => expect(mount.problem()).toBeNull());
     await screen.findByText("SH1");
@@ -556,7 +561,7 @@ test.each(["undo after apply", "review identity", "insertText", "pointer keyboar
     fireEvent.click(screen.getByRole("button", { name: /plan Apply cells/i }));
     if (entryMode === "review identity") {
       await screen.findByText(/Panel Schedule.*SH1.*Id 7.*PE_G___Description.*instance.*Duct heater → Duct heater - gate review/);
-      const reading = mount.value().value as { saved: { snapshot: { rows: { bindings: { targets: unknown[] }[] }[] } } };
+      const reading = valueOf(mount.value()) as { saved: { snapshot: { rows: { bindings: { targets: unknown[] }[] }[] } } };
       expect(reading.saved.snapshot.rows[0]!.bindings[0]!.targets[0]).toMatchObject({
         uniqueId: "schedule-member-7", elementLabel: "SH1", scope: "instance",
         parameterName: "PE_G___Description", displayValue: "Duct heater",
@@ -567,12 +572,12 @@ test.each(["undo after apply", "review identity", "insertText", "pointer keyboar
       fireEvent.click(screen.getByRole("button", { name: "Apply cells" }));
       await waitFor(async () => expect((await host.view()).doc.cells["1::2"].edit).toBeNull());
       await waitFor(() => expect(mount.problem()).toBeNull());
-      const undo = screen.getByRole("button", { name: "Undo Edit schedule cell 1::2" });
+      const undo = await screen.findByRole("button", { name: "Undo" });
       expect(undo.getAttribute("aria-disabled"), "Applied Work must not offer a silently refused undo").toBe("true");
       // Kit tips wait for real movement after a press; jsdom's hover omits movementX.
       fireEvent(window, Object.assign(new Event("pointermove"), { movementX: 1 }));
       await user.hover(undo);
-      await screen.findByText("Cannot undo: 'Apply cells' already wrote this to Revit. Reverse it in Revit.");
+      await screen.findByText(/Cannot undo.*Edit schedule cell 1::2.*schedule.grid.push.*already consumed/);
       const settled = await host.view();
       fireEvent.click(undo);
       expect(await host.view()).toEqual(settled);
@@ -605,7 +610,7 @@ afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 test("JZ Fans undo after apply: public write journey leaves an honest toolbar refusal", async () => {
   const { nativeFixture } = await import("../../../host/tests/fans-work-fixture");
   const { observeResources } = await import("@pe/runtime");
-  const { JournalButtons } = await import("../shell/situation-band");
+  const { TimelineButtons } = await import("../shell/situation-band");
   const { withInvocationContext } = await import("@pe/runtime/context");
   const { peRouteUrl } = await import("@pe/agent-contracts/pe-api");
   const f = await nativeFixture();
@@ -622,7 +627,7 @@ test("JZ Fans undo after apply: public write journey leaves an honest toolbar re
   };
   const read = observeResources(f.saved, undefined, f.observeHostResource);
   const connected = createWorkFeedClient({ subscribe: read, dirty() {} }, {
-    write: (key, write) => f.saved.write(key, key.route, "human", write),
+    write: (key, write) => f.saved.write(key, key.route, "human", write, async () => []),
     submit: async command => {
       const response = await f.post("/actions", command);
       expect(response.ok, await response.clone().text()).toBe(true);
@@ -639,8 +644,8 @@ test("JZ Fans undo after apply: public write journey leaves an honest toolbar re
     target: f.target, fixture: null, work: { address: null, open: f.target.ref },
     address: { read: () => new URLSearchParams(), write() {}, subscribe: () => () => {} },
     custody: { current: () => true }, memory: () => ({}),
-  }, routeRegistry.fans!.fingerprint, { work, sources: { "fans.sheet": { kind: "use", open: () => () => {} } } });
-  const view = render(<JournalButtons owner={mount} />);
+  }, routeRegistry.fans!.fingerprint, { work, timeline: fixtureTimeline(f.saved, () => timelineReceipts(f.journal), changed => f.journal.subscribe({ kinds: ["action"] }, changed)), sources: { "fans.sheet": { kind: "use", open: () => () => {} } } });
+  const view = render(<TimelineButtons owner={mount} />);
   try {
     const staged = await stage("ducts", [
       { path: ["writeIntent", "edit"], value: { value: { groups: ["group:g1"] } } },
@@ -659,11 +664,11 @@ test("JZ Fans undo after apply: public write journey leaves an honest toolbar re
     await command("undo-plan", "sheet.plan");
     await command("undo-apply", "sheet.apply");
     expect(f.native.get(4)).toBe(250);
-    await waitFor(() => expect(screen.getByRole("button", { name: "Undo Edit fan airflow" }).getAttribute("aria-disabled")).toBe("true"));
-    const undo = screen.getByRole("button", { name: "Undo Edit fan airflow" });
+    await waitFor(() => expect(screen.getByRole("button", { name: "Undo" }).getAttribute("aria-disabled")).toBe("true"));
+    const undo = screen.getByRole("button", { name: "Undo" });
     fireEvent(window, Object.assign(new Event("pointermove"), { movementX: 1 }));
     await userEvent.setup().hover(undo);
-    await screen.findByText("Cannot undo: 'Write to Revit' already wrote this to Revit. Reverse it in Revit.");
+    await screen.findByText(/Cannot undo.*undo-apply.*already consumed/);
     fireEvent.click(undo);
     expect(f.native.get(4)).toBe(250);
     expect(screen.getByRole("button", { name: "Redo" }).getAttribute("aria-disabled")).toBe("true");
@@ -715,10 +720,10 @@ test("JZ header chooser query keys preserve the current schedule until an explic
   }, workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`), { work, sources: { "schedules.view": source } });
   let view: ReturnType<typeof render> | undefined;
   try {
-    await waitFor(() => expect(mount.value().current).toBe(true), { timeout: 20_000 });
-    const chosen = mount.value().value.catalog.schedules.find((row: any) => row.name === "Panel 16").workspaceId;
+    await waitFor(() => expect(mount.value().state === "ready").toBe(true), { timeout: 20_000 });
+    const chosen = valueOf(mount.value()).catalog.schedules.find((row: any) => row.name === "Panel 16").workspaceId;
     const pending: string[] = [];
-    const unsubscribe = mount.subscribe(() => { if (mount.value().status === "pending") pending.push(mount.value().status); });
+    const unsubscribe = mount.subscribe(() => { const { state } = mount.value(); if (state === "reading" || state === "refreshing") pending.push(state); });
     const root = createRootRoute({ component: () => <KeyScopeHost id="chooser-journey"><TypedSubject mount={mount} /></KeyScopeHost> });
     const router = createRouter({ routeTree: root, history: createMemoryHistory({ initialEntries: ["/schedules"] }) });
     view = render(<RouterProvider router={router} />);
@@ -739,7 +744,7 @@ test("JZ header chooser query keys preserve the current schedule until an explic
     await user.click(screen.getByRole("option", { name: "Panel 16" }));
     // The real Schedules chooser chooses one member; only the explicit choice replaces Panel.
     await waitFor(() => expect(mount.page.read().workspaceId.ids).toEqual([subjectCode({ keyKind: "workspace", key: chosen })]));
-    await waitFor(() => expect(mount.value().current).toBe(true), { timeout: 20_000 });
+    await waitFor(() => expect(mount.value().state === "ready").toBe(true), { timeout: 20_000 });
     expect(requests.length).toBeGreaterThan(count);
   } finally { view?.unmount(); mount.dispose(); await Promise.all(pendingReads); }
 });
@@ -880,7 +885,7 @@ test("D G07 Family renders named picker, member roster, Work and stage words wit
     expect(readiness.textContent, "The readiness marker must not repeat the problem alert").toBe("");
     expect(screen.queryByText(member)).toBeNull(); // No member can be chosen before its roster arrives.
     await ready.promise;
-    expect(mount.value().current).toBe(false);
+    expect(mount.value().state === "ready").toBe(false);
     cleanWords("C746: before the roster publication, no raw identity fallback");
     roster.resolve();
     expect((await surfaceReadiness()).getAttribute("data-readiness")).toBe("ready");
@@ -888,13 +893,13 @@ test("D G07 Family renders named picker, member roster, Work and stage words wit
     expect(screen.queryByText(/^Ready$/)).toBeNull();
     expect(mount.owner()?.doc).toEqual(original);
     // Slice 10: the kernel's subject picker is the one family chooser; the roster is its options, by name.
-    await waitFor(() => expect(mount.value().value).toBeTruthy());
-    expect.soft(family.spec.subject!.options(mount.value().value as never).map(option => option.label)).toEqual([`Mechanical library · ${member}`]);
+    await waitFor(() => expect(valueOf(mount.value())).toBeTruthy());
+    expect.soft(family.spec.subject!.options(valueOf(mount.value()) as never).map(option => option.label)).toEqual([`Mechanical library · ${member}`]);
     cleanWords("C747: actual Work and member payload display strings");
     const picked = { kind: "ids" as const, ids: [podMemberCode({ pod, path: member })] };
     await act(async () => { mount.page.subject(picked); });
     await waitFor(() => expect(memberReads).toBeGreaterThan(0));
-    await waitFor(() => expect(mount.value().current).toBe(true));
+    await waitFor(() => expect(mount.value().state === "ready").toBe(true));
     expect(mount.page.read()).toMatchObject({ pod, member: picked });
     expect.soft((await screen.findByRole("textbox", { name: "Destination pod" }) as HTMLInputElement).value).toBe("Mechanical library");
     cleanWords("C746: selected roster member keeps its canonical key off the surface");
@@ -924,7 +929,7 @@ test("D G07 Family renders named picker, member roster, Work and stage words wit
 
 
 test("JM H17 browse an optional host route without a pin, then refuse malformed document pins", async () => {
-  const module = route({ ...family.spec, edits: undefined, core: undefined, subject: undefined, goal: undefined, query: undefined, fields: {}, picture: undefined, title: undefined, commands: {}, reads: {},
+  const module = route({ ...family.spec, edits: undefined, core: undefined, subject: undefined, goal: undefined, query: undefined, fields: {}, picture: undefined, title: undefined, verbs: {}, band: [], reads: {},
     panes: { main: { title: "Optional document", purpose: "Inspect exact target authority",
       body: "scroll", draw: ctx => scrollBody(<p role="status">{ctx.target?.kind === "host" ? "Host browsing" : "Pinned document"}</p>) } },
     layout: { kind: "pane", id: "main" } });
@@ -975,7 +980,7 @@ test("JZ B02 undo follows focus between typed routes, portal and hidden pane; te
     const owner = live(...args); owners.push(owner); return owner;
   });
   const make = (key: string) => route({ ...fans.spec, key, name: key, needs: "browser", core: undefined,
-    subject: undefined, goal: undefined, query: undefined, reads: {}, edits: undefined, commands: {}, fields: {}, picture: undefined, title: undefined,
+    subject: undefined, goal: undefined, query: undefined, reads: {}, edits: undefined, verbs: {}, band: [], fields: {}, picture: undefined, title: undefined,
     panes: { main: { title: key, purpose: "Focus ownership", body: "scroll", draw: () => scrollBody(<><button>{key} focus</button><textarea aria-label={`${key} text`} />{createPortal(<button>{key} portal</button>, document.body)}</>) } },
     layout: { kind: "pane", id: "main" } });
   const a = make("jz-a"), b = make("jz-b");
@@ -992,7 +997,7 @@ test("JZ B02 undo follows focus between typed routes, portal and hidden pane; te
   render(<RouterProvider router={router} />);
   await screen.findByRole("button", { name: "jz-b focus" });
   expect(owners).toHaveLength(2);
-  const undo = owners.map(owner => vi.spyOn(owner.history, "undo"));
+  const undo = owners.map(owner => vi.spyOn(owner, "stepTimeline"));
   const press = (node: HTMLElement) => { node.focus(); const native = fireEvent.keyDown(node, { key: "z", code: "KeyZ", ctrlKey: true }); fireEvent.keyUp(node, { key: "z", code: "KeyZ", ctrlKey: true }); return native; };
   press(screen.getByRole("textbox", { name: "jz-a text" }));
   expect(undo.map(spy => spy.mock.calls.length), "B02: browser retains text undo").toEqual([0, 0]);
@@ -1092,7 +1097,7 @@ test("JZ Fans native before: stage, Plan, inspect method and unset pressure; unr
     await vi.waitFor(() => expect(f.fans.work()!.value.equipmentFlows[elementSubject(realMuas.nodes.find(node => node.id === 14577391)!)]?.edit?.value.cfm).toBe(1000));
     f.fans.refresh("value");
     for (const id of ["value"])
-      await vi.waitFor(() => expect(f.fans.readingStatus(id).snapshot).toMatchObject({ current: true }));
+      await vi.waitFor(() => expect(f.fans.readingStatus(id).snapshot).toMatchObject({ state: "ready" }));
     function WriteReview() {
       const [, changed] = useReducer(n => n + 1, 0);
       useEffect(() => f.fans.subscribe(changed), []);
@@ -1173,8 +1178,8 @@ test.each([false, true])(
     for (const id of ["value"])
       await vi.waitFor(() => {
         const snapshot = f.fans.readingStatus(id).snapshot;
-        if (snapshot.status === "failed") throw Error(`${id}: ${snapshot.reason}`);
-        expect(snapshot).toMatchObject({ current: true });
+        if (snapshot.state === "refused") throw Error(`${id}: ${refusalOf(snapshot)}`);
+        expect(snapshot).toMatchObject({ state: "ready" });
       });
     function Write() {
       const [, changed] = useReducer((n) => n + 1, 0);
@@ -1213,7 +1218,7 @@ test.each([false, true])(
     });
     expect(f.fans.work()!.revision).toBe(stagedRevision);
     expect(f.calls.get("fans:fans.sheet")).toBeGreaterThan(beforeReads!);
-    await waitFor(() => expect(f.typed.value().current).toBe(true));
+    await waitFor(() => expect(f.typed.value().state === "ready").toBe(true));
     expect(f.typed.value().publication!.evaluation).toBe(beforeSwitch);
     await act(async () =>
       plan({
@@ -1256,7 +1261,7 @@ test.each([false, true])(
       cells: [{ before: "880 cfm", author: "human" }],
     });
     expect(f.fans.review("losses")!.rows[0]).toContain("MUAS-1");
-    expect(f.typed.action("losses").read()?.preview).toBeTruthy();
+    expect(planned(f.typed.verb("losses")).read()?.preview).toBeTruthy();
     const reviewTrigger = screen.getByRole("button", { name: /Write to Revit.*planned/ });
     if (reviewTrigger.getAttribute("aria-expanded") !== "true")
       await act(async () => fireEvent.click(reviewTrigger));
@@ -1344,9 +1349,9 @@ test("JZ B03 people choose named subjects: pending Families scope, cold Schedule
   const router = createRouter({ routeTree: root, history: createMemoryHistory({ initialEntries: ["/schedules"] }) });
   const view = render(<RouterProvider router={router} />);
   try {
-    await waitFor(() => expect(mount.value().current).toBe(true));
+    await waitFor(() => expect(mount.value().state === "ready").toBe(true));
     expect(mount.work(), "B03: catalogue discovery does not require selected Work").toBeNull();
-    await waitFor(() => expect(screen.getAllByRole("button", { name: "Read schedule" })).toHaveLength(2));
+    await waitFor(() => expect(screen.getAllByRole("button", { name: "Read schedule" }), "a verb is drawn once: the grid's, not the band's too").toHaveLength(1));
     await act(async () => { fireEvent.click(screen.getAllByRole("button", { name: "Read schedule" }).at(-1)!); });
     expect(screen.getAllByText("Choose a schedule before reading").length, "B03: refused Read is visible").toBeGreaterThan(0);
     expect.soft(screen.queryAllByText(/.+ complete$/i), "B03: a refused verb must never produce any completion receipt").toEqual([]);
@@ -1360,7 +1365,7 @@ test("JZ B03 people choose named subjects: pending Families scope, cold Schedule
     expect(chosen).not.toEqual([host.scope.work]);
     expect(search.has("workspaceId"), "B03: picker creates the Page address without a URL seed").toBe(true);
     await screen.findByRole("button", { name: "Start" });
-    await waitFor(() => expect(mount.value().current).toBe(true));
+    await waitFor(() => expect(mount.value().state === "ready").toBe(true));
     const before = host.reads();
     await act(async () => { fireEvent.click(screen.getAllByRole("button", { name: "Read schedule" }).at(-1)!); });
     expect.soft(screen.queryAllByText("Start this schedule Work before reading").length,
@@ -1372,17 +1377,16 @@ test("JZ B03 people choose named subjects: pending Families scope, cold Schedule
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Start" })); });
     await waitFor(() => expect(mount.work()).not.toBeNull());
     expect([mount.work()!.handle.key.work]).toEqual(chosen);
-    await waitFor(() => expect(mount.value().current).toBe(true));
+    await waitFor(() => expect(mount.value().state === "ready").toBe(true));
     await act(async () => { fireEvent.click(screen.getAllByRole("button", { name: "Read schedule" }).at(-1)!); });
     await waitFor(() => expect(host.reads(), "B03: Read reaches native schedule detail").toBeGreaterThan(before));
-    await waitFor(() => expect(mount.result("read")).toBeDefined());
     await waitFor(() => {
-      expect(mount.value().current, "B03: Read publishes a current Value").toBe(true);
-      expect(mount.value().value?.reading, "B03: publication contains the completed Read, not the old capture").toEqual(mount.result("read"));
+      expect(mount.value().state === "ready", "B03: Read publishes a current Value").toBe(true);
+      expect(valueOf(mount.value())?.reading, "B03: publication contains the completed Read, not the old capture").toBeTruthy();
     });
-    expect(mount.action("read").failure).toBeNull();
-    expect(mount.value().value?.reading?.snapshot.scheduleId).toBe(43);
-    expect(mount.value().value?.reading?.snapshot.scheduleName).toBe("ElectricDuctHeater");
+    expect(mount.verb("read").failure).toBeNull();
+    expect(valueOf(mount.value())?.reading?.snapshot.scheduleId).toBe(43);
+    expect(valueOf(mount.value())?.reading?.snapshot.scheduleName).toBe("ElectricDuctHeater");
     expect(host.sent.filter(row => row.key === "revit.detail.schedules").at(-1)?.input)
       .toMatchObject({ query: { kind: "ScheduleReferences", scheduleIds: [43] } });
     // TypedChrome mounts the shipped pane: members must reach the grid.
@@ -1441,10 +1445,10 @@ async function pendingFamiliesChoice() {
   try {
     await screen.findByRole("option", { name: "Air Terminal Tags" });
     await waitFor(() => expect(mount.work()).not.toBeNull());
-    await waitFor(() => expect(mount.value().current).toBe(true));
+    await waitFor(() => expect(mount.value().state === "ready").toBe(true));
     hold = true;
     await act(async () => mount.refresh());
-    expect(mount.value(), "B03 Families: pending refresh retains named choices").toMatchObject({ status: "pending", current: false });
+    expect(mount.value(), "B03 Families: pending refresh retains named choices").toMatchObject({ state: "refreshing" });
     const before = { work: mount.work(), page: mount.page.read(), url: search.toString() };
     const category = screen.getByRole("option", { name: "Air Terminal Tags" });
     const member = screen.getByRole("option", { name: "Air Terminal Tag" });
@@ -1457,7 +1461,7 @@ async function pendingFamiliesChoice() {
     expect({ work: mount.work(), page: mount.page.read(), url: search.toString() }, "B03 Families: a refused choice commits nothing").toEqual(before);
     expect(familiesRouteState.schema.parse(mount.work()?.value).scope.edit, "B03 Families: no category was queued secretly").toBeUndefined();
     await act(async () => { release.resolve(); });
-    await waitFor(() => expect(mount.value().current).toBe(true));
+    await waitFor(() => expect(mount.value().state === "ready").toBe(true));
     expect(screen.getByRole("option", { name: "Air Terminal Tags" }).getAttribute("aria-disabled"), "B03 Families: current basis re-enables scope choices").not.toBe("true");
     expect(familiesRouteState.schema.parse(mount.work()?.value).scope.edit).toBeUndefined();
   } finally { release.resolve(); view.unmount(); mount.dispose(); await Promise.all(tasks); }
@@ -1472,16 +1476,16 @@ test("JZ H01 H17 saved takeoff choice preserves authored Work and live Initializ
     render(<TakeoffDrawing mount={j.mount} />);
     fireEvent.click(screen.getByRole("button", { name: "Choose views" }));
     fireEvent.click(await screen.findByRole("option", { name: "Zoning plan" }));
-    await waitFor(() => expect(j.mount.value().current).toBe(true), {timeout:20000});
+    await waitFor(() => expect(j.mount.value().state === "ready").toBe(true), {timeout:20000});
     await waitFor(() => expect(j.mount.owner()?.ready || j.mount.owner()?.absent).toBe(true));
     expect(j.mount.owner()!.handle, "H01: view choice cannot select another Work through serialized Page fields").toEqual(originalWork);
     await j.ready();
-    const capture = adoptionData.parse(j.mount.value().value).captures[0]!;
+    const capture = adoptionData.parse(valueOf(j.mount.value())).captures[0]!;
     fireEvent.click(screen.getByRole("button", { name: "Choose capture" }));
     const option = (await screen.findAllByRole("option")).find(row => row.textContent?.includes(capture.capturedAt));
     expect(option, "choose this exact saved capture").toBeTruthy();
     fireEvent.click(option!);
-    await waitFor(() => expect(j.mount.value().current).toBe(true), {timeout:20000});
+    await waitFor(() => expect(j.mount.value().state === "ready").toBe(true), {timeout:20000});
     await waitFor(() => expect(j.mount.owner()?.ready || j.mount.owner()?.absent).toBe(true));
     expect(screen.getByText(/Archived takeoff/)).toBeTruthy();
     expect(j.mount.owner()!.handle, "H01: a saved-evidence id cannot select another Work").toEqual(originalWork);
@@ -1491,7 +1495,7 @@ test("JZ H01 H17 saved takeoff choice preserves authored Work and live Initializ
     await screen.findByRole("checkbox", {name:"Select Office zone in Zoning plan"});
     expect(j.mount.owner()!.handle).toEqual(originalWork);
     expect((screen.getByRole("button", {name:"initialize"}) as HTMLButtonElement).disabled, "H17: live readiness uses the current document and its original Work").toBe(false);
-    expect(j.mount.value().value.initialize.refusal).toBeNull();
+    expect(valueOf(j.mount.value()).initialize.refusal).toBeNull();
     expect(j.host.inputs.source).toMatchObject({capturing:true});
     expect(j.host.inputs.lane.kind).toBe("live");
     if(j.host.inputs.lane.kind === "live")
@@ -1505,6 +1509,7 @@ vi.mock("../workbench/provider", () => ({ useWorkbench: () => conversation.value
 vi.mock("../chat/chat-shell", () => ({ ChatShell: () => null }));
 
 test("JZ B05 retain Family Work and its spec across folding, first-thread promotion and thread switches", async () => {
+  await seedPlaces([]);
   const [{ createRoute }, { RegistryContext }, { appAtomRegistry }, { RouteDock },
     { createChatPageStore }, { module: family }, { publicRoutes }, { peClient },
     { createPeClient }, { peReadings }, { observeResources }, { createPeRoutes },
@@ -1533,7 +1538,7 @@ test("JZ B05 retain Family Work and its spec across folding, first-thread promot
     pages: [{ page: 1, width: 612, height: 792, screenshotUrl: null, markdown: "Retained specification" }],
     blocks: [{ id: "page-1-block-1", page: 1, kind: "text", md: "Retained specification", bboxes: [] }],
   } } });
-  await fileRouteDocumentStore(join(host.dir, "work")).setState({ targetKey: workKey(key), route: "family",
+  await fileRouteDocumentStore(stateFixture(join(host.dir, "work"))).setState({ targetKey: workKey(key), route: "family",
     value: { version: 1, schemaVersion: 1, revision: 3, doc, history: [] } });
   const transport = createPeClient("", (input, init) => withInvocationContext({ caller: who }, () =>
     api.fetch(new Request(new URL(String(input), "http://host"), init))));
@@ -1548,10 +1553,11 @@ test("JZ B05 retain Family Work and its spec across folding, first-thread promot
   const store = createChatPageStore({ registry: appAtomRegistry, search: { patch: async () => {} } });
   conversation.value = { store, threads };
   const stamp = routeRegistry.family!.fingerprint;
-  // This journey holds Family Work with no host read behind it: one hand pane, and no subject or goal,
-  // since a subject route's Place enrolls only once its roster read is current (`typed-mount.ts`, subjectState).
+  // This journey holds Family Work with no host read behind it: one hand pane that names no read (a pane
+  // with no read always draws), and no subject or goal, since a subject route's Place enrolls only once its
+  // roster read is current (`typed-mount.ts`, subjectState).
   const declaration = route({ ...family.spec, subject: undefined, goal: undefined, layout: { kind: "pane", id: "workspace" }, panes: { workspace: {
-    ...family.spec.panes.workspace,
+    ...family.spec.panes.workspace, read: undefined,
     body: "scroll", draw: ctx => scrollBody(<output aria-label="Mounted Family Work">{ctx.cells.doc?.spec?.doc.fileName}</output>),
   } } });
   function Family() { return <TypedShell module={declaration} fingerprint={stamp} />; }
@@ -1568,11 +1574,16 @@ test("JZ B05 retain Family Work and its spec across folding, first-thread promot
     await router.load();
     render(<RouterProvider router={router} />);
     await screen.findByText("retained-spec.pdf");
-    const seam = screen.getByRole("separator", { name: "Resize pane" });
+    const seam = screen.getAllByRole("separator", { name: "Resize pane" }).find(node =>
+      node.closest("[data-layout-split]")?.getAttribute("data-layout-split") === JSON.stringify(["route-dock", "tools"]));
+    if (!seam) throw Error("The tools dock has no resize separator");
     for (let i = 0; i < 40 && !screen.queryByRole("button", { name: "Expand tools" }); i++)
       fireEvent.keyDown(seam, { key: "ArrowRight" });
     expect(screen.getByRole("button", { name: "Expand tools" }), "B05: the actual tools Activity is folded").toBeTruthy();
-    expect(screen.getByLabelText("Pea context").textContent, "E8-11: folded tools still name Pea's bound Place").toContain("Family");
+    // fedd433a retired the duplicate context row (routes LEDGER); folding retains the actual Work.
+    expect(screen.queryByLabelText("Pea context")).toBeNull();
+    expect(screen.getByLabelText("Mounted Family Work").textContent,
+      "E8-11: folding retains Family's Work and spec").toBe("retained-spec.pdf");
     await (await import("@testing-library/react")).act(() => store.actions.promoteThread(threads[0]!.id));
     expect(router.state.location.search.thread, "B05: first Send supplies the thread after the drawing folded").toBe(threads[0]!.id);
     await waitFor(async () => expect((await read(threads[0]!.id)).status,
@@ -1623,8 +1634,8 @@ test.each(["takeoffs", "families"] as const)("JZ kernel Start on %s after read r
     try {
       const start = await screen.findByRole("button", { name: "Start" });
       const retainedStart = j.mount.startAction()!;
-      if (!catalogue) await waitFor(() => expect(j.mount.value().current).toBe(true), { timeout: 20000 });
-      else expect(j.mount.value()).toMatchObject({ current: false, status: "pending" });
+      if (!catalogue) await waitFor(() => expect(j.mount.value().state === "ready").toBe(true), { timeout: 20000 });
+      else expect(j.mount.value()).toMatchObject({ state: expect.stringMatching(/^(reading|refreshing)$/) });
       // Resource release alone leaves the selected Place's Start authority intact.
       await act(async () => { j.mount.release(); });
       expect(j.mount.available()).toBe(true);
@@ -1637,7 +1648,7 @@ test.each(["takeoffs", "families"] as const)("JZ kernel Start on %s after read r
       expect(receipts).toHaveLength(1);
       expect(receipts[0]!.state).toBe("succeeded");
       expect(screen.queryByRole("button", { name: "Start" })).toBeNull();
-      if (route === "takeoffs") expect(j.mount.value().value.initialize.refusal).toBeNull();
+      if (route === "takeoffs") expect(valueOf(j.mount.value()).initialize.refusal).toBeNull();
       else {
         const category = await screen.findByRole("option", { name: "Air Terminal Tags" });
         expect(category.getAttribute("aria-disabled")).toBeNull();
@@ -1658,11 +1669,11 @@ test("JZ saved Takeoffs capture explains its empty snapshot and returns to live 
   try {
     await j.ready();
     render(<TakeoffDrawing mount={j.mount} />);
-    const capture = adoptionData.parse(j.mount.value().value).captures[0]!;
+    const capture = adoptionData.parse(valueOf(j.mount.value())).captures[0]!;
     fireEvent.click(screen.getByRole("button", { name: "Choose capture" }));
     const option = (await screen.findAllByRole("option")).find(row => row.textContent?.includes(capture.capturedAt));
     fireEvent.click(option!);
-    await waitFor(() => expect(j.mount.value().current).toBe(true), { timeout: 20000 });
+    await waitFor(() => expect(j.mount.value().state === "ready").toBe(true), { timeout: 20000 });
     expect(screen.getByText(/Archived takeoff/)).toBeTruthy();
     expect(screen.getByText("No adopted zones in this saved takeoff")).toBeTruthy();
     expect(screen.getByText(/This capture stores takeoff data, not a view image/)).toBeTruthy();
@@ -1684,13 +1695,13 @@ test("JZ E8-12 close Home clears a capacity refusal and permits another Place", 
   await import("../routes/__root");
   vi.spyOn(await import("../navigation/surface-host"), "useSurfaceHost").mockReturnValue({ surface: "web" } as never);
   vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener() {}, removeEventListener() {} }));
-  sessionStorage.setItem("pe.places", JSON.stringify(Array.from({ length: 12 }, (_, i) => ({
+  await seedPlaces(Array.from({ length: 12 }, (_, i) => ({
     id: `aaaaaaaa-0000-4000-8000-${String(i).padStart(12, "0")}`, route: "home", link: "/", at: new Date().toISOString(),
-  }))));
+  })));
   const store = createChatPageStore({ registry: appAtomRegistry, search: { patch: async () => {} } });
   conversation.value = { store, threads: [] };
   const module = route({ ...family.spec, key: "home", address: "/", name: "Home", needs: "browser", core: undefined,
-    subject: undefined, goal: undefined, query: undefined, reads: {}, edits: undefined, commands: {}, fields: {}, picture: undefined, title: undefined,
+    subject: undefined, goal: undefined, query: undefined, reads: {}, edits: undefined, verbs: {}, band: [], fields: {}, picture: undefined, title: undefined,
     panes: { main: { title: "Home", purpose: "Place capacity", body: "scroll", draw: () => scrollBody(<p>Home body</p>) } }, layout: { kind: "pane", id: "main" } });
   const root = createRootRoute({ component: () => <RegistryContext.Provider value={appAtomRegistry}>
     <RouteDock renderRoute={body => body}>{null}</RouteDock>
@@ -1703,12 +1714,12 @@ test("JZ E8-12 close Home clears a capacity refusal and permits another Place", 
     render(<RouterProvider router={router} />);
     await screen.findByText("Home body");
     fireEvent.click(screen.getByRole("button", { name: "Open another Place on this route" }));
-    await screen.findByText("This window keeps 12 Places; close one first.");
+    await screen.findByText("This machine keeps 12 Places; close one first.");
     fireEvent.click(screen.getAllByRole("button", { name: "Close Home" })[11]!);
-    await waitFor(() => expect(JSON.parse(sessionStorage.getItem("pe.places")!)).toHaveLength(11));
-    expect(screen.queryByText("This window keeps 12 Places; close one first.")).toBeNull();
+    await waitFor(() => expect(placesHost.read()).toHaveLength(11));
+    expect(screen.queryByText("This machine keeps 12 Places; close one first.")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Open another Place on this route" }));
-    await waitFor(() => expect(JSON.parse(sessionStorage.getItem("pe.places")!)).toHaveLength(12));
+    await waitFor(() => expect(placesHost.read()).toHaveLength(12));
   } finally { cleanup(); sessionStorage.clear(); vi.unstubAllGlobals(); conversation.value = null; }
 });
 
@@ -1730,7 +1741,7 @@ test("JZ E8-03 a typed Fans refused Plan explains the atomic Apply hold at the a
     { path: ["equipmentFlows", elementSubject(realMuas.nodes.find(node => node.id === 14577391)!), "edit"], value: { value: { cfm: 925, source: "test" } } },
   ], f.fans.work()!.revision);
   f.fans.refresh("value");
-  await vi.waitFor(() => expect(f.typed.value().current).toBe(true));
+  await vi.waitFor(() => expect(f.typed.value().state === "ready").toBe(true));
   const reason = "MUAS-1: missing PE_M_Fan_AirFlowDesign; add the missing parameter";
   native.submit.mockImplementation(async () => ({ id: "atomic-hold", state: "succeeded", result: {
     previewOnly: true, planRefusal: reason,
@@ -1790,7 +1801,7 @@ test.each(["Fans", "Ducts"] as const)("JZ C042 %s subject-list declaration suppr
     return <section aria-label="Fan subject list"><button onClick={() => subject.add([first.id])}>{first.label}</button></section>;
   }
   for (const pane of ["detail", "roster"] as const) {
-    const module = route({ ...fans.spec, needs: "browser", edits: undefined, commands: {}, reads: {},
+    const module = route({ ...fans.spec, needs: "browser", edits: undefined, verbs: {}, band: [], reads: {},
       subject: { ...fans.spec.subject!, pane: "roster", read },
       panes: {
         roster: { subjectList: declared.subjectList, title: "Fan list", purpose: "Choose the subject", read: { ...read }, body: "scroll", draw: ctx => scrollBody(<Roster ctx={ctx} />) },
@@ -1809,7 +1820,7 @@ test.each(["Fans", "Ducts"] as const)("JZ C042 %s subject-list declaration suppr
       else await screen.findByRole("region", { name: "Fan subject list" });
       expect(screen.queryByRole("button", { name: "Choose fan" }), "One subject capability has one choice path").toBeNull();
       if (pane === "roster") {
-        const first = fans.spec.subject!.options(mount.value().value)[0]!;
+        const first = fans.spec.subject!.options(valueOf(mount.value()))[0]!;
         fireEvent.click(screen.getByRole("button", { name: first.label }));
         expect(mount.page.read().fan).toEqual({ kind: "ids", ids: [first.id] });
       }
@@ -1822,7 +1833,7 @@ test("JZ audit named subject choices preserve all none add and toggle without ra
   const { typedSubjectDoor } = await import("../shell/subject");
   const host = await fixture(true), tasks = new Set<Promise<unknown>>();
   const roster = fans.spec.subject!.read!;
-  const module = route({ ...fans.spec, core: roster, edits: undefined, commands: {},
+  const module = route({ ...fans.spec, core: roster, edits: undefined, verbs: {}, band: [],
     subject: { ...fans.spec.subject!, pane: "detail" },
     panes: { detail: { title: "Subject choices", purpose: "Choose named subjects", body: "scroll", draw: () => scrollBody(<p>Subject choice surface</p>) } },
     layout: { kind: "pane", id: "detail" } });
@@ -1848,7 +1859,7 @@ test("JZ audit named subject choices preserve all none add and toggle without ra
     await screen.findByRole("button", { name: "Choose fan" });
     expect(document.body.textContent).not.toContain(unknown);
     expect(screen.getByText(/outside the current roster/)).toBeTruthy();
-    const options = module.spec.subject!.options(mount.value(roster).value);
+    const options = module.spec.subject!.options(valueOf(mount.value(roster)));
     expect(options.length).toBeGreaterThan(1);
     fireEvent.click(screen.getByRole("button", { name: "No fan" }));
     expect(mount.page.read().fan).toEqual({ kind: "ids", ids: [] }); expect(moves).toBe(1);
@@ -1883,7 +1894,7 @@ test("JZ audit optional document pins retain exact source authority and retire r
   const created: mounts.TypedMount[] = [];
   const original = mounts.mountTypedRoute;
   const factory = vi.spyOn(mounts, "mountTypedRoute").mockImplementation((...args) => { const m = original(...args); created.push(m); return m; });
-  const module = route({ ...family.spec, needs: "host", optionalTarget: "document", edits: undefined, core: undefined, subject: undefined, goal: undefined, query: undefined, reads: {}, commands: {}, fields: {}, picture: undefined, title: undefined,
+  const module = route({ ...family.spec, needs: "host", optionalTarget: "document", edits: undefined, core: undefined, subject: undefined, goal: undefined, query: undefined, reads: {}, verbs: {}, band: [], fields: {}, picture: undefined, title: undefined,
     panes: { main: { title: "Optional document", purpose: "Inspect exact document authority", body: "scroll", draw: ctx => scrollBody(<p>{ctx.target?.kind === "document" ? `Pinned ${ctx.target.ref.session}/${ctx.target.ref.openId}` : ctx.target?.kind === "host" ? "Host browsing" : "No authority"}</p>) } }, layout: { kind: "pane", id: "main" } });
   let search = new URLSearchParams();
   const listeners = new Set<() => void>();
@@ -1930,8 +1941,11 @@ test("JZ audit Schedules keyed edits preserve a sibling stale mark and narrow in
   });
   const work: WorkJournalDoor = { ...native, open: () => ({ subscribe(deliver) {
     let closed = false;
-    void host.view().then(state => { if (!closed) deliver({ kind: "ready", history: { from: 0, acks: [] }, snapshot: { handle: { key: host.scope, revision: state.revision }, revision: state.revision, value: state.doc } }); });
-    return () => { closed = true; };
+    const stop = host.observeWork(host.scope,
+      () => { void host.view().then(state => { if (!closed) deliver({ kind: "ready", history: { from: 0, acks: [] }, snapshot: { handle: { key: host.scope, revision: state.revision }, revision: state.revision, value: state.doc } }); }); },
+      ack => { if (!closed) deliver({ kind: "ack", ack }); },
+      error => { throw error; });
+    return () => { closed = true; stop(); };
   } }) };
   // Keep the real schemas while bounding TypeScript's recursive JSON-schema expansion.
   const spec = (schedules as TypedRoute).spec;
@@ -1941,7 +1955,7 @@ test("JZ audit Schedules keyed edits preserve a sibling stale mark and narrow in
   const mount = mounts.mountTypedRoute(module, { target: { kind: "document", ref: host.b }, fixture: null,
     work: { address: null, open: host.b }, address: { read: () => new URLSearchParams(), write() {}, subscribe: () => () => {} },
     custody: { current: () => true }, memory: () => ({}),
-  }, workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`), { work });
+  }, workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`), { work, timeline: fixtureTimeline(host.workspace, () => timelineReceipts(host.owner())) });
   const cells = () => mount.draw("main", ctx => ctx.cells) as any;
   try {
     await vi.waitFor(() => expect(mount.owner()?.ready).toBe(true));
@@ -1955,11 +1969,12 @@ test("JZ audit Schedules keyed edits preserve a sibling stale mark and narrow in
     expect(stale).toMatchObject({ ok: false, code: "stale_revision" });
     expect(await cells().at(["cells", "1::2"]).delete({ label: "Delete first cell" })).toBeNull();
     expect(last.write.inverse.filter((p: { path: string[] }) => p.path[0] === "cells").map((p: { path: string[] }) => p.path)).toEqual([["cells", "1::2"]]);
-    expect(await mount.history.undo()).toMatchObject({ ok: true });
-    expect(mount.owner()!.doc).toEqual(reviewed);
+    await waitFor(() => expect(mount.timeline()?.undo?.label).toBe("Delete first cell"));
+    expect(await mount.stepTimeline("undo")).toBeNull();
+    await waitFor(() => expect(mount.owner()!.doc).toEqual(reviewed));
     expect(await cells().patch([{ path: ["cells"], value: reviewed.cells }], { label: "Replace collection deliberately" })).toBeNull();
     expect(mount.owner()!.doc.basis.stale ?? []).toEqual([]);
-  } finally { mount.journal().intents.forEach(intent => mount.discardIntent(intent.id)); mount.dispose(); }
+  } finally { mount.pendingEdits().forEach(intent => mount.discardIntent(intent.id)); mount.dispose(); }
 }, 60_000);
 
 
@@ -1972,7 +1987,7 @@ test("JZ Plan refusal marker holds a valid sealed ancillary-only review at the t
     { path: ["writeIntent"], value: { edit: { value: { walk: { unitId: 14577391, portIndex: 2 } } } } },
     { path: ["equipmentFlows", elementSubject(realMuas.nodes.find(node => node.id === 14577391)!), "edit"], value: { value: { cfm: 925, source: "test" } } },
   ], f.fans.work()!.revision);
-  f.fans.refresh("value"); await vi.waitFor(() => expect(f.typed.value().current).toBe(true));
+  f.fans.refresh("value"); await vi.waitFor(() => expect(f.typed.value().state === "ready").toBe(true));
   const reason = "MUAS-1: required airflow parameter is missing; add the missing parameter";
   native.submit.mockClear();
   native.submit.mockImplementation(async () => ({ id: "marker-only-plan", state: "succeeded", result: {

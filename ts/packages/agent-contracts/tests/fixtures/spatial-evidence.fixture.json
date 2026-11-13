@@ -1,0 +1,44 @@
+{
+  "evidence": {
+    "documentKey": "host",
+    "observedAt": "1970-01-01T00:00:00Z",
+    "frame": "host-internal-ft",
+    "resolved": {
+      "sources": [],
+      "categories": [],
+      "kinds": [],
+      "layers": [],
+      "exclusions": [],
+      "representation": "native-mesh",
+      "acquisitionRequested": true
+    },
+    "sources": [],
+    "acquisition": [
+      {
+        "placement": {
+          "hostDocumentKey": "host"
+        },
+        "subjectUniqueId": "subject",
+        "outcome": "outside-scope",
+        "reason": "none"
+      }
+    ],
+    "coverage": []
+  },
+  "searched": {
+    "docs": 0,
+    "categories": 0,
+    "candidates": 0,
+    "examined": 0,
+    "skipped": 0
+  },
+  "segments": [
+    {
+      "index": 0,
+      "verdict": "UNKNOWN",
+      "surfaceObservation": "none-observed",
+      "clearanceReason": "containment-unsupported"
+    }
+  ],
+  "ms": 0.0
+}

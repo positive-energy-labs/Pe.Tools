@@ -1,13 +1,13 @@
 /**
  * Slice 10 falsifier for /pods (routes MAP row 10, ADR 0035 rules 1, 3 and 8): the route draws
  * through the slots. The member is the subject (a `name` SubjectRef over `[pod, path]`), its Work
- * draws as the kernel's sheet of `local` cells over the saved bytes, its unresolved list is the
- * kernel's goal pane, and no hand-drawn spec editor is left. Live, the driver presses the steps in
+ * draws in a route-local JSON editor over the same saved bytes because the frozen Domain has no
+ * arbitrary JSON arm. Its unresolved list stays the kernel's goal pane. The driver presses the steps in
  * the slice 10 receipt; this pins the declaration and the cells.
  */
 import { expect, test } from "vite-plus/test";
 import { podMemberCode, podMemberOfCode } from "@pe/agent-contracts";
-import { sheetCells } from "../route/slots/sheet/index.ts";
+import { memberFields, fieldsEmpty } from "./fields.tsx";
 import { titlePane } from "../shell/typed-shell.tsx";
 import { member, module } from "./route.ts";
 
@@ -35,47 +35,46 @@ test("the member is a name SubjectRef over [pod, path], and only that kind decod
   expect(member({ member: { kind: "ids", ids: [code] } })).toEqual({ pod: "share-ducts", path: "settings/checks.json" });
 });
 
-test("/pods declares subject, sheet, goal and query, and keeps no hand-drawn spec pane", () => {
+test("/pods declares subject, goal and query, and keeps arbitrary JSON outside the sheet grammar", () => {
   const { spec, data } = module;
   expect(spec.subject).toMatchObject({ field: "member", noun: "member", pane: "members" });
-  // The panes: the subject list, the kernel's sheet and goal, and the run history (a result, not an editor).
+  // The member editor occupies the same pane; the subject and Goal remain kernel slots.
   expect(Object.fromEntries(Object.entries(spec.panes).map(([id, p]) => [id, (p as { kernel?: string }).kernel ?? (p.subjectList ? "subject" : "route")])))
-    .toEqual({ members: "subject", runs: "route", sheet: "sheet", goal: "goal" });
+    .toEqual({ members: "subject", runs: "route", sheet: "route", goal: "goal" });
   expect(Object.keys(spec.panes)).not.toContain("spec");
   // `runs` is the one query; the member is the subject field; the core read is the Goal.
   expect(data.fields.runs?.role).toBe("query");
   expect(data.fields.member).toMatchObject({ role: "subject", cardinality: "many" });
   expect(data.subject).toMatchObject({ field: "member", pane: "members" });
   expect(data.goal).toBe("value");
-  expect(data.sheet?.bindings.fields).toMatchObject({ kind: "local", per: "subject", json: true });
-  // A local-only sheet never reaches Revit, so the kernel adds no sheet write verb; Save is the route's own.
-  expect(Object.keys(spec.commands).sort()).toEqual(["adopt", "open", "save", "saveNew"]);
+  expect(data.sheet).toBeUndefined();
+  // Arbitrary JSON never reaches Revit through the sheet pair; Save remains the route's own door.
+  expect(Object.keys(spec.verbs).sort()).toEqual(["adopt", "open", "save", "saveNew"]);
   // A person can Start this Work: the route seeds an empty one for Open saved bytes to fill.
   expect(spec.edits?.seed?.({} as never, null)).toEqual({ basis: null, fields: {} });
   // The title rides the sheet's head, the first pane after the subject list.
   expect(titlePane(spec)).toBe("sheet");
 });
 
-test("the sheet draws one local JSON cell per top-level property, over the saved bytes", () => {
-  const slot = module.spec.sheet!;
-  const cells = sheetCells(slot, { rows: [code], work: read(true, { "/maxSystems": { edit: { value: 26, by: "human" } } }).work, model: [], read: read(true, { "/maxSystems": { edit: { value: 26, by: "human" } } }) });
-  expect(cells.map((c) => [c.row, c.label, c.value, c.model, c.source, c.json])).toEqual([
-    ["/$schema", "$schema", "./checks.schema.json", "./checks.schema.json", "model", true],
-    ["/maxSystems", "maxSystems", 26, 25, "work", true],
-    ["/names", "names", ["Elbow", "Tee"], ["Elbow", "Tee"], "model", true],
-    ["/a~1b", "a/b", 1, 1, "model", true],
+test("the member pane draws one route-local JSON cell per top-level property, over the saved bytes", () => {
+  const cells = memberFields(read(true, { "/maxSystems": { edit: { value: 26, by: "human" } } }));
+  expect(cells.map((c) => [c.row, c.label, c.value, c.model, c.source])).toEqual([
+    ["/$schema", "$schema", "./checks.schema.json", "./checks.schema.json", "model"],
+    ["/maxSystems", "maxSystems", 26, 25, "work"],
+    ["/names", "names", ["Elbow", "Tee"], ["Elbow", "Tee"], "model"],
+    ["/a~1b", "a/b", 1, 1, "model"],
   ]);
-  expect(cells.every((c) => c.kind === "local" && !c.drift && !c.refusal)).toBe(true);
+  expect(cells.every((c) => !c.refusal)).toBe(true);
 });
 
 test("before Open saved bytes the cells refuse with the reason, so a save cannot replace the file", () => {
-  const cells = sheetCells(module.spec.sheet!, { rows: [code], work: null, model: [], read: read(false) });
+  const cells = memberFields(read(false), null);
   expect(cells.length).toBe(4);
   expect(new Set(cells.map((c) => c.refusal))).toEqual(new Set(["Open saved bytes before editing: this Work has no saved basis"]));
 });
 
 test("the sheet's empty states name their exit", () => {
-  const empty = module.spec.sheet!.empty!;
+  const empty = fieldsEmpty;
   expect(empty(null)).toBe("Pick a member on the left to edit its Work");
   expect(empty({ ...read(true), scope: { pod: "p", path: "src/Probe.cs", runs: "member" } })).toBe(
     "src/Probe.cs is source, not a JSON spec; pick a .json member",

@@ -9,6 +9,7 @@ import { NodeHttpClient, NodeServices } from "@effect/platform-node";
 import { expect, test, vi } from "vite-plus/test";
 import { detachedBridge, sessionView, effectTest, settle } from "./effect-test.ts";
 import { NativeReads, NativeReadLimits } from "../src/native-reads.ts";
+import { commandReadOwnership } from "../src/command-reads.ts";
 import { RevitBridge, CANCEL_OPERATION_KEY } from "../src/bridge.ts";
 import { prepareRead } from "../../../packages/host-internal/src/read-admission.ts";
 import type { DoorFailure, NativeAnswer, NativeOutcome } from "@pe/host-internal/request-contracts";
@@ -97,6 +98,60 @@ const makeHarness = (holdCancel = false) =>
     return { reads, jobs, cancels, answer, cancelWaiters: () => cancelWaiters };
   });
 const harness = makeHarness();
+
+effectTest("command reads wait for native cleanup after the answer; Stop detaches only their lease", () =>
+  Effect.gen(function* () {
+    const { reads, jobs, answer, cancels } = yield* harness;
+    const prepared = yield* prepare();
+    const identity = admittedRequestIdentity({ kind: "human", via: "local" }, {});
+    const owned = commandReadOwnership({
+      resolve: () => Effect.die("unused"),
+      read: () => Effect.flatMap(RequestIdentity, (owner) => reads.join(prepared, "session", owner)),
+    }, reads);
+    const owner = owned.readOwnership.open(identity);
+    const flight = yield* owned.nativeRead!.read({ key: "revit.detail.space-scene", input: {}, scope: {} })
+      .pipe(Effect.provideService(RequestIdentity, identity), Effect.forkScoped);
+    yield* until(() => jobs.length === 1);
+    yield* answer(0);
+    yield* Fiber.join(flight);
+    expect(owner.state().kind).toBe("unsettled");
+    const settled = yield* Effect.forkScoped(Effect.promise(() => owner.settle()));
+    yield* Effect.promise(() => new Promise<void>((resolve) => setImmediate(resolve)));
+    expect(settled.pollUnsafe()).toBeUndefined();
+    yield* Deferred.succeed(jobs[0]!.terminal, "native-acknowledged");
+    expect((yield* Fiber.join(settled)).kind).toBe("settled");
+    expect(cancels).toEqual([]);
+  }),
+);
+
+effectTest("command Stop cannot settle unknown native work or cancel another owner's read lease", () =>
+  Effect.gen(function* () {
+    const { reads, jobs, answer, cancels } = yield* harness;
+    const prepared = yield* prepare();
+    const identity = admittedRequestIdentity({ kind: "human", via: "local" }, {});
+    const peer = admittedRequestIdentity({ kind: "human", via: "local" }, {});
+    const owned = commandReadOwnership({ resolve: () => Effect.die("unused"),
+      read: () => Effect.flatMap(RequestIdentity, (owner) => reads.join(prepared, "session", owner)),
+    }, reads);
+    const owner = owned.readOwnership.open(identity);
+    const read = yield* owned.nativeRead!.read({ key: "revit.detail.space-scene", input: {}, scope: {} })
+      .pipe(Effect.provideService(RequestIdentity, identity), Effect.forkScoped);
+    yield* until(() => jobs.length === 1);
+    const other = yield* reads.join(prepared, "session", peer).pipe(Effect.forkScoped);
+    yield* Effect.yieldNow;
+    expect((yield* reads.retained).joiners).toBe(2);
+    yield* Effect.promise(() => owner.requestStop());
+    yield* Fiber.await(read);
+    expect(cancels).toEqual([]);
+    const settled = yield* Effect.forkScoped(Effect.promise(() => owner.settle()));
+    yield* Effect.promise(() => new Promise<void>((resolve) => setImmediate(resolve)));
+    expect(settled.pollUnsafe()).toBeUndefined();
+    yield* answer(0);
+    yield* Fiber.join(other);
+    yield* Deferred.succeed(jobs[0]!.terminal, "unknown-until-reconciled");
+    expect((yield* Fiber.join(settled)).kind).toBe("unsettled");
+  }),
+);
 
 effectTest(
   "joiners detach independently; last departure cancels once and retirement lasts until terminal, not answer",
@@ -370,7 +425,8 @@ effectTest(
 );
 
 test("retained /fans acquisition admits every caller and keeps miss, refresh and native identity truthful", async () => {
-  const { mkdtemp, rm } = await import("node:fs/promises");
+  const { mkdtemp } = await import("../../../tests/isolated-home/storage.ts");
+  const { rm } = await import("node:fs/promises");
   const { tmpdir } = await import("node:os");
   const { join } = await import("node:path");
   const { ActionJournal } = await import("../src/action-journal.ts");

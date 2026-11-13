@@ -1,25 +1,22 @@
+import { native } from "@pe/agent-contracts/handle";
+import * as contracts from "./contract.ts";
+import { body } from "@pe/host/read-graph";
 import { workRead } from "@pe/host/reads/inputs";
 import { familyObservation, familyReceipts } from "@pe/host/builtin-read-handles";
 import { z } from "zod";
 import { familiesRouteState, canonicalRouteInput, actionReceiptSchema, type FamiliesObservation } from "@pe/agent-contracts";
-import {
-  familiesViewArgs,
-  familiesViewData,
-} from "../../../../packages/agent-contracts/src/families-read.ts";
-import { read, workScope, documentMark } from "@pe/host/read-graph";
+import { familiesViewData, } from "../../../../packages/agent-contracts/src/families-read.ts";
+import { workScope, documentMark } from "@pe/host/read-graph";
 import { applyOutcome, applyTally } from "./families-outcome.ts";
 import { matrixModel, buildPivot, splitRows } from "./families-matrix.ts";
 
 /** Immutable native evidence, Work and matrix calculation meet only on the host. */
-export const familiesView = read("families.view", {
-  input: familiesViewArgs,
-  output: familiesViewData,
-  async run(ctx, args) {
+export const familiesView = body(contracts.view, async function(ctx, args) {
     await ctx.read(documentMark, args.target);
     const scope = { ...(await ctx.read(workScope, args.target)), route: "families" };
     const view = await ctx.read(workRead("families", familiesRouteState.schema), scope);
     const work = familiesRouteState.schema.parse(view?.doc ?? {});
-    const { body: catalog } = await ctx.native("revit.catalog.loaded-families", {
+    const { body: catalog } = await ctx.read(native("revit.catalog.loaded-families"), {
       request: { filter: {}, budget: { maxEntries: 5000 } },
       target: { kind: "document", ref: args.target },
     });
@@ -37,8 +34,7 @@ export const familiesView = read("families.view", {
       { work, catalog, observation, receipts },
       familiesValue,
     );
-  },
-});
+  });
 
 type ViewInputs = {
   work: z.output<typeof familiesRouteState.schema>;

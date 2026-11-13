@@ -101,7 +101,7 @@ export const shelfOf = (thread: HarnessThreadSummary, now = Date.now()): ThreadS
 /** The thread's targets in one line: the one document's name, or a count when several. */
 export function targetLabel(thread: { head: ThreadHead }): string {
   const { targets } = thread.head;
-  if (targets.length > 1) return targetsLabel(targets)!;
+  if (targets.length > 1) return targetsLabel(targets) ?? "Untargeted";
   const only = targets[0];
   if (!only) return "Untargeted";
   if (only.label) return only.label;
@@ -148,7 +148,7 @@ export function compareThreads(a: HarnessThreadSummary, b: HarnessThreadSummary,
   if (aShelf !== bShelf) return THREAD_SHELVES.indexOf(aShelf) - THREAD_SHELVES.indexOf(bShelf);
   const anchor = (thread: HarnessThreadSummary, shelf: ThreadShelf) =>
     shelf === "snoozed"
-      ? thread.lifecycle.snoozedUntil!
+      ? (thread.lifecycle.snoozedUntil ?? thread.updatedAt)
       : shelf === "settled"
         ? (thread.lifecycle.settledAt ?? thread.updatedAt)
         : (thread.lifecycle.reopenedAt ?? thread.createdAt);
@@ -395,4 +395,4 @@ export function demoThreads(body: HarnessThreadBody): HarnessThreadSummary[] {
 
 /** The thread's one document request; null when it targets none or several (ADR 0021). */
 export const soleRequest = (head: ThreadHead): DocumentRequest | null =>
-  head.targets.length === 1 ? head.targets[0]!.request : null;
+  head.targets.length === 1 ? (head.targets[0]?.request ?? null) : null;

@@ -1,4 +1,5 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
+import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test, vi } from "vite-plus/test";
@@ -8,6 +9,48 @@ import { captureStore, testRegistry, testDocumentMarks } from "./effect-test.ts"
 import { fixtureNative } from "./fixture-native.ts";
 import { nativeRecordingRequest } from "./native-recordings.ts";
 import { bindControl } from "../src/control.ts";
+import { nativeRequestSchema } from "@pe/host-contracts/decoders";
+
+test.each(["initialize", "adopt", "partition"])("Takeoffs %s preview accepts readWorks and apply dispatches strict native input", async (verb) => {
+  const directory = await mkdtemp(join(tmpdir(), "pe-initialize-plan-"));
+  const leaf = verb === "initialize" ? "takeoffs.initialize-carrier" : verb === "adopt" ? "takeoffs.adopt" : "takeoffs.partition";
+  const action = `takeoffs.${verb}`;
+  const native = await fixtureNative(join(directory, "native"), "fresh-takeoffs.initialize-carrier", `fresh-${leaf}`);
+  const socket = await native.connect();
+  let state: unknown;
+  const workspace = new RouteWorkspace({ registrations: [{ spec: tools.takeoffs.work }], store: {
+    getState: async () => state, setState: async ({ value }) => { state = structuredClone(value); },
+  } });
+  const key = { binding: "address" as const, route: "takeoffs", target: address("C:/model.rvt") };
+  const post = native.actions({ workspace, marks: testDocumentMarks(native.bridge) }, captureStore(directory));
+  try {
+    await workspace.publish(key, "takeoffs", [{
+      path: ["writeIntent", action],
+      value: { edit: { value: verb === "adopt" ? { views: [nativeRecordingRequest(`fresh-${leaf}`)] } : nativeRecordingRequest(`fresh-${leaf}`) } },
+    }], 0);
+    const work = { key, revision: (await workspace.read(key, "takeoffs"))!.revision };
+    const invoke = async (id: string, command: string) => {
+      const response = await post({ id, key: command, target: { kind: "document", ref: socket.target }, input: { work, ...(id === "unplanned" ? {} : { readWorks: {} }) } });
+      expect([200, 202], await response.clone().text()).toContain(response.status);
+      return native.journal.wait(id);
+    };
+    expect(await invoke("unplanned", action)).toMatchObject({
+      state: "failed", notDispatched: true, refusal: { code: "preview.stale" },
+    });
+    expect(native.calls).toEqual([]);
+    expect(await invoke("plan", `${action}.preview`)).toMatchObject({
+      state: "succeeded", result: { previewOnly: true },
+    });
+    expect(native.calls).toEqual([]);
+    expect(await invoke("apply", action)).toMatchObject({ state: "succeeded" });
+    expect(native.calls.map((call) => call.key)).toEqual(verb === "initialize" ? [leaf] : ["takeoffs.initialize-carrier", leaf]);
+    expect(nativeRequestSchema("takeoffs.initialize-carrier").safeParse(native.calls[0]!.input).success).toBe(true);
+    expect(nativeRequestSchema(leaf).safeParse(native.calls.at(-1)!.input).success).toBe(true);
+  } finally {
+    await native.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
 
 test.each(["selected", "unrelated", "none"] as const)(
   "recorded rooms.write admission fences %s changes and a current preview reaches both declared leaves",

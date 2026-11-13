@@ -1,3 +1,5 @@
+import { fixtureTimeline } from "../shell/fixture-work-door";
+import * as ductsReads from "../ducts/contract.ts";
 import { systemList } from "@pe/ducts-domain/system-list";
 import { createHash } from "node:crypto";
 import { withStoredRulings } from "@pe/ducts-domain/rulings";
@@ -28,7 +30,10 @@ export async function createWitness(
   /** The action door; absent, the browser's own. A witness hands in a real host journal here. */
   submit: typeof browserWorkPorts.submit = browserWorkPorts.submit,
   /** The Pe HTTP client the findings history door goes through; absent, the browser's own. */
-  findings?: Parameters<typeof import("../route/host").undoOwnFinding>[1],
+  findings?: Parameters<typeof import("../shell/work-feed-client").createTimelineClient>[0],
+  /** The Readings stream the mount reads the findings Work from; absent, the browser's own. */
+  readings?: Pick<import("#/host/resource-stream").Readings, "subscribe">,
+  timeline?: import("../shell/work-feed-client").TimelineClient,
 ) {
   const admitted = await admit();
   const ws = new RouteWorkspace({
@@ -57,7 +62,7 @@ export async function createWitness(
   const connected = createWorkFeedClient(
     { subscribe: observe, dirty() {} },
     {
-      write: (key, write) => ws.write(key, key.route, "human", write),
+      write: (key, write) => ws.write(key, key.route, "human", write, async () => []),
       submit: async command => { const call = `fans:${command.key}`; inputs.set(call,command.input); calls.set(call,(calls.get(call)??0)+1); return submit(command); },
     },
   );
@@ -105,9 +110,9 @@ export async function createWitness(
     },
   });
   for (const [entry, read] of Object.entries({
-    "ducts.roster.value": "roster",
-    "ducts.network.value": "network",
-    "ducts.pricing.value": "pricing",
+    [ductsReads.roster.key]: "roster",
+    [ductsReads.network.key]: "network",
+    [ductsReads.pricing.key]: "pricing",
   })) {
     native[entry] = {
       kind: "use",
@@ -238,7 +243,7 @@ export async function createWitness(
   };
   const places = new Map<string, ReturnType<typeof placeInput>>();
   function mount(
-    route: {typed: unknown; data: import("@pe/agent-contracts").RouteGraphJson; workFingerprint: import("@pe/agent-contracts").RouteFingerprint},
+    route: {typed: unknown; data: import("@pe/agent-contracts").RouteGraphWire; workFingerprint: import("@pe/agent-contracts").RouteFingerprint},
     initial = new URLSearchParams(),
     place: string = route.data.key,
   ) {
@@ -266,7 +271,7 @@ export async function createWitness(
       });
       places.set(place, input);
     }
-    const mounted = nativeTestAdapter(mountTypedRoute(route.typed as import("../route/typed-route").TypedRoute, input, route.workFingerprint, {work: feed, findings, sources: Object.fromEntries(Object.entries({...native,...overrides}).map(([entry,source])=>[entry, source.kind === "use" ? { ...source, open(ctx,deliver) {
+    const mounted = nativeTestAdapter(mountTypedRoute(route.typed as import("../route/typed-route").TypedRoute, input, route.workFingerprint, {work: feed, timeline: timeline ?? (findings ? undefined : fixtureTimeline(ws)), findings, readings, sources: Object.fromEntries(Object.entries({...native,...overrides}).map(([entry,source])=>[entry, source.kind === "use" ? { ...source, open(ctx,deliver) {
       const call = `${route.data.key}:${entry}`; calls.set(call,(calls.get(call)??0)+1); inputs.set(call,ctx.args);
       return source.open(ctx,deliver);
     } } : source])) }), feed);

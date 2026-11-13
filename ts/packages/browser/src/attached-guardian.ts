@@ -6,15 +6,9 @@ import { Effect, Semaphore } from "effect";
 import { connectCdp, type CdpClient, type CommandOptions } from "./cdp.ts";
 import { BrowserError } from "./errors.ts";
 import { evaluator } from "./evaluate.ts";
-import { releaseAttachment, type AttachmentLock } from "./attachment-lock.ts";
+import { releaseAttachment } from "./attachment-lock.ts";
 import { publishJson } from "./receipts.ts";
-
-interface GuardianConfig {
-  endpoint: string;
-  receipt: string;
-  lock: AttachmentLock;
-  timeoutMs: number;
-}
+import { decodeGuardianConfig } from "./keeper-config.ts";
 interface Forward {
   id: number;
   method: string;
@@ -86,7 +80,7 @@ export function guardianClient(pipe: CdpClient): CdpClient {
 }
 
 export async function runAttachedGuardian(configFile: string): Promise<void> {
-  const config: GuardianConfig = JSON.parse(await readFile(configFile, "utf8"));
+  const config = decodeGuardianConfig(JSON.parse(await readFile(configFile, "utf8")));
   const directory = dirname(config.receipt);
   const owned = new Set<string>();
   const creates = new Set<Promise<void>>();
@@ -175,7 +169,7 @@ export async function runAttachedGuardian(configFile: string): Promise<void> {
         }
         await cdp.close();
       }
-      await publishJson(join(directory, "attached-cleanup.json"), {
+      await publishJson(config.storage, "attached-cleanup.json", {
         status: "closed",
         guardianPid: process.pid,
         connections: opened ? 1 : 0,

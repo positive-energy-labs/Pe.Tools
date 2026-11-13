@@ -19,7 +19,7 @@ test("Page links use the existing viewer only for this frontend or its exact run
     expect(pageLink("/pages/report/?scope=all#airflow", front)?.page).toEqual({
       page: oneName("report"),
       view: true,
-      query: "scope=all",
+      query: { scope: "all" },
       fragment: "airflow",
     });
     for (const path of [

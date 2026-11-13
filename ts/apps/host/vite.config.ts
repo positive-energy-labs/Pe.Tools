@@ -75,7 +75,7 @@ async function prepareTestSourceClosures() {
   }
   const before = routeStartupSourceHash(checkout);
   await prepareSourceClosures();
-  // The producer also rewrites tracked generated sources; stamp only a run that found them current.
+  // A source edit during closure generation invalidates the stamp.
   const sourceHash = routeStartupSourceHash(checkout);
   if (sourceHash !== before) return;
   const stamp: RouteStartupProjection = {

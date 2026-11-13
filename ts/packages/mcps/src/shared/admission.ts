@@ -1,5 +1,6 @@
 import { readFamilyCapture } from "./family-read-client.ts";
 import { z } from "zod";
+import { isReadEffect } from "@pe/host-contracts/contracts";
 /** Catalog selection is an adapter; immutable request retention and execution belong to shared owners. */
 import {
   commands,
@@ -57,10 +58,20 @@ export type CapabilityIntent = {
 export const CANCEL_KEY = "op.cancel";
 const caller = (context: AdmissionContext) => new HostRpcCaller(context);
 
+/**
+ * Whether calling an op writes. A native op answers by its effect, which is its handler's scope.
+ * A host-only op keeps its hand-written intent: pointers.point is a SessionWrite that needs no
+ * write consent, so its effect alone would send it through the command door.
+ */
+export const opWrites = (op: Pick<HostOperationDefinition, "key" | "effect"> & { intent?: string }): boolean =>
+  isTsOnlyOperationKey(op.key) && op.intent !== undefined
+    ? op.intent !== "Read"
+    : !isReadEffect(op.effect);
+
 export async function readCapabilityIntent(
   key: string,
   context: AdmissionContext,
-  definition?: { intent: HostOperationDefinition["intent"]; needs: ActionNeed },
+  definition?: { mutates: boolean; needs: ActionNeed },
 ): Promise<CapabilityIntent> {
   if (Object.hasOwn(commands, key)) {
     const command = commands[key as SemanticActionKey];
@@ -93,10 +104,11 @@ export async function readCapabilityIntent(
     throw Error(
       catalog?.bridgeCatalogError ?? `Operation '${key}' is unavailable in the selected catalog`,
     );
+  const mutates = "mutates" in selected ? selected.mutates : opWrites(selected);
   return {
-    door: selected.intent === "Read" && key !== "scripting.execute" ? "call" : "command",
+    door: mutates ? "command" : "call",
     needs: selected.needs === "nothing" && !isTsOnlyOperationKey(key) ? "session" : selected.needs,
-    mutates: selected.intent !== "Read" || key === "scripting.execute",
+    mutates,
     session: catalog?.bridgeSessionId,
   };
 }

@@ -3,7 +3,10 @@ import { useEffect, useLayoutEffect, useMemo, useState, type ReactNode } from "r
 import { useAtomValue } from "@effect/atom-react";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { routeAddress, split, pane } from "@pe/agent-contracts";
-import { ChatShell } from "#/chat/chat-shell";
+import { TypedShell } from "../shell/typed-shell";
+import { routeRegistry } from "../route/registry";
+import { DockSurface } from "./hosted-route";
+import { DockBand } from "../shell/pane-actions";
 import { EmptyState } from "@pe/kit/lang/empty";
 import { Button } from "@pe/kit/lang/button";
 import { chipRecipe } from "@pe/kit/lang/chip";
@@ -15,7 +18,7 @@ import {
 import { ChatPlanIntent } from "#/route/situation-ladder";
 import { useWorkbench } from "./provider";
 import { useRouteTabs } from "./tabs";
-import { RouteTabActions, RouteTabs, tabTitle } from "./route-tabs";
+import { RouteTabActions, RouteTabs } from "./route-tabs";
 import { RouteRetention } from "./route-retention";
 import { DOCK_PANES } from "./dock-layout";
 import { paneFrame } from "#/route/body";
@@ -34,6 +37,10 @@ export function RouteDock({
   const { store } = useWorkbench();
   const views = usePlaceViews();
   const tabs = useRouteTabs();
+  const chat = routeRegistry.chat;
+  if (!chat) throw Error("The dock requires the registered chat route");
+  const [peaHead, setPeaHead] = useState<HTMLDivElement | null>(null);
+  const [toolHead, setToolHead] = useState<HTMLDivElement | null>(null);
   const pea = useRouterState({
     select: (state) => state.location.pathname === routeAddress("chat").path,
   });
@@ -120,19 +127,13 @@ export function RouteDock({
           pea: (frame) =>
             frame(
               tabs.route || pea ? (
-                <>
-                  {layout.tools?.folded && tabs.active && (
-                    <span aria-label="Pea context" className="shrink-0 truncate p-(--gutter) hairline-b">
-                      {tabTitle(tabs.active)}
-                    </span>
-                  )}
-                  <ChatShell docked={Boolean(tabs.route)} target={tabs.target} />
-                </>
+                <DockBand value={{ node: peaHead }}><DockSurface value={{ docked: Boolean(tabs.route), target: tabs.target }}>
+                  <TypedShell module={chat.module} fingerprint={chat.fingerprint} />
+                </DockSurface></DockBand>
               ) : (
                 children
               ),
-              // No head: the hosted surface's own panes carry theirs (two chrome layers).
-              { ...paneFrame(DOCK_PANES.pea.body), title: "" },
+              { ...paneFrame(DOCK_PANES.pea.body), tabs: <div ref={setPeaHead} className="contents" /> },
             ),
           tools: (frame) =>
             frame(
@@ -143,11 +144,11 @@ export function RouteDock({
                     onOpen={() => void navigate({ to: "/$route", params: { route: "open" } })}
                   />
                 )}
-                <PlaceViewsProvider value={views}><RouteRetention {...tabs} renderRoute={renderRoute} /></PlaceViewsProvider>
+                <DockBand value={{ node: toolHead }}><PlaceViewsProvider value={views}><RouteRetention {...tabs} renderRoute={renderRoute} /></PlaceViewsProvider></DockBand>
               </>,
               {
                 ...paneFrame(DOCK_PANES.tools.body),
-                tabs: strip,
+                tabs: <>{strip}<div ref={setToolHead} className="contents" /></>,
                 actions: (
                   <RouteTabActions
                     tabs={tabs.tabs}

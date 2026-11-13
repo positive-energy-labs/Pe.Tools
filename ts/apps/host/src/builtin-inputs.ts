@@ -1,3 +1,4 @@
+import { stateScope } from "@pe/host-contracts/service-identity";
 import { catalogsFor } from "./ducts-files.ts";
 import { z } from "zod";
 import { admitNativeCaller } from "./native-read-policy.ts";
@@ -27,11 +28,13 @@ import {
 } from "./input-occurrence.ts";
 import type { TakingObserver } from "./native-recording.ts";
 import { inputPort, type ReadSources } from "./reads/inputs.ts";
-import { Publications, fingerprint } from "./reads/evaluator.ts";
+import { fingerprint } from "./reads/evaluator.ts";
+import { Publications } from "./reads/publications.ts";
 import { History, localHistory } from "./reads/history.ts";
 import { historyRoutes } from "./reads/history-routes.ts";
 import { historyPoseSchema, addressSchema, sameAddress } from "@pe/agent-contracts";
 import { ActionJournalService } from "./receipt-services.ts";
+import { hostTimeline } from "./reads/work-timeline.ts";
 import { readInvalidations } from "./reads/invalidations.ts";
 import { settingsFile } from "./reads/door.ts";
 import { onSettingWritten, readSettingTiers, watchSettingTiers } from "./tiered-settings.ts";
@@ -77,7 +80,7 @@ import {
   type HostWork,
   type PeInvocationFactory,
 } from "./pe-routes.ts";
-import { productRouteWorkPath } from "./product-paths.ts";
+import { hostState } from "./host-ownership.ts";
 import { RequestIdentity } from "./request-services.ts";
 import { markReadings } from "./resource-adapters.ts";
 import { fileRouteDocumentStore } from "./route-document-store.ts";
@@ -210,7 +213,8 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
             row.state === "succeeded" &&
             row.target.kind === "document" &&
             row.steps.some(
-              (s) => s.state === "succeeded" && s.effect !== "Read" && s.effect !== "TransactRead",
+              (s) => s.state === "succeeded" && (s.kind !== "native" || s.transport !== "bridge" || !s.touched ||
+                ["wrote", "unauthorized", "unknown", "restoreFailed"].includes(s.touched.kind)),
             )
           )
             history.afterWrite(row.target.ref, row.id);
@@ -223,6 +227,8 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
       }),
     );
   }
+  // The Timeline reads receipts from the action journal; a lane built before the journal opens has no Timeline.
+  const timelineJournal = Option.getOrUndefined(yield* Effect.serviceOption(ActionJournalService));
   let settingWatches: ReturnType<typeof watchSettingTiers> | undefined;
   const invalidations = readInvalidations(
     workspace,
@@ -243,6 +249,7 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
         settingWatches?.close();
       };
     },
+    timelineJournal && ((changed) => timelineJournal.subscribe({ kinds: ["action"] }, changed)),
   );
   yield* Effect.addFinalizer(() => Effect.sync(invalidations.close));
   const json = (value: unknown) =>
@@ -356,6 +363,12 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
     const admitted = Context.add(provided, RequestIdentity, identity);
     const invoke = <A, E>(effect: Effect.Effect<A, E, RequestIdentityKey | HostNativeRead>) =>
       runPods({}, Effect.provide(effect, admitted));
+    const timeline = timelineJournal && !recorded ? hostTimeline(workspace, timelineJournal, async () => {
+      const result = await invoke(Context.get(services, HostSessionInventory).list());
+      return result.sessions.flatMap(session => session.connected
+        ? (session.openDocuments ?? []).map(document => ({ session: session.sessionId, openId: document.openId, address: addressSchema.nullable().parse(document.address ?? null), projectHome: document.projectHome }))
+        : []);
+    }) : undefined;
     const url = new URL(web.url),
       declared = matchPeRoute(web.method, url.pathname)!;
     if (declared.id === "resources.subscriptions") return { resourceOwner: connectionOwner };
@@ -366,7 +379,14 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
       query: Object.fromEntries(url.searchParams),
       body: web.method === "GET" ? undefined : await web.clone().json(),
     });
-    const graph = graphRouteIds.includes(declared.id) ? graphRoute(declared.id, input.body) : null;
+    const graph = graphRouteIds.includes(declared.id)
+      ? graphRoute(
+          declared.id,
+          input.body,
+          undefined,
+          identity.caller.kind === "pea" ? "pea" : identity.caller.kind === "human" ? "human" : null,
+        )
+      : null;
     const graphRequest = graph?.publication;
     const historyDocument = documentRefSchema.safeParse(
       (graph?.args as { target?: unknown } | undefined)?.target,
@@ -587,10 +607,18 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
               });
             },
           ),
-        call: async (key, input, target, version, role) => {
+        call: async (key, input, target, version, role, signal) => {
+          // Interrupt only this native read join. NativeReads retains restoration and terminal custody.
+          const take = async <A, E>(effect: Effect.Effect<A, E, RequestIdentityKey | HostNativeRead>) => {
+            const result = await runPods(
+              {}, Effect.provide(effect, context).pipe(Effect.result), { signal },
+            );
+            if (result._tag === "Failure") throw result.failure;
+            return result.success;
+          };
           const chosen = executionTargetSchema.parse(target);
           const safety = hostOpSafety[key as keyof typeof hostOpSafety];
-          if (!safety || safety.intent !== "Read")
+          if (!safety || (safety.effect !== "Read" && safety.effect !== "TransactRead"))
             throw Error(`Native leaf is not a catalog Read: ${key}`);
           const ref = chosen.kind === "document" ? chosen.ref : null;
           if (!["ducts.snapshot.roster", "ducts.snapshot.walk", "ducts.tables"].includes(key)) {
@@ -600,7 +628,7 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
               : chosen.kind === "session"
                 ? { bridgeSessionId: chosen.session }
                 : {};
-            const answer = await invoke(native.read({ key, input, scope }));
+            const answer = await take(native.read({ key, input, scope }));
             return new Response(JSON.stringify(answer.value), {
               // Admission generations fence native flights; sealed read versions describe content.
               // Keep freshness evidence in the native taking, outside the Value's content identity.
@@ -613,7 +641,7 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
             ...(key === "ducts.tables" ? {} : { openDocumentId: ref.openId }),
           };
           return HttpServerResponse.toWeb(
-            await invoke(retained(current, { key, input, scope }, { version }, role, documentRead)),
+            await take(retained(current, { key, input, scope }, { version }, role, documentRead)),
           );
         },
       };
@@ -989,6 +1017,7 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
             readGraph: async () => {
               const port = inputPort({
                 leaves: registeredReads.leaves,
+                timeline,
                 source,
                 workspace,
                 marks,
@@ -1321,7 +1350,7 @@ export const defaultReadOwner = (
     };
     return yield* makeReadOwner(inputs, {
       ...options,
-      store: options.store ?? fileRouteDocumentStore(productRouteWorkPath()),
+      store: options.store ?? fileRouteDocumentStore(stateScope(hostState(), hostState().work)),
       live: { ...live, owner: ductsReadings(yield* RevitBridge) },
     });
   });

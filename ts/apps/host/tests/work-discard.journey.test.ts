@@ -1,12 +1,15 @@
-import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { notices as storedNotices } from "@pe/host-contracts/kinds";
+import { stateMachine, stateFixture } from "../../../tests/isolated-home/storage.ts";
+import { dirname as storedParent } from "node:path";
+import { mkdtempWork as mkdtemp } from "../../../tests/isolated-home/storage.ts";
+import { readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vite-plus/test";
 import { z } from "zod";
 import { bindWork, workKey } from "@pe/agent-contracts";
-import { readStoredNotices } from "@pe/host-contracts/store";
-import { storedNoticesPath } from "../src/notice-feed.ts";
+
 import { createPeRoutes } from "../src/pe-routes.ts";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
 import { human, actAs } from "./callers.ts";
@@ -16,10 +19,10 @@ test("D rule 5 opens discarded disk Work empty and saves the first edit without 
   const key = bindWork("discard-journey", null), targetKey = workKey(key);
   const name = createHash("sha256").update(`${key.route}:${targetKey}`).digest("hex") + ".json";
   const path = join(dir, name);
-  const posted = () => readStoredNotices(storedNoticesPath()).filter((notice) => notice.path === path);
+  const posted = () => storedNotices(stateMachine(path)).filter((notice) => notice.path === path);
   const spec = { route: key.route, title: "Work", description: "Authored Work", schemaVersion: 2,
     schema: z.object({ note: z.string().default("") }) };
-  const store = fileRouteDocumentStore(dir);
+  const store = fileRouteDocumentStore(stateFixture(dir));
   const request = (method: string, suffix = "", body?: unknown) => new Request(`http://host/pe/route-state/${key.route}${suffix}`, {
     method, ...(body === undefined ? {} : { headers: { "content-type": "application/json" }, body: JSON.stringify(body) }),
   });

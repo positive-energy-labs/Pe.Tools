@@ -7,12 +7,18 @@ import type {
 } from "./command-executor.ts";
 import { CommandRejected, StepFailure, io, refused } from "./command-executor.ts";
 import { readJournalSnapshot } from "./journal-snapshot.ts";
-import { nativeEffect, validateNativeInput } from "./native-input.ts";
+import { validateNativeInput } from "./native-input.ts";
+import type { ReadOwner } from "./reads/read-ownership.ts";
 import { bindActionDispatch, type DispatchRefusal } from "./action-dispatch.ts";
 import { appendFile, mkdir, readdir, readFile } from "node:fs/promises";
-import { discardStored, readStored, writeAtomic } from "@pe/host-contracts/store";
-import { storedBlobsPath, storedNoticesPath } from "./notice-feed.ts";
-import { dirname, join, win32 } from "node:path";
+import { stateDirectory } from "@pe/host-contracts/service-identity";
+import { stateKind, read as readStoredFile, setAside, writeState, type StoredFile } from "@pe/host-contracts/kinds";
+export const journalKind = stateKind({ schema: z.unknown(), place: (_name: string) => "Action journal", segments: (name: string) => [name] });
+const outputKind = stateKind({
+  schema: z.unknown(), place: (_id: string, ..._parts: string[]) => "Action outputs",
+  segments: (id: string, ...parts: string[]) => ["action-outputs", createHash("sha256").update(id).digest("hex"), ...parts],
+});
+import { dirname, join, relative, win32 } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import { holdSendCommand, SendHeld } from "./guards.ts";
 import { OwnerReads, type OwnerValue } from "@pe/runtime";
@@ -32,6 +38,8 @@ import {
   sameCaller,
   actionReceiptSchema,
   actionStepSchema,
+  touchedSchema,
+  observedSchema,
   actionAdmissionSchema,
   type ActionAdmission,
   type Consumed,
@@ -99,12 +107,13 @@ const undispatched = (steps: readonly ActionStep[]) =>
       (step.state === "failed" || step.state === "cancelled") &&
       step.notDispatched === true,
   );
-/** A succeeded step that may have changed something: only the catalog's stamp clears a read. */
+/** Only native terminal evidence can clear a possible document write. */
 const effected = (step: ActionStep) =>
-  step.state === "succeeded" &&
   step.kind !== "publication" &&
-  step.effect !== "Read" &&
-  step.effect !== "TransactRead";
+  (step.kind === "native"
+    ? (!("touched" in step) || !step.touched || ["wrote", "unauthorized", "unknown", "restoreFailed"].includes(step.touched.kind)) &&
+      !("notDispatched" in step && step.notDispatched)
+    : step.state === "succeeded");
 const holdsClaims = (row: ActionReceipt) =>
   !(
     (row.state === "failed" || row.state === "cancelled") &&
@@ -372,7 +381,7 @@ type Settled = { state: Exclude<ActionReceipt["state"], "running"> } & Record<
  * - an uncertain step is never hidden: the attempt is unknown and nothing redispatches it;
  * - cancelled is a settled answer, never a rollback claim;
  * - a known succeeded effect is never erased: a later failure makes the attempt incomplete;
- * - a succeeded catalog Read is a known outcome, not an effect: a later refusal stays known;
+ * - a native terminal that proves no remaining change keeps a later refusal known;
  * - with no effect, a failure is failed, and not dispatched only when no step reached its owner.
  * `null` means recovery proved nothing new and the attempt keeps its state.
  */
@@ -520,6 +529,7 @@ export class ActionJournal implements ReceiptReader {
   private flushed = false;
   // Page authority is a host-minted object capability, never reconstructed from persisted data.
   private readonly activeCallers = new Map<string, Caller>();
+  private readonly readOwners = new Map<string, ReadOwner>();
   private environment?: CommandEnvironment;
   private inputContext?: HostInputContext["Service"];
   bindInputContext(inputs: HostInputContext["Service"]): void {
@@ -529,7 +539,7 @@ export class ActionJournal implements ReceiptReader {
   private readonly listeners = new Set<() => void>();
   private readonly reads = new OwnerReads();
   constructor(
-    private readonly path: string,
+    private readonly file: StoredFile<unknown, "state">,
     /** The host runtime's clock: every event time this journal produces reads it. */
     private readonly now: () => number,
     private readonly stamp: () => ReceiptStamp | null = () => null,
@@ -537,6 +547,8 @@ export class ActionJournal implements ReceiptReader {
     /** Absent only on a read-side journal (a restart reader); such a journal admits nothing. */
     private readonly owners?: Owners,
   ) {}
+  private get path() { return this.file.path; }
+  private get storage() { return stateDirectory(this.file.machine, ...relative(this.file.machine.state, dirname(this.path)).split(/[\\\\/]/).filter(Boolean)); }
   /** Bound once when the host/demo/test runtime acquires its exact bridge and Work owner. */
   bindCommands(environment: CommandEnvironment): void {
     if (this.environment) throw Error("This journal already has its command environment");
@@ -699,7 +711,7 @@ export class ActionJournal implements ReceiptReader {
     }
     return this.dispatchRefusal(requestId);
   }
-  async markDispatched(requestId: string) {
+  async markDispatched(requestId: string, transport: "bridge" | "sdk") {
     await this.serial(async () => {
       const action = this.stepAction.get(requestId),
         row = action ? this.rows.get(action) : undefined;
@@ -707,9 +719,12 @@ export class ActionJournal implements ReceiptReader {
       await this.commit([
         {
           ...row,
-          steps: row.steps.map((step) =>
-            step.id === requestId ? { ...step, dispatchedAt: new Date(this.now()).toISOString() } : step,
-          ),
+          steps: row.steps.map((step) => {
+            if (step.id !== requestId) return step;
+            if (step.transport && step.transport !== transport)
+              throw Error("Dispatch cannot change a step's recorded transport");
+            return actionStepSchema.parse({ ...step, transport, dispatchedAt: new Date(this.now()).toISOString() });
+          }),
         },
       ]);
       this.notify();
@@ -819,11 +834,7 @@ export class ActionJournal implements ReceiptReader {
       if (entry.isFile() && entry.name.endsWith(".json")) {
         const path = join(entry.parentPath, entry.name);
         // Derived (ADR 0039): an export that does not decode is discarded with a notice and left out.
-        const read = readStored(path, z.unknown(), {
-          class: "discard",
-          place: "Action outputs",
-          notices: storedNoticesPath(),
-        });
+        const read = readStoredFile(outputKind.in(this.storage, id, ...path.slice(home.length + 1).split(/[\\\\/]/)));
         if (read.kind === "ok") files[path.slice(home.length + 1).replaceAll("\\", "/")] = read.value;
       }
     return { id, home, files };
@@ -837,7 +848,7 @@ export class ActionJournal implements ReceiptReader {
     );
   }
   private async export(id: string, name: string, value: unknown) {
-    writeAtomic(join(this.home(id), name), JSON.stringify(value, null, 2));
+    writeState(outputKind.in(this.storage, id, ...name.split(/[\\\\/]/)), JSON.stringify(value, null, 2));
   }
   private async waitForTurn(id: string, retirementOnly = false) {
     for (;;) {
@@ -958,6 +969,8 @@ export class ActionJournal implements ReceiptReader {
         return { read: workspace.read.bind(workspace), view: workspace.view.bind(workspace), publish: owner.publish.bind(owner) };
       },
       consumed,
+      clock: { now: () => new Date(this.now()).toISOString() },
+      ids: { mint: randomUUID },
       selectWork: async (spec, handle, select) => {
         if (handle.key.route !== spec.route)
           throw refused("Work belongs to another tool", "work.route");
@@ -1654,7 +1667,6 @@ export class ActionJournal implements ReceiptReader {
                 id: randomUUID(),
                 kind,
                 key,
-                ...(kind === "native" && nativeEffect(key) ? { effect: nativeEffect(key) } : {}),
                 input: structuredClone(input),
                 ...(kind === "native" && exactProcess
                   ? { process: structuredClone(exactProcess) }
@@ -1668,7 +1680,28 @@ export class ActionJournal implements ReceiptReader {
                   bindActionDispatch(step.id, {
                     refusal: () => journal.dispatchRefusal(step.id),
                     validate: () => journal.validateDispatch(step.id),
-                    dispatched: () => journal.markDispatched(step.id),
+                    dispatched: (transport) => journal.markDispatched(step.id, transport),
+                    terminal: async (touched, evidenceJson) => {
+                      const parsed = touchedSchema.safeParse(touched);
+                      let nativeEvidence: import("@pe/agent-contracts").Observed | undefined;
+                      try { nativeEvidence = observedSchema.safeParse(JSON.parse(evidenceJson ?? "null")).data; }
+                      catch { /* Malformed evidence cannot establish an observation. */ }
+                      await save((current) => ({ ...current, steps: current.steps.map((held): ActionStep => {
+                        if (held.id !== step.id || held.transport !== "bridge" || (!parsed.success && held.bridgeReply === "touched")) return held;
+                        const base = { ...held };
+                        delete base.touched;
+                        const bridgeReply: typeof held.bridgeReply = parsed.success ? "touched" : touched == null ? "missing-touched" : "invalid-touched";
+                        return { ...base,
+                          bridgeReply,
+                          ...(parsed.success ? { touched: parsed.data } : {}),
+                          ...(nativeEvidence ? { nativeEvidence } : {}),
+                        };
+                      }) }));
+                    },
+                    uncertain: async (reason) => save((current) => ({ ...current, steps: current.steps.map((held) =>
+                      held.id !== step.id || held.transport !== "bridge" || held.bridgeReply === "touched" ? held
+                        : { ...held, touched: { kind: "unknown", reason } },
+                    ) })),
                   }),
                 );
               return { step };
@@ -1800,6 +1833,7 @@ export class ActionJournal implements ReceiptReader {
         try {
           if (!retirementOnly) commandCheckpoint(originOf(row.caller));
         } catch {
+          void this.readOwners.get(row.id)?.requestStop().catch(persistenceFailed);
           void save((current) => ({ ...current, cancellationRequested: true })).catch(
             persistenceFailed,
           );
@@ -1827,9 +1861,13 @@ export class ActionJournal implements ReceiptReader {
           await gate(row, "prepared");
       };
       // Rule 2g: settle inside the Exit, so every exit (interruption included) commits once.
-      const settleExit = (exit: Exit.Exit<unknown, unknown>) => {
+      const identity = ownerIdentity(row, crossing.parent);
+      const readOwner = this.environment?.readOwnership?.open(identity);
+      if (readOwner) this.readOwners.set(row.id, readOwner);
+      const settleExit = async (exit: Exit.Exit<unknown, unknown>) => {
+        const descendants = await readOwner?.settle();
         const error = Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined;
-        const finished = {
+        let finished = {
           ...unsettled(row),
           ...(Exit.isSuccess(exit)
             ? settle(true, row.steps, { kind: "returned", result: exit.value })
@@ -1838,6 +1876,9 @@ export class ActionJournal implements ReceiptReader {
                 ...(error instanceof CommandRejected ? { refusal: error.refusal } : {}),
               }),
         } as ActionReceipt;
+        if (descendants?.kind === "unsettled") finished = { ...unsettled(finished),
+          state: "unknown", error: "Required native reads have no terminal evidence", status: 503,
+        };
         return this.serial(async () => {
             const next = actionReceiptSchema.parse({
               ...finished,
@@ -1857,6 +1898,7 @@ export class ActionJournal implements ReceiptReader {
               throw error;
             } finally {
               this.activeCallers.delete(row.id);
+              this.readOwners.delete(row.id);
               releaseRun();
               releaseDispatch.forEach((release) => release());
             }
@@ -1881,7 +1923,7 @@ export class ActionJournal implements ReceiptReader {
               Effect.sync(() => console.error("action-journal: completion failed", Cause.pretty(cause))),
             ),
           ),
-        ).pipe(Effect.provideService(RequestIdentity, ownerIdentity(row, crossing.parent))),
+        ).pipe(Effect.provideService(RequestIdentity, identity)),
       );
       return structuredClone(row);
     });
@@ -1897,6 +1939,7 @@ export class ActionJournal implements ReceiptReader {
     if (!row) throw Error(`Action '${id}' has no admitted receipt`);
     if (row.state !== "running")
       throw Error(`Action '${id}' is ${row.state}; only an active action can be cancelled`);
+    await this.readOwners.get(id)?.requestStop();
     await this.serial(async () => {
       const current = this.rows.get(id)!;
       await this.commit([{ ...current, cancellationRequested: true }]);
@@ -1943,6 +1986,7 @@ export class ActionJournal implements ReceiptReader {
             update.step.id !== step.id ||
             update.step.key !== step.key ||
             update.step.kind !== step.kind ||
+            update.step.transport !== step.transport ||
             canonicalRouteInput(update.step.input) !== canonicalRouteInput(step.input) ||
             (step.process &&
               update.step.process &&
@@ -1951,8 +1995,9 @@ export class ActionJournal implements ReceiptReader {
             throw Error("Recovery cannot change a step's immutable intent or process");
           // Recovery supplies a new outcome. Obsolete fields from the previous state are not
           // part of that outcome; the journal retains immutable intent and dispatch evidence.
-          const variant = actionStepSchema.options.find(
-            (schema) => schema.shape.state.value === update.step.state,
+          const variant = actionStepSchema.options.map((option) => option.options).flat().find(
+            (schema) => schema.shape.state.value === update.step.state && schema.shape.transport.safeParse(update.step.transport).success &&
+              ("opReceipt" in schema.shape) === ("opReceipt" in update.step),
           )!;
           update.step = actionStepSchema.parse({
             ...variant.strip().parse(update.step),
@@ -2080,17 +2125,7 @@ export class ActionJournal implements ReceiptReader {
     // itself, is deleted with one notice and the host runs on an empty journal. Before this, a
     // throw here rejected every later journal write for the life of the host.
     const discard = (reason: string) => {
-      discardStored(
-        this.path,
-        {
-          class: "discard",
-          place: "Action journal",
-          notices: storedNoticesPath(),
-          // The bytes rest in the blob store first, under the hash the notice names.
-          blobRoot: storedBlobsPath(),
-        },
-        reason,
-      );
+      setAside(this.file, reason);
       for (const held of [
         this.rows,
         this.receipts,
@@ -2109,7 +2144,7 @@ export class ActionJournal implements ReceiptReader {
       this.discarded = new Date(this.now()).toISOString();
       // Written now, not at the next commit: a host that restarts before any write still knows.
       try {
-        writeAtomic(this.path, this.headerLine());
+        writeState(this.file, this.headerLine());
         this.header = true;
       } catch (error) {
         // The flag stays in memory, and the next commit writes the header that carries it.
@@ -2295,8 +2330,8 @@ export class ActionJournal implements ReceiptReader {
       ...[...this.mappings].map((mapping) => ({ mapping })),
       ...[...this.receipts.values()].map((receipt) => ({ receipt })),
     ];
-    writeAtomic(
-      this.path,
+    writeState(
+      this.file,
       `${this.headerLine()}${lines.map((line) => `${JSON.stringify(line)}\n`).join("")}`,
     );
     this.header = true;

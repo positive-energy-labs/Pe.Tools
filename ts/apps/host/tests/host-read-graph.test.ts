@@ -1,5 +1,7 @@
+import { stateFixture } from "../../../tests/isolated-home/storage.ts";
+import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
-import { mkdtemp, rm, writeFile, open, readFile, readdir, stat, utimes } from "node:fs/promises";
+import { rm, writeFile, open, readFile, readdir, stat, utimes } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Context, Effect, Layer, Schema } from "effect";
@@ -18,7 +20,8 @@ import { nativeRead } from "../src/reads/evaluator.ts";
 import { registeredReads } from "../src/reads/routes.ts";
 import { familiesViewArgs } from "@pe/agent-contracts";
 import { withInvocationContext } from "@pe/runtime/context";
-import { Publications, read, leaf, RefusedPartition } from "../src/reads/evaluator.ts";
+import { read, leaf, RefusedPartition } from "../src/reads/evaluator.ts";
+import { Publications } from "../src/reads/publications.ts";
 import { FIRM_SEED } from "../src/ducts-inputs.ts";
 import { BridgeError } from "@pe/host-internal/dispatch";
 import { RequestIdentity, admittedRequestIdentity } from "../src/request-services.ts";
@@ -435,7 +438,7 @@ test("F2 Work, same-version firm criteria and document mark changes during a mul
 
 test("F3 three native batches retain the middle refusal on offline replay; no live bridge is constructed", async () => {
   const dir = await mkdtemp(join(tmpdir(), "host-read-refused-"));
-  const writer = await settle(openRecordingWriter(join(dir, "recording"), identity, bounds));
+  const writer = await settle(openRecordingWriter(stateFixture(join(dir, "recording")), identity, bounds));
   let liveCalls = 0,
     poison = 0;
   const batch = leaf("native-batch", z.array(z.number()), z.array(z.number()), false);

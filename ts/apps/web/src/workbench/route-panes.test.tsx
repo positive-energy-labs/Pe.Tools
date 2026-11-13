@@ -1,3 +1,4 @@
+import { host, seedPlaces } from "./places.test-support";
 import { stableFanKey } from "../ducts/sheet/model";
 import {route as declareRoute, scrollBody} from "../route/typed-route";
 import {module as familiesDeclaration} from "../families/route";
@@ -67,15 +68,21 @@ const tabOpen = place("aaaaaaaa-0000-4000-8000-00000000000c", "SO", "303", {
   ref: { session: "s1", openId: "o1" },
 });
 const seeded = [ducts, tabA, tabB, tabOpen];
-const places = () => JSON.parse(sessionStorage.getItem("pe.places") ?? "[]") as ThreadTab[];
-// Only T and U are real host chats; Places are this window's sessionStorage, seeded per test.
+const places = () => host.read() as ThreadTab[];
+// Only T and U are real host chats; the host list is seeded per test.
 const threads = [{ id: "T" }, { id: "U" }];
 vi.mock("./provider", () => ({ useWorkbench: () => ({ store, threads }) }));
 const hostEvents = vi.hoisted(() => {
   const listeners = new Set<(event: unknown) => void>();
   return { listeners, emit: (event: unknown) => [...listeners].forEach((each) => each(event)) };
 });
-vi.mock("#/chat/chat-shell", () => ({ ChatShell: () => <div data-chat-probe="" /> }));
+vi.mock("../shell/typed-shell", async (actual) => {
+  const real = await actual<typeof import("../shell/typed-shell")>();
+  const { RouteBand } = await import("../navigation/route-controls");
+  return { ...real, TypedShell: (props: Parameters<typeof real.TypedShell>[0]) => props.module.spec.key === "chat"
+    ? <><RouteBand route="chat"><span data-slot="situation-band">Pea controls</span></RouteBand><div data-chat-probe="" /></>
+    : <real.TypedShell {...props} /> };
+});
 vi.mock("#/route/situation-ladder", async () => ({ ChatPlanIntent: (await import("react")).createContext(null) }));
 vi.mock("#/host/resource-stream", async (actual) => {
   const { useEffect } = await import("react");
@@ -105,7 +112,7 @@ vi.mock("#/host/pe-client", () => ({ peClient: { call } }));
 
 // The retention/lease witness uses the typed Page contract without acquiring native evidence or Work.
 const familiesProbe=declareRoute({
-  ...familiesDeclaration.spec, needs:"browser",core:undefined,edits:undefined,commands:{},
+  ...familiesDeclaration.spec, needs:"browser",core:undefined,edits:undefined,verbs:{},band:[],
   panes:{probe:{title:"Probe",purpose:"Retention proof",body:"scroll",draw:ctx=>scrollBody(<output data-families-probe="">{ctx.page.read().focus}</output>)}},
   layout:{kind:"pane",id:"probe"},
 });
@@ -124,12 +131,13 @@ function DuctsProbe() {
   return <output data-ducts-probe="">{system.kind === "all" ? "all" : (namesOf(system) as string[]).join(" + ")}</output>;
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   mounts = 0;
   call.mockReset();
   call.mockImplementation(async (door) => (door === "view.publish" ? { revision: 1 } : {}));
   sessionStorage.clear();
-  sessionStorage.setItem("pe.places", JSON.stringify(seeded));
+  await seedPlaces([]);
+  await seedPlaces(seeded);
   vi.stubGlobal("matchMedia", () => ({
     matches: false,
     addEventListener() {},
@@ -195,13 +203,21 @@ async function mount(entry = "/pea?thread=T", strict = false, restore = false, v
 }
 const tools = () => document.querySelector<HTMLElement>('[data-pane-id="tools"]')!;
 
+test("the dock puts each route band in its pane head and draws no Pea context row", async () => {
+  await mount("/fans?fixture=layout");
+  const pea = document.querySelector('[data-pane-id="pea"]')!;
+  const band = pea.querySelector('[data-slot="situation-band"]')!;
+  expect(band).not.toBeNull();
+  expect(band.closest('[data-slot="pane-body"]')).toBeNull();
+  await waitFor(() => expect(tools().querySelector('[data-slot="situation-band"]')).not.toBeNull());
+  expect(tools().querySelector('[data-slot="situation-band"]')!.closest('[data-slot="pane-body"]')).toBeNull();
+  expect(screen.queryByLabelText("Pea context")).toBeNull();
+});
+
 test("a tab press expands the tools on that Place; a Work press restores its Page without a remount", async () => {
-  sessionStorage.setItem(
-    "pe.places",
-    JSON.stringify([
+  await seedPlaces([
       { ...ducts, link: routeAddress("ducts").link({ system: {kind:"ids",ids:[systemCode("S1")]} }, { work: "w1" }) },
-    ]),
-  );
+    ]);
   const router = await mount();
   fireEvent.click(screen.getByRole("button", { name: "Expand tools" }));
   fireEvent.click(screen.getByRole("button", { name: TAB }));
@@ -313,6 +329,7 @@ const settle = () => act(() => new Promise((done) => setTimeout(done, 50)));
 
 test("an actual admitted standalone Fans Place enrolls without a chat or native host call", async () => {
   sessionStorage.clear();
+  await seedPlaces([]);
   // JSON string codec text (plain, empty, numeric-looking) survives the history tag's state write.
   const strings = {
     stage: JSON.stringify("sheet"),
@@ -386,7 +403,7 @@ test("an admitted Place keeps its codec bytes through open, switch, bare URL res
     link,
     at: ducts.at,
   };
-  sessionStorage.setItem("pe.places", JSON.stringify([ducts, fans]));
+  await seedPlaces([ducts, fans]);
   // Raw `key=value` pairs, never decoded: byte equality, order-free, the shell's own keys aside.
   const pairs = (query: string) =>
     query
@@ -443,6 +460,7 @@ test("(b)(c) switching conversation lands on /pea collapsed, opens no tool, and 
 
 test("(d) first Send from a tool promotes in place: tool stays, one thread.place for it", async () => {
   sessionStorage.clear();
+  await seedPlaces([]);
   const router = await mount("/ducts?target=C%3A%2FModels%2FOffice.rvt");
   await settle();
   const mounted = mounts;
@@ -543,7 +561,7 @@ test("route-view-open: same binding keeps the Page and tags the command; another
 });
 
 test("route-view-open with a new binding opens a default Page and borrows no visible target", async () => {
-  sessionStorage.setItem("pe.places", JSON.stringify([tabA]));
+  await seedPlaces([tabA]);
   const router = await mount(`${tabA.link}&thread=T`);
   await settle();
   act(() =>
@@ -581,7 +599,7 @@ test("the closed-Work band follows the Place a press opened, with no chat select
 });
 
 test("an explicit open's command id clears when the thread association changes", async () => {
-  sessionStorage.setItem("pe.places", JSON.stringify([]));
+  await seedPlaces([]);
   const router = await mount("/pea?thread=T");
   await settle();
   const commandId = "33333333-3333-4333-8333-333333333333";
@@ -611,12 +629,13 @@ test("an explicit open's command id clears when the thread association changes",
 
 test("a saved legacy open-ref Place keeps its id under StrictMode, /pea and a cross-row Work press", async () => {
   sessionStorage.clear();
+  await seedPlaces([]);
   // The bytes a writer saves (host navigation.ts resume link); a restore matches saved bytes exactly.
   const legacy = routeAddress("ducts").link({ system: {kind:"ids",ids:[systemCode("Office retained page")]} }, {
     target: JSON.stringify({ kind: "open", ref: { session: "closed-session", openId: "closed-open" } }),
   });
   // New enrollment is exercised above through actual Fans admission. This tests saved-Place rebinding.
-  sessionStorage.setItem("pe.places", JSON.stringify([{ ...ducts, link: legacy }]));
+  await seedPlaces([{ ...ducts, link: legacy }]);
   const router = await mount(legacy, true);
   await waitFor(() => expect(shown(router).tab).not.toBeNull());
   await settle();
@@ -706,10 +725,12 @@ test("a Pea open of a new tool keeps its first lease instance, and a set against
   expect(hostCalls("view.remove")).toEqual([]);
   expect(leases()).toEqual(new Set([instance]));
   expect(places().some((tab) => tab.route === "families")).toBe(true);
+  expect(document.querySelector("[data-families-probe]")?.textContent).toBe('name:["Family","Type"]#field:Name');
 });
 
 test("after first-Send promotion and a chat pick, a Pea open keeps one lease and one Place", async () => {
   sessionStorage.clear();
+  await seedPlaces([]);
   const router = await mount("/ducts?target=C%3A%2FModels%2FOffice.rvt");
   await settle();
   threads.push({ id: "NEW" });
@@ -733,6 +754,7 @@ test("after first-Send promotion and a chat pick, a Pea open keeps one lease and
     await settle();
     expect(hostCalls("view.remove")).toEqual([]);
     expect(places().filter((tab) => tab.route === "families")).toHaveLength(1);
+    expect(document.querySelector("[data-families-probe]")).not.toBeNull();
     expect(
       screen.getAllByRole("button", { name: "Families" }).length,
     ).toBeGreaterThan(0);
@@ -886,6 +908,7 @@ test("fan selection with picture pose preserves Pea open state and width", async
 
 test("N-03 typed Fans retains a newly explicit pin when its resolved target is unchanged", async () => {
   sessionStorage.clear();
+  await seedPlaces([]);
   const router = await mount("/fans?fixture=layout");
   await waitFor(() => expect(places().some((tab) => tab.route === "fans")).toBe(true));
   const pin = JSON.stringify({ kind: "open", ref: { session: "same", openId: "same" } });
@@ -913,6 +936,7 @@ test("N-03 typed Fans retains a newly explicit pin when its resolved target is u
 
 test("6.1 a reopened Place keeps an exact ?target, and its URL mark witnesses it", async () => {
   sessionStorage.clear();
+  await seedPlaces([]);
   const pin = JSON.stringify({ kind: "open", ref: { session: "s1", openId: "o1" } });
   // The app root's search reader and the app router's codec (router.tsx).
   const router = await mount(`/fans?fixture=layout&target=${encodeURIComponent(pin)}`, false, false, true);
@@ -928,6 +952,7 @@ test("6.1 a reopened Place keeps an exact ?target, and its URL mark witnesses it
 
 test("6.1 the URL mark appears only after the Place's URL write", async () => {
   sessionStorage.clear();
+  await seedPlaces([]);
   let search = new URLSearchParams(), held: URLSearchParams | null = null;
   const listeners = new Set<() => void>();
   const port = { read: () => new URLSearchParams(search), write: (next: URLSearchParams) => { held = new URLSearchParams(next); },
@@ -950,6 +975,7 @@ test("6.1 the URL mark appears only after the Place's URL write", async () => {
 
 test("6.1 two Places, one hidden: the shown copy is the only one that answers its name", async () => {
   sessionStorage.clear();
+  await seedPlaces([]);
   await mount("/fans?fixture=layout");
   await waitFor(() => expect(places().filter((tab) => tab.route === "fans")).toHaveLength(1), { timeout: 10_000 });
   fireEvent.click(await screen.findByRole("button", { name: "Open another Place on this route" }));
@@ -964,6 +990,7 @@ test("6.1 two Places, one hidden: the shown copy is the only one that answers it
 
 test("6.1b first open of /fans while the document bind is pending reads as pending, never as unavailable", async () => {
   sessionStorage.clear();
+  await seedPlaces([]);
   let drew = false;
   const watch = new MutationObserver(() => { drew ||= document.body.textContent?.includes("Document unavailable") ?? false; });
   watch.observe(document.body, { subtree: true, childList: true, characterData: true });
@@ -979,6 +1006,7 @@ test("6.1b first open of /fans while the document bind is pending reads as pendi
 
 test("6.1b a hidden Place's section carries no aria-busy while the document bind is pending", async () => {
   sessionStorage.clear();
+  await seedPlaces([]);
   const { admit } = await import("../fans/admission.fixture");
   fansRoute = (await admit()).presenter;
   // The same pending bind as above (`useReading` is mocked pending), on a Place the dock hides.

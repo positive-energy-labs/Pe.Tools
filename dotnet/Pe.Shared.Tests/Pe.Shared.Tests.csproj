@@ -11,6 +11,8 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <None Include="../../ts/packages/agent-contracts/tests/fixtures/spatial-evidence.fixture.json" Link="spatial-evidence.fixture.json" CopyToOutputDirectory="PreserveNewest" />
+        <None Include="../../ts/packages/host-contracts/tests/fixtures/scene-artifact.fixture.json" Link="scene-artifact.fixture.json" CopyToOutputDirectory="PreserveNewest" />
         <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
         <PackageReference Include="NUnit" Version="3.13.3" />
         <PackageReference Include="NUnit3TestAdapter" Version="4.6.0" />

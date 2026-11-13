@@ -1,3 +1,4 @@
+using Pe.Revit.Operations;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.DB.Events;
 using Autodesk.Revit.UI;
@@ -68,8 +69,8 @@ public sealed class RevitScriptExecutionService(
         ScriptCancellationScope? cancellation = null
     ) {
         cancellation ??= ScriptCancellationScope.None;
-        // The whole execution is the run: a project save or synchronize that fires inside it is held (ScriptSaveHold).
-        using var run = ScriptRunScope.Enter();
+        // ScriptSaveHold uses this caller throughout execution to hold only guarded project saves.
+        using var run = ScriptRunScope.Enter(request.Caller);
         Log.Information(
             "Revit scripting execute starting: ExecutionId={ExecutionId}, WorkspaceKey={WorkspaceKey}, SourcePath={SourcePath}",
             executionId,
@@ -970,7 +971,9 @@ public sealed class RevitScriptExecutionService(
             );
         }
 
-        using var mutationMonitor = new ScriptDocumentMutationMonitor(context.App.Application);
+        // The op runner's monitor (Pe.Revit.Operations): one DocumentChanged subscription for calls and scripts.
+        OperationMonitor.Attach(context.App.Application);
+        using var mutationMonitor = OperationMonitor.Watch();
 
         try {
             container.Execute();
@@ -996,18 +999,24 @@ public sealed class RevitScriptExecutionService(
                 ? ScriptDiagnosticFactory.Warning("readonly", message)
                 : ScriptDiagnosticFactory.Info("readonly", message));
 
-        if (mutationMonitor.HasPersistedChanges)
+        // Classify by transaction NAME, not Document reference: Revit hands the event a different
+        // Document wrapper than context.Document, so ReferenceEquals misreads the guard's own churn
+        // as a foreign write (the ViewSchedule.GetTableData regen persist-false-positive). A change
+        // whose name escaped the guard is a committed transaction the group rollback does not cover
+        // (e.g. another open document), so it persisted. See ReadOnlyGuardMutationClassifier.
+        var changes = mutationMonitor.Changes;
+        if (changes.Any(change => ReadOnlyGuardMutationClassifier.EscapedGuard(change.Transactions, ReadOnlyGuardTransactionName)))
             throw new RevitScriptMutationException(
                 "ReadOnly script execution changed an open Revit document and the changes PERSISTED (a committed transaction the rollback guard does not cover, e.g. another open document). " +
-                mutationMonitor.CreateSummary() +
+                MutationSummary(changes) +
                 " Rerun with permissionMode=WriteTransaction for intentional changes."
             );
 
-        if (mutationMonitor.HasChanges)
+        if (changes.Count != 0)
             diagnostics.Add(ScriptDiagnosticFactory.Warning(
                 "readonly",
                 "ReadOnly script modified the document; all changes were rolled back and discarded. " +
-                mutationMonitor.CreateSummary() +
+                MutationSummary(changes) +
                 " Rerun with permissionMode=WriteTransaction to keep changes."
             ));
     }
@@ -1182,92 +1191,14 @@ public sealed class RevitScriptExecutionService(
         Exception? innerException = null
     ) : Exception(message, innerException);
 
-    private sealed class ScriptDocumentMutationMonitor : IDisposable {
-        private readonly Autodesk.Revit.ApplicationServices.Application _application;
-        private readonly List<ScriptDocumentMutationEvent> _events = [];
-        private bool _disposed;
-
-        public ScriptDocumentMutationMonitor(
-            Autodesk.Revit.ApplicationServices.Application application
-        ) {
-            this._application = application ?? throw new ArgumentNullException(nameof(application));
-            this._application.DocumentChanged += this.OnDocumentChanged;
-        }
-
-        public bool HasChanges => this._events.Count != 0;
-
-        /// <summary>A change carrying a transaction name that is not the guard's — a committed
-        /// transaction the group rollback does not cover (e.g. another open document), so it persisted.
-        /// Regeneration a script's reads force carries the guard's own name (or none) and is contained,
-        /// so it never counts here.</summary>
-        public bool HasPersistedChanges => this._events.Any(item => !item.IsSandboxChurn);
-
-        public void Dispose() {
-            if (this._disposed)
-                return;
-
-            this._disposed = true;
-            this._application.DocumentChanged -= this.OnDocumentChanged;
-        }
-
-        public string CreateSummary() {
-            var events = this._events.ToList();
-            var totalAdded = events.Sum(item => item.AddedCount);
-            var totalModified = events.Sum(item => item.ModifiedCount);
-            var totalDeleted = events.Sum(item => item.DeletedCount);
-            var documentNames = events
-                .Select(item => item.DocumentTitle)
-                .Where(title => !string.IsNullOrWhiteSpace(title))
-                .Distinct(StringComparer.Ordinal)
-                .ToList();
-            var transactionNames = events
-                .SelectMany(item => item.TransactionNames)
-                .Where(name => !string.IsNullOrWhiteSpace(name))
-                .Distinct(StringComparer.Ordinal)
-                .ToList();
-
-            return
-                $"Added={totalAdded}, Modified={totalModified}, Deleted={totalDeleted}. " +
-                $"Documents={FormatList(documentNames)}. " +
-                $"Transactions={FormatList(transactionNames)}.";
-        }
-
-        private void OnDocumentChanged(object? sender, DocumentChangedEventArgs args) {
-            var addedCount = args.GetAddedElementIds().Count;
-            var modifiedCount = args.GetModifiedElementIds().Count;
-            var deletedCount = args.GetDeletedElementIds().Count;
-            if (addedCount == 0 && modifiedCount == 0 && deletedCount == 0)
-                return;
-
-            var document = args.GetDocument();
-            var transactionNames = args.GetTransactionNames().ToList();
-            // Classify by transaction NAME, not Document reference: Revit hands the event a different
-            // Document wrapper than context.Document, so ReferenceEquals misreads the guard's own churn
-            // as a foreign write (the ViewSchedule.GetTableData regen persist-false-positive). See
-            // ReadOnlyGuardMutationClassifier for the full contract.
-            var escapedGuard = ReadOnlyGuardMutationClassifier.EscapedGuard(
-                transactionNames, ReadOnlyGuardTransactionName);
-            this._events.Add(new ScriptDocumentMutationEvent(
-                document?.Title ?? "<unknown>",
-                addedCount,
-                modifiedCount,
-                deletedCount,
-                transactionNames,
-                IsSandboxChurn: !escapedGuard
-            ));
-        }
-
-        private static string FormatList(IReadOnlyList<string> values) =>
-            values.Count == 0 ? "<none reported>" : string.Join(", ", values);
+    private static string MutationSummary(IReadOnlyList<ObservedChange> changes) {
+        static string FormatList(IEnumerable<string> values) =>
+            values.Where(value => !string.IsNullOrWhiteSpace(value)).Distinct(StringComparer.Ordinal).ToList() is { Count: > 0 } list
+                ? string.Join(", ", list) : "<none reported>";
+        return
+            $"Added={changes.Sum(item => item.Added)}, Modified={changes.Sum(item => item.Modified)}, Deleted={changes.Sum(item => item.Deleted)}. " +
+            $"Documents={FormatList(changes.Select(item => item.DocumentTitle))}. " +
+            $"Transactions={FormatList(changes.SelectMany(item => item.Transactions))}.";
     }
-
-    private sealed record ScriptDocumentMutationEvent(
-        string DocumentTitle,
-        int AddedCount,
-        int ModifiedCount,
-        int DeletedCount,
-        IReadOnlyList<string> TransactionNames,
-        bool IsSandboxChurn
-    );
 
 }

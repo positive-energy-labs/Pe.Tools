@@ -1,4 +1,7 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { stateFixture } from "../../../tests/isolated-home/storage.ts";
+import { journalFixture } from "./storage.ts";
+import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
+import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Context, Deferred, Effect, Exit, Fiber, Layer, Scope } from "effect";
@@ -12,21 +15,24 @@ import { ActionJournalService } from "../src/receipt-services.ts";
 import { HostLog } from "../src/host-log.ts";
 import { RequestIdentity, admittedRequestIdentity } from "../src/request-services.ts";
 import { settle } from "./effect-test.ts";
+import type { ReadOwnership } from "../src/reads/read-ownership.ts";
+import { markDispatched, recordNativeTerminal } from "../src/action-dispatch.ts";
 
 const human = { kind: "human", via: "local" } as const;
 
 // ADR 0029 rule 10, durable command: only the native side is mocked; the journal is its live Layer.
-async function fixture() {
+async function fixture(readOwnership?: ReadOwnership, failAfter = false) {
   const dir = await mkdtemp(join(tmpdir(), "pe-attempt-"));
   const host = Scope.makeUnsafe();
   const journal = Context.get(
-    await settle(Layer.buildWithScope(ActionJournalService.live(null, dir), host)),
+    await settle(Layer.buildWithScope(ActionJournalService.live(null, stateFixture(dir)), host)),
     ActionJournalService,
   );
   const native = Deferred.makeUnsafe<unknown, StepFailure>();
   const calls: { key: string; requestId: string }[] = [];
   const seen: { identity?: RequestIdentityData; interrupted: boolean; cancelsSettled: number } = { interrupted: false, cancelsSettled: 0 };
   journal.bindCommands({
+    readOwnership,
     probe: async () => null,
     resolve: () =>
       command(
@@ -38,10 +44,13 @@ async function fixture() {
             execution.step("native", "test.hold", {}, (requestId) =>
               Effect.gen(function* () {
                 seen.identity = yield* RequestIdentity;
+                yield* Effect.promise(() => markDispatched(requestId, "bridge"));
                 calls.push({ key: "test.hold", requestId });
                 return yield* Deferred.await(native);
               }).pipe(Effect.onInterrupt(() => Effect.sync(() => void (seen.interrupted = true)))),
-            ),
+            ).pipe(Effect.andThen((result) => failAfter
+              ? Effect.fail(new StepFailure("later step refused", 409, "refused"))
+              : Effect.succeed(result))),
           // The mock native door: what the registry's `op.cancel` sends to Revit, answered late.
           cancel: (requestId) =>
             Effect.sync(() => calls.push({ key: CANCEL_OPERATION_KEY, requestId })).pipe(
@@ -78,9 +87,9 @@ async function fixture() {
     submit,
     answer: (value: Effect.Effect<unknown, StepFailure>) => Deferred.doneUnsafe(native, value),
     closeHost: () => settle(Scope.close(host, Exit.void)),
-    reopen: () => new ActionJournal(join(dir, "partition-operations.json"), Date.now),
+    reopen: () => new ActionJournal(journalFixture(join(dir, "partition-operations.json")), Date.now),
     /** Receipt revisions the host log holds, as JSON text. */
-    logged: () => new HostLog(join(dir, "log"), Date.now).read(0, (entry) => entry.event.kind === "receipt").entries.map((entry) => JSON.stringify(entry.event)),
+    logged: () => new HostLog(stateFixture(join(dir, "log")), Date.now).read(0, (entry) => entry.event.kind === "receipt").entries.map((entry) => JSON.stringify(entry.event)),
     async dispose() {
       // A failed assertion leaves the step held; release it so the scope's join can finish.
       Deferred.doneUnsafe(native, Effect.succeed(null));
@@ -101,6 +110,66 @@ test("aborting the admission after the row is journaled changes nothing; the att
   } finally {
     await f.dispose();
   }
+});
+
+test("owned reads open at admission, Stop signals them, and cleanup precedes parent settlement", async () => {
+  const events: string[] = [];
+  let release!: () => void;
+  const cleanup = new Promise<void>((resolve) => { release = resolve; });
+  const f = await fixture({
+    open: (identity) => {
+      events.push(`open:${identity.ownership.owner}`);
+      return { ownership: identity.ownership, native: async () => { throw Error("unused"); },
+        requestStop: async () => { events.push("stop"); },
+        state: () => ({ kind: "unsettled", requiredDescendants: [], evidence: [] }),
+        settle: async () => { events.push("settle"); await cleanup;
+          return { kind: "settled", requiredDescendants: [], evidence: [] }; },
+      };
+    },
+    flight: () => { throw Error("unused"); },
+  });
+  try {
+    await f.submit("read-owner");
+    await f.journal.cancel("read-owner");
+    f.answer(Effect.succeed({ ok: true }));
+    await vi.waitFor(() => expect(events).toContain("settle"));
+    expect((await f.journal.list(undefined, "read-owner"))[0]?.state).toBe("running");
+    expect(events).toEqual(["open:read-owner", "stop", "settle"]);
+    release();
+    expect((await f.journal.wait("read-owner")).state).toBe("succeeded");
+  } finally { release(); await f.dispose(); }
+});
+
+test("live native terminal facts survive the step write and journal reopen", async () => {
+  const f = await fixture();
+  try {
+    const id = await f.submit("facts");
+    await recordNativeTerminal(id, { kind: "restored", views: [] },
+      JSON.stringify({ documentKey: "model", revision: 5, extra: "preserved" }));
+    f.answer(Effect.succeed({ ok: true }));
+    const row = await f.journal.wait("facts");
+    expect(row.steps[0]).toMatchObject({ touched: { kind: "restored", views: [] },
+      nativeEvidence: { documentKey: "model", revision: 5, extra: "preserved" } });
+    expect(row.steps[0]).not.toHaveProperty("effect");
+    expect((await f.reopen().list(undefined, "facts"))[0]?.steps).toEqual(row.steps);
+  } finally { await f.dispose(); }
+});
+
+test.each([
+  { touched: { kind: "none" }, state: "failed" },
+  { touched: { kind: "rolledBack" }, state: "failed" },
+  { touched: { kind: "restored", views: [] }, state: "failed" },
+  { touched: { kind: "wrote", transactions: [], added: 0, modified: 1, deleted: 0 }, state: "incomplete" },
+  { touched: { kind: "restoreFailed", views: [{ view: { documentKey: "doc", uniqueId: "view", id: 1 }, left: ["crop"] }] }, state: "incomplete" },
+  { touched: { kind: "unknown", reason: "lost-response" }, state: "incomplete" },
+])("a later refusal uses native $touched.kind testimony: $state", async ({ touched, state }) => {
+  const f = await fixture(undefined, true);
+  try {
+    const id = await f.submit("native-facts");
+    await recordNativeTerminal(id, touched);
+    f.answer(Effect.succeed({ ok: true }));
+    expect((await f.journal.wait("native-facts")).state).toBe(state);
+  } finally { await f.dispose(); }
 });
 
 test("the attempt runs under the journal's identity with the submitter as causal parent", async () => {

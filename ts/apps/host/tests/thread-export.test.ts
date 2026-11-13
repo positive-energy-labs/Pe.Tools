@@ -1,8 +1,9 @@
+import { stateFixture } from "../../../tests/isolated-home/storage.ts";
+import { mkdtempSync } from "../../../tests/isolated-home/storage.ts";
 import { registryService, harnessThreads } from "./effect-test.ts";
 import { createHash } from "node:crypto";
 import {
   mkdirSync,
-  mkdtempSync,
   readFileSync,
   renameSync,
   rmSync,
@@ -90,13 +91,13 @@ test("public export pins the full durable thread, including tool results, withou
   const log = events.map((event) => JSON.stringify(event)).join("\r\n") + "\r\n";
   writeFileSync(join(dir, "meta.json"), meta);
   writeFileSync(join(dir, "events.jsonl"), log);
-  const durableLog = new HostLog(join(root, ".log"), Date.now);
+  const durableLog = new HostLog(stateFixture(join(root, ".log")), Date.now);
   for (const event of events) durableLog.append({ kind: "thread", thread: "thread-1", event });
   durableLog.append({ kind: "thread", thread: "unrelated", event: events[0]! });
   const host = await harnessThreads({
     runs: registryService(),
     log: durableLog,
-    root,
+    root: stateFixture(root),
     worldRoot: root,
     mcpServer: () => {
       throw Error("export must not spawn");
@@ -180,7 +181,7 @@ test("export reports host retention gaps and oversize pointers without truncatin
   try {
     mkdirSync(join(root, "thread"));
     writeFileSync(join(root, "thread/meta.json"), JSON.stringify({ id: "thread" }));
-    const log = new HostLog(join(root, ".log"), Date.now, { segmentBytes: 1, segments: 1, entryBytes: 256 });
+    const log = new HostLog(stateFixture(join(root, ".log")), Date.now, { segmentBytes: 1, segments: 1, entryBytes: 256 });
     const events: HarnessEvent[] = [1, 2].map((seq) => ({
       kind: "prompt",
       seq,
@@ -193,7 +194,7 @@ test("export reports host retention gaps and oversize pointers without truncatin
       events.map((e) => JSON.stringify(e) + "\n").join(""),
     );
     for (const event of events) log.append({ kind: "thread", thread: "thread", event });
-    const exporting = exportThread(root, "thread", log);
+    const exporting = exportThread(stateFixture(root), "thread", log);
     writeFileSync(join(root, "thread/events.jsonl"), "later write\n");
     const archive = await (await exporting).json();
     expect(archive.events).toEqual(events);
@@ -219,7 +220,7 @@ test("a T3-shaped thread id round-trips: hashed in every path, itself in the arc
     expect(threadSegment("thread-1")).toBe("thread-1");
     mkdirSync(join(root, segment));
     writeFileSync(join(root, segment, "meta.json"), JSON.stringify({ id }));
-    const log = new HostLog(join(root, ".log"), Date.now);
+    const log = new HostLog(stateFixture(join(root, ".log")), Date.now);
     const event: HarnessEvent = {
       kind: "prompt",
       seq: 1,
@@ -229,7 +230,7 @@ test("a T3-shaped thread id round-trips: hashed in every path, itself in the arc
     };
     writeFileSync(join(root, segment, "events.jsonl"), JSON.stringify(event) + "\n");
     log.append({ kind: "thread", thread: id, event });
-    const response = await exportThread(root, id, log);
+    const response = await exportThread(stateFixture(root), id, log);
     expect(response.headers.get("content-disposition")).toMatch(
       new RegExp(`^attachment; filename="${segment}-[0-9a-f]{12}\\.json"$`),
     );

@@ -1,6 +1,8 @@
+import { stateFixture } from "../../../tests/isolated-home/storage.ts";
+import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
 import { journalAt } from "./effect-test.ts";
-import { mkdtemp, rm } from "node:fs/promises";
+import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Cause, Context, Effect, Exit, Layer, Schema, Scope } from "effect";
@@ -44,7 +46,7 @@ const decodes = async (codec: Schema.Codec<unknown, Schema.Json>, value: unknown
 const bundle = async () => {
   const dir = await mkdtemp(join(tmpdir(), "pe-work-inputs-"));
   dirs.push(dir);
-  return { dir, writer: await Effect.runPromise(openRecordingWriter(dir, identity, bounds)) };
+  return { dir, writer: await Effect.runPromise(openRecordingWriter(stateFixture(dir), identity, bounds)) };
 };
 const reader = (dir: string) => Effect.runPromise(openRecordingReader(dir, identity, bounds));
 

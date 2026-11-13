@@ -68,17 +68,20 @@ public sealed class SpaceViewTests {
     public void Wire_filter_preserves_default_obstructors_and_explicit_DWG_axes() {
         var solid = new PrimRow(0, 10, "solid", "Walls", PrimKind.Solid, new Aabb(), 1);
         var curve = solid with { Kind = PrimKind.Curve2D, Layer = "A-WALL", ElementId = 20 };
+        var host = new Placement("doc", null);
         var defaults = new SpaceView.FilterRequest().ToFilter();
-        Assert.That(defaults.Wants(solid), Is.True);
-        Assert.That(defaults.Wants(curve), Is.False);
+        Assert.That(defaults.Wants(solid, "doc", host), Is.True);
+        Assert.That(defaults.Wants(curve, "doc", host), Is.False);
         var filter = new SpaceView.FilterRequest(Sources: ["revitlink"], Kinds: ["curve2d"],
-            Categories: ["walls"], Layers: ["a-w*"], ExcludeElementIds: [10]).ToFilter();
+            Categories: ["walls"], Layers: ["a-w*"], Exclusions: [new("doc", host, "solid")]).ToFilter();
         Assert.Multiple(() => {
             Assert.That(filter.Wants(SourceKind.Host), Is.False);
             Assert.That(filter.Wants(SourceKind.RevitLink), Is.True);
-            Assert.That(filter.Wants(solid), Is.False);
-            Assert.That(filter.Wants(curve), Is.True);
-            Assert.That(filter.Wants(curve with { ElementId = 10 }), Is.False);
+            Assert.That(filter.Wants(solid, "doc", host), Is.False);
+            Assert.That(filter.Wants(curve with { UniqueId = "other" }, "doc", host), Is.True);
+            Assert.That(filter.Wants(curve with { ElementId = 10 }, "doc", host), Is.False);
+            Assert.That(filter.Wants(curve with { ElementId = 10 }, "linked", host), Is.True);
+            Assert.That(filter.Wants(curve with { ElementId = 10 }, "doc", new("doc", "link-a")), Is.True);
         });
     }
 

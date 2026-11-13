@@ -1,8 +1,10 @@
 import { z } from "zod";
+import { useMention } from "@pe/kit/lang/attention";
+import { decode, subjectRefCodeSchema } from "@pe/agent-contracts/subject-ref";
 import { Button } from "@pe/kit/lang/button";
 import { NarrowChip } from "@pe/kit/lang/chip";
 import { ListPopup } from "@pe/kit/lang/list-popup";
-import type { RouteGraphJson } from "@pe/agent-contracts";
+import type { RouteGraphWire as RouteGraphJson } from "@pe/agent-contracts";
 import { canonicalEnvironmentInput as identity } from "../../../../packages/agent-contracts/src/route-kernel-environment";
 import { openSet, type OpenSet } from "./open-set.neutral";
 const rosterSchema = z.array(z.object({ id: z.unknown(), label: z.string() }));
@@ -57,6 +59,7 @@ export function subjectOf(mount: SubjectMount, data: RouteGraphJson) {
   };
 }
 export function SubjectPicker({ mount, data, single = false }: { mount: SubjectMount; data: RouteGraphJson; single?: boolean }) {
+  const mention = useMention();
   const subject = subjectOf(mount, data);
   if (!subject) return null;
   const { options, many, all, selected, active, unknown } = subject;
@@ -74,13 +77,12 @@ export function SubjectPicker({ mount, data, single = false }: { mount: SubjectM
           />
         ) : (
           open.map((o) => (
-            <NarrowChip
-              key={identity(o.id)}
+            <span key={identity(o.id)} data-findings-route={data.key} {...(typeof o.id === "string" && decode(o.id).ok ? mention(subjectRefCodeSchema.parse(o.id)) : {})}><NarrowChip
               label={o.label}
               selected={identity(o.id) === active}
               title={`Close this ${noun}; the others stay open`}
               onRemove={() => subject.remove(o.id)}
-            />
+            /></span>
           ))
         ))}
       <ListPopup
@@ -96,7 +98,7 @@ export function SubjectPicker({ mount, data, single = false }: { mount: SubjectM
         select={many && !single ? "multi" : "single"}
         selected={selected}
         empty={`No ${noun} available`}
-        row={(o) => ({ label: o.label })}
+        row={(o) => ({ label: <span data-findings-route={data.key} {...(typeof o.id === "string" && decode(o.id).ok ? mention(subjectRefCodeSchema.parse(o.id)) : {})}>{o.label}</span> })}
         onPick={(option) => single ? subject.select([option.id]) : subject.toggle(option.id)}
         onSelectedChange={
           many && !single

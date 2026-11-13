@@ -1,10 +1,12 @@
 """The machine: what holds it, whether a heavy step may start, and a receipted stop.
 
 usage: python machine.py admit <kind> [--json]   ADMIT, HOLD, or REFUSE (suite in a delegated child); exit 0, 3 or 4
+       python machine.py run <kind> [--wait 60] [--integrator] -- <command> [args...]
+           atomic, bounded admission held over the whole process tree (codegen, suite, browser)
        python machine.py admit suite --integrator the integrator is a delegated child that owns the suite, so it says so
        python machine.py who [--all] [--json]     every process this repo's work can attribute, biggest first
        python machine.py stop <pid> [<pid>...]    stop processes `who` marks stoppable; refuses the rest; writes a receipt
-       python machine.py prune [--dry]            stop every editor and bystander app; `admit` does this itself before it answers HOLD
+       python machine.py prune [--dry]            explicitly stop every editor and bystander app
 
 kinds: light (one package tsc, touched tests, one C# build, a guard)
        codegen (route-graphs or a multi-package tsc; measured ~2 GiB per run, so the suite floor; children may run it)
@@ -15,9 +17,8 @@ kinds: light (one package tsc, touched tests, one C# build, a guard)
 
 Floors come from the 2026-11-03 machine budget: measured footprint plus about 2 GiB headroom.
 `stop` never touches Revit (pe-revit session owns it), the installed product host, T3, Claude, Codex, or Helium.
-Owner, 2026-11-10: while a run is on, most of the machine is killable, and Helium is the one app that always stays up. So editors
-(Zed, VS Code and their language servers) and bystander apps (ChatGPT, Edge, a Chrome that is not Helium) are stoppable, and a
-memory HOLD prunes them before it is reported. Unknown processes stay untouched: a kill list is safer than a keep list on Windows.
+`admit` is diagnostic only: a snapshot cannot reserve capacity. Use `run` for a bounded command.
+Pruning editors and bystander apps is explicit; admission never stops someone else's work.
 Receipts: .artifacts/machine/stops.jsonl in the root checkout, one line per stop, with the caller's T3 thread.
 """
 import ctypes
@@ -133,7 +134,7 @@ def safe_admit(kind, as_json):
         return 3
 
 
-def admit(kind, as_json, pruned=False):
+def admit(kind, as_json):
     if kind not in FLOORS_GIB:
         print(f"unknown kind {kind}; kinds: {', '.join(FLOORS_GIB)}")
         return 2
@@ -163,9 +164,6 @@ def admit(kind, as_json, pruned=False):
     if free < STOP_GIB:
         reasons.append(f"free {free:.1f} GiB under the stop floor {STOP_GIB} GiB")
     verdict = "HOLD" if reasons else "ADMIT"
-    if verdict == "HOLD" and free < floor and not pruned and any(p["kind"] in PRUNE_KINDS for p in procs):
-        prune(False)
-        return admit(kind, as_json, pruned=True)
     stoppable = sorted((p for p in procs if p["stoppable"]), key=lambda p: -p["gib"])[:5]
     reading = {
         "verdict": verdict, "kind": kind, "free_gib": round(free, 1), "total_gib": round(total, 1),
@@ -235,6 +233,14 @@ def stop(pids):
 def main():
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # a piped stdout is cp1252, and command lines are not
     argv = sys.argv[1:]
+    if argv and argv[0] == "run":
+        import sqlite3
+        from reservation import run
+        try:
+            return run(argv[1:])
+        except (OSError, ValueError, TimeoutError, sqlite3.Error) as error:
+            print(f"HOLD: {error}", file=sys.stderr)
+            return 3
     as_json = "--json" in argv
     show_all = "--all" in argv
     args = [a for a in argv if not a.startswith("--")]

@@ -1,5 +1,6 @@
 import { captureStore } from "./effect-test.ts";
-import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
+import { readFile, readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { expect, test, vi } from "vite-plus/test";

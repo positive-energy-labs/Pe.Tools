@@ -1,18 +1,4 @@
 import type { PaneDecl, RouteGraph, RouteGraphRefusal, VerbDecl } from "@pe/agent-contracts";
-import { actionScopeKeys, type ActionDefinition, type Chord, type ScopeKey } from "@pe/kit/keys";
-
-export interface KeyScopeSpec {
-  id: string;
-  keys: readonly ScopeKey[];
-  children: readonly KeyScopeSpec[];
-}
-
-export interface GraphChordPlacements {
-  /** Only panes in the reduced, mounted layout appear here. Folded panes bind nothing. */
-  panes: Readonly<Record<string, { folded?: boolean; verbs?: readonly string[] }>>;
-  /** Invocation and admission come from the verb owner; labels and chords come from the graph. */
-  actions: Readonly<Record<string, Pick<ActionDefinition, "invoke" | "available" | "refusal">>>;
-}
 
 export type GraphChordRefusal = Omit<RouteGraphRefusal, "code"> & {
   code: RouteGraphRefusal["code"] | "reserved-chord";
@@ -36,9 +22,9 @@ const chordKey = (chord: string) =>
     .join("+");
 // Explicit platform spellings must not bypass reservations of the same physical keys.
 const RESERVED = new Set(
-  ["Mod", "Ctrl", "Meta"].flatMap((mod) =>
-    ["Z", "Shift+Z", "Y", "K", "Shift+K"].map((key) => chordKey(`${mod}+${key}`)),
-  ),
+  [chordKey("Alt+/"), ...["Mod", "Ctrl", "Meta"].flatMap((mod) =>
+    ["Z", "Shift+Z", "Y", "K", "Shift+K", "Shift+Period", "Shift+."].map((key) => chordKey(`${mod}+${key}`)),
+  )],
 );
 
 /** Bare and Shift-only keys belong to text controls. Modified commands remain available there. */
@@ -65,7 +51,7 @@ function paneChords(
 }
 
 /** Admission checks all declarations, including panes that are currently gated or folded. */
-export function validateGraphChords<P, W>(graph: RouteGraph<P, W>): GraphChordRefusal[] {
+export function validateGraphChords(graph: Pick<RouteGraph, "verbs" | "panes">): GraphChordRefusal[] {
   const refusals: GraphChordRefusal[] = [];
   const reserved = (chord: string, path: string) => {
     if (RESERVED.has(chordKey(chord)))
@@ -100,75 +86,4 @@ export function validateGraphChords<P, W>(graph: RouteGraph<P, W>): GraphChordRe
     }
   }
   return refusals;
-}
-
-export type GraphChordBinding =
-  | { ok: true; tree: KeyScopeSpec }
-  | { ok: false; refusals: readonly GraphChordRefusal[] };
-
-/** Pure projection for kit KeyScope + ScopeKeys. It registers no second scope tree or hotkey door. */
-export function bindGraphChords<P, W>(
-  graph: RouteGraph<P, W>,
-  stage: string,
-  placements: GraphChordPlacements,
-): GraphChordBinding {
-  const refusals = validateGraphChords(graph);
-  const declared = graph.stages[stage];
-  if (!declared)
-    refusals.push({
-      code: "invalid-graph",
-      path: `stages.${stage}`,
-      message: `Unknown stage '${stage}'`,
-    });
-  for (const id of declared?.panes ?? []) {
-    const pane = graph.panes[id];
-    const resolved = placements.panes[id]?.verbs;
-    if (pane && resolved?.some((verb) => !placedIds(pane).includes(verb)))
-      refusals.push({
-        code: "missing-verb",
-        path: `panes.${id}.verbs`,
-        message: `Pane '${id}' resolved an undeclared verb`,
-      });
-  }
-  if (refusals.length || !declared) return { ok: false, refusals };
-  const keys = (bindings: readonly { id: string; chord: string }[]): ScopeKey[] =>
-    bindings.flatMap(({ id, chord }) => {
-      const verb = graph.verbs[id];
-      const action = placements.actions[id];
-      if (!verb || !action) return [];
-      return actionScopeKeys([
-        {
-          ...action,
-          id: `route.${graph.key}.${id}`,
-          label: verb.label,
-          description: verb.says,
-          bindings: [chord as Chord],
-          options: { ignoreInputs: chordIgnoresInputs(chord) },
-        },
-      ]);
-    });
-  return {
-    ok: true,
-    tree: {
-      id: graph.key,
-      keys: [],
-      children: [
-        {
-          id: `${graph.key}:${stage}`,
-          keys: keys(
-            declared.verbs.flatMap((id) =>
-              graph.verbs[id]?.chord ? [{ id, chord: graph.verbs[id]!.chord! }] : [],
-            ),
-          ),
-          children: declared.panes.flatMap((id) => {
-            const placement = placements.panes[id];
-            const pane = graph.panes[id];
-            if (!pane || !placement || placement.folded) return [];
-            const ids = placement.verbs ?? placedIds(pane);
-            return [{ id, keys: keys(paneChords(graph, pane, ids)), children: [] }];
-          }),
-        },
-      ],
-    },
-  };
 }

@@ -2,7 +2,8 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, test } from "vite-plus/test";
-import { readStoredNotices } from "@pe/host-contracts/store";
+import { notices } from "@pe/host-contracts/kinds";
+import { stateTree } from "@pe/host-contracts/service-identity";
 import { analyticsConfig, readOrCreateInstallId } from "../src/analytics.ts";
 
 const names = ["LOCALAPPDATA", "PE_TOOLS_PRODUCT_HOME", "PE_TOOLS_SHARED_ROOT"] as const;
@@ -47,7 +48,8 @@ test("lane selection: dev never uses the installed key, and no person's file opt
   writeFileSync(join(firm, "pe-home.json"), `{"tier":"firm"}`);
   writeFileSync(join(firm, "keys.json"), JSON.stringify({ "posthog.api-key": "firm-dev-key" }));
   process.env.PE_TOOLS_SHARED_ROOT = firm;
-  expect(analyticsConfig("dev")).toEqual({ apiKey: "firm-dev-key", host: "https://us.i.posthog.com" });
+  expect(analyticsConfig("dev")).toEqual({ apiKey: "firm-dev-key", host: "https://us.i.posthog.com",
+  });
   expect(analyticsConfig("installed")?.apiKey).toBe("installed-key");
 });
 
@@ -69,7 +71,7 @@ test.each([
   expect(replaced).not.toBe(first);
   expect(JSON.parse(readFileSync(path, "utf8"))).toEqual({ installId: replaced });
   expect(readOrCreateInstallId()).toBe(replaced);
-  expect(readStoredNotices(join(root, "state", "stored-notices.jsonl"))).toMatchObject([
+  expect(notices(stateTree(root))).toMatchObject([
     { class: "discard", place: "Install identity", path },
   ]);
 });

@@ -1,12 +1,14 @@
 import {
   opSubject,
   opTouches,
-  opEffect,
+  opEffect as nativeOpEffect,
   opCardinality,
   opCost,
 } from "@pe/host-contracts/generated";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
-export { opSubject, opTouches, opEffect, opCardinality, opCost };
+import type { HostOperationDefinition } from "@pe/host-contracts/contracts";
+export const opEffect = { ...nativeOpEffect, WorkWrite: "WorkWrite" } as const;
+export { opSubject, opTouches, opCardinality, opCost };
 type Value<T> = T[keyof T];
 export interface CatalogAxes {
   subject: Value<typeof opSubject>;
@@ -29,6 +31,23 @@ export interface CatalogLink extends CatalogAxes {
   previewBy?: string;
   derive?: NonNullable<import("./command.ts").Command["derivation"]>["derive"];
   preview?: NonNullable<import("./command.ts").Command["derivation"]>["preview"];
+}
+function axis<T extends string>(values: Record<string, T>, value: string): T {
+  const found = Object.values(values).find((candidate) => candidate === value);
+  if (found === undefined) throw Error(`Unknown native axis: ${value}`);
+  return found;
+}
+/** The native metadata projection shared by host catalog rows and browser read handles. */
+export function nativeAxes(op: Omit<HostOperationDefinition, "intent" | "rollsBack" | "usesTransactions">): CatalogAxes {
+  return {
+    subject: axis(opSubject, op.subject),
+    touches: op.touches.split(", ").map((touch) => axis(opTouches, touch)),
+    effect: axis(opEffect, op.effect),
+    cost: op.costTier,
+    cardinality: axis(opCardinality, op.cardinality),
+    internal: op.internal,
+    rollsBack: op.effect === "TransactRead",
+  };
 }
 const weight = { Cheap: 1, Bounded: 10, Expensive: 100, Mutation: 100 };
 /** Validate edges only. Execution, derivation and preview remain in named runtime functions. */

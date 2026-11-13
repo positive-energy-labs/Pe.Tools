@@ -1,6 +1,12 @@
 // @vitest-environment jsdom
+import { module as ducts } from "../ducts/route";
+import { module as family } from "../family/route";
+import { publicRoutes } from "./route-discovery";
+for (const typed of [ducts, family])
+  if (!publicRoutes.typed(typed.data.key))
+    publicRoutes.register({ typed, manifest: typed.data, hosted: () => null });
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
-import { renderToString, renderToStaticMarkup } from "react-dom/server";
+import { renderToString } from "react-dom/server";
 import { hydrateRoot } from "react-dom/client";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { actionScopeKeys, actionTeaching, chordLabel } from "@pe/kit/keys";
@@ -10,44 +16,19 @@ import {
   registerTeaching,
   type Teaching,
 } from "@pe/kit/lang/teach";
-import { TeachingLayoutView } from "@pe/kit/lang/teaching-layout";
 import { TeachPage, TeachReference, TeachTarget, useTeaching } from "@pe/kit/lang/use-teach";
-import { ductsPaneState, DUCTS_LAYOUT, DUCTS_TEACHING } from "#/ducts/proto/e/teaching";
+import { referenceTeaching } from "./teaching";
+const DUCTS_TEACHING = referenceTeaching("/ducts");
+test("route teaching names the declared design pane and never the retired e-inputs pane", () => {
+  expect(DUCTS_TEACHING.some(fact => fact.kind === "region" && fact.id === "design")).toBe(true);
+  expect(DUCTS_TEACHING.some(fact => fact.id === "e-inputs")).toBe(false);
+  expect(referenceTeaching("/family")).not.toEqual(STARTUP_TEACHING);
+});
 import { STAGE_ACTIONS } from "#/scene/stage-teaching";
 import { HelpWorld } from "./help";
 import { STARTUP_TEACHING } from "./teaching";
 
 afterEach(cleanup);
-
-test("Ducts support folds retain the current width and last-focused priority policy", () => {
-  const state = {
-    inboxOpen: null,
-    treeCollapsed: null,
-    priority: "sidebar" as const,
-    toRule: 1,
-    edit: 0,
-  };
-  expect(ductsPaneState({ ...state, width: 1400 })).toEqual({
-    sidebarCollapsed: false,
-    inboxShown: true,
-  });
-  expect(ductsPaneState({ ...state, width: 900 })).toEqual({
-    sidebarCollapsed: false,
-    inboxShown: false,
-  });
-  expect(ductsPaneState({ ...state, width: 600 })).toEqual({
-    sidebarCollapsed: true,
-    inboxShown: false,
-  });
-  expect(ductsPaneState({ ...state, width: 900, inboxOpen: true, priority: "inbox" })).toEqual({
-    sidebarCollapsed: true,
-    inboxShown: true,
-  });
-  expect(ductsPaneState({ ...state, width: 900, inboxOpen: true })).toEqual({
-    sidebarCollapsed: false,
-    inboxShown: false,
-  });
-});
 
 const twoRegions: Teaching[] = [
   { kind: "region", id: "a", label: "Systems", rect: { left: 0, top: 0, width: 200, height: 400 } },
@@ -187,54 +168,6 @@ test("changing the shared action changes reference and actual scoped bindings to
   expect(action.invoke).not.toHaveBeenCalled();
 });
 
-test("a shared split change reaches the rendered layout and reference rectangles", () => {
-  const layout = {
-    ...DUCTS_LAYOUT,
-    size: 512,
-    start: { ...DUCTS_LAYOUT.start, axis: "horizontal" as const },
-  };
-  const reference = declaredTeaching(layout);
-  expect(reference.find((f) => f.kind === "region" && f.id === "e-rules-all")).toMatchObject({
-    rect: { left: 336, top: 0, width: 88 },
-  });
-  const html = renderToStaticMarkup(
-    <TeachingLayoutView<typeof layout>
-      layout={layout}
-      content={{
-        "e-systems": (pane) => pane("systems"),
-        "e-sidebar": (pane) => pane("tree"),
-        "e-inputs": (pane) => pane("inputs"),
-        "e-rules-all": (pane) => pane("rules"),
-        "e-rules": (pane) => pane("selected rules"),
-        "e-picture": (pane) => pane("picture"),
-        "e-inbox": (pane) => pane("rulings"),
-      }}
-      state={{
-        conditions: {
-          system: { available: true },
-          tree: { available: true },
-          tight: { available: false },
-        },
-        // Render the tree side: folded Activity content is intentionally absent from SSR.
-        choices: { scope: { value: "end", onChange: () => {} } },
-        folds: {
-          sidebar: { collapsed: null, onChange: () => {} },
-          drawing: { collapsed: null, onChange: () => {} },
-          inputs: { collapsed: "end", onChange: () => {} },
-        },
-      }}
-    />,
-  );
-  expect(html).toContain("512px");
-  const container = document.createElement("div");
-  container.innerHTML = html;
-  expect(
-    [...container.querySelectorAll("[data-slot=pane-split]")].map((node) =>
-      node.getAttribute("data-axis"),
-    ),
-  ).toEqual(["horizontal", "horizontal", "horizontal", "vertical", "horizontal", "horizontal"]);
-});
-
 test("reference projection removes runtime claims even from an accidentally stateful declaration", () => {
   const facts = declaredTeaching({
     id: "one",
@@ -275,7 +208,7 @@ test("measured shell panes cannot replace a route's still-loading declaration", 
     </TeachTarget>,
   );
   expect(view.container.querySelector("[data-teach-source=reference]")).toBeTruthy();
-  expect(view.container.textContent).toContain("All-systems rules");
+  expect(view.container.textContent).toContain("Design");
   expect(view.container.textContent).not.toContain("Chat");
   act(withdraw);
 });
@@ -314,7 +247,7 @@ test("empty measurements keep the reference; route changes exclude another retai
     </TeachPage>,
   );
   expect(view.container.querySelector("[data-teach-source=reference]")).toBeTruthy();
-  expect(view.container.textContent).toContain("All-systems rules");
+  expect(view.container.textContent).toContain("Design");
 });
 
 test("a local chat tutorial owns its measured facts while tool chrome keeps the current tool", () => {
@@ -361,9 +294,7 @@ test("a local chat tutorial owns its measured facts while tool chrome keeps the 
   );
   act(() => withdrawals.forEach((withdraw) => withdraw()));
   expect(view.container.querySelector('[data-reader="chat"]')!.textContent).toContain("Workspace");
-  expect(view.container.querySelector('[data-reader="chat"]')!.textContent).not.toContain(
-    "All-systems rules",
-  );
+  expect(view.container.querySelector('[data-reader="chat"]')!.textContent).not.toContain("Design");
 });
 
 test("SSR never reads the process-global mounted registry and hydrates the same map without warnings", async () => {

@@ -3,8 +3,10 @@
 // Before this guard they had none and rose in steps at landings (casts 101 to 151 and
 // suppressions 57 to 106 in two weeks).
 // `node src/health-census.ts` prints the census; `--tighten` lowers the baseline to it.
-// ponytail: the first three are lines matched by a regex, not the type checker. A count that
-// needs the checker gets its own census, as test-casts has.
+// `casts` is a syntax-tree count in TypeScript (kaitpw, 2026-11-13: casts and `any` are a sign of
+// bad design and may not rise anywhere): every `as T` except `as const`, every `<T>x`, and every
+// `any` written as a type. It ratchets per file. In C# it counts `(dynamic)` lines.
+// ponytail: suppressions and todos are lines matched by a regex.
 // `fsWrites` (kernel crusade 2, slice 1 / ST5) is a syntax-tree count: one per call that mutates
 // the filesystem through node:fs, node:fs/promises or an Effect `FileSystem`, in production files
 // of the host and the packages it stores through. It ratchets per file, not by total: a write
@@ -16,24 +18,77 @@ import { fileURLToPath } from "node:url";
 import ts from "typescript";
 
 export type Count = Record<string, number>;
-export type Health = { casts: Count; suppressions: Count; todos: Count; longFiles: Count; fsWrites: Count };
+export type Health = { casts: Count; nonNull: Count; suppressions: Count; todos: Count; longFiles: Count; fsWrites: Count };
 
 /** Ratchets that hold per file: no file may rise, whatever the total does. */
-export const PER_FILE = ["fsWrites"] as const satisfies readonly (keyof Health)[];
+export const PER_FILE = ["casts", "nonNull", "fsWrites"] as const satisfies readonly (keyof Health)[];
 
 /**
  * The doors: files a per-file count may rise in, because writes consolidate into them (the store is
  * the one write door, routes CONTRACTS K-A2). Their calls still count toward the total.
  */
 export const OWNERS: Record<(typeof PER_FILE)[number], readonly string[]> = {
+  casts: [],
+  nonNull: [],
   fsWrites: ["ts/packages/host-contracts/src/store.ts"],
 };
+export const NAMES = ["casts", "nonNull", "suppressions", "todos", "longFiles", "fsWrites"] as const satisfies readonly (keyof Health)[];
 
 /** Per-file rises outside the named owners. */
 export const perFileRises = (name: (typeof PER_FILE)[number], actual: Count, baseline: Count) =>
   rises(actual, baseline).filter((line) => !OWNERS[name].some((owner) => line.startsWith(`${owner}:`)));
 
-const FS_SCOPE = /^ts\/(apps\/host|packages\/(host-contracts|host-internal|runtime))\//;
+/**
+ * Written exceptions to the one write door (routes MAP slice 2): files that keep writes of their
+ * own. Each listed file carries `STORE-EXCEPTION: ADR 0039` at its sites, and every marker line
+ * names its end condition by the word in EXCEPTIONS (the end is "T3 replaces thread/provider
+ * persistence", worded per site). A listed file with no marker, a marker line without its end
+ * condition, or a marker in an unlisted file is red, so no file declares itself exempt.
+ */
+export const STORE_EXCEPTION = "STORE-EXCEPTION: ADR 0039";
+export const EXCEPTIONS: Record<string, string> = {
+  "ts/apps/host/src/harness/thread-store.ts": "T3",
+  "ts/apps/host/src/harness/threads.ts": "T3",
+  "ts/apps/host/src/harness/providers.ts": "T3",
+};
+
+/** Problems with the written exceptions, given each in-scope production file's text. */
+export function exceptionProblems(sources: Record<string, string>): string[] {
+  const problems: string[] = [];
+  for (const [file, text] of Object.entries(sources)) {
+    const end = EXCEPTIONS[file];
+    const lines = text.split("\n");
+    // A marker reads with the comment lines that continue it, so a wrapped end condition counts.
+    const block = (i: number) => {
+      let end = i + 1;
+      while (end < lines.length && /^\s*(\/\/|\*(?!\/))/.test(lines[end]!)) end++;
+      return lines.slice(i, end).join(" ");
+    };
+    const markers = lines.flatMap((line, i) => (line.includes(STORE_EXCEPTION) ? [[i + 1, block(i)] as const] : []));
+    if (end === undefined) {
+      if (markers.length) problems.push(`${file}: carries ${STORE_EXCEPTION} but is not in EXCEPTIONS (health-census.ts)`);
+      continue;
+    }
+    if (!markers.length) problems.push(`${file}: the written exception is gone; the site needs "${STORE_EXCEPTION}" and its end condition (${end})`);
+    for (const [line, text] of markers)
+      if (!new RegExp(`\\b${end}\\b`).test(text)) problems.push(`${file}:${line}: ${STORE_EXCEPTION} names no end condition (${end})`);
+  }
+  for (const file of Object.keys(EXCEPTIONS))
+    if (!(file in sources)) problems.push(`${file}: listed as a store exception but not found`);
+  return problems;
+}
+
+/** The in-scope production sources the fsWrites count and the exceptions read. */
+export const storeScopeSources = (): Record<string, string> =>
+  Object.fromEntries(
+    productionFiles()
+      .filter((file) => FS_SCOPE.test(file) && /\.tsx?$/.test(file))
+      .map((file) => [file, readFileSync(join(repoRoot, file), "utf8")]),
+  );
+
+// ST5 scope (storage.md): the host and the packages that store for it. The vendored service is not ours
+// to convert; the browser package writes no product state.
+const FS_SCOPE = /^ts\/(apps\/host|packages\/(host-contracts|host-internal|runtime))\/(?!src\/vendor\/)|^ts\/packages\/mcps\/src\//;
 const FS_MODULES = new Set(["fs", "node:fs", "fs/promises", "node:fs/promises"]);
 const NODE_MUTATORS = new Set(
   ["writeFile", "appendFile", "rename", "rm", "rmdir", "unlink", "mkdir", "mkdtemp", "copyFile", "cp", "symlink", "link", "truncate", "chmod", "utimes"]
@@ -90,10 +145,34 @@ export function fsWriteCount(path: string, text: string): number {
   return count;
 }
 
+/**
+ * TypeScript type escapes. `casts`: `as T` (not `as const`), `<T>x`, and `any` as a type.
+ * `nonNull`: postfix `x!` (owner ruling 2026-11-13: its own count, a different escape with a
+ * different fix; frozen at the census, it only falls).
+ */
+export function escapeCounts(path: string, text: string): { casts: number; nonNull: number } {
+  const kind = path.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS;
+  const ast = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true, kind);
+  const counts = { casts: 0, nonNull: 0 };
+  const visit = (node: ts.Node) => {
+    if (
+      (ts.isAsExpression(node) && !(ts.isTypeReferenceNode(node.type) && node.type.typeName.getText(ast) === "const")) ||
+      ts.isTypeAssertionExpression(node) ||
+      node.kind === ts.SyntaxKind.AnyKeyword
+    )
+      counts.casts++;
+    if (ts.isNonNullExpression(node)) counts.nonNull++;
+    ts.forEachChild(node, visit);
+  };
+  visit(ast);
+  return counts;
+}
+
 const repoRoot = resolve(import.meta.dirname, "../../../..");
 const LONG = 600;
-const lines: Record<Exclude<keyof Health, "longFiles" | "fsWrites">, RegExp> = {
-  casts: /\bas (any|unknown as)\b|\(dynamic\)|\bas never\b/,
+const DYNAMIC = /\(dynamic\)/;
+const LINE_COUNTS = ["suppressions", "todos"] as const satisfies readonly (keyof Health)[];
+const lines: Record<(typeof LINE_COUNTS)[number], RegExp> = {
   suppressions:
     /@ts-(ignore|expect-error)|(eslint|oxlint)-disable|#pragma warning disable|SuppressMessage/,
   todos: /\b(TODO|HACK|FIXME|XXX)\b/,
@@ -101,15 +180,14 @@ const lines: Record<Exclude<keyof Health, "longFiles" | "fsWrites">, RegExp> = {
 
 export const isProduction = (path: string) =>
   /\.(tsx?|cs)$/.test(path) &&
-  !/\.d\.ts$|\.(test|spec|guard|journey|gen|generated)\.|(^|\/)(tests?|__tests__|fixtures?|generated)\/|Tests?\//.test(
+  !/\.d\.ts$|\.(test|test-support|spec|guard|journey|gen|generated|fixture)\.|(^|\/)(tests?|__tests__|fixtures?|generated)\/|Tests?\//.test(
     path,
   );
 
 export const total = (count: Count) => Object.values(count).reduce((sum, n) => sum + n, 0);
 
-export function census(): Health {
-  const health: Health = { casts: {}, suppressions: {}, todos: {}, longFiles: {}, fsWrites: {} };
-  const files = execFileSync("git", ["ls-files", "--cached", "--others", "--exclude-standard"], {
+const productionFiles = () =>
+  execFileSync("git", ["ls-files", "--cached", "--others", "--exclude-standard"], {
     cwd: repoRoot,
     encoding: "utf8",
     maxBuffer: 1 << 28,
@@ -117,7 +195,10 @@ export function census(): Health {
     .split("\n")
     .filter((path) => isProduction(path) && existsSync(join(repoRoot, path)))
     .sort();
-  for (const file of files) {
+
+export function census(): Health {
+  const health: Health = { casts: {}, nonNull: {}, suppressions: {}, todos: {}, longFiles: {}, fsWrites: {} };
+  for (const file of productionFiles()) {
     const source = readFileSync(join(repoRoot, file), "utf8");
     if (FS_SCOPE.test(file) && /\.tsx?$/.test(file)) {
       const writes = fsWriteCount(file, source);
@@ -125,13 +206,23 @@ export function census(): Health {
     }
     const text = source.split("\n");
     if (text.length > LONG) health.longFiles[file] = 1;
-    for (const [name, pattern] of Object.entries(lines)) {
-      const hits = text.filter((line) => pattern.test(line)).length;
-      if (hits) health[name as keyof typeof lines][file] = hits;
+    const escapes = file.endsWith(".cs")
+      ? { casts: text.filter((line) => DYNAMIC.test(line)).length, nonNull: 0 }
+      : escapeCounts(file, source);
+    if (escapes.casts) health.casts[file] = escapes.casts;
+    if (escapes.nonNull) health.nonNull[file] = escapes.nonNull;
+    for (const name of LINE_COUNTS) {
+      const hits = text.filter((line) => lines[name].test(line)).length;
+      if (hits) health[name][file] = hits;
     }
   }
   return health;
 }
+
+const isCount = (value: unknown): value is Count =>
+  typeof value === "object" && value !== null && Object.values(value).every((n) => typeof n === "number");
+const isHealth = (value: unknown): value is Health =>
+  typeof value === "object" && value !== null && NAMES.every((name) => name in value && isCount(Reflect.get(value, name)));
 
 /** The files whose count rose, as `file: baseline -> actual`. */
 export const rises = (actual: Count, baseline: Count) =>
@@ -142,11 +233,10 @@ export const rises = (actual: Count, baseline: Count) =>
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const path = join(import.meta.dirname, "health.baseline.json");
   const actual = census();
-  const names = Object.keys(actual) as (keyof Health)[];
+  const names = NAMES;
   if (process.argv.includes("--tighten")) {
-    const baseline = existsSync(path)
-      ? (JSON.parse(readFileSync(path, "utf8")) as Health)
-      : undefined;
+    const parsed: unknown = existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : undefined;
+    const baseline = isHealth(parsed) ? parsed : undefined;
     for (const name of PER_FILE)
       if (baseline?.[name] && perFileRises(name, actual[name], baseline[name]).length)
         throw new Error(

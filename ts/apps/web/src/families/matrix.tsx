@@ -10,15 +10,13 @@ import type { FamiliesDrawContext } from "./route";
 import { TypeGrid } from "./pivot-grid";
 import { useCellCollection } from "@pe/kit/lang/cell";
 import { useMeasuredParse } from "#/host/measured-parse";
-import { FindingVerb } from "#/route/slots/findings/verb";
 import { joinRows } from "./families-matrix";
-import { subjectCode } from "../../../../packages/agent-contracts/src/subject-ref.ts";
 export function FamiliesMatrix({ ctx }: { ctx: FamiliesDrawContext }) {
   const [failure, setFailure] = useState<string | null>(null);
-  const run = async (id: string, input?: unknown) => {
+  const run = async (id: "read" | "stop", input?: unknown) => {
     try {
       setFailure(null);
-      await ctx.write(id).run(input);
+      await ctx.verb(id).run(input);
     } catch (error) {
       setFailure(error instanceof Error ? error.message : String(error));
     }
@@ -114,11 +112,8 @@ export function FamiliesMatrix({ ctx }: { ctx: FamiliesDrawContext }) {
         <Button label="Stop family read" onClick={() => run("stop")}>
           Stop
         </Button>
-        <PreviewAction handle={ctx.write("apply")} label="Apply families" />
+        <PreviewAction handle={ctx.verb("apply")} label="Apply families" />
       </ButtonGroup>
-      {!ctx.value.current && (
-        <OutcomeLine kind="advisory" label="Family read" says={ctx.value.reason} />
-      )}
       {shown?.progress && shown.progress.state !== "complete" && (
         <OutcomeLine
           kind={shown.progress.state === "failed" ? "error" : "advisory"}
@@ -147,17 +142,10 @@ export function FamiliesMatrix({ ctx }: { ctx: FamiliesDrawContext }) {
         families={pivot.pivotFamilies}
         scroller={scroller}
         landed={landed}
-        typeVerb={(type) => (
-          <FindingVerb
-            subject={subjectCode({ keyKind: "name", key: [type.familyName, type.typeName] })}
-            name={`${type.familyName} · ${type.typeName}`}
-            action={ctx.write("finding")}
-          />
-        )}
         edit={{
           live,
           params: new Map(params.map((p) => [p.key, p])),
-          readOnly: !ctx.cells.ready || !!data?.editRefusal,
+          readOnly: ctx.cells.state.state !== "ready" || !!data?.editRefusal,
           parse,
           propose: async (address, value, current) => {
             const result = await ctx.cells.edit(

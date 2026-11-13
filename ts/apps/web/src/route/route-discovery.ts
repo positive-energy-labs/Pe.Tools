@@ -101,11 +101,11 @@ export function createRouteDiscovery() {
     entries,
     keys: () => [...registered.keys()],
     get: (key: string) => registered.get(key),
-    /** The one route that declares this action; a kernel action no route declares (findings.write, which the mount adds) names none. */
+    /** The one route that declares this action; a kernel action no route declares (findings.say, which the mount adds) names none. */
     actionRoute(key: string) {
       const owners = entries().filter(({ typed }) =>
-        Object.values(typed.spec.commands).some((verb) =>
-          verb.entry === key || ("plan" in verb && verb.plan === key),
+        Object.values(typed.spec.verbs).some(
+          (verb) => verb.handle.key === key || verb.handle.plan?.key === key,
         ),
       );
       return owners.length === 1 ? owners[0]!.manifest.key : null;

@@ -1,4 +1,5 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
+import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it } from "vite-plus/test";
@@ -40,18 +41,30 @@ it("stamps the trusted script caller over supplied caller bytes", async () => {
   }
 });
 
-it.each([["Succeeded", "succeeded"], ["RuntimeFailed", "failed"], ["CompilationFailed", "failed"]] as const)(
-  "real HTTP script admission classifies retained %s as %s", async (status, state) => {
+// These Nov 2-6 payload recordings predate Touched. Keep their provenance intact and supply
+// explicit scenario evidence, rather than claiming the retained status proves no model changes.
+it.each([
+  ["Succeeded", { kind: "none" }, "succeeded"],
+  ["RuntimeFailed", { kind: "rolledBack" }, "failed"],
+  ["CompilationFailed", { kind: "none" }, "failed"],
+  ["RuntimeFailed", undefined, "incomplete"],
+  ["CompilationFailed", undefined, "incomplete"],
+] as const)(
+  "HTTP script admission classifies retained %s with touched=%j as %s", async (status, touched, state) => {
     const dir = await mkdtemp(join(tmpdir(), "pe-script-recorded-"));
     const native = await fixtureNative(dir, `retained-script-${status}`, "retained-host-ops-catalog"); const socket = await native.connect();
+    if (touched) native.reportTouched("scripting.execute", touched);
     try {
       const response = await native.actions()({ id: "script", key: "scripting.execute", target: { kind: "document", ref: socket.target }, input: { scriptContent: "WriteLine(1);" } });
       expect(response.status, await response.clone().text()).toBeLessThan(400);
       const result = await native.journal.wait("script");
-      expect(result, JSON.stringify(result)).toMatchObject({ state });
+      expect(result.state).toBe(state);
+      expect(result.steps.at(-1)).toMatchObject({ transport: "bridge", bridgeReply: touched ? "touched" : "missing-touched" });
+      if (touched) expect(result.steps.at(-1)).toHaveProperty("touched", touched);
+      else expect(result.steps.at(-1)).not.toHaveProperty("touched");
       expect(native.calls.filter(call => call.key === "scripting.execute")).toMatchObject([{ key: "scripting.execute", input: { scriptContent: "WriteLine(1);" } }]);
       expect(native.calls.every(call => call.action === "scripting.execute")).toBe(true);
-      if (state === "failed") expect(result.steps.at(-1)).toMatchObject({ state: "failed", evidence: { result: { status } } });
+      if (state !== "succeeded") expect(result.steps.at(-1)).toMatchObject({ state: "failed", evidence: { result: { status } } });
     } finally { await native.close(); await rm(dir, { recursive: true, force: true }); }
   },
 );

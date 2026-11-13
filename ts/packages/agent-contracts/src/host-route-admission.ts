@@ -1,8 +1,8 @@
 import type { z } from "zod";
 import { z as hostZ } from "zod";
 import type { RouteFingerprint } from "./route-kernel-admission.ts";
-import type { RouteDiagnostic, RouteGraphJson } from "./route-kernel-data.ts";
-import { RouteGraphJson as hostGraphSchema } from "./route-kernel-data.ts";
+import type { RouteDiagnostic, RouteGraphWire as RouteGraphJson } from "./route-kernel-data.ts";
+import { RouteGraphWire as hostGraphSchema } from "./route-kernel-data.ts";
 import type { RouteStateSpec, RouteWriteAdmission } from "./route-state.ts";
 
 declare const hostAdmission: unique symbol;
@@ -34,6 +34,8 @@ export interface HostRouteModule extends Omit<HostWorkRegistration, "spec"> {
   readonly reads?: Readonly<Record<string, {
     readonly name:string; readonly input:z.ZodType; readonly output:z.ZodType;
     readonly run:(context:any,args:any)=>unknown;
+    /** The handle a `body()` serves; registration joins its `uses`. */
+    readonly contract?: import("./handle.ts").AnyReadHandle;
   }>>;
   readonly leaves?: Readonly<Record<string,(args:unknown,services:HostLeafServices)=>Promise<unknown>>>;
 
@@ -61,7 +63,6 @@ const workStateFields = {
   finds: hostZ.array(hostZ.string()).optional(),
   schema: hostZ.custom<z.ZodType>((v) => v instanceof hostZ.ZodType),
   schemaVersion: hostZ.number().int().positive().optional(),
-  upgrade: hostZ.custom<RouteStateSpec<z.ZodType>["upgrade"]>((v) => typeof v === "function").optional(),
   editable: hostZ.array(hostZ.array(hostZ.union([hostZ.string(), hostZ.number()]))).optional(),
   reconcileEdit: hostZ
     .custom<RouteStateSpec<z.ZodType>["reconcileEdit"]>((v) => typeof v === "function")

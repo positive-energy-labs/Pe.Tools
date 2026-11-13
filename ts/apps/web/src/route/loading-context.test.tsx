@@ -1,4 +1,10 @@
 // @vitest-environment jsdom
+import { module as ducts } from "../ducts/route";
+import { module as family } from "../family/route";
+import { publicRoutes } from "./route-discovery";
+for (const typed of [ducts, family])
+  if (!publicRoutes.typed(typed.data.key))
+    publicRoutes.register({ typed, manifest: typed.data, hosted: () => null });
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, expect, test, vi } from "vite-plus/test";
@@ -9,7 +15,7 @@ import { peReadings } from "#/host/resource-stream";
 import { TooltipProvider } from "@pe/kit/lang/tooltip";
 import { HelpWorld } from "./help";
 import { STARTUP_TEACHING, referenceTeaching } from "./teaching";
-import { DUCTS_TEACHING } from "#/ducts/proto/e/teaching";
+const DUCTS_TEACHING = referenceTeaching("/ducts");
 import { useLocalDevice, RemoteDeviceGate, RecordedSourceChip } from "#/machine/devices";
 
 const host = vi.hoisted(() => ({ call: vi.fn(), fetch: vi.fn() }));
@@ -44,8 +50,8 @@ test("the static shell renders caller-owned public guidance without a host or pr
     </RemoteDeviceGate>,
   );
   expect(ducts).toContain("data-page-map");
-  expect(ducts).toContain("All-systems rules");
-  expect(ducts).toContain("move the cursor down");
+  expect(ducts).toContain("Design");
+
   expect(ducts).not.toContain(" · active");
   expect(ducts).not.toContain(" · shown");
   expect(ducts).not.toContain(" · available");
@@ -89,10 +95,10 @@ test.each([
 test("route declarations replace rather than merge and unsupported routes never use Ducts", () => {
   const view = render(<HelpWorld facts={referenceTeaching("/ducts")} />);
   expect(screen.getByRole("group", { name: "Page regions" })).toBeTruthy();
-  expect(view.container.textContent).toContain("All-systems rules");
+  expect(view.container.textContent).toContain("Design");
   view.rerender(<HelpWorld facts={referenceTeaching("/family")} />);
-  expect(view.container.textContent).not.toContain("All-systems rules");
-  expect(view.container.textContent).toContain("Workspace");
+  expect(view.container.textContent).not.toContain("Design");
+  expect(view.container.textContent).toContain("Family");
 });
 
 const recorded = {
@@ -168,7 +174,18 @@ test.each([
     expect(await screen.findByRole("alert")).toBeTruthy();
     expect(screen.queryByText(/Local authority/)).toBeNull();
     host.fetch.mockResolvedValueOnce(
-      features(JSON.stringify({ ...recorded, truncated: { at: 3, stoppedAt: 1_794_000_000_000, site: "work", op: "work.read", reason: "full" } })),
+      features(
+        JSON.stringify({
+          ...recorded,
+          truncated: {
+            at: 3,
+            stoppedAt: 1_794_000_000_000,
+            site: "work",
+            op: "work.read",
+            reason: "full",
+          },
+        }),
+      ),
     );
     fireEvent.click(screen.getByRole("button", { name: "Retry host connection" }));
     expect(await screen.findByText("Recorded · read only · partial")).toBeTruthy();
@@ -250,10 +267,14 @@ test("the real inventory hook feeds picker labels without fabricated pid and ret
   };
   vi.spyOn(peReadings, "subscribe").mockImplementation((_request, listener) => {
     listeners.add(listener);
-    return () => { listeners.delete(listener); };
+    return () => {
+      listeners.delete(listener);
+    };
   });
   const write = vi.fn();
-  const place = { address: { read: () => new URLSearchParams(), write, subscribe: () => () => {} } };
+  const place = {
+    address: { read: () => new URLSearchParams(), write, subscribe: () => () => {} },
+  };
   const view = render(
     <RegistryContext.Provider value={registry}>
       <DocumentPicker place={place} target={null} needs="project" enabled />

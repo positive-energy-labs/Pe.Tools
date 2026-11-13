@@ -1,6 +1,7 @@
 export * from "./activity.ts";
 export * from "./command.ts";
 export * from "./route-state.ts";
+export { workStepRequestSchema } from "./work-timeline.ts";
 export * from "./route-address.ts";
 export * from "./route-view.ts";
 export {
@@ -98,3 +99,4 @@ export * from "./ducts-read.ts";
 export {valueReadRequest,valueReadResponse} from "./value.ts";
 
 export { blobRefSchema, blobUploadSchema } from "./blob-ref.ts";
+export { placesFileSchema } from "./places.ts";

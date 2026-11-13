@@ -1,5 +1,5 @@
 import type { ContextOf } from "../route/defaults";
-import { command } from "../route/typed-actions.ts";
+import { handle } from "@pe/agent-contracts/handle";
 import { bindings, fanScope } from "./bindings";
 import { read } from "../route/defaults";
 import { stageField } from "../route/defaults";
@@ -12,7 +12,7 @@ import {
   type Immutable,
   type SubjectRefCode,
 } from "@pe/agent-contracts";
-import { reads } from "./reads.ts";
+import * as reads from "./contract.ts";
 import { editPatches } from "@pe/ducts-domain/sheet/index";
 import { field, picturePose, route, subjectSchema, split } from "../route/defaults.ts";
 import { hostRead } from "../route/host-read.ts";
@@ -42,6 +42,8 @@ export const sheet = read(
     sheetPath: page.sheetPath,
   }),
 );
+// The roster pane draws this read: the sheet refuses a fan it cannot find ("choose it from the roster"),
+// and the roster is the control that clears that refusal.
 const roster = read(hostRead(reads.sheet, sheetValueFixtures), () => ({
   fan: [],
   sheetPath: "",
@@ -86,6 +88,7 @@ export const module = route({
       subjectList: true,
       title: "Fans",
       purpose: "Open fan ports",
+      read: roster,
       bindings,
       body: "scroll",
       draw: draw("scroll", () => import("./mount.tsx"), "RosterBody"),
@@ -127,17 +130,18 @@ export const module = route({
     history: editMetaSchema,
     describe: describeInputHistory,
   },
-  commands: {
+  verbs: {
     losses: {
-      ...command("sheet.apply"),
+      handle: handle("sheet.apply"),
       label: "Write to Revit",
-      present: (result, data, work) =>
+      present: (result, { value: data, doc: work }) =>
         presentLosses(result, {
           page: { stage: "sheet" },
           readings: { sheetSnapshot: { value: data.sheetSnapshot }, fansWork: { value: work } },
         }),
     },
   },
+  band: ["losses"],
   layout: split(
     "h",
     [

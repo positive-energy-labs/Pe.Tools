@@ -1,3 +1,6 @@
+import { mkdtemp, stateFixture } from "../../../../tests/isolated-home/storage.ts";
+import { fixtureTimeline } from "../shell/fixture-work-door";
+import { refusalOf, valueOf } from "./typed-route";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
 import { snapshot as workSnapshot } from "../../../host/tests/host-read-graph.test-support";
 import { stableFanKey } from "../ducts/sheet/model";
@@ -7,7 +10,7 @@ import { HttpRouter } from "effect/http";
 // Host-only dependency: this HTTP journey lives beside web route journeys.
 import { NodeHttpClient, NodeServices } from "../../../host/node_modules/@effect/platform-node/dist/index.js";
 import { expect, test, vi } from "vite-plus/test";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { RouteWorkspace } from "@pe/runtime";
 import { address, commands, tools, roomEditKey, takeoffObservationSchema } from "@pe/agent-contracts";
@@ -33,7 +36,8 @@ import { RequestIdentity, admittedRequestIdentity } from "../../../host/src/requ
 import { bindControl } from "../../../host/src/control";
 import { testRegistry } from "../../../host/tests/effect-test";
 import { module as fans } from "../fans/route";
-import { mountTypedRoute } from "../shell/typed-mount";
+import { direct, mountTypedRoute, planned } from "../shell/typed-mount";
+import { handle } from "@pe/agent-contracts/handle";
 import type { PlaceInput } from "../shell/typed-place";
 import { createWorkFeedClient } from "../shell/work-feed-client";
 import { routeInput } from "./host";
@@ -229,7 +233,7 @@ async function journey(module: TypedRoute = fans) {
     callRouteOver(journal, undefined, { workspace: host.workspace }).pipe(
       nativeReadRoot(),
       Layer.provide(Layer.mergeAll(DuctFiles.layer(), HostDocumentMarks.layer)),
-      Layer.provideMerge(PictureCaptureStore.layer(join(host.dir, "pictures"))),
+      Layer.provideMerge(PictureCaptureStore.layer(stateFixture(join(host.dir, "pictures")))),
       HttpRouter.provideRequest(Layer.mergeAll(NodeServices.layer, NodeHttpClient.layerUndici)),
       Layer.provideMerge(RevitBridgeLive),
     ),
@@ -237,6 +241,7 @@ async function journey(module: TypedRoute = fans) {
   );
   const api = createPeRoutes({
     workspace: host.workspace,
+    journal,
     registrations: [],
     navigation: { threads: async () => [], documents: async () => [{ ...ref, address: path }] },
   });
@@ -305,6 +310,8 @@ async function journey(module: TypedRoute = fans) {
   };
   let heldWrite: ReturnType<typeof gate> | undefined;
   let beforeWrite: ReturnType<typeof gate> | undefined;
+  let answered: { key: string; result: unknown; held?: ReturnType<typeof gate> } | undefined;
+  const submits: string[] = [];
   const writes: WorkWrite[] = [];
   const work = createWorkFeedClient(source, {
     write: async (key, body) => {
@@ -317,6 +324,14 @@ async function journey(module: TypedRoute = fans) {
       return result;
     },
     submit: async (command) => {
+      submits.push(command.key);
+      if (answered?.key === command.key) {
+        const held = answered.held; answered.held = undefined;
+        if (held) { held.entered.resolve(); await held.release.promise; }
+        return actionReceiptSchema.parse({ state: "succeeded", result: answered.result, id: command.id, key: command.key,
+          caller: who, basis: null, target: command.target, input: command.input, steps: [],
+          prepared: { state: "unprepared" }, recovery: [], startedAt: new Date().toISOString() });
+      }
       const response = await request("/actions", command);
       expect([200, 202], await response.clone().text()).toContain(response.status);
       await journal.wait(command.id);
@@ -357,7 +372,7 @@ async function journey(module: TypedRoute = fans) {
   const mounts: ReturnType<typeof mountTypedRoute>[] = [];
   const mount = (readOnly = false, place: Partial<PlaceInput> = {}, ports: Parameters<typeof mountTypedRoute>[3] = {}, candidate: TypedRoute = module) => {
     const m = mountTypedRoute(candidate, { ...input, ...place, readOnly }, fingerprint, {
-      work,
+      work, timeline: fixtureTimeline(host.workspace),
       sources: { "fans.sheet": read }, ...ports,
     });
     mounts.push(m);
@@ -371,7 +386,8 @@ async function journey(module: TypedRoute = fans) {
     m.refresh();
     return vi.waitFor(
       () => {
-        expect(m.value()).toMatchObject({ current: true });
+        expect(m.value()).toMatchObject({ state: "ready" });
+        expect(m.timeline()).not.toBeNull();
         if (m.owner()?.ready) expect(m.problem()).toBeNull();
       },
       { timeout: 20_000 },
@@ -397,6 +413,11 @@ async function journey(module: TypedRoute = fans) {
     holdStream() { streamHeld = true; },
     flushStream() { streamHeld = false; streamQueue.splice(0).forEach(deliver => deliver()); },
     holdWrite() { heldWrite = gate(); return heldWrite; },
+    /** The door answers `key` itself with `result`, and never asks the host. */
+    answer(key: string, result: unknown) { answered = { key, result }; },
+    /** Holds the next answered submit at the door. */
+    holdSubmit() { answered!.held = gate(); return answered!.held; },
+    submits,
     depart() {
       current = false;
     },
@@ -411,7 +432,7 @@ async function journey(module: TypedRoute = fans) {
     },
     async close() {
       // Refused intents outlive a Place in production, but not this disposable host fixture.
-      mounts.forEach(m => m.journal().intents.forEach(intent => m.discardIntent(intent.id)));
+      mounts.forEach(m => m.pendingEdits().forEach(intent => m.discardIntent(intent.id)));
       mounts.forEach((m) => m.dispose());
       streams.forEach((stop) => stop());
       await Promise.allSettled([...pending]);
@@ -537,7 +558,7 @@ test("JW2 receive Pea proposals, accept and deny individual cells without changi
   try {
     await j.start();
     const by: Caller = { kind: "pea", context: "jw", thread: "jw-proposals" };
-    const stored = structuredClone(j.m.value().value.sheetSnapshot);
+    const stored = structuredClone(valueOf(j.m.value()).sheetSnapshot);
     expect(
       stored.nodes.length,
       "H20: proposal journey starts with actual recorded native facts",
@@ -579,7 +600,7 @@ test("JW2 receive Pea proposals, accept and deny individual cells without changi
     await j.ready();
     expect(j.m.owner()!.doc.flows[terminalB]?.edit, "H20: deny clears the proposed edit").toBeNull();
     expect(
-      j.m.value().value.sheetSnapshot,
+      valueOf(j.m.value()).sheetSnapshot,
       "H20: stored native facts survive proposal transitions",
     ).toEqual(stored);
     expect(j.m.owner()!.doc.flows[terminalA].edit.value).toEqual({ cfm: 250 });
@@ -594,10 +615,11 @@ test("JM H27 interleave a second writer, refuse the original undo and keep its n
     await j.start();
     expect(await j.cells().at(["flows", terminalA]).stage({ cfm: 240 }, { label: "Set terminal airflow" })).toBeNull();
     await j.ready();
-    const step = j.m.history.entries.at(-1)!;
-    expect(await j.m.history.undo(step.press), "H07: typed Work undoes the named edit").toMatchObject({ ok: true });
+    await vi.waitFor(() => expect(j.m.timeline()?.undo).toBeTruthy());
+    const step = j.m.timeline()!.undo!;
+    expect(await j.m.stepTimeline("undo"), "H07: host Timeline undoes the offered edit").toBeNull();
     await j.ready();
-    expect(await j.m.history.redo(step.press), "H07: typed Work redoes the same edit").toMatchObject({ ok: true });
+    expect(await j.m.stepTimeline("redo"), "H07: host Timeline redoes the offered edit").toBeNull();
     await j.ready();
     const result = await j.write(j.key(), { kind: "apply", expectedRevision: j.m.owner()!.handle!.revision,
       press: crypto.randomUUID(), label: "Another designer changes airflow",
@@ -606,11 +628,11 @@ test("JM H27 interleave a second writer, refuse the original undo and keep its n
     await vi.waitFor(() => expect(j.m.owner()!.doc.flows[terminalA].edit.value).toEqual({ cfm: 500 }));
     await j.ready();
     const before = structuredClone(j.m.owner()!.doc), revision = j.m.owner()!.handle!.revision;
-    const undo = await j.m.history.undo(step.press);
+    const undo = await j.host.workspace.step([j.key()], "human", "undo", step, async () => []);
     expect(undo, "H27: a changed affected path refuses its original inverse").toMatchObject({ ok: false });
     expect(j.m.owner()!.doc, "H27: conflicting undo changes no path").toEqual(before);
     expect(j.m.owner()!.handle!.revision, "H27: no inverse retry writes a new revision").toBe(revision);
-    expect(j.m.history.entries.some(entry => entry.press === step.press), "H27: the named entry survives refusal").toBe(true);
+    expect(j.m.timeline()!.rows.some(entry => "work" in entry && entry.kind === "edit" && entry.revision === ("revision" in step ? step.revision : -1)), "H27: the named entry survives refusal").toBe(true);
   } finally { await j.close(); }
 }, 60_000);
 
@@ -631,7 +653,7 @@ test("JM H01/H13 hide one document, inspect another and reopen the first named W
     await vi.waitFor(() => expect(reopened.owner()?.ready).toBe(true));
     expect(reopened.owner()!.scope.key).toEqual(firstKey);
     expect(reopened.owner()!.doc.flows[terminalA].edit.value).toEqual({ cfm: 240 });
-    expect(JSON.stringify(reopened.journal()), "H13: cold reopening retains the human action label").toContain("Terminal A design airflow");
+    await vi.waitFor(() => expect(JSON.stringify(reopened.timeline()), "H13: cold reopening retains the human action label").toContain("Terminal A design airflow"));
   } finally { await j.close(); }
 }, 60_000);
 
@@ -642,9 +664,9 @@ test("JM H12 leave a Page with drawn cells, inspect it, and refuse both old edit
     const cell = j.cells().at(["flows", terminalA]), before = structuredClone(j.m.owner()!.doc);
     const receipts = (await j.journal.list()).length;
     j.depart();
-    expect(j.m.value().value, "H12: departure preserves inspection").toBeDefined();
+    expect(valueOf(j.m.value()), "H12: departure preserves inspection").toBeDefined();
     expect(await cell.stage({ cfm: 700 }, { label: "Late airflow" }), "H12: captured cell cannot write after departure").toMatchObject({ code: "refused" });
-    await expect(j.m.action("losses").plan(), "H12: departure cannot acquire a new native plan").rejects.toThrow("Place");
+    await expect(planned(j.m.verb("losses")).plan(), "H12: departure cannot acquire a new native plan").rejects.toThrow("Place");
     expect(j.m.owner()!.doc).toEqual(before);
     expect((await j.journal.list()).length, "H12: neither path submits a native action").toBe(receipts);
   } finally { await j.close(); }
@@ -661,7 +683,7 @@ test("JM H30 refuse a stale drawn edit and retain its original intent across ref
     expect(await old.stage({ cfm: 731 }, { label: "Keep my original airflow" })).toMatchObject({ code: "refused" });
     await j.ready();
     expect(j.m.owner()!.doc, "H30: stale intent never recomputes on newer Work").toEqual(before);
-    expect(JSON.stringify(j.m.journal()), "H30: rejected input remains inspectable until explicit discard").toContain("Keep my original airflow");
+    expect(JSON.stringify(j.m.pendingEdits()), "H30: rejected input remains inspectable until explicit discard").toContain("Keep my original airflow");
   } finally { await j.close(); }
 }, 60_000);
 
@@ -682,7 +704,7 @@ test("JZ C121/C090 drawn authority rejects copied, foreign and old bases without
     expect(await drawn.patch([{ path: ["flows", terminalA, "edit"], value: { value: edit } }],
       { label: "Original refused airflow" })).toMatchObject({ code: "refused" });
     expect(j.m.current(old)).toBe(false);
-    const intent = j.m.journal().intents.find(i => i.label === "Original refused airflow")!;
+    const intent = j.m.pendingEdits().find(i => i.label === "Original refused airflow")!;
     expect(intent.input.expectedRevision).toBe(old.workRevision);
     expect(intent.input.patches).toEqual([{ path: ["flows", terminalA, "edit"], value: { value: edit } }]);
     expect(Object.isFrozen(intent.input.patches)).toBe(true);
@@ -690,7 +712,7 @@ test("JZ C121/C090 drawn authority rejects copied, foreign and old bases without
     expect(j.writes).toHaveLength(count);
     expect(j.m.owner()!.doc).toEqual(before);
     j.m.discardIntent(intent.id);
-    expect(j.m.journal().intents.some(i => i.id === intent.id)).toBe(false);
+    expect(j.m.pendingEdits().some(i => i.id === intent.id)).toBe(false);
     expect(await j.cells().at(["flows", terminalA]).stage({ cfm: 201 })).toBeNull();
   } finally { await j.close(); }
 }, 60_000);
@@ -710,7 +732,7 @@ test("JZ C122 delayed mounted submit retains its revision after a newer edit", a
     expect(await pending).toMatchObject({ code: "refused" });
     expect(j.writes.slice(-2).map(w => w.expectedRevision)).toEqual([revision, revision]);
     expect(j.m.owner()!.doc.flows[terminalA].edit.value).toEqual({ cfm: 500 });
-    expect(j.m.journal().intents.at(-1)!.input.patches).toEqual([
+    expect(j.m.pendingEdits().at(-1)!.input.patches).toEqual([
       { path: ["flows", terminalA, "edit"], value: { value: { cfm: 200 } } },
     ]);
   } finally { held?.release.resolve(); await j.close(); }
@@ -744,7 +766,7 @@ test.each(["ack-first", "stream-first"])("JZ C086 %s delivery and pending depart
   } finally { held?.release.resolve(); j.flushStream(); await j.close(); }
 }, 60_000);
 
-test("JZ C718/C675/C676/C730 atomic press, isolated cell undo, root addressing and locked deletion", async () => {
+test("JZ C718/C675/C676/C730 atomic press, Timeline undo, root addressing and locked deletion", async () => {
   const j = await journey();
   try {
     await j.start();
@@ -752,34 +774,29 @@ test("JZ C718/C675/C676/C730 atomic press, isolated cell undo, root addressing a
     expect(await j.cells().patch([terminalA, terminalB].map(id => ({ path: ["flows", id, "edit"], value: { value: { cfm: 240 } } })),
       { label: "Both terminals" })).toBeNull();
     await j.ready();
-    const step = j.m.journal().undo.at(-1)!;
-    expect(j.m.journal().undo.filter(s => s.press === j.writes.at(-1)!.press), JSON.stringify(j.m.journal())).toHaveLength(1);
-    expect(step.transitions).toHaveLength(1);
-    expect(step.transitions[0]!.forward).toHaveLength(2);
-    expect(step.transitions[0]!.inverse).toHaveLength(2);
-    expect(j.writes.at(-1)!.press).toBe(step.press);
-    expect(await j.m.history.undo(step.press)).toMatchObject({ ok: true });
+    await vi.waitFor(() => expect(j.m.timeline()?.undo?.label).toBe("Both terminals"));
+    expect(j.writes.at(-1)!.patches).toHaveLength(2);
+    expect(await j.m.stepTimeline("undo")).toBeNull();
     await j.ready(); expect(j.m.owner()!.doc).toEqual(original);
     expect(await j.cells().patch([terminalA, terminalB].map(id => ({ path: ["flows", id], value: { edit: { value: { cfm: 250 } } } })))).toBeNull();
     await j.ready();
-    const before = structuredClone(j.m.owner()!.doc), steps = j.m.journal().undo.length;
+    const before = structuredClone(j.m.owner()!.doc), steps = j.m.timeline()!.rows.length;
     for (const [id, action] of [[terminalA, "clear"], [terminalB, "clear"], [terminalA, "delete"]] as const) {
       expect(await j.cells().at(["flows", id])[action]({ label: `${action} ${id}` })).toBeNull();
       await j.ready();
     }
     expect(j.m.owner()!.doc.flows[terminalA]).toBeUndefined();
-    expect(j.m.journal().undo).toHaveLength(steps + 3);
-    expect(j.m.journal().undo.slice(-3).map(s => s.transitions.length)).toEqual([1, 1, 1]);
-    for (let i = 0; i < 3; i++) { expect(await j.m.history.undo()).toMatchObject({ ok: true }); await j.ready(); }
+    expect(j.m.timeline()!.rows).toHaveLength(steps + 3);
+    for (let i = 0; i < 3; i++) { expect(await j.m.stepTimeline("undo")).toBeNull(); await j.ready(); }
     expect(j.m.owner()!.doc).toEqual(before);
     expect(await j.cells().at(["writeIntent"]).stage({ walk: { unitId: 1, portIndex: 0 } })).toBeNull(); await j.ready();
-    const rootBefore = structuredClone(j.m.owner()!.doc), rootSteps = j.m.journal().undo.length;
+    const rootBefore = structuredClone(j.m.owner()!.doc), rootSteps = j.m.timeline()!.rows.length;
     expect(() => j.cells().at(["foreignRoot"])).toThrow("No owning Work");
     expect(await j.cells().at(["writeIntent"]).clear()).toBeNull(); await j.ready();
     expect(await j.cells().at(["writeIntent"]).delete()).toBeNull(); await j.ready();
     expect(j.m.owner()!.doc.writeIntent).toEqual({});
-    expect(j.m.journal().undo).toHaveLength(rootSteps + 2);
-    for (let i = 0; i < 2; i++) { expect(await j.m.history.undo()).toMatchObject({ ok: true }); await j.ready(); }
+    expect(j.m.timeline()!.rows).toHaveLength(rootSteps + 2);
+    for (let i = 0; i < 2; i++) { expect(await j.m.stepTimeline("undo")).toBeNull(); await j.ready(); }
     expect(j.m.owner()!.doc).toEqual(rootBefore);
     const locked = j.cells().at(["flows", terminalA], undefined, { readOnly: true });
     const writes = j.writes.length;
@@ -792,37 +809,29 @@ test("JZ C718/C675/C676/C730 atomic press, isolated cell undo, root addressing a
 
 // A command read cannot publish into a Page generation that did not invoke it.
 test("JZ direct query drops a retired Page reply after A-B-A and discloses the refusal", async () => {
-  const { z } = await import("zod");
-  const { queryAction } = await import("./typed-actions");
-  const held = gate();
-  let j: Awaited<ReturnType<typeof journey>>;
-  const module = { ...fans, spec: { ...fans.spec, commands: { ...fans.spec.commands,
-    audit: { ...queryAction({ key: "fans.audit-generation", input: z.strictObject({}),
-      run: async () => {
-        held.entered.resolve();
-        await held.release.promise;
-        return j.host.send(901, []);
-      } }), label: "Read fan" },
+  // A verb whose handle reads: the findings list, through the same door as every command.
+  const module = { ...fans, spec: { ...fans.spec, band: [...fans.spec.band, "audit"], verbs: { ...fans.spec.verbs,
+    audit: { handle: handle("findings.list"), label: "Read fan" },
   } } };
-  j = await journey(module);
+  const j = await journey(module);
   try {
     await j.start();
+    j.answer("findings.list", { findings: [] });
     const pageA = j.m.page.read().fan, tokenA = j.m.workBasis()!;
-    const pending = j.m.action("audit").run({}).then(value => ({ value }), error => ({ error }));
+    const held = j.holdSubmit();
+    const pending = direct(j.m.verb("audit")).run({}).then(value => ({ value }), error => ({ error }));
     await held.entered.promise;
     j.m.page.subject({ kind: "ids", ids: [] });
     j.m.page.subject(pageA);
     expect(j.m.current(tokenA), "A-B-A retires the original generation").toBe(false);
     held.release.resolve();
     const outcome = await pending;
-    expect(outcome).toHaveProperty("error", expect.any(Error));
-    expect(j.m.result("audit"), "Retired query output never enters the current result slot").toBeUndefined();
-    expect(j.m.action("audit").failure, "The waiting user sees why their read did not land").toMatch(/earlier Page/);
+    expect(outcome, "A retired Page's read never answers as a success").toHaveProperty("error", expect.any(Error));
+    expect(j.m.verb("audit").failure, "The waiting user sees why their read did not land").toMatch(/earlier Page/);
     expect(j.writes).toHaveLength(0);
-    const current = await j.m.action("audit").run({});
-    expect(j.m.result("audit"), "A fresh invocation can publish normally").toEqual(current);
-    expect(j.m.action("audit").failure).toBeNull();
-  } finally { held.release.resolve(); await j.close(); }
+    await expect(direct(j.m.verb("audit")).run({}), "A fresh invocation answers normally").resolves.toBeDefined();
+    expect(j.m.verb("audit").failure).toBeNull();
+  } finally { await j.close(); }
 }, 60_000);
 
 test("JZ raw Work patch paths and ambiguous operation fields refuse atomically at HTTP", async () => {
@@ -864,11 +873,14 @@ test("JZ a null Place target refuses Work before dispatch but still permits clie
     await j.start();
     const unbound = j.mount(false, { target: null });
     await vi.waitFor(() => expect(unbound.owner()?.ready).toBe(true));
-    expect(unbound.value().current, "A targetless Page cannot borrow document Value authority").toBe(false);
+    expect(unbound.value().state === "ready", "A targetless Page cannot borrow document Value authority").toBe(false);
     const before = structuredClone(unbound.owner()!.doc), revision = unbound.owner()!.handle!.revision;
     const count = j.writes.length;
-    const cells = unbound.draw("sheet-inputs", ctx => ctx.cells) as DrawContext<any, any, any, any>["cells"];
-    expect(await cells.at(["flows", terminalA]).stage({ cfm: 330 }), "No target means no write authority").toMatchObject({ code: "unavailable" });
+    // The read is value-less, so the shell draws its line and no body: there is no cell to stage through.
+    // The refused stage over a held value keeps its witness in rooms.test.tsx ("Unsafe").
+    let drew = false;
+    unbound.draw("sheet-inputs", () => { drew = true; return null; });
+    expect(drew, "No target means no body, so no write authority").toBe(false);
     expect(j.writes).toHaveLength(count);
     expect(unbound.owner()!.doc).toEqual(before);
     expect(unbound.owner()!.handle!.revision).toBe(revision);
@@ -894,17 +906,17 @@ test("JZ released reads resume once after custody returns through an unchanged a
       read: () => new URLSearchParams(), write() {}, subscribe(notify) { listeners.add(notify); return () => { listeners.delete(notify); }; },
     } }, { sources: { "fans.sheet": source } });
     await Promise.allSettled([...tasks]);
-    expect(m.value().current).toBe(true);
-    const initial = reads, retained = m.value().value;
+    expect(m.value().state === "ready").toBe(true);
+    const initial = reads, retained = valueOf(m.value());
     expect(initial).toBeGreaterThan(0);
     m.release(); current = false;
     const stop = m.subscribe(() => {});
     expect(reads, "A hidden Place cannot acquire another native read").toBe(initial);
-    expect(m.value().value).toEqual(retained);
+    expect(valueOf(m.value())).toEqual(retained);
     current = true; listeners.forEach(notify => notify());
     await vi.waitFor(() => expect(reads, "Address notification resumes each declared read once").toBe(initial * 2));
     await Promise.allSettled([...tasks]);
-    expect(m.value().current).toBe(true);
+    expect(m.value().state === "ready").toBe(true);
     listeners.forEach(notify => notify());
     expect(reads, "An equal current address cannot duplicate the subscription").toBe(initial * 2);
     stop();
@@ -947,17 +959,17 @@ test.each(["accepted", "refused"] as const)("JZ audit member switch keeps a late
     expect(m.owner()!.doc, "The replacement never receives the old member's delta").toEqual(before);
     expect(m.owner()!.handle).toEqual(handle);
     expect(m.problem()).toBeNull();
-    expect(m.journal().intents.some(intent => intent.label === "Member A delayed edit")).toBe(false);
+    expect(m.pendingEdits().some(intent => intent.label === "Member A delayed edit")).toBe(false);
     await vi.waitFor(() => expect(inspectorA.owner()!.doc.flows[terminalA].edit.value).toEqual({ cfm: outcome === "accepted" ? 210 : 700 }));
   } finally { held?.release.resolve(); await j.close(); }
 }, 60_000);
 
-test("JZ audit explicit demand refuses malformed HTTP Value data and recovers without exposing it", async () => {
+test("JZ audit a read refuses malformed HTTP Value data and recovers without exposing it", async () => {
   const { route } = await import("./typed-route");
   const j = await journey(), tasks = new Set<Promise<unknown>>();
   let opened = 0, corrupt = true;
-  const read = { ...fans.spec.core!, demand: "explicit" as const };
-  const module = route({ ...fans.spec, edits: undefined, commands: {}, subject: undefined, reads: {}, core: read,
+  const read = { ...fans.spec.core! };
+  const module = route({ ...fans.spec, edits: undefined, verbs: {}, band: [], subject: undefined, reads: {}, core: read,
     panes: { main: { title: "Explicit Fan read", purpose: "Inspect a demanded Value", read, body: "scroll", draw: () => scrollBody(null) } },
     layout: { kind: "pane", id: "main" } });
   const source: UseSource = { kind: "use", open(ctx, deliver) {
@@ -971,61 +983,57 @@ test("JZ audit explicit demand refuses malformed HTTP Value data and recovers wi
   } };
   try {
     const m = j.mount(false, {}, { sources: { "fans.sheet": source } }, module);
-    expect(opened, "Explicit reads are idle until demand").toBe(0);
-    expect(m.value().value).toBeUndefined();
-    m.refresh(read); await Promise.allSettled([...tasks]);
+    await Promise.allSettled([...tasks]);
     expect(opened).toBe(1);
-    expect(m.value().current).toBe(false);
-    expect(m.value().value, "Malformed wire data is never drawn").toBeUndefined();
+    expect(m.value().state === "ready").toBe(false);
+    expect(valueOf(m.value()), "Malformed wire data is never drawn").toBeUndefined();
     const failed = m.value();
-    if (failed.current) throw Error("Malformed Value became current");
-    expect(failed.reason).toMatch(/reading|contract|unavailable/i);
-    expect(failed.reason).not.toMatch(/ZodError|invalid_type|expected.*object/i);
+    if (failed.state === "ready") throw Error("Malformed Value became current");
+    expect(refusalOf(failed)).toMatch(/reading|contract|unavailable/i);
+    expect(refusalOf(failed)).not.toMatch(/ZodError|invalid_type|expected.*object/i);
     corrupt = false; m.refresh(read); await Promise.allSettled([...tasks]);
-    expect(m.value().current).toBe(true);
-    const before = m.value().value;
+    expect(m.value().state === "ready").toBe(true);
+    const before = valueOf(m.value());
     corrupt = true; m.refresh(read); await Promise.allSettled([...tasks]);
-    expect(m.value().current).toBe(false);
-    expect(m.value().value, "A malformed replacement retains the last decoded Value").toEqual(before);
+    expect(m.value().state === "ready").toBe(false);
+    expect(valueOf(m.value()), "A malformed replacement retains the last decoded Value").toEqual(before);
     corrupt = false; m.refresh(read); await Promise.allSettled([...tasks]);
-    expect(m.value().current).toBe(true);
+    expect(m.value().state === "ready").toBe(true);
   } finally { await Promise.allSettled(tasks); await j.close(); }
 }, 60_000);
 
 test("JZ audit validation readiness and per-action busy admission prevent dispatch", async () => {
-  const { z } = await import("zod");
-  const { queryAction } = await import("./typed-actions");
-  const held = gate();
-  let calls = 0, j: Awaited<ReturnType<typeof journey>>;
-  const module = { ...fans, spec: { ...fans.spec, commands: { ...fans.spec.commands,
-    audit: { ...queryAction({ key: "fans.audit-admission", input: z.strictObject({ n: z.number() }),
-      run: async input => { calls++; if (typeof input.n === "number") { held.entered.resolve(); await held.release.promise; }
-        return j.host.send(910 + calls, []); } }), label: "Read fan" },
+  const module = { ...fans, spec: { ...fans.spec, band: [...fans.spec.band, "audit"], verbs: { ...fans.spec.verbs,
+    audit: { handle: handle("findings.list"), label: "Read fan" },
   } } };
-  j = await journey(module);
+  const j = await journey(module);
+  const calls = () => j.submits.filter((key) => key === "findings.list").length;
   try {
     await j.ready();
     expect(await j.cells().at(["flows", terminalA]).stage({ cfm: 220 })).toMatchObject({ code: "unavailable" });
     expect(j.writes).toHaveLength(0);
+    expect(j.m.verb("audit").refusal, "A verb that carries the Work handle refuses before the Work exists").toBe("Start this Work to edit");
+    await expect(direct(j.m.verb("audit")).run({})).rejects.toThrow("Start this Work to edit");
+    expect(calls(), "A refused press dispatches nothing").toBe(0);
     await j.start();
-    await expect(j.m.action("audit").run({ n: "bad" })).rejects.toThrow();
-    expect(calls).toBe(0);
-    const first = j.m.action("audit").run({ n: 1 });
+    j.answer("findings.list", { findings: [] });
+    const held = j.holdSubmit();
+    const first = direct(j.m.verb("audit")).run({});
     await held.entered.promise;
-    const duplicate = j.m.action("audit").run({ n: 2 }).then(value => ({ value }), error => ({ error }));
+    const duplicate = direct(j.m.verb("audit")).run({}).then(value => ({ value }), error => ({ error }));
     held.release.resolve();
     await first;
     expect(await duplicate).toHaveProperty("error", expect.objectContaining({ message: "Action already pending" }));
-    expect(calls).toBe(1);
-    expect(j.m.action("audit").pending).toBe(false);
-    await j.m.action("audit").run({ n: 3 });
-    expect(calls).toBe(2);
+    expect(calls()).toBe(1);
+    expect(j.m.verb("audit").pending).toBe(false);
+    await direct(j.m.verb("audit")).run({});
+    expect(calls()).toBe(2);
     expect(j.writes).toHaveLength(0);
-  } finally { held.release.resolve(); await j.close(); }
+  } finally { await j.close(); }
 }, 60_000);
 
 test("JZ audit page Bind validates its live HTTP contract before dispatch and persists the valid binding", async () => {
-  const { mkdtemp, mkdir, writeFile, readFile, rm } = await import("node:fs/promises");
+  const { mkdir, writeFile, readFile, rm } = await import("node:fs/promises");
   const { tmpdir } = await import("node:os");
   const { createPagesHandler } = await import("../../../host/src/pages-route");
   const { pageBindRpc } = await import("../../../../packages/mcps/src/shared/rpc-client");
@@ -1035,7 +1043,7 @@ test("JZ audit page Bind validates its live HTTP contract before dispatch and pe
   await mkdir(join(pages, "todo"), { recursive: true }); await mkdir(pods);
   await writeFile(join(pages, "todo", "index.html"), "<title>Audit Page</title><p>Bind this page</p>", "utf8");
   const state = join(dir, "state", "Pages");
-  const handle = createPagesHandler(pages, pods, undefined, undefined, { root: state, notices: join(dir, "state", "stored-notices.jsonl") });
+  const handle = createPagesHandler(pages, pods, undefined, undefined, stateFixture(state));
   let dispatches = 0;
   vi.stubGlobal("fetch", (url: string, init?: RequestInit) => {
     dispatches++; return withInvocationContext({ caller: who }, () => handle(new Request(new URL(url, "http://host"), init)));
@@ -1083,7 +1091,7 @@ test("JZ cut two Places retain independent Page pose selection Value and inactiv
   try {
     const a = place("a"); await j.settle();
     a.m.page.pose({ contextRadiusFt: 11 }); a.m.page.select([{ kind: "focus", id: "audit:a" }]);
-    await j.settle(); const beforeA = a.m.page.read(), valueA = a.m.value().value, urlA = address.read();
+    await j.settle(); const beforeA = a.m.page.read(), valueA = valueOf(a.m.value()), urlA = address.read();
     expect(valueA).toBeDefined(); a.p.remember(beforeA); a.p.setVisible(false); a.m.release();
     active = "b"; address.write(new URLSearchParams("target=two"));
     const b = place("b"); await j.settle();
@@ -1095,11 +1103,11 @@ test("JZ cut two Places retain independent Page pose selection Value and inactiv
     expect(a.p.fixture).toBeNull();
     expect(() => a.m.page.pose({ contextRadiusFt: 99 })).toThrow();
     expect(a.m.page.read()).toEqual(beforeA); expect(b.m.page.read()).toEqual(beforeB);
-    expect(a.m.value().value).toEqual(valueA); expect(a.p.memory()).toEqual(beforeA);
+    expect(valueOf(a.m.value())).toEqual(valueA); expect(a.p.memory()).toEqual(beforeA);
     active = "none"; address.write(urlA); active = "a"; a.p.setVisible(true);
     const resumed = a.m.subscribe(() => {}); await j.settle();
     expect(a.p.state(() => { throw Error("Reveal must retain its typed mount"); })).toBe(a.m);
-    expect(a.m.page.read()).toEqual(beforeA); expect(b.m.page.read()).toEqual(beforeB); expect(a.m.value().current).toBe(true);
+    expect(a.m.page.read()).toEqual(beforeA); expect(b.m.page.read()).toEqual(beforeB); expect(a.m.value().state === "ready").toBe(true);
     resumed();
   } finally { places.forEach(p => p.dispose()); await j.close(); }
 }, 60_000);

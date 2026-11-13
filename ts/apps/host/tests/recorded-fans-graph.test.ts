@@ -1,8 +1,10 @@
+import { stateFixture } from "../../../tests/isolated-home/storage.ts";
+import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
 import capturedWalk from "./native-recordings/driver-ducts.snapshot.walk.json" with { type: "json" };
 import { unavailableFieldOptions } from "./effect-test.ts";
 import { readFileSync, existsSync } from "node:fs";
-import { mkdtemp, rm, writeFile, mkdir } from "node:fs/promises";
+import { rm, writeFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
@@ -158,7 +160,7 @@ test.each(["off", "on", "recovery", "endurance", "tamper", "truncated", "legacy"
   const snapshotContract = await run(readSchemas("ducts.snapshot.walk"));
   if (snapshotContract) Schema.decodeUnknownSync(snapshotContract.response)(snapshot);
   await mkdir(join(dir, "catalogs")); await mkdir(join(dir, "Settings"), { recursive: true }); await writeFile(join(dir, "Settings", "ducts.json"), JSON.stringify(FIRM_SEED));
-  const writer = await run(openRecordingWriter(join(dir, "bundle"), identity, bounds));
+  const writer = await run(openRecordingWriter(stateFixture(join(dir, "bundle")), identity, bounds));
   const inputs = await run(HostInputContext.pipe(Effect.provide(HostInputContext.layer({ kind: "live", ...(capturing ? { captureStore: writer } : {}) }))));
   const native = Layer.succeed(HostNativeRead, {
     resolve: (input) => admitNativeCaller(input.key).pipe(Effect.as({ operationKey: input.key,
@@ -181,7 +183,7 @@ test.each(["off", "on", "recovery", "endurance", "tamper", "truncated", "legacy"
     inventory: Layer.succeed(HostSessionInventory, { list: () => Effect.die("inventory not requested"), subscribe: () => () => {}, document: () => Effect.succeed(row),
       session: () => Effect.succeed({ sessionId: ref.session }), attachment: () => Effect.succeed({ sessionId: ref.session }) }),
   };
-  const liveHost = await bootHost({ inputs, clock: 200, reads: { live: livePorts, store: fileRouteDocumentStore(join(dir, "work")),
+  const liveHost = await bootHost({ inputs, clock: 200, reads: { live: livePorts, store: fileRouteDocumentStore(stateFixture(join(dir, "work"))),
       observedReadSet: (recipe, id, requestId, caller) => { completed.push({ recipe, id, requestId, caller }); },
       observed: (taking) => Effect.gen(function* () {
         if (holdMark && taking.input.kind === "marks") {
@@ -728,7 +730,7 @@ test.each(["off", "on", "recovery", "endurance", "tamper", "truncated", "legacy"
 
 test.each(["on", "off", "full", "io"] as const)("inventory consumers %s", async (mode) => {
   const dir = await mkdtemp(join(tmpdir(), "pe-inventory-consumers-"));
-  const writer = await run(openRecordingWriter(dir, identity, { ...bounds, maxTakings: mode === "full" ? 1 : 2000 }));
+  const writer = await run(openRecordingWriter(stateFixture(dir), identity, { ...bounds, maxTakings: mode === "full" ? 1 : 2000 }));
   const old = await run(openRecordingReader(dir, identity, bounds));
   const listeners = new Set<(event: HostBridgeEvent) => void>();
   let title = "initial", reads = 0, poison = 0, workspace: RouteWorkspace;
@@ -746,7 +748,7 @@ test.each(["on", "off", "full", "io"] as const)("inventory consumers %s", async 
     native: Layer.succeed(HostNativeRead, { resolve: () => Effect.die("unexpected native"), read: () => Effect.die("unexpected native") }),
     files: Layer.succeed(DuctFiles, { firm: () => Effect.die("unexpected files"), ductCatalogs: Effect.die("unexpected files") }),
     marks: Layer.succeed(HostDocumentMarks, hostMarks({ changedAt: () => null, subscribe: () => () => {} })) },
-    store: fileRouteDocumentStore(join(dir, "work")), initialize: async (owner) => { workspace = owner; } }), { disableLogger: true });
+    store: fileRouteDocumentStore(stateFixture(join(dir, "work"))), initialize: async (owner) => { workspace = owner; } }), { disableLogger: true });
   const send = (owner: typeof web, url: string, body?: unknown) => withInvocationContext({ caller, hostBaseUrl: "http://host" }, () => owner.handler(
     new Request(`http://host${url}`, { method: body === undefined ? "GET" : "POST", ...(body === undefined ? {} : { body: JSON.stringify(body) }) }),
     Context.make(RequestIdentity, admittedRequestIdentity(caller, {}))));

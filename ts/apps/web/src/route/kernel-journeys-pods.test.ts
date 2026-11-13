@@ -1,3 +1,4 @@
+import { mkdtemp, stateFixture, stateMachine } from "../../../../tests/isolated-home/storage.ts";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
 import { snapshot as workSnapshot } from "../ducts/test-fixture";
 // @vitest-environment jsdom
@@ -35,16 +36,16 @@ async function podJourney() {
     filter: (source) => !source.split(/[\\/]/).includes("node_modules"),
   });
   const lifecycle = createPackageLifecycle({
-    packages: () => listPackages(root), decisionsPath: resolve(host.dir, "enabled.json"),
+    packages: () => listPackages(root), machine: stateMachine(host.dir),
   });
   const routes = createPodRoutes(lifecycle, {
-    workspace: host.workspace, trustPath: resolve(host.dir, "trust.json"),
+    workspace: host.workspace, machine: stateMachine(host.dir),
   });
   const [row] = await routes.list();
   if (!row) throw Error("Published Snowdon is absent");
   // Recorded authored Work, as in pod-admission.test.tsx. Starting Work is not this story.
   const key = bindWork(row.workRoute, null);
-  await fileRouteDocumentStore(resolve(host.dir, "work")).setState({
+  await fileRouteDocumentStore(stateFixture(resolve(host.dir, "work"))).setState({
     targetKey: workKey(key), route: key.route,
     value: { version: 1, schemaVersion: 2, revision: 7,
       doc: { version: 2, inputs: { size: "10", length: 175, amps: 20, voltage: 208, phase: "3" } }, history: [] },
@@ -78,7 +79,7 @@ async function podJourney() {
   const work = createWorkFeedClient({
     subscribe: observeResources(host.workspace, { observe: () => () => {} }), dirty() {},
   }, {
-    write: (key, write) => host.workspace.write(key, key.route, "human", write),
+    write: (key, write) => host.workspace.write(key, key.route, "human", write, async () => []),
     submit: () => { throw Error("This Pod has no native action"); },
   });
   const loader = createPodRouteLoader(async (entry) => {
@@ -98,7 +99,7 @@ async function podJourney() {
       }, loaded.fingerprint, { work, sources: { [name]: source } });
       mounts.push(mount);
       mount.subscribe(() => {});
-      await vi.waitFor(() => expect(mount.value()).toMatchObject({ current: true }), { timeout: 20_000 });
+      await vi.waitFor(() => expect(mount.value()).toMatchObject({ state: "ready" }), { timeout: 20_000 });
       return mount;
     },
     async close() {
@@ -219,10 +220,10 @@ import { AssetReel, threadAssets } from "../chat/asset-reel";
 import { TooltipProvider } from "@pe/kit/lang/tooltip";
 import { createPeRoutes } from "../../../host/src/pe-routes";
 import { SettingsBody } from "../machine/body";
-import { MACHINE_SEEDS } from "../design-system/open-examples";
+import { MACHINE_SEEDS } from "../machine/open-examples";
 import { reportFault, DIAGNOSTICS_MAX_PENDING } from "../host/diagnostics";
 import { Pane, PaneFaultProvider } from "@pe/kit/lang/pane";
-import { mkdtemp, rm } from "node:fs/promises";
+import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 
 function UsageLedger() {
@@ -333,7 +334,7 @@ async function sendFeedbackWhileDeliveryWaits() {
     enableExceptionAutocapture: false, requestTimeout: 60000,
     fetch: () => { sends++; return request.promise; },
   });
-  const telemetry = createReceiptExport({ journal, root: dir, client, deadlineMs: 50,
+  const telemetry = createReceiptExport({ journal, root: stateFixture(dir), client, deadlineMs: 50,
     stamps: { host: { ...stamp, component: "host" }, web: { ...stamp, component: "web" } } });
   const routes = createPeRoutes({ registrations: [], store: { getState: async () => null, setState: async () => {} }, heads: { observe: () => () => {} }, telemetry });
   const post = (path: string, body?: unknown) => withInvocationContext({ caller: { kind: "human", via: "local" } }, () => routes.fetch(new Request(`http://host${path}`, {
@@ -430,7 +431,7 @@ test("JZ H29 human-only RPC and forged, foreign and stale review reuse refuse", 
 
 import { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } from "@tanstack/react-router";
 import { createContributionContent } from "../../../host/src/pe-routes";
-import { importShippedPods } from "../../../host/src/installed-pods";
+import { importShippedPods, ledgerKind } from "../../../host/src/installed-pods";
 import { exportPod, installArchive } from "../../../host/src/pod-transfer";
 import { createPluginsHandler } from "../../../host/src/plugins-handler";
 import { PictureCaptures } from "../../../host/src/captures-route";
@@ -445,7 +446,7 @@ test("JP5 bootstrap replaces only unchanged imports and Home discovers the untru
   for (const modified of [false, true]) {
     const host = await fixture(true);
     const root = resolve(host.dir, "Pods"), shipped = resolve(host.dir, "shipped");
-    const captures = new PictureCaptures(resolve(host.dir, "pictures"), 64 * 1024 * 1024, Date.now);
+    const captures = new PictureCaptures(stateFixture(resolve(host.dir, "pictures")), 64 * 1024 * 1024, Date.now);
     const source = resolve(host.dir, "old", "snowdon-circuits");
     const examples = resolve(process.cwd(), "../../../examples/pods");
     const gate = Promise.withResolvers<void>();
@@ -468,27 +469,27 @@ test("JP5 bootstrap replaces only unchanged imports and Home discovers the untru
       // An earlier shipped import, as the bootstrap left it: the import record in the state root its
       // ledger sits in, and the original archive retained there by its hash.
       await installArchive(await readFile(old.archivePath), old.archivePath, undefined,
-        { podsRoot: root, stateRoot: resolve(host.dir, "state"), captures });
-      await cp(old.archivePath, resolve(host.dir, "state/shipped-pod-originals", `${old.archiveSha256}.zip`));
+        { podsRoot: root, machine: stateMachine(host.dir), captures });
+      await cp(old.archivePath, resolve(stateMachine(host.dir).state, "shipped-pod-originals", `${old.archiveSha256}.zip`));
       await exportPod({ pod: manifest.id, archivePath: resolve(shipped, "snowdon-circuits.zip") }, { podsRoot: examples, captures });
       const pod = resolve(root, manifest.id), key = `route:@${manifest.id}/${current.artifact}`;
       const oldTrust = `pod-bytes:${old.archiveSha256}`;
-      const trustPath = resolve(host.dir, "trust.json");
+      const trustPath = stateMachine(host.dir).routeTrust;
       await writeFile(trustPath, JSON.stringify({ [key]: oldTrust }));
       if (modified) await writeFile(resolve(pod, "README.md"), "Keep this authored worksheet note.");
       const before = (await listPackages(root)).packages.find(p => p.id === manifest.id)!.members.map(m => [m.path, m.sha256]);
-      content = createContributionContent({ worldRoot: host.dir, homeRoot: host.dir, packages: () => listPackages(root),
-        decisionsPath: resolve(host.dir, "enabled.json"),
+      content = createContributionContent({ worldRoot: stateFixture(host.dir), homeRoot: host.dir, packages: () => listPackages(root),
+        decisionsMachine: stateMachine(host.dir),
         bootstrap: async () => {
           await gate.promise;
           try {
             const report = await importShippedPods({ shippedRoot: shipped, podsRoot: root, captures,
-              ledger: resolve(host.dir, "state/shipped-pods.json") });
+              ledger: ledgerKind.in(stateMachine(host.dir)) });
             completed.resolve(report);
           } catch (error) { completed.reject(error); throw error; }
         },
       });
-      routes = createPodRoutes(content.lifecycle, { trustPath });
+      routes = createPodRoutes(content.lifecycle, { machine: stateMachine(host.dir) });
       const handler = createPluginsHandler(content, routes);
       let inventoryReads = 0, homeMounts = 0;
       vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -520,8 +521,10 @@ test("JP5 bootstrap replaces only unchanged imports and Home discovers the untru
       expect(screen.queryByText(current.name), "H16: obsolete declarations cannot become executable Home rows").toBeNull();
       await act(async () => { gate.resolve(); await completed.promise; });
       const report = await completed.promise;
+      // Reconciliation's package listing measured about 800 ms; allow 5x that cost here.
+      // The one-second default also races this census on the clean integration baseline.
       if (!modified && report.outcomes[0]?.outcome === "updated")
-        await vi.waitFor(async () => expect((await routes!.list()).find(row => row.packageId === manifest.id)).toMatchObject({ fingerprint: current.fingerprint }));
+        await vi.waitFor(async () => expect((await routes!.list()).find(row => row.packageId === manifest.id)).toMatchObject({ fingerprint: current.fingerprint }), { timeout: 4_000 });
       // Import completion precedes the owner's asynchronous lifecycle reconciliation.
       // The provider's real interval re-reads; neither router nor Home is reloaded or remounted.
       await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
@@ -549,7 +552,7 @@ test("JP5 bootstrap replaces only unchanged imports and Home discovers the untru
         view.unmount(); cleanup();
         view = render(createElement(Members, { ctx: {
           page: { read: () => ({ member: { kind: "ids", ids: [] }, runs: "member" }), query() {} },
-          value: { current: true, value: { pods: [kept] } },
+          value: { state: "ready", value: { pods: [kept] } },
         } as unknown as Parameters<typeof Members>[0]["ctx"] }));
         const refusal = screen.getAllByRole("alert").map(node => node.textContent).join(" ");
         expect.soft(refusal, "H16: the actual Pods pane names the preserved example and reason").toContain("Example update kept Snowdon Circuits: its authored members differ");
@@ -606,7 +609,7 @@ test("JZ Open machine census: sampling drift lists documents; content conflict n
     return () => {};
   } });
   const work = createWorkFeedClient({ subscribe: observeResources(host.workspace, { observe: () => () => {} }), dirty() {} }, {
-    write: (key, write) => host.workspace.write(key, key.route, "human", write), submit: () => { throw Error("No native actions"); },
+    write: (key, write) => host.workspace.write(key, key.route, "human", write, async () => []), submit: () => { throw Error("No native actions"); },
   });
   let packet: unknown;
   const read = async (subscription: string) => {
@@ -624,7 +627,7 @@ test("JZ Open machine census: sampling drift lists documents; content conflict n
       kind: "use", open(_ctx, deliver) { deliver({ kind: "complete", revision: 1, value: packet }); return () => {}; },
     } } });
     mounts.push(mount); mount.subscribe(() => {});
-    return render(createElement(TooltipProvider, null, mount.draw("documents", ctx => createElement(OpenBody, { ctx })) as React.ReactNode));
+    return render(createElement(TooltipProvider, null, mount.draw("documents", (ctx: import("../machine/open-fields").OpenContext) => createElement(OpenBody, { ctx })) as React.ReactNode));
   };
   try {
     packet = await read("stable");

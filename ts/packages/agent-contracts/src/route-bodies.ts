@@ -55,6 +55,8 @@ export const routeBindingSchema = z.object({
   bodies: z.record(z.string(), bodySchema),
 });
 export type RouteBindings = z.output<typeof routeBindingSchema>;
+/** Gate values are linked against the actual field schema, never a stage-name table. */
+export { linkRouteGates } from "./route-kernel-data.ts";
 export function routeDiagnostic(
   data: { key?: string; version?: number },
   path: string,
@@ -545,7 +547,14 @@ export function linkRouteBodies(
   const layout = (node: LayoutJson, path: string) => {
     if (node.kind === "pane") reference(data.panes, node.id, `${path}.id`, "pane");
     else if (node.kind === "gate") {
-      reference(data.predicates, node.when, `${path}.when`, "predicate");
+      if (node.when === "subject") {
+        if (!data.subject) fail(`${path}.when`, "subject", "subject declaration", "Subject gate requires a subject");
+      } else {
+        const field = data.fields[node.when.field];
+        const schema = field && "schema" in field ? bindings.schemas[field.schema] : undefined;
+        if (!schema?.safeParse(node.when.value).success)
+          fail(`${path}.when`, node.when.field, "declared field value", "Gate must name a field and a value accepted by its schema");
+      }
       layout(node.child, `${path}.child`);
     } else {
       if (layoutIds.has(node.id)) fail(`${path}.id`, node.id, "unique split", "Duplicate split id");
