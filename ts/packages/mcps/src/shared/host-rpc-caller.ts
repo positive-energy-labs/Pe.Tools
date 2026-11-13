@@ -3,7 +3,7 @@ import { readPeError } from "@pe/host-contracts/pe-api";
 import { contextFetch as fetch } from "@pe/runtime/context";
 import { documentRefSchema, type ActionReceipt, type DocumentRef, type Touched } from "@pe/agent-contracts";
 import { recoverAction, type DetachedAction } from "./takeoff-action-client.ts";
-import { runCapability, CANCEL_KEY } from "./admission.ts";
+import { runCapability, CANCEL_KEY, opWrites } from "./admission.ts";
 import { Effect } from "effect";
 import { resolveHostBaseUrl } from "./host-config.ts";
 /** What a /call response says it actually ran against; headers absent means no Revit session. */
@@ -226,7 +226,7 @@ export class HostRpcCaller {
         )
       : undefined;
     const operation = recovered || key === CANCEL_KEY ? undefined : await this.getOperation(key);
-    if (recovered || operation?.intent === "Mutate" || key === "scripting.execute") {
+    if (recovered || (operation && opWrites(operation))) {
       const started = Date.now();
       const action =
         recovered ??

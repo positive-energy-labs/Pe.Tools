@@ -358,6 +358,12 @@ public record RevitViewImageModelRect(
     double MaxY
 );
 
+/// <summary>
+///     Whether a focused capture put the view back. When <see cref="Held" /> is false the image is still good, and
+///     <see cref="Left" /> names what the captured view still carries: crop, scopeBox, annotationCrop, sheetFilter.
+/// </summary>
+public sealed record RevitViewImageRestore(bool Held, IReadOnlyList<string> Left);
+
 /// <param name="Width">Delivered PNG width in pixels, read from the final file (not the export width it was cut from).</param>
 /// <param name="Warning">Why the image is far smaller than asked, in words; null when it is not.</param>
 public record RevitViewImageData(
@@ -372,7 +378,9 @@ public record RevitViewImageData(
     string? SheetNumber = null,
     RevitViewImageRegistration? Registration = null,
     // Why Registration is absent; null exactly when it is present.
-    RevitViewImageRegistrationRefusal? RegistrationRefusal = null
+    RevitViewImageRegistrationRefusal? RegistrationRefusal = null,
+    // Null when the capture changed nothing; a focused capture says whether its temporary change was undone.
+    RevitViewImageRestore? Restore = null
 ) {
     /// <summary>
     ///     Host captures route for exactly the registered PNG (the host keeps every taking), keyed by <see cref="RevitViewImageRegistration.ImageSha256" />;

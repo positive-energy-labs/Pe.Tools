@@ -8,10 +8,10 @@ import type { HostOperationDefinition } from "@pe/host-contracts/contracts";
 import { bodyText } from "./body-text.ts";
 
 const operations: HostOperationDefinition[] = [
-  {subject:"None",touches:"Metadata",effect:"Read",cardinality:"One",costTier:"Cheap", key: "scripting.execute", intent: "Mutate", needs: "document" },
-  {subject:"None",touches:"Metadata",effect:"Read",cardinality:"One",costTier:"Cheap", key: "scripting.workspace.bootstrap", intent: "Mutate", needs: "nothing" },
-  {subject:"None",touches:"Metadata",effect:"Read",cardinality:"One",costTier:"Cheap", key: "pod.import", intent: "Mutate", needs: "nothing" },
-  {subject:"None",touches:"Metadata",effect:"Read",cardinality:"One",costTier:"Cheap", key: "pod.export", intent: "Mutate", needs: "nothing" },
+  {subject:"None",touches:"Metadata",effect:"ModelWrite",cardinality:"One",costTier:"Cheap", key: "scripting.execute", intent: "Mutate", needs: "document" },
+  {subject:"None",touches:"Metadata",effect:"ModelWrite",cardinality:"One",costTier:"Cheap", key: "scripting.workspace.bootstrap", intent: "Mutate", needs: "nothing" },
+  {subject:"None",touches:"Metadata",effect:"ModelWrite",cardinality:"One",costTier:"Cheap", key: "pod.import", intent: "Mutate", needs: "nothing" },
+  {subject:"None",touches:"Metadata",effect:"ModelWrite",cardinality:"One",costTier:"Cheap", key: "pod.export", intent: "Mutate", needs: "nothing" },
   {subject:"None",touches:"Metadata",effect:"Read",cardinality:"One",costTier:"Cheap", key: "revit.context.summary", intent: "Read", needs: "document" },
 ];
 const target = { kind: "open", ref: { session: "A", openId: "open-A" } } as const;
@@ -417,4 +417,19 @@ test("a fans handle runs the losses preflight: it reads both Works at its docume
     .rejects.toThrow("before preview (503)");
   expect(seen.some((path) => path.endsWith("/ducts"))).toBe(true);
   expect(seen.some((path) => path.endsWith("/fans"))).toBe(true);
+});
+
+import { opWrites } from "../src/shared/admission.ts";
+import { hostOpCatalog } from "@pe/host-contracts/catalog";
+import { tsOnlyOperationCatalog } from "@pe/host-contracts/operation-types";
+// Mutant: make opWrites read `intent` for a native op and the first two lines go red.
+test("a native op writes by its effect; a host-only op keeps its declared intent", () => {
+  const native = { key: "revit.context.view-image.focus", intent: "Read" } as const;
+  expect(opWrites({ ...native, effect: "SessionWrite" })).toBe(true);
+  expect(opWrites({ ...native, effect: "TransactRead", intent: "Mutate" })).toBe(false);
+  for (const op of hostOpCatalog)
+    expect(opWrites(op), op.key).toBe(op.effect === "SessionWrite" || op.effect === "ModelWrite");
+  const point = tsOnlyOperationCatalog.find((op) => op.key === "pointers.point")!;
+  expect(point.effect).toBe("SessionWrite");
+  expect(opWrites(point)).toBe(false);
 });
