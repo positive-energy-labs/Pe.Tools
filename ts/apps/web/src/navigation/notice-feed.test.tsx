@@ -5,8 +5,9 @@
  * summaries, `actions.read` and Works. Every other source is dead here: a row can only come from
  * the feed.
  */
-import type { NoticeFeed } from "@pe/agent-contracts";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { actionReceiptSchema, type NoticeFeed } from "@pe/agent-contracts";
+import { cleanup, fireEvent, render, screen, within, waitFor, act } from "@testing-library/react";
+import { peClient } from "#/host/pe-client";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 
 const feed: NoticeFeed = {
@@ -58,6 +59,46 @@ vi.mock("#/navigation/state", () => ({
 }));
 vi.mock("#/route/pod-route-context", () => ({ usePodRoutes: () => null }));
 afterEach(cleanup);
+
+test.each(["failed", "succeeded"] as const)("Confirm follows a %s send receipt in Activity", async (state) => {
+  const { Ledger } = await import("./ledger");
+  const { LEDGER_PRESENTATIONS } = await import("./ledger-model");
+  const running = actionReceiptSchema.parse({
+    id: "send-receipt", key: "outward.send", input: {}, state: "running",
+    caller: { kind: "human", via: "local" }, target: { kind: "host" }, basis: null,
+    steps: [], prepared: { state: "unprepared" }, recovery: [],
+    startedAt: "2026-11-12T00:00:00.000Z",
+  });
+  const terminal = actionReceiptSchema.parse({
+    ...running, state,
+    ...(state === "failed" ? { error: "LLAMA_CLOUD_API_KEY is not set", status: 502 } : { result: {} }),
+  });
+  let finish!: (response: Response) => void;
+  const fetchReceipt = vi.fn()
+    .mockResolvedValueOnce(Response.json([running]))
+    .mockImplementationOnce(() => new Promise<Response>((resolve) => { finish = resolve; }));
+  vi.stubGlobal("fetch", fetchReceipt);
+  vi.mocked(peClient.call).mockResolvedValueOnce({ ok: true, id: running.id } as never);
+  const before = feed.rows;
+  try {
+    const view = render(<Ledger presentation={LEDGER_PRESENTATIONS.home} />);
+    fireEvent.click(screen.getByRole("button", { name: "Confirm: send Wiring to LlamaCloud, pages 1-5" }));
+    await waitFor(() => expect(fetchReceipt).toHaveBeenCalledTimes(2));
+    expect(String(fetchReceipt.mock.calls[0]![0])).toContain("id=send-receipt");
+    // Confirm consumed the hold while the send is still running.
+    feed.rows = before.filter((row) => row.act?.kind !== "confirm-send");
+    view.rerender(<Ledger presentation={LEDGER_PRESENTATIONS.home} />);
+    expect(screen.queryByRole("button", { name: /Confirm:/ })).toBeNull();
+    await act(async () => { finish(Response.json([terminal])); });
+    if (state === "failed")
+      expect(await screen.findByText("Not sent: LLAMA_CLOUD_API_KEY is not set. Ask Pea to send it again.")).toBeTruthy();
+    else
+      expect(screen.queryByText(/Not sent:/)).toBeNull();
+  } finally {
+    feed.rows = before;
+    vi.unstubAllGlobals();
+  }
+});
 
 const GAP =
   "slice 6 gap: navigation/ledger.tsx still joins thread summaries, actions.read and Works in the browser instead of reading the notice feed";
