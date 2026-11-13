@@ -139,8 +139,8 @@ export function createPackageLifecycle(
   } = {},
 ) {
   // Resolve homes once at startup, never by synchronous drive probing on a refresh request.
-  // Limit: dynamic home discovery is excluded. A firm home mounted after startup is not added;
-  // only late Pods and edits inside the homes resolved here are discovered without a restart.
+  // Home roots resolve once at startup; the owner's ruling is that the host starts after a shared
+  // drive mounts, so a home mounting later is not watched.
   const roots = options.packages ? [] : productPodsRoots();
   let diskSignature: string | undefined;
   let inFlight: Promise<Awaited<ReturnType<typeof listPackages>>> | undefined;
