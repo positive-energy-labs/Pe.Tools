@@ -244,7 +244,8 @@ export function writeSettingTier(
 ): SettingWrite {
   if (request.path.some((key) => ["written", "__proto__", "constructor", "prototype"].includes(key)))
     return { ok: false, status: 422, message: "The setting path contains a reserved key." };
-  if (!Object.hasOwn(settingOwners, request.owner) || !settingOwners[request.owner]!.accepts(request.path, request.value, request.tier))
+  const owner = Object.hasOwn(settingOwners, request.owner) ? settingOwners[request.owner] : undefined;
+  if (!owner?.accepts(request.path, request.value, request.tier))
     return { ok: false, status: 422, message: `No declared setting accepts ${request.owner} ${request.path.join(".")} with that value.` };
   const read = readTier(request.tier, request.owner, context.pointer);
   if (read.home === null || read.path === null)

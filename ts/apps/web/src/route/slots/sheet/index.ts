@@ -27,8 +27,8 @@ export interface SheetCell extends StateCell {
 }
 /** A dotted binding names its existing nested Work cell, without a second writable copy. */
 export const bindingPath = (binding: string, row?: string): [string, ...string[]] => {
-  const [first, ...rest] = binding.split(".");
-  return [first!, ...rest, ...(row === undefined ? [] : [row])];
+  const [first = binding, ...rest] = binding.split(".");
+  return [first, ...rest, ...(row === undefined ? [] : [row])];
 };
 export function domainDraw(domain: Domain, read: unknown, row?: string): Pick<SheetCell, "unit" | "numeric" | "field" | "choices"> {
   if (domain.kind === "number") return { unit: domain.unit, numeric: { min: domain.min ?? domain.exclusiveMin, max: domain.max, digits: domain.digits } };
@@ -39,7 +39,9 @@ export function domainDraw(domain: Domain, read: unknown, row?: string): Pick<Sh
   if (domain.kind === "object") {
     const fields = Object.entries(domain.fields);
     if (fields.length !== 1) return {};
-    const [field, child] = fields[0]!;
+    const first = fields[0];
+    if (!first) return {};
+    const [field, child] = first;
     const draw = domainDraw(child, read, row);
     return { ...draw, field, ...(draw.choices ? { choices: draw.choices.map(c => ({ ...c, value: { [field]: c.value ?? c.key } })) } : {}) };
   }
@@ -90,7 +92,7 @@ export function homeHandle(path: readonly string[], read: unknown, send: (reques
   const declared = registry?.at(settingPath);
   const at = (read as { settings?: Record<string, readonly SettingTierRead[]> } | undefined)?.settings?.[owner]?.find(at => at.tier === tier);
   const save = async (value: unknown) => {
-    if (!tier || !declared || !registry!.accepts(settingPath, value, tier)) return { code: "invalid", message: "No declared setting accepts this value at that tier" };
+    if (!registry || !tier || !declared || !registry.accepts(settingPath, value, tier)) return { code: "invalid", message: "No declared setting accepts this value at that tier" };
     if (!at?.home) return { code: "unavailable", message: at?.notFound ?? `No ${tier} home was read` };
     try {
       await send({ owner, tier, path: settingPath, value, expectedSha256: at.sha256 });

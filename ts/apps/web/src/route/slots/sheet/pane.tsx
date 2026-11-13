@@ -47,12 +47,17 @@ function Cell({ ctx, cell, verb }: { ctx: Ctx; cell: SheetCell; verb: ReactNode 
     typeof optionInput?.key === "string" ? optionInput.key : undefined, optionInput?.context ?? {});
   const options = pickerOptions(optionsReading);
   if (domain.kind === "options" && previousOf(optionsReading)) domain.handle.data.parse({ body: previousOf(optionsReading), version: null });
-  const workHandle = cell.setting ? null : ctx.cells.at(bindingPath(cell.binding, cell.row));
-  const handle = workHandle ? { ...workHandle, stage: async (value: unknown, history?: { label: string }) => {
-    const parsed = schema.safeParse(value);
-    return parsed.success ? workHandle.stage(parsed.data, history) : { code: "invalid", message: parsed.error.issues[0]?.message ?? "Invalid value" };
-  } } : {
-    owner: { route: cell.setting!.owner, label: "unsaved" }, value: draft ? { edit: { value: draft.value, by: "human" as const } } : {},
+  const setting = cell.setting;
+  const handle = (() => {
+    if (!setting) {
+      const workHandle = ctx.cells.at(bindingPath(cell.binding, cell.row));
+      return { ...workHandle, stage: async (value: unknown, history?: { label: string }) => {
+        const parsed = schema.safeParse(value);
+        return parsed.success ? workHandle.stage(parsed.data, history) : { code: "invalid", message: parsed.error.issues[0]?.message ?? "Invalid value" };
+      } };
+    }
+    return {
+    owner: { route: setting.owner, label: "unsaved" }, value: draft ? { edit: { value: draft.value, by: "human" as const } } : {},
     refusal: null, transitions: () => [{ kind: "clear" as const, run: async () => { setDraft({ value: null }); return null; } }], clear: async () => { setDraft({ value: null }); return null; },
     stage: async (value: unknown) => {
       if (value === null) { setDraft({ value: null }); return null; }
@@ -60,12 +65,14 @@ function Cell({ ctx, cell, verb }: { ctx: Ctx; cell: SheetCell; verb: ReactNode 
       if (!parsed.success) return { message: parsed.error.issues[0]?.message ?? "Invalid value" };
       setDraft({ value: parsed.data }); return null;
     },
-  };
+    };
+  })();
   const save = async (tier: NonNullable<SheetCell["setting"]>["tiers"][number]) => {
     const value = draft?.value;
+    if (!setting) return;
     if (value === undefined) return setSaid("Type a value or clear it before saving");
     setSaving(tier.tier);
-    const failure = await ctx.cells.at(["setting", cell.setting!.owner, tier.tier, ...cell.setting!.path]).stage(value);
+    const failure = await ctx.cells.at(["setting", setting.owner, tier.tier, ...setting.path]).stage(value);
     setSaid(failure ? `Not saved: ${failure.message}` : `${value === null ? "Cleared" : "Saved"} at ${tier.tier}`);
     if (!failure) setDraft(null);
     setSaving(null);
