@@ -72,8 +72,9 @@ internal static class OpRunner {
             return new Touched.RestoreFailed(left.Select(restore => new ViewLeft(View(restore),
                 restore.What.Codes().Select(code => (ViewLeftover)Enum.Parse(typeof(ViewLeftover), code, true)).ToList())).ToList());
 
-        // A commit nothing was discarding, other than the set and undo of the scope's own temporaries.
-        var stray = changes.Where(change => !change.Contained
+        // A commit nothing was discarding, other than the set and undo of the scope's own temporaries. A discard
+        // that did not happen (a rollback that failed, a scratch document left open) contained nothing.
+        var stray = changes.Where(change => (!change.Contained || scope.Undiscarded)
             && !(change.Transactions.Count != 0 && change.Transactions.All(scope.Own.Contains))).ToList();
         var names = stray.SelectMany(change => change.Transactions).Distinct(StringComparer.Ordinal).ToList();
         int added = stray.Sum(change => change.Added), modified = stray.Sum(change => change.Modified), deleted = stray.Sum(change => change.Deleted);
@@ -85,8 +86,16 @@ internal static class OpRunner {
                 return new Touched.Wrote(names, added, modified, deleted);
             case OpEffect.SessionWrite when scope.Restores.Count != 0:
                 return new Touched.Restored(scope.Restores.Select(View).Distinct().ToList());
-            case OpEffect.Read or OpEffect.TransactRead when stray.Count != 0 && !overlapped:
+            case OpEffect.Read or OpEffect.TransactRead when stray.Count != 0 && overlapped:
+                // Another call's window was open, so the commit may be its own. It is never called clean
+                // (purger N1). The call is not refused: overlap is only known after both ran, and failing a
+                // read because a write ran beside it would punish the innocent one.
+                return new Touched.Unknown(TouchedUnknownReason.Overlapped);
+            case OpEffect.Read or OpEffect.TransactRead when stray.Count != 0:
                 return new Touched.Unauthorized(names, added, modified, deleted);
+            case OpEffect.TransactRead when scope.Undiscarded:
+                // Nothing was seen to commit, but the discard the scope promised did not happen.
+                return new Touched.Unknown(TouchedUnknownReason.CancelledMidEffect);
             case OpEffect.TransactRead when scope.Used || changes.Any(change => change.Contained):
                 return new Touched.RolledBack();
             default:

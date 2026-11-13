@@ -369,9 +369,9 @@ internal sealed class BridgeAgent : IDisposable {
                 request.OperationKey,
                 request.RequestId
             );
-        } catch (OperationCanceledException) {
+        } catch (OperationCanceledException cancelled) {
             // The pump owns the token, so the pump answers the cancelled frame. Here we only
-            // stamp the verdict `op result` reads, then let it through.
+            // stamp the verdict `op result` reads, then hand the pump the same touched.
             var message = $"Operation '{request.OperationKey}' was cancelled.";
             Log.Information(
                 "Host bridge request cancelled: OperationKey={OperationKey}, RequestId={RequestId}",
@@ -380,7 +380,7 @@ internal sealed class BridgeAgent : IDisposable {
             );
             CompleteOpReceipt(receipt, BridgeWire.Verdicts.Cancelled, OpReceiptResponse.Failed(
                 message, BridgeOperationExceptions.CancelledStatusCode, touched));
-            throw;
+            throw new OpCancelledException(touched, cancelled);
         } catch (BridgeOperationException ex) {
             var totalMs = GetElapsedMilliseconds(startedAt);
             var errorFrame = new BridgeFrame(

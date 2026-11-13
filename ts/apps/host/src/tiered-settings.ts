@@ -54,7 +54,20 @@ const activeWrites = (log = events()) => {
       if (index >= 0) active.splice(index, 1);
     }
   }
-  return active;
+  // A crash can land the restore before its completion record. The actual prior bytes consume
+  // that save and the later saves of this file, including after an older undo lands next.
+  const restored = new Set<HomeWriteRow>();
+  const writes = log.filter((row): row is HomeWriteRow => row.kind === "home-write");
+  for (const path of new Set(writes.map(row => row.path))) {
+    let hash: string;
+    try { hash = sha256Hex(readFileSync(path)); } catch { continue; }
+    let afterRestore = false;
+    for (const row of writes.filter(row => row.path === path)) {
+      if (row.priorSha256 === hash && row.sha256 !== hash) afterRestore = true;
+      if (afterRestore) restored.add(row);
+    }
+  }
+  return active.filter(row => !restored.has(row));
 };
 const undoRefusal = (row: HomeWriteRow): string | null => {
   if (row.priorSha256 === null) return "This file was new. Undo of a first home write is not supported; the file is kept.";
@@ -96,10 +109,12 @@ registerTimelineSource({
     const active = new Set(activeWrites(log));
     const rows = log.filter((row): row is HomeWriteRow => row.kind === "home-write" && owners.has(row.owner) && roots.has(row.home));
     const latest = rows.findLast(row => active.has(row) && row.by.kind === by);
+    const undone = rows.findLast(row => !active.has(row) && row.by.kind === by);
+    const undoneAt = undone && log.findLast(event => event.kind === "home-undo" && event.path === undone.path && event.sha256 === undone.sha256)?.at;
     return {
       rows: rows.map(row => ({ ...row, undoable: active.has(row) && undoRefusal(row) === null })),
       undo: latest ? { ref: { home: latest.path, sha256: latest.sha256, label: latest.place }, at: Date.parse(latest.at), refusal: undoRefusal(latest) } : null,
-      redo: null,
+      redo: undone ? { ref: { home: undone.path, sha256: undone.sha256, label: undone.place }, at: Date.parse(undoneAt ?? undone.at), refusal: "A home write is undone by saving again; redo is not supported." } : null,
     };
   },
   async step(direction, ref, caller) {

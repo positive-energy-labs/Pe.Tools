@@ -92,20 +92,20 @@ export async function dispatchSdk(
         "failed",
         envelope,
       );
-    await markDispatched(requestId);
+    await markDispatched(requestId, "sdk");
     return envelope;
   }
   if (envelope.diagnostics.some((d) => d.code === "doc.missing-links")) {
-    await markDispatched(requestId);
+    await markDispatched(requestId, "sdk");
     throw new StepFailure(said, 409, "failed", envelope);
   }
   if (!state && (envelope.exitCode === 2 || envelope.exitCode === 3))
     throw new StepFailure(said, 409, "refused", result);
   if (state === "ok") {
-    await markDispatched(requestId);
+    await markDispatched(requestId, "sdk");
     return keepEnvelope ? envelope : envelope.result;
   }
-  if (result?.legs?.length) await markDispatched(requestId);
+  if (result?.legs?.length) await markDispatched(requestId, "sdk");
   const doc = args[0] === "doc";
   if (
     (state === "refused" || state === "bad-invocation") &&
@@ -113,7 +113,7 @@ export async function dispatchSdk(
   )
     throw new StepFailure(said, 409, "refused", args[1] === "dialogs" ? envelope : result);
   if (doc && state === "failed") {
-    await markDispatched(requestId);
+    await markDispatched(requestId, "sdk");
     throw new StepFailure(said, 502, "failed", result);
   }
   if (doc && state === "cancelled") throw new StepFailure(said, 499, "cancelled", result);
