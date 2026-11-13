@@ -10,7 +10,7 @@ import { expect, test } from "vite-plus/test";
 import { HostNativeRead } from "@pe/host-internal/native-read";
 import { routeFingerprint, valueReadResponse } from "@pe/agent-contracts";
 import { peRouteUrl } from "@pe/agent-contracts/pe-api";
-import { builtinData } from "../../../packages/agent-contracts/src/route-kernel.fixtures.ts";
+import { podWire, podHostSource } from "./pod-wire.fixture.ts";
 import { buildRouteArtifact } from "../../web/route-module-hash.ts";
 import { loadPodHostEntry } from "../src/pod-artifact.ts";
 import { createPodRoutes } from "../src/pod-routes.ts";
@@ -31,21 +31,16 @@ test("digest-verified Pod host reads enter reads.value and retire with their Wor
   const sentinel = "PE_POD_READ_HOST_LOADED",
     name = "pod.registry.value",
     leaf = "pod.registry.input";
-  const data = {
-    ...builtinData,
-    key: "pod.registry.tool",
-    address: `/tool/${encodeURIComponent("route:@registry/routes/tool/route.artifact")}`,
-    work: { schema: "work", route: "pod.registry.tool", version: 1, },
-  };
+  const typed = await podWire("pod.registry.tool", `/tool/${encodeURIComponent("route:@registry/routes/tool/route.artifact")}`);
+  const data = typed.data;
   const source = join(root, "host.ts"),
     zod = fileURLToPath(import.meta.resolve("zod"));
   await writeFile(
     source,
-    `import {z} from ${JSON.stringify(zod)};
+    `${podHostSource(typed, zod).replace("export const module=", "const base=")}
 process.env.${sentinel} = 'loaded';
-const input=z.object({}), output=z.object({total:z.number()}), work=z.object({amount:z.number()});
-export const module={data:${JSON.stringify(data)},schemas:{work},
-workState:{route:'pod.registry.tool',title:'Registry',description:'Host input admission',schema:work,schemaVersion:1},
+const input=z.object({}), output=z.object({total:z.number()});
+export const module={...base,
 reads:{value:{name:'${name}',input,output,run:(ctx)=>ctx.read({name:'${leaf}',input,output,leaf:true,validate:false},{})}},
 leaves:{'${leaf}':async()=>({total:17})}};`,
   );

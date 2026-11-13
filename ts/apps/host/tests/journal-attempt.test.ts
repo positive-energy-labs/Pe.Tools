@@ -13,7 +13,7 @@ import { HostLog } from "../src/host-log.ts";
 import { RequestIdentity, admittedRequestIdentity } from "../src/request-services.ts";
 import { settle } from "./effect-test.ts";
 import type { ReadOwnership } from "../src/reads/read-ownership.ts";
-import { recordNativeTerminal } from "../src/action-dispatch.ts";
+import { markDispatched, recordNativeTerminal } from "../src/action-dispatch.ts";
 
 const human = { kind: "human", via: "local" } as const;
 
@@ -41,6 +41,7 @@ async function fixture(readOwnership?: ReadOwnership, failAfter = false) {
             execution.step("native", "test.hold", {}, (requestId) =>
               Effect.gen(function* () {
                 seen.identity = yield* RequestIdentity;
+                yield* Effect.promise(() => markDispatched(requestId, "bridge"));
                 calls.push({ key: "test.hold", requestId });
                 return yield* Deferred.await(native);
               }).pipe(Effect.onInterrupt(() => Effect.sync(() => void (seen.interrupted = true)))),
