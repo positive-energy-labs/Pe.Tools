@@ -725,6 +725,7 @@ test("a Pea open of a new tool keeps its first lease instance, and a set against
   expect(hostCalls("view.remove")).toEqual([]);
   expect(leases()).toEqual(new Set([instance]));
   expect(places().some((tab) => tab.route === "families")).toBe(true);
+  expect(document.querySelector("[data-families-probe]")?.textContent).toBe('name:["Family","Type"]#field:Name');
 });
 
 test("after first-Send promotion and a chat pick, a Pea open keeps one lease and one Place", async () => {
@@ -753,6 +754,7 @@ test("after first-Send promotion and a chat pick, a Pea open keeps one lease and
     await settle();
     expect(hostCalls("view.remove")).toEqual([]);
     expect(places().filter((tab) => tab.route === "families")).toHaveLength(1);
+    expect(document.querySelector("[data-families-probe]")).not.toBeNull();
     expect(
       screen.getAllByRole("button", { name: "Families" }).length,
     ).toBeGreaterThan(0);

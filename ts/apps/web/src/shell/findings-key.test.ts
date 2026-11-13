@@ -22,25 +22,17 @@ const basis = { member: ref, rawContent: "{}", sha256: "f".repeat(64) };
 const address = addressSchema.parse("C:/model.rvt");
 const port = subjectCode({ keyKind: "UniqueId", key: uniqueIdSchema.parse("9e9fb89e-a9db-4d9a-8f35-b8fbc2303423-00d3da72"), sub: { port: 1 } });
 type Ports = NonNullable<Parameters<typeof mountTypedRoute>[3]>;
-type Call = { name: string; query: Record<string, string>; works?: unknown };
-
-/** /pods at a picked member on one document: the route's Work is keyed by the member, the findings by the document. */
-function mountPods(readings: NonNullable<Ports["readings"]>, calls: Call[] = []) {
-  const findings: NonNullable<Ports["findings"]> = { async response(name: string, input: { query?: object; body?: unknown }) {
-    const works = (input.body as { args?: { works?: unknown } } | undefined)?.args?.works;
-    calls.push({ name, query: { ...input.query }, ...(works ? { works } : {}) });
-    // The host Timeline's answer for the findings Work: one step of the person's to undo.
-    return name === "reads.value"
-      ? Response.json({ value: { data: { rows: [], redo: null, refusal: { undo: null, redo: null },
-          undo: { work: { binding: "address", route: "findings", target: address }, revision: 3, label: "late" } } } })
-      : Response.json({ ok: true });
-  } };
+/** /pods keeps its member Work and reads the document findings independently (B41). */
+function mountPods(readings: NonNullable<Ports["readings"]>) {
   return mountTypedRoute(pods, {
     address: { read: () => new URLSearchParams(), write() {}, subscribe: () => () => {} },
     fixture: null, target: { kind: "host" }, work: { address, open: null }, custody: { current: () => true },
     memory: () => ({ member: { kind: "ids", ids: [podMemberCode(ref)] } }),
   }, workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`), {
-    work: createFixtureWorkDoor(settingsRouteState, { basis, fields: {} }), sources: {}, findings, readings,
+    work: createFixtureWorkDoor(settingsRouteState, { basis, fields: {} }), sources: {}, readings, timeline: {
+      open(_works, deliver) { deliver(null, "Member Work has no document Timeline (B41)"); return () => {}; },
+      async step() { return { message: "Member Work has no document Timeline (B41)" }; },
+    },
   });
 }
 const memory = () => {
@@ -62,8 +54,7 @@ test("a findings.say through the host as Pea appears in a mounted route's findin
   const socket = await native.connect();
   const host = memory();
   const post = native.actions({ workspace: host });
-  const calls: Call[] = [];
-  const mount = mountPods(workReadings(host), calls);
+  const mount = mountPods(workReadings(host));
   try {
     let notified = 0;
     mount.subscribe(() => void notified++);
@@ -78,8 +69,7 @@ test("a findings.say through the host as Pea appears in a mounted route's findin
     ]));
     expect(notified, "the arrival redraws the route").toBeGreaterThan(before);
     // No person action and no reload: the mount asked the Pe client for nothing.
-    expect(calls).toEqual([]);
-    expect(await mount.ownFindingsLeft()).toBe(0);
+
   } finally {
     mount.dispose();
     await native.close();
@@ -87,22 +77,14 @@ test("a findings.say through the host as Pea appears in a mounted route's findin
   }
 }, 60_000);
 
-/* purge-2 c103cdbc: undo and the own-findings count used the route's member key, a findings Work the host never wrote. */
-test("on a member-keyed route the findings Reading and undo address one findings Work: the document's", async () => {
-  const seen: unknown[] = [], calls: Call[] = [];
-  const mount = mountPods(workReadings(memory(), seen), calls);
+test("a member-keyed route reads the document findings without adding them to its Timeline (B41)", async () => {
+  const seen: unknown[] = [];
+  const mount = mountPods(workReadings(memory(), seen));
   try {
     await vi.waitFor(() => expect(mount.owner()?.handle).toBeTruthy());
-    mount.findings();
-    mount.findings();
-    expect(seen, "one subscription, to the document's findings Work").toEqual([{ kind: "work", binding: "address", route: "findings", target: address }]);
-    expect(await mount.undoFinding()).toBeNull();
-    expect(calls.map((call) => call.name)).toContain("work.history");
-    // The Timeline read carries its Work in the body; every keyed call names the document, not the member.
-    expect(calls.filter((call) => call.name !== "reads.value" && JSON.stringify(call.query) !== JSON.stringify({ target: address }))).toEqual([]);
-    expect(calls.filter((call) => call.name === "reads.value").map((call) => call.works)).toContainEqual([
-      { binding: "address", route: "findings", target: address },
-    ]);
+    mount.findings(); mount.findings();
+    expect(seen).toEqual([{ kind: "work", binding: "address", route: "findings", target: address }]);
+    expect(await mount.stepTimeline("undo")).toEqual({ message: "Member Work has no document Timeline (B41)" });
   } finally { mount.dispose(); }
 });
 
@@ -115,7 +97,6 @@ test("a findings Reading the host fails, or a findings Work that does not decode
       await vi.waitFor(() => expect(io.fault).toHaveBeenCalledWith(
         { code: "reading.failed", routeCode: "pods", readingKind: "findings" }, expect.anything()));
       expect(mount.findings()).toEqual([]);
-      expect(await mount.ownFindingsLeft(), "unread, so the host answers an undo").toBeNull();
     } finally { mount.dispose(); }
   }
 });

@@ -34,6 +34,45 @@ import type { CommandHandle } from "@pe/agent-contracts/handle";
 import { handle } from "@pe/agent-contracts/handle";
 import { httpRoutes } from "@pe/agent-contracts/pe-api";
 import { HOST_RPC_BRIDGE_SESSION_HEADER, HOST_RPC_DOCUMENT_HEADER } from "@pe/host-contracts/operation-types";
+import { peClient } from "../host/pe-client";
+import { publicationSource } from "../host/publication-source";
+import { routeInput } from "../route/host";
+import { workTimelineSchema, type WorkKey, type WorkStepRequest, type WorkTimeline } from "@pe/agent-contracts";
+
+export interface TimelineClient {
+  open(works: readonly WorkKey[], deliver: (value: WorkTimeline | null, reason?: string) => void): () => void;
+  step(request: WorkStepRequest): Promise<{ message: string } | null>;
+}
+/** One host publication, invalidated on Work and receipt changes, shared with Pea's step door. */
+export function createTimelineClient(client: Pick<typeof peClient, "response"> = peClient): TimelineClient {
+  return {
+    open(works, deliver) {
+      const controller = new AbortController();
+      const source = publicationSource({ async read(_ctx, publication, release) {
+        const response = await client.response("reads.value", { body: { ...publication, read: "work.timeline", args: { works }, release } });
+        if (!response.ok) throw Error(`Timeline unavailable (${response.status})`);
+        return await response.json();
+      } });
+      const stop = source.open({ target: { kind: "host" }, workKey: null, workRevision: null, page: {}, work: null,
+        args: { works }, inputs: {}, signal: controller.signal, attempt: { target: { kind: "host" }, workKey: null, generation: 0 }, trigger: { kind: "demand" } }, frame => {
+        if (frame.kind === "complete") {
+          const parsed = workTimelineSchema.safeParse(frame.value.value?.data);
+          deliver(parsed.success ? parsed.data : null, parsed.success ? undefined : "Timeline answer does not match its contract");
+        } else if (frame.kind === "failure") deliver(null, String(frame.error));
+        else if (frame.kind !== "log") deliver(null, "Refreshing Timeline");
+      });
+      return () => { controller.abort(); if (typeof stop === "function") stop(); };
+    },
+    async step(request) {
+      const key = request.works[0];
+      if (!key) return { message: "No Work in this Timeline" };
+      const response = await client.response("work.history", { ...routeInput(key.route, key), body: request });
+      const wire = await response.json();
+      return response.ok && wire?.ok !== false ? null : { message: typeof wire?.error === "string"
+        ? wire.error : wire?.error?.message ?? `Timeline step refused (${response.status})` };
+    },
+  };
+}
 
 type DirectAnswer = { state: "answered"; result: unknown };
 /** One send door: only the minted handle selects a transport. */

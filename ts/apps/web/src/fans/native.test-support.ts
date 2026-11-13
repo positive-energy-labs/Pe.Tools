@@ -41,12 +41,10 @@ export function nativeTestAdapter(mount: TypedMount, _door: WorkJournalDoor) {
     work: () => mount.work() as NonNullable<ReturnType<TypedMount["work"]>> & { value: FansRouteDocument },
     subjectState: mount.subjectState,
     workFailure: () => mount.owner()?.failure ?? null,
-    history: { get entries() { return mount.owner()?.lease.entry.journal.entries()??[]; },undo:mount.history.undo,redo:mount.history.redo,revert:mount.history.revert },
     reviewRefusal: (id:string)=>mount.reviewProblem(id)?Error(mount.reviewProblem(id)!):null,
     confirm:(id:string)=>{if(mount.review(id)?.stale) throw Error("Review stale");return planned(mount.verb(id)).apply();},
     readingStatus: (id:string)=>({snapshot:snapshot(id)}),
     picker: (_field?: string) => {const value=valueOf(mount.value(mount.spec.subject!.read ?? mount.spec.core));return value ? mount.spec.subject!.options(value) : [];},
-    journal: () => mount.owner()!.lease.entry.journal.read(),
     setPaneDemand(_pane: string, _next: boolean) {},
     refresh: (id?: string) => mount.refresh(id ? mount.spec.reads?.[id] ?? mount.spec.core : undefined),
     invoke(id:string,input:any,basis=mount.workBasis()) {

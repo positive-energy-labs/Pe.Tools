@@ -1,4 +1,4 @@
-import { applyPatches, canonicalRouteInput, workKey, type WorkKey } from "@pe/agent-contracts";
+import { applyPatches, canonicalRouteInput, workKey } from "@pe/agent-contracts";
 import type { z } from "zod";
 import type { Immutable, RouteStateGraph as RouteGraphJson } from "../../agent-contracts/src/route-kernel-data.ts";
 import {
@@ -23,7 +23,6 @@ import {
   type WorkReduction,
   type RouteTokenIssuer,
 } from "../../agent-contracts/src/route-kernel-page.ts";
-import type { WorkJournal } from "./work-journal.ts";
 
 type TransactionPatch<G extends RouteGraphJson, S extends SchemaTable> =
   | PagePatch<G, S>
@@ -33,8 +32,6 @@ type TransactionPatch<G extends RouteGraphJson, S extends SchemaTable> =
 interface WorkServices<W> {
   readonly workSchema: z.ZodType<W>;
   readonly hashWork: (value: W) => string;
-  /** The composition root retains one journal per Work, independently of mounted UI. */
-  readonly journal: (key: WorkKey) => WorkJournal;
 }
 export type ScopeGateOptions<
   G extends RouteGraphJson,
@@ -42,7 +39,7 @@ export type ScopeGateOptions<
   W = Immutable<WorkOf<G, S>>,
 > = (
   | WorkServices<W>
-  | { readonly workSchema?: never; readonly hashWork?: never; readonly journal?: never }
+  | { readonly workSchema?: never; readonly hashWork?: never }
 ) & {
   /** Kernel composition resolves the new Work identity before publishing a subject move. */
   readonly scopeFields?: readonly string[];
@@ -73,16 +70,16 @@ function immutableCopy<T>(value: T): T {
 }
 const refused = (message: string): MoveResult => ({ kind: "refused", code: "acceptance", message });
 
-/** One synchronous acceptance owner below React. UI disposal retires publication, not receipts. */
+/** One synchronous acceptance owner below React. Accepted writes remain host-owned after disposal. */
 export function createRouteScopeGate<
   G extends RouteGraphJson,
   S extends SchemaTable,
   W = Immutable<WorkOf<G, S>>,
 >(options: ScopeGateOptions<G, S, W>): AcceptanceOwner<G, S, W> {
-  const suppliedWork = [options.workSchema, options.hashWork, options.journal].filter(
+  const suppliedWork = [options.workSchema, options.hashWork].filter(
     Boolean,
   ).length;
-  if (suppliedWork !== 0 && suppliedWork !== 3) throw Error("Incomplete Work acceptance services");
+  if (suppliedWork !== 0 && suppliedWork !== 2) throw Error("Incomplete Work acceptance services");
   type Snapshot = AcceptanceSnapshot<G, S, W>;
   const work = options as Partial<WorkServices<W>>;
   const issuer = options.issuer ?? createRouteTokenIssuer();
@@ -217,7 +214,7 @@ export function createRouteScopeGate<
     token: InvocationToken | AcceptanceToken,
     delivery: WorkDelivery<W>,
   ): WorkReduction {
-    if (!work.workSchema || !work.hashWork || !work.journal)
+    if (!work.workSchema || !work.hashWork)
       return { kind: "refused", reason: "wrong-work" };
     if (
       !issuer.owns(token) ||
@@ -233,7 +230,6 @@ export function createRouteScopeGate<
     const live = active(attempt);
     if (!live && delivery.kind !== "ack")
       return { kind: "refused", reason: closed ? "closed" : "retired" };
-    const journal = work.journal(key);
     const revision =
       delivery.kind === "snapshot" ? delivery.handle.revision : delivery.write.revision;
     const current = live ? (state?.work ?? null) : null;
@@ -243,19 +239,7 @@ export function createRouteScopeGate<
       after: current?.revision ?? null,
       reason,
     });
-    let receipt: "recorded" | "duplicate" | "none" = "none";
-    if (delivery.kind !== "snapshot") {
-      const result = journal.reconcile(
-        immutableCopy({
-          ...delivery.write,
-          patches: [...delivery.write.patches].map((p) => ({ ...p, path: [...p.path] })),
-          inverse: [...delivery.write.inverse].map((p) => ({ ...p, path: [...p.path] })),
-        }),
-      );
-      if (result === "contradiction") return recover("contradiction");
-      if (result === "wrong-work") return { kind: "refused", reason: "wrong-work" };
-      receipt = result;
-    }
+    const receipt = "none" as const;
     if (!live) return { kind: "receipt-only", key, revision };
     if (!state) return { kind: "refused", reason: "retired" };
     const scopeState = state;
@@ -316,7 +300,6 @@ export function createRouteScopeGate<
     if (known.has(revision) && known.get(revision) !== hash) return recover("contradiction");
     if (current && revision === current.revision) return { kind: "duplicate", revision, receipt };
     known.set(revision, hash);
-    journal.observe({ revision, doc: value });
     continueInvocation();
     // An ack's key is the host's canonical Work key, so its key and revision are the handle.
     const handle = delivery.kind === "snapshot" ? delivery.handle : { key, revision };

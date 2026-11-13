@@ -1,11 +1,35 @@
 import { workFingerprintSchema } from "../../../../packages/agent-contracts/src/route-kernel-admission";
 import { expect, test, vi } from "vite-plus/test";
-import type { Readings } from "../host/resource-stream";
+import { peReadings, type Readings } from "../host/resource-stream";
 import type {
   WorkFeedState,
   WorkScope,
 } from "../../../../packages/agent-contracts/src/work-journal-door";
-import { createWorkFeedClient } from "./work-feed-client";
+import { createTimelineClient, createWorkFeedClient } from "./work-feed-client";
+
+test("Timeline reads host order, releases its publication, and sends the offered step with every Work", async () => {
+  const stop = vi.fn();
+  vi.spyOn(peReadings, "subscribe").mockReturnValue(stop);
+  const works = [key, { ...key, route: "second" }];
+  const expected = { work: works[1]!, revision: 1, label: "Second" };
+  const rows = [
+    { kind: "edit", work: key, revision: 1, by: "human", state: "applied", label: "First", at: 20 },
+    { kind: "edit", work: works[1], revision: 1, by: "human", state: "applied", label: "Second", at: 10 },
+  ];
+  const response = vi.fn(async (name: string, _input: unknown) => Response.json(name === "reads.value"
+    ? { generation: 0, version: 1, state: "current", value: { evaluation: "test", coverage: { refused: [], unknown: [] }, data: { rows, undo: expected, redo: null, refusal: { undo: null, redo: null } } } }
+    : { ok: true }));
+  const client = createTimelineClient({ response });
+  const deliver = vi.fn();
+  const close = client.open(works, deliver);
+  try {
+    await vi.waitFor(() => expect(deliver).toHaveBeenCalledWith(expect.objectContaining({ rows, undo: expected }), undefined));
+    expect(await client.step({ direction: "undo", works, expected })).toBeNull();
+    expect(response).toHaveBeenCalledWith("work.history", expect.objectContaining({ body: { direction: "undo", works, expected } }));
+  } finally { close(); vi.restoreAllMocks(); }
+  expect(stop).toHaveBeenCalledOnce();
+  expect(response).toHaveBeenCalledWith("reads.value", expect.objectContaining({ body: expect.objectContaining({ release: true, args: { works } }) }));
+});
 const key = { binding: "host", route: "note", target: null } as const;
 const scope: WorkScope = {
   route: "note",
