@@ -82,6 +82,8 @@ export interface RouteDocumentStore {
 }
 
 /** Host undo-window configuration: both limits bound the retained suffix. */
+/** Every action receipt the host holds, read fresh on each call. */
+export type TimelineReceipts = () => Promise<readonly ActionStatus[]>;
 export const DEFAULT_WORK_HISTORY_LIMITS = { maxCount: 256, maxBytes: 512 * 1024 } as const;
 export type WorkReadView = "read" | "raw" | "view";
 /** The admitted feed's two shapes: the view with history (`work`), or the snapshot acks follow (`work-acks`). */
@@ -557,13 +559,13 @@ export class RouteWorkspace {
   }
 
   /** The untrusted write envelope has no authorship field. `by` is the host caller's principal. */
-  write(scope: WorkKey, route: string, by: WorkAuthor, input: WorkWrite) {
+  write(scope: WorkKey, route: string, by: WorkAuthor, input: WorkWrite, receipts?: TimelineReceipts) {
     this.#authorize("edit");
     if (by === "human" && input.kind === "apply" && !input.press)
       return Promise.resolve(
         refuse("refused", "a human edit needs a press", "Mint a press before dispatch."),
       );
-    return this.apply(scope, route, by, input.patches, input.expectedRevision, false, input);
+    return this.apply(scope, route, by, input.patches, input.expectedRevision, false, input, receipts);
   }
 
   async apply(
@@ -579,6 +581,8 @@ export class RouteWorkspace {
       press: null,
       kind: "apply",
     },
+    /** Needed by a restore: the host's action receipts, read inside the write boundary. */
+    receipts?: TimelineReceipts,
   ): Promise<RouteStateWriteResult> {
     this.#authorize("edit");
     if (scope.route !== route)
@@ -641,6 +645,12 @@ export class RouteWorkspace {
           "this inverse is unknown or its paths changed",
           "Re-read Work and clear conflicting history.",
         );
+      if (kind === "restore") {
+        // Every restore, from the step door or posted raw, passes the Timeline's one admission here,
+        // inside the write boundary: the receipts are read after every earlier write has landed.
+        const refusal = await this.#restorable(scope, by, context.restoreOf, envelope, records, receipts);
+        if (refusal) return refusal;
+      }
       const applied = applyPatches(
         registration.spec, envelope, by, recorded?.write.inverse ?? patches,
         expectedRevision, trusted || kind === "restore", kind === "restore",
@@ -763,6 +773,37 @@ export class RouteWorkspace {
   }
 
   /**
+   * The Timeline's admission of one restore (ADR 0042): it must be the caller's own next step on
+   * this Work, in either direction, and no Revit write may hold it. Runs on the write tail.
+   */
+  async #restorable(
+    scope: WorkKey,
+    by: WorkAuthor,
+    restoreOf: number | undefined,
+    envelope: { revision: number; doc: unknown },
+    records: readonly { write: WorkWriteAck }[],
+    receipts: TimelineReceipts | undefined,
+  ): Promise<RouteStateWriteResult | null> {
+    if (!receipts)
+      return refuse("refused", "A restore needs the host's receipts", "Undo through the Timeline step door.");
+    const part = projectWorks(
+      [{ key: scope, snapshot: { revision: envelope.revision, doc: envelope.doc }, acks: records.map(({ write }) => write) }],
+      await receipts(),
+      by,
+    );
+    const candidate = [part.undo, part.redo].find(
+      (next) => next && "work" in next.ref && next.ref.revision === restoreOf,
+    );
+    if (!candidate)
+      return refuse(
+        "refused",
+        `Restoring r${restoreOf} is not ${by === "pea" ? "Pea's" : "the person's"} own next Timeline step on this Work`,
+        "Re-read the Timeline.",
+      );
+    return candidate.refusal ? refuse("refused", candidate.refusal, "Re-read the Timeline.") : null;
+  }
+
+  /**
    * The Works' rows and this author's next step each way (ADR 0042). `receipts` is every action
    * receipt the host holds: it is a required argument, so no caller can build the Timeline without
    * the Revit-write barrier.
@@ -787,12 +828,14 @@ export class RouteWorkspace {
     by: WorkAuthor,
     direction: "undo" | "redo",
     expected: StepRef,
-    receipts: readonly ActionStatus[],
+    /** Read once here to choose the step, and again inside each restore's write boundary. */
+    receipts: TimelineReceipts,
   ): Promise<RouteStateWriteResult> {
     this.#authorize(direction);
     const read = await this.#timelineWorks(works);
-    const journals = read.map((work) => timelineJournal(work, receipts));
-    const candidate = projectWorks(read, receipts, by, journals)[direction];
+    const sampled = await receipts();
+    const journals = read.map((work) => timelineJournal(work, sampled));
+    const candidate = projectWorks(read, sampled, by, journals)[direction];
     if (!candidate) return refuse("refused", `Nothing to ${direction}`, "Re-read the Timeline.");
     if (!sameStep(candidate.ref, expected))
       return refuse(
@@ -808,7 +851,7 @@ export class RouteWorkspace {
     const scope = read[index]!.key;
     let accepted: RouteStateWriteResult | undefined;
     const result = await journals[index]![direction](async (write) => {
-      accepted = await this.write(scope, scope.route, by, write);
+      accepted = await this.write(scope, scope.route, by, write, receipts);
       return accepted;
     }, undefined, by);
     return result.ok && accepted

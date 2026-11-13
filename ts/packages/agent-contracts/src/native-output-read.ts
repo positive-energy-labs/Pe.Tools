@@ -53,7 +53,7 @@ export type NativeValue<K extends HostOperationKey> = {
   body: NativeReadOutput<K>;
   version: string | null;
 };
-export const nativeReadInput = <K extends HostOperationKey>(key: K) =>
-  nativeArgs.omit({ key: true }).extend({ request: nativeRequestSchema(key) }) as z.ZodType<NativeArgs<K>>;
-export const nativeReadValue = <K extends HostOperationKey>(key: K) =>
-  z.object({ body: nativeOutputSchema(key), version: z.string().nullable() }) as z.ZodType<NativeValue<K>>;
+export const nativeReadInput = <K extends HostOperationKey>(key: K): z.ZodType<NativeArgs<K>> =>
+  nativeArgs.omit({ key: true }).extend({ request: nativeRequestSchema(key) });
+export const nativeReadValue = <K extends HostOperationKey>(key: K): z.ZodType<NativeValue<K>> =>
+  z.object({ body: nativeOutputSchema(key), version: z.string().nullable() });

@@ -121,6 +121,14 @@ export interface CommandContext {
     ) => WorkSelection<z.output<S>>,
   ): Promise<z.output<S>>;
   read: { receipts(id?: string): ActionReceipt[] };
+  /**
+   * The command's clock and id leaves: an executor that stamps a time or mints an id asks here,
+   * never `new Date()` or `randomUUID()`. Findings is the first consumer.
+   * ponytail: no recorded-input kind yet. A recording refuses writes and the only consumer is a write
+   * door, so nothing could replay one; add the `clock` and `id` kinds with the first recorded consumer.
+   */
+  readonly clock: { /** ISO time. */ now(): string };
+  readonly ids: { mint(): string };
 }
 export interface CommandBinding {
   consumes?: Consumed[];
