@@ -1,5 +1,5 @@
 import { useRef, useMemo } from "react";
-import type { OpenContext } from "./route";
+import type { OpenContext } from "./open-fields";
 import type { OpenOwner } from "./context";
 const openActions = ["start", "open", "close", "stop", "restart"];
 export function useOpenTypedOwner(ctx: OpenContext, actions = openActions): OpenOwner {

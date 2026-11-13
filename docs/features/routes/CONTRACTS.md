@@ -39,6 +39,32 @@ Copy each into both briefs verbatim from the cited lines.
 3. **Receipt response shape** (writer B and writer E). New, from finding 2, and not yet written anywhere: the object `BridgeAgent` writes to the response file and `native-receipts.ts` reads. It must carry the payload, `touched` and the evidence. The lead writes it in phase 0.
 4. **Evidence interfaces** (writer B lift; writer C implements). `sight.md:98-104`. `IObserved { DocumentKey; Revision? }` and `IEvidenced<out TEvidence>`. A null revision stays unknown.
 5. **`SpatialEvidence` wire shape** (writer C gives; the TS decode writer takes). `picture.md:96-108`.
+
+   Native PI-P1 implements `IEvidenced<SpatialEvidence>` on every Space answer, including `SceneArtifact`. The answer member is `evidence`; `stamp` and `fresh` are removed. PSC1 metadata uses `evidence` and format `space-scene-v6`. `SceneReceipt` keeps bounded counts and observation `revision`/`observedAt`; the artifact answer supplies concrete evidence separately. The C# authority is `dotnet/Pe.Revit.Space/Coverage.cs`:
+
+   ```ts
+   type Placement = { hostDocumentKey: string; linkUniqueId: string | null };
+   type SubjectExclusion = { documentKey: string; placement: Placement; subjectUniqueId: string };
+   type SourceRevision = { kind: 'observed' | 'unavailable'; epoch: number | null;
+     version: string | null; reason: 'not-recorded' | 'source-unread' | null };
+   type SourceObservation = { placement: Placement; documentKey: string | null;
+     revision: SourceRevision; toHost: readonly number[]; availability: 'loaded' | 'unloaded' | 'unavailable' };
+   type Acquisition = { placement: Placement; subjectUniqueId: string;
+     outcome: 'acquired' | 'empty' | 'partial' | 'failed' | 'deferred' | 'approximate' | 'outside-scope';
+     reason: 'none' | 'geometry-read' | 'triangulate' | 'budget' | 'unsupported' };
+   type CoverageGap = { placement: Placement; subjectUniqueId: string | null;
+     reason: 'source-unread' | 'partial-geometry' | 'failed-geometry' | 'deferred' | 'approximate'; count: number };
+   type SpatialEvidence = { documentKey: string; revision: number | null; observedAt: string;
+     frame: 'host-internal-ft'; resolved: Resolved; sources: readonly SourceObservation[];
+     acquisition: readonly Acquisition[]; coverage: readonly CoverageGap[]; geometryCost?: GeometryCost | null };
+   // Resolved keeps sources/categories/kinds/layers, replaces excludedElementIds with exclusions: SubjectExclusion[],
+   // and adds scope: Aabb|null, reach: number[][]|null (eight host-frame XYZ corners per box),
+   // representation: string, acquisitionRequested: boolean. Inventory/status sets acquisitionRequested=false.
+   // SweepSegment keeps index/verdict/nearest/closestPoint; minGapFt is nullable. Adds surfaceObservation:
+   // 'observed'|'none-observed', clearanceReason:'containment-unsupported'. Verdict is HIT|NEAR|UNKNOWN.
+   ```
+
+   Geometry packs use schema 2 and retain acquisition with triangles. Old packs recapture. Approximate scene primitives remain drawable and disclose an `approximate` gap; they cannot certify exact collision coverage. Full placement membership, including unread sources, is authoritative. Generation is owned by Kernel, decode by `k2/evidence-decode`.
 6. **`NativeAnswer`** (writer D edits; K3 and writer E consume). `picture.md:124-131`, corrected: it replaces the existing `F` parameter at `request-contracts.d.ts:68`.
 7. **`ReadOwnership`** (writer D gives; K3 and writer E call). `picture.md:141-159`. Writer E calls `open` at admission, `requestStop` from Stop, `settle` before the parent settles.
 8. **`ScriptCaller`** (writer A, both halves). `enum ScriptCaller { Agent, Person }`; `ExecuteRevitScriptRequest` gains a trailing `ScriptCaller Caller = ScriptCaller.Agent`; the host sets `caller: guards(caller) ? "Agent" : "Person"` over anything the input carried; a succeeded receipt whose result has `held` yields one `waits` row with verb `held`.

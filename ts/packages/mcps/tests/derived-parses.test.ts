@@ -144,7 +144,7 @@ test("person A parses a document once; person B, same project home, parses nothi
     expect(existsSync(join(dir, person, ".local-state", "state", "Derived"))).toBe(false);
 });
 
-test("a derived file whose name does not match its bytes is refused and discarded with one notice", async () => {
+test("a derived file whose name does not match its bytes is refused and skipped with one notice, and its bytes are kept", async () => {
   become("a");
   await read({ path: file, pages: "1" });
   const [name] = readdirSync(derived);
@@ -160,8 +160,11 @@ test("a derived file whose name does not match its bytes is refused and discarde
   await read({ path: file, pages: "1" });
   expect(parses.count).toBe(2);
   const notices = readStoredNotices(storedNoticesFile(runtimeRoot()));
-  expect(notices.map((n) => [n.class, n.path, n.sha256])).toEqual([["discard", join(derived, name!), sha(Buffer.from(forged))]]);
+  expect(notices.map((n) => [n.class, n.path, n.sha256])).toEqual([["keep", join(derived, name!), sha(Buffer.from(forged))]]);
+  // The reader removed nothing (K-A1). B's own parse then wrote the true bytes under that name
+  // through the write door, which rested the forged bytes in B's blob store first.
   expect(mismatched(derived)).toEqual([]);
+  expect(readFileSync(join(runtimeRoot(), "state", "Blobs", "sha256", sha(Buffer.from(forged))), "utf8")).toBe(forged);
 });
 
 test("with no project home the parse lands under the machine state root, never the user home or a temp folder", async () => {

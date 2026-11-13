@@ -21,4 +21,8 @@ test("a Pod entry importing the whole @pe/web/route surface bundles without effe
   const bytes = new TextDecoder().decode(built.executables[0]!.members.find((m) => m.path === "route.js")!.bytes);
   expect(bytes).toContain("paneLayout");
   expect(bytes).not.toMatch(/from ["']effect/);
+  // Command metadata is data-only; the host's executable Zod command declarations stay out.
+  expect(bytes).not.toMatch(/(?:const|var|let) (?:commands|hostActions|actionControls|sheetActions)\s*=/);
+  expect(bytes).not.toContain("Unrecognized here:");
+  expect(bytes).not.toContain("Start this Work");
 }, 120_000);

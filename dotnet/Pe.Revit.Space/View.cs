@@ -1,3 +1,4 @@
+using Pe.Shared.RevitData;
 namespace Pe.Revit.Space;
 
 /// <summary>
@@ -13,14 +14,14 @@ public static class SpaceView {
         IReadOnlyList<string>? Categories = null,
         IReadOnlyList<string>? Kinds = null,
         IReadOnlyList<string>? Layers = null,
-        IReadOnlyList<long>? ExcludeElementIds = null
+        IReadOnlyList<SubjectExclusion>? Exclusions = null
     ) {
         public Filter ToFilter() => new(
             this.Sources?.Select(s => (SourceKind)Enum.Parse(typeof(SourceKind), s, true)).ToList(),
             this.Categories,
             this.Kinds?.Select(k => (PrimKind)Enum.Parse(typeof(PrimKind), k, true)).ToList(),
             this.Layers,
-            this.ExcludeElementIds);
+            this.Exclusions);
     }
 
     /// <summary>One host level and its project elevation in host internal feet.</summary>
@@ -34,14 +35,14 @@ public static class SpaceView {
     ///     capture geometry. Other query operations prepare their own World. Bounds union captured row boxes.
     /// </summary>
     public sealed record StatusAnswer(
-        Stamp Stamp,
+        SpatialEvidence Evidence,
         bool Built,
         int PendingIds,
         IReadOnlyList<SourceCategories> Categories,
         IReadOnlyList<LevelRow> Levels,
         Aabb? Bounds,
         double Ms
-    );
+    ) : IEvidenced<SpatialEvidence>;
 
     /// <summary>
     ///     Every row that passes the filter, as parallel arrays: index i across every array is one
@@ -49,7 +50,7 @@ public static class SpaceView {
     ///     lists, so a category name travels once. Box is six doubles per row; -1 means no layer.
     /// </summary>
     public sealed record RowsAnswer(
-        Stamp Stamp,
+        SpatialEvidence Evidence,
         Searched Searched,
         IReadOnlyList<string> Categories,
         IReadOnlyList<string> Kinds,
@@ -65,21 +66,21 @@ public static class SpaceView {
         double[] ExtrusionFt,
         double[] Box,
         double Ms
-    );
+    ) : IEvidenced<SpatialEvidence>;
 
     /// <summary>
     ///     A <see cref="SliceAnswer" /> cut to a piece budget, whole elements or nothing, for the
     ///     browser frame budget: a knee band across a whole storey is 164 k pieces. <see cref="Total" /> is what the slice found regardless.
     /// </summary>
     public sealed record SliceCapped(
-        Stamp Stamp,
+        SpatialEvidence Evidence,
         Searched Searched,
         IReadOnlyList<SliceElement> Elements,
         int Pieces,
         int Total,
         bool Truncated,
         double Ms
-    );
+    ) : IEvidenced<SpatialEvidence>;
 
     public static SliceCapped Slice(Document document, double z0, double z1, Filter filter, Aabb? xyClip, int maxPieces) {
         if (maxPieces < 0) throw new ArgumentOutOfRangeException(nameof(maxPieces));
@@ -95,17 +96,17 @@ public static class SpaceView {
             kept.Add(el);
             pieces += el.Pieces.Count;
         }
-        return new SliceCapped(full.Stamp, full.Searched, kept, pieces, full.Pieces, truncated, full.Ms);
+        return new SliceCapped(full.Evidence, full.Searched, kept, pieces, full.Pieces, truncated, full.Ms);
     }
 
     /// <summary>One source BVH, through MaxDepth inclusive, in post-order with the root last.</summary>
-    public sealed record TreeAnswer(Stamp Stamp, int Source, int MaxDepth, IReadOnlyList<BvhNode> Nodes, double Ms);
+    public sealed record TreeAnswer(SpatialEvidence Evidence, int Source, int MaxDepth, IReadOnlyList<BvhNode> Nodes, double Ms) : IEvidenced<SpatialEvidence>;
 
-    public static StatusAnswer Status(Document document) => Status(document, new World(document.GetDocumentKey(), SpaceWorld.Epoch(document)));
+    public static StatusAnswer Status(Document document) => Status(document, SpaceWorld.SceneSources(document));
 
     public static StatusAnswer Status(Document document, World world) {
         var sw = System.Diagnostics.Stopwatch.StartNew();
-        var built = world.BuiltUtc != default;
+        var built = world.AcquisitionRequested;
         var bounds = Aabb.Empty;
         var any = false;
         foreach (var p in world.Partitions)
@@ -120,7 +121,7 @@ public static class SpaceView {
             .OrderBy(l => l.ProjectElevation).Select(l => new LevelRow(l.Name, l.ProjectElevation)).ToList();
         sw.Stop();
         return new StatusAnswer(
-            world.StampFor(world.Partitions, AllKinds),
+            world.EvidenceFor(world.Partitions, AllKinds),
             built,
             0,
             world.Partitions.Select(p => new SourceCategories(p.Source, p.Categories)).ToList(),
@@ -153,7 +154,7 @@ public static class SpaceView {
             foreach (var row in p.Prims) {
                 candidates++;
                 // Chadds CAD native bounds meet the reach while some emitted rows lie far below it.
-                if (!filter.Wants(row) || !row.Box.Overlaps(scope)) {
+                if (!p.Wants(filter, row) || !row.Box.Overlaps(scope)) {
                     skipped++;
                     continue;
                 }
@@ -173,7 +174,7 @@ public static class SpaceView {
 
         sw.Stop();
         return new RowsAnswer(
-            world.StampFor(touched, filter),
+            world.EvidenceFor(touched, filter),
             new Searched(touched.Count, categories.Count, candidates, candidates - skipped, skipped),
             categories.Names, kinds.Names, layers.Names, roles.Names,
             source.ToArray(), elementId.ToArray(), category.ToArray(), kind.ToArray(), layer.ToArray(), role.ToArray(),
@@ -189,7 +190,7 @@ public static class SpaceView {
             ?? throw new ArgumentOutOfRangeException(nameof(source), $"no partition with source {source}");
         var nodes = partition.Bvh.Walk(maxDepth);
         sw.Stop();
-        return new TreeAnswer(world.StampFor([partition], AllKinds with { Sources = [partition.Kind] }), source, maxDepth, nodes,
+        return new TreeAnswer(world.EvidenceFor([partition], AllKinds with { Sources = [partition.Kind] }), source, maxDepth, nodes,
             Math.Round(sw.Elapsed.TotalMilliseconds, 3));
     }
 

@@ -125,16 +125,21 @@ export function writeHomeFile(
   return { ok: true, sha256: sha256Hex(next), priorSha256, priorBlob };
 }
 
-/** Rest bytes in the content-addressed blob store, `<blobRoot>/sha256/<hash>`, create-exclusive. */
+/**
+ * Rest bytes in the content-addressed blob store, `<blobRoot>/sha256/<hash>`, and prove the copy:
+ * it returns only when the blob reads back as these bytes, and throws otherwise. A caller removes
+ * or overwrites the original only after this returned.
+ */
 function restBlob(blobRoot: string, sha256: string, bytes: Uint8Array): string {
   const blob = join(blobRoot, "sha256", sha256);
-  mkdirSync(dirname(blob), { recursive: true });
-  try {
-    writeFileSync(blob, bytes, { flag: "wx" });
-  } catch (error) {
-    if (errno(error) !== "EEXIST") throw error;
-    // A blob torn by an earlier crash is rewritten; a whole one is the same bytes already.
-    if (sha256Hex(readFileSync(blob)) !== sha256) writeAtomic(blob, bytes);
+  const rests = () => {
+    const copy = readOrNull(blob);
+    return copy !== null && sha256Hex(copy) === sha256;
+  };
+  // A whole blob is the same bytes already; a blob torn by an earlier crash is rewritten.
+  if (!rests()) {
+    writeAtomic(blob, bytes);
+    if (!rests()) throw Error(`The copy at '${blob}' does not read back as the bytes it was given.`);
   }
   return blob;
 }
@@ -180,8 +185,9 @@ export function readStoredNotices(file: string): StoredNotice[] {
  * `notices` is the machine's notice file (`<machine state root>/state/stored-notices.jsonl` in the
  * host). A discard must name it, so nothing is deleted without a trace; a keep may, when no listing
  * of its own shows the refusal. `parse` replaces `JSON.parse` for a file that is not one JSON value.
- * `blobRoot` makes a discard lose nothing: the refused bytes rest in `<blobRoot>/sha256/<hash>`
- * before the file goes, and the notice's `sha256` is that hash.
+ * A discard loses nothing: the refused bytes rest in `<blobRoot>/sha256/<hash>` before the file
+ * goes, and the notice's `sha256` is that hash. A caller that names no `blobRoot` gets the `Blobs`
+ * folder beside the notice file, which is the machine's blob root (`stateTree().blobs`).
  */
 export type StoredPolicy = { place: string; parse?: (text: string) => unknown } & (
   | { class: "keep"; notices?: string; blobRoot?: undefined }
@@ -225,35 +231,51 @@ export function noteStored(file: string, notice: Omit<StoredNotice, "at">): void
 }
 
 /**
- * Apply a class to bytes that were refused: one notice per path and hash, then delete if `discard`.
+ * Apply a class to a file that was refused: one notice per path and hash, and a set-aside if
+ * `discard`. Set-aside is copy, verify, then remove, in that order (K-A1): the file goes only after
+ * its bytes rest in the blob store. So three cases keep the file whatever the class says: its bytes
+ * could not be read, the copy failed, or it changed while it was being copied.
  * A discard names exactly one file. Discard-class files sit inside keep-class folders
  * (`Pods/<pod>/imported.json`, `Pages/<slug>/.state/**`), so this never removes a folder and
  * never recurses: `rmSync` without `recursive` refuses a directory, and the refusal is swallowed.
  */
 function refuse(path: string, bytes: Buffer | null, policy: StoredPolicy, why: string) {
-  let reason = oneLine(why);
-  if (policy.class === "discard" && policy.blobRoot && bytes)
-    try {
-      const blob = restBlob(policy.blobRoot, sha256Hex(bytes), bytes);
-      reason = `Prior bytes: ${blob}. ${reason}`;
-    } catch (error) {
-      // ponytail: the discard goes on without its copy, because the owner is about to write a
-      // fresh file over these bytes either way. Hold the discard instead if a full disk is seen.
-      console.warn(`Could not keep a copy of '${path}' before its discard: ${message(error)}`);
-    }
-  if (policy.notices)
-    noteStored(policy.notices, {
-      class: policy.class,
-      place: policy.place,
-      path,
-      sha256: bytes && sha256Hex(bytes),
-      reason,
-    });
-  if (policy.class === "keep") return { kind: "kept", reason } as const;
+  const note = (cls: StoredPolicy["class"], reason: string) => {
+    if (policy.notices)
+      noteStored(policy.notices, {
+        class: cls,
+        place: policy.place,
+        path,
+        sha256: bytes && sha256Hex(bytes),
+        reason,
+      });
+    return reason;
+  };
+  const kept = (reason: string) => ({ kind: "kept", reason: note("keep", oneLine(reason)) }) as const;
+  if (policy.class === "keep" || !bytes) return kept(why);
+  let blob: string;
+  try {
+    blob = restBlob(
+      policy.blobRoot ?? join(dirname(policy.notices), productPathNames.blobsDirectoryName),
+      sha256Hex(bytes),
+      bytes,
+    );
+  } catch (error) {
+    return kept(`Kept, because its bytes could not be copied aside (${message(error)}). ${why}`);
+  }
+  try {
+    // ponytail: the compare and the remove are not one step; a writer landing between them loses
+    // its bytes. Ceiling: one machine, one host per state root. Take a lock file if writers grow.
+    const now = readOrNull(path);
+    if (now && !now.equals(bytes)) return kept(`Kept, because it changed while it was set aside. ${why}`);
+  } catch (error) {
+    return kept(`Kept, because it could not be read again (${message(error)}). ${why}`);
+  }
+  const reason = note("discard", oneLine(`Prior bytes: ${blob}. ${why}`));
   try {
     rmSync(path, { force: true });
   } catch {
-    // A held file stays; its notice is already posted and does not repeat.
+    // A held file stays; its bytes rest in the blob store and its notice does not repeat.
   }
   return { kind: "discarded", reason } as const;
 }
@@ -261,7 +283,8 @@ function refuse(path: string, bytes: Buffer | null, policy: StoredPolicy, why: s
 /**
  * Decode a stored file at the trust boundary (ADR 0039 rule 1). `keep`: an authored file that does
  * not decode is refused, its bytes are never touched, and the reason comes back. `discard`: the
- * file is deleted with one notice. Only a missing file reads as `missing`.
+ * file is set aside (its bytes rest in the blob store, then it is removed) with one notice. A file
+ * that could not be read is `kept` in either class. Only a missing file reads as `missing`.
  */
 export function readStored<T>(
   path: string,
@@ -361,9 +384,9 @@ export function discardStored(
   let bytes: Buffer | null;
   try {
     bytes = readOrNull(path);
-  } catch {
-    // Not a readable file (a folder, a held file): post the notice, and the delete refuses it.
-    return void refuse(path, null, policy, reason);
+  } catch (error) {
+    // Not a readable file (a folder, a held file): it is kept, and the notice says why.
+    return void refuse(path, null, policy, `${reason} (${message(error)})`);
   }
   if (bytes) refuse(path, bytes, policy, reason);
 }
@@ -382,11 +405,15 @@ export const derivedKey = (source: Uint8Array | string, producer: string) =>
 ${producer}`);
 export const derivedName = (key: string, bytes: Uint8Array | string) => `${key}.${sha256Hex(bytes)}`;
 
-/** Refuse one derived file: discard class (ADR 0039), one notice, the bytes rest in the blob store. */
+/** An owner refuses one derived file it decoded: discard class (ADR 0039), one notice, the bytes rest in the blob store. */
 export const discardDerived = (store: DerivedStore, path: string, reason: string) =>
   discardStored(path, { class: "discard", place: "Derived file", notices: store.notices, blobRoot: store.blobRoot }, reason);
 
-/** The file a key names, proven by its own hash. One whose name does not match its bytes is discarded with one notice. */
+/**
+ * The file a key names, proven by its own hash. One whose name does not match its bytes is skipped
+ * with one notice and stays where it is: a reader never removes a file, and `dir` can be a folder
+ * on a shared drive that another person's machine is writing.
+ */
 export function readDerived(store: DerivedStore, key: string): { path: string; bytes: Buffer } | null {
   let names: string[];
   try {
@@ -396,19 +423,37 @@ export function readDerived(store: DerivedStore, key: string): { path: string; b
   }
   for (const name of names.filter((name) => name.startsWith(`${key}.`)).sort()) {
     const path = join(store.dir, name);
-    const bytes = readOrNull(path);
+    let bytes: Buffer | null;
+    try {
+      bytes = readOrNull(path);
+    } catch {
+      continue; // A held file is not this read's answer, and it stays.
+    }
     if (!bytes) continue;
     if (name === derivedName(key, bytes)) return { path, bytes };
-    // ponytail: a file another process is still writing reads as torn and is discarded; its writer
-    // then finds nothing on the next read and derives again. Write by temp and link if that shows.
-    discardDerived(store, path, "Its name does not match its bytes.");
+    // ponytail: a file another process is still writing reads as torn and posts one notice for
+    // that half-written hash. Write by temp and link if that shows.
+    noteStored(store.notices, {
+      class: "keep",
+      place: "Derived file",
+      path,
+      sha256: sha256Hex(bytes),
+      reason: "Skipped: its name does not match its bytes.",
+    });
   }
   return null;
 }
 
-/** Write once through the write door: create-exclusive, so a second writer of the same name is a no-op. */
+/**
+ * Write once through the write door: create-exclusive, so a second writer of the same name is a
+ * no-op. One case writes twice: the name is taken by bytes that do not match it (a torn or forged
+ * file, which `readDerived` skips and never removes). Then the write door replaces exactly those
+ * bytes, after resting them in the blob store, so a bad file cannot hold a good one's name forever.
+ */
 export function writeDerived(store: DerivedStore, key: string, bytes: Uint8Array | string): string {
   const path = join(store.dir, derivedName(key, bytes));
-  writeHomeFile(path, bytes, { expectSha256: null, blobRoot: store.blobRoot });
+  const made = writeHomeFile(path, bytes, { expectSha256: null, blobRoot: store.blobRoot });
+  if (!made.ok && made.actualSha256 && made.actualSha256 !== sha256Hex(bytes))
+    writeHomeFile(path, bytes, { expectSha256: made.actualSha256, blobRoot: store.blobRoot });
   return path;
 }

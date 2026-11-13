@@ -148,16 +148,18 @@ test("public disable removes Page, script, member, catalog and receipted skill; 
   await content.lifecycle.close();
 });
 
-test("captured plugin module activates hooks, file removal removes influence", async () => {
+test("Pod JavaScript is never imported and its package contribution still installs", async () => {
   root = await mkdtemp(join(tmpdir(), "pe-plugin-hook-"));
   vi.stubEnv("LOCALAPPDATA", join(root, "machine"));
   vi.stubEnv("PE_TOOLS_PRODUCT_HOME", root);
   const pods = join(root, "Pods");
-  await mkdir(join(pods, "hook/plugins/observe"), { recursive: true });
+  await mkdir(join(pods, "hook/plugins/x"), { recursive: true });
   await writeFile(join(pods, "hook/pod.json"), '{"id":"hook"}');
   await writeFile(
-    join(pods, "hook/plugins/observe/index.js"),
-    'export default {setup(c){ c.hook("turn.before", e => { globalThis.__peHookSeen = e.turnId; }); }}',
+    join(pods, "hook/plugins/x/index.js"),
+    `import { writeFileSync } from "node:fs";
+     writeFileSync(${JSON.stringify(join(root, "import-sentinel"))}, "imported");
+     export default { setup() {} };`,
   );
   const { createPackageLifecycle } = await import("../src/package-lifecycle.ts");
   const lifecycle = createPackageLifecycle({
@@ -166,26 +168,18 @@ test("captured plugin module activates hooks, file removal removes influence", a
   });
   bindPackageLifecycle(lifecycle);
   await lifecycle.ready;
-  expect(lifecycle.inventory().find((p) => p.id === "pod:hook")?.status).toBe("active");
-  await mkdir(join(pods, "broken/plugins/observe"), { recursive: true });
-  await writeFile(join(pods, "broken/pod.json"), '{"id":"broken"}');
-  await writeFile(
-    join(pods, "broken/plugins/observe/index.js"),
-    'export default { setup(){throw Error("setup failure");} }',
-  );
-  await lifecycle.refresh();
-  await lifecycle.setEnabled("pod:broken", true);
-  expect(lifecycle.inventory().find((p) => p.id === "pod:broken")).toMatchObject({
-    status: "error",
-    error: expect.stringContaining("setup failure"),
-  });
-  await expect(requirePackageEnabled("broken")).rejects.toThrow("inactive");
-  await lifecycle.emit("turn.before", { threadId: "t", turnId: "one" });
-  expect((globalThis as unknown as { __peHookSeen: string }).__peHookSeen).toBe("one");
-  await rm(join(pods, "hook"), { recursive: true });
-  await lifecycle.refresh();
-  await lifecycle.emit("turn.before", { threadId: "t", turnId: "two" });
-  expect((globalThis as unknown as { __peHookSeen: string }).__peHookSeen).toBe("one");
-  delete (globalThis as unknown as { __peHookSeen?: string }).__peHookSeen;
-  await lifecycle.close();
+  try {
+    expect(lifecycle.inventory().find((p) => p.id === "pod:hook")?.status).toBe("active");
+    expect(lifecycle.packages().map((p) => p.id)).toEqual(["hook"]);
+    expect(lifecycle.packages()[0]!.members.some((m) => m.path === "plugins/x/index.js")).toBe(true);
+    await expect(readFile(join(root, "import-sentinel"), "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+    await lifecycle.setEnabled("pod:hook", false);
+    expect(lifecycle.packages()).toEqual([]);
+    await lifecycle.setEnabled("pod:hook", true);
+    expect(lifecycle.packages().map((p) => p.id)).toEqual(["hook"]);
+    await lifecycle.refresh();
+    await expect(readFile(join(root, "import-sentinel"), "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+  } finally {
+    await lifecycle.close();
+  }
 });

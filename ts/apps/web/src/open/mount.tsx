@@ -1,15 +1,15 @@
 import type { ReadingState } from "#/shell/source-contract";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { HarnessThreadSummary, Machine } from "@pe/agent-contracts";
-import type { OpenContext } from "./route";
-import { useOpenTypedOwner } from "./typed-owner";
+import type { OpenContext } from "../machine/open-fields";
+import { useOpenTypedOwner } from "../machine/typed-owner";
 import { Scroll } from "@pe/kit/lang/scroll";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
-import { PatchBay, type BayLayout } from "./bay";
+import { PatchBay, type BayLayout } from "../machine/bay";
 
-import { OpenOwnerContext } from "./context";
-import { modelRows } from "./model";
-import type { Recents } from "./model";
+import { OpenOwnerContext } from "../machine/context";
+import { modelRows } from "../machine/open-model";
+import type { Recents } from "../machine/open-model";
 export function OpenBody({ ctx }: { ctx: OpenContext }) {
   const owner = useOpenTypedOwner(ctx);
   const container = useRef<HTMLDivElement>(null);
