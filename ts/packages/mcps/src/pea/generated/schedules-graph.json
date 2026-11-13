@@ -133,9 +133,10 @@
   "verbs": {
     "read": {
       "kind": "command",
-      "input": "none",
+      "input": "verb:read",
       "label": "Read schedule",
-      "review": "shown",
+      "effect": "SessionWrite",
+      "review": "none",
       "deps": {
         "page": [
           "workspaceId"
@@ -158,9 +159,10 @@
     },
     "bind": {
       "kind": "command",
-      "input": "none",
+      "input": "verb:bind",
       "label": "Bind schedule",
-      "review": "shown",
+      "effect": "SessionWrite",
+      "review": "none",
       "deps": {
         "page": [
           "workspaceId"
@@ -183,8 +185,9 @@
     },
     "push": {
       "kind": "command",
-      "input": "none",
+      "input": "verb:push",
       "label": "Apply cells",
+      "effect": "ModelWrite",
       "review": "shown",
       "deps": {
         "page": [
@@ -207,6 +210,7 @@
       "intent": "push"
     }
   },
+  "band": [],
   "panes": {
     "grid": {
       "label": "Schedules",
@@ -214,11 +218,7 @@
       "draws": [
         "value"
       ],
-      "verbs": [
-        "read",
-        "bind",
-        "push"
-      ]
+      "verbs": []
     }
   },
   "layout": {

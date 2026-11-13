@@ -8,6 +8,21 @@ const projections = import.meta.glob<{ default: unknown }>(
   { eager: true },
 );
 
+test.each(Object.keys(routeRegistry).sort())("%s wire verbs reflect the declaration without guessing placement", (key) => {
+  const { spec, data, host } = routeRegistry[key]!.module;
+  expect(data.band).toEqual([]);
+  for (const pane of Object.values(data.panes)) expect(pane.verbs).toEqual([]);
+  expect(Object.keys(data.verbs)).toEqual(Object.keys(spec.commands));
+  for (const [id, command] of Object.entries(spec.commands)) {
+    const verb = data.verbs[id]!;
+    expect("entry" in verb && verb.entry).toBe(command.entry);
+    expect(verb.label).toBe(command.label);
+    expect(verb.review).toBe("plan" in command ? "shown" : "none");
+    expect(verb.effect).toBe(command.contract.axes.effect);
+    expect(host.schemas[verb.input]).toBe(command.contract.input);
+  }
+});
+
 test.each(Object.keys(routeRegistry).sort())(
   "%s admits and publishes the same typed route to Pea (codegen:routes)",
   (key) => {

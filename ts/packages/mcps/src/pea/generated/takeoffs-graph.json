@@ -215,8 +215,9 @@
   "verbs": {
     "initialize": {
       "kind": "command",
-      "input": "none",
+      "input": "verb:initialize",
       "label": "Initialize",
+      "effect": "ModelWrite",
       "review": "shown",
       "deps": {
         "page": [],
@@ -240,8 +241,9 @@
     },
     "adopt": {
       "kind": "command",
-      "input": "none",
+      "input": "verb:adopt",
       "label": "Adopt",
+      "effect": "ModelWrite",
       "review": "shown",
       "deps": {
         "page": [],
@@ -264,6 +266,7 @@
       "intent": "adopt"
     }
   },
+  "band": [],
   "panes": {
     "adoption": {
       "label": "View adoption",
@@ -271,10 +274,7 @@
       "draws": [
         "value"
       ],
-      "verbs": [
-        "initialize",
-        "adopt"
-      ]
+      "verbs": []
     }
   },
   "layout": {

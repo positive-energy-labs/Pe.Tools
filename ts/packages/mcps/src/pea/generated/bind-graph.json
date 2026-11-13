@@ -110,9 +110,10 @@
   "verbs": {
     "bind": {
       "kind": "command",
-      "input": "none",
+      "input": "verb:bind",
       "label": "Bind",
-      "review": "shown",
+      "effect": "SessionWrite",
+      "review": "none",
       "deps": {
         "page": [
           "page"
@@ -130,9 +131,10 @@
     },
     "read": {
       "kind": "command",
-      "input": "none",
+      "input": "verb:read",
       "label": "Read binding",
-      "review": "shown",
+      "effect": "Read",
+      "review": "none",
       "deps": {
         "page": [
           "page"
@@ -149,6 +151,7 @@
       "intent": "read"
     }
   },
+  "band": [],
   "panes": {
     "main": {
       "label": "Bind Page",
@@ -156,10 +159,7 @@
       "draws": [
         "value"
       ],
-      "verbs": [
-        "bind",
-        "read"
-      ]
+      "verbs": []
     }
   },
   "layout": {

@@ -331,11 +331,15 @@ export function route<D, const F extends Fields, W extends z.ZodObject, Edit ext
   const readings: Record<string,RouteGraphJson["readings"][string]>={};
   for(const [read,id] of readIds) readings[id]={kind:"use",entry:read.key,demand:read.demand === "explicit"?"explicit":"visible",
     retain:{evidence:"scope",resource:"scope"},refresh:"dependencies",deps:{page:Object.keys(fields),work:[],readings:[]}};
-  const verbs:RouteGraphJson["verbs"]=Object.fromEntries(Object.entries(normalized.commands).map(([id,cmd])=>[id,{
-    kind:"command",entry:cmd.entry,input:"none",label:cmd.label,review:"shown",
+  const verbs:RouteGraphJson["verbs"]=Object.fromEntries(Object.entries(normalized.commands).map(([id,cmd])=>{
+    if (cmd.contract.axes.effect === "Unset") throw Error(`Route ${spec.key}: verb ${id} has no declared effect`);
+    const input = `verb:${id}`;
+    schemas[input] = cmd.contract.input;
+    return [id,{
+    kind:"command",entry:cmd.entry,input,label:cmd.label,effect:cmd.contract.axes.effect,review:"plan" in cmd ? "shown" : "none",
     deps:{page:spec.subject?[spec.subject.field]:[],work:work?Object.keys(work.schema.shape):[],readings:spec.core?[readIds.get(spec.core)!]:[]},
     captures:spec.core?[readIds.get(spec.core)!]:[],intent:id,
-  }]));
+  }]; }));
   const stage=String(Object.values(spec.fields).find(f=>f.role === "stage")?.initial ?? "main");
   const data:RouteGraphJson={version:1,key:spec.key,address:spec.address ?? `/${spec.key}`,name:spec.name,directory:spec.directory,
     capabilities:[...(work?["work" as const]:[]),...(Object.keys(verbs).length?["native-write" as const]:[]),
@@ -346,7 +350,9 @@ export function route<D, const F extends Fields, W extends z.ZodObject, Edit ext
       const meta=(schema as z.ZodType).meta();
       return meta?.title ? [[key,{label:meta.title,internal:meta.internal === true}]] : [];
     })),cells:{},panes:Object.fromEntries(Object.entries(normalized.panes).map(([id,p])=>[id,{label:p.title,purpose:p.purpose,
-      draws:p.read?[readIds.get(p.read)!]:[],verbs:Object.keys(verbs)}])),readings,verbs,seeds:{},layout:discoveryLayout(spec.layout),
+      // row/pane flags say who does not draw in the band, but do not name an owning pane.
+      // Until SH-S2 declares placement, an empty placement is explicitly unknown.
+      draws:p.read?[readIds.get(p.read)!]:[],verbs:[]} ])),band:[],readings,verbs,seeds:{},layout:discoveryLayout(spec.layout),
     ...(sheet?{sheet}:{}),...(spec.picture?{picture:pictureSlotData(spec.picture)}:{}),...(spec.goal?{goal:readIds.get(spec.goal)!}:{}),
     needs:normalized.needs === "browser" || normalized.needs === "host" ? "nothing" : normalized.needs,
     predicates:{},observe:[],resetOnTarget:[],stageOrder:[stage],stages:{[stage]:{panes:Object.keys(normalized.panes),verbs:Object.keys(verbs),word:spec.name}}};

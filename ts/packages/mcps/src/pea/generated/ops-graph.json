@@ -92,9 +92,10 @@
   "verbs": {
     "run": {
       "kind": "command",
-      "input": "none",
+      "input": "verb:run",
       "label": "Run read",
-      "review": "shown",
+      "effect": "Read",
+      "review": "none",
       "deps": {
         "page": [
           "op"
@@ -112,9 +113,10 @@
     },
     "control": {
       "kind": "command",
-      "input": "none",
+      "input": "verb:control",
       "label": "Receipt control",
-      "review": "shown",
+      "effect": "Read",
+      "review": "none",
       "deps": {
         "page": [
           "op"
@@ -131,6 +133,7 @@
       "intent": "control"
     }
   },
+  "band": [],
   "panes": {
     "main": {
       "label": "Ops",
@@ -138,10 +141,7 @@
       "draws": [
         "value"
       ],
-      "verbs": [
-        "run",
-        "control"
-      ]
+      "verbs": []
     }
   },
   "layout": {

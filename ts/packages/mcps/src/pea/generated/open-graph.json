@@ -87,9 +87,10 @@
   "verbs": {
     "stop": {
       "kind": "command",
-      "input": "none",
+      "input": "verb:stop",
       "label": "Stop Revit",
-      "review": "shown",
+      "effect": "SessionWrite",
+      "review": "none",
       "deps": {
         "page": [],
         "work": [],
@@ -105,9 +106,10 @@
     },
     "restart": {
       "kind": "command",
-      "input": "none",
+      "input": "verb:restart",
       "label": "Hot reload Revit",
-      "review": "shown",
+      "effect": "SessionWrite",
+      "review": "none",
       "deps": {
         "page": [],
         "work": [],
@@ -123,9 +125,10 @@
     },
     "start": {
       "kind": "command",
-      "input": "none",
+      "input": "verb:start",
       "label": "Start Revit and open",
-      "review": "shown",
+      "effect": "SessionWrite",
+      "review": "none",
       "deps": {
         "page": [],
         "work": [],
@@ -141,9 +144,10 @@
     },
     "open": {
       "kind": "command",
-      "input": "none",
+      "input": "verb:open",
       "label": "Open document",
-      "review": "shown",
+      "effect": "SessionWrite",
+      "review": "none",
       "deps": {
         "page": [],
         "work": [],
@@ -159,9 +163,10 @@
     },
     "close": {
       "kind": "command",
-      "input": "none",
+      "input": "verb:close",
       "label": "Close document",
-      "review": "shown",
+      "effect": "SessionWrite",
+      "review": "none",
       "deps": {
         "page": [],
         "work": [],
@@ -176,6 +181,7 @@
       "intent": "close"
     }
   },
+  "band": [],
   "panes": {
     "documents": {
       "label": "Documents",
@@ -183,13 +189,7 @@
       "draws": [
         "value"
       ],
-      "verbs": [
-        "stop",
-        "restart",
-        "start",
-        "open",
-        "close"
-      ]
+      "verbs": []
     }
   },
   "layout": {

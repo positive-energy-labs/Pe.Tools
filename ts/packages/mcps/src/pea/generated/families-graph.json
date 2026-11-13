@@ -84,9 +84,10 @@
   "verbs": {
     "read": {
       "kind": "command",
-      "input": "none",
+      "input": "verb:read",
       "label": "Read families",
-      "review": "shown",
+      "effect": "SessionWrite",
+      "review": "none",
       "deps": {
         "page": [],
         "work": [
@@ -111,9 +112,10 @@
     },
     "stop": {
       "kind": "command",
-      "input": "none",
+      "input": "verb:stop",
       "label": "Stop family read",
-      "review": "shown",
+      "effect": "SessionWrite",
+      "review": "none",
       "deps": {
         "page": [],
         "work": [
@@ -138,8 +140,9 @@
     },
     "apply": {
       "kind": "command",
-      "input": "none",
+      "input": "verb:apply",
       "label": "Apply families",
+      "effect": "ModelWrite",
       "review": "shown",
       "deps": {
         "page": [],
@@ -164,6 +167,7 @@
       "intent": "apply"
     }
   },
+  "band": [],
   "panes": {
     "main": {
       "label": "Families",
@@ -171,11 +175,7 @@
       "draws": [
         "value"
       ],
-      "verbs": [
-        "read",
-        "stop",
-        "apply"
-      ]
+      "verbs": []
     }
   },
   "layout": {

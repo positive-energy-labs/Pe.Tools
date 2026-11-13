@@ -194,9 +194,10 @@
   "verbs": {
     "read": {
       "kind": "command",
-      "input": "none",
+      "input": "verb:read",
       "label": "Read family",
-      "review": "shown",
+      "effect": "Read",
+      "review": "none",
       "deps": {
         "page": [
           "member"
@@ -220,9 +221,10 @@
     },
     "saved": {
       "kind": "command",
-      "input": "none",
+      "input": "verb:saved",
       "label": "Read saved family",
-      "review": "shown",
+      "effect": "Read",
+      "review": "none",
       "deps": {
         "page": [
           "member"
@@ -246,9 +248,10 @@
     },
     "open": {
       "kind": "command",
-      "input": "none",
+      "input": "verb:open",
       "label": "Open member",
-      "review": "shown",
+      "effect": "Read",
+      "review": "none",
       "deps": {
         "page": [
           "member"
@@ -272,9 +275,10 @@
     },
     "attach": {
       "kind": "command",
-      "input": "none",
+      "input": "verb:attach",
       "label": "Attach PDF",
-      "review": "shown",
+      "effect": "SessionWrite",
+      "review": "none",
       "deps": {
         "page": [
           "member"
@@ -298,9 +302,10 @@
     },
     "capture": {
       "kind": "command",
-      "input": "none",
+      "input": "verb:capture",
       "label": "Save family to pod",
-      "review": "shown",
+      "effect": "SessionWrite",
+      "review": "none",
       "deps": {
         "page": [
           "member"
@@ -324,8 +329,9 @@
     },
     "build": {
       "kind": "command",
-      "input": "none",
+      "input": "verb:build",
       "label": "Build .rfa",
+      "effect": "ModelWrite",
       "review": "shown",
       "deps": {
         "page": [
@@ -350,8 +356,9 @@
     },
     "apply": {
       "kind": "command",
-      "input": "none",
+      "input": "verb:apply",
       "label": "Apply family",
+      "effect": "ModelWrite",
       "review": "shown",
       "deps": {
         "page": [
@@ -375,6 +382,7 @@
       "intent": "apply"
     }
   },
+  "band": [],
   "panes": {
     "workspace": {
       "label": "Family",
@@ -382,15 +390,7 @@
       "draws": [
         "value"
       ],
-      "verbs": [
-        "read",
-        "saved",
-        "open",
-        "attach",
-        "capture",
-        "build",
-        "apply"
-      ]
+      "verbs": []
     },
     "goal": {
       "label": "Unresolved",
@@ -398,15 +398,7 @@
       "draws": [
         "value"
       ],
-      "verbs": [
-        "read",
-        "saved",
-        "open",
-        "attach",
-        "capture",
-        "build",
-        "apply"
-      ]
+      "verbs": []
     }
   },
   "layout": {

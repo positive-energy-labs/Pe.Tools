@@ -548,8 +548,9 @@
   "verbs": {
     "losses": {
       "kind": "command",
-      "input": "none",
+      "input": "verb:losses",
       "label": "Write to Revit",
+      "effect": "ModelWrite",
       "review": "shown",
       "deps": {
         "page": [
@@ -576,6 +577,7 @@
       "intent": "losses"
     }
   },
+  "band": [],
   "panes": {
     "sheet-roster": {
       "label": "Fans",
@@ -583,9 +585,7 @@
       "draws": [
         "value"
       ],
-      "verbs": [
-        "losses"
-      ]
+      "verbs": []
     },
     "sheet-inputs": {
       "label": "Inputs",
@@ -593,9 +593,7 @@
       "draws": [
         "value"
       ],
-      "verbs": [
-        "losses"
-      ]
+      "verbs": []
     },
     "sheet-picture": {
       "label": "Picture",
@@ -603,9 +601,7 @@
       "draws": [
         "value"
       ],
-      "verbs": [
-        "losses"
-      ]
+      "verbs": []
     },
     "sheet-ledger": {
       "label": "Ledger",
@@ -613,9 +609,7 @@
       "draws": [
         "value"
       ],
-      "verbs": [
-        "losses"
-      ]
+      "verbs": []
     }
   },
   "layout": {

@@ -126,9 +126,10 @@
   "verbs": {
     "open": {
       "kind": "command",
-      "input": "none",
+      "input": "verb:open",
       "label": "Open saved bytes",
-      "review": "shown",
+      "effect": "SessionWrite",
+      "review": "none",
       "deps": {
         "page": [
           "member"
@@ -149,9 +150,10 @@
     },
     "adopt": {
       "kind": "command",
-      "input": "none",
+      "input": "verb:adopt",
       "label": "Adopt disk bytes and replace edits",
-      "review": "shown",
+      "effect": "SessionWrite",
+      "review": "none",
       "deps": {
         "page": [
           "member"
@@ -172,9 +174,10 @@
     },
     "save": {
       "kind": "command",
-      "input": "none",
+      "input": "verb:save",
       "label": "Save staged member",
-      "review": "shown",
+      "effect": "SessionWrite",
+      "review": "none",
       "deps": {
         "page": [
           "member"
@@ -195,9 +198,10 @@
     },
     "saveNew": {
       "kind": "command",
-      "input": "none",
+      "input": "verb:saveNew",
       "label": "Save as new member",
-      "review": "shown",
+      "effect": "SessionWrite",
+      "review": "none",
       "deps": {
         "page": [
           "member"
@@ -217,6 +221,7 @@
       "intent": "saveNew"
     }
   },
+  "band": [],
   "panes": {
     "members": {
       "label": "Members",
@@ -224,12 +229,7 @@
       "draws": [
         "inventory"
       ],
-      "verbs": [
-        "open",
-        "adopt",
-        "save",
-        "saveNew"
-      ]
+      "verbs": []
     },
     "runs": {
       "label": "Runs",
@@ -237,12 +237,7 @@
       "draws": [
         "value"
       ],
-      "verbs": [
-        "open",
-        "adopt",
-        "save",
-        "saveNew"
-      ]
+      "verbs": []
     },
     "sheet": {
       "label": "Sheet",
@@ -250,12 +245,7 @@
       "draws": [
         "value"
       ],
-      "verbs": [
-        "open",
-        "adopt",
-        "save",
-        "saveNew"
-      ]
+      "verbs": []
     },
     "goal": {
       "label": "Unresolved",
@@ -263,12 +253,7 @@
       "draws": [
         "value"
       ],
-      "verbs": [
-        "open",
-        "adopt",
-        "save",
-        "saveNew"
-      ]
+      "verbs": []
     }
   },
   "layout": {

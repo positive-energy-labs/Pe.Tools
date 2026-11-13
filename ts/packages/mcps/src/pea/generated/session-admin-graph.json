@@ -96,9 +96,10 @@
   "verbs": {
     "start": {
       "kind": "command",
-      "input": "none",
+      "input": "verb:start",
       "label": "Start Revit and open",
-      "review": "shown",
+      "effect": "SessionWrite",
+      "review": "none",
       "deps": {
         "page": [],
         "work": [],
@@ -114,9 +115,10 @@
     },
     "stop": {
       "kind": "command",
-      "input": "none",
+      "input": "verb:stop",
       "label": "Stop Revit",
-      "review": "shown",
+      "effect": "SessionWrite",
+      "review": "none",
       "deps": {
         "page": [],
         "work": [],
@@ -132,9 +134,10 @@
     },
     "restart": {
       "kind": "command",
-      "input": "none",
+      "input": "verb:restart",
       "label": "Hot reload Revit",
-      "review": "shown",
+      "effect": "SessionWrite",
+      "review": "none",
       "deps": {
         "page": [],
         "work": [],
@@ -149,6 +152,7 @@
       "intent": "restart"
     }
   },
+  "band": [],
   "panes": {
     "sessions": {
       "label": "Sessions",
@@ -156,11 +160,7 @@
       "draws": [
         "value"
       ],
-      "verbs": [
-        "start",
-        "stop",
-        "restart"
-      ]
+      "verbs": []
     }
   },
   "layout": {

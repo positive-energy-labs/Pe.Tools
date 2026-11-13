@@ -142,8 +142,9 @@
   "verbs": {
     "partition": {
       "kind": "command",
-      "input": "none",
+      "input": "verb:partition",
       "label": "Partition view",
+      "effect": "ModelWrite",
       "review": "shown",
       "deps": {
         "page": [
@@ -166,8 +167,9 @@
     },
     "apply": {
       "kind": "command",
-      "input": "none",
+      "input": "verb:apply",
       "label": "Write room fields",
+      "effect": "ModelWrite",
       "review": "shown",
       "deps": {
         "page": [
@@ -190,8 +192,9 @@
     },
     "merge": {
       "kind": "command",
-      "input": "none",
+      "input": "verb:merge",
       "label": "Merge rooms",
+      "effect": "ModelWrite",
       "review": "shown",
       "deps": {
         "page": [
@@ -213,6 +216,7 @@
       "intent": "merge"
     }
   },
+  "band": [],
   "panes": {
     "main": {
       "label": "Rooms",
@@ -220,11 +224,7 @@
       "draws": [
         "value"
       ],
-      "verbs": [
-        "partition",
-        "apply",
-        "merge"
-      ]
+      "verbs": []
     },
     "goal": {
       "label": "Unresolved",
@@ -232,11 +232,7 @@
       "draws": [
         "value"
       ],
-      "verbs": [
-        "partition",
-        "apply",
-        "merge"
-      ]
+      "verbs": []
     }
   },
   "layout": {
