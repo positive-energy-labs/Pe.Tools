@@ -5,6 +5,7 @@ import { fireEvent, render } from "@testing-library/react";
 import { actionScopeKeys, KeyScope, ScopeKeys } from "@pe/kit/keys";
 import { chordIgnoresInputs, validateGraphChords } from "./keys";
 import { ductLossGraph } from "./projection-graph.test.fixture";
+import { z } from "zod";
 
 test.each(["Mod+Z", "Control+Z", "Command+K"])("%s remains reserved without the dead binder", chord => {
   // Mutant: remove the reserved-chord admission check with bindGraphChords.
@@ -15,6 +16,13 @@ test.each(["Mod+Z", "Control+Z", "Command+K"])("%s remains reserved without the 
     expect.objectContaining({ code: "reserved-chord", path: "panes.probe.chords.probe" }),
   ]));
 });
+
+test.each(["Alt+/", "Option+/", "Mod+Shift+.", "Ctrl+Shift+.", "Command+Shift+Period"] as const)(
+  "shell reserves %s before any route binds it", (chord) => {
+    expect(validateGraphChords({ verbs: { help: { kind: "query", review: "none", label: "Help", chord, effect: "query", input: z.object({}) } }, panes: {} }))
+      .toMatchObject([{ code: "reserved-chord", path: "verbs.help.chord" }]);
+  },
+);
 
 test.each([["E", true], ["Shift+E", true], ["Mod+Enter", false], ["Alt+T", false]] as const)(
   "%s leaves text inputs alone = %s", (chord, ignores) => {

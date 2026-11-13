@@ -12,13 +12,12 @@ import {
   type TargetResolution,
   type Machine,
 } from "@pe/agent-contracts";
-import { Check, Copy, X } from "lucide-react";
+import { X } from "lucide-react";
 import { Popover } from "@base-ui/react/popover";
 import { PopupFrame } from "@pe/kit/lang/list-popup";
 import { useAtomValue } from "@effect/atom-react";
 
 import { Button } from "@pe/kit/lang/button";
-import { useCopy } from "@pe/kit/lib/use-copy";
 import { previousOf } from "#/host/resource-state";
 import { Ladder } from "#/route/ladder";
 import { useDocumentLadder } from "#/route/situation-ladder";
@@ -28,7 +27,6 @@ import type { RouteHandle } from "#/route/handle";
 import { chatReading, type ChatHandle } from "./owner-ports";
 export type { ChatHandle } from "./owner-ports";
 
-import { SituationBand } from "#/shell/situation-band";
 import { PrimaryRouteControls } from "#/navigation/route-controls";
 import { RouteHelpButton } from "#/route/help";
 import { useThreadScope } from "#/chat/scope";
@@ -47,8 +45,6 @@ import { ComposerOpenMode } from "./composer-open";
 import { ComposerPending } from "./composer-pending";
 import { HeadLadder } from "./head-chips";
 import { emptyPrompt, type ChatDraft } from "#/workbench/prompt";
-import { usePublishSituationSignal } from "#/navigation/route-controls";
-import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 /**
  * Send, scoped to the composer draft: the one verb, whether pressed in the head or entered in the
@@ -204,77 +200,6 @@ export function useChatSituation(handle: ChatHandle) {
 }
 
 export type ChatSituation = ReturnType<typeof useChatSituation>;
-
-function ThreadIdentity({ id }: { id: string }) {
-  const { copy, copied } = useCopy();
-  return (
-    <span className="flex min-w-0 items-center gap-2" data-testid="thread-identity">
-      <TooltipHint content={id}>
-        <span className="min-w-0 truncate face-mono">{id}</span>
-      </TooltipHint>
-      <Button
-        label={copied ? "Copied thread ID" : "Copy thread ID"}
-        icon={copied ? Check : Copy}
-        onClick={() => copy(id)}
-      />
-    </span>
-  );
-}
-
-/** The global head observes the same composer owners; Send keeps its controls locally. */
-export function ChatSituationHead({
-  situation,
-  status,
-}: {
-  handle: ChatHandle;
-  situation: ChatSituation;
-  status: ComposerStatus;
-}) {
-  const { head, threadLabel, threadId } = situation;
-  const kind = status.caution
-    ? "failure"
-    : status.text === "waiting for you"
-      ? "health"
-      : status.text === "ready"
-        ? "ready"
-        : "busy";
-  usePublishSituationSignal("chat", {
-    kind,
-    tone:
-      kind === "failure"
-        ? "caution"
-        : kind === "ready"
-          ? "done"
-          : kind === "busy"
-            ? "commit"
-            : "caution",
-    title: `Pea · ${status.text}${status.detail ? ` · ${status.detail}` : ""}`,
-    stamp: `${threadLabel}|${kind}|${head.revision}|${head.stale}|${status.detail ?? ""}`,
-  });
-  return (
-    <SituationBand
-      label="Pea Situation"
-      name="Pea"
-      context={
-        <>
-          <span>
-            {threadId && threadLabel === threadId ? "Untitled thread" : threadLabel || "New thread"}
-          </span>
-          {threadId && <ThreadIdentity key={threadId} id={threadId} />}
-          <span>
-            {head.targets.length
-              ? (situation.ladder.docWord ?? targetLabel({ head }))
-              : "no target"}
-          </span>
-          {/* I6: a word, not a sentence; the composer's own controls show the wait. */}
-          <span>{head.stale ? `${status.text} · stale` : status.text}</span>
-        </>
-      }
-      alerts={status.detail && <span data-tone="caution">{status.detail}</span>}
-      verbs={[]}
-    />
-  );
-}
 
 /** Lamp · gauge · help · theme for Chat — it rides the thread head, not the composer. */
 export function ChatCluster(_props: { handle: ChatHandle; situation: ChatSituation }) {
