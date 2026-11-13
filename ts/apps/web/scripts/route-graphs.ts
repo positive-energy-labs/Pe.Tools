@@ -83,6 +83,7 @@ const checkout = fileURLToPath(new URL("../../../../", import.meta.url));
 const sourceHashBefore = check || closureOnly ? undefined : routeStartupSourceHash(checkout);
 async function emit(destination: URL, text: string) {
   const closure = destination.pathname.endsWith("/source-closure.generated.json");
+  if (closureOnly && !closure) return;
   projections[fileURLToPath(destination)] = text;
   if (runtime) return;
   if (check) {

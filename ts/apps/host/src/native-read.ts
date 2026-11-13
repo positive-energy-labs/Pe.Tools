@@ -9,7 +9,7 @@ import { prepareRead } from "../../../packages/host-internal/src/read-admission.
 import { gatewayTarget } from "./gateway-catalog.ts";
 import { admitNativeCaller, admitted, readRefusal as refusal } from "./native-read-policy.ts";
 import { NativeReads } from "./native-reads.ts";
-import { ReadFreshness, readSchemas } from "./request-services.ts";
+import { ReadFreshness, readSchemas, RequestIdentity } from "./request-services.ts";
 import { SdkSession } from "./sdk-session.ts";
 
 export const HostNativeReadLive = Layer.effect(
@@ -68,7 +68,8 @@ export const HostNativeReadLive = Layer.effect(
         ),
       read: (request) =>
         admit(request).pipe(
-          Effect.flatMap(({ prepared, session }) => reads.join(prepared, session)),
+          Effect.flatMap(({ prepared, session }) => Effect.flatMap(RequestIdentity,
+            (identity) => reads.join(prepared, session, identity))),
         ),
     };
   }),

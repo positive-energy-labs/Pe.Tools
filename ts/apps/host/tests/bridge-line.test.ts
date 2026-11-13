@@ -8,7 +8,14 @@ import { CANCEL_OPERATION_KEY, RevitBridgeLive, RevitProcessAlive } from "../src
 import { connectTestBridge } from "./bridge-fixture.ts";
 import { ActionJournalService } from "../src/receipt-services.ts";
 import type { ActionJournal } from "../src/action-journal.ts";
-import { effectTest } from "./effect-test.ts";
+import { effectTest, journalAt } from "./effect-test.ts";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { actionReceiptSchema } from "@pe/agent-contracts";
+import { noticeRows } from "../src/notice-feed.ts";
+import { readNativeReceipt } from "../src/native-receipts.ts";
+import { originalProcess, sdkEnvelope } from "./native-receipt-fixture.ts";
 
 // The session line's law (ADR 0029 phase 3b; a PROVEN 7.6 GB regression class lives behind it):
 // interrupting a waiter removes it and nothing else; op.cancel never takes a place in the line;
@@ -405,6 +412,51 @@ const terminal = (requestId: string, outcome = "Succeeded") => ({
 });
 const terminalFrame = (requestId: string, outcome?: string) =>
   JSON.stringify({ kind: "Terminal", terminal: terminal(requestId, outcome) });
+
+effectTest("socket killed during focused capture recovers restoreFailed and one notice", () =>
+  Effect.gen(function* () {
+    const directory = yield* Effect.promise(() => mkdtemp(join(tmpdir(), "pe-focused-socket-")));
+    const journal = journalAt(join(directory, "receipts.jsonl"), Date.now);
+    yield* Effect.addFinalizer(() => Effect.promise(async () => {
+      await journal.close();
+      await rm(directory, { recursive: true, force: true });
+    }));
+    const { call, sent, close, socketOf } = yield* harness.pipe(Effect.provideService(ActionJournalService, journal));
+    let terminalTouched: unknown;
+    const release = bindActionDispatch("focused-socket", {
+      refusal: () => null, validate: async () => null, dispatched: async () => {},
+      terminal: async (touched) => { terminalTouched = touched; },
+    });
+    yield* Effect.addFinalizer(() => Effect.sync(release));
+    const capture = yield* call("revit.context.view-image", { focus: { elementIds: [42] } }, "focused-socket");
+    const request = yield* sent;
+    yield* close;
+    const touched = { kind: "restoreFailed", views: [{
+      view: { documentKey: "model", uniqueId: "focus-view", id: 42 }, left: ["crop"],
+    }] };
+    yield* socketOf(inFlight({ terminals: [{ ...terminal(request.requestId), touched }] }));
+    yield* Fiber.await(capture);
+    expect(terminalTouched).toEqual(touched);
+    const recovered = yield* Effect.promise(() => readNativeReceipt({
+      id: request.requestId, key: request.operationKey, kind: "native", input: {},
+      state: "unknown", error: "socket lost", status: 503,
+    }, originalProcess, async () => sdkEnvelope({
+      requestId: request.requestId, state: "ok",
+      receipt: { ...originalProcess, requestId: request.requestId, key: request.operationKey, verdict: "ok" },
+      response: { payload: { image: "focus.png" }, touched },
+    })));
+    expect(recovered.step).toMatchObject({ state: "succeeded", touched });
+    const action = actionReceiptSchema.parse({
+      id: "focused-capture", key: request.operationKey, state: "succeeded", result: {},
+      caller: { kind: "human", via: "local" }, basis: null, target: { kind: "host" },
+      input: {}, steps: [recovered.step], prepared: { state: "ready", value: null },
+      recovery: [], startedAt: "2026-11-12T00:00:00Z",
+    });
+    expect(noticeRows({ threads: [], works: [], machine: null, stored: [], held: [],
+      receipts: [{ revision: 1, action }] }, 0))
+      .toMatchObject([{ key: `native:${request.requestId}`, verb: "restoreFailed" }]);
+  }),
+);
 
 effectTest("a failed dispatch journal mark stays typed and holds B until A Terminal", () =>
   Effect.gen(function* () {

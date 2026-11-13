@@ -18,7 +18,7 @@ import { Context, Effect, Layer, Option, PubSub, Ref, Schema } from "effect";
 import type { HttpServerRequest, HttpServerResponse } from "effect/http";
 import { Socket } from "effect/socket";
 import { HttpServerResponse as Response } from "effect/http";
-import { dispatchRefusal, markDispatched, validateDispatch } from "./action-dispatch.ts";
+import { dispatchRefusal, markDispatched, validateDispatch, recordNativeTerminal } from "./action-dispatch.ts";
 import { ActionJournalService } from "./receipt-services.ts";
 import { receiptProducerSchema, type DocumentRef, type ReceiptProducer } from "@pe/agent-contracts";
 import { runtimeOwnerRejection } from "@pe/host-contracts/service-identity";
@@ -499,8 +499,11 @@ export const RevitBridgeLive = Layer.effect(
             });
             // Re-adoption: a request inFlight lists is still held, because the carried-over session
             // keeps it dispatched and its worker reconciling. Only replayed terminals act here.
-            for (const terminal of inFlight?.terminals ?? [])
+            for (const terminal of inFlight?.terminals ?? []) {
+              if ((yield* Ref.get(session.requests)).has(terminal.requestId))
+                yield* Effect.promise(() => recordNativeTerminal(terminal.requestId, terminal.touched));
               yield* settleTerminal(session, terminal);
+            }
             return;
           }
           case "Terminal": {
@@ -509,7 +512,12 @@ export const RevitBridgeLive = Layer.effect(
               return;
             }
             // Like a Response, it is matched by request id from any socket of the session.
-            if (session) yield* settleTerminal(session, frame.terminal);
+            if (session) {
+              const terminal = frame.terminal;
+              if ((yield* Ref.get(session.requests)).has(terminal.requestId))
+                yield* Effect.promise(() => recordNativeTerminal(terminal.requestId, terminal.touched));
+              yield* settleTerminal(session, terminal);
+            }
             return;
           }
           case "StateSync":
@@ -539,8 +547,12 @@ export const RevitBridgeLive = Layer.effect(
             }
             // Matched by request id from any socket of the session: a late answer from a replaced
             // socket settles its request instead of being dropped as unknown.
-            if (session && connection)
+            if (session && connection) {
+              const response = frame.response;
+              if ((yield* Ref.get(session.requests)).has(response.requestId))
+                yield* Effect.promise(() => recordNativeTerminal(response.requestId, response.touched, response.evidenceJson));
               yield* completeBridgeRequest(session.requests, frame.response, connection.epoch);
+            }
             return;
           }
           case "Event": {

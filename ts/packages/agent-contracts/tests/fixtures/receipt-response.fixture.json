@@ -59,6 +59,47 @@
     "statusCode": 499,
     "outcome": "CancelledMidEffect"
   },
+  "failed-lost-response": {
+    "touched": { "kind": "unknown", "reason": "lost-response" },
+    "error": "socket lost",
+    "statusCode": 503
+  },
+  "failed-process-exit": {
+    "touched": { "kind": "unknown", "reason": "process-exit" },
+    "error": "process ended",
+    "statusCode": 503
+  },
+  "ok-evidence-null-revision": {
+    "payload": null,
+    "touched": { "kind": "none" },
+    "evidence": { "documentKey": "doc-a", "revision": null }
+  },
+  "refused-missing-payload": { "touched": { "kind": "none" } },
+  "refused-success-unauthorized": {
+    "payload": null,
+    "touched": { "kind": "unauthorized", "transactions": [], "added": 0, "modified": 1, "deleted": 0 }
+  },
+  "refused-failure-extra-field": {
+    "error": "failed", "statusCode": 500, "touched": { "kind": "none" }, "extra": true
+  },
+  "refused-negative-count": {
+    "payload": null,
+    "touched": { "kind": "wrote", "transactions": [], "added": -1, "modified": 0, "deleted": 0 }
+  },
+  "refused-negative-modified": {
+    "payload": null,
+    "touched": { "kind": "wrote", "transactions": [], "added": 0, "modified": -1, "deleted": 0 }
+  },
+  "refused-negative-deleted": {
+    "payload": null,
+    "touched": { "kind": "wrote", "transactions": [], "added": 0, "modified": 0, "deleted": -1 }
+  },
+  "refused-failure-no-status": {
+    "error": "failed", "touched": { "kind": "none" }
+  },
+  "refused-restoreFailed-no-view": {
+    "payload": null, "touched": { "kind": "restoreFailed", "views": [] }
+  },
   "failed-posted-command": {
     "touched": { "kind": "unknown", "reason": "posted-command" },
     "error": "refused",
