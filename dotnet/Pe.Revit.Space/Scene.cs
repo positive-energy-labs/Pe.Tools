@@ -155,7 +155,10 @@ public static class Scene {
         T Timed<T>(string phase, Func<T> work) {
             var start = System.Diagnostics.Stopwatch.GetTimestamp();
             try { return work(); }
-            finally { phases[phase] = phases.GetValueOrDefault(phase) + System.Diagnostics.Stopwatch.GetElapsedTime(start).TotalMilliseconds; }
+            finally {
+                phases[phase] = phases.GetValueOrDefault(phase)
+                    + (System.Diagnostics.Stopwatch.GetTimestamp() - start) * (1000.0 / System.Diagnostics.Stopwatch.Frequency);
+            }
         }
         var levels = Timed("levels", () => Levels.Read(document, cancellationToken));
         var world = SpaceWorld.SceneSources(document);

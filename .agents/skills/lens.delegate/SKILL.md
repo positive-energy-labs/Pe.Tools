@@ -17,13 +17,15 @@ prevents: "context rot: one session carrying everything, the main agent building
 - Every brief names the evidence set the thread will read. Threads whose readings will be compared get non-overlapping evidence. Identical evidence means one thread, not two.
 - A brief points at committed text. A plan that lives only in a dirty tree is committed before the first thread reads it, because two copies drift and the second writer overwrites the first.
 - A fresh reader gets the product spec and the public surface an outsider would have, and nothing from the plan, the run directory, or their vocabulary. The brief carries no author's position. The reader is sealed from the parent as well as from peers, and the threads that built the work answer as witnesses afterward, never as first readers. A rep translates the reading into the plan's words afterward. A reader who holds the plan tests conformance, not freshness, and a new branch in the same conversation is not a fresh reader.
-- Every brief names two modes, and the owner confirms the stance table (role, model, effort, both modes) before the first launch. A change is the owner's. The cost mode: mixture (the default: top-level threads on the strongest tier, children on the cheapest fit, spread across providers for a second reading), indulgent (no meter gating, the strongest tier for any child doing judgment) or conserve (meter-gated, cheap children, a second provider only for census). The knowledge mode: continuation (a primed thread finishes known work), cold (a new thread with no prior conclusions) or rebuttal (a primed thread is handed a sealed claim to break).
+- Every brief names two modes, and the owner confirms the stance table (role, tier, model, effort, both modes) before the first launch. Build the table from the tier file and a fresh meter reading, with each model's used share and reset time beside it, so the owner corrects a computed table and never dictates one from memory. A change is the owner's. The cost mode: mixture (the default: standing roles on the partner tier, children on the cheapest tier that fits, spread across providers for a second reading), indulgent (no meter gating, the taste tier for any child doing judgment that writes no code) or conserve (meter-gated, cheap children, a second provider only for census). The knowledge mode: continuation (a primed thread finishes known work), cold (a new thread with no prior conclusions) or rebuttal (a primed thread is handed a sealed claim to break).
+- A brief that an agent writes never changes a charter's gates or wakes. It may add scope, files and limits. Only the owner changes a gate or a wake, as a ruling quoted in the owner's words. A thread whose brief changes one with no quoted ruling keeps to its charter and says so in its reply.
+- Every brief carries one estimate line: writer-hours or wall-hours, never days, with the measured rate it came from (lines per writer-hour for this kind of slice, the last suite's minutes, the median fix round). An estimate with no measured rate says so.
 - Every brief asks what can be removed or reused, and names the preserved consumers and trust boundaries. The receipt reports expected and actual complexity deltas as gauges, never as targets.
 - A fan-out that will delete or fix many things starts with a census, as `purge` defines it.
 - Make the shared base once (research, fixture, scaffold) and hand it to every thread.
-- Send one question per message, because a thread asked four questions returns one averaged answer. Send the follow-up to the same thread.
+- Send one question per message, because a thread asked four questions returns one averaged answer. Send the follow-up to the same thread, unless the tier file's rule for that thread's model says to start a fresh one.
 - Reuse before you re-brief. A thread that just read the terrain is primed, so send it the next question instead of paying a new thread to read the same files.
-- A scheduled wake from the harness carries the checkpoint cadence and the time-box alarm. An agent never counts its own runs. A keepalive fires a fixed time after the thread's last run ends, inside the prompt cache's lifetime, and never while the thread runs. A thread arms it once at launch and never re-arms it; `execute` names the tool. An interval wake fires whether or not the thread was active, so it carries a checkpoint or an alarm, never a keepalive.
+- A scheduled wake from the harness carries the checkpoint cadence and the time-box alarm where the harness has one, and `execute` says what stands in where it has none. An agent never counts its own runs. A keepalive fires a fixed time after the thread's last run ends, inside the prompt cache's lifetime, and never while the thread runs. A thread arms it once at launch and never re-arms it; `execute` names the tool. An interval wake fires whether or not the thread was active, so it carries a checkpoint or an alarm, never a keepalive.
 - Research threads read primary sources only (official docs, source, specs), give one citation per claim, and file findings where `docs` says. Clone third-party source locally and sync it before reading, because grep beats the web.
 
 ## Replies
@@ -59,8 +61,8 @@ The second says what the owner needs:
 
 ## Running threads
 
-- Forward a child's message in your own plain words, never verbatim, because run-together text is a measured habit of one model family in agent-to-agent messages and it passes from a parent brief to its children (the Models section names it).
-- An autonomous thread never blocks on a human. It puts a question in a message to its parent or in its reply, continues on a stated default, and names that default where the answer will land.
+- Forward a child's message in your own plain words, never verbatim, because run-together text is a measured habit of one model family in agent-to-agent messages and it passes from a parent brief to its children (the tier file names it).
+- An autonomous thread never blocks on a human, apart from the two agreements a run starts with, the stance table and the plan, and a proof only the owner can make at its end. A run is parked when everything left needs the owner, with no fix, check, review or move of main that a thread could still do: it reports those rows, every thread stops what it holds, and the owner's message is the wake. It puts a question in a message to its parent or in its reply, continues on a stated default, and names that default where the answer will land.
 - A thread that waits names what will wake it: a background job that notifies, a schedule, or a message it asked for. A thread idle on something nobody will deliver is stalled, whatever it last reported.
 - Rule on a thread's newest state. Before a ruling, open the thread's last message and its newest artifact, not the one you remember.
 - Write a ruling that changes a gate or another thread's limits into the document that thread reads, in the same hour, because a thread can only obey a ruling it can read.
@@ -81,45 +83,48 @@ The second says what the owner needs:
 
 ## Writing and landing
 
-- A writing thread delivers a branch cut from the integrator's tip. The integrator merges it and reuses the child's stamp at that SHA, re-running only what a conflict touched. Never cherry-pick a child's work, because a cherry-pick re-authors it, hides its conflicts and erases who did it. A thread that wants to be measured works on a branch, because work committed straight to main cannot be attributed.
+- A writing thread delivers a branch cut from its parent's tip. The parent merges it and reuses the child's test result at that SHA, re-running only what a conflict touched. That result admits the branch to the merge and proves no row: in a run with a driver, only the driver stamps a proof row. Never cherry-pick a child's work, because a cherry-pick re-authors it, hides its conflicts and erases who did it. A thread that wants to be measured works on a branch, because work committed straight to main cannot be attributed.
 - Assign one writer per coupled production decision, even across files. Independent writers need settled contracts and separate seams.
 - Give each writing thread its own tree. If two threads edit one checkout, pin every claim to a commit, and discard any proof taken while the other thread was mid-write.
 - Authorship runs in parallel by default: every disjoint seam gets its writer at once, and only landing is ordered. A serial plan names the collision that forces it. Heavy proof (a full suite, a build, a native session, a host with a browser) is admitted by the machine reading `execute` names, never by a count of threads.
 - Sequence by collision, not by topic. Partition by production seam ownership and let tests follow their seam, because two threads that both need one production seam pay a merge tax instead of running in parallel. Give each thread a disjoint file set and name it in the brief. Write a shared contract that two threads code against into both briefs, verbatim.
 - A thread that measures a running surface works alone, because any thread that saves a file reloads the server under it and voids the reading.
-- A run has one gate, its end: one drive of the final tip, where every slice's falsifier holds and every defect is fixed or ruled Owed by the owner. A final tip that differs from the driven SHA only in files the drive cannot observe carries the stamp, and the handoff names that diff. Until the end, main takes the integration tip whenever its full suite is green, so the owner always runs the newest landed work, and every drive and panel trails that tip as feedback. A file in that suite counts red only after it also fails when run alone; a file that fails only under load is a performance finding for the tail child and holds nothing. A gate per slice or per wave holds every proven slice behind the slowest one, so remove such a gate instead of resizing it.
-- The integration branch has no routine gate. A slice merges into it when its writer's typecheck and touched tests pass. Review and driving trail the merged tip, and ordinary findings become a fix thread or an Owed line. Suspected data loss, consent errors, wrong-document mutation, or a broken contract that invalidates downstream work pauses only the affected operation or dependency until the smallest credible check resolves it. Independent work continues; a red count or an unfinished review alone never holds the wave.
-- Slices merge in waves. A wave is the set of slices whose writers run at once and that share one drive of their merged tip. The integrator names the waves, the critical-path slice and each slice's expected hours before the fan-out, so a slice that will wait on another is known up front.
-- A writing child proves with typecheck and the tests its diff touches. It runs no full suite and no mutants, because the code under it is still churning. Broad checkpoints follow the coupling and risk of the merged work, as `prove` defines, rather than every slice or wave. Their reds go to one tail child while independent work continues. Only a tip that main takes must have a green full suite.
-- A writing child's report carries its commit SHA and the output of its last test run. The integrator sends back a report that lacks either one, because a child that ended its turn with tests still running has proven nothing.
+- A run has one gate, its end: every proof row the map declares holds a PROVEN stamp that the final tip carries or is ruled Owed by the owner, and every defect is fixed or ruled Owed by the owner. A row is a slice's falsifier or a critical journey, driven at an exact SHA, and it names the paths it observes, each a file or a directory. A later tip carries a row's stamp when the diff between the two touches none of those paths, and the handoff names that diff. A row that names no paths is voided by every tip. Until the end, main takes the integration tip whenever its full suite is green, so the owner always runs the newest landed work, and every drive and panel trails that tip as feedback. A file in that suite counts red only after it also fails when run alone; a file that fails only under load is a performance finding for the tail child, the implementor's one fix thread for ordinary reds, and holds nothing. A gate per slice or per wave holds every proven slice behind the slowest one, so remove such a gate instead of resizing it.
+- The integration branch has no routine gate. A slice merges into it when its writer's typecheck and touched tests pass. Review and driving trail the merged tip, and ordinary findings become a fix thread or an Owed line. Suspected data loss, consent errors, wrong-document mutation, or a broken contract that invalidates downstream work pauses only the affected operation or dependency until the smallest credible check resolves it. It pauses a move of main only when that move would ship the suspected defect. The thread that raises the hold names the operation and the SHA to the implementor and the integrator in one message. The implementor assigns the check to a thread that did not write the code, and that thread's result lifts the hold or confirms it. Independent work continues; a red count or an unfinished review alone never holds the wave.
+- Slices merge in waves. A wave is the set of slices whose writers run at once and that share one drive of their merged tip. The implementor names the waves, the critical-path slice and each slice's estimate before the fan-out, so a slice that will wait on another is known up front.
+- A child on a writer tier proves with typecheck and the tests its diff touches. It runs no full suite and no mutants, because the code under it is still churning. Broad checkpoints follow the coupling and risk of the merged work, as `prove` defines, rather than every slice or wave. The run's regressions and its load-only findings go to one tail child while independent work continues, and the integrator keeps main's own reds and what its merge broke. Only a tip that main takes must have a green full suite.
+- A writing child's report carries its commit SHA and the output of its last test run. The parent sends back a report that lacks either one, because a child that ended its turn with tests still running has proven nothing.
 - The review and the drive read the same merged tip at the same time, and neither waits for the other.
-- The purger owns broad verification at the named checkpoints and on the candidate for main. The integrator reads that run before the fast-forward. Reuse evidence until changed behavior, inputs, dependencies or conflicts invalidate it; no second thread repeats the same suite on the same tip. A guard RED excused as a flake stays owned until a rerun on a quiet machine passes.
-- Land what is proven and list the rest as Owed. A landing is gated only on its claims carrying their stamps, never on every layer being proven natively.
+- The integrator owns broad verification: the full suite on each merged tip it offers to main, and it moves main when that suite is green. Reuse evidence until changed behavior, inputs, dependencies or conflicts invalidate it; no second thread repeats the same suite or the same build on the same tip. A guard RED excused as a flake stays owned until a rerun on a quiet machine passes.
+- Land what is proven and list the rest as Owed. The run's end reads the stamps its claims carry and never asks that every layer be proven natively. A merge and a move of main read no stamp.
 
 ## Standing roles [scope: repo]
 
-Standing roles: see `.agents/roles/` (implementor, purger, driver). A charter names no model. The defaults for brevity are implementor Opus, driver Sol, purger Opus, authors Opus, and the owner confirms the stance table before the first launch, so a Sol implementor or an Opus driver is one word. A role is relaunched from its charter, relieved by handoff, and labelled by its charter name in retros. A record keeper (the former archivist) is launched only when the owner asks for one, with the retro corpus scripts as its instrument.
+Standing roles: see `.agents/roles/` (implementor, purger, driver, integrator). A charter names no model, and each role's tier is in the tier file. The owner confirms the stance table before the first launch. The partners launch at the start of a run, each from its charter. A role is relieved by handoff and labelled by its charter name in retros. A second track of work is its own root with its own queue, or it waits; it is never a partner of the implementor. A record keeper (the former archivist) is launched only when the owner asks for one, with the retro corpus scripts as its instrument.
 
 ## Models [scope: repo]
 
-gpt-6.1-sol runs words together (`AllaffectedchecksGREEN(6hist,12Work)`) in 18% of its agent-to-agent messages and 0% of its replies to the owner, so its messages are rewritten before they are forwarded (`docs/research/2026-11-09-garble-by-model.md`).
+Model guidance has one home, the tier file `.agents/models.toml`. It maps each tier to a provider, a model, an effort range and a meter scope, and it holds the rules that bind one model, the owner's bans, the facts no meter reports, and the dated observations. Skills and charters name tiers only. The check fails on a model name anywhere else in the set, so a new model is one edit to that file.
 
-Pick the cheapest model that can do the task. Judgment and unbounded work go to the model with taste. Owner bans and the day's budget come before either rule.
+The tiers:
+
+| Tier | Work |
+|---|---|
+| partner | a standing role that is woken many times over a run |
+| heady writer | a new seam, a coupled decision, judgment-heavy code |
+| slog writer | a well-specified fix round, a rename, a mechanical sweep |
+| census reader | a read-only census or a mechanical read of a record |
+| taste | design, UX and architecture opinion, the one-shot scaffold of a step; never a fill thread |
+
+Pick the cheapest tier that can do the task. Judgment-heavy code goes to the heady writer, and judgment that writes no code goes to the taste tier. Owner bans and the day's budget come before either rule.
 
 - The user's budget line for the day overrides everything here. Read both usage meters before a fan-out and at every long-run wake (`execute` names the meter). Limits are scoped per model as well as per provider, so one provider percentage misleads.
+- A wave of writers starts at the low end of its tier's effort range. Raise effort one thread at a time, and say why in that thread's brief.
+- A well-specified fix round goes to the slog writer, and a fix that reopens a coupled decision goes to the heady writer.
 - A banked reset is redeemed only on the user's rule.
-- Owner bans: Astra is never used.
-- Resolve provider and model IDs from the live tool catalog. Do not substitute Sol 6 or older Codex defaults.
+- Resolve provider and model IDs from the live tool catalog, and never substitute an older default.
 - Never rank models by speed or by surviving LOC per dollar alone. Choose the thinking effort for the task.
 - Add a second provider to a panel to get a different reading, not a better one.
-
-Observed affinity, 2026-10-26 to 11-02 (`.artifacts/runs/retro-20261102-paradigm/affinity.txt`). These are observations with uncertain task mix and attribution, not a quality ranking. A new affinity claim needs a date, N, and uncertainty.
-
-| Model | Fits | Observed |
-|---|---|---|
-| Sol 6.1 (`gpt-6.1-sol`) | implementation child, the default writing thread | 114 missions, 92% complete |
-| Opus 5.5 | root threads; UI implementation when the user names it | 42 missions, 98% complete, 60% needed a second message |
-| Fable 5.1 | taste: design, UX and architecture opinion, the one-shot scaffold of a step; never a fill thread | 17 missions, 0% needed a second message |
-| Terra (`gpt-6.1-terra`) | census and mechanical reads | 8 censuses |
+- A new observation in the tier file needs a date, N, and uncertainty.
 
 `execute` names which tool runs waited work and which runs reads.

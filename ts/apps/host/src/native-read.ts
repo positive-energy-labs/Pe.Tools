@@ -6,7 +6,7 @@
 import { Effect, Layer } from "effect";
 import { HostNativeRead, type NativeReadInput } from "@pe/host-internal/native-read";
 import { prepareRead } from "../../../packages/host-internal/src/read-admission.ts";
-import { gatewayTarget } from "./gateway-actions.ts";
+import { gatewayTarget } from "./gateway-catalog.ts";
 import { admitNativeCaller, admitted, readRefusal as refusal } from "./native-read-policy.ts";
 import { NativeReads } from "./native-reads.ts";
 import { ReadFreshness, readSchemas } from "./request-services.ts";

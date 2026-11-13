@@ -4,7 +4,6 @@ description: "Maintain or port the skill set itself: write or edit a stance, cha
 argument-hint: "What is being written, edited, or ported?"
 figure: Theseus' ship and the Ulysses contract — the set refits itself, and binds its own cold reader
 prevents: "set drift: a skill edited by feel, never run cold"
-disable-model-invocation: true
 scope: skills
 ---
 # Reflect
@@ -34,7 +33,7 @@ Exactly one loop or pass owns the route at a time. Ordinary building is not a st
 
 ## What the check asserts
 
-The set's `check.py` sits in the skills directory, and `execute` gives the command. It fails when a skill directory is not named `<kind>.<name>`, has no `SKILL.md`, or has a `name:` that differs from the directory suffix. It fails on a missing description, `figure:`, or `prevents:`, on a loop or pass with no `stop:`, and on a slot with no `scope:`. It fails when two skills claim the same trigger phrase, and when an unquoted frontmatter value holds a colon and a space, because the harness then drops the description silently. It fails on repo names, paths, or code fences in a skill that is not a slot, outside a section headed `[scope: repo]`. It fails on a `## Parlance` section, on a backticked retired skill name, and on a quoted slash command that names no skill. It fails when the client skill mirror is a copy instead of a junction, when the commit hook is not installed, and when the user-global skill directory holds anything but the harness's own bucket. The kind table in `index` and the routing table in `AGENTS.md` are projections of each skill's frontmatter, and `--fix` rewrites them along with the junction and the hook. Everything else in the set is held by review only.
+The set's `check.py` sits in the skills directory, and `execute` gives the command. The check is the list of what it asserts, and each failure names its rule, so no prose here repeats it. The kind table in `index` and the routing table in `AGENTS.md` are projections of each skill's frontmatter, and `--fix` rewrites them along with the client mirror and the git settings the set needs. Everything the check does not assert is held by review only.
 
 ## Writing a stance
 
@@ -79,7 +78,9 @@ A skill edit is level 9 on `index`'s strength ladder, the weakest. The writer an
 - Before adding a law, walk the ladder for a type, a projection, a boundary decode, or a guard that can hold the rule instead.
 - The user rules on every stance edit. In a sanctioned autonomous session, file the edit as Owed instead of landing it.
 - Run the check after any edit. A set that fails the check is not landed.
-- A fresh agent, given only the text, proves the edit by doing the intended thing.
+- A fresh agent, given only the text, proves the edit by doing the intended thing. The writer lists the acts the reader must do before the read starts, and the read passes when the reader does every one. The reader is a model of another family where one is available.
+- An edit made after a read is unread until a reader reads it. Fixes go in batches between reads, and only the reads that failed are run again.
+- A role charter is edited under these same laws.
 - A killed law moves to the ledger beside `index` with the reason it was killed.
 
 ## Porting to a new repo

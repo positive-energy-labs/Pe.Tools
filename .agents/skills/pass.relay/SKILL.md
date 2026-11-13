@@ -1,7 +1,6 @@
 ---
 name: relay
 description: Pass work to the next agent or session. Trigger on "handoff", "hand off", "next agent", "context is too long", "I'm switching sessions", "make a handoff", "pick up where you left off". Not a summary of what you learned; the next runner needs the baton, not your memoirs.
-disable-model-invocation: true
 argument-hint: "Who picks it up, from where, and what is the first thing they must do?"
 stop: baton delivered
 figure: Herald — the message to the next session
