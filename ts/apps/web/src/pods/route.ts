@@ -2,13 +2,11 @@ import type { ContextOf } from "../route/defaults";
 import { sessionCommand } from "../route/typed-actions.ts";
 import { read } from "../route/defaults";
 import { z } from "zod";
-import { memberWork, routeAddress, settingsRouteState, type Immutable } from "@pe/agent-contracts";
-import { local } from "@pe/agent-contracts/slots";
+import { memberWork, settingsRouteState, type Immutable } from "@pe/agent-contracts";
 import { valueRead } from "../../../../packages/agent-contracts/src/value.ts";
 import { field, route, split, subjectSchema } from "../route/defaults.ts";
 import { hostRead } from "../route/host-read.ts";
 import { draw } from "../route/draw.tsx";
-import { isSpecOf } from "../route/workflow.ts";
 
 import {
   podsArgs,
@@ -37,33 +35,6 @@ export const query = { runs: field(podsArgs.shape.runs, "member", "query") };
 type Page = typeof fields & typeof query;
 export type PodsContext = ContextOf<Page, typeof loaded, typeof settingsRouteState, never>;
 export type PodsRosterContext = ContextOf<Page, typeof inventory, typeof settingsRouteState, never>;
-type Value = z.output<typeof podsValue>;
-
-/** RFC 6901: a top-level key as a JSON Pointer. */
-const pointer = (key: string) => `/${key.replaceAll("~", "~0").replaceAll("/", "~1")}`;
-const objectOf = (text: string | undefined): Record<string, unknown> | null => {
-  try {
-    const parsed: unknown = JSON.parse((text ?? "").replace(/^﻿/, ""));
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : null;
-  } catch {
-    return null;
-  }
-};
-const keyOf = (row: string) => row.slice(1).replaceAll("~1", "/").replaceAll("~0", "~");
-/**
- * Save writes every staged edit (`settingsCandidate`), and a cell shows only a value staged at its
- * own top-level key. The rest, staged by /family or Pea, are named: an edit beneath a key, the root
- * edit (raw text for the whole file) and a delete. `under` keeps the ones beneath one row.
- */
-const hidden = (read: Value, under?: string) =>
-  Object.entries(read.work?.fields ?? {})
-    .filter(([at, cell]) => cell.edit && (under === undefined
-      ? at === "" || at.indexOf("/", 1) > 0 || cell.edit.delete
-      : at.startsWith(`${under}/`)))
-    .map(([at, cell]) => at === "" ? "the whole file as raw text" : cell.edit!.delete ? `delete ${at}` : at);
-/** The member's own scope only: a read for another member is never drawn as this one's. */
-const current = (read: Value) => read.scope.pod && read.member ? read : null;
-
 export const module = route({
   key: "pods",
   name: "Pods",
@@ -105,53 +76,8 @@ export const module = route({
     const ref = member(ctx.page.read());
     return ref ? `${ref.pod} · ${ref.path}` : null;
   },
-  /*
-   * The member's Work as `local` bindings (ADR 0035 rule 3): one draft cell per top-level property, at
-   * its JSON Pointer in the Work's `fields`; the saved bytes are the layer under it. A run reads the
-   * saved file, so these cells never reach Revit and the sheet has no write verb; Save is the route's.
-   */
-  sheet: {
-    draft: true,
-    bindings: {
-      fields: local({ kind: "json", reason: "Pod member properties are arbitrary authored JSON" }, "subject", {
-        rows: (read: Value) => Object.keys((current(read) && objectOf(read.draft)) ?? {}).map(pointer),
-        rowLabel: (_read: Value, row: string) => keyOf(row),
-        model: (read: Value, row: string | undefined) => {
-          const saved = objectOf(read.member?.content);
-          const beneath = row === undefined ? [] : hidden(read, row);
-          return {
-            ...(beneath.length ? { note: `Save also writes beneath this key: ${beneath.join(", ")}` } : {}),
-            value: row === undefined || !saved ? null : (saved[keyOf(row)] ?? null),
-            ref: "saved file",
-            ...(read.work?.basis ? {} : { refusal: "Open saved bytes before editing: this Work has no saved basis" }),
-          };
-        },
-      }),
-    },
-    empty: (read: Value | null) => {
-      const ref = read?.scope;
-      if (!ref?.pod || !ref.path) return "Pick a member on the left to edit its Work";
-      if (!ref.path.endsWith(".json")) return `${ref.path} is source, not a JSON spec; pick a .json member`;
-      if (!read?.member) return `Reading ${ref.pod} · ${ref.path}`;
-      return objectOf(read.draft) ? null : "The draft is not a JSON object; Pea can repair it as raw text";
-    },
-    note: (read: Value) => {
-      const edits = current(read) ? hidden(read) : [];
-      return edits.length ? `Save also writes staged edits these cells do not show: ${edits.join(", ")}` : null;
-    },
-    from: (read: Value, search) =>
-      read.member && isSpecOf(read.schemaRef, "/schemas/settings/FamilyFoundry/models.json")
-        ? {
-            says: "Open in Family",
-            href: routeAddress("family").link({
-              stage: "apply",
-              member: { kind: "ids", ids: [podMemberCode({ pod: read.scope.pod, path: read.scope.path })] },
-              ...(typeof search.thread === "string" ? { thread: search.thread } : {}),
-            }),
-          }
-        : null,
-  },
   panes: {
+    sheet: { title: "Member fields", purpose: "Edit the member’s arbitrary JSON over its saved bytes", body: "scroll", draw: draw("scroll", () => import("./fields.tsx"), "MemberFields") },
     members: {
       subjectList: true,
       title: "Members",

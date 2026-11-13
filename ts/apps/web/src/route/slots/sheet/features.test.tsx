@@ -45,7 +45,7 @@ test("model value from the read: a binding reads its row's model value out of th
 
 test("choice kind with options from the read: a binding offers the read's options for its row", () => {
   const slot = { bindings: {
-    fanStatic: local({ kind: "enum", shape: z.string(), choices: (read: { esp: string[] }) => read.esp.map((p) => ({ key: p, label: p })) }),
+    fanStatic: local({ kind: "enum", shape: z.string(), choices: (read: { esp: string[] }) => read.esp.map((p) => ({ value: p, label: p })) }),
   } };
   const [cell] = sheetCells(slot, { rows: [], work: {}, model: [], read: { esp: ["ESP", "PE_ESP"] } });
   expect(cell!.choices?.map((c) => c.key)).toEqual(["ESP", "PE_ESP"]);
@@ -213,8 +213,8 @@ test("an options domain uses its native handle and retains an unavailable stored
     expect(reading).toHaveBeenCalledWith(ctx.target.ref, "parameter-identities", {});
     fireEvent.click(screen.getByRole("button", { name: "Slot options" }));
     expect(await screen.findByText("Fixture flow")).toBeTruthy();
-    expect(screen.getByText("Missing flow (unavailable)")).toBeTruthy();
+    expect(screen.getByRole("option", { name: "Missing flow (unavailable)" }).getAttribute("aria-disabled")).toBe("true");
     fireEvent.click(screen.getByRole("option", { name: /Fixture flow/ }));
-    await vi.waitFor(() => expect(stage).toHaveBeenCalledWith("Fixture flow"));
+    await vi.waitFor(() => expect(stage).toHaveBeenCalledWith("Fixture flow", undefined));
   } finally { reading.mockRestore(); }
 });

@@ -6,25 +6,19 @@ type OptionsRequest = OpRequestOf<"revit.catalog.field-options">;
 export type OptionsDomain = { kind: "options"; handle: ReturnType<typeof native<"revit.catalog.field-options">>; input: OptionsRequest | ((read: unknown) => OptionsRequest); persist: "value" | "label"; mode: "constraint" | "suggestion" };
 
 export type NumberDomain = { kind: "number"; unit?: string; min?: number; exclusiveMin?: number; max?: number; digits?: number };
-export type Choice = { key: string; label: string; value?: unknown; description?: string; disabled?: string; clear?: true };
+export type EnumChoice = { value: unknown; label: string; description?: string; disabled?: string };
 export type Domain =
   | NumberDomain
-  | { kind: "enum"; shape: z.ZodType; choices: readonly Choice[] | ((read: any, row?: string) => readonly Choice[]) }
+  | { kind: "enum"; shape: z.ZodType; choices: readonly EnumChoice[] | ((read: any, row?: string) => readonly EnumChoice[]) }
   | OptionsDomain
-  | { kind: "object"; fields: Readonly<Record<string, Domain>> }
-  | { kind: "derived" }
-  | { kind: "json"; reason: string };
-export type Home =
-  | { at: "parameter"; parameter: string }
-  | { at: "store"; store: string }
-  | { at: "local" }
-  | { at: "setting"; owner: string; path: readonly string[]; tiers: readonly SettingTier[] };
+  | { kind: "object"; fields: Readonly<Record<string, Domain>> };
+export type Home = z.output<typeof homeSchema>;
 
 export type DomainValue<D extends Domain> = D extends NumberDomain ? number
   : D extends { kind: "enum"; shape: z.ZodType<infer V> } ? V
   : D extends { kind: "options" } ? string
   : D extends { kind: "object"; fields: infer F extends Record<string, Domain> } ? { [K in keyof F]: DomainValue<F[K]> }
-  : D extends { kind: "derived" } ? never : z.output<ReturnType<typeof z.json>>;
+  : never;
 /** Decode is independent of the choices a current read happens to offer. */
 export function schemaOf<const D extends Domain>(domain: D): z.ZodType<DomainValue<D>>;
 export function schemaOf(domain: Domain): z.ZodType {
@@ -39,8 +33,6 @@ export function schemaOf(domain: Domain): z.ZodType {
     case "enum": return domain.shape;
     case "options": return z.string().min(1);
     case "object": return z.strictObject(Object.fromEntries(Object.entries(domain.fields).map(([key, field]) => [key, schemaOf(field)])));
-    case "json": return z.json();
-    case "derived": return z.never();
   }
 }
 
@@ -48,7 +40,7 @@ export function schemaOf(domain: Domain): z.ZodType {
  * The sheet slot (ADR 0035 rules 1 and 3; ADR 0030 rules 4, 6 and 8). A route fills it with data:
  * bindings keyed by cell name. The kernel draws one StateCell per binding per row, stages through
  * the one Work write path, and reaches Revit through one plan/apply pair (`SHEET_COMMANDS`).
- * Owner: slice 7. Scaffold: types and the closed kinds only.
+ * Value domains derive decoding; homes declare where an edit belongs.
  */
 
 export type BindingPer = "subject" | "route";
@@ -81,7 +73,11 @@ export interface BindingDraw<R = any> {
   readonly model?: (read: R, row: string | undefined) => CellLayer | null | undefined;
 }
 
-export type SheetBinding = BindingDraw & { readonly domain: Domain; readonly home: Home; readonly per: BindingPer };
+export type SheetBinding = BindingDraw & { readonly domain: Domain } & (
+  | { readonly home: Extract<Home, { at: "parameter" }>; readonly per: "subject" }
+  | { readonly home: Extract<Home, { at: "setting" }>; readonly per: "route" }
+  | { readonly home: Extract<Home, { at: "store" | "local" }>; readonly per: BindingPer }
+);
 export const parameter = (parameter: string, domain: Domain, draw?: BindingDraw): SheetBinding =>
   ({ ...draw, domain, home: { at: "parameter", parameter }, per: "subject" });
 export const store = (store: string, domain: Domain, per: BindingPer = "subject", draw?: BindingDraw): SheetBinding =>
@@ -152,16 +148,13 @@ export const SHEET_COMMANDS = { plan: "sheet.plan", apply: "sheet.apply" } as co
 /** Enum schemas travel as JSON Schema; callbacks and read bodies stay local. */
 export type DomainData = NumberDomain
   | { kind: "enum"; shape: Record<string, unknown> }
-  | { kind: "options"; handle: string; input?: Record<string, unknown>; persist: "value" | "label"; mode: "constraint" | "suggestion" }
-  | { kind: "object"; fields: Record<string, DomainData> }
-  | { kind: "derived" } | { kind: "json"; reason: string };
+  | { kind: "options"; handle: "revit.catalog.field-options"; input?: Record<string, unknown>; persist: "value" | "label"; mode: "constraint" | "suggestion" }
+  | { kind: "object"; fields: Record<string, DomainData> };
 export const domainDataSchema: z.ZodType<DomainData> = z.lazy(() => z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("number"), unit: z.string().optional(), min: z.number().optional(), exclusiveMin: z.number().optional(), max: z.number().optional(), digits: z.number().int().nonnegative().optional() }),
   z.strictObject({ kind: z.literal("enum"), shape: z.record(z.string(), z.unknown()) }),
-  z.strictObject({ kind: z.literal("options"), handle: z.string(), input: z.record(z.string(), z.unknown()).optional(), persist: z.enum(["value", "label"]), mode: z.enum(["constraint", "suggestion"]) }),
+  z.strictObject({ kind: z.literal("options"), handle: z.literal("revit.catalog.field-options"), input: z.record(z.string(), z.unknown()).optional(), persist: z.enum(["value", "label"]), mode: z.enum(["constraint", "suggestion"]) }),
   z.strictObject({ kind: z.literal("object"), fields: z.record(z.string(), domainDataSchema) }),
-  z.strictObject({ kind: z.literal("derived") }),
-  z.strictObject({ kind: z.literal("json"), reason: z.string().min(1) }),
 ]));
 export const homeSchema = z.discriminatedUnion("at", [
   z.strictObject({ at: z.literal("parameter"), parameter: z.string().min(1) }),
@@ -174,7 +167,7 @@ export const sheetSlotDataSchema = z.strictObject({
   bindings: z.record(z.string(), z.strictObject({
     home: homeSchema, domain: domainDataSchema, per: z.enum(["subject", "route"]),
     label: z.string().optional(), default: z.unknown().optional(),
-  })),
+  }).refine(b => b.home.at === "parameter" ? b.per === "subject" : b.home.at === "setting" ? b.per === "route" : true, "This home does not admit that row cardinality")),
 });
 export type SheetSlotData = z.output<typeof sheetSlotDataSchema>;
 const domainData = (domain: Domain): DomainData => {

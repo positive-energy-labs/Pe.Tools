@@ -132,7 +132,7 @@ describe("kernel gaps", () => {
   });
   test("kernel slot: parameter-binding (4)", () => {
     // The slot's data projection (sheetSlotDataSchema) keys bindings under `bindings`.
-    expect(module.data).toMatchObject({ sheet: { bindings: { chosen: { kind: "parameter", parameter: "Diameter" } } } });
+    expect(module.data).toMatchObject({ sheet: { bindings: { chosen: { home: { at: "parameter", parameter: "Diameter" }, domain: { kind: "number" } } } } });
   });
   test.fails("kernel gap: subjectref-codec (4)", async () => {
     // chosen is keyed by a raw UniqueId string; no SubjectRef codec exists to key it by.

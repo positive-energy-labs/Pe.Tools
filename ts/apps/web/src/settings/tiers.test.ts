@@ -311,7 +311,6 @@ test("an unregistered owner is invalid even before a home can be resolved", () =
   expect(writeSettingTier({ owner: "not-declared", tier: "firm", path: ["x"], value: 1, expectedSha256: null }, { pointer }))
     .toMatchObject({ ok: false, status: 422 });
 });
-test("an owner cannot write an undeclared tier or a path prefix", () => {
-  for (const [tier, path] of [["user", ["designFriction"]], ["project", ["criteria"]]] as const)
-    expect(writeSettingTier({ owner: "ducts", tier, path, value: null, expectedSha256: null }, { pointer })).toMatchObject({ ok: false, status: 422 });
+test.each([["user", ["designFriction"]], ["project", ["criteria"]]] as const)("an owner cannot write undeclared tier/path %s %j", (tier, path) => {
+  expect(writeSettingTier({ owner: "ducts", tier, path, value: null, expectedSha256: null }, { pointer })).toMatchObject({ ok: false, status: 422 });
 });

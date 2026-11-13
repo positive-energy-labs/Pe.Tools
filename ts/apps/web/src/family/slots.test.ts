@@ -1,3 +1,4 @@
+import { z } from "zod";
 /**
  * Slice 10 falsifier for /family (routes MAP row 10, ADR 0035 rules 1, 2 and 8): the family is the
  * subject (a `name` SubjectRef over its saved member, `[pod, path]`), the table's search, sort,
@@ -119,7 +120,7 @@ test("the hand member list and the pod/path identity pair are deleted", () => {
  * /family declares its sheet and the table and its codecs go.
  */
 test.fails("kernel gap: cited-cell (10)", () => {
-  const slot = { draft: true as const, bindings: { cells: local({ kind: "json", reason: "Family parameter fixture" }, "subject", { rows: () => ["/types/Wide/Width"] }) } };
+  const slot = { draft: true as const, bindings: { cells: local({ kind: "enum", shape: z.string(), choices: [] }, "subject", { rows: () => ["/types/Wide/Width"] }) } };
   const work = { cells: { "/types/Wide/Width": { edit: { value: "40in", by: "pea", sources: [{ blockId: "p2-b7" }] } } } };
   const [cell] = sheetCells(slot, { rows: [], work, model: [], read: {} });
   expect(cell).toMatchObject({ value: "40in", pending: { by: "pea" } });

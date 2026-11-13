@@ -1,7 +1,8 @@
+import type { HandleCellProps } from "@pe/kit/lang/cell";
 import { settingOwners } from "@pe/agent-contracts/setting-owners";
 import type { Immutable } from "@pe/agent-contracts";
 import { serveSetting, SETTING_TIERS, type SettingTierRead } from "@pe/agent-contracts/tiered-setting";
-import { schemaOf, type Choice, type Domain, type ModelValue, type SheetSlot, type StateCell } from "@pe/agent-contracts/slots";
+import { schemaOf, type Domain, type ModelValue, type SheetSlot, type StateCell } from "@pe/agent-contracts/slots";
 export interface SheetInput<W = unknown> {
   readonly rows: readonly string[];
   readonly work: Immutable<W> | null;
@@ -14,8 +15,7 @@ export interface SheetCell extends StateCell {
   readonly unit?: string;
   readonly numeric?: { min?: number; max?: number; digits?: number };
   readonly field?: string;
-  readonly json?: true;
-  readonly choices?: readonly Choice[];
+  readonly choices?: HandleCellProps["options"];
   readonly ref?: string;
   readonly refusal?: string;
   readonly note?: string;
@@ -30,12 +30,11 @@ export const bindingPath = (binding: string, row?: string): [string, ...string[]
   const [first, ...rest] = binding.split(".");
   return [first!, ...rest, ...(row === undefined ? [] : [row])];
 };
-export function domainDraw(domain: Domain, read: unknown, row?: string): Pick<SheetCell, "unit" | "numeric" | "field" | "json" | "choices"> {
+export function domainDraw(domain: Domain, read: unknown, row?: string): Pick<SheetCell, "unit" | "numeric" | "field" | "choices"> {
   if (domain.kind === "number") return { unit: domain.unit, numeric: { min: domain.min ?? domain.exclusiveMin, max: domain.max, digits: domain.digits } };
-  if (domain.kind === "json") return { json: true };
   if (domain.kind === "enum") {
     const choices = typeof domain.choices === "function" ? domain.choices(read, row) : domain.choices;
-    return choices.length ? { choices } : {};
+    return choices.length ? { choices: choices.map(c => ({ ...c, key: typeof c.value === "string" ? c.value : JSON.stringify(c.value), ...(c.value === null ? { clear: true } : {}) })) } : {};
   }
   if (domain.kind === "object") {
     const fields = Object.entries(domain.fields);

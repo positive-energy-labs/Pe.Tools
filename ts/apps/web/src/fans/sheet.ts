@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { DUCT_UNIT_ROLES, type fansSheetData, type Immutable, type Resolved } from "@pe/agent-contracts";
-import { local, parameter, store, type CellLayer, type Choice, type SheetSlot } from "@pe/agent-contracts/slots";
+import { local, parameter, store, type CellLayer, type EnumChoice, type SheetSlot } from "@pe/agent-contracts/slots";
 import { fanWriteCells } from "@pe/ducts-domain/staged";
 import { suggestKind, suggestRole } from "@pe/ducts-domain/roster";
 import { sheetSystems } from "@pe/ducts-domain/sheet/scoped-snapshot";
@@ -56,15 +56,15 @@ const layer = (resolved: Immutable<Resolved<unknown>> | undefined, wrap: (v: unk
 const units = (read: Read) => Object.keys(inputsOf(read)?.units ?? {});
 const fanUnit = (read: Read) => read?.open?.overview.fan?.unitId ?? null;
 /** The write scope offered from the open fan, with how many staged cells it writes; a standing scope on another fan stays listed. */
-const scopeChoices = (read: Read): readonly Choice[] => {
+const scopeChoices = (read: Read): readonly EnumChoice[] => {
   const snapshot = snapshotOf(read);
   const fan = read?.open?.overview.fan, standing = read?.fansWork.writeIntent.edit?.value?.walk;
   const mine = (walk: { unitId: number; portIndex: number }) => !!fan && walk.unitId === fan.unitId && walk.portIndex === (fan as { portIndex?: number }).portIndex;
   return [
-    ...(fan && "portIndex" in fan ? [{ key: "fan", label: `${fan.mark || `unit ${fan.unitId}`} · ${snapshot ? fanWriteCells(read!.fansWork, snapshot).length : 0} staged`, value: { walk: { unitId: fan.unitId, portIndex: fan.portIndex } },
+    ...(fan && "portIndex" in fan ? [{ label: `${fan.mark || `unit ${fan.unitId}`} · ${snapshot ? fanWriteCells(read!.fansWork, snapshot).length : 0} staged`, value: { walk: { unitId: fan.unitId, portIndex: fan.portIndex } },
       description: "Write this fan's walk and its staged cells" }] : []),
-    ...(standing && !mine(standing) ? [{ key: "other", label: `unit ${standing.unitId}`, value: { walk: standing }, description: "Another fan's scope, still standing" }] : []),
-    { key: "none", label: "None", clear: true, description: "Clear the write scope" },
+    ...(standing && !mine(standing) ? [{ label: `unit ${standing.unitId}`, value: { walk: standing }, description: "Another fan's scope, still standing" }] : []),
+    { value: null, label: "None", description: "Clear the write scope" },
   ];
 };
 const inWg = { kind: "object", fields: { inWg: { kind: "number", min: 0, unit: "in-wg", digits: 4 } } } as const;
@@ -93,7 +93,7 @@ export const fansSheet = {
     // Design friction stays /ducts design data (ducts ledger Q2a), so Fans omits it.
     ...Object.fromEntries(Object.entries(ductsSettings).filter(([key]) => key !== "setting.ducts.designFriction")),
     writeIntent: local({ kind: "enum", shape: z.strictObject({ walk: z.strictObject({ unitId: z.number().int().positive(), portIndex: z.number().int().nonnegative() }) }), choices: scopeChoices }, "route", { label: "Write scope" }),
-    roles: store("_PE_DuctLosses", { kind: "object", fields: { role: { kind: "enum", shape: z.enum(DUCT_UNIT_ROLES), choices: DUCT_UNIT_ROLES.map(role => ({ key: role, label: role === "fan" ? "Fan" : "Passive" })) } } }, "subject", {
+    roles: store("_PE_DuctLosses", { kind: "object", fields: { role: { kind: "enum", shape: z.enum(DUCT_UNIT_ROLES), choices: DUCT_UNIT_ROLES.map(role => ({ value: role, label: role === "fan" ? "Fan" : "Passive" })) } } }, "subject", {
       rows: (read: Read) => rowsOf(read, (snapshotOf(read)?.nodes ?? []).filter((n) => n.kind === "equipment").map((n) => String(n.id))),
       rowLabel: (read, row) => nameOf(read, row, "Unit role"),
       model: (read: Read, row) => {

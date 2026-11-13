@@ -112,21 +112,6 @@
       "refresh": "dependencies"
     }
   },
-  "sheet": {
-    "draft": true,
-    "bindings": {
-      "fields": {
-        "home": {
-          "at": "local"
-        },
-        "domain": {
-          "kind": "json",
-          "reason": "Pod member properties are arbitrary authored JSON"
-        },
-        "per": "subject"
-      }
-    }
-  },
   "goal": "value",
   "verbs": {
     "open": {
@@ -223,6 +208,19 @@
     }
   },
   "panes": {
+    "sheet": {
+      "label": "Member fields",
+      "purpose": "Edit the member’s arbitrary JSON over its saved bytes",
+      "draws": [
+        "value"
+      ],
+      "verbs": [
+        "open",
+        "adopt",
+        "save",
+        "saveNew"
+      ]
+    },
     "members": {
       "label": "Members",
       "purpose": "Browse installed Pod members",
@@ -239,19 +237,6 @@
     "runs": {
       "label": "Runs",
       "purpose": "Inspect member or Pod runs",
-      "draws": [
-        "value"
-      ],
-      "verbs": [
-        "open",
-        "adopt",
-        "save",
-        "saveNew"
-      ]
-    },
-    "sheet": {
-      "label": "Sheet",
-      "purpose": "Edit the bound cells",
       "draws": [
         "value"
       ],
@@ -323,9 +308,9 @@
     "main": {
       "word": "Pods",
       "panes": [
+        "sheet",
         "members",
         "runs",
-        "sheet",
         "goal"
       ],
       "verbs": [

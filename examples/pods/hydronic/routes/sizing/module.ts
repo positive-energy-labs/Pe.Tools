@@ -40,9 +40,9 @@ export const module = route({
   // `chosen` is the pipe's Diameter in Revit: sheet.plan reads it, sheet.apply writes it (ADR 0035 rule 3).
   sheet: {
     bindings: {
-      chosen: parameter("Diameter", z.number().positive(), "Millimeters"),
-      maxVelocity: local(z.number().positive()),
-      maxFriction: local(z.number().positive()),
+      chosen: parameter("Diameter", { kind: "number", exclusiveMin: 0, unit: "Millimeters" }),
+      maxVelocity: local({ kind: "number", exclusiveMin: 0 }),
+      maxFriction: local({ kind: "number", exclusiveMin: 0 }),
     },
   },
   // The picture is the system's pipes, each outlined in its status ink. The kernel adds the pane and its pose,

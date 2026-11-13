@@ -31,8 +31,6 @@ const rowsOf = (slot: SheetSlot, ctx: Ctx, field?: string): string[] => {
 /** Where a value stands when Work holds none: the layer and, for the firm file, which file. */
 const layerWord = (cell: SheetCell) => (cell.ref ? `${cell.source} ${cell.ref}` : cell.source);
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
-/** A `json` cell's text: JSON when it parses, else the text itself. */
-const jsonOrText = (text: string): unknown => { try { return JSON.parse(text); } catch { return text; } };
 
 /** The row's subject, when its key is a SubjectRef code; a binding's own row key (a slot name) has none. */
 const subjectRow = (row: string | undefined) => (row !== undefined && decode(row).ok ? (row as SubjectRefCode) : null);
@@ -88,16 +86,13 @@ function Cell({ ctx, cell, verb }: { ctx: Ctx; cell: SheetCell; verb: ReactNode 
           model={under}
           source={layerWord(cell)}
           scale="row"
-          {...(cell.refusal || domain.kind === "derived" || domain.kind === "options" && domain.mode === "constraint" ? { capReason: cell.refusal ?? (domain.kind === "derived" ? "Derived value is read-only" : "Choose an option from the list") } : {})}
+          {...(cell.refusal || domain.kind === "options" && domain.mode === "constraint" ? { capReason: cell.refusal ?? "Choose an option from the list" } : {})}
           {...(cell.note ? { note: cell.note } : {})}
           {...(cell.unit ? { unit: { label: cell.unit } } : {})}
           {...(cell.numeric || field ? { numeric: cell.numeric ?? {} } : {})}
           {...(field ? {
             format: (v: unknown) => String((v as Record<string, unknown> | null)?.[field] ?? "—"),
             parse: (text: string) => ({ [field]: Number(text) }),
-          } : cell.json ? {
-            format: (v: unknown) => (typeof v === "string" ? v : v === undefined ? "" : JSON.stringify(v)),
-            parse: (text: string) => (typeof under === "string" ? text : jsonOrText(text)),
           } : cell.setting ? {
             parse: (text: string) => text.trim() === "" ? null : cell.numeric ? Number(text) : text,
           } : {})}
