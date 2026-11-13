@@ -101,7 +101,7 @@ export const commandTable = {
   "pod.capture": {"axes":{"subject":"None","touches":["Metadata"],"effect":"Read","cost":"Cheap","cardinality":"One"},"effect":"Read","via":"command"},
   "pod.export": {"axes":{"subject":"None","touches":["Metadata"],"effect":"SessionWrite","cost":"Mutation","cardinality":"One"},"effect":"SessionWrite","via":"command"},
   "pod.import": {"axes":{"subject":"None","touches":["Metadata"],"effect":"SessionWrite","cost":"Mutation","cardinality":"One"},"effect":"SessionWrite","via":"command"},
-  "pod.promote": {"axes":{"subject":"None","touches":["Metadata"],"effect":"Read","cost":"Mutation","cardinality":"One"},"effect":"Read","via":"command"},
+  "pod.promote": {"axes":{"subject":"None","touches":["Metadata"],"effect":"SessionWrite","cost":"Mutation","cardinality":"One"},"effect":"SessionWrite","via":"command"},
   "pod.runs": {"axes":{"subject":"None","touches":["Metadata"],"effect":"Read","cost":"Cheap","cardinality":"One"},"effect":"Read","via":"command"},
   "pod.member.read": {"axes":{"subject":"None","touches":["Metadata"],"effect":"Read","cost":"Cheap","cardinality":"One"},"effect":"Read","via":"command"},
   "pod.member.write": {"axes":{"subject":"None","touches":["Metadata"],"effect":"SessionWrite","cost":"Mutation","cardinality":"One"},"effect":"SessionWrite","via":"command"},

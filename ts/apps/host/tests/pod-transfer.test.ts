@@ -15,6 +15,7 @@ import { basename, join } from "node:path";
 import { serveRoutes } from "./real-server.ts";
 import { mintContext } from "../src/control.ts";
 import { productPathNames } from "@pe/host-contracts/contracts";
+import { commandTable } from "@pe/agent-contracts/command-axes";
 
 const homeVariable = productPathNames.productHomeVariable;
 import type { PictureCaptures } from "../src/captures-route.ts";
@@ -363,6 +364,7 @@ test("an entry that inflates past its declared size is refused (decompression bo
 });
 
 test("pod.promote wraps a scratch Page byte for byte, unbound, without touching the original", async () => {
+  expect(commandTable["pod.promote"]).toMatchObject({ effect: "SessionWrite", via: "command" });
   const pages = join(root, "Documents", "Pe.Tools", "Pages");
   const html = "<!doctype html><title>Notes</title><script src=/pages/pe.js></script>";
   await mkdir(join(pages, "notes", ".state"), { recursive: true });

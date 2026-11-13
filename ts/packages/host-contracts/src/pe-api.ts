@@ -1712,7 +1712,7 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     subject: "None",
     touches: "Metadata",
     cardinality: "One",
-    effect: "Read",
+    effect: "SessionWrite",
     origin: "host-local",
     displayName: "Promote Page to Pod",
     description:
