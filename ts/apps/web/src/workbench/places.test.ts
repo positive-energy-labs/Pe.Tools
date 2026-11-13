@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { expect, test } from "vite-plus/test";
+import { expect, test, vi } from "vite-plus/test";
 import { waitFor } from "@testing-library/react";
 import { spawnSync } from "node:child_process";
 import { Places, focus, readFocus } from "./places";
@@ -30,7 +30,11 @@ test("two windows can focus different Places without writing the host list", () 
       removeItem: (key: string) => { values.delete(key); } };
   };
   const a = storage(), b = storage();
-  focus("first", a); focus("second", b);
-  expect(readFocus(a)).toBe("first");
-  expect(readFocus(b)).toBe("second");
+  try {
+    vi.stubGlobal("sessionStorage", a); focus("first");
+    vi.stubGlobal("sessionStorage", b); focus("second");
+    expect(readFocus()).toBe("second");
+    vi.stubGlobal("sessionStorage", a);
+    expect(readFocus()).toBe("first");
+  } finally { vi.unstubAllGlobals(); }
 });
