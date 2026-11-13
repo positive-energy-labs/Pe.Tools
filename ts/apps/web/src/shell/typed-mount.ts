@@ -138,10 +138,15 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
       ? record.snapshot.publication : null;
   };
   const timelineClient = ports.timeline ?? (input.fixture === null && !input.history ? createTimelineClient(ports.findings) : null);
-  const timelineWorks = () => [...new Map([
-    ...[...owners.values()].map(owner => owner.handle?.key ?? owner.scope.key),
-    ...[...reads.keys()].flatMap(read => currentPublication(read)?.works ?? []),
-  ].map(key => [workKey(key), key])).values()];
+  const timelineWorks = () => {
+    const members = new Map<string, import("@pe/agent-contracts").WorkKey>();
+    // The owner feed has already resolved its binding; a duplicate read must not replace it.
+    for (const key of [
+      ...[...owners.values()].map(owner => owner.handle?.key ?? owner.scope.key),
+      ...[...reads.keys()].flatMap(read => currentPublication(read)?.works ?? []),
+    ]) if (!members.has(workKey(key))) members.set(workKey(key), key);
+    return [...members.values()];
+  };
   // The document head has no writable owner. Its host scope is independent of route read membership.
   const timelineDocument = () => {
     if (edits || input.target?.kind !== "document") return undefined;
@@ -152,7 +157,10 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
   const connectTimeline = (force = false) => {
     const works = timelineWorks(), document = timelineDocument();
     const core = spec.core ? reads.get(spec.core)?.snapshot : undefined;
-    const valueProblem = !document && !!spec.core && !currentPublication(spec.core)
+    // Owner keys stand independently of the core. Retained members can hold a read-dependent
+    // Timeline, but cannot grant membership when current owners or publications do not establish it.
+    const needsValue = !works.length || core?.publication?.works.some(held => !works.some(key => workKey(key) === workKey(held)));
+    const valueProblem = !document && needsValue && !!spec.core && !currentPublication(spec.core)
       ? core && (core.state === "refused" || core.state === "stale")
         ? `Undo and Redo unavailable: current Value refused. ${reasonOf(core)}. ${retainedLine(core) ?? "Refresh needed"}.`
         : "Reading Timeline: waiting for the current Value"
