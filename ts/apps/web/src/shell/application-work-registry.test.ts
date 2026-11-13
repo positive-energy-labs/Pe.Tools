@@ -26,3 +26,24 @@ test("a late acknowledgement releases retained input after the last Place leaves
   const next = registry.acquire(key);
   expect(next.entry).not.toBe(first.entry); next.release();
 });
+
+test.each(["accept", "discard"])("a late %s from an old entry preserves its replacement's retained input", (finish) => {
+  const registry = createApplicationWorkRegistry(), key = bindWork("test", null, "replacement");
+  const old = registry.acquire(key);
+  old.entry.retain({ kind: "apply", press: "old", expectedRevision: 0, patches: [] }, "Old edit");
+  old.release();
+  old.entry.accept("old"); // The stream settles the old entry before its HTTP completion.
+  const newer = registry.acquire(key);
+  const id = newer.entry.retain({ kind: "apply", press: "new", expectedRevision: 1,
+    patches: [{ path: ["note"], value: "KEEP ME" }] }, "new refused KEEP ME");
+  newer.entry.refuse(id, "Offline");
+  const retained = newer.entry.pending();
+  expect(retained).toMatchObject([{ id: "new", label: "new refused KEEP ME", status: "refused" }]);
+  if (finish === "accept") old.entry.accept("old");
+  else old.entry.discard("old");
+  newer.release();
+  const reopened = registry.acquire(key);
+  expect({ sameOwner: reopened.entry === newer.entry, pending: reopened.entry.pending() })
+    .toEqual({ sameOwner: true, pending: retained });
+  reopened.release();
+});
