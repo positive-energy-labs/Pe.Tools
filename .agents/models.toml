@@ -61,7 +61,7 @@ id = "claude-opus-5-5"
 provider = "claude"
 meter = "weekly_all"
 rules = [
-  "Never runs a writer tier. A partner on this model sends every slice and fix round to a child on a writer tier, even when the heady writer's meter is empty (owner, 2026-11-12). What it writes itself is what its charter names: a merge, a merge fix, an assigned seam.",
+  "Never runs a writer tier. A partner on this model sends every slice and fix round to a child on a writer tier, even when the heady writer's meter is empty (owner, 2026-11-12). What it writes itself is what its charter names: a merge, a merge fix, an assigned seam, and for the integrator the fix of a red that is main's own or that its merge made.",
   "May be messaged at any idle age: a cold restart of a re-woken partner is cheap (see observations).",
 ]
 
