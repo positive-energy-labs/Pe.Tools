@@ -8,23 +8,21 @@ import { routeRegistry as hostRoutes } from "../../host/src/routes.generated";
 import { commands } from "@pe/agent-contracts";
 import { z } from "zod";
 
-test.each(Object.keys(routeRegistry).sort())(
-  "%s wire verbs reflect the declaration without guessing placement",
-  (key) => {
-    const { spec, data } = routeRegistry[key]!.module;
-    expect(data.band).toEqual([]);
-    for (const pane of Object.values(data.panes)) expect(pane.verbs).toEqual([]);
-    expect(Object.keys(data.verbs)).toEqual(Object.keys(spec.commands));
-    for (const [id, command] of Object.entries(spec.commands)) {
-      const verb = data.verbs[id]!;
-      expect("entry" in verb && verb.entry).toBe(command.entry);
-      expect(verb.label).toBe(command.label);
-      expect(verb.review).toBe("plan" in command ? "shown" : "none");
-      expect(verb.effect).toBe(command.contract.axes.effect);
-      expect(Object.keys(verb).sort()).toEqual(["effect", "entry", "label", "review"]);
-    }
-  },
-);
+test.each(Object.keys(routeRegistry).sort())("%s wire verbs reflect the declaration and place each verb once", (key) => {
+  const { spec, data } = routeRegistry[key]!.module;
+  expect(data.band).toEqual([...spec.band]);
+  // The band and the panes together hold every declared verb exactly once.
+  expect([...data.band, ...Object.values(data.panes).flatMap((pane) => (Array.isArray(pane.verbs) ? pane.verbs : []))].sort()).toEqual(Object.keys(spec.verbs).sort());
+  expect(Object.keys(data.verbs)).toEqual(Object.keys(spec.verbs));
+  for (const [id, declared] of Object.entries(spec.verbs)) {
+    const verb = data.verbs[id]!;
+    expect("entry" in verb && verb.entry).toBe(declared.handle.key);
+    expect(verb.label).toBe(declared.label);
+    expect(verb.review).toBe(declared.handle.plan ? "shown" : "none");
+    expect(verb.effect).toBe(declared.handle.effect);
+    expect(Object.keys(verb).sort()).toEqual(["effect", "entry", "label", "review"]);
+  }
+});
 
 test.each(Object.keys(routeRegistry).sort())(
   "%s admits and publishes the same typed route to Pea (codegen:routes)",

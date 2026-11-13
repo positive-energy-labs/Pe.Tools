@@ -146,8 +146,9 @@ test("W07/X01: a new workspace reacquires Pea history and never replays an old v
   expect(
     fansDocumentSchema.parse(next.fans.work()!.value).componentDrops[terminal]?.edit?.value.inWg,
   ).toBe(0.25);
-  expect(next.fans.timeline()!.rows.flatMap(row => row.kind === "edit" ? [row.label] : [])).toEqual(["Pea part drop"]);
-  expect(await next.fans.stepTimeline("undo")).toMatchObject({ message: expect.any(String) });
+  await vi.waitFor(() => expect(next.fans.timeline()?.rows.flatMap(row => row.kind === "edit" ? [row.label] : [])).toEqual(["Pea part drop"]));
+  expect(next.fans.timeline()!.undo).toBeNull();
+  expect(await next.fans.stepTimeline("undo")).toEqual({ message: "Nothing to undo" });
   expect(fansDocumentSchema.parse(next.fans.work()!.value).componentDrops[terminal]?.edit?.value.inWg).toBe(0.25);
 });
 

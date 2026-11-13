@@ -1,6 +1,6 @@
 {
-  "testFiles": 810,
-  "total": 312,
+  "testFiles": 811,
+  "total": 309,
   "byFile": {
     "apps/host/tests/admission.test.ts": 1,
     "apps/host/tests/admitted-builtins.test.ts": 1,
@@ -72,7 +72,6 @@
     "apps/web/src/fans/one-lifecycle.test.tsx": 3,
     "apps/web/src/fans/work-reading.test.ts": 1,
     "apps/web/src/fans/write-action.test.tsx": 2,
-    "apps/web/src/host/client.test.ts": 1,
     "apps/web/src/host/connection-budget.test.ts": 1,
     "apps/web/src/machine/machine.test.tsx": 3,
     "apps/web/src/machine/runtime.test.ts": 1,
@@ -107,7 +106,6 @@
     "apps/web/src/shell/work-feed-client.test.ts": 4,
     "apps/web/src/shell/work-journal-client.test.ts": 2,
     "apps/web/src/workbench/route-panes.test.tsx": 1,
-    "packages/agent-contracts/scripts/door-table.test.ts": 2,
     "packages/agent-contracts/src/catalog-admission.test.ts": 2,
     "packages/agent-contracts/src/catalog-work.test.ts": 1,
     "packages/agent-contracts/src/catalog.test.ts": 1,

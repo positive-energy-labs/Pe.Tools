@@ -1,4 +1,4 @@
-import { sessionCommand } from "../route/typed-actions.ts";
+import { handle } from "@pe/agent-contracts/handle";
 import { paneLayout } from "../route/defaults";
 import { route } from "../route/defaults";
 import { draw } from "../route/draw";
@@ -28,33 +28,30 @@ export const module = route({
       purpose: "Choose a model and destination Revit",
       body: "scroll",
       draw: draw("scroll", () => import("./mount"), "OpenBody"),
+      // Each verb takes the document and session the person chose in this pane.
+      verbs: ["stop", "restart", "start", "open", "close"],
     },
   },
-  commands: {
+  verbs: {
     stop: {
-      ...sessionCommand("instances.stop"),
+      handle: handle("instances.stop"),
       label: "Stop Revit",
-      input: (_context, supplied) => supplied,
     },
     restart: {
-      ...sessionCommand("instances.restart"),
+      handle: handle("instances.restart"),
       label: "Hot reload Revit",
-      input: (_context, supplied) => supplied,
     },
     start: {
-      ...sessionCommand("instances.start"),
+      handle: handle("instances.start"),
       label: "Start Revit and open",
-      input: (_context, supplied) => supplied,
     },
     open: {
-      ...sessionCommand("instances.open"),
+      handle: handle("instances.open"),
       label: "Open document",
-      input: (_context, supplied) => supplied,
     },
     close: {
-      ...sessionCommand("instances.close"),
+      handle: handle("instances.close"),
       label: "Close document",
-      input: (_context, supplied) => supplied,
     },
   },
   layout: paneLayout("documents"),

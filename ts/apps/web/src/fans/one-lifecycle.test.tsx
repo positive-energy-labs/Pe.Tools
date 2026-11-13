@@ -2,7 +2,7 @@
 import { expect, test, vi } from "vite-plus/test";
 import { address } from "@pe/agent-contracts";
 import { historySnapshotSchema } from "../shell/history";
-import { mountTypedRoute } from "../shell/typed-mount";
+import { direct, mountTypedRoute, planned } from "../shell/typed-mount";
 import { scrollBody } from "../route/body";
 import type { ReadingContext } from "../shell/source-contract";
 import { createWitness } from "./cutover.test-support";
@@ -35,7 +35,7 @@ test("typed panes share declared Values; recorded Fans and Ducts use frozen Work
       expect(recorded.workBasis()).toBeNull();
       expect(recorded.timelineRefusal()).toBe("needs live Revit");
       expect(open.mock.calls.at(-1)![0]).toMatchObject({historyPoint:history.point.id,historyPose:{instance:"recorded",route:route.data.key}});
-      await expect(recorded.run("losses")).rejects.toThrow("needs live Revit");
+      await expect(planned(recorded.verb("losses")).plan()).rejects.toThrow("needs live Revit");
     } finally { recorded.dispose(); expect(recorded.timeline()).toBeNull(); }
     }
 
@@ -47,7 +47,7 @@ test("typed panes share declared Values; recorded Fans and Ducts use frozen Work
 test("optional Work and invocation arguments share one typed scope", async () => {
   const {z}=await import("zod");
   const {route,field}=await import("../route/typed-route");
-  const {sessionCommand,queryAction}=await import("../route/typed-actions");
+  const {handle}=await import("@pe/agent-contracts/handle");
   const {module:reference}=await import("./route");
   const {hostRead}=await import("../route/host-read");
   const {valueRead,workFingerprintSchema}=await import("@pe/agent-contracts");
@@ -56,7 +56,7 @@ test("optional Work and invocation arguments share one typed scope", async () =>
   const declaration={key:"wave4-probe",address:"/",name:"Probe",needs:"host" as const,directory:reference.data.directory,
     fields:{member:field(z.string(),"","query")},core:{...read,args:()=>({})},
     panes:{main:{title:"Probe",purpose:"Scope falsifier",read,body:"scroll" as const,draw:(ctx:any)=>scrollBody(ctx)}},layout:{kind:"pane" as const,id:"main"}};
-  const calls:unknown[]=[],queries:unknown[]=[];
+  const calls:unknown[]=[];
   const door={
     lifetime:"subscription",receipts:()=>({subscribe:()=>()=>{}}),
     open:(scope:import("@pe/agent-contracts").WorkScope)=>{calls.push(scope.key);return {subscribe:(deliver:(state:unknown)=>void)=>{
@@ -78,8 +78,8 @@ test("optional Work and invocation arguments share one typed scope", async () =>
   const module=route({...declaration,
     edits:{work:z.object({note:z.object({edit:z.object({value:z.string()}).optional()})}),key:page=>page.member||null,
       owners:{},input:z.string(),patches:()=>[],history:z.object({label:z.string()}),describe:(detail:{label:string})=>detail},
-    commands:{start:{...sessionCommand("instances.start"),label:"Start"},echo:{...queryAction({key:"probe.echo",input:z.object({blob:z.string()}),
-      run:async(args,context)=>{queries.push({args,context});return args;}}),label:"Echo"}},
+    // `ops.read` goes by its route: it keeps the Place's target, and no Work handle rides its input.
+    verbs:{start:{handle:handle("instances.start"),label:"Start"},echo:{handle:handle("ops.read"),label:"Echo"}},band:["start","echo"],
   });
   const mounted=mountTypedRoute(module,input,fingerprint,{work:door,sources:{"probe.value":{kind:"use",open:source}}});
   try {
@@ -88,9 +88,13 @@ test("optional Work and invocation arguments share one typed scope", async () =>
     expect(calls.every(key=>(key as {work:string}).work === "A")).toBe(true);
     mounted.page.query({member:"B"});expect(mounted.owner()?.handle?.key).toMatchObject({binding:"workspace",work:"B"});
     mounted.refresh(module.spec.core);expect(source).toHaveBeenCalled();
-    await mounted.run("echo",false,{blob:"invocation only"});
-    expect(queries).toEqual([{args:{blob:"invocation only"},context:{target:{kind:"host"},work:expect.objectContaining({key:expect.objectContaining({work:"B"}),revision:7})}}]);
-    await mounted.run("start",false,{year:"2026",owner:"you",addins:"on"});expect(door.submit).toHaveBeenCalledOnce();
+    expect(mounted.placement()).toEqual({band:["start","echo"],panes:{main:[]}});
+    expect(mounted.kernelVerb("findings.say")).toMatchObject({label:"Say finding",effect:"WorkWrite"});
+    expect(()=>mounted.verb("nope")).toThrow("Unknown verb nope");
+    const echo={op:{key:"logs.tail",intent:"Read"},request:{blob:"invocation only"}};
+    await direct(mounted.verb("echo")).run(echo);
+    expect(door.submit).toHaveBeenLastCalledWith({id:expect.any(String),key:"ops.read",target:{kind:"host"},input:echo});
+    await direct(mounted.verb("start")).run({year:"2026",owner:"you",addins:"on"});expect(door.submit).toHaveBeenCalledTimes(2);
     expect(mounted.page.read()).toMatchObject({member:"B"});expect(search.has("blob")).toBe(false);
     mounted.page.query({member:""});expect(mounted.owner()).toBeUndefined();expect(mounted.workBasis()).toBeNull();stop();
   } finally {mounted.dispose();}

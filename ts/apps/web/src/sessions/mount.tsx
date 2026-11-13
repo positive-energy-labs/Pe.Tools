@@ -129,4 +129,4 @@ export function SessionsBody({ ctx }: { ctx: import("./route").SessionContext })
     </OpenOwnerContext>
   );
 }
-const sessionActions = ["start", "stop", "restart"];
+const sessionActions = ["start", "stop", "restart"] as const;

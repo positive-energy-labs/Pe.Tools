@@ -184,10 +184,9 @@ function BandAlerts({ mount }: { mount: TypedMount }) {
 }
 /** Band verbs: Start, then the band's verbs. A list, not a component: the band ranks its first entry as primary. */
 function bandVerbs(mount: TypedMount): ReactNode[] {
-  const { spec } = mount;
   return [
     ...(mount.startAction()?[<TypedStart key="start" mount={mount}/>]:[]),
-    ...Object.entries(spec.commands).filter(([,c])=>!("row" in c && c.row) && !("pane" in c && c.pane)).map(([id])=><TypedWrite key={id} mount={mount} id={id} />),
+    ...mount.placement().band.map(id=><TypedWrite key={id} mount={mount} id={id} />),
   ];
 }
 /** Band timeline: the Timeline head over the recorded points and the Work history. */
@@ -198,8 +197,9 @@ function BandTimeline({ mount, recorded }: { mount: TypedMount; recorded?: React
 const subjectActive = (mount: TypedMount, when: string | import("@pe/agent-contracts").GateWhen) =>
   gateActive(when, mount.page.read(), mount.spec.subject?.field);
 export function TypedWrite({ mount, id }: { mount: TypedMount; id: string }) {
-  const command=mount.spec.commands[id]!,handle=mount.action(id);
-  if("kind" in command) return <><Button label={handle.label} refusal={handle.refusal} busy={handle.pending} onClick={()=>void handle.run().catch(()=>{})}>{handle.label}</Button>
+  const handle=mount.verb(id);
+  // Review follows the plan: a handle with one is planned and applied, any other is one press.
+  if("run" in handle) return <><Button label={handle.label} refusal={handle.refusal} busy={handle.pending} onClick={()=>void handle.run().catch(()=>{})}>{handle.label}</Button>
     {handle.failure?<span role="alert">{handle.failure}</span>:null}</>;
   return <PreviewAction handle={handle} label={handle.label} />;
 }

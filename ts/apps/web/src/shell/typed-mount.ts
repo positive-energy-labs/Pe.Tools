@@ -1,6 +1,6 @@
 import { homeHandle } from "../route/slots/sheet/index.ts";
 import { peReadings, type Readings } from "#/host/resource-stream";
-import { findingCommand } from "../route/slots/findings/index.ts";
+import { kernelVerbs, type KernelVerbKey } from "../route/slots/findings/index.ts";
 import { FINDINGS_OWNER, findingsWorkSchema, type Finding } from "@pe/agent-contracts/slots";
 import { hostReadSource } from "./host-read-source.ts";
 import { z } from "zod";
@@ -18,6 +18,7 @@ import {
   bindWork,
   cellPatches,
   commands,
+  hostActions,
   commandTarget,
   canonicalRouteInput,
   workKey,
@@ -46,7 +47,10 @@ import { settleWork } from "./work-door-observation";
 import { freezePage } from "./freeze-page";
 import type { PlaceInput } from "./typed-place";
 import type { ReadingContext, UseSource } from "./source-contract";
-import { reasonOf, refusalOf, valueOf, type DrawContext, type EditFailure, type EditHistory, type TypedRoute } from "../route/typed-route";
+import type { AnyVerb, DrawContext, EditFailure, EditHistory, PlannedVerb, RunVerb, TypedRoute, VerbContext, VerbHandle } from "../route/typed-route";
+import { handle } from "@pe/agent-contracts/handle";
+import type { Command } from "../../../../packages/agent-contracts/src/command.ts";
+import { reasonOf, refusalOf, valueOf } from "../route/typed-route";
 import type { ReadingState } from "@pe/agent-contracts";
 import { absentLine, failureLine } from "./reading-line";
 import { cancelAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
@@ -74,10 +78,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
   ports: { work?: WorkJournalDoor; sources?: Record<string, UseSource>; findings?: Parameters<typeof createTimelineClient>[0]; timeline?: TimelineClient; readings?: Pick<Readings, "subscribe"> } = {}) {
   const cleanups: (() => void)[] = [];
   try {
-  // Every route carries the kernel's one command, the person's `finding` (ADR 0035 rule 9); a route's own
-  // id wins. A Workless mount (a Page projection) has it too, so a shared row body draws it refused, not
-  // thrown. The mount adds it, not `route()`: its contract is the catalog, and `route()` is the Pod surface.
-  const spec = { ...module.spec, commands: { finding: findingCommand, ...module.spec.commands } } as TypedRoute["spec"];
+  const spec = module.spec;
   const edits = spec.edits;
   const own = edits?.work.route ?? spec.key;
   const ownerConfigs = edits?.owners ?? {};
@@ -325,12 +326,16 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     if (spec.core && core?.state !== "ready") return core ? reasonOf(core) : "Reading Value...";
     return valueAfterWork();
   };
-  /** A catalog command that carries the route's Work handle cannot run before that Work exists (a raw
-   *  `work: null` decode error was the 2b drive's /pods "Open saved bytes"); it says why instead. */
-  const workCommandRefusal = (entry: string) => {
-    const catalog = commands[entry as keyof typeof commands];
-    if (!catalog || !("work" in catalog) || !catalog.work || owners.get(own)?.handle) return null;
-    return owners.get(own)?.absent ? "Start this Work first" : "Reading Work...";
+  // The binding lookup: `hostActions` holds the semantic commands and the direct reads, receipt controls,
+  // `ops.read` and `page.bind` beside them.
+  const declared = (key: string): Command | undefined => hostActions[key as keyof typeof hostActions];
+  /** A command that carries the route's Work handle cannot run before that Work exists (a raw
+   *  `work: null` decode error was the 2b drive's /pods "Open saved bytes"); it refuses with the Work's
+   *  own reason ("Start this Work to edit"), as the cells do. */
+  const workRefusal = (key: string) => {
+    const work = declared(key)?.work;
+    if (!work || work.optional || owners.get(own)?.handle) return null;
+    return !edits ? "This view keeps no Work" : owners.get(own)?.problem ?? "Reading Work...";
   };
   const writeRefusal = () => input.fixture !== null ? "Fixture has no native writes" : basisRefusal();
   // Settlement includes every demanded reading, not only the core write basis.
@@ -453,54 +458,65 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     });
     subscribing = false;
   };
-  const results = new Map<string,unknown>();
   const pending = new Set<string>();
-  const run = async (id: string, apply = false, supplied?:unknown) => {
+  type Verb = AnyVerb;
+  const verbContext = (work: WorkHandle | null): VerbContext => ({ page, target: input.target, work,
+    value: spec.core ? valueOf(reads.get(spec.core)?.snapshot) : undefined, doc: owners.get(own)?.doc ?? undefined });
+  /** A verb whose handle has no plan: one send through the one door, which picks the transport from the handle. */
+  const send = async (id: string, verb: Verb, supplied?: unknown) => {
     requireWritable();
     if (input.fixture !== null) throw Error("Fixture has no native writes");
-    const cmd = spec.commands[id];
-    if(!cmd) throw Error(`Unknown command ${id}`);
     problems.delete(id); notify();
-    if("kind" in cmd) {
-      const queryPage = cmd.kind === "query" ? gate.read()?.pageEpoch : null;
-      const handle=owners.get(own)?.handle ?? null;
-      const context={page:page as never,target:input.target,work:handle,value:spec.core?valueOf(reads.get(spec.core)?.snapshot):undefined};
-      try {
-        const proposed=cmd.input?.(context,supplied) ?? supplied ?? {};
-        const catalog=commands[cmd.entry as keyof typeof commands];
-        const request=cmd.contract.input.parse(catalog && "work" in catalog && catalog.work
-          ? {...z.record(z.string(),z.unknown()).parse(proposed),work:handle} : proposed);
-        let result:unknown;
-        if(cmd.kind === "session" || cmd.kind === "catalog") {
-          const completion=await settleNative(door.submit({id:crypto.randomUUID(),key:cmd.entry,
-            target:commandTarget(cmd.entry,z.record(z.string(),z.unknown()).parse(request),input.target?.kind === "document"?input.target.ref:undefined),
-            input:z.record(z.string(),z.unknown()).parse(request)}),true);
-          const receipt=z.object({receiptId:z.string(),result:z.unknown().optional()}).parse(completion);
-          result=catalog && "result" in catalog ? cmd.contract.output.parse(receipt.result) : {kind:"void",receiptId:receipt.receiptId};
-        } else result=await cmd.invoke!(request,{target:input.target ?? {kind:"host"},work:handle});
-        if (queryPage && (disposed || !input.custody.current() || gate.read()?.pageEpoch !== queryPage))
-          throw Error("This read finished for an earlier Page; run it again");
-        results.set(id,result); syncReads(true);
-        return result;
-      } catch(error) {
-        // A request or an answer its contract refuses reads as one sentence, as a Value does (`valueRefusal`);
-        // the issue list (a whole regex, for a format) is diagnostics' and never the person's.
-        const raw=error instanceof Error?error.message:String(error);
-        const at=error instanceof z.ZodError?error.issues[0]?.path.join("."):"";
-        const said=readableRefusal(error,`${cmd.label} does not match its contract${at?` at ${at}`:""}. The detail is in the log.`);
-        problems.set(id,said);
-        if(said === raw) throw error;
-        reportFault({code:"action.failed",routeCode:spec.key,readingKind:cmd.entry},error);
-        throw Error(said,{cause:error});
-      }
-      finally {notify();}
+    const key = verb.handle.key;
+    // A read answers the Page it was asked from; a write lands whatever the Page did meanwhile.
+    const readPage = verb.handle.effect === "Read" ? gate.read()?.pageEpoch : null;
+    try {
+      const refusal = workRefusal(key);
+      if (refusal) throw Error(refusal);
+      const work = owners.get(own)?.handle ?? null;
+      const proposed = z.record(z.string(), z.unknown()).parse(verb.input?.(verbContext(work), supplied) ?? supplied ?? {});
+      // The host decodes the input (K2): a malformed one returns as its typed refusal.
+      const request = declared(key)?.work && work ? { ...proposed, work } : proposed;
+      // A journaled command resolves its own target; a route keeps the Place's (`ops.read` runs on a host, a session or a document).
+      const target = verb.handle.via === "command"
+        ? commandTarget(key, request, input.target?.kind === "document" ? input.target.ref : undefined)
+        : input.target ?? { kind: "host" as const };
+      const receipt = z.object({ receiptId: z.string().optional(), result: z.unknown().optional() })
+        .parse(await settleNative(door.submit({ id: crypto.randomUUID(), key, target, input: request }), true));
+      const answered = declared(key);
+      const result = verb.handle.via !== "command" || (answered && "result" in answered) ? receipt.result : { kind: "void", receiptId: receipt.receiptId };
+      if (readPage && (disposed || !input.custody.current() || gate.read()?.pageEpoch !== readPage))
+        throw Error("This read finished for an earlier Page; run it again");
+      syncReads(true);
+      return result;
+    } catch (error) {
+      // A refusal that is a validator's issue list reads as one sentence, as a Value does (`valueRefusal`);
+      // the list (a whole regex, for a format) is diagnostics' and never the person's.
+      const raw = error instanceof Error ? error.message : String(error);
+      // The door carries a refusal as its sentence, so a validator's issue list arrives as that text.
+      let issues: unknown = error instanceof z.ZodError ? error.issues : null;
+      if (!issues) try { issues = JSON.parse(raw); } catch { /* A domain sentence. */ }
+      const at = z.array(z.object({ path: z.array(z.union([z.string(), z.number()])) })).safeParse(issues).data?.[0]?.path.join(".");
+      const said = readableRefusal(error, `${verb.label} does not match its contract${at ? ` at ${at}` : ""}. The detail is in the log.`);
+      problems.set(id, said);
+      if (said === raw) throw error;
+      reportFault({ code: "action.failed", routeCode: spec.key, readingKind: key }, error);
+      throw Error(said, { cause: error });
     }
+    finally { notify(); }
+  };
+  /** A verb whose handle has a plan: plan, seal, and apply only the sealed review. */
+  const review = async (id: string, verb: Verb, apply: boolean, supplied?: unknown) => {
+    requireWritable();
+    if (input.fixture !== null) throw Error("Fixture has no native writes");
+    problems.delete(id); notify();
+    const key = verb.handle.key;
     if (apply) {
       const held = reviews.get(id);
       if (!held || !reviewCurrent(id, held.token, held.signature)) throw Error("Review is stale; prepare it again");
       applyingReviews.set(id,held); reviews.delete(id); notify();
       try {
-        const result = await settleNative(door.submit({ id: crypto.randomUUID(), key: cmd.entry, target: input.target!, input: held.input }));
+        const result = await settleNative(door.submit({ id: crypto.randomUUID(), key, target: input.target!, input: held.input }));
         syncReads(true); return result;
       } finally {applyingReviews.delete(id);notify();}
     }
@@ -512,25 +528,43 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
       const issued=gate.invocation(gate.capture(`plan:${id}`),dependencies());
       if(!issued.ok) throw Error(issued.reason);
       token=issued.value; plans.set(id,token); reviews.delete(id);
-      const contract = commands[cmd.entry as keyof typeof commands];
+      const binding = declared(key)?.work;
       // A door every route shares (the sheet pair, ANY_ROUTE) takes the asking route's own Work.
-      const primary = owners.get("work" in contract && contract.work && contract.work.route !== ANY_ROUTE ? contract.work.route : own)!.handle!;
-      const proposed=cmd.input?.({page:page as never,target:input.target,work:primary,value:core.value},supplied) ?? supplied ?? {};
-      const request = cmd.planContract.input.parse({ ...z.record(z.string(),z.unknown()).parse(proposed), work: primary,
-        readWorks: Object.fromEntries([...owners].filter(([id]) => id !== primary.key.route).map(([id,o]) => [id,o.handle])) });
+      const primary = owners.get(binding && binding.route !== ANY_ROUTE ? binding.route : own)!.handle!;
+      const proposed=verb.input?.(verbContext(primary),supplied) ?? supplied ?? {};
+      const request = { ...z.record(z.string(),z.unknown()).parse(proposed), work: primary,
+        readWorks: Object.fromEntries([...owners].filter(([id]) => id !== primary.key.route).map(([id,o]) => [id,o.handle])) };
       const signature = workSignature();
-      const data = spec.core ? valueOf(reads.get(spec.core)?.snapshot) : undefined, doc = owners.get(own)!.doc;
-      const result = await settleNative(door.submit({ id: token.id, key: cmd.plan, target: input.target!, input: z.record(z.string(),z.unknown()).parse(request) }));
-      const preview = writePreviewSchema.parse(cmd.planContract.output.parse(result));
-      const handle = z.object({ handle: workHandleSchema }).parse(preview.seal.work).handle;
-      if (canonicalRouteInput(handle) !== canonicalRouteInput(primary)) throw Error("Preview sealed a different Work");
+      const context = verbContext(primary);
+      const result = await settleNative(door.submit({ id: token.id, key: verb.handle.plan!.key, target: input.target!, input: request }));
+      const preview = writePreviewSchema.parse(result);
+      const sealed = z.object({ handle: workHandleSchema }).parse(preview.seal.work).handle;
+      if (canonicalRouteInput(sealed) !== canonicalRouteInput(primary)) throw Error("Preview sealed a different Work");
       if (!reviewCurrent(id, token, signature)) throw staleReview(token, signature);
-      const presented=presentationSchema.parse(cmd.present(preview,data,doc));
-      reviews.set(id, { preview, input: request as Record<string,unknown>, token, signature,
+      const presented=presentationSchema.parse(verb.present!(preview,context));
+      reviews.set(id, { preview, input: request, token, signature,
         presentation: typeof presented === "string" ? {sentence:presented,rows:[]} : presented });
       problems.delete(id);
     } catch (error) { if(!token || plans.get(id)===token) problems.set(id,error instanceof Error?error.message:String(error)); throw error; }
     finally { notify(); }
+  };
+  /** One press at a time per verb; a failure is kept for the handle to draw. */
+  const press = async (id: string, act: () => Promise<unknown>) => {
+    if(pending.has(id)) throw Error("Action already pending");
+    pending.add(id); notify();
+    try { return await act(); }
+    catch(error) { if (!problems.has(id)) problems.set(id,error instanceof Error?error.message:String(error)); throw error; }
+    finally {pending.delete(id);notify();}
+  };
+  const verbRefusal = (verb: Verb) => input.readOnly || input.history ? "needs live Revit" : input.fixture !== null ? "Fixture has no native actions"
+    : verb.handle.plan ? basisRefusal() : workRefusal(verb.handle.key);
+  const handleOf = (id: string, verb: Verb): VerbHandle => {
+    const facts = { label: verb.label, effect: verb.handle.effect, get pending(){return pending.has(id);},
+      get refusal(){return verbRefusal(verb);}, get failure(){return problems.get(id)??null;} };
+    return verb.handle.plan
+      ? Object.defineProperties({ plan:(supplied?:unknown)=>press(id,()=>review(id,verb,false,supplied)), apply:()=>press(id,()=>review(id,verb,true)),
+          cancel:()=>mounted.cancel(id), read:()=>mounted.review(id) }, Object.getOwnPropertyDescriptors(facts)) as PlannedVerb
+      : Object.defineProperties({ run:(supplied?:unknown)=>press(id,()=>send(id,verb,supplied)) }, Object.getOwnPropertyDescriptors(facts)) as RunVerb;
   };
   syncReads();
   const mounted = {
@@ -538,7 +572,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     whenReady: () => whenSettled(false),
     whenWritable: () => whenSettled(true),
     absentOwners:()=>[...owners].filter(([id,owner])=>id!==own&&owner.absent).map(([route])=>route),
-    startAction():import("../route/typed-route").ActionHandle|null {
+    startAction(): RunVerb | null {
       if([...owners.values()].some(record=>!record.ready&&!record.absent)) return null;
       const absent=[...owners].filter(([,record])=>record.absent);
       if(!absent.length||!edits?.seed||!key||input.readOnly||input.history) return null;
@@ -566,24 +600,21 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
         } catch(error){problems.set("work.start",error instanceof Error?error.message:String(error));throw error;}
         finally{pending.delete("work.start");notify();}
       };
-      return {label:"Start",get pending(){return pending.has("work.start");},get refusal(){return refusal();},
-        get failure(){return problems.get("work.start")??null;},
-        run,plan:run,apply:run,cancel:()=>{},read:()=>null};
+      return {label:"Start",effect:handle("work.start").effect,get pending(){return pending.has("work.start");},get refusal(){return refusal();},
+        get failure(){return problems.get("work.start")??null;},run};
     },
-    action(id: string): import("../route/typed-route").ActionHandle {
-      const command=spec.commands[id];
-      if(!command) throw Error(`Unknown command ${id}`);
-      const perform=async(apply=false,supplied?:unknown)=>{
-        if(pending.has(id)) throw Error("Action already pending");
-        pending.add(id); notify();
-        try { return await run(id,apply,supplied); }
-        catch(error) { problems.set(id,error instanceof Error?error.message:String(error)); throw error; }
-        finally {pending.delete(id);notify();}
-      };
-      return {label:command.label, get pending(){return pending.has(id);},
-        get refusal(){return mounted.commandRefusal(id);}, get failure(){return problems.get(id)??null;},
-        run:(supplied)=>perform(false,supplied),plan:()=>perform(),apply:()=>perform(true),
-        cancel:()=>mounted.cancel(id),read:()=>mounted.review(id)};
+    /** Who draws each verb (routes CONTRACTS.md, "Placement on a mount"): the band's ids, the first primary, and each pane's. */
+    placement: () => ({ band: spec.band, panes: Object.fromEntries(Object.entries(spec.panes).map(([id, pane]) => [id, pane.verbs ?? []])) as Readonly<Record<string, readonly string[]>> }),
+    verb(id: string): VerbHandle {
+      const verb = spec.verbs[id];
+      if(!verb) throw Error(`Unknown verb ${id}`);
+      return handleOf(id, verb);
+    },
+    /** A kernel verb: on every route, declared by none, never placed. This only reads the kernel's table. */
+    kernelVerb(key: KernelVerbKey): RunVerb {
+      const verb = kernelVerbs[key];
+      if(!verb) throw Error(`Unknown kernel verb ${key}`);
+      return handleOf(`kernel:${key}`, verb) as RunVerb;
     },
     findings: () => { watchFindings(); return findings; },
     stopCommand: (id:string) => {requireWritable();return cancelAction(id);},
@@ -625,11 +656,6 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     /** The URL write is flushed: the address alone, without Place memory, decodes to this Page
      *  (slice 6.1, `data-url-settled`); a reload reads only the address. */
     urlCurrent: () => canonicalRouteInput(addressPage(false)) === canonicalRouteInput(page), target: () => input.target, revision: () => revision, work: () => gate.read()?.work ?? null, workBasis: basis,
-    // A row verb runs on this route's own Work handle: before the Work is ready it refuses with the Work's own
-    // reason ("Start this Work to edit"), as the cells do, instead of failing a press nobody sees. Any other
-    // catalog command that carries the Work handle refuses through workCommandRefusal.
-    commandRefusal:(id:string)=> input.readOnly || input.history ? "needs live Revit" : input.fixture !== null ? "Fixture has no native actions"
-      : "kind" in spec.commands[id]! ? ("row" in spec.commands[id]! && spec.commands[id]!.row ? (!edits ? "This view keeps no Work to write findings into" : !owners.get(own)?.ready ? owners.get(own)?.problem ?? "Reading Work..." : null) : workCommandRefusal(spec.commands[id]!.entry)) : basisRefusal(),
     problem: () => edits?basisRefusal():null, writeRefusal,
     /** The basis that failed (a Work feed failure, a thrown read), as distinct
      *  from a state such as "Start this Work to edit": failures draw as a pane failure line. */
@@ -641,7 +667,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     // A named read refreshes with the rest: every read is demanded at mount.
     refresh: (_read?:import("../route/host-read").HostRead) => {
       requireCurrent(); syncReads(true);
-    }, run, result:(id:string)=>results.get(id),
+    },
     review: (id: string) => { const r=reviews.get(id)??applyingReviews.get(id); if(!r) return null;
       const stale = !reviewCurrent(id, r.token, r.signature);
       return { preview: stale || !reviews.has(id) ? undefined : r.preview, sentence: stale ? null : r.presentation.sentence,
@@ -747,7 +773,8 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
         edit: (edit,detail)=>patch(()=>edits!.patches(edits!.input.parse(edit),valueOf(core)),detail),
       };
       return (render ?? ((ctx: DrawContext<any,any,any,any>) => pane.draw(ctx).node))({ target: input.target, refresh:mounted.refresh, read:(read:import("../route/host-read").HostRead)=>mounted.value(read), absent:absentLine, value, page: mounted.page, cells, selection:{read:()=>page.selected,set:(selected:any)=>move({selected})},
-        write:mounted.action } as any);
+        // A route's own id wins over a kernel verb of the same name.
+        verb:(id:string)=>Object.hasOwn(spec.verbs,id)||!Object.hasOwn(kernelVerbs,id)?mounted.verb(id):mounted.kernelVerb(id as KernelVerbKey) } as any);
     },
     // Retaining hidden read connections was a Plan-identity workaround; content fingerprints
     // now survive reconnect. Keep Work feeds connected so pending edits settle.
@@ -761,6 +788,9 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
   } catch (error) { cleanups.reverse().forEach(stop => stop()); throw error; }
 }
 export type TypedMount = ReturnType<typeof mountTypedRoute>;
+/** For a holder of only the id (a test, a harness): the handle as the kind it must be, or a throw. */
+export const planned = (verb: VerbHandle): PlannedVerb => { if (!("plan" in verb)) throw Error(`${verb.label} has no plan`); return verb; };
+export const direct = (verb: VerbHandle): RunVerb => { if (!("run" in verb)) throw Error(`${verb.label} is reviewed: plan it`); return verb; };
 async function settleNative(submission: ReturnType<WorkJournalDoor["submit"]>,receipt=false) {
   return new Promise<unknown>((resolve,reject)=>submission.accepted.subscribe(outcome=>{
     if(outcome.kind==="pending") return;

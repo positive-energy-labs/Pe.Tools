@@ -1,9 +1,9 @@
 import { z } from "zod";
-import { route, field, read, paneLayout, type ContextOf } from "../route/defaults";
+import { route, field, read, paneLayout, type ContextOf, type Verbs } from "../route/defaults";
 import type { ReadingState } from "@pe/agent-contracts";
 import { hostRead } from "../route/host-read";
 import { draw } from "../route/draw";
-import { command } from "../route/typed-actions";
+import { handle } from "@pe/agent-contracts/handle";
 import {
   takeoffsRouteState,
   valueRead,
@@ -46,7 +46,7 @@ export const patches = z.array(routeStatePatchSchema);
 /** The adoption pane draws the view catalogue it chooses from: the core refuses until views and zones
  * are chosen ("choose explicit zones"), and the chooser is the control that clears that refusal. */
 export type AdoptionContext = Omit<
-  ContextOf<typeof fields, typeof viewCatalogue, typeof takeoffsRouteState, typeof patches>,
+  ContextOf<typeof fields, typeof viewCatalogue, typeof takeoffsRouteState, typeof patches, Verbs<never, "initialize" | "adopt">>,
   "read"
 > & {
   // Named, not generic: wrapping the adoption data in the generic `read`'s `ReadingState` exceeds tsc's
@@ -90,9 +90,9 @@ export const module = route({
     history: z.object({ label: z.string() }),
     describe: (history) => ({ label: history.label }),
   },
-  commands: {
+  verbs: {
     initialize: {
-      ...command("takeoffs.initialize"),
+      handle: handle("takeoffs.initialize"),
       label: "Initialize",
       input: ({ value }) => {
         if (!value || value.initialize.refusal)
@@ -105,7 +105,7 @@ export const module = route({
           throw Error("Prepare Initialize from the current reading");
         return {};
       },
-      present: (_preview, data) => {
+      present: (_preview, { value: data }) => {
         const missing = data.initialize.missingCarrierGuids;
         if (!missing.length) throw Error("Read the missing shared parameters before initializing");
         return {
@@ -115,7 +115,7 @@ export const module = route({
       },
     },
     adopt: {
-      ...command("takeoffs.adopt"),
+      handle: handle("takeoffs.adopt"),
       label: "Adopt",
       input: ({ value }) => {
         if (!value || value.adopt.refusal)
@@ -142,5 +142,7 @@ export const module = route({
       draw: draw("scroll", () => import("./typed-adoption"), "AdoptionBody"),
     },
   },
+  // The band draws each review; the pane stages the Work a plan reads, then asks for the plan.
+  band: ["initialize", "adopt"],
   layout: paneLayout("adoption"),
 });

@@ -49,7 +49,7 @@ test("/pods declares subject, goal and query, and keeps arbitrary JSON outside t
   expect(data.goal).toBe("value");
   expect(data.sheet).toBeUndefined();
   // Arbitrary JSON never reaches Revit through the sheet pair; Save remains the route's own door.
-  expect(Object.keys(spec.commands).sort()).toEqual(["adopt", "open", "save", "saveNew"]);
+  expect(Object.keys(spec.verbs).sort()).toEqual(["adopt", "open", "save", "saveNew"]);
   // A person can Start this Work: the route seeds an empty one for Open saved bytes to fill.
   expect(spec.edits?.seed?.({} as never, null)).toEqual({ basis: null, fields: {} });
   // The title rides the sheet's head, the first pane after the subject list.

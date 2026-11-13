@@ -4,7 +4,7 @@ import { RosterBody, LedgerBody } from "./mount";
 import { kernelPane } from "../shell/typed-shell";
 import { SheetPane } from "../route/slots/sheet/pane.tsx";
 import * as networkBodies from "../ducts/proto/e/screen";
-import type { TypedMount } from "../shell/typed-mount";
+import { planned, type TypedMount } from "../shell/typed-mount";
 import type { FansRouteDocument } from "@pe/agent-contracts";
 import { completion } from "../shell/work-door-observation";
 import type { WorkJournalDoor, WorkWriteOutcome } from "../../../../packages/agent-contracts/src/work-journal-door";
@@ -42,13 +42,13 @@ export function nativeTestAdapter(mount: TypedMount, _door: WorkJournalDoor) {
     subjectState: mount.subjectState,
     workFailure: () => mount.owner()?.failure ?? null,
     reviewRefusal: (id:string)=>mount.reviewProblem(id)?Error(mount.reviewProblem(id)!):null,
-    confirm:(id:string)=>{if(mount.review(id)?.stale) throw Error("Review stale");return mount.run(id,true);},
+    confirm:(id:string)=>{if(mount.review(id)?.stale) throw Error("Review stale");return planned(mount.verb(id)).apply();},
     readingStatus: (id:string)=>({snapshot:snapshot(id)}),
     picker: (_field?: string) => {const value=valueOf(mount.value(mount.spec.subject!.read ?? mount.spec.core));return value ? mount.spec.subject!.options(value) : [];},
     setPaneDemand(_pane: string, _next: boolean) {},
     refresh: (id?: string) => mount.refresh(id ? mount.spec.reads?.[id] ?? mount.spec.core : undefined),
     invoke(id:string,input:any,basis=mount.workBasis()) {
-      if (id !== "edit") { void mount.run(id).catch(()=>{}); return {kind:"preview"}; }
+      if (id !== "edit") { void planned(mount.verb(id)).plan().catch(()=>{}); return {kind:"preview"}; }
       if (!basis) throw Error("Work unavailable");
       if(!mount.current(basis)) throw Error("Stale accepted Work basis");
       return completion<WorkWriteOutcome>({kind:"pending"},async()=>{

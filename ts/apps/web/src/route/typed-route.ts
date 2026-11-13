@@ -17,16 +17,16 @@ import { subjectSchema } from "@pe/agent-contracts/route-kernel-codecs";
 import type { PlanHandle as importPlanHandle } from "@pe/kit/lang/write-action";
 import { z } from "zod";
 import type { Publication } from "@pe/agent-contracts/value";
+// The command half of the handles only: `handle.ts` also holds the native catalog, which no Pod bundle may reach.
+import { handle, type CommandHandle, type Effect, type InputOf } from "../../../../packages/agent-contracts/src/command-handle.ts";
+/** A Pod declares its verbs with this: the same mint the builtin routes take from the contracts package. */
+export { handle };
+import type { KernelVerbKey } from "./slots/findings/index.ts";
 import { linkRouteGates } from "../../../../packages/agent-contracts/src/route-kernel-data.ts";
 import { picturePoseSchemas, pictureSlotData, sheetSlotData, writesRevit, SHEET_COMMANDS, type Goal, type PictureScope, type PictureSlot, type SheetSlot } from "@pe/agent-contracts/slots";
 
-// Generated metadata keeps command schemas out of Pod bundles. The host decodes inputs.
+// The generated table is data only: no command schema reaches the browser or a Pod bundle. The host decodes inputs.
 import { commandCatalogAxes } from "@pe/agent-contracts/command-axes";
-const sheetContract = (key: typeof SHEET_COMMANDS[keyof typeof SHEET_COMMANDS]) => ({
-  input: z.looseObject({}), output: z.unknown(), axes: commandCatalogAxes[key],
-});
-const sheetCommand = { entry: SHEET_COMMANDS.apply, plan: SHEET_COMMANDS.plan,
-  contract: sheetContract(SHEET_COMMANDS.apply), planContract: sheetContract(SHEET_COMMANDS.plan) };
 import { fillBody, scrollBody, type Body, type BodyKind } from "./body.ts";
 export { scrollBody, fillBody, type Body, type BodyKind } from "./body.ts";
 
@@ -173,7 +173,7 @@ export type PaneBindings = {
   members?: import("@pe/kit/lang/attention").Members;
   observation?: import("../revit/observation").NativeObservation;
 };
-export interface DrawContext<D, F extends Fields, W, Edit> {
+export interface DrawContext<D, F extends Fields, W, Edit, V extends AnyVerbs = AnyVerbs> {
   readonly target: import("@pe/agent-contracts").ExecutionTarget | null;
   /** A second reading; the body narrows on `"value" in` and draws `absent(state)` otherwise. */
   read<R extends HostRead>(read: R): ReadingState<ReadData<R>>;
@@ -185,15 +185,72 @@ export interface DrawContext<D, F extends Fields, W, Edit> {
   readonly selection: { read(): Page<F>["selected"]; set(value: Page<F>["selected"]): unknown };
   readonly cells: EditableCells<W, Edit>;
   refresh(read?: HostRead): void;
-  write(command: string): ActionHandle;
+  /** A verb this route declared, or one of the kernel's. A property, not a method: an id the route
+   *  did not declare fails `tsc` where the route names the body that asks for it. */
+  readonly verb: <K extends keyof (V & KernelVerbs)>(id: K) => (V & KernelVerbs)[K];
 }
-export interface ActionHandle extends importPlanHandle {
+/** What every verb says of itself, whichever door it goes through. */
+export interface VerbFacts {
   readonly label: string;
+  readonly effect: Effect;
   readonly pending: boolean;
   readonly refusal: string | null;
   readonly failure: string | null;
+}
+/** A verb whose handle has no plan: one press, one send. */
+export interface RunVerb extends VerbFacts {
   run(input?: unknown): Promise<unknown>;
 }
+/** A verb whose handle has a plan: it is reviewed, so it has no `run`. */
+export interface PlannedVerb extends VerbFacts, importPlanHandle {
+  readonly pending: boolean;
+  readonly refusal: string | null;
+  readonly failure: string | null;
+  plan(input?: unknown): Promise<unknown>;
+  apply(): Promise<unknown>;
+}
+export type VerbHandle = RunVerb | PlannedVerb;
+type KernelVerbs = Readonly<Record<KernelVerbKey, RunVerb>>;
+/** A body's verbs, named apart from the route declaration (`ContextOf`): the ids it runs, the ids it plans. */
+export type Verbs<Run extends string = never, Plan extends string = never> = Readonly<Record<Run, RunVerb>> &
+  Readonly<Record<Plan, PlannedVerb>>;
+type AnyVerbs = Readonly<Record<string, VerbHandle>>;
+type VerbScope = { page: unknown; value: unknown; doc: unknown };
+/** What a verb's `input` and `present` see: the Page, the target, the route's own Work and core Value. */
+export type VerbContext<C extends VerbScope = { page: any; value: any; doc: any }> = {
+  readonly page: C["page"];
+  readonly target: import("@pe/agent-contracts").ExecutionTarget | null;
+  readonly work: import("@pe/agent-contracts").WorkHandle | null;
+  readonly value: C["value"] | undefined;
+  readonly doc: C["doc"] | undefined;
+};
+/** What a review says: one sentence, or a sentence over its rows and cells (`presentationSchema` decodes it). */
+type Presentation = string | { readonly sentence: string; readonly rows: readonly string[]; readonly cells?: readonly unknown[] };
+/** The mount binds the Work handles; a verb supplies the rest of its handle's input. */
+type Unbound<I> = I extends object ? Omit<I, "work" | "readWorks"> : I;
+/**
+ * A verb: a command handle placed on a route (ADR 0042). Its plan decides whether it is reviewed, so a
+ * handle with a plan must say how its review reads; its effect decides which door it goes through.
+ * Without `input`, what the press supplies is the input.
+ */
+export type VerbDecl<C extends VerbScope, H extends CommandHandle = CommandHandle> = {
+  readonly handle: H;
+  readonly label: string;
+  readonly input?: (ctx: VerbContext<C>, supplied?: any) => Unbound<InputOf<H>>;
+} & (CommandHandle extends H
+  // A handle whose key is erased (a mounted spec declared again) keeps whatever it had.
+  ? { present?(result: unknown, ctx: VerbContext<C> & { readonly value: C["value"]; readonly doc: C["doc"] }): Presentation }
+  : H extends { plan: object }
+    ? { present(result: unknown, ctx: VerbContext<C> & { readonly value: C["value"]; readonly doc: C["doc"] }): Presentation }
+    : { present?: never });
+/** A declared verb as the shell holds it, whatever its handle. */
+export type AnyVerb = {
+  readonly handle: CommandHandle;
+  readonly label: string;
+  input?(ctx: VerbContext, supplied?: unknown): unknown;
+  present?(result: unknown, ctx: VerbContext): Presentation;
+};
+type HandlesOf<V> = { readonly [K in keyof V]: V[K] extends { plan: object } ? PlannedVerb : RunVerb };
 
 type Owner = { state: RouteStateSpec<z.ZodObject>; value?: string };
 export type Owners = Readonly<Record<string, Owner>>;
@@ -210,6 +267,7 @@ export type Specification<
   Reads extends Readonly<Record<string, HostRead>> = Readonly<Record<string, HostRead>>,
   SubjectRead extends HostRead = HostRead,
   Q extends QueryFields = {},
+  V extends Readonly<Record<string, CommandHandle>> = Readonly<Record<string, CommandHandle>>,
 > = {
   key: string;
   address?: string;
@@ -242,8 +300,8 @@ export type Specification<
   /** Slice 8: a scope (SubjectRef set, box, or prism with a frame) and marks from the closed set; the kernel draws
    * them in its picture pane. `overlay` is the one hook for what the closed marks cannot express: a builtin
    * loads it with `overlay()` (`slots/picture/overlay.tsx`, which types its parts); a Pod declares none. */
-  picture?: PictureSlot<DrawContext<NoInfer<D>, NoInfer<F & NoInfer<Q>>, z.output<W>, z.output<Edit>>> & {
-    overlay?(props: { ctx: DrawContext<NoInfer<D>, NoInfer<F & NoInfer<Q>>, z.output<W>, z.output<Edit>>; scope: PictureScope; picture(parts: any): any }): unknown;
+  picture?: PictureSlot<DrawContext<NoInfer<D>, NoInfer<F & NoInfer<Q>>, z.output<W>, z.output<Edit>, HandlesOf<NoInfer<V>>>> & {
+    overlay?(props: { ctx: DrawContext<NoInfer<D>, NoInfer<F & NoInfer<Q>>, z.output<W>, z.output<Edit>, HandlesOf<NoInfer<V>>>; scope: PictureScope; picture(parts: any): any }): unknown;
   };
   /** Slice 7: one host Read whose data is the Goal; the kernel draws its unresolved list first. */
   goal?: HostRead & { output: z.ZodType<Publication<Goal>>; args(page: Page<NoInfer<F & NoInfer<Q>>>): unknown };
@@ -251,7 +309,7 @@ export type Specification<
   query?: Q;
   /** The pane head's title (ADR 0035 rule 5): the kernel draws it in the head of the first pane, in layout
    * order, that is not the subject list. Null draws nothing. */
-  title?(ctx: DrawContext<NoInfer<D>, NoInfer<F & NoInfer<Q>>, z.output<W>, z.output<Edit>>): string | null;
+  title?(ctx: DrawContext<NoInfer<D>, NoInfer<F & NoInfer<Q>>, z.output<W>, z.output<Edit>, HandlesOf<NoInfer<V>>>): string | null;
   fields: F;
   reads?: Readonly<Record<string, HostRead & { args(page: Page<F & NoInfer<Q>>): unknown }>>;
   panes: {
@@ -264,8 +322,10 @@ export type Specification<
       /** The pane's ground (kit `Pane`): `artifact` lets support heads inside it recede (L4). */
       ground?: "artifact";
       read?: Reads[K];
-      bindings?(ctx: DrawContext<ReadData<Reads[K]>, F & NoInfer<Q>, z.output<W>, z.output<Edit>>): PaneBindings;
-    } & PaneBody<DrawContext<ReadData<Reads[K]>, F & NoInfer<Q>, z.output<W>, z.output<Edit>>>;
+      /** The verbs this pane's body draws. A verb is on the band or in exactly one pane. */
+      verbs?: readonly (keyof NoInfer<V> & string)[];
+      bindings?(ctx: DrawContext<ReadData<Reads[K]>, F & NoInfer<Q>, z.output<W>, z.output<Edit>, HandlesOf<NoInfer<V>>>): PaneBindings;
+    } & PaneBody<DrawContext<ReadData<Reads[K]>, F & NoInfer<Q>, z.output<W>, z.output<Edit>, HandlesOf<NoInfer<V>>>>;
   };
   edits?: {
     work: W | RouteStateSpec<W>;
@@ -278,33 +338,16 @@ export type Specification<
     history: z.ZodType;
     describe(history: any): { label: string; meta?: unknown };
   };
-  commands?: Readonly<
-    Record<
-      string,
-      {
-        entry: string;
-        plan: string;
-        contract: EntryContract;
-        planContract: EntryContract;
-        label: string;
-        input?(context:{page:Page<F & NoInfer<Q>>;target:import("@pe/agent-contracts").ExecutionTarget|null;
-          work:import("@pe/agent-contracts").WorkHandle|null;value:Immutable<D>|undefined},supplied?:any):unknown;
-        present(result: unknown, data: Immutable<D>, work: Immutable<z.output<W>>): unknown;
-      } | { kind: "session" | "catalog" | "query" | "rpc"; entry: string; contract: EntryContract; label: string;
-        /** A pane draws this verb on its rows, with the row's subject; the band does not. */
-        row?: true;
-        /** The pane holds this verb's input (a form, a chosen row) and draws its press; the band has no input to give it. */
-        pane?: true;
-        invoke?: import("@pe/agent-contracts").ReadEntry["run"];
-        input?(context: { page: Page<F & NoInfer<Q>>; target: import("@pe/agent-contracts").ExecutionTarget | null;
-          work: import("@pe/agent-contracts").WorkHandle | null; value: Immutable<D> | undefined },supplied?:any): unknown }
-    >
-  >;
+  /** Keyed by verb id, which is not the catalog key: two verbs may share one handle. */
+  verbs?: { readonly [K in keyof V]: VerbDecl<{ page: Page<F & NoInfer<Q>>; value: Immutable<D>; doc: Immutable<z.output<W>> }, V[K]> };
+  /** The verbs the shell draws on the band, the first primary. */
+  band?: readonly (keyof NoInfer<V> & string)[];
   layout: LayoutJson;
 };
 /** The shell executes this typed module. Data is a one-way discovery/host admission projection. */
 export function route<D, const F extends Fields, W extends z.ZodObject, Edit extends z.ZodType,
-  const Reads extends Readonly<Record<string, HostRead>>, SubjectRead extends HostRead, const Q extends QueryFields = {}>(spec: Specification<D, F, W, Edit, Reads, SubjectRead, Q>) {
+  const Reads extends Readonly<Record<string, HostRead>>, SubjectRead extends HostRead, const Q extends QueryFields = {},
+  const V extends Readonly<Record<string, CommandHandle>> = {}>(spec: Specification<D, F, W, Edit, Reads, SubjectRead, Q, V>) {
   const edits = spec.edits;
   const declared = edits?.work;
   const work = !declared ? undefined : "schema" in declared ? declared : { route: spec.key, title: spec.name,
@@ -313,14 +356,23 @@ export function route<D, const F extends Fields, W extends z.ZodObject, Edit ext
   const sheet = spec.sheet ? sheetSlotData(spec.sheet) : undefined;
   // ADR 0035 rules 2, 3 and 8: a filled sheet, goal or picture slot is a kernel-drawn pane and, for a sheet that writes Revit,
   // the one sheet pair as the route's `sheet` verb. A route that declares either itself keeps its own.
-  const declaredCommands = spec.commands ?? {};
-  const sheetVerb = sheet && writesRevit(sheet) && !Object.values(declaredCommands).some((c) => c.entry === SHEET_COMMANDS.apply)
-    ? { sheet: { ...sheetCommand, label: "Write to Revit",
+  const declaredVerbs: Readonly<Record<string, AnyVerb>> = spec.verbs ?? {};
+  const sheetVerb: Readonly<Record<string, AnyVerb>> = sheet && writesRevit(sheet) && !Object.values(declaredVerbs).some((verb) => verb.handle.key === SHEET_COMMANDS.apply)
+    ? { sheet: { handle: handle(SHEET_COMMANDS.apply), label: "Write to Revit",
         present: (result: unknown) => {
-          const writes = (result as { writes?: readonly unknown[] }).writes?.length ?? 0;
+          const writes = typeof result === "object" && result !== null && "writes" in result && Array.isArray(result.writes) ? result.writes.length : 0;
           return `Write ${writes} parameter value${writes === 1 ? "" : "s"} to Revit`;
         } } }
     : {};
+  // Drawn once: a verb is on the band or in exactly one pane. The kernel's sheet verb is the band's.
+  const band: readonly string[] = [...(spec.band ?? []), ...Object.keys(sheetVerb)];
+  const placed = [...band, ...Object.values(spec.panes).flatMap((pane) => pane.verbs ?? [])];
+  const verbTable: Readonly<Record<string, AnyVerb>> = { ...declaredVerbs, ...sheetVerb };
+  for (const id of placed) if (!Object.hasOwn(verbTable, id)) throw Error(`Route ${spec.key}: "${id}" is placed but is not a declared verb`);
+  for (const id of Object.keys(verbTable)) {
+    const places = placed.filter((at) => at === id).length;
+    if (places !== 1) throw Error(`Route ${spec.key}: verb "${id}" is ${places ? "placed more than once" : "in neither the band nor a pane"}; place it in the band or in exactly one pane`);
+  }
   // The shell draws a kernel pane (`typed-shell.tsx`, `kernel`): a route module, and a Pod bundle, carries no React.
   // The sheet pane reads the core, as a declared pane does by default (`defaults.ts`): its cells and empty state take that read.
   const kernelPanes = {
@@ -330,7 +382,7 @@ export function route<D, const F extends Fields, W extends z.ZodObject, Edit ext
     // The picture fills its pane and reads the core, whose evaluation is the capture's revision.
     ...(spec.picture && !Object.values(spec.panes).some((p) => p.kernel === "picture") ? { picture: { title: "Picture", purpose: "See the subject in the model", read: spec.core,
       kernel: "picture", body: "fill", draw: () => fillBody(null) } } : {}),
-  } as unknown as Specification<D, F, W, Edit, Reads, SubjectRead, Q>["panes"];
+  } as unknown as Specification<D, F, W, Edit, Reads, SubjectRead, Q, V>["panes"];
   // The pose is the kernel's: a declared picture brings its fields, so the pane the kernel adds can draw for a
   // route that named none. A route's own field under a pose name would be drawn as the pose, so it is refused.
   const own: Fields = { ...spec.query, ...spec.fields };
@@ -339,7 +391,7 @@ export function route<D, const F extends Fields, W extends z.ZodObject, Edit ext
   if (clash) throw Error(`Route ${spec.key}: field "${clash}" is the picture's pose; spread picturePose or rename it`);
   const pageFields = { ...pose, ...own };
   // `query` fields mount as Page fields: the shell reads one field table (rule 1: `query` holds what no slot does).
-  const normalized = { ...spec, fields: pageFields as F & Q, needs: spec.needs ?? "project", commands: { ...declaredCommands, ...sheetVerb } as NonNullable<typeof spec.commands>,
+  const normalized = { ...spec, fields: pageFields as F & Q, needs: spec.needs ?? "project", verbs: verbTable, band,
     panes: { ...spec.panes, ...kernelPanes }, edits: work && edits ? {...edits,work,owners} : undefined };
   const schemas: Record<string,z.ZodType> = { none:z.strictObject({}) };
   if (work && edits) {
@@ -370,11 +422,9 @@ export function route<D, const F extends Fields, W extends z.ZodObject, Edit ext
   const readings: Record<string,RouteGraphJson["readings"][string]>={};
   for(const [read,id] of readIds) readings[id]={kind:"use",entry:read.key,demand:"visible",
     retain:{evidence:"scope",resource:"scope"},refresh:"dependencies",deps:{page:Object.keys(fields),work:[],readings:[]}};
-  const verbs:RouteGraphJson["verbs"]=Object.fromEntries(Object.entries(normalized.commands).map(([id,cmd])=>{
-    if (cmd.contract.axes.effect === "Unset") throw Error(`Route ${spec.key}: verb ${id} has no declared effect`);
-    return [id,{
-    entry:cmd.entry,label:cmd.label,effect:cmd.contract.axes.effect,review:"plan" in cmd ? "shown" : "none",
-  }]; }));
+  const verbs:RouteGraphJson["verbs"]=Object.fromEntries(Object.entries(verbTable).map(([id,verb])=>[id,{
+    entry:verb.handle.key,label:verb.label,effect:verb.handle.effect,review:verb.handle.plan?"shown":"none",
+  }]));
   const data:RouteGraphJson={version:1,key:spec.key,address:spec.address ?? `/${spec.key}`,name:spec.name,directory:spec.directory,
     capabilities:[...(work?["work" as const]:[]),...(Object.keys(verbs).length?["native-write" as const]:[]),
       ...(["document","project","family"].includes(normalized.needs)?["geometry" as const]:[])],fields,
@@ -384,17 +434,22 @@ export function route<D, const F extends Fields, W extends z.ZodObject, Edit ext
       const meta=(schema as z.ZodType).meta();
       return meta?.title ? [[key,{label:meta.title,internal:meta.internal === true}]] : [];
     })),cells:{},panes:Object.fromEntries(Object.entries(normalized.panes).map(([id,p])=>[id,{label:p.title,purpose:p.purpose,
-      // row/pane flags say who does not draw in the band, but do not name an owning pane.
-      // Until SH-S2 declares placement, an empty placement is explicitly unknown.
-      draws:p.read?[readIds.get(p.read)!]:[],verbs:[]} ])),band:[],readings,verbs,seeds:{},layout:spec.layout,
+      draws:p.read?[readIds.get(p.read)!]:[],verbs:[...(p.verbs ?? [])]}])),band:[...band],readings,verbs,seeds:{},layout:spec.layout,
     ...(sheet?{sheet}:{}),...(spec.picture?{picture:pictureSlotData(spec.picture)}:{}),...(spec.goal?{goal:readIds.get(spec.goal)!}:{}),
     needs:normalized.needs === "browser" || normalized.needs === "host" ? "nothing" : normalized.needs,
     observe:[],resetOnTarget:[]};
   const gateErrors = linkRouteGates(data, schemas);
   if (gateErrors.length) throw Error(gateErrors.map(error => `${error.path}: ${error.message}`).join("; "));
   const host:HostRouteModule={data,schemas,...(work?{workState:work,readWorks:Object.keys(owners).filter(id=>id!==work.route)}:{})};
+  const axes: Readonly<Record<string, EntryContract["axes"]>> = commandCatalogAxes;
   const entries:Record<string,EntryContract>=Object.fromEntries([...[...readIds.keys()].map(read=>[read.key,read]),
-    ...Object.values(normalized.commands).flatMap(c=>[[c.entry,c.contract],...("plan" in c?[[c.plan,c.planContract]]:[])])]);
+    // The linker finds a verb's entry by key; its axes are the generated table's, and no schema rides along.
+    ...Object.values(verbTable).flatMap(verb=>[verb.handle,...(verb.handle.plan?[verb.handle.plan]:[])])
+      .map(h=>{
+        const declared = axes[h.key];
+        if (!declared) throw Error(`No generated axes for ${h.key}`);
+        return [h.key,{input:z.looseObject({}),output:z.unknown(),axes:declared}];
+      })]);
   return {spec:normalized,data,host,entries};
 }
-export type TypedRoute = ReturnType<typeof route<any, Fields, z.ZodObject, z.ZodType, Record<string, HostRead>, HostRead>>;
+export type TypedRoute = ReturnType<typeof route<any, Fields, z.ZodObject, z.ZodType, Record<string, HostRead>, HostRead, {}, Readonly<Record<string, CommandHandle>>>>;
