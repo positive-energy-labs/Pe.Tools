@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "test": "vp test",
-    "ratchets:tighten": "node src/unification-2-census.ts --tighten && node src/tighten-effect-islands.ts && node src/test-casts-census.ts --tighten && node src/health-census.ts --tighten"
+    "ratchets:tighten": "node src/unification-2-census.ts --tighten && node src/tighten-effect-islands.ts && node src/test-casts-census.ts --tighten && node src/health-census.ts --tighten && node src/route-closure-census.ts --tighten"
   },
   "devDependencies": {
     "@pe/host-contracts": "workspace:*",
