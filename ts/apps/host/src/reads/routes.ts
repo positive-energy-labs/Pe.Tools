@@ -1,4 +1,5 @@
 import { routeRegistry } from "../routes.generated.ts";
+import { placesRead, readPlaces } from "../places.ts";
 import { valueReadRequest, type HostRouteModule } from "@pe/agent-contracts";
 import {
   evaluate,
@@ -89,6 +90,7 @@ export const registeredReads: HostReadRegistry = readRegistry([
   ...Object.values(routeRegistry).map((route) => route.host),
   { reads: { [WORK_TIMELINE_READ]: workTimelineRead } },
 ]);
+registeredReads.register({ places: placesRead }, { places: async () => readPlaces() });
 /** HTTP adapters select a read; composition and freshness belong to the evaluator. */
 /** `by` is the request's author: the one per-caller read (`work.timeline`) is stamped with it here. */
 export function graphRoute(
