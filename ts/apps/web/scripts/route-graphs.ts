@@ -46,6 +46,8 @@ const jiti = createJiti(import.meta.url, {
 });
 const { canonicalRouteJson, projectKernelDirectory } =
   await jiti.import<typeof import("@pe/agent-contracts")>("@pe/agent-contracts");
+const { textCodec } = await jiti.import<typeof import("../../../packages/agent-contracts/src/route-field.ts")>("../../../packages/agent-contracts/src/route-field.ts");
+const { listSearchCodec } = await jiti.import<typeof import("../../../packages/agent-contracts/src/list-search.ts")>("../../../packages/agent-contracts/src/list-search.ts");
 const check = process.argv.includes("--check");
 // Write every builtin closure (untracked build output) without rewriting tracked projections.
 const closureOnly = process.argv.includes("--builtin-closure-only");
@@ -161,7 +163,9 @@ for (const key of keys) {
       const schema = field.role === "subject"
         ? `subjectSchema(${(json.oneOf as {properties?:{ids?:{maxItems?:number}}}[]).find(part=>part.properties?.ids)?.properties!.ids!.maxItems})`
         : `(z.fromJSONSchema(${JSON.stringify(json)}) as z.ZodType<Immutable<${schemaType(json)}>>)`;
-      const codec = field.codec === "list-search" ? ", codec: listSearchCodec" : field.codec === "text" ? ", codec: textCodec" : "";
+      const codecName = field.codec === listSearchCodec ? "listSearchCodec" : field.codec === textCodec ? "textCodec" : null;
+      if (field.codec && !codecName) throw Error(`${key}: the declared field codec has no address projection`);
+      const codec = codecName ? `, codec: ${codecName}` : "";
       const projected = `${agent ? "field" : "personField"}(${schema}${field.initial === undefined ? ".optional()" : `.default(${JSON.stringify(field.initial)})`}, ${JSON.stringify(field.url)})`;
       return `${JSON.stringify(key)}: ${field.share === false || codec ? `{ ...${projected}${field.share === false ? ", share: false" : ""}${codec} }` : projected}`;
     });

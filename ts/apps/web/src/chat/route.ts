@@ -1,7 +1,8 @@
 import * as contracts from "./contract.ts";
 import type { ContextOf } from "../route/defaults";
 import { z } from "zod";
-import { listSearchSchema, threadSearchDefault } from "@pe/agent-contracts";
+import { threadListFields } from "../../../../packages/agent-contracts/src/routes/shared.ts";
+import { textCodec } from "../../../../packages/agent-contracts/src/route-field.ts";
 import { field } from "../route/defaults";
 import { read } from "../route/defaults";
 import { route } from "../route/defaults.ts";
@@ -10,10 +11,9 @@ import { draw } from "../route/draw.tsx";
 
 export const loaded = read(hostRead(contracts.context));
 export const fields = {
-  threadSearch: { ...field(listSearchSchema, threadSearchDefault(), "query"), codec: "list-search" as const },
-  threadSort: { ...field(z.enum(["", "recent", "title"]), "", "query"), codec: "text" as const },
+  ...threadListFields,
   turn: field(z.number().int().positive().optional(), undefined, "query"),
-  prompt: { ...field(z.string().max(200), "", "query"), share: false as const, codec: "text" as const },
+  prompt: { ...field(z.string().max(200), "", "query"), share: false as const, codec: textCodec },
 };
 export type ChatHandle = ContextOf<typeof fields, typeof loaded, never, never>;
 /** `minOtherSize` is Pea's floor: the chat column's reading measure (`--chat-measure` in

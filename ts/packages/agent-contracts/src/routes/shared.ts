@@ -4,23 +4,28 @@ import {
   planeViewportSchema,
   viewportKey,
   type PlaneViewport,
+  type Codec,
 } from "../page-keys.ts";
-import { field } from "../route-field.ts";
+import { field, textCodec } from "../route-field.ts";
 import { z } from "zod";
 
 /** Chat's sidebar can accompany any route; its list view has one shareable address. */
 export const threadSearchDefault = () => pickListPill(emptyListSearch(), "scope", "all");
+/** One field object feeds both the kernel Page and address projections. */
+const sharedQuery = <S extends z.ZodType, C extends Codec<unknown>>(schema: S, codec: C) => ({
+  schema, codec, initial: schema.parse(undefined),
+  role: "query" as const, url: "replace" as const, agent: "set" as const,
+});
 export const threadListFields = {
-  threadSearch: field(
+  threadSearch: sharedQuery(
     listSearchKey()
       .default(threadSearchDefault)
       .describe(
         "JSON {v:1,keywords:string,pills:[{field,op:'=',value}]}. Literal keywords and equality pills. Fields: target, provider, state, unread, scope. Scope values: attention, all, archived.",
       ),
-    { url: "replace", agent: "set" },
     listSearchCodec,
   ),
-  threadSort: field(z.enum(["", "recent", "title"]).default(""), { url: "replace", agent: "set" }),
+  threadSort: sharedQuery(z.enum(["", "recent", "title"]).default(""), textCodec),
 };
 
 /** A plan picture's pan and zoom; null = fit. A drag replaces; Pea may set it. */

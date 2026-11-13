@@ -48,7 +48,7 @@ test("a person's finding on a fan port draws one mark on the port's geometry in 
     disconnect() {}
   });
   const dir = await mkdtemp(join(tmpdir(), "pe-findings-mark-"));
-  const native = await fixtureNative(join(dir, "native"));
+  const native = await fixtureNative(join(dir, "state", "native"));
   const socket = await native.connect();
   let saved: unknown = null;
   const host = new RouteWorkspace({

@@ -58,15 +58,9 @@ export type CapabilityIntent = {
 export const CANCEL_KEY = "op.cancel";
 const caller = (context: AdmissionContext) => new HostRpcCaller(context);
 
-/**
- * Whether calling an op writes. A native op answers by its effect, which is its handler's scope.
- * A host-only op keeps its hand-written intent: pointers.point is a SessionWrite that needs no
- * write consent, so its effect alone would send it through the command door.
- */
-export const opWrites = (op: Pick<HostOperationDefinition, "key" | "effect"> & { intent?: string }): boolean =>
-  isTsOnlyOperationKey(op.key) && op.intent !== undefined
-    ? op.intent !== "Read"
-    : !isReadEffect(op.effect);
+/** Effects select the door for both host-local and native operations. */
+export const opWrites = (op: Pick<HostOperationDefinition, "key" | "effect">): boolean =>
+  !isReadEffect(op.effect);
 
 export async function readCapabilityIntent(
   key: string,
@@ -94,9 +88,9 @@ export async function readCapabilityIntent(
   const local = tsOnlyOperationCatalog.find((row) => row.key === key);
   if (local)
     return {
-      door: local.intent === "Read" ? "call" : "command",
+      door: opWrites(local) ? "command" : "call",
       needs: local.needs,
-      mutates: local.intent !== "Read",
+      mutates: opWrites(local),
     };
   const catalog = definition ? undefined : await caller(context).catalog();
   const selected = definition ?? catalog?.ops.find((row) => row.key === key);
