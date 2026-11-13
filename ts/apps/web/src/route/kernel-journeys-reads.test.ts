@@ -214,7 +214,7 @@ test("JZ Plan route switch: Ducts reads preserve the Fans seal; changed Work sta
     mounted.release();
     const definitions = { ductsPricing, ductsNetwork, ductsRoster };
     const unregister = registeredReads.register(Object.fromEntries(Object.entries(definitions).filter(([, read]) => !registeredReads.reads.has(read.name))));
-    const sources = Object.fromEntries(Object.values(definitions).map(definition => [definition.name + ".value", publicationSource({
+    const sources = Object.fromEntries(Object.values(definitions).map(definition => [definition.name, publicationSource({
       async read(ctx, publication, release) {
         const response = await j.host.probe({ read: definition.name, ...publication, release, args: { target: ref, ...(ctx.args as object) } });
         expect(response.ok, await response.clone().text()).toBe(true);
@@ -546,7 +546,7 @@ async function compareSystemAnswers() {
   let generation = 0;
   const sources = Object.fromEntries(
     Object.values(definitions).map((definition) => [
-      `${definition.name}.value`,
+      definition.name,
       {
         kind: "use" as const,
         open(ctx, deliver) {

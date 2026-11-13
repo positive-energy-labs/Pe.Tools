@@ -606,10 +606,18 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
               });
             },
           ),
-        call: async (key, input, target, version, role) => {
+        call: async (key, input, target, version, role, signal) => {
+          // Interrupt only this native read join. NativeReads retains restoration and terminal custody.
+          const take = async <A, E>(effect: Effect.Effect<A, E, RequestIdentityKey | HostNativeRead>) => {
+            const result = await runPods(
+              {}, Effect.provide(effect, context).pipe(Effect.result), { signal },
+            );
+            if (result._tag === "Failure") throw result.failure;
+            return result.success;
+          };
           const chosen = executionTargetSchema.parse(target);
           const safety = hostOpSafety[key as keyof typeof hostOpSafety];
-          if (!safety || safety.intent !== "Read")
+          if (!safety || (safety.effect !== "Read" && safety.effect !== "TransactRead"))
             throw Error(`Native leaf is not a catalog Read: ${key}`);
           const ref = chosen.kind === "document" ? chosen.ref : null;
           if (!["ducts.snapshot.roster", "ducts.snapshot.walk", "ducts.tables"].includes(key)) {
@@ -619,7 +627,7 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
               : chosen.kind === "session"
                 ? { bridgeSessionId: chosen.session }
                 : {};
-            const answer = await invoke(native.read({ key, input, scope }));
+            const answer = await take(native.read({ key, input, scope }));
             return new Response(JSON.stringify(answer.value), {
               // Admission generations fence native flights; sealed read versions describe content.
               // Keep freshness evidence in the native taking, outside the Value's content identity.
@@ -632,7 +640,7 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
             ...(key === "ducts.tables" ? {} : { openDocumentId: ref.openId }),
           };
           return HttpServerResponse.toWeb(
-            await invoke(retained(current, { key, input, scope }, { version }, role, documentRead)),
+            await take(retained(current, { key, input, scope }, { version }, role, documentRead)),
           );
         },
       };

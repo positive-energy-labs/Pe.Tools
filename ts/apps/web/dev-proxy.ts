@@ -43,7 +43,7 @@ export function readHostRequest(method: string, url: string, body?: unknown): bo
     const call = body as { key?: unknown } | null;
     if (typeof call?.key !== "string" || !Object.hasOwn(hostOpSafety, call.key)) return false;
     const safety = hostOpSafety[call.key as keyof typeof hostOpSafety];
-    return safety.intent === "Read" && safety.usesTransactions === false;
+    return safety.effect === "Read";
   }
   if (method === "POST" && ["/family/readings", "/schedules/readings"].includes(path)) {
     const read = body as { key?: unknown; input?: { evaluate?: unknown } } | null;

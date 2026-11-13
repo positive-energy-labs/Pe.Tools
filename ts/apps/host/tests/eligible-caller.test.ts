@@ -65,7 +65,7 @@ test.each(["/call", "/native"])("eligible caller witness at %s", async (door) =>
     method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ key, request: input }),
   }), Context.make(RequestIdentity, admittedRequestIdentity(caller, { bridgeSessionId: "bridge-a", openDocumentId: "open-a" })));
   try {
-    expect(definition.intent).toBe("Read");
+    expect(definition.effect).toBe("Read");
     const refused = await send(pea());
     expect(refused.status, await refused.clone().text()).toBe(403);
     expect(await refused.json()).toMatchObject({ refusal: { code: "human.only", door: door === "/call" ? "/call" : "native-read" } });

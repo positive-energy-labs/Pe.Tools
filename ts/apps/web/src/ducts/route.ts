@@ -26,7 +26,7 @@ import { draw } from "../route/draw.tsx";
 import { fillBody, scrollBody } from "../route/body.ts";
 import { overlay } from "../route/slots/picture/overlay.tsx";
 import { describeInputHistory, editMetaSchema } from "./sheet/input-history.neutral.ts";
-import { reads } from "./reads.ts";
+import * as reads from "./contract.ts";
 import { presentLosses, presentHeal, presentFan } from "./reviews.ts";
 import { designSheet } from "./design-sheet.ts";
 

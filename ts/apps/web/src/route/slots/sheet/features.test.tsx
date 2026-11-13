@@ -1,8 +1,9 @@
+import { contract } from "@pe/agent-contracts/handle";
 import { native } from "@pe/agent-contracts/handle";
 import * as resources from "../../../host/resource-state";
 import { ductsRouteState, workFingerprintSchema, type WorkJournalDoor } from "@pe/agent-contracts";
 import { ductsSettings } from "@pe/agent-contracts/setting-owners";
-import { valueRead } from "@pe/agent-contracts/value";
+
 import { hostRead } from "../../host-read.ts";
 import { read, route, scrollBody } from "../../defaults.ts";
 import { mountTypedRoute } from "../../../shell/typed-mount.ts";
@@ -164,7 +165,7 @@ test.each(["refused", "stale"])("a %s stale-hash save re-reads the tier and draw
 });
 
 test.each(["ready", "stale"] as const)("the real mount sends a setting-home save with its exact tier, target and read hash without owning Work: %s", async state => {
-  const loaded = read(hostRead(valueRead("bindings.settings", z.object({}), z.unknown())));
+  const loaded = read(hostRead(contract("bindings.settings", { input: z.object({}), data: z.unknown(), uses: [] })));
   const declaration = route({ key: "settings", name: "Settings", needs: "host", host: "./host.ts", directory: settingsModule.spec.directory, fields: {}, core: loaded,
     panes: { sheet: { title: "Sheet", purpose: "Edit settings", body: "scroll", kernel: "sheet", read: loaded, draw: () => scrollBody(null) } },
     sheet: { bindings: { velocity: ductsSettings["setting.ducts.velocitySupplyFpm"]! } },

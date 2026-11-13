@@ -1,3 +1,5 @@
+import { body } from "@pe/host/read-graph";
+import { sizing as declaration } from "./contract.ts";
 import { z } from "zod";
 import { executionTargetSchema } from "@pe/agent-contracts/target";
 import { subjectCode, uniqueIdSchema } from "@pe/agent-contracts/subject-ref";
@@ -9,11 +11,7 @@ const stored = z.object({ doc: work }).nullable();
 const input = args.extend({ target: executionTargetSchema });
 const SAYS = { "no-flow": "carries no design flow", "exceeds-limit": "exceeds a limit at its current size", "no-catalog-size": "has no catalog size within both limits" };
 
-export const sizing = {
-  name: `${key}.sizing`,
-  input,
-  output: value,
-  async run(ctx: ReadContext, { system, target }: z.output<typeof input>) {
+export const sizing = body(declaration, async function(ctx: ReadContext, { system, target }: z.output<typeof input>) {
     if (target.kind !== "document") throw Error("Choose a project document");
     // The target document's Work, the firm file's limit, and two generic catalog reads: no Pod-owned native op.
     const doc = stored.parse(await ctx.work(key, target.ref))?.doc ?? work.parse({});
@@ -42,6 +40,5 @@ export const sizing = {
         result: unresolved.length ? { kind: "estimate" as const, value: sized.parse(result), sources: ["current diameters"] } : { kind: "complete" as const, value: sized.parse(result) },
       };
     });
-  },
-};
+  });
 export const reads = { sizing };

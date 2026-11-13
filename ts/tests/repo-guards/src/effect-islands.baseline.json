@@ -23,7 +23,11 @@
     "apps/host/src/session-route.ts": 1,
     "packages/browser/src/attached-guardian.ts": 1,
     "packages/browser/src/keeper.ts": 1,
-    "packages/mcps/src/shared/host-rpc-caller.ts": 1
+    "packages/mcps/src/shared/host-rpc-caller.ts": 1,
+    "apps/web/src/machine/open-contract.ts": 0,
+    "apps/web/src/route/slots/findings/notes.tsx": 0,
+    "apps/web/src/route/slots/subject-name.ts": 0,
+    "packages/agent-contracts/src/command-handle.ts": 0
   },
   "tests": {
     "apps/host/tests/boundary.test.ts": 5,
@@ -44,6 +48,11 @@
     "apps/host/tests/update-route.test.ts": 1,
     "apps/host/tests/vite-web.test.ts": 4,
     "apps/host/tests/work-lifetime.test.ts": 1,
-    "packages/browser/tests/acceptance.test.ts": 1
+    "packages/browser/tests/acceptance.test.ts": 1,
+    "apps/host/tests/findings-guide.test.ts": 0,
+    "apps/web/src/route/slots/findings/notes.test.tsx": 0,
+    "apps/web/src/route/slots/subject-name.test.ts": 0,
+    "apps/web/src/route/verbs.test.ts": 0,
+    "packages/host-contracts/src/route-startup.test.ts": 0
   }
 }

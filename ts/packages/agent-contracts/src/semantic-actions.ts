@@ -527,7 +527,7 @@ export const preparedTakeoffSchema = z.strictObject({
 export const hostActions = {
   "ops.read": {
     via: { route: "operation.call" },
-    native: [...hostOpCatalog, ...tsOnlyOperationCatalog].filter((op) => op.intent === "Read").map((op) => op.key),
+    native: [...hostOpCatalog, ...tsOnlyOperationCatalog].filter((op) => (op.effect === "Read" || op.effect === "TransactRead")).map((op) => op.key),
     says: "Read one native operation through the guarded operation door.",
     needs: "nothing", effect: "query", dirties: [],
     input: z.object({ op: z.object({ key: z.string(), intent: z.string() }).passthrough(), request: z.unknown() }),
