@@ -28,7 +28,7 @@ export const fields = {
   zones: field(many, [], "query", "push"),
   work: field(z.string(), "", "query", "push"),
   r10: field(z.string(), "", "query", "push"),
-  stage: field(z.literal("adopt"), "adopt", "pose"),
+  stage: field(z.literal("adopt"), "adopt", "stage", "push"),
 };
 export const loaded = read(
   hostRead(valueRead("takeoffs.adoption", adoptionArgs, adoptionData)),

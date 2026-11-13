@@ -149,7 +149,7 @@ export function FamiliesMatrix({ ctx }: { ctx: FamiliesDrawContext }) {
           <FindingVerb
             subject={subjectCode({ keyKind: "name", key: [type.familyName, type.typeName] })}
             name={`${type.familyName} · ${type.typeName}`}
-            action={ctx.verb(FINDINGS_DOORS.write)}
+            action={ctx.verb(FINDINGS_DOORS.say)}
           />
         )}
         edit={{

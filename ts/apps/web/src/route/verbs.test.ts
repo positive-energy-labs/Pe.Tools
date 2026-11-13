@@ -29,7 +29,7 @@ const declare = (placed: { band?: readonly "read"[]; pane?: readonly "read"[] })
         draw: (ctx) => {
           // A declared id and a kernel id are verbs of this route.
           void ctx.verb("read").run;
-          void ctx.verb("findings.write").run;
+          void ctx.verb("findings.say").run;
           // @ts-expect-error `nope` is not a verb this route declared.
           void ctx.verb("nope");
           return scrollBody(null);

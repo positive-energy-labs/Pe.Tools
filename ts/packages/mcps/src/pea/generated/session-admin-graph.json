@@ -95,61 +95,22 @@
   },
   "verbs": {
     "start": {
-      "kind": "command",
-      "input": "none",
+      "entry": "instances.start",
       "label": "Start Revit and open",
       "effect": "SessionWrite",
-      "review": "none",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": [
-          "value"
-        ]
-      },
-      "captures": [
-        "value"
-      ],
-      "entry": "instances.start",
-      "intent": "start"
+      "review": "none"
     },
     "stop": {
-      "kind": "command",
-      "input": "none",
+      "entry": "instances.stop",
       "label": "Stop Revit",
       "effect": "SessionWrite",
-      "review": "none",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": [
-          "value"
-        ]
-      },
-      "captures": [
-        "value"
-      ],
-      "entry": "instances.stop",
-      "intent": "stop"
+      "review": "none"
     },
     "restart": {
-      "kind": "command",
-      "input": "none",
+      "entry": "instances.restart",
       "label": "Hot reload Revit",
       "effect": "SessionWrite",
-      "review": "none",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": [
-          "value"
-        ]
-      },
-      "captures": [
-        "value"
-      ],
-      "entry": "instances.restart",
-      "intent": "restart"
+      "review": "none"
     }
   },
   "band": [],
@@ -171,23 +132,6 @@
     "kind": "pane",
     "id": "sessions"
   },
-  "stages": {
-    "main": {
-      "word": "Sessions",
-      "panes": [
-        "sessions"
-      ],
-      "verbs": [
-        "start",
-        "stop",
-        "restart"
-      ]
-    }
-  },
-  "stageOrder": [
-    "main"
-  ],
-  "predicates": {},
   "cells": {},
   "workFields": {},
   "seeds": {},

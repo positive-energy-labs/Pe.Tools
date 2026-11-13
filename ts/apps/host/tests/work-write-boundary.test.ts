@@ -110,6 +110,8 @@ async function fixture() {
     caller: { kind: "human", via: "local" },
     basis: null,
     consumed: [],
+    clock: { now: () => new Date().toISOString() },
+    ids: { mint: () => crypto.randomUUID() },
     work: {} as CommandContext["work"],
     selectWork: vi.fn(async () => doc) as CommandContext["selectWork"],
     read: { receipts: () => receipts },

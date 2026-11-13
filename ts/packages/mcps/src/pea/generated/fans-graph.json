@@ -547,34 +547,10 @@
   },
   "verbs": {
     "losses": {
-      "kind": "command",
-      "input": "none",
+      "entry": "sheet.apply",
       "label": "Write to Revit",
       "effect": "ModelWrite",
-      "review": "shown",
-      "deps": {
-        "page": [
-          "fan"
-        ],
-        "work": [
-          "writeIntent",
-          "calculation",
-          "terminalDrops",
-          "componentDrops",
-          "esp",
-          "equipmentFlows",
-          "roles",
-          "flows"
-        ],
-        "readings": [
-          "value"
-        ]
-      },
-      "captures": [
-        "value"
-      ],
-      "entry": "sheet.apply",
-      "intent": "losses"
+      "review": "shown"
     }
   },
   "band": [
@@ -664,24 +640,6 @@
       }
     }
   },
-  "stages": {
-    "sheet": {
-      "word": "Fans",
-      "panes": [
-        "sheet-roster",
-        "sheet-inputs",
-        "sheet-picture",
-        "sheet-ledger"
-      ],
-      "verbs": [
-        "losses"
-      ]
-    }
-  },
-  "stageOrder": [
-    "sheet"
-  ],
-  "predicates": {},
   "cells": {},
   "workFields": {},
   "seeds": {},

@@ -89,7 +89,7 @@ test("optional Work and invocation arguments share one typed scope", async () =>
     mounted.page.query({member:"B"});expect(mounted.owner()?.handle?.key).toMatchObject({binding:"workspace",work:"B"});
     mounted.refresh(module.spec.core);expect(source).toHaveBeenCalled();
     expect(mounted.placement()).toEqual({band:["start","echo"],panes:{main:[]}});
-    expect(mounted.kernelVerb("findings.write")).toMatchObject({label:"Write finding",effect:"WorkWrite"});
+    expect(mounted.kernelVerb("findings.say")).toMatchObject({label:"Say finding",effect:"WorkWrite"});
     expect(()=>mounted.verb("nope")).toThrow("Unknown verb nope");
     const echo={op:{key:"logs.tail",intent:"Read"},request:{blob:"invocation only"}};
     await direct(mounted.verb("echo")).run(echo);

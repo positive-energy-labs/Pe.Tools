@@ -125,100 +125,28 @@
   "goal": "value",
   "verbs": {
     "open": {
-      "kind": "command",
-      "input": "none",
+      "entry": "settings.observe",
       "label": "Open saved bytes",
       "effect": "SessionWrite",
-      "review": "none",
-      "deps": {
-        "page": [
-          "member"
-        ],
-        "work": [
-          "basis",
-          "fields"
-        ],
-        "readings": [
-          "value"
-        ]
-      },
-      "captures": [
-        "value"
-      ],
-      "entry": "settings.observe",
-      "intent": "open"
+      "review": "none"
     },
     "adopt": {
-      "kind": "command",
-      "input": "none",
+      "entry": "settings.observe",
       "label": "Adopt disk bytes and replace edits",
       "effect": "SessionWrite",
-      "review": "none",
-      "deps": {
-        "page": [
-          "member"
-        ],
-        "work": [
-          "basis",
-          "fields"
-        ],
-        "readings": [
-          "value"
-        ]
-      },
-      "captures": [
-        "value"
-      ],
-      "entry": "settings.observe",
-      "intent": "adopt"
+      "review": "none"
     },
     "save": {
-      "kind": "command",
-      "input": "none",
+      "entry": "settings.write",
       "label": "Save staged member",
       "effect": "SessionWrite",
-      "review": "none",
-      "deps": {
-        "page": [
-          "member"
-        ],
-        "work": [
-          "basis",
-          "fields"
-        ],
-        "readings": [
-          "value"
-        ]
-      },
-      "captures": [
-        "value"
-      ],
-      "entry": "settings.write",
-      "intent": "save"
+      "review": "none"
     },
     "saveNew": {
-      "kind": "command",
-      "input": "none",
+      "entry": "settings.write",
       "label": "Save as new member",
       "effect": "SessionWrite",
-      "review": "none",
-      "deps": {
-        "page": [
-          "member"
-        ],
-        "work": [
-          "basis",
-          "fields"
-        ],
-        "readings": [
-          "value"
-        ]
-      },
-      "captures": [
-        "value"
-      ],
-      "entry": "settings.write",
-      "intent": "saveNew"
+      "review": "none"
     }
   },
   "band": [
@@ -304,27 +232,6 @@
     ],
     "sized": "start"
   },
-  "stages": {
-    "main": {
-      "word": "Pods",
-      "panes": [
-        "members",
-        "runs",
-        "sheet",
-        "goal"
-      ],
-      "verbs": [
-        "open",
-        "adopt",
-        "save",
-        "saveNew"
-      ]
-    }
-  },
-  "stageOrder": [
-    "main"
-  ],
-  "predicates": {},
   "cells": {},
   "workFields": {
     "basis": {

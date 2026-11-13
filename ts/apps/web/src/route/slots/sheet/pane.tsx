@@ -154,7 +154,7 @@ export function SheetPane({ ctx: { draw: ctx, slot, field } }: { ctx: { draw: Ct
     const subject = subjectRow(cell.row);
     if (!subject || verbed.has(subject)) return null;
     verbed.add(subject);
-    return <FindingVerb subject={subject} name={cell.label} action={ctx.verb(FINDINGS_DOORS.write)} />;
+    return <FindingVerb subject={subject} name={cell.label} action={ctx.verb(FINDINGS_DOORS.say)} />;
   };
   if (empty) return <>{note}<p className="text-ink-2">{empty}</p></>;
   return (

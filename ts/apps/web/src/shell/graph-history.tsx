@@ -32,7 +32,7 @@ export function GraphHistory({
   const projected = projectTimeline(entries, verbs, journal);
   // The person's latest written finding carries their undo; the host's history door undoes their own last one.
   const ownFinding = owner.undoFinding && [...projected].reverse().find((row) =>
-    receiptKey(row) === FINDINGS_DOORS.write && row.outcome?.state === "succeeded" && entryCaller(row.entry) === "you")?.key;
+    receiptKey(row) === FINDINGS_DOORS.say && row.outcome?.state === "succeeded" && entryCaller(row.entry) === "you")?.key;
   // Whether anything of the person's is left to undo is the host's findings Work's answer, asked again
   // when their latest write changes and after each undo; null (unread) leaves the host to refuse.
   const [ownLeft, setOwnLeft] = useState<number | null>(null);

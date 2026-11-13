@@ -9,6 +9,7 @@ import { elementIndex } from "../element-index";
 import { NativeObservationScope } from "../revit/observation";
 import { ValueScope } from "@pe/kit/lang/collection";
 import type { DrawContext } from "../route/typed-route";
+import { gateActive } from "../route/typed-route";
 import { useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { useRouter } from "@tanstack/react-router";
 import { GraphLayoutView, type GraphLayoutState } from "@pe/kit";
@@ -194,10 +195,8 @@ function BandTimeline({ mount, recorded }: { mount: TypedMount; recorded?: React
 const paneFacts = (spec: TypedMount["spec"]) =>
   Object.fromEntries(Object.entries(spec.panes).map(([id,p])=>[id,{label:p.title,purpose:p.purpose,draws:[],verbs:[]}]));
 /** The layout's `subject` gate: open when the Page holds a subject. */
-const subjectActive = (mount: TypedMount, when: string) => {
-  const subject = mount.spec.subject, held = subject && mount.page.read()[subject.field];
-  return when === "subject" && !!held && (held.kind === "all" || !!held.ids?.length);
-};
+const subjectActive = (mount: TypedMount, when: string | import("@pe/agent-contracts").GateWhen) =>
+  gateActive(when, mount.page.read(), mount.spec.subject?.field);
 export function TypedWrite({ mount, id }: { mount: TypedMount; id: string }) {
   const handle=mount.verb(id);
   // Review follows the plan: a handle with one is planned and applied, any other is one press.

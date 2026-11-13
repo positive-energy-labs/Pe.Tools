@@ -91,109 +91,34 @@
   },
   "verbs": {
     "run": {
-      "kind": "command",
-      "input": "none",
+      "entry": "ops.read",
       "label": "Run read",
       "effect": "SessionWrite",
-      "review": "none",
-      "deps": {
-        "page": [
-          "op"
-        ],
-        "work": [],
-        "readings": [
-          "value"
-        ]
-      },
-      "captures": [
-        "value"
-      ],
-      "entry": "ops.read",
-      "intent": "run"
+      "review": "none"
     },
     "action.read": {
-      "kind": "command",
-      "input": "none",
+      "entry": "action.read",
       "label": "Read receipt",
       "effect": "Read",
-      "review": "none",
-      "deps": {
-        "page": [
-          "op"
-        ],
-        "work": [],
-        "readings": [
-          "value"
-        ]
-      },
-      "captures": [
-        "value"
-      ],
-      "entry": "action.read",
-      "intent": "action.read"
+      "review": "none"
     },
     "action.recover": {
-      "kind": "command",
-      "input": "none",
+      "entry": "action.recover",
       "label": "Recover action",
       "effect": "SessionWrite",
-      "review": "none",
-      "deps": {
-        "page": [
-          "op"
-        ],
-        "work": [],
-        "readings": [
-          "value"
-        ]
-      },
-      "captures": [
-        "value"
-      ],
-      "entry": "action.recover",
-      "intent": "action.recover"
+      "review": "none"
     },
     "action.resume": {
-      "kind": "command",
-      "input": "none",
+      "entry": "action.resume",
       "label": "Resume action",
       "effect": "SessionWrite",
-      "review": "none",
-      "deps": {
-        "page": [
-          "op"
-        ],
-        "work": [],
-        "readings": [
-          "value"
-        ]
-      },
-      "captures": [
-        "value"
-      ],
-      "entry": "action.resume",
-      "intent": "action.resume"
+      "review": "none"
     },
     "action.cancel": {
-      "kind": "command",
-      "input": "none",
+      "entry": "action.cancel",
       "label": "Cancel action",
       "effect": "SessionWrite",
-      "review": "none",
-      "deps": {
-        "page": [
-          "op"
-        ],
-        "work": [],
-        "readings": [
-          "value"
-        ]
-      },
-      "captures": [
-        "value"
-      ],
-      "entry": "action.cancel",
-      "intent": "action.cancel"
+      "review": "none"
     }
   },
   "band": [],
@@ -217,25 +142,6 @@
     "kind": "pane",
     "id": "main"
   },
-  "stages": {
-    "main": {
-      "word": "Ops",
-      "panes": [
-        "main"
-      ],
-      "verbs": [
-        "run",
-        "action.read",
-        "action.recover",
-        "action.resume",
-        "action.cancel"
-      ]
-    }
-  },
-  "stageOrder": [
-    "main"
-  ],
-  "predicates": {},
   "cells": {},
   "workFields": {},
   "seeds": {},

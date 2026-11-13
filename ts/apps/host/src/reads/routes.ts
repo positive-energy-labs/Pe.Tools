@@ -36,7 +36,7 @@ function bind<I, O>(
       id: string,
       generation: number,
       port: InputPort,
-      keep?: (publication: Publication<O>) => Promise<() => void>,
+      keep?: (publication: Publication<unknown>) => Promise<() => void>,
       admitted?: ReturnType<Publications["admission"]>,
     ) => owner.publish(id, generation, definition, args, port, keep, admitted),
   };

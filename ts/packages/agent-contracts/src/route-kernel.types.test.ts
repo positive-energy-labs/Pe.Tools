@@ -264,7 +264,7 @@ export function criticRefusals(
       void readings.total;
       // @ts-expect-error only named captures are visible
       void captures.roster;
-      return { amount: ("value" in captures.total ? captures.total.value.total : undefined) ?? work.amount };
+      return { amount: "value" in captures.total ? captures.total.value.total : work.amount };
     },
   };
   // @ts-expect-error critic R5: no partial restore through the move door

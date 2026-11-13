@@ -36,5 +36,5 @@ test("a Pod's sheet row keyed by a SubjectRef shows the person's Finding verb, w
   fireEvent.click(screen.getByRole("button", { name: "Write a finding on Pipe size" }));
   fireEvent.change(await screen.findByRole("textbox", { name: "finding text" }), { target: { value: "riser undersized" } });
   fireEvent.click(screen.getByRole("button", { name: "Write note on Pipe size" }));
-  await vi.waitFor(() => expect(run).toHaveBeenCalledWith("findings.write", expect.objectContaining({ subject: pipe, kind: "note", text: "riser undersized" })));
+  await vi.waitFor(() => expect(run).toHaveBeenCalledWith("findings.say", expect.objectContaining({ subject: pipe, kind: "note", text: "riser undersized" })));
 });

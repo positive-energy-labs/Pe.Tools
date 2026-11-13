@@ -90,7 +90,7 @@ export function RosterBody({ ctx }: { ctx: SheetContext }) {
           roster: roster,
           picked: pickedFans === "all" ? roster.map(stableFanKey) : pickedFans,
           open: open,
-          finding: ctx.verb(FINDINGS_DOORS.write),
+          finding: ctx.verb(FINDINGS_DOORS.say),
           busy: busy,
           loading: busy,
         }}

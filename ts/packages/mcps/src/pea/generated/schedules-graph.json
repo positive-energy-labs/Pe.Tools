@@ -132,82 +132,22 @@
   },
   "verbs": {
     "read": {
-      "kind": "command",
-      "input": "none",
+      "entry": "schedule.grid.read",
       "label": "Read schedule",
       "effect": "SessionWrite",
-      "review": "none",
-      "deps": {
-        "page": [
-          "workspaceId"
-        ],
-        "work": [
-          "writeIntent",
-          "basis",
-          "cells",
-          "takenAt"
-        ],
-        "readings": [
-          "value"
-        ]
-      },
-      "captures": [
-        "value"
-      ],
-      "entry": "schedule.grid.read",
-      "intent": "read"
+      "review": "none"
     },
     "bind": {
-      "kind": "command",
-      "input": "none",
+      "entry": "schedule.grid.bind",
       "label": "Bind schedule",
       "effect": "SessionWrite",
-      "review": "none",
-      "deps": {
-        "page": [
-          "workspaceId"
-        ],
-        "work": [
-          "writeIntent",
-          "basis",
-          "cells",
-          "takenAt"
-        ],
-        "readings": [
-          "value"
-        ]
-      },
-      "captures": [
-        "value"
-      ],
-      "entry": "schedule.grid.bind",
-      "intent": "bind"
+      "review": "none"
     },
     "push": {
-      "kind": "command",
-      "input": "none",
+      "entry": "schedule.grid.push",
       "label": "Apply cells",
       "effect": "ModelWrite",
-      "review": "shown",
-      "deps": {
-        "page": [
-          "workspaceId"
-        ],
-        "work": [
-          "writeIntent",
-          "basis",
-          "cells",
-          "takenAt"
-        ],
-        "readings": [
-          "value"
-        ]
-      },
-      "captures": [
-        "value"
-      ],
-      "entry": "schedule.grid.push",
-      "intent": "push"
+      "review": "shown"
     }
   },
   "band": [],
@@ -229,23 +169,6 @@
     "kind": "pane",
     "id": "grid"
   },
-  "stages": {
-    "main": {
-      "word": "Schedules",
-      "panes": [
-        "grid"
-      ],
-      "verbs": [
-        "read",
-        "bind",
-        "push"
-      ]
-    }
-  },
-  "stageOrder": [
-    "main"
-  ],
-  "predicates": {},
   "cells": {},
   "workFields": {
     "basis": {

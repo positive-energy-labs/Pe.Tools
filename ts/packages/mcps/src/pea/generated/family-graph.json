@@ -87,7 +87,7 @@
       }
     },
     "stage": {
-      "role": "pose",
+      "role": "stage",
       "schema": "stage",
       "codec": "stage",
       "initial": "audit",
@@ -193,193 +193,46 @@
   "goal": "value",
   "verbs": {
     "read": {
-      "kind": "command",
-      "input": "none",
+      "entry": "family.read",
       "label": "Read family",
       "effect": "Read",
-      "review": "none",
-      "deps": {
-        "page": [
-          "member"
-        ],
-        "work": [
-          "writeIntent",
-          "reading",
-          "spec",
-          "cells",
-          "takenAt"
-        ],
-        "readings": [
-          "value"
-        ]
-      },
-      "captures": [
-        "value"
-      ],
-      "entry": "family.read",
-      "intent": "read"
+      "review": "none"
     },
     "saved": {
-      "kind": "command",
-      "input": "none",
+      "entry": "family.saved",
       "label": "Read saved family",
       "effect": "Read",
-      "review": "none",
-      "deps": {
-        "page": [
-          "member"
-        ],
-        "work": [
-          "writeIntent",
-          "reading",
-          "spec",
-          "cells",
-          "takenAt"
-        ],
-        "readings": [
-          "value"
-        ]
-      },
-      "captures": [
-        "value"
-      ],
-      "entry": "family.saved",
-      "intent": "saved"
+      "review": "none"
     },
     "open": {
-      "kind": "command",
-      "input": "none",
+      "entry": "family.observe",
       "label": "Open member",
       "effect": "Read",
-      "review": "none",
-      "deps": {
-        "page": [
-          "member"
-        ],
-        "work": [
-          "writeIntent",
-          "reading",
-          "spec",
-          "cells",
-          "takenAt"
-        ],
-        "readings": [
-          "value"
-        ]
-      },
-      "captures": [
-        "value"
-      ],
-      "entry": "family.observe",
-      "intent": "open"
+      "review": "none"
     },
     "attach": {
-      "kind": "command",
-      "input": "none",
+      "entry": "family.attach-spec",
       "label": "Attach PDF",
       "effect": "SessionWrite",
-      "review": "none",
-      "deps": {
-        "page": [
-          "member"
-        ],
-        "work": [
-          "writeIntent",
-          "reading",
-          "spec",
-          "cells",
-          "takenAt"
-        ],
-        "readings": [
-          "value"
-        ]
-      },
-      "captures": [
-        "value"
-      ],
-      "entry": "family.attach-spec",
-      "intent": "attach"
+      "review": "none"
     },
     "capture": {
-      "kind": "command",
-      "input": "none",
+      "entry": "family.capture",
       "label": "Save family to pod",
       "effect": "SessionWrite",
-      "review": "none",
-      "deps": {
-        "page": [
-          "member"
-        ],
-        "work": [
-          "writeIntent",
-          "reading",
-          "spec",
-          "cells",
-          "takenAt"
-        ],
-        "readings": [
-          "value"
-        ]
-      },
-      "captures": [
-        "value"
-      ],
-      "entry": "family.capture",
-      "intent": "capture"
+      "review": "none"
     },
     "build": {
-      "kind": "command",
-      "input": "none",
+      "entry": "family.build",
       "label": "Build .rfa",
       "effect": "ModelWrite",
-      "review": "shown",
-      "deps": {
-        "page": [
-          "member"
-        ],
-        "work": [
-          "writeIntent",
-          "reading",
-          "spec",
-          "cells",
-          "takenAt"
-        ],
-        "readings": [
-          "value"
-        ]
-      },
-      "captures": [
-        "value"
-      ],
-      "entry": "family.build",
-      "intent": "build"
+      "review": "shown"
     },
     "apply": {
-      "kind": "command",
-      "input": "none",
+      "entry": "family.apply",
       "label": "Apply family",
       "effect": "ModelWrite",
-      "review": "shown",
-      "deps": {
-        "page": [
-          "member"
-        ],
-        "work": [
-          "writeIntent",
-          "reading",
-          "spec",
-          "cells",
-          "takenAt"
-        ],
-        "readings": [
-          "value"
-        ]
-      },
-      "captures": [
-        "value"
-      ],
-      "entry": "family.apply",
-      "intent": "apply"
+      "review": "shown"
     }
   },
   "band": [
@@ -427,28 +280,6 @@
     ],
     "sized": "end"
   },
-  "stages": {
-    "main": {
-      "word": "Family",
-      "panes": [
-        "workspace",
-        "goal"
-      ],
-      "verbs": [
-        "read",
-        "saved",
-        "open",
-        "attach",
-        "capture",
-        "build",
-        "apply"
-      ]
-    }
-  },
-  "stageOrder": [
-    "main"
-  ],
-  "predicates": {},
   "cells": {},
   "workFields": {
     "writeIntent": {

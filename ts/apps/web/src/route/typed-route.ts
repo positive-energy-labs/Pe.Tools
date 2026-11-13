@@ -1,7 +1,7 @@
 import type {
   HostRouteModule,
   Immutable,
-  RouteGraphJson,
+  RouteGraphWire as RouteGraphJson,
   RouteStatePatch,
   RouteStateSpec,
   ReadingState,
@@ -23,6 +23,7 @@ import { handle, type CommandHandle, type Effect, type InputOf } from "../../../
 /** A Pod declares its verbs with this: the same mint the builtin routes take from the contracts package. */
 export { handle };
 import type { KernelVerbKey } from "./slots/findings/index.ts";
+import { linkRouteGates } from "../../../../packages/agent-contracts/src/route-kernel-data.ts";
 import { picturePoseSchemas, pictureSlotData, sheetSlotData, writesRevit, SHEET_COMMANDS, type Goal, type PictureScope, type PictureSlot, type SheetSlot } from "@pe/agent-contracts/slots";
 
 // The generated table is data only: no command schema reaches the browser or a Pod bundle. The host decodes inputs.
@@ -39,6 +40,32 @@ type Field = {
 export const whenSubject = (child: string | LayoutJson): LayoutJson => ({
   kind: "gate", when: "subject", child: typeof child === "string" ? { kind: "pane", id: child } : child,
 });
+/** Field names and values come from the same declaration, never a free-form predicate id. */
+export const when = <const F extends Fields, K extends keyof F & string>(
+  fields: F, key: K, value: NoInfer<z.output<F[K]["schema"]>> & string, child: string | LayoutJson,
+): LayoutJson => {
+  fields[key]!.schema.parse(value);
+  return { kind: "gate", when: { field: key, value }, child: typeof child === "string" ? { kind: "pane", id: child } : child };
+};
+export function gateActive(condition: string | import("@pe/agent-contracts").GateWhen, page: Readonly<Record<string, unknown>>, subject?: string): boolean {
+  if (typeof condition === "object") return page[condition.field] === condition.value;
+  if (condition !== "subject") return false;
+  const held = subject ? page[subject] as { kind?: string; ids?: readonly unknown[] } | null : null;
+  return !!held && (held.kind === "all" || !!held.ids?.length);
+}
+/** Only panes surviving gates own demand; shared reads stay alive while any visible pane uses them. */
+export function visibleReads(spec: TypedRoute["spec"], page: Readonly<Record<string, unknown>>) {
+  const active = new Set<HostRead>(Object.values(spec.reads ?? {}));
+  const visit = (node: LayoutJson) => {
+    if (node.kind === "split") node.children.forEach(visit);
+    else if (node.kind === "gate") { if (gateActive(node.when, page, spec.subject?.field)) visit(node.child); }
+    else { const read = spec.panes[node.id]?.read ?? spec.core; if (read) active.add(read); }
+  };
+  visit(spec.layout);
+  const subjectRead = spec.subject ? spec.subject.read ?? spec.core : undefined;
+  if (subjectRead) active.add(subjectRead);
+  return active;
+}
 export const split = (
   axis: "h" | "v",
   children: readonly (string | LayoutJson)[],
@@ -98,7 +125,7 @@ type RoleFields<F extends Fields, R extends Field["role"]> = {
 export type DrawPage<F extends Fields> = {
   read(): Page<F>;
   pose(
-    patch: Partial<Pick<FieldValues<F>, RoleFields<F, "pose">>>,
+    patch: Partial<Pick<FieldValues<F>, RoleFields<F, "pose" | "stage">>>,
     intent?: "gesture" | "named",
   ): unknown;
   query(patch: Partial<Pick<FieldValues<F>, RoleFields<F, "query">>>): unknown;
@@ -399,11 +426,8 @@ export function route<D, const F extends Fields, W extends z.ZodObject, Edit ext
   for(const [read,id] of readIds) readings[id]={kind:"use",entry:read.key,demand:"visible",
     retain:{evidence:"scope",resource:"scope"},refresh:"dependencies",deps:{page:Object.keys(fields),work:[],readings:[]}};
   const verbs:RouteGraphJson["verbs"]=Object.fromEntries(Object.entries(verbTable).map(([id,verb])=>[id,{
-    kind:"command",entry:verb.handle.key,input:"none",label:verb.label,effect:verb.handle.effect,review:verb.handle.plan?"shown":"none",
-    deps:{page:spec.subject?[spec.subject.field]:[],work:work?Object.keys(work.schema.shape):[],readings:spec.core?[readIds.get(spec.core)!]:[]},
-    captures:spec.core?[readIds.get(spec.core)!]:[],intent:id,
+    entry:verb.handle.key,label:verb.label,effect:verb.handle.effect,review:verb.handle.plan?"shown":"none",
   }]));
-  const stage=String(Object.values(spec.fields).find(f=>f.role === "stage")?.initial ?? "main");
   const data:RouteGraphJson={version:1,key:spec.key,address:spec.address ?? `/${spec.key}`,name:spec.name,directory:spec.directory,
     capabilities:[...(work?["work" as const]:[]),...(Object.keys(verbs).length?["native-write" as const]:[]),
       ...(["document","project","family"].includes(normalized.needs)?["geometry" as const]:[])],fields,
@@ -413,10 +437,12 @@ export function route<D, const F extends Fields, W extends z.ZodObject, Edit ext
       const meta=(schema as z.ZodType).meta();
       return meta?.title ? [[key,{label:meta.title,internal:meta.internal === true}]] : [];
     })),cells:{},panes:Object.fromEntries(Object.entries(normalized.panes).map(([id,p])=>[id,{label:p.title,purpose:p.purpose,
-      draws:p.read?[readIds.get(p.read)!]:[],verbs:[...(p.verbs ?? [])]}])),readings,verbs,band:[...band],seeds:{},layout:discoveryLayout(spec.layout),
+      draws:p.read?[readIds.get(p.read)!]:[],verbs:[...(p.verbs ?? [])]}])),band:[...band],readings,verbs,seeds:{},layout:spec.layout,
     ...(sheet?{sheet}:{}),...(spec.picture?{picture:pictureSlotData(spec.picture)}:{}),...(spec.goal?{goal:readIds.get(spec.goal)!}:{}),
     needs:normalized.needs === "browser" || normalized.needs === "host" ? "nothing" : normalized.needs,
-    predicates:{},observe:[],resetOnTarget:[],stageOrder:[stage],stages:{[stage]:{panes:Object.keys(normalized.panes),verbs:Object.keys(verbs),word:spec.name}}};
+    observe:[],resetOnTarget:[]};
+  const gateErrors = linkRouteGates(data, schemas);
+  if (gateErrors.length) throw Error(gateErrors.map(error => `${error.path}: ${error.message}`).join("; "));
   const host:HostRouteModule={data,schemas,...(work?{workState:work,readWorks:Object.keys(owners).filter(id=>id!==work.route)}:{})};
   const entries:Record<string,EntryContract>=Object.fromEntries([...[...readIds.keys()].map(read=>[read.key,read]),
     // The linker finds a verb's entry by key; its axes are the generated table's, and no schema rides along.
@@ -426,10 +452,6 @@ export function route<D, const F extends Fields, W extends z.ZodObject, Edit ext
 }
 export type TypedRoute = ReturnType<typeof route<any, Fields, z.ZodObject, z.ZodType, Record<string, HostRead>, HostRead, {}, Readonly<Record<string, CommandHandle>>>>;
 
-/** Data discovery has no executable predicate slots; the native shell owns subject gates. */
-function discoveryLayout(node: LayoutJson): LayoutJson {
-  return node.kind === "gate" ? discoveryLayout(node.child) : node.kind === "split" ? {...node,children:node.children.map(discoveryLayout)} : node;
-}
 export function projectValue<A,B>(reading: ReadingState<A>, select:(value:Immutable<A>)=>B): ReadingState<B> {
   return "value" in reading ? {...reading,value:select(reading.value) as Immutable<B>} : reading;
 }
