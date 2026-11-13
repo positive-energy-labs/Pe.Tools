@@ -129,8 +129,6 @@ function TypedPlace({ module, place, fingerprint, snapshot }: { snapshot?: Histo
 export function TypedChrome({ mount, document, recorded, thread }: { mount: TypedMount; document: ReactNode; recorded?: ReactNode; thread?: string }) {
   useSyncExternalStore(mount.subscribe,mount.revision,mount.revision);
   const { spec }=mount;
-  // A failure is a pane failure line (TypedPane), not a sentence in the Situation band (I2, 2026-11-11 caution).
-  const readiness = mount.readiness(), failure = mount.failure(), problem = failure ? null : mount.problem();
   const visible=useContext(RouteVisibility), portal=useHasGlobalNavigation();
   const [panes,setPanes]=useState<GraphLayoutState>(()=>readLayoutState(`route:${spec.key}`));
   const slot=usePaneActionSlot();
@@ -143,22 +141,65 @@ export function TypedChrome({ mount, document, recorded, thread }: { mount: Type
     if (!mount.available()) return {ok:false,refusal:refuse("not-ready","Reveal this Place before changing its Page")};
     mount.move(patch as Record<string,unknown>,"push"); return {ok:true,moved:true,receipt:{current:()=>visible,rendered:page=>canonicalRouteInput(page)===canonicalRouteInput(mount.page.read())}};
   } }} />;
-  const head=<SituationBand name={spec.name} context={<>{document}<TypedSubject mount={mount} />{spec.edits && mount.work()?<span>{`r${mount.work()!.revision}`}</span>:null}</>}
-    alerts={<><span role="status" aria-label="Route readiness" data-readiness={readiness.kind}>{readiness.kind !== "ready" && readiness.reason !== problem && readiness.reason !== failure ? readiness.reason : null}</span>{mount.value().value!==undefined&&!mount.value().current?<span role="status">{retainedValueLabel(mount.value())}</span>:null}{problem ? <span role="alert">{problem}</span> : null}{mount.absentOwners().map(owner=>{const route=routeOf(owner);return <span key={owner}>Work is absent: {route?<a href={routeAddress(route).link()}>Start {owner}</a>:owner}</span>;})}<CatalogWorkReviews mount={mount} /></>}
-    verbs={[...(mount.startAction()?[<TypedStart key="start" mount={mount}/>]:[]),...Object.entries(spec.commands).filter(([,c])=>!("row" in c && c.row) && !("pane" in c && c.pane)).map(([id])=><TypedWrite key={id} mount={mount} id={id} />),
-      // An explicit-demand read is a verb the person presses; nothing else re-reads from chrome.
-      ...Object.entries(spec.panes).filter(([,p])=>p.read?.demand === "explicit").map(([id,p])=><Button key={`read:${id}`} label={`Read ${p.title}`} onClick={()=>mount.refresh(p.read)}>Read</Button>)]}
-    timeline={<TimelineHead owner={mount} history={<>{recorded}<GraphHistory owner={mount} /></>} />} />;
+  const head=<SituationBand name={spec.name}
+    context={<BandContext mount={mount} document={document} />}
+    alerts={<BandAlerts mount={mount} />}
+    verbs={bandVerbs(mount)}
+    timeline={<BandTimeline mount={mount} recorded={recorded} />} />;
   // A route the host leases no view for publishes none, retained (chat's PlaceViews) or direct.
   return <SubjectDoor.Provider value={subject}>{leases ? view : null}<KeyScopeHost id={`route:${spec.key}`} hidden={!visible} className="flex min-h-0 flex-1 flex-col">
     <ScopeKeys keys={actionScopeKeys((["undo","redo"] as const).map(direction=>({id:`work.${direction}`,label:direction,bindings:direction==="undo"?["Mod+Z"]:["Mod+Shift+Z","Mod+Y"],
       options:{ignoreInputs:true},invoke:()=>{if(visible) void mount.history[direction]();}})))} />
     {portal ? <PrimaryRouteControls route={spec.key} slot="situation">{head}</PrimaryRouteControls> : head}
-    <GraphLayoutView layout={layout(spec.layout)} panes={Object.fromEntries(Object.entries(spec.panes).map(([id,p])=>[id,{label:p.title,purpose:p.purpose,draws:[],verbs:[]}]))}
-      active={when=>when === "subject" && !!spec.subject && (mount.page.read()[spec.subject.field]?.kind === "all" || !!mount.page.read()[spec.subject!.field]?.ids?.length)} state={{panes,onChange:next=>{setPanes(next);writeLayoutState(`route:${spec.key}`,next);}}}
+    <GraphLayoutView
+      layout={layout(spec.layout)}
+      panes={paneFacts(spec)}
+      active={when=>subjectActive(mount,when)}
+      state={{panes,onChange:next=>{setPanes(next);writeLayoutState(`route:${spec.key}`,next);}}}
       bodies={Object.fromEntries(Object.entries(spec.panes).map(([id,p])=>[id,pane=>pane(mount.draw(id,ctx=><TypedPane mount={mount} id={id} ctx={ctx} />) as ReactNode,{...paneFrame(p.body),ground:p.ground,actions:slot(id),busy:visible&&paneBusy(mount,p)})]))} />
   </KeyScopeHost></SubjectDoor.Provider>;
 }
+// The band head, one named piece per concern (routes CONTRACTS.md, "Band pieces"). TypedChrome composes
+// them and owns nothing inside one. Each reads the mount at TypedChrome's render: TypedChrome subscribes.
+/** Band context: the document, the subject, the Work revision. */
+function BandContext({ mount, document }: { mount: TypedMount; document: ReactNode }) {
+  const work = mount.spec.edits ? mount.work() : null;
+  return <>{document}<TypedSubject mount={mount} />{work?<span>{`r${work.revision}`}</span>:null}</>;
+}
+/** Band alerts: readiness, the retained value, the problem, absent owners, reviews.
+ *  A failure is a pane failure line (TypedPane), not a sentence in the Situation band (I2, 2026-11-11 caution). */
+function BandAlerts({ mount }: { mount: TypedMount }) {
+  const readiness = mount.readiness(), failure = mount.failure(), problem = failure ? null : mount.problem();
+  return <>
+    <span role="status" aria-label="Route readiness" data-readiness={readiness.kind}>{readiness.kind !== "ready" && readiness.reason !== problem && readiness.reason !== failure ? readiness.reason : null}</span>
+    {mount.value().value!==undefined&&!mount.value().current?<span role="status">{retainedValueLabel(mount.value())}</span>:null}
+    {problem ? <span role="alert">{problem}</span> : null}
+    {mount.absentOwners().map(owner=>{const route=routeOf(owner);return <span key={owner}>Work is absent: {route?<a href={routeAddress(route).link()}>Start {owner}</a>:owner}</span>;})}
+    <CatalogWorkReviews mount={mount} />
+  </>;
+}
+/** Band verbs: Start, then the band's verbs. A list, not a component: the band ranks its first entry as primary. */
+function bandVerbs(mount: TypedMount): ReactNode[] {
+  const { spec } = mount;
+  return [
+    ...(mount.startAction()?[<TypedStart key="start" mount={mount}/>]:[]),
+    ...Object.entries(spec.commands).filter(([,c])=>!("row" in c && c.row) && !("pane" in c && c.pane)).map(([id])=><TypedWrite key={id} mount={mount} id={id} />),
+    // An explicit-demand read is a verb the person presses; nothing else re-reads from chrome.
+    ...Object.entries(spec.panes).filter(([,p])=>p.read?.demand === "explicit").map(([id,p])=><Button key={`read:${id}`} label={`Read ${p.title}`} onClick={()=>mount.refresh(p.read)}>Read</Button>),
+  ];
+}
+/** Band timeline: the Timeline head over the recorded points and the Work history. */
+function BandTimeline({ mount, recorded }: { mount: TypedMount; recorded?: ReactNode }) {
+  return <TimelineHead owner={mount} history={<>{recorded}<GraphHistory owner={mount} /></>} />;
+}
+/** The layout view's pane facts: what the graph layout knows of each pane. */
+const paneFacts = (spec: TypedMount["spec"]) =>
+  Object.fromEntries(Object.entries(spec.panes).map(([id,p])=>[id,{label:p.title,purpose:p.purpose,draws:[],verbs:[]}]));
+/** The layout's `subject` gate: open when the Page holds a subject. */
+const subjectActive = (mount: TypedMount, when: string) => {
+  const subject = mount.spec.subject, held = subject && mount.page.read()[subject.field];
+  return when === "subject" && !!held && (held.kind === "all" || !!held.ids?.length);
+};
 export function TypedWrite({ mount, id }: { mount: TypedMount; id: string }) {
   const command=mount.spec.commands[id]!,handle=mount.action(id);
   if("kind" in command) return <><Button label={handle.label} refusal={handle.refusal} busy={handle.pending} onClick={()=>void handle.run().catch(()=>{})}>{handle.label}</Button>

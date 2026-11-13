@@ -33,6 +33,54 @@ export const OWNERS: Record<(typeof PER_FILE)[number], readonly string[]> = {
 export const perFileRises = (name: (typeof PER_FILE)[number], actual: Count, baseline: Count) =>
   rises(actual, baseline).filter((line) => !OWNERS[name].some((owner) => line.startsWith(`${owner}:`)));
 
+/**
+ * Written exceptions to the one write door (routes MAP slice 2): files that keep writes of their
+ * own. Each listed file carries `STORE-EXCEPTION: ADR 0039` at its sites, and every marker line
+ * names its end condition by the word in EXCEPTIONS (the end is "T3 replaces thread/provider
+ * persistence", worded per site). A listed file with no marker, a marker line without its end
+ * condition, or a marker in an unlisted file is red, so no file declares itself exempt.
+ */
+export const STORE_EXCEPTION = "STORE-EXCEPTION: ADR 0039";
+export const EXCEPTIONS: Record<string, string> = {
+  "ts/apps/host/src/harness/thread-store.ts": "T3",
+  "ts/apps/host/src/harness/threads.ts": "T3",
+  "ts/apps/host/src/harness/providers.ts": "T3",
+};
+
+/** Problems with the written exceptions, given each in-scope production file's text. */
+export function exceptionProblems(sources: Record<string, string>): string[] {
+  const problems: string[] = [];
+  for (const [file, text] of Object.entries(sources)) {
+    const end = EXCEPTIONS[file];
+    const lines = text.split("\n");
+    // A marker reads with the comment lines that continue it, so a wrapped end condition counts.
+    const block = (i: number) => {
+      let end = i + 1;
+      while (end < lines.length && /^\s*(\/\/|\*(?!\/))/.test(lines[end]!)) end++;
+      return lines.slice(i, end).join(" ");
+    };
+    const markers = lines.flatMap((line, i) => (line.includes(STORE_EXCEPTION) ? [[i + 1, block(i)] as const] : []));
+    if (end === undefined) {
+      if (markers.length) problems.push(`${file}: carries ${STORE_EXCEPTION} but is not in EXCEPTIONS (health-census.ts)`);
+      continue;
+    }
+    if (!markers.length) problems.push(`${file}: the written exception is gone; the site needs "${STORE_EXCEPTION}" and its end condition (${end})`);
+    for (const [line, text] of markers)
+      if (!new RegExp(`\\b${end}\\b`).test(text)) problems.push(`${file}:${line}: ${STORE_EXCEPTION} names no end condition (${end})`);
+  }
+  for (const file of Object.keys(EXCEPTIONS))
+    if (!(file in sources)) problems.push(`${file}: listed as a store exception but not found`);
+  return problems;
+}
+
+/** The in-scope production sources the fsWrites count and the exceptions read. */
+export const storeScopeSources = (): Record<string, string> =>
+  Object.fromEntries(
+    productionFiles()
+      .filter((file) => FS_SCOPE.test(file) && /\.tsx?$/.test(file))
+      .map((file) => [file, readFileSync(join(repoRoot, file), "utf8")]),
+  );
+
 const FS_SCOPE = /^ts\/(apps\/host|packages\/(host-contracts|host-internal|runtime))\//;
 const FS_MODULES = new Set(["fs", "node:fs", "fs/promises", "node:fs/promises"]);
 const NODE_MUTATORS = new Set(
@@ -107,9 +155,8 @@ export const isProduction = (path: string) =>
 
 export const total = (count: Count) => Object.values(count).reduce((sum, n) => sum + n, 0);
 
-export function census(): Health {
-  const health: Health = { casts: {}, suppressions: {}, todos: {}, longFiles: {}, fsWrites: {} };
-  const files = execFileSync("git", ["ls-files", "--cached", "--others", "--exclude-standard"], {
+const productionFiles = () =>
+  execFileSync("git", ["ls-files", "--cached", "--others", "--exclude-standard"], {
     cwd: repoRoot,
     encoding: "utf8",
     maxBuffer: 1 << 28,
@@ -117,7 +164,10 @@ export function census(): Health {
     .split("\n")
     .filter((path) => isProduction(path) && existsSync(join(repoRoot, path)))
     .sort();
-  for (const file of files) {
+
+export function census(): Health {
+  const health: Health = { casts: {}, suppressions: {}, todos: {}, longFiles: {}, fsWrites: {} };
+  for (const file of productionFiles()) {
     const source = readFileSync(join(repoRoot, file), "utf8");
     if (FS_SCOPE.test(file) && /\.tsx?$/.test(file)) {
       const writes = fsWriteCount(file, source);

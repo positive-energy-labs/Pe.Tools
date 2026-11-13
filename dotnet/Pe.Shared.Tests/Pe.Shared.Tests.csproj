@@ -21,6 +21,7 @@
 
     <ItemGroup>
         <None Include="../../ts/packages/host-contracts/tests/runtime-ownership.fixture.json" Link="runtime-ownership.fixture.json" CopyToOutputDirectory="PreserveNewest" />
+        <None Include="../../ts/packages/agent-contracts/tests/fixtures/receipt-response.fixture.json" Link="receipt-response.fixture.json" CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
 
     <ItemGroup>

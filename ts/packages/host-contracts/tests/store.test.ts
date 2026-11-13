@@ -14,19 +14,27 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vite-plus/tes
 import { z } from "zod";
 import {
   appendStoredLine,
+  derivedName,
   discardStored,
+  readDerived,
   readStored,
   readStoredLines,
   readStoredNotices,
   sha256Hex,
   storedNoticesFile,
   writeAtomic,
+  writeDerived,
   writeHomeFile,
 } from "../src/store.ts";
 
 vi.mock("node:fs", async (original) => {
   const fs = await original<typeof import("node:fs")>();
-  return { ...fs, renameSync: vi.fn(fs.renameSync), writeFileSync: vi.fn(fs.writeFileSync) };
+  return {
+    ...fs,
+    readFileSync: vi.fn(fs.readFileSync),
+    renameSync: vi.fn(fs.renameSync),
+    writeFileSync: vi.fn(fs.writeFileSync),
+  };
 });
 
 let root: string;
@@ -190,6 +198,8 @@ describe("readStored", () => {
       writeFileSync(path, bytes);
       expect(readStored(path, schema, discard()).kind).toBe("discarded");
       expect(existsSync(path)).toBe(false);
+      // A caller that names no blob root still loses nothing: the bytes rest beside the notice file.
+      expect(readFileSync(join(root, "state", "Blobs", "sha256", sha256Hex(bytes)), "utf8")).toBe(bytes);
       expect(readStored(path, schema, discard())).toEqual({ kind: "missing" });
       // The same bytes back at the same path (a failed delete, a restored copy) post nothing new.
       writeFileSync(path, bytes);
@@ -218,6 +228,118 @@ describe("readStored", () => {
     expect(readStored(root, schema, { class: "keep", place: "A folder" }).kind).toBe("kept");
   });
 
+  // K-A1 falsifiers, each with its mutant in `store.ts`.
+  // Locked file: in `refuse`, send `!bytes` in the discard class to `rmSync` (the code before ST1).
+  // Unwritable blob root: in `refuse`, let the `catch` after `restBlob` fall through to `rmSync`.
+  // Short copy: in `restBlob`, drop the `rests()` check after `writeAtomic`.
+  // Changed while copied: in `refuse`, drop the re-read before `rmSync`.
+  const held = (path: string, from = 0) => {
+    const real = vi.mocked(readFileSync).getMockImplementation()!;
+    let reads = 0;
+    vi.mocked(readFileSync).mockImplementation(((target: never, ...rest: never[]) => {
+      if (target === path && reads++ >= from)
+        throw Object.assign(Error("EBUSY: resource busy or locked"), { code: "EBUSY" });
+      return (real as (...args: never[]) => unknown)(target, ...rest);
+    }) as typeof readFileSync);
+    return () => vi.mocked(readFileSync).mockImplementation(real);
+  };
+
+  test("a locked file is kept in the discard class: it still exists and one notice posted", () => {
+    const path = join(root, "work.json");
+    writeFileSync(path, '{"name":"mine"}');
+    const release = held(path);
+    expect(readStored(path, schema, discard())).toMatchObject({ kind: "kept" });
+    expect(readStored(path, schema, discard())).toMatchObject({ kind: "kept" });
+    release();
+    expect(readFileSync(path, "utf8")).toBe('{"name":"mine"}');
+    const posted = readStoredNotices(notices());
+    expect(posted).toMatchObject([{ class: "keep", place: "Work for /ducts", path, sha256: null }]);
+    expect(posted[0]!.reason).toContain("EBUSY");
+    // An owner's own refusal of a file it cannot read keeps it too.
+    const again = held(path);
+    discardStored(path, discard(), "stale");
+    again();
+    expect(readFileSync(path, "utf8")).toBe('{"name":"mine"}');
+  });
+
+  test("a blob root that cannot be written keeps the original, with one notice", () => {
+    const path = join(root, "work.json");
+    writeFileSync(path, "{ torn");
+    writeFileSync(join(root, "not-a-folder"), "");
+    const policy = { ...discard(), blobRoot: join(root, "not-a-folder") };
+    expect(readStored(path, schema, policy)).toMatchObject({ kind: "kept" });
+    expect(readStored(path, schema, policy)).toMatchObject({ kind: "kept" });
+    expect(readFileSync(path, "utf8")).toBe("{ torn");
+    const posted = readStoredNotices(notices());
+    expect(posted).toMatchObject([{ class: "keep", path, sha256: sha256Hex("{ torn") }]);
+    expect(posted[0]!.reason).toContain("could not be copied aside");
+    discardStored(path, policy, "stale");
+    expect(readFileSync(path, "utf8")).toBe("{ torn");
+  });
+
+  test("a copy that does not read back as the original keeps the original", () => {
+    const path = join(root, "work.json");
+    writeFileSync(path, "{ torn");
+    // The one write of the set-aside is the blob's temp file: it lands short.
+    const real = vi.mocked(writeFileSync).getMockImplementation()!;
+    vi.mocked(writeFileSync).mockImplementationOnce((file) => real(file, "{ to"));
+    expect(readStored(path, schema, discard())).toMatchObject({ kind: "kept" });
+    expect(readFileSync(path, "utf8")).toBe("{ torn");
+    // The next read copies it whole and sets it aside.
+    expect(readStored(path, schema, discard())).toMatchObject({ kind: "discarded" });
+    expect(readFileSync(join(root, "state", "Blobs", "sha256", sha256Hex("{ torn")), "utf8")).toBe(
+      "{ torn",
+    );
+    expect(existsSync(path)).toBe(false);
+  });
+
+  test("a file that changes or locks while it is copied aside is kept", () => {
+    const path = join(root, "work.json");
+    writeFileSync(path, "{ torn");
+    const real = vi.mocked(writeFileSync).getMockImplementation()!;
+    // Another writer lands new bytes at the path during the copy.
+    vi.mocked(writeFileSync).mockImplementationOnce((file, bytes) => {
+      real(path, '{"name":"new"}');
+      return real(file, bytes);
+    });
+    expect(readStored(path, schema, discard())).toMatchObject({ kind: "kept" });
+    expect(readFileSync(path, "utf8")).toBe('{"name":"new"}');
+    writeFileSync(path, "{ other");
+    const release = held(path, 1);
+    expect(readStored(path, schema, discard())).toMatchObject({ kind: "kept" });
+    release();
+    expect(readFileSync(path, "utf8")).toBe("{ other");
+  });
+
+  test("a derived file whose name does not match its bytes stays, is skipped, and posts one notice", () => {
+    // Mutant: in `readDerived`, call `discardDerived` on the mismatch (the forged file is removed).
+    const store = { dir: join(root, "Derived"), notices: notices(), blobRoot: join(root, "state", "Blobs") };
+    const wrong = join(store.dir, `key.${sha256Hex("other bytes")}`);
+    writeAtomic(wrong, "forged");
+    expect(readDerived(store, "key")).toBeNull();
+    writeAtomic(join(store.dir, derivedName("key", "whole")), "whole");
+    expect(readDerived(store, "key")?.bytes.toString()).toBe("whole");
+    expect(readFileSync(wrong, "utf8")).toBe("forged");
+    expect(readStoredNotices(notices())).toMatchObject([
+      { class: "keep", place: "Derived file", path: wrong, sha256: sha256Hex("forged") },
+    ]);
+  });
+
+  test("a derived write replaces bytes that hold its name falsely, and rests them first", () => {
+    // Mutant: in `writeDerived`, drop the second `writeHomeFile` (the forged file holds the name).
+    const store = { dir: join(root, "Derived"), notices: notices(), blobRoot: join(root, "state", "Blobs") };
+    const path = join(store.dir, derivedName("key", "whole"));
+    writeAtomic(path, "forged");
+    expect(readDerived(store, "key")).toBeNull();
+    expect(writeDerived(store, "key", "whole")).toBe(path);
+    expect(readDerived(store, "key")?.bytes.toString()).toBe("whole");
+    expect(readFileSync(join(store.blobRoot, "sha256", sha256Hex("forged")), "utf8")).toBe("forged");
+    // A whole file is never rewritten.
+    vi.mocked(writeFileSync).mockClear();
+    writeDerived(store, "key", "whole");
+    expect(vi.mocked(writeFileSync).mock.calls.filter(([, , o]) => (o as { flag?: string })?.flag !== "wx")).toEqual([]);
+  });
+
   test("an unreadable notice file never stops a discard", () => {
     const path = join(root, "work.json");
     writeFileSync(path, "{");
@@ -227,6 +349,7 @@ describe("readStored", () => {
       class: "discard",
       place: "Work",
       notices: join(root, "blocked", "notices.jsonl"),
+      blobRoot: join(root, "state", "Blobs"),
     });
     expect(read.kind).toBe("discarded");
     expect(existsSync(path)).toBe(false);
@@ -240,7 +363,9 @@ describe("readStored", () => {
     discardStored(path, discard(), "identity does not match");
     discardStored(path, discard(), "identity does not match");
     expect(existsSync(path)).toBe(false);
-    expect(readStoredNotices(notices())).toMatchObject([{ reason: "identity does not match" }]);
+    expect(readStoredNotices(notices())).toMatchObject([
+      { reason: expect.stringContaining("identity does not match") },
+    ]);
   });
 
   test("a discard with a blobRoot rests the bytes under the hash its notice names, then deletes", () => {
@@ -304,8 +429,8 @@ describe("a discard names exactly one file", () => {
     const before = tree(pod);
     const policy = { class: "discard", place: "Pod ducts", notices: notices() } as const;
 
-    expect(readStored(pod, z.unknown(), policy).kind).toBe("discarded");
-    expect(readStored(join(pod, "output"), z.unknown(), policy).kind).toBe("discarded");
+    expect(readStored(pod, z.unknown(), policy).kind).toBe("kept");
+    expect(readStored(join(pod, "output"), z.unknown(), policy).kind).toBe("kept");
     expect(() => discardStored(pod, policy, "stale")).not.toThrow();
 
     expect(tree(pod)).toEqual(before);

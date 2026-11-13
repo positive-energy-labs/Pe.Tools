@@ -47,8 +47,8 @@ public sealed class SpaceCleanHostGeometryProofTests {
                 captures++;
                 var triangles = new List<Tri>();
                 var rows = new List<PrimRow>();
-                Ingest.Element(subject, 0, 0, triangles, Transform.Identity, rows, false);
-                return new LinkedGeometryStore.Geometry(rows.ToArray(), triangles.ToArray());
+                Ingest.Element(subject, 0, 0, triangles, Transform.Identity, rows, new GeometryRead(), false);
+                return new LinkedGeometryStore.Geometry(rows.ToArray(), triangles.ToArray(), new Acquisition(new Pe.Revit.Space.Placement(document.GetDocumentKey(), null), subject.UniqueId, AcquisitionOutcome.Acquired, AcquisitionReason.None));
             }
             using (var versionStore = LinkedGeometryStore.For(document, null, Transform.Identity, versionGeneration))
                 versionStore!.Read("version-proof", Capture);
@@ -103,7 +103,7 @@ public sealed class SpaceCleanHostGeometryProofTests {
     }
 
     private static byte[] ReadScene(Document document, ElementId element) {
-        // Scene.Write's stream is only float32 vertices; Stamp/timing metadata is returned separately.
+        // Scene.Write's stream is only float32 vertices; SpatialEvidence/timing metadata is returned separately.
         using var output = new MemoryStream();
         Scene.Write(document, new SceneRequest([element.Value()], FocusOnly: true, ContextRepresentation: SceneContextRepresentation.LinkBoxes), output);
         return output.ToArray();

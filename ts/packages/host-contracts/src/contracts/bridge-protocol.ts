@@ -150,6 +150,8 @@ export const bridgeTerminalSchema = Schema.Struct({
   startedAtUnixMs: Schema.Number,
   completedAtUnixMs: Schema.Number,
   receiptId: nullableString,
+  /** What the finished call did, restore outcome included. Decode with agent-contracts `touchedSchema`. */
+  touched: Schema.optional(Schema.NullOr(Schema.Unknown)),
 });
 export type BridgeTerminal = Schema.Schema.Type<typeof bridgeTerminalSchema>;
 export const bridgeInFlightRequestSchema = Schema.Struct({
@@ -197,6 +199,10 @@ export const bridgeResponseSchema = Schema.Struct({
   metrics: performanceMetricsSchema,
   ok: Schema.Boolean,
   payloadJson: nullableString,
+  /** The response's evidence, apart from the payload; absent when its type declares none. */
+  evidenceJson: nullableString,
+  /** Decode with agent-contracts `touchedSchema`. Absent is unknown, never none. */
+  touched: Schema.optional(Schema.NullOr(Schema.Unknown)),
   requestId: Schema.String,
   statusCode: Schema.optional(Schema.NullOr(Schema.Number)),
 });

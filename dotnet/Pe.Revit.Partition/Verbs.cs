@@ -43,12 +43,12 @@ public static class Verbs {
         var sw = System.Diagnostics.Stopwatch.StartNew();
         ProbeAnswer Probe(double x, double y) {
             var answer = SpaceVerbs.Probe(world, new XYZ(x, y, input.LevelZ + KneeLoFt), purpose: ProbePurpose.RoomHeights);
-            RequireStamp(answer.Stamp, input.Knee.Stamp, document.GetDocumentKey(), "probe");
+            RequireStamp(answer.Evidence, input.Knee.Evidence, document.GetDocumentKey(), "probe");
             return answer;
         }
 
         var result = Solve.RunRails(input, Probe);
-        RequireCurrent(document, input.Knee.Stamp);
+        RequireCurrent(document, input.Knee.Evidence);
         sw.Stop();
         return result with { Ms = Math.Round(sw.Elapsed.TotalMilliseconds, 3) };
     }
@@ -85,15 +85,15 @@ public static class Verbs {
         // (sources AND categories AND Solid|Mesh) OR (Curve2D AND layers) is not one filter.
         var knee = Band(world, levelZ + KneeLoFt, levelZ + KneeHiFt, declared, clip);
         var header = Band(world, levelZ + HeaderLoFt, levelZ + HeaderHiFt, declared, clip);
-        RequireStamp(header.Solids.Stamp, knee.Solids.Stamp, document.GetDocumentKey(), "header");
-        var gates = new[] { knee.Solids.Stamp.Resolved, knee.Ribbons.Stamp.Resolved,
-            header.Solids.Stamp.Resolved, header.Ribbons.Stamp.Resolved };
+        RequireStamp(header.Solids.Evidence, knee.Solids.Evidence, document.GetDocumentKey(), "header");
+        var gates = new[] { knee.Solids.Evidence.Resolved, knee.Ribbons.Evidence.Resolved,
+            header.Solids.Evidence.Resolved, header.Ribbons.Evidence.Resolved };
         var originalKnee = SpaceVerbs.OriginalCurves(world, levelZ + KneeLoFt, levelZ + KneeHiFt, clip, declared.Ribbons);
         var originalHeader = SpaceVerbs.OriginalCurves(world, levelZ + HeaderLoFt, levelZ + HeaderHiFt, clip, declared.Ribbons);
-        RequireStamp(originalKnee.Stamp, knee.Solids.Stamp, document.GetDocumentKey(), "original knee curves");
-        RequireStamp(originalHeader.Stamp, knee.Solids.Stamp, document.GetDocumentKey(), "original header curves");
-        var (proposals, dropped) = Proposals(document, level, phaseId, knee.Solids.Stamp, clip);
-        RequireCurrent(document, knee.Solids.Stamp);
+        RequireStamp(originalKnee.Evidence, knee.Solids.Evidence, document.GetDocumentKey(), "original knee curves");
+        RequireStamp(originalHeader.Evidence, knee.Solids.Evidence, document.GetDocumentKey(), "original header curves");
+        var (proposals, dropped) = Proposals(document, level, phaseId, knee.Solids.Evidence, clip);
+        RequireCurrent(document, knee.Solids.Evidence);
         return new PartitionInput(knee.Merged, header.Merged, loops, levelZ, knobs, gates, source, proposals,
             new OriginalCurveEvidence(originalKnee, originalHeader), Dropped: dropped);
     }
@@ -183,7 +183,7 @@ public static class Verbs {
         return phase.Id;
     }
 
-    private static (IReadOnlyList<RoomProposal>, IReadOnlyList<string>) Proposals(Document host, Level level, ElementId phase, Stamp stamp, Aabb clip) {
+    private static (IReadOnlyList<RoomProposal>, IReadOnlyList<string>) Proposals(Document host, Level level, ElementId phase, SpatialEvidence stamp, Aabb clip) {
         var result = new List<RoomProposal>();
         var dropped = new List<string>();
         Collect(host, null, Transform.Identity);
@@ -195,14 +195,14 @@ public static class Verbs {
             sources++;
             Collect(doc, link, link.GetTotalTransform());
         }
-        if (stamp.Sources.Count != sources)
+        if (stamp.Sources.Count(s => s.Availability == SceneSourceState.Loaded) != sources)
             throw new PartitionException("stale capture: loaded source inventory differs from Space build");
         return (result, dropped);
 
         void Collect(Document doc, RevitLinkInstance? link, Transform transform) {
             var documentKey = doc.GetDocumentKey();
             var linkId = link?.Id.Value();
-            if (!stamp.Sources.Any(s => s.DocumentKey == documentKey && s.LinkInstanceId == linkId && !s.Dirty))
+            if (!stamp.Sources.Any(s => s.DocumentKey == documentKey && s.Placement.LinkUniqueId == link?.UniqueId && s.Availability == SceneSourceState.Loaded))
                 throw new PartitionException($"stale capture: source {documentKey}, link {linkId} is absent or dirty");
             var rooms = new FilteredElementCollector(doc).WherePasses(new Autodesk.Revit.DB.Architecture.RoomFilter())
                 .Cast<ArchitecturalRoom>().Where(r => r.Location is not null && InScope(r, transform))
@@ -231,7 +231,7 @@ public static class Verbs {
                 if (link is null ? roomLevel.Id != level.Id : Math.Abs(hostZ - level.ProjectElevation) > LoopTolFt)
                     continue;
                 // The host plus link instance resolves the source even when Revit gives a loaded link no path.
-                var key = $"{Uri.EscapeDataString(stamp.HostDocumentKey)}|{Uri.EscapeDataString(link?.UniqueId ?? "host")}|{Uri.EscapeDataString(room.UniqueId)}";
+                var key = $"{Uri.EscapeDataString(stamp.DocumentKey)}|{Uri.EscapeDataString(link?.UniqueId ?? "host")}|{Uri.EscapeDataString(room.UniqueId)}";
                 var boundaries = room.GetBoundarySegments(options);
                 var loops = boundaries?.Select(b => Loop(b.Select(s => s.GetCurve()), transform)).ToArray() ?? [];
                 // A proposal is advice: a loop that does not close drops that proposal, named, and the run goes on.
@@ -265,18 +265,20 @@ public static class Verbs {
 
     private static bool Finite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
 
-    private static void RequireStamp(Stamp stamp, Stamp expected, string hostKey, string stage) {
-        if (!stamp.Fresh || stamp.BuiltUtc == default)
+    private static void RequireStamp(SpatialEvidence stamp, SpatialEvidence expected, string hostKey, string stage) {
+        try { stamp.RequireBasis(hostKey, stamp.Revision ?? throw new InvalidOperationException("Missing revision")); }
+        catch (InvalidOperationException) {
             throw new PartitionException($"stale capture: {stage} Space evidence is unbuilt or dirty");
-        if (stamp.HostDocumentKey != hostKey || stamp.Frame != Stamp.HostInternalFt)
+        }
+        if (stamp.DocumentKey != hostKey || stamp.Frame != SpatialEvidence.HostInternalFt)
             throw new PartitionException($"malformed capture: {stage} document or coordinate frame mismatch");
-        if (stamp.Epoch != expected.Epoch || stamp.BuiltUtc != expected.BuiltUtc
-            || !stamp.Sources.SequenceEqual(expected.Sources))
+        if (stamp.Revision != expected.Revision || stamp.ObservedAt != expected.ObservedAt
+            || !stamp.SameSources(expected))
             throw new PartitionException($"stale capture: {stage} Space evidence changed during capture");
     }
 
-    private static void RequireCurrent(Document document, Stamp stamp) {
-        if (SpaceWorld.Epoch(document) != stamp.Epoch)
+    private static void RequireCurrent(Document document, SpatialEvidence stamp) {
+        if (SpaceWorld.Epoch(document) != stamp.Revision)
             throw new PartitionException("stale capture: Space changed during capture or solve");
     }
 
@@ -287,10 +289,10 @@ public static class Verbs {
     private static BandSlices Band(World world, double z0, double z1, Enclosure e, Aabb clip) {
         var s = SpaceVerbs.Slice(world, z0, z1, e.Solids, clip);
         var r = SpaceVerbs.Slice(world, z0, z1, e.Ribbons, clip);
-        RequireStamp(s.Stamp, s.Stamp, world.HostDocumentKey, "solids");
-        RequireStamp(r.Stamp, s.Stamp, world.HostDocumentKey, "ribbons");
+        RequireStamp(s.Evidence, s.Evidence, world.HostDocumentKey, "solids");
+        RequireStamp(r.Evidence, s.Evidence, world.HostDocumentKey, "ribbons");
         var merged = new SliceAnswer(
-            s.Stamp,
+            s.Evidence,
             new Searched(
                 Math.Max(s.Searched.Docs, r.Searched.Docs),
                 s.Searched.Categories + r.Searched.Categories,

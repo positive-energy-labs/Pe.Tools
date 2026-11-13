@@ -1,6 +1,10 @@
 import { observeWorkReceipts } from "./work-receipt-feed.ts";
 import { invocationContext, hostFetch as fetch } from "@pe/runtime/context";
-import { HOST_RUNTIME_SERVICE_HEADER } from "@pe/host-contracts/contracts";
+import {
+  HOST_RUNTIME_SERVICE_HEADER,
+  HOST_RPC_BRIDGE_SESSION_HEADER,
+  HOST_RPC_DOCUMENT_HEADER,
+} from "@pe/host-contracts/contracts";
 import { hostOwnership } from "./host-ownership.ts";
 import { peRouteUrl } from "@pe/agent-contracts/pe-api";
 import { Effect } from "effect";
@@ -187,7 +191,11 @@ export function hostResourceObserver(
     const key = readingKey(request);
     const accept = (result: OwnerValue<unknown>) => publish(resourceSnapshot(key, result));
     /** Read the host's own HTTP surface once, or on the host's own timer. Never the client's. */
-    const oneShot = (paths: ReadonlyArray<readonly [string, RequestInit?]>, periodMs?: number) => {
+    const oneShot = (
+      paths: ReadonlyArray<readonly [string, RequestInit?]>,
+      periodMs?: number,
+      project: (value: unknown) => unknown = (value) => value,
+    ) => {
       const controller = new AbortController();
       const pump = () =>
         Promise.all(
@@ -197,8 +205,8 @@ export function hostResourceObserver(
               // The self-read carries the browser's forwarded origin; admission refuses a browser
               // request without its runtime owner (runtime.owner-missing), so name this host.
               headers: {
-                ...Object.fromEntries(new Headers(init?.headers)),
                 ...headers,
+                ...Object.fromEntries(new Headers(init?.headers)),
                 [HOST_RUNTIME_SERVICE_HEADER]: hostOwnership.serviceName,
               },
               signal: controller.signal,
@@ -215,7 +223,14 @@ export function hostResourceObserver(
             return value;
           }),
         ).then(
-          (bodies) => accept({ value: bodies[0] }),
+          (bodies) => {
+            if (controller.signal.aborted) return;
+            try {
+              accept({ value: project(bodies[0]) });
+            } catch (error) {
+              accept({ error: String(error) });
+            }
+          },
           (error: unknown) => {
             if (!controller.signal.aborted) accept({ error: String(error) });
           },
@@ -320,48 +335,34 @@ export function hostResourceObserver(
         }
         // A LiveDocument key's value names its document, which binds the mark (`documentIn`).
         case "field-options": {
-          // TODO: Use the admitted recorded native-read door before recording closes (ADR 0031 rule 1).
-          // Runtime falsifier: capture options, replay with a poisoned bridge and require zero live calls;
-          // a recorded miss must refuse, never return the current document's live options.
-          if (!bridge) {
-            accept({ error: "No Revit bridge" });
-            return () => {};
-          }
-          let live = true;
           const { target, key: domain, context } = request;
-          // effect-edge: island, phase 5
-          void Effect.runPromise(
-            resolveSession(bridge, {
-              bridgeSessionId: target.session,
-              openDocumentId: target.openId,
-            }).pipe(
-              Effect.flatMap((resolved) =>
-                bridge.invoke(
-                  "revit.catalog.field-options",
-                  { key: domain, context },
-                  resolved.sessionId,
-                  target.openId,
-                ),
-              ),
-            ),
-          ).then(
-            ({ value }) => {
+          // The ordinary operation door owns admission and recording, including replay misses.
+          return oneShot(
+            [
+              [
+                peRouteUrl("operation.call", {}),
+                {
+                  method: "POST",
+                  headers: {
+                    "content-type": "application/json",
+                    [HOST_RPC_BRIDGE_SESSION_HEADER]: target.session,
+                    [HOST_RPC_DOCUMENT_HEADER]: target.openId,
+                  },
+                  body: JSON.stringify({
+                    key: "revit.catalog.field-options",
+                    request: { key: domain, context },
+                  }),
+                },
+              ],
+            ],
+            undefined,
+            (value) => {
               const { descriptor } = value as { descriptor: { requiredRuntimeMode: string } };
-              if (live)
-                accept({
-                  value:
-                    descriptor.requiredRuntimeMode === "LiveDocument"
-                      ? { ...(value as object), target }
-                      : value,
-                });
-            },
-            (error: unknown) => {
-              if (live) accept({ error: error instanceof Error ? error.message : String(error) });
+              return descriptor.requiredRuntimeMode === "LiveDocument"
+                ? { ...(value as object), target }
+                : value;
             },
           );
-          return () => {
-            live = false;
-          };
         }
         case "world": {
           const release = bridge

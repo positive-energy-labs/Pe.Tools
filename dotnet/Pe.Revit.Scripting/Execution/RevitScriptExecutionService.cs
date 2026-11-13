@@ -68,8 +68,8 @@ public sealed class RevitScriptExecutionService(
         ScriptCancellationScope? cancellation = null
     ) {
         cancellation ??= ScriptCancellationScope.None;
-        // The whole execution is the run: a project save or synchronize that fires inside it is held (ScriptSaveHold).
-        using var run = ScriptRunScope.Enter();
+        // ScriptSaveHold uses this caller throughout execution to hold only guarded project saves.
+        using var run = ScriptRunScope.Enter(request.Caller);
         Log.Information(
             "Revit scripting execute starting: ExecutionId={ExecutionId}, WorkspaceKey={WorkspaceKey}, SourcePath={SourcePath}",
             executionId,

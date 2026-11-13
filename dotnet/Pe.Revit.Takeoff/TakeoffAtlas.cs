@@ -1,4 +1,4 @@
-﻿using Newtonsoft.Json;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Serialization;
 using Pe.Shared.RevitData;
 
@@ -228,7 +228,7 @@ public static class TakeoffAtlas
                 [r.LabelX, r.LabelY], r.Polygon)).ToList(),
             ReadLiveRegions(doc, view, request.ZoneGuid),
             new TakeoffPartitionReview(
-                new TakeoffReviewSource(request.RunId, answer.Stamp.HostDocumentKey, request.ZoneGuid.ToString("D")),
+                new TakeoffReviewSource(request.RunId, answer.Evidence.DocumentKey, request.ZoneGuid.ToString("D")),
                 new TakeoffReviewZone(request.ZoneGuid.ToString("D"), request.ZoneName,
                     Boundaries((FilledRegion)doc.GetElement(request.ZoneRegion.ToElementId()))),
                 answer.Rooms.Select(r => new TakeoffReviewShape(

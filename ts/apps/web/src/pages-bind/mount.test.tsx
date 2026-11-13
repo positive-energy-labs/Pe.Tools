@@ -4,7 +4,7 @@ import type { PageTargetReading } from "@pe/agent-contracts";
 import { cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 
-vi.mock("#/open/bay", () => ({ useThreadSummaries: () => null }));
+vi.mock("../machine/bay", () => ({ useThreadSummaries: () => null }));
 vi.mock("#/host/resource-state", () => ({
   useInventory: () => ({ state: "absent" }),
   previousOf: () => undefined,
