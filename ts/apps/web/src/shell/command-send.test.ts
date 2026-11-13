@@ -1,7 +1,8 @@
 import { expect, test, vi } from "vite-plus/test";
 import { handle } from "@pe/agent-contracts/handle";
 import { HOST_RPC_BRIDGE_SESSION_HEADER, HOST_RPC_DOCUMENT_HEADER } from "@pe/host-contracts/operation-types";
-import { sendCommand } from "./work-feed-client";
+import { sendCommand, createWorkFeedClient, browserWorkPorts } from "./work-feed-client";
+import type { AcceptedResult } from "../../../../packages/agent-contracts/src/work-journal-door";
 
 const target = { kind: "document", ref: { session: "session-a", openId: "open-a" } } as const;
 const ports = (value: unknown = {}) => ({
@@ -85,4 +86,20 @@ test("family reads project the owning Work into scope outside the strict read in
     body: JSON.stringify({ key: "family.read", input: { readId: "read-a", expectedRevision: 7 }, target: target.ref, scope: work.key }),
   }));
   expect(transport.submit).not.toHaveBeenCalled();
+});
+
+test("direct answers resolve and replay without inventing a host receipt", async () => {
+  const result = { id: "original", state: "running" };
+  const door = createWorkFeedClient(undefined, {
+    write: browserWorkPorts.write,
+    submit: async () => ({ state: "answered" as const, result }),
+  });
+  const submission = door.submit({ id: "control-request", key: "action.cancel", target, input: { id: "original" } });
+  const accepted = await new Promise<AcceptedResult>((resolve) => submission.accepted.subscribe(
+    (value) => { if (value.kind !== "pending") resolve(value); },
+    () => {},
+  ));
+  expect(accepted).toEqual({ kind: "accepted-native", outcome: "committed", result });
+  expect(door.accepted(submission.handle.id)).toEqual(accepted);
+  expect(accepted).not.toHaveProperty("receiptId");
 });
