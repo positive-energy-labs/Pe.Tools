@@ -17,7 +17,7 @@ prevents: "the repeated cost: a costly session pattern paid again because nobody
 - The owner names what felt bad, and the instruments say what it cost. A finding needs both. Treat a feeling with no measurement as a lead, and a measurement with no feeling as a gauge.
 - Measure the sessions with `mine`'s retro verb and report what it prints. A run with child threads is measured as a tree and drawn as swimlanes, because the critical path lives in the waits between threads. Put the context curve with its compaction marks on a page.
 - Compare against a good run, because a finding without a comparison only describes. When the owner names none, take the last finished run of the same shape, measure it with the same commands, and say that the choice was yours. `mine` says how to find a run's base, tip and threads. When no such run can be measured, say so and compare nothing.
-- Each finding carries its mechanism, its cost in the measured unit, an anchor (thread id plus turn time or item id), its severity, and its level on `index`'s strength ladder.
+- The findings are one table, a row each, with five columns: the mechanism, its cost in the measured unit, an anchor (thread id plus turn time or item id), its severity, and its level on `index`'s strength ladder. A finding with an empty cell is a lead and is listed apart.
 - Rank findings by that level: a fix above the line beats a guard, and a guard beats prose. Send a skill edit to `reflect`, a verdict to `docs`, and a tool defect to its owner's ledger.
 - Labels are inferred after the fact from the record. Never ask an agent to introspect about its own role changes.
 - Close with what the good run did that the others did not, as copy and don't-copy pairs.

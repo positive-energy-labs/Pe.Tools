@@ -277,6 +277,8 @@ The one ledger outside `docs/features/`; the skill set is not a feature. Same th
 - No tool arms a time box or a checkpoint wake (three cold readers, 2026-11-12). `delegate` says a scheduled wake carries the alarm and `execute` names none. Until it is built, `execute` tells the setter to read each child's age at every wake.
 - Open from the same reads, each the owner's call: two runs' integrators share one main and one suite slot with no rule between them; the slog-writer tier has no alternate when its meter is empty; the tier file says 0 codex reset credits and `meter.py` printed 1; a purger mutant of a pure deletion has no branch to flip.
 - `retro.py`, from two cold readers (2026-11-12): the gate landmark matches no commit subject any charter asks for and prints "0 gated" for a finished run; the slice parser rejects titles such as "s7 fill", so 456 of 706 kernel commits fell to no slice; a thread shared by two runs has no window; `partners` fills only from `--cycles`; one purger printed a negative idle time.
+- `mine` has no redaction step before it exports raw session text, and retained owner messages hold a pasted credential (cold reader, 2026-11-12, who redacted in its own extract).
+- `retro.py` prints `active_hours` as a sum of overlapping intervals: one implementor read 17.9 h where the union of its intervals was 7.15 h (same reader). `mine` now says so in prose; the column should print the union.
 
 ## Incidents
 
