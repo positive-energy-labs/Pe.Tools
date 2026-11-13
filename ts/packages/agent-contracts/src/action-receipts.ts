@@ -196,6 +196,67 @@ export const nativeReceiptFailureSchema = z.object({
   outcome: z.string().optional(),
 });
 
+/** A view is named with its document: an op can touch more than one. */
+export const viewRefSchema = z.strictObject({
+  documentKey: z.string(),
+  uniqueId: z.string(),
+  id: z.number().int(),
+});
+export type ViewRef = z.infer<typeof viewRefSchema>;
+const changed = {
+  transactions: z.array(z.string()),
+  added: z.number().int(),
+  modified: z.number().int(),
+  deleted: z.number().int(),
+};
+/** What one native call did to the document. Filled by the scope and the change monitor, never by
+ * an op. Omitted from what Pea reads when "none". `restoreFailed`, `unauthorized` and `unknown`
+ * raise one notice at the terminal write. The C# twin is `Touched` in Pe.Shared.HostContracts
+ * `Bridge/Touched.cs`; both assert `tests/fixtures/receipt-response.fixture.json`. */
+export const touchedSchema = z.discriminatedUnion("kind", [
+  z.strictObject({ kind: z.literal("none") }),
+  z.strictObject({ kind: z.literal("rolledBack") }),
+  z.strictObject({ kind: z.literal("restored"), views: z.array(viewRefSchema) }),
+  z.strictObject({
+    kind: z.literal("restoreFailed"),
+    views: z.array(
+      z.strictObject({
+        view: viewRefSchema,
+        left: z.array(z.enum(["crop", "scopeBox", "annotationCrop", "sheetFilter"])),
+      }),
+    ),
+  }),
+  z.strictObject({ kind: z.literal("wrote"), ...changed }),
+  z.strictObject({ kind: z.literal("unauthorized"), ...changed }),
+  z.strictObject({
+    kind: z.literal("unknown"),
+    reason: z.enum(["lost-response", "cancelled-mid-effect", "process-exit", "posted-command"]),
+  }),
+]);
+export type Touched = z.infer<typeof touchedSchema>;
+/** The least every evidence record states (C# `IObserved`). An absent revision is no
+ * source-revision proof: the observed basis is unavailable, never 0 or "current". The domain's own
+ * members (Space's sources and manifest) ride beside these two and are kept. */
+export const observedSchema = z.looseObject({
+  documentKey: z.string(),
+  revision: z.number().int().optional(),
+});
+export type Observed = z.infer<typeof observedSchema>;
+/** The one object the bridge writes to an op receipt's response file (C# `OpReceiptResponse`),
+ * which `pe-revit op result` returns as `response`. A success has `payload` and no `error`; a
+ * failure has `error` and no `payload`. Both carry `touched`: a failed or cancelled call may still
+ * have written. `evidence` is absent when the op's response type declares none. The verdict is on
+ * the SDK receipt, not here. */
+export const nativeReceiptResponseSchema = z.union([
+  z.strictObject({
+    payload: z.unknown(),
+    touched: touchedSchema,
+    evidence: observedSchema.optional(),
+  }),
+  z.strictObject({ ...nativeReceiptFailureSchema.shape, touched: touchedSchema }),
+]);
+export type NativeReceiptResponse = z.infer<typeof nativeReceiptResponseSchema>;
+
 /** A projection of the durable receipt, never a second writable outcome. */
 export function invocationOutcome(row: ActionReceipt | ActionStatus): InvocationOutcome {
   const reason = "error" in row ? row.error : undefined;
