@@ -4,6 +4,41 @@ import { join } from "node:path";
 import { expect, it } from "vite-plus/test";
 import { freezeScript } from "../src/operation-script.ts";
 import { fixtureNative } from "./fixture-native.ts";
+import { Effect } from "effect";
+import { gatewayExecutor } from "../src/gateway-actions.ts";
+import type { CommandContext } from "../src/command-executor.ts";
+import type { ActionExecution } from "../src/action-journal.ts";
+import type { RevitBridge } from "../src/bridge.ts";
+import type { PictureCaptures } from "../src/captures-route.ts";
+import type { Caller } from "@pe/agent-contracts";
+
+it("stamps the trusted script caller over supplied caller bytes", async () => {
+  const callers: Caller[] = [
+    { kind: "human", via: "local" }, { kind: "anonymous" },
+    { kind: "pea", thread: "t", context: "c" }, { kind: "page", page: "page:@p/p" },
+    { kind: "external-mcp", device: "d", context: "c", label: "Device" },
+    { kind: "service", service: "s" },
+  ];
+  const executor = gatewayExecutor("scripting.execute", {} as RevitBridge["Service"],
+    (_key, input) => Effect.succeed(input), {} as PictureCaptures);
+  for (const caller of callers) {
+    for (const supplied of [undefined, "Person", "Agent"]) {
+      let sent: unknown;
+      const execution = {
+        prepared: { kind: "host-leaf" },
+        step: (_kind, _key, input, execute) => {
+          sent = input;
+          return execute("script-caller");
+        },
+      } as ActionExecution;
+      const ctx = { caller, admission: { id: "script-caller", target: { kind: "host" },
+        input: { scriptContent: "WriteLine(1);", ...(supplied ? { caller: supplied } : {}) },
+      } } as unknown as CommandContext;
+      await Effect.runPromise(executor.run(ctx, execution) as Effect.Effect<unknown, unknown>);
+      expect(sent).toMatchObject({ caller: caller.kind === "human" ? "Person" : "Agent" });
+    }
+  }
+});
 
 it.each([["Succeeded", "succeeded"], ["RuntimeFailed", "failed"], ["CompilationFailed", "failed"]] as const)(
   "real HTTP script admission classifies retained %s as %s", async (status, state) => {
