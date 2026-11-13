@@ -141,6 +141,14 @@
   },
   "band": [],
   "panes": {
+    "sheet": {
+      "label": "Member fields",
+      "purpose": "Edit the member’s arbitrary JSON over its saved bytes",
+      "draws": [
+        "value"
+      ],
+      "verbs": []
+    },
     "members": {
       "label": "Members",
       "purpose": "Browse installed Pod members",
@@ -152,14 +160,6 @@
     "runs": {
       "label": "Runs",
       "purpose": "Inspect member or Pod runs",
-      "draws": [
-        "value"
-      ],
-      "verbs": []
-    },
-    "sheet": {
-      "label": "Member fields",
-      "purpose": "Edit the member’s arbitrary JSON over its saved bytes",
       "draws": [
         "value"
       ],
