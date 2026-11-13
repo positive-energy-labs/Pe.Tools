@@ -58,35 +58,107 @@ Each slice is stated as what it deletes. "Lane" is the cheapest lane that can fa
 
 ### Timing plan
 
-Writer-hours as the nine plans stated them, with no measured rate. The implementor replaces this table after its own plan check.
+Replaced 2026-11-12 by the implementor's plan check: four readers re-read every row against the code at ee2d30fd (results in `.artifacts/runs/kernel2-20261112/plancheck/A.md` to `D.md`). The Wave column of the slice table is superseded by this section. Every writer starts as soon as its inputs exist; the order below holds only at landing. A batch is when a writer launches, not a gate. Hours are active writer-hours from the measured rates (about 400 added lines per writer-hour; a heady slice's median 1.6 active hours), and past plans ran 1.1 to 6 times over. Each writer's time box is twice its estimate. Shared contracts are in [CONTRACTS.md](CONTRACTS.md); a reader's writer letters there map to the branches below.
 
-| Slice | Hours | Lands after |
-|---|---|---|
-| 0 | 2 to 3 | nothing; gates landing and proof, never writing |
-| 1 | 22 | nothing for the loss fix; the kinds after it |
-| 2 | 4 | nothing |
-| 3 | 32 | nothing for the capture fix and the script hold |
-| 4 | 38 | slice 9's record and Work Reading (F1, F2) before `verb()` on the shared shell files |
-| 5 | 12 | nothing |
-| 6 | 61 to 73 | slice 4's `handle.ts`; the read-lifetime helper (PI-P2) lands before the read contract (K3) |
-| 7 | 52 to 64 | slice 3; the read-lifetime helper |
-| 8 | 44 | slice 9's Work Reading before the browser journal is deleted |
-| 9 | 35 | slice 4's `WorkWrite` effect |
-| 10 | 22 | slice 4's `handle.ts`; slice 8 on the shared shell files |
-| 11 | 31 to 34 | slice 4 |
-| 12 | 36 | slices 5 and 8; Places last, after slice 1's kinds |
-| 13 | 19 to 22 | slices 9, 10, 6 and 12; the guard lands last |
-| P | 15 to 22 | nothing |
+Slice 0 is a baseline, not a gate. The integrator's full suite on ee2d30fd, the driver's e2e pack and the purger's test fix (merged at b215fc69) make it.
 
-Total: 425 to 463. The critical path is slice 4's generated table, then `verb()`, then slice 6's read contract. Slice 8's contract, host door and journal deletion are the second chain.
+Batch 1, at the plan's agreement:
 
-Landing order on shared files. Each line is a collision the plans found; a writer who touches the file reads its plan row first.
+| Branch | Rows | Slice | Tier | Lands after |
+|---|---|---|---|---|
+| k2/freeze-ts | handle.ts, `Publication` to `C/value.ts`, `ctx.files` (ST6), wire additions | 4, 6 | heady | nothing |
+| k2/freeze-native | `Evidence.cs` lift, `Touched`, `ScriptCaller`, `read-ownership.ts` interfaces, the receipt response shape | 3, 7 | heady | nothing |
+| k2/folders | SH-S7a deletions and moves (`open/bay.tsx`, `lifecycle.tsx`, `typed-owner.ts`), dead `use-work-scope.ts` and `route-environment.ts` | 13 | slog | nothing; first web landing |
+| k2/store | ST1, ST3, ST4a | 1 | heady | nothing |
+| k2/pods | ST2, ST8's written exception (the pre-provider shim stays) | 2 | slog | nothing |
+| k2/timeline-host | C1 (types first, frozen), C2 with the `web/route/host.ts:59` patch, the findings Work as a member | 8 | heady | nothing |
+| k2/shell-states | commit 0 (split the band head and layout view in `typed-shell.tsx`), then SH-S6 | 5 | heady | k2/folders |
+| k2/findings | F1 with the clock and id leaves (F9 folded), F2 | 9 | heady | k2/shell-states on `typed-mount.ts` |
+| k2/script-hold | ST9 | 3 | slog | k2/freeze-native |
+| k2/native-scope | SI-S0 reduced, SI-S1, SI-S2's C# half, SI-S4 | 3, 7 | heady | k2/freeze-native |
+| k2/evidence-native | PI-P1 native | 7 | slog | k2/freeze-native |
+| k2/generated-table | K1 (with `pe-api.ts`), K6 | 4 | slog | k2/freeze-ts |
+| k2/chat-route | C7 | 12 | slog | k2/folders |
+| k2/bent-cut | PI-P3 | P | slog | nothing |
 
-- `web/shell/typed-mount.ts` and `typed-shell.tsx`: slice 5, then slice 9's Work Reading, then slice 4's `verb()` and helper deletion, then slice 11's gates, then slice 8's journal deletion, then slice 9's notes surface, then slice 11's teaching and keys, then slice 12's band.
-- `RevitDataRequestService.cs`: slice 3's two parts, then slice 7's `lens` and `hidden`.
-- `action-journal.ts`: slice 7 is its one writer; other slices land their lines first or hand them over.
-- `SpaceOps.cs`, `SpaceSceneOps.cs`, `native-output.ts`, `gateway-actions.ts`, `call-route.ts`: the Picture rows of slices 6 and 7 are the one writer; slice 3's script-hold line lands first.
-- Generated outputs: one landing per wave regenerates them.
+Batch 2, when the freeze commits land:
+
+| Branch | Rows | Slice | Tier | Lands after |
+|---|---|---|---|---|
+| k2/verbs | SH-S2 with K2, then SH-S5 | 4 | heady | k2/generated-table, k2/shell-states, k2/findings |
+| k2/read-contract | K3's contract and host half | 6 | heady | k2/freeze-ts |
+| k2/bindings | B1, B2, ST7's owner-registry half | 10 | slog | k2/freeze-ts; B2 after k2/shell-states on `sheet/pane.tsx` |
+| k2/projection | SH-S1, then SH-S3 | 11 | slog | k2/freeze-ts |
+| k2/read-lifetime | PI-P2's helper, `native-output.ts` policy, field-options | 6 | slog | k2/script-hold on `gateway-actions.ts` |
+| k2/evidence-ts | SI-S2's TS half, `native-receipts.ts` included | 7 | slog | k2/script-hold on `notice-feed.ts` |
+| k2/places-host | C9's host half | 12 | slog | k2/store's kinds |
+
+Batch 3, as each input lands:
+
+| Branch | Rows | Slice | Tier | Lands after |
+|---|---|---|---|---|
+| k2/journal-delete | C3 with F7, then C4; the browser journal owners the purger found (`application-work-registry.ts`, `work-scope-acceptance.ts`, `work-writes.ts`, `situation-band.tsx`) | 8 | slog | k2/timeline-host, k2/shell-states |
+| k2/tier-row | ST7a, the home-write row | 8 | slog | k2/timeline-host |
+| k2/store-sweeps | ST4b, ST4c, ST4d | 1 | slog | k2/store |
+| k2/lens | SI-S3 | 7 | slog | k2/native-scope, k2/read-lifetime |
+| k2/evidence-decode | PI-P1's TS decode | 7 | slog | k2/evidence-native |
+| k2/read-sweep | K3's sweep of 15 `route.ts`, PI-P2's consumer edits, `bindGraphChords` deletion | 6 | slog | k2/verbs, k2/read-contract |
+| k2/projection-pea | PA-P1 without chat, K5's host half | 11 | slog | k2/projection |
+| k2/findings-rest | F3 (its kit edit is in this file set), F4, F5 reduced, F8, F10 | 9 | slog | k2/findings, k2/verbs |
+| k2/verbs-follow | SH-S4 reduced, P1, C5, C6 | 4, 11, 12 | heady | k2/verbs |
+| k2/places-web | C9's web half | 12 | slog | k2/places-host |
+
+The purger holds the guards as its assigned seams, because they are repo guards: ST5's write ratchet (after k2/store), the web import guard on `runtime/work-journal.ts` (after k2/journal-delete), and slice 13's route-closure guard (D1), landed early with the existing edges as a frozen list that ratchets down.
+
+Estimate: k2/freeze-ts 1h
+Estimate: k2/freeze-native 1h
+Estimate: k2/folders 1h
+Estimate: k2/store 4h
+Estimate: k2/pods 1.5h
+Estimate: k2/timeline-host 3h
+Estimate: k2/shell-states 4h
+Estimate: k2/findings 3h
+Estimate: k2/script-hold 2.5h
+Estimate: k2/native-scope 8h
+Estimate: k2/evidence-native 7h
+Estimate: k2/generated-table 2.5h
+Estimate: k2/chat-route 2h
+Estimate: k2/bent-cut 3h
+Estimate: k2/verbs 4h
+Estimate: k2/read-contract 3h
+Estimate: k2/bindings 3h
+Estimate: k2/projection 3h
+Estimate: k2/read-lifetime 3h
+Estimate: k2/evidence-ts 4h
+Estimate: k2/places-host 1.5h
+Estimate: k2/journal-delete 3h
+Estimate: k2/tier-row 2h
+Estimate: k2/store-sweeps 3h
+Estimate: k2/lens 3h
+Estimate: k2/evidence-decode 1.5h
+Estimate: k2/read-sweep 2h
+Estimate: k2/projection-pea 3h
+Estimate: k2/findings-rest 4h
+Estimate: k2/verbs-follow 4h
+Estimate: k2/places-web 1.5h
+
+Total: about 90 active writer-hours over 31 writers, against the planners' 425 to 463. The critical path is k2/folders, then k2/shell-states, then k2/verbs, then k2/verbs-follow and k2/read-sweep: about 13 active hours. The native chain (k2/freeze-native, k2/native-scope, k2/lens) is about 12. Revit's add-in lease admits one controlled session at a time, so native writers prove on deterministic tests where reader B says that holds, batch their fresh runs, and ask the driver for the lease.
+
+Landing order on the two shell files (reader D measured it): k2/shell-states's commit 0, then SH-S6, then k2/findings, then three lanes in any order against each other: verbs (k2/verbs, then k2/verbs-follow and k2/findings-rest), timeline (k2/journal-delete), and small (SH-S3 in k2/projection, B2 in k2/bindings). The forcing collisions: SH-S6 rewrites the snapshot shape read at 33 lines of the mount; `typed-mount.ts:456` reads `FINDINGS_DOORS.write` inside the block SH-S2 rewrites; `placement()` and `verb()` exist only after SH-S2; C3 before C4 and F7 at `typed-mount.ts:641` and `typed-shell.tsx:151`; C5 before C6 at `typed-shell.tsx:156`.
+
+Other landing orders: ST9 before PI-P2 on `gateway-actions.ts:376-387` and before SI-S2 on `notice-feed.ts`; SI-S1 before SI-S3 on `RevitDataRequestService.cs`; SI-S1 before K1's regeneration of `host-typegen.ts`; PI-P2's `native-output.ts` edit before SI-S3; SH-S7a's moves before SH-S6 and SH-S2 edit those files. Generated outputs: the landing that changes a generator's source regenerates its output.
+
+### Plan check corrections, 2026-11-12
+
+The implementor took these defaults from the four readers and the purger's first scour. Each is re-openable.
+
+- Cut: K4's `history.compare` door and extractor (no reader in this crusade; `keyedBy` stays, written in K3). SH-S4's key-scope capability and `chord` on the wire (`bindGraphChords`'s deletion stays). B3's six duct slot names (product code; B1's `options` arm stays). `contract()` for K3's 13 host-only recipes. PA-P1's chat projection (C7 rewrites chat). ST1's C# rename. ST5's separate census (the guard's first run is the baseline). C4 only if k2/journal-delete has no room. SI-S3's enum members with no falsifier (`Annotations`, `Rows`, `TemplateLocked`, `FilteredBySheet`, `LensUse`). The `pea/index.ts` split of `document` from `target`. The margin coercion deletion (no row owns its wire default). The three-doc spatial rewrite, reduced to the false sentences. F6 picture inks. F5's `pointers.keep` op and person-facing list. The explicit-read demand state, S6's evidence fields and F3's `data-noted` mark.
+- Kept against a reader's cut: PI-P1's qualified exclusions (witness P1-C), because slice 7 deletes bare-id exclusions on purpose. The bent-cut editor, at the lowest priority, because the owner ticked it and it shares no file. Places (C9), the first to drop if the run is long.
+- Kept against the map: the pre-provider shim at `thread-store.ts:95-96`, because deleting it hides a person's chat with only a log line. ST8 writes the exception at the site.
+- Moved: ST7's owner-registry half to slice 10. F7 into C3's writer. F9 into F1. SH-S3 beside SH-S1. K3 split into its contract and host half, and its route-file sweep. One writer takes both C# halves of SI-S1 and SI-S2 (`Op.cs:101-139`, `BridgeAgent.cs`). `RollsBack = true` leaves with SI-S1's capture split, because `Op.cs:514` refuses a TransactRead without it.
+- Assumption B holds: the read-lifetime helper lands in k2/read-lifetime before both consumers. Assumption C is half false: `touched` rides in the response file `BridgeAgent.cs` writes, so `pe-revit op result` carries it with no SDK change; only a typed field on the SDK receipt stays an Owed line. Assumption A is spiked now in its own thread; a failed A blocks only the "views only" cross-check and `unauthorized`.
+- The browser journal has three owners, not one file: the purger found `createWorkJournal` in `application-work-registry.ts` and the `acquireWorkJournal` map in `shell/journal.ts`. `runtime/work-journal.ts` stays as the host engine; slice 8 deletes every web importer.
+- File sets grew where readers found them short: K1 gains `pe-api.ts`; SI-S2 gains `native-receipts.ts`; SI-S3's callers gain `captures-route.ts`, `captures/list.tsx`, `ops/renderers.ts`, `rooms/rooms-plan.ts`, `takeoff/plan.ts`, `HostProtocolContracts.cs` and the recorded fixtures; SH-S6 gains `rooms/plan.tsx`, `typed-route.ts:367`, `route-environment.ts` and `route-kernel-environment.ts`; F1 gains `typed-mount.ts:456`, `graph-history.tsx:35`, `ducts/sheet/types.ts`, `findings/verb.tsx`; C3 gains `input-history.neutral.test.ts` and `fans/native.test-support.ts`; C9 gains three tests that seed `pe.places`. Each writer's brief carries its reader's file set.
 
 ### Assumptions that no run has checked
 
@@ -112,11 +184,11 @@ Landing order on shared files. Each line is a collision the plans found; a write
 
 ## Deletion criteria
 
-- A slice lands only when its falsifier is green at the landed SHA and every item in its Deletes column is gone.
+- A slice merges into the integration branch when its writer's typecheck and touched tests pass. Its falsifier is a driver row stamped on a merged tip, and the end gate reads it. A slice is done when every item in its Deletes column is gone or was cut in the plan check above.
 - A guard is admitted only when a named mutant or a planted offender turns it red.
 - No slice writes migration code or a compatibility shim. A compile break is the census.
 - No slice adds a prompt, an approval window or a wait on the person.
-- A slice that needs a kit change sends a red `kernel gap:` test to the kit owner, never a local patch.
+- A kit change is made inside the file set of the slice that needs it, as F3 does; no other thread patches the kit.
 - The crusade ends when slice 13's guard and slice 1's write ratchet hold, the browser journal engine and the hand-typed axes are gone, and every proof row is stamped on the final tip or ruled Owed by the owner.
 
 ## Risk tier per surface
