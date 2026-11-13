@@ -32,7 +32,7 @@ export interface TimelinePart {
 export const sameStep = (a: StepRef, b: StepRef): boolean =>
   "work" in a
     ? "work" in b && workKey(a.work) === workKey(b.work) && a.revision === b.revision
-    : "home" in b && a.home === b.home && a.sha256 === b.sha256;
+    : !("work" in b) && a.home === b.home && a.sha256 === b.sha256;
 
 const pathLabel = (ack: WorkWriteAck) =>
   ack.patches[0]?.path.length ? `Edit ${ack.patches[0].path.join(".")}` : "Edit Work";

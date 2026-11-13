@@ -6,6 +6,8 @@ import { withInvocationContext } from "@pe/runtime/context";
 import type { ActionJournal } from "../src/action-journal.ts";
 import { createPeRoutes } from "../src/pe-routes.ts";
 import { hostTimeline, registerTimelineSource } from "../src/reads/work-timeline.ts";
+import { graphRoute } from "../src/reads/routes.ts";
+import { inputPort } from "../src/reads/inputs.ts";
 import { approvedPea, human } from "./callers.ts";
 
 /** The production step door over two Works of one Place, with receipts read from the action journal. */
@@ -47,6 +49,7 @@ function doors() {
     fans,
     works,
     receipts,
+    timeline: hostTimeline(workspace, journal),
     read: (by: "human" | "pea") => hostTimeline(workspace, journal).read(works, by),
     value: async (key: WorkKey) => ((await workspace.view(key, key.route))!.doc as { a: number }).a,
     async edit(key: WorkKey, caller: Caller, a: number) {
@@ -140,4 +143,27 @@ test("a registered second source competes for the next step, and the door routes
     release();
   }
   expect((await d.read("human")).undo).toMatchObject({ work: d.ducts });
+});
+
+test("the read door stamps the caller's author over anything the client sent, and the port answers from the Timeline", async () => {
+  const d = doors();
+  await d.edit(d.ducts, approvedPea("timeline-door"), 4);
+  const request = { read: "work.timeline", args: { works: d.works, by: "human" }, subscription: "s", generation: 0 };
+  const bound = graphRoute("reads.value", request, undefined, "pea");
+  expect(bound.args).toMatchObject({ by: "pea" });
+  const port = inputPort({
+    source: {} as never,
+    workspace: {} as never,
+    marks: {} as never,
+    run: (async () => undefined) as never,
+    evaluation: "test",
+    origin: () => null,
+    revision: () => 0,
+    timeline: d.timeline,
+  });
+  expect(workTimelineSchema.parse(await bound.evaluate(port))).toMatchObject({ undo: { work: d.ducts } });
+  // A person has no step here: the edit is Pea's.
+  expect(await graphRoute("reads.value", request, undefined, "human").evaluate(port)).toMatchObject({ undo: null });
+  // A lane with no action journal refuses the read; it never builds a Timeline without receipts.
+  await expect(bound.evaluate(inputPort({ source: {} as never, workspace: {} as never, marks: {} as never, run: (async () => undefined) as never, evaluation: "test", origin: () => null, revision: () => 0 }))).rejects.toThrow(/action journal/);
 });
