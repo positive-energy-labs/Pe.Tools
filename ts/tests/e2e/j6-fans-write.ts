@@ -42,7 +42,7 @@ async function plan(page: Page) {
   return page.until(
     async () => {
       const text = await page.textOf(POPOVER);
-      return /planned|refused|no staged edit/i.test(text) ? text : null;
+      return /planned|refused|no staged edit|nothing to write/i.test(text) ? text : null;
     },
     "the plan outcome in the Write popover",
     300_000,
@@ -106,5 +106,5 @@ await journey("J6-fans", async (page, step) => {
   step(`unit ESP after write: ${await esp(page)}`);
 
   step("re-plan: the stage was consumed");
-  expectText(await plan(page), "no staged edit", "a re-plan after Write is refused");
+  expectText(await plan(page), /nothing to write/i, "a re-plan after Write is refused");
 });
