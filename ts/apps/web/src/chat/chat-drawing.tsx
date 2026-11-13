@@ -1,7 +1,6 @@
 import type { ListSearch } from "@pe/agent-contracts";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 import {
-  createContext,
   Suspense,
   useCallback,
   useEffect,
@@ -28,7 +27,6 @@ import { Button } from "@pe/kit/lang/button";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 import {
   ChatCluster,
-  ChatSituationHead,
   ComposerPickers,
   ComposerState,
   ComposerWork,
@@ -54,8 +52,7 @@ import { ComposerBank } from "#/chat/composer-bank";
 import { useThreadPresence } from "#/machine/os-notices";
 import { routeAddress, routeAt } from "@pe/agent-contracts";
 
-export type ChatShellProps = { target?: string; docked?: boolean };
-export const ChatSurfaceProps = createContext<ChatShellProps>({});
+import { DockSurface as ChatSurfaceProps, type DockSurfaceProps as ChatShellProps } from "../workbench/hosted-route";
 
 /** A new thread is a draft until its first send; in the tray it replaces Activity meanwhile. */
 function useNewThread() {
@@ -184,7 +181,7 @@ export function ChatDrawing({ ctx }: { ctx: ChatHandle }) {
   );
 }
 
-function ChatSurface({ target, docked = false, handle }: ChatShellProps & { handle: ChatHandle }) {
+function ChatSurface({ target, handle }: ChatShellProps & { handle: ChatHandle }) {
   const columnRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
@@ -284,11 +281,6 @@ function ChatSurface({ target, docked = false, handle }: ChatShellProps & { hand
       data-route-mount="chat"
       className="flex min-h-0 min-w-0 flex-1 flex-col font-sans text-ink"
     >
-      {!docked && (
-        <PrimaryRouteControls route="chat" slot="situation">
-          <ChatSituationHead handle={handle} situation={situation} status={status} />
-        </PrimaryRouteControls>
-      )}
       {activity ? (
         <Ledger
           presentation={LEDGER_PRESENTATIONS.tray}
