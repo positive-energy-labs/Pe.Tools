@@ -9,7 +9,7 @@ import { Button } from "@pe/kit/lang/button";
 import { NOTICE_GROUPS, type NoticeRow } from "@pe/agent-contracts";
 import { peClient } from "#/host/pe-client";
 import { followAction } from "#/shell/work-feed-client";
-import { relativeThreadAge } from "#/chat/thread-navigation";
+import { relativeThreadAge } from "#/workbench/thread-navigation";
 import { usePodRoutes } from "#/route/pod-route-context";
 import { previousOf } from "#/host/resource-state";
 import {

@@ -1,7 +1,4 @@
 [
-  "chat/scope.ts uses peClient",
-  "chat/thread-palette.tsx uses peClient",
-  "chat/thread-work.ts uses peClient",
   "ducts/proto/e/fan-sections.tsx -> fans/route",
   "ducts/proto/e/screen.tsx -> fans/route",
   "fans/bindings.ts -> ducts/cell-focus",
@@ -25,14 +22,5 @@
   "fans/route.ts -> ducts/sheet/input-history.neutral",
   "fans/route.ts -> ducts/sheet/model",
   "fans/route.ts -> ducts/sheet/value-fixtures",
-  "machine/notice.tsx -> chat/question-form",
-  "navigation/ledger.tsx -> chat/thread-navigation",
-  "route/route-target.ts -> chat/scope",
-  "sessions/route.ts -> open/route",
-  "workbench/moments.tsx -> chat/use-mentions",
-  "workbench/provider/view.tsx -> chat/scope",
-  "workbench/provider/view.tsx -> chat/thread-navigation",
-  "workbench/route-panes.tsx -> chat/thread-work",
-  "workbench/store.ts -> chat/thread-work",
-  "workbench/tabs.ts -> chat/thread-work"
+  "sessions/route.ts -> open/route"
 ]

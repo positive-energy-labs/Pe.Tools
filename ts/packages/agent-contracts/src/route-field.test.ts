@@ -64,7 +64,7 @@ test("many round trips all and exact ids; cap refusal never truncates", () => {
   expect(f.schema.safeParse([1]).success).toBe(false);
 });
 test("formerly narrowed routes preserve all through URL and Pea", () => {
-  for (const [route, key] of [["pea", "selected"], ["rooms", "layers"], ["space", "hidden"], ["space", "isolated"], ["space", "layers"]] as const) {
+  for (const [route, key] of [["rooms", "layers"], ["space", "hidden"], ["space", "isolated"], ["space", "layers"]] as const) {
     const address = routeAddress(route);
     expect(address.read({ [key]: route === "rooms" ? JSON.stringify("all") : "all" }).page).toHaveProperty(key, "all");
   }

@@ -40,7 +40,7 @@ export function renderRoutesCs(): string {
     return true;
   }).map(({ key, directory }) => {
     const route = directory.path.slice(1) || "home";
-    const address = routeAddresses[route as keyof typeof routeAddresses];
+    const address = routeAddresses[key as keyof typeof routeAddresses];
     if (!address) throw Error(`${key}: ${directory.path} is in the route directory and not in the address table`);
     const spec = { ...directory, fields: address.fields };
     const keys = Object.entries({ ...threadListFields, ...spec.fields } as Record<

@@ -21,7 +21,7 @@ import {
   targetInventory,
   retainTargetInventory,
 } from "#/host/resource-state";
-import { soleUserDocument } from "#/chat/scope";
+import { soleUserDocument } from "#/workbench/sole-user-document";
 import { useOwned } from "#/shell/owner";
 
 export interface BindingLost {

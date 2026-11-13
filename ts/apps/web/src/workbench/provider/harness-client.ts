@@ -1,3 +1,5 @@
+import { peClient } from "#/host/pe-client";
+import { readPeError } from "@pe/host-contracts/pe-api";
 import { createPeClient } from "@pe/agent-contracts/pe-api";
 import { hostFetch } from "#/host/runtime";
 /**
@@ -152,4 +154,21 @@ export function streamThread(options: {
   };
   follow();
   return stop;
+}
+
+/** Keep the response status and refusal body for the scope owner to reconcile. */
+export const setThreadTargets = (id: string, body: PutTarget) =>
+  peClient.response("scope.set", { params: { id }, body });
+
+export async function downloadThread(id: string): Promise<void> {
+  const response = await peClient.response("thread.export", { params: { id } });
+  if (!response.ok) throw Error((await readPeError(response)).message);
+  const url = URL.createObjectURL(await response.blob());
+  const link = document.createElement("a");
+  link.href = url;
+  link.download =
+    /filename="([^"]+)"/.exec(response.headers.get("content-disposition") ?? "")?.[1] ??
+    `${id}.json`;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }

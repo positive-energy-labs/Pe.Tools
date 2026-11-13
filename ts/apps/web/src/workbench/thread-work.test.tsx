@@ -6,7 +6,7 @@ import { peReadings } from "#/host/resource-stream";
 import { emptyChatState } from "@pe/agent-contracts/chat-state";
 import { CHAT_SEED_THREAD_WORK } from "../design-system/chat-examples";
 import { demoThreads } from "./thread-navigation";
-import { ThreadsSidebar } from "./thread-palette";
+import { ThreadsSidebar } from "#/chat/thread-palette";
 import * as work from "./thread-work";
 
 vi.mock("./thread-work", async (original) => {

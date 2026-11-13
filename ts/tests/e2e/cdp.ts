@@ -13,6 +13,7 @@ import {
 import { execSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { composerTurn } from "./composer-turn.ts";
 
 export type Page = Awaited<ReturnType<typeof connect>>;
 
@@ -480,15 +481,13 @@ const CREDIT =
  * not a product fail.
  */
 export async function sendChat(page: Page, text: string, ms = 300_000) {
-  const working = () =>
-    page.read<boolean>(
-      `[...document.querySelectorAll("button")].some((b) => b.innerText.trim() === "send" && b.title === "Pea is working")`,
-    );
+  const observed = () => page.read<ReturnType<typeof composerTurn>>(`(${composerTurn.toString()})()`);
+  const working = async () => (await observed()).state === "working";
   if (await working()) {
     await page
       .until(async () => !(await working()), "the running turn to settle", 60_000)
       .catch(async () => {
-        await page.click("cancel");
+        await page.click("stop", "[data-composer-send]");
         await page.until(async () => !(await working()), "cancel to settle", 30_000);
       });
   }
@@ -500,16 +499,19 @@ export async function sendChat(page: Page, text: string, ms = 300_000) {
   await page.press("Enter");
   await page.waitText(text, 30_000);
   const end = await page.until(
-    async () => /\b(READY|FAILED|WAITING FOR YOU)\b/.exec(await page.text())?.[1],
+    async () => {
+      const turn = await observed();
+      return turn.state === "settled" || turn.state === "failed" ? turn : null;
+    },
     "the turn to settle",
     ms,
   );
-  if (end === "FAILED") {
-    const detail = await page.textOf('[data-testid="composer-status-detail"]');
+  if (end.state === "failed") {
+    const detail = end.detail;
     throw new Error(
       CREDIT.test(detail)
         ? `BLOCKED: ${detail}`
-        : `ASSERT the turn completes: FAILED — ${detail || "(no status detail)"}`,
+        : `ASSERT the turn completes: ${detail || "the composer refused the turn"}`,
     );
   }
 }

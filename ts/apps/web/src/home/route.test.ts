@@ -1,5 +1,9 @@
 import { expect, test } from "vite-plus/test";
 import { module, query } from "./route";
+import { module as chat } from "../chat/route";
+import { module as takeoff } from "../takeoff/route";
+import { decodeField, encodeField } from "../route/field-codec";
+import { routeAddress, routeKeys, threadListFields } from "@pe/agent-contracts";
 
 /*
  * Slice 10 (MAP row 10), index: home sits on the slot declaration alone. No subject, no sheet,
@@ -32,4 +36,28 @@ test("slice 10 index: home declares only query and one pane, no subject and no s
     selected: "selection",
   });
   expect(data.subject).toBeUndefined();
+});
+
+test("every thread-list Page uses the shared fields and one encoding", () => {
+  for (const route of [module, chat, takeoff]) {
+    const fields = route.spec.fields;
+    expect(fields.threadSort, route.data.key).toBe(threadListFields.threadSort);
+    expect(fields.threadSearch, route.data.key).toBe(threadListFields.threadSearch);
+    expect(encodeField(fields.threadSort, "title"), route.data.key).toBe("title");
+    expect(decodeField(fields.threadSort, '"title"'), route.data.key).toBe("");
+    expect(decodeField(fields.threadSearch, "broken"), route.data.key).toEqual({
+      v: 0, keywords: "broken", pills: [],
+    });
+  }
+});
+
+test("all thread-list address projections use the shared codec for malformed input", () => {
+  for (const key of routeKeys) {
+    const at = routeAddress(key);
+    expect(at.read({ threadSort: '"title"' }).page.threadSort, key).toBe("");
+    expect(at.read({ threadSearch: "broken" }).page.threadSearch, key).toEqual({
+      v: 0, keywords: "broken", pills: [],
+    });
+    expect(at.write({ threadSort: "title" }).threadSort, key).toBe("title");
+  }
 });

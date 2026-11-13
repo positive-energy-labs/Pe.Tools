@@ -2,7 +2,7 @@
 import { act, cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { ComposerPending } from "./composer-pending";
-import { composerAnswer, QuestionForm } from "./question-form";
+import { composerAnswer, QuestionForm } from "#/workbench/question-form";
 import type { Question } from "@pe/agent-contracts/chat-state";
 
 afterEach(cleanup);

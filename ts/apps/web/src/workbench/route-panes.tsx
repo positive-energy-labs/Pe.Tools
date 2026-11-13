@@ -10,7 +10,7 @@ import { DockBand } from "../shell/pane-actions";
 import { EmptyState } from "@pe/kit/lang/empty";
 import { Button } from "@pe/kit/lang/button";
 import { chipRecipe } from "@pe/kit/lang/chip";
-import { useThreadWorks } from "#/chat/thread-work";
+import { useThreadWorks } from "#/workbench/thread-work";
 import {
   GraphLayoutView,
   type GraphLayoutState,
@@ -45,7 +45,7 @@ export function RouteDock({
   const [peaHead, setPeaHead] = useState<HTMLDivElement | null>(null);
   const [toolHead, setToolHead] = useState<HTMLDivElement | null>(null);
   const pea = useRouterState({
-    select: (state) => state.location.pathname === routeAddress("pea").path,
+    select: (state) => state.location.pathname === routeAddress("chat").path,
   });
   const plan = useAtomValue(store.atoms.planIntent);
   const planRefusal = useAtomValue(store.atoms.planRefusal);

@@ -41,8 +41,8 @@ internal static class PeRoutes {
         internal static class Keys {
             public const string ThreadSearch = "threadSearch";
             public const string ThreadSort = "threadSort";
-            public const string Selected = "selected";
             public const string Turn = "turn";
+            public const string Selected = "selected";
         }
     }
 

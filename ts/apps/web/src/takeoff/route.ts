@@ -11,7 +11,6 @@ import { takeoffsRouteState,
 
 import {
   threadListFields,
-  threadSearchDefault,
   planViewport,
 } from "../../../../packages/agent-contracts/src/routes/shared";
 const many = z.union([z.array(z.string()), z.literal("all")]);
@@ -20,8 +19,7 @@ export const fields = {
   zone: field(z.string(), "", "pose", "push"),
   room: field(z.string(), "", "pose", "push"),
   viewport: field(planViewport.schema, null, "pose"),
-  threadSearch: field(threadListFields.threadSearch.schema, threadSearchDefault(), "query"),
-  threadSort: field(threadListFields.threadSort.schema, "", "query"),
+  ...threadListFields,
   views: field(many, [], "query", "push"),
   zones: field(many, [], "query", "push"),
   work: field(z.string(), "", "query", "push"),
