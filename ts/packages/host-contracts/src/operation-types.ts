@@ -1023,7 +1023,7 @@ export function isTsOnlyOperationKey(key: string): key is TsOnlyOperationKey {
   return Object.hasOwn(tsOnlyOperationSchemas, key);
 }
 
-export type HostLocalCatalogEntry = HostOperationDefinition & {
+export type HostLocalCatalogEntry = Omit<HostOperationDefinition, "intent"> & {
   readonly key: TsOnlyOperationKey;
   readonly origin: "host-local";
   readonly principal?: readonly ("human" | "pea")[];

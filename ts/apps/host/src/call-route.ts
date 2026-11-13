@@ -873,7 +873,7 @@ function callRoutes(
               nativeReads: nativeReads ?? { kind: "recorded" } },
             composition?.local ??
               ((key, input, scope, context) =>
-                executeGatewayLocal(key, input, bridge, observations(), actionDeps.pictures!, actionDeps.launchShell, scope, context)),
+                executeGatewayLocal(key, input, bridge, observations(), actionDeps.pictures!, actionDeps.launchShell, scope, context, composition?.pointers)),
             composition?.origin,
           );
         }),
@@ -1349,13 +1349,14 @@ function executeGatewayLocal(
   launch?: (path: string) => Promise<void>,
   scope?: HostSessionScope,
   action?: GatewayLocalContext,
+  pointers?: ThreadPointers,
 ): Effect.Effect<unknown, unknown, AttemptHost> {
   if (!isTsOnlyOperationKey(key))
     return Effect.fail(new BridgeError("Unknown host operation", 409, { notDispatched: true }));
   // The journal Layer holds the node and HTTP services; the picture store is this route's value.
   if (!linkedCatalog().entries.get(key)?.call?.shell)
     return dispatchTsOnlyOperation(key, input, scope, bridge, captures, {
-      caller: action?.caller ?? { kind: "anonymous" }, action,
+      caller: action?.caller ?? { kind: "anonymous" }, action, pointers,
     }).pipe(Effect.provideService(PictureCaptureStore, pictures));
   return Effect.flatMap(decodeRequest("host.shell.open", input), (input) =>
     openShellPath(input, launch),
