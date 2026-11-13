@@ -1,8 +1,8 @@
 import { z } from "zod";
-import { route, field, read, paneLayout, type ContextOf } from "../route/defaults";
+import { route, field, read, paneLayout, type ContextOf, type Verbs } from "../route/defaults";
 import { hostRead } from "../route/host-read";
 import { draw } from "../route/draw";
-import { command } from "../route/typed-actions";
+import { handle } from "@pe/agent-contracts/handle";
 import {
   takeoffsRouteState,
   valueRead,
@@ -46,7 +46,8 @@ export type AdoptionContext = ContextOf<
   typeof fields,
   typeof loaded,
   typeof takeoffsRouteState,
-  typeof patches
+  typeof patches,
+  Verbs<never, "initialize" | "adopt">
 >;
 export const module = route({
   key: "takeoffs",
@@ -79,9 +80,9 @@ export const module = route({
     history: z.object({ label: z.string() }),
     describe: (history) => ({ label: history.label }),
   },
-  commands: {
+  verbs: {
     initialize: {
-      ...command("takeoffs.initialize"),
+      handle: handle("takeoffs.initialize"),
       label: "Initialize",
       input: ({ value }) => {
         if (!value || value.initialize.refusal)
@@ -100,7 +101,7 @@ export const module = route({
       }),
     },
     adopt: {
-      ...command("takeoffs.adopt"),
+      handle: handle("takeoffs.adopt"),
       label: "Adopt",
       input: ({ value }) => {
         if (!value || value.adopt.refusal)
@@ -126,5 +127,7 @@ export const module = route({
       draw: draw("scroll", () => import("./typed-adoption"), "AdoptionBody"),
     },
   },
+  // The band draws each review; the pane stages the Work a plan reads, then asks for the plan.
+  band: ["initialize", "adopt"],
   layout: paneLayout("adoption"),
 });

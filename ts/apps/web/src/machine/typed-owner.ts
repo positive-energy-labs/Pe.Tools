@@ -1,8 +1,14 @@
 import { useRef, useMemo } from "react";
 import type { OpenContext } from "./open-fields";
+import type { RunVerb } from "../route/typed-route";
 import type { OpenOwner } from "./context";
-const openActions = ["start", "open", "close", "stop", "restart"];
-export function useOpenTypedOwner(ctx: OpenContext, actions = openActions): OpenOwner {
+type OpenVerb = "start" | "open" | "close" | "stop" | "restart";
+const openActions: readonly OpenVerb[] = ["start", "open", "close", "stop", "restart"];
+/** `/sessions` passes the three verbs it declares; its context holds those and no others. */
+export function useOpenTypedOwner<V extends OpenVerb = OpenVerb>(
+  ctx: Omit<OpenContext, "verb"> & { verb(id: NoInfer<V>): RunVerb },
+  actions: readonly V[] = openActions as readonly V[],
+): OpenOwner {
   const current = useRef(ctx);
   current.current = ctx;
   return useMemo(
@@ -11,7 +17,7 @@ export function useOpenTypedOwner(ctx: OpenContext, actions = openActions): Open
         subscribe: () => () => {},
         version: () => 0,
         fixture: null,
-        busy: () => actions.find(id => current.current.write(id).pending) ?? null,
+        busy: () => actions.find(id => current.current.verb(id).pending) ?? null,
         view: {
           read: () => ({
             page: {
@@ -42,12 +48,12 @@ export function useOpenTypedOwner(ctx: OpenContext, actions = openActions): Open
             };
           },
         },
-        control: (id: string, input: any) => ({
+        control: (id: V, input: any) => ({
           refusal: current.current.value.current ? null : current.current.value.reason,
           run: async () => {
             try {
               if (input.refusal) throw Error(input.refusal);
-              const value = await current.current.write(id).run(input.request);
+              const value = await current.current.verb(id).run(input.request);
               return { state: "done", kind: "command", outcome: { state: "succeeded" }, value };
             } catch (error) {
               return { state: "refused", refusal: { message: String(error) } };

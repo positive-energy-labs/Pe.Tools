@@ -65,8 +65,8 @@ export function useFamilyStore(ctx: FamilyContext) {
   );
   const inspect = useMemo(() => inspectOf(page.inspector), [page.inspector]);
   const drillType = page.drill || null;
-  const run=useCallback(async(id:string,input:unknown={})=>{
-    try {await current.current.write(id === "attach-spec"?"attach":id).run(input);return null;}
+  const run=useCallback(async(id:"attach",input:unknown={})=>{
+    try {await current.current.verb(id).run(input);return null;}
     catch(error){return {message:error instanceof Error?error.message:String(error)};}
   },[]);
   const identity=work?workKey(work.handle.key):null;
@@ -290,7 +290,7 @@ export function useFamilyStore(ctx: FamilyContext) {
           reader.onerror = () => reject(reader.error);
           reader.readAsDataURL(file);
         });
-        const refused = await run("attach-spec", {
+        const refused = await run("attach", {
           member,
           source: await uploadBlob({ fileName: file.name, base64 }),
         });

@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { decode, type SubjectRefCode } from "../../../../../../packages/agent-contracts/src/subject-ref.ts";
-import type { SheetSlot } from "@pe/agent-contracts/slots";
+import { FINDINGS_DOORS, type SheetSlot } from "@pe/agent-contracts/slots";
 import { Button } from "@pe/kit/lang/button";
 import { Input } from "@pe/kit/lang/input";
 import { submitAction } from "@pe/mcps/actions";
@@ -157,7 +157,7 @@ export function SheetPane({ ctx: { draw: ctx, slot, field } }: { ctx: { draw: Ct
     const subject = subjectRow(cell.row);
     if (!subject || verbed.has(subject)) return null;
     verbed.add(subject);
-    return <FindingVerb subject={subject} name={cell.label} action={ctx.write("finding")} />;
+    return <FindingVerb subject={subject} name={cell.label} action={ctx.verb(FINDINGS_DOORS.write)} />;
   };
   if (empty) return <>{note}<p className="text-ink-2">{empty}</p></>;
   return (

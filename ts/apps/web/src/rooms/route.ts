@@ -1,5 +1,5 @@
 import type { ContextOf } from "../route/defaults";
-import { command } from "../route/typed-actions.ts";
+import { handle } from "@pe/agent-contracts/handle";
 import { bindings } from "./bindings";
 import { read } from "../route/defaults";
 import { z } from "zod";
@@ -87,22 +87,23 @@ export const module = route({
     history: z.object({ label: z.string() }),
     describe: (history) => ({ label: history.label }),
   },
-  commands: {
+  verbs: {
     partition: {
-      ...command("rooms.partition"),
+      handle: handle("rooms.partition"),
       label: "Partition view",
       present: () => ({ sentence: "Partition the staged plan view", rows: [] }),
     },
     apply: {
-      ...command("rooms.write"),
+      handle: handle("rooms.write"),
       label: "Write room fields",
       present: () => ({ sentence: "Write the staged room fields", rows: [] }),
     },
     merge: {
-      ...command("rooms.merge"),
+      handle: handle("rooms.merge"),
       label: "Merge rooms",
       present: () => ({ sentence: "Merge the staged room selection", rows: [] }),
     },
   },
+  band: ["partition", "apply", "merge"],
   layout: split("h", ["main", "goal"], { id: "rooms-main", size: 320, sized: "end" }),
 });

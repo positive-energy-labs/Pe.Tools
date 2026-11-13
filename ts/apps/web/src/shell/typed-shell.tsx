@@ -183,7 +183,7 @@ function bandVerbs(mount: TypedMount): ReactNode[] {
   const { spec } = mount;
   return [
     ...(mount.startAction()?[<TypedStart key="start" mount={mount}/>]:[]),
-    ...Object.entries(spec.commands).filter(([,c])=>!("row" in c && c.row) && !("pane" in c && c.pane)).map(([id])=><TypedWrite key={id} mount={mount} id={id} />),
+    ...mount.placement().band.map(id=><TypedWrite key={id} mount={mount} id={id} />),
     // An explicit-demand read is a verb the person presses; nothing else re-reads from chrome.
     ...Object.entries(spec.panes).filter(([,p])=>p.read?.demand === "explicit").map(([id,p])=><Button key={`read:${id}`} label={`Read ${p.title}`} onClick={()=>mount.refresh(p.read)}>Read</Button>),
   ];
@@ -201,8 +201,9 @@ const subjectActive = (mount: TypedMount, when: string) => {
   return when === "subject" && !!held && (held.kind === "all" || !!held.ids?.length);
 };
 export function TypedWrite({ mount, id }: { mount: TypedMount; id: string }) {
-  const command=mount.spec.commands[id]!,handle=mount.action(id);
-  if("kind" in command) return <><Button label={handle.label} refusal={handle.refusal} busy={handle.pending} onClick={()=>void handle.run().catch(()=>{})}>{handle.label}</Button>
+  const handle=mount.verb(id);
+  // Review follows the plan: a handle with one is planned and applied, any other is one press.
+  if("run" in handle) return <><Button label={handle.label} refusal={handle.refusal} busy={handle.pending} onClick={()=>void handle.run().catch(()=>{})}>{handle.label}</Button>
     {handle.failure?<span role="alert">{handle.failure}</span>:null}</>;
   return <PreviewAction handle={handle} label={handle.label} />;
 }

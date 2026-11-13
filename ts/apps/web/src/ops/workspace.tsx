@@ -97,7 +97,7 @@ export function Operation({ ctx }: { ctx: OpsContext }) {
             }
             onClick={() =>
               void ctx
-                .write("run")
+                .verb("run")
                 .run({ op: selected, request: requestOf(values) })
                 .then((result) => {
                   setValue(result as Value);

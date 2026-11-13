@@ -1,5 +1,5 @@
 import type { ContextOf } from "../route/defaults";
-import { sessionCommand } from "../route/typed-actions.ts";
+import { handle } from "@pe/agent-contracts/handle";
 import { read } from "../route/defaults";
 import { z } from "zod";
 import { memberWork, routeAddress, settingsRouteState, type Immutable } from "@pe/agent-contracts";
@@ -21,6 +21,12 @@ import {
 /** The open member: the subject's one id, a `name` SubjectRef `[pod, path]` (ADR 0035 rule 2). */
 export const member = (page: { member: Immutable<z.output<ReturnType<typeof subjectSchema>>> }) =>
   page.member.kind === "ids" ? podMemberOfCode(page.member.ids[0]) : null;
+/** A verb on a member refuses before one is chosen: its command's input requires the member. */
+const chosen = (page: Parameters<typeof member>[0]) => {
+  const ref = member(page);
+  if (!ref) throw Error("Choose a Pod member first");
+  return ref;
+};
 export const loaded = read(
   hostRead(valueRead("pods.author", podsArgs, podsValue)),
   (page: Parameters<typeof member>[0] & { runs: "member" | "pod" }) => ({
@@ -183,28 +189,28 @@ export const module = route({
     history: z.object({ label: z.string() }),
     describe: (history) => ({ label: history.label }),
   },
-  commands: {
+  verbs: {
     open: {
-      ...sessionCommand("settings.observe"),
+      handle: handle("settings.observe"),
       label: "Open saved bytes",
       input: ({ page, value }) => ({
-        member: member(page),
+        member: chosen(page),
         sha256: value?.member?.sha256,
         replaceEdits: false,
       }),
     },
     adopt: {
-      ...sessionCommand("settings.observe"),
+      handle: handle("settings.observe"),
       label: "Adopt disk bytes and replace edits",
       input: ({ page, value }) => ({
-        member: member(page),
+        member: chosen(page),
         sha256: value?.member?.sha256,
         replaceEdits: true,
       }),
     },
-    save: { ...sessionCommand("settings.write"), label: "Save staged member", input: () => ({}) },
+    save: { handle: handle("settings.write"), label: "Save staged member", input: () => ({}) },
     saveNew: {
-      ...sessionCommand("settings.write"),
+      handle: handle("settings.write"),
       label: "Save as new member",
       input: ({ page }) => {
         const ref = member(page);
@@ -212,6 +218,7 @@ export const module = route({
       },
     },
   },
+  band: ["open", "adopt", "save", "saveNew"],
   layout: split(
     "h",
     ["members", split("v", ["sheet",

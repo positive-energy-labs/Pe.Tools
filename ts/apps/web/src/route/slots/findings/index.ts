@@ -1,5 +1,5 @@
 import { FINDINGS_DOORS, type Finding, type Mark } from "@pe/agent-contracts/slots";
-import { catalogAction } from "../../typed-actions.ts";
+import { handle } from "@pe/agent-contracts/handle";
 import { resolveMark, type Captured } from "../picture/index.ts";
 
 /*
@@ -18,14 +18,16 @@ export function findingMark(finding: Finding, captured: readonly Captured[]): Ma
 }
 
 /**
- * The route command a person's row verb (`FindingVerb`) runs: `findings.write` with the row's
- * finding. The mount (shell/typed-mount.ts) adds it to every route as `finding` and binds the
- * route's own Work handle; the host addresses the admitted document's findings Work and stamps the
- * author from the caller. `route()`, the Pod surface, never imports this file, because the contract
- * is the catalog (pod-surface.guard.test.ts).
+ * The kernel's verbs: on every route, declared by none, never placed. The shell's
+ * `mount.kernelVerb(key)` only reads this table and binds the route's own Work handle; the host
+ * addresses the admitted document's findings Work and stamps the author from the caller. `route()`,
+ * the Pod surface, imports only the key type from this file (pod-surface.guard.test.ts).
  */
-export const findingCommand = {
-  ...catalogAction(FINDINGS_DOORS.write),
-  label: "Write finding", row: true as const,
-  input: (_context: unknown, supplied: unknown) => ({ finding: supplied }),
-};
+export const kernelVerbs = {
+  [FINDINGS_DOORS.write]: {
+    handle: handle(FINDINGS_DOORS.write),
+    label: "Write finding",
+    input: (_context: unknown, supplied: unknown) => ({ finding: supplied }),
+  },
+} as const;
+export type KernelVerbKey = keyof typeof kernelVerbs;

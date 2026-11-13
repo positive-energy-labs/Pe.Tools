@@ -79,7 +79,7 @@ export const entryCaller = (entry: TimelineEntry) =>
     : "you";
 
 /** The Work journal behind the owner's current scope: the one history of authored edits. */
-export type JournalOwner = Pick<TypedMount, "subscribe" | "revision" | "restoreWork" | "stopCommand"> & Partial<Pick<TypedMount, "undoFinding" | "ownFindingsLeft">> & { spec?: Pick<TypedMount["spec"], "commands">; discardIntent?(id:string):void; journalRefusal(): string | null; journal(): ReturnType<WorkJournal["read"]> | null; timeline(): readonly TimelineEntry[] };
+export type JournalOwner = Pick<TypedMount, "subscribe" | "revision" | "restoreWork" | "stopCommand"> & Partial<Pick<TypedMount, "undoFinding" | "ownFindingsLeft">> & { spec?: Pick<TypedMount["spec"], "verbs">; discardIntent?(id:string):void; journalRefusal(): string | null; journal(): ReturnType<WorkJournal["read"]> | null; timeline(): readonly TimelineEntry[] };
 export function useWorkJournal(owner: JournalOwner) {
   useSyncExternalStore(owner.subscribe, owner.revision, owner.revision);
   return owner.journal();
@@ -127,7 +127,7 @@ export function JournalButtons({
   const undo = journal.undo.at(-1);
   const redo = journal.redo.at(-1);
   const entries = owner.timeline();
-  const verbs = Object.fromEntries(Object.entries(owner.spec?.commands ?? {}).map(([id, command]) => [id, { label: command.label, entry: command.entry }]));
+  const verbs = Object.fromEntries(Object.entries(owner.spec?.verbs ?? {}).map(([id, verb]) => [id, { label: verb.label, entry: verb.handle.key }]));
   const rows = projectTimeline(entries, verbs, journal);
   const barrierRefusal = (step: typeof undo, direction: "undo" | "redo") => {
     if (!step?.barrier) return null;

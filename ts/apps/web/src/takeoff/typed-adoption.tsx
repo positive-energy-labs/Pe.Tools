@@ -47,12 +47,11 @@ export function AdoptionBody({ ctx }: { ctx: AdoptionContext }) {
     }
     const { id } = pending;
     setPending(null);
-    const action = ctx.write(id);
+    const action = ctx.verb(id);
     void (async () => {
-      if (id === "adopt") {
-        await action.plan();
-        await action.apply();
-      } else await action.run();
+      await action.plan();
+      // Adopt applies its own plan; Initialize's review is the band's to apply.
+      if (id === "adopt") await action.apply();
     })().catch((error) => setProblem(String(error)));
   }, [pending, ctx.value, ctx.cells.ready]);
   const stage = async (id: "initialize" | "adopt") => {
@@ -229,7 +228,7 @@ export function AdoptionBody({ ctx }: { ctx: AdoptionContext }) {
             <Button
               key={id}
               label={id}
-              busy={pending?.id === id || ctx.write(id).pending}
+              busy={pending?.id === id || ctx.verb(id).pending}
               refusal={
                 pending
                   ? "Preparing Work"

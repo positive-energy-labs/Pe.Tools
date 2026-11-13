@@ -28,9 +28,9 @@ function Workspace({ ctx }: { ctx: FamilyContext }) {
     pod = page.pod || open?.pod || "";
   const [failure, setFailure] = useState<string | null>(null);
   const [destination, setDestination] = useState<{ pod: string; text: string } | null>(null);
-  const run = async (id: string, input: unknown) => {
+  const run = async (id: "attach", input: unknown) => {
     try {
-      await ctx.write(id).run(input);
+      await ctx.verb(id).run(input);
       setFailure(null);
     } catch (error) {
       setFailure(String(error));
