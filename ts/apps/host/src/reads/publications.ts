@@ -29,13 +29,13 @@ type Pending = { inputs: Dependency[]; superseded: boolean };
 type Slot = { generation: number; key: string; published?: Publication<unknown>; attempt: number; pending?: Pending; lease?: ReadLease };
 /** What a publication needs of a `ReadFlight`. An owner's `ReadOwnership.flight` satisfies it. */
 export type Flight<T> = Pick<ReadFlight<T>, "result" | "join">;
-export type OpenFlight = <T>(run: (signal: AbortSignal) => Promise<T>) => Flight<T>;
+export type StartFlight = <T>(run: (signal: AbortSignal) => Promise<T>) => Flight<T>;
 /**
  * A flight with no causal owner: leases only. The final release aborts the read's own signal.
  * ponytail: repeats the lease count of `read-ownership.ts`, whose flight needs a `ReadOwner`;
  * the publish caller passes `(run) => ownership.flight(owner, run)` once it holds one.
  */
-const unowned: OpenFlight = (run) => {
+const unowned: StartFlight = (run) => {
   const controller = new AbortController();
   let consumers = 0,
     done = false;
@@ -74,7 +74,7 @@ export class Publications {
   constructor(
     private readonly capacity = 128,
     private readonly byteLimit = 128 * 1024 * 1024,
-    private readonly open: OpenFlight = unowned,
+    private readonly open: StartFlight = unowned,
   ) {}
   observe(id: string, notify: (publication: Publication<unknown>) => void) {
     const listeners = this.listeners.get(id) ?? new Set<() => void>();

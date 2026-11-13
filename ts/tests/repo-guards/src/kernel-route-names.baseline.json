@@ -10,6 +10,8 @@
     "ts/apps/host/src/reads/history.ts",
     "ts/apps/host/src/reads/inputs.ts",
     "ts/apps/host/src/reads/invalidations.ts",
+    "ts/apps/host/src/reads/publications.ts",
+    "ts/apps/host/src/reads/read-ownership.ts",
     "ts/apps/host/src/reads/routes.ts",
     "ts/apps/host/src/work-inputs.ts",
     "ts/apps/host/src/work-receipt-feed.ts",
