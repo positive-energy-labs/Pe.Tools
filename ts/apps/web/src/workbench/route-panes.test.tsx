@@ -130,6 +130,7 @@ beforeEach(async () => {
   call.mockReset();
   call.mockImplementation(async (door) => (door === "view.publish" ? { revision: 1 } : {}));
   sessionStorage.clear();
+  await seedPlaces([]);
   await seedPlaces(seeded);
   vi.stubGlobal("matchMedia", () => ({
     matches: false,
@@ -311,6 +312,7 @@ const settle = () => act(() => new Promise((done) => setTimeout(done, 50)));
 
 test("an actual admitted standalone Fans Place enrolls without a chat or native host call", async () => {
   sessionStorage.clear();
+  await seedPlaces([]);
   // JSON string codec text (plain, empty, numeric-looking) survives the history tag's state write.
   const strings = {
     stage: JSON.stringify("sheet"),
@@ -441,6 +443,7 @@ test("(b)(c) switching conversation lands on /pea collapsed, opens no tool, and 
 
 test("(d) first Send from a tool promotes in place: tool stays, one thread.place for it", async () => {
   sessionStorage.clear();
+  await seedPlaces([]);
   const router = await mount("/ducts?target=C%3A%2FModels%2FOffice.rvt");
   await settle();
   const mounted = mounts;
@@ -609,6 +612,7 @@ test("an explicit open's command id clears when the thread association changes",
 
 test("a saved legacy open-ref Place keeps its id under StrictMode, /pea and a cross-row Work press", async () => {
   sessionStorage.clear();
+  await seedPlaces([]);
   // The bytes a writer saves (host navigation.ts resume link); a restore matches saved bytes exactly.
   const legacy = routeAddress("ducts").link({ system: {kind:"ids",ids:[systemCode("Office retained page")]} }, {
     target: JSON.stringify({ kind: "open", ref: { session: "closed-session", openId: "closed-open" } }),
@@ -708,6 +712,7 @@ test("a Pea open of a new tool keeps its first lease instance, and a set against
 
 test("after first-Send promotion and a chat pick, a Pea open keeps one lease and one Place", async () => {
   sessionStorage.clear();
+  await seedPlaces([]);
   const router = await mount("/ducts?target=C%3A%2FModels%2FOffice.rvt");
   await settle();
   threads.push({ id: "NEW" });
@@ -884,6 +889,7 @@ test("fan selection with picture pose preserves Pea open state and width", async
 
 test("N-03 typed Fans retains a newly explicit pin when its resolved target is unchanged", async () => {
   sessionStorage.clear();
+  await seedPlaces([]);
   const router = await mount("/fans?fixture=layout");
   await waitFor(() => expect(places().some((tab) => tab.route === "fans")).toBe(true));
   const pin = JSON.stringify({ kind: "open", ref: { session: "same", openId: "same" } });
@@ -911,6 +917,7 @@ test("N-03 typed Fans retains a newly explicit pin when its resolved target is u
 
 test("6.1 a reopened Place keeps an exact ?target, and its URL mark witnesses it", async () => {
   sessionStorage.clear();
+  await seedPlaces([]);
   const pin = JSON.stringify({ kind: "open", ref: { session: "s1", openId: "o1" } });
   // The app root's search reader and the app router's codec (router.tsx).
   const router = await mount(`/fans?fixture=layout&target=${encodeURIComponent(pin)}`, false, false, true);
@@ -926,6 +933,7 @@ test("6.1 a reopened Place keeps an exact ?target, and its URL mark witnesses it
 
 test("6.1 the URL mark appears only after the Place's URL write", async () => {
   sessionStorage.clear();
+  await seedPlaces([]);
   let search = new URLSearchParams(), held: URLSearchParams | null = null;
   const listeners = new Set<() => void>();
   const port = { read: () => new URLSearchParams(search), write: (next: URLSearchParams) => { held = new URLSearchParams(next); },
@@ -948,6 +956,7 @@ test("6.1 the URL mark appears only after the Place's URL write", async () => {
 
 test("6.1 two Places, one hidden: the shown copy is the only one that answers its name", async () => {
   sessionStorage.clear();
+  await seedPlaces([]);
   await mount("/fans?fixture=layout");
   await waitFor(() => expect(places().filter((tab) => tab.route === "fans")).toHaveLength(1), { timeout: 10_000 });
   fireEvent.click(await screen.findByRole("button", { name: "Open another Place on this route" }));
@@ -962,6 +971,7 @@ test("6.1 two Places, one hidden: the shown copy is the only one that answers it
 
 test("6.1b first open of /fans while the document bind is pending reads as pending, never as unavailable", async () => {
   sessionStorage.clear();
+  await seedPlaces([]);
   let drew = false;
   const watch = new MutationObserver(() => { drew ||= document.body.textContent?.includes("Document unavailable") ?? false; });
   watch.observe(document.body, { subtree: true, childList: true, characterData: true });
@@ -977,6 +987,7 @@ test("6.1b first open of /fans while the document bind is pending reads as pendi
 
 test("6.1b a hidden Place's section carries no aria-busy while the document bind is pending", async () => {
   sessionStorage.clear();
+  await seedPlaces([]);
   const { admit } = await import("../fans/admission.fixture");
   fansRoute = (await admit()).presenter;
   // The same pending bind as above (`useReading` is mocked pending), on a Place the dock hides.
