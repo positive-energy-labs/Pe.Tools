@@ -52,7 +52,7 @@ import { handle } from "@pe/agent-contracts/handle";
 import type { Command } from "../../../../packages/agent-contracts/src/command.ts";
 import { reasonOf, refusalOf, valueOf } from "../route/typed-route";
 import type { ReadingState } from "@pe/agent-contracts";
-import { absentLine, failureLine } from "./reading-line";
+import { absentLine, failureLine, retainedLine } from "./reading-line";
 import { cancelAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 import { observeSubject, subjectScopeKey, type SubjectState } from "./subject";
 
@@ -151,13 +151,18 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
   let timelineMembership: string | undefined;
   const connectTimeline = (force = false) => {
     const works = timelineWorks(), document = timelineDocument();
-    const readingValue = !document && !!spec.core && !currentPublication(spec.core);
-    const membership = canonicalRouteInput([works, document ?? null, readingValue]);
+    const core = spec.core ? reads.get(spec.core)?.snapshot : undefined;
+    const valueProblem = !document && !!spec.core && !currentPublication(spec.core)
+      ? core && (core.state === "refused" || core.state === "stale")
+        ? `Undo and Redo unavailable: current Value refused. ${reasonOf(core)}. ${retainedLine(core) ?? "Refresh needed"}.`
+        : "Reading Timeline: waiting for the current Value"
+      : null;
+    const membership = canonicalRouteInput([works, document ?? null, valueProblem]);
     if (!force && timelineMembership === membership) return;
     timelineMembership = membership;
     stopTimeline(); timelineState = null;
-    timelineProblem = input.history ? "Recorded Timeline is read-only" : readingValue ? "Reading Timeline: waiting for the current Value" : "Timeline unavailable";
-    if (readingValue) return;
+    timelineProblem = input.history ? "Recorded Timeline is read-only" : valueProblem ?? "Timeline unavailable";
+    if (valueProblem) return;
     if (!timelineClient || !works.length && !document) return;
     let closed = false;
     const stop = timelineClient.open(works, (value, reason) => {
