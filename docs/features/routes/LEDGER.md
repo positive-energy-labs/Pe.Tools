@@ -62,6 +62,8 @@ The route kernel and every web route's shared shape ([ADR 0026](../../adr/0026-o
 
 - 2026-11-13, native step `effect` testimony was retired by `0817458c` under [MAP slice 7](MAP.md#ordered-deletable-slices): catalog effects grant scope, while terminal `touched` states what remains changed. The Fans refusal witness keeps its review, no-Apply and unchanged-Work assertions and checks that the retired field is absent.
 
+- 2026-11-13, `fedd433a` implements [MAP slice 12](MAP.md#ordered-deletable-slices): a docked route owns the band in its pane head; the duplicate `Pea context` row is retired. Folding retains the bound Place and adds no context row.
+
 ## Tried & rejected
 
 - 2026-11-04, dynamic `new URL` for nested Pod artifact paths excludes the nested file from Vite's emitted lookup and requests `undefined`; use literal bundled asset URLs. [Artifact law](../../../ts/apps/web/src/route/pod-fixtures.test.ts). (FIXTURE0)
