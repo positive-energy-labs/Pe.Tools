@@ -1,3 +1,4 @@
+import { mkdtemp, stateFixture } from "../../../../tests/isolated-home/storage.ts";
 import { refusalOf, valueOf } from "./typed-route";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
 import { snapshot as workSnapshot } from "../../../host/tests/host-read-graph.test-support";
@@ -8,7 +9,7 @@ import { HttpRouter } from "effect/http";
 // Host-only dependency: this HTTP journey lives beside web route journeys.
 import { NodeHttpClient, NodeServices } from "../../../host/node_modules/@effect/platform-node/dist/index.js";
 import { expect, test, vi } from "vite-plus/test";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { RouteWorkspace } from "@pe/runtime";
 import { address, commands, tools, roomEditKey, takeoffObservationSchema } from "@pe/agent-contracts";
@@ -231,7 +232,7 @@ async function journey(module: TypedRoute = fans) {
     callRouteOver(journal, undefined, { workspace: host.workspace }).pipe(
       nativeReadRoot(),
       Layer.provide(Layer.mergeAll(DuctFiles.layer(), HostDocumentMarks.layer)),
-      Layer.provideMerge(PictureCaptureStore.layer(join(host.dir, "pictures"))),
+      Layer.provideMerge(PictureCaptureStore.layer(stateFixture(join(host.dir, "pictures")))),
       HttpRouter.provideRequest(Layer.mergeAll(NodeServices.layer, NodeHttpClient.layerUndici)),
       Layer.provideMerge(RevitBridgeLive),
     ),
@@ -1034,7 +1035,7 @@ test("JZ audit validation readiness and per-action busy admission prevent dispat
 }, 60_000);
 
 test("JZ audit page Bind validates its live HTTP contract before dispatch and persists the valid binding", async () => {
-  const { mkdtemp, mkdir, writeFile, readFile, rm } = await import("node:fs/promises");
+  const { mkdir, writeFile, readFile, rm } = await import("node:fs/promises");
   const { tmpdir } = await import("node:os");
   const { createPagesHandler } = await import("../../../host/src/pages-route");
   const { pageBindRpc } = await import("../../../../packages/mcps/src/shared/rpc-client");
@@ -1044,7 +1045,7 @@ test("JZ audit page Bind validates its live HTTP contract before dispatch and pe
   await mkdir(join(pages, "todo"), { recursive: true }); await mkdir(pods);
   await writeFile(join(pages, "todo", "index.html"), "<title>Audit Page</title><p>Bind this page</p>", "utf8");
   const state = join(dir, "state", "Pages");
-  const handle = createPagesHandler(pages, pods, undefined, undefined, { root: state, notices: join(dir, "state", "stored-notices.jsonl") });
+  const handle = createPagesHandler(pages, pods, undefined, undefined, stateFixture(state));
   let dispatches = 0;
   vi.stubGlobal("fetch", (url: string, init?: RequestInit) => {
     dispatches++; return withInvocationContext({ caller: who }, () => handle(new Request(new URL(url, "http://host"), init)));

@@ -1,3 +1,4 @@
+import { mkdtemp, stateFixture } from "../../../../tests/isolated-home/storage.ts";
 import { refusalOf, valueOf } from "./typed-route";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
 import { stableFanKey } from "../ducts/sheet/model";
@@ -75,7 +76,7 @@ import { handle } from "@pe/agent-contracts/handle";
 import { publicationSource } from "../host/publication-source";
 import { builtinEnrollments } from "../../../host/src/builtin-enrollment";
 import savedNetwork from "../ducts/fixtures/synthetic-snapshot.json";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Context, Layer, Scope, Exit } from "effect";
@@ -707,7 +708,7 @@ test("JX4 Families apply readback cannot overwrite a newer manual read or certif
   const key = bindWork("families", path, undefined, target);
   const workspace = new RouteWorkspace({
     registrations: [],
-    store: fileRouteDocumentStore(join(dir, "work")),
+    store: fileRouteDocumentStore(stateFixture(join(dir, "work"))),
   });
   const admissionScope = Scope.makeUnsafe();
   await Effect.runPromise(Layer.buildWithScope(admittedBuiltinsLayer(workspace), admissionScope));

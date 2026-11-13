@@ -1,5 +1,4 @@
 import { createHash } from "node:crypto";
-import { productPathNames } from "@pe/host-contracts/contracts";
 import { note, type StateDirectory } from "@pe/host-contracts/kinds";
 import type { ReceiptStamp } from "@pe/agent-contracts";
 import { HostInputContext } from "./input-context.ts";

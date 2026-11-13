@@ -1,6 +1,7 @@
+import { mkdtemp, stateFixture, stateMachine } from "../../../../tests/isolated-home/storage.ts";
 // @vitest-environment jsdom
 import { resolve } from "node:path";
-import { readFile, cp, mkdtemp, rm } from "node:fs/promises";
+import { readFile, cp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { createHash } from "node:crypto";
 import { createElement, useSyncExternalStore } from "react";
@@ -127,11 +128,11 @@ async function harness(stale = false) {
   });
   const lifecycle = createPackageLifecycle({
     packages: () => listPackages(resolve(dir, "Pods")),
-    decisionsPath: resolve(dir, "enabled.json"),
+    machine: stateMachine(dir),
   });
-  const store = fileRouteDocumentStore(resolve(dir, "Work")),
+  const store = fileRouteDocumentStore(stateFixture(resolve(dir, "Work"))),
     workspace = new RouteWorkspace({ registrations: [], store });
-  const routes = createPodRoutes(lifecycle, { workspace, trustPath: resolve(dir, "trust.json") });
+  const routes = createPodRoutes(lifecycle, { workspace, machine: stateMachine(dir) });
   const [row] = await routes.list();
   if (!row) throw Error("Missing Snowdon");
   const key = bindWork(row.workRoute, null),

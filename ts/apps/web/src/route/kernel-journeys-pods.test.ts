@@ -1,3 +1,4 @@
+import { mkdtemp, stateFixture, stateMachine } from "../../../../tests/isolated-home/storage.ts";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
 import { snapshot as workSnapshot } from "../ducts/test-fixture";
 // @vitest-environment jsdom
@@ -35,16 +36,16 @@ async function podJourney() {
     filter: (source) => !source.split(/[\\/]/).includes("node_modules"),
   });
   const lifecycle = createPackageLifecycle({
-    packages: () => listPackages(root), decisionsPath: resolve(host.dir, "enabled.json"),
+    packages: () => listPackages(root), machine: stateMachine(host.dir),
   });
   const routes = createPodRoutes(lifecycle, {
-    workspace: host.workspace, trustPath: resolve(host.dir, "trust.json"),
+    workspace: host.workspace, machine: stateMachine(host.dir),
   });
   const [row] = await routes.list();
   if (!row) throw Error("Published Snowdon is absent");
   // Recorded authored Work, as in pod-admission.test.tsx. Starting Work is not this story.
   const key = bindWork(row.workRoute, null);
-  await fileRouteDocumentStore(resolve(host.dir, "work")).setState({
+  await fileRouteDocumentStore(stateFixture(resolve(host.dir, "work"))).setState({
     targetKey: workKey(key), route: key.route,
     value: { version: 1, schemaVersion: 2, revision: 7,
       doc: { version: 2, inputs: { size: "10", length: 175, amps: 20, voltage: 208, phase: "3" } }, history: [] },
@@ -222,7 +223,7 @@ import { SettingsBody } from "../machine/body";
 import { MACHINE_SEEDS } from "../machine/open-examples";
 import { reportFault, DIAGNOSTICS_MAX_PENDING } from "../host/diagnostics";
 import { Pane, PaneFaultProvider } from "@pe/kit/lang/pane";
-import { mkdtemp, rm } from "node:fs/promises";
+import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 
 function UsageLedger() {
@@ -333,7 +334,7 @@ async function sendFeedbackWhileDeliveryWaits() {
     enableExceptionAutocapture: false, requestTimeout: 60000,
     fetch: () => { sends++; return request.promise; },
   });
-  const telemetry = createReceiptExport({ journal, root: dir, client, deadlineMs: 50,
+  const telemetry = createReceiptExport({ journal, root: stateFixture(dir), client, deadlineMs: 50,
     stamps: { host: { ...stamp, component: "host" }, web: { ...stamp, component: "web" } } });
   const routes = createPeRoutes({ registrations: [], store: { getState: async () => null, setState: async () => {} }, heads: { observe: () => () => {} }, telemetry });
   const post = (path: string, body?: unknown) => withInvocationContext({ caller: { kind: "human", via: "local" } }, () => routes.fetch(new Request(`http://host${path}`, {
@@ -430,7 +431,7 @@ test("JZ H29 human-only RPC and forged, foreign and stale review reuse refuse", 
 
 import { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } from "@tanstack/react-router";
 import { createContributionContent } from "../../../host/src/pe-routes";
-import { importShippedPods } from "../../../host/src/installed-pods";
+import { importShippedPods, ledgerKind } from "../../../host/src/installed-pods";
 import { exportPod, installArchive } from "../../../host/src/pod-transfer";
 import { createPluginsHandler } from "../../../host/src/plugins-handler";
 import { PictureCaptures } from "../../../host/src/captures-route";
@@ -445,7 +446,7 @@ test("JP5 bootstrap replaces only unchanged imports and Home discovers the untru
   for (const modified of [false, true]) {
     const host = await fixture(true);
     const root = resolve(host.dir, "Pods"), shipped = resolve(host.dir, "shipped");
-    const captures = new PictureCaptures(resolve(host.dir, "pictures"), 64 * 1024 * 1024, Date.now);
+    const captures = new PictureCaptures(stateFixture(resolve(host.dir, "pictures")), 64 * 1024 * 1024, Date.now);
     const source = resolve(host.dir, "old", "snowdon-circuits");
     const examples = resolve(process.cwd(), "../../../examples/pods");
     const gate = Promise.withResolvers<void>();
@@ -468,27 +469,27 @@ test("JP5 bootstrap replaces only unchanged imports and Home discovers the untru
       // An earlier shipped import, as the bootstrap left it: the import record in the state root its
       // ledger sits in, and the original archive retained there by its hash.
       await installArchive(await readFile(old.archivePath), old.archivePath, undefined,
-        { podsRoot: root, stateRoot: resolve(host.dir, "state"), captures });
-      await cp(old.archivePath, resolve(host.dir, "state/shipped-pod-originals", `${old.archiveSha256}.zip`));
+        { podsRoot: root, machine: stateMachine(host.dir), captures });
+      await cp(old.archivePath, resolve(stateMachine(host.dir).state, "shipped-pod-originals", `${old.archiveSha256}.zip`));
       await exportPod({ pod: manifest.id, archivePath: resolve(shipped, "snowdon-circuits.zip") }, { podsRoot: examples, captures });
       const pod = resolve(root, manifest.id), key = `route:@${manifest.id}/${current.artifact}`;
       const oldTrust = `pod-bytes:${old.archiveSha256}`;
-      const trustPath = resolve(host.dir, "trust.json");
+      const trustPath = stateMachine(host.dir).routeTrust;
       await writeFile(trustPath, JSON.stringify({ [key]: oldTrust }));
       if (modified) await writeFile(resolve(pod, "README.md"), "Keep this authored worksheet note.");
       const before = (await listPackages(root)).packages.find(p => p.id === manifest.id)!.members.map(m => [m.path, m.sha256]);
-      content = createContributionContent({ worldRoot: host.dir, homeRoot: host.dir, packages: () => listPackages(root),
-        decisionsPath: resolve(host.dir, "enabled.json"),
+      content = createContributionContent({ worldRoot: stateFixture(host.dir), homeRoot: host.dir, packages: () => listPackages(root),
+        decisionsMachine: stateMachine(host.dir),
         bootstrap: async () => {
           await gate.promise;
           try {
             const report = await importShippedPods({ shippedRoot: shipped, podsRoot: root, captures,
-              ledger: resolve(host.dir, "state/shipped-pods.json") });
+              ledger: ledgerKind.in(stateMachine(host.dir)) });
             completed.resolve(report);
           } catch (error) { completed.reject(error); throw error; }
         },
       });
-      routes = createPodRoutes(content.lifecycle, { trustPath });
+      routes = createPodRoutes(content.lifecycle, { machine: stateMachine(host.dir) });
       const handler = createPluginsHandler(content, routes);
       let inventoryReads = 0, homeMounts = 0;
       vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
