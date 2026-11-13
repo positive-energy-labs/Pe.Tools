@@ -2,8 +2,8 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "re
 import { createPortal } from "react-dom";
 import { HotkeyCommand } from "#/components/lang/hotkey-command";
 import {
-  RouteControlsOutlet,
-  useRouteControlPresence,
+  BandOutlet,
+  useHasBand,
   usePublishSituationPresentation,
   useSituationSignal,
   useSituationDock,
@@ -21,7 +21,7 @@ export function SituationDrawer({
   barAnchor?: HTMLElement | null;
   rail?: ReactNode;
 }) {
-  const enabled = useRouteControlPresence("situation");
+  const enabled = useHasBand();
   const available = enabled || rail != null;
   const trigger = useRef<HTMLSpanElement>(null);
   const drawer = useRef<HTMLDivElement>(null);
@@ -210,7 +210,7 @@ export function SituationDrawer({
                 {rail}
               </div>
             )}
-            <RouteControlsOutlet slot="situation" as="div" className="min-w-0" />
+            <BandOutlet className="min-w-0" />
           </div>,
           portalHost,
         )}

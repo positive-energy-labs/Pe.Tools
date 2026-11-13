@@ -4,7 +4,7 @@ import { TypedShell } from "../shell/typed-shell";
 import { routeRegistry } from "../route/registry";
 import { STARTUP_TEACHING } from "../route/teaching";
 import { module } from "./route";
-import { ChatSurfaceProps, type ChatShellProps } from "./chat-drawing";
+import { DockSurface as ChatSurfaceProps, type DockSurfaceProps as ChatShellProps } from "../workbench/hosted-route";
 
 /** The route wrapper owns mounting; the declared drawing never imports its own closure. */
 export const ChatShell = memo(function ChatShell(props: ChatShellProps) {
