@@ -44,6 +44,7 @@
       "types": "./src/semantic-actions.ts",
       "import": "./src/semantic-actions.ts"
     },
+    "./handle": "./src/handle.ts",
     "./command-axes": {
       "types": "./src/command-axes.ts",
       "import": "./src/command-axes.ts"
@@ -66,6 +67,8 @@
     "access": "public"
   },
   "scripts": {
+    "codegen": "node --import jiti/register scripts/command-axes.ts",
+    "codegen:check": "node --import jiti/register scripts/command-axes.ts --check",
     "build": "vp pack",
     "dev": "vp pack --watch",
     "test": "vp test",

@@ -290,7 +290,6 @@
   "uncheckedRegistry": [],
   "malformedSources": [],
   "dynamicModules": [
-    "ts/apps/host/src/package-lifecycle.ts#createPackageLifecycle/synchronize/setup/module:import",
     "ts/apps/host/src/pod-artifact.ts#admitPodArtifact/loaded:import",
     "ts/apps/web/scripts/heal-click-proof.ts#{ chromium }:require",
     "ts/apps/web/scripts/heal-review-proof.ts#{ chromium }:require",

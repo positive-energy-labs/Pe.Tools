@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
 import ts from "typescript";
 import { execFileSync } from "node:child_process";
@@ -204,7 +204,7 @@ export function additions(actual: OffenderSets, allowed: OffenderSets): string[]
 
 /** Read-only history check. Legacy numeric baselines cannot bless a new identity. The first
  * ordinal-free multiset baseline is the RATCHET-GREEN migration floor; every later snapshot constrains it. */
-export function baselineFloors(): OffenderSets[] {
+export function baselineFloors(): CarriedFloor[] {
   const git = (...args: string[]) =>
     execFileSync("git", args, { cwd: root, encoding: "utf8" }).trim();
   const mergeBase = git("merge-base", "HEAD", "origin/main");
@@ -212,8 +212,16 @@ export function baselineFloors(): OffenderSets[] {
     mergeBase,
     ...git("log", "--format=%H", "--", baselinePath).split(/\s+/).filter(Boolean),
   ]);
+  const exists = (path: string) => existsSync(resolve(root, path));
   return [...commits].flatMap((sha) => {
     if (!git("ls-tree", sha, "--", baselinePath)) return []; // This law did not exist at that merge base.
+    return floorAt(sha).map((floor) => {
+      // Only a floor that names a path gone from the tree can need a move; the diff costs ~1 s.
+      const gone = Object.values(floor).flat().some((site) => !exists(site.split("#")[0]!));
+      return carry(floor, gone ? [renamesSince(git, sha), NAMED_MOVES] : [NAMED_MOVES], exists);
+    });
+  });
+  function floorAt(sha: string): OffenderSets[] {
     const value: unknown = JSON.parse(git("show", `${sha}:${baselinePath}`));
     if (typeof value !== "object" || value === null || !Object.values(value).every(Array.isArray))
       return [];
@@ -222,6 +230,66 @@ export function baselineFloors(): OffenderSets[] {
     if (Object.values(value).some((sites) => sites.some((site: string) => /@\d+$/.test(site))))
       return [];
     return [value as OffenderSets];
+  }
+}
+
+/** A move: the old repo path and the new one. */
+export type Move = Record<string, string>;
+/**
+ * Moves git cannot see as renames (a file rewritten past the similarity threshold), named by the
+ * branch that makes them. A move carries its allowances; it never adds one.
+ */
+export const NAMED_MOVES: Move = {};
+
+/** Net git renames from `sha` to the working tree, old path to new. */
+function renamesSince(git: (...args: string[]) => string, sha: string): Move {
+  const moves: Move = {};
+  for (const line of git("diff", "-M", "--diff-filter=R", "--name-status", sha, "--", "ts").split("\n")) {
+    const [status, from, to] = line.split("\t");
+    if (status?.startsWith("R") && from && to) moves[from] = to;
+  }
+  return moves;
+}
+
+/** A floor and, for each identity on a moved path, the name it carries to. */
+export type CarriedFloor = { sites: OffenderSets; carried: Record<string, string> };
+
+/**
+ * A floor carried through `moves`, applied in order: an identity is `<path>#<site>`, and a moved
+ * path takes its allowances with it. A path that still exists was not moved away (git saw a
+ * rename, then the path was used again), so it carries nothing.
+ */
+export function carry(floor: OffenderSets, moves: readonly Move[], exists: (path: string) => boolean = () => false): CarriedFloor {
+  const follow = (path: string) => (exists(path) ? path : moves.reduce((at, move) => move[at] ?? at, path));
+  const carried: Record<string, string> = {};
+  for (const site of Object.values(floor).flat()) {
+    const hash = site.indexOf("#");
+    const to = hash < 0 ? follow(site) : `${follow(site.slice(0, hash))}${site.slice(hash)}`;
+    if (to !== site) carried[site] = to;
+  }
+  return { sites: floor, carried };
+}
+
+/**
+ * `additions` against a carried floor: each floor entry covers one site, under its old name or its
+ * carried name, never both. So a move keeps its debt, a stale old-name allowance still matches,
+ * and no count rises.
+ */
+export function floorAdditions(actual: OffenderSets, floor: CarriedFloor): string[] {
+  return Object.entries(actual).flatMap(([law, sites]) => {
+    const remaining = new Map<string, number>();
+    for (const site of floor.sites[law] ?? []) remaining.set(site, (remaining.get(site) ?? 0) + 1);
+    const byCarried = new Map<string, string[]>();
+    for (const site of remaining.keys())
+      if (floor.carried[site]) byCarried.set(floor.carried[site], [...(byCarried.get(floor.carried[site]) ?? []), site]);
+    const take = (site: string) => {
+      const count = remaining.get(site) ?? 0;
+      if (count) remaining.set(site, count - 1);
+      return count > 0;
+    };
+    // Exact names first, so a carried name never takes an allowance its own old name needs.
+    const unmatched = sites.filter((site) => !take(site));
+    return unmatched.filter((site) => !(byCarried.get(site) ?? []).some(take)).map((site) => `${law}: ${site}`);
   });
 }
 

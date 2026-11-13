@@ -14,7 +14,7 @@ public sealed class ClippingTests {
         using var gzip = new GZipStream(file, CompressionMode.Decompress);
         using var reader = new StreamReader(gzip);
         var input = JsonConvert.DeserializeObject<PartitionInput>(reader.ReadToEnd())!;
-        var answer = Solve.RunRails(input, (_, _) => new ProbeAnswer(input.Knee.Stamp, input.Knee.Searched, null, null, 0, 0));
+        var answer = Solve.RunRails(input, (_, _) => new ProbeAnswer(input.Knee.Evidence, input.Knee.Searched, null, null, 0, 0));
         Assert.That(answer.Rooms, Is.Not.Empty);
         var polygons = answer.Rooms.Select(r => Solve.GeometryOf(new[] { r.Loop }.Concat(r.Holes ?? []).ToArray())).ToArray();
         Assert.That(polygons.All(p => p.IsValid), Is.True);

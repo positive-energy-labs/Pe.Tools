@@ -7721,7 +7721,19 @@ export namespace RevitDetailSpaceCensus {
       categories?: string[] | null;
       kinds?: string[] | null;
       layers?: string[] | null;
-      excludeElementIds?: number[] | null;
+      exclusions?: SubjectExclusion[] | null;
+    }
+    export interface SubjectExclusion {
+      documentKey: string;
+      placement: Placement;
+      subjectUniqueId: string;
+    }
+    /**
+     * Stable source placement. Numeric Revit ids are payload, never exclusion identity.
+     */
+    export interface Placement {
+      hostDocumentKey: string;
+      linkUniqueId?: null | string;
     }
   }
   export namespace Res {
@@ -7735,6 +7747,19 @@ export namespace RevitDetailSpaceCensus {
      *
      */
     export type PrimKind = "Solid" | "Mesh" | "Curve2D" | "Element";
+    export type RevisionKind = "observed" | "unavailable";
+    export type RevisionUnavailableReason = "not-recorded" | "source-unread";
+    export type SceneSourceState = "loaded" | "unloaded" | "unavailable";
+    export type AcquisitionOutcome =
+      | "acquired"
+      | "empty"
+      | "partial"
+      | "failed"
+      | "deferred"
+      | "approximate"
+      | "outside-scope";
+    export type AcquisitionReason = "none" | "geometry-read" | "triangulate" | "budget" | "unsupported";
+    export type CoverageReason = "source-unread" | "partial-geometry" | "failed-geometry" | "deferred" | "approximate";
     /**
      * Architectural height authority, independent of collision geometry. None means never a height.
      * ByGeometry is an element with no category role (an IFC proxy slab or roof is a nameless Generic
@@ -7747,41 +7772,25 @@ export namespace RevitDetailSpaceCensus {
      * Stamped counts of matching rows by source kind, category, primitive kind and layer, plus the ten largest rows.
      */
     export interface Response {
-      stamp: Stamp;
+      evidence: SpatialEvidence;
       searched: Searched;
       buckets: CensusBucket[];
       top: CensusTop[];
       ms: number;
     }
     /**
-     * Provenance and freshness. Every answer embeds one; it is not optional.
+     * Observed basis and acquisition, never a claim that a retained answer is current.
      */
-    export interface Stamp {
-      hostDocumentKey: string;
-      epoch: number;
-      frame: string;
-      builtUtc: string;
-      sources: SourceRow[];
-      fresh: boolean;
-      resolved: Resolved;
-      /**
-       * The only frame this library speaks. A reader that sees another value must refuse.
-       */
-      geometryCost?: null | GeometryCost;
-    }
-    /**
-     * One row per partition. Carried inside every Stamp.
-     */
-    export interface SourceRow {
-      source: number;
+    export interface SpatialEvidence {
       documentKey: string;
-      linkInstanceId?: number | null;
-      kind: SourceKind;
-      builtAtEpoch: number;
-      dirty: boolean;
-      elements: number;
-      triangles: number;
-      skipped: number;
+      revision?: number | null;
+      observedAt: string;
+      frame: string;
+      resolved: Resolved;
+      sources: SourceObservation[];
+      acquisition: Acquisition[];
+      coverage: CoverageGap[];
+      geometryCost?: null | GeometryCost;
     }
     /**
      * The options a verb actually ran with, after defaults were applied. Never null and never a
@@ -7795,7 +7804,59 @@ export namespace RevitDetailSpaceCensus {
       categories: string[];
       kinds: PrimKind[];
       layers: string[];
-      excludedElementIds: number[];
+      exclusions: SubjectExclusion[];
+      scope?: null | Aabb;
+      reach?: number[][] | null;
+      representation: string;
+      acquisitionRequested: boolean;
+    }
+    export interface SubjectExclusion {
+      documentKey: string;
+      placement: Placement;
+      subjectUniqueId: string;
+    }
+    /**
+     * Stable source placement. Numeric Revit ids are payload, never exclusion identity.
+     */
+    export interface Placement {
+      hostDocumentKey: string;
+      linkUniqueId?: null | string;
+    }
+    /**
+     * Axis-aligned bounds in host internal feet.
+     */
+    export interface Aabb {
+      minX: number;
+      minY: number;
+      minZ: number;
+      maxX: number;
+      maxY: number;
+      maxZ: number;
+    }
+    export interface SourceObservation {
+      placement: Placement;
+      documentKey?: null | string;
+      revision: SourceRevision;
+      toHost: number[];
+      availability: SceneSourceState;
+    }
+    export interface SourceRevision {
+      kind: RevisionKind;
+      epoch?: number | null;
+      version?: null | string;
+      reason?: null | RevisionUnavailableReason;
+    }
+    export interface Acquisition {
+      placement: Placement;
+      subjectUniqueId: string;
+      outcome: AcquisitionOutcome;
+      reason: AcquisitionReason;
+    }
+    export interface CoverageGap {
+      placement: Placement;
+      subjectUniqueId?: null | string;
+      reason: CoverageReason;
+      count: number;
     }
     /**
      * Acquisition evidence, not a memory cap. Native geometry remains allocated until document close.
@@ -7896,7 +7957,19 @@ export namespace RevitDetailSpaceProbe {
       categories?: string[] | null;
       kinds?: string[] | null;
       layers?: string[] | null;
-      excludeElementIds?: number[] | null;
+      exclusions?: SubjectExclusion[] | null;
+    }
+    export interface SubjectExclusion {
+      documentKey: string;
+      placement: Placement;
+      subjectUniqueId: string;
+    }
+    /**
+     * Stable source placement. Numeric Revit ids are payload, never exclusion identity.
+     */
+    export interface Placement {
+      hostDocumentKey: string;
+      linkUniqueId?: null | string;
     }
   }
   export namespace Res {
@@ -7910,6 +7983,19 @@ export namespace RevitDetailSpaceProbe {
      *
      */
     export type PrimKind = "Solid" | "Mesh" | "Curve2D" | "Element";
+    export type RevisionKind = "observed" | "unavailable";
+    export type RevisionUnavailableReason = "not-recorded" | "source-unread";
+    export type SceneSourceState = "loaded" | "unloaded" | "unavailable";
+    export type AcquisitionOutcome =
+      | "acquired"
+      | "empty"
+      | "partial"
+      | "failed"
+      | "deferred"
+      | "approximate"
+      | "outside-scope";
+    export type AcquisitionReason = "none" | "geometry-read" | "triangulate" | "budget" | "unsupported";
+    export type CoverageReason = "source-unread" | "partial-geometry" | "failed-geometry" | "deferred" | "approximate";
     /**
      * Architectural height authority, independent of collision geometry. None means never a height.
      * ByGeometry is an element with no category role (an IFC proxy slab or roof is a nameless Generic
@@ -7926,7 +8012,7 @@ export namespace RevitDetailSpaceProbe {
      *
      */
     export interface Response {
-      stamp: Stamp;
+      evidence: SpatialEvidence;
       searched: Searched;
       floor?: null | ProbeHit;
       ceiling?: null | ProbeHit;
@@ -7935,34 +8021,18 @@ export namespace RevitDetailSpaceProbe {
       purpose: ProbePurpose;
     }
     /**
-     * Provenance and freshness. Every answer embeds one; it is not optional.
+     * Observed basis and acquisition, never a claim that a retained answer is current.
      */
-    export interface Stamp {
-      hostDocumentKey: string;
-      epoch: number;
-      frame: string;
-      builtUtc: string;
-      sources: SourceRow[];
-      fresh: boolean;
-      resolved: Resolved;
-      /**
-       * The only frame this library speaks. A reader that sees another value must refuse.
-       */
-      geometryCost?: null | GeometryCost;
-    }
-    /**
-     * One row per partition. Carried inside every Stamp.
-     */
-    export interface SourceRow {
-      source: number;
+    export interface SpatialEvidence {
       documentKey: string;
-      linkInstanceId?: number | null;
-      kind: SourceKind;
-      builtAtEpoch: number;
-      dirty: boolean;
-      elements: number;
-      triangles: number;
-      skipped: number;
+      revision?: number | null;
+      observedAt: string;
+      frame: string;
+      resolved: Resolved;
+      sources: SourceObservation[];
+      acquisition: Acquisition[];
+      coverage: CoverageGap[];
+      geometryCost?: null | GeometryCost;
     }
     /**
      * The options a verb actually ran with, after defaults were applied. Never null and never a
@@ -7976,7 +8046,59 @@ export namespace RevitDetailSpaceProbe {
       categories: string[];
       kinds: PrimKind[];
       layers: string[];
-      excludedElementIds: number[];
+      exclusions: SubjectExclusion[];
+      scope?: null | Aabb;
+      reach?: number[][] | null;
+      representation: string;
+      acquisitionRequested: boolean;
+    }
+    export interface SubjectExclusion {
+      documentKey: string;
+      placement: Placement;
+      subjectUniqueId: string;
+    }
+    /**
+     * Stable source placement. Numeric Revit ids are payload, never exclusion identity.
+     */
+    export interface Placement {
+      hostDocumentKey: string;
+      linkUniqueId?: null | string;
+    }
+    /**
+     * Axis-aligned bounds in host internal feet.
+     */
+    export interface Aabb {
+      minX: number;
+      minY: number;
+      minZ: number;
+      maxX: number;
+      maxY: number;
+      maxZ: number;
+    }
+    export interface SourceObservation {
+      placement: Placement;
+      documentKey?: null | string;
+      revision: SourceRevision;
+      toHost: number[];
+      availability: SceneSourceState;
+    }
+    export interface SourceRevision {
+      kind: RevisionKind;
+      epoch?: number | null;
+      version?: null | string;
+      reason?: null | RevisionUnavailableReason;
+    }
+    export interface Acquisition {
+      placement: Placement;
+      subjectUniqueId: string;
+      outcome: AcquisitionOutcome;
+      reason: AcquisitionReason;
+    }
+    export interface CoverageGap {
+      placement: Placement;
+      subjectUniqueId?: null | string;
+      reason: CoverageReason;
+      count: number;
     }
     /**
      * Acquisition evidence, not a memory cap. Native geometry remains allocated until document close.
@@ -8067,7 +8189,19 @@ export namespace RevitDetailSpaceRows {
       categories?: string[] | null;
       kinds?: string[] | null;
       layers?: string[] | null;
-      excludeElementIds?: number[] | null;
+      exclusions?: SubjectExclusion[] | null;
+    }
+    export interface SubjectExclusion {
+      documentKey: string;
+      placement: Placement;
+      subjectUniqueId: string;
+    }
+    /**
+     * Stable source placement. Numeric Revit ids are payload, never exclusion identity.
+     */
+    export interface Placement {
+      hostDocumentKey: string;
+      linkUniqueId?: null | string;
     }
   }
   export namespace Res {
@@ -8081,6 +8215,19 @@ export namespace RevitDetailSpaceRows {
      *
      */
     export type PrimKind = "Solid" | "Mesh" | "Curve2D" | "Element";
+    export type RevisionKind = "observed" | "unavailable";
+    export type RevisionUnavailableReason = "not-recorded" | "source-unread";
+    export type SceneSourceState = "loaded" | "unloaded" | "unavailable";
+    export type AcquisitionOutcome =
+      | "acquired"
+      | "empty"
+      | "partial"
+      | "failed"
+      | "deferred"
+      | "approximate"
+      | "outside-scope";
+    export type AcquisitionReason = "none" | "geometry-read" | "triangulate" | "budget" | "unsupported";
+    export type CoverageReason = "source-unread" | "partial-geometry" | "failed-geometry" | "deferred" | "approximate";
 
     /**
      * Every row that passes the filter, as parallel arrays: index i across every array is one
@@ -8089,7 +8236,7 @@ export namespace RevitDetailSpaceRows {
      *
      */
     export interface Response {
-      stamp: Stamp;
+      evidence: SpatialEvidence;
       searched: Searched;
       categories: string[];
       kinds: string[];
@@ -8107,34 +8254,18 @@ export namespace RevitDetailSpaceRows {
       ms: number;
     }
     /**
-     * Provenance and freshness. Every answer embeds one; it is not optional.
+     * Observed basis and acquisition, never a claim that a retained answer is current.
      */
-    export interface Stamp {
-      hostDocumentKey: string;
-      epoch: number;
-      frame: string;
-      builtUtc: string;
-      sources: SourceRow[];
-      fresh: boolean;
-      resolved: Resolved;
-      /**
-       * The only frame this library speaks. A reader that sees another value must refuse.
-       */
-      geometryCost?: null | GeometryCost;
-    }
-    /**
-     * One row per partition. Carried inside every Stamp.
-     */
-    export interface SourceRow {
-      source: number;
+    export interface SpatialEvidence {
       documentKey: string;
-      linkInstanceId?: number | null;
-      kind: SourceKind;
-      builtAtEpoch: number;
-      dirty: boolean;
-      elements: number;
-      triangles: number;
-      skipped: number;
+      revision?: number | null;
+      observedAt: string;
+      frame: string;
+      resolved: Resolved;
+      sources: SourceObservation[];
+      acquisition: Acquisition[];
+      coverage: CoverageGap[];
+      geometryCost?: null | GeometryCost;
     }
     /**
      * The options a verb actually ran with, after defaults were applied. Never null and never a
@@ -8148,7 +8279,59 @@ export namespace RevitDetailSpaceRows {
       categories: string[];
       kinds: PrimKind[];
       layers: string[];
-      excludedElementIds: number[];
+      exclusions: SubjectExclusion[];
+      scope?: null | Aabb;
+      reach?: number[][] | null;
+      representation: string;
+      acquisitionRequested: boolean;
+    }
+    export interface SubjectExclusion {
+      documentKey: string;
+      placement: Placement;
+      subjectUniqueId: string;
+    }
+    /**
+     * Stable source placement. Numeric Revit ids are payload, never exclusion identity.
+     */
+    export interface Placement {
+      hostDocumentKey: string;
+      linkUniqueId?: null | string;
+    }
+    /**
+     * Axis-aligned bounds in host internal feet.
+     */
+    export interface Aabb {
+      minX: number;
+      minY: number;
+      minZ: number;
+      maxX: number;
+      maxY: number;
+      maxZ: number;
+    }
+    export interface SourceObservation {
+      placement: Placement;
+      documentKey?: null | string;
+      revision: SourceRevision;
+      toHost: number[];
+      availability: SceneSourceState;
+    }
+    export interface SourceRevision {
+      kind: RevisionKind;
+      epoch?: number | null;
+      version?: null | string;
+      reason?: null | RevisionUnavailableReason;
+    }
+    export interface Acquisition {
+      placement: Placement;
+      subjectUniqueId: string;
+      outcome: AcquisitionOutcome;
+      reason: AcquisitionReason;
+    }
+    export interface CoverageGap {
+      placement: Placement;
+      subjectUniqueId?: null | string;
+      reason: CoverageReason;
+      count: number;
     }
     /**
      * Acquisition evidence, not a memory cap. Native geometry remains allocated until document close.
@@ -8221,11 +8404,36 @@ export namespace RevitDetailSpaceScene {
     }
   }
   export namespace Res {
+    /**
+     * Which document a partition reads. One partition per source.
+     */
+    export type SourceKind = "Host" | "RevitLink" | "IfcLink";
+    /**
+     * What a triangle came from. Curve2D is a DWG 2D layer raised into a vertical
+     * ribbon; it is never an obstructor unless a filter names it.
+     *
+     */
+    export type PrimKind = "Solid" | "Mesh" | "Curve2D" | "Element";
+    export type RevisionKind = "observed" | "unavailable";
+    export type RevisionUnavailableReason = "not-recorded" | "source-unread";
+    export type SceneSourceState = "loaded" | "unloaded" | "unavailable";
+    export type AcquisitionOutcome =
+      | "acquired"
+      | "empty"
+      | "partial"
+      | "failed"
+      | "deferred"
+      | "approximate"
+      | "outside-scope";
+    export type AcquisitionReason = "none" | "geometry-read" | "triangulate" | "budget" | "unsupported";
+    export type CoverageReason = "source-unread" | "partial-geometry" | "failed-geometry" | "deferred" | "approximate";
+
     export interface Response {
       scene: SceneReceipt;
       id: string;
       url: string;
       bytes: number;
+      evidence: SpatialEvidence;
     }
     /**
      * Bounded RPC receipt. Full membership, source transforms and unavailable identities live in PSC1.
@@ -8234,9 +8442,8 @@ export namespace RevitDetailSpaceScene {
       format: string;
       frame: string;
       hostDocumentKey: string;
-      epoch: number;
-      builtUtc: string;
-      fresh: boolean;
+      revision?: number | null;
+      observedAt: string;
       bounds: Aabb;
       triangles: number;
       elements: number;
@@ -8322,6 +8529,92 @@ export namespace RevitDetailSpaceScene {
        */
       looseness: string;
     }
+    /**
+     * Observed basis and acquisition, never a claim that a retained answer is current.
+     */
+    export interface SpatialEvidence {
+      documentKey: string;
+      revision?: number | null;
+      observedAt: string;
+      frame: string;
+      resolved: Resolved;
+      sources: SourceObservation[];
+      acquisition: Acquisition[];
+      coverage: CoverageGap[];
+      geometryCost?: null | GeometryCost;
+    }
+    /**
+     * The options a verb actually ran with, after defaults were applied. Never null and never a
+     * silence: a caller who passed no filter reads back Kinds: [Solid, Mesh] and the sources
+     * and categories spelled out. This is the gate that was in force, not the outcome; what the
+     * verb then had to touch is Searched.
+     *
+     */
+    export interface Resolved {
+      sources: SourceKind[];
+      categories: string[];
+      kinds: PrimKind[];
+      layers: string[];
+      exclusions: SubjectExclusion[];
+      scope?: null | Aabb;
+      reach?: number[][] | null;
+      representation: string;
+      acquisitionRequested: boolean;
+    }
+    export interface SubjectExclusion {
+      documentKey: string;
+      placement: Placement;
+      subjectUniqueId: string;
+    }
+    /**
+     * Stable source placement. Numeric Revit ids are payload, never exclusion identity.
+     */
+    export interface Placement {
+      hostDocumentKey: string;
+      linkUniqueId?: null | string;
+    }
+    export interface SourceObservation {
+      placement: Placement;
+      documentKey?: null | string;
+      revision: SourceRevision;
+      toHost: number[];
+      availability: SceneSourceState;
+    }
+    export interface SourceRevision {
+      kind: RevisionKind;
+      epoch?: number | null;
+      version?: null | string;
+      reason?: null | RevisionUnavailableReason;
+    }
+    export interface Acquisition {
+      placement: Placement;
+      subjectUniqueId: string;
+      outcome: AcquisitionOutcome;
+      reason: AcquisitionReason;
+    }
+    export interface CoverageGap {
+      placement: Placement;
+      subjectUniqueId?: null | string;
+      reason: CoverageReason;
+      count: number;
+    }
+    /**
+     * Acquisition evidence, not a memory cap. Native geometry remains allocated until document close.
+     */
+    export interface GeometryCost {
+      plannedCount: number;
+      plannedCost: number;
+      perSource: GeometrySourceCost[];
+      newlyTessellatedCount: number;
+      cumulativeTessellatedCount: number;
+    }
+    export interface GeometrySourceCost {
+      source: string;
+      linkInstanceId?: number | null;
+      count: number;
+      loadOnlyCount: number;
+      cost: number;
+    }
   }
   export namespace Artifact {
     /**
@@ -8334,6 +8627,19 @@ export namespace RevitDetailSpaceScene {
      *
      */
     export type PrimKind = "Solid" | "Mesh" | "Curve2D" | "Element";
+    export type RevisionKind = "observed" | "unavailable";
+    export type RevisionUnavailableReason = "not-recorded" | "source-unread";
+    export type SceneSourceState = "loaded" | "unloaded" | "unavailable";
+    export type AcquisitionOutcome =
+      | "acquired"
+      | "empty"
+      | "partial"
+      | "failed"
+      | "deferred"
+      | "approximate"
+      | "outside-scope";
+    export type AcquisitionReason = "none" | "geometry-read" | "triangulate" | "budget" | "unsupported";
+    export type CoverageReason = "source-unread" | "partial-geometry" | "failed-geometry" | "deferred" | "approximate";
     /**
      * Architectural height authority, independent of collision geometry. None means never a height.
      * ByGeometry is an element with no category role (an IFC proxy slab or roof is a nameless Generic
@@ -8344,11 +8650,10 @@ export namespace RevitDetailSpaceScene {
     export type SceneRepresentation = "mesh" | "oriented-box" | "run";
     export type SceneRunShape = "round" | "rectangular" | "oval";
     export type SceneBoxFrame = "bounds" | "symbol" | "triangles" | "link";
-    export type SceneSourceState = "loaded" | "unloaded" | "unavailable";
 
     export interface SceneMetadata {
       format: string;
-      stamp: Stamp;
+      evidence: SpatialEvidence;
       bounds: Aabb;
       triangles: number;
       elements: SceneElement[];
@@ -8374,34 +8679,18 @@ export namespace RevitDetailSpaceScene {
       };
     }
     /**
-     * Provenance and freshness. Every answer embeds one; it is not optional.
+     * Observed basis and acquisition, never a claim that a retained answer is current.
      */
-    export interface Stamp {
-      hostDocumentKey: string;
-      epoch: number;
-      frame: string;
-      builtUtc: string;
-      sources: SourceRow[];
-      fresh: boolean;
-      resolved: Resolved;
-      /**
-       * The only frame this library speaks. A reader that sees another value must refuse.
-       */
-      geometryCost?: null | GeometryCost;
-    }
-    /**
-     * One row per partition. Carried inside every Stamp.
-     */
-    export interface SourceRow {
-      source: number;
+    export interface SpatialEvidence {
       documentKey: string;
-      linkInstanceId?: number | null;
-      kind: SourceKind;
-      builtAtEpoch: number;
-      dirty: boolean;
-      elements: number;
-      triangles: number;
-      skipped: number;
+      revision?: number | null;
+      observedAt: string;
+      frame: string;
+      resolved: Resolved;
+      sources: SourceObservation[];
+      acquisition: Acquisition[];
+      coverage: CoverageGap[];
+      geometryCost?: null | GeometryCost;
     }
     /**
      * The options a verb actually ran with, after defaults were applied. Never null and never a
@@ -8415,7 +8704,59 @@ export namespace RevitDetailSpaceScene {
       categories: string[];
       kinds: PrimKind[];
       layers: string[];
-      excludedElementIds: number[];
+      exclusions: SubjectExclusion[];
+      scope?: null | Aabb;
+      reach?: number[][] | null;
+      representation: string;
+      acquisitionRequested: boolean;
+    }
+    export interface SubjectExclusion {
+      documentKey: string;
+      placement: Placement;
+      subjectUniqueId: string;
+    }
+    /**
+     * Stable source placement. Numeric Revit ids are payload, never exclusion identity.
+     */
+    export interface Placement {
+      hostDocumentKey: string;
+      linkUniqueId?: null | string;
+    }
+    /**
+     * Axis-aligned bounds in host internal feet.
+     */
+    export interface Aabb {
+      minX: number;
+      minY: number;
+      minZ: number;
+      maxX: number;
+      maxY: number;
+      maxZ: number;
+    }
+    export interface SourceObservation {
+      placement: Placement;
+      documentKey?: null | string;
+      revision: SourceRevision;
+      toHost: number[];
+      availability: SceneSourceState;
+    }
+    export interface SourceRevision {
+      kind: RevisionKind;
+      epoch?: number | null;
+      version?: null | string;
+      reason?: null | RevisionUnavailableReason;
+    }
+    export interface Acquisition {
+      placement: Placement;
+      subjectUniqueId: string;
+      outcome: AcquisitionOutcome;
+      reason: AcquisitionReason;
+    }
+    export interface CoverageGap {
+      placement: Placement;
+      subjectUniqueId?: null | string;
+      reason: CoverageReason;
+      count: number;
     }
     /**
      * Acquisition evidence, not a memory cap. Native geometry remains allocated until document close.
@@ -8433,17 +8774,6 @@ export namespace RevitDetailSpaceScene {
       count: number;
       loadOnlyCount: number;
       cost: number;
-    }
-    /**
-     * Axis-aligned bounds in host internal feet.
-     */
-    export interface Aabb {
-      minX: number;
-      minY: number;
-      minZ: number;
-      maxX: number;
-      maxY: number;
-      maxZ: number;
     }
     export interface SceneElement {
       handle: Handle;
@@ -8516,6 +8846,7 @@ export namespace RevitDetailSpaceScene {
      * One source instance: the host, or one placement of a link. A link document placed three times is three sources.
      */
     export interface SceneSource {
+      placement: Placement;
       /**
        * Empty when the link is not loaded; Name then names its link type.
        */
@@ -8660,11 +8991,11 @@ export namespace RevitDetailSpaceScene {
   }
 }
 
-/** Slice the operation-owned world with a horizontal band z0..z1: every triangle clipped to the band and flattened to convex xy pieces per element, the exact footprint the partition solver reads; capped at maxPieces with whole elements, and the answer says when it truncated and the total it found. Reads only the band (within xyClip when given): an element is admitted when its own-frame box meets that region, and xyClip rejects elements whose box misses the rectangle. */
+/** Slice the operation-owned world with a horizontal band z0..z1: every triangle clipped to the band and flattened to convex xy pieces per element, the exact footprint the partition solver reads; capped at maxPieces with whole elements, and the answer says when it truncated and the total it found. Reads only the band within the declared region. */
 export namespace RevitDetailSpaceSlice {
   export namespace Req {
     /**
-     * Slice z0..z1 in host internal feet. XyClip is six ordered bounds; only x/y reject whole rows.
+     * Slice z0..z1 inside the declared Region in host internal feet.
      * MaxPieces defaults to 50000 and retains whole elements in source order; zero emits none.
      */
     export interface Request {
@@ -8672,7 +9003,6 @@ export namespace RevitDetailSpaceSlice {
       z0: number;
       z1: number;
       filter?: null | FilterRequest;
-      xyClip?: number[] | null;
       maxPieces?: number | null;
     }
     /**
@@ -8691,7 +9021,19 @@ export namespace RevitDetailSpaceSlice {
       categories?: string[] | null;
       kinds?: string[] | null;
       layers?: string[] | null;
-      excludeElementIds?: number[] | null;
+      exclusions?: SubjectExclusion[] | null;
+    }
+    export interface SubjectExclusion {
+      documentKey: string;
+      placement: Placement;
+      subjectUniqueId: string;
+    }
+    /**
+     * Stable source placement. Numeric Revit ids are payload, never exclusion identity.
+     */
+    export interface Placement {
+      hostDocumentKey: string;
+      linkUniqueId?: null | string;
     }
   }
   export namespace Res {
@@ -8705,6 +9047,19 @@ export namespace RevitDetailSpaceSlice {
      *
      */
     export type PrimKind = "Solid" | "Mesh" | "Curve2D" | "Element";
+    export type RevisionKind = "observed" | "unavailable";
+    export type RevisionUnavailableReason = "not-recorded" | "source-unread";
+    export type SceneSourceState = "loaded" | "unloaded" | "unavailable";
+    export type AcquisitionOutcome =
+      | "acquired"
+      | "empty"
+      | "partial"
+      | "failed"
+      | "deferred"
+      | "approximate"
+      | "outside-scope";
+    export type AcquisitionReason = "none" | "geometry-read" | "triangulate" | "budget" | "unsupported";
+    export type CoverageReason = "source-unread" | "partial-geometry" | "failed-geometry" | "deferred" | "approximate";
     /**
      * Architectural height authority, independent of collision geometry. None means never a height.
      * ByGeometry is an element with no category role (an IFC proxy slab or roof is a nameless Generic
@@ -8719,7 +9074,7 @@ export namespace RevitDetailSpaceSlice {
      *
      */
     export interface Response {
-      stamp: Stamp;
+      evidence: SpatialEvidence;
       searched: Searched;
       elements: SliceElement[];
       pieces: number;
@@ -8728,34 +9083,18 @@ export namespace RevitDetailSpaceSlice {
       ms: number;
     }
     /**
-     * Provenance and freshness. Every answer embeds one; it is not optional.
+     * Observed basis and acquisition, never a claim that a retained answer is current.
      */
-    export interface Stamp {
-      hostDocumentKey: string;
-      epoch: number;
-      frame: string;
-      builtUtc: string;
-      sources: SourceRow[];
-      fresh: boolean;
-      resolved: Resolved;
-      /**
-       * The only frame this library speaks. A reader that sees another value must refuse.
-       */
-      geometryCost?: null | GeometryCost;
-    }
-    /**
-     * One row per partition. Carried inside every Stamp.
-     */
-    export interface SourceRow {
-      source: number;
+    export interface SpatialEvidence {
       documentKey: string;
-      linkInstanceId?: number | null;
-      kind: SourceKind;
-      builtAtEpoch: number;
-      dirty: boolean;
-      elements: number;
-      triangles: number;
-      skipped: number;
+      revision?: number | null;
+      observedAt: string;
+      frame: string;
+      resolved: Resolved;
+      sources: SourceObservation[];
+      acquisition: Acquisition[];
+      coverage: CoverageGap[];
+      geometryCost?: null | GeometryCost;
     }
     /**
      * The options a verb actually ran with, after defaults were applied. Never null and never a
@@ -8769,7 +9108,59 @@ export namespace RevitDetailSpaceSlice {
       categories: string[];
       kinds: PrimKind[];
       layers: string[];
-      excludedElementIds: number[];
+      exclusions: SubjectExclusion[];
+      scope?: null | Aabb;
+      reach?: number[][] | null;
+      representation: string;
+      acquisitionRequested: boolean;
+    }
+    export interface SubjectExclusion {
+      documentKey: string;
+      placement: Placement;
+      subjectUniqueId: string;
+    }
+    /**
+     * Stable source placement. Numeric Revit ids are payload, never exclusion identity.
+     */
+    export interface Placement {
+      hostDocumentKey: string;
+      linkUniqueId?: null | string;
+    }
+    /**
+     * Axis-aligned bounds in host internal feet.
+     */
+    export interface Aabb {
+      minX: number;
+      minY: number;
+      minZ: number;
+      maxX: number;
+      maxY: number;
+      maxZ: number;
+    }
+    export interface SourceObservation {
+      placement: Placement;
+      documentKey?: null | string;
+      revision: SourceRevision;
+      toHost: number[];
+      availability: SceneSourceState;
+    }
+    export interface SourceRevision {
+      kind: RevisionKind;
+      epoch?: number | null;
+      version?: null | string;
+      reason?: null | RevisionUnavailableReason;
+    }
+    export interface Acquisition {
+      placement: Placement;
+      subjectUniqueId: string;
+      outcome: AcquisitionOutcome;
+      reason: AcquisitionReason;
+    }
+    export interface CoverageGap {
+      placement: Placement;
+      subjectUniqueId?: null | string;
+      reason: CoverageReason;
+      count: number;
     }
     /**
      * Acquisition evidence, not a memory cap. Native geometry remains allocated until document close.
@@ -8849,6 +9240,19 @@ export namespace RevitDetailSpaceStatus {
      *
      */
     export type PrimKind = "Solid" | "Mesh" | "Curve2D" | "Element";
+    export type RevisionKind = "observed" | "unavailable";
+    export type RevisionUnavailableReason = "not-recorded" | "source-unread";
+    export type SceneSourceState = "loaded" | "unloaded" | "unavailable";
+    export type AcquisitionOutcome =
+      | "acquired"
+      | "empty"
+      | "partial"
+      | "failed"
+      | "deferred"
+      | "approximate"
+      | "outside-scope";
+    export type AcquisitionReason = "none" | "geometry-read" | "triangulate" | "budget" | "unsupported";
+    export type CoverageReason = "source-unread" | "partial-geometry" | "failed-geometry" | "deferred" | "approximate";
 
     /**
      * Summary of the operation's capture. Status alone reports Built false because it does not
@@ -8856,7 +9260,7 @@ export namespace RevitDetailSpaceStatus {
      *
      */
     export interface Response {
-      stamp: Stamp;
+      evidence: SpatialEvidence;
       built: boolean;
       pendingIds: number;
       categories: SourceCategories[];
@@ -8865,34 +9269,18 @@ export namespace RevitDetailSpaceStatus {
       ms: number;
     }
     /**
-     * Provenance and freshness. Every answer embeds one; it is not optional.
+     * Observed basis and acquisition, never a claim that a retained answer is current.
      */
-    export interface Stamp {
-      hostDocumentKey: string;
-      epoch: number;
-      frame: string;
-      builtUtc: string;
-      sources: SourceRow[];
-      fresh: boolean;
-      resolved: Resolved;
-      /**
-       * The only frame this library speaks. A reader that sees another value must refuse.
-       */
-      geometryCost?: null | GeometryCost;
-    }
-    /**
-     * One row per partition. Carried inside every Stamp.
-     */
-    export interface SourceRow {
-      source: number;
+    export interface SpatialEvidence {
       documentKey: string;
-      linkInstanceId?: number | null;
-      kind: SourceKind;
-      builtAtEpoch: number;
-      dirty: boolean;
-      elements: number;
-      triangles: number;
-      skipped: number;
+      revision?: number | null;
+      observedAt: string;
+      frame: string;
+      resolved: Resolved;
+      sources: SourceObservation[];
+      acquisition: Acquisition[];
+      coverage: CoverageGap[];
+      geometryCost?: null | GeometryCost;
     }
     /**
      * The options a verb actually ran with, after defaults were applied. Never null and never a
@@ -8906,7 +9294,59 @@ export namespace RevitDetailSpaceStatus {
       categories: string[];
       kinds: PrimKind[];
       layers: string[];
-      excludedElementIds: number[];
+      exclusions: SubjectExclusion[];
+      scope?: null | Aabb;
+      reach?: number[][] | null;
+      representation: string;
+      acquisitionRequested: boolean;
+    }
+    export interface SubjectExclusion {
+      documentKey: string;
+      placement: Placement;
+      subjectUniqueId: string;
+    }
+    /**
+     * Stable source placement. Numeric Revit ids are payload, never exclusion identity.
+     */
+    export interface Placement {
+      hostDocumentKey: string;
+      linkUniqueId?: null | string;
+    }
+    /**
+     * Axis-aligned bounds in host internal feet.
+     */
+    export interface Aabb {
+      minX: number;
+      minY: number;
+      minZ: number;
+      maxX: number;
+      maxY: number;
+      maxZ: number;
+    }
+    export interface SourceObservation {
+      placement: Placement;
+      documentKey?: null | string;
+      revision: SourceRevision;
+      toHost: number[];
+      availability: SceneSourceState;
+    }
+    export interface SourceRevision {
+      kind: RevisionKind;
+      epoch?: number | null;
+      version?: null | string;
+      reason?: null | RevisionUnavailableReason;
+    }
+    export interface Acquisition {
+      placement: Placement;
+      subjectUniqueId: string;
+      outcome: AcquisitionOutcome;
+      reason: AcquisitionReason;
+    }
+    export interface CoverageGap {
+      placement: Placement;
+      subjectUniqueId?: null | string;
+      reason: CoverageReason;
+      count: number;
     }
     /**
      * Acquisition evidence, not a memory cap. Native geometry remains allocated until document close.
@@ -8939,21 +9379,10 @@ export namespace RevitDetailSpaceStatus {
       name: string;
       elevationFt: number;
     }
-    /**
-     * Axis-aligned bounds in host internal feet.
-     */
-    export interface Aabb {
-      minX: number;
-      minY: number;
-      minZ: number;
-      maxX: number;
-      maxY: number;
-      maxZ: number;
-    }
   }
 }
 
-/** Sweep a rectangular profile (widthFt across, heightFt up) along a polyline and answer HIT, NEAR or CLEAR per segment with the exact gap and the nearest element's Handle. The region is admission only: every polyline point must lie inside it, while the profile and clearance may extend past it. Only the sweep's own reach is read (plus CAD ribbons when the filter asks for Curve2D). Cost is reported in the geometry stamp; large reads remain available. */
+/** Sweep a rectangular profile (widthFt across, heightFt up) along a polyline and report observed surface HIT or NEAR per segment, otherwise UNKNOWN because containment is unsupported, with a nullable surface gap and the witness element's Handle. The region is admission only: every polyline point must lie inside it, while the profile and clearance may extend past it. Only the sweep's own reach is read (plus CAD ribbons when the filter asks for Curve2D). Cost is reported in the geometry stamp; large reads remain available. */
 export namespace RevitDetailSpaceSweep {
   export namespace Req {
     /**
@@ -8983,7 +9412,19 @@ export namespace RevitDetailSpaceSweep {
       categories?: string[] | null;
       kinds?: string[] | null;
       layers?: string[] | null;
-      excludeElementIds?: number[] | null;
+      exclusions?: SubjectExclusion[] | null;
+    }
+    export interface SubjectExclusion {
+      documentKey: string;
+      placement: Placement;
+      subjectUniqueId: string;
+    }
+    /**
+     * Stable source placement. Numeric Revit ids are payload, never exclusion identity.
+     */
+    export interface Placement {
+      hostDocumentKey: string;
+      linkUniqueId?: null | string;
     }
   }
   export namespace Res {
@@ -8997,6 +9438,19 @@ export namespace RevitDetailSpaceSweep {
      *
      */
     export type PrimKind = "Solid" | "Mesh" | "Curve2D" | "Element";
+    export type RevisionKind = "observed" | "unavailable";
+    export type RevisionUnavailableReason = "not-recorded" | "source-unread";
+    export type SceneSourceState = "loaded" | "unloaded" | "unavailable";
+    export type AcquisitionOutcome =
+      | "acquired"
+      | "empty"
+      | "partial"
+      | "failed"
+      | "deferred"
+      | "approximate"
+      | "outside-scope";
+    export type AcquisitionReason = "none" | "geometry-read" | "triangulate" | "budget" | "unsupported";
+    export type CoverageReason = "source-unread" | "partial-geometry" | "failed-geometry" | "deferred" | "approximate";
     /**
      * Architectural height authority, independent of collision geometry. None means never a height.
      * ByGeometry is an element with no category role (an IFC proxy slab or roof is a nameless Generic
@@ -9009,40 +9463,24 @@ export namespace RevitDetailSpaceSweep {
      * Stamped clearance verdicts for each consecutive polyline segment, with search accounting and elapsed milliseconds.
      */
     export interface Response {
-      stamp: Stamp;
+      evidence: SpatialEvidence;
       searched: Searched;
       segments: SweepSegment[];
       ms: number;
     }
     /**
-     * Provenance and freshness. Every answer embeds one; it is not optional.
+     * Observed basis and acquisition, never a claim that a retained answer is current.
      */
-    export interface Stamp {
-      hostDocumentKey: string;
-      epoch: number;
-      frame: string;
-      builtUtc: string;
-      sources: SourceRow[];
-      fresh: boolean;
-      resolved: Resolved;
-      /**
-       * The only frame this library speaks. A reader that sees another value must refuse.
-       */
-      geometryCost?: null | GeometryCost;
-    }
-    /**
-     * One row per partition. Carried inside every Stamp.
-     */
-    export interface SourceRow {
-      source: number;
+    export interface SpatialEvidence {
       documentKey: string;
-      linkInstanceId?: number | null;
-      kind: SourceKind;
-      builtAtEpoch: number;
-      dirty: boolean;
-      elements: number;
-      triangles: number;
-      skipped: number;
+      revision?: number | null;
+      observedAt: string;
+      frame: string;
+      resolved: Resolved;
+      sources: SourceObservation[];
+      acquisition: Acquisition[];
+      coverage: CoverageGap[];
+      geometryCost?: null | GeometryCost;
     }
     /**
      * The options a verb actually ran with, after defaults were applied. Never null and never a
@@ -9056,7 +9494,59 @@ export namespace RevitDetailSpaceSweep {
       categories: string[];
       kinds: PrimKind[];
       layers: string[];
-      excludedElementIds: number[];
+      exclusions: SubjectExclusion[];
+      scope?: null | Aabb;
+      reach?: number[][] | null;
+      representation: string;
+      acquisitionRequested: boolean;
+    }
+    export interface SubjectExclusion {
+      documentKey: string;
+      placement: Placement;
+      subjectUniqueId: string;
+    }
+    /**
+     * Stable source placement. Numeric Revit ids are payload, never exclusion identity.
+     */
+    export interface Placement {
+      hostDocumentKey: string;
+      linkUniqueId?: null | string;
+    }
+    /**
+     * Axis-aligned bounds in host internal feet.
+     */
+    export interface Aabb {
+      minX: number;
+      minY: number;
+      minZ: number;
+      maxX: number;
+      maxY: number;
+      maxZ: number;
+    }
+    export interface SourceObservation {
+      placement: Placement;
+      documentKey?: null | string;
+      revision: SourceRevision;
+      toHost: number[];
+      availability: SceneSourceState;
+    }
+    export interface SourceRevision {
+      kind: RevisionKind;
+      epoch?: number | null;
+      version?: null | string;
+      reason?: null | RevisionUnavailableReason;
+    }
+    export interface Acquisition {
+      placement: Placement;
+      subjectUniqueId: string;
+      outcome: AcquisitionOutcome;
+      reason: AcquisitionReason;
+    }
+    export interface CoverageGap {
+      placement: Placement;
+      subjectUniqueId?: null | string;
+      reason: CoverageReason;
+      count: number;
     }
     /**
      * Acquisition evidence, not a memory cap. Native geometry remains allocated until document close.
@@ -9091,9 +9581,11 @@ export namespace RevitDetailSpaceSweep {
     export interface SweepSegment {
       index: number;
       verdict: string;
-      minGapFt: number;
+      minGapFt?: null | number;
       nearest?: null | Handle;
       closestPoint?: number[] | null;
+      surfaceObservation: string;
+      clearanceReason: string;
     }
     /**
      * The address of one element. Enough for the host to select it.
@@ -9154,46 +9646,43 @@ export namespace RevitDetailSpaceTree {
      *
      */
     export type PrimKind = "Solid" | "Mesh" | "Curve2D" | "Element";
+    export type RevisionKind = "observed" | "unavailable";
+    export type RevisionUnavailableReason = "not-recorded" | "source-unread";
+    export type SceneSourceState = "loaded" | "unloaded" | "unavailable";
+    export type AcquisitionOutcome =
+      | "acquired"
+      | "empty"
+      | "partial"
+      | "failed"
+      | "deferred"
+      | "approximate"
+      | "outside-scope";
+    export type AcquisitionReason = "none" | "geometry-read" | "triangulate" | "budget" | "unsupported";
+    export type CoverageReason = "source-unread" | "partial-geometry" | "failed-geometry" | "deferred" | "approximate";
 
     /**
      * One source BVH, through MaxDepth inclusive, in post-order with the root last.
      */
     export interface Response {
-      stamp: Stamp;
+      evidence: SpatialEvidence;
       source: number;
       maxDepth: number;
       nodes: BvhNode[];
       ms: number;
     }
     /**
-     * Provenance and freshness. Every answer embeds one; it is not optional.
+     * Observed basis and acquisition, never a claim that a retained answer is current.
      */
-    export interface Stamp {
-      hostDocumentKey: string;
-      epoch: number;
-      frame: string;
-      builtUtc: string;
-      sources: SourceRow[];
-      fresh: boolean;
-      resolved: Resolved;
-      /**
-       * The only frame this library speaks. A reader that sees another value must refuse.
-       */
-      geometryCost?: null | GeometryCost;
-    }
-    /**
-     * One row per partition. Carried inside every Stamp.
-     */
-    export interface SourceRow {
-      source: number;
+    export interface SpatialEvidence {
       documentKey: string;
-      linkInstanceId?: number | null;
-      kind: SourceKind;
-      builtAtEpoch: number;
-      dirty: boolean;
-      elements: number;
-      triangles: number;
-      skipped: number;
+      revision?: number | null;
+      observedAt: string;
+      frame: string;
+      resolved: Resolved;
+      sources: SourceObservation[];
+      acquisition: Acquisition[];
+      coverage: CoverageGap[];
+      geometryCost?: null | GeometryCost;
     }
     /**
      * The options a verb actually ran with, after defaults were applied. Never null and never a
@@ -9207,7 +9696,59 @@ export namespace RevitDetailSpaceTree {
       categories: string[];
       kinds: PrimKind[];
       layers: string[];
-      excludedElementIds: number[];
+      exclusions: SubjectExclusion[];
+      scope?: null | Aabb;
+      reach?: number[][] | null;
+      representation: string;
+      acquisitionRequested: boolean;
+    }
+    export interface SubjectExclusion {
+      documentKey: string;
+      placement: Placement;
+      subjectUniqueId: string;
+    }
+    /**
+     * Stable source placement. Numeric Revit ids are payload, never exclusion identity.
+     */
+    export interface Placement {
+      hostDocumentKey: string;
+      linkUniqueId?: null | string;
+    }
+    /**
+     * Axis-aligned bounds in host internal feet.
+     */
+    export interface Aabb {
+      minX: number;
+      minY: number;
+      minZ: number;
+      maxX: number;
+      maxY: number;
+      maxZ: number;
+    }
+    export interface SourceObservation {
+      placement: Placement;
+      documentKey?: null | string;
+      revision: SourceRevision;
+      toHost: number[];
+      availability: SceneSourceState;
+    }
+    export interface SourceRevision {
+      kind: RevisionKind;
+      epoch?: number | null;
+      version?: null | string;
+      reason?: null | RevisionUnavailableReason;
+    }
+    export interface Acquisition {
+      placement: Placement;
+      subjectUniqueId: string;
+      outcome: AcquisitionOutcome;
+      reason: AcquisitionReason;
+    }
+    export interface CoverageGap {
+      placement: Placement;
+      subjectUniqueId?: null | string;
+      reason: CoverageReason;
+      count: number;
     }
     /**
      * Acquisition evidence, not a memory cap. Native geometry remains allocated until document close.

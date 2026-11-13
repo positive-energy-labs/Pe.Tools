@@ -1,4 +1,5 @@
 using Pe.Shared.Scripting.Execution;
+using Pe.Shared.HostContracts.Scripting;
 
 namespace Pe.Revit.Tests;
 
@@ -11,13 +12,29 @@ public sealed class ScriptRunScopeTests {
     private static readonly ScriptSaveKind[] HeldKinds =
         [ScriptSaveKind.Save, ScriptSaveKind.SaveAsOverExisting, ScriptSaveKind.Synchronize];
 
+    // Mutants: ignoring the caller holds Person; flipping the request default lets an omitted caller save.
+    [Test]
+    public void Only_the_persons_script_bypasses_the_hold_and_omitted_caller_is_guarded() {
+        Assert.That(new ExecuteRevitScriptRequest().Caller, Is.EqualTo(ScriptCaller.Agent));
+        foreach (var caller in new[] { ScriptCaller.Person, ScriptCaller.Agent, new ExecuteRevitScriptRequest().Caller }) {
+            using var run = ScriptRunScope.Enter(caller);
+            foreach (var kind in HeldKinds)
+                Assert.That(ScriptRunScope.Holds(kind, false), Is.EqualTo(caller != ScriptCaller.Person), $"{caller}: {kind}");
+            Assert.That(run.Held, Is.Null);
+        }
+        using var agent = ScriptRunScope.Enter(ScriptCaller.Agent);
+        using (ScriptRunScope.Enter(ScriptCaller.Person))
+            Assert.That(ScriptRunScope.Holds(ScriptSaveKind.Save, false), Is.False);
+        Assert.That(ScriptRunScope.Holds(ScriptSaveKind.Save, false), Is.True);
+    }
+
     // Mutant, run red once: Dispose that leaves the scope set (`Current = this._outer` deleted) fails every line after a using.
     [Test]
     public void The_scope_is_active_only_between_enter_and_dispose() {
         Assert.That(ScriptRunScope.Current, Is.Null);
-        using (var run = ScriptRunScope.Enter()) {
+        using (var run = ScriptRunScope.Enter(ScriptCaller.Agent)) {
             Assert.That(ScriptRunScope.Current, Is.SameAs(run));
-            using (var inner = ScriptRunScope.Enter())
+            using (var inner = ScriptRunScope.Enter(ScriptCaller.Person))
                 Assert.That(ScriptRunScope.Current, Is.SameAs(inner));
             Assert.That(ScriptRunScope.Current, Is.SameAs(run), "a nested run hands the scope back to its outer run");
             run.Dispose();
@@ -26,7 +43,7 @@ public sealed class ScriptRunScopeTests {
         Assert.That(ScriptRunScope.Current, Is.Null);
 
         Assert.Throws<InvalidOperationException>(() => {
-            using var run = ScriptRunScope.Enter();
+            using var run = ScriptRunScope.Enter(ScriptCaller.Agent);
             throw new InvalidOperationException("the script threw");
         });
         Assert.That(ScriptRunScope.Current, Is.Null, "a run that throws still clears the scope");
@@ -40,7 +57,7 @@ public sealed class ScriptRunScopeTests {
         foreach (var kind in Enum.GetValues<ScriptSaveKind>())
             Assert.That(ScriptRunScope.Holds(kind, isFamilyDocument: false), Is.False, $"{kind} outside a run is the person's");
 
-        using var run = ScriptRunScope.Enter();
+        using var run = ScriptRunScope.Enter(ScriptCaller.Agent);
         foreach (var kind in HeldKinds)
             Assert.That(ScriptRunScope.Holds(kind, isFamilyDocument: false), Is.True, $"{kind} of a project inside a run");
         foreach (var kind in Enum.GetValues<ScriptSaveKind>())
@@ -50,7 +67,7 @@ public sealed class ScriptRunScopeTests {
 
     [Test]
     public void A_run_reports_one_reason_for_what_it_held() {
-        using var run = ScriptRunScope.Enter();
+        using var run = ScriptRunScope.Enter(ScriptCaller.Agent);
         Assert.That(run.Held, Is.Null);
 
         run.RecordHeld(ScriptSaveKind.Save, "Chadds.rvt");

@@ -18,10 +18,10 @@ internal static class SpaceOps {
     public sealed record CensusRequest(double[] Box, FilterRequest? Filter = null);
 
     /// <summary>
-    /// Slice z0..z1 in host internal feet. XyClip is six ordered bounds; only x/y reject whole rows.
+    /// Slice z0..z1 inside the declared Region in host internal feet.
     /// MaxPieces defaults to 50000 and retains whole elements in source order; zero emits none.
     /// </summary>
-    public sealed record SliceRequest(Region Region, double Z0, double Z1, FilterRequest? Filter = null, double[]? XyClip = null, int? MaxPieces = null);
+    public sealed record SliceRequest(Region Region, double Z0, double Z1, FilterRequest? Filter = null, int? MaxPieces = null);
 
     /// <summary>
     /// Probe At (three host-internal-feet coordinates). MaxDistanceFt defaults to 200.
@@ -47,7 +47,7 @@ internal static class SpaceOps {
     private static CensusAnswer Census(CensusRequest request, ProjectDocument document) =>
         Verbs.Census(document.Value, Box(request.Box, nameof(request.Box)), (request.Filter ?? new FilterRequest()).ToFilter());
 
-    [Op("revit.detail.space-slice", OpSubject.Region, OpTouches.Geometry, Does = "Slice the operation-owned world with a horizontal band z0..z1: every triangle clipped to the band and flattened to convex xy pieces per element, the exact footprint the partition solver reads; capped at maxPieces with whole elements, and the answer says when it truncated and the total it found. Reads only the band (within xyClip when given): an element is admitted when its own-frame box meets that region, and xyClip rejects elements whose box misses the rectangle.", Title = "Slice Space World", Finds = ["space", "slice", "band", "footprint", "plan"], Cost = OpCost.Expensive)]
+    [Op("revit.detail.space-slice", OpSubject.Region, OpTouches.Geometry, Does = "Slice the operation-owned world with a horizontal band z0..z1: every triangle clipped to the band and flattened to convex xy pieces per element, the exact footprint the partition solver reads; capped at maxPieces with whole elements, and the answer says when it truncated and the total it found. Reads only the band within the declared region.", Title = "Slice Space World", Finds = ["space", "slice", "band", "footprint", "plan"], Cost = OpCost.Expensive)]
     private static SliceCapped Slice(SliceRequest request, ProjectDocument document) {
         Finite(request.Z0, nameof(request.Z0));
         Finite(request.Z1, nameof(request.Z1));
@@ -70,7 +70,7 @@ internal static class SpaceOps {
         return Verbs.Probe(document.Value, at, (request.Filter ?? new FilterRequest()).ToFilter(), distance, purpose);
     }
 
-    [Op("revit.detail.space-sweep", OpSubject.Region, OpTouches.Geometry, Does = "Sweep a rectangular profile (widthFt across, heightFt up) along a polyline and answer HIT, NEAR or CLEAR per segment with the exact gap and the nearest element's Handle. The region is admission only: every polyline point must lie inside it, while the profile and clearance may extend past it. Only the sweep's own reach is read (plus CAD ribbons when the filter asks for Curve2D). Cost is reported in the geometry stamp; large reads remain available.", Title = "Sweep Space World", Finds = ["space", "sweep", "clearance", "duct", "collision"], Cost = OpCost.Expensive)]
+    [Op("revit.detail.space-sweep", OpSubject.Region, OpTouches.Geometry, Does = "Sweep a rectangular profile (widthFt across, heightFt up) along a polyline and report observed surface HIT or NEAR per segment, otherwise UNKNOWN because containment is unsupported, with a nullable surface gap and the witness element's Handle. The region is admission only: every polyline point must lie inside it, while the profile and clearance may extend past it. Only the sweep's own reach is read (plus CAD ribbons when the filter asks for Curve2D). Cost is reported in the geometry stamp; large reads remain available.", Title = "Sweep Space World", Finds = ["space", "sweep", "clearance", "duct", "collision"], Cost = OpCost.Expensive)]
     private static SweepAnswer Sweep(SweepRequest request, ProjectDocument document) {
         if (request.Polyline is not { Length: >= 2 }) throw new ArgumentException("polyline needs at least two coordinate triples.");
         Positive(request.WidthFt, nameof(request.WidthFt));
