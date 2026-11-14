@@ -453,7 +453,8 @@ export function createPagesHandler(
       return found && { ...found, pod: null, state: join(stored.path, basename(found.dir)) };
     }
     if (more.length || !pods) return null;
-    for (const pod of await activePackages((await listPackages(pods)).packages, pods)) {
+    const candidates = (await listPackages(pods)).packages.filter((pod) => pod.id === id);
+    for (const pod of await activePackages(candidates, pods)) {
       const row = pod.contributions.find(
         (one) => one.kind === "page" && one.path === `pages/${page}`,
       );
