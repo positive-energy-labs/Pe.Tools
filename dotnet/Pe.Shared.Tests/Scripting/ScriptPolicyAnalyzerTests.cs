@@ -30,8 +30,11 @@ public sealed class ScriptPolicyAnalyzerTests {
     public void An_undeclared_write_is_rejected_under_the_default_request_policy() {
         var request = new ExecuteRevitScriptRequest();
         var sources = new ScriptSourceSet([new("Write.cs", "using var tx = new Transaction(doc, \"Owned\");")], "Write.cs");
-        Assert.That(request.PermissionMode, Is.EqualTo(ScriptPermissionMode.ReadOnly));
-        Assert.That(ScriptPolicyAnalyzer.CreateDefault().Analyze(sources, request.PermissionMode)
+        // A request names no mode by default; a source no manifest declares a mode for then runs ReadOnly.
+        Assert.That(request.PermissionMode, Is.Null);
+        var mode = new Pe.Shared.Scripting.Pods.PodManifest(2, "office", "Office", "1.0.0", null, []).ModeFor("Write.cs", request.PermissionMode);
+        Assert.That(mode, Is.EqualTo(ScriptPermissionMode.ReadOnly));
+        Assert.That(ScriptPolicyAnalyzer.CreateDefault().Analyze(sources, mode)
             .Any(d => d.Severity == ScriptDiagnosticSeverity.Error), Is.True);
     }
 

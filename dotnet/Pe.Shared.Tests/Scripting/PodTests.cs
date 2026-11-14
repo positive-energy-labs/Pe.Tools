@@ -626,6 +626,43 @@ public sealed class PodTests {
         Assert.That(error.InnerException, Is.TypeOf<OperationCanceledException>());
     }
 
+    // A script's `PodFile` (pods map, contract C1). Mutants, each run red once: drop the `NormalizeMemberPath` call
+    // and the prefix check in `FullPath` (the `..` path answers the outside file); drop the reparse-point loop in
+    // `MemberFile` (the junction answers the outside file); drop the `File.Exists` test (a missing file answers).
+    [Test]
+    public void A_scripts_pod_file_is_a_live_member_and_never_leaves_the_pod() {
+        var folder = this.WritePod("Office", "office", new() { ["assets/note.txt"] = "carried" });
+        var outside = Path.Combine(this._root, "outside");
+        Directory.CreateDirectory(outside);
+        File.WriteAllText(Path.Combine(outside, "secret.txt"), "not the pod's");
+        // A junction needs no privilege, where a symbolic link does; both are reparse points.
+        using (var link = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("cmd.exe",
+                   $"/c mklink /J \"{Path.Combine(folder, "linked")}\" \"{outside}\"") { UseShellExecute = false, CreateNoWindow = true })!)
+            link.WaitForExit();
+        Assert.That(File.Exists(Path.Combine(folder, "linked", "secret.txt")), Is.True, "the junction was not made");
+        try {
+            Assert.That(ScriptPodPreparationService.MemberFile(folder, "assets/note.txt"), Is.EqualTo(Path.Combine(folder, "assets", "note.txt")));
+            Assert.That(ScriptPodPreparationService.MemberFile(folder, @"assets\note.txt"), Is.EqualTo(Path.Combine(folder, "assets", "note.txt")));
+            File.WriteAllText(Path.Combine(folder, "assets", "note.txt"), "edited after the run began");
+            Assert.That(File.ReadAllText(ScriptPodPreparationService.MemberFile(folder, "assets/note.txt")), Is.EqualTo("edited after the run began"));
+            foreach (var escape in new[] { "../outside/secret.txt", "assets/../../outside/secret.txt", Path.Combine(outside, "secret.txt"), "" })
+                Assert.Throws<InvalidDataException>(() => ScriptPodPreparationService.MemberFile(folder, escape), escape);
+            Assert.That(Assert.Throws<InvalidDataException>(() => ScriptPodPreparationService.MemberFile(folder, "linked/secret.txt"))!.Message,
+                Does.Contain("cannot follow a link"));
+            Assert.That(Assert.Throws<FileNotFoundException>(() => ScriptPodPreparationService.MemberFile(folder, "assets/missing.rfa"))!.Message,
+                Is.EqualTo("This Pod has no file 'assets/missing.rfa'."));
+        } finally { Directory.Delete(Path.Combine(folder, "linked")); }
+    }
+
+    // Mutant, run red once: raise `ScriptInputBounds.MaxInputBytes` (the oversized input is accepted).
+    [Test]
+    public void A_scripts_input_is_bounded_at_256_KiB() {
+        Assert.DoesNotThrow(() => ScriptInputBounds.Require(null));
+        Assert.DoesNotThrow(() => ScriptInputBounds.Require(new JObject { ["text"] = new string('a', 256 * 1024 - 11) }));
+        Assert.That(Assert.Throws<ArgumentException>(() => ScriptInputBounds.Require(new JObject { ["text"] = new string('a', 256 * 1024 - 10) }))!.Message,
+            Is.EqualTo("Script input may not exceed 256 KiB."));
+    }
+
     [Test]
     public void Captured_support_files_are_retained_but_only_CSharp_sources_compile() {
         var folder = this.WritePod("Office", "office", new() {
