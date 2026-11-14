@@ -930,8 +930,8 @@ export function createContributionContent(options: {
   pagesRoots?: readonly string[];
   packages?: typeof listPackages;
   pages?: (packages: readonly AdmittedPackage[]) => Promise<readonly PageDescriptor[]>;
-  /** Runs beside the start census, never before it: the host door does not wait for an import. */
-  bootstrap?: () => Promise<unknown>;
+  /** Runs beside the census. Honor cancellation before home writes; shutdown never joins it. */
+  bootstrap?: (signal: AbortSignal) => Promise<unknown>;
   decisionsMachine?: import("@pe/host-contracts/kinds").StateRoot;
   changed?: () => void;
 }) {
@@ -957,13 +957,17 @@ export function createContributionContent(options: {
   // the start census, and `activateImportedPackage` waits for that census, so what the import adds
   // is activated by name either way. Reconcile after import and invalidate the catalog so the home page
   // discovers them without restarting.
-  const bootstrap = Promise.resolve().then(async () => {
+  const bootstrapStop = new AbortController();
+  void Promise.resolve().then(async () => {
     if (!options.bootstrap) return;
-    await options.bootstrap();
+    bootstrapStop.signal.throwIfAborted();
+    await options.bootstrap(bootstrapStop.signal);
+    bootstrapStop.signal.throwIfAborted();
     await lifecycle.refresh();
     snapshot = undefined;
     options.changed?.();
   }).catch(error => {
+    if (bootstrapStop.signal.aborted) return;
     bootstrapProblem = `Shipped Pods unavailable: ${String(error)}`;
     snapshot = undefined;
     options.changed?.();
@@ -1141,7 +1145,12 @@ export function createContributionContent(options: {
   }
   return {
     lifecycle,
-    close: async () => { await bootstrap; await lifecycle.close(); },
+    close: async () => {
+      // Optional first-run imports never hold host shutdown. Their owner checks the signal
+      // before publishing more home bytes; an uncancellable read may finish without publishing.
+      bootstrapStop.abort();
+      await lifecycle.close();
+    },
     read: () => {
       if (!snapshot || (!pending && Date.now() - observedAt >= 30_000)) {
         pending = true;
@@ -1201,8 +1210,8 @@ function* hostPeRoutes(
     worldRoot: stateScope(hostState(), hostState().agent),
     pagesRoots: productPagesRoots(),
     changed: () => invalidateCatalog(),
-    bootstrap: async () => {
-      const imported = await importShippedPods({ captures: pictures });
+    bootstrap: async (signal) => {
+      const imported = await importShippedPods({ captures: pictures, signal });
       const refused = imported.outcomes.filter((outcome) => outcome.outcome === "refused");
       if (refused.length)
         throw Error(
