@@ -931,7 +931,6 @@ internal sealed class RevitDataRequestService {
         return GetElectricalCircuitsCatalogCore(request with { Options = (request.Options ?? new()) with { IncludeNearbyProxyContext = true } }, document);
     }
 
-    [Op("revit.catalog.electrical-circuits", OpSubject.Document, OpTouches.Geometry, Does = "Read electrical circuit facts, connected load identity, panel names, circuit numbers, optional nearby proxy context, and compact filter diagnostics from the active Revit document.", Title = "Get Electrical Circuits Catalog", Finds = ["revit", "circuits", "catalog", "loads", "panel", "load-name", "connected-elements", "nearby-proxy", "equipment-alignment"], Example = "{ \"filter\": { \"panelNames\": [\"C6P\"], \"loadNames\": [\"RV-13, DH-7 - Lower Level\"], \"circuitNumbers\": [\"1\"] }, \"options\": { \"parameterQuery\": { \"parameters\": [{ \"name\": \"Mark\" }, { \"name\": \"Panel\" }, { \"name\": \"Circuit Number\" }, { \"name\": \"Load Name\" }] } } }")]
     private ElectricalCircuitsCatalogData GetElectricalCircuitsCatalogCore(
         ElectricalCircuitsCatalogRequest request,
         RevitDocument activeDocument
