@@ -85,7 +85,21 @@ export async function requirePackageEnabled(
   if (typeof podsRoots === "string" && podsRoots !== productPodsRootPath()) return;
   if (serving && !outsideCensus.includes(id)) {
     await serving.ready;
-    serving.requestRefresh();
+    const refresh = serving.requestRefresh();
+    if (!serving.inventory().some((pod) => pod.id === `pod:${id}`)) {
+      // A missed door gets one discovery attempt; a stalled home cannot hold it forever.
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        await Promise.race([
+          refresh,
+          new Promise<void>((resolve) => {
+            timer = setTimeout(resolve, 5000);
+          }),
+        ]);
+      } finally {
+        clearTimeout(timer);
+      }
+    }
     if (!serving.active(id)) throw Error(`Pod '${id}' is inactive`);
   }
   if ((await readDecisions(decisionsKind.in(hostState())))[`pod:${id}`] === false)
@@ -273,7 +287,7 @@ export function createPackageLifecycle(
     /** One scan in flight. Reads serve the last completed listing until it finishes. */
     requestRefresh: () => {
       if (closed) return;
-      void refresh().catch((error) => {
+      return refresh().catch((error) => {
         if (closed) return;
         console.error("package-lifecycle: background refresh failed; keeping last listing", error);
       });
