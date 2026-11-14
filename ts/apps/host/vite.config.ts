@@ -153,7 +153,7 @@ export default defineConfig(({ mode }) => ({
     testTimeout: 15_000,
     // expect.poll waits 1 s by default; real HTTP and child processes need more when the box is busy.
     expect: { poll: { timeout: 10_000 } },
-    globalSetup: ["../../tests/isolated-home/global-setup.ts"],
+    globalSetup: ["../../tests/isolated-home/global-setup.ts", "./tests/build-kit.global-setup.ts"],
     setupFiles: ["../../tests/isolated-home/setup.ts"],
   },
 }));

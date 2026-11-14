@@ -9,6 +9,33 @@ import { oneName } from "../route/typed-route";
 import { peReadings } from "../host/resource-stream";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 
+/**
+ * The document's name is the visible consent (ADR 0021), so every write a person consented to names
+ * it and says whose consent it is: a document added to the bound thread, or a person's own pin
+ * (ADR 0043). `pea` writes a document Pea acquired, which no person consented to, and `read` writes
+ * nothing; both keep the bare kind.
+ */
+function writeConsent(write: PageTargetReading["write"]): { hint: string; unnamed: string } | null {
+  if (!write) return null;
+  switch (write.kind) {
+    case "thread":
+      return {
+        hint: "A person added this document to the bound thread; this Page may write it.",
+        unnamed: "thread document",
+      };
+    case "human":
+      return {
+        hint: "You pinned this document; this Page may write it.",
+        unnamed: "pinned document",
+      };
+    case "pea":
+    case "read":
+      return null;
+    default:
+      return write satisfies never;
+  }
+}
+
 /** SPA chrome owns consent. Page code never draws or answers this control. */
 export function PageBindingChip({
   slug,
@@ -45,21 +72,22 @@ export function PageBindingChip({
       else if (next) setRefusal(next.error.message);
     });
   }, [slug]);
-  const write = reading?.write;
-  // The document's name is the visible consent (ADR 0021): a thread slot that writes names it.
+  const consent = writeConsent(reading?.write ?? null);
   return (
     <div className="flex min-w-0 items-center gap-2" aria-label="Page binding">
-      {write?.kind === "thread" ? (
-        <TooltipHint content="A person added this document to the bound thread; this Page may write it.">
+      {consent ? (
+        <TooltipHint content={consent.hint}>
           <span className="face-mono" data-tone="done">
-            {reading?.document?.title || "thread document"}
+            {reading?.document?.title || consent.unnamed}
           </span>
         </TooltipHint>
       ) : (
         <TooltipHint
-          content={write?.kind === "read" ? write.refusal.reason : (refusal ?? undefined)}
+          content={
+            reading?.write?.kind === "read" ? reading.write.refusal.reason : (refusal ?? undefined)
+          }
         >
-          <span className="face-mono">{write?.kind ?? "unverified"}</span>
+          <span className="face-mono">{reading?.write?.kind ?? "unverified"}</span>
         </TooltipHint>
       )}
       <a
