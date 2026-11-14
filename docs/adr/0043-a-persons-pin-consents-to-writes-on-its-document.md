@@ -14,4 +14,6 @@ A pin Pea made still writes only acquired documents. A person's pin gives no aut
 
 ## Consequences
 
+Same-origin Page script can already reach `/actions` as the person by choosing its referrer; ADR 0017 names this as a non-boundary, and this decision widens nothing there.
+
 People can use a pinned Page's write tools without making Pea acquire their document or binding a thread first. The host carries the same pin consent through preflight, dispatch and the receipt, while preserving the Page as caller. A request never borrows authority from a changed binding or a different document lifetime. Pin consent adds no confirmation or approval wait. Accepted ADR 0017 remains unchanged; this ADR is the supersession record.

@@ -44,14 +44,14 @@ test("access-086: paired MCP writes only its bound thread's human-added targets;
     devices.bind(device.id, "human-thread");
     const basis = admitCrossing(caller, destination, "test");
     expect(basis).toMatchObject({ kind: "grant", thread: "human-thread", device: device.id });
-    expect(live(basis)).toBeNull();
+    expect(await live(basis)).toBeNull();
     expect(await listedRw()).toBe(true);
     expect(() =>
       admitCrossing(caller, { kind: "document", ref: { ...lifetime, openId: "other" } }, "test"),
     ).toThrow("grant.required");
     devices.revoke(device.id);
     expect(() => admitCrossing(caller, destination, "test")).toThrow("device.revoked");
-    expect(live(basis)?.refusal.code).toBe("device.revoked");
+    expect((await live(basis))?.refusal.code).toBe("device.revoked");
     expect(await listedRw()).toBe(false);
   } finally {
     await web.dispose();

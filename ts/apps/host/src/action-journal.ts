@@ -730,7 +730,7 @@ export class ActionJournal implements ReceiptReader {
       this.notify();
     });
   }
-  dispatchRefusal(requestId: string): DispatchRefusal | null {
+  async dispatchRefusal(requestId: string): Promise<DispatchRefusal | null> {
     const action = this.stepAction.get(requestId);
     const row = action ? this.rows.get(action) : undefined;
     if (!row) return null;
@@ -753,7 +753,7 @@ export class ActionJournal implements ReceiptReader {
     } catch (error) {
       return { kind: "refused", message: messageOf(error) };
     }
-    const dead = live(row.basis, "native dispatch");
+    const dead = await live(row.basis, "native dispatch");
     return dead ? { kind: "refused", message: dead.message } : null;
   }
 
@@ -1068,7 +1068,7 @@ export class ActionJournal implements ReceiptReader {
       } catch (error) {
         throw new StepFailure(messageOf(error), 499, "refused");
       }
-    const dead = live(row.basis, moment);
+    const dead = await live(row.basis, moment);
     if (dead)
       throw new CommandRejected({ kind: "trust", code: dead.refusal.code, message: dead.message });
     try {
