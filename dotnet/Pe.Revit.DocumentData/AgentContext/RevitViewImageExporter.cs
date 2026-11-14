@@ -11,7 +11,8 @@ namespace Pe.Revit.DocumentData.AgentContext;
 ///     Unfocused captures use views as configured — templates, VG overrides, and temporary
 ///     hide/isolate all apply. Never creates or permanently mutates views.
 ///     A cropped view exports unmodified and is cut to exactly its crop arithmetically; focus capture
-///     sets a temporary crop box (clearing any scope box, annotation crop on), phase and phase filter for requested
+///     sets a temporary crop box (clearing any scope box, annotation crop on), a phase that never moves backward,
+///     and a phase filter for requested
 ///     elements, then restores them (editable doc only).
 ///     A focused capture of a sheet-filtered schedule lifts the filter the same way. Both temporaries are committed
 ///     and then undone through the op's <see cref="SessionWrite" /> scope; the unfocused read commits nothing.
@@ -132,15 +133,21 @@ public static class RevitViewImageExporter {
         var filterParam = view.get_Parameter(BuiltInParameter.VIEW_PHASE_FILTER);
         var originalPhase = phaseParam?.AsElementId();
         var originalFilter = filterParam?.AsElementId();
-        var latestPhase = RevitViewImageVisibility.LatestPhase(document.Phases.Cast<Phase>().Select(p => p.Id.Value()),
+        var latestPhase = elementIds is not { Count: > 0 } ? null : RevitViewImageVisibility.LatestPhase(document.Phases.Cast<Phase>().Select(p => p.Id.Value()),
             (elementIds ?? []).Select(id => document.GetElement(id.ToElementId()))
-                .Where(e => e is not null).Select(e => e!.CreatedPhaseId.Value()));
+                .Where(e => e is not null).Select(e => e!.CreatedPhaseId.Value()), originalPhase?.Value());
         var phase = latestPhase?.ToElementId();
         var filter = document.GetElement(originalFilter ?? ElementId.InvalidElementId) as PhaseFilter;
         // Choose an existing filter; never edit the shared phase filter and affect other views.
         var captureFilter = phase is null || ShowsNewAndExisting(filter) ? filter
             : new FilteredElementCollector(document).OfClass(typeof(PhaseFilter)).Cast<PhaseFilter>()
-                .FirstOrDefault(ShowsNewAndExisting);
+                .Where(ShowsNewAndExisting)
+                .OrderByDescending(candidate => (elementIds ?? []).Select(id => document.GetElement(id.ToElementId()))
+                    .Where(element => element is not null)
+                    .Count(element => !PhaseHidden(candidate, element!.GetPhaseStatus(phase))))
+                .ThenByDescending(candidate => candidate.GetPhaseStatusPresentation(ElementOnPhaseStatus.Demolished) == PhaseStatusPresentation.DontShow
+                    && candidate.GetPhaseStatusPresentation(ElementOnPhaseStatus.Temporary) == PhaseStatusPresentation.DontShow)
+                .FirstOrDefault();
         var changePhase = phase is not null && phase != originalPhase && phaseParam is { IsReadOnly: false };
         var changeFilter = phase is not null && captureFilter is not null && captureFilter.Id != originalFilter
                            && filterParam is { IsReadOnly: false };
@@ -189,6 +196,11 @@ public static class RevitViewImageExporter {
         && filter.GetPhaseStatusPresentation(ElementOnPhaseStatus.New) != PhaseStatusPresentation.DontShow
         && filter.GetPhaseStatusPresentation(ElementOnPhaseStatus.Existing) != PhaseStatusPresentation.DontShow;
 
+    private static bool PhaseHidden(PhaseFilter? filter, ElementOnPhaseStatus status) =>
+        status is ElementOnPhaseStatus.Future or ElementOnPhaseStatus.Past
+        || (status != ElementOnPhaseStatus.None && filter is not null
+            && filter.GetPhaseStatusPresentation(status) == PhaseStatusPresentation.DontShow);
+
     public static RevitViewImageData Refused(Document document, View view, IReadOnlyList<RevitViewImageNotDrawn> reasons) =>
         new(new(RevitAgentContextHandleKind.View, document.GetDocumentKey(), view.Id.Value(), view.UniqueId, view.Name),
             null, 0, 0, 0, new(LensBasis.UserView, view.Id.Value()), ReadHidden(document, view)) {
@@ -205,10 +217,8 @@ public static class RevitViewImageExporter {
             var element = document.GetElement(id.ToElementId());
             var status = element is not null && phase is not null && phase != ElementId.InvalidElementId
                 ? element.GetPhaseStatus(phase) : ElementOnPhaseStatus.None;
-            var phaseHidden = status is ElementOnPhaseStatus.Future or ElementOnPhaseStatus.Past
-                || (status != ElementOnPhaseStatus.None && filter is not null
-                    && filter.GetPhaseStatusPresentation(status) == PhaseStatusPresentation.DontShow);
-            var box = element?.get_BoundingBox(null);
+            var phaseHidden = PhaseHidden(filter, status);
+            var box = element?.get_BoundingBox(view);
             var reasons = RevitViewImageVisibility.Reasons(element is not null, phaseHidden,
                 element?.IsHidden(view) == true,
                 element?.Category is { } category && view.CanCategoryBeHidden(category.Id) && view.GetCategoryHidden(category.Id),

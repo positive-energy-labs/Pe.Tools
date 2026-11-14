@@ -6,6 +6,14 @@ namespace Pe.Shared.Tests.RevitData;
 [TestFixture]
 public class ViewImageVisibilityTests {
     [Test]
+    public void Capture_phase_never_moves_back_from_the_views_phase() {
+        Assert.That(RevitViewImageVisibility.LatestPhase([90, 2, 17], [90], 2), Is.EqualTo(2));
+        Assert.That(RevitViewImageVisibility.LatestPhase([90, 2, 17], [17], 2), Is.EqualTo(17));
+        Assert.That(RevitViewImageVisibility.LatestPhase([90, 2, 17], [-1], 2), Is.EqualTo(2));
+        Assert.That(RevitViewImageVisibility.LatestPhase([90, 2, 17], [90], 999), Is.EqualTo(90));
+    }
+
+    [Test]
     public void Latest_phase_follows_document_order_not_ids_or_request_order() {
         Assert.That(RevitViewImageVisibility.LatestPhase([90, 2, 17], [2, 90, 17, 999]), Is.EqualTo(17));
         Assert.That(RevitViewImageVisibility.LatestPhase([90, 2, 17], [90, 2]), Is.EqualTo(2));

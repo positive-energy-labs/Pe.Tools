@@ -6122,8 +6122,8 @@ export namespace RevitContextViewImage {
     }
     /**
      * Optional crop: exactly one of ElementIds, Selection, or ScopeBox. The view is exported
-     * with a temporary crop around the focus and, for requested elements, their latest creation phase and a
-     * filter showing New and Existing. Committed view state is restored afterwards. Requires an editable document;
+     * with a temporary crop around the focus and, for requested elements, the later of their latest creation phase
+     * and the view's phase, with a filter showing New and Existing. Committed view state is restored afterwards. Requires an editable document;
      * not supported on sheets.
      *
      */
@@ -6290,7 +6290,7 @@ export namespace RevitContextViewImage {
   }
 }
 
-/** Capture a view cropped to element ids, the current selection or a scope box, or a sheet-filtered schedule with all its rows. For requested elements, temporarily uses their latest creation phase in document order and a phase filter showing New and Existing. Commits temporary view state (crop, scope box, annotation crop, phase, phase filter; or the schedule's sheet filter), exports, then commits its undo. Needs an editable document. NotDrawn names requested elements excluded by phase/filter, element/category hiding or bounds; these checks do not certify pixels or occlusion. Refused means every requested element is excluded: no PNG is exported. Restore says whether undo held; restore.left names state left on the view (crop, scopeBox, annotationCrop, sheetFilter, phase, phaseFilter). Same request as revit.context.view-image. */
+/** Capture a view cropped to element ids, the current selection or a scope box, or a sheet-filtered schedule with all its rows. For requested elements, temporarily uses the later of the view's phase and their latest creation phase in document order, and a phase filter showing New and Existing. When switching filters, prefers one hiding Demolished and Temporary unless a broader filter draws more requested elements. Commits temporary view state (crop, scope box, annotation crop, phase, phase filter; or the schedule's sheet filter), exports, then commits its undo. Needs an editable document. NotDrawn names requested elements excluded by phase/filter, element/category hiding or bounds; these checks do not certify pixels or occlusion. Refused means every requested element is excluded: no PNG is exported. Restore says whether undo held; restore.left names state left on the view (crop, scopeBox, annotationCrop, sheetFilter, phase, phaseFilter). Same request as revit.context.view-image. */
 export namespace RevitContextViewImageFocus {
   export namespace Req {
     export interface Request {
@@ -6315,8 +6315,8 @@ export namespace RevitContextViewImageFocus {
     }
     /**
      * Optional crop: exactly one of ElementIds, Selection, or ScopeBox. The view is exported
-     * with a temporary crop around the focus and, for requested elements, their latest creation phase and a
-     * filter showing New and Existing. Committed view state is restored afterwards. Requires an editable document;
+     * with a temporary crop around the focus and, for requested elements, the later of their latest creation phase
+     * and the view's phase, with a filter showing New and Existing. Committed view state is restored afterwards. Requires an editable document;
      * not supported on sheets.
      *
      */

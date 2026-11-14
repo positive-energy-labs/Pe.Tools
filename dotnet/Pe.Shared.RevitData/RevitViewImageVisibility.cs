@@ -2,8 +2,9 @@ namespace Pe.Shared.RevitData;
 
 /// <summary>Pure capture policy; phase order is the document's sequence, never numeric id order.</summary>
 public static class RevitViewImageVisibility {
-    public static long? LatestPhase(IEnumerable<long> phaseOrder, IEnumerable<long> createdPhaseIds) {
+    public static long? LatestPhase(IEnumerable<long> phaseOrder, IEnumerable<long> createdPhaseIds, long? viewPhase = null) {
         var created = new HashSet<long>(createdPhaseIds);
+        if (viewPhase is { } current) created.Add(current);
         return phaseOrder.Where(created.Contains).Select(id => (long?)id).LastOrDefault();
     }
 

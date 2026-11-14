@@ -333,8 +333,8 @@ public record RevitViewImageTarget(
 
 /// <summary>
 ///     Optional crop: exactly one of ElementIds, Selection, or ScopeBox. The view is exported
-///     with a temporary crop around the focus and, for requested elements, their latest creation phase and a
-///     filter showing New and Existing. Committed view state is restored afterwards. Requires an editable document;
+///     with a temporary crop around the focus and, for requested elements, the later of their latest creation phase
+///     and the view's phase, with a filter showing New and Existing. Committed view state is restored afterwards. Requires an editable document;
 ///     not supported on sheets.
 /// </summary>
 public record RevitViewImageFocus(
