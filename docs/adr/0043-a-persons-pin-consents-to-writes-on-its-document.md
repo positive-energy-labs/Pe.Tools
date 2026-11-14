@@ -10,7 +10,7 @@ A person pins a Page to their open document in the host's chip. ADR 0017 rule 8 
 
 A pin whose host-owned `boundBy` is `human` consents to the Page's writes on the exact document lifetime resolved for that request. The Page acts as the person who pinned it. The receipt keeps the Page key, `boundBy: human` and the admitted lifetime. Its notice names the Page and the person who pinned it. The binding records a role, not an account name, so neither receipt nor notice invents a named identity.
 
-A pin Pea made still writes only acquired documents. A person's pin gives no authority over another lifetime or session. An unbound Page keeps its refusal. ADR 0017 rule 7's script sibling census and ADR 0038's guards for synchronize, overwrite or discard, and send outward remain in force.
+A pin Pea made still writes only acquired documents. A person's pin gives no authority over another lifetime or session. An unbound Page keeps its refusal. ADR 0017 rule 7's script sibling census and ADR 0038's guards for synchronize, overwrite or discard, and send outward remain in force. (The sibling census is superseded by [ADR 0044](0044-a-script-run-is-fenced-to-its-target-document.md); the guards remain.)
 
 ## Consequences
 
