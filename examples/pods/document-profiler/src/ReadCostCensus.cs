@@ -19,6 +19,7 @@ public sealed class ReadCostCensus : PeScriptContainer
     public override void Execute()
     {
         if (doc == null) { Result(new { refused = "No active document." }); return; }
+        ProfilerSettings.FromInput((name, fallback) => Arg(name, fallback));
         if (doc.IsModifiable) throw new ArgumentException("Runs outside any transaction; request NoTransaction.");
         if (ProfilerSettings.CensusFirstTouchSample < 1 || ProfilerSettings.CensusFirstTouchSample > 20000 ||
             ProfilerSettings.CensusChunk < 1 || ProfilerSettings.CensusCategoryWalk < 1 || ProfilerSettings.CensusCategoryWalk > 20000 || ProfilerSettings.CensusOrientationSample < 1 || ProfilerSettings.CensusOrientationSample > 20000 ||
@@ -56,7 +57,10 @@ public sealed class ReadCostCensus : PeScriptContainer
             .Concat(headlines).Concat(Limits.Take(3)));
         var text = Artifacts.WriteText("read-cost-census.txt", summary);
         WriteLine(summary);
-        Result(new { status, artifact = artifact.FullPath, summary = text.FullPath, diagnostics });
+        // Each headline is "subject: finding"; the Page draws them as rows.
+        Result(new { status, artifact = artifact.FullPath, summary = text.FullPath, diagnostics,
+            rows = headlines.Select(h => h.Split(new[] { ": " }, 2, StringSplitOptions.None))
+                .Select(h => new { subject = h[0], finding = h.Length > 1 ? h[1] : "" }).ToArray() });
     }
 
     private void Section(string name, Func<object> body)

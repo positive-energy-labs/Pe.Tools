@@ -6,15 +6,20 @@ Find suspects, test them on a copy, recommend only measured improvements. Requir
 
 ## Start here
 
-Ask Pea to run `script:@document-profiler/src/Profile.cs` with **ReadOnly** permission. It writes inventories, repeated API timings and whole-process memory observations.
+Open the Page `pages/profile` (key `page:@document-profiler/pages/profile`), bind it to a document with the chip, and press a census button. Each run is kept on the Page with its document, time and who ran it, and its rows are drawn as a table. A number box left blank keeps the script's default.
 
-For mechanical working views, run `script:@document-profiler/src/MechanicalPlanCensus.cs`. It preserves the distinction between parents and their sheeted dependents.
+Or ask Pea. Each script is an entrypoint with its mode declared in [pod.json](pod.json), so the Page and Pea run the same key:
+
+- `script:@document-profiler/src/Profile.cs` (ReadOnly): inventories, repeated API timings and whole-process memory observations. Input: `maxElements`, `budgetSeconds`, `samples`.
+- `script:@document-profiler/src/MechanicalPlanCensus.cs` (ReadOnly): mechanical working views. It preserves the distinction between parents and their sheeted dependents. Input: `budgetSeconds`.
+
+Options are read with `Arg(name, fallback)` in [Settings.cs](src/Settings.cs), the one home of each default. The answer carries up to 200 `rows`; the artifact file it names holds everything. [skills/profile-document/SKILL.md](skills/profile-document/SKILL.md) tells Pea the keys, the inputs and what the Page records.
 
 These reads identify candidates. They do not measure element RAM or finished drawing.
 
 ## Revit read cost census — why it exists
 
-Before designing a read around a model, run `script:@document-profiler/src/ReadCostCensus.cs` with **NoTransaction** permission. It starts no transaction and stops if the document becomes modified. It writes `read-cost-census.json` and a short `read-cost-census.txt`. Every row says whether it is measured, sampled or projected, and each section records its own seconds and Revit private-bytes change.
+Before designing a read around a model, run `script:@document-profiler/src/ReadCostCensus.cs` with **NoTransaction** permission. It starts no transaction and stops if the document becomes modified. It writes `read-cost-census.json` and a short `read-cost-census.txt`. Its sample sizes are input too (`censusBudgetSeconds`, `firstTouchSample`, `categoryWalk`, `orientationSample`, `obbSample`, `fidelitySample`, `chunk`, `seed`). A document pinned by a person allows ReadOnly scripts only, so run this one from a thread that holds the document. Every row says whether it is measured, sampled or projected, and each section records its own seconds and Revit private-bytes change.
 
 It guards five lessons from a week of reading Chadds:
 
@@ -46,7 +51,7 @@ It separates **view creation, geometry updates, drawing and journal idle**, with
 
 ## Test a deletion
 
-Experiments ship disabled. Configure [Settings.cs](src/Settings.cs) on an acknowledged disposable copy: exact copy/original paths, candidate UniqueIds and the same preserved elements/views across trials.
+Experiments ship disabled. Configure [Settings.cs](src/Settings.cs) on an acknowledged disposable copy: exact copy/original paths, candidate UniqueIds and the same preserved elements/views across trials. These stay source on purpose: input cannot arm an experiment. The Page has a button for each, with its warning beside it, and never runs one on its own.
 
 - [DeletionExperiment.cs](src/DeletionExperiment.cs): compare sham, deletion and restored controls. Record dependencies Revit also deletes. Require repeated benefit above control variation.
 - [SaveVariant.cs](src/SaveVariant.cs): save a new deletion variant for fresh-process comparisons. Save/reopen behavior and RAM savings still need native proof.

@@ -3,6 +3,7 @@ public sealed class DeletionExperiment : PeScriptContainer
     public override void Execute()
     {
         if (doc == null) { Result(new { refused = "No active document." }); return; }
+        ProfilerSettings.FromInput((name, fallback) => Arg(name, fallback));
         try { Interventions.Guard(doc); }
         catch (ArgumentException e) { Result(new { refused = e.Message }); return; }
         var budget = new ProfilerBudget(ct);
