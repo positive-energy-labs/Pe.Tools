@@ -262,7 +262,7 @@ For a Pod with Revit script entrypoints, pe_find must first establish an exact c
 
 A Pod is one folder under Pods/<folder>/ in a content home. It holds pod.json and authored files: C# scripts, Pages, skills, settings, assets and guides. Everything a tool needs travels in that folder. A folder without pod.json is not a Pod. The host admits one bounded membership set; build debris, run output, Page state and binding authority are machine state and never sit in the Pod.
 
-pod.json holds schemaVersion (2), id, name, version, description, entrypoints, and an optional for; write nothing else in it. Some shipped Pods also declare routes. That tier is frozen: never add, edit or copy a route. Libraries offer operations for JSON members; do not bind a JSON file to an operation in the manifest.
+pod.json holds schemaVersion (2), id, name, version, description, entrypoints, and an optional for; write nothing else in it. Libraries offer operations for JSON members; do not bind a JSON file to an operation in the manifest.
 
 ### Scripts: one key, every door
 

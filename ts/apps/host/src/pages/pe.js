@@ -254,9 +254,13 @@
       m = j.message || j.error || j.title || m;
     } catch {}
     const issue = j?.issues?.[0] ?? j?.evidence?.issues?.[0];
-    const refused = r.status >= 400 && r.status < 500;
+    // Only a typed refusal (a door refusal, a target resolution, or an issue with a code) is the host's words alone
+    // and bannered; any other 4xx or 5xx keeps its status, so an empty 404 or a polled JSON 404 never becomes a
+    // blank or sticky banner.
+    const refused = Boolean(m && j && (j.refusal || j.resolution || issue?.code));
     const error = new Error(refused ? m : `${r.status} ${r.statusText}${m ? `: ${m}` : ""}`);
-    if (j && (j.refusal || j.resolution || refused)) {
+    error.status = r.status;
+    if (refused) {
       Object.assign(error, {
         name: "PeRefusal",
         code: j.refusal ? j.refusal.code : j.resolution?.reason || j.resolution?.kind || issue?.code,
