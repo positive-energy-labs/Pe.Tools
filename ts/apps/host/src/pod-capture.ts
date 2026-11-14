@@ -35,6 +35,7 @@ export async function capturePodDirectory(
     if (++directories > memberBounds.maxDirectoryCount) throw Error("Pod directory limit exceeded");
     const absolute = join(directory, relative);
     if ((await lstat(absolute)).isSymbolicLink()) throw Error("Pod directories cannot be links");
+    signal?.throwIfAborted();
     for (const entry of (await readdir(absolute, { withFileTypes: true })).sort((a, b) =>
       a.name.localeCompare(b.name),
     )) {
@@ -52,6 +53,7 @@ export async function capturePodDirectory(
         }
         if (++files > memberBounds.maxFileCount) throw Error("Pod file count limit exceeded");
         const info = await lstat(join(directory, path));
+        signal?.throwIfAborted();
         if (!info.isFile() || info.isSymbolicLink())
           throw Error("Pod input must be a regular file");
         if (info.size > memberBounds.maxFileBytes)
@@ -61,7 +63,9 @@ export async function capturePodDirectory(
         const handle = await open(join(directory, path), "r");
         let bytes: Buffer;
         try {
+          signal?.throwIfAborted(); // A late open still closes its handle before abandoning capture.
           const stat = await handle.stat();
+          signal?.throwIfAborted();
           if (!stat.isFile() || stat.ino !== info.ino || stat.size !== info.size)
             throw new PackageReadIncomplete("Pod input changed during capture");
           bytes = Buffer.alloc(stat.size + 1);
@@ -69,6 +73,7 @@ export async function capturePodDirectory(
           while (count < bytes.length) {
             signal?.throwIfAborted();
             const read = await handle.read(bytes, count, bytes.length - count, null);
+            signal?.throwIfAborted();
             if (!read.bytesRead) break;
             count += read.bytesRead;
           }
@@ -127,6 +132,8 @@ export function rememberPackageCensus(roots: PodsRoots, listing: PackageListing)
 }
 
 export const packageDiscoveryTimeoutMs = 5_000;
+// Parallel metadata and capture each get one third; root discovery and publication keep the rest.
+export const packagePodWorkTimeoutMs = Math.floor(packageDiscoveryTimeoutMs / 3);
 export const packageScanMaxAgeMs = 60_000;
 
 export class PackageDiscoveryExceeded extends Error {
@@ -160,6 +167,39 @@ type DiscoveryScan = {
 const discovery = new Map<string, DiscoveryScan>();
 const scans = new Set<DiscoveryScan>();
 const validations = new Set<AbortController>();
+
+/** Bound one Pod, not its neighbours. Native IO may settle late; its signal forbids publication. */
+export async function readPackageWork<T>(
+  directory: string,
+  parent: AbortSignal | undefined,
+  read: (signal: AbortSignal) => Promise<T>,
+): Promise<T> {
+  const stop = new AbortController();
+  validations.add(stop);
+  const cancel = () => stop.abort(parent?.reason);
+  parent?.addEventListener("abort", cancel, { once: true });
+  if (parent?.aborted) cancel();
+  let rejectAborted = () => {};
+  const aborted = new Promise<never>((_, reject) => {
+    rejectAborted = () => reject(stop.signal.reason);
+    stop.signal.addEventListener("abort", rejectAborted, { once: true });
+    if (stop.signal.aborted) rejectAborted();
+  });
+  const timer = setTimeout(() => stop.abort(new PackageReadIncomplete(
+    `Pod work exceeded ${packagePodWorkTimeoutMs} ms reading '${directory}'`,
+  )), packagePodWorkTimeoutMs);
+  try {
+    return await Promise.race([Promise.resolve().then(() => {
+      stop.signal.throwIfAborted();
+      return read(stop.signal);
+    }), aborted]);
+  } finally {
+    clearTimeout(timer);
+    parent?.removeEventListener("abort", cancel);
+    stop.signal.removeEventListener("abort", rejectAborted);
+    validations.delete(stop);
+  }
+}
 export type PackageCensus = { signature: string | undefined; listing: PackageListing };
 const completedCensuses = new Map<string, PackageCensus>();
 
@@ -280,28 +320,14 @@ export async function captureIndexedPackage(
       `No discovered Pod has id '${id}'. Refresh the Pod list after adding or moving a Pod.`,
     );
   requirePackageAvailable(selected);
-  const stop = new AbortController();
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    const pod = await Promise.race([
-      read(selected.directory, selected.folder, stop.signal),
-      new Promise<never>((_, reject) => {
-        timer = setTimeout(() => {
-          stop.abort();
-          reject(
-            Error(
-              `Pod '${id}' capture exceeded 5000 ms reading '${selected.directory}'. Try again when this folder is available.`,
-            ),
-          );
-        }, 5_000);
-      }),
-    ]);
-    if (pod.id !== id)
-      throw Error(
-        `Pod identity changed in '${selected.directory}'. Refresh the Pod list and try again.`,
-      );
-    return pod;
-  } finally {
-    clearTimeout(timer);
-  }
+  const pod = await readPackageWork(selected.directory, undefined,
+    signal => read(selected.directory, selected.folder, signal)).catch((error: unknown) => {
+      if (incompletePackageRead(error)) throw new PackageDiscoveryExceeded(selected.directory, message(error));
+      throw error;
+    });
+  if (pod.id !== id)
+    throw Error(
+      `Pod identity changed in '${selected.directory}'. Refresh the Pod list and try again.`,
+    );
+  return pod;
 }

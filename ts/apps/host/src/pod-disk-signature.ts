@@ -1,6 +1,7 @@
 import { lstat, readdir } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { logPackageDiscovery } from "./pod-discovery-log.ts";
+import { readPackageWork } from "./pod-capture.ts";
 
 const metadataScanSlowMs = 500;
 
@@ -39,22 +40,23 @@ export async function podsDiskSignature(
   include: (path: string) => boolean,
   signal?: AbortSignal,
 ): Promise<string | undefined> {
-  const entries: unknown[] = [];
-  const walk = async (absolute: string, member: string | undefined): Promise<void> => {
-    signal?.throwIfAborted();
+  let failed = false;
+  const walk = async (absolute: string, member: string, entries: unknown[], signal: AbortSignal): Promise<void> => {
+    signal.throwIfAborted();
     const info = await lstat(absolute);
-    signal?.throwIfAborted();
+    signal.throwIfAborted();
     entries.push([absolute, info.mode, info.size, info.mtimeMs, info.ctimeMs, info.ino]);
     if (!info.isDirectory() || info.isSymbolicLink()) return;
     for (const name of (await readdir(absolute)).sort()) {
-      signal?.throwIfAborted();
-      const path = member === undefined ? undefined : member ? `${member}/${name}` : name;
-      try { if (path !== undefined && !include(path)) continue; } catch {}
-      await walk(join(absolute, name), member === undefined ? "" : path);
+      signal.throwIfAborted();
+      const path = member ? `${member}/${name}` : name;
+      try { if (!include(path)) continue; } catch {}
+      await walk(join(absolute, name), path, entries, signal);
     }
   };
   try {
-    for (const root of roots) {
+    const rootsEntries = await Promise.all(roots.map(async root => {
+      const entries: unknown[] = [];
       entries.push(root);
       const started = performance.now();
       let logged = false;
@@ -65,7 +67,30 @@ export async function podsDiskSignature(
       };
       const slowLog = setTimeout(startLog, metadataScanSlowMs);
       let outcome = "completed";
-      try { await walk(root, undefined); }
+      try {
+        signal?.throwIfAborted();
+        const info = await lstat(root);
+        signal?.throwIfAborted();
+        entries.push([root, info.mode, info.size, info.mtimeMs, info.ctimeMs, info.ino]);
+        if (info.isDirectory() && !info.isSymbolicLink()) {
+          const children = await Promise.all((await readdir(root)).sort().map(async name => {
+            const directory = join(root, name);
+            try {
+              return await readPackageWork(directory, signal, async signal => {
+                const entries: unknown[] = [];
+                await walk(directory, "", entries, signal);
+                return entries;
+              });
+            } catch {
+              signal?.throwIfAborted();
+              failed = true;
+              outcome = "partial";
+              return [];
+            }
+          }));
+          entries.push(...children.flat());
+        }
+      }
       catch (error) {
         outcome = "failed";
         if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
@@ -78,9 +103,10 @@ export async function podsDiskSignature(
           logPackageDiscovery(`Pod folder metadata scan end folder=${JSON.stringify(root)} durationMs=${Math.round(performance.now() - started)} outcome=${outcome}`);
         }
       }
-    }
+      return entries;
+    }));
     // Metadata-preserving edits need byte hashing; Google Drive timestamp behavior needs the live drive.
-    return JSON.stringify(entries);
+    return failed ? undefined : JSON.stringify(rootsEntries.flat());
   } catch {
     signal?.throwIfAborted();
     return undefined;

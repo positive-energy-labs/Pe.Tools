@@ -32,6 +32,7 @@ import {
   incompletePackageRead,
   PackageReadIncomplete,
   packageProblem as problem,
+  readPackageWork,
 } from "./pod-capture.ts";
 
 export type PackageEntrypoint = {
@@ -199,7 +200,7 @@ async function scanPackages(
     .map(pod => [resolve(pod.directory), pod]));
   const admitted = new Map(previous?.listing.packages.map(pod => [resolve(pod.directory), pod]));
   const result: PackageListing = { packages: [], unreadable: [] };
-  for (const root of roots) {
+  const listings = await Promise.all(roots.map(async root => {
     signal.throwIfAborted();
     const started = performance.now();
     scanLog(`Pod folder scan start folder=${JSON.stringify(root)}`);
@@ -222,6 +223,9 @@ async function scanPackages(
       end();
       signal.removeEventListener("abort", end);
     }
+    return listing;
+  }));
+  for (const listing of listings) {
     result.packages.push(...listing.packages);
     result.unreadable.push(...listing.unreadable);
   }
@@ -239,36 +243,45 @@ async function listPodsFolder(podsRoot: string, signal: AbortSignal, reusable: R
     if (previous.length) return { packages: previous.map(pod => unavailablePackage(pod, error)), unreadable: [] };
     throw error;
   }
-  for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+  const listings = await Promise.all(entries.sort((a, b) => a.name.localeCompare(b.name)).map(async entry => {
     signal.throwIfAborted();
-    if (!entry.isDirectory() && !entry.isSymbolicLink()) continue;
+    const result: PackageListing = { packages: [], unreadable: [] };
+    if (!entry.isDirectory() && !entry.isSymbolicLink()) return result;
     const directory = join(podsRoot, entry.name);
     try {
-      if (entry.isSymbolicLink()) throw Error("Pod folders cannot be links.");
-      try {
-        await lstat(join(directory, "pod.json"));
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
-        throw error;
-      }
-      const pod = reusable.get(resolve(directory)) ?? await readFolder(directory, entry.name, signal);
-      const signature = signatures.get(resolve(directory));
-      if (!reusable.has(resolve(directory)) && signature && !pod.diagnostics.some(issue => issue.code === "PackageMemberInvalid")) {
-        const captured = new Set(pod.members.map(member => resolve(directory, member.path)));
-        const expected = packageDiskFiles(signature);
-        if (captured.size !== expected.length || expected.some(path => !captured.has(resolve(path))))
-          throw new PackageReadIncomplete("Pod members changed during capture");
-      }
-      result.packages.push(pod);
+      const pod = await readPackageWork(directory, signal, async signal => {
+        if (entry.isSymbolicLink()) throw Error("Pod folders cannot be links.");
+        try {
+          await lstat(join(directory, "pod.json"));
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+          throw error;
+        }
+        const pod = reusable.get(resolve(directory)) ?? await readFolder(directory, entry.name, signal);
+        const signature = signatures.get(resolve(directory));
+        if (!reusable.has(resolve(directory)) && signature && !pod.diagnostics.some(issue => issue.code === "PackageMemberInvalid")) {
+          const captured = new Set(pod.members.map(member => resolve(directory, member.path)));
+          const expected = packageDiskFiles(signature);
+          if (captured.size !== expected.length || expected.some(path => !captured.has(resolve(path))))
+            throw new PackageReadIncomplete("Pod members changed during capture");
+        }
+        return pod;
+      });
+      if (pod) result.packages.push(pod);
     } catch (error) {
       signal.throwIfAborted();
       const previous = admitted.get(resolve(directory));
       if (previous && incompletePackageRead(error)) {
         result.packages.push(unavailablePackage(previous, error));
-        continue;
+        return result;
       }
       result.unreadable.push({ folder: entry.name, message: message(error) });
     }
+    return result;
+  }));
+  for (const listing of listings) {
+    result.packages.push(...listing.packages);
+    result.unreadable.push(...listing.unreadable);
   }
   return result;
 }
