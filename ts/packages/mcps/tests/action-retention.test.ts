@@ -468,3 +468,37 @@ test("a later root cannot rebuild a lost pre-ACK id or borrow authority; the ori
   expect(select).not.toHaveBeenCalled();
   expect(api.runningAdmissions()).toEqual([]);
 });
+
+// D35: a `pea script` run with --timeout-seconds 300 died at 79 s on a receipt poll slice.
+test("a receipt poll that outlives its slice is asked again, so the run's own timeout is the only budget", async () => {
+  const endpoint = base();
+  const admission: ActionAdmission = {
+    id: crypto.randomUUID(),
+    key: "pod.export",
+    target: { kind: "host" },
+    input: { pod: "a", archivePath: "a.zip" },
+  };
+  // Poll slices run 1000x fast: the 26 s slice ends at 26 ms, and the host answers after it.
+  const real = AbortSignal.timeout.bind(AbortSignal);
+  vi.spyOn(AbortSignal, "timeout").mockImplementation((ms) => real(ms / 1000));
+  let polls = 0;
+  vi.stubGlobal("fetch", (_input: unknown, init?: RequestInit) =>
+    ++polls === 1
+      ? new Promise((_, reject) =>
+          init!.signal!.addEventListener("abort", () => reject(init!.signal!.reason)),
+        )
+      : Promise.resolve(Response.json([receipt(admission)])),
+  );
+  try {
+    const api = await client();
+    expect(
+      await api.waitForAction(admission.id, endpoint, 300_000, undefined, receipt(admission, "running")),
+    ).toMatchObject({ state: "succeeded", result: { done: true } });
+    expect(polls).toBe(2);
+    expect(
+      new api.ActionResultError({ state: "detached", id: "a1", key: "scripting.execute", acceptance: "admitted" }).message,
+    ).toContain("action.read");
+  } finally {
+    vi.restoreAllMocks();
+  }
+});

@@ -403,7 +403,9 @@ export async function waitForAction(
       } catch (error) {
         if (Date.now() >= deadline)
           return { state: "detached", id, key: row.key, acceptance: "admitted" };
-        throw error;
+        // A slice is a poll interval, not a budget: a host that answers late is asked again, so
+        // `waitMs` is the only deadline (D35). The caller's own abort and a refusal still throw.
+        if (signal?.aborted || (error as Error | null)?.name !== "TimeoutError") throw error;
       }
     }
     return row;
@@ -413,7 +415,16 @@ export async function waitForAction(
 }
 export class ActionResultError extends Error {
   constructor(readonly action: ActionReceipt | DetachedAction) {
-    super(`${action.id}: ${action.state}: ${"error" in action ? action.error : "outcome pending"}`);
+    super(
+      `${action.id}: ${action.state}: ${
+        "error" in action
+          ? action.error
+          : action.state === "detached"
+            ? // The journal keeps the receipt; a client that stopped waiting names how to read it.
+              `this client stopped waiting; the run is not cancelled and its receipt is kept. Read it with action.read { "id": "${action.id}" } (pea host call --key action.read --request-file <json>)`
+            : "outcome pending"
+      }`,
+    );
   }
 }
 /**
