@@ -558,7 +558,7 @@ test("a slow filesystem scan leaves inventory and unrelated HTTP reads available
     expect(result[0]).not.toContainEqual(expect.objectContaining({ id: "pod:late" }));
     expect(result[1]).toEqual(result[0]);
     expect(result[2]).toEqual({ status: "ok" });
-    expect(scan).toHaveBeenCalledTimes(1);
+    expect(scan.mock.calls.map(([path]) => String(path)).sort()).toEqual([...packages.productPodsRoots()].sort());
     await expect(requirePackageEnabled("existing")).resolves.toBeUndefined();
     let answered = false;
     const opening = requirePackageEnabled("late").then(() => {
@@ -566,7 +566,7 @@ test("a slow filesystem scan leaves inventory and unrelated HTTP reads available
     });
     await new Promise((resolve) => setImmediate(resolve));
     expect(answered).toBe(false);
-    expect(scan).toHaveBeenCalledTimes(1);
+    expect(scan.mock.calls.map(([path]) => String(path)).sort()).toEqual([...packages.productPodsRoots()].sort());
     release.resolve();
     await expect(opening).resolves.toBeUndefined();
   } finally {

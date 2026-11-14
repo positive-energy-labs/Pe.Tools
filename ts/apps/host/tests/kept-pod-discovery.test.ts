@@ -13,7 +13,7 @@ import { importShippedPods } from "../src/installed-pods.ts";
 import { exportPod } from "../src/pod-transfer.ts";
 import { bindPackageScanLogger, capturePackage, listPackages } from "../src/packages.ts";
 import * as packages from "../src/packages.ts";
-import { discoverPackages, stopPackageDiscovery } from "../src/pod-capture.ts";
+import { discoverPackages, packagePodWorkTimeoutMs, stopPackageDiscovery } from "../src/pod-capture.ts";
 import { createContributionContent } from "../src/pe-routes.ts";
 import { createPagesHandler } from "../src/pages-route.ts";
 import { pagesRoute } from "../src/pages-route.ts";
@@ -280,7 +280,7 @@ test("unchanged concurrent requests validate metadata but share one full scan", 
   } finally { release.resolve(); await Promise.all([first, ...others]); }
 });
 
-test.each(["in-flight", "late"])("a request after an edit validates an %s answer against its arrival signature", async (kind) => {
+test.each(["in-flight", "bounded"])("a request after an edit validates a %s scan against its arrival signature", async (kind) => {
   const { pods, page } = await reviewedPod();
   await mkdir(join(pods, "zz-blocker"));
   await writeFile(join(pods, "zz-blocker", "pod.json"), '{"id":"blocker"}');
@@ -293,15 +293,17 @@ test.each(["in-flight", "late"])("a request after an edit validates an %s answer
     }
     return actual(...args);
   });
-  if (kind === "late") vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  if (kind === "bounded") vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   const first = listPackages({ podsRoots: pods });
   const observed = first.catch(error => error);
   await entered.promise;
   const complete = discoverPackages(pods, async () => { throw Error("unexpected second reader"); }, "background");
   try {
-    if (kind === "late") {
-      await vi.advanceTimersByTimeAsync(5_000);
-      expect(await observed).toBeInstanceOf(Error);
+    if (kind === "bounded") {
+      await vi.advanceTimersByTimeAsync(packagePodWorkTimeoutMs);
+      expect(await observed).toMatchObject({ unreadable: expect.arrayContaining([
+        expect.objectContaining({ folder: "zz-blocker", message: expect.stringContaining("Pod work exceeded") }),
+      ]) });
       release.resolve(); await complete;
     }
     await writeFile(join(page, "index.html"), "<title>v2 after request arrival</title>");
@@ -473,9 +475,8 @@ test("a stalled folder listing bounds waiters, shares work, and publishes its la
   const lines: string[] = [];
   bindPackageScanLogger((line) => lines.push(line));
   const actual = filesystem.readdir;
-  const spy = vi.spyOn(filesystem, "readdir").mockImplementationOnce(async (...args) => {
-    entered.resolve();
-    await release.promise;
+  const spy = vi.spyOn(filesystem, "readdir").mockImplementation(async (...args) => {
+    if (String(args[0]) === root) { entered.resolve(); await release.promise; }
     return actual(...args);
   });
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
@@ -493,7 +494,9 @@ test("a stalled folder listing bounds waiters, shares work, and publishes its la
   await vi.waitFor(async () => expect((await capturePackage("late", homes)).id).toBe("late"));
   const folderScans = lines.filter(line => line.startsWith("Pod folder scan "));
   expect(folderScans).toHaveLength(4);
-  expect(folderScans[1]).toContain("outcome=completed");
+  expect(folderScans.filter(line => line.startsWith("Pod folder scan end"))).toEqual([
+    expect.stringContaining("outcome=completed"), expect.stringContaining("outcome=completed"),
+  ]);
   const calls = lines.filter(line => line.startsWith("Pod folder scan start")).length;
   expect((await listPackages({ podsRoots: homes })).packages.map(p => p.id)).toEqual(["late"]);
   expect(lines.filter(line => line.startsWith("Pod folder scan start"))).toHaveLength(calls);

@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { capturePackage, listPackages } from "../src/packages.ts";
+import { packagePodWorkTimeoutMs } from "../src/pod-capture.ts";
 import * as productPaths from "@pe/host-contracts/product-paths";
 
 vi.mock("node:fs/promises", async (original) => ({
@@ -75,7 +76,7 @@ test("default capture never probes homes, including when passed admitted bytes",
   expect(probe).toHaveBeenCalledTimes(1);
 });
 
-test("a stalled selected folder refuses at five seconds and stops walking when IO returns", async () => {
+test("a stalled selected folder refuses at its Pod bound and stops walking when IO returns", async () => {
   const { local, foreign, directory } = await fixture();
   const entered = Promise.withResolvers<void>();
   const release = Promise.withResolvers<void>();
@@ -87,11 +88,12 @@ test("a stalled selected folder refuses at five seconds and stops walking when I
   });
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   const capture = capturePackage("local", [local, foreign]);
-  const refused = expect(capture).rejects.toThrow(
-    `capture exceeded 5000 ms reading '${directory}'`,
-  );
+  const refused = expect(capture).rejects.toMatchObject({
+    code: "pod.discovery.exceeded",
+    message: expect.stringContaining(`Pod work exceeded ${packagePodWorkTimeoutMs} ms reading '${directory}'`),
+  });
   await entered.promise;
-  await vi.advanceTimersByTimeAsync(5_000);
+  await vi.advanceTimersByTimeAsync(packagePodWorkTimeoutMs);
   await refused;
   const reads = vi.spyOn(filesystem, "open");
   release.resolve();
