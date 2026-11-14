@@ -9,6 +9,7 @@ import { HOST_RUNTIME_SERVICE_HEADER } from "@pe/host-contracts/contracts";
 import {
   emptyThreadHead,
   pageTargetReadingSchema,
+  routeAddress,
   type Caller,
   type DocumentRef,
   type PageTargetReading,
@@ -53,6 +54,20 @@ async function pagesRoot(live?: PageLive) {
 }
 
 describe("pages", () => {
+  it("the Bind redirect keeps the Page's whole query in its query field", async () => {
+    const { fetch } = await pagesRoot();
+    const response = await fetch("/pages/todo/?walk=1&x=2", {
+      headers: { "sec-fetch-dest": "document" },
+    });
+    expect(response.status).toBe(302);
+    const location = new URL(response.headers.get("location")!, "http://host");
+    expect(location.pathname).toBe("/bind");
+    expect(routeAddress("bind").read(Object.fromEntries(location.searchParams)).page).toMatchObject({
+      view: true,
+      query: { walk: "1", x: "2" },
+    });
+  });
+
   it("lists and serves a package's pages as <id>--<page>, keyed by manifest id, state outside the pod", async () => {
     const { root, pods, state: stateRoot, fetch } = await pagesRoot();
     const folder = join(pods, "duct-kit-v1");

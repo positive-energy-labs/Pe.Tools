@@ -209,7 +209,7 @@ test("a torn last receipt line leaves every other receipt listed, posts one noti
   );
   const list = () =>
     web.handler(new Request("http://host/captures"), Context.make(PictureCaptureStore, store));
-  const facts = { origin: "human", document: { title: "Sample.rvt" }, view: { name: "Level 1" }, focus: null, registration: null } as const;
+  const facts = { origin: "human", document: { title: "Sample.rvt" }, view: { name: "Level 1" }, focus: null, registration: null, marks: [] };
   const receipts = join(root, "receipts.jsonl");
   const posted = () =>
     storedNotices(stateMachine(receipts)).filter((notice) => notice.path === receipts);
