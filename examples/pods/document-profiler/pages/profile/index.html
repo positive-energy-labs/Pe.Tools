@@ -146,7 +146,8 @@ document.querySelector("main").addEventListener("click", async (ev) => {
     const budget = input.censusBudgetSeconds ?? input.budgetSeconds ?? 0;
     const reading = await pe.reading(POD + run.path, () =>
       pe.script(run.path, { input, timeoutSeconds: Math.max(run.seconds ?? 120, budget + 60) }));
-    (await kernel).fire({ type: "reading", reading, input, document: doc.title });
+    // A shared event is kept by the host first, then reduced with its seq and time; a refusal lands in the catch below.
+    await (await kernel).fire({ type: "reading", reading, input, document: doc.title });
     status.textContent = "";
   } catch (e) {
     status.className = "alarm";
