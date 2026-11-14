@@ -175,27 +175,52 @@
   /** The host's refusal, word for word; one banner, the latest refusal. */
   const banner = (message) => line("pe-refusal", "alert", "#7f1d1d", message);
   /**
-   * A boot read the host cannot answer yet. Pod discovery that outlasts its budget answers 503 with the code
-   * `pod.discovery.exceeded`: the Pods folder is slow, not gone, and the same request a moment later is answered.
+   * Reads retry transport failures and Pod discovery that outlasts its budget (503 with the code
+   * `pod.discovery.exceeded`). A lost connection is not a final reading.
    * So `send` is sent again after 1 s, 2 s, 5 s, then every 10 s for as long as the page is open, and the page says
    * what it is waiting for in the host's words. Every other answer comes back as it is, at once: a refusal, a 4xx
    * and any other 503 are never asked twice. Every read goes through here (target, state, its text publish, and
-   * `pe.read`); Page code never loops. An act (`pe.do` on a mutation, `pe.script`) is never sent twice.
+   * `pe.read` and `pe.do` read probes); Page code never loops. This is the sole read retry owner, including
+   * fire's catch-up after a committed append. An act (append, `pe.do` mutation, `pe.script`) is never sent twice.
    */
   const DISCOVERY_WAITS = [1000, 2000, 5000];
   let waiting = 0;
+  const transportFailure = (error) => error?.name === "TypeError" || error?.name === "NetworkError";
   const whenDiscovered = async (send) => {
+    let pending = false;
+    try {
     for (let tries = 0; ; tries++) {
-      const r = await send();
+      let r, message;
+      try {
+        r = await send();
+      } catch (error) {
+        if (!transportFailure(error) || stopped) throw error;
+        message = `waiting for the host connection: ${error.message}`;
+      }
+      if (r) {
       const late = r.status === 503 ? await r.clone().json().catch(() => null) : null;
       const expiry = late?.error && typeof late.error === "object" ? late.error : late;
       if (expiry?.code !== "pod.discovery.exceeded" || stopped) {
-        if (tries && --waiting === 0) line("pe-waiting", "status", "#374151", "");
         return r;
       }
-      if (!tries) waiting++;
-      line("pe-waiting", "status", "#374151", `waiting for the Pods folder: ${expiry.message}`);
+        message = `waiting for the Pods folder: ${expiry.message}`;
+      }
+      if (!pending) { pending = true; waiting++; }
+      line("pe-waiting", "status", "#374151", message);
       await new Promise((ok) => setTimeout(ok, DISCOVERY_WAITS[tries] ?? 10000));
+    }
+    } finally {
+      if (pending && --waiting === 0) line("pe-waiting", "status", "#374151", "");
+    }
+  };
+  // A lost act response proves neither success nor failure. Keep its browser words and never resend it.
+  const sendAct = async (send) => {
+    try { return await send(); }
+    catch (cause) {
+      if (!transportFailure(cause)) throw cause;
+      const error = new Error(`Action outcome is unknown: ${cause.message}`, { cause });
+      banner(error.message);
+      throw error;
     }
   };
   /**
@@ -291,7 +316,7 @@
 
   /** One act as this page (`/pages/<slug>/act`), waited until its receipt settles; answers the settled row. */
   const act = async (key, input) => {
-    let row = await json(await client.response("page.act", pageInput({ key, input })));
+    let row = await json(await sendAct(() => client.response("page.act", pageInput({ key, input }))));
     const id = row.id;
     while (row.state === "running") {
       await new Promise((ok) => setTimeout(ok, 250));
@@ -556,7 +581,7 @@
     refuse: banner,
     load: (after = 0) =>
       whenDiscovered(() => client.response("page.state", { ...pageInput(), query: { after } })).then(json),
-    append: (event) => client.response("page.append", pageInput(event)).then(json),
+    append: (event) => sendAct(() => client.response("page.append", pageInput(event))).then(json),
     publish: async (projection) => {
       const r = await whenDiscovered(() => client.response("page.text", pageInput(projection)));
       if (r.status === 409) return; // Another tab published a newer prefix; its text wins.
