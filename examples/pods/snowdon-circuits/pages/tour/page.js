@@ -31,8 +31,8 @@ const Page = createInstruments({
     window.pageState = { state, events: pe.exported?.events };
   },
   onCapture: captured => { window.pageCapture = captured; },
-  exportSnapshot: async snapshot => {
-    const response = await pe.fetch('/pages/' + encodeURIComponent(pe.slug) + '/export', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ snapshot }) });
+  exportSnapshot: async () => {
+    const response = await pe.fetch('/pages/' + encodeURIComponent(pe.slug) + '/export', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
     if (!response.ok) throw new Error(await response.text());
     const url = URL.createObjectURL(await response.blob());
     const a = document.createElement('a'); a.href = url; a.download = 'voltage-drop-snapshot.html'; a.click();

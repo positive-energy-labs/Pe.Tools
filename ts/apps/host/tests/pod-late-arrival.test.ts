@@ -1,3 +1,4 @@
+import { createServer } from "node:http";
 import * as store from "@pe/host-contracts/kinds";
 import { mkdir,rm,writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -469,4 +470,110 @@ test("inventory read refreshes member bytes in a Pod present at startup", async 
       ).toString();
     })
     .toBe("after");
+});
+
+test("FINAL REVIEW: an action reconciliation must not block discovery reads", async () => {
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const { lstat: original } =
+    await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
+  vi.spyOn(filesystem, "lstat").mockImplementation(async (...args) => {
+    entered.resolve();
+    await release.promise;
+    return original(...args);
+  });
+  const action = content.lifecycle.refresh();
+  await entered.promise;
+  let answered = false;
+  const reading = Promise.all([inventory()]).then(() => {
+    answered = true;
+  });
+  try {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(answered, "inventory must serve the completed census while action scans disk").toBe(
+      true,
+    );
+  } finally {
+    release.resolve();
+    await action;
+    await reading;
+  }
+});
+
+test("control: a firm Pod present before startup is listed and active", async () => {
+  await content.lifecycle.close();
+  await put(firm, "firm-control/pod.json", '{"id":"firm-control"}');
+  content = createContributionContent({
+    worldRoot: stateFixture(join(root, "world")),
+    decisionsMachine: stateMachine(root),
+  });
+  bindPackageLifecycle(content.lifecycle);
+  await content.lifecycle.ready;
+  await expect.poll(inventory).toContainEqual(expect.objectContaining({ id: "pod:firm-control" }));
+  expect(content.lifecycle.active("firm-control")).toBe(true);
+});
+
+test("a slow filesystem scan leaves inventory and unrelated HTTP reads available", async () => {
+  await put(join(root, "user"), "late/pod.json", '{"id":"late"}');
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const { lstat: original } =
+    await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
+  const scan = vi.spyOn(filesystem, "lstat").mockImplementation(async (...args) => {
+    entered.resolve();
+    await release.promise;
+    return original(...args);
+  });
+  scan.mockClear();
+  const handler = createPluginsHandler(content);
+  const server = createServer(async (req, res) => {
+    const response =
+      req.url === "/health"
+        ? Response.json({ status: "ok" })
+        : await handler(new Request(`http://host${req.url}`));
+    res.writeHead(response.status, { "content-type": "application/json" });
+    res.end(await response.text());
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  if (!address || typeof address === "string") throw Error("Expected TCP listener");
+  const base = `http://127.0.0.1:${address.port}`;
+  try {
+    const first = fetch(`${base}/pe/plugins`).then((r) => r.json());
+    await entered.promise;
+    // All these must answer before the fake filesystem is released, including the initiating read.
+    const answers = Promise.all([
+      first,
+      fetch(`${base}/pe/plugins`).then((r) => r.json()),
+      fetch(`${base}/health`).then((r) => r.json()),
+    ]);
+    const result = await Promise.race([
+      answers,
+      new Promise<never>((_, reject) => {
+        const timer = setTimeout(() => reject(Error("Reads waited for the filesystem scan")), 1000);
+        void answers.finally(() => clearTimeout(timer)).catch(() => {});
+      }),
+    ]);
+    expect(result[0]).not.toContainEqual(expect.objectContaining({ id: "pod:late" }));
+    expect(result[1]).toEqual(result[0]);
+    expect(result[2]).toEqual({ status: "ok" });
+    expect(scan).toHaveBeenCalledTimes(1);
+    await expect(requirePackageEnabled("existing")).resolves.toBeUndefined();
+    let answered = false;
+    const opening = requirePackageEnabled("late").then(() => {
+      answered = true;
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(answered).toBe(false);
+    expect(scan).toHaveBeenCalledTimes(1);
+    release.resolve();
+    await expect(opening).resolves.toBeUndefined();
+  } finally {
+    release.resolve();
+    await content.lifecycle.refresh();
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+  expect(await inventory()).toContainEqual(expect.objectContaining({ id: "pod:late" }));
+  await expect(requirePackageEnabled("late")).resolves.toBeUndefined();
 });
