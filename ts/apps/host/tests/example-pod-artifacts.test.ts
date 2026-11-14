@@ -24,7 +24,10 @@ test("every example Pod Page script path resolves to a declared entrypoint", asy
         const path = match[2]!;
         const member = path.startsWith(`script:@${manifest.id}/`)
           ? path.slice(`script:@${manifest.id}/`.length)
-          : new URL(path, `http://pod/pages/${file.split(sep).join("/")}`).pathname.slice(1);
+          : // pe.js scriptKey (D41): ./ and ../ resolve beside the Page; a bare path and a leading / resolve from the Pod root.
+            decodeURIComponent(
+              new URL(path, `http://pod/${/^\.\.?\//.test(path) ? `pages/${file.split(sep).join("/")}` : ""}`).pathname.slice(1),
+            );
         expect(declared.has(member), `${pod.name}/pages/${file}: ${path} resolves to undeclared ${member}`).toBe(true);
         checked++;
       }
