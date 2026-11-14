@@ -72,7 +72,7 @@ import { HostDocumentMarks } from "./document-marks.ts";
 import { ductBodySubject, type DuctsBodyBasisSource } from "./ducts-body-basis.ts";
 import { DuctFiles } from "./ducts-files.ts";
 import type { DuctsReadings } from "./ducts-readings.ts";
-import { ductsReadings } from "./ducts-readings.ts";
+import { ductsReadings, isRetainedReadFailure } from "./ducts-readings.ts";
 
 import type { FamiliesReader } from "./families-reader.ts";
 import { readFamily, type FamilyActionDependencies } from "./family-actions.ts";
@@ -486,7 +486,7 @@ function callRoutes(
                 };
               })
             : entry.script
-              ? { value: yield* runPodScript(bridge, { session: bridgeSessionId!, openId: openDocumentId }, yield* Effect.try({
+              ? { value: yield* runPodScript(bridge, { session: bridgeSessionId ?? (yield* new NoRevitSession()), openId: openDocumentId }, yield* Effect.try({
                   try: () => z.record(z.string(), z.unknown()).parse(request ?? {}),
                   catch: () => new CommandRejected({ kind: "domain", code: "script.input", message: "Script input must be an object" }, 400),
                 }), requestId) }
@@ -1425,8 +1425,7 @@ export const retainedDuctsRead = Effect.fn("Call.retainedDucts")(function* (
     revision: basis.recorded?.version,
     beforeReady: (body) => basis.consume(body, target),
   } } : {}) }).pipe(Effect.catch((error) =>
-    basis && options.version && error._tag === "InvalidRequest" &&
-      error.status === 409 && error.problem === "read.retained"
+    basis && options.version && isRetainedReadFailure(error)
       ? basis.refuse(error) : Effect.fail(error)));
   if (basis && shared.reused) yield* basis.consume(shared, target);
   yield* Effect.try({ try: () => owner.assertCurrent(subject, shared.version), catch: retainedReadFailure });

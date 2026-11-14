@@ -30,7 +30,7 @@ export const PER_FILE = ["casts", "nonNull", "fsWrites"] as const satisfies read
 export const OWNERS: Record<(typeof PER_FILE)[number], readonly string[]> = {
   casts: [],
   nonNull: [],
-  fsWrites: ["ts/packages/host-contracts/src/store.ts"],
+  fsWrites: ["ts/packages/host-contracts/src/store.ts", "ts/apps/host/scripts/stage-web.ts"],
 };
 export const NAMES = ["casts", "nonNull", "suppressions", "todos", "longFiles", "fsWrites"] as const satisfies readonly (keyof Health)[];
 
@@ -82,13 +82,16 @@ export function exceptionProblems(sources: Record<string, string>): string[] {
 export const storeScopeSources = (): Record<string, string> =>
   Object.fromEntries(
     productionFiles()
-      .filter((file) => FS_SCOPE.test(file) && /\.tsx?$/.test(file))
+      .filter((file) => inStoreScope(file) && /\.tsx?$/.test(file))
       .map((file) => [file, readFileSync(join(repoRoot, file), "utf8")]),
   );
 
 // ST5 scope (storage.md): the host and the packages that store for it. The vendored service is not ours
 // to convert; the browser package writes no product state.
 const FS_SCOPE = /^ts\/(apps\/host|packages\/(host-contracts|host-internal|runtime))\/(?!src\/vendor\/)|^ts\/packages\/mcps\/src\//;
+// Payload staging writes build output, not runtime product state; keep the runtime budget intact.
+const BUILD_SCRIPTS = new Set(["ts/apps/host/scripts/stage-web.ts"]);
+const inStoreScope = (file: string) => FS_SCOPE.test(file) && !BUILD_SCRIPTS.has(file);
 const FS_MODULES = new Set(["fs", "node:fs", "fs/promises", "node:fs/promises"]);
 const NODE_MUTATORS = new Set(
   ["writeFile", "appendFile", "rename", "rm", "rmdir", "unlink", "mkdir", "mkdtemp", "copyFile", "cp", "symlink", "link", "truncate", "chmod", "utimes"]
@@ -200,7 +203,7 @@ export function census(): Health {
   const health: Health = { casts: {}, nonNull: {}, suppressions: {}, todos: {}, longFiles: {}, fsWrites: {} };
   for (const file of productionFiles()) {
     const source = readFileSync(join(repoRoot, file), "utf8");
-    if (FS_SCOPE.test(file) && /\.tsx?$/.test(file)) {
+    if (inStoreScope(file) && /\.tsx?$/.test(file)) {
       const writes = fsWriteCount(file, source);
       if (writes) health.fsWrites[file] = writes;
     }
