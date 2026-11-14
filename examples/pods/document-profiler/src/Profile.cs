@@ -3,6 +3,7 @@ public sealed class Profile : PeScriptContainer
     public override void Execute()
     {
         if (doc == null) { Result(new { refused = "No active document." }); return; }
+        ProfilerSettings.FromInput((name, fallback) => Arg(name, fallback));
         Profiler.Validate();
         var budget = new ProfilerBudget(ct);
         var provenance = Profiler.Provenance(doc);
@@ -52,6 +53,11 @@ public sealed class Profile : PeScriptContainer
             memoryBefore, memoryAfter = Profiler.Memory()
         });
         WriteLine("Inventory is a hypothesis list. Timings measure API workloads; view queries do not measure rendered UI. See profile.json.");
-        Result(new { status, artifact = artifact.FullPath, visited = elements.Count, capped, diagnostics });
+        var groups = elements.GroupBy(e => new { e.Category, e.Family, e.Kind }).OrderByDescending(g => g.Count()).ToList();
+        Result(new { status, artifact = artifact.FullPath, visited = elements.Count, capped, diagnostics,
+            // What a Page draws and Pea reads without opening the artifact. A count is inventory, never cost.
+            rowsListed = Math.Min(groups.Count, 200), groups = groups.Count,
+            rows = groups.Take(200).Select(g => new { category = g.Key.Category, family = g.Key.Family, kind = g.Key.Kind,
+                observedCount = g.Count() }).ToArray() });
     }
 }

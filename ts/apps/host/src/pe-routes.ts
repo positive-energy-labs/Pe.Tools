@@ -1069,6 +1069,7 @@ export function createContributionContent(options: {
           title: `${pod.name}: ${c.name}`,
           description: c.description ?? "",
           projection: pageProjections.get(c.key),
+          ...(c.mode ? { mode: c.mode } : {}),
         })),
       }),
     );

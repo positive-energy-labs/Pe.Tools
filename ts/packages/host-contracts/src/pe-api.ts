@@ -1693,7 +1693,7 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     origin: "host-local",
     displayName: "Promote Page to Pod",
     description:
-      "Wrap a scratch Page (Pages/<page>/ in the content home) as a new pod <id> holding pages/<page>/ byte for byte, so it can be exported and shared. The HTML is never rewritten; the scratch Page stays; the binding does not travel. Returns the promoted Page's key.",
+      "Move a scratch Page (Pages/<page>/ in the content home) into a new pod <id> as pages/<page>/, byte for byte, so it can be given scripts, exported and shared. The HTML is never rewritten; the scratch Page is removed once the pod holds it; its binding and event log do not travel. Returns the promoted Page's key.",
     visibility: "DefaultVisible",
     costTier: "Mutation",
     needs: "nothing",

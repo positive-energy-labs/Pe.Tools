@@ -662,8 +662,16 @@ describe("pages", () => {
       await mkdir(join(pod, "settings"), { recursive: true });
       await writeFile(
         join(pod, "pod.json"),
-        JSON.stringify({ id: "ducts", entrypoints: [{ sourcePath: "src/Census.cs" }] }),
+        JSON.stringify({
+          id: "ducts",
+          entrypoints: [
+            { sourcePath: "src/Census.cs" },
+            { sourcePath: "pages/tour/checks/census.csx", mode: "ReadOnly" },
+          ],
+        }),
       );
+      await mkdir(join(pod, "pages", "tour", "checks"), { recursive: true });
+      await writeFile(join(pod, "pages", "tour", "checks", "census.csx"), "Result(1);");
       await writeFile(join(pod, "src", "Census.cs"), "// census");
       await writeFile(join(pod, "src", "Helper.cs"), "// helper");
       await writeFile(join(pod, "settings", "checks.json"), "{}");
@@ -708,10 +716,31 @@ describe("pages", () => {
       ]);
       expect(body.input.sourcePath).toBe("src/Census.cs");
       expect(body.input.sourceBundle.files.map((file) => file.path).sort()).toEqual([
+        "pages/tour/checks/census.csx",
         "pod.json",
         "src/Census.cs",
         "src/Helper.cs",
       ]);
+      // Contract C1: an entrypoint beside the Page runs by key, its `input` passes untouched, and
+      // its declared mode is the default. Mutants, each run red once: drop `input` from the run
+      // `operationOf` builds; default `asked` to `sent.permissionMode` alone; drop the ReadOnly
+      // refusal (the write below is forwarded).
+      const check = "script:@ducts/pages/tour/checks/census.csx";
+      const checked = await act(check, { input: { level: "L2" }, scriptContent: "Result(2);" });
+      expect(checked.status, await checked.clone().text()).toBe(202);
+      expect((forwarded[1]!.body as { input: Record<string, unknown> }).input).toEqual({
+        input: { level: "L2" },
+        permissionMode: "ReadOnly",
+        sourcePath: "pages/tour/checks/census.csx",
+        sourceBundle: body.input.sourceBundle,
+      });
+      const write = await act(check, { permissionMode: "WriteTransaction" });
+      expect(write.status).toBe(400);
+      expect(await write.text()).toContain("declared ReadOnly in pod.json");
+      const undeclared = await act("script:@ducts/pages/tour/checks/other.csx");
+      expect(await undeclared.text()).toContain(
+        "declare pages/tour/checks/other.csx in pod.json entrypoints",
+      );
       // A member reads, never runs; an undeclared source is no script; another package is not this page's.
       for (const key of [
         "member:@ducts/settings/checks.json",
@@ -721,7 +750,7 @@ describe("pages", () => {
         const refused = await act(key);
         expect(refused.status, key).toBe(400);
       }
-      expect(forwarded).toHaveLength(1);
+      expect(forwarded).toHaveLength(2);
     });
 
     it("C3 checks every Pod model probe in one read on the bound document", async () => {
@@ -904,7 +933,11 @@ describe("pages", () => {
     };
     type Answer = (url: URL, init: RequestInit) => Response | undefined;
     /** The served bytes in a page at `/pages/todo/`, with fetch and EventSource recorded and the host's answers. */
-    async function page(answer: Answer = () => undefined, declaration?: string) {
+    async function page(
+      answer: Answer = () => undefined,
+      pageKey = "page:@pages/todo",
+      declaration?: string,
+    ) {
       const { fetch } = await pagesRoot();
       const source = await (await fetch("/pages/pe.js")).text();
       const sent: Sent[] = [];
@@ -942,7 +975,7 @@ describe("pages", () => {
         document: {
           body,
           querySelector: (selector: string) =>
-            selector === 'meta[name="pe-page"]' ? { getAttribute: () => "page:@pages/todo" } : null,
+            selector === 'meta[name="pe-page"]' ? { getAttribute: () => pageKey } : null,
           getElementById: (id: string) => nodes.get(id) ?? null,
           createElement: () => {
             const node: Record<string, unknown> = {
@@ -1033,6 +1066,53 @@ describe("pages", () => {
       "sec-fetch-dest": "empty",
     };
 
+    // Contract C1, the Page's one script door. Mutants, each run red once: make `scriptKey` answer
+    // null on a Pod Page (the file is fetched and sent as source); make `pe.do` return the settled
+    // row's result for a script key (the answer is the run record, not the Result value); read the
+    // failed run from `row.result` alone (the compiler's words are lost).
+    it("pe.script and pe.do run a Pod's declared script by key, with one input and one answer", async () => {
+      let failing = false;
+      const run = { status: "Succeeded", data: { rows: [1] }, diagnostics: [], output: "" };
+      const broken = {
+        status: "CompilationFailed",
+        output: "",
+        diagnostics: [{ severity: "Error", message: "CS1002: ; expected\n at census.csx" }],
+      };
+      const { pe, sent } = await page(
+        (url) =>
+          url.pathname === "/pages/todo/act"
+            ? Response.json(
+                failing
+                  ? { id: "a1", state: "failed", error: "Script execution CompilationFailed", status: 422, evidence: { result: broken } }
+                  : { id: "a1", state: "succeeded", result: run },
+              )
+            : undefined,
+        "page:@ducts/pages/tour",
+      );
+      const acts = () => sent.filter((one) => one.url === "/pages/todo/act").map((one) => one.body);
+      expect(await pe.script!("checks/census.csx", { input: { level: "L2" } })).toEqual({ rows: [1] });
+      expect(await pe.do!("script:@ducts/src/Census.cs", { input: { level: "L2" }, mode: "WriteTransaction" })).toEqual({ rows: [1] });
+      expect(await pe.script!("/src/Census.cs")).toEqual({ rows: [1] });
+      expect(await pe.script!("Result(1);\n")).toEqual({ rows: [1] });
+      expect(acts()).toEqual([
+        { key: "script:@ducts/pages/tour/checks/census.csx", input: { input: { level: "L2" }, timeoutSeconds: 120 } },
+        { key: "script:@ducts/src/Census.cs", input: { input: { level: "L2" }, permissionMode: "WriteTransaction", timeoutSeconds: 120 } },
+        { key: "script:@ducts/src/Census.cs", input: { timeoutSeconds: 120 } },
+        { key: "scripting.execute", input: { timeoutSeconds: 120, scriptContent: "Result(1);\n", permissionMode: "ReadOnly" } },
+      ]);
+      // A Pod Page's script is never fetched and sent as anonymous source.
+      expect(sent.some((one) => one.url.endsWith(".csx") || one.url.endsWith(".cs"))).toBe(false);
+      expect((pe as unknown as { lastRun: unknown }).lastRun).toEqual(run);
+      failing = true;
+      const error = await pe.script!("checks/census.csx").then(
+        () => null,
+        (thrown: Error & { run?: unknown }) => thrown,
+      );
+      expect(error?.message).toBe("script:@ducts/pages/tour/checks/census.csx CompilationFailed: CS1002: ; expected");
+      expect(error?.run).toEqual(broken);
+      expect((pe as unknown as { lastRun: unknown }).lastRun).toEqual(broken);
+    });
+
     it("C2: one stream reduces replay and live rows with identical metadata, without duplicate echoes", async () => {
       const replay = {
         seq: 1,
@@ -1062,6 +1142,7 @@ describe("pages", () => {
             return Response.json(own);
           }
         },
+        undefined,
         JSON.stringify({ add: "add value" }),
       );
       const seen: unknown[] = [];
@@ -1130,7 +1211,7 @@ describe("pages", () => {
     it.each(["{", "[]", '{"verdict":42}'])(
       "C2: pe.state refuses malformed DOM declaration %s",
       async (declaration) => {
-        const { pe, sent } = await page(() => undefined, declaration);
+        const { pe, sent } = await page(() => undefined, undefined, declaration);
         await expect(pe.state!({ base: {}, reduce: (state: unknown) => state })).rejects.toThrow(
           "pe-agent declaration",
         );
