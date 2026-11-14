@@ -880,9 +880,11 @@ public sealed class RevitScriptExecutionService(
         try {
             fence.Run(() => this.ExecuteWithTransactionPolicy(container, context, plan, diagnostics, run));
             threw = false;
-        } catch (Exception ex) when (fence.Titles.Count != 0 && ex.Message.Contains("open transaction phase", StringComparison.Ordinal)) {
-            diagnostics.Add(ScriptDiagnosticFactory.Warning("fence",
-                $"Revit refuses Save, SaveAs and synchronize on a document that has a transaction group open, and this run holds one on every other open document ({string.Join(", ", fence.Titles.Select(title => $"'{title}'"))}) so that a script changes only the document it runs on. To save one of those, run the script on it."));
+        } catch (Exception ex) when (ex.Message.Contains("open transaction phase", StringComparison.Ordinal)
+                                     && ScriptChangeLedger.SaveRefusedWords(run.TargetHold, fence.Titles) is not null) {
+            // Revit does not say which document it refused, so one sentence names every hold of the run:
+            // its own document's (guard, host transaction or undo group) and the fence's siblings.
+            diagnostics.Add(ScriptDiagnosticFactory.Warning("transaction", ScriptChangeLedger.SaveRefusedWords(run.TargetHold, fence.Titles)!));
             throw;
         } finally {
             application.FailuresProcessing -= run.OnFailuresProcessing;
@@ -920,7 +922,8 @@ public sealed class RevitScriptExecutionService(
     ///     groups are held on several documents at once, a sibling commits under the fence in every mode's
     ///     transaction shape and the rollback discards it, and a person's earlier unsaved edits in the sibling
     ///     stay. Revit refuses Save, SaveAs and Close on a document with a group open, so a run cannot save or
-    ///     close a sibling, and the result says why. The sibling is not left modified by the rollback.
+    ///     close a sibling. A refused save is explained by ScriptChangeLedger.SaveRefusedWords, which names the
+    ///     run's own document's hold beside the fence's. The sibling is not left modified by the rollback.
     ///     The fence is also the monitor's scope: a commit in a held sibling is observed as Discarded.
     ///     The honest limit: this bounds a script's commits, not hostile code; a script that returns with a
     ///     transaction still open on a sibling may leave a group Revit will not roll back, and the run then fails
@@ -1042,12 +1045,11 @@ public sealed class RevitScriptExecutionService(
             }
         }
 
+        // A save a library makes on the grouped document is refused by Revit; ExecuteContainer says why.
+        if (group is not null)
+            run.TargetHold = "so that its transactions are one undo entry; a script whose own source calls Save runs ungrouped, and this call was made from a library";
         try {
             run.Execute(container);
-        } catch (Exception ex) when (group is not null && ex.Message.Contains("open transaction phase", StringComparison.Ordinal)) {
-            diagnostics.Add(ScriptDiagnosticFactory.Warning("transaction",
-                "The run's transactions were being grouped into one undo entry, and Revit refuses Save, SaveAs and synchronize on a document while a group is open on it. A script whose own source calls one of them runs ungrouped; this call was made from a library."));
-            throw;
         } finally {
             if (group is not null) {
                 using (group)
@@ -1077,6 +1079,8 @@ public sealed class RevitScriptExecutionService(
         private IReadOnlyList<ObservedChange>? _guarded;
         public IReadOnlyList<ScriptRaisedFailure> Raised => this._raised;
         public ScriptUndo Undo { get; set; } = new();
+        /// <summary>Why the run's own document has a transaction or group open while the script runs; null when it has none.</summary>
+        public string? TargetHold { get; set; }
         /// <summary>False while the script has not been entered: a run its guard refused changed nothing and says nothing.</summary>
         public bool Started { get; private set; }
 
@@ -1220,6 +1224,7 @@ public sealed class RevitScriptExecutionService(
             );
         }
 
+        run.TargetHold = "the ReadOnly rollback guard";
         try {
             run.Execute(container);
         } finally {
@@ -1300,6 +1305,7 @@ public sealed class RevitScriptExecutionService(
             // One transaction is one undo entry, named after the entrypoint.
             sandbox = DocumentSandbox.BeginCommit(document, undoName);
             run.Undo = new ScriptUndo(undoName);
+            run.TargetHold = "the host's one transaction";
         } catch (Exception ex) {
             throw new RevitScriptTransactionException(
                 ScriptExecutionStatus.RuntimeFailed,

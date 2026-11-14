@@ -161,6 +161,26 @@ public sealed class ScriptChangeLedgerTests {
         });
     }
 
+    // F-W18-3: Revit's refusal does not say which document it refused, so the words name every hold the run has
+    // and blame neither alone. Mutant, run red once (2026-11-14): drop the `targetHold is not null` hold from
+    // SaveRefusedWords; a save the run's own undo group refused is then blamed on the fence.
+    [Test]
+    public void A_refused_save_names_every_hold_the_run_has() {
+        const string Opening = "Revit refuses Save, SaveAs and synchronize on a document that has a transaction or a transaction group open. ";
+        Assert.Multiple(() => {
+            Assert.That(ScriptChangeLedger.SaveRefusedWords(null, []), Is.Null, "the run holds nothing, so the refusal is not its doing");
+            Assert.That(ScriptChangeLedger.SaveRefusedWords(null, ["Chadds", "Brodie"]), Is.EqualTo(Opening +
+                "This run holds one on every other open document ('Chadds', 'Brodie'), so that a script changes only the document it runs on. " +
+                "To save another document, run the script on it."));
+            Assert.That(ScriptChangeLedger.SaveRefusedWords("the host's one transaction", []), Is.EqualTo(Opening +
+                "This run holds one on its own document (the host's one transaction). " +
+                "To save the run's own document, use a NoTransaction script whose own source calls Save."));
+            Assert.That(ScriptChangeLedger.SaveRefusedWords("the ReadOnly rollback guard", ["Chadds"]), Is.EqualTo(Opening +
+                "This run holds one on its own document (the ReadOnly rollback guard), and one on every other open document ('Chadds'), so that a script changes only the document it runs on. " +
+                "To save the run's own document, use a NoTransaction script whose own source calls Save. To save another document, run the script on it."));
+        });
+    }
+
     [Test]
     public void A_run_that_could_not_be_grouped_says_why() {
         var changes = Changes(Write, [Commit("one", added: [1]), Commit("two", added: [2])],

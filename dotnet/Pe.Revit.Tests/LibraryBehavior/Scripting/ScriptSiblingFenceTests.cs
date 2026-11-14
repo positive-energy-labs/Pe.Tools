@@ -112,7 +112,8 @@ public sealed class ScriptSiblingFenceTests {
     }
 
     // Revit refuses Save on a document with a transaction group open (SiblingFenceProofTests), so a run cannot
-    // save a sibling. The script fails on Revit's exception and the result says why in plain words.
+    // save a sibling. The script fails on Revit's exception and the result says why in plain words. The script's
+    // own source calls Save, so the run is ungrouped and only the fence holds anything.
     [Test]
     public void A_save_of_a_sibling_is_refused_and_the_result_says_why(UIApplication uiApplication) {
         var (target, sibling) = OpenPair(uiApplication);
@@ -125,12 +126,33 @@ public sealed class ScriptSiblingFenceTests {
         Console.WriteLine($"[PE_SIBLING_FENCE_RUN] sibling save: {result.Status}; {Words(result)}");
         Assert.Multiple(() => {
             Assert.That(result.Status, Is.EqualTo(ScriptExecutionStatus.RuntimeFailed), Words(result));
-            var said = result.Diagnostics.Single(diagnostic => diagnostic.Stage == "fence");
+            var said = result.Diagnostics.Single(diagnostic => diagnostic.Message.StartsWith("Revit refuses Save", StringComparison.Ordinal));
             Assert.That(said.Severity, Is.EqualTo(ScriptDiagnosticSeverity.Warning));
-            Assert.That(said.Message, Does.StartWith("Revit refuses Save, SaveAs and synchronize on a document that has a transaction group open, and this run holds one on every other open document ("));
+            Assert.That(said.Message, Does.StartWith("Revit refuses Save, SaveAs and synchronize on a document that has a transaction or a transaction group open. This run holds one on every other open document ("));
             Assert.That(said.Message, Does.Contain($"'{siblingTitle}'"));
-            Assert.That(said.Message, Does.EndWith("so that a script changes only the document it runs on. To save one of those, run the script on it."));
+            Assert.That(said.Message, Does.EndWith("), so that a script changes only the document it runs on. To save another document, run the script on it."));
+            Assert.That(said.Message, Does.Not.Contain("its own document"), "nothing held the run's own document");
             Assert.That(sibling.IsModified, Is.False);
+        });
+    }
+
+    // F-W18-3: a Save the run's own undo group refuses must not be blamed on the fence. The delegate stands in for
+    // a library: the script's own source has no Save call for the host to read, so the run stays grouped.
+    [Test]
+    public void A_save_of_the_runs_own_document_refused_by_its_undo_group_names_that_group(UIApplication uiApplication) {
+        var (target, sibling) = OpenPair(uiApplication);
+
+        var result = Run(uiApplication, target, "Action save = doc!.Save; save();", ScriptPermissionMode.NoTransaction, "library-saver");
+
+        Console.WriteLine($"[PE_SIBLING_FENCE_RUN] own save: {result.Status}; {Words(result)}");
+        Assert.Multiple(() => {
+            Assert.That(result.Status, Is.EqualTo(ScriptExecutionStatus.RuntimeFailed), Words(result));
+            var said = result.Diagnostics.Single(diagnostic => diagnostic.Message.StartsWith("Revit refuses Save", StringComparison.Ordinal));
+            Assert.That(said.Message, Does.StartWith(
+                "Revit refuses Save, SaveAs and synchronize on a document that has a transaction or a transaction group open. " +
+                "This run holds one on its own document (so that its transactions are one undo entry; a script whose own source calls Save runs ungrouped, and this call was made from a library), and one on every other open document ("));
+            Assert.That(said.Message, Does.Contain($"'{sibling.Title}'"));
+            Assert.That(said.Message, Does.EndWith("To save the run's own document, use a NoTransaction script whose own source calls Save. To save another document, run the script on it."));
         });
     }
 

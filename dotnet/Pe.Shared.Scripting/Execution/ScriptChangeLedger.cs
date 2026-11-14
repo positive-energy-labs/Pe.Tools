@@ -94,6 +94,25 @@ public static class ScriptChangeLedger {
                $"which it was not run on. {(fenced.Count == 1 ? "That was" : "Those were")} rolled back: a script changes only the document it runs on.";
     }
 
+    /// <summary>
+    ///     Why Revit refused a save during a run, naming every hold the run has: Revit's exception does not say
+    ///     which document it refused, so the words blame neither hold alone. Null when the run holds nothing,
+    ///     so the refusal is not the run's doing.
+    /// </summary>
+    /// <param name="targetHold">Why the run's own document has a transaction or group open; null when it has none.</param>
+    /// <param name="siblings">The titles of the other open documents the run's fence holds.</param>
+    public static string? SaveRefusedWords(string? targetHold, IReadOnlyList<string> siblings) {
+        if (targetHold is null && siblings.Count == 0) return null;
+        var holds = new List<string>();
+        if (targetHold is not null) holds.Add($"its own document ({targetHold})");
+        if (siblings.Count != 0)
+            holds.Add($"every other open document ({string.Join(", ", siblings.Select(title => $"'{title}'"))}), so that a script changes only the document it runs on");
+        return "Revit refuses Save, SaveAs and synchronize on a document that has a transaction or a transaction group open. "
+               + $"This run holds one on {string.Join(", and one on ", holds)}."
+               + (targetHold is null ? "" : " To save the run's own document, use a NoTransaction script whose own source calls Save.")
+               + (siblings.Count == 0 ? "" : " To save another document, run the script on it.");
+    }
+
     private static string Quoted(IReadOnlyList<string> names) =>
         names.Count == 0 ? "a transaction" : string.Join(", ", names.Select(name => $"'{name}'"));
 

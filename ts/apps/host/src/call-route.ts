@@ -2,7 +2,7 @@ import { blobUploadSchema } from "@pe/agent-contracts";
 import { put as putBlob } from "./action-blobs.ts";
 import { captureReceiptSchema } from "@pe/agent-contracts";
 import { canonicalRouteInput, nativePrincipals } from "@pe/agent-contracts";
-import { runPodScript } from "./operation-script.ts";
+import { runPodScript, scriptNeedsDocument } from "./operation-script.ts";
 import {
   NATIVE_BODY_VERSION_HEADER,
   DUCTS_REFRESH_HEADER,
@@ -360,11 +360,16 @@ function callRoutes(
           if (target.kind !== "host")
             bridgeSessionId = target.kind === "document" ? target.ref.session : target.session;
           openDocumentId = target.kind === "document" ? target.ref.openId : null;
-          if (entry.script && target.kind === "document")
+          if (entry.script) {
+            // Defence in depth: `scripting.execute` needs a document today, so `gatewayTarget` never answers a
+            // session for it. This admission must not depend on that, nor on `runPodScript` refusing later.
+            if (target.kind !== "document")
+              return yield* Effect.fail(new BridgeError(scriptNeedsDocument, 409, { notDispatched: true }));
             yield* Effect.try({
               try: () => admitScript(caller, target.ref, "/call", readsOnly(key, request)),
               catch: (error) => error,
             });
+          }
         }
       }
       if (entry.reading) {
