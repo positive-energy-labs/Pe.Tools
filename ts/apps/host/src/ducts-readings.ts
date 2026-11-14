@@ -34,6 +34,8 @@ type Entry = {
   readers: number;
 };
 const refused = (message: string) => new InvalidRead({ message, status: 409, problem: "read.retained" });
+export const isRetainedReadFailure = (error: DoorFailure): error is InvalidRead =>
+  error._tag === "InvalidRequest" && error.status === 409 && error.problem === "read.retained";
 const identity = (request: DuctsReadingRequest) =>
   request.kind === "ducts-snapshot"
     ? { target: request.target, session: request.target.session }
