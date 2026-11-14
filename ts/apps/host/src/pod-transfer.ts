@@ -479,9 +479,48 @@ export function archiveId(entries: ReadonlyMap<string, Buffer>): string {
   return parsed.data;
 }
 
+/** The archive a scratch Page becomes: a new `pod.json` plus `pages/<page>/`, byte for byte. */
+export function promotedArchive(
+  request: { page: string; id: string; name?: string | undefined },
+  members: readonly { path: string; bytes: Uint8Array }[],
+): Map<string, Buffer> {
+  const manifest = Buffer.from(
+    `${JSON.stringify({ schemaVersion: 2, id: request.id, name: request.name ?? request.page, version: "0.1.0", entrypoints: [] }, null, 2)}\n`,
+  );
+  const files = new Map<string, Buffer>([["pod.json", manifest]]);
+  for (const member of members)
+    files.set(`pages/${request.page}/${member.path}`, Buffer.from(member.bytes));
+  return files;
+}
+
 /**
- * Wrap a scratch Page (`Pages/<page>/`) as a new Pod `<id>` holding `pages/<page>/`, byte for byte.
- * The scratch Page stays. Page state is machine state under the state root (homes freeze shape 7),
+ * The second half of a promote, run only after the Pod is installed: remove the scratch files the Pod
+ * now holds, so one Page has one home. A file is removed only while its bytes still equal the installed
+ * copy; one edited since the capture, and anything the Pod did not take, stays where it is.
+ */
+export async function retireScratchPage(
+  source: string,
+  page: string,
+  installed: ReadonlyMap<string, Buffer>,
+): Promise<void> {
+  const prefix = `pages/${page}/`;
+  const folders = new Set([source]);
+  for (const [path, bytes] of installed) {
+    if (!path.startsWith(prefix)) continue;
+    const file = join(source, path.slice(prefix.length));
+    if (!(await readFile(file).catch(() => null))?.equals(bytes)) continue;
+    await rm(file);
+    for (let folder = dirname(file); folder.length > source.length; folder = dirname(folder))
+      folders.add(folder);
+  }
+  // Deepest first; a folder that still holds something refuses and is left.
+  for (const folder of [...folders].sort((a, b) => b.length - a.length))
+    await rmdir(folder).catch(() => {});
+}
+
+/**
+ * Move a scratch Page (`Pages/<page>/`) into a new Pod `<id>` as `pages/<page>/`, byte for byte.
+ * Page state is machine state under the state root (homes freeze shape 7),
  * so none of it travels: the promoted Page starts unbound with an empty log.
  */
 export async function promotePage(
@@ -502,13 +541,9 @@ export async function promotePage(
   const errors = page.diagnostics.filter((d) => d.severity === "error");
   if (errors.length)
     throw new TransferRefused(errors.map((d) => `${d.path}: ${d.message}`).join("; "));
-  const manifest = Buffer.from(
-    `${JSON.stringify({ schemaVersion: 2, id: id.data, name: request.name ?? request.page, version: "0.1.0", entrypoints: [] }, null, 2)}\n`,
-  );
-  const files = new Map<string, Buffer>([["pod.json", manifest]]);
-  for (const member of page.members)
-    files.set(`pages/${request.page}/${member.path}`, Buffer.from(member.bytes));
+  const files = promotedArchive({ ...request, id: id.data }, page.members);
   const installed = await installArchive(writeZip(files), source, id.data, options);
+  await retireScratchPage(source, request.page, files);
   return { ...installed, key: `page:@${installed.id}/pages/${request.page}` };
 }
 

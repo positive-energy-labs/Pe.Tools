@@ -54,11 +54,13 @@ internal static class ScriptFileTemplates {
 
         A pod is one folder under `{{ProductPathNames.PodsDirectoryName}}/<folder>/` holding `{{ProductPathNames.PodManifestFileName}}`, and any of:
 
-        - `{{ScriptingWorkspaceLayout.SourceDirectoryName}}/` - C# scripts.
+        - C# scripts, `.cs` or `.csx`, at any path. `{{ScriptingWorkspaceLayout.SourceDirectoryName}}/` is the usual home; a script may also sit beside the Page that runs it. One that `{{ProductPathNames.PodManifestFileName}}` declares as an entrypoint runs by the key `script:@<id>/<path>`.
+        - `pages/<page>/index.html` - a Page: plain HTML that loads `/pages/pe.js`, written as a file.
+        - `skills/<name>/SKILL.md` - the guidance an agent gets about this pod.
         - `{{ProductPathNames.SettingsDirectoryName}}/` - JSON members and fragments.
         - `{{ProductPathNames.AssetsDirectoryName}}/` - files a member or a script reads.
 
-        Nothing else is a pod. Every file in a pod is a **member**, addressed everywhere as `{ pod: <id>, path: <relative path> }`.
+        Every file in a pod is a **member**, addressed everywhere as `{ pod: <id>, path: <relative path> }`. Nothing made at run time is one: run output, a Page's event log and its binding are machine state, as the section on output says. The `build-pod` skill under `.agents/skills/` is the full account of entrypoints, script input and Pages.
 
         ## Identity
 
