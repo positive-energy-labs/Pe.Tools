@@ -64,7 +64,7 @@ test("a script needs authority over its target alone, whatever else is open besi
   const device: Caller = { kind: "external-mcp", context: "m", label: "MCP", device: "d1" };
   const minted = mintPageDoor(
     "page:@pages/pin",
-    { kind: "pinned", address: address("C:/Jobs/Pin.rvt") },
+    { kind: "pinned", ref: docA },
     "/pages/pin/act",
     true,
     docA,
