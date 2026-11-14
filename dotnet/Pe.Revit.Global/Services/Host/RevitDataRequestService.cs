@@ -52,11 +52,17 @@ namespace Pe.Revit.Global.Services.Host;
 internal sealed class RevitDataRequestService {
     [Op("mep.system.members", OpSubject.Document, OpTouches.Topology, Title = "Read MEP System Members", Does = "Read a bounded roster of this document's MEP systems (piping and duct; domain is a field) and optionally one system's members: UniqueIds and ElementIds, system type and classification, flow, size (nominal and inner diameter, or width and height; a size the domain lacks reads absent), length, segment, type, and every physical connector with its peers and the flow direction Revit reports (In, Out or Bidirectional, never inferred). Each system's source is its base equipment, Revit's base connector id and any connector Revit reports Out; no base equipment reads absent. Revit reports a base connector Bidirectional once assigned, so upstream walks from the base connector id across peers. Optional facts are value, absent or error. Lengths and sizes are Revit internal feet, flow is internal cubic feet per second. Refuses overflow rather than truncating. Read-only.", Finds = ["mep", "systems", "members", "flow", "connectors", "upstream", "source"], Cost = OpCost.Bounded, Example = "{ \"systemUniqueId\": \"<UniqueId from the roster>\", \"maxSystems\": 256, \"maxElements\": 4096 }")]
     private static MepSystemMembersData GetMepSystemMembers(MepSystemMembersRequest request, ProjectDocument document) =>
-        Pe.Revit.Global.Lib.Mep.MepSystemReads.Members(document.Value, request);
+        MepRead(Pe.Revit.Global.Lib.Mep.MepSystemReads.Members(document.Value, request));
 
     [Op("mep.segment.sizes", OpSubject.Document, OpTouches.Metadata, Title = "Read Segment Size Catalog", Does = "Read this document's bounded segment catalog: each segment's UniqueId, ElementId, name, domain, kind and nominal, inner and outer diameters in Revit internal feet. Refuses segment or size overflow rather than truncating. Read-only.", Finds = ["mep", "segments", "sizes", "diameter", "catalog"], Cost = OpCost.Bounded, Example = "{ \"maxSegments\": 256, \"maxSizesPerSegment\": 512 }")]
     private static MepSegmentSizesData GetMepSegmentSizes(MepSegmentSizesRequest request, ProjectDocument document) =>
-        Pe.Revit.Global.Lib.Mep.MepSystemReads.SegmentSizes(document.Value, request);
+        MepRead(Pe.Revit.Global.Lib.Mep.MepSystemReads.SegmentSizes(document.Value, request));
+
+    private static T MepRead<T>(Pe.Revit.Global.Lib.Mep.MepReadResult<T> result) where T : class =>
+        result.Refusal is { } refusal
+            ? throw BridgeOperationExceptions.BadRequest(refusal.Message,
+                [BridgeOperationExceptions.Issue(refusal.Path, refusal.Code, refusal.Message, null)])
+            : result.Value!;
 
     [Op("takeoffs.snapshot", OpSubject.Region, OpTouches.Geometry, Does = "Read Takeoff zones and rooms for explicit view names or zone GUIDs. Empty scope reads only model status and source identity without region geometry.", Title = "Get Takeoff Snapshot", Finds = ["takeoffs", "snapshot", "zones", "rooms", "filled-regions"], Cost = OpCost.Bounded)]
     private static TakeoffSnapshotResponse GetTakeoffSnapshotCore(TakeoffReadRequest request, ProjectDocument activeDocument) =>
