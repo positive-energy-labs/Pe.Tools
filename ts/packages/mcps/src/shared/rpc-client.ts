@@ -78,17 +78,3 @@ export const rhvacLaunchRpc: ReadEntry<z.ZodObject<{ path: z.ZodString }>> = {
       }),
     ),
 };
-export const pageBindRpc = {
-  key: "page.bind",
-  input: z.object({ slug: z.string().min(1), binding: z.unknown() }),
-  run: async (input: { slug: string; binding: unknown }) => {
-    // The API catalogue imports route graphs, which declare this door.
-    const { createPeClient, peRoutes } = await import("@pe/agent-contracts/pe-api");
-    return answer(
-      await createPeClient("", fetch).response("page.bind", {
-        params: { slug: input.slug },
-        body: peRoutes["page.bind"].body.parse(input.binding),
-      }),
-    );
-  },
-};

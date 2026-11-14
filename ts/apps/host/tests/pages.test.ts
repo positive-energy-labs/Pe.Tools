@@ -570,6 +570,35 @@ describe("pages", () => {
       expect(forwarded).toHaveLength(1);
     });
 
+    it("C3 checks every Pod model probe in one read on the bound document", async () => {
+      const entries = [{ elementId: 1, elementUniqueId: "one" }, { elementId: 2, elementUniqueId: "wrong" }];
+      const reads: unknown[] = [];
+      const { pods, fetch } = await pagesRoot({
+        sessions: async () => [session("S1")],
+        forward: async (_path, headers, body) => {
+          reads.push({ headers, body });
+          return Response.json({ documentTitle: "Other", entries });
+        },
+      });
+      const pod = join(pods, "tour");
+      await mkdir(join(pod, "pages", "tour"), { recursive: true });
+      await writeFile(join(pod, "pages", "tour", "index.html"), "<title>Tour</title>");
+      await writeFile(join(pod, "pod.json"), JSON.stringify({ id: "tour", for: { title: "Chadds", probes: [
+        { elementId: 1, uniqueId: "one" }, { elementId: 2, uniqueId: "two" },
+      ] } }));
+      await asCaller(human, fetch)("/pe/pages/tour--tour/binding", { method: "PUT", body: JSON.stringify({ kind: "pinned", address: MODEL }) });
+      reads.length = 0; // Binding itself answers a target reading.
+      const target = () => asCaller({ kind: "page", page: "page:@tour/pages/tour" }, fetch)("/pages/tour--tour/target").then((r) => r.json()) as Promise<PageTargetReading>;
+      expect((await target()).resolution).toEqual({ kind: "refused", reason: "wrong-model", message: "this Pod is for Chadds; the bound document is Other" });
+      expect(reads).toHaveLength(1);
+      expect(reads[0]).toMatchObject({ body: { key: "revit.detail.elements", request: { query: { kind: "ElementReferences", elementIds: [1, 2] } } } });
+      entries[1].elementUniqueId = "two";
+      expect((await target()).resolution.kind).toBe("resolved");
+      expect(reads).toHaveLength(2);
+      entries.pop();
+      expect((await target()).resolution.kind).toBe("refused");
+    });
+
     it("a pinned Address open in two Revits is choose: ambiguous, closed is document-closed", async () => {
       bind();
       const two = await host([session("S1"), session("S2")]);
@@ -995,6 +1024,15 @@ describe("pages", () => {
         expect(pe.doc).toBeNull();
         expect((body.children[0] as { textContent: string }).textContent).toBe(refusal!.message);
       }
+    });
+
+    it("pe.target throws wrong-model as PeTargetRefusal and displays the host's words", async () => {
+      const message = "this Pod is for Chadds; the bound document is Other";
+      const { pe, body } = await page((url) => url.pathname.endsWith("/target") ? Response.json({
+        ...resolved, resolution: { kind: "refused", reason: "wrong-model", message },
+      }) : undefined);
+      await expect(pe.target!()).rejects.toMatchObject({ name: "PeTargetRefusal", code: "wrong-model", message });
+      expect((body.children[0] as { textContent: string }).textContent).toBe(message);
     });
 
     it("pe.do acts through the page door and shows the host's refusal word for word", async () => {
