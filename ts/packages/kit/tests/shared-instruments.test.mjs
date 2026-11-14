@@ -60,7 +60,7 @@ function harness(initial, reducer, options = {}) {
     },
     do: async (key, input) => {
       calls.push({ key, input });
-      return { status: "Succeeded", data: { v: 1, rows: [], total: 0, copyOnly: true } };
+      return { v: 1, rows: [], total: 0, copyOnly: true };
     },
     exportSnapshot: async (snapshot) => calls.push({ export: snapshot }),
     ...options,
@@ -74,6 +74,15 @@ function all(node) {
 function button(tree, label) {
   return all(tree).find((node) => node.props.label === label);
 }
+
+test("circuit census consumes the script Result value directly", async () => {
+  const route = await module();
+  const h = harness(route.initial, route.reducer);
+  await button(route.create(h.api)(), "Read circuits").props.onClick();
+  assert.equal(h.state().reading.total, 0);
+  assert.equal(h.state().reading.copyOnly, true);
+  assert.deepEqual(h.state().reading.rows, []);
+});
 
 test("the portable Page authors theme changes through its reducer", async () => {
   const route = await module();
