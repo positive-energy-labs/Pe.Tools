@@ -34,7 +34,6 @@ test.each([
   ).toEqual(expected);
   expect(match?.params).toEqual({ route: "duct-loss" });
   expect(router.routesByPath["/$route"]).toBe(builtinRoute);
-  expect(router.routesByPath["/tool/$key"]).toBeDefined();
   expect(router.buildLocation({ to: "/$route", params: { route: "duct-loss" }, search: { work: "W" } }).pathname).toBe(
     "/duct-loss",
   );

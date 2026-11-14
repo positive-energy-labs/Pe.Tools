@@ -129,7 +129,6 @@ function structuralCensus() {
       const owners: Record<string, string[]> = {
         "ducts-sheet.ts": ["work.workspace.apply"],
         "schedule-actions.ts": ["work.publish", "captures.saveSchedule"],
-        "pod-routes.ts": ["lifecycle.refresh"],
         "plugins-handler.ts": ["content.lifecycle.refresh"],
       };
       walk(source, (n) => {

@@ -15,7 +15,7 @@ export const packageIdSchema = namespaceIdSchema.refine(
   (id) => !reservedPackageIds.some((reserved) => reserved === id),
   "Reserved package namespace",
 );
-export const contributionKindSchema = z.enum(["script", "page", "skill", "member", "route"]);
+export const contributionKindSchema = z.enum(["script", "page", "skill", "member"]);
 export type ContributionKind = z.infer<typeof contributionKindSchema>;
 
 /** Exact portable spelling; never normalize untrusted keys into another member. */
@@ -58,7 +58,6 @@ export const contributionReferenceSchema = z
     if (kind === "script") return /\.csx?$/i.test(path);
     if (kind === "page") return /^pages\/[a-z0-9]+(?:-[a-z0-9]+)*$/.test(path);
     if (kind === "skill") return /^skills\/[a-z0-9]+(?:-[a-z0-9]+)*$/.test(path);
-    if (kind === "route") return /^routes\/[a-z0-9]+(?:-[a-z0-9]+)*\/route\.artifact$/.test(path);
     return true;
   }, "Contribution kind does not match its namespace or entry path");
 export type ContributionReference = z.infer<typeof contributionReferenceSchema>;

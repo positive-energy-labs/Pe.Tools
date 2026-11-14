@@ -33,7 +33,6 @@ public sealed class PodManifestValidatorTests {
               "name": "Connector Audit",
               "version": "1.0.0",
               "description": "Checks connector data.",
-              "routes": [{ "sourcePath": "routes/audit/index.js", "name": "Audit", "description": "Inspect connectors" }],
               "entrypoints": [
                 {
                   "sourcePath": "src/Main.cs",

@@ -3,8 +3,6 @@ packages:
   - packages/*
   - tests/*
   - tools/*
-  - ../examples/pods/snowdon-circuits
-  - ../examples/pods/hydronic
 
 catalogMode: prefer
 

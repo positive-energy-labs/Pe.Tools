@@ -57,7 +57,6 @@ vi.mock("#/navigation/state", () => ({
   useNavigation: () => ({ snapshot: null, loading: false, error: undefined, refresh() {} }),
   useDestination: () => () => true,
 }));
-vi.mock("#/route/pod-route-context", () => ({ usePodRoutes: () => null }));
 afterEach(cleanup);
 
 test.each(["refused", "failed", "unknown", "succeeded"] as const)("Confirm follows a %s send receipt in Activity", async (state) => {

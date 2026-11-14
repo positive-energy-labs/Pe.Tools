@@ -1,6 +1,6 @@
 {
-  "testFiles": 849,
-  "total": 309,
+  "testFiles": 842,
+  "total": 306,
   "byFile": {
     "apps/host/tests/admission.test.ts": 1,
     "apps/host/tests/admitted-builtins.test.ts": 1,
@@ -26,8 +26,7 @@
     "apps/host/tests/operation-script.test.ts": 4,
     "apps/host/tests/page-publication.browser.test.ts": 1,
     "apps/host/tests/pages.test.ts": 8,
-    "apps/host/tests/pod-admission.test.ts": 1,
-    "apps/host/tests/pod-inventory-read.test.ts": 2,
+    "apps/host/tests/pod-inventory-read.test.ts": 1,
     "apps/host/tests/receipt-export.test.ts": 1,
     "apps/host/tests/receipt-notices.test.ts": 3,
     "apps/host/tests/receipt-spine.test.ts": 1,
@@ -85,7 +84,6 @@
     "apps/web/src/route/kernel-journeys-family.test.tsx": 1,
     "apps/web/src/route/kernel-journeys-focus.test.tsx": 3,
     "apps/web/src/route/kernel-journeys-geometry.test.tsx": 1,
-    "apps/web/src/route/kernel-journeys-pods.test.ts": 1,
     "apps/web/src/route/kernel-journeys-reads.test.ts": 1,
     "apps/web/src/route/kernel-journeys-work.test.ts": 5,
     "apps/web/src/route/slots/findings/person.test.tsx": 2,

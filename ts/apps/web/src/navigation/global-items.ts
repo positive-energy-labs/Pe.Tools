@@ -1,7 +1,5 @@
 import { ROUTE_DIRECTORY } from "@pe/agent-contracts";
 import type { NavigationSnapshot } from "./navigation-client";
-import { podPath } from "./model";
-import type { PodRouteDescriptor } from "@pe/agent-contracts";
 
 export type ResultKind = "All" | "Tools" | "Works" | "Pea threads";
 export type Destination = {
@@ -17,21 +15,8 @@ export type Destination = {
 export function globalItems(
   snapshot: NavigationSnapshot | null,
   kind: ResultKind,
-  pods: readonly PodRouteDescriptor[] = [],
 ): Destination[] {
   return [
-    ...(kind === "All" || kind === "Tools"
-      ? pods.map((route) => ({
-          key: route.key,
-          kind: "Tools" as const,
-          label: route.name,
-          context: route.packageId,
-          aliases: `${route.description} ${route.artifact}`,
-          state: route.trusted ? "Trusted Pod route" : "Trust required",
-          url: podPath(route),
-          reason: null,
-        }))
-      : []),
     ...(kind === "All" || kind === "Tools"
       ? ROUTE_DIRECTORY.filter((tool) => tool.directory).map((tool) => ({
           key: `tool:${tool.path}`,

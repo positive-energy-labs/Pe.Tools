@@ -1,13 +1,17 @@
-/* Portable Page adapter; instruments and calculation are shared with the authored route. */
+/* Portable circuit worksheet. Shared state is the Page event log. */
 (async () => {
 await pe.kitReady;
 const { React, h, createRoot, useState } = pe.kit;
 const sources = JSON.parse(document.getElementById('page-source').textContent);
-const base = pe.exported?.snapshot?.v === SCHEMA_VERSION ? structuredClone(pe.exported.snapshot) : structuredClone(initialCircuitState);
+const base = structuredClone(initialCircuitState);
 const params = new URLSearchParams(location.hash.slice(1));
 for (const key of ['tab', 'theme', 'target']) if (params.has(key)) base[key] = params.get(key);
 let redraw = () => {};
-const kernel = pe.kernel(circuitReduce, base, () => redraw(kernel.state));
+const kernel = await pe.state({
+  reduce: circuitReduce, base, render: state => redraw(state),
+  describe: state => '# Voltage drop\n\n' + JSON.stringify(state, null, 2),
+  local: ['select', 'proposal', 'receipt'],
+});
 const Page = createInstruments({
   React, kit: pe.kit, sources, exported: pe.exported,
   getState: () => kernel.state,
@@ -18,19 +22,17 @@ const Page = createInstruments({
   },
   target: () => pe.target(), read: (key, input) => pe.read(key, input), do: (key, input) => pe.do(key, input),
   initialize: async () => {
-    pe.describe(() => '# Voltage drop\n\nDocument: ' + (kernel.state.reading?.document?.title || 'Manual calculation') + '\nRead at: ' + (kernel.state.reading?.at ? new Date(kernel.state.reading.at).toLocaleString() : 'No reading yet') + '\nTarget: ' + kernel.state.target + '%\n\n' + JSON.stringify(kernel.state, null, 2));
-    await pe.state(kernel, { local: ['select', 'set', 'proposal', 'receipt', 'input'] });
     redraw(kernel.state);
   },
   onState: state => {
     document.documentElement.dataset.theme = state.theme;
     document.documentElement.classList.toggle('dark', state.theme === 'dark');
     history.replaceState(null, '', location.pathname + location.search + '#' + new URLSearchParams({ tab: state.tab, theme: state.theme, target: state.target }));
-    window.pageState = { state, events: kernel.log };
+    window.pageState = { state, events: pe.exported?.events };
   },
   onCapture: captured => { window.pageCapture = captured; },
-  exportSnapshot: async snapshot => {
-    const response = await pe.fetch('/pages/' + encodeURIComponent(pe.slug) + '/export', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ snapshot }) });
+  exportSnapshot: async () => {
+    const response = await pe.fetch('/pages/' + encodeURIComponent(pe.slug) + '/export', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
     if (!response.ok) throw new Error(await response.text());
     const url = URL.createObjectURL(await response.blob());
     const a = document.createElement('a'); a.href = url; a.download = 'voltage-drop-snapshot.html'; a.click();

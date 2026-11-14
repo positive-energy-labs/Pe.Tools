@@ -2,6 +2,8 @@
 
 Date: 2026-11-10. Status: accepted. Source: kaitpw's rulings in the kernel crusade thread after two rounds with four adjacent threads (Space, findings, UI triage, kernel audit) and two code censuses. Evidence: `.artifacts/runs/kernel-crusade-20261110/DIRECTION-r1..r3.md` and each thread's last two replies (Space 2727, Findings 91, Triage 228, Audit 1015). Amends [ADR 0026](0026-one-route-shell.md), [ADR 0027](0027-one-route-one-subject-one-consent.md) rule 15 and [ADR 0030](0030-pea-first-goal-core-plan-statecell.md) rules 9 and 10. [ADR 0034](0034-timeline-per-work-places-on-host.md) stands. Frontier: [routes MAP](../features/routes/MAP.md).
 
+Pod-route promotion and Pod slots are superseded by [ADR 0045](0045-pages-only-pod-ui.md). Builtin kernel behavior remains.
+
 ## Context
 
 Four threads hit one wall from four sides. The kernel composes routes, but the things that recur live below the route: the Picture, findings, selection, StateCell, the Timeline, consent and status. No slot holds any of them, so each route re-authors them, and `fans/route.ts` imports web `ducts/` nine times to avoid authoring them twice. The audit measured a route at about 250 handwritten lines over seven files plus three generators, with 407 `unknown` and 247 casts in 86 shell files because `admitUnknown` discards the one strong type at the seam. Consent is drawn in five branches from one host state. "What needs a person" is derived twice, once on the host (`notices.ts`) for push and once in the browser (`navigation/ledger.tsx`) for pull. The legacy mount kernel is twenty files and about 3,950 lines that no slot route uses.

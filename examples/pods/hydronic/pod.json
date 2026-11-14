@@ -4,12 +4,11 @@
   "name": "Hydronic",
   "version": "0.1.0",
   "description": "Size the pipes of one hydronic piping system against the firm's velocity and friction limits.",
-  "routes": [
+  "entrypoints": [
     {
-      "artifact": "routes/sizing/route.artifact",
-      "fingerprint": "pod-bytes:328edbf6336e2827b49bce2db15f62aa9e98affc0a5bcd995b6353f2728135d0",
-      "name": "Hydronic pipe sizing",
-      "description": "Size each pipe of a hydronic system against velocity and friction limits"
+      "sourcePath": "pages/sizing/Heal.cs",
+      "name": "Apply pipe diameters",
+      "mode": "WriteTransaction"
     }
   ]
 }

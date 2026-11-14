@@ -11,7 +11,6 @@ export * from "./catalog-work.ts";
 export * from "./work-value.ts";
 export * from "./value.ts";
 
-export type { PodRouteAuthoring } from "./pod-authoring.ts";
 export {
   field,
   manyField,

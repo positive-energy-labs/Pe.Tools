@@ -48,7 +48,6 @@ vi.mock("#/navigation/state", () => ({
   useNavigation: () => ({ snapshot: null, loading: false, error: undefined, refresh() {} }),
   useDestination: () => () => true,
 }));
-vi.mock("#/route/pod-route-context", () => ({ usePodRoutes: () => null }));
 // The overlay itself is the ledger's and has its own tests; here only its open state matters.
 vi.mock("./global-search", () => ({ GlobalSearch: () => null }));
 

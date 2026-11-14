@@ -26,7 +26,6 @@ type NavigationDocument = z.infer<typeof documentSchema>;
 export interface NavigationSources {
   threads(): Promise<unknown>;
   documents(): Promise<unknown>;
-  routes?(): Promise<Record<string, string>>;
   contexts?(): readonly { threadId: string; context: ThreadWorkContext | null }[];
   subscribe?(notify: () => void): () => void;
 }
@@ -145,8 +144,7 @@ async function resumeDestination(
   if (!census.available) throw new Error("Persisted Work discovery is unavailable");
   const work = census.works.find((item) => item.id === id);
   if (!work) return null;
-  const routes = (await sources?.routes?.()) ?? {};
-  const path = routes[work.route] ?? documentRoutes[work.route];
+  const path = documentRoutes[work.route];
   if (work.scope.binding === "workspace" && work.route === "schedules") {
     const addresses = (sources?.contexts?.() ?? []).flatMap(({ context }) =>
       context
@@ -175,7 +173,7 @@ async function resumeDestination(
           : "This schedule Work has no unique remembered document binding. It was left unchanged.",
     };
   }
-  if (work.scope.binding === "host" && !routes[work.route])
+  if (work.scope.binding === "host")
     return {
       id,
       key: work.scope,
@@ -183,8 +181,7 @@ async function resumeDestination(
       reason: "This tool requires a document; its host-only Work has no document binding.",
     };
   if (
-    work.scope.binding === "workspace" &&
-    !(routes[work.route] && work.scope.work === "calculator")
+    work.scope.binding === "workspace"
   )
     return {
       id,
@@ -209,7 +206,7 @@ async function resumeDestination(
         ? JSON.stringify({ kind: "open", ref: work.scope.open })
         : undefined;
   const at = routeAt(path);
-  const carry = { target, work: work.scope.binding === "workspace" ? work.scope.work : undefined };
+  const carry = { target };
   return {
     id,
     key: work.scope,
@@ -276,19 +273,13 @@ function destination(
   scope: WorkKey,
   documents: readonly NavigationDocument[],
   available: boolean,
-  routes: Record<string, string> = {},
 ) {
-  // Pod routes own a document-free calculator workspace as well as document-bound Works.
-  if (scope.binding === "workspace" && scope.work === "calculator" && routes[scope.route])
-    return { url: routes[scope.route]!, reason: null };
   if (scope.binding === "workspace")
     return { url: null, reason: "This tool has no URL that resumes this named Work workspace." };
-  const path = routes[scope.route] ?? documentRoutes[scope.route];
+  const path = documentRoutes[scope.route];
   if (!path)
     return { url: null, reason: "This Work has no document route that accepts its identity." };
   if (scope.binding === "host")
-    if (routes[scope.route]) return { url: path, reason: null };
-    else
       return {
         url: null,
         reason: "This route requires a document; its host-only Work has no document binding.",
@@ -335,7 +326,6 @@ export async function readNavigation(
   sources?: NavigationSources,
 ): Promise<NavigationSnapshot> {
   const observations: string[] = [];
-  const routes = (await sources?.routes?.()) ?? {};
   const [workResult, threadResult, documentResult] = await Promise.allSettled([
     workspace.instances(),
     sources
@@ -371,7 +361,7 @@ export async function readNavigation(
     revision: work.revision,
     staged: work.unfinished,
     ...(work.state === "ready"
-      ? destination(work.scope, documents ?? [], documents !== null, routes)
+      ? destination(work.scope, documents ?? [], documents !== null)
       : {
           url: null,
           reason:

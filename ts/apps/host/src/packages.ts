@@ -6,8 +6,6 @@ import {
   type ContributionKind,
   scriptModeSchema,
   type ScriptMode,
-  podRouteDeclarationSchema,
-  type PodRouteDeclaration,
 } from "@pe/agent-contracts";
 import type { Dirent } from "node:fs";
 import { lstat, readdir } from "node:fs/promises";
@@ -16,7 +14,6 @@ import type { ScriptingExecute } from "@pe/host-contracts/generated";
 import type { MemberIssue } from "@pe/host-contracts/operation-types";
 import { productPathNames } from "@pe/host-contracts/contracts";
 import { contentHomes, contentRootsReady, ContentHomeUnavailable } from "./content-roots.ts";
-import { verifyPodArtifact } from "./pod-artifact.ts";
 import { shippedPodUpdateRefusals } from "./shipped-pod-status.ts";
 import { podModelSchema, type PodModel } from "./pod-model.ts";
 import { logPackageDiscovery as scanLog } from "./pod-discovery-log.ts";
@@ -69,7 +66,6 @@ export type AdmittedPackage = {
   members: PackageMember[];
   diagnostics: MemberIssue[];
   contributions: PackageContribution[];
-  routes?: PodRouteDeclaration[];
 };
 export type PackageListing = {
   packages: AdmittedPackage[];
@@ -434,38 +430,6 @@ async function readFolder(
       diagnostics.push(problem("InvalidEntrypoint", "pod.json", message(error)));
     }
   }
-  const routes: PodRouteDeclaration[] = [];
-  for (const raw of Array.isArray(value.routes) ? value.routes : []) {
-    try {
-      const declaration = podRouteDeclarationSchema.parse(raw);
-      const slug = declaration.artifact.split("/")[1];
-      if (`pod.${value.id}.${slug}`.length > 100)
-        throw Error("Route Work identity exceeds 100 characters");
-      if (routes.some((route) => route.artifact === declaration.artifact))
-        throw Error("Duplicate route artifact");
-      const artifact = members.find((member) => member.path === declaration.artifact);
-      if (!artifact) throw Error("Route has no admitted artifact");
-      try {
-        await verifyPodArtifact(
-          JSON.parse(new TextDecoder().decode(artifact.bytes)),
-          declaration.fingerprint,
-        );
-      } catch (error) {
-        diagnostics.push(problem("RouteFingerprintMismatch", declaration.artifact, message(error)));
-        continue;
-      }
-      if (
-        declaration.page &&
-        !members.some((member) => member.path === `${declaration.page}/index.html`)
-      )
-        throw Error("Route has no admitted portable Page");
-      routes.push(declaration);
-    } catch (error) {
-      diagnostics.push(problem("InvalidRoute", "pod.json", message(error)));
-    }
-  }
-  if (value.routes !== undefined && !Array.isArray(value.routes))
-    diagnostics.push(problem("InvalidRoute", "pod.json", "routes must be an array"));
   const contributions = members.flatMap((member) => {
     const kind = kindOfMember(member.path, entrypoints);
     if (!kind) return [];
@@ -501,17 +465,6 @@ async function readFolder(
     members,
     entrypoints,
     diagnostics: currentDiagnostics(value.id, diagnostics),
-    contributions: [
-      ...contributions,
-      ...routes.map((route) => ({
-        kind: "route" as const,
-        path: route.artifact,
-        memberPath: route.artifact,
-        key: contributionKey({ kind: "route", packageId: value.id, path: route.artifact }),
-        name: route.name,
-        description: route.description,
-      })),
-    ],
-    routes,
+    contributions,
   };
 }
