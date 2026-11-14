@@ -147,6 +147,7 @@ import { createPackageLifecycle, bindPackageLifecycle } from "./package-lifecycl
 import {
   captureDirectory,
   capturePackage,
+  bindPackageScanLogger,
   listPackages,
   type AdmittedPackage,
 } from "./packages.ts";
@@ -1193,6 +1194,11 @@ function* hostPeRoutes(
   telemetry: ReceiptExporter = missingTelemetry(),
 ) {
   const runtime = yield* Effect.context<never>();
+  const log = (entry: Effect.Effect<void>) => {
+    // effect-edge: island, phase 5
+    Effect.runSync(entry);
+  };
+  bindPackageScanLogger((message) => log(Effect.logInfo(message)));
   const journal = yield* ActionJournalService;
   const hostLog = yield* HostLogService;
   const marks = yield* HostDocumentMarks;
@@ -1225,8 +1231,7 @@ function* hostPeRoutes(
   void userCodexMcpServers(userCodexConfigPath())
     .then((names) => writePeaCodexProjectConfig(worldRoot, names))
     .catch((error) =>
-      // effect-edge: island, phase 5
-      Effect.runSync(
+      log(
         Effect.logWarning(`Pea's Codex project config was not written: ${String(error)}`),
       ),
     );

@@ -11,7 +11,7 @@ import {
   pageTargetReadingSchema,
   routeAddress,
   type Caller,
-  type Basis,
+  basisSchema,
   type DocumentRef,
   type PageTargetReading,
   type ThreadHead,
@@ -23,8 +23,10 @@ import {
   type PageLive,
 } from "../src/pages-route.ts";
 import { readRequestIdentity, type IdentityOptions } from "../src/request-identity.ts";
-import { admitCrossing, bindControl, callerOf, currentCaller, live, Refused } from "../src/control.ts";
+import { admitCrossing, bindControl, callerOf, currentCaller, live, Refused, onPagePinRevoke } from "../src/control.ts";
 import { asCaller, human, pea, serviceHeaders } from "./callers.ts";
+import * as packages from "../src/packages.ts";
+import * as lifecycle from "../src/package-lifecycle.ts";
 
 const cleanup: (() => Promise<unknown>)[] = [];
 afterEach(async () => {
@@ -60,6 +62,45 @@ async function pagesRoot(live?: PageLive) {
 }
 
 describe("pages", () => {
+  it.each([4000, 6000])("Pod listing taking %i ms shares one five-second Page budget with lifecycle", async (listingMs) => {
+    const { pods, fetch } = await pagesRoot();
+    const directory = join(pods, "late");
+    await mkdir(join(directory, "pages", "tour"), { recursive: true });
+    await writeFile(join(directory, "pod.json"), '{"id":"late"}');
+    await writeFile(join(directory, "pages", "tour", "index.html"), "<title>Late tour</title>");
+    const listing = await packages.listPackages(pods);
+    const entered = Promise.withResolvers<void>();
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const list = vi.spyOn(packages, "listPackages").mockImplementation(async () => {
+      entered.resolve();
+      await new Promise((resolve) => setTimeout(resolve, listingMs));
+      return listing;
+    });
+    const active = vi.spyOn(lifecycle, "activePackages").mockImplementation(async (candidates) => {
+      await new Promise((resolve) => setTimeout(resolve, 4000));
+      return [...candidates];
+    });
+    const delivery: { answer?: Response } = {};
+    const opening = fetch("/pages/late--tour/").then((response) => { delivery.answer = response; return response; });
+    await entered.promise;
+    try {
+      await vi.advanceTimersByTimeAsync(4999);
+      expect(delivery.answer).toBeUndefined();
+      expect(active).toHaveBeenCalledTimes(listingMs < 5000 ? 1 : 0);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(delivery.answer?.status).toBe(404);
+      expect(await (await opening).text()).toContain("no page late--tour: no admitted package contributes it");
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(active).toHaveBeenCalledTimes(listingMs < 5000 ? 1 : 0);
+    } finally {
+      await vi.advanceTimersByTimeAsync(10000);
+      await opening;
+      list.mockRestore();
+      active.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
   it("the Bind redirect keeps the Page's whole query in its query field", async () => {
     const { fetch } = await pagesRoot();
     const response = await fetch("/pages/todo/?walk=1&x=2", {
@@ -305,7 +346,7 @@ describe("pages", () => {
   );
 
   it.each(["{", "[]", '{"verdict":42}', '{"verdict":""}', '{"verdict":"line\\nbreak"}'])(
-    "C2: refuses malformed file declaration %s with its Page file",
+    "C2: malformed file declaration %s preserves replay but refuses agent append",
     async (declaration) => {
       const { root, fetch } = await pagesRoot();
       const file = join(root, "todo", "index.html");
@@ -314,17 +355,41 @@ describe("pages", () => {
         `<script type="application/json" id="pe-agent">${declaration}</script>`,
       );
       const agent = asCaller(pea(), fetch);
-      for (const response of [
-        await agent("/pages/todo/state"),
-        await agent("/pages/todo/events", { method: "POST", body: '{"type":"verdict"}' }),
-      ]) {
-        expect(response.status).toBe(422);
-        expect((await response.json()) as unknown).toMatchObject({
-          message: expect.stringContaining(file),
-        });
-      }
+      expect(
+        (await fetch("/pages/todo/events", { method: "POST", body: '{"type":"note"}' })).status,
+      ).toBe(201);
+      const read = await agent("/pages/todo/state");
+      expect(read.status).toBe(200);
+      expect(await read.json()).toMatchObject({
+        seq: 1,
+        events: [{ event: { type: "note" } }],
+        agent: {},
+        agentError: expect.stringContaining(file),
+      });
+      const response = await agent("/pages/todo/events", { method: "POST", body: '{"type":"verdict"}' });
+      expect(response.status).toBe(422);
+      expect(await response.json()).toMatchObject({ message: expect.stringContaining(file) });
     },
   );
+
+  it("C2: two pe-agent blocks preserve replay but refuse agent append in words", async () => {
+    const { root, fetch } = await pagesRoot();
+    await writeFile(
+      join(root, "todo", "index.html"),
+      '<script type="application/json" id="pe-agent">{"note":"text"}</script>'.repeat(2),
+    );
+    const agent = asCaller(pea(), fetch);
+    const read = await agent("/pages/todo/state");
+    expect(read.status).toBe(200);
+    expect(await read.json()).toMatchObject({
+      events: [],
+      agent: {},
+      agentError: expect.stringContaining("expected one"),
+    });
+    const response = await agent("/pages/todo/events", { method: "POST", body: '{"type":"note"}' });
+    expect(response.status).toBe(422);
+    expect(await response.text()).toContain("expected one");
+  });
 
   it("C2: buffers live rows while SSE replay is in flight", async () => {
     const { fetch } = await pagesRoot();
@@ -841,14 +906,18 @@ describe("pages", () => {
       await f.as(human).put("/pe/pages/todo/binding", { kind: "pinned", address: MODEL });
       const response = await f.page.post("/pages/todo/act", { key: "k" });
       expect(response.status).toBe(202);
-      const { basis } = await response.json() as { basis: Basis };
+      const basis = basisSchema.parse((await response.json()).basis);
       expect(await live(basis, "step")).toBeNull();
+      const fenced: string[] = [];
+      const stop = onPagePinRevoke((page) => fenced.push(page));
+      cleanup.push(async () => stop());
       if (change === "reopen") sessions[0] = session("S1", MODEL, "new-opening");
       else {
         if (change === "agent") bind("S1");
         await f.as(change === "agent" ? pea("t1") : human).put("/pe/pages/todo/binding",
           change === "unpin" ? { kind: "none" } : { kind: "pinned", address: change === "repin" ? "C:/Other.rvt" : MODEL });
       }
+      expect(fenced).toEqual(change === "reopen" ? [] : ["page:@pages/todo"]);
       for (const moment of ["step", "authorize", "native dispatch"])
         expect((await live(basis, moment))?.refusal).toMatchObject({ code: "grant.revoked", door: moment, lifetime: docA });
     });
@@ -1326,13 +1395,29 @@ describe("pages", () => {
     );
 
     it.each(["{", "[]", '{"verdict":42}'])(
-      "C2: pe.state refuses malformed DOM declaration %s",
+      "C2: pe.state replays despite malformed DOM declaration %s and shows agentError",
       async (declaration) => {
-        const { pe, sent } = await page(() => undefined, undefined, declaration);
-        await expect(pe.state!({ base: {}, reduce: (state: unknown) => state })).rejects.toThrow(
-          "pe-agent declaration",
+        const message = "Invalid pe-agent declaration in this Page's index.html";
+        const { pe, sent, body } = await page(
+          (url) =>
+            url.pathname.endsWith("/state")
+              ? Response.json({
+                  seq: 1,
+                  events: [{ seq: 1, origin: "person", at: "now", event: { value: 7 } }],
+                  agent: {},
+                  agentError: message,
+                })
+              : undefined,
+          undefined,
+          declaration,
         );
-        expect(sent.some((row) => row.method === "PUT")).toBe(false);
+        const k = await pe.state!({
+          base: 0,
+          reduce: (_state: unknown, event: { value: number }) => event.value,
+        });
+        expect(k).toMatchObject({ state: 7 });
+        expect((body.children[0] as { textContent: string }).textContent).toBe(message);
+        expect(sent.some((row) => row.method === "PUT")).toBe(true);
       },
     );
 
