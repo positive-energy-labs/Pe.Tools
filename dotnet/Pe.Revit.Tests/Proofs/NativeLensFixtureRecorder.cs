@@ -39,7 +39,7 @@ public sealed class NativeLensFixtureRecorder {
             }, Formatting.Indented, settings));
             Assert.That(response.Boxed, Is.EqualTo(1));
             Assert.That(response.Lens.Basis, Is.EqualTo(LensBasis.PeDefault));
-            var view = (View)doc.GetElement(response.ViewId.ToElementId());
+            var view = (View)doc.GetElement(response.ViewId!.Value.ToElementId());
             foreach (var item in Pe.Revit.DocumentData.AgentContext.RevitViewImageExporter.LensCategories) {
                 if (!view.CanCategoryBeHidden(new ElementId(item.Category))) continue;
                 Assert.That(view.GetCategoryHidden(new ElementId(item.Category)), Is.True);

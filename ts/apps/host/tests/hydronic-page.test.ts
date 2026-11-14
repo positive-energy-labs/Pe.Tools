@@ -1,4 +1,6 @@
 import { describe, expect, test } from 'vite-plus/test';
+import { readFile } from 'node:fs/promises';
+import { runInNewContext } from 'node:vm';
 import { fromRevit, hydraulics, size, type Pipe } from '../../../../examples/pods/hydronic/pages/sizing/size.mjs';
 import type { MepSystemMembers } from '@pe/host-contracts/generated';
 // Copper-ish nominal/inner pairs, mm. The real catalog is the model's pipe segment (see gaps).
@@ -8,6 +10,30 @@ const pipe = (uniqueId: string, flow: number | null, diameter: number, upstream:
   ({ uniqueId, label: uniqueId, flow, diameter, length: 10, upstream, segment: "s" });
 
 describe("sizing", () => {
+  test("W50: Read system scopes the roster and member calls before reading a large model", async () => {
+    const source = await readFile(new URL('../../../../examples/pods/hydronic/pages/sizing/index.html', import.meta.url), 'utf8');
+    const calls: { key: string; request: Record<string, unknown> }[] = [];
+    const events: unknown[] = [];
+    const systems = [{ uniqueId: 'pipe-system', domain: 'piping' }];
+    const read = runInNewContext(`(${source.slice(source.indexOf('async function read('), source.indexOf('function Worksheet('))})`, {
+      pe: { target: async () => ({ session: 's', openId: 'd' }), read: async (key: string, request: Record<string, unknown>) => {
+        calls.push({ key, request });
+        if (key === 'mep.system.members') {
+          expect(request.domain).toBe('piping');
+          expect(request.systemUniqueId ? request.maxElements : request.maxSystems).toBeGreaterThan(0);
+          return { systems, elements: [] };
+        }
+        return { segments: [] };
+      } },
+      k: { fire: async (event: unknown) => events.push(event) }, fromRevit: () => ({}),
+    }) as (id?: string) => Promise<void>;
+    await read();
+    expect(calls.slice(0, 2)).toEqual([
+      { key: 'mep.system.members', request: { domain: 'piping', maxSystems: 1024 } },
+      { key: 'mep.system.members', request: { domain: 'piping', systemUniqueId: 'pipe-system', maxElements: 16384 } },
+    ]);
+    expect(events).toMatchObject([{ type: 'reading', reading: { system: 'pipe-system', systems } }]);
+  });
   test("candidate is the smallest catalog size within both limits", () => {
     const [row] = size([pipe("a", 0.3, 25)], catalogs, limits, {}).rows;
     expect(row?.candidate).toBe(25);

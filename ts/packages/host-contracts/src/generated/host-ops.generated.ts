@@ -3383,10 +3383,14 @@ export namespace MepSegmentSizes {
 /** Read a bounded roster of this document's MEP systems (piping and duct; domain is a field) and optionally one system's members: UniqueIds and ElementIds, system type and classification, flow, size (nominal and inner diameter, or width and height; a size the domain lacks reads absent), length, segment, type, and every physical connector with its peers and the flow direction Revit reports (In, Out or Bidirectional, never inferred). Each system's source is its base equipment, Revit's base connector id and any connector Revit reports Out; no base equipment reads absent. Revit reports a base connector Bidirectional once assigned, so upstream walks from the base connector id across peers. Optional facts are value, absent or error. Lengths and sizes are Revit internal feet, flow is internal cubic feet per second. Refuses overflow rather than truncating. Read-only. */
 export namespace MepSystemMembers {
   export namespace Req {
+    /**
+     * Domain narrows before the roster bound: piping or duct. A system id reads only that system.
+     */
     export interface Request {
       systemUniqueId?: null | string;
       maxSystems?: number;
       maxElements?: number;
+      domain?: null | string;
     }
   }
   export namespace Res {

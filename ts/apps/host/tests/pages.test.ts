@@ -1805,7 +1805,7 @@ describe("pages", () => {
         undefined,
         sleep,
       );
-      await expect(pe.target!()).rejects.toThrow("403");
+      await expect(pe.target!()).rejects.toThrow("this Page may not read that document");
       await expect(pe.state!({ reduce: (s: unknown) => s, base: {} })).rejects.toThrow("503");
       expect(asked).toEqual({ target: 1, state: 1 });
       expect(waits).toEqual([]);
