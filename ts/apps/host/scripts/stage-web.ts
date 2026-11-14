@@ -23,10 +23,10 @@ const pages = join(here, "..", "dist-installed", "pages");
 rmSync(pages, { recursive: true, force: true });
 const { createJiti } = await import("jiti");
 const { PAGE_LIBRARY_SOURCES } = await createJiti(import.meta.url).import<
-  typeof import("../src/page-libraries.ts")
->("../src/page-libraries.ts");
+  typeof import("../src/page-library-sources.ts")
+>("../src/page-library-sources.ts");
 for (const [name, source] of Object.entries(PAGE_LIBRARY_SOURCES)) {
-  const from = fileURLToPath(new URL(source, new URL("../src/page-libraries.ts", import.meta.url)));
+  const from = fileURLToPath(new URL(source, new URL("../src/page-library-sources.ts", import.meta.url)));
   const to = join(pages, name);
   mkdirSync(dirname(to), { recursive: true });
   cpSync(from, to);
