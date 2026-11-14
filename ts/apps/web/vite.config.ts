@@ -156,7 +156,7 @@ const config = defineConfig(({ mode, command }) => {
     build: {
       // Private symbolication only: "hidden" emits maps without a sourceMappingURL, the chunk and
       // its map share a debug id, sources are repo-relative, and no source text is embedded.
-      // stage-web.mjs moves every map out of the served client tree.
+      // stage-web.ts moves every map out of the served client tree.
       sourcemap: "hidden",
       rolldownOptions: {
         output: {
