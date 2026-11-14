@@ -11557,7 +11557,7 @@ export namespace ScriptingExecute {
       sourcePath?: null | string;
       workspaceKey?: string;
       sourceName?: null | string;
-      permissionMode?: ScriptPermissionMode;
+      permissionMode?: null | ScriptPermissionMode;
       timeoutSeconds?: number;
       sourceBundle?: null | ScriptPodSourceBundle;
       caller?: ScriptCaller;

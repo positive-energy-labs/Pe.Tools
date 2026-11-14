@@ -143,6 +143,44 @@ public sealed class PodManifestValidatorTests {
                 .Replace("\"sourcePath\": \"src/Main.cs\"", $"\"sourcePath\": \"src/Main.cs\", \"mode\": \"{mode}\"")).Success, Is.False, mode);
     }
 
+    // The palette's two runs. Mutant, run red once: make `RunMode(full: true)` answer WriteTransaction whatever
+    // the entrypoint declares (the ReadOnly and NoTransaction rows fail).
+    [TestCase(null, false, "ReadOnly")]
+    [TestCase(null, true, "WriteTransaction")]
+    [TestCase("ReadOnly", true, "ReadOnly")]
+    [TestCase("NoTransaction", true, "NoTransaction")]
+    [TestCase("NoTransaction", false, "ReadOnly")]
+    [TestCase("WriteTransaction", false, "ReadOnly")]
+    public void A_persons_run_takes_the_declared_mode_and_safe_never_writes(string? declared, bool full, string expected) {
+        var mode = declared is null ? (Pe.Shared.HostContracts.Scripting.ScriptPermissionMode?)null
+            : Enum.Parse<Pe.Shared.HostContracts.Scripting.ScriptPermissionMode>(declared);
+        Assert.That(new PodEntrypoint("src/Main.cs", null, null, mode).RunMode(full).ToString(), Is.EqualTo(expected));
+    }
+
+    // The one mode rule every door reaches. Mutants, each run red once: answer `asked ?? ReadOnly` (a declared
+    // WriteTransaction run with no mode rolls back: the third row fails); drop the ReadOnly refusal (the last two fail).
+    [TestCase(null, null, "ReadOnly")]
+    [TestCase(null, "WriteTransaction", "WriteTransaction")]
+    [TestCase("WriteTransaction", null, "WriteTransaction")]
+    [TestCase("NoTransaction", null, "NoTransaction")]
+    [TestCase("NoTransaction", "ReadOnly", "ReadOnly")]
+    [TestCase("ReadOnly", null, "ReadOnly")]
+    [TestCase("ReadOnly", "ReadOnly", "ReadOnly")]
+    [TestCase("ReadOnly", "WriteTransaction", null)]
+    [TestCase("ReadOnly", "NoTransaction", null)]
+    public void A_run_takes_the_asked_mode_then_the_declared_mode_and_a_declared_read_refuses_a_write(string? declared, string? asked, string? expected) {
+        static Pe.Shared.HostContracts.Scripting.ScriptPermissionMode? Mode(string? name) =>
+            name is null ? null : Enum.Parse<Pe.Shared.HostContracts.Scripting.ScriptPermissionMode>(name);
+        var manifest = new PodManifest(2, "office", "Office", "1.0.0", null, [new PodEntrypoint("checks/Census.csx", null, null, Mode(declared))]);
+        if (expected is null)
+            Assert.That(Assert.Throws<ArgumentException>(() => manifest.ModeFor("checks/census.csx", Mode(asked)))!.Message,
+                Is.EqualTo($"checks/census.csx is declared ReadOnly in pod.json; it cannot run as {asked}."));
+        else
+            Assert.That(manifest.ModeFor("checks/census.csx", Mode(asked)).ToString(), Is.EqualTo(expected));
+        // A source the manifest does not declare has no declared mode.
+        Assert.That(manifest.ModeFor("src/Helper.cs", null).ToString(), Is.EqualTo("ReadOnly"));
+    }
+
     [Test]
     public void Settings_only_pod_is_valid() {
         var result = PodManifestValidator.ValidateJson(

@@ -47,6 +47,8 @@ test.each(["bundle", "source-path", "unscoped"] as const)(
         {
           sourcePath: "src/Run.cs",
           workspaceKey: "Tour",
+          // A Pod run is a read at /call only when it says so: native takes the declared mode otherwise.
+          permissionMode: "ReadOnly",
           ...(door === "source-path" ? {} : { sourceBundle }),
         },
         door !== "unscoped",

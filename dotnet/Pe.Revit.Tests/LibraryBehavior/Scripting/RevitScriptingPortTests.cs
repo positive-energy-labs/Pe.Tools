@@ -54,16 +54,28 @@ public sealed class RevitScriptingPortTests {
     //   - drop `plan.Input` from `BuildExecutionContext` (the first run fails: "needs the argument 'level'");
     //   - pass `null` for the Pod folder there (the first run fails: "this script runs outside a Pod");
     //   - drop the `WrapStatementBody` call in `ScriptPodSourceNormalizer.Normalize` (the first run fails to compile);
-    //   - drop the escape check in `ScriptPodPreparationService.FullPath` and the `NormalizeMemberPath` call in
-    //     `RevitScriptContext.PodFile` (the escape run succeeds and answers the outside file);
-    //   - drop the declared-ReadOnly refusal in `NormalizeRequest` (the write run is not Rejected).
+    //   - make `NormalizeRequest` take `request.PermissionMode ?? ReadOnly` instead of `ModeFor` (the write run
+    //     is not Rejected, and the run that names no mode is PolicyRejected for owning a transaction);
+    //   - drop the `ScriptInputBounds.Require` call (the oversized input runs).
+    // The Pod lives in a temporary home this test names to the service, so no host answers and the person's
+    // Pods are never written. `PodFile`'s own refusals are held without Revit in `PodTests`.
     [Test]
     public void Statement_body_entrypoint_beside_a_page_reads_its_input_and_a_file_its_pod_carries(UIApplication uiApplication) {
         var document = EnsureActiveProjectDocument(uiApplication);
         var workspaceKey = "pod-door-proof-" + Guid.NewGuid().ToString("N");
-        var root = UserPods.Root(workspaceKey);
+        var home = Path.Combine(Path.GetTempPath(), "pe-door-home-" + Guid.NewGuid().ToString("N"));
+        var root = Path.Combine(home, "Pods", workspaceKey);
         var runs = Path.Combine(ProductRuntimeLayout.Current.State.RunsPath, workspaceKey);
         var outside = Path.Combine(Path.GetDirectoryName(root)!, workspaceKey + "-outside.txt");
+        ScriptPodSourceBundle Captured() => new(Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)
+            .Select(path => new ScriptPodSourceFile(Path.GetRelativePath(root, path).Replace('\\', '/'), Convert.ToBase64String(File.ReadAllBytes(path)))).ToList());
+        // What the host answers `pod.capture`: this Pod's folder, by its manifest id.
+        var pods = new Pe.Revit.Scripting.Pods.ScriptPodPreparationService((key, _) => key == "pod.capture"
+            ? Newtonsoft.Json.Linq.JObject.FromObject(new { id = workspaceKey, folder = workspaceKey, directory = root, contributions = Array.Empty<object>(), memberBundle = Captured(), sourceBundle = Captured() })
+            : throw new InvalidOperationException($"Unexpected admission: {key}"));
+        var csProjReader = new CsProjReader();
+        var service = new RevitScriptExecutionService(new ScriptProjectGenerator(csProjReader), new ScriptReferenceResolver(csProjReader),
+            new ScriptAssemblyLoadService(), new ScriptCompilationService(ScriptFileTemplates.DefaultUsings), () => uiApplication, pods: pods);
         var checks = Path.Combine(root, "pages", "tour", "checks");
         Directory.CreateDirectory(checks);
         Directory.CreateDirectory(Path.Combine(root, "assets"));
@@ -80,19 +92,21 @@ public sealed class RevitScriptingPortTests {
             """);
         File.WriteAllText(Path.Combine(checks, "strict.csx"), """Result(Arg<int>("count"));""");
         File.WriteAllText(Path.Combine(checks, "escape.csx"), $$"""Result(File.ReadAllText(PodFile("../{{workspaceKey}}-outside.txt")));""");
-        File.WriteAllText(UserPods.PodManifest(workspaceKey),
+        File.WriteAllText(Path.Combine(checks, "owns.csx"), """using (var own = new Transaction(doc, "Door proof")) { own.Start(); own.RollBack(); } Result("owned");""");
+        File.WriteAllText(Path.Combine(root, "pod.json"),
             $$"""
             { "schemaVersion": 2, "id": "{{workspaceKey}}", "name": "Door proof", "version": "1.0.0", "entrypoints": [
               { "sourcePath": "pages/tour/checks/census.csx", "mode": "ReadOnly" },
               { "sourcePath": "pages/tour/checks/strict.csx" },
-              { "sourcePath": "pages/tour/checks/escape.csx" }
+              { "sourcePath": "pages/tour/checks/escape.csx" },
+              { "sourcePath": "pages/tour/checks/owns.csx", "mode": "NoTransaction" }
             ] }
             """);
         var runIndex = 0;
         ExecuteRevitScriptData Run(string? path, Newtonsoft.Json.Linq.JObject? input,
-            ScriptPermissionMode mode = ScriptPermissionMode.ReadOnly, string? inline = null) =>
-            CreateExecutionService(uiApplication).Execute(document, inline is null
-                ? new ExecuteRevitScriptRequest(SourcePath: path, WorkspaceKey: workspaceKey, SourceBundle: CapturedBundle(workspaceKey), PermissionMode: mode, Input: input)
+            ScriptPermissionMode? mode = null, string? inline = null) =>
+            service.Execute(document, inline is null
+                ? new ExecuteRevitScriptRequest(SourcePath: path, WorkspaceKey: workspaceKey, SourceBundle: Captured(), PermissionMode: mode, Input: input)
                 : new ExecuteRevitScriptRequest(ScriptContent: inline, PermissionMode: mode, Input: input), $"{workspaceKey}-{runIndex++}");
         static string Words(ExecuteRevitScriptData result) => string.Join("; ", result.Diagnostics
             .Where(diagnostic => diagnostic.Severity == ScriptDiagnosticSeverity.Error).Select(diagnostic => diagnostic.Message));
@@ -123,6 +137,15 @@ public sealed class RevitScriptingPortTests {
             Assert.That(write.Status, Is.EqualTo(ScriptExecutionStatus.Rejected));
             Assert.That(Words(write), Does.Contain("declared ReadOnly in pod.json"));
 
+            // A run that names no mode takes the declared one: only NoTransaction admits a script's own transaction.
+            var owned = Run("pages/tour/checks/owns.csx", null);
+            Assert.That(owned.Status, Is.EqualTo(ScriptExecutionStatus.Succeeded), Words(owned));
+            Assert.That(Run("pages/tour/checks/owns.csx", null, ScriptPermissionMode.ReadOnly).Status, Is.EqualTo(ScriptExecutionStatus.PolicyRejected));
+
+            var oversized = Run("pages/tour/checks/census.csx", new() { ["level"] = new string('a', ScriptInputBounds.MaxInputBytes) });
+            Assert.That(oversized.Status, Is.EqualTo(ScriptExecutionStatus.Rejected));
+            Assert.That(Words(oversized), Does.Contain("Script input may not exceed 256 KiB."));
+
             var inline = Run(null, new() { ["level"] = "L3" }, inline: """Result(Arg<string>("level"));""");
             Assert.That(inline.Status, Is.EqualTo(ScriptExecutionStatus.Succeeded), Words(inline));
             Assert.That(Newtonsoft.Json.Linq.JToken.FromObject(inline.Data!).ToString(), Is.EqualTo("L3"));
@@ -130,9 +153,8 @@ public sealed class RevitScriptingPortTests {
             Assert.That(podless.Status, Is.EqualTo(ScriptExecutionStatus.RuntimeFailed));
             Assert.That(Words(podless), Does.Contain("this script runs outside a Pod"));
         } finally {
-            if (Directory.Exists(root)) Directory.Delete(root, true);
+            if (Directory.Exists(home)) Directory.Delete(home, true);
             if (Directory.Exists(runs)) Directory.Delete(runs, true);
-            if (File.Exists(outside)) File.Delete(outside);
         }
     }
 
