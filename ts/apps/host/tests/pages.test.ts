@@ -595,7 +595,7 @@ describe("pages", () => {
     it("mints the D12 page key into index.html and stamps it, never a header", async () => {
       bind();
       const { fetch, page, forwarded, as } = await host([session("S1")]);
-      await as(human).put("/pe/pages/todo/binding", { kind: "pinned", address: MODEL });
+      await as(human).put("/pe/pages/todo/binding", { kind: "pinned", ref: docA });
       const html = await (await fetch("/pages/todo/")).text();
       expect(html).toContain('<meta name="pe-page" content="page:@pages/todo">');
       expect(html).toContain('<link rel="icon" href="data:,">');
@@ -711,7 +711,7 @@ describe("pages", () => {
       stop();
       const served = seen.length;
       headMoved();
-      await as(human).put("/pe/pages/todo/binding", { kind: "pinned", address: MODEL });
+      await as(human).put("/pe/pages/todo/binding", { kind: "pinned", ref: docA });
       expect(seen).toHaveLength(served);
       const missing: unknown[] = [];
       // A name that is no Page slug is refused, as the HTTP door refuses it.
@@ -835,7 +835,7 @@ describe("pages", () => {
       await writeFile(join(pod, "pod.json"), JSON.stringify({ id: "tour", for: { title: "Chadds", probes: [
         { elementId: 1, uniqueId: "one" }, { elementId: 2, uniqueId: "two" },
       ] } }));
-      await asCaller(human, fetch)("/pe/pages/tour--tour/binding", { method: "PUT", body: JSON.stringify({ kind: "pinned", address: MODEL }) });
+      await asCaller(human, fetch)("/pe/pages/tour--tour/binding", { method: "PUT", body: JSON.stringify({ kind: "pinned", ref: docA }) });
       reads.length = 0; // Binding itself answers a target reading.
       const target = () => asCaller({ kind: "page", page: "page:@tour/pages/tour" }, fetch)("/pages/tour--tour/target").then(async (r) => pageTargetReadingSchema.parse(await r.json()));
       expect((await target()).resolution).toEqual({ kind: "refused", reason: "wrong-model", message: "this Pod is for Chadds; the bound document is Other" });
@@ -848,23 +848,16 @@ describe("pages", () => {
       expect((await target()).resolution.kind).toBe("refused");
     });
 
-    it("a pinned Address open in two Revits is choose: ambiguous, closed is document-closed", async () => {
+    it("a pin selects its exact lifetime even with the same Address in two Revits, and refuses a reopen", async () => {
       bind();
       const two = await host([session("S1"), session("S2")]);
-      await two.as(human).put("/pe/pages/todo/binding", { kind: "pinned", address: MODEL });
+      await two.as(human).put("/pe/pages/todo/binding", { kind: "pinned", ref: docA });
       const reading = (await (
         await two.page.get("/pages/todo/target")
       ).json()) as PageTargetReading;
-      expect(reading.resolution).toEqual({ kind: "choose", reason: "ambiguous" });
-      expect(reading.document).toBeNull();
-      const act = await two.page.post("/pages/todo/act", { key: "revit.context.lens" });
-      expect(act.status).toBe(409);
-      expect(await act.json()).toMatchObject({
-        resolution: { kind: "choose", reason: "ambiguous" },
-      });
-      expect(two.forwarded).toEqual([]);
-      const none = await host([session("S1", "C:\\Jobs\\Other.rvt")]);
-      await none.as(human).put("/pe/pages/todo/binding", { kind: "pinned", address: MODEL });
+      expect(reading.resolution).toEqual({ kind: "resolved", target: { kind: "document", ref: docA } });
+      const none = await host([session("S1", MODEL, "new-opening")]);
+      await none.as(human).put("/pe/pages/todo/binding", { kind: "pinned", ref: docA });
       expect(
         ((await (await none.page.get("/pages/todo/target")).json()) as PageTargetReading)
           .resolution,
@@ -874,23 +867,33 @@ describe("pages", () => {
     it("a person's pin writes its document as that person's act", async () => {
       bind("S2");
       const yours = await host([session("S1")]);
-      await yours.as(human).put("/pe/pages/todo/binding", { kind: "pinned", address: MODEL });
+      await yours.as(human).put("/pe/pages/todo/binding", { kind: "pinned", ref: docA });
       expect(await (await yours.page.post("/pages/todo/act", { key: "k" })).json()).toMatchObject({
         caller: { kind: "page", page: "page:@pages/todo" },
         basis: { kind: "person-pin", page: "page:@pages/todo", boundBy: "human", lifetime: docA },
       });
       expect(await (await yours.page.get("/pages/todo/target")).json()).toMatchObject({ write: { kind: "human" } });
       const peas = await host([session("S2")]);
-      await peas.as(human).put("/pe/pages/todo/binding", { kind: "pinned", address: MODEL });
+      await peas.as(human).put("/pe/pages/todo/binding", { kind: "pinned", ref: { session: "S2", openId: "B" } });
       expect(await (await peas.page.post("/pages/todo/act", { key: "k" })).json()).toMatchObject({
         basis: { kind: "person-pin", boundBy: "human", lifetime: { session: "S2", openId: "B" } },
       });
     });
 
+    it("a detached document with no Address binds and runs by its exact lifetime", async () => {
+      bind();
+      const detached = session("S1");
+      const f = await host([{ ...detached, documents: detached.documents!.map((doc) => ({ ...doc, address: null })) }]);
+      const response = await f.as(human).put("/pe/pages/todo/binding", { kind: "pinned", ref: docA });
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({ resolution: { kind: "resolved", target: { kind: "document", ref: docA } } });
+      expect((await f.page.post("/pages/todo/act", { key: "k" })).status).toBe(202);
+    });
+
     it("a Pea pin cannot consent to a write after its acquisition is released", async () => {
       bind("S1");
       const f = await host([session("S1")]);
-      expect((await f.as(pea("t1")).put("/pe/pages/todo/binding", { kind: "pinned", address: MODEL })).status).toBe(200);
+      expect((await f.as(pea("t1")).put("/pe/pages/todo/binding", { kind: "pinned", ref: docA })).status).toBe(200);
       // Pinning needs acquisition. Release it before the write so only boundBy distinguishes consent.
       bind();
       const response = await f.page.post("/pages/todo/act", { key: "k" });
@@ -903,7 +906,7 @@ describe("pages", () => {
       bind();
       const sessions = [session("S1"), session("S2", "C:/Other.rvt")];
       const f = await host(sessions);
-      await f.as(human).put("/pe/pages/todo/binding", { kind: "pinned", address: MODEL });
+      await f.as(human).put("/pe/pages/todo/binding", { kind: "pinned", ref: docA });
       const response = await f.page.post("/pages/todo/act", { key: "k" });
       expect(response.status).toBe(202);
       const basis = basisSchema.parse((await response.json()).basis);
@@ -915,7 +918,7 @@ describe("pages", () => {
       else {
         if (change === "agent") bind("S1");
         await f.as(change === "agent" ? pea("t1") : human).put("/pe/pages/todo/binding",
-          change === "unpin" ? { kind: "none" } : { kind: "pinned", address: change === "repin" ? "C:/Other.rvt" : MODEL });
+          change === "unpin" ? { kind: "none" } : { kind: "pinned", ref: change === "repin" ? { session: "S2", openId: "B" } : docA });
       }
       expect(fenced).toEqual(change === "reopen" ? [] : ["page:@pages/todo"]);
       for (const moment of ["step", "authorize", "native dispatch"])
@@ -978,7 +981,7 @@ describe("pages", () => {
         session("S2", "C:\\Pea\\Copy.rvt"),
       ]);
       const put = (caller: Caller, body: unknown) => as(caller).put("/pe/pages/todo/binding", body);
-      expect(await code(await put(pea("t9"), { kind: "pinned", address: MODEL }))).toMatchObject({
+      expect(await code(await put(pea("t9"), { kind: "pinned", ref: docA }))).toMatchObject({
         code: "page.binding-not-yours",
       });
       expect(await code(await put(pea("t9"), { kind: "thread", thread: "t9" }))).toMatchObject({
@@ -990,11 +993,11 @@ describe("pages", () => {
       expect(await code(await put({ kind: "anonymous" }, { kind: "none" }))).toMatchObject({
         code: "context.missing",
       });
-      expect((await put(pea("t9"), { kind: "pinned", address: "C:\\Pea\\Copy.rvt" })).status).toBe(
+      expect((await put(pea("t9"), { kind: "pinned", ref: { session: "S2", openId: "B" } })).status).toBe(
         200,
       );
       expect(JSON.parse(await readFile(join(state, "todo", "binding.json"), "utf8"))).toEqual({
-        slots: { default: { kind: "pinned", address: "C:\\Pea\\Copy.rvt" } },
+        slots: { default: { kind: "pinned", ref: { session: "S2", openId: "B" } } },
         // Pea set it, so it is no person's consent to the Page's ReadOnly scripts.
         boundBy: { default: "agent" },
       });

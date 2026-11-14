@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { canonicalRouteInput } from "./route-doc.ts";
 import { pageKeySchema } from "./contribution.ts";
-import { addressSchema, documentRefSchema, executionTargetSchema } from "./target.ts";
+import { documentRefSchema, executionTargetSchema } from "./target.ts";
 
 /* ── Caller identity (ADR 0017 D2) ───────────────────────────────────────────────────── */
 
@@ -140,11 +140,11 @@ export type Refusal = z.infer<typeof refusalSchema>;
 
 /**
  * D10: what one slot of a Page targets. `thread` follows that thread's targets (and writes the
- * documents a human added to it); `pinned` names a document by Address, so it survives a reopen; `none` writes nothing.
+ * documents a human added to it); `pinned` names one exact open lifetime; `none` writes nothing.
  */
 export const pageChoiceSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("thread"), thread: z.string().min(1) }),
-  z.strictObject({ kind: z.literal("pinned"), address: addressSchema }),
+  z.strictObject({ kind: z.literal("pinned"), ref: documentRefSchema }),
   z.strictObject({ kind: z.literal("none") }),
 ]);
 export type PageChoice = z.infer<typeof pageChoiceSchema>;

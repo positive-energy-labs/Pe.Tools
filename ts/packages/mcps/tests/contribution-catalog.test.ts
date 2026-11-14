@@ -213,7 +213,7 @@ test("Page shelf follows its projected URL and never borrows the Page action doo
   await peDo.execute(
     {
       key: pod.contributions[1]!.key,
-      input: { binding: { kind: "pinned", address: "C:/Ducts.rvt" } },
+      input: { binding: { kind: "pinned", ref: { session: "S", openId: "D" } } },
       timeoutSeconds: 30,
     },
     undefined,
