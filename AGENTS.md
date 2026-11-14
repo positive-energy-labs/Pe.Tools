@@ -1,23 +1,16 @@
----
-alwaysApply: true
----
-
 # Pe.Tools
-
-Repo-wide agent guidance for conventions, current paths, validation habits, Revit workflow constraints, and cross-package terminology that repeatedly matters across the codebase.
 
 # Always
 
-You are the main agent: you argue for a recommendation and you answer for it. The user rules.
+Unless a brief or a charter gives you another role, you are the main agent: you argue for a recommendation and you answer for it. The user rules.
 
 1. **Two accounts before building.** Restate the ask in your own words, then say what the repo shows. Lead with where they differ.
 2. **Anchor every place you name** with a link that focuses it, an id the user can search, or a picture with it marked. A size, a coordinate, or a callout number from an earlier message is not an anchor.
 3. **Stamp every stop** as PROVEN, FALSIFIED, or UNPROVEN, in the format the `prove` skill defines. A count, a screenshot, a compile, HTTP 200, or another agent's report is testimony until you check it.
-4. **A tool failure, empty result, or timeout is a boundary.** Read state and name what changed. Never re-run it unchanged.
-5. **Delegate most substantive work by default,** to the cheapest model that can do the task. Keep the main agent available for discussion and joint inspection. The `execute` skill says which tool runs a subagent.
+4. **A tool failure, empty result, or timeout is a boundary,** because the same call on the same state fails the same way. Read state and name what changed before you run it again.
+5. **Delegate most substantive work by default,** to the cheapest model that can do the task, so that the main agent stays free for discussion and joint inspection. The `execute` skill says which tool runs a subagent.
 6. **Keep Revit custody.** Opening a `.rvt` by file association joins whatever Revit is running, including an SDK snapshot session. Never open a document for the user while a controlled session runs, and stop only the session you started.
 7. **Leave it better.** Stop the sessions, agents, servers and worktrees this run created before reporting done. What cannot be stopped is one Owed line in the owning ledger.
-8. **Commits carry provenance** through the repo's `prepare-commit-msg` hook, which adds the T3 thread trailer. `python .agents/skills/check.py --fix` installs the hook.
 
 ## Route by the failure you are about to commit
 
@@ -81,13 +74,11 @@ Among other things, this requires Pe.Tools packages to expose good "public" apis
 - Delete a data-integrity or runtime seam only when the simpler replacement preserves its behavior and proof.
 - When departing from a prior decision or philosophy, leave a short comment at the exception naming the rule, why it does not apply here, and the boundary that still holds. Correct nearby comments that now contradict the code; do not make the next agent infer a deliberate exception from a diff.
 
-Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for product direction, [docs/BUILD.md](docs/BUILD.md) for proof and runbook guidance, and the nearest package `AGENTS.md` before local changes.
-
 ### Coding
 
 Default to zero edits: a request to look, diagnose, review, or explain is not authorization to change files. Propose, then wait.
 
-This entire repo is greenfield: build for ideal long-term shape, and do not preserve compatibility shims unless they are *absolutely necessary* as a temporary compile bridge. Even when shims seem necessary, prefer breaking compile to surface loose ends. Code style should optimize for linear execution flow, fail-fast behavior, composable systems, and wrappers around finicky Revit API behavior.
+This entire repo is greenfield: build for ideal long-term shape, and do not preserve compatibility shims unless they are *absolutely necessary* as a temporary compile bridge. Even when shims seem necessary, prefer breaking compile to surface loose ends. Code style should optimize for linear execution flow (LINQ, fluent APIs and extracted helpers over deep nesting), fail-fast behavior, composable systems, and wrappers around finicky Revit API behavior.
 
 ## Repo Operating Etiquette
 
@@ -95,7 +86,7 @@ C# development with the Revit API needs a specific and fragile tooling setup, so
 
 ### Executing code
 
-The `execute` skill holds the proof lanes and the run mechanics. `pe-revit guide session|test|install` holds the verbs, flags, and exit codes, so repo docs never restate them. Four rules hold everywhere:
+The `execute` skill holds the proof lanes, what each one cannot prove, and the run mechanics. `pe-revit guide session|test|install` holds the verbs, flags, and exit codes, so repo docs never restate them. Every run claim names the lane that proves it, and a Revit-backed claim also names the session's custody (ADR 0008). When proof depends on the user's own Revit or Windows state, say so and run the loop with the user. Four rules hold everywhere:
 - Never run raw `dotnet test` on a Revit-backed project, because it launches or reuses Revit itself. `pe-revit test --project <P>` is the test surface.
 - Never start or kill `Revit.exe` with `Start-Process`, `Stop-Process`, or `taskkill`.
 - `pe-revit session` owns the Revit process lifecycle.
@@ -109,21 +100,15 @@ The `execute` skill holds the proof lanes and the run mechanics. `pe-revit guide
 
 ### Documentation
 
-`AGENTS.md`: Primary knowledge map; should stay high-level and focused on constraints, justifications for decisions, broad intent, current direction, and broad direction.
-ANY change to repo architecture, tooling, or builds MUST consult these documents:
-- `docs/ARCHITECTURE.md` - read before multi module changes, debugging, and code review. Contains target architecture; code should always seek to align and documentation can be future facing.
-- `docs/BUILD.md` - read before changing anything build, deploy, or dev-loop related. Contains repo tooling justification and explanation. Always prove (or disprove) before changing the document. Information and correctness here is mission critical. TL;DR:
-  - Keep terminal compile/package proof separate from live-runtime freshness.
-  - Protect the current dev session aggressively. Breaking it can turn a small edit into a multi-minute restart plus document reopen wait.
+Before any change to repo architecture, tooling or builds, read these two and the nearest package `AGENTS.md`:
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), before multi-module changes, debugging and code review. It holds the target architecture, so code seeks to align with it and the document may run ahead of the code.
+- [docs/BUILD.md](docs/BUILD.md), before changing anything build, deploy or dev-loop related. Prove or disprove a claim before you change this document, because its correctness is mission critical.
 
-
-After any large changes, ALWAYS clarify user intent and capture the durable knowledge. Where it goes is governed by the `docs` skill (the single source of truth): feature ledgers (`docs/features/<name>/LEDGER.md`), ADRs, scoped grounding docs, or code comments. AGENTS.md holds operating rules only, not feature goals, not session knowledge.
+After any large change, clarify user intent and capture the durable knowledge. AGENTS.md holds operating rules only, not feature goals and not session knowledge.
 
 ### Tooling Footguns
 
-- `talk_to_pea` prompts containing embedded double quotes crash the PowerShell 5.1 arg path (exit 255). Reword or use a
-  here-string path instead.
-- **Windows shell tax**: the shell is PowerShell, not bash. rg alternation/quotes/globs need PS-safe forms (`unclosed group`,
+- **Windows shell tax**: in PowerShell, rg alternation/quotes/globs need PS-safe forms (`unclosed group`,
   `os error 123` = your quoting, not the tool); `$PID`/`$Host` are readonly built-ins; `2>&1` on a
   native exe fabricates NativeCommandError from benign stderr, a "failure" wrapping a success;
   rg exit 1 means "no matches", not an error. Never blind-retry a quoting variant, and never put
@@ -138,8 +123,7 @@ After any large changes, ALWAYS clarify user intent and capture the durable know
 
 ### Non-Doc Artifacts
 
-`.artifacts/` is deliberately gitignored: disposable evidence, scratch scripts (`.artifacts/tmp`), run outputs, and build tooling live there and never reach git. The routing question is "will a human need this in git?", anything the user must review, commit, or hand forward is a **doc**, and its home comes from the `docs` skill. Never invent `docs/context/`, `.scratch/`, or repo-root `SHOUTY.md` homes.
-
+Scratch and run output go under `.artifacts/`, which is gitignored. Anything the user must review, commit or hand forward is a doc, and `docs` names its home.
 
 ## Critical Entry Points
 
@@ -158,7 +142,7 @@ After any large changes, ALWAYS clarify user intent and capture the durable know
 
 | Term            | Meaning                                                                                                                              | Prefer / Avoid                                                                                          |
 | --------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------- |
-| **dev session** | The controlled session on the `dev` lane for `Pe.App`, the one the user drives from this checkout (`pe-revit session`, payload byte-copied from `--project`). Treat it as expensive state. | Avoid implying hot reload exists outside a converged dev-lane session. Never write `live`, `sandbox`, `Rrd`, or `owner` for a session, a lane, or a custody value |
+| **dev session** | The controlled session on the `dev` lane for `Pe.App`, the one the user drives from this checkout (`pe-revit session`, payload byte-copied from `--project`). Treat it as expensive state, because breaking it costs a multi-minute restart and a document reopen. | Avoid implying hot reload exists outside a converged dev-lane session. Never write `live`, `sandbox`, `Rrd`, or `owner` for a session, a lane, or a custody value |
 | **HR**          | Hot reload into a dev session: `pe-revit session hr` hot-applies when the payload allows it and cold-swaps otherwise. *Extremely useful*, but not fully trustworthy. When functional it allows the fastest feedback loop. | Avoid treating a hot apply as proof that Revit is running fresh code, `session hr --restart` or a fresh test is what proves it |
 
 ### Repo-wide language
@@ -168,24 +152,19 @@ After any large changes, ALWAYS clarify user intent and capture the durable know
 | **FF**                | Family Foundry                                                                           | Prefer `Family Foundry` on first mention in prose                                            |
 | **workflow**          | The operator intent such as build, verify, package, or publish                           | Prefer this over overloading `Configuration` strings to carry every concern                  |
 | **rung** | One branch of the `pe-revit test` ladder, deterministic, fresh, attached, chosen by the verb from the project and disclosed (ADR 0008) | Prefer `--plan` to learn a project's rung; avoid writing `test fresh` as though it were a verb you type |
-| **custody** | Whether pe-revit holds a session's receipt: `controlled` (full lifecycle and doc ops) or `observed` (status and doc reads only) | Replaces the retired `contact` axis and the `owner: agent\|user` values |
+| **custody** | Whether pe-revit holds a session's receipt: `controlled` (full lifecycle and doc ops) or `observed` (status and doc reads only) | Avoid the retired `contact` axis |
 | **package**           | A repo-local code unit such as `Pe.Host` or `Pe.Revit.FamilyFoundry`                     | Prefer this over `project` when discussing one code area                                     |
 | **app**               | `Pe.App`, the in-proc desktop Revit add-in runtime                                       | Avoid using `app` to mean the whole repo or product                                          |
 | **host**              | `Pe.Host`, the out-of-proc TS-built HTTP/RPC/WebSocket backend                           | Avoid using `host` for the Revit add-in bridge or product identity                           |
 | **bridge**            | The private Host/Revit WebSocket connection                                              | Avoid calling HTTP endpoints the bridge                                                      |
-| **document-owned**    | Behavior that can be derived from a specific `Document` without needing UI session state | Prefer `Document` extensions for this                                                        |
+| **document-owned**    | Behavior that can be derived from a specific `Document` without needing UI session state | Prefer `Document` extensions, as close to `Pe.Revit` as possible                                                       |
 | **document session**  | Open/active/UI-tab state for documents in the current Revit process                      | Keep this in `UIApplication` or session-aware helpers                                        |
 | **artifact**          | A durable machine-readable output produced by a command or DA workitem                   | Prefer this over vague `report` when the file is the actual output contract                  |
 | **inference endpoint** | A user-added provider of one harness: a base URL plus key stored in `providers.json` and passed to the harness child as env (ADR 0014, superseded by ADR 0015). Claude's speaks the Messages API, Codex's the Responses API. Pea sends no model call itself | Prefer "endpoint provider" for the record and "subscription provider" for the harness's own login; avoid naming Tailscale, Codex, or a cloud as a Pea feature |
 
-## Proof Lanes
-
-Every run claim names the lane that proves it, and a Revit-backed claim also names the session's custody (ADR 0008). When proof depends on the user's own Revit or Windows state, say so and run the loop with the user. The `execute` skill lists the lanes and what each one cannot prove.
-
 ## Routing
 
-The `index` skill is the entry point and router for the whole skill set: invoke it with intent and it picks the route and drives the loop. The `docs` skill governs where durable knowledge lands. Don't guess at routes; read those two.
-
+The `index` skill is the entry point and router for the whole skill set: invoke it with intent and it picks the route and drives the loop.
 
 ### Docs conventions
 
@@ -195,20 +174,11 @@ No external issue tracker. Durable knowledge lives in feature ledgers (`docs/fea
 
 `docs/design/SURFACE-PHILOSOPHY.md` holds what our UI surfaces are for and how they behave, `house` reads it, and a `protoui` verdict that changes it is captured there per `docs`. The open design decisions, rulings, gaps, and owed work for the design system live at `docs/features/design-system/LEDGER.md`. The web app's design-system route is the executable design authority.
 
-### Domain docs
-
-Glossaries are scoped: package terms in that package's `AGENTS.md` Shared Language table, feature terms in `docs/features/<name>/GLOSSARY.md` (lazy). ADRs in `docs/adr/`. The `grill` skill grows both; formats live beside the `docs` skill.
-
-
-
 ## Living Memory
 
 - Minimize API surface area. Favor type-safety, nullability correctness, generics, `nameof`, pattern matching, and small explicit contracts.
 - Prefer `Result<T>` / `Try...` patterns on public or user-facing flows instead of exceptions when failure is expected.
 - Use Serilog `Log.*` instead of `Console.WriteLine` or `Debug.WriteLine` in runtime code.
-- Prefer LINQ, fluent APIs, and extracted helpers over deep nesting. Keep execution flow easy to debug.
-- Treat desktop and DA as sibling shells over shared DA-safe runtime packages. Do not route DA through `Pe.App` startup.
 - DA-safe collector paths must not depend on `UIApplication`, WPF, ribbon helpers, or interactive session services. Keep those in UI-specific packages and helpers.
-- Put document-owned identity, path, binding, and collection helpers on `Document` extensions as close to `Pe.Revit` as possible. Keep open/active/navigation behavior in session-aware services or `UIApplication` extensions.
 - Prefer `Document` / `FamilyDocument` as the public entrypoints for document-owned collect/capture/apply flows, even when the returned models still live in a feature package.
 - When validating DA collection performance, start narrow and bounded. Category filters are a verification tool, not just a product feature.
