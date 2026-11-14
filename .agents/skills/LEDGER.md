@@ -284,7 +284,7 @@ The one ledger outside `docs/features/`; the skill set is not a feature. Same th
 - `retro.py`, from two cold readers (2026-11-12): the gate landmark matches no commit subject any charter asks for and prints "0 gated" for a finished run; the slice parser rejects titles such as "s7 fill", so 456 of 706 kernel commits fell to no slice; a thread shared by two runs has no window; `partners` fills only from `--cycles`; one purger printed a negative idle time.
 - `mine` has no redaction step before it exports raw session text, and retained owner messages hold a pasted credential (cold reader, 2026-11-12, who redacted in its own extract).
 - `retro.py` prints `active_hours` as a sum of overlapping intervals: one implementor read 17.9 h where the union of its intervals was 7.15 h (same reader). `mine` now says so in prose; the column should print the union.
-- Scale of a run's root (kernel2, open with the owner): 100 children under one thread, 911 messages in, 40 an hour. The message rule removes the mid-task sends; whether the root needs wave leads between it and its writers is undecided.
+- Trial, unread and unrun: wave leads past eight writers and one tail lead (kaitpw 2026-11-14: "i have maybe somem reservations ... pls make these changes too, and we'll see how they fare next"). Baseline to beat, kernel2: 100 children under the root, 911 messages in at 40 an hour, a defect found to its row restamped in 179 minutes at the median. The lead layer adds one handoff between a writer's report and its merge; kill it if the second number rises. The tail revert rule (kaitpw: "i like") has the same first run.
 
 ## Incidents
 

@@ -20,7 +20,7 @@ What the person sees on the surface at a named SHA. Native readback taken before
 
 ## produces
 
-Each cycle, in the reply template `delegate` defines: the rows it drove at this SHA with their stamps, the rows the tip voided, the rows that carried, and each defect as a reproduction with the SHA, the row, what was seen and the readback. A FALSIFIED row names the clause of its falsifier that failed, and every other defect is a defect line, whatever its size. Production defects go to the implementor. It delegates every drive. Each row or lane goes to a child on the tier the tier file names, as many at once as the machine admits, and the child returns the readback and the evidence paths. The driver keeps the row table, reads each child's evidence and writes every stamp itself. It drives with its own hands only to write a journey that does not exist yet.
+Each cycle, in the reply template `delegate` defines: the rows it drove at this SHA with their stamps, the rows the tip voided, the rows that carried, and each defect as a reproduction with the SHA, the row, what was seen and the readback. A FALSIFIED row names the clause of its falsifier that failed, and every other defect is a defect line, whatever its size. Production defects go to the implementor, or to the tail lead once the implementor has named one. It delegates every drive. Each row or lane goes to a child on the tier the tier file names, as many at once as the machine admits, and the child returns the readback and the evidence paths. The driver keeps the row table, reads each child's evidence and writes every stamp itself. It drives with its own hands only to write a journey that does not exist yet.
 
 ## wakes on
 
