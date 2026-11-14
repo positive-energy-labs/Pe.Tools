@@ -143,6 +143,20 @@ public sealed class PodManifestValidatorTests {
                 .Replace("\"sourcePath\": \"src/Main.cs\"", $"\"sourcePath\": \"src/Main.cs\", \"mode\": \"{mode}\"")).Success, Is.False, mode);
     }
 
+    // The palette's two runs. Mutant, run red once: make `RunMode(full: true)` answer WriteTransaction whatever
+    // the entrypoint declares (the ReadOnly and NoTransaction rows fail).
+    [TestCase(null, false, "ReadOnly")]
+    [TestCase(null, true, "WriteTransaction")]
+    [TestCase("ReadOnly", true, "ReadOnly")]
+    [TestCase("NoTransaction", true, "NoTransaction")]
+    [TestCase("NoTransaction", false, "ReadOnly")]
+    [TestCase("WriteTransaction", false, "ReadOnly")]
+    public void A_persons_run_takes_the_declared_mode_and_safe_never_writes(string? declared, bool full, string expected) {
+        var mode = declared is null ? (Pe.Shared.HostContracts.Scripting.ScriptPermissionMode?)null
+            : Enum.Parse<Pe.Shared.HostContracts.Scripting.ScriptPermissionMode>(declared);
+        Assert.That(new PodEntrypoint("src/Main.cs", null, null, mode).RunMode(full).ToString(), Is.EqualTo(expected));
+    }
+
     [Test]
     public void Settings_only_pod_is_valid() {
         var result = PodManifestValidator.ValidateJson(

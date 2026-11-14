@@ -178,6 +178,10 @@ const podEntrypointSchema = Schema.Struct({
   sourcePath: Schema.String,
   name: Schema.optional(Schema.NullOr(Schema.String)),
   description: Schema.optional(Schema.NullOr(Schema.String)),
+  /** Declared, it is every door's default, and `ReadOnly` refuses a write mode (pods map, contract C1). */
+  mode: Schema.optional(
+    Schema.NullOr(Schema.Literals(["ReadOnly", "WriteTransaction", "NoTransaction"])),
+  ),
 });
 
 /** One admitted contribution (`packages.ts`): kind follows the path; `key` is the canonical host key. */

@@ -13,7 +13,8 @@ namespace Pe.App.Commands.Palette.TaskPalette;
 ///     host callback. A host-local capture must complete before native execution begins.
 /// </summary>
 internal static class PodScriptRunner {
-    public static void Run(UIApplication uiapp, PodScriptTaskItem item, ScriptPermissionMode permissionMode) {
+    public static void Run(UIApplication uiapp, PodScriptTaskItem item, bool full) {
+        var permissionMode = item.Entrypoint.RunMode(full);
         var modeLabel = permissionMode == ScriptPermissionMode.ReadOnly
             ? "safe — changes discarded"
             : "full — can modify model";

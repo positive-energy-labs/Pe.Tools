@@ -28,7 +28,15 @@ public sealed record PodEntrypoint(
     string? Description,
     // Declared, it is the default for every door, and ReadOnly refuses a caller's write mode (contract C1).
     ScriptPermissionMode? Mode = null
-);
+) {
+    /// <summary>
+    ///     The mode a person's run takes. Safe is always ReadOnly. Full is the declared mode, so an entrypoint
+    ///     declared ReadOnly stays a read and one declared NoTransaction owns its transactions; one that
+    ///     declares none runs in one host-owned transaction.
+    /// </summary>
+    public ScriptPermissionMode RunMode(bool full) =>
+        full ? this.Mode ?? ScriptPermissionMode.WriteTransaction : ScriptPermissionMode.ReadOnly;
+}
 
 public sealed record PodManifestValidationResult(
     PodManifest? Manifest,
