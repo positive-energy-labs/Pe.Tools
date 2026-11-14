@@ -78,7 +78,7 @@ if mode == 'baseline':
     sys.exit(p.returncode)
 try:
     kind = mode if mode in ('suite','browser') else 'codegen'
-    sys.exit(R.run([kind,'--integrator','--home',str(home),'--wait',wait,'--receipt',receipt,'--',sys.executable,child,receipt+'.child']))
+    sys.exit(R.run([kind,'--owns-suite','--home',str(home),'--wait',wait,'--receipt',receipt,'--',sys.executable,child,receipt+'.child']))
 except KeyboardInterrupt:
     sys.exit(130)
 except (OSError, ValueError, sqlite3.Error) as error:

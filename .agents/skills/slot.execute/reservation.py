@@ -227,7 +227,7 @@ def run(argv):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("kind", choices=["light", *BUDGETS])
     parser.add_argument("--wait", type=float, default=60, help="queue deadline in seconds, 0..600")
-    parser.add_argument("--integrator", action="store_true")
+    parser.add_argument("--owns-suite", action="store_true")
     parser.add_argument("--home", type=Path)
     parser.add_argument("--receipt", type=Path)
     split = argv.index("--") if "--" in argv else len(argv)
@@ -235,8 +235,8 @@ def run(argv):
     command = argv[split + 1:]
     if not command or not 0 <= options.wait <= 600:
         parser.error("needs -- command and a wait between 0 and 600 seconds")
-    if options.kind == "suite" and not options.integrator and os.environ.get("T3CODE_THREAD_ID", "").startswith("thread:delegated-task:"):
-        print("REFUSE suite: only the integrator runs the full suite", file=sys.stderr)
+    if options.kind == "suite" and not options.owns_suite and os.environ.get("T3CODE_THREAD_ID", "").startswith("thread:delegated-task:"):
+        print("REFUSE suite: a delegated child runs a full suite only when its brief names it the owner, and then passes --owns-suite", file=sys.stderr)
         return 4
     # Executable argv only: list2cmdline cannot escape cmd.exe shell syntax.
     executable = shutil.which(command[0])
