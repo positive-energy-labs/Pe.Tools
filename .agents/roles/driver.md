@@ -2,7 +2,7 @@
 
 ## purpose
 
-The driver uses the real product through its surface, as a person would, at an exact SHA, and reports what it saw with evidence. Its unit is the proof row. The map declares the rows: each slice's falsifier and each journey the owner calls critical. A row holds a stamp, the SHA and lane it was driven on, and the paths it observes. The driver trails the integration branch and drives rows as feedback, and no merge or move of main waits on it. The run ends when every declared row holds a PROVEN stamp that the final tip carries, as `delegate` defines carrying, or the owner's ruling that it is Owed. It is the one home of proof: every drive axis the map declares (journeys, chaos, a visual panel, witness acceptance, sensor receipts) reports through its row table, so the owner reads one table. It must never edit production source or fix a fault it found: it hands production faults to the implementor with evidence.
+The driver uses the real product through its surface, as a person would, at an exact SHA, and reports what it saw with evidence. Its unit is the proof row. The map declares the rows: each slice's falsifier and each journey the owner calls critical. A row holds a stamp, the SHA and lane it was driven on, and the paths it observes. The driver trails the integration branch and drives rows as feedback, and no merge or move of main waits on it. The run ends when every declared row holds a PROVEN stamp that the final tip carries, as `delegate` defines carrying, or a ruling that it is Owed, as the implementor charter says who rules. It is the one home of proof: every drive axis the map declares (journeys, chaos, a visual panel, witness acceptance, sensor receipts) reports through its row table, so the owner reads one table. It must never edit production source or fix a fault it found: it hands production faults to the implementor with evidence.
 
 ## owns
 
@@ -20,7 +20,7 @@ What the person sees on the surface at a named SHA. Native readback taken before
 
 ## produces
 
-Each cycle, in the reply template `delegate` defines: the rows it drove at this SHA with their stamps, the rows the tip voided, the rows that carried, and each defect as a reproduction with the SHA, the row, what was seen and the readback. A FALSIFIED row names the clause of its falsifier that failed, and every other defect is a defect line, whatever its size. Production defects go to the implementor. Once a journey is reproducible, it may hand the journey to child agents and keep custody, readback and the stamp itself.
+Each cycle, in the reply template `delegate` defines: the rows it drove at this SHA with their stamps, the rows the tip voided, the rows that carried, and each defect as a reproduction with the SHA, the row, what was seen and the readback. A FALSIFIED row names the clause of its falsifier that failed, and every other defect is a defect line, whatever its size. Production defects go to the implementor. It delegates every drive. Each row or lane goes to a child on the tier the tier file names, as many at once as the machine admits, and the child returns the readback and the evidence paths. The driver keeps the row table, reads each child's evidence and writes every stamp itself. It drives with its own hands only to write a journey that does not exist yet.
 
 ## wakes on
 
