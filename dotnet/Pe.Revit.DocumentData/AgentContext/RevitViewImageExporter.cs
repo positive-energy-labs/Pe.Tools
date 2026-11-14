@@ -94,7 +94,8 @@ public static class RevitViewImageExporter {
         BoundingBoxXYZ modelBox,
         double marginPercent,
         int pixelSize,
-        SessionWrite scope
+        SessionWrite scope,
+        IReadOnlyList<long>? elementIds = null
     ) {
         if (document.IsReadOnly)
             throw new InvalidOperationException("Focus capture needs an editable document (it sets a temporary crop box).");
@@ -138,8 +139,12 @@ public static class RevitViewImageExporter {
             use: () => {
                 var producedPath = ExportCropped(document, view, pixelSize, out var refusal);
                 // Read while the temporary crop is still set: it is the crop the image was exported with.
-                return BuildResult(document, view, producedPath, pixelSize, TryModelRect(view), null,
-                    refusal is { } refused ? (null, refused) : TryRegistration(view, producedPath)) with { Restore = new(true, []) };
+                var result = BuildResult(document, view, producedPath, pixelSize, TryModelRect(view), null,
+                    refusal is { } refused ? (null, refused) : TryRegistration(view, producedPath));
+                return result with {
+                    Restore = new(true, []),
+                    Marks = refusal is null ? ProjectMarks(document, view, elementIds, result.Width, result.Height) : []
+                };
             },
             undo: () => {
                 view.CropBox = originalCrop;
@@ -218,16 +223,8 @@ public static class RevitViewImageExporter {
     private static void ApplyCrop(View view, BoundingBoxXYZ modelBox, double marginPercent) {
         var cropBox = view.CropBox;
         var toView = cropBox.Transform.Inverse;
-        // XY corners at one representative Z, like Annotate: transforming the full 3D corner
-        // set lets the bbox Z range pollute the crop XY on rotated/transformed crops.
-        var zMid = (modelBox.Min.Z + modelBox.Max.Z) / 2.0;
-        var corners = new[] {
-                new XYZ(modelBox.Min.X, modelBox.Min.Y, zMid),
-                new XYZ(modelBox.Max.X, modelBox.Min.Y, zMid),
-                new XYZ(modelBox.Min.X, modelBox.Max.Y, zMid),
-                new XYZ(modelBox.Max.X, modelBox.Max.Y, zMid)
-            }
-            .Select(toView.OfPoint).ToList();
+        // The full height contributes to image XY in a 3D lens or section.
+        var corners = Corners(modelBox).Select(toView.OfPoint).ToList();
         double minX = corners.Min(p => p.X), maxX = corners.Max(p => p.X);
         double minY = corners.Min(p => p.Y), maxY = corners.Max(p => p.Y);
         var margin = Math.Max(maxX - minX, maxY - minY) * marginPercent / 100.0;
@@ -244,6 +241,30 @@ public static class RevitViewImageExporter {
         foreach (var y in new[] { box.Min.Y, box.Max.Y })
         foreach (var z in new[] { box.Min.Z, box.Max.Z })
             yield return transform.OfPoint(new XYZ(x, y, z));
+    }
+
+    private static IReadOnlyList<RevitViewImageMark> ProjectMarks(
+        Document document, View view, IReadOnlyList<long>? elementIds, int width, int height
+    ) {
+        if (elementIds is null || view is View3D { IsPerspective: true }) return [];
+        var crop = view.CropBox;
+        var toView = crop.Transform.Inverse;
+        var spanX = crop.Max.X - crop.Min.X;
+        var spanY = crop.Max.Y - crop.Min.Y;
+        if (spanX <= 0 || spanY <= 0) return [];
+        var marks = new List<RevitViewImageMark>();
+        foreach (var id in elementIds.Distinct()) {
+            var box = document.GetElement(id.ToElementId())?.get_BoundingBox(view);
+            if (box is null) continue;
+            var points = Corners(box).Select(toView.OfPoint).ToList();
+            var left = (int)Math.Max(0, Math.Floor((points.Min(p => p.X) - crop.Min.X) / spanX * width));
+            var right = (int)Math.Min(width, Math.Ceiling((points.Max(p => p.X) - crop.Min.X) / spanX * width));
+            var top = (int)Math.Max(0, Math.Floor((crop.Max.Y - points.Max(p => p.Y)) / spanY * height));
+            var bottom = (int)Math.Min(height, Math.Ceiling((crop.Max.Y - points.Min(p => p.Y)) / spanY * height));
+            if (right > left && bottom > top)
+                marks.Add(new(id, left, top, right - left, bottom - top));
+        }
+        return marks;
     }
 
     /// <summary>Model-space XY extent of the view's crop box, when crop is active.</summary>

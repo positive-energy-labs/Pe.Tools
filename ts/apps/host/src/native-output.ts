@@ -48,6 +48,7 @@ export const projectNativeOutput = (
           ...(raw.view.label ? { name: raw.view.label } : {}),
         },
         focus,
+        marks: raw.marks,
         registration: raw.registration ? { ...raw.registration } : null,
       });
       const { filePath: _, ...body } = raw;

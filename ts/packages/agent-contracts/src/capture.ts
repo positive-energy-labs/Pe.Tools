@@ -5,6 +5,7 @@
  */
 import { z } from "zod";
 import type { OpResponseOf } from "@pe/host-contracts/operation-types";
+import { nativeResponseDefinitionSchema } from "@pe/host-contracts/native-schemas";
 
 export const VIEW_IMAGE_KEY = "revit.context.view-image";
 export const FOCUSED_VIEW_IMAGE_KEY = "revit.context.view-image.focus";
@@ -35,6 +36,13 @@ export const captureReceiptSchema = z.object({
     .nullable(),
   /** Revit's registration (model corners + sha); null when the op refused one (a sheet, no crop). */
   registration: z.looseObject({ imageSha256: shaSchema }).nullable(),
+  /** Projected element bounds when a capture names focus elements. C# owns the pixel contract. */
+  marks: z
+    .array(
+      nativeResponseDefinitionSchema<
+        NonNullable<OpResponseOf<typeof VIEW_IMAGE_KEY>["marks"]>[number]
+      >(VIEW_IMAGE_KEY, "RevitViewImageMark"),
+    ),
   byteSize: z.number().int().nonnegative(),
   url: z.string(),
 });
