@@ -23,6 +23,11 @@ import { homeDirs, homes, projectHome } from "@pe/host-contracts/product-paths";
 import { verifyPodArtifact } from "./pod-artifact.ts";
 import { shippedPodUpdateRefusals } from "./shipped-pod-status.ts";
 import { podModelSchema, type PodModel } from "./pod-model.ts";
+import {
+  captureIndexedPackage,
+  rememberCaptureRoots,
+  rememberPackageCensus,
+} from "./pod-capture.ts";
 
 export type PackageEntrypoint = {
   sourcePath: string;
@@ -123,8 +128,11 @@ export const podHome = (directory: string, pointer?: string | null) => {
  * has none.
  */
 export type PodsRoots = string | readonly string[];
-export const productPodsRoots = (pointer?: string | null) =>
-  homeDirs(productPathNames.podsDirectoryName, { pointer });
+export const productPodsRoots = (pointer?: string | null) => {
+  const roots = homeDirs(productPathNames.podsDirectoryName, { pointer });
+  if (!pointer) rememberCaptureRoots(roots);
+  return roots;
+};
 /** The Pods folder of the project home a target document's pointer names; null when it names none here. */
 export const projectPodsRoot = (pointer: string | null | undefined) => {
   const home = projectHome(pointer);
@@ -147,7 +155,7 @@ export async function listPackages(
   let timer: ReturnType<typeof setTimeout> | undefined;
   const stop = new AbortController();
   try {
-    return await Promise.race([
+    const listing = await Promise.race([
       scanPackages(roots, stop.signal),
       new Promise<never>((_, reject) => {
         timer = setTimeout(() => {
@@ -160,6 +168,8 @@ export async function listPackages(
         }, 5_000);
       }),
     ]);
+    rememberPackageCensus(roots, listing);
+    return listing;
   } finally {
     clearTimeout(timer);
   }
@@ -258,13 +268,15 @@ export function onePackage(
 export const readPackage = async (id: string, podsRoots: PodsRoots = productPodsRoots()) =>
   onePackage(await listPackages(podsRoots), id);
 
-/** Freeze admitted bytes without rereading disk. Admission errors refuse; member semantics stay native. */
+/** Freeze admitted bytes, or capture one indexed folder afresh. Member semantics stay native. */
 export async function capturePackage(
   packageOrId: AdmittedPackage | string,
-  podsRoots: PodsRoots = productPodsRoots(),
+  podsRoots?: PodsRoots,
 ): Promise<CapturedPackage> {
   const pod =
-    typeof packageOrId === "string" ? await readPackage(packageOrId, podsRoots) : packageOrId;
+    typeof packageOrId === "string"
+      ? await captureIndexedPackage(packageOrId, podsRoots, readFolder)
+      : packageOrId;
   const errors = pod.diagnostics.filter((issue) =>
     ["PackageMemberInvalid", "DuplicatePodId"].includes(issue.code),
   );
@@ -284,6 +296,7 @@ export async function capturePackage(
 export async function captureDirectory(
   directory: string,
   manifestOnly = false,
+  signal?: AbortSignal,
 ): Promise<{ members: PackageMember[]; diagnostics: MemberIssue[] }> {
   const members: PackageMember[] = [];
   const diagnostics: MemberIssue[] = [];
@@ -292,12 +305,14 @@ export async function captureDirectory(
     files = 0,
     total = 0;
   const walk = async (relative: string): Promise<void> => {
+    signal?.throwIfAborted();
     if (++directories > memberBounds.maxDirectoryCount) throw Error("Pod directory limit exceeded");
     const absolute = join(directory, relative);
     if ((await lstat(absolute)).isSymbolicLink()) throw Error("Pod directories cannot be links");
     for (const entry of (await readdir(absolute, { withFileTypes: true })).sort((a, b) =>
       a.name.localeCompare(b.name),
     )) {
+      signal?.throwIfAborted();
       const path = relative ? `${relative}/${entry.name}` : entry.name;
       if (manifestOnly && path !== "pod.json") continue;
       try {
@@ -326,6 +341,7 @@ export async function captureDirectory(
           bytes = Buffer.alloc(stat.size + 1);
           let count = 0;
           while (count < bytes.length) {
+            signal?.throwIfAborted();
             const read = await handle.read(bytes, count, bytes.length - count, null);
             if (!read.bytesRead) break;
             count += read.bytesRead;
@@ -354,6 +370,7 @@ export async function captureDirectory(
           schema,
         });
       } catch (error) {
+        signal?.throwIfAborted();
         diagnostics.push(problem("PackageMemberInvalid", path, message(error)));
       }
       if (
@@ -372,7 +389,10 @@ export async function captureDirectory(
  * Fresh global identity claims, followed by full admission of only the selected folder. The folder
  * name and the manifest id must each be claimed once across every home.
  */
-export async function resolvePackageIdentity(folder: string, podsRoots: PodsRoots = productPodsRoots()) {
+export async function resolvePackageIdentity(
+  folder: string,
+  podsRoots: PodsRoots = productPodsRoots(),
+) {
   if (packageMemberPathSchema.parse(folder).includes("/"))
     throw Error("An output folder must name one immediate Pod directory");
   const named = (entry: { name: string }) => entry.name.toLowerCase() === folder.toLowerCase();
@@ -399,11 +419,7 @@ export async function resolvePackageIdentity(folder: string, podsRoots: PodsRoot
         const manifest = captured.members.find((member) => member.path === "pod.json");
         if (!manifest || captured.diagnostics.some((issue) => issue.severity === "error"))
           throw Error("Pod has no admitted pod.json");
-        const value = JSON.parse(
-          Buffer.from(manifest.bytes)
-            .toString("utf8")
-            .replace(/^﻿/, ""),
-        );
+        const value = JSON.parse(Buffer.from(manifest.bytes).toString("utf8").replace(/^﻿/, ""));
         const claim = {
           id: packageIdSchema.parse(value?.id),
           folder: entry.name,
@@ -430,8 +446,13 @@ export async function resolvePackageIdentity(folder: string, podsRoots: PodsRoot
   return { id: pod.id, folder: pod.folder };
 }
 
-async function readFolder(directory: string, folder: string): Promise<AdmittedPackage> {
-  const { members, diagnostics } = await captureDirectory(directory);
+async function readFolder(
+  directory: string,
+  folder: string,
+  signal?: AbortSignal,
+): Promise<AdmittedPackage> {
+  const { members, diagnostics } = await captureDirectory(directory, false, signal);
+  signal?.throwIfAborted();
   const manifest = members.find((member) => member.path === "pod.json");
   if (!manifest) throw Error("Pod has no admitted pod.json.");
   const value = JSON.parse(
