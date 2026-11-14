@@ -27,6 +27,9 @@ description: Use for a chart, table, diagram, comparison, calculation walk, or m
 
 This skill makes scratch Pages: drafts under Pages/<slug>/ that only the Page call writes. A scratch Page has no scripts you can name by key. A Page that runs a Pod's scripts, or that travels with a tool, is the file pages/<page>/index.html inside the Pod, written with file tools; skill:@product/skills/build-pod owns that. The Page code below (pe.js) is the same in both.
 
+Bare paths and leading / resolve from the Pod root; ./ and ../ resolve beside the Page's index.html.
+A Page no browser has rendered is reported as untested, with what was and was not checked.
+
 Use pe_do({kind: "page", slug, title, html}) before the final reply when a visual would explain a mechanism, comparison, or calculation. Send a complete self-contained HTML document with inline style and script. The host checks it, captures it, and writes Pages/<slug>/index.html under its product home. Its result includes the canonical Page key, absolute openUrl, and a PNG shown in the conversation. Return its openUrl with a short takeaway; the person already sees the picture. Default to a compact single view for teaching: one diagram or comparison, short labels, and only controls that clarify an assumption. Aim for about 3 KB of HTML for the first visual. Every correction or update resubmits complete HTML through the same Page call with the same slug. Keep that HTML in the turn; never locate, read, or patch a scratch Page's files through a terminal or direct access to the content home. If the call refuses, fix the stated problem and resubmit the HTML.
 
 Worked example, the Snowdon duct-loss shape (page:@snowdon-ducts/pages/tour): explain the pressure budget as straight duct plus fittings plus a VAV allowance. For a teaching illustration, publish it directly with assumed inputs rather than waiting for that example's model binding:
@@ -267,11 +270,11 @@ An entrypoint is { "sourcePath", "name"?, "description"?, "mode"? }. sourcePath 
 
 The key is script:@<id>/<sourcePath>, and three doors run it with the same input and the same answer:
 
-- A Page: const rows = await pe.script("src/Compare.cs", { input: { a, b } }). A relative path resolves to this Pod's key; pe.do("script:@<id>/src/Compare.cs", { input }) is the same call. Options are input, mode and timeoutSeconds. It answers the Result value and throws with the compiler's or runtime's own words; the full run record is on the error and on pe.lastRun.
+- A Page: const rows = await pe.script("src/Compare.cs", { input: { a, b } }). Bare paths and leading / resolve from the Pod root; ./ and ../ resolve beside the Page's index.html. pe.do("script:@<id>/src/Compare.cs", { input }) is the same call. Options are input, mode and timeoutSeconds. It answers the Result value and throws with the compiler's or runtime's own words; the full run record is on the error and on pe.lastRun.
 - You: pe_read script:@<id>/<path> { input } for a ReadOnly entrypoint, pe_do script:@<id>/<path> { input, permissionMode, timeoutSeconds } for the rest. The catalog row carries the declared mode.
 - A person: the palette button described below.
 
-Declare every script a Page runs. A path the Pod does not declare is refused with "declare <path> in pod.json entrypoints". Inline source (pe.script with a multi-line string) is for scratch Pages and probes only: it has no key, so you could not run the check the Page shows, and the person and you would be reading different things.
+Declare every script a Page runs. An undeclared path that matches a declaration under the other base is refused with "did you mean /<declared path>?"; only a path with no such match is refused with "declare <path> in pod.json entrypoints". Inline source (pe.script with a multi-line string) is for scratch Pages and probes only: it has no key, so you could not run the check the Page shows, and the person and you would be reading different things.
 
 ### Pages: files in the Pod
 

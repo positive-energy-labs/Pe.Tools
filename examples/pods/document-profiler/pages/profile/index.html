@@ -38,18 +38,18 @@ const POD = "script:@document-profiler/";
 // One row per entrypoint in pod.json. `args` are the input names the script reads with Arg(name, fallback);
 // a blank box sends nothing, so the fallback written in src/Settings.cs stays the one home of each default.
 const RUNS = [
-  { path: "/src/MechanicalPlanCensus.cs", title: "Mechanical plans and their sheets", verb: "Read plans", args: ["budgetSeconds"],
+  { path: "src/MechanicalPlanCensus.cs", title: "Mechanical plans and their sheets", verb: "Read plans", args: ["budgetSeconds"],
     words: "Read-only. Lists mechanical plans with their direct sheet placements. An unsheeted parent can still have sheeted dependents; blank means unknown, not no." },
-  { path: "/src/Profile.cs", title: "Element inventory", verb: "Profile", args: ["maxElements", "budgetSeconds", "samples"],
+  { path: "src/Profile.cs", title: "Element inventory", verb: "Profile", args: ["maxElements", "budgetSeconds", "samples"],
     words: "Read-only. Counts elements by category, family and kind, and times repeated API reads. The full evidence is in the artifact file." },
-  { path: "/src/ReadCostCensus.cs", title: "Read cost", verb: "Measure read cost", seconds: 300,
+  { path: "src/ReadCostCensus.cs", title: "Read cost", verb: "Measure read cost", seconds: 300,
     args: ["censusBudgetSeconds", "firstTouchSample", "categoryWalk", "orientationSample", "obbSample", "fidelitySample", "chunk", "seed"],
     words: "Starts no transaction and stops if the document changes, but runs as NoTransaction, so a pinned document refuses it: bind through a thread that holds the document." },
-  { path: "/src/DeletionExperiment.cs", title: "Compare deletions", verb: "Run deletion experiment", experiment: true, seconds: 600, args: [],
+  { path: "src/DeletionExperiment.cs", title: "Compare deletions", verb: "Run deletion experiment", experiment: true, seconds: 600, args: [],
     words: "Deletes the configured candidates inside rolled-back transaction groups and times the survivors. Does not measure drawing or RAM." },
-  { path: "/src/SaveVariant.cs", title: "Save a deletion variant", verb: "Delete and save variant", experiment: true, seconds: 600, args: [],
+  { path: "src/SaveVariant.cs", title: "Save a deletion variant", verb: "Delete and save variant", experiment: true, seconds: 600, args: [],
     words: "Commits one configured deletion and saves a NEW .rvt at the configured path. The bound copy is changed." },
-  { path: "/src/ViewOpenProbe.cs", title: "Time view opening", verb: "Run view probe", experiment: true, seconds: 600, args: [],
+  { path: "src/ViewOpenProbe.cs", title: "Time view opening", verb: "Run view probe", experiment: true, seconds: 600, args: [],
     words: "Switches the active view in the foreground Revit window, then restores it. Do not touch Revit while it runs." },
 ];
 const slot = (run) => run.path.replace(/\W/g, "-");

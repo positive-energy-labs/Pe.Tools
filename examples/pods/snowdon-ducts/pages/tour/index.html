@@ -62,9 +62,9 @@
 const $ = (id) => document.getElementById(id);
 // Entrypoints of this Pod, by path. Pea runs the same ones as script:@snowdon-ducts/<path>, and gets the same rows.
 const KEYS = {
-  census: "/src/Census.cs",
-  inspect: "/src/InspectRun.cs",
-  experiment: "/src/CoefficientExperiment.cs",
+  census: "src/Census.cs",
+  inspect: "src/InspectRun.cs",
+  experiment: "src/CoefficientExperiment.cs",
 };
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 

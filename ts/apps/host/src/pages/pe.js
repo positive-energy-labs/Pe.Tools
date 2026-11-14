@@ -5,13 +5,14 @@
  *   await pe.find("show elements");                      // the host's catalog ranked by words → [{ key, kind, title, description }]
  *   await pe.read("revit.context.summary");              // run a read on the bound document; the answer is the op's response
  *   await pe.do("revit.context.show-elements", { elementIds: [1234] });   // run a mutation as this page; waits until it settles
- *   await pe.script("checks/census.csx", { input: { level: "L2" } });   // run the Pod's declared script; the answer is its Result(...)
+ *   await pe.script("./checks/census.csx", { input: { level: "L2" } });   // run the Pod's declared script; the answer is its Result(...)
+ *   // Bare paths and leading / resolve from the Pod root; ./ and ../ resolve beside the Page's index.html.
  *   await pe.do("script:@snowdon-ducts/src/Census.cs");  // the same call by key, the key Pea runs too
  *   const k = await pe.state({ reduce, base, render, describe }); // one shared event log
  *   // Declare agent events in HTML: <script type="application/json" id="pe-agent">{"verdict":"passed and explanation"}</script>
  *   await pe.picture([1234]);                            // lens then view-image: { url, sha, at, viewId, viewName, registration }
  *   await pe.reading("checks/census.csx", run);          // one reading: { source, at, rows } with rows = what `run()` answered
- *   await pe.diff({ script: "heals/taps.csx" }, ["Mark"]);   // run it and answer what it changed: elements and before/after rows
+ *   await pe.diff({ script: "./heals/taps.csx" }, ["Mark"]);   // run it and answer what it changed: elements and before/after rows
  *
  * `find`, `read` and `do` are the same words and keys as Pea's `pe_find`, `pe_read` and `pe_do`. The host knows which
  * page is calling from the page's own path (`pe.page` is the key it minted) and which document from the page's
@@ -322,21 +323,22 @@
   };
 
   /**
-   * The key a Pod Page's script path names. `checks/census.csx` is the file beside index.html and `/src/Census.cs`
-   * is from the Pod root; both become `script:@<pod>/<path from the Pod root>`. Null on a scratch Page, which has
+   * The key a Pod Page's script path names. `./checks/census.csx` is beside index.html; `src/Census.cs` and
+   * `/src/Census.cs` are from the Pod root. All become `script:@<pod>/<path from the Pod root>`. Null on a scratch Page, which has
    * no Pod and so no script anyone can name by key.
    */
   const scriptKey = (path) => {
     const at = /^page:@([^/]+)\/(pages\/[^/]+)$/.exec(pe.page || "");
     if (!at || at[1] === "pages") return null;
-    const member = decodeURIComponent(new URL(path, `http://pod/${at[2]}/`).pathname.slice(1));
+    const base = path.startsWith("./") || path.startsWith("../") ? `${at[2]}/` : "";
+    const member = decodeURIComponent(new URL(path, `http://pod/${base}`).pathname.slice(1));
     return `script:@${at[1]}/${member}`;
   };
 
   /**
    * Run C# in Revit, one door for every script. `keyOrPath` is a Pod's declared entrypoint, as its key
-   * (`script:@snowdon-ducts/src/Census.cs`) or, on that Pod's own Page, as a `.cs`/`.csx` path (`checks/census.csx`
-   * beside index.html, `/src/Census.cs` from the Pod root). The Pod declares it in pod.json `entrypoints`; a path it
+   * (`script:@snowdon-ducts/src/Census.cs`) or, on that Pod's own Page, as a `.cs`/`.csx` path (`./checks/census.csx`
+   * beside index.html, `src/Census.cs` or `/src/Census.cs` from the Pod root). The Pod declares it in pod.json `entrypoints`; a path it
    * does not declare is refused. A string with a newline is C# source and runs inline (Execute-body statements with
    * `doc`, `uidoc`, `app`, `selection` in scope), for a scratch Page or a probe; nobody else can run that by name.
    * `input` is one JSON object the script reads with `Arg<T>("name")`. `mode` is ReadOnly (every change rolls back),
