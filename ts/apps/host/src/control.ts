@@ -735,6 +735,11 @@ export async function live(basis: Basis | null, door = "step begin"): Promise<Re
 
 type RevokeListener = (thread: string, lifetime: DocumentRef) => void;
 const revokeListeners = new Set<RevokeListener>();
+const pagePinRevokeListeners = new Set<(page: string) => void>();
+export function onPagePinRevoke(listener: (page: string) => void): () => void {
+  pagePinRevokeListeners.add(listener);
+  return () => void pagePinRevokeListeners.delete(listener);
+}
 /** E2's queue sweep registers here; the head store fires it when a human removes an added document. */
 export function onRevoke(listener: RevokeListener): () => void {
   revokeListeners.add(listener);
@@ -742,4 +747,8 @@ export function onRevoke(listener: RevokeListener): () => void {
 }
 export function emitRevoke(thread: string, lifetime: DocumentRef) {
   for (const listener of revokeListeners) listener(thread, lifetime);
+}
+/** A Page binding change fences dispatch synchronously, including an in-flight pin read. */
+export function emitPagePinRevoke(page: string) {
+  for (const listener of pagePinRevokeListeners) listener(page);
 }
