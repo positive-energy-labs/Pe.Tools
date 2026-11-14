@@ -486,8 +486,11 @@ function callRoutes(
                   },
                 };
               })
-            : entry.script && bridgeSessionId
-              ? { value: yield* runPodScript(bridge, { session: bridgeSessionId, openId: openDocumentId }, z.record(z.string(), z.unknown()).parse(request ?? {}), requestId) }
+            : entry.script
+              ? { value: yield* runPodScript(bridge, { session: bridgeSessionId!, openId: openDocumentId }, yield* Effect.try({
+                  try: () => z.record(z.string(), z.unknown()).parse(request ?? {}),
+                  catch: () => new CommandRejected({ kind: "domain", code: "script.input", message: "Script input must be an object" }, 400),
+                }), requestId) }
               : yield* bridge.invoke(key, request ?? {}, bridgeSessionId, openDocumentId, requestId);
       // A joined Read names the dispatch that actually ran, never this caller's unsent id.
       const nativeRequestId =
@@ -1284,7 +1287,7 @@ function toProblem(error: unknown): {
       status: Number(error.status),
     };
   if (error instanceof CommandRejected)
-    return { kind: "InvalidRequest", message: error.message, status: 409 };
+    return { kind: "InvalidRequest", message: error.message, status: error.status };
   if (error instanceof NoRevitSession)
     return { kind: "Disconnected", message: error.message, status: 503 };
   if (error instanceof StepFailure)
