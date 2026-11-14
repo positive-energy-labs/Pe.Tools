@@ -111,78 +111,90 @@ test("an admitted Page whose changed Pod fails mid-read answers try-again, never
   }
 });
 
-test.each(["invalid-manifest", "invalid-entrypoint", "persistent-io", "new-io", "partial-walk"])(
-  "a %s Pod never blocks another Pod's fresh Page",
-  async (kind) => {
-    const root = await fs.mkdtemp(join(tmpdir(), "pe-scoped-discovery-"));
-    try {
-      const pods = join(root, "Pods");
-      const page = (id: string) => join(pods, id, "pages", "hello", "index.html");
-      const make = async (id: string) => {
-        await fs.mkdir(join(page(id), ".."), { recursive: true });
-        await fs.writeFile(join(pods, id, "pod.json"), JSON.stringify({ id }));
-        await fs.writeFile(page(id), `<title>${id}</title>`);
-      };
-      await make("healthy");
-      if (kind !== "new-io") await make("broken");
-      const handler = createPagesHandler(
-        [],
-        pods,
-        undefined,
-        undefined,
-        stateFixture(join(root, "state")),
+test.each([
+  "invalid-manifest",
+  "invalid-entrypoint",
+  "persistent-io",
+  "new-io",
+  "partial-walk",
+  "metadata-io",
+])("a %s Pod never blocks another Pod's fresh Page", async (kind) => {
+  const root = await fs.mkdtemp(join(tmpdir(), "pe-scoped-discovery-"));
+  try {
+    const pods = join(root, "Pods");
+    const page = (id: string) => join(pods, id, "pages", "hello", "index.html");
+    const make = async (id: string) => {
+      await fs.mkdir(join(page(id), ".."), { recursive: true });
+      await fs.writeFile(join(pods, id, "pod.json"), JSON.stringify({ id }));
+      await fs.writeFile(page(id), `<title>${id}</title>`);
+    };
+    await make("healthy");
+    if (kind !== "new-io") await make("broken");
+    const handler = createPagesHandler(
+      [],
+      pods,
+      undefined,
+      undefined,
+      stateFixture(join(root, "state")),
+    );
+    const request = (id: string) => handler(new Request(`http://host/pages/${id}--hello/`));
+    expect((await request("healthy")).status).toBe(200);
+    if (kind === "new-io") await make("broken");
+    if (kind === "invalid-manifest") await fs.writeFile(join(pods, "broken", "pod.json"), "{");
+    if (kind === "invalid-entrypoint")
+      await fs.writeFile(
+        join(pods, "broken", "pod.json"),
+        '{"id":"broken","entrypoints":[{"sourcePath":42}]}',
       );
-      const request = (id: string) => handler(new Request(`http://host/pages/${id}--hello/`));
-      expect((await request("healthy")).status).toBe(200);
-      if (kind === "new-io") await make("broken");
-      if (kind === "invalid-manifest") await fs.writeFile(join(pods, "broken", "pod.json"), "{");
-      if (kind === "invalid-entrypoint")
-        await fs.writeFile(
-          join(pods, "broken", "pod.json"),
-          '{"id":"broken","entrypoints":[{"sourcePath":42}]}',
-        );
-      if (kind === "partial-walk") {
-        await fs.writeFile(page("broken"), "<title>changed</title>");
-        const original = fs.readdir;
-        vi.spyOn(fs, "readdir").mockImplementation(async (...args) => {
-          if (
-            String(args[0]) === join(page("broken"), "..") &&
-            typeof args[1] === "object" &&
-            args[1]?.withFileTypes
-          )
-            return [];
-          return original(...args);
-        });
-      }
-      if (kind.endsWith("io")) {
-        await fs.writeFile(page("broken"), "<title>changed</title>");
-        const original = fs.open;
-        vi.spyOn(fs, "open").mockImplementation(async (...args) => {
-          if (String(args[0]) === page("broken"))
-            throw Object.assign(Error("Locked"), { code: "EBUSY" });
-          return original(...args);
-        });
-      }
-      for (let attempt = 0; attempt < 3; attempt++) {
-        await fs.writeFile(page("healthy"), `<title>fresh ${attempt}</title>`);
-        const response = await request("healthy");
-        expect(response.status).toBe(200);
-        expect(await response.text()).toContain(`fresh ${attempt}`);
-        if (kind === "persistent-io" || kind === "partial-walk")
-          expect((await request("broken")).status).toBe(503);
-      }
-      const listing = await listPackages({ podsRoots: pods });
-      if (kind === "invalid-manifest" || kind === "new-io")
-        expect(listing.unreadable).toEqual([expect.objectContaining({ folder: "broken" })]);
-      if (kind === "invalid-entrypoint")
-        expect(listing.packages.find((p) => p.id === "broken")?.diagnostics).toEqual(
-          expect.arrayContaining([expect.objectContaining({ code: "InvalidEntrypoint" })]),
-        );
-    } finally {
-      await fs.rm(root, { recursive: true, force: true });
+    if (kind === "partial-walk") {
+      await fs.writeFile(page("broken"), "<title>changed</title>");
+      const original = fs.readdir;
+      vi.spyOn(fs, "readdir").mockImplementation(async (...args) => {
+        if (
+          String(args[0]) === join(page("broken"), "..") &&
+          typeof args[1] === "object" &&
+          args[1]?.withFileTypes
+        )
+          return [];
+        return original(...args);
+      });
     }
-  },
-);
+    if (kind.endsWith("io")) {
+      await fs.writeFile(page("broken"), "<title>changed</title>");
+      const original = fs.open;
+      vi.spyOn(fs, "open").mockImplementation(async (...args) => {
+        if (String(args[0]) === page("broken"))
+          throw Object.assign(Error("Locked"), { code: "EBUSY" });
+        return original(...args);
+      });
+    }
+    if (kind === "metadata-io") {
+      const original = fs.lstat;
+      vi.spyOn(fs, "lstat").mockImplementation(async (...args) => {
+        if (String(args[0]) === page("broken"))
+          throw Object.assign(Error("Placeholder unavailable"), { code: "EACCES" });
+        return original(...args);
+      });
+    }
+    for (let attempt = 0; attempt < 3; attempt++) {
+      await fs.writeFile(page("healthy"), `<title>fresh ${attempt}</title>`);
+      const response = await request("healthy");
+      expect(response.status).toBe(200);
+      expect(await response.text()).toContain(`fresh ${attempt}`);
+      if (kind === "persistent-io" || kind === "partial-walk" || kind === "metadata-io")
+        expect((await request("broken")).status).toBe(503);
+    }
+    const listing = await listPackages({ podsRoots: pods });
+    if (kind === "invalid-manifest" || kind === "new-io")
+      expect(listing.unreadable).toEqual([expect.objectContaining({ folder: "broken" })]);
+    if (kind === "invalid-entrypoint")
+      expect(listing.packages.find((p) => p.id === "broken")?.diagnostics).toEqual(
+        expect.arrayContaining([expect.objectContaining({ code: "InvalidEntrypoint" })]),
+      );
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
 
 test("a script key of an unavailable Pod answers typed try-again at the shared byte door", async () => {
   const root = await fs.mkdtemp(join(tmpdir(), "pe-key-unavailable-"));

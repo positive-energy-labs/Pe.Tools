@@ -191,7 +191,7 @@ async function scanPackages(
 ): Promise<PackageListing> {
   // The census owns reuse. Unknown metadata never permits borrowing bytes, and duplicate identity
   // is projected after reuse so a temporary collision cannot poison an unchanged Pod.
-  const before = previous && packageDiskSignatures(previous.signature, roots);
+  const before = previous?.signature === undefined ? undefined : packageDiskSignatures(previous.signature, roots);
   const after = signature && packageDiskSignatures(signature, roots);
   const reusable = new Map(previous?.listing.packages
     .filter(pod => !pod.discoveryFailure && after && before?.has(resolve(pod.directory)) &&

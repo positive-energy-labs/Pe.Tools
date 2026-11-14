@@ -160,7 +160,7 @@ type DiscoveryScan = {
 const discovery = new Map<string, DiscoveryScan>();
 const scans = new Set<DiscoveryScan>();
 const validations = new Set<AbortController>();
-export type PackageCensus = { signature: string; listing: PackageListing };
+export type PackageCensus = { signature: string | undefined; listing: PackageListing };
 const completedCensuses = new Map<string, PackageCensus>();
 
 /** Shutdown cancels discovery; request expiry alone leaves a recoverable scan running. */
@@ -220,8 +220,9 @@ export async function discoverPackages(
       current.completedAt = Date.now();
       // Only on-time answers enter the checked cache. Late answers keep their one-reader 5 s window.
       if (!current.expired && discovery.get(key) === current) {
-        if (signature !== undefined) completedCensuses.set(key, { signature, listing });
-        else completedCensuses.delete(key);
+        // Unknown metadata cannot authorize byte reuse, but it must retain identity and retry
+        // markers across repeated IO failures instead of turning the second retry into absence.
+        completedCensuses.set(key, { signature, listing });
         discovery.delete(key);
       }
       return listing;
