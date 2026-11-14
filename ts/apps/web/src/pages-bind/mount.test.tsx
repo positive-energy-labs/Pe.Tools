@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { oneName } from "#/route/typed-route";
 import { routeAddress, type PageTargetReading } from "@pe/agent-contracts";
-import { cleanup, fireEvent, render } from "@testing-library/react";
+import { act, cleanup, fireEvent, render } from "@testing-library/react";
 import { workFingerprintSchema } from "@pe/agent-contracts";
 import { mountTypedRoute } from "../shell/typed-mount";
 import { module as bindRoute } from "./route";
@@ -13,7 +13,8 @@ vi.mock("../host/resource-stream", () => ({ peReadings: stream }));
 vi.mock("#/host/resource-state", () => ({
   useInventory: () => ({ state: "absent" }),
   previousOf: () => undefined,
-  inventoryOf: () => [],
+  // The sessions pass through, so a test names its own open documents.
+  inventoryOf: (sessions: unknown) => sessions ?? [],
 }));
 
 import { BindBody } from "./mount";
@@ -126,5 +127,52 @@ test("D9: from a real /bind?view=true Place that remembers view=true, one chip c
     view.rerender(<BindBody ctx={ctxOf() as never} />);
     expect(view.getByTestId("pages-bind")).toBeTruthy();
     expect(view.queryByTitle("Page pdrop--tour")).toBeNull();
+  } finally { mount.dispose(); }
+});
+
+/**
+ * D40 (drive f1/C2b): on a never-bound Page the pin's PUT went out with the target Reading still
+ * pending, the form showed nothing for the seconds the host takes, and "Back to the Page" 82 ms later
+ * reloaded the document and aborted it. This mounts the real route over the real /bind address.
+ * Mutants: drop `binding` or `onBack` where mount.tsx hands them to the picker.
+ */
+test("D40: a pin pressed while the binding Reading is pending is sent once, says it is busy, and survives Back", async () => {
+  stream.subscribe.mockReset().mockImplementation(() => () => {}); // the Reading never lands
+  const link = routeAddress("bind").link({ page: oneName("pdrop--tour"), view: false, query: { walk: "1" } });
+  let search = new URL(link, "http://host").searchParams;
+  const listeners = new Set<() => void>();
+  const go = (next: URLSearchParams) => { search = new URLSearchParams(next); listeners.forEach((l) => l()); };
+  const mount = mountTypedRoute(bindRoute, {
+    address: { read: () => new URLSearchParams(search), write: go, subscribe: (l: () => void) => (listeners.add(l), () => listeners.delete(l)) },
+    fixture: null, target: { kind: "host" }, work: { address: null, open: null }, custody: { current: () => true },
+    memory: () => ({}),
+  } as never, workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`), { sources: {} });
+  const ref = { session: "S", openId: "brodie" };
+  let answer!: () => void;
+  const run = vi.fn(() => new Promise<null>((resolve) => { answer = () => resolve(null); }));
+  const value = { threads: [], pages: [], inventory: { sessions: [{ sessionId: "S", year: 2025, processId: 1, openDocuments: [{ title: "Brodie", openId: "brodie", address: null }] }] } };
+  const ctxOf = () => ({ page: mount.page, value: { state: "ready", value }, verb: () => ({ run }) });
+  try {
+    const form = render(<BindBody ctx={ctxOf() as never} />);
+    expect(form.getByText("no reading yet")).toBeTruthy();
+    const option = () => form.getByRole("option", { name: /Brodie/ });
+    fireEvent.click(option());
+    expect(run, "the press is sent, not dropped").toHaveBeenCalledExactlyOnceWith({ kind: "pinned", ref });
+    expect(form.getByTestId("pages-bind").getAttribute("aria-busy")).toBe("true");
+    expect(form.getByRole("status").textContent).toContain("Binding…");
+    expect(option().getAttribute("aria-disabled")).toBe("true");
+    fireEvent.click(option());
+    expect(run, "an inert option sends nothing").toHaveBeenCalledOnce();
+    // Back stays in this document (the click is taken, not followed), so the bind in flight lives.
+    expect(fireEvent.click(form.getByRole("link", { name: "Back to the Page" }))).toBe(false);
+    expect(ctxOf().page.read()).toMatchObject({ view: true, query: { walk: "1" } });
+    await act(async () => { answer(); });
+    // The same body now draws the viewed Page; back at the picker it holds the answer it waited for.
+    expect(form.getByTitle("Page pdrop--tour")).toBeTruthy();
+    ctxOf().page.pose({ view: false }, "named");
+    form.rerender(<BindBody ctx={ctxOf() as never} />);
+    expect(form.getByRole("status").textContent).toContain("Bound.");
+    expect(form.getByTestId("pages-bind").getAttribute("aria-busy")).toBeNull();
+    expect(option().getAttribute("aria-disabled")).toBeNull();
   } finally { mount.dispose(); }
 });

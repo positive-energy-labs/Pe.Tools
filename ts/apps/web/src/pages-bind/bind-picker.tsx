@@ -40,6 +40,7 @@ const subjectOf = (reading: PageTargetReading) =>
 type Choice = { kind: "thread"; thread: HarnessThreadSummary } | { kind: "doc"; doc: Pinnable };
 const THREADS = "Follow a thread";
 const DOCUMENTS = "Pin a document";
+const BINDING = "Binding… the host answers once it has listed the Pods.";
 const keyOf = (choice: Choice) =>
   choice.kind === "thread"
     ? `thread:${choice.thread.id}`
@@ -59,6 +60,8 @@ export function BindPicker({
   documents,
   inventory,
   outcome,
+  binding: busy = false,
+  onBack,
   onBind,
 }: {
   slug: string;
@@ -70,6 +73,10 @@ export function BindPicker({
   inventory?: import("@pe/agent-contracts").Reading<unknown>;
   /** The last bind's answer: the host's refusal, or null. */
   outcome: { ok: boolean; message: string } | null;
+  /** A bind is in flight: every option is inert and says why, and the form is `aria-busy`. */
+  binding?: boolean;
+  /** Returns to the viewed Page in this document; the href alone stays for a new tab. */
+  onBack?: () => void;
   onBind: (slot: PageChoice) => void;
 }) {
   const binding = reading?.binding ?? null;
@@ -111,22 +118,39 @@ export function BindPicker({
       order: [THREADS, DOCUMENTS],
     },
     state: { ...emptyListState(), selected: bound ? [keyOf(bound)] : [] },
+    refusalOf: () => (busy ? BINDING : null),
     onPick: (choice) =>
       choice.kind === "thread"
         ? onBind({ kind: "thread", thread: choice.thread.id })
         : onBind({ kind: "pinned", ref: choice.doc.ref }),
   });
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4" data-testid="pages-bind">
+    <div
+      className="flex min-h-0 flex-1 flex-col gap-4"
+      data-testid="pages-bind"
+      aria-busy={busy || undefined}
+    >
       <Section
         label={`Bind ${reading?.page ?? slug}`}
         aside={
           <>
-            <a href={back}>Back to the Page</a>
+            <a
+              href={back}
+              onClick={
+                onBack &&
+                ((event) => {
+                  if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey) return;
+                  event.preventDefault();
+                  onBack();
+                })
+              }
+            >
+              Back to the Page
+            </a>
             <Button
               label="Unbind"
               kind="framed"
-              refusal={binding?.kind === "none" ? "This Page is not bound." : null}
+              refusal={busy ? BINDING : binding?.kind === "none" ? "This Page is not bound." : null}
               onClick={() => onBind({ kind: "none" })}
             />
           </>
@@ -149,7 +173,11 @@ export function BindPicker({
             no reading yet
           </EmptyState>
         )}
-        {outcome ? (
+        {busy ? (
+          <p className="m-0 t-small text-ink-2" role="status">
+            {BINDING}
+          </p>
+        ) : outcome ? (
           <p
             className={`m-0 t-small ${outcome.ok ? "text-ink-2" : ""}`}
             data-tone={outcome.ok ? undefined : "caution"}
