@@ -1,6 +1,6 @@
 ---
 name: execute
-description: "How code runs and claims are proven in Pe.Tools. Trigger on \"run\", \"test\", \"build\", \"prove it\", \"which lane\", \"worktree\", \"herdr\", \"spin up\", \"dev server\", \"background this\", or before a Revit session, browser check, long process, or proof claim. Runbook, not a route; unexplained failures belong to `diagnose`."
+description: "How code runs and claims are proven in Pe.Tools. Trigger on \"run\", \"test\", \"build\", \"prove it\", \"which lane\", \"worktree\", \"spin up\", \"dev server\", \"background this\", or before a Revit session, browser check, long process, or proof claim. Runbook, not a route; unexplained failures belong to `diagnose`."
 figure: the chain of custody, where every hand between claim and reality signs
 prevents: "the wrong reality: a claim proved on a lane that cannot falsify it"
 scope: repo
@@ -15,7 +15,6 @@ scope: repo
 - Name the claim and its lane before the run. Stamp the result in the format `prove` gives.
 - Use an explicit working directory. Read the checkout and commit before a long or stateful run, and read the answering binary's identity when the CLI reports one.
 - Prefer the repo's command, then the tool's own guide or `--help`. This file does not copy a CLI manual.
-- Read `docs/ARCHITECTURE.md` and `docs/BUILD.md` before a multi-package, build, deployment or dev-loop change.
 - The shell is PowerShell. `AGENTS.md` Tooling Footguns holds the quoting and exit-code traps.
 - A native claim (Revit, tray, installed host) runs through `tools/acceptance.py`, which does setup, probe, census and teardown. Dev setup is backend-only by default; add `--web` for browser proof. Read its docstring. Record its SDK calls as envelopes under the run's `ev/`.
 - One agent owns a native FALSIFIED from diagnosis through fix to the native re-check, in one task. Splitting cause, fix and re-check across agents costs extra rounds. A run with standing roles is the exception: the driver never edits production code, so the driver owns every re-check, the integrator owns the cause and the fix of main's own reds and of what its merge broke, and the implementor's fix thread owns every other.
@@ -28,9 +27,8 @@ scope: repo
 | Host and web | VitePlus through the `vp` command or package scripts |
 | Pea and host operations | `pea`, after you verify which checkout and host lane it resolved |
 | Browser | `pea browser` (`@pe/browser`); the harness preview only to show the user a page |
-| Subagents | see the paragraph below |
 
-**Subagents.** Use the harness Agent tool for work that returns as text, or that edits files inside this checkout, when the main agent does not wait on it. Use T3 `delegate_task` for work the main agent waits on, or work that needs its own worktree. Use `.agents/skills/slot.execute/herdr.ps1` only when the user must see or talk to the agent, the work needs its own thread to revisit, or one agent hands off to another. `delegate` decides who gets the work. Never use Codex-native `spawn_agent` for work anyone waits on, because its children are invisible to T3 and `wait_agent` times out.
+**Subagents.** Use the harness Agent tool for work that returns as text, or that edits files inside this checkout, when the main agent does not wait on it. Use T3 `delegate_task` for work the main agent waits on, or work that needs its own worktree. `delegate` decides who gets the work. Never use Codex-native `spawn_agent` for work anyone waits on, because its children are invisible to T3 and `wait_agent` times out.
 
 ## Proof lanes
 
@@ -53,15 +51,7 @@ HTTP responses, source reads, screenshots, logs and hot-reload verdicts are evid
 
 ## Revit control plane
 
-The SDK owns build, process, session, document, test, package and install mechanics. Ask it for verbs, flags and exit codes:
-
-```powershell
-dotnet tool run pe-revit -- guide
-dotnet tool run pe-revit -- guide session
-dotnet tool run pe-revit -- guide test
-dotnet tool run pe-revit -- <family> --help
-dotnet tool run pe-revit -- <command> --json
-```
+The SDK owns build, process, session, document, test, package and install mechanics. `dotnet tool run pe-revit -- guide [session|test]` is its manual, `<family> --help` gives flags, and `--json` gives the envelope.
 
 - Run `test --plan` or `session start --plan` before the first Revit contact in a checkout.
 - Never use `Stop-Process`, `taskkill`, or a direct Revit launch. `pe-revit session` owns the Revit lifecycle.
@@ -72,7 +62,7 @@ dotnet tool run pe-revit -- <command> --json
 - Never mutate installed product state without the user's explicit authority.
 - The generated `ts/packages/host-contracts/src/vendor/generated/pe-revit-contract.ts` owns `pe-revit` argv and envelopes. Do not hand-write either.
 - A Revit-backed drive runs on its own controlled session, a disposable copy of the model, and an isolated product home (`PE_TOOLS_PRODUCT_HOME`), all named in its receipt. `pea script` against that session needs the same `PE_TOOLS_PRODUCT_HOME`, or it reports no running dev host.
-- Revit 2025 gives the add-in quarantine lease to one controlled session at a time. A second `session start` is refused with `session.quarantine-unavailable`, and `machine.py admit` does not see the lease. A thread outside the wave asks the thread that owns the gate before it starts Revit, and stops its session when its last drive ends.
+- `--quarantine` boots Revit with third-party add-ins disabled, which about halves startup and cuts memory. The SDK gives it to one live session per Revit year, because it works by editing one per-user settings file that Revit itself rewrites at boot and at shutdown. A second quarantined `session start` of that year is refused with `session.quarantine-unavailable` until the first session's process exits, and `machine.py admit` does not see the lease.
 
 ## Host, web and Pea
 
@@ -86,9 +76,7 @@ Run pea scripts, host operations, or `pea --prompt` only after the SDK session i
 - No tool arms a time box or an alarm for one child yet (the skills ledger holds the Owed line). Until one exists, the thread that set a time box reads each child's age at every wake and every cycle report, and treats a child past its box as the alarm.
 - A run's wake is one T3 schedule bound to the driver's own thread. The driver arms it at launch with `schedule_task` (an interval of 50 minutes, inside the 60-minute prompt cache, titled `<run> wake`), and the implementor deletes it with `delete_scheduled_task` when the run ends or parks, because a parked run wakes on the owner's message alone. The driver writes the schedule's id to `wake.id` in the run directory. The owner sees one entry per run in T3's schedule list and stops a run's wakes by deleting it. The schedule's prompt is the whole checklist, so that no compaction can drop it: read the status of the implementor and of each partner thread; read the integration head against each `last-read/<role>.sha`; name to the implementor any thread whose last run failed or whose message has sat queued since the last wake; when the implementor itself has not run since the last wake while work it could do waits, send it that work and the sentence that no owner message asks for a stop; when the implementor's last cycle report is older than two wakes, send it the report's three duties (the pulse, the partner statuses, the three zero counts); and when nothing changed, reply in one line and stop. `keepalive.py` and its shared tick are not part of a run: the tick stopped twice with no cause found.
 - A new tip on the integration branch reaches a partner in a message from the implementor, which names the tip to the purger, the driver and the integrator at every merge. A standing partner is launched once with `delegate_task` and messaged after that with `t3_thread_send`, and its completion wakes the thread that launched it. A fresh check or review is a new `delegate_task`. That is the substrate the charters point to until the tip watcher in the skills ledger exists. A partner writes the SHA it last read to a file in its run directory every cycle, because the implementor's report and the watcher both read it. A partner whose work is done reads the integration branch's head before it waits: a head newer than the SHA it last read is a tip, whoever failed to send it.
-- The tier file is `.agents/models.toml`. It holds every model name, tier, effort range, per-model rule and owner fact, and the check refuses a model name in any skill or charter.
-- A dependency install, an owner-config compile or a focused package test needs no grant, slot or queue. A thread runs them when its source is ready. A heavy step (a full suite, a build, a codegen run, a Revit session, a host with a browser) first runs `python .agents/skills/slot.execute/machine.py admit <kind>` and starts on ADMIT. `admit` exits 0 only on ADMIT, so a script chains it (`machine.py admit suite && <command>`) and cannot run through a HOLD. A delegated child gets REFUSE for `suite` unless its brief names it the owner of one, and then it passes `--owns-suite`: the integrator of a run on its merged tip, or a measurement or a release check outside a run. A writing child never owns a suite. `machine.py run suite` makes a second suite wait for the first. Admission never prunes apps; cleanup stays explicit. A HOLD names the reading, the floor and the biggest stoppable holders; it expires after ten minutes and goes to the implementor in one line. A driver whose Revit session is already up asks for `browser`, not `revit-drive`, because the drive floor pays for a cold Revit. `machine.py who` lists every process the repo's work can attribute, with its kind, checkout, age, memory and command line, so a thread can decide what to stop. `machine.py stop <pid>` stops a dev server, test worker, codegen, build server or agent browser and writes a receipt to `.artifacts/machine/stops.jsonl`; it refuses Revit, the installed product host, T3, Claude, Codex, Helium and any process it cannot name. Stopping a dev server is encouraged: they accumulate and their memory grows with the kernel. A thread stops what its own checkout started, until it hands that process to another thread, which alone stops it from then on; the purger stops anything the run can attribute that no thread holds custody of. A resource left running for another thread is handed over in a message that names it, and the receiver stops it.
-- `pnpm codegen` from `ts` reserves capacity through its full process tree. Do not use `machine.py run` for SDK sessions or persistent services.
+- A dependency install, an owner-config compile or a focused package test needs no grant, slot or queue. A heavy step (a full suite, a build, a codegen run, a Revit session, a host with a browser) first runs `python .agents/skills/slot.execute/machine.py admit <kind>` and starts on ADMIT, because the machine's memory is the one resource every thread shares and none can see. `admit` exits 0 only on ADMIT, so a script chains it and cannot run through a HOLD; a HOLD goes to the implementor in one line. A delegated child gets REFUSE for `suite` unless its brief names it the owner of one, and then it passes `--owns-suite`; a writing child never owns a suite. `machine.py --help` prints its kinds and the `run`, `who`, `stop` and `prune` verbs. A thread stops what its own checkout started, and a resource left running for another thread is handed over in a message that names it.
 - The commit that changes a tracked generated artifact's source also regenerates the artifact. A check never regenerates a tracked file, because it would change the candidate it claims to verify. Delete the tracked artifact when the build can derive it.
 - Write source files and patches with the edit tool or with git (`git diff --output`, `git apply`). Never use PowerShell `Set-Content`, `Out-File` or a pipe, because they add a BOM, CRLF or codepage bytes. Run a destructive step such as checkout or reset as its own command, after the check that guards it has passed.
 - Send a message that unblocks a running turn as a steer. Queue only what can wait for that turn to end.
@@ -102,36 +90,17 @@ Run pea scripts, host operations, or `pea --prompt` only after the SDK session i
 
 ## Browser
 
-- Browser proof is `pea browser`. The `pea` shim puts it on PATH, but `pe-browser` is not on PATH. `pea browser guide` prints its manual without starting anything. It owns its Chrome (headless or `--visible`), leases one tab, records receipts and retires what it started.
-- Its gestures find the control by role and name on every call, hit-test the point before pressing, and read typed values back. A covered, disabled or mistyped control returns `blocked` or `mismatch`. Only these gestures prove what a user can do.
+- Browser proof is `pea browser`, and `pea browser guide` is its manual: launch, headless measurement, the observer connection and cleanup.
 - A scripted `element.click()`, a dispatched event, a store call or an endpoint never stands in for a UI step.
 - The harness preview and T3 preview tools only show the user a page. Their timeouts are tool limits, not product findings. Computer Use is banned on this machine.
 - A repeatable journey is a list of named actions under `ts/tests/e2e/`, played by `walk.ts`, and `f1-fans.ts` is the pattern. An action finds its control by role and name, draws each choice from the seed, and checks a rule instead of a remembered value. Run one from `ts` on a fresh tab against a real Revit session with `node --import jiti/register tests/e2e/<journey>.ts --seed <n>`. `--walk <n>` plays n actions picked at random by the seed in place of the fixed list. A green journey alone gates nothing, because the driver also explores by hand in every gate drive. One-off checks use the CLI verbs (`pea browser SESSION click|type|press|shot`). Inspect console, network and visible state. If no browser can be driven, stamp the browser claim UNPROVEN and prove only the lower lane.
-- Drive and measure in the default headless launch (hover timing, layout shift, long tasks included). It has no OS window, so the owner's screen cannot cover or stall it, and it draws frames at full rate. `--visible` is for a person watching; minimizing any window stops its frames.
-- Keep one observer connection for the whole run and write captured bodies to a file, because a CLI spawn per call costs seconds. `delegate` sequences edits around a measuring run.
 
-## Worktrees and Herdr
+## Worktrees
 
 - Create a worktree as a sibling directory with `git worktree add`. Never nest one.
 - A worktree is cut from a commit, so a tool or rule that is uncommitted in the launching checkout does not exist for the child, and neither does one on a branch its base has not merged. Commit it and merge it before the launch.
 - A fresh worktree has no dependency install. From `ts`, run `vp i --frozen-lockfile --prefer-offline`. Vite+ owns dependency installation, so never run bare `pnpm install`.
 - A fresh worktree uses the release feed at `%USERPROFILE%\source\feeds\pe-revit-sdk`, or `sdk.feed` in `product.payloads.json`. `pe-revit sdk adopt <version>` repins and regenerates the client. Review its `--plan` first. Do not copy, junction or symlink a feed into the worktree.
-- Herdr is for agents and processes the user must see. Otherwise it is overhead. Herdr is PowerShell. Use one named Herdr session per worktree. Parse the session, workspace, tab and pane ids it returns, and never infer focus.
-- Before first use, resolve `herdr` with `Get-Command herdr`. If it is absent, set `HERDR_BIN` to the executable or report the agent lane unavailable.
-
-```powershell
-& .\.agents\skills\slot.execute\herdr.ps1 up <session> <cwd> <posture.md> <name>:<kind>[:<model>][:<effort>]
-& .\.agents\skills\slot.execute\herdr.ps1 cast <session> <cwd> <posture.md> <spec> <prompt-file>
-& .\.agents\skills\slot.execute\herdr.ps1 goal <session> <goal.md>
-& .\.agents\skills\slot.execute\herdr.ps1 retire-worktree <path>
-& .\.agents\skills\slot.execute\herdr.ps1 sweep [<days>]
-& .\.agents\skills\slot.execute\herdr.ps1 status <session> [<agent>]
-& .\.agents\skills\slot.execute\herdr.ps1 send <session> <agent> <prompt-file>
-& .\.agents\skills\slot.execute\herdr.ps1 wait <session> <agent> [<timeout-ms>]
-& .\.agents\skills\slot.execute\herdr.ps1 read <session> <agent> [<lines>]
-```
-
-Do not retire a working agent.
 
 ## Skill set
 
