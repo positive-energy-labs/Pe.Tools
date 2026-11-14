@@ -71,3 +71,14 @@ test("access-061/062: a disconnected Page reading immediately stops naming its d
   await waitFor(() => expect(screen.queryByText("MEP")).toBeNull());
   expect(screen.getByText("unverified")).toBeTruthy();
 });
+test("D24, ADR 0043: a person's pin that writes names its document, never the bare kind", async () => {
+  await renderChip();
+  const pinned: PageTargetReading = {
+    ...writes,
+    binding: { kind: "pinned", ref: { session: "S", openId: "A" } },
+    write: { kind: "human" },
+  };
+  act(() => stream.send({ kind: "snapshot", key: "k", value: pinned }));
+  expect(await screen.findByText("MEP")).toBeTruthy();
+  expect(screen.queryByText("human")).toBeNull();
+});
