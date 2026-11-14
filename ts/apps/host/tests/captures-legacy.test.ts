@@ -33,7 +33,10 @@ test("/captures lists every pre-marks receipt without rewriting the log", async 
     await writeFile(path, log);
     const response = await web.handler(
       new Request("http://host/captures"),
-      Context.make(PictureCaptureStore, new PictureCaptures(stateFixture(dir), 1024 ** 3, Date.now)),
+      Context.make(
+        PictureCaptureStore,
+        new PictureCaptures(stateFixture(dir), 1024 ** 3, Date.now),
+      ),
     );
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
