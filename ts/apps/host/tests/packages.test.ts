@@ -82,6 +82,46 @@ test("one snapshot lists and captures every authored byte, excluding authority a
   expect(kindOfMember("skills/inspect/SKILL.md")).toBe("skill");
 });
 
+// Contract C1. Mutants, each run red once: restore the `src/` test in `readFolder`'s entrypoint
+// parse (no row for the check beside the Page); drop `mode` from the contribution row; accept any
+// string as a mode (no InvalidEntrypoint for "Write").
+test("an entrypoint is any script of the Pod, keeps its declared mode, and gets a script row where it lives", async () => {
+  await put("Original", "pages/tour/checks/census.csx", "Result(1);");
+  await put("Original", "heals/Fix.cs", "Result(2);");
+  await put(
+    "Original",
+    "pod.json",
+    JSON.stringify({
+      id: "mixed",
+      entrypoints: [
+        { sourcePath: "pages/tour/checks/census.csx", mode: "ReadOnly" },
+        { sourcePath: "heals/Fix.cs" },
+        { sourcePath: "src/Run.cs", mode: "Write" },
+        { sourcePath: "settings/checks.json" },
+      ],
+    }),
+  );
+  const pod = await readPackage("mixed", root);
+  expect(pod.contributions.filter((row) => row.kind === "script")).toEqual([
+    expect.objectContaining({ key: "script:@mixed/heals/Fix.cs" }),
+    expect.objectContaining({
+      key: "script:@mixed/pages/tour/checks/census.csx",
+      mode: "ReadOnly",
+    }),
+  ]);
+  expect(pod.contributions.find((row) => row.key === "script:@mixed/heals/Fix.cs")).not.toHaveProperty("mode");
+  expect(pod.diagnostics.filter((issue) => issue.code === "InvalidEntrypoint")).toHaveLength(2);
+  expect(kindOfMember("pages/tour/checks/census.csx", pod.entrypoints)).toBe("script");
+  // Every script of the Pod is a compiler input, so the entrypoint compiles beside the others.
+  expect((await capturePackage(pod)).sourceBundle.files.map((file) => file.path).sort()).toEqual([
+    "PeScripts.csproj",
+    "heals/Fix.cs",
+    "pages/tour/checks/census.csx",
+    "pod.json",
+    "src/Run.cs",
+  ]);
+});
+
 test("folder rename preserves keys; duplicate manifest identities refuse resolution and capture", async () => {
   const before = await readPackage("mixed", root);
   await rename(join(root, "Original"), join(root, "Renamed"));

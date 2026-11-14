@@ -20,7 +20,9 @@ public sealed record PodManifest(
 public sealed record PodEntrypoint(
     string SourcePath,
     string? Name,
-    string? Description
+    string? Description,
+    // Declared, it is the default for every door, and ReadOnly refuses a caller's write mode (contract C1).
+    ScriptPermissionMode? Mode = null
 );
 
 public sealed record PodManifestValidationResult(
@@ -48,7 +50,8 @@ public static class PodManifestValidator {
     private static readonly HashSet<string> EntrypointFields = new(StringComparer.Ordinal) {
         "sourcePath",
         "name",
-        "description"
+        "description",
+        "mode"
     };
 
     private static readonly UTF8Encoding StrictUtf8 = new(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
@@ -184,7 +187,7 @@ public static class PodManifestValidator {
                     if (sourcePath.Length > 1024 || normalized != sourcePath || sourcePath.Normalize() != sourcePath || sourcePath.IndexOfAny(['%', '#', '\u007f']) >= 0 ||
                         sourcePath.Split('/').Any(segment => segment.Trim() != segment || segment.EndsWith(".", StringComparison.Ordinal) ||
                             System.Text.RegularExpressions.Regex.IsMatch(segment, @"^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)", System.Text.RegularExpressions.RegexOptions.IgnoreCase)))
-                        throw new ArgumentException("Pod entrypoint source path must use its exact portable src/ path.");
+                        throw new ArgumentException("Pod entrypoint source path must use its exact portable path.");
                     if (!sourcePaths.Add(sourcePath))
                         diagnostics.Add(ScriptDiagnosticFactory.Error(DiagnosticStage, $"Duplicate pod entrypoint sourcePath '{sourcePath}'."));
                 } catch (ArgumentException ex) {
@@ -195,8 +198,15 @@ public static class PodManifestValidator {
 
             var name = ReadOptionalString(obj, "name", diagnostics);
             var description = ReadOptionalString(obj, "description", diagnostics);
+            ScriptPermissionMode? mode = null;
+            if (ReadOptionalString(obj, "mode", diagnostics) is { } declared) {
+                if (Enum.TryParse<ScriptPermissionMode>(declared, out var parsed) && Enum.GetName(typeof(ScriptPermissionMode), parsed) == declared)
+                    mode = parsed;
+                else
+                    diagnostics.Add(ScriptDiagnosticFactory.Error(DiagnosticStage, $"pod.json entrypoints[{index}] mode must be ReadOnly, WriteTransaction or NoTransaction."));
+            }
             if (sourcePath is not null)
-                entrypoints.Add(new PodEntrypoint(sourcePath, name, description));
+                entrypoints.Add(new PodEntrypoint(sourcePath, name, description, mode));
         }
 
         return entrypoints;

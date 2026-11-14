@@ -11531,6 +11531,7 @@ export namespace ScriptingExecute {
       timeoutSeconds?: number;
       sourceBundle?: null | ScriptPodSourceBundle;
       caller?: ScriptCaller;
+      input?: unknown;
     }
     export interface ScriptPodSourceBundle {
       files: ScriptPodSourceFile[];

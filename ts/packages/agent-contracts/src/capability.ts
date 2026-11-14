@@ -12,6 +12,7 @@ import {
   contributionKindSchema,
   contributionSourcePath,
   contributionSourceSchema,
+  scriptModeSchema,
   isCanonicalSlug,
   parseContributionKey,
 } from "./contribution.ts";
@@ -76,6 +77,8 @@ export const capabilitySchema = z
     source: z.string(),
     package: contributionSourceSchema.optional(),
     projection: capabilityProjectionSchema.optional(),
+    /** A packaged script's declared mode: every door's default, and `ReadOnly` makes the row a read. */
+    mode: scriptModeSchema.optional(),
     /** Ranking nudge: the op catalog's DefaultVisible tier ranks first; nothing is hidden. */
     rank: z.number().default(0),
   })
