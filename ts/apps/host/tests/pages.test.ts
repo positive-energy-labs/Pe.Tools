@@ -11,7 +11,7 @@ import {
   pageTargetReadingSchema,
   routeAddress,
   type Caller,
-  type Basis,
+  basisSchema,
   type DocumentRef,
   type PageTargetReading,
   type ThreadHead,
@@ -865,7 +865,7 @@ describe("pages", () => {
       await f.as(human).put("/pe/pages/todo/binding", { kind: "pinned", address: MODEL });
       const response = await f.page.post("/pages/todo/act", { key: "k" });
       expect(response.status).toBe(202);
-      const { basis } = (await response.json()) as { basis: Basis };
+      const basis = basisSchema.parse((await response.json()).basis);
       expect(await live(basis, "step")).toBeNull();
       const fenced: string[] = [];
       const stop = onPagePinRevoke((page) => fenced.push(page));

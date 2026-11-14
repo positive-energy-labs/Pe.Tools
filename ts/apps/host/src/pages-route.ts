@@ -347,8 +347,8 @@ export class PageState {
         if ("childNodes" in node) node.childNodes.forEach(visit);
       };
       visit(parse(await readFile(file, "utf8")));
-      if (!blocks.length) return {};
-      const block = blocks[0]!;
+      const [block] = blocks;
+      if (!block) return {};
       if (
         blocks.length !== 1 ||
         block.tagName !== "script" ||
@@ -506,7 +506,8 @@ export function createPagesHandler(
   };
   bindControl({
     pagePin: async (page) => {
-      const slug = pageActDoor(page).split("/")[2]!;
+      const slug = pageActDoor(page).split("/")[2];
+      if (!slug) return null;
       const sessions = await live.sessions();
       // Consent belongs to machine Page state, independent of the current content home.
       const binding = new PageState("", stateDirectory(stored, slug)).binding();
@@ -1068,7 +1069,7 @@ export function createPagesHandler(
       try {
         agent = await state.agent();
       } catch (error) {
-        agentError = (error as Error).message;
+        agentError = error instanceof Error ? error.message : String(error);
       }
       const rows = await state.rows();
       const cursor = url.searchParams.has("after") ? Number(url.searchParams.get("after")) : null;
@@ -1105,7 +1106,7 @@ export function createPagesHandler(
         try {
           agent = await state.agent();
         } catch (error) {
-          return problem(422, (error as Error).message);
+          return problem(422, error instanceof Error ? error.message : String(error));
         }
         const declared = Object.keys(agent);
         const type = Reflect.get(event, "type");
