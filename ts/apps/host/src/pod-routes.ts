@@ -76,7 +76,8 @@ export const trustKind = keptStateKind({
   segments: () => stateSegments("routeTrust"),
 });
 
-// A healthy 16 MB Snowdon journey read returned 1171 ms after the check started locally.
+// A healthy 16 MB Snowdon check took 1171 ms locally: background census validation of
+// numeric byte arrays delays both file callbacks and timers on this same event loop.
 // Round four times that observed elapsed time up to whole seconds. Google Drive is not measured.
 const POD_ROUTE_CHECK_TIMEOUT_MS = 5000;
 
