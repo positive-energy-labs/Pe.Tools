@@ -40,8 +40,8 @@ export function BindBody({ ctx }: { ctx: BindContext }) {
   if (page.view)
     return (
       <>
-        {/* D9: the viewed Page carries its chip here. A Page's refusal says "Bind it from the chip",
-            and the bar draws none for a SubjectRef `page`, so this is the one place it shows. */}
+        {/* D9: the viewed Page carries its chip here, the one place it is drawn. A Page's refusal says
+            "Bind it from the chip". */}
         <PageBindingChip slug={slug} query={page.query} fragment={page.fragment} />
         <iframe
           className="size-full flex-1"
