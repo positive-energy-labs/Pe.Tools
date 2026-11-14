@@ -319,7 +319,7 @@ test.each(["in-flight", "late"])("a request after an edit validates an %s answer
   } finally { release.resolve(); await complete; await observed; }
 });
 
-test("a background floor leaves the old request running but cannot publish its old census", async () => {
+test("a changed signature leaves the old request running but cannot publish its old census", async () => {
   const { pods } = await reviewedPod();
   const old = await listPackages({ podsRoots: pods });
   await filesystem.rename(join(pods, "review"), join(pods, "fresh"));
@@ -328,50 +328,17 @@ test("a background floor leaves the old request running but cannot publish its o
   const release = Promise.withResolvers<packages.PackageListing>();
   vi.useFakeTimers({ toFake: ["Date"] });
   let signal: AbortSignal;
-  const signature = async () => "stable";
-  const first = discoverPackages("superseded", (_roots, stop) => { signal = stop; return release.promise; }, "request", undefined, signature);
+  let disk = "old";
+  const signature = async () => disk;
+  const first = discoverPackages("superseded", (_roots, stop) => { signal = stop; return release.promise; }, "request", signature);
   await new Promise(resolve => setImmediate(resolve));
-  vi.setSystemTime(Date.now() + 1_000);
-  expect(await discoverPackages("superseded", async () => newer, "background", Date.now(), signature)).toEqual(newer);
+  disk = "new";
+  expect(await discoverPackages("superseded", async () => newer, "background", signature)).toEqual(newer);
   expect(signal!.aborted).toBe(false);
   release.resolve(old);
   expect(await first).toEqual(old);
   expect((await capturePackage("fresh", "superseded")).id).toBe("fresh");
-  expect(await discoverPackages("superseded", async () => { throw Error("unchanged listing rescanned"); }, "request", undefined, signature)).toEqual(newer);
-});
-
-test.each(["listPackages", "readPackage"])("%s forwards notBefore in Date.now epoch milliseconds", async (entry) => {
-  const { pods } = await reviewedPod();
-  const listing = await listPackages({ podsRoots: pods });
-  vi.useFakeTimers({ toFake: ["Date"] });
-  vi.setSystemTime(2_000_000_000_000);
-  const metadata = vi.spyOn(diskSignature, "podsDiskSignature").mockResolvedValue("epoch-fixture");
-  const directories = vi.spyOn(filesystem, "readdir");
-  const fullScans = () => directories.mock.calls.filter(([path, options]) => String(path) === pods &&
-    options && typeof options === "object" && options.withFileTypes).length;
-  const lookup = (notBefore: number) => entry === "readPackage"
-    ? packages.readPackage("review", { podsRoots: pods, notBefore: notBefore })
-    : packages.listPackages({ podsRoots: pods, wait: "request", notBefore: notBefore });
-  for (const advance of [0, 1_000]) {
-    stopPackageDiscovery();
-    metadata.mockClear();
-    directories.mockClear();
-    const release = Promise.withResolvers<packages.PackageListing>();
-    const entered = Promise.withResolvers<void>();
-    let signal: AbortSignal;
-    const pending = discoverPackages(pods, (_roots, stop) => { signal = stop; entered.resolve(); return release.promise; },
-      "background", undefined, async () => "epoch-fixture").catch(() => undefined);
-    await entered.promise;
-    vi.setSystemTime(Date.now() + advance);
-    const reading = lookup(Date.now() - (advance ? 0 : 1_000));
-    try {
-      await new Promise(resolve => setImmediate(resolve));
-      expect(metadata).toHaveBeenCalledTimes(1);
-      expect(fullScans()).toBe(advance ? 1 : 0);
-      expect(signal!.aborted).toBe(false);
-    }
-    finally { release.resolve(listing); await pending; await reading; }
-  }
+  expect(await discoverPackages("superseded", async () => { throw Error("unchanged listing rescanned"); }, "request", signature)).toEqual(newer);
 });
 
 test.each(["target", "export"])("a slow %s GET keeps its own rules after discovery answers", async (verb) => {

@@ -171,7 +171,7 @@ it("answers the typed 503 at both script doors when Pod discovery outlasts its w
   // The real single-flight discovery with a scan in flight that never lands: every reader joins it.
   const roots = productPodsRoots();
   const entered = Promise.withResolvers<void>();
-  void discoverPackages(roots, () => { entered.resolve(); return new Promise(() => {}); }, "background", undefined,
+  void discoverPackages(roots, () => { entered.resolve(); return new Promise(() => {}); }, "background",
     signal => podsDiskSignature(roots, isPackageMember, signal));
   await entered.promise;
   const input = { sourcePath: "checks/engine.csx", workspaceKey: "pdrop" };

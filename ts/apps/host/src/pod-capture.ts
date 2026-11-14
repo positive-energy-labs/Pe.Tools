@@ -51,8 +51,6 @@ export async function discoverPackages(
   roots: PodsRoots,
   read: (roots: readonly string[], signal: AbortSignal) => Promise<PackageListing>,
   wait: "request" | "background",
-  /** Date.now() epoch milliseconds. Refuse an in-flight scan started before this floor. */
-  notBefore?: number,
   readSignature?: (signal: AbortSignal) => Promise<string | undefined>,
 ): Promise<PackageListing> {
   const key = rootsKey(roots);
@@ -66,7 +64,7 @@ export async function discoverPackages(
     const tooOld = scan && !scan.completed && Date.now() - scan.startedAt >= packageScanMaxAgeMs;
     // Validate joins and late answers too. Unknown metadata never authorizes reuse.
     const changed = scan && readSignature && (signature === undefined || scan.signature !== signature);
-    if (scan && (tooOld || changed || (notBefore !== undefined && scan.startedAt < notBefore) ||
+    if (scan && (tooOld || changed ||
       (scan.completed && (wait === "background" || Date.now() - scan.completedAt >= packageDiscoveryTimeoutMs)))) {
       // Superseding a read leaves its waiters running. Only age and shutdown cancel IO.
       if (tooOld) scan.stop.abort();
