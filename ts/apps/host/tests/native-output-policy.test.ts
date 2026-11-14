@@ -46,7 +46,11 @@ test("a capture policy row projects using that call's key for both schemas", asy
       projectNativeOutput(
         pictures,
         "capture.test",
-        { filePath, view: { elementId: 42, label: "Plan" } },
+        {
+          filePath,
+          view: { elementId: 42, label: "Plan" },
+          marks: [{ elementId: 7, left: 10, top: 20, width: 30, height: 40 }],
+        },
         {},
         {},
         caller,
@@ -56,6 +60,7 @@ test("a capture policy row projects using that call's key for both schemas", asy
     expect(schemas.output).toHaveBeenCalledWith("capture.test");
     expect(keep).toHaveBeenCalledTimes(1);
     const capture = await keep.mock.results[0]!.value;
+    expect(capture.marks).toEqual([{ elementId: 7, left: 10, top: 20, width: 30, height: 40 }]);
     expect(result).toMatchObject({ capture, imageUrl: capture.url });
     expect(result).not.toHaveProperty("filePath");
   } finally {
@@ -76,12 +81,17 @@ test("an already projected capture uses its own output schema without reading a 
       view: {},
       focus: null,
       registration: null,
+      marks: [],
     },
   };
   expect(
     await Effect.runPromise(
       projectNativeOutput(
-        new PictureCaptures(stateTree(process.env.PE_TEST_HOME_ROOT!).directory("unused"), 1024, () => 1),
+        new PictureCaptures(
+          stateTree(process.env.PE_TEST_HOME_ROOT!).directory("unused"),
+          1024,
+          () => 1,
+        ),
         "capture.test",
         value,
         {},
@@ -99,7 +109,11 @@ test("a call without capture policy passes through unchanged", async () => {
   expect(
     await Effect.runPromise(
       projectNativeOutput(
-        new PictureCaptures(stateTree(process.env.PE_TEST_HOME_ROOT!).directory("unused"), 1024, () => 1),
+        new PictureCaptures(
+          stateTree(process.env.PE_TEST_HOME_ROOT!).directory("unused"),
+          1024,
+          () => 1,
+        ),
         "ordinary.read",
         value,
         {},

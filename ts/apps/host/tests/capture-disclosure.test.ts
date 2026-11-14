@@ -11,10 +11,11 @@ const image = {
   filePath: "C:/test.png", byteSize: 1, width: 100, height: 100,
   lens: { basis: "UserView", viewId: 1 },
   hidden: [{ what: "Links", count: 2, why: "NotEvaluated" }],
+  marks: [],
 };
 const capture = {
   id: "test", sha: "a".repeat(64), at: "2026-11-13T00:00:00.000Z", origin: "human",
-  document: {}, view: {}, focus: null, registration: null, byteSize: 1,
+  document: {}, view: {}, focus: null, registration: null, marks: [], byteSize: 1,
   url: `/captures/${"a".repeat(64)}.png`,
 };
 
@@ -29,7 +30,7 @@ test.each(keys)("%s keeps category disclosure at raw and projected output bounda
   const { filePath: _, ...body } = image;
   const projected = { ...body, capture, imageUrl: capture.url };
   expect(nativeOutputSchema(key).parse(projected)).toMatchObject({ lens: image.lens, hidden: image.hidden });
-  for (const field of ["lens", "hidden"] as const) {
+  for (const field of ["lens", "hidden", "marks"] as const) {
     const missing = { ...image }; delete (missing as Partial<typeof image>)[field];
     expect(nativeResponseSchema(key).safeParse(missing).success, field).toBe(false);
     const dropped = { ...projected }; delete (dropped as Partial<typeof projected>)[field];

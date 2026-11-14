@@ -1305,7 +1305,7 @@ internal sealed class RevitDataRequestService {
             return focusBox is null
                 ? RevitViewImageExporter.Export(document, view, pixelSize)
                 : RevitViewImageExporter.ExportFocused(
-                    document, view, focusBox, marginPercent, pixelSize, scope!);
+                    document, view, focusBox, marginPercent, pixelSize, scope!, request.Focus?.ElementIds);
         } catch (Exception ex) {
             throw BridgeOperationExceptions.Unexpected(
                 "ViewImageExportException",
