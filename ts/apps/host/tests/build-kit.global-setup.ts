@@ -7,6 +7,9 @@ import { fileURLToPath } from "node:url";
 export default function buildKit() {
   execSync("pnpm --filter @pe/kit build", {
     cwd: fileURLToPath(new URL("../", import.meta.url)),
+    // Vitest runs this under NODE_ENV=test, and a build there compiles JSX to `jsxDEV` against
+    // production React: every kit component then throws "jsxDEV is not a function" in a Page.
+    env: { ...process.env, NODE_ENV: "production" },
     stdio: ["ignore", "ignore", "inherit"],
   });
 }
