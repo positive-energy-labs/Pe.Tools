@@ -1,8 +1,7 @@
 # The one home of model guidance for the skill set.
-# Skills and charters name tiers. This file names models.
-# `python .agents/skills/check.py` fails when a word under a model's `names`, or a model id,
-# appears in a SKILL.md or a role charter. A new model is one edit here.
-# Every observation carries a date, an N and its limits. Delete an observation a newer one replaces.
+# Skills and charters name tiers. This file names models, and the check fails on a model name anywhere else,
+# so a new model is one edit here.
+# Observations live in the skills ledger. This file keeps only the rates agents use.
 
 updated = "2026-11-14"
 
@@ -37,23 +36,36 @@ model = "fable"
 effort = ["medium"]
 
 # ---------------------------------------------------------------- roles
-# A charter names no model. Each standing role runs on a tier.
+# Each standing role runs on a tier.
 
 [roles]
 implementor = "partner"
 purger = "partner"
 driver = "partner"
-integrator = "partner" # its work is mechanical; a cheaper tier passed a cold read and no run (see observations)
+integrator = "partner" # its work is mechanical; a cheaper tier passed a cold read and no run
 
 # Jobs that a role hands to children.
 [jobs]
-plan-check-reader = "taste" # homes: four readers, three minutes, four plan changes
-tip-reviewer = "slog-writer" # kernel2: the purger's 12 children were 10 on this tier's model and 2 on the taste tier's
+plan-check-reader = "taste"
+tip-reviewer = "slog-writer"
 mutant-runner = "slog-writer"
-drive-child = "slog-writer" # kernel2: all 7 of the driver's children, after the owner said this model drives as well
+drive-child = "slog-writer" # the owner said this model drives as well
 wave-lead = "heady-writer" # untried: it writes no code, and it needs the judgment to send a report back
 tail-lead = "heady-writer" # untried
-scour-reader = "taste" # untried on this tier; on 2026-11-12 two readers on the partner tier's model took 8 and 9 minutes for 37 anchored findings
+scour-reader = "taste" # untried on this tier
+
+# ---------------------------------------------------------------- rates
+# What an estimate line and a time box start from. Each comes from one run, named in brackets.
+# The skills ledger holds the windows, sources and limits.
+
+[rates]
+estimate_ratio = "actual ran at a median near 0.25 of estimate, from branch start to first merge, over 31 estimates [kernel2]"
+estimate_unit = "all 8 estimates ran high, by 1.1 to 6 times in hours and 4 to 16 times in days, so estimate in hours [homes]"
+heady_writer_slice = "0.6 to 5.2 active hours, median 1.6; about 400 added lines per writer-hour [homes]"
+slog_writer_fix_round = "6 to 12 active minutes [homes]"
+full_suite = "26 to 34 minutes on a merged tip [homes]"
+merge_to_build = "43 minutes at the median [kernel2]"
+driver_tip_to_rows = "42 minutes at the median, 14 to 71 [homes]"
 
 # ---------------------------------------------------------------- models
 # `names` are the words the check bans from skills and charters.
@@ -67,7 +79,7 @@ provider = "claude"
 meter = "weekly_all"
 rules = [
   "Never runs a writer tier. A partner on this model sends every slice and fix round to a child on a writer tier, even when the heady writer's meter is empty (owner, 2026-11-12). What it writes itself is what its charter names: a merge, a merge fix, an assigned seam, and for the integrator the fix of a red that is main's own or that its merge made.",
-  "May be messaged at any idle age: a cold restart of a re-woken partner is cheap (see observations).",
+  "May be messaged at any idle age: a cold restart of a re-woken partner is cheap.",
 ]
 
 [models.fable]
@@ -98,7 +110,7 @@ id = "gpt-6.1-terra"
 provider = "codex"
 meter = "codex"
 rules = [
-  "Give it one file set and one table per task. Two censuses that spanned a dozen files stopped incomplete, at medium and at high effort (2026-11-12).",
+  "Give it one file set and one table per task, because two censuses that spanned a dozen files stopped incomplete (2026-11-12).",
 ]
 
 [models.sonnet]
@@ -130,66 +142,3 @@ rules = ["Owner ban: never used."]
 claude_banked_resets = "some; count not stated (2026-11-12)"
 codex_reset_credits = 0
 codex_usage_credits = "62,500 stated on 2026-11-12; whether they draw past an empty meter is unconfirmed"
-
-# ---------------------------------------------------------------- observations
-# Observations, not a quality ranking. Task mix and attribution are uncertain in every row.
-
-[[observations]]
-date = "2026-11-02"
-window = "2026-10-26 to 2026-11-02"
-source = ".artifacts/runs/retro-20261102-paradigm/affinity.txt"
-rows = [
-  "sol: 114 missions, 92% complete; the default writing thread then",
-  "opus: 42 missions, 98% complete, 60% needed a second message",
-  "fable (5.1): 17 missions, 0% needed a second message",
-  "terra: 8 censuses",
-]
-
-[[observations]]
-date = "2026-11-12"
-window = "the homes crusade, 2026-11-11 22:12Z to 2026-11-12 11:44Z"
-source = ".artifacts/runs/retro-20261112-homes-outer/"
-limits = "One run. Tasks were sorted by rule, slices to fable and fix rounds to sol, so the rows do not compare like with like."
-rows = [
-  "fable: 14 writer threads with commits, $22 per 1k production lines moved, 469 lines per active hour",
-  "sol: 11 writer threads with commits, $7 per 1k production lines moved, 610 lines per active hour",
-  "fix rounds: fable $1.6 at the median, sol $0.5; one sol fix passed its unit test and failed live, and one sol diagnosis needed a fable follow-up",
-  "eight fable writers at high effort, beside a second run drawing on the same meter, emptied it in 94 minutes",
-  "opus partners: 7 cold restarts of 130k to 305k tokens were about 2% of opus token cost",
-]
-
-[[observations]]
-date = "2026-11-12"
-window = "the homes crusade; times to start an estimate from"
-source = ".artifacts/runs/retro-20261112-homes-outer/"
-limits = "One run. Active time includes waiting on tests."
-rows = [
-  "slog-writer fix round: 6 to 12 active minutes",
-  "heady-writer slice: 0.6 to 5.2 active hours, median 1.6; about 400 added lines per writer-hour",
-  "full suite on a merged tip: 26 to 34 minutes",
-  "driver, tip to rows: 42 minutes at the median, 14 to 71",
-  "plan estimates ran 1.1 to 6 times over in hours and 4 to 16 times over in days",
-]
-
-[[observations]]
-date = "2026-11-12"
-window = "cold read of the four charters by the codex models, as role plays of an invented run"
-source = ".artifacts/tmp/coldread/"
-limits = "A tabletop. No reader ran a command or held a role for longer than 40 minutes. One reader per row."
-rows = [
-  "sol, high: the purger, 13 of 13 events as the charter intends; the driver, 15 of 15",
-  "sol, medium and high: the implementor, 14 of 14 events at each effort; both built the stance table from this file and wrote complete briefs",
-  "sol, medium: the integrator, 14 of 14; terra, medium: the integrator, 14 of 14",
-  "sol, high: a contradiction read of six files returned 38 anchored items, and 31 wording fixes followed",
-  "terra, medium and high: a reference census across a dozen files stopped incomplete both times and said so",
-]
-
-[[observations]]
-date = "2026-11-12"
-window = "writer threads of the kernel and homes crusades"
-source = ".artifacts/runs/retro-20261112-homes/productivity/RESULTS.md"
-limits = "Few threads per row. Measured by thread c2f9645e and not re-derived."
-rows = [
-  "slices over 1,500 lines: fable 984 lines per active hour, opus 539",
-  "lines rewritten by another thread within 12 hours: fable 2%, opus 3%, sol 7% (14% on new seams), sonnet 2%",
-]
