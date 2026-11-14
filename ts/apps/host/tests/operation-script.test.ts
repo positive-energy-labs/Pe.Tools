@@ -2,10 +2,14 @@ import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expect, it } from "vite-plus/test";
+import { expect, it, onTestFinished } from "vite-plus/test";
 import { freezeScript } from "../src/operation-script.ts";
 import { fixtureNative } from "./fixture-native.ts";
 import { Effect } from "effect";
+import { NodeServices } from "@effect/platform-node";
+import { FetchHttpClient } from "effect/http";
+import { detachedBridge, pictureCaptures } from "./effect-test.ts";
+import { RequestIdentity, admittedRequestIdentity } from "../src/request-services.ts";
 import { gatewayExecutor } from "../src/gateway-actions.ts";
 import type { CommandContext } from "../src/command-executor.ts";
 import type { ActionExecution } from "../src/action-journal.ts";
@@ -14,24 +18,33 @@ import type { PictureCaptures } from "../src/captures-route.ts";
 import type { Caller } from "@pe/agent-contracts";
 
 it("C3 refuses a Pod script before execution on any missing or mismatched probe, and permits a matching model", async () => {
+  const root = await mkdtemp(join(tmpdir(), "pe-pod-model-"));
+  onTestFinished(() => rm(root, { recursive: true, force: true }));
   const entries = [{ elementId: 1, elementUniqueId: "one" }, { elementId: 2, elementUniqueId: "wrong" }];
   const calls: { key: string; input: unknown; session: unknown; openId: unknown }[] = [];
-  const bridge = { invoke: (key: string, input: unknown, session?: string, openId?: string | null) => {
+  const bridge = detachedBridge({ invoke: (key, input, session, openId) => {
     calls.push({ key, input, session, openId });
-    return Effect.succeed({ value: key === "revit.detail.elements" ? { documentTitle: "Other", entries } : { status: "Succeeded" } });
-  } } as unknown as RevitBridge["Service"];
+    return Effect.succeed({ value: key === "revit.detail.elements" ? { documentTitle: "Other", entries } : { status: "Succeeded" }, target: { session: session ?? "s", document: null } });
+  } });
   const sourceBundle = { files: [{ path: "pod.json", bytesBase64: Buffer.from(JSON.stringify({ for: {
     title: "Chadds", probes: [{ elementId: 1, uniqueId: "one" }, { elementId: 2, uniqueId: "two" }],
   } })).toString("base64") }] };
-  const executor = gatewayExecutor("scripting.execute", bridge, () => Effect.void, {} as PictureCaptures);
+  const executor = gatewayExecutor("scripting.execute", bridge, () => Effect.void, pictureCaptures(root));
+  const unused = (): never => { throw Error("unexpected access outside the Pod script fixture"); };
   const run = (bundle = sourceBundle) => {
-    const execution = { prepared: { kind: "native-leaf", script: { sourceBundle: bundle } },
+    const execution: ActionExecution = { prepared: { kind: "native-leaf", script: { sourceBundle: bundle } },
       step: (_kind, _key, _input, execute) => execute("run"),
-    } as ActionExecution;
-    const ctx = { caller: { kind: "human", via: "local" }, admission: { id: "run",
+      effect: unused, publishWork: unused, retireWork: unused, recorded: unused, retire: unused,
+    };
+    const ctx: CommandContext = { caller: { kind: "human", via: "local" }, admission: { id: "run", key: "scripting.execute",
       target: { kind: "document", ref: { session: "s", openId: "d" } }, input: { sourcePath: "src/Run.cs" },
-    } } as unknown as CommandContext;
-    return Effect.runPromiseExit(executor.run(ctx, execution) as Effect.Effect<unknown, unknown>);
+    }, basis: null, consumed: [], get work() { return unused(); }, selectWork: unused,
+      read: { receipts: () => [] }, clock: { now: unused }, ids: { mint: unused },
+    };
+    return Effect.runPromiseExit(executor.run(ctx, execution).pipe(
+      Effect.provide(NodeServices.layer), Effect.provide(FetchHttpClient.layer),
+      Effect.provideService(RequestIdentity, admittedRequestIdentity(ctx.caller, {})),
+    ));
   };
   const mismatch = await run();
   expect(mismatch._tag).toBe("Failure");
