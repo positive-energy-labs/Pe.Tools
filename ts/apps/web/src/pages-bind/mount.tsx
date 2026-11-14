@@ -16,7 +16,10 @@ export function BindBody({ ctx }: { ctx: BindContext }) {
   // The host names a Page by its key (`page:@<pod>/pages/<page>`), the route by its slug; a reading
   // is kept with the slug it was read for, so one identity is compared in one form.
   const [reading, setReading] = useState<{ slug: string; value: PageTargetReading } | null>(null),
-    [outcome, setOutcome] = useState<{ ok: boolean; message: string } | null>(null);
+    [outcome, setOutcome] = useState<{ ok: boolean; message: string } | null>(null),
+    // D40: the bind in flight. The host lists the Pods before it answers (seconds), and until then
+    // the form says so and takes no second press.
+    [binding, setBinding] = useState(false);
   // The Page's target is a Reading on the tab's one stream, as the Page chip reads it: the host serves
   // it on arrival and again when the binding moves, so nothing here asks twice.
   useEffect(() => {
@@ -30,11 +33,15 @@ export function BindBody({ ctx }: { ctx: BindContext }) {
     });
   }, [slug, page.view]);
   const bind = async (choice: PageChoice) => {
+    setOutcome(null);
+    setBinding(true);
     try {
       await ctx.verb("bind").run(choice);
       setOutcome({ ok: true, message: "Bound. The Page chip follows within 5 s." });
     } catch (error) {
       setOutcome({ ok: false, message: String(error) });
+    } finally {
+      setBinding(false);
     }
   };
   if (page.view)
@@ -80,6 +87,9 @@ export function BindBody({ ctx }: { ctx: BindContext }) {
             : null
         }
         outcome={outcome}
+        binding={binding}
+        // D40: a followed href reloads the document and aborts a bind in flight; the pose keeps it.
+        onBack={() => ctx.page.pose({ view: true }, "named")}
         onBind={(choice) => void bind(choice)}
       />
     </>
