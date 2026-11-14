@@ -50,6 +50,92 @@ public sealed class RevitScriptingPortTests {
         }
     }
 
+    // Contract C1 (docs/features/pods/MAP.md), on real Revit. Mutants, each run red once:
+    //   - drop `plan.Input` from `BuildExecutionContext` (the first run fails: "needs the argument 'level'");
+    //   - pass `null` for the Pod folder there (the first run fails: "this script runs outside a Pod");
+    //   - drop the `WrapStatementBody` call in `ScriptPodSourceNormalizer.Normalize` (the first run fails to compile);
+    //   - drop the escape check in `ScriptPodPreparationService.FullPath` and the `NormalizeMemberPath` call in
+    //     `RevitScriptContext.PodFile` (the escape run succeeds and answers the outside file);
+    //   - drop the declared-ReadOnly refusal in `NormalizeRequest` (the write run is not Rejected).
+    [Test]
+    public void Statement_body_entrypoint_beside_a_page_reads_its_input_and_a_file_its_pod_carries(UIApplication uiApplication) {
+        var document = EnsureActiveProjectDocument(uiApplication);
+        var workspaceKey = "pod-door-proof-" + Guid.NewGuid().ToString("N");
+        var root = UserPods.Root(workspaceKey);
+        var runs = Path.Combine(ProductRuntimeLayout.Current.State.RunsPath, workspaceKey);
+        var outside = Path.Combine(Path.GetDirectoryName(root)!, workspaceKey + "-outside.txt");
+        var checks = Path.Combine(root, "pages", "tour", "checks");
+        Directory.CreateDirectory(checks);
+        Directory.CreateDirectory(Path.Combine(root, "assets"));
+        Directory.CreateDirectory(Path.Combine(root, "lib"));
+        File.WriteAllText(outside, "not the pod's");
+        File.WriteAllText(Path.Combine(root, "assets", "note.txt"), "carried by the pod");
+        File.WriteAllText(Path.Combine(root, "lib", "Tally.cs"), "public static class Tally { public static int Twice(int n) => n * 2; }");
+        File.WriteAllText(Path.Combine(checks, "census.csx"),
+            """
+            using System.Globalization;
+            var level = Arg<string>("level");
+            var count = Arg<int>("count", 3);
+            Result(new { level, twice = Tally.Twice(count).ToString(CultureInfo.InvariantCulture), note = File.ReadAllText(PodFile("assets/note.txt")), title = doc.Title });
+            """);
+        File.WriteAllText(Path.Combine(checks, "strict.csx"), """Result(Arg<int>("count"));""");
+        File.WriteAllText(Path.Combine(checks, "escape.csx"), $$"""Result(File.ReadAllText(PodFile("../{{workspaceKey}}-outside.txt")));""");
+        File.WriteAllText(UserPods.PodManifest(workspaceKey),
+            $$"""
+            { "schemaVersion": 2, "id": "{{workspaceKey}}", "name": "Door proof", "version": "1.0.0", "entrypoints": [
+              { "sourcePath": "pages/tour/checks/census.csx", "mode": "ReadOnly" },
+              { "sourcePath": "pages/tour/checks/strict.csx" },
+              { "sourcePath": "pages/tour/checks/escape.csx" }
+            ] }
+            """);
+        var runIndex = 0;
+        ExecuteRevitScriptData Run(string? path, Newtonsoft.Json.Linq.JObject? input,
+            ScriptPermissionMode mode = ScriptPermissionMode.ReadOnly, string? inline = null) =>
+            CreateExecutionService(uiApplication).Execute(document, inline is null
+                ? new ExecuteRevitScriptRequest(SourcePath: path, WorkspaceKey: workspaceKey, SourceBundle: CapturedBundle(workspaceKey), PermissionMode: mode, Input: input)
+                : new ExecuteRevitScriptRequest(ScriptContent: inline, PermissionMode: mode, Input: input), $"{workspaceKey}-{runIndex++}");
+        static string Words(ExecuteRevitScriptData result) => string.Join("; ", result.Diagnostics
+            .Where(diagnostic => diagnostic.Severity == ScriptDiagnosticSeverity.Error).Select(diagnostic => diagnostic.Message));
+        try {
+            var read = Run("pages/tour/checks/census.csx", new() { ["level"] = "L2" });
+            Assert.That(read.Status, Is.EqualTo(ScriptExecutionStatus.Succeeded), Words(read));
+            var data = Newtonsoft.Json.Linq.JToken.FromObject(read.Data!);
+            Assert.Multiple(() => {
+                Assert.That(data.Value<string>("level"), Is.EqualTo("L2"));
+                Assert.That(data.Value<string>("twice"), Is.EqualTo("6"));
+                Assert.That(data.Value<string>("note"), Is.EqualTo("carried by the pod"));
+                Assert.That(data.Value<string>("title"), Is.EqualTo(document.Title));
+                Assert.That(read.Attribution!.MemberPath, Is.EqualTo("pages/tour/checks/census.csx"));
+            });
+
+            var missing = Run("pages/tour/checks/strict.csx", null);
+            Assert.That(missing.Status, Is.EqualTo(ScriptExecutionStatus.RuntimeFailed));
+            Assert.That(Words(missing), Does.Contain("This script needs the argument 'count' (Int32)"));
+            var illTyped = Run("pages/tour/checks/strict.csx", new() { ["count"] = "many" });
+            Assert.That(illTyped.Status, Is.EqualTo(ScriptExecutionStatus.RuntimeFailed));
+            Assert.That(Words(illTyped), Does.Contain("The argument 'count' must be a Int32; the input has \"many\""));
+
+            var escape = Run("pages/tour/checks/escape.csx", null);
+            Assert.That(escape.Status, Is.EqualTo(ScriptExecutionStatus.RuntimeFailed), Words(escape));
+            Assert.That(escape.Data, Is.Null);
+
+            var write = Run("pages/tour/checks/census.csx", new() { ["level"] = "L2" }, ScriptPermissionMode.WriteTransaction);
+            Assert.That(write.Status, Is.EqualTo(ScriptExecutionStatus.Rejected));
+            Assert.That(Words(write), Does.Contain("declared ReadOnly in pod.json"));
+
+            var inline = Run(null, new() { ["level"] = "L3" }, inline: """Result(Arg<string>("level"));""");
+            Assert.That(inline.Status, Is.EqualTo(ScriptExecutionStatus.Succeeded), Words(inline));
+            Assert.That(Newtonsoft.Json.Linq.JToken.FromObject(inline.Data!).ToString(), Is.EqualTo("L3"));
+            var podless = Run(null, null, inline: """Result(PodFile("assets/note.txt"));""");
+            Assert.That(podless.Status, Is.EqualTo(ScriptExecutionStatus.RuntimeFailed));
+            Assert.That(Words(podless), Does.Contain("this script runs outside a Pod"));
+        } finally {
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+            if (Directory.Exists(runs)) Directory.Delete(runs, true);
+            if (File.Exists(outside)) File.Delete(outside);
+        }
+    }
+
     [Test]
     public void Project_generation_preserves_user_references_and_packages() {
         var runtimeAssemblyPath = typeof(PeScriptContainer).Assembly.Location;
