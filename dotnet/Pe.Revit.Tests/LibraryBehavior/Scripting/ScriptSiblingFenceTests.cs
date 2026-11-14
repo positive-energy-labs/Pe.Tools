@@ -9,7 +9,8 @@ namespace Pe.Revit.Tests;
 ///     while the target's change is kept or discarded as its mode says. The platform facts are in
 ///     SiblingFenceProofTests, and the words in ScriptChangeLedgerTests.
 ///     Mutant, run red once (2026-11-14). "no fence": `continue;` as the first statement of the loop in
-///     SiblingFence.Raise, so no sibling is held; the sibling keeps the script's name in every mode.
+///     SiblingFence.Raise, so no sibling is held: 5 of the 6 tests fail (ReadOnly answers the old PERSISTED
+///     error naming the sibling), and only the run-opened document test, which needs no fence, passes.
 /// </summary>
 [TestFixture]
 public sealed class ScriptSiblingFenceTests {
@@ -62,8 +63,9 @@ public sealed class ScriptSiblingFenceTests {
             Assert.That(sibling.ProjectInformation.Name, Is.EqualTo(Original), "the sibling's change is gone");
             Assert.That(sibling.IsModified, Is.False, "the sibling is not left with unsaved changes");
             Assert.That(target.ProjectInformation.Name, Is.EqualTo(targetAfter), "the target follows its mode");
-
-            Assert.That(result.Failures, Has.Count.EqualTo(1), string.Join(" | ", result.Failures!.Select(failure => failure.Message)));
+        });
+        Assert.That(result.Failures, Has.Count.EqualTo(1), "the rolled-back sibling commit is one failure row");
+        Assert.Multiple(() => {
             var failure = result.Failures![0];
             Assert.That(failure.Transaction, Is.EqualTo("Rename sibling"));
             Assert.That(failure.Outcome, Is.EqualTo(ScriptFailureOutcome.RolledBack));
