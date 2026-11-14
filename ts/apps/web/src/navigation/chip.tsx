@@ -10,7 +10,16 @@ import { peReadings } from "../host/resource-stream";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 /** SPA chrome owns consent. Page code never draws or answers this control. */
-export function PageBindingChip({ slug }: { slug: string }) {
+export function PageBindingChip({
+  slug,
+  query,
+  fragment,
+}: {
+  slug: string;
+  /** The viewed Page's own query and fragment: the bind choice holds them for the way back. */
+  query?: Record<string, string>;
+  fragment?: string;
+}) {
   const { carry } = routeAddress("bind").read(useRouteSearch());
   const [reading, setReading] = useState<PageTargetReading | null>(null);
   const [refusal, setRefusal] = useState<string | null>(null);
@@ -46,7 +55,7 @@ export function PageBindingChip({ slug }: { slug: string }) {
           <span className="face-mono">{write?.kind ?? "unverified"}</span>
         </TooltipHint>
       )}
-      <a href={routeAddress("bind").link({ page: oneName(slug) }, carry)}>Bind…</a>
+      <a href={routeAddress("bind").link({ page: oneName(slug), query, fragment }, carry)}>Bind…</a>
       {refusal && (
         <span role="status" data-tone="caution">
           {refusal}

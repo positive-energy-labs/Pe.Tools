@@ -61,3 +61,31 @@ test("a chosen Page's target draws from its Reading without a press, though the 
   expect(screen.queryByText("no reading yet")).toBeNull();
   expect(stream.subscribe).toHaveBeenCalledWith({ kind: "page-target", slug: "snowdon-ducts--tour" }, expect.any(Function));
 });
+
+/**
+ * D9: a top-level Page open lands on view=true, and the Page's refusal says "Bind it from the chip".
+ * The viewed Page draws that chip; its link reaches the picker, and the picker links back, both
+ * with the Page's query intact. Mutant: drop `<PageBindingChip>` from the view branch of mount.tsx.
+ */
+test("D9: a viewed unbound Page shows its chip, the chip reaches the picker, and the picker returns with the query", () => {
+  stream.subscribe.mockReset().mockImplementation((_reading: unknown, deliver: (frame: unknown) => void) => {
+    deliver({ kind: "snapshot", value: { ...reading, write: null } });
+    return () => {};
+  });
+  const address = routeAddress("bind");
+  const at = (link: string) => {
+    const page = address.read(Object.fromEntries(new URL(link, "http://host").searchParams)).page;
+    const ctx = { page: { read: () => page }, value: { state: "ready", value: null }, verb: () => ({ run: vi.fn() }) };
+    return render(<BindBody ctx={ctx as never} />);
+  };
+  const viewed = address.link({ page: oneName("snowdon-ducts--tour"), view: true, query: { walk: "1" }, fragment: "p3" });
+  const view = at(viewed);
+  expect(view.getByLabelText("Page binding").textContent).toContain("unverified");
+  expect(view.queryByTestId("pages-bind")).toBeNull();
+  const toPicker = view.getByRole("link", { name: "Bind…" }).getAttribute("href")!;
+  cleanup();
+  const picker = at(toPicker);
+  expect(picker.getByTestId("pages-bind")).toBeTruthy();
+  expect(picker.queryByTitle("Page snowdon-ducts--tour")).toBeNull();
+  expect(picker.getByRole("link", { name: "Back to the Page" }).getAttribute("href")).toBe(viewed);
+});
