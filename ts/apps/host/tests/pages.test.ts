@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { runInNewContext } from "node:vm";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { HOST_RUNTIME_SERVICE_HEADER } from "@pe/host-contracts/contracts";
+import { normalizePeError } from "@pe/host-contracts/pe-api";
 import {
   emptyThreadHead,
   pageTargetReadingSchema,
@@ -89,7 +90,10 @@ describe("pages", () => {
       expect(active).toHaveBeenCalledTimes(listingMs < 5000 ? 1 : 0);
       await vi.advanceTimersByTimeAsync(1);
       expect(delivery.answer?.status).toBe(503);
-      expect(await (await opening).text()).toContain("Pod discovery exceeded 5000 ms");
+      const expiry = await (await opening).json();
+      expect(expiry.message).toContain("Pod discovery exceeded 5000 ms");
+      // The code is what lets pe.js ask again by itself and leave every other 503 alone.
+      expect(expiry.code).toBe("pod.discovery.exceeded");
       await vi.advanceTimersByTimeAsync(5000);
       expect(active).toHaveBeenCalledTimes(listingMs < 5000 ? 1 : 0);
     } finally {
@@ -97,6 +101,77 @@ describe("pages", () => {
       await opening;
       list.mockRestore();
       active.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+  it("W34: the page-target Reading asks again after a discovery expiry and serves the target once the folder answers", async () => {
+    const { pods, handle } = await pagesRoot();
+    const directory = join(pods, "late");
+    await mkdir(join(directory, "pages", "tour"), { recursive: true });
+    await writeFile(join(directory, "pod.json"), '{"id":"late"}');
+    await writeFile(join(directory, "pages", "tour", "index.html"), "<title>Late tour</title>");
+    const listing = await packages.listPackages(pods);
+    let slow = true;
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const list = vi.spyOn(packages, "listPackages").mockImplementation(async () => {
+      if (slow) await new Promise((resolve) => setTimeout(resolve, 6000));
+      return listing;
+    });
+    const seen: string[] = [];
+    const stop = handle.observeTarget("late--tour", (result) =>
+      seen.push("value" in result ? result.value.page : result.error),
+    );
+    try {
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(seen).toEqual([expect.stringContaining("Pod discovery exceeded 5000 ms")]);
+      slow = false;
+      await vi.advanceTimersByTimeAsync(999);
+      expect(list).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(list.mock.calls.length).toBeGreaterThan(1);
+      await expect.poll(() => seen.at(-1)).toBe("page:@late/pages/tour");
+    } finally {
+      stop();
+      await vi.advanceTimersByTimeAsync(10000);
+      list.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+  it.each(["document", "iframe"])("W34: a %s request for a Page that discovery cannot find yet gets the host's words and asks again by itself", async (dest) => {
+    const { pods, fetch } = await pagesRoot();
+    const directory = join(pods, "late");
+    await mkdir(join(directory, "pages", "tour"), { recursive: true });
+    await writeFile(join(directory, "pod.json"), '{"id":"late"}');
+    await writeFile(join(directory, "pages", "tour", "index.html"), "<title>Late tour</title>");
+    const listing = await packages.listPackages(pods);
+    let slow = true;
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const list = vi.spyOn(packages, "listPackages").mockImplementation(async () => {
+      if (slow) await new Promise((resolve) => setTimeout(resolve, 6000));
+      return listing;
+    });
+    const open = () => fetch("/pages/late--tour/?walk=1", { headers: { accept: "text/html,*/*", "sec-fetch-dest": dest } });
+    try {
+      const opening = open();
+      await vi.advanceTimersByTimeAsync(5000);
+      const waiting = await opening;
+      expect(waiting.status).toBe(503);
+      expect(waiting.headers.get("content-type")).toContain("text/html");
+      const html = await waiting.text();
+      expect(html).toContain('<meta http-equiv="refresh"');
+      expect(html).toContain("waiting for the Pods folder: Pod discovery exceeded 5000 ms listing");
+      expect(html).toContain("Try again when the folder is available.");
+      // The same request, once the folder answers, is the Page (or its place in the app).
+      slow = false;
+      vi.useRealTimers();
+      const served = await open();
+      expect(served.status).toBe(dest === "document" ? 302 : 200);
+    } finally {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      await vi.advanceTimersByTimeAsync(10000);
+      list.mockRestore();
       vi.useRealTimers();
     }
   });
@@ -1035,12 +1110,14 @@ describe("pages", () => {
       document: { session: "s1", openId: "d1", title: "Project A MEP" },
       write: { kind: "thread", thread: "t1-abcdef-123" },
     };
-    type Answer = (url: URL, init: RequestInit) => Response | undefined;
+    type Answer = (url: URL, init: RequestInit) => Response | Promise<Response> | undefined;
     /** The served bytes in a page at `/pages/todo/`, with fetch and EventSource recorded and the host's answers. */
     async function page(
       answer: Answer = () => undefined,
       pageKey = "page:@pages/todo",
       declaration?: string,
+      /** The page's `setTimeout`: a test that owns it decides when a wait ends. */
+      sleep: typeof setTimeout = setTimeout,
     ) {
       const { fetch } = await pagesRoot();
       const source = await (await fetch("/pages/pe.js")).text();
@@ -1072,7 +1149,7 @@ describe("pages", () => {
         Response,
         console,
         crypto,
-        setTimeout,
+        setTimeout: sleep,
         clearTimeout,
         setInterval: () => 0,
         clearInterval: () => {},
@@ -1501,6 +1578,131 @@ describe("pages", () => {
         expect(pe.doc).toBeNull();
         expect((body.children[0] as { textContent: string }).textContent).toBe(refusal!.message);
       }
+    });
+
+    /** The Pages handler's own discovery expiry, through the route envelope the browser receives. */
+    const words =
+      "Pod discovery exceeded 5000 ms listing G:/Shared drives/Pods. Try again when the folder is available.";
+    const late = () =>
+      normalizePeError(
+        Response.json({ error: words, message: words, code: "pod.discovery.exceeded" }, { status: 503 }),
+      );
+    const owned = () => {
+      const waits: { ms: number; end: () => void }[] = [];
+      const sleep = ((end: () => void, ms: number) => (waits.push({ ms, end }), 0)) as unknown as typeof setTimeout;
+      /** Every wait the Page is in is exactly `ms`; then they all end. */
+      const pass = async (...ms: number[]) => {
+        await expect.poll(() => waits.map((wait) => wait.ms)).toEqual(ms);
+        for (const wait of waits.splice(0)) wait.end();
+      };
+      return { waits, sleep, pass };
+    };
+
+    it("W34: a discovery 503 on a boot read is asked again by itself until the Page loads, with no reload", async () => {
+      const { sleep, pass, waits } = owned();
+      const asked = { target: 0, state: 0 };
+      const { pe, body } = await page(
+        (url) => {
+          if (url.pathname.endsWith("/target")) return ++asked.target <= 2 ? late() : undefined;
+          if (url.pathname.endsWith("/state")) return ++asked.state <= 4 ? late() : undefined;
+          return undefined;
+        },
+        undefined,
+        undefined,
+        sleep,
+      );
+      const note = () => body.children.find((node) => (node as { id?: string }).id === "pe-waiting") as
+        | { textContent: string; hidden: boolean; role: string }
+        | undefined;
+      const target = pe.target!();
+      const rendered: unknown[] = [];
+      const state = pe.state!({ reduce: (s: unknown) => s, base: { tries: 0 }, render: (s: unknown) => rendered.push(s) });
+      await pass(1000, 1000);
+      expect(note()).toMatchObject({ textContent: `waiting for the Pods folder: ${words}`, hidden: false, role: "status" });
+      expect(pe.doc).toBeNull();
+      await pass(2000, 2000);
+      expect(await target).toEqual(resolved.document);
+      expect(pe.doc).toEqual(resolved.document);
+      // The state read is still waiting, so the Page still says so.
+      await pass(5000);
+      expect(note()?.hidden).toBe(false);
+      await pass(10000);
+      await state;
+      expect(rendered).toEqual([{ tries: 0 }]);
+      expect(asked).toEqual({ target: 3, state: 5 });
+      expect(note()?.hidden).toBe(true);
+      expect(waits).toEqual([]);
+    });
+
+    // Seen live (A7c): target and state answered 200, the text publish answered 503, and `k` never came back.
+    it("W34: the store still loads when its text publish answers a discovery 503 after the state read answered", async () => {
+      const { sleep, pass } = owned();
+      let text = 0;
+      const { pe } = await page(
+        (url) => (url.pathname.endsWith("/text") && ++text <= 2 ? late() : undefined),
+        undefined,
+        undefined,
+        sleep,
+      );
+      const loading = pe.state!({ reduce: (s: unknown) => s, base: { tries: 5 } }) as Promise<{ state: unknown }>;
+      await pass(1000);
+      await pass(2000);
+      expect((await loading).state).toEqual({ tries: 5 });
+      expect(text).toBe(3);
+    });
+
+    // Seen live (A7c): the Page's own reads through `/call` answered 503 and its panel stayed unusable.
+    it("W34: pe.read and pe.do ask a read again on a discovery 503; an act is never sent twice", async () => {
+      const { sleep, pass, waits } = owned();
+      let calls = 0;
+      const { pe, sent } = await page(
+        (url) => {
+          if (url.pathname.endsWith("/call")) return ++calls <= 2 || calls === 4 ? late() : undefined;
+          if (url.pathname.endsWith("/act")) return late();
+          return undefined;
+        },
+        undefined,
+        undefined,
+        sleep,
+      );
+      const read = pe.read!("revit.context.journal", { maxLines: 60 });
+      await pass(1000);
+      await pass(2000);
+      expect(await read).toEqual({ ok: true });
+      const done = pe.do!("revit.catalog.warnings");
+      await pass(1000);
+      expect(await done).toEqual({ ok: true });
+      await expect(pe.script!("script:@kit/src/Census.cs")).rejects.toThrow("503");
+      expect(sent.filter((request) => request.url.endsWith("/act"))).toHaveLength(1);
+      expect(waits).toEqual([]);
+    });
+
+    it("W34: a 403 refusal and a 503 that is not a discovery expiry are answered once, never asked again", async () => {
+      const { sleep, waits } = owned();
+      const asked = { target: 0, state: 0 };
+      const { pe, body } = await page(
+        (url) => {
+          if (url.pathname.endsWith("/target") && ++asked.target)
+            return Response.json(
+              { error: { code: "grant.required", message: "this Page may not read that document" } },
+              { status: 403 },
+            );
+          if (url.pathname.endsWith("/state") && ++asked.state)
+            return Response.json(
+              { error: { code: "route.refused", message: "this host has no Revit composition" } },
+              { status: 503 },
+            );
+          return undefined;
+        },
+        undefined,
+        undefined,
+        sleep,
+      );
+      await expect(pe.target!()).rejects.toThrow("403");
+      await expect(pe.state!({ reduce: (s: unknown) => s, base: {} })).rejects.toThrow("503");
+      expect(asked).toEqual({ target: 1, state: 1 });
+      expect(waits).toEqual([]);
+      expect(body.children.find((node) => (node as { id?: string }).id === "pe-waiting")).toBeUndefined();
     });
 
     it("pe.target throws wrong-model as PeTargetRefusal and displays the host's words", async () => {
