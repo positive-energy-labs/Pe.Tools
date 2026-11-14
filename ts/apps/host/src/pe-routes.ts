@@ -1,5 +1,6 @@
 import { stateScope } from "@pe/host-contracts/service-identity";
-import { contentRootsReady } from "./content-roots.ts";
+import { acquireContentRoots, contentHomes, contentFirmHome, contentHomesFound, ContentHomeUnavailable } from "./content-roots.ts";
+import { homeLogLines } from "@pe/host-contracts/product-paths";
 import { targetHomes } from "./call-route.ts";
 import { readPlaces, writePlaces } from "./places.ts";
 import { workKeySchema as mountedWorkKeySchema } from "@pe/agent-contracts";
@@ -138,7 +139,6 @@ import {
   type NavigationSources,
 } from "./navigation.ts";
 import { createNoticeFeed, noticeRows, noteStartupHomes, type NoticeSources } from "./notice-feed.ts";
-import { homeLogLines } from "@pe/host-contracts/product-paths";
 import { heldSend, heldSends, holdSend, confirmSend, subscribeHeldSends } from "./guards.ts";
 import type { ActionJournal } from "./action-journal.ts";
 import { hostTimeline, timelineReceipts } from "./reads/work-timeline.ts";
@@ -929,9 +929,9 @@ export function createContributionContent(options: {
   /** The agent's working directory: the harness skill projections land here, never in a home. */
   worldRoot: import("@pe/host-contracts/kinds").StateDirectory;
   /** The user home that authors `Skills/` and, by default, `Pages/`; the user root when omitted. */
-  homeRoot?: string;
+  homeRoot?: string | (() => string | undefined);
   /** Scratch Pages in read order; the home's `Pages` when omitted (an isolated test world). */
-  pagesRoots?: readonly string[];
+  pagesRoots?: readonly string[] | (() => readonly string[]);
   packages?: typeof listPackages;
   pages?: (packages: readonly AdmittedPackage[]) => Promise<readonly PageDescriptor[]>;
   /** Runs beside the census. Honor cancellation before home writes; shutdown never joins it. */
@@ -939,8 +939,12 @@ export function createContributionContent(options: {
   decisionsMachine?: import("@pe/host-contracts/kinds").StateRoot;
   changed?: () => void;
 }) {
-  const homeRoot = options.homeRoot ?? userRoot();
-  const pagesRoots = options.pagesRoots ?? [join(homeRoot, "Pages")];
+  const homeRoot = () => typeof options.homeRoot === "function" ? options.homeRoot() : options.homeRoot ?? userRoot();
+  const pagesRoots = () => {
+    if (typeof options.pagesRoots === "function") return options.pagesRoots();
+    const home = homeRoot();
+    return options.pagesRoots ?? (home ? [join(home, "Pages")] : []);
+  };
   const revisions = new Map<string, Map<string, unknown>>();
   const latest = new Map<string, unknown>();
   let snapshot: Promise<CapabilityContent> | undefined;
@@ -1014,12 +1018,14 @@ export function createContributionContent(options: {
       });
   }
   async function build(): Promise<CapabilityContent> {
+    const userHome = homeRoot();
+    if (!userHome) throw new ContentHomeUnavailable();
     await lifecycle.ready;
     const listing = lifecycle.listing();
     admitted = lifecycle.packages();
     const allDescriptors = options.pages
       ? await options.pages(admitted)
-      : await pageDescriptors(admitted, pagesRoots);
+      : await pageDescriptors(admitted, pagesRoots());
     const descriptors = allDescriptors.filter((p) => p.key !== null && p.openUrl !== null);
     const scratch = allDescriptors.filter((p) => p.pod === null).map((p) => p.slug);
     const collisions = pageFolderCollisions(scratch);
@@ -1098,7 +1104,7 @@ export function createContributionContent(options: {
             }),
     );
     const publication = await publishPeaSkills(
-      { productHomePath: homeRoot, agent: options.worldRoot, captureDirectory },
+      { productHomePath: userHome, agent: options.worldRoot, captureDirectory },
       packagedSkills,
       lifecycle.skills(),
     );
@@ -1159,7 +1165,7 @@ export function createContributionContent(options: {
     read: () => {
       if (!snapshot || (!pending && Date.now() - observedAt >= 30_000)) {
         pending = true;
-        snapshot = build().finally(() => {
+        snapshot = build().catch(error => { snapshot = undefined; throw error; }).finally(() => {
           observedAt = Date.now();
           pending = false;
         });
@@ -1170,7 +1176,7 @@ export function createContributionContent(options: {
     pages: async (pointer?: string | null) => {
       const descriptors = options.pages
         ? await options.pages(admitted)
-        : await scratchPageDescriptors(pointer ? productPagesRoots(pointer) : pagesRoots);
+        : await scratchPageDescriptors(pointer ? productPagesRoots(pointer) : pagesRoots());
       return pageRows(descriptors);
     },
     member: (key: string, sha256?: string) =>
@@ -1216,16 +1222,20 @@ function* hostPeRoutes(
   // Host startup prepares this fixed machine-state directory before any harness can spawn.
   const worldRoot = hostState().agent;
   // Unbound is a working state (ADR 0037 rule 2): the host starts, and the feed says where it looked.
-  noteStartupHomes();
-  // One host log line per home, with its tier and how it was found; with no firm home, where it looked.
-  for (const line of homeLogLines()) yield* Effect.logInfo(line);
-  yield* Effect.promise(() => contentRootsReady());
+  const rootsOwner = acquireContentRoots();
+  yield* Effect.addFinalizer(() => Effect.sync(rootsOwner.close));
+  const homes = contentHomes(), userHome = homes.find(home => home.tier === "user")?.root;
+  // Pass the async census explicitly: these diagnostics must not probe the firm drives again.
+  if (userHome) noteStartupHomes(userHome, contentFirmHome());
+  for (const line of homeLogLines(contentHomesFound())) yield* Effect.logInfo(line);
   let invalidateCatalog = () => {};
   const content = createContributionContent({
     worldRoot: stateScope(hostState(), hostState().agent),
-    pagesRoots: productPagesRoots(),
+    homeRoot: () => contentHomes().find(home => home.tier === "user")?.root,
+    pagesRoots: productPagesRoots,
     changed: () => invalidateCatalog(),
     bootstrap: async (signal) => {
+      if (!contentHomes().some(home => home.tier === "user")) return;
       const imported = await importShippedPods({ captures: pictures, signal });
       const refused = imported.outcomes.filter((outcome) => outcome.outcome === "refused");
       if (refused.length)

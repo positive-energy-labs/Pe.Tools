@@ -54,8 +54,8 @@ export function getHostStatus(
   bridge: BridgeSessionView,
   capabilities: PeaRuntimeCapabilities = hostCapabilities,
   runtimeRefusal: string | null = null,
+  found: ReturnType<typeof homesFound> = homesFound(),
 ) {
-  const found = homesFound();
   return Effect.succeed({
     homes: found.homes.map(({ tier, root, found }) => ({ tier, path: root, found })),
     firmHomeNotice: found.firmNotice,

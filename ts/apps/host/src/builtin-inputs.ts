@@ -1,4 +1,7 @@
 import { stateScope } from "@pe/host-contracts/service-identity";
+import { contentHomes, contentRootsReady, contentFirmHome } from "./content-roots.ts";
+import { productPathNames } from "@pe/host-contracts/contracts";
+import { join } from "node:path";
 import { catalogsFor } from "./ducts-files.ts";
 import { z } from "zod";
 import { admitNativeCaller } from "./native-read-policy.ts";
@@ -1336,7 +1339,16 @@ export const readInputRoutes = (
   ).pipe(Layer.provide(httpProblems));
 
 /** Built-in domain registration lives here; the HTTP kernel composes this module without route knowledge. */
-export const builtinFileLayer = () => DuctFiles.layer();
+export const builtinFileLayer = () => Layer.unwrap(Effect.promise(async () => {
+  await contentRootsReady();
+  return DuctFiles.layer({
+    firm: () => {
+      const root = contentFirmHome().root;
+      return root && join(root, productPathNames.homeSettingsDirectoryName);
+    },
+    catalogs: contentHomes().map(home => join(home.root, productPathNames.catalogsDirectoryName)),
+  });
+}));
 export const builtinFileRoutes = ductCatalogsRoute;
 export const defaultReadOwner = (
   inputs: HostInputContext["Service"],

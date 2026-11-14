@@ -19,7 +19,7 @@ import {
 } from "@pe/host-contracts/generated";
 import type { MemberIssue } from "@pe/host-contracts/operation-types";
 import { productPathNames } from "@pe/host-contracts/contracts";
-import { contentHomes, contentRootsReady } from "./content-roots.ts";
+import { contentHomes, contentRootsReady, ContentHomeUnavailable } from "./content-roots.ts";
 import { verifyPodArtifact } from "./pod-artifact.ts";
 import { shippedPodUpdateRefusals } from "./shipped-pod-status.ts";
 import { podModelSchema, type PodModel } from "./pod-model.ts";
@@ -154,12 +154,14 @@ const claimedTwice = (id: string, twins: readonly Pick<AdmittedPackage, "directo
 export type PackageDiscoveryOptions = {
   podsRoots?: PodsRoots;
   wait?: "request" | "background";
-  /** Date.now() epoch milliseconds. Refuse an in-flight scan started before this floor. */
-  notBefore?: number;
 };
-export async function listPackages({ podsRoots, wait = "request", notBefore }: PackageDiscoveryOptions = {}): Promise<PackageListing> {
-  if (podsRoots === undefined) { await contentRootsReady(); podsRoots = productPodsRoots(); }
-  const listing = await discoverPackages(podsRoots, scanPackages, wait, notBefore,
+export async function listPackages({ podsRoots, wait = "request" }: PackageDiscoveryOptions = {}): Promise<PackageListing> {
+  if (podsRoots === undefined) {
+    await contentRootsReady();
+    if (!contentHomes().some(home => home.tier === "user")) throw new ContentHomeUnavailable();
+    podsRoots = productPodsRoots();
+  }
+  const listing = await discoverPackages(podsRoots, scanPackages, wait,
     signal => podsDiskSignature([podsRoots].flat(), isPackageMember, signal));
   // Import notices are runtime state, not disk bytes; project them even when the census is reused.
   return { ...listing, packages: listing.packages.map(pod => ({ ...pod, diagnostics: currentDiagnostics(pod.id, pod.diagnostics) })) };
@@ -256,8 +258,7 @@ export function onePackage(
     : refuse(`No installed pod has id '${id}'.`, 404);
 }
 
-/** notBefore uses Date.now() epoch milliseconds, as listPackages does. */
-export const readPackage = async (id: string, options: Pick<PackageDiscoveryOptions, "podsRoots" | "notBefore"> = {}) =>
+export const readPackage = async (id: string, options: Pick<PackageDiscoveryOptions, "podsRoots"> = {}) =>
   onePackage(await listPackages(options), id);
 
 /** Freeze admitted bytes, or capture one indexed folder afresh. Member semantics stay native. */

@@ -40,7 +40,7 @@ import { requirePackageEnabled, activePackages, projectPodIds, reconcilePackageC
 import { shippedPodsSettled } from "./installed-pods.ts";
 import { LocalOpError } from "./local-error.ts";
 import { PackageDiscoveryExceeded } from "./pod-capture.ts";
-import { contentRootsReady } from "./content-roots.ts";
+import { contentRootsReady, contentHomes, ContentHomeUnavailable } from "./content-roots.ts";
 import { hostState } from "./host-ownership.ts";
 import { sha256Hex,
   writeHome,
@@ -171,7 +171,13 @@ const projectPodsNote = (ctx: PodContext) =>
       };
 
 const podContentReady = (ctx: PodContext) =>
-  ctx.podsRoot === undefined ? Effect.promise(async () => { await shippedPodsSettled(); await contentRootsReady(ctx.pointer); }) : Effect.void;
+  ctx.podsRoot === undefined ? Effect.tryPromise({
+    try: async () => {
+      await shippedPodsSettled(); await contentRootsReady(ctx.pointer);
+      if (!contentHomes().some(home => home.tier === "user")) throw new ContentHomeUnavailable();
+    },
+    catch: error => new LocalOpError("pod.content", errorMessage(error), 503),
+  }) : Effect.void;
 
 export const listPods = Effect.fnUntraced(function* (ctx: PodContext = {}) {
   yield* podContentReady(ctx);
@@ -373,7 +379,7 @@ export const readMemberPod = Effect.fnUntraced(function* (pod: string, ctx: PodC
         "pod.member.read",
         errorMessage(error),
         // A discovery that ran out of its wait read nothing: it is not a Pod that is gone.
-        error instanceof PackageDiscoveryExceeded
+        error instanceof PackageDiscoveryExceeded || error instanceof ContentHomeUnavailable
           ? 503
           : errorMessage(error).includes("claimed")
             ? 409

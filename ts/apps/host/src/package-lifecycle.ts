@@ -181,9 +181,8 @@ export function createPackageLifecycle(
     if (closed) return initialListing;
     // Roots are refreshed by the shared async owner, never by a request or scan.
     const roots = options.packages ? [] : productPodsRoots();
-    const signatureStartedAt = Date.now();
     // Lifecycle owns publication after a slow scan; Page requests bound their own wait for it.
-    const listing = await (options.packages ? options.packages() : listPackages({ podsRoots: roots, wait: "background", notBefore: signatureStartedAt }));
+    const listing = await (options.packages ? options.packages() : listPackages({ podsRoots: roots, wait: "background" }));
     if (closed) return initialListing;
     const current = new Set(listing.packages.map((p) => `pod:${p.id}`));
     for (const id of signatures.keys())

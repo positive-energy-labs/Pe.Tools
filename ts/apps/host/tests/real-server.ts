@@ -73,7 +73,7 @@ export async function serveRoutes<E, R>(
  * The whole host (`makeHttpLive`) on isolated state and product homes. `terminal` is the human/cli
  * context the host writes beside its receipt, as the owner's own `pea` reads it.
  */
-export async function bootHost(options: Pick<Partial<import("../src/app.ts").HttpLiveOptions>, "inputs" | "reads" | "webRoot" | "revitCompositionFactory"> & { clock?: number } = {}) {
+export async function bootHost(options: Pick<Partial<import("../src/app.ts").HttpLiveOptions>, "inputs" | "reads" | "webRoot" | "revitCompositionFactory"> & { clock?: number; productHome?: null } = {}) {
   const base = process.env.PE_TEST_HOME_ROOT ?? tmpdir();
   const localAppData = mkdtempSync(join(base, "pe-host-real-"));
   const home = mkdtempSync(join(base, "pe-host-real-home-"));
@@ -89,7 +89,8 @@ export async function bootHost(options: Pick<Partial<import("../src/app.ts").Htt
     [productPathNames.productHomeVariable]: process.env[productPathNames.productHomeVariable],
   };
   process.env.LOCALAPPDATA = localAppData;
-  process.env[productPathNames.productHomeVariable] = home;
+  if (options.productHome === null) delete process.env[productPathNames.productHomeVariable];
+  else process.env[productPathNames.productHomeVariable] = home;
   // effect-edge: island, phase 5
   const latch = Effect.runSync(Deferred.make<void>());
   // effect-edge: island, phase 5

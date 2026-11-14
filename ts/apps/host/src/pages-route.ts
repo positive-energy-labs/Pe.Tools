@@ -1,5 +1,5 @@
 import { stateScope } from "@pe/host-contracts/service-identity";
-import { acquireContentRoots, contentRootsReady } from "./content-roots.ts";
+import { acquireContentRoots, contentRootsReady, contentHomes, ContentHomeUnavailable } from "./content-roots.ts";
 import { targetHomes } from "./call-route.ts";
 import { readSessionScope } from "./sdk-session.ts";
 import {
@@ -1247,7 +1247,13 @@ export const pagesRoute = (
         const resolvePage = async () => {
           const scope = readSessionScope(Object.fromEntries(request.headers));
           const { pointer } = bridge ? await Effect.runPromise(targetHomes(bridge, scope)) : {};
-          if (root === productPagesRoots || pods === productPodsRoots) await contentRootsReady(pointer);
+          if (root === productPagesRoots || pods === productPodsRoots) {
+            await contentRootsReady(pointer);
+            if (!contentHomes().some(home => home.tier === "user")) {
+              const error = new ContentHomeUnavailable();
+              return json({ code: error.code, error: error.message, message: error.message }, error.status);
+            }
+          }
           if (expired) return timeout;
           const roots = root(pointer);
           podRoots = pods(pointer);
