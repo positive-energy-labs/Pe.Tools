@@ -354,6 +354,9 @@ export function createPodRoutes(
       if (!route || route.fingerprint !== hash || !route.trusted)
         throw Error("Route trust is absent or its bytes changed");
       if (route.admission.status === "refused") refuse(route.admission);
+      // An in-flight admission is not authority. Refuse now so this reader never joins it.
+      if (route.admission.status !== "admitted")
+        throw Error("Pod route admission is pending; retry after it completes");
       const pod = lifecycle.packages().find((pod) => pod.id === route.packageId)!;
       const { wire } = await verifyPodArtifact(
         await currentArtifact(pod, route),
@@ -361,6 +364,11 @@ export function createPodRoutes(
       );
       // ponytail: JSON number arrays inflate payload roughly 3?4x; move to base64 or a raw octet-stream if Pod artifacts grow.
       if (closed) throw Error("Pod routes are closed");
+      // Byte verification yields: withdrawal or reconciliation may have ended this admission.
+      const decision = stored();
+      if (decision.kind !== "ok" || decision.value[key] !== hash ||
+          registrations.get(key)?.hash !== hash || !current(key, hash))
+        throw Error("Pod route admission changed; inspect it before delivery");
       return { fingerprint: route.fingerprint, artifact: wire };
     },
     close() {

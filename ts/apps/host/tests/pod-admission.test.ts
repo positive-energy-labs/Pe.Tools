@@ -114,6 +114,30 @@ async function isolatedRefusal() {
   };
 }
 
+test("review: pending admission cannot deliver a refused route bundle", async () => {
+  const f = await isolatedRefusal();
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const actual = podArtifacts.admitPodArtifact;
+  const spy = vi.spyOn(podArtifacts, "admitPodArtifact").mockImplementation(async (...args) => {
+    entered.resolve();
+    await release.promise;
+    return actual(...args);
+  });
+  const trusting = f.trust("renamed");
+  try {
+    await entered.promise;
+    const row = (await f.routes.list()).find(row => row.packageId === "renamed")!;
+    expect(row.admission.status).toBe("pending");
+    const delivered = await f.routes.bundle(row.key, row.fingerprint).then(() => true, () => false);
+    expect(delivered).toBe(false);
+  } finally {
+    release.resolve();
+    try { expect((await trusting).status).toBe(409); }
+    finally { spy.mockRestore(); await f.close(); }
+  }
+}, 30_000);
+
 test("B58: one refused Pod never fails inventory or another Pod's admission", async () => {
   const f = await isolatedRefusal();
   try {

@@ -3,9 +3,10 @@ import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { buildRouteArtifact } from "../../web/route-module-hash.ts";
+import { podWire, podHostSource } from "./pod-wire.fixture.ts";
 import { createHash } from "node:crypto";
-import { routeFingerprint } from "../../../packages/agent-contracts/src/route-module.ts";
-import { builtinData } from "../../../packages/agent-contracts/src/route-kernel.fixtures.ts";
 import { createContributionContent } from "../src/pe-routes.ts";
 import { createPluginsHandler } from "../src/plugins-handler.ts";
 import { createPodRoutes } from "../src/pod-routes.ts";
@@ -53,6 +54,28 @@ test("a healthy local read completing after 1200 ms is not refused", async () =>
   } finally {
     vi.useRealTimers();
   }
+});
+
+test("a bundle cannot outlive its admission while its byte check is pending", async () => {
+  await putRoute(join(root, "user"));
+  await content.lifecycle.refresh();
+  const d = (await routes.list()).find(r => r.packageId === "late")!;
+  await routes.trust(d.key, d.fingerprint, true);
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const actual = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
+  let first = true;
+  vi.spyOn(filesystem, "open").mockImplementation(async (...args) => {
+    if (first) { first = false; entered.resolve(); await release.promise; }
+    return actual.open(...args);
+  });
+  const delivery = routes.bundle(d.key, d.fingerprint).then(() => true, () => false);
+  await entered.promise;
+  try {
+    await routes.trust(d.key, d.fingerprint, false);
+    release.resolve();
+    expect(await delivery).toBe(false);
+  } finally { release.resolve(); await delivery; }
 });
 
 test("a detached initial census can fail after close without an unhandled rejection", async () => {
@@ -189,6 +212,7 @@ test("a held new admission never queues later route inventory readers", async ()
   const d = (await routes.list()).find((r) => r.packageId === "late")!;
   await routes.trust(d.key, d.fingerprint, true);
   await content.lifecycle.refresh();
+  routes.close();
   const admitting = createPodRoutes(content.lifecycle, {
     machine: stateMachine(root),
     workspace: new RouteWorkspace({
@@ -226,10 +250,9 @@ test("a held new admission never queues later route inventory readers", async ()
     release.resolve();
     vi.mocked(filesystem.open).mockRestore();
     vi.useRealTimers();
-    // The tiny fixture's JS is deliberately invalid. Reaching admission proves that a
-    // recovered read retries after a deadline, rather than reusing a cached IO refusal.
+    // A recovered read reaches admission rather than reusing a cached IO refusal.
     expect(await admitting.list()).toContainEqual(expect.objectContaining({
-      key: d.key, admission: expect.objectContaining({ status: "refused", code: "pod.route.admission.refused", retryable: false }),
+      key: d.key, admission: { status: "admitted" },
     }));
   } finally {
     release.resolve();
@@ -535,10 +558,18 @@ beforeEach(async () => {
     worldRoot: stateFixture(join(root, "world")),
     decisionsMachine: stateMachine(root),
   });
-  routes = createPodRoutes(content.lifecycle, { machine: stateMachine(root) });
+  routes = admittedRoutes();
   bindPackageLifecycle(content.lifecycle);
   await content.lifecycle.ready;
 });
+function admittedRoutes() {
+  return createPodRoutes(content.lifecycle, {
+    machine: stateMachine(root),
+    workspace: new RouteWorkspace({
+      registrations: [], store: { getState: async () => null, setState: async () => {} },
+    }),
+  });
+}
 test("control: a firm Pod present before startup is listed and active", async () => {
   await routes.close();
   await content.lifecycle.close();
@@ -736,33 +767,21 @@ for (const tier of ["user", "firm"] as const) {
   });
 }
 async function putRoute(home: string) {
-  const bytes = [101, 120, 112, 111, 114, 116];
-  const sha256 = createHash("sha256").update(Uint8Array.from(bytes)).digest("hex");
-  const artifact = {
-    version: 1 as const,
-    data: builtinData,
-    contracts: [{ id: "test", sha256 }],
-    executables: [
-      { client: "web" as const, entry: "route.js", members: [{ path: "route.js", sha256 }] },
-    ],
-  };
-  const fingerprint = await routeFingerprint(artifact);
+  const typed = await podWire("pod.late.tool", `/tool/${encodeURIComponent("route:@late/routes/tool/route.artifact")}`, 1, "Late");
+  const data = typed.data;
+  const entry = join(root, "route-entry.ts");
+  const imports = fileURLToPath(new URL("../../../packages/agent-contracts/src/route-kernel.fixtures.ts", import.meta.url)).replaceAll("\\", "/");
+  await writeFile(entry, `import {builtinModule} from ${JSON.stringify(imports)};
+export const module = {...builtinModule, data: ${JSON.stringify(data)}, bodies:
+Object.fromEntries(Object.entries(builtinModule.bodies).map(([key, body]) => [key, {...body, source: {module:'route.js', export:key}}]))};`);
+  const artifact = await buildRouteArtifact({
+    entry, root, data, contracts: [{ id: "test", bytes: new TextEncoder().encode("late-fixture-contract") }],
+    hostEntry: { entry: join(root, "route-host.ts"), source: podHostSource(typed, fileURLToPath(import.meta.resolve("zod"))) },
+  });
   await put(
     home,
     "late/routes/tool/route.artifact",
-    JSON.stringify({
-      artifact,
-      fingerprint,
-      contracts: [{ id: "test", bytes }],
-      executables: [
-        {
-          client: "web",
-          entry: "route.js",
-          resolved: true,
-          members: [{ path: "route.js", bytes }],
-        },
-      ],
-    }),
+    JSON.stringify(artifact, (_key, value) => value instanceof Uint8Array ? [...value] : value),
   );
   await put(
     home,
@@ -772,7 +791,7 @@ async function putRoute(home: string) {
       routes: [
         {
           artifact: "routes/tool/route.artifact",
-          fingerprint: `pod-bytes:${fingerprint}`,
+          fingerprint: `pod-bytes:${artifact.fingerprint}`,
           name: "Late",
           description: "Late route",
         },
