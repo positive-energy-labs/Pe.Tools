@@ -430,7 +430,9 @@ test("H1: a MUAS-1 ESP write refuses for its shared type and MUAS-2 keeps its va
       .not.toBe("")
       .catch(() => undefined);
     seen.staleStatus = await status();
-    await press(page, roster, "^Refresh$");
+    // D38: a sheet already current draws no Refresh (status "" above), so the person presses it only
+    // when the reading is stale. Either way the sheet must end current before the plan.
+    if (seen.staleStatus) await press(page, roster, "^Refresh$");
     await expect.poll(status, { timeout: 180_000, message: "sheet re-read" }).toBe("");
     const state = () =>
       page.evaluate(() => ({
