@@ -69,6 +69,7 @@ import {
   documentAcquisition,
   threadHead,
   subscribeHeads,
+  emitPagePinRevoke,
 } from "./control.ts";
 import { capturePackage, listPackages, productPodsRoots, type PodsRoots } from "./packages.ts";
 import { activePackages, requirePackageEnabled } from "./package-lifecycle.ts";
@@ -331,7 +332,7 @@ export class PageState {
     return this.stored("text.json", peRoutes["page.text"].body.nullable(), null);
   }
   /** Authored content, never machine state: imports and unopened Pages declare the same events. */
-  agent() {
+  async agent() {
     const file = join(this.pageDir, "index.html");
     try {
       const blocks: DefaultTreeAdapterMap["element"][] = [];
@@ -343,7 +344,7 @@ export class PageState {
           blocks.push(node);
         if ("childNodes" in node) node.childNodes.forEach(visit);
       };
-      visit(parse(readFileSync(file, "utf8")));
+      visit(parse(await readFile(file, "utf8")));
       if (!blocks.length) return {};
       const block = blocks[0]!;
       if (
@@ -913,6 +914,14 @@ export function createPagesHandler(
       slots: { ...current.slots, default: slot },
       boundBy: { ...current.boundBy, default: caller.kind === "human" ? "human" : "agent" },
     });
+    if (
+      current.boundBy?.default === "human" &&
+      current.slots.default?.kind === "pinned" &&
+      (caller.kind !== "human" ||
+        slot.kind !== "pinned" ||
+        slot.address !== current.slots.default.address)
+    )
+      emitPagePinRevoke(page);
     return json(await target(page, state));
   }
 
@@ -1058,11 +1067,12 @@ export function createPagesHandler(
       }
     }
     if (verb === "state" && request.method === "GET") {
-      let agent;
+      let agent = {};
+      let agentError;
       try {
-        agent = state.agent();
+        agent = await state.agent();
       } catch (error) {
-        return problem(422, (error as Error).message);
+        agentError = (error as Error).message;
       }
       const rows = await state.rows();
       const cursor = url.searchParams.has("after") ? Number(url.searchParams.get("after")) : null;
@@ -1075,6 +1085,7 @@ export function createPagesHandler(
         text: projection?.text ?? null,
         textSeq: projection?.seq ?? null,
         agent,
+        agentError,
       });
     }
     if (verb === "text" && request.method === "PUT") {
@@ -1096,7 +1107,7 @@ export function createPagesHandler(
       if (originOf(caller) === "agent") {
         let agent;
         try {
-          agent = state.agent();
+          agent = await state.agent();
         } catch (error) {
           return problem(422, (error as Error).message);
         }

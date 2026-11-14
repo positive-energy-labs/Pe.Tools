@@ -43,29 +43,6 @@
       const { reduce, base, render = () => {}, describe = () => "", local = [] } = options;
       if (mounted) throw Error("pe.state may be called only once per Page");
       mounted = true;
-      const block = document.getElementById("pe-agent");
-      let agent;
-      try {
-        agent = block ? JSON.parse(block.textContent) : {};
-      } catch (error) {
-        throw Error(`Invalid pe-agent declaration in this Page's index.html: ${error.message}`);
-      }
-      if (
-        block &&
-        (block.tagName !== "SCRIPT" ||
-          block.type !== "application/json" ||
-          agent === null ||
-          typeof agent !== "object" ||
-          Array.isArray(agent) ||
-          Object.entries(agent).some(
-            ([type, description]) =>
-              !type ||
-              typeof description !== "string" ||
-              !description.trim() ||
-              /[\r\n]/.test(description),
-          ))
-      )
-        throw Error("Invalid pe-agent declaration in this Page's index.html");
       const k = { state: base };
       let seq = 0;
       let queue = Promise.resolve();
@@ -77,6 +54,10 @@
         render(k.state);
       };
       const saved = await io.load();
+      if (saved.agentError) {
+        if (io.refuse) io.refuse(saved.agentError);
+        else console.error(saved.agentError);
+      }
       for (const row of saved.events) apply(row);
       seq = saved.seq;
       render(k.state);

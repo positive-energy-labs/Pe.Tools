@@ -19,6 +19,8 @@ import { readNativeReceipt } from "../src/native-receipts.ts";
 import { originalProcess, sdkEnvelope } from "./native-receipt-fixture.ts";
 import { command } from "../src/command-executor.ts";
 import { z } from "zod";
+import { emitPagePinRevoke } from "../src/control.ts";
+import { bindRevoke } from "../src/revoke.ts";
 
 // The session line's law (ADR 0029 phase 3b; a PROVEN 7.6 GB regression class lives behind it):
 // interrupting a waiter removes it and nothing else; op.cancel never takes a place in the line;
@@ -87,6 +89,55 @@ const harness = Effect.gen(function* () {
     );
   return { life, bridgeScope, socket, socketOf, call, ...first };
 });
+
+effectTest("a Page unpin fences a dispatch whose pin read already returned consent", () =>
+  Effect.gen(function* () {
+    const directory = yield* Effect.promise(() => mkdtemp(join(tmpdir(), "pe-pin-fence-")));
+    const journal = journalAt(join(directory, "receipts.jsonl"), Date.now);
+    yield* Effect.addFinalizer(() =>
+      Effect.promise(async () => {
+        await journal.close();
+        await rm(directory, { recursive: true, force: true });
+      }),
+    );
+    const h = yield* harness.pipe(Effect.provideService(ActionJournalService, journal));
+    yield* Effect.addFinalizer(() => Scope.close(h.bridgeScope, Exit.void));
+    const stop = bindRevoke(journal, h.bridge);
+    yield* Effect.addFinalizer(() => Effect.sync(stop));
+    let reads = 0;
+    let readEntered!: () => void;
+    const reading = new Promise<void>((resolve) => { readEntered = resolve; });
+    let returnConsent!: (value: null) => void;
+    const release = bindActionDispatch("pin-race", {
+      refusal: () => {
+        if (++reads === 1) {
+          return new Promise<null>((resolve) => {
+            returnConsent = resolve;
+            readEntered();
+          });
+        }
+        return { kind: "refused", message: "Page pin removed" };
+      },
+      validate: async () => null,
+      dispatched: async () => {},
+    });
+    yield* Effect.addFinalizer(() => Effect.sync(release));
+    const pending = yield* h.call("test.pin", {}, "pin-race");
+    yield* Effect.promise(() => reading);
+    // The pin read holds its old consent while the binding write fences dispatch.
+    emitPagePinRevoke("page:@pages/pin");
+    returnConsent(null);
+    yield* turns();
+    const escaped = (yield* Queue.size(h.outgoing)) > 0 ? yield* Queue.takeAll(h.outgoing) : [];
+    // Answer an escaped request so a broken fence fails an assertion rather than hanging teardown.
+    for (const frame of escaped) yield* h.answer(frame.request!.requestId);
+    const result = yield* Fiber.await(pending);
+    expect(escaped).toHaveLength(0);
+    expect(failure(result)).toMatchObject({ outcome: "refused", message: "Page pin removed" });
+    expect(reads).toBe(2);
+    expect(yield* Queue.size(h.outgoing)).toBe(0);
+  }),
+);
 
 effectTest("interrupting a waiter never lets the one behind it overtake the running op", () =>
   Effect.gen(function* () {
