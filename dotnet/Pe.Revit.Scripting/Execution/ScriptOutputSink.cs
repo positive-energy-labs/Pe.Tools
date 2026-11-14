@@ -12,6 +12,9 @@ internal sealed class ScriptOutputSink {
 
     public Pe.Shared.HostContracts.Scripting.PodReceipt? Attribution { get; set; }
     public Pe.Revit.Scripting.Storage.ScriptArtifactWriter? Artifacts { get; set; }
+    /// <summary>What the run changed and what Revit raised, set once the script has run; null before that.</summary>
+    public Pe.Shared.HostContracts.Scripting.ScriptChanges? Changes { get; set; }
+    public List<Pe.Shared.HostContracts.Scripting.ScriptFailure>? Failures { get; set; }
 
     public string GetBufferedOutput() {
         lock (this._sync)

@@ -71,7 +71,54 @@ public record ExecuteRevitScriptData(
     object? Data = null,
     PodReceipt? Attribution = null,
     // The one reason a project save or synchronize inside this run was cancelled (ADR 0038); null when none was.
-    string? Held = null
+    string? Held = null,
+    // What the run changed in its document, in every mode; null when the script never started.
+    ScriptChanges? Changes = null,
+    // Every failure Revit raised while the script ran, and what became of it; null when the script never started.
+    List<ScriptFailure>? Failures = null
+);
+
+/// <summary>Element ids of one kind of change. `Ids` holds at most 2,000; `Total` counts them all.</summary>
+public record ScriptChangedIds(List<long> Ids, int Total);
+
+/// <summary>
+///     What a script run changed in the document it ran on, as Revit reported each commit. An element added and
+///     then modified is added; one added and then deleted is in no list. `Kept` is false for a ReadOnly run: the
+///     lists are what it would have changed, and Revit rolled it back. `Transactions` names each commit in order.
+///     `Summary` says the same in one sentence, and says so when Revit rolled back what the run tried to commit.
+///     `Undo` names the single entry Ctrl+Z in Revit undoes; when it is null on a run that kept changes,
+///     `Ungrouped` says why the run's transactions are separate undo entries.
+/// </summary>
+public record ScriptChanges(
+    ScriptChangedIds Added,
+    ScriptChangedIds Modified,
+    ScriptChangedIds Deleted,
+    List<string> Transactions,
+    bool Kept,
+    string Summary,
+    string? Undo = null,
+    string? Ungrouped = null
+);
+
+/// <summary>What became of a failure Revit raised during a script run.</summary>
+[JsonConverter(typeof(StringEnumConverter))]
+public enum ScriptFailureOutcome {
+    /// <summary>The failure's transaction did not commit: nothing it did is in the document.</summary>
+    RolledBack,
+    /// <summary>A warning the run acknowledged; its transaction went on.</summary>
+    Dismissed,
+    /// <summary>The failure's transaction committed: a warning that stands, or a failure something resolved.</summary>
+    Committed
+}
+
+/// <summary>One failure in Revit's words. `DefinitionId` is Revit's failure definition GUID; `Severity` is Warning, Error or DocumentCorruption.</summary>
+public record ScriptFailure(
+    string Message,
+    string Severity,
+    string DefinitionId,
+    List<long> ElementIds,
+    string Transaction,
+    ScriptFailureOutcome Outcome
 );
 
 /// <summary>What a run's source was: a saved member's bytes, a supplied draft, or operation input with no member.</summary>

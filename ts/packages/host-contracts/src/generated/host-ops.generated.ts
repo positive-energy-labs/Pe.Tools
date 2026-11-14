@@ -11590,6 +11590,10 @@ export namespace ScriptingExecute {
      * A run's settled outcome. Cancelled is its own answer, never a rollback claim.
      */
     export type PodRunOutcome = "Succeeded" | "Failed" | "Cancelled";
+    /**
+     * What became of a failure Revit raised during a script run.
+     */
+    export type ScriptFailureOutcome = "RolledBack" | "Dismissed" | "Committed";
 
     export interface Response {
       status: ScriptExecutionStatus;
@@ -11603,6 +11607,8 @@ export namespace ScriptingExecute {
       data?: unknown;
       attribution?: null | PodReceipt;
       held?: null | string;
+      changes?: null | ScriptChanges;
+      failures?: ScriptFailure[] | null;
     }
     export interface ScriptDiagnostic {
       stage: string;
@@ -11635,6 +11641,43 @@ export namespace ScriptingExecute {
       outcome: PodRunOutcome;
       outputs: string[];
       reason?: null | string;
+    }
+    /**
+     * What a script run changed in the document it ran on, as Revit reported each commit. An element added and
+     * then modified is added; one added and then deleted is in no list. `Kept` is false for a ReadOnly run: the
+     * lists are what it would have changed, and Revit rolled it back. `Transactions` names each commit in order.
+     * `Summary` says the same in one sentence, and says so when Revit rolled back what the run tried to commit.
+     * `Undo` names the single entry Ctrl+Z in Revit undoes; when it is null on a run that kept changes,
+     * `Ungrouped` says why the run's transactions are separate undo entries.
+     *
+     */
+    export interface ScriptChanges {
+      added: ScriptChangedIds;
+      modified: ScriptChangedIds;
+      deleted: ScriptChangedIds;
+      transactions: string[];
+      kept: boolean;
+      summary: string;
+      undo?: null | string;
+      ungrouped?: null | string;
+    }
+    /**
+     * Element ids of one kind of change. `Ids` holds at most 2,000; `Total` counts them all.
+     */
+    export interface ScriptChangedIds {
+      ids: number[];
+      total: number;
+    }
+    /**
+     * One failure in Revit's words. `DefinitionId` is Revit's failure definition GUID; `Severity` is Warning, Error or DocumentCorruption.
+     */
+    export interface ScriptFailure {
+      message: string;
+      severity: string;
+      definitionId: string;
+      elementIds: number[];
+      transaction: string;
+      outcome: ScriptFailureOutcome;
     }
   }
 }
