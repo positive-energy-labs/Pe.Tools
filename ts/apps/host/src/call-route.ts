@@ -487,7 +487,7 @@ function callRoutes(
                 };
               })
             : entry.script && bridgeSessionId
-              ? { value: yield* runPodScript(bridge, { session: bridgeSessionId, openId: openDocumentId }, (request ?? {}) as Record<string, unknown>, requestId) }
+              ? { value: yield* runPodScript(bridge, { session: bridgeSessionId, openId: openDocumentId }, z.record(z.string(), z.unknown()).parse(request ?? {}), requestId) }
               : yield* bridge.invoke(key, request ?? {}, bridgeSessionId, openDocumentId, requestId);
       // A joined Read names the dispatch that actually ran, never this caller's unsent id.
       const nativeRequestId =
