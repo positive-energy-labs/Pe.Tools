@@ -149,10 +149,7 @@ export function commandResources(
           if (pass && !pods) podReads.set(pass, (pods = new Map()));
           let pod = pods?.get(dependency.probe.pod);
           if (!pod) {
-            pod = runPods(
-              deps,
-              readMemberPod(dependency.probe.pod, ctx, { notBefore: pass?.startedAt ?? Date.now() }),
-            );
+            pod = runPods(deps, readMemberPod(dependency.probe.pod, ctx, true));
             pods?.set(dependency.probe.pod, pod);
           }
           return pod.then((admitted) => runPods(deps, readMember(dependency.probe, ctx, admitted))).then(
@@ -213,11 +210,7 @@ export function commandResources(
         case "directory":
           return directorySnapshot(await captureDirectory(dependency.probe.path));
         case "catalog": {
-          // No older than its pass, as the member fallback: a scan in flight read the disk before.
-          const listing = await listPackages({
-            podsRoots: deps.podsRoot,
-            notBefore: pass?.startedAt ?? Date.now(),
-          });
+          const listing = await listPackages({ podsRoots: deps.podsRoot });
           if (listing.unreadable.length)
             throw Error("Cannot verify an unreadable Pod dependency catalog");
           return listing.packages

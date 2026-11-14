@@ -176,13 +176,12 @@ export interface CommandResources {
   workReads?: (admission: ActionAdmission) => CommandWorkReads;
   /**
    * `moment` is the gate that asks; absent means the strongest reading. `pass` is one gate's walk
-   * over an action's consumed facts: probes of one pass may share a read, no read outlives it, and
-   * none is older than `startedAt` (`Date.now()` ms).
+   * over an action's consumed facts: probes of one pass may share a read, and no read outlives it.
    */
   probe(
     dependency: Exclude<Consumed, { kind: "work" }>,
     moment?: string,
-    pass?: { readonly startedAt: number },
+    pass?: object,
   ): Promise<unknown>;
   target?(target: ExecutionTarget, needs: ActionNeed): Promise<void>;
   effectPath?(effect: Extract<RouteEffect, { kind: "member" }>): Promise<string | undefined>;

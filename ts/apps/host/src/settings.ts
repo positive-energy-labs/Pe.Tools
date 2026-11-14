@@ -362,14 +362,12 @@ function parseReceipt(content: string): PodReceipt | string {
  * `indexed` reads only this Pod's folder, found by the last discovery, as capture does: the bytes are
  * as fresh, and an id claimed twice since that discovery waits for the next one. The index is a
  * shortcut and never the answer: any miss (no discovery yet, a folder that moved or changed its id,
- * a member that no longer admits) asks discovery, which answers as it always did. The edits a
- * freshness gate exists to catch cause those misses, so that discovery begins at or after
- * `notBefore` (`Date.now()` ms): a scan already in flight read the disk before the edit.
+ * a member that no longer admits) asks discovery, which answers as it always did.
  */
 export const readMemberPod = Effect.fnUntraced(function* (
   pod: string,
   ctx: PodContext = {},
-  indexed?: { notBefore: number },
+  indexed = false,
 ) {
   // A fresh home activates shipped pods only when the background import lands; reading before
   // it would answer "inactive" for a pod that is about to be active (bounded, installed-pods.ts).
@@ -381,9 +379,12 @@ export const readMemberPod = Effect.fnUntraced(function* (
   return yield* Effect.tryPromise({
     try: (): Promise<AdmittedPackage> =>
       indexed
-        ? capturePackage(pod, ctx.podsRoot).catch(() =>
-            readPackage(pod, { podsRoots: podsRoots(ctx), notBefore: indexed.notBefore }),
-          )
+        ? // ponytail: no freshness floor on this fallback. The edits a gate exists to catch cause
+          // these misses, and discovery already refuses to reuse or join a read whose disk signature
+          // differs from one taken after the ask arrives (`choose` in `discoverPackages`,
+          // pod-capture.ts:68). Ceiling: an edit that keeps a member's size and timestamps is not
+          // seen here; hash bytes in the signature if that edit must be caught.
+          capturePackage(pod, ctx.podsRoot).catch(() => readPackage(pod, { podsRoots: podsRoots(ctx) }))
         : readPackage(pod, { podsRoots: podsRoots(ctx) }),
     catch: (error) =>
       new LocalOpError(

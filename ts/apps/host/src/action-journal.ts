@@ -1081,8 +1081,7 @@ export class ActionJournal implements ReceiptReader {
         message: error.message,
       });
     }
-    // The wall clock, not `this.now`: discovery compares it with its own scans' start times.
-    const pass = { startedAt: Date.now() };
+    const pass = {};
     for (const dependency of row.consumes) {
       if (dependency.kind === "work") {
         // Retirement compares each submitted cell against live Work itself.
