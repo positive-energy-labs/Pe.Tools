@@ -13,6 +13,43 @@ import type { RevitBridge } from "../src/bridge.ts";
 import type { PictureCaptures } from "../src/captures-route.ts";
 import type { Caller } from "@pe/agent-contracts";
 
+it("C3 refuses a Pod script before execution on any missing or mismatched probe, and permits a matching model", async () => {
+  const entries = [{ elementId: 1, elementUniqueId: "one" }, { elementId: 2, elementUniqueId: "wrong" }];
+  const calls: { key: string; input: unknown; session: unknown; openId: unknown }[] = [];
+  const bridge = { invoke: (key: string, input: unknown, session?: string, openId?: string | null) => {
+    calls.push({ key, input, session, openId });
+    return Effect.succeed({ value: key === "revit.detail.elements" ? { documentTitle: "Other", entries } : { status: "Succeeded" } });
+  } } as unknown as RevitBridge["Service"];
+  const sourceBundle = { files: [{ path: "pod.json", bytesBase64: Buffer.from(JSON.stringify({ for: {
+    title: "Chadds", probes: [{ elementId: 1, uniqueId: "one" }, { elementId: 2, uniqueId: "two" }],
+  } })).toString("base64") }] };
+  const executor = gatewayExecutor("scripting.execute", bridge, () => Effect.void, {} as PictureCaptures);
+  const run = (bundle = sourceBundle) => {
+    const execution = { prepared: { kind: "native-leaf", script: { sourceBundle: bundle } },
+      step: (_kind, _key, _input, execute) => execute("run"),
+    } as ActionExecution;
+    const ctx = { caller: { kind: "human", via: "local" }, admission: { id: "run",
+      target: { kind: "document", ref: { session: "s", openId: "d" } }, input: { sourcePath: "src/Run.cs" },
+    } } as unknown as CommandContext;
+    return Effect.runPromiseExit(executor.run(ctx, execution) as Effect.Effect<unknown, unknown>);
+  };
+  const mismatch = await run();
+  expect(mismatch._tag).toBe("Failure");
+  expect(JSON.stringify(mismatch)).toContain("this Pod is for Chadds; the bound document is Other");
+  expect(calls).toEqual([{ key: "revit.detail.elements", input: { query: { kind: "ElementReferences", elementIds: [1, 2] } }, session: "s", openId: "d" }]);
+  calls.length = 0;
+  entries[1].elementUniqueId = "two";
+  expect((await run())._tag).toBe("Success");
+  expect(calls.map((call) => call.key)).toEqual(["revit.detail.elements", "scripting.execute"]);
+  calls.length = 0;
+  entries.pop();
+  expect((await run())._tag).toBe("Failure");
+  expect(calls.map((call) => call.key)).toEqual(["revit.detail.elements"]);
+  calls.length = 0;
+  expect((await run({ files: [] }))._tag).toBe("Success");
+  expect(calls.map((call) => call.key)).toEqual(["scripting.execute"]);
+});
+
 it("stamps the trusted script caller over supplied caller bytes", async () => {
   const callers: Caller[] = [
     { kind: "human", via: "local" }, { kind: "anonymous" },
