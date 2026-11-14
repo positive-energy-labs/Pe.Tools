@@ -258,6 +258,35 @@ test("HTTP document targets normalize once before generated native handles and p
   }
 });
 
+test("History keeps its own recorded references after HTTP-only slots are reclaimed", async () => {
+  const f = await fixture(true);
+  const publish = async (subscription: string, fan: string[] = []) => {
+    const response = await f.request(new Request("http://host/pe/reads/value", {
+      method: "POST", body: JSON.stringify({ read: "fans.sheet", args: { target: ref, fan, sheetPath: "" }, subscription, generation: 0 }),
+    }));
+    expect(response.status, await response.clone().text()).toBe(200);
+    return response.json();
+  };
+  try {
+    const first = await publish("request-only");
+    expect(f.reads.publications.history()).toEqual({});
+    const point = historyPointSchema.parse(await f.history("", { kind: "captured", document: path }));
+    const fan = first.value.data.fans.rows.find((row: { mark: string }) => row.mark === "MUAS-1");
+    const next = await publish("next-request", [fanCode(fan)]);
+    expect(f.reads.publications.history()).toEqual({});
+    expect(next.value.evaluation).not.toBe(first.value.evaluation);
+    const later = historyPointSchema.parse(await f.history("", { kind: "captured", document: path }));
+    expect(later.history.publications).toHaveLength(1);
+    expect(later.history.publications[0]!.evaluation).toBe(next.value.evaluation);
+    const reader = await settle(openRecordingReader(join(f.dir, "recording"), identity, bounds));
+    const cold = new History(reader, settle);
+    const calls = f.nativeCalls;
+    expect(await cold.publication(point.id, "fans.sheet", "fans.sheet")).toEqual(first);
+    expect(await cold.publication(later.id, "fans.sheet", "fans.sheet")).toEqual(next);
+    expect(f.nativeCalls).toBe(calls);
+  } finally { await f.close(); }
+});
+
 test("History reopens the host's exact publication after newer Values, with no live fill", async () => {
   const f = await fixture(true);
   try {
