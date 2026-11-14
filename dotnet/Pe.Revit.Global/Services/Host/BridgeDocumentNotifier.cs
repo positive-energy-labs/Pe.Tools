@@ -2,6 +2,7 @@ using Autodesk.Revit.UI.Events;
 using Pe.Revit.Extensions.ProjDocument;
 using Pe.Revit.Global.Services.Document;
 using Pe.Revit.Loader.Documents;
+using Pe.Revit.Tasks;
 using Pe.Shared.HostContracts.Bridge;
 using Pe.Shared.HostContracts.Protocol;
 using Serilog;
@@ -19,6 +20,7 @@ namespace Pe.Revit.Global.Services.Host;
 internal sealed class BridgeDocumentNotifier : IDisposable {
     private static readonly TimeSpan DocumentChangedMinInterval = TimeSpan.FromMilliseconds(750);
     private readonly IDocumentTracker _documents;
+    private readonly RevitTaskQueue _queue;
     private readonly Func<BridgeStateSnapshot> _snapshot;
     private readonly Func<DocumentInvalidationEvent, BridgeStateSnapshot, Task> _publishAsync;
     private readonly object _sync = new();
@@ -33,10 +35,12 @@ internal sealed class BridgeDocumentNotifier : IDisposable {
 
     public BridgeDocumentNotifier(
         IDocumentTracker documents,
+        RevitTaskQueue queue,
         Func<BridgeStateSnapshot> snapshot,
         Func<DocumentInvalidationEvent, BridgeStateSnapshot, Task> publishAsync
     ) {
         this._documents = documents;
+        this._queue = queue;
         this._snapshot = snapshot;
         this._publishAsync = publishAsync;
     }
@@ -84,20 +88,28 @@ internal sealed class BridgeDocumentNotifier : IDisposable {
     public Task PublishInitialStateAsync() =>
         this.PublishCurrentAsync(DocumentInvalidationReason.Changed);
 
+    public Task RefreshAfterRunAsync() => this.PublishAfterApiCallAsync();
+
     private void OnOpened(TrackedDocument tracked) {
         if (this._isReplaying)
             return;
+        // LoadFamily can remove its internal document without DocumentClosed. UI Idling is not
+        // a completion boundary in a headless session; queue a fresh census after this API call.
+        _ = this.PublishAfterApiCallAsync();
         _ = this.PublishCurrentAsync(DocumentInvalidationReason.Opened);
-        // Revit titles an EditFamily document after DocumentOpened (w8-revit 2c), and nothing else
-        // fires for it. Every open republishes once, on the next idle; the snapshot reads titles live.
-        var uiApplication = RevitUiSession.CurrentUIApplication;
-        EventHandler<IdlingEventArgs>? republish = null;
-        republish = (_, _) => {
-            uiApplication.Idling -= republish;
-            if (!this._disposed)
-                _ = this.PublishCurrentAsync(DocumentInvalidationReason.Changed);
-        };
-        uiApplication.Idling += republish;
+    }
+
+    private async Task PublishAfterApiCallAsync() {
+        try {
+            var publish = await this._queue.Run(
+                _ => this._disposed ? Task.CompletedTask : this.PublishCurrentAsync(DocumentInvalidationReason.Changed),
+                // A request id forces queueing even inside a native event outside a queue run.
+                new RevitRunOptions { Label = "bridge document census", RequestId = Guid.NewGuid().ToString("N") }
+            ).ConfigureAwait(false);
+            await publish.ConfigureAwait(false);
+        } catch (Exception ex) {
+            Log.Warning(ex, "Host bridge failed to refresh documents after API call.");
+        }
     }
 
     private void OnClosed(DocumentKey key) =>

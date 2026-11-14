@@ -119,6 +119,7 @@ internal sealed class BridgeAgent : IDisposable {
             Global.Services.Document.DocumentTrackerAccessor.Current
                 ?? throw new InvalidOperationException(
                     "Document tracker not available; AppCore.Startup must run before the bridge connects."),
+            this._revitTaskQueue,
             this.BuildStateSnapshot,
             this.PublishDocumentInvalidationAsync
         );
@@ -308,7 +309,14 @@ internal sealed class BridgeAgent : IDisposable {
                 responseTask = OpRunner.RunAsync(op, request.PayloadJson, null, cancellationToken, request.DerivedCommand);
             }
 
-            var ran = await responseTask.ConfigureAwait(false);
+            OpRun ran;
+            try {
+                ran = await responseTask.ConfigureAwait(false);
+            } finally {
+                // A script's completion must not outrun the census that removes its transient docs.
+                if (request.OperationKey == "scripting.execute")
+                    await this._documentNotifier.RefreshAfterRunAsync().ConfigureAwait(false);
+            }
             touched = ran.Touched;
             if (ran.Error is not null)
                 System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(ran.Error).Throw();
@@ -678,14 +686,28 @@ internal sealed class BridgeAgent : IDisposable {
         // Title and address come from the live document, never the tracker's event-time snapshot:
         // SaveAs changes the path, and an EditFamily document is admitted before it has a title.
         var attested = true;
-        var documents = tracker.Open.Where(tracked => !tracked.IsLinked)
-            .Select(tracked => {
+        // The tracker owns identity, but a LoadFamily internal close can omit lifecycle events.
+        // Membership must come from Revit's current census, never retained tracker wrappers.
+        var liveDocuments = RevitUiSession.CurrentUIApplication.Application.Documents
+            .Cast<Autodesk.Revit.DB.Document>().ToArray();
+        var documents = new List<BridgeDocumentSnapshot>();
+        foreach (var tracked in tracker.Open) {
+            try {
                 var document = tracked.Resolve();
+                if (!document.IsValidObject || !liveDocuments.Any(tracked.Matches)) {
+                    Log.Warning("Host bridge skipped closed document {OpenId} retained by the SDK tracker.", tracked.OpenId);
+                    continue;
+                }
+                if (document.IsLinked)
+                    continue;
                 // The SDK authority, not this payload, names the lifetime; one disagreement withholds the marker.
                 attested &= PeDocumentIdentity.TryGetOpenId(document, out var authority) && authority == tracked.OpenId;
-                return CaptureDocument(document, tracked.OpenId, activeDocument != null && tracked.Matches(activeDocument));
-            })
-            .ToList();
+                documents.Add(CaptureDocument(document, tracked.OpenId, activeDocument != null && tracked.Matches(activeDocument)));
+            } catch (Exception ex) {
+                // One bad wrapper must never strand every document by preventing registration.
+                Log.Warning(ex, "Host bridge could not capture document {OpenId}; skipping it.", tracked.OpenId);
+            }
+        }
         var runtimeAssemblies = CaptureRuntimeAssemblies();
         Log.Debug(
             "Host bridge state snapshot: ActiveDocument={ActiveDocumentTitle}",
