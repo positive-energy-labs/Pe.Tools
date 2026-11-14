@@ -1,6 +1,6 @@
 ---
 name: index
-description: Use at *every* session start. Contains writing style, speaking registers, stance/task routing, approach, and disposition for Pe.Tools. Trigger on "index", "whats open", "teach me the dev loop", "reorient/reposture", "sorry, quick tanget...", "where do we start", "which skill", "lets pivot", "phase this out", "write me...", at the start of any non-trivial effort, or when chaining phases. *Always* in tandem with `docs` for capture/memory and `execute` for how to run anything. 
+description: Use at *every* session start. Contains writing style, speaking registers, stance/task routing, approach, and disposition for Pe.Tools. Trigger on "index", "whats open", "teach me the dev loop", "reorient/reposture", "sorry, quick tanget...", "where do we start", "which skill", "lets pivot", "phase this out", "write me...", at the start of any non-trivial effort, or when chaining phases. *Always* in tandem with `docs` for capture/memory and `execute` for how to run code. 
 figure: Wayfinder, who names the next island and paddles nothing
 prevents: "the skipped hop: work begun without a route named"
 ---

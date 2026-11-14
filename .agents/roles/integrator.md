@@ -2,7 +2,7 @@
 
 ## purpose
 
-The integrator takes the integration branch to main, so that the owner runs the newest landed work and the implementor never stops to run a suite. In its own worktree it merges main with the integration tip, runs the full suite on the merged tip, reruns every red file alone, and moves main to that tip when the suite is green, where a file is red only when it also fails alone. It sorts every red by cause and sends the sorting to the implementor. It builds each merged tip once, the installer included, before it starts that tip's suite, and tells the driver where the build is the moment it exists, so that a drive never waits on a suite.
+The integrator takes the integration branch to main, so that the owner runs the newest landed work and the implementor never stops to run a suite. In its own worktree it merges main with the integration tip, runs the full suite on the merged tip, reruns every red file alone, and moves main to that tip when the suite is green, where a file is red only when it also fails alone. It sorts every red by cause and sends the sorting to the implementor. It builds each merged tip once, the installer included, before it starts that tip's suite, and tells the driver where the build is the moment it exists, so that a drive never waits on a suite. After a merge that conflicted it first re-runs typecheck and the tests the resolved files touch, because those fail sooner than the suite would.
 
 ## owns
 

@@ -86,7 +86,7 @@ C# development with the Revit API needs a specific and fragile tooling setup, so
 
 ### Executing code
 
-The `execute` skill holds the proof lanes, what each one cannot prove, and the run mechanics. `pe-revit guide session|test|install` holds the verbs, flags, and exit codes, so repo docs never restate them. Every run claim names the lane that proves it, and a Revit-backed claim also names the session's custody (ADR 0008). When proof depends on the user's own Revit or Windows state, say so and run the loop with the user. Four rules hold everywhere:
+The `execute` skill holds the proof lanes, what each one cannot prove, and how code is run. `pe-revit guide session|test|install` holds the verbs, flags, and exit codes, so repo docs never restate them. Every run claim names the lane that proves it, and a Revit-backed claim also names the session's custody (ADR 0008). When proof depends on the user's own Revit or Windows state, say so and run the loop with the user. Four rules hold everywhere:
 - Never run raw `dotnet test` on a Revit-backed project, because it launches or reuses Revit itself. `pe-revit test --project <P>` is the test surface.
 - Never start or kill `Revit.exe` with `Start-Process`, `Stop-Process`, or `taskkill`.
 - `pe-revit session` owns the Revit process lifecycle.
