@@ -11,10 +11,11 @@ namespace Pe.Revit.Tests;
 ///     Every test writes only to a blank project under a temp folder. `Undo` is set only when Revit assimilated
 ///     the run's group; that one Ctrl+Z then takes the run back is not provable here (Revit runs a posted Undo
 ///     only after the whole test run), so a person or a driven session proves it.
-///     Mutants, each run red once (2026-11-14). "ids dropped": pass no `idsOf` to OperationMonitor.Watch in
-///     RevitScriptExecutionService.ExecuteContainer; the id lists are empty. "no group": skip `group.Start()` in
-///     ExecuteInUndoGroup; `Undo` is null. "failures unheard":
-///     delete `application.FailuresProcessing += run.OnFailuresProcessing;`; the rolled-back run carries no failure.
+///     Mutants, each run red once (2026-11-14). "added ids dropped": `new ObservedIds([], ...)` in
+///     OperationMonitor.OnDocumentChanged; the walls are in no list. "no group": throw in place of
+///     `new TransactionGroup(document, undoName)` in ExecuteInUndoGroup; `Undo` is not the run's name.
+///     "failures unheard": delete `application.FailuresProcessing += run.OnFailuresProcessing;`; the rolled-back
+///     run carries no failure.
 /// </summary>
 [TestFixture]
 public sealed class ScriptChangesTests {
