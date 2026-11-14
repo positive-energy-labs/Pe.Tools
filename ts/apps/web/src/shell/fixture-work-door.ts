@@ -19,7 +19,9 @@ import { mergeTimeline } from "../../../../packages/runtime/src/work-timeline";
 import type { TimelineClient } from "./work-feed-client";
 
 /** Deterministic host fixture: exercise the workspace's real Timeline and step implementation. */
-export function fixtureTimeline(workspace: RouteWorkspace, receipts: () => Promise<import("@pe/agent-contracts").ActionStatus[]> | import("@pe/agent-contracts").ActionStatus[] = () => [], subscribeReceipts?: (changed: () => void) => () => void): TimelineClient {
+export function fixtureTimeline(workspace = new RouteWorkspace({ registrations: [], store: {
+  getState: async () => undefined, setState: async () => {},
+} }), receipts: () => Promise<import("@pe/agent-contracts").ActionStatus[]> | import("@pe/agent-contracts").ActionStatus[] = () => [], subscribeReceipts?: (changed: () => void) => () => void): TimelineClient {
   return {
     open(works, deliver) {
       let closed = false, generation = 0;

@@ -74,6 +74,8 @@ import { module as families } from "../families/route";
 import type { TypedRoute } from "./typed-route";
 import { handle } from "@pe/agent-contracts/handle";
 import { publicationSource } from "../host/publication-source";
+import { hostEventSource } from "../host/event-source.test-support";
+import { fixtureTimeline } from "../shell/fixture-work-door";
 import { builtinEnrollments } from "../../../host/src/builtin-enrollment";
 import savedNetwork from "../ducts/fixtures/synthetic-snapshot.json";
 import { rm, writeFile } from "node:fs/promises";
@@ -106,42 +108,11 @@ test("JZ Plan route switch: Ducts reads preserve the Fans seal; changed Work sta
   let nativeGeneration = "incarnation:24";
   const systemRoster = { ...roster, systems: roster.systems.slice(0, 1) };
   const j = await journey({ roster: systemRoster, snapshot: { ...snapshot, systems: systemRoster.systems }, freshness: () => nativeGeneration });
-  const streams = new Set<{ close(): void }>();
+  const { Stream, streams } = hostEventSource(j.host.request);
   // The read invalidations the tab's one stream is watching now, as the host was told.
   const watched = new Set<string>();
   let mounted: ReturnType<typeof mountTypedRoute> | undefined;
   let held: ReturnType<typeof gate> | undefined;
-  // EventSource is a browser platform shim over the actual host HTTP/SSE handler.
-  class Stream {
-    onopen?: () => void;
-    onmessage?: (event: { data: string }) => void;
-    onerror?: () => void;
-    private reader?: ReadableStreamDefaultReader<Uint8Array>;
-    private closed = false;
-    constructor(url: string) {
-      streams.add(this);
-      void (async () => {
-        const response = await j.host.request(new Request(url));
-        this.reader = response.body!.getReader();
-        if (this.closed) return void this.reader.cancel();
-        this.onopen?.();
-        let buffer = "";
-        const decoder = new TextDecoder();
-        while (!this.closed) {
-          const frame = await this.reader.read(); if (frame.done) break;
-          buffer += decoder.decode(frame.value, { stream: true });
-          let end: number;
-          while ((end = buffer.indexOf("\n\n")) >= 0) {
-            const event = buffer.slice(0, end); buffer = buffer.slice(end + 2);
-            for (const line of event.split("\n")) if (line.startsWith("data: ")) this.onmessage?.({ data: line.slice(6) });
-          }
-        }
-      })().catch(() => { if (!this.closed) this.onerror?.(); });
-    }
-    addEventListener() {}
-    removeEventListener() {}
-    close() { this.closed = true; void this.reader?.cancel(); streams.delete(this); }
-  }
   vi.stubGlobal("window", { location: { href: "http://host/", origin: "http://host", search: "" } });
   vi.stubGlobal("EventSource", Stream);
   // The stream's keys travel by POST to the same host handler the stream reads.
@@ -321,6 +292,7 @@ async function journey(recorded: Parameters<typeof fixture>[1] = {}) {
   const fingerprint = workFingerprintSchema.parse(`builtin-closure:${builtinEnrollments.find(entry => entry.routeKey === "fans")!.closure.fingerprint}`);
   const mount = mountTypedRoute(fans, input, fingerprint, {
     work,
+    timeline: fixtureTimeline(host.workspace),
     sources: { "fans.sheet": source },
   });
   const stop = mount.subscribe(() => {});

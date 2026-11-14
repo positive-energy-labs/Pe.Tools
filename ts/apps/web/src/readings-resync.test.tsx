@@ -18,6 +18,7 @@ import { emptyChatState } from "@pe/agent-contracts/chat-state";
 import { RegistryContext } from "@effect/atom-react";
 
 import { PeReadings, peReadings, useHostEvents, bindActionReadings } from "./host/resource-stream";
+import { publicationSource } from "./host/publication-source";
 import { readingAtom, previousOf, useReading, useReadingSlice } from "#/host/resource-state";
 import { useProviders } from "./workbench/provider/providers";
 import { machineFixture } from "../../../packages/agent-contracts/tests/machine-fixture";
@@ -103,6 +104,38 @@ function owner(
   );
   return { readings, sources, subscriptions, update };
 }
+
+test("a publication waits through a silent stream and acquires after the replacement's first frame", async () => {
+  vi.useFakeTimers();
+  const random = vi.spyOn(Math, "random").mockReturnValue(1);
+  const { readings, sources } = owner();
+  const subscribe = vi.spyOn(peReadings, "subscribe").mockImplementation(readings.subscribe.bind(readings));
+  const request = { kind: "publication", subscription: "silent-page", generation: 0 } as const;
+  const read = vi.fn(async () => ({ generation: 0, version: 1, state: "current", value: {
+    evaluation: "after-reconnect", coverage: { refused: [], unknown: [] },
+  } }));
+  const frames: string[] = [];
+  const stop = publicationSource({ read }).open({ signal: new AbortController().signal,
+    publication: { subscription: request.subscription, generation: 0 } } as never, frame => frames.push(frame.kind));
+  try {
+    await vi.advanceTimersByTimeAsync(0);
+    sources[0]!.onopen!();
+    expect(read).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(sources[0]!.closed).toBe(true);
+    expect(read).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1_000);
+    sources[1]!.onopen!();
+    sources[1]!.onmessage!({ data: JSON.stringify({ kind: "snapshot", key: readingKey(request),
+      value: { generation: 0, version: 0, state: "absent" } }) });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(read).toHaveBeenCalledOnce();
+    expect(frames.at(-1)).toBe("complete");
+  } finally {
+    if (typeof stop === "function") stop();
+    readings.close(); subscribe.mockRestore(); random.mockRestore(); vi.useRealTimers();
+  }
+});
 
 test.each(["ECONNREFUSED", "Reading subscriptions: 403"])("a failed POST (%s) fences even a delivered snapshot", async (failure) => {
   vi.useFakeTimers();
