@@ -160,7 +160,11 @@ async function capturePage(
             responseHeaders: [
               {
                 name: "Content-Type",
-                value: PAGE_MEDIA[extname(destination.pathname)] ?? "application/octet-stream",
+                // The Page's own URL ends in `/`: it has no extension, and it is the document.
+                value:
+                  request.url === url
+                    ? PAGE_MEDIA[".html"]!
+                    : (PAGE_MEDIA[extname(destination.pathname)] ?? "application/octet-stream"),
               },
               // Service workers require HTTP(S) script URLs; only self-contained compute workers
               // may start outside page Fetch. Their networking still meets the deny proxy.
