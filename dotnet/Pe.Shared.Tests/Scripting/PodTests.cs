@@ -638,7 +638,7 @@ public sealed class PodTests {
         var normalized = ScriptPodSourceNormalizer.Normalize(bundle, "Office", "src/Run.cs");
         Assert.That(prepared, Is.TypeOf<PreparedPod>());
         Assert.That(prepared.Members.Select(member => member.Path), Does.Contain("skills/inspect/SKILL.md"));
-        Assert.That(normalized.SourceSet.Files.Select(file => file.Name), Is.EqualTo(new[] { "Run.cs" }));
+        Assert.That(normalized.SourceSet.Files.Select(file => file.Name), Is.EqualTo(new[] { "src/Run.cs" }));
         Assert.That(normalized.SourceSet.Files[0].Content, Does.Contain("PeScriptContainer"));
     }
 

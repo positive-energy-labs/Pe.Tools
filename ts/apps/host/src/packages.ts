@@ -4,6 +4,8 @@ import {
   packageIdSchema,
   packageMemberPathSchema,
   type ContributionKind,
+  scriptModeSchema,
+  type ScriptMode,
   podRouteDeclarationSchema,
   type PodRouteDeclaration,
 } from "@pe/agent-contracts";
@@ -26,6 +28,8 @@ export type PackageEntrypoint = {
   sourcePath: string;
   name: string | null;
   description: string | null;
+  /** Declared, it is every door's default, and `ReadOnly` refuses a write mode (contract C1). */
+  mode: ScriptMode | null;
 };
 export type PackageMember = {
   path: string;
@@ -40,6 +44,7 @@ export type PackageContribution = {
   key: string;
   name: string;
   description: string | null;
+  mode?: ScriptMode;
 };
 export type AdmittedPackage = {
   for?: PodModel;
@@ -63,7 +68,8 @@ export type CapturedPackage = AdmittedPackage & {
   memberBundle: ScriptingExecute.Req.ScriptPodSourceBundle;
 };
 
-export const isCompilerSource = (path: string) => path.startsWith("src/") && /\.cs$/i.test(path);
+/** A script is any `.cs` or `.csx` member; native compiles the entrypoint beside the Pod's other `.cs` files. */
+export const isCompilerSource = (path: string) => /\.csx?$/i.test(path);
 export const isCompilerInput = (path: string) =>
   path === "pod.json" || path === "PeScripts.csproj" || isCompilerSource(path);
 
@@ -383,18 +389,26 @@ async function readFolder(directory: string, folder: string): Promise<AdmittedPa
   const model = value.for === undefined ? undefined : podModelSchema.parse(value.for);
   for (const entry of Array.isArray(value.entrypoints) ? value.entrypoints : []) {
     try {
-      if (Object.keys(entry).some((key) => !["sourcePath", "name", "description"].includes(key)))
+      if (
+        Object.keys(entry).some(
+          (key) => !["sourcePath", "name", "description", "mode"].includes(key),
+        )
+      )
         throw Error("Unknown entrypoint field; sourcePath is its identity");
       const path = packageMemberPathSchema.parse(entry.sourcePath);
       if (
-        !(path.startsWith("src/") && /^src\/.+\.cs$/i.test(path)) ||
+        !isCompilerSource(path) ||
         entrypoints.some((item) => item.sourcePath.toLowerCase() === path.toLowerCase())
       )
         throw Error("Invalid or duplicate script sourcePath");
+      const mode = scriptModeSchema.nullish().safeParse(entry.mode);
+      if (!mode.success)
+        throw Error(`${path}: mode must be ReadOnly, WriteTransaction or NoTransaction`);
       entrypoints.push({
         sourcePath: path,
         name: typeof entry.name === "string" ? entry.name : null,
         description: typeof entry.description === "string" ? entry.description : null,
+        mode: mode.data ?? null,
       });
       if (!members.some((member) => member.path === path))
         diagnostics.push(
@@ -453,6 +467,7 @@ async function readFolder(directory: string, folder: string): Promise<AdmittedPa
           key: contributionKey({ kind, packageId: value.id, path }),
           name: entry?.name ?? path.split("/").at(-1)!,
           description: entry?.description ?? null,
+          ...(entry?.mode ? { mode: entry.mode } : {}),
         },
       ];
     } catch (error) {

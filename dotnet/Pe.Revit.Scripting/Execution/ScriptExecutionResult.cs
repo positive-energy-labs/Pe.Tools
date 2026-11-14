@@ -21,7 +21,8 @@ internal sealed record ScriptExecutionPlan(
     PodManifest? PodManifest,
     PodReceipt? Attribution,
     string ProjectContent,
-    bool RequireSingleContainer
+    bool RequireSingleContainer,
+    Newtonsoft.Json.Linq.JObject? Input = null
 );
 
 internal enum ScriptWorkspaceExecutionMode {

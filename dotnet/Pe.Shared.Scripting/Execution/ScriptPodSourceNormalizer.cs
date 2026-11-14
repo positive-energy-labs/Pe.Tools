@@ -10,6 +10,7 @@ public sealed record NormalizedPodSource(ScriptSourceSet SourceSet, PodManifest 
 public static class ScriptPodSourceNormalizer {
     private const int MaxFiles = ScriptPodSourceBounds.MaxFileCount;
     private const int MaxFileBytes = ScriptPodMemberBounds.MaxFileBytes;
+    private static readonly Analysis.ScriptEntryPointResolver Containers = new("PeScriptContainer");
 
     public static NormalizedPodSource Normalize(ScriptPodSourceBundle bundle, string workspaceKey, string sourcePath) {
         var captured = DecodeFiles(bundle);
@@ -20,8 +21,10 @@ public static class ScriptPodSourceNormalizer {
         if (!manifest.Success || manifest.Manifest is null)
             throw new ArgumentException(string.Join("; ", manifest.Diagnostics.Select(d => d.Message)), PodManifestValidator.DiagnosticStage);
         var project = captured.TryGetValue("PeScripts.csproj", out var projectBytes) ? Text(projectBytes) : null;
-        var sources = captured.Where(file => file.Key.StartsWith("src/", StringComparison.Ordinal)
-            && file.Key.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)).ToList();
+        // The entrypoint is any script of the Pod. Every other `.cs` file compiles beside it; a `.csx` compiles
+        // only as the entrypoint being run.
+        var sources = captured.Where(file => string.Equals(file.Key, selected, StringComparison.OrdinalIgnoreCase)
+            || file.Key.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)).ToList();
         if (sources.Count is < 1 or > MaxFiles)
             throw new ArgumentException($"Pod source requires 1 to {MaxFiles} files.");
         var directories = sources.SelectMany(file => file.Key.Split('/').Select((_, i) => string.Join("/", file.Key.Split('/').Take(i)))).Distinct().Count();
@@ -36,10 +39,15 @@ public static class ScriptPodSourceNormalizer {
             total += file.Value.Length;
             if (file.Value.Length > ScriptPodSourceBounds.MaxFileBytes || total > ScriptPodSourceBounds.MaxTotalBytes)
                 throw new ArgumentException("Pod source exceeds its byte bounds.");
-            files.Add(new ScriptSourceFile(path.Substring(4), content));
+            // A statement body runs wrapped, as an inline snippet does. One that is not the entrypoint is another
+            // entrypoint's body, so it stays out of this compile.
+            var isEntrypoint = string.Equals(path, selected, StringComparison.OrdinalIgnoreCase);
+            if (isEntrypoint) content = Containers.WrapStatementBody(content);
+            else if (Containers.IsStatementBody(content)) continue;
+            files.Add(new ScriptSourceFile(path, content));
         }
         if (!names.Contains(selected)) throw new ArgumentException("Captured Pod source lacks the selected entrypoint.");
-        return new NormalizedPodSource(new ScriptSourceSet(files, selected.Substring(4)), manifest.Manifest, project);
+        return new NormalizedPodSource(new ScriptSourceSet(files, selected), manifest.Manifest, project);
     }
 
     /// <summary>Validate the untrusted bundle envelope, never infer filesystem membership here.</summary>

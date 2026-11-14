@@ -4,7 +4,7 @@ import { capabilityCatalogSchema, type PackageProjection } from "@pe/agent-contr
 import { machineFixture } from "../../agent-contracts/tests/machine-fixture.ts";
 import { buildCapabilities } from "../src/pea/capabilities.ts";
 import { skillSnapshot } from "../src/pea/skill-publication.ts";
-import { peDo, peRead } from "../src/pea/capability-tools.ts";
+import { peDo, peRead, podScriptRun } from "../src/pea/capability-tools.ts";
 import { fakeRuntimeHost } from "./runtime-host-fixture.ts";
 
 const bytes = Buffer.from(
@@ -105,6 +105,85 @@ test("skill reads exact admitted bytes, members refuse execution, and old keys r
     ok: false,
     content: expect.stringMatching(/revision|admitted/i),
   });
+});
+
+// Contract C1, Pea's script door. Mutants, each run red once: restore `effect: "command"` for every
+// script row in `packageRows` (pe_read refuses the check); drop the ReadOnly refusal in the script
+// dispatch (the write is sent); spread the whole payload into `scripting.execute` (scriptContent
+// crosses); drop `input` from what the dispatch passes.
+test("a ReadOnly entrypoint is a read Pea runs with pe_read, with its input, and never as a write", async () => {
+  fakeRuntimeHost("http://127.0.0.1:9");
+  vi.stubEnv("PE_CONTEXT", "");
+  const check = "script:@snowdon-ducts/pages/tour/checks/census.csx";
+  const withCheck: PackageProjection = {
+    ...pod,
+    members: [...pod.members, { path: "pages/tour/checks/census.csx", sha256, sizeBytes: 1 }],
+    contributions: [
+      ...pod.contributions,
+      {
+        key: check,
+        sourcePath: "pages/tour/checks/census.csx",
+        title: "Duct check",
+        description: "",
+        mode: "ReadOnly",
+      },
+    ],
+  };
+  const built = buildCapabilities({ ops: [], routes: [], packages: [withCheck], skills });
+  expect(built.find((row) => row.key === check)).toMatchObject({
+    effect: "query",
+    mutates: false,
+    mode: "ReadOnly",
+    input: { properties: { input: { type: "object" } } },
+  });
+  expect(built.find((row) => row.key === pod.contributions[0]!.key)).toMatchObject({
+    effect: "command",
+    mutates: true,
+  });
+  const calls: { path: string; body: unknown }[] = [];
+  vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
+    const request = input instanceof Request ? input : new Request(String(input), init);
+    const url = new URL(request.url);
+    const body = request.method === "GET" ? undefined : await request.json().catch(() => undefined);
+    calls.push({ path: url.pathname, body });
+    if (url.pathname === "/pe/capabilities")
+      return Response.json({ ...catalog(), capabilities: built });
+    if (url.pathname === "/pe/contributions")
+      return Response.json({
+        content: "Result(1);",
+        bytesBase64: "",
+        sha256,
+        folder: "renamed-local",
+        sourceBundle: { files: [] },
+      });
+    if (request.method === "GET" && url.pathname.endsWith("/actions")) return Response.json([]);
+    return Response.json({ ok: true });
+  });
+  // A script that declares no mode is still a command: pe_read refuses it and nothing is sent.
+  expect(
+    await peRead.execute({ key: pod.contributions[0]!.key, timeoutSeconds: 30 }, undefined),
+  ).toMatchObject({ ok: false, content: expect.stringMatching(/pe_do/) });
+  for (const tool of [peRead, peDo])
+    expect(
+      await tool.execute(
+        { key: check, input: { permissionMode: "WriteTransaction" }, timeoutSeconds: 30 },
+        undefined,
+      ),
+    ).toMatchObject({ ok: false, content: expect.stringMatching(/declared ReadOnly in pod.json/) });
+  // Refused before the admitted bytes are even read.
+  expect(calls.some((call) => call.path === "/pe/contributions")).toBe(false);
+  // What crosses for a declared script: its input, the mode and the timeout. The source never does.
+  expect(
+    podScriptRun(built.find((row) => row.key === check)!, {
+      input: { level: "L2" },
+      scriptContent: "Result(2);",
+      sourcePath: "src/Census.cs",
+      sourceBundle: { files: [] },
+    }),
+  ).toEqual({ input: { level: "L2" }, permissionMode: "ReadOnly" });
+  expect(
+    podScriptRun({ key: "script:@a/src/B.cs" }, { permissionMode: "NoTransaction", timeoutSeconds: 9 }),
+  ).toEqual({ permissionMode: "NoTransaction", timeoutSeconds: 9 });
 });
 
 test("Page shelf follows its projected URL and never borrows the Page action door", async () => {

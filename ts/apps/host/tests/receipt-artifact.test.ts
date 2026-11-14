@@ -2,7 +2,6 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test } from "vite-plus/test";
-// @ts-expect-error untyped build script
 import { splitWebMaps } from "../scripts/web-maps.mjs";
 
 const roots: string[] = [];
