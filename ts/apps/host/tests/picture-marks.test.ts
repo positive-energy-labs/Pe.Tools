@@ -1,6 +1,19 @@
 import { readFile } from "node:fs/promises";
 import { runInNewContext } from "node:vm";
 import { expect, test, vi } from "vite-plus/test";
+import { nativeResponseSchema } from "@pe/host-contracts/decoders";
+
+test("an unboxed lens carries per-element refusals without inventing a view", () => {
+  const response = {
+    viewId: null, viewName: null, created: false, boxed: 0, note: "No model bounds",
+    lens: null, hidden: [], refused: true,
+    notDrawn: [
+      { elementId: 6956140, reasons: ["NoBoundingBox"] },
+      { elementId: 13006707, reasons: ["ElementMissing"] },
+    ],
+  };
+  expect(nativeResponseSchema("revit.context.lens").parse(response)).toEqual(response);
+});
 
 test("pe.picture answers pixel marks and asks for surrounding context", async () => {
   const source = (await readFile(new URL("../src/pages/pe.js", import.meta.url), "utf8")).replace(
@@ -25,11 +38,12 @@ test("pe.picture answers pixel marks and asks for surrounding context", async ()
   pe.do = vi
     .fn()
     .mockResolvedValueOnce({ viewId: 42, viewName: "Lens" })
-    .mockResolvedValueOnce({ imageUrl: "/captures/picture.png", marks, notDrawn });
+    .mockResolvedValueOnce({ imageUrl: "/captures/picture.png", marks, notDrawn, width: 1500, height: 1441 });
   const answer = await pe.picture([7]);
   expect(answer.marks).toEqual(marks);
   expect(answer.url).toBe("/captures/picture.png");
   expect(answer.notDrawn).toEqual(notDrawn);
+  expect(answer).toMatchObject({ width: 1500, height: 1441 });
   expect(pe.do).toHaveBeenLastCalledWith("revit.context.view-image.focus", {
     target: { id: 42 },
     focus: { elementIds: [7] },
@@ -41,4 +55,14 @@ test("pe.picture answers pixel marks and asks for surrounding context", async ()
   await expect(pe.picture([8])).rejects.toMatchObject({
     message: "Picture refused: 8: PhaseHidden", notDrawn,
   });
+  const unboxed = [
+    { elementId: 6956140, reasons: ["NoBoundingBox"] },
+    { elementId: 13006707, reasons: ["ElementMissing"] },
+  ];
+  pe.do = vi.fn().mockResolvedValueOnce({ refused: true, notDrawn: unboxed });
+  await expect(pe.picture([6956140, 13006707])).rejects.toMatchObject({
+    message: "Picture refused: 6956140: NoBoundingBox; 13006707: ElementMissing",
+    refused: true, notDrawn: unboxed,
+  });
+  expect(pe.do).toHaveBeenCalledTimes(1);
 });

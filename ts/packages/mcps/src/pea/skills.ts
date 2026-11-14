@@ -285,7 +285,7 @@ Page script signature: pe.script(keyOrPath, { input, mode, permissionMode, timeo
 
 ### Pages: files in the Pod
 
-A Pod's Page is the file pages/<page>/index.html: plain HTML that loads /pages/pe.js. Write and edit it with your file tools in the Pod folder, with any files it needs beside it. The pe_do Page call writes scratch Pages only and cannot place a Page in a Pod. The key is page:@<id>/pages/<page>; find it with pe_find after writing and open the address that row gives. Nothing restarts: a Pod or a file you write is seen on the next discovery. A Pod may hold several Pages; each has its own key, binding and event log, and none reads another's.
+A Pod's Page is the file pages/<page>/index.html: plain HTML that loads /pages/pe.js. To see a working one, read a shipped example Pod in the Pods folder of the home you write to (pe_find kind page lists them, for example page:@document-profiler/pages/profile). Never model on a source checkout: an installed machine has none, and the host's status path is not a place to read. Write and edit it with your file tools in the Pod folder, with any files it needs beside it. The pe_do Page call writes scratch Pages only and cannot place a Page in a Pod. The key is page:@<id>/pages/<page>; find it with pe_find after writing and open the address that row gives. Nothing restarts: a Pod or a file you write is seen on the next discovery. A Pod may hold several Pages; each has its own key, binding and event log, and none reads another's.
 
 Page code is what skill:@product/skills/make-page steps 3 and 4 describe (pe.target, pe.read, pe.do, pe.state, and pe.fetch, pe.find, pe.reading, pe.picture, pe.diff), plus pe.script by key. Three rules make a Page something you can use as well as a person:
 
