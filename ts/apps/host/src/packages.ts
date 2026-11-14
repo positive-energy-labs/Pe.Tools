@@ -140,10 +140,66 @@ const claimedTwice = (id: string, twins: readonly Pick<AdmittedPackage, "directo
  * is unique across homes (ADR 0037 rule 4): an id claimed twice, in one Pods folder or in two
  * homes, is refused in every copy. Nothing shadows.
  */
-export async function listPackages(podsRoots: PodsRoots = productPodsRoots()): Promise<PackageListing> {
+export async function listPackages(
+  podsRoots: PodsRoots = productPodsRoots(),
+): Promise<PackageListing> {
+  const roots = [podsRoots].flat();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const stop = new AbortController();
+  try {
+    return await Promise.race([
+      scanPackages(roots, stop.signal),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+          stop.abort();
+          reject(
+            Error(
+              `Pod discovery exceeded 5000 ms listing ${roots.join(", ")}. Try again when the folder is available.`,
+            ),
+          );
+        }, 5_000);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+let scanLog = (_message: string) => {};
+export const logPackageDiscovery = (message: string) => scanLog(message);
+/** Bound at host composition to the same Effect logger as other host diagnostics. */
+export function bindPackageScanLogger(log: (message: string) => void) {
+  scanLog = log;
+}
+
+async function scanPackages(
+  roots: readonly string[],
+  signal: AbortSignal,
+): Promise<PackageListing> {
   const result: PackageListing = { packages: [], unreadable: [] };
-  for (const root of [podsRoots].flat()) {
-    const listing = await listPodsFolder(root);
+  for (const root of roots) {
+    signal.throwIfAborted();
+    const started = performance.now();
+    scanLog(`Pod folder scan start folder=${JSON.stringify(root)}`);
+    let outcome = "failed";
+    let ended = false;
+    const end = () => {
+      if (ended) return;
+      ended = true;
+      scanLog(
+        `Pod folder scan end folder=${JSON.stringify(root)} durationMs=${Math.round(performance.now() - started)} outcome=${signal.aborted ? "timed-out" : outcome}`,
+      );
+    };
+    signal.addEventListener("abort", end, { once: true });
+    let listing: PackageListing;
+    try {
+      listing = await listPodsFolder(root, signal);
+      signal.throwIfAborted();
+      outcome = "completed";
+    } finally {
+      end();
+      signal.removeEventListener("abort", end);
+    }
     result.packages.push(...listing.packages);
     result.unreadable.push(...listing.unreadable);
   }
@@ -157,7 +213,7 @@ export async function listPackages(podsRoots: PodsRoots = productPodsRoots()): P
   return result;
 }
 
-async function listPodsFolder(podsRoot: string): Promise<PackageListing> {
+async function listPodsFolder(podsRoot: string, signal: AbortSignal): Promise<PackageListing> {
   const result: PackageListing = { packages: [], unreadable: [] };
   let entries;
   try {
@@ -167,6 +223,7 @@ async function listPodsFolder(podsRoot: string): Promise<PackageListing> {
     throw error;
   }
   for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+    signal.throwIfAborted();
     if (!entry.isDirectory() && !entry.isSymbolicLink()) continue;
     try {
       const directory = join(podsRoot, entry.name);
@@ -384,7 +441,13 @@ async function readFolder(directory: string, folder: string): Promise<AdmittedPa
   );
   packageIdSchema.parse(value?.id);
   const updateRefusal = shippedPodUpdateRefusals.get(value.id);
-  if (updateRefusal) diagnostics.push(problem("ShippedExampleUpdateKept", "pod.json", updateRefusal));
+  if (updateRefusal)
+    diagnostics.push({
+      code: "ShippedExampleUpdateKept",
+      path: "pod.json",
+      message: updateRefusal,
+      severity: "warning",
+    });
   const entrypoints: PackageEntrypoint[] = [];
   const model = value.for === undefined ? undefined : podModelSchema.parse(value.for);
   for (const entry of Array.isArray(value.entrypoints) ? value.entrypoints : []) {

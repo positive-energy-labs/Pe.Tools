@@ -6,6 +6,7 @@ import { createPluginRuntime } from "@pe/agent-contracts";
 import { z } from "zod";
 import {
   listPackages,
+  logPackageDiscovery,
   isPackageMember,
   productPodsRoots,
   projectPodsRoot,
@@ -86,23 +87,26 @@ export async function requirePackageEnabled(
   // Only the product's Pods carry policy: the content homes, or the user's Pods an import writes.
   if (typeof podsRoots === "string" && podsRoots !== productPodsRootPath()) return;
   if (serving && !outsideCensus.includes(id)) {
-    await serving.ready;
-    if (!serving.inventory().some((pod) => pod.id === `pod:${id}`)) {
-      // Queue behind any scan that may have captured bytes before this Pod arrived.
-      const refresh = serving.refresh();
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      try {
-        await Promise.race([
-          refresh,
-          new Promise<void>((resolve) => {
-            timer = setTimeout(resolve, packageDiscoveryTimeoutMs);
-          }),
-        ]);
-      } finally {
-        clearTimeout(timer);
-      }
-    } else serving.requestRefresh();
-    if (!serving.active(id)) throw Error(`Pod '${id}' is inactive`);
+    const lifecycle = serving;
+    const discover = async () => {
+      await lifecycle.ready;
+      if (!lifecycle.inventory().some((pod) => pod.id === `pod:${id}`)) {
+        // Queue behind any scan that may have captured bytes before this Pod arrived.
+        await lifecycle.refresh();
+      } else lifecycle.requestRefresh();
+    };
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        discover(),
+        new Promise<void>((resolve) => {
+          timer = setTimeout(resolve, packageDiscoveryTimeoutMs);
+        }),
+      ]);
+    } finally {
+      clearTimeout(timer);
+    }
+    if (!lifecycle.active(id)) throw Error(`Pod '${id}' is inactive`);
   }
   if ((await readDecisions(decisionsKind.in(hostState())))[`pod:${id}`] === false)
     throw Error(`Pod '${id}' is disabled`);
@@ -138,11 +142,20 @@ async function podsDiskSignature(roots: readonly string[]): Promise<string | und
   try {
     for (const root of roots) {
       entries.push(root);
+      const started = performance.now();
+      logPackageDiscovery(`Pod folder metadata scan start folder=${JSON.stringify(root)}`);
+      let outcome = "completed";
       try {
         await walk(root, undefined);
       } catch (error) {
+        outcome = "failed";
         if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
+        outcome = "missing";
         entries.push("missing");
+      } finally {
+        logPackageDiscovery(
+          `Pod folder metadata scan end folder=${JSON.stringify(root)} durationMs=${Math.round(performance.now() - started)} outcome=${outcome}`,
+        );
       }
     }
     // shortcut: an edit preserving file size and timestamps is missed; hash bytes to support it.
