@@ -7,7 +7,8 @@ test("pe.picture answers pixel marks and asks for surrounding context", async ()
     "/*pe:runtime*/ null",
     JSON.stringify({ header: "x-pe-runtime", service: "proof" }),
   );
-  const window: Record<string, unknown> = {};
+  // pe.js registers a `pagehide` listener at load; this bare context has no DOM to supply one.
+  const window: Record<string, unknown> = { addEventListener() {} };
   runInNewContext(source, {
     window,
     location: new URL("http://localhost/pages/proof/"),

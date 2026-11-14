@@ -555,7 +555,7 @@ test("JP5 bootstrap replaces only unchanged imports and Home discovers the untru
           value: { state: "ready", value: { pods: [kept] } },
         } as unknown as Parameters<typeof Members>[0]["ctx"] }));
         const refusal = screen.getAllByRole("alert").map(node => node.textContent).join(" ");
-        expect.soft(refusal, "H16: the actual Pods pane names the preserved example and reason").toContain("Example update kept Snowdon Circuits: its authored members differ");
+        expect.soft(refusal, "H16: the actual Pods pane names the preserved example and reason").toContain("Snowdon Circuits was kept with your changes. Only the example update was skipped because its authored members differ");
         expect.soft(refusal, "H16: product refusal text never exposes validator internals").not.toMatch(/invalid_type|unrecognized_keys|expected string|received undefined/);
       }
     } finally {

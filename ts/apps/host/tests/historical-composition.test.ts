@@ -154,7 +154,8 @@ test("historical mutation doors refuse without append or any live graph", async 
   const before = await readdir(dir, { recursive: true });
   try {
     for (const [path, body] of [
-      ["/call", { key: "ducts.apply", request: {} }],
+      // `/call` validates native input before the historical refusal, so this is the smallest valid apply.
+      ["/call", { key: "ducts.apply", request: { fittings: [], terminals: [], components: [], equipment: [], terminalFlows: [], equipmentFlows: [], store: {} } }],
       ["/call", { key: "scripting.execute", request: {} }],
       ["/call", { key: "revit.matrix.loaded-families", request: {} }],
       [nativeReadResolveEndpoint.path, { operationKey: "revit.matrix.loaded-families", input: {} }],
