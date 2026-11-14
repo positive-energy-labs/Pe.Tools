@@ -24,7 +24,9 @@ export function runPodScript(
   requestId: string,
 ) {
   return Effect.gen(function* () {
-    const captured = input.sourcePath != null && input.sourceBundle == null ? yield* io(() => freezeScript(input)) : undefined;
+    const captured = input.sourcePath != null && input.sourceBundle == null
+      ? yield* io(() => freezeScript(input)).pipe(Effect.mapError((error) => refused(error instanceof Error ? error.message : String(error))))
+      : undefined;
     const sealedInput = captured ? { ...input, sourceBundle: captured.sourceBundle } : input;
     const bundle = sealedInput.sourceBundle as ScriptingExecute.Req.ScriptPodSourceBundle | undefined;
     const manifest = bundle?.files.find((file) => file.path === "pod.json");

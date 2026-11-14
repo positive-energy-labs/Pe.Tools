@@ -16,7 +16,7 @@ import type { Caller } from "@pe/agent-contracts";
 it("C3 refuses a Pod script before execution on any missing or mismatched probe, and permits a matching model", async () => {
   const entries = [{ elementId: 1, elementUniqueId: "one" }, { elementId: 2, elementUniqueId: "wrong" }];
   const calls: { key: string; input: unknown; session: unknown; openId: unknown }[] = [];
-  const bridge = { invoke: (key, input, session, openId) => {
+  const bridge = { invoke: (key: string, input: unknown, session?: string, openId?: string | null) => {
     calls.push({ key, input, session, openId });
     return Effect.succeed({ value: key === "revit.detail.elements" ? { documentTitle: "Other", entries } : { status: "Succeeded" } });
   } } as unknown as RevitBridge["Service"];
