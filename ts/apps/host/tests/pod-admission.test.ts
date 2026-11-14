@@ -182,6 +182,35 @@ test("B58: corrected bytes require their new trust and then admit on the next re
   } finally { await f.close(); }
 }, 30_000);
 
+test("B58: a failed byte check cannot pin a refusal to the last good census", async () => {
+  const f = await isolatedRefusal();
+  let retry: ReturnType<typeof createPodRoutes> | undefined;
+  let stopDiscovery = () => {};
+  try {
+    expect((await f.trust("fixture")).status).toBe(200);
+    await f.content.lifecycle.refresh();
+    f.routes.close();
+    const discovery = vi.spyOn(f.content.lifecycle, "requestRefresh").mockImplementation(() => {});
+    stopDiscovery = () => { discovery.mockRestore(); };
+    retry = createPodRoutes(f.content.lifecycle, { workspace: f.workspace, machine: stateMachine(f.root) });
+    const path = join(f.root, "Pods/fixture/pod.json");
+    const original = await readFile(path, "utf8");
+    const changed = original.replace('"name":"Fixture"', '"name":"Fjxture"');
+    expect(changed).not.toBe(original);
+    expect(() => JSON.parse(changed)).not.toThrow();
+    await writeFile(path, changed);
+    expect(await retry.list()).toContainEqual(expect.objectContaining({
+      packageId: "fixture", admission: expect.objectContaining({ status: "refused" }),
+    }));
+    await writeFile(path, original);
+    // The edit was repaired between censuses. Only a completed byte check can pin a refusal
+    // to captured hashes: here the check never observed the census's supposedly refused bytes.
+    expect(await retry.list()).toContainEqual(expect.objectContaining({
+      packageId: "fixture", admission: { status: "admitted" },
+    }));
+  } finally { stopDiscovery(); retry?.close(); await f.close(); }
+}, 30_000);
+
 test("host and browser refuse a fingerprinted raw-slash Pod address alias", async () => {
   const root = await mkdtemp(join(tmpdir(), "pe-pod-address-"));
   try {

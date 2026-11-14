@@ -276,8 +276,10 @@ export function createPodRoutes(
         options.workspace
       ) {
         admitting.add(route.key);
+        let checked = false;
         try {
           const value = await currentArtifact(pod, route);
+          checked = true;
           const evidence = await verifyPodArtifact(value, route.fingerprint);
           const host = evidence.executables.some((entry) => entry.client === "host")
             ? await loadPodHostEntry(value, route.fingerprint)
@@ -305,9 +307,9 @@ export function createPodRoutes(
             reason: contracts.message(error),
             retryable: timeout,
           };
-          // A byte-check deadline refused only this request; it never reached admission.
-          // Keep that existing retryable IO rule separate from a completed admission refusal.
-          if (!timeout) refusals.set(route.key, { bytes, admission });
+          // Only matching fresh bytes can pin a refusal to this census. A failed check says
+          // nothing about those captured bytes after a repair; deadlines stay request-local too.
+          if (checked) refusals.set(route.key, { bytes, admission });
           route.admission = admission;
         } finally {
           admitting.delete(route.key);
