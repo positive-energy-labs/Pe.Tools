@@ -1,6 +1,7 @@
 import { knownUserRoot, resolveHomes, resolveProjectHome, noFirmHomeText, type FirmHome, type Home, type FoundHome } from "@pe/host-contracts/product-paths";
 import { note, sha256Hex } from "@pe/host-contracts/kinds";
 import { hostState } from "./host-ownership.ts";
+import { noteNoFirmHome, noteEarlierWork } from "./notice-feed.ts";
 
 export const contentRootsRefreshMs = 30_000;
 export const contentRootsResolveTimeoutMs = 5_000;
@@ -20,6 +21,10 @@ type Roots = {
   timer?: ReturnType<typeof setInterval>;
   users: number;
   projects: Map<string, Attempt>;
+  unavailable: boolean;
+  noticedFirm: boolean;
+  noticedWork: boolean;
+  listeners: Set<() => void>;
 };
 const owners = new Map<string, Roots>();
 
@@ -29,6 +34,14 @@ function unavailable(roots: Roots, places: readonly string[], reason: unknown) {
     .filter((place): place is string => Boolean(place)))].join(", ") || "C: through Z:";
   const message = `Firm home unavailable at ${where}: ${String(reason)}. Keeping the last good homes, or the user home, while resolution continues.`;
   note(hostState(), { class: "keep", place: "Firm home", path, sha256: sha256Hex(message), reason: message });
+  roots.unavailable = true;
+  roots.listeners.forEach(listener => listener());
+}
+
+function settledNotices(roots: Roots, completed: boolean) {
+  if (completed && !roots.noticedFirm) { roots.noticedFirm = true; noteNoFirmHome(roots.firm, hostState()); }
+  const user = roots.homes.get("")?.find(home => home.tier === "user")?.root;
+  if (user && !roots.noticedWork) { roots.noticedWork = true; void noteEarlierWork(user, hostState()); }
 }
 
 async function bounded(work: Promise<void>, timeoutMs: number, expired: () => void, signal: AbortSignal): Promise<void> {
@@ -54,6 +67,7 @@ function owner() {
     homes: new Map(user ? [["", [{ tier: "user", root: user }]]] : []),
     firm: { root: null, looked: [] }, pointers: new Set(), ready: Promise.resolve(),
     refresh: async () => {}, users: 0, projects: new Map(),
+    unavailable: false, noticedFirm: false, noticedWork: false, listeners: new Set(),
   };
   current.refresh = () => {
     if (current.pending && !current.pending.expired) return current.pending.work;
@@ -76,13 +90,16 @@ function owner() {
       if (current.pending !== attempt || attempt.stop.signal.aborted) return;
       current.homes = homes;
       current.firm = { ...firm, root: homes.get("")?.find(home => home.tier === "firm")?.root ?? null };
+      current.unavailable = false;
+      settledNotices(current, true);
+      current.listeners.forEach(listener => listener());
     }).catch(error => {
       if (current.pending === attempt && !attempt.stop.signal.aborted) unavailable(current, places, error);
     }).finally(() => { if (current.pending === attempt) current.pending = undefined; });
     attempt.work = bounded(work, contentRootsResolveTimeoutMs, () => {
       attempt.expired = true;
       unavailable(current, places, `resolution exceeded ${contentRootsResolveTimeoutMs} ms`);
-    }, attempt.stop.signal);
+    }, attempt.stop.signal).finally(() => { if (!attempt.stop.signal.aborted) settledNotices(current, false); });
     // Expiry releases waiters; this read can publish until the next tick retires it.
     return attempt.work;
   };
@@ -96,6 +113,7 @@ export async function contentRootsReady(pointer?: string | null) {
   await roots.ready;
   if (!pointer || roots.homes.has(pointer)) return;
   roots.pointers.add(pointer);
+  if (Date.now() - started >= contentRootsResolveTimeoutMs) return;
   let pending = roots.projects.get(pointer);
   if (!pending) {
     const snapshot = roots.homes, homes = snapshot.get("") ?? [];
@@ -122,6 +140,11 @@ export async function contentRootsReady(pointer?: string | null) {
 
 /** Cache-only reads, including the startup notice's firm-home report. */
 export const contentFirmHome = (): FirmHome => owner().firm;
+export const contentRootsUnavailable = (): boolean => owner().unavailable;
+export function observeContentRoots(listener: () => void): () => void {
+  const roots = owner(); roots.listeners.add(listener);
+  return () => { roots.listeners.delete(listener); };
+}
 export function contentHomesFound(): { homes: FoundHome[]; firmNotice: string | null } {
   const roots = owner();
   return {

@@ -1,11 +1,11 @@
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, writeFile, readFile } from "node:fs/promises";
 import * as filesystem from "node:fs";
 import * as paths from "@pe/host-contracts/product-paths";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
-import { acquireContentRoots, contentRootsRefreshMs, contentRootsResolveTimeoutMs, contentRootsReady, contentHomes } from "../src/content-roots.ts";
+import { acquireContentRoots, contentRootsRefreshMs, contentRootsResolveTimeoutMs, contentRootsReady, contentHomes, contentRootsUnavailable, observeContentRoots } from "../src/content-roots.ts";
 import { notices } from "@pe/host-contracts/kinds";
 import { hostState } from "../src/host-ownership.ts";
 import * as asyncFilesystem from "node:fs/promises";
@@ -18,8 +18,12 @@ import { ownedSession } from "./callers.ts";
 import { BRIDGE_CONTRACT_VERSION, BRIDGE_PATH, HOST_RUNTIME_SERVICE_QUERY } from "@pe/host-contracts/contracts";
 import { hostOwnership } from "../src/host-ownership.ts";
 import { detachedBridge } from "./effect-test.ts";
-import { Layer } from "effect";
+import { Effect, Layer } from "effect";
 import { ActionJournalService } from "../src/receipt-services.ts";
+import { getHostStatus } from "../src/local-ops.ts";
+import { productPodsRootPath } from "../src/product-paths.ts";
+import { exportPod } from "../src/pod-transfer.ts";
+import { noticeRows } from "../src/notice-feed.ts";
 
 vi.mock("node:fs", async original => ({ ...await original<typeof import("node:fs")>() }));
 vi.mock("node:fs/promises", async original => ({ ...await original<typeof import("node:fs/promises")>() }));
@@ -51,6 +55,13 @@ test("an unanswered Documents lookup keeps health and bridge up, refuses Pages, 
     expect(pages.status).toBe(503);
     expect(await pages.json()).toMatchObject({ code: "pod.home-unavailable", message: expect.stringContaining("PE_TOOLS_PRODUCT_HOME") });
     await expect(listPackages()).rejects.toMatchObject({ code: "pod.home-unavailable", status: 503 });
+    const exportStarted = performance.now();
+    await expect(exportPod({ pod: "missing", archivePath: join(root, "missing.zip") })).rejects.toMatchObject({
+      code: "pod.home-unavailable", status: 503, message: expect.stringContaining("PE_TOOLS_PRODUCT_HOME"),
+    });
+    expect(performance.now() - exportStarted).toBeLessThan(contentRootsResolveTimeoutMs + startupSchedulingMarginMs);
+    expect(() => productPodsRootPath()).toThrow("PE_TOOLS_PRODUCT_HOME");
+    expect(paths.userRoot).not.toHaveBeenCalled();
     socket = new WebSocket(`${host.base.replace("http:", "ws:")}${BRIDGE_PATH}?${HOST_RUNTIME_SERVICE_QUERY}=${hostOwnership.serviceName}`);
     await new Promise<void>((resolve, reject) => {
       socket?.addEventListener("open", () => resolve(), { once: true });
@@ -67,6 +78,100 @@ test("an unanswered Documents lookup keeps health and bridge up, refuses Pages, 
     await vi.advanceTimersByTimeAsync(contentRootsRefreshMs);
     expect((await fetch(`${host.base}/pages`)).status).toBe(200);
   } finally { socket?.close(); await host.close(); }
+});
+
+test("host status defaults to the cached snapshot and cannot call the sync home probe", async () => {
+  const { root, firm } = await rootsFixture();
+  vi.spyOn(paths, "resolveHomes").mockResolvedValue(snapshot(root, firm));
+  const sync = vi.spyOn(paths, "homesFound").mockImplementation(() => { throw Error("sync home probe"); });
+  const owner = acquireContentRoots();
+  try {
+    await owner.ready;
+    const status = await Effect.runPromise(getHostStatus({ connected: false }));
+    expect(status.homes).toContainEqual(expect.objectContaining({ tier: "firm", path: firm }));
+    expect(sync).not.toHaveBeenCalled();
+  } finally { owner.close(); }
+});
+
+test("Pod export and its user-root door refuse a missing identity without a sync Documents lookup", async () => {
+  const { root } = await rootsFixture();
+  vi.spyOn(paths, "knownUserRoot").mockReturnValue(undefined);
+  const sync = vi.spyOn(paths, "userRoot").mockImplementation(() => { throw Error("sync reg.exe lookup"); });
+  vi.spyOn(paths, "resolveHomes").mockReturnValue(new Promise(() => {}));
+  vi.useFakeTimers();
+  const owner = acquireContentRoots();
+  const answer = exportPod({ pod: "missing", archivePath: join(root, "missing.zip") }).catch(error => error);
+  try {
+    expect(() => productPodsRootPath()).toThrow("PE_TOOLS_PRODUCT_HOME");
+    await vi.advanceTimersByTimeAsync(contentRootsResolveTimeoutMs);
+    expect(await answer).toMatchObject({ code: "pod.home-unavailable", status: 503,
+      message: expect.stringContaining("PE_TOOLS_PRODUCT_HOME") });
+    expect(sync).not.toHaveBeenCalled();
+  } finally { owner.close(); await answer; }
+});
+
+test("the first completed probe posts where it looked, once, after settling", async () => {
+  const { root, firm } = await rootsFixture();
+  const release = Promise.withResolvers<Map<string, paths.Home[]>>();
+  vi.spyOn(paths, "resolveHomes").mockImplementation((_pointers, options) => {
+    options?.onFirm?.({ root: null, looked: [firm] });
+    return release.promise;
+  });
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  const owner = acquireContentRoots();
+  const findings = () => notices(hostState()).filter(n => n.path === firm && n.reason.startsWith("No firm home:"));
+  try {
+    expect(findings()).toHaveLength(0);
+    release.resolve(snapshot(root));
+    await owner.ready;
+    expect(findings()).toHaveLength(1);
+    expect(findings()[0]?.reason).toContain(firm);
+    await vi.advanceTimersByTimeAsync(contentRootsRefreshMs);
+    expect(findings()).toHaveLength(1);
+  } finally { release.resolve(snapshot(root)); owner.close(); }
+});
+
+test("a newly resolved user home notices earlier Work asynchronously and only once", async () => {
+  const { root } = await rootsFixture();
+  const work = join(root, "Work"), file = join(work, "nested", "old.json");
+  await mkdir(join(work, "nested"), { recursive: true });
+  await writeFile(file, "keep these bytes");
+  vi.spyOn(paths, "knownUserRoot").mockReturnValue(undefined);
+  const release = Promise.withResolvers<Map<string, paths.Home[]>>();
+  vi.spyOn(paths, "resolveHomes").mockReturnValue(release.promise);
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  const owner = acquireContentRoots();
+  const findings = () => notices(hostState()).filter(n => n.path === work);
+  try {
+    expect(findings()).toHaveLength(0);
+    release.resolve(snapshot(root)); await owner.ready;
+    await vi.waitFor(() => expect(findings()).toHaveLength(1));
+    expect(findings()[0]?.reason).toContain("Work saved by an earlier version");
+    expect(await readFile(file, "utf8")).toBe("keep these bytes");
+    await vi.advanceTimersByTimeAsync(contentRootsRefreshMs);
+    expect(findings()).toHaveLength(1);
+  } finally { release.resolve(snapshot(root)); owner.close(); }
+});
+
+test("a firm home arriving late clears its unavailable warning and notifies the live feed", async () => {
+  const { root, firm } = await rootsFixture();
+  const release = Promise.withResolvers<Map<string, paths.Home[]>>();
+  vi.spyOn(paths, "resolveHomes").mockReturnValue(release.promise);
+  vi.useFakeTimers();
+  const owner = acquireContentRoots(), changed = vi.fn(), stop = observeContentRoots(changed);
+  const rows = () => noticeRows({ threads: [], receipts: [], works: [], held: [], machine: null,
+    stored: notices(hostState()).filter(n => n.path === firm), firmHomeUnavailable: contentRootsUnavailable(),
+  }, Date.now());
+  try {
+    await vi.advanceTimersByTimeAsync(contentRootsResolveTimeoutMs);
+    expect(rows().some(row => row.says?.includes("Firm home unavailable"))).toBe(true);
+    changed.mockClear();
+    release.resolve(snapshot(root, firm));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(contentRootsUnavailable()).toBe(false);
+    expect(rows().some(row => row.says?.includes("Firm home unavailable"))).toBe(false);
+    expect(changed).toHaveBeenCalledOnce();
+  } finally { release.resolve(snapshot(root)); stop(); owner.close(); }
 });
 async function rootsFixture() {
   const root = await mkdtemp(join(tmpdir(), "pe-root-deadline-"));

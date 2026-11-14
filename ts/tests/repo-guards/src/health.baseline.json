@@ -51,7 +51,7 @@
     "ts/apps/host/src/mcp-route.ts": 2,
     "ts/apps/host/src/native-output.ts": 3,
     "ts/apps/host/src/native-recording.ts": 3,
-    "ts/apps/host/src/notice-feed.ts": 3,
+    "ts/apps/host/src/notice-feed.ts": 2,
     "ts/apps/host/src/operation-script.ts": 2,
     "ts/apps/host/src/ops-catalog.ts": 3,
     "ts/apps/host/src/packages.ts": 2,

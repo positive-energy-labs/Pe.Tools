@@ -1,5 +1,5 @@
 import { stateScope } from "@pe/host-contracts/service-identity";
-import { acquireContentRoots, contentHomes, contentFirmHome, contentHomesFound, ContentHomeUnavailable } from "./content-roots.ts";
+import { acquireContentRoots, contentHomes, contentHomesFound, contentRootsUnavailable, observeContentRoots, ContentHomeUnavailable } from "./content-roots.ts";
 import { homeLogLines } from "@pe/host-contracts/product-paths";
 import { targetHomes } from "./call-route.ts";
 import { readPlaces, writePlaces } from "./places.ts";
@@ -138,7 +138,7 @@ import {
   resumeWork,
   type NavigationSources,
 } from "./navigation.ts";
-import { createNoticeFeed, noticeRows, noteStartupHomes, type NoticeSources } from "./notice-feed.ts";
+import { createNoticeFeed, noticeRows, type NoticeSources } from "./notice-feed.ts";
 import { heldSend, heldSends, holdSend, confirmSend, subscribeHeldSends } from "./guards.ts";
 import type { ActionJournal } from "./action-journal.ts";
 import { hostTimeline, timelineReceipts } from "./reads/work-timeline.ts";
@@ -1224,9 +1224,6 @@ function* hostPeRoutes(
   // Unbound is a working state (ADR 0037 rule 2): the host starts, and the feed says where it looked.
   const rootsOwner = acquireContentRoots();
   yield* Effect.addFinalizer(() => Effect.sync(rootsOwner.close));
-  const homes = contentHomes(), userHome = homes.find(home => home.tier === "user")?.root;
-  // Pass the async census explicitly: these diagnostics must not probe the firm drives again.
-  if (userHome) noteStartupHomes(userHome, contentFirmHome());
   for (const line of homeLogLines(contentHomesFound())) yield* Effect.logInfo(line);
   let invalidateCatalog = () => {};
   const content = createContributionContent({
@@ -1397,6 +1394,7 @@ function* hostPeRoutes(
             works: noticeCache.works,
             machine,
             stored: storedNotices(hostState()),
+            firmHomeUnavailable: contentRootsUnavailable(),
             held: heldSends(),
           },
           Date.now(),
@@ -1417,6 +1415,7 @@ function* hostPeRoutes(
           })
           .catch((error) => console.warn("Notice feed: Works unread", error));
       const releases = [
+        observeContentRoots(changed),
         journal.subscribe({ kinds: ["action"] }, receipt),
         subscribeHeldSends(changed),
         threads.observe({ kind: "threads" }, changed) ?? (() => {}),
