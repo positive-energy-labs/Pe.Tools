@@ -72,6 +72,7 @@ import { capturePackage, listPackages, productPodsRoots, type PodsRoots } from "
 import { activePackages, requirePackageEnabled } from "./package-lifecycle.ts";
 import {
   pageDescriptors,
+  PAGE_LIBRARY_SOURCES,
   productPagesRoots,
   scratchPageDirectory,
   type PagesRoots,
@@ -96,20 +97,13 @@ import { stateDirectory } from "@pe/host-contracts/service-identity";
  * Each library file beside its source on the dev lane, so an edit is live on the next request;
  * staged under `<exeDir>/pages` when installed (`scripts/stage-web.mjs`).
  */
-const LIBRARY_SOURCES = {
-  "pe.js": "./pages/pe.js",
-  "pe.css": "./pages/pe.css",
-  "base.css": "../../../packages/kit/src/base.css",
-  "revit.js": "../../web/src/revit/revit.js",
-  "revit.css": "../../web/src/revit/revit.css",
-  "kit/pe-kit.js": "../../../packages/kit/dist/pe-kit.js",
-  "kit/pe-kit.css": "../../../packages/kit/dist/pe-kit.css",
-} as const;
-type PageLibraryFile = keyof typeof LIBRARY_SOURCES;
-const assetPath = (name: PageLibraryFile) =>
-  hostOwnership.lane === "installed"
+const assetPath = (name: string) => {
+  const source = Object.entries(PAGE_LIBRARY_SOURCES).find(([file]) => file === name)?.[1];
+  if (!source) throw Error(`Unknown Page library ${name}`);
+  return hostOwnership.lane === "installed"
     ? join(dirname(process.execPath), "pages", name)
-    : fileURLToPath(new URL(LIBRARY_SOURCES[name], import.meta.url));
+    : fileURLToPath(new URL(source, import.meta.url));
+};
 
 /**
  * The facsimile is an ES module for the web app; pages load classic scripts (their inline handlers
@@ -126,7 +120,7 @@ ${source.replace(exports, "globalThis.rv = {$1};")}
 })();
 `;
 };
-const asset = (name: PageLibraryFile) => {
+const asset = (name: string) => {
   try {
     return readFileSync(assetPath(name), "utf8");
   } catch (error) {
@@ -163,9 +157,7 @@ export const pageLibrary = (path: string): string | null => {
   if (path === "/pages/pe.css") return `${asset("base.css")}\n${asset("pe.css")}`;
   if (path === "/pages/revit.js") return classicRevit();
   const file = path.slice("/pages/".length);
-  return file === "revit.css" || file === "kit/pe-kit.js" || file === "kit/pe-kit.css"
-    ? asset(file)
-    : null;
+  return Object.hasOwn(PAGE_LIBRARY_SOURCES, file) ? asset(file) : null;
 };
 
 /** One file segment: a leading dot is refused, so editor droppings stay private. */
@@ -222,8 +214,8 @@ const noLive: PageLive = {
   forward: async () => problem(503, "this host has no Revit composition"),
 };
 
-const callBodySchema = z.strictObject({ key: z.string().min(1), request: z.unknown().optional() });
-const actBodySchema = z.strictObject({ key: z.string().min(1), input: z.unknown().optional() });
+const callBodySchema = peRoutes["page.call"].body;
+const actBodySchema = peRoutes["page.act"].body;
 
 const inventoryOf = (sessions: readonly LiveSession[]): TargetInventory => ({
   kind: "ready",
@@ -259,9 +251,9 @@ function resolveSlot(slot: PageChoice, sessions: readonly LiveSession[]): Target
   return { kind: "choose", reason: "missing" };
 }
 
-/** The host-stamped origin of a row: the page key, `human`, or `agent`; never a header. */
+/** The host-stamped origin of a row; never a header. */
 const originOf = (caller: Caller) =>
-  caller.kind === "page" ? caller.page : caller.kind === "human" ? "human" : "agent";
+  caller.kind === "page" ? "page" : caller.kind === "human" ? "person" : "agent";
 
 const unboundRefusal = (door: string): Refusal => ({
   code: "page.unbound",
@@ -270,20 +262,15 @@ const unboundRefusal = (door: string): Refusal => ({
 });
 
 /**
- * One page's log, snapshot and binding. They are machine state (ADR 0037 rule 6): `dir` is the
+ * One Page's log, text projection and binding. They are machine state (ADR 0037 rule 6): `dir` is the
  * Page's folder under the state root, never the Page's own folder in a home. Appends are serial
- * per page. Page state is discard class (ADR 0039): a snapshot or binding that does not decode is
+ * per page. Page state is discard class (ADR 0039): a text projection or binding that does not decode is
  * deleted with one notice and reads as absent. The event log is append-only and decodes per line:
  * a bad line is left out with one notice, and a read never rewrites the file.
  */
-const pageFileKind = <T>(
-  schema: z.ZodType<T>,
-  name: "snapshot.json" | "binding.json" | "snapshot.md",
-  slug: string,
-) =>
+const pageFileKind = <T>(schema: z.ZodType<T>, name: "binding.json" | "text.json", slug: string) =>
   stateKind({
     schema,
-    parse: name === "snapshot.md" ? (text) => text : undefined,
     place: () => `Page ${slug}`,
     segments: () => [name],
   });
@@ -304,7 +291,7 @@ class PageState {
   private get dir() {
     return this.storage.path;
   }
-  private stored<T>(file: "snapshot.json" | "binding.json", schema: z.ZodType<T>, missing: T) {
+  private stored<T>(file: "text.json" | "binding.json", schema: z.ZodType<T>, missing: T) {
     const read = readStoredFile(pageFileKind(schema, file, basename(this.dir)).in(this.storage));
     return read.kind === "ok" ? read.value : missing;
   }
@@ -327,15 +314,6 @@ class PageState {
     });
     return job;
   }
-  async snapshot(): Promise<unknown> {
-    return this.stored("snapshot.json", z.unknown(), null);
-  }
-  async writeSnapshot(value: unknown) {
-    writeState(
-      pageFileKind(z.unknown(), "snapshot.json", basename(this.dir)).in(this.storage),
-      JSON.stringify(value, null, 2),
-    );
-  }
   /** A binding names a thread or a document as data in the file, never in its path. */
   binding(): PageBinding {
     return this.stored("binding.json", pageBindingSchema, unboundPage);
@@ -347,15 +325,17 @@ class PageState {
     );
     this.signal("binding", {});
   }
-  /** The page's text projection (`pe.describe`): markdown an agent reads instead of the snapshot. */
-  async text(): Promise<string | null> {
-    return readFile(join(this.dir, "snapshot.md"), "utf8").catch((error) => {
-      if (isMissing(error)) return null;
-      throw error;
-    });
+  projection() {
+    return this.stored("text.json", peRoutes["page.text"].body.nullable(), null);
   }
-  async writeText(text: string) {
-    writeState(pageFileKind(z.string(), "snapshot.md", basename(this.dir)).in(this.storage), text);
+  async writeText(value: z.infer<(typeof peRoutes)["page.text"]["body"]>) {
+    const seq = lastSeq(await this.rows());
+    if (value.seq > seq || value.seq < (this.projection()?.seq ?? 0)) return false;
+    writeState(
+      pageFileKind(peRoutes["page.text"].body, "text.json", basename(this.dir)).in(this.storage),
+      JSON.stringify(value),
+    );
+    return true;
   }
   follow(listen: Listener) {
     this.listeners.add(listen);
@@ -516,13 +496,11 @@ export function createPagesHandler(
 <pre>&lt;link rel="stylesheet" href="/pages/pe.css"&gt;
 &lt;script src="/pages/pe.js"&gt;&lt;/script&gt;
 &lt;script&gt;
-  const k = pe.kernel((state, event) =&gt; state, {}, render);   // reduce(state, event), base, render
-  pe.state(k);                                                 // every copy and every agent share k's log
-  pe.describe(() =&gt; \`# \${k.state.title}\`);                     // what the page says, as markdown, for agents
+  const k = await pe.state({ reduce, base: {}, render, describe, agent: {} });
   await pe.do("revit.context.show-elements", { elementIds: [1234] });   // pe.find, pe.read, pe.do: Pea's doors
   await pe.script("checks/census.csx");                        // C# beside the page; pe.picture, pe.diff, pe.reading
 &lt;/script&gt;</pre>
-<p>Agents reach the same log at <code>GET /pages/&lt;slug&gt;/state</code> (<code>snapshot</code> and <code>text</code>) and <code>POST /pages/&lt;slug&gt;/events</code>. The header of <a href="/pages/pe.js">pe.js</a> is the whole reference.</p>
+<p>Agents reach the same log at <code>GET /pages/&lt;slug&gt;/state</code> (<code>events</code>, <code>text</code>, <code>textSeq</code> and <code>agent</code>) and <code>POST /pages/&lt;slug&gt;/events</code>. The header of <a href="/pages/pe.js">pe.js</a> is the whole reference.</p>
 </body></html>`,
       { headers: { "content-type": "text/html; charset=utf-8" } },
     );
@@ -570,14 +548,14 @@ export function createPagesHandler(
           last = row.seq;
           controller.enqueue(frame(row));
         };
-        // Follow first, then replay: a row appended between the two is sent once, by seq.
-        const unfollow = state.follow(send);
-        const unhead = subscribeHeads(() =>
-          controller.enqueue(encoder.encode("event: head\ndata: {}\n\n")),
-        );
-        const unhear = state.hear((event, data) =>
-          controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)),
-        );
+        // Buffer live rows until replay finishes: a newer row must not skip an unseen prefix.
+        const pending: PageEventRow[] = [];
+        let replayed = false;
+        const unfollow = state.follow((row) => (replayed ? send(row) : pending.push(row)));
+        const unhear = state.hear((event, data) => {
+          if (event === "file")
+            controller.enqueue(encoder.encode(`event: file\ndata: ${JSON.stringify(data)}\n\n`));
+        });
         // A named heartbeat, so pe.js can tell a quiet stream from a dead one (a browser's own
         // EventSource retry was seen to never fire after a dev host restart, 2026-10-04).
         const beat = setInterval(
@@ -589,7 +567,6 @@ export function createPagesHandler(
           request.signal.removeEventListener("abort", stop);
           clearInterval(beat);
           unfollow();
-          unhead();
           unhear();
           try {
             controller.close();
@@ -602,6 +579,8 @@ export function createPagesHandler(
         request.signal.addEventListener("abort", stop);
         if (request.signal.aborted) stop();
         for (const row of await state.rows()) send(row);
+        for (const row of pending.sort((a, b) => a.seq - b.seq)) send(row);
+        replayed = true;
       },
       cancel() {
         stop();
@@ -816,7 +795,13 @@ export function createPagesHandler(
    * `page.bind`: a person binds anything; Pea (or an MCP client) only pins a
    * document open in one of Pea's own Revits.
    */
-  async function bind(slug: string, state: PageState, page: string, request: Request, caller: Caller) {
+  async function bind(
+    slug: string,
+    state: PageState,
+    page: string,
+    request: Request,
+    caller: Caller,
+  ) {
     const at = peRouteUrl("page.bind", { params: { slug } });
     const parsed = pageChoiceSchema.safeParse(
       await request.json().catch((error) => {
@@ -870,7 +855,10 @@ export function createPagesHandler(
    * The `page-target` Reading: this Page's target now, and again when a thread head or its binding
    * moves. The SPA's chip follows it on its one Readings stream, never on a stream of its own.
    */
-  const observeTarget = (slug: string, publish: (result: OwnerValue<PageTargetReading>) => void) => {
+  const observeTarget = (
+    slug: string,
+    publish: (result: OwnerValue<PageTargetReading>) => void,
+  ) => {
     let closed = false;
     let turn = 0;
     let stops: (() => void)[] = [];
@@ -944,7 +932,9 @@ export function createPagesHandler(
     }
     const wantsHtml = (request.headers.get("accept") ?? "").includes("text/html");
     if (parts.length === 1)
-      return wantsHtml ? listPage(await list()) : json({ root: [root].flat(), pages: await list() });
+      return wantsHtml
+        ? listPage(await list())
+        : json({ root: [root].flat(), pages: await list() });
     const [, slug = "", ...rest] = parts;
     const library = request.method === "GET" ? pageLibrary(url.pathname) : null;
     if (library !== null)
@@ -973,9 +963,9 @@ export function createPagesHandler(
               return undefined;
             })
           : {};
-      const parsed = z.strictObject({ snapshot: z.unknown().optional() }).safeParse(sent);
+      const parsed = peRoutes["page.export"].body.safeParse(sent);
       if (!parsed.success)
-        return problem(400, "a Page export is { snapshot? }; destination paths are host-owned");
+        return problem(400, "a Page export is {}; destination paths are host-owned");
       try {
         const result = await exportPage({
           directory: where.dir,
@@ -983,8 +973,6 @@ export function createPagesHandler(
           page: where.key,
           exportedAt: new Date().toISOString(),
           document: (await target(where.key, state)).document,
-          snapshot:
-            parsed.data.snapshot === undefined ? await state.snapshot() : parsed.data.snapshot,
           events: await state.rows(),
           library: async (path) => {
             const text = pageLibrary(path);
@@ -1006,15 +994,25 @@ export function createPagesHandler(
     }
     if (verb === "state" && request.method === "GET") {
       const rows = await state.rows();
+      const cursor = url.searchParams.has("after") ? Number(url.searchParams.get("after")) : null;
+      if (cursor !== null && (!Number.isSafeInteger(cursor) || cursor < 0))
+        return problem(400, "after is a nonnegative integer event sequence");
+      const projection = state.projection();
       return json({
         seq: lastSeq(rows),
-        events: rows,
-        snapshot: await state.snapshot(),
-        text: await state.text(),
+        events: cursor === null ? rows.slice(-50) : rows.filter((row) => row.seq > cursor),
+        text: projection?.text ?? null,
+        textSeq: projection?.seq ?? null,
+        agent: projection?.agent ?? {},
       });
     }
     if (verb === "text" && request.method === "PUT") {
-      await state.writeText(await request.text());
+      if (originOf(caller) === "agent")
+        return problem(403, "only a Page or person publishes its text and agent declaration");
+      const parsed = peRoutes["page.text"].body.safeParse(await request.json().catch(() => null));
+      if (!parsed.success) return problem(400, parsed.error.message);
+      if (!(await state.writeText(parsed.data)))
+        return problem(409, "text seq is ahead of the log or older than the saved text");
       return new Response(null, { status: 204 });
     }
     if (verb === "events" && request.method === "POST") {
@@ -1024,10 +1022,19 @@ export function createPagesHandler(
       });
       if (typeof event !== "object" || event === null || Array.isArray(event))
         return problem(400, "an event is one JSON object");
+      if (originOf(caller) === "agent") {
+        const agent = state.projection()?.agent ?? {};
+        const declared = Object.keys(agent);
+        const type = Reflect.get(event, "type");
+        if (typeof type !== "string" || !Object.hasOwn(agent, type))
+          return problem(
+            422,
+            `undeclared agent event type; declared types: ${declared.join(", ") || "(none)"}`,
+          );
+      }
       return json(await state.append(event, originOf(caller)), 201);
     }
-    if (verb === "target" && request.method === "GET")
-      return json(await target(where.key, state));
+    if (verb === "target" && request.method === "GET") return json(await target(where.key, state));
     if ((verb === "call" || verb === "act") && request.method === "POST")
       return door(verb, slug, state, where.key, request, caller);
     if (verb === "events" && request.method === "GET") {
@@ -1035,15 +1042,6 @@ export function createPagesHandler(
         url.searchParams.get("after") ?? request.headers.get("last-event-id") ?? 0,
       );
       return sse(request, state, Number.isFinite(after) ? after : 0);
-    }
-    if (verb === "snapshot" && request.method === "PUT") {
-      const value: unknown = await request.json().catch((error) => {
-        console.error("pages-route: asynchronous operation failed", error);
-        return undefined;
-      });
-      if (value === undefined) return problem(400, "a snapshot is JSON");
-      await state.writeSnapshot(value);
-      return new Response(null, { status: 204 });
     }
     if (request.method !== "GET")
       return problem(405, `${request.method} has no meaning on a page file`);
@@ -1114,7 +1112,8 @@ export const pagesRoute = (
       const handler = HttpEffect.fromWebHandler(async (request) => {
         const scope = readSessionScope(Object.fromEntries(request.headers));
         const { pointer } = bridge ? await Effect.runPromise(targetHomes(bridge, scope)) : {};
-        const roots = root(pointer), podRoots = pods(pointer);
+        const roots = root(pointer),
+          podRoots = pods(pointer);
         const key = JSON.stringify([roots, podRoots]);
         let pages = handlers.get(key);
         if (!pages) {
@@ -1123,7 +1122,8 @@ export const pagesRoute = (
         }
         served = pages.observeTarget;
         return matchPeRoute(request.method, new URL(request.url).pathname)
-          ? servePeRoute(request, pages) : pages(request);
+          ? servePeRoute(request, pages)
+          : pages(request);
       });
       // One registration claims the bare `/pages` too (a second `add` is refused at boot; see captures).
       yield* router.add("*", "/pages/*", handler);
