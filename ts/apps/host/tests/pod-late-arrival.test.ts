@@ -1,3 +1,7 @@
+import { createHash } from "node:crypto";
+import { Effect, type FileSystem } from "effect";
+import { NodeServices } from "@effect/platform-node";
+import { writeMember, saveMember } from "../src/settings.ts";
 import { createServer } from "node:http";
 import * as filesystem from "node:fs/promises";
 import * as store from "@pe/host-contracts/kinds";
@@ -577,4 +581,66 @@ test("a slow filesystem scan leaves inventory and unrelated HTTP reads available
   }
   expect(await inventory()).toContainEqual(expect.objectContaining({ id: "pod:late" }));
   await expect(requirePackageEnabled("late")).resolves.toBeUndefined();
+});
+
+const settle = <A, E>(effect: Effect.Effect<A, E, FileSystem.FileSystem>) =>
+  Effect.runPromise(effect.pipe(Effect.provide(NodeServices.layer)));
+test("REVIEW: host member write must reconcile before the next inventory", async () => {
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const original = packages.listPackages;
+  vi.spyOn(packages, "listPackages").mockImplementationOnce(async (options) => {
+    const listing = await original(options);
+    entered.resolve();
+    await release.promise;
+    return listing;
+  });
+  // Hold lifecycle publication after discovery; the member door can still validate its census.
+  content.lifecycle.requestRefresh();
+  await entered.promise;
+  let writeReturned = false;
+  const writing = settle(
+    writeMember({ pod: "existing", path: "settings/new.json", content: "{}" }),
+  ).then((result) => {
+    writeReturned = true;
+    return result;
+  });
+  try {
+    await expect
+      .poll(() =>
+        filesystem
+          .readFile(join(root, "user/Pods/existing/settings/new.json"), "utf8")
+          .catch(() => null),
+      )
+      .toBe("{}");
+    // The bytes landed, but success must wait for the held census rather than use discovery.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(writeReturned).toBe(false);
+    release.resolve();
+    await writing;
+    await inventory();
+    expect(
+      content.lifecycle
+        .listing()
+        .packages.find((p) => p.id === "existing")!
+        .members.map((m) => m.path),
+    ).toContain("settings/new.json");
+    await settle(
+      saveMember({
+        pod: "existing",
+        path: "settings/new.json",
+        content: '{"saved":true}',
+        expectedSha256: createHash("sha256").update("{}").digest("hex"),
+      }),
+    );
+    const saved = content.lifecycle
+      .listing()
+      .packages.find((p) => p.id === "existing")!
+      .members.find((m) => m.path === "settings/new.json")!;
+    expect(Buffer.from(saved.bytes).toString()).toBe('{"saved":true}');
+  } finally {
+    release.resolve();
+    await writing;
+    await content.lifecycle.refresh();
+  }
 });
