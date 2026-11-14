@@ -166,7 +166,7 @@ test("the five-second lifecycle discovery bound includes its initial census", as
   }
 });
 
-test("a first Page request can spend 9999 ms in its two discovery waits", async () => {
+test("a first Page request shares one five-second budget across its two discovery waits", async () => {
   const root = await mkdtemp(join(tmpdir(), "pe-first-page-bound-"));
   const home = join(root, "home");
   const pods = join(home, "Pods");
@@ -201,11 +201,10 @@ test("a first Page request can spend 9999 ms in its two discovery waits", async 
     await vi.advanceTimersByTimeAsync(4_999);
     releaseListing.resolve();
     await policyEntered.promise;
-    await vi.advanceTimersByTimeAsync(4_999);
     expect(answered).toBe(false);
     await vi.advanceTimersByTimeAsync(1);
     expect((await opening)?.status).toBe(404);
-    expect(Date.now() - started).toBe(9_999);
+    expect(Date.now() - started).toBe(5_000);
   } finally {
     releaseListing.resolve();
     await lifecycle.close();
