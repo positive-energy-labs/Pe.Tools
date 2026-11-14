@@ -9,8 +9,6 @@ import { resolveHostBaseUrl } from "./host-config.ts";
 /** What a /call response says it actually ran against; headers absent means no Revit session. */
 export type ResolvedTarget = {
   session: string | null;
-  /** The document Address, never an openId. */
-  document: string | null;
   /** Exact open lifetime, distinct from the persisted document Address. */
   openId?: string;
   nativeObservation?: { source: "native"; document: DocumentRef; requestId: string };
@@ -334,7 +332,6 @@ const callHostRpcEffect = Effect.fnUntraced(function* (
 /** Every /call response names the target it ran against; absent headers mean no Revit session. */
 function readResolvedTarget(response: Response): ResolvedTarget | undefined {
   const session = response.headers.get("x-pe-resolved-session");
-  const document = response.headers.get("x-pe-resolved-document");
   const openId = response.headers.get("x-pe-resolved-open-id");
   const requestId = response.headers.get("x-pe-native-request-id");
   let nativeObservation: ResolvedTarget["nativeObservation"];
@@ -347,10 +344,10 @@ function readResolvedTarget(response: Response): ResolvedTarget | undefined {
       // Malformed provenance leaves the read visible but unavailable for native actions.
     }
   }
-  return session || document
+  return session
     ? {
         session,
-        document: document ? decodeURIComponent(document) : null,
+        ...(openId ? { openId: decodeURIComponent(openId) } : {}),
         ...(nativeObservation ? { nativeObservation } : {}),
       }
     : undefined;
@@ -420,10 +417,9 @@ export const runHostRpcEffect = Effect.fnUntraced(function* (
 
 function parseResolvedTarget(value: unknown): ResolvedTarget | undefined {
   if (!value || typeof value !== "object") return undefined;
-  const { session, document } = value as Record<string, unknown>;
-  return (typeof session === "string" || session === null) &&
-    (typeof document === "string" || document === null)
-    ? { session, document }
+  const { session, openId } = value as Record<string, unknown>;
+  return (typeof session === "string" || session === null)
+    ? { session, ...(typeof openId === "string" ? { openId } : {}) }
     : undefined;
 }
 

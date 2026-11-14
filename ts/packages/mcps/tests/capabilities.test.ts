@@ -750,7 +750,7 @@ test("an exact-open turn Target reads and writes route Work under its document's
       result: { revision: number };
     };
     expect(read).toMatchObject({ ok: true, result: { revision: 2 } });
-    expect(read.target).toEqual({ session: "b1", document: projectA });
+    expect(read.target).toEqual({ session: "b1", openId: "project-a" });
     const proposed = (await run(
       peDo,
       {
@@ -904,7 +904,7 @@ test("ADR 0021: a thread with several targets refuses a call with no override; a
     const target = { kind: "open", ref: { session: "b1", openId: "b" } };
     expect(await run(peRead, { ...route, target }, head)).toMatchObject({
       ok: true,
-      target: { session: "b1", document: "C:\\Models\\B.rvt" },
+      target: { session: "b1", openId: "b" },
     });
     expect(
       await run(
@@ -1153,7 +1153,7 @@ test("Pea dispatches roster and sheet through the registered read door without a
     }),
   ).toMatchObject({
     ok: true,
-    target: { session: "s1", document: "open-1" },
+    target: { session: "s1", openId: "open-1" },
     result: { rows: [] },
   });
   const input = {

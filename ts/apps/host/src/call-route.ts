@@ -955,20 +955,16 @@ function recordHostOp(
 }
 
 const RESOLVED_SESSION_HEADER = "x-pe-resolved-session";
-const RESOLVED_DOCUMENT_HEADER = "x-pe-resolved-document";
 
 function resolvedTargetHeaders({
   session,
-  document,
   documentRef,
 }: {
   session: string;
-  document: string | null;
   documentRef?: { session: string; openId: string };
 }): Record<string, string> {
   const headers: Record<string, string> = {};
   headers[RESOLVED_SESSION_HEADER] = session;
-  if (document) headers[RESOLVED_DOCUMENT_HEADER] = encodeURIComponent(document);
   if (documentRef?.session === session && documentRef.openId)
     headers["x-pe-resolved-open-id"] = encodeURIComponent(documentRef.openId);
   return headers;

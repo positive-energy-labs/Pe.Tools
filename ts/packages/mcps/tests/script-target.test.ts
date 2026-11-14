@@ -59,6 +59,7 @@ test.each(["read", "do"])("%s names the non-active lifetime in the request and r
   expect(admitted).toHaveLength(0);
   const exact = await run({ target: { kind: "open", ref } });
   expect(exact).toMatchObject({ ok: true, target: { session: "s", openId: ref.openId } });
+  expect(exact).toHaveProperty("target", { session: "s", openId: ref.openId });
   expect(admitted.at(-1)).toMatchObject({ target: { kind: "document", ref } });
   if (door === "do") expect(await peDo.execute({ key: "page:@demo/pages/compare", input: { event: { type: "note" } }, timeoutSeconds: 30 }, undefined))
     .toMatchObject({ ok: true, target: { session: "s", openId: ref.openId } });
