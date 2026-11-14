@@ -1,6 +1,6 @@
 // Stages the built web SPA into the host payload (contract with the C# installer:
 // static root = <dir of Pe.Host.exe>/web/client). Run via `pnpm --filter @pe/host build:payload`.
-import { cpSync, existsSync, rmSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { splitWebMaps } from "./web-maps.mjs";
@@ -21,15 +21,16 @@ console.log(`staged web SPA -> ${dest}; ${split.length} private maps -> ${maps}`
 // Page assets (pages-route.ts reads them from <dir of Pe.Host.exe>/pages when installed).
 const pages = join(here, "..", "dist-installed", "pages");
 rmSync(pages, { recursive: true, force: true });
-cpSync(join(here, "..", "src", "pages"), pages, { recursive: true });
-cpSync(join(here, "..", "..", "..", "packages", "kit", "src", "base.css"), join(pages, "base.css"));
-const kit = join(here, "..", "..", "..", "packages", "kit", "dist");
-for (const name of ["pe-kit.js", "pe-kit.css"])
-  if (!existsSync(join(kit, name)))
-    throw new Error(`Page kit build not found at ${kit}; build @pe/kit first`);
-cpSync(kit, join(pages, "kit"), { recursive: true });
-for (const name of ["revit.js", "revit.css"])
-  cpSync(join(here, "..", "..", "web", "src", "revit", name), join(pages, name));
+const { createJiti } = await import("jiti");
+const { PAGE_LIBRARY_SOURCES } = await createJiti(import.meta.url).import(
+  "../src/page-libraries.ts",
+);
+for (const [name, source] of Object.entries(PAGE_LIBRARY_SOURCES)) {
+  const from = fileURLToPath(new URL(source, new URL("../src/page-libraries.ts", import.meta.url)));
+  const to = join(pages, name);
+  mkdirSync(dirname(to), { recursive: true });
+  cpSync(from, to);
+}
 console.log(`staged page assets -> ${pages}`);
 
 // Shipped Pods (installed-pods.ts imports <dir of Pe.Host.exe>/pods/*.zip on first run). Each
@@ -37,14 +38,15 @@ console.log(`staged page assets -> ${pages}`);
 // user's own export would carry. An empty capture store: a shipped Pod that names a capture refuses.
 // The exporter's module graph resolves host ownership on load; staging is a build step on the source lane.
 process.env.PE_LANE ??= "dev";
-const { createJiti } = await import("jiti");
 const { exportPod } = await createJiti(import.meta.url).import("../src/pod-transfer.ts");
 const { PictureCaptures } = await createJiti(import.meta.url).import("../src/captures-route.ts");
 const { listPackages } = await createJiti(import.meta.url).import("../src/packages.ts");
+const { stateTree } = await createJiti(import.meta.url).import("@pe/host-contracts/service-identity");
 const examples = join(here, "..", "..", "..", "..", "examples", "pods");
 const shipped = join(here, "..", "dist-installed", "pods");
 rmSync(shipped, { recursive: true, force: true });
-const noCaptures = new PictureCaptures(join(shipped, ".no-captures"), 0, () => 0);
+// PictureCaptures takes a StateDirectory, not a path; this .mjs has no type check to say so (D1).
+const noCaptures = new PictureCaptures(stateTree(join(shipped, ".no-captures")).directory("captures"), 0, () => 0);
 const listing = await listPackages(examples);
 if (listing.unreadable.length) {
   console.error(`unreadable example pods: ${JSON.stringify(listing.unreadable)}`);

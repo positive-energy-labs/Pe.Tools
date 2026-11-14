@@ -1,7 +1,12 @@
 /** The Page projection, with no HTTP: one descriptor per Page the host serves. */
 import { readdir, readFile, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { contributionKey, parseContributionKey } from "@pe/agent-contracts";
+import {
+  contributionKey,
+  parseContributionKey,
+  pageSlugOf,
+  pageOpenUrl,
+} from "@pe/agent-contracts";
 import type { AdmittedPackage } from "./packages.ts";
 import { productPathNames } from "@pe/host-contracts/contracts";
 import { homeDirs } from "@pe/host-contracts/product-paths";
@@ -67,7 +72,8 @@ export function scratchPageKey(
 
 /** One Pages folder, or the product's Pages in every home, in list order (user, project, firm). */
 export type PagesRoots = string | readonly string[];
-export const productPagesRoots = (pointer?: string | null) => homeDirs(productPathNames.pagesDirectoryName, { pointer });
+export const productPagesRoots = (pointer?: string | null) =>
+  homeDirs(productPathNames.pagesDirectoryName, { pointer });
 
 /**
  * Every scratch folder holding an `index.html`, in every home, with its key or why it has none.
@@ -88,12 +94,19 @@ async function scratchPages(pagesRoots: PagesRoots) {
       const directory = join(pagesRoot, folder);
       const facts = await stat(join(directory, "index.html")).catch(() => null);
       if (facts?.isFile())
-        found.push({ directory, folder, modified: facts.mtime, named: scratchPageKey(folder, collisions) });
+        found.push({
+          directory,
+          folder,
+          modified: facts.mtime,
+          named: scratchPageKey(folder, collisions),
+        });
     }
   }
   const bySlug = Map.groupBy(found, (page) => page.folder.toLowerCase());
   return found.map((page) => {
-    const homes = new Set(bySlug.get(page.folder.toLowerCase())!.map((twin) => dirname(twin.directory)));
+    const homes = new Set(
+      bySlug.get(page.folder.toLowerCase())!.map((twin) => dirname(twin.directory)),
+    );
     if (homes.size < 2) return page;
     const twins = bySlug.get(page.folder.toLowerCase())!.map((twin) => twin.directory);
     return {
@@ -110,7 +123,10 @@ async function scratchPages(pagesRoots: PagesRoots) {
  * The folder a scratch slug names, in whichever home holds it; else the user home's (the first
  * root), unwritten yet: a new Page starts in the user home. A slug with no key names no folder.
  */
-export async function scratchPageDirectory(slug: string, pagesRoots: PagesRoots = productPagesRoots()) {
+export async function scratchPageDirectory(
+  slug: string,
+  pagesRoots: PagesRoots = productPagesRoots(),
+) {
   const roots = [pagesRoots].flat();
   const named = (await scratchPages(roots)).filter(
     (page) => page.folder.toLowerCase() === slug.toLowerCase(),
@@ -134,7 +150,7 @@ export async function scratchPageDescriptors(
     pages.push({
       ...named,
       slug: folder,
-      openUrl: named.key ? `/pages/${folder}/` : null,
+      openUrl: named.key ? pageOpenUrl(named.key) : null,
       title: titleOf(bytes.toString("utf8"), folder),
       pod: null,
       entry: { path: "index.html", sha256: sha(bytes), bytes },
@@ -161,13 +177,14 @@ export function packagePageDescriptors(packages: readonly AdmittedPackage[]): Pa
       pod.contributions.flatMap((row) => {
         const member = pod.members.find((one) => one.path === row.memberPath);
         if (row.kind !== "page" || !member) return [];
-        const slug = `${pod.id}--${row.path.slice("pages/".length)}`;
+        const slug = pageSlugOf(row.key);
+        if (!slug) throw Error(`Invalid Page key '${row.key}'`);
         return [
           {
             key: row.key,
             reason: null,
             slug,
-            openUrl: `/pages/${slug}/`,
+            openUrl: pageOpenUrl(row.key),
             title: titleOf(Buffer.from(member.bytes).toString("utf8"), slug),
             pod: pod.id,
             entry: { path: member.path, sha256: member.sha256, bytes: member.bytes },
@@ -179,3 +196,13 @@ export function packagePageDescriptors(packages: readonly AdmittedPackage[]): Pa
     )
     .sort((a, b) => a.key.localeCompare(b.key));
 }
+/** One source map for host serving and payload staging, relative to this module. */
+export const PAGE_LIBRARY_SOURCES = {
+  "pe.js": "./pages/pe.js",
+  "pe.css": "./pages/pe.css",
+  "base.css": "../../../packages/kit/src/base.css",
+  "revit.js": "../../web/src/revit/revit.js",
+  "revit.css": "../../web/src/revit/revit.css",
+  "kit/pe-kit.js": "../../../packages/kit/dist/pe-kit.js",
+  "kit/pe-kit.css": "../../../packages/kit/dist/pe-kit.css",
+} as const;

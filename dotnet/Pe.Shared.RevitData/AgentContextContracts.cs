@@ -406,6 +406,10 @@ public record RevitViewImageData(
     /// </summary>
     public string? ImageUrl => this.Registration is null ? null : $"/captures/{this.Registration.ImageSha256}.png";
 
+    /// <summary>Focus elements' bounding boxes in delivered pixels (origin top-left, Y down).
+    ///     Clipped to the image; missing geometry and boxes outside the crop are omitted. Bounds do not certify visibility.</summary>
+    public IReadOnlyList<RevitViewImageMark> Marks { get; init; } = [];
+
     /// <summary>Below this long side a capture is a thumbnail: say so rather than hand it over as a success.</summary>
     public const int SmallLongSide = 400;
 
@@ -448,6 +452,9 @@ public enum RevitViewImageRegistrationRefusal {
 
 /// <summary>A pixel rectangle of an exported image; <see cref="Left" />/<see cref="Top" /> from the image's top-left.</summary>
 public sealed record RevitViewImagePixelRect(int Left, int Top, int Width, int Height);
+
+/// <summary>An element's projected bounding box in the delivered PNG, in pixels from the top-left.</summary>
+public sealed record RevitViewImageMark(long ElementId, int Left, int Top, int Width, int Height);
 
 /// <summary>
 ///     Where the PNG sits in the model: model XY (feet) of the image's top-left, top-right and bottom-left pixel

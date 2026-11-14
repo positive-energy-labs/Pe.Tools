@@ -24,6 +24,8 @@ import { installArchive, writeZip, exportPod } from "../src/pod-transfer.ts";
 import * as store from "@pe/host-contracts/kinds";
 import { RouteWorkspace } from "@pe/runtime";
 import { peRouteUrl } from "@pe/agent-contracts/pe-api";
+import { createPagesHandler } from "../src/pages-route.ts";
+import { setTimeout as realSetTimeout, clearTimeout as realClearTimeout } from "node:timers";
 
 test("a healthy local read completing after 1200 ms is not refused", async () => {
   await putRoute(join(root, "user"));
@@ -608,6 +610,118 @@ afterEach(async () => {
   vi.unstubAllEnvs();
   await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
 });
+test("an unknown Pod waits at most five seconds for a stalled refresh", async () => {
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  let calls = 0;
+  const lifecycle = createPackageLifecycle({
+    machine: stateMachine(root),
+    packages: async () => {
+      if (++calls > 1) {
+        entered.resolve();
+        await release.promise;
+      }
+      return { packages: [], unreadable: [] };
+    },
+  });
+  await lifecycle.ready;
+  bindPackageLifecycle(lifecycle);
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    const refusal = expect(requirePackageEnabled("missing")).rejects.toThrow("inactive");
+    await entered.promise;
+    await vi.advanceTimersByTimeAsync(5000);
+    await refusal;
+    expect(calls).toBe(2);
+  } finally {
+    release.resolve();
+    vi.useRealTimers();
+    await lifecycle.close();
+    bindPackageLifecycle(content.lifecycle);
+  }
+});
+
+test("a known Page answers while an unrelated late Pod waits for discovery", async () => {
+  await put(join(root, "user"), "existing/pages/tour/index.html", "<title>Existing tour</title>");
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  let calls = 0;
+  const lifecycle = createPackageLifecycle({
+    machine: stateMachine(root),
+    packages: async () => {
+      const listing = await packages.listPackages(join(root, "user/Pods"));
+      if (++calls > 1) {
+        entered.resolve();
+        await release.promise;
+      }
+      return listing;
+    },
+  });
+  await lifecycle.ready;
+  bindPackageLifecycle(lifecycle);
+  const scan = lifecycle.requestRefresh();
+  await entered.promise;
+  await put(join(root, "user"), "late/pod.json", '{"id":"late"}');
+  const handle = createPagesHandler(join(root, "user/Pages"), packages.productPodsRoots(),
+    undefined, undefined, stateFixture(join(root, "page-state")));
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  let timer: ReturnType<typeof realSetTimeout> | undefined;
+  const opening = handle(new Request("http://host/pages/existing--tour/"));
+  try {
+    const response = await Promise.race([
+      opening,
+      new Promise<never>((_, reject) => {
+        timer = realSetTimeout(() => reject(Error("Known Page waited for unrelated discovery")), 1000);
+      }),
+    ]);
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain("Existing tour");
+    expect(lifecycle.active("late")).toBe(false);
+  } finally {
+    realClearTimeout(timer);
+    release.resolve();
+    vi.useRealTimers();
+    await scan;
+    await opening;
+    await lifecycle.close();
+    bindPackageLifecycle(content.lifecycle);
+  }
+});
+
+test("a missed door queues fresh discovery behind a scan captured before arrival", async () => {
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  let calls = 0;
+  const lifecycle = createPackageLifecycle({
+    machine: stateMachine(root),
+    packages: async () => {
+      ++calls;
+      if (calls === 2) {
+        entered.resolve();
+        await release.promise;
+      }
+      if (calls <= 2) return { packages: [], unreadable: [] };
+      return packages.listPackages(join(root, "user/Pods"));
+    },
+  });
+  await lifecycle.ready;
+  bindPackageLifecycle(lifecycle);
+  try {
+    lifecycle.requestRefresh();
+    await entered.promise;
+    await put(join(root, "user"), "late/pod.json", '{"id":"late"}');
+    const opening = requirePackageEnabled("late");
+    await new Promise((resolve) => setImmediate(resolve));
+    release.resolve();
+    await expect(opening).resolves.toBeUndefined();
+    expect(calls).toBe(3);
+  } finally {
+    release.resolve();
+    await lifecycle.close();
+    bindPackageLifecycle(content.lifecycle);
+  }
+});
+
 test("unchanged refreshes reuse the full listing", async () => {
   const list = vi.spyOn(packages, "listPackages");
   await content.lifecycle.refresh();
@@ -718,7 +832,16 @@ test("a slow filesystem scan leaves inventory, routes and unrelated HTTP reads a
     expect(result[1]).toEqual(result[0]);
     expect(result[3]).toEqual({ status: "ok" });
     expect(scan).toHaveBeenCalledTimes(1);
-    await expect(requirePackageEnabled("late")).rejects.toThrow("inactive");
+    await expect(requirePackageEnabled("existing")).resolves.toBeUndefined();
+    let answered = false;
+    const opening = requirePackageEnabled("late").then(() => {
+      answered = true;
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(answered).toBe(false);
+    expect(scan).toHaveBeenCalledTimes(1);
+    release.resolve();
+    await expect(opening).resolves.toBeUndefined();
   } finally {
     release.resolve();
     await content.lifecycle.refresh();
@@ -747,16 +870,25 @@ for (const tier of ["user", "firm"] as const) {
   });
   test(`${tier}: direct Pod door discovers and admits late arrival`, async () => {
     await arrive();
-    await expect
-      .poll(async () => {
-        try {
-          await requirePackageEnabled("late");
-          return true;
-        } catch {
-          return false;
-        }
-      })
-      .toBe(true);
+    await expect(requirePackageEnabled("late")).resolves.toBeUndefined();
+  });
+  test(`${tier}: first Page request admits a late Pod without reload`, async () => {
+    await arrive();
+    await put(
+      tier === "firm" ? firm : join(root, "user"),
+      "late/pages/tour/index.html",
+      "<title>Late tour</title>",
+    );
+    const handle = createPagesHandler(
+      join(root, "user/Pages"),
+      packages.productPodsRoots(),
+      undefined,
+      undefined,
+      stateFixture(join(root, "page-state")),
+    );
+    const response = await handle(new Request("http://host/pages/late--tour/"));
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain("Late tour");
   });
   test(`${tier}: route inventory discovers an untrusted late route`, async () => {
     await arrive();

@@ -56,6 +56,12 @@ export const sameCaller = (a: Caller | null | undefined, b: Caller | null | unde
 /** Why a crossing was admitted; stored on the receipt and rechecked at every step begin (D4). */
 export const basisSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("human") }),
+  z.strictObject({
+    kind: z.literal("person-pin"),
+    page: pageKeySchema,
+    boundBy: z.literal("human"),
+    lifetime: documentRefSchema,
+  }),
   /** Document scope is rechecked at step begin; release must survive its own close. */
   z.strictObject({
     kind: z.literal("acquisition"),
@@ -106,6 +112,7 @@ export const refusalCodes = [
   "page.unbound",
   "page.binding-not-yours",
   "page.use-page-door",
+  "wrong-model",
 ] as const;
 export type RefusalCode = (typeof refusalCodes)[number];
 /** Request admission refuses before any door runs, with one of these or a `RefusalCode`. */
@@ -146,8 +153,8 @@ export type PageChoice = z.infer<typeof pageChoiceSchema>;
  * A Page's binding record, host-written to `binding.json` in the Page's machine-state folder
  * (never in the Page's own folder: a binding names a thread, and a home holds no ids). Named slots let a
  * cross-document report bind several documents later; wave 1 builds and renders `default` only.
- * `boundBy` names who set each slot: a human's bind is their consent to the Page's ReadOnly
- * scripts on that document. A slot with no entry was not bound by a human.
+ * `boundBy` names who set each slot: a human's pin consents to the Page's writes on that
+ * document (ADR 0043). A slot with no entry was not bound by a human.
  */
 export const pageBindingSchema = z.strictObject({
   slots: z.object({ default: pageChoiceSchema }).catchall(pageChoiceSchema),
@@ -158,6 +165,7 @@ export const unboundPage: PageBinding = { slots: { default: { kind: "none" } }, 
 
 /** What a write from a Page's slot would do now, decided as its act door decides. */
 export type PageWrite =
+  | { kind: "human" }
   | { kind: "pea" }
   | { kind: "thread"; thread: string }
   | { kind: "read"; refusal: Refusal };
@@ -165,12 +173,13 @@ export type PageWrite =
 export const pageTargetReadingSchema = z.object({
   page: z.string(), slot: z.literal("default"), binding: pageChoiceSchema,
   resolution: z.discriminatedUnion("kind", [
+    z.object({ kind: z.literal("refused"), reason: z.literal("wrong-model"), message: z.string() }),
     z.object({ kind: z.literal("resolved"), target: executionTargetSchema }),
     z.object({ kind: z.literal("checking") }), z.object({ kind: z.literal("failed"), message: z.string() }),
     z.object({ kind: z.literal("choose"), reason: z.enum(["missing", "several-targets", "session-gone", "document-closed", "wrong-document-kind", "ambiguous"]) }),
   ]),
   document: z.object({ session: z.string(), openId: z.string(), title: z.string() }).nullable(),
-  write: z.discriminatedUnion("kind", [z.object({ kind: z.literal("pea") }), z.object({ kind: z.literal("thread"), thread: z.string() }), z.object({ kind: z.literal("read"), refusal: refusalSchema })]).nullable(),
+  write: z.discriminatedUnion("kind", [z.object({ kind: z.literal("human") }), z.object({ kind: z.literal("pea") }), z.object({ kind: z.literal("thread"), thread: z.string() }), z.object({ kind: z.literal("read"), refusal: refusalSchema })]).nullable(),
 });
 export type PageTargetReading = z.output<typeof pageTargetReadingSchema>;
 

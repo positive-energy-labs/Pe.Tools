@@ -526,7 +526,8 @@ export function admitCrossing(
       destination.kind === "document" &&
       admitted.readConsent !== null &&
       sameRef(admitted.readConsent, destination.ref);
-    return admitPage(admitted.slot, destination, admitted.door, reads);
+    return admitPage(admitted.slot, destination, admitted.door, reads,
+      admitted.readConsent ? { page: caller.page, target: admitted.readConsent } : undefined);
   }
   if (caller.kind === "human") return { kind: "human" };
   if (caller.kind === "external-mcp" && caller.device) {
@@ -588,7 +589,8 @@ function admitTarget(
 
 /**
  * A Page writes as itself under its slot: a thread slot on the documents a human added to that
- * thread, a pinned slot on Pea's documents only, no slot never. `door` is the page's own
+ * thread, a person's pin on its exact resolved lifetime (ADR 0043), an agent pin on acquired
+ * documents only, no slot never. `door` is the page's own
  * `/pages/<slug>/act`. The access switch is Pea's, not a Page's.
  */
 export function admitPage(
@@ -596,6 +598,7 @@ export function admitPage(
   destination: ExecutionTarget,
   door: string,
   reads = false,
+  pin?: { page: string; target: DocumentRef },
 ): Basis | null {
   if (slot.kind === "none")
     throw refuse(
@@ -604,7 +607,10 @@ export function admitPage(
       `Refused at ${door}: this Page has no target. Bind it to a thread or pin a document from the chip.`,
     );
   if (reads || destination.kind === "host" || destination.kind === "sdk-session") return null;
-  const acquired = acquisitionBasis(destination);
+  // ADR 0043 supersedes 0017 rule 8 only for a person's pin, never for another lifetime.
+  if (slot.kind === "pinned" && pin && destination.kind === "document" && sameRef(pin.target, destination.ref))
+    return { kind: "person-pin", page: pin.page, boundBy: "human", lifetime: destination.ref };
+  const acquired = pin ? null : acquisitionBasis(destination);
   if (acquired) return acquired;
   const session = destination.kind === "session" ? destination.session : destination.ref.session;
   if (slot.kind === "pinned")

@@ -15,7 +15,12 @@ public sealed record PodManifest(
     string Version,
     string? Description,
     IReadOnlyList<PodEntrypoint> Entrypoints
-);
+) {
+    public PodModel? For { get; init; }
+}
+
+public sealed record PodModel(string Title, IReadOnlyList<PodModelProbe> Probes);
+public sealed record PodModelProbe(long ElementId, string UniqueId);
 
 public sealed record PodEntrypoint(
     string SourcePath,
@@ -43,6 +48,7 @@ public static class PodManifestValidator {
         "version",
         "description",
         "entrypoints",
+        "for",
         // The host owns route admission; native scripting consumes only entrypoints from the same manifest.
         "routes"
     };
@@ -102,6 +108,7 @@ public static class PodManifestValidator {
         var version = ReadRequiredString(root, "version", diagnostics);
         var description = ReadOptionalString(root, "description", diagnostics);
         var entrypoints = ReadEntrypoints(root, diagnostics);
+        var model = ReadModel(root, diagnostics);
 
         if (diagnostics.Any(diagnostic => diagnostic.Severity == ScriptDiagnosticSeverity.Error))
             return new PodManifestValidationResult(null, diagnostics);
@@ -114,7 +121,7 @@ public static class PodManifestValidator {
                 version!,
                 description,
                 entrypoints
-            ),
+            ) { For = model },
             diagnostics
         );
     }
@@ -124,6 +131,36 @@ public static class PodManifestValidator {
             if (!knownFields.Contains(property.Name))
                 diagnostics.Add(ScriptDiagnosticFactory.Error(DiagnosticStage, $"Unknown field '{property.Name}' in {owner}."));
         }
+    }
+
+    private static PodModel? ReadModel(JObject root, List<ScriptDiagnostic> diagnostics) {
+        if (root["for"] is null) return null;
+        if (root["for"] is not JObject model) {
+            diagnostics.Add(ScriptDiagnosticFactory.Error(DiagnosticStage, "pod.json field 'for' must be an object."));
+            return null;
+        }
+        AddUnknownFieldDiagnostics(model, new(StringComparer.Ordinal) { "title", "probes" }, diagnostics, "for");
+        var title = ReadRequiredString(model, "title", diagnostics);
+        if (model["probes"] is not JArray { Count: > 0 } probes) {
+            diagnostics.Add(ScriptDiagnosticFactory.Error(DiagnosticStage, "pod.json for.probes must be a non-empty array."));
+            return null;
+        }
+        var result = new List<PodModelProbe>();
+        foreach (var token in probes) {
+            if (token is not JObject probe) {
+                diagnostics.Add(ScriptDiagnosticFactory.Error(DiagnosticStage, "pod.json for.probes entries must be objects."));
+                continue;
+            }
+            AddUnknownFieldDiagnostics(probe, new(StringComparer.Ordinal) { "elementId", "uniqueId" }, diagnostics, "for.probes");
+            var uniqueId = ReadRequiredString(probe, "uniqueId", diagnostics);
+            if (probe["elementId"] is not { Type: JTokenType.Integer } id ||
+                !long.TryParse(id.ToString(), out var elementId) || elementId <= 0 || elementId > 9007199254740991L) {
+                diagnostics.Add(ScriptDiagnosticFactory.Error(DiagnosticStage, "pod.json for.probes elementId must be a positive safe integer."));
+                continue;
+            }
+            if (uniqueId is not null) result.Add(new(elementId, uniqueId));
+        }
+        return title is null ? null : new(title, result);
     }
 
     private static int? ReadRequiredInteger(JObject root, string fieldName, List<ScriptDiagnostic> diagnostics) {

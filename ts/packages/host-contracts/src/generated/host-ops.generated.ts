@@ -6190,6 +6190,11 @@ export namespace RevitContextViewImage {
        *
        */
       imageUrl?: null | string;
+      /**
+       * Focus elements' bounding boxes in delivered pixels (origin top-left, Y down).
+       *                 Clipped to the image; missing geometry and boxes outside the crop are omitted. Bounds do not certify visibility.
+       */
+      marks: RevitViewImageMark[];
     }
     export interface RevitAgentContextHandle {
       kind: RevitAgentContextHandleKind;
@@ -6247,6 +6252,16 @@ export namespace RevitContextViewImage {
     export interface RevitViewImageRestore {
       held: boolean;
       left: string[];
+    }
+    /**
+     * An element's projected bounding box in the delivered PNG, in pixels from the top-left.
+     */
+    export interface RevitViewImageMark {
+      elementId: number;
+      left: number;
+      top: number;
+      width: number;
+      height: number;
     }
   }
 }
@@ -6344,6 +6359,11 @@ export namespace RevitContextViewImageFocus {
        *
        */
       imageUrl?: null | string;
+      /**
+       * Focus elements' bounding boxes in delivered pixels (origin top-left, Y down).
+       *                 Clipped to the image; missing geometry and boxes outside the crop are omitted. Bounds do not certify visibility.
+       */
+      marks: RevitViewImageMark[];
     }
     export interface RevitAgentContextHandle {
       kind: RevitAgentContextHandleKind;
@@ -6401,6 +6421,16 @@ export namespace RevitContextViewImageFocus {
     export interface RevitViewImageRestore {
       held: boolean;
       left: string[];
+    }
+    /**
+     * An element's projected bounding box in the delivered PNG, in pixels from the top-left.
+     */
+    export interface RevitViewImageMark {
+      elementId: number;
+      left: number;
+      top: number;
+      width: number;
+      height: number;
     }
   }
 }

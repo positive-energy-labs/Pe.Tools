@@ -22,6 +22,7 @@ import { productPathNames } from "@pe/host-contracts/contracts";
 import { homeDirs, homes, projectHome } from "@pe/host-contracts/product-paths";
 import { verifyPodArtifact } from "./pod-artifact.ts";
 import { shippedPodUpdateRefusals } from "./shipped-pod-status.ts";
+import { podModelSchema, type PodModel } from "./pod-model.ts";
 
 export type PackageEntrypoint = {
   sourcePath: string;
@@ -46,6 +47,7 @@ export type PackageContribution = {
   mode?: ScriptMode;
 };
 export type AdmittedPackage = {
+  for?: PodModel;
   id: string;
   name: string;
   version: string;
@@ -384,6 +386,7 @@ async function readFolder(directory: string, folder: string): Promise<AdmittedPa
   const updateRefusal = shippedPodUpdateRefusals.get(value.id);
   if (updateRefusal) diagnostics.push(problem("ShippedExampleUpdateKept", "pod.json", updateRefusal));
   const entrypoints: PackageEntrypoint[] = [];
+  const model = value.for === undefined ? undefined : podModelSchema.parse(value.for);
   for (const entry of Array.isArray(value.entrypoints) ? value.entrypoints : []) {
     try {
       if (
@@ -474,6 +477,7 @@ async function readFolder(directory: string, folder: string): Promise<AdmittedPa
   });
   return {
     id: value.id,
+    for: model,
     name: typeof value.name === "string" ? value.name : value.id,
     version: typeof value.version === "string" ? value.version : "",
     folder,

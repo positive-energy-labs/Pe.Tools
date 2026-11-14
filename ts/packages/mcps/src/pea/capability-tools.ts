@@ -663,7 +663,14 @@ async function executeTool(
         ? "grant.context-cannot-hold: external MCP cannot run this capability until human pairing exists, including ReadOnly scripts."
         : `'${row.key}' is human-only. Ask the user to press it in the ${row.title.split(":")[0]} workspace.`,
     );
-  if (row.kind === "page" && !replayOperations && input.input)
+  if (
+    row.kind === "page" &&
+    !replayOperations &&
+    input.input &&
+    !z
+      .strictObject({ after: z.number().int().nonnegative().optional() })
+      .safeParse(coerceJsonObject(input.input)).success
+  )
     return refuse(
       row.key,
       defaultTarget,
@@ -782,15 +789,18 @@ async function dispatch(
         result: await response.json(),
       });
       // pe_do is the Page shelf's event/binding door; these cross their original host checks.
-      if (!input.input) {
+      if (!Object.hasOwn(payload, "event") && !Object.hasOwn(payload, "binding")) {
+        const cursor = z
+          .strictObject({ after: z.number().int().nonnegative().optional() })
+          .parse(payload);
         const [state, target] = await Promise.all([
-          client.response("page.state", { params }).then(read),
+          client.response("page.state", { params, query: cursor }).then(read),
           client.response("page.target", { params }).then(read),
         ]);
         return {
           ok: state.ok && target.ok,
           target: scopeTarget,
-          result: { state: state.result, target: target.result },
+          result: { ...state.result, target: target.result },
         };
       }
       const action = z

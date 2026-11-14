@@ -198,7 +198,7 @@ test("Page shelf follows its projected URL and never borrows the Page action doo
   });
   expect(
     await peRead.execute({ key: pod.contributions[1]!.key, timeoutSeconds: 30 }, undefined),
-  ).toMatchObject({ ok: true, result: { state: { text: "Page text" } } });
+  ).toMatchObject({ ok: true, result: { text: "Page text" } });
   await peDo.execute(
     { key: pod.contributions[1]!.key, input: { event: { text: "note" } }, timeoutSeconds: 30 },
     undefined,
