@@ -1,7 +1,7 @@
 /** Pure stored-value contracts and content identity; I/O stays in store.ts. */
 import { createHash } from "node:crypto";
 import { z } from "zod";
-import type { At, StoredFile, Stored } from "./kinds.ts";
+import type { At, StoredFile, Stored, DerivedDir } from "./kinds.ts";
 import type { HomePath, StatePath } from "./store-paths.ts";
 
 export const sha256Hex = (bytes: Uint8Array | string) =>
@@ -56,6 +56,13 @@ export type DerivedStore<P extends HomePath | StatePath> = {
   notices: StatePath;
   blobRoot: StatePath;
 };
+
+export const derivedStoreOf = <P extends HomePath | StatePath>(dir: DerivedDir<P>): DerivedStore<P> => ({
+  dir: dir.path,
+  path: dir.file,
+  notices: dir.machine.notices,
+  blobRoot: dir.machine.blobs,
+});
 
 export function policyOf(
   file: StoredFile<unknown, "state">,

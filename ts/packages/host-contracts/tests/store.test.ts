@@ -1,5 +1,4 @@
 import {
-  appendFileSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -40,7 +39,6 @@ vi.mock("node:fs", async (original) => {
     readFileSync: vi.fn(fs.readFileSync),
     renameSync: vi.fn(fs.renameSync),
     writeFileSync: vi.fn(fs.writeFileSync),
-    appendFileSync: vi.fn(fs.appendFileSync),
   };
 });
   const schema = z.strictObject({ name: z.string() });
@@ -316,15 +314,18 @@ test("a locked file also blocks replacement until its original bytes can rest", 
 test("an unavailable notice writer never stops a verified set-aside", () => {
   const file = value();
   seed(file, "{ torn");
-  vi.mocked(appendFileSync).mockImplementationOnce(() => {
-    throw Error("notice unavailable");
+  const actual = vi.mocked(writeFileSync).getMockImplementation()!;
+  vi.mocked(writeFileSync).mockImplementation((...args) => {
+    if (typeof args[1] === "string" && args[1].includes('"place":')) throw Error("notice unavailable");
+    return actual(...args);
   });
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-  expect(read(file)).toMatchObject({ kind: "set-aside" });
-  expect(existsSync(file.path)).toBe(false);
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  try {
+    expect(read(file)).toMatchObject({ kind: "set-aside" });
+    expect(existsSync(file.path)).toBe(false);
     expect(readFileSync(blob("{ torn"), "utf8")).toBe("{ torn");
-  expect(warn).toHaveBeenCalledOnce();
-  warn.mockRestore();
+    expect(warn).toHaveBeenCalledOnce();
+  } finally { vi.mocked(writeFileSync).mockImplementation(actual); warn.mockRestore(); }
 });
 test("an owner sets aside exactly one file with one notice, and siblings stay identical", () => {
   const file = value();

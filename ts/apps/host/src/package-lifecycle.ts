@@ -1,5 +1,6 @@
 import { stateSegments } from "@pe/host-contracts/service-identity";
 import { createHash } from "node:crypto";
+import { acquireContentRoots, contentRootsReady } from "./content-roots.ts";
 import { createPluginRuntime } from "@pe/agent-contracts";
 import { z } from "zod";
 import {
@@ -71,6 +72,7 @@ const readDecisions = async (file: DecisionsFile) => {
  * document, so these are outside it: only a person's off choice gates one.
  */
 export const projectPodIds = async (pointer: string | null | undefined) => {
+  await contentRootsReady(pointer);
   const root = projectPodsRoot(pointer);
   return root ? (await listPackages({ podsRoots: root })).packages.map((pod) => pod.id) : [];
 };
@@ -127,6 +129,7 @@ export function createPackageLifecycle(
     changed?: () => void;
   } = {},
 ) {
+  const rootsOwner = options.packages ? undefined : acquireContentRoots();
   let inFlight: Promise<Awaited<ReturnType<typeof listPackages>>> | undefined;
   let closed = false;
   const decisionsFile = decisionsKind.in(options.machine ?? hostState());
@@ -158,6 +161,7 @@ export function createPackageLifecycle(
   });
   let settled: Promise<unknown> = ready;
   async function initialize() {
+    await rootsOwner?.ready;
     decisions = await readDecisions(decisionsFile);
     if (closed) return;
     await runtime.install(
@@ -175,7 +179,7 @@ export function createPackageLifecycle(
   }
   async function synchronize() {
     if (closed) return initialListing;
-    // Re-resolve on a scan: a home mounting after startup must join the next census.
+    // Roots are refreshed by the shared async owner, never by a request or scan.
     const roots = options.packages ? [] : productPodsRoots();
     const signatureStartedAt = Date.now();
     // Lifecycle owns publication after a slow scan; Page requests bound their own wait for it.
@@ -287,6 +291,7 @@ export function createPackageLifecycle(
     skills: () => runtime.contributions().flatMap((c) => (c.kind === "skill" ? [c.skill] : [])),
     close: async () => {
       closed = true;
+      rootsOwner?.close();
       // The detached initial read may fail after its home has been released.
       void ready.catch(() => {});
       // Scans own only reads. A stalled filesystem must not hold shutdown; synchronize refuses

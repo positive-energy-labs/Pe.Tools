@@ -11,7 +11,9 @@
  * `04 PE Software Files\Pe.Tools`. Pods, Pages and Catalogs read all three; an id is unique across
  * them, and a write lands in the home the thing came from. A machine with no firm home runs.
  */
-import { execFileSync } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
+import { access, readFile, readdir, realpath } from "node:fs/promises";
+import { promisify } from "node:util";
 import { existsSync, readFileSync, readdirSync, realpathSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join, relative, resolve, isAbsolute } from "node:path";
@@ -206,12 +208,25 @@ export function sharedDriveRoot(facts?: HomeFacts): string | null {
  * but a forward-slash relative path that stays inside the shared drive root is unbound, never a throw.
  */
 export function projectHome(pointer: string | null | undefined, facts?: HomeFacts): string | null {
-  const base = sharedDriveRoot(facts);
+  const root = projectCandidate(pointer, firmHome(facts).root);
+  return root && markerTier((facts ?? machineFacts([])).marker(insideTestRoot(root))) === "project" ? root : null;
+}
+
+function projectCandidate(pointer: string | null | undefined, firm: string | null): string | null {
+  const parent = firm && dirname(firm);
+  const base = parent && dirname(parent) !== parent ? dirname(parent) : null;
   const segments = pointer?.split("/") ?? [];
   if (!base || !pointer || /[\\:]/.test(pointer)) return null;
   if (segments.some((segment) => !segment.trim() || segment === "." || segment === "..")) return null;
-  const root = insideTestRoot(join(base, ...segments, productIdentity.productName));
-  return markerTier((facts ?? machineFacts([])).marker(root)) === "project" ? root : null;
+  return join(base, ...segments, productIdentity.productName);
+}
+
+/** Cold document binding uses the already resolved firm home; it never probes drives. */
+export async function resolveProjectHome(pointer: string, firm: string | null): Promise<string | null> {
+  const root = projectCandidate(pointer, firm);
+  if (!root) return null;
+  const text = await readFile(join(root, productPathNames.homeMarkerFileName), "utf8").catch(() => null);
+  return markerTier(text) === "project" ? root : null;
 }
 
 /**
@@ -281,6 +296,64 @@ export const homeLogLines = (found = homesFound()): string[] => [
 /** One content folder (`Pods`, `Pages`, `Catalogs`) in every home, in list order. */
 export const homeDirs = (name: string, input?: HomesInput): string[] =>
   homes(input).map((home) => join(home.root, name));
+
+/** Async machine read for long-lived owners. Never probes the network on a request's stack. */
+export async function resolveHomes(pointers: readonly string[] = []): Promise<Map<string, Home[]>> {
+  const check = async (path: string) => {
+    if (process.env[testHomeRootVariable]) {
+      const temp = await realpath(tmpdir());
+      if (![tmpdir(), temp].some(root => {
+        const away = relative(resolve(root), resolve(path));
+        return !away.startsWith("..") && !isAbsolute(away);
+      })) throw Error(`Test isolation: '${path}' is outside the temp directory.`);
+    }
+    return path;
+  };
+  const marker = async (root: string) => readFile(join(await check(root), productPathNames.homeMarkerFileName), "utf8").catch(() => null);
+  const override = process.env[productPathNames.productHomeVariable]?.trim();
+  if (!override && !cached) {
+    cached = process.platform === "win32"
+      ? parseDocumentsKnownFolder((await promisify(execFile)("reg.exe", ["query", userShellFolders, "/v", "Personal"], { encoding: "utf8", windowsHide: true })).stdout, process.env)
+      : join(homedir(), "Documents");
+  }
+  const userPath = override ? resolve(override) : cached && join(cached, productIdentity.productName);
+  if (!userPath) throw Error("Documents known folder unreadable");
+  const user = await check(userPath);
+  const told = process.env[productPathNames.sharedRootVariable]?.trim();
+  let firm: string | null = null;
+  if (told) {
+    const root = await check(resolve(told));
+    if (markerTier(await marker(root)) === "firm") firm = root;
+  } else {
+    const drives = process.platform !== "win32" || process.env[testHomeRootVariable] ? [] :
+      (await Promise.all([..."CDEFGHIJKLMNOPQRSTUVWXYZ"].map(async letter => {
+        const root = `${letter}:\\`;
+        return await access(root).then(() => root, () => null);
+      }))).filter((root): root is string => root !== null);
+    const lists = new Map<string, string[]>(), markers = new Map<string, string | null>();
+    await Promise.all(drives.map(async drive => {
+      const shared = join(drive, productPathNames.sharedDrivesDirectoryName);
+      const names = await readdir(shared).catch(() => []);
+      lists.set(shared, names);
+      await Promise.all([drive, ...names.map(name => join(shared, name))].map(async base => {
+        const root = join(base, ...firmHomeSegments);
+        markers.set(root, await marker(root));
+      }));
+    }));
+    firm = probeFirmHome({ drives, list: root => lists.get(root) ?? [], marker: root => markers.get(root) ?? null }).root;
+  }
+  const result = new Map<string, Home[]>();
+  await Promise.all(["", ...pointers].map(async pointer => {
+    const candidate = projectCandidate(pointer, firm);
+    const project = candidate && markerTier(await marker(candidate)) === "project" ? candidate : null;
+    result.set(pointer, [
+      { tier: "user", root: user },
+      ...(project ? [{ tier: "project" as const, root: project }] : []),
+      ...(firm ? [{ tier: "firm" as const, root: firm }] : []),
+    ]);
+  }));
+  return result;
+}
 
 /** The firm home's tiered values, `<firm>\Settings`; null without a firm home. */
 export function firmSettingsDir(facts?: HomeFacts): string | null {

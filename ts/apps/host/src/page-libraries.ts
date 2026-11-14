@@ -9,7 +9,7 @@ import {
 } from "@pe/agent-contracts";
 import type { AdmittedPackage } from "./packages.ts";
 import { productPathNames } from "@pe/host-contracts/contracts";
-import { homeDirs } from "@pe/host-contracts/product-paths";
+import { contentHomes } from "./content-roots.ts";
 import { sha256Hex as sha } from "./page-artifacts.ts";
 
 /** One Page the host serves, as anything that lists, ranks or opens Pages reads it. */
@@ -73,7 +73,7 @@ export function scratchPageKey(
 /** One Pages folder, or the product's Pages in every home, in list order (user, project, firm). */
 export type PagesRoots = string | readonly string[];
 export const productPagesRoots = (pointer?: string | null) =>
-  homeDirs(productPathNames.pagesDirectoryName, { pointer });
+  contentHomes(pointer).map(home => join(home.root, productPathNames.pagesDirectoryName));
 
 /**
  * Every scratch folder holding an `index.html`, in every home, with its key or why it has none.
