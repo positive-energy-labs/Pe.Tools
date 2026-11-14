@@ -14,7 +14,9 @@ public sealed class RevitScriptContext(
     ScriptArtifactWriter artifacts,
     CancellationToken cancellationToken = default,
     Action<string>? outputWriter = null,
-    Action<string>? notificationSink = null
+    Action<string>? notificationSink = null,
+    JObject? input = null,
+    string? podFolder = null
 ) {
     private const int MaxResultCharacters = 1024 * 1024;
 
@@ -29,6 +31,43 @@ public sealed class RevitScriptContext(
     public string RevitVersion { get; } = revitVersion;
     public ScriptArtifactWriter Artifacts { get; } = artifacts;
     public CancellationToken CancellationToken { get; } = cancellationToken;
+
+    /// <summary>The caller's arguments; an empty object when none were sent.</summary>
+    public JObject Input { get; } = input ?? new JObject();
+
+    /// <summary>The absolute folder of the running Pod, as the host named it; null for an inline run.</summary>
+    public string? PodFolder { get; } = podFolder;
+
+    /// <summary>One argument by name. A missing one throws unless a fallback is given; an ill-typed one always throws.</summary>
+    public T Arg<T>(string name, bool hasFallback = false, T fallback = default!) {
+        var token = this.Input.GetValue(name, StringComparison.OrdinalIgnoreCase);
+        if (token is null || token.Type == JTokenType.Null)
+            return hasFallback
+                ? fallback
+                : throw new ArgumentException($"This script needs the argument '{name}' ({typeof(T).Name}), and the input has none. Pass it as input: {{ \"{name}\": ... }}.");
+        try {
+            return token.ToObject<T>() is { } value
+                ? value
+                : throw new Newtonsoft.Json.JsonException("it converts to null");
+        } catch (Exception ex) when (ex is Newtonsoft.Json.JsonException or FormatException or InvalidCastException or ArgumentException or OverflowException) {
+            throw new ArgumentException($"The argument '{name}' must be a {typeof(T).Name}; the input has {token.ToString(Newtonsoft.Json.Formatting.None)}. {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    ///     The absolute path of a file the running Pod carries. The live file, not the bytes the run captured.
+    ///     Refuses a path that leaves the Pod (by `..`, a rooted path, or a link) and a file that is not there.
+    /// </summary>
+    public string PodFile(string relativePath) {
+        if (this.PodFolder is null)
+            throw new InvalidOperationException("this script runs outside a Pod; PodFile names a file of the Pod a declared entrypoint runs from.");
+        var path = Pods.ScriptPodPreparationService.FullPath(this.PodFolder,
+            Pods.ScriptPodPreparationService.NormalizeMemberPath((relativePath ?? string.Empty).Replace('\\', '/')));
+        for (var at = path; at is not null && at.Length > this.PodFolder.Length; at = Path.GetDirectoryName(at))
+            if ((File.Exists(at) || Directory.Exists(at)) && (File.GetAttributes(at) & FileAttributes.ReparsePoint) != 0)
+                throw new InvalidDataException($"PodFile cannot follow a link: {relativePath}");
+        return File.Exists(path) ? path : throw new FileNotFoundException($"This Pod has no file '{relativePath}'.", path);
+    }
 
     /// <summary>Structured result set by the script via Result(...); returned as the response's data field.</summary>
     public JToken? ResultData { get; private set; }

@@ -7,16 +7,19 @@
   "entrypoints": [
     {
       "sourcePath": "src/Census.cs",
+      "mode": "ReadOnly",
       "name": "Duct census",
       "description": "Read-only: list duct systems, their elements and flow, and the warnings that mention ducts."
     },
     {
       "sourcePath": "src/InspectRun.cs",
+      "mode": "ReadOnly",
       "name": "Inspect a run",
       "description": "Read-only: walk the selected duct run (or the largest system) fitting by fitting with connector flow and loss readings."
     },
     {
       "sourcePath": "src/CoefficientExperiment.cs",
+      "mode": "NoTransaction",
       "name": "Duct annotation experiment",
       "description": "Changes the model: on a disposable copy only, writes each duct's computed velocity and size into its Comments and reads them back."
     }
