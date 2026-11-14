@@ -1056,7 +1056,7 @@ export function createPagesHandler(
         status: 302,
         headers: {
           location: routeAddress("bind").link(
-            { page: oneName(slug), view: true },
+            { page: oneName(slug), view: true, query: Object.fromEntries(url.searchParams) },
             routeAddress("bind").read(Object.fromEntries(url.searchParams)).carry,
           ),
         },
