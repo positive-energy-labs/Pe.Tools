@@ -1,10 +1,14 @@
 import { createHash } from "node:crypto";
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { capabilityCatalogSchema, type PackageProjection } from "@pe/agent-contracts";
+import {
+  capabilityCatalogSchema,
+  declaredScriptRun,
+  type PackageProjection,
+} from "@pe/agent-contracts";
 import { machineFixture } from "../../agent-contracts/tests/machine-fixture.ts";
 import { buildCapabilities } from "../src/pea/capabilities.ts";
 import { skillSnapshot } from "../src/pea/skill-publication.ts";
-import { peDo, peRead, podScriptRun } from "../src/pea/capability-tools.ts";
+import { peDo, peRead } from "../src/pea/capability-tools.ts";
 import { fakeRuntimeHost } from "./runtime-host-fixture.ts";
 
 const bytes = Buffer.from(
@@ -108,9 +112,9 @@ test("skill reads exact admitted bytes, members refuse execution, and old keys r
 });
 
 // Contract C1, Pea's script door. Mutants, each run red once: restore `effect: "command"` for every
-// script row in `packageRows` (pe_read refuses the check); drop the ReadOnly refusal in the script
-// dispatch (the write is sent); spread the whole payload into `scripting.execute` (scriptContent
-// crosses); drop `input` from what the dispatch passes.
+// script row in `packageRows` (pe_read refuses the check); drop the ReadOnly refusal in
+// `declaredScriptRun` (the write is sent); spread the whole payload there (scriptContent crosses);
+// drop `input` from what it passes.
 test("a ReadOnly entrypoint is a read Pea runs with pe_read, with its input, and never as a write", async () => {
   fakeRuntimeHost("http://127.0.0.1:9");
   vi.stubEnv("PE_CONTEXT", "");
@@ -174,7 +178,7 @@ test("a ReadOnly entrypoint is a read Pea runs with pe_read, with its input, and
   expect(calls.some((call) => call.path === "/pe/contributions")).toBe(false);
   // What crosses for a declared script: its input, the mode and the timeout. The source never does.
   expect(
-    podScriptRun(built.find((row) => row.key === check)!, {
+    declaredScriptRun(built.find((row) => row.key === check)!, {
       input: { level: "L2" },
       scriptContent: "Result(2);",
       sourcePath: "src/Census.cs",
@@ -182,7 +186,7 @@ test("a ReadOnly entrypoint is a read Pea runs with pe_read, with its input, and
     }),
   ).toEqual({ input: { level: "L2" }, permissionMode: "ReadOnly" });
   expect(
-    podScriptRun({ key: "script:@a/src/B.cs" }, { permissionMode: "NoTransaction", timeoutSeconds: 9 }),
+    declaredScriptRun({ key: "script:@a/src/B.cs" }, { permissionMode: "NoTransaction", timeoutSeconds: 9 }),
   ).toEqual({ permissionMode: "NoTransaction", timeoutSeconds: 9 });
 });
 
