@@ -26,11 +26,11 @@ You work with the Pod `snowdon-ducts`. Find its keys with `pe_find`:
 3. **Pick a run.** Select an element of one system (or let `InspectRun` take the largest) and read `InspectRun`. Report fittings with a loss parameter and fittings without. If none carry one, say that plainly: the sample may not store loss on its fittings.
 4. **Show.** Use `revit.context.lens` then `revit.context.show-elements` on the fitting ids so the person sees them. Capture the view when asked.
 5. **Experiment (optional).** Read `settings/checks.json` for the markers. Run `CoefficientExperiment` on the copy; it writes each duct's velocity and size into Comments. Report `changed`, `alreadyCurrent`, `applied` and the `sample` readbacks. If it says `refused` or `unavailable`, relay that; never fabricate a fixture and call it a sample defect.
-6. **Leave a note.** `pe_do page:@snowdon-ducts/pages/tour { event: { type: "note", text } }` puts a remark on the open Page, marked as yours. It is the only event the Page accepts from an agent; any other type is refused with that list.
+6. **Leave a note.** `pe_do page:@snowdon-ducts/pages/tour { event: { type: "note", text } }` puts a remark on the Page, marked as yours, whether or not anyone has it open. It is the only event the Page accepts from an agent; any other type is refused with that list.
 
 ## Adapting the Page
 
-Copy the Pod under a new manifest id first; never edit `snowdon-ducts` in place. The Page is the file `pages/tour/index.html` in the Pod folder, plain HTML using `/pages/pe.js`; edit it with file tools. It runs the Pod's entrypoints by path with `pe.script`, and keeps everything it shows in one `pe.state` event log. Change one thing at a time (a refresh button, a show-in-Revit button), reload, then `pe_read` the Page's key and check that `text` says what the Page shows. The build-pod skill is the full account of a Pod's scripts and Pages.
+Copy the Pod under a new manifest id first; never edit `snowdon-ducts` in place. The Page is the file `pages/tour/index.html` in the Pod folder, plain HTML using `/pages/pe.js`; edit it with file tools. It runs the Pod's entrypoints by path with `pe.script`, keeps everything it shows in one `pe.state` event log, and declares the events an agent may append in its `pe-agent` script block. Change one thing at a time (a refresh button, a show-in-Revit button), reload, then `pe_read` the Page's key and check that `text` says what the Page shows. The build-pod skill is the full account of a Pod's scripts and Pages.
 
 ## Export
 

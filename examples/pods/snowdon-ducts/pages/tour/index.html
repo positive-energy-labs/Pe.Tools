@@ -6,6 +6,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="stylesheet" href="/pages/pe.css">
 <script src="/pages/pe.js"></script>
+<!-- The events an agent may append. The host reads this from the file, so Pea can leave a note before anyone opens the Page. -->
+<script type="application/json" id="pe-agent">{ "note": "A remark for the next reader of this Page. Fields: text (string)." }</script>
 <style>
   main { max-width: 980px; margin: 0 auto; padding: 16px 20px 48px; }
   table { border-collapse: collapse; width: 100%; }
@@ -123,11 +125,10 @@ async function busy(label, fn) {
 }
 
 (async () => {
-  // `journal` is this copy's own poll, so it stays out of the shared log. `agent` is what Pea may append.
+  // `journal` is this copy's own poll, so it stays out of the shared log.
   const k = await pe.state({
     reduce, base, render: draw, describe,
     local: ["journal"],
-    agent: { note: "A remark for the next reader of this Page. Fields: text (string)." },
   });
   // pe.script answers the script's Result value and throws otherwise. The reading keeps it unchanged as `rows`,
   // and firing a shared event waits for the host to keep it.
