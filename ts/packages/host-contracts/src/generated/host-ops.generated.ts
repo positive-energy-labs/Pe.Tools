@@ -5800,6 +5800,14 @@ export namespace RevitContextLens {
       | "Rooms"
       | "Areas";
     export type HiddenWhy = "PeDefault" | "NotEvaluated";
+    export type RevitViewImageNotDrawnReason =
+      | "ElementMissing"
+      | "PhaseHidden"
+      | "ElementHidden"
+      | "CategoryHidden"
+      | "NoBoundingBox"
+      | "OutsideCrop"
+      | "OutsideSectionBox";
 
     /**
      * What revit.context.lens made or refreshed.
@@ -5808,11 +5816,11 @@ export namespace RevitContextLens {
       /**
        * The lens view's id, for revit.context.show-elements or revit.context.view-image.
        */
-      viewId: number;
+      viewId?: number | null;
       /**
        * That view's name.
        */
-      viewName: string;
+      viewName?: null | string;
       /**
        * True when the view was made by this call; false when an existing one was refreshed.
        */
@@ -5825,8 +5833,13 @@ export namespace RevitContextLens {
        * One line on what happened.
        */
       note: string;
-      lens: Lens;
+      lens?: null | Lens;
       hidden: Hidden[];
+      /**
+       * No lens was made because none of the requested elements has model bounds.
+       */
+      refused: boolean;
+      notDrawn: RevitViewImageNotDrawn[];
     }
     /**
      * The view used, without inferring who configured a referenced view.
@@ -5843,6 +5856,10 @@ export namespace RevitContextLens {
       what: HiddenKind;
       count: number;
       why: HiddenWhy;
+    }
+    export interface RevitViewImageNotDrawn {
+      elementId: number;
+      reasons: RevitViewImageNotDrawnReason[];
     }
   }
 }

@@ -421,19 +421,22 @@
    * twice the focus size on each side for context. `registration` places pixels in model XY when available.
    */
   pe.picture = async (elementIds, { name, paddingFeet, pixelSize, marginPercent = 200 } = {}) => {
+    const check = result => {
+      if (!result.refused) return result;
+      const error = new Error(`Picture refused: ${result.notDrawn.map(item => `${item.elementId}: ${item.reasons.join(", ")}`).join("; ")}`);
+      error.refused = true;
+      error.notDrawn = result.notDrawn;
+      error.restore = result.restore;
+      throw error;
+    };
     const lens = await pe.do("revit.context.lens", { elementIds, name, paddingFeet });
-    const image = await pe.do("revit.context.view-image.focus", {
+    check(lens);
+    const image = check(await pe.do("revit.context.view-image.focus", {
       target: { id: lens.viewId },
       focus: { elementIds },
       pixelSize,
       marginPercent,
-    });
-    if (image.refused) {
-      const error = new Error(`Picture refused: ${image.notDrawn.map(item => `${item.elementId}: ${item.reasons.join(", ")}`).join("; ")}`);
-      error.notDrawn = image.notDrawn;
-      error.restore = image.restore;
-      throw error;
-    }
+    }));
     const url = image.imageUrl;
     if (!url) throw new Error(`view-image of ${lens.viewName} was not kept by the host`);
     return {
@@ -444,6 +447,8 @@
       viewName: lens.viewName,
       registration: image.registration || null,
       marks: image.marks,
+      width: image.width,
+      height: image.height,
       notDrawn: image.notDrawn,
       restore: image.restore,
     };
