@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Document profiler</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="/pages/pe.css">
+<script src="/pages/pe.js"></script>
+</head>
+<body>
+<!-- No stylesheet of its own: plain elements take the house look from pe.css. The one inline style is the page gutter. -->
+<main style="max-width: 980px; margin: 0 auto; padding: 16px 20px 48px">
+  <h1>Document profiler</h1>
+  <p id="doc" class="muted">Reading this Page's binding.</p>
+  <p class="muted">A large count is a clue, not a cost. Nothing here runs until you press its button, and every run is kept below with its document and time.</p>
+
+  <h2>Censuses</h2>
+  <div id="censuses"></div>
+
+  <h2>Experiments on a disposable copy</h2>
+  <p class="caution">These delete elements, save files or switch views. They ship disabled: each one refuses until <code>src/Settings.cs</code> names your disposable copy, its original, and the acknowledgement sentence. Bind this Page to that copy, never to the original. A Page input cannot arm them.</p>
+  <div id="experiments"></div>
+
+  <h2>Notes</h2>
+  <ul id="notes"></ul>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+const POD = "script:@document-profiler/";
+
+// One row per entrypoint in pod.json. `args` are the input names the script reads with Arg(name, fallback);
+// a blank box sends nothing, so the fallback written in src/Settings.cs stays the one home of each default.
+const RUNS = [
+  { path: "src/MechanicalPlanCensus.cs", title: "Mechanical plans and their sheets", verb: "Read plans", args: ["budgetSeconds"],
+    words: "Read-only. Lists mechanical plans with their direct sheet placements. An unsheeted parent can still have sheeted dependents; blank means unknown, not no." },
+  { path: "src/Profile.cs", title: "Element inventory", verb: "Profile", args: ["maxElements", "budgetSeconds", "samples"],
+    words: "Read-only. Counts elements by category, family and kind, and times repeated API reads. The full evidence is in the artifact file." },
+  { path: "src/ReadCostCensus.cs", title: "Read cost", verb: "Measure read cost", seconds: 300,
+    args: ["censusBudgetSeconds", "firstTouchSample", "categoryWalk", "orientationSample", "obbSample", "fidelitySample", "chunk", "seed"],
+    words: "Starts no transaction and stops if the document changes, but runs as NoTransaction, so a pinned document refuses it: bind through a thread that holds the document." },
+  { path: "src/DeletionExperiment.cs", title: "Compare deletions", verb: "Run deletion experiment", experiment: true, seconds: 600, args: [],
+    words: "Deletes the configured candidates inside rolled-back transaction groups and times the survivors. Does not measure drawing or RAM." },
+  { path: "src/SaveVariant.cs", title: "Save a deletion variant", verb: "Delete and save variant", experiment: true, seconds: 600, args: [],
+    words: "Commits one configured deletion and saves a NEW .rvt at the configured path. The bound copy is changed." },
+  { path: "src/ViewOpenProbe.cs", title: "Time view opening", verb: "Run view probe", experiment: true, seconds: 600, args: [],
+    words: "Switches the active view in the foreground Revit window, then restores it. Do not touch Revit while it runs." },
+];
+const slot = (run) => run.path.replace(/\W/g, "-");
+
+// Static skeleton, drawn once. render() only fills each run's result, so nothing moves while a reading arrives.
+for (const run of RUNS) {
+  $(run.experiment ? "experiments" : "censuses").insertAdjacentHTML("beforeend", `
+    <h3>${esc(run.title)}</h3>
+    <p class="${run.experiment ? "caution" : "muted"}">${esc(run.words)}</p>
+    <p>${run.args.map((a) => `<label>${esc(a)} <input type="number" size="8" data-arg="${esc(a)}" data-run="${slot(run)}" placeholder="default"></label> `).join("")}
+      <button data-run="${slot(run)}">${esc(run.verb)}</button>
+      <span id="status-${slot(run)}" class="muted"></span></p>
+    <div id="result-${slot(run)}" class="muted">No reading yet.</div>`);
+}
+
+// C2: the event log is the Page's whole state. A reading is kept per script key; the last one wins.
+const base = { readings: {}, notes: [] };
+const reduce = (s, e, meta) => {
+  if (e.type === "reading" && e.reading?.source)
+    return { ...s, readings: { ...s.readings, [e.reading.source]: { ...e, origin: meta.origin, seq: meta.seq } } };
+  if (e.type === "note") return { ...s, notes: [...s.notes, { text: e.text, origin: meta.origin, at: meta.at }] };
+  return s;
+};
+const by = (origin) => (origin === "agent" ? "Pea" : "a person");
+const cell = (v) => v == null ? '<span class="muted">unknown</span>' : v === true ? "yes" : v === false ? "no" : esc(typeof v === "object" ? JSON.stringify(v) : v);
+
+function render(s) {
+  for (const run of RUNS) {
+    const kept = s.readings[POD + run.path];
+    if (!kept) continue;
+    const r = kept.reading.rows ?? {};
+    const rows = Array.isArray(r.rows) ? r.rows : [];
+    // uniqueId is the row's identity for a later run (it rides the title); the table shows names.
+    const cols = rows.length ? Object.keys(rows[0]).filter((c) => c !== "uniqueId") : [];
+    const facts = Object.entries(r).filter(([k, v]) => k !== "rows" && k !== "diagnostics" && k !== "refused" && typeof v !== "object");
+    $("result-" + slot(run)).className = "";
+    $("result-" + slot(run)).innerHTML =
+      `<p class="muted">${esc(kept.document ?? "document not recorded")}, ${new Date(kept.reading.at).toLocaleString()}, run by ${by(kept.origin)}` +
+        `${kept.input && Object.keys(kept.input).length ? `, input ${esc(JSON.stringify(kept.input))}` : ""}</p>` +
+      (r.refused ? `<p class="caution">Refused: ${esc(r.refused)}</p>` : "") +
+      (r.diagnostics || []).map((d) => `<p class="caution">${esc(d)}</p>`).join("") +
+      (facts.length ? `<p>${facts.map(([k, v]) => `${esc(k)} <span class="mono">${esc(v)}</span>`).join(" · ")}</p>` : "") +
+      (rows.length ? `<table><tr>${cols.map((c) => `<th>${esc(c)}</th>`).join("")}</tr>${rows.map((row) =>
+        `<tr title="${esc(row.uniqueId ?? "")}">${cols.map((c) => `<td>${cell(row[c])}</td>`).join("")}</tr>`).join("")}</table>` : "") +
+      (r.rowsListed != null && r.rowsListed < (r.groups ?? r.mechanicalPlans ?? 0) ? `<p class="muted">Listed ${r.rowsListed}; the rest is in the artifact.</p>` : "");
+  }
+  $("notes").innerHTML = s.notes.map((n) => `<li>${esc(n.text)} <span class="muted">(${by(n.origin)}, ${new Date(n.at).toLocaleString()})</span></li>`).join("") ||
+    '<li class="muted">None. Pea can leave a note here after it reads a census.</li>';
+}
+
+// What an agent reads instead of the pixels: one block per kept reading, with its first rows.
+const describe = (s) => [
+  "# Document profiler",
+  ...RUNS.map((run) => {
+    const kept = s.readings[POD + run.path];
+    if (!kept) return `- ${run.path}: no reading`;
+    const r = kept.reading.rows ?? {};
+    const rows = Array.isArray(r.rows) ? r.rows : [];
+    return [`## ${run.title} (${POD}${run.path})`,
+      `Document ${kept.document ?? "not recorded"}, read ${new Date(kept.reading.at).toISOString()} by ${by(kept.origin)}, event ${kept.seq}.`,
+      r.refused ? `Refused: ${r.refused}` : `Status ${r.status ?? "?"}, ${rows.length} rows kept${r.artifact ? `, artifact ${r.artifact}` : ""}.`,
+      ...rows.slice(0, 20).map((row) => "- " + JSON.stringify(row))].join("\n");
+  }),
+  ...s.notes.map((n) => `- note (${by(n.origin)}): ${n.text}`),
+].join("\n");
+
+const kernel = pe.state({ reduce, base, render, describe, agent: {
+  reading: "a census run by key: { reading: { source: 'script:@document-profiler/src/<File>.cs', at: <ms>, rows: <the script's whole answer> }, input: <what was passed>, document: <title> }",
+  note: "one line for the person reading this Page: { text }",
+} });
+
+const showDoc = async () => {
+  try {
+    const doc = await pe.target();
+    $("doc").className = "";
+    $("doc").textContent = `Bound to ${doc.title}.`;
+    return doc;
+  } catch (e) {
+    $("doc").className = "caution";
+    $("doc").textContent = e.message;
+    throw e;
+  }
+};
+showDoc().catch(() => {});
+
+document.querySelector("main").addEventListener("click", async (ev) => {
+  const button = ev.target.closest("button[data-run]");
+  const run = button && RUNS.find((x) => slot(x) === button.dataset.run);
+  if (!run) return;
+  const status = $("status-" + slot(run));
+  const input = Object.fromEntries([...document.querySelectorAll(`input[data-run="${slot(run)}"]`)]
+    .filter((box) => box.value !== "").map((box) => [box.dataset.arg, Number(box.value)]));
+  button.disabled = true;
+  status.className = "muted";
+  status.textContent = "Running in Revit.";
+  try {
+    const doc = await showDoc();
+    // Pod-relative path: the host resolves it to this Pod's entrypoint key and runs it in the mode pod.json declares.
+    const budget = input.censusBudgetSeconds ?? input.budgetSeconds ?? 0;
+    const reading = await pe.reading(POD + run.path, () =>
+      pe.script(run.path, { input, timeoutSeconds: Math.max(run.seconds ?? 120, budget + 60) }));
+    (await kernel).fire({ type: "reading", reading, input, document: doc.title });
+    status.textContent = "";
+  } catch (e) {
+    status.className = "alarm";
+    status.textContent = e.message;
+  } finally {
+    button.disabled = false;
+  }
+});
+</script>
+</body>
+</html>
