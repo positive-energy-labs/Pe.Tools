@@ -24,7 +24,7 @@ Each cycle, in the reply template `delegate` defines: the rows it drove at this 
 
 ## wakes on
 
-A new tip on the integration branch, delivered through the substrate `execute` names. A message from the implementor, the integrator or the owner. Its own background command finishing.
+A new tip on the integration branch, delivered through the substrate `execute` names. A message from the implementor, the integrator or the owner. Its own background command finishing. The run's wake, which it arms at launch as `execute` says and answers by that schedule's checklist: it is the one thread that notices a stalled implementor or a dead partner, and it reports one and never relaunches one.
 
 ## handoff
 

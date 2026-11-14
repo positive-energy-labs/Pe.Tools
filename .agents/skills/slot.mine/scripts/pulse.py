@@ -139,16 +139,19 @@ def main(argv):
         if not estimates: print('estimates: %s has no `Estimate: <branch> <hours>h` line, so none is scored' % map_path)
         idle = []
         for branch, est in estimates:
-            m = next((m for m in ms if branch in m[1]), None)
+            hits = [m for m in ms if re.search(re.escape(branch) + r'(?![\w-])', m[1])]  # k2/store must not match k2/store-sweeps
+            m = min(hits, key=lambda m: when(m[0])) if hits else None  # the first merge is when the slice became drivable
             if not m:
                 if subprocess.run(['git', 'rev-parse', '-q', '--verify', branch], capture_output=True).returncode: idle.append(branch)
                 elif show_all: print('estimate %s %sh: not merged' % (branch, est))
                 continue
-            first = git('log', '--reverse', '--format=%cI', '%s..%s' % (m[2][0], m[2][1])).splitlines()
+            # a writer commits just before it merges, so the branch's creation in the reflog is the start; first commit when the reflog is gone
+            born = subprocess.run(['git', 'reflog', 'show', '--date=iso-strict', '--format=%gd', branch], capture_output=True, text=True).stdout.split()
+            first = [born[-1].split('{')[1].rstrip('}')] if born else git('log', '--reverse', '--format=%cI', '%s..%s' % (m[2][0], m[2][1])).splitlines()
             actual = (when(m[0]) - datetime.datetime.fromisoformat(first[0])).total_seconds() / 3600 if first else 0
             ratio = actual / float(est)
             if show_all or not ESTIMATE_BAND[0] <= ratio <= ESTIMATE_BAND[1]:
-                print('estimate %s: %sh planned, %.1fh from first commit to merge = %.1fx' % (branch, est, actual, ratio))
+                print('estimate %s: %sh planned, %.1fh from branch start to merge = %.1fx' % (branch, est, actual, ratio))
         if idle: print('not started (no branch): ' + ', '.join(idle))
     if red: print('exit 1: a ratchet or a health count rose')
     return 1 if red else 0
