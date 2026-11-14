@@ -2,6 +2,7 @@ import { blobUploadSchema } from "@pe/agent-contracts";
 import { put as putBlob } from "./action-blobs.ts";
 import { captureReceiptSchema } from "@pe/agent-contracts";
 import { canonicalRouteInput, nativePrincipals } from "@pe/agent-contracts";
+import { runPodScript } from "./operation-script.ts";
 import {
   NATIVE_BODY_VERSION_HEADER,
   DUCTS_REFRESH_HEADER,
@@ -485,7 +486,9 @@ function callRoutes(
                   },
                 };
               })
-            : yield* bridge.invoke(key, request ?? {}, bridgeSessionId, openDocumentId, requestId);
+            : entry.script && bridgeSessionId
+              ? { value: yield* runPodScript(bridge, { session: bridgeSessionId, openId: openDocumentId }, (request ?? {}) as Record<string, unknown>, requestId) }
+              : yield* bridge.invoke(key, request ?? {}, bridgeSessionId, openDocumentId, requestId);
       // A joined Read names the dispatch that actually ran, never this caller's unsent id.
       const nativeRequestId =
         "nativeRequestId" in result && typeof result.nativeRequestId === "string"
