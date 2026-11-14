@@ -195,7 +195,7 @@ test("the harness, Page and route-state doors carry their caller through the rea
     humanReached(await at("POST", act, page, { key: "x" }));
     // POST /pages/:slug/events: each row's origin is the caller that carried it.
     for (const headers of [human, page, pea])
-      expect((await at("POST", "/pages/carriage/events", headers, { type: "count", n: 1 })).status).toBe(201);
+      expect((await at("POST", "/pages/carriage/events", headers, { n: 1 })).status).toBe(201);
     const state = JSON.parse((await at("GET", "/pages/carriage/state", {})).text) as {
       events: { origin: string }[];
     };
