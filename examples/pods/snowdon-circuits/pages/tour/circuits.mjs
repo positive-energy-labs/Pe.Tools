@@ -61,12 +61,13 @@ export function circuitReduce(state, event) {
       return { ...state, reading: event.reading, selectedId: sameDocument && event.reading.rows.some(row => row.id === state.selectedId) ? state.selectedId : null, overrides: sameDocument ? state.overrides : {}, proposal: null, receipt: null };
     }
     case "select": return { ...state, selectedId: event.id, proposal: null, receipt: null };
-    case "override": return { ...state, overrides: { ...state.overrides, [state.selectedId]: { ...state.overrides[state.selectedId], [event.key]: event.value } }, proposal: null };
+    // A durable override names its circuit: `selectedId` is per-copy local state, absent on replay and in another tab.
+    case "override": return { ...state, overrides: { ...state.overrides, [event.id]: { ...state.overrides[event.id], [event.key]: event.value } }, proposal: null };
     case "set": return ["target", "tab", "theme"].includes(event.key) ? { ...state, [event.key]: event.value, proposal: event.key === "target" ? null : state.proposal } : state;
     case "input": return Object.hasOwn(state.inputs, event.key) ? { ...state, inputs: { ...state.inputs, [event.key]: event.value } } : state;
     case "proposal": return { ...state, proposal: event.proposal, receipt: null };
     case "receipt": return { ...state, receipt: event.receipt, proposal: null };
-    case "clear-overrides": return { ...state, overrides: { ...state.overrides, [state.selectedId]: {} }, proposal: null };
+    case "clear-overrides": return { ...state, overrides: { ...state.overrides, [event.id]: {} }, proposal: null };
     default: return state;
   }
 }
