@@ -1234,6 +1234,18 @@ describe("pages", () => {
         body,
       };
     }
+    it.each(["MepBoundExceeded", "MepSystemsEmpty"])("W50: native %s words reach the Page banner without HTTP noise", async (code) => {
+      const message = code === "MepBoundExceeded"
+        ? "More than 1024 MEP systems. Narrow domain or pass systemUniqueId."
+        : "No MEP systems match this scope. Choose a system in this document or change domain.";
+      const { pe, body } = await page((url) => url.pathname === "/pages/todo/call"
+        ? Response.json({ kind: "BridgeError", message, evidence: { issues: [{ code, instancePath: "$.maxSystems", message }] } }, { status: 400 })
+        : undefined);
+      await expect(pe.read!("mep.system.members", { domain: "piping", maxSystems: 1024 })).rejects.toMatchObject({ name: "PeRefusal", code, message });
+      expect(body.children.find((n) => (n as { id?: string }).id === "pe-refusal")).toMatchObject({ textContent: message });
+      expect(JSON.stringify(body.children)).not.toContain("500");
+    });
+
     const options: IdentityOptions = {
       port: () => 5180,
       frontendOrigin: undefined,

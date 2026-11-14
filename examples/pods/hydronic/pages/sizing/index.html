@@ -27,10 +27,10 @@ async function act(run) {
 }
 async function read(systemUniqueId) {
   const target = await pe.target();
-  const roster = await pe.read('mep.system.members', {});
-  const system = systemUniqueId || roster.systems.find(s => s.domain === 'piping')?.uniqueId;
+  const roster = await pe.read('mep.system.members', { domain: 'piping', maxSystems: 1024 });
+  const system = systemUniqueId || roster.systems[0]?.uniqueId;
   if (!system) throw Error('This document has no piping system');
-  const members = await pe.read('mep.system.members', { systemUniqueId: system });
+  const members = await pe.read('mep.system.members', { domain: 'piping', systemUniqueId: system, maxElements: 16384 });
   const segments = await pe.read('mep.segment.sizes', {});
   await k.fire({ type: 'reading', reading: { target, system, systems: roster.systems.filter(s => s.domain === 'piping'), at: new Date().toISOString(), ...fromRevit(members, segments) } });
 }
