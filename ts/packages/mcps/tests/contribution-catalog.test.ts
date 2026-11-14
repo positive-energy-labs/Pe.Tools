@@ -201,6 +201,10 @@ test("Page shelf follows its projected URL and never borrows the Page action doo
     const url = new URL(input instanceof Request ? input.url : String(input));
     paths.push(url.pathname);
     if (url.pathname === "/pe/capabilities") return Response.json(catalog());
+    if (url.pathname === "/pages/snowdon-ducts--tour/target") return Response.json({
+      page: pod.contributions[1]!.key, slot: "default", binding: { kind: "none" },
+      resolution: { kind: "choose", reason: "missing" }, document: null, write: null,
+    });
     return Response.json({ text: "Page text" });
   });
   expect(

@@ -63,6 +63,9 @@ import {
   headRequests,
   targetKey,
   pageChoiceSchema,
+  pageKeySchema,
+  pageSlugOf,
+  pageTargetReadingSchema,
   type Capability,
   type CapabilityCatalog,
   type DocumentRequest,
@@ -301,6 +304,7 @@ const runInputSchema = z.object({
     ),
   key: z.string().min(1).describe("A capability key from pe_find."),
   input: z.unknown().optional().describe("Matches the row's input schema."),
+  page: pageKeySchema.optional().describe("When running a script for a Page, default to this Page's binding target. An unresolved binding refuses."),
   target: z
     .union([sdkSessionSelectionSchema, documentRequestSchema.options[0]])
     .optional()
@@ -727,6 +731,7 @@ function receiptTarget(row: ActionReceipt): ResolvedTarget {
           ? row.target.session
           : null,
     document: null,
+    ...(row.target.kind === "document" ? { openId: row.target.ref.openId } : {}),
   };
 }
 
@@ -810,12 +815,13 @@ async function dispatch(
           z.strictObject({ event: z.record(z.string(), z.unknown()) }),
         ])
         .parse(coerceJsonObject(input.input));
+      const bound = "binding" in action ? null : await pageRunTarget(row.key, false);
       const answer = await read(
         "binding" in action
           ? await client.response("page.bind", { params, body: action.binding })
           : await client.response("page.append", { params, body: action.event }),
       );
-      return { ...answer, target: scopeTarget };
+      return { ...answer, target: bound ? { session: bound.session, document: null, openId: bound.openId } : { session: null, document: null } };
     }
     case "route":
     case "skill":
@@ -837,14 +843,12 @@ async function dispatch(
       const admitted = await contributionRead(row);
       if (!admitted.sourceBundle || !admitted.folder)
         throw Error("Frozen admitted script input unavailable");
-      const definition = await new HostRpcCaller({
-        hostBaseUrl: base(),
-        ...transportScope(input.target, defaultTarget),
-      }).getOperation("scripting.execute");
-      if (!definition) throw Error("Public scripting operation metadata unavailable");
+      const callerContext = invocationContext()?.caller;
+      const page = input.page ?? (callerContext?.kind === "page" ? callerContext.page : undefined);
+      const pageTarget = !input.target && page ? { kind: "open" as const, ref: await pageRunTarget(page) } : undefined;
       const target = await operationTarget(
-        { ...row, needs: definition.needs === "nothing" ? "session" : definition.needs! },
-        input.target,
+        { ...row, needs: "document" },
+        input.target ?? pageTarget,
         targets,
       );
       const caller = new HostRpcCaller({
@@ -862,7 +866,9 @@ async function dispatch(
       });
       return {
         ok: result.ok,
-        target: { session: target.bridgeSessionId ?? null, document: null },
+        target: result.action && result.action.state !== "detached"
+          ? receiptTarget(result.action)
+          : { session: target.bridgeSessionId ?? null, document: null, openId: target.openDocumentId ?? undefined },
         result: scriptResultForModel(result),
       };
     }
@@ -1226,6 +1232,22 @@ function scriptResultForModel(result: HostOperationCallResult): unknown {
   };
 }
 
+async function pageRunTarget(page: string): Promise<DocumentRef>;
+async function pageRunTarget(page: string, required: false): Promise<DocumentRef | null>;
+async function pageRunTarget(page: string, required = true): Promise<DocumentRef | null> {
+  const slug = pageSlugOf(page);
+  if (!slug) throw Error("Expected a canonical Page key");
+  const response = await createPeClient(base(), fetch).response("page.target", { params: { slug } });
+  if (!response.ok) throw Error(`Page target unavailable: ${await response.text()}`);
+  const reading = pageTargetReadingSchema.parse(await response.json());
+  const resolution = reading.resolution;
+  if (resolution.kind !== "resolved" || resolution.target.kind !== "document") {
+    if (!required) return null;
+    throw Error(`Page ${page} has no resolved document target: ${JSON.stringify(resolution)}`);
+  }
+  return resolution.target.ref;
+}
+
 async function operationTarget(
   row: Capability,
   override: RunInput["target"],
@@ -1244,6 +1266,12 @@ async function operationTarget(
   const { sessions } = await new HostRpcCaller({ hostBaseUrl: base(), timeoutMs: 30_000 }).call(
     "bridge.sessions.list",
   );
+  if (row.kind === "script" && !override) {
+    const open = sessions.filter((session) => session.connected).flatMap((session) =>
+      (session.openDocuments ?? []).map((doc) => `${doc.title} (doc:${session.sessionId}/${doc.openId})`));
+    if (open.length !== 1 || targets.length !== 1)
+      throw Error(`Name one exact document target for this script with target {kind: open, ref: {session, openId}}. Open documents: ${open.join(", ") || "none"}.`);
+  }
   const inventory: TargetInventory = {
     kind: "ready",
     sessions: Object.fromEntries(
