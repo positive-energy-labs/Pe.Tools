@@ -74,7 +74,7 @@ import {
   emitPagePinRevoke,
 } from "./control.ts";
 import { capturePackage, listPackages, productPodsRoots, type AdmittedPackage, type PodsRoots } from "./packages.ts";
-import { PackageDiscoveryExceeded, packageDiscoveryTimeoutMs } from "./pod-capture.ts";
+import { PackageDiscoveryExceeded, packageDiscoveryTimeoutMs, requirePackageAvailable } from "./pod-capture.ts";
 import { activePackages, requirePackageEnabled } from "./package-lifecycle.ts";
 import {
   pageDescriptors,
@@ -481,6 +481,7 @@ export function createPagesHandler(
     const discover = async () => {
       const listing = await listPackages({ podsRoots: pods });
       if (expired || requestWait?.expired) return [];
+      for (const pod of listing.packages) if (pod.id === id) requirePackageAvailable(pod);
       return activePackages(listing.packages.filter((pod) => id === undefined || pod.id === id), pods);
     };
     try {
@@ -869,6 +870,7 @@ export function createPagesHandler(
     const pod = pods
       ? (await listPackages({ podsRoots: pods })).packages.find((one) => one.id === ref.packageId)
       : undefined;
+    if (pod) requirePackageAvailable(pod);
     const row = pod?.contributions.find((row) => row.kind === "script" && row.key === key);
     if (!pod || !row) {
       // D41: a path read from the other base names an existing declaration, not a missing entrypoint.

@@ -25,6 +25,14 @@ export function packageDiskSignatures(signature: string, roots: readonly string[
   return new Map([...grouped].map(([directory, entries]) => [directory, JSON.stringify(entries)]));
 }
 
+/** A completed capture must not silently omit a regular member the arrival walk saw. */
+export function packageDiskFiles(signature: string): string[] {
+  const entries: unknown = JSON.parse(signature);
+  if (!Array.isArray(entries)) return [];
+  return entries.flatMap(entry => Array.isArray(entry) && typeof entry[0] === "string" &&
+    typeof entry[1] === "number" && (entry[1] & 0o170000) === 0o100000 ? [entry[0]] : []);
+}
+
 /** Metadata only. Unreadable metadata never authorizes reuse; a missing root is a known state. */
 export async function podsDiskSignature(
   roots: readonly string[],

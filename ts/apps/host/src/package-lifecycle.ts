@@ -197,6 +197,7 @@ export function createPackageLifecycle(
         .update(
           JSON.stringify([
             pod.directory,
+            pod.discoveryFailure,
             pod.diagnostics,
             pod.members.map((m) => [m.path, m.sha256]),
           ]),

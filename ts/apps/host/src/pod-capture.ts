@@ -7,11 +7,11 @@ export const rememberCaptureRoots = (roots: PodsRoots) => {
 };
 const rootsKey = (roots: PodsRoots) => JSON.stringify([roots].flat().map((root) => resolve(root)));
 // Discovery owns cross-home identity; capture reads fresh bytes only from its selected folder.
-const censuses = new Map<string, Pick<AdmittedPackage, "id" | "folder" | "directory">[]>();
+const censuses = new Map<string, Pick<AdmittedPackage, "id" | "folder" | "directory" | "discoveryFailure">[]>();
 export function rememberPackageCensus(roots: PodsRoots, listing: PackageListing) {
   censuses.set(
     rootsKey(roots),
-    listing.packages.map(({ id, folder, directory }) => ({ id, folder, directory })),
+    listing.packages.map(({ id, folder, directory, discoveryFailure }) => ({ id, folder, directory, discoveryFailure })),
   );
 }
 
@@ -25,6 +25,16 @@ export class PackageDiscoveryExceeded extends Error {
       ? `Pod discovery could not complete listing ${[roots].flat().join(", ")}: ${incomplete}. Try again when the folder is available.`
       : `Pod discovery exceeded ${packageDiscoveryTimeoutMs} ms listing ${[roots].flat().join(", ")}. Try again when the folder is available.`);
   }
+}
+
+/** One availability boundary for indexed captures, admitted bytes, Pages and by-key reads. */
+export function requirePackageAvailable(pod: Pick<AdmittedPackage, "directory" | "discoveryFailure">) {
+  if (pod.discoveryFailure) throw new PackageDiscoveryExceeded(pod.directory, pod.discoveryFailure);
+}
+
+export function requireIndexedPackageAvailable(id: string, roots: PodsRoots | undefined = productRoots) {
+  const pod = roots && censuses.get(rootsKey(roots))?.find(pod => pod.id === id);
+  if (pod) requirePackageAvailable(pod);
 }
 
 type DiscoveryScan = {
@@ -80,7 +90,8 @@ export async function discoverPackages(
       return scan.promise;
     }
     const cached = completedCensuses.get(key);
-    if (signature !== undefined && cached?.signature === signature) return Promise.resolve(cached.listing);
+    if (signature !== undefined && cached?.signature === signature &&
+      !cached.listing.packages.some(pod => pod.discoveryFailure)) return Promise.resolve(cached.listing);
     const stop = new AbortController();
     const current: DiscoveryScan = {
       stop,
@@ -156,6 +167,7 @@ export async function captureIndexedPackage(
     throw Error(
       `No discovered Pod has id '${id}'. Refresh the Pod list after adding or moving a Pod.`,
     );
+  requirePackageAvailable(selected);
   const stop = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {

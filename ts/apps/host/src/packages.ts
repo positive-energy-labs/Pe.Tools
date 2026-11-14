@@ -24,14 +24,14 @@ import { verifyPodArtifact } from "./pod-artifact.ts";
 import { shippedPodUpdateRefusals } from "./shipped-pod-status.ts";
 import { podModelSchema, type PodModel } from "./pod-model.ts";
 import { logPackageDiscovery as scanLog } from "./pod-discovery-log.ts";
-import { packageDiskSignatures, podsDiskSignature } from "./pod-disk-signature.ts";
+import { packageDiskFiles, packageDiskSignatures, podsDiskSignature } from "./pod-disk-signature.ts";
 export { bindPackageScanLogger, logPackageDiscovery, packageScanLog, packageScanLogLineLimit } from "./pod-discovery-log.ts";
 import {
   captureIndexedPackage,
   rememberCaptureRoots,
   discoverPackages,
   type PackageCensus,
-  PackageDiscoveryExceeded,
+  requirePackageAvailable,
 } from "./pod-capture.ts";
 
 export type PackageEntrypoint = {
@@ -57,6 +57,8 @@ export type PackageContribution = {
   mode?: ScriptMode;
 };
 export type AdmittedPackage = {
+  /** Last known admission for discovery only; byte-serving boundaries refuse until recovery. */
+  discoveryFailure?: string;
   for?: PodModel;
   id: string;
   name: string;
@@ -193,10 +195,10 @@ async function scanPackages(
   const before = previous && packageDiskSignatures(previous.signature, roots);
   const after = signature && packageDiskSignatures(signature, roots);
   const reusable = new Map(previous?.listing.packages
-    .filter(pod => after && before?.has(resolve(pod.directory)) &&
+    .filter(pod => !pod.discoveryFailure && after && before?.has(resolve(pod.directory)) &&
       before.get(resolve(pod.directory)) === after.get(resolve(pod.directory)))
     .map(pod => [resolve(pod.directory), pod]));
-  const admitted = new Set(previous?.listing.packages.map(pod => resolve(pod.directory)));
+  const admitted = new Map(previous?.listing.packages.map(pod => [resolve(pod.directory), pod]));
   const result: PackageListing = { packages: [], unreadable: [] };
   for (const root of roots) {
     signal.throwIfAborted();
@@ -214,7 +216,7 @@ async function scanPackages(
     signal.addEventListener("abort", end, { once: true });
     let listing: PackageListing;
     try {
-      listing = await listPodsFolder(root, signal, reusable, admitted);
+      listing = await listPodsFolder(root, signal, reusable, admitted, after || new Map());
       signal.throwIfAborted();
       outcome = "completed";
     } finally {
@@ -227,15 +229,15 @@ async function scanPackages(
   return result;
 }
 
-async function listPodsFolder(podsRoot: string, signal: AbortSignal, reusable: ReadonlyMap<string, AdmittedPackage>, admitted: ReadonlySet<string>): Promise<PackageListing> {
+async function listPodsFolder(podsRoot: string, signal: AbortSignal, reusable: ReadonlyMap<string, AdmittedPackage>, admitted: ReadonlyMap<string, AdmittedPackage>, signatures: ReadonlyMap<string, string>): Promise<PackageListing> {
   const result: PackageListing = { packages: [], unreadable: [] };
   let entries;
   try {
     entries = await readdir(podsRoot, { withFileTypes: true });
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return result;
-    if ([...admitted].some(directory => resolve(dirname(directory)) === resolve(podsRoot)))
-      throw new PackageDiscoveryExceeded(podsRoot, message(error));
+    const previous = [...admitted.values()].filter(pod => resolve(dirname(pod.directory)) === resolve(podsRoot));
+    if (previous.length) return { packages: previous.map(pod => unavailablePackage(pod, error)), unreadable: [] };
     throw error;
   }
   for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
@@ -251,19 +253,33 @@ async function listPodsFolder(podsRoot: string, signal: AbortSignal, reusable: R
         throw error;
       }
       const pod = reusable.get(resolve(directory)) ?? await readFolder(directory, entry.name, signal);
-      // Arrival metadata requires fresh admission (W26): a partial read cannot publish absence or
-      // stale bytes. Only a completed walk missing the folder/manifest authorizes removal.
-      if (admitted.has(resolve(directory)) && pod.diagnostics.some(issue => issue.code === "PackageMemberInvalid"))
-        throw Error("Previously admitted Pod could not be completely read");
+      const signature = signatures.get(resolve(directory));
+      if (!reusable.has(resolve(directory)) && signature && !pod.diagnostics.some(issue => issue.code === "PackageMemberInvalid")) {
+        const captured = new Set(pod.members.map(member => resolve(directory, member.path)));
+        const expected = packageDiskFiles(signature);
+        if (captured.size !== expected.length || expected.some(path => !captured.has(resolve(path))))
+          throw new PackageReadIncomplete("Pod members changed during capture");
+      }
       result.packages.push(pod);
     } catch (error) {
       signal.throwIfAborted();
-      if (admitted.has(resolve(directory))) throw new PackageDiscoveryExceeded(podsRoot, message(error));
+      const previous = admitted.get(resolve(directory));
+      if (previous && incompletePackageRead(error)) {
+        result.packages.push(unavailablePackage(previous, error));
+        continue;
+      }
       result.unreadable.push({ folder: entry.name, message: message(error) });
     }
   }
   return result;
 }
+
+class PackageReadIncomplete extends Error {}
+const incompletePackageRead = (error: unknown) => error instanceof PackageReadIncomplete ||
+  (error instanceof Error && "code" in error && typeof error.code === "string");
+const unavailablePackage = (pod: AdmittedPackage, error: unknown): AdmittedPackage => ({
+  ...pod, discoveryFailure: message(error),
+});
 
 /** The one admitted package with this id (manifest identity, never a folder alias); a twice-claimed or missing id refuses with its reason. */
 export function onePackage(
@@ -272,7 +288,10 @@ export function onePackage(
   refuse = (reason: string, _status: 404 | 409): Error => Error(reason),
 ): AdmittedPackage {
   const found = listing.packages.filter((pod) => pod.id === id);
-  if (found.length === 1) return found[0]!;
+  if (found.length === 1) {
+    requirePackageAvailable(found[0]!);
+    return found[0]!;
+  }
   throw found.length
     ? refuse(claimedTwice(id, found), 409)
     : refuse(`No installed pod has id '${id}'.`, 404);
@@ -290,6 +309,7 @@ export async function capturePackage(
     typeof packageOrId === "string"
       ? await captureIndexedPackage(packageOrId, podsRoots, readFolder)
       : packageOrId;
+  requirePackageAvailable(pod);
   const errors = pod.diagnostics.filter((issue) =>
     ["PackageMemberInvalid", "DuplicatePodId"].includes(issue.code),
   );
@@ -350,7 +370,7 @@ export async function captureDirectory(
         try {
           const stat = await handle.stat();
           if (!stat.isFile() || stat.ino !== info.ino || stat.size !== info.size)
-            throw Error("Pod input changed during capture");
+            throw new PackageReadIncomplete("Pod input changed during capture");
           bytes = Buffer.alloc(stat.size + 1);
           let count = 0;
           while (count < bytes.length) {
@@ -363,7 +383,7 @@ export async function captureDirectory(
         } finally {
           await handle.close();
         }
-        if (bytes.length !== info.size) throw Error("Pod input changed during capture");
+        if (bytes.length !== info.size) throw new PackageReadIncomplete("Pod input changed during capture");
         let schema: string | null = null;
         if (path.endsWith(".json")) {
           try {
@@ -384,6 +404,7 @@ export async function captureDirectory(
         });
       } catch (error) {
         signal?.throwIfAborted();
+        if (incompletePackageRead(error)) throw error;
         diagnostics.push(problem("PackageMemberInvalid", path, message(error)));
       }
       if (

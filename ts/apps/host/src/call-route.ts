@@ -92,6 +92,7 @@ import { admitNativeCaller } from "./native-read-policy.ts";
 import { InvalidRead } from "./native-reads.ts";
 import { validateNativeInput } from "./native-input.ts";
 import { capturePackage } from "./packages.ts";
+import { PackageDiscoveryExceeded } from "./pod-capture.ts";
 import { recordHostFact } from "./receipt-export.ts";
 import { ReadFreshness, RequestIdentity } from "./request-services.ts";
 import {
@@ -1170,6 +1171,7 @@ const localEntries = {
 
 /** A package refusal keeps its own words; identity misses are 404, twins 409, bad members 422. */
 const packageError = (key: string, error: unknown) => {
+  if (error instanceof PackageDiscoveryExceeded) return error;
   const note = error instanceof Error ? error.message : String(error);
   return new LocalOpError(
     key,
@@ -1232,12 +1234,15 @@ function toProblem(error: unknown): {
   kind: HostErrorKind;
   message: string;
   status: number;
+  code?: string;
   nativeOutcome?: string;
   issues?: BridgeError["evidence"]["issues"];
   notDispatched?: true;
   result?: unknown;
   resolvedTarget?: BridgeError["evidence"]["resolvedTarget"];
 } {
+  if (error instanceof PackageDiscoveryExceeded)
+    return { kind: "HostFailure", code: error.code, message: error.message, status: 503, notDispatched: true };
   if (
     error &&
     typeof error === "object" &&

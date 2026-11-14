@@ -161,7 +161,7 @@ import {
   type PageDescriptor,
 } from "./page-libraries.ts";
 import { createPluginsHandler } from "./plugins-handler.ts";
-import { stopPackageDiscovery } from "./pod-capture.ts";
+import { PackageDiscoveryExceeded, requirePackageAvailable, stopPackageDiscovery } from "./pod-capture.ts";
 import { createPodRoutes } from "./pod-routes.ts";
 import { userRoot } from "@pe/host-contracts/product-paths";
 import { graphRouteIds } from "./reads/routes.ts";
@@ -499,10 +499,15 @@ export function createPeRoutes(options: PeRoutesOptions) {
       const key = url.searchParams.get("key") ?? "";
       if (!parseContributionKey(key))
         return json({ error: "Expected a canonical contribution key" }, 400);
-      const value = await options.contributionRead?.(
+      const value = await Promise.resolve().then(() => options.contributionRead?.(
         key,
         url.searchParams.get("sha256") ?? undefined,
-      );
+      )).catch((error: unknown) => {
+        if (error instanceof PackageDiscoveryExceeded)
+          return json({ code: error.code, error: error.message, message: error.message }, 503);
+        throw error;
+      });
+      if (value instanceof Response) return value;
       return value
         ? json(value)
         : json(
@@ -1084,7 +1089,7 @@ export function createContributionContent(options: {
       }),
     );
     const packagedSkills = admitted.flatMap((pod) =>
-      pod.diagnostics.some((d) => d.severity === "error")
+      pod.discoveryFailure || pod.diagnostics.some((d) => d.severity === "error")
         ? []
         : pod.contributions
             .filter((c) => c.kind === "skill")
@@ -1110,6 +1115,7 @@ export function createContributionContent(options: {
     );
     latest.clear();
     for (const pod of admitted) {
+      if (pod.discoveryFailure) continue;
       if (pod.diagnostics.some((d) => d.severity === "error")) continue;
       const frozen = await capturePackage(pod);
       for (const member of pod.members) {
@@ -1180,8 +1186,12 @@ export function createContributionContent(options: {
         : await scratchPageDescriptors(pointer ? productPagesRoots(pointer) : pagesRoots());
       return pageRows(descriptors);
     },
-    member: (key: string, sha256?: string) =>
-      latest.has(key) ? (sha256 ? revisions.get(key)?.get(sha256) : latest.get(key)) : undefined,
+    member: (key: string, sha256?: string) => {
+      const id = parseContributionKey(key)?.packageId;
+      const pod = admitted.find(pod => pod.id === id);
+      if (pod) requirePackageAvailable(pod);
+      return latest.has(key) ? (sha256 ? revisions.get(key)?.get(sha256) : latest.get(key)) : undefined;
+    },
   };
 }
 
