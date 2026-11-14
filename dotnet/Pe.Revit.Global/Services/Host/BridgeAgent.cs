@@ -119,6 +119,7 @@ internal sealed class BridgeAgent : IDisposable {
             Global.Services.Document.DocumentTrackerAccessor.Current
                 ?? throw new InvalidOperationException(
                     "Document tracker not available; AppCore.Startup must run before the bridge connects."),
+            this._revitTaskQueue,
             this.BuildStateSnapshot,
             this.PublishDocumentInvalidationAsync
         );
@@ -271,44 +272,50 @@ internal sealed class BridgeAgent : IDisposable {
                 throw new InvalidOperationException($"Unsupported bridge operation '{request.OperationKey}'.");
 
             OpCallGate.Require(op.Definition, request.DerivedCommand, request.PayloadJson);
-            Task<OpRun> responseTask;
-            if (op.Thread == OpThread.Revit) {
-                // The op gets the request's own token, never context.Cancellation: the queue disposes
-                // that per-run link when the delegate returns, and an async op (scripting.execute)
-                // returns at its first await, so op.cancel would fire a token nothing links anymore.
-                var run = await this._revitTaskQueue.RunForResult(
-                    context => OpRunner.RunAsync(
-                        op,
-                        request.PayloadJson,
-                        ResolveDocument(op, request.OpenDocumentId, context.Cancellation),
-                        cancellationToken, request.DerivedCommand),
-                    new RevitRunOptions { Label = op.Key },
-                    cancellationToken,
-                    onLateCompletion: result => late.TrySetResult(result)
-                ).ConfigureAwait(false);
-                if (run.Outcome == RevitTaskOutcome.Faulted)
-                    responseTask = run.GetValueOrThrow();
-                else if (!run.Ok) {
-                    deferred = run.Outcome is RevitTaskOutcome.AbandonedStillRunning or RevitTaskOutcome.TimedOut;
-                    if (deferred) RequestEvidence.Uncertain(request.RequestId, run.Outcome.ToString());
-                    if (run.Outcome == RevitTaskOutcome.TimedOut) late.TrySetResult(run);
-                    await this.WriteRevitTaskOutcomeAsync(
-                        request,
-                        receipt,
-                        run.Outcome,
-                        run.Detail,
-                        startedAt,
-                        requestBytes,
-                        cancellationToken
+            OpRun ran;
+            try {
+                Task<OpRun> responseTask;
+                if (op.Thread == OpThread.Revit) {
+                    // The op gets the request's own token, never context.Cancellation: the queue disposes
+                    // that per-run link when the delegate returns, and an async op (scripting.execute)
+                    // returns at its first await, so op.cancel would fire a token nothing links anymore.
+                    var run = await this._revitTaskQueue.RunForResult(
+                        context => OpRunner.RunAsync(
+                            op,
+                            request.PayloadJson,
+                            ResolveDocument(op, request.OpenDocumentId, context.Cancellation),
+                            cancellationToken, request.DerivedCommand),
+                        new RevitRunOptions { Label = op.Key },
+                        cancellationToken,
+                        onLateCompletion: result => late.TrySetResult(result)
                     ).ConfigureAwait(false);
-                    return;
-                } else
-                    responseTask = run.Value!;
-            } else {
-                responseTask = OpRunner.RunAsync(op, request.PayloadJson, null, cancellationToken, request.DerivedCommand);
+                    if (run.Outcome == RevitTaskOutcome.Faulted)
+                        responseTask = run.GetValueOrThrow();
+                    else if (!run.Ok) {
+                        deferred = run.Outcome is RevitTaskOutcome.AbandonedStillRunning or RevitTaskOutcome.TimedOut;
+                        if (deferred) RequestEvidence.Uncertain(request.RequestId, run.Outcome.ToString());
+                        if (run.Outcome == RevitTaskOutcome.TimedOut) late.TrySetResult(run);
+                        await this.WriteRevitTaskOutcomeAsync(
+                            request,
+                            receipt,
+                            run.Outcome,
+                            run.Detail,
+                            startedAt,
+                            requestBytes,
+                            cancellationToken
+                        ).ConfigureAwait(false);
+                        return;
+                    } else
+                        responseTask = run.Value!;
+                } else {
+                    responseTask = OpRunner.RunAsync(op, request.PayloadJson, null, cancellationToken, request.DerivedCommand);
+                }
+                ran = await responseTask.ConfigureAwait(false);
+            } finally {
+                // Cover prefix faults and early outcomes too, with a bounded wait for the final census.
+                if (request.OperationKey == "scripting.execute")
+                    await this._documentNotifier.RefreshAfterRunAsync(cancellationToken).ConfigureAwait(false);
             }
-
-            var ran = await responseTask.ConfigureAwait(false);
             touched = ran.Touched;
             if (ran.Error is not null)
                 System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(ran.Error).Throw();
@@ -678,14 +685,28 @@ internal sealed class BridgeAgent : IDisposable {
         // Title and address come from the live document, never the tracker's event-time snapshot:
         // SaveAs changes the path, and an EditFamily document is admitted before it has a title.
         var attested = true;
-        var documents = tracker.Open.Where(tracked => !tracked.IsLinked)
-            .Select(tracked => {
+        // The tracker owns identity, but a LoadFamily internal close can omit lifecycle events.
+        // Membership must come from Revit's current census, never retained tracker wrappers.
+        var liveDocuments = RevitUiSession.CurrentUIApplication.Application.Documents
+            .Cast<Autodesk.Revit.DB.Document>().ToArray();
+        var documents = new List<BridgeDocumentSnapshot>();
+        foreach (var tracked in tracker.Open) {
+            try {
                 var document = tracked.Resolve();
+                if (!document.IsValidObject || !liveDocuments.Any(tracked.Matches)) {
+                    Log.Warning("Host bridge skipped closed document {OpenId} retained by the SDK tracker.", tracked.OpenId);
+                    continue;
+                }
+                if (document.IsLinked)
+                    continue;
                 // The SDK authority, not this payload, names the lifetime; one disagreement withholds the marker.
                 attested &= PeDocumentIdentity.TryGetOpenId(document, out var authority) && authority == tracked.OpenId;
-                return CaptureDocument(document, tracked.OpenId, activeDocument != null && tracked.Matches(activeDocument));
-            })
-            .ToList();
+                documents.Add(CaptureDocument(document, tracked.OpenId, activeDocument != null && tracked.Matches(activeDocument)));
+            } catch (Exception ex) {
+                // One bad wrapper must never strand every document by preventing registration.
+                Log.Warning(ex, "Host bridge could not capture document {OpenId}; skipping it.", tracked.OpenId);
+            }
+        }
         var runtimeAssemblies = CaptureRuntimeAssemblies();
         Log.Debug(
             "Host bridge state snapshot: ActiveDocument={ActiveDocumentTitle}",
