@@ -1163,7 +1163,7 @@ public sealed class RevitScriptingPortTests {
             );
             WritePodManifest(workspaceKey, "src/SampleScript.cs");
 
-            var service = CreateExecutionService(uiApplication);
+            var service = CreateExecutionService(uiApplication, workspaceKey);
             var failedResult = service.Execute(uiApplication.ActiveUIDocument?.Document, 
                 new ExecuteRevitScriptRequest(
                     ScriptContent: """
@@ -1188,8 +1188,8 @@ public sealed class RevitScriptingPortTests {
                 "test-inline-second"
             );
 
-            Assert.That(failedResult.Status, Is.EqualTo(ScriptExecutionStatus.CompilationFailed));
-            Assert.That(succeededResult.Status, Is.EqualTo(ScriptExecutionStatus.Succeeded));
+            Assert.That(failedResult.Status, Is.EqualTo(ScriptExecutionStatus.CompilationFailed), DiagnosticWords(failedResult));
+            Assert.That(succeededResult.Status, Is.EqualTo(ScriptExecutionStatus.Succeeded), DiagnosticWords(succeededResult));
             Assert.That(succeededResult.Output, Does.Contain("workspace script ran"));
         } finally {
             DeleteWorkspace(workspaceRoot);
@@ -1281,9 +1281,18 @@ public sealed class RevitScriptingPortTests {
                 }
                 """
             );
-            WritePodManifest(workspaceKey, "src/SampleScript.cs");
+            // C1 (docs/features/pods/LEDGER.md): helpers are .cs; only the selected .csx compiles.
+            Directory.CreateDirectory(Path.Combine(workspaceRoot, "lib"));
+            File.WriteAllText(Path.Combine(workspaceRoot, "lib", "PageHelper.cs"),
+                "public static class PageHelper { public const string Message = \"page helper ran\"; }");
+            Directory.CreateDirectory(Path.Combine(workspaceRoot, "pages", "check"));
+            File.WriteAllText(Path.Combine(workspaceRoot, "pages", "check", "Run.csx"),
+                "WriteLine(WorkspaceHelper.Message); WriteLine(PageHelper.Message);");
+            File.WriteAllText(Path.Combine(workspaceRoot, "pages", "check", "Unselected.csx"),
+                "This is deliberately invalid C# and must not compile.");
+            WritePodManifest(workspaceKey, "src/SampleScript.cs", "pages/check/Run.csx");
 
-            var service = CreateExecutionService(uiApplication);
+            var service = CreateExecutionService(uiApplication, workspaceKey);
             var result = service.Execute(uiApplication.ActiveUIDocument?.Document, 
                 new ExecuteRevitScriptRequest(
                     SourcePath: "src/SampleScript.cs",
@@ -1293,10 +1302,17 @@ public sealed class RevitScriptingPortTests {
                 "test-pod-helper"
             );
 
-            Assert.That(result.Status, Is.EqualTo(ScriptExecutionStatus.Succeeded));
+            Assert.That(result.Status, Is.EqualTo(ScriptExecutionStatus.Succeeded), DiagnosticWords(result));
             Assert.That(result.Output, Does.Contain("pod workspace script ran"));
             Assert.That(result.Output, Does.Not.Contain("other workspace script ran"));
             Assert.That(result.Diagnostics.Select(diagnostic => diagnostic.Message), Has.Some.Contain("Pod mode"));
+
+            var pageResult = service.Execute(uiApplication.ActiveUIDocument?.Document,
+                new ExecuteRevitScriptRequest(SourcePath: "pages/check/Run.csx", WorkspaceKey: workspaceKey,
+                    SourceBundle: CapturedBundle(workspaceKey)), "test-pod-page-helper");
+            Assert.That(pageResult.Status, Is.EqualTo(ScriptExecutionStatus.Succeeded), DiagnosticWords(pageResult));
+            Assert.That(pageResult.Output, Does.Contain("pod workspace script ran").And.Contain("page helper ran"));
+            Assert.That(pageResult.Output, Does.Not.Contain("other workspace script ran"));
         } finally {
             DeleteWorkspace(workspaceRoot);
         }
@@ -1371,15 +1387,28 @@ public sealed class RevitScriptingPortTests {
     private static ScriptProjectGenerator CreateProjectGenerator() =>
         new(new CsProjReader());
 
-    private static RevitScriptExecutionService CreateExecutionService(UIApplication uiApplication) {
+    private static string DiagnosticWords(ExecuteRevitScriptData result) =>
+        string.Join("; ", result.Diagnostics.Select(diagnostic => $"{diagnostic.Stage}: {diagnostic.Message}"));
+
+    private static RevitScriptExecutionService CreateExecutionService(UIApplication uiApplication, string? workspaceKey = null) {
         var csProjReader = new CsProjReader();
         var projectGenerator = new ScriptProjectGenerator(csProjReader);
+        // These library tests own their Pod. Host discovery is a separate integration dependency.
+        var pods = workspaceKey is null ? null : new Pe.Revit.Scripting.Pods.ScriptPodPreparationService((key, request) => {
+            Assert.That(key, Is.EqualTo("pod.capture"));
+            Assert.That(Newtonsoft.Json.Linq.JObject.FromObject(request).Value<string>("pod"), Is.EqualTo(workspaceKey));
+            return Newtonsoft.Json.Linq.JObject.FromObject(new {
+                id = workspaceKey, folder = workspaceKey, directory = UserPods.Root(workspaceKey),
+                contributions = Array.Empty<object>(), memberBundle = CapturedBundle(workspaceKey), sourceBundle = CapturedBundle(workspaceKey)
+            });
+        });
         return new RevitScriptExecutionService(
             projectGenerator,
             new ScriptReferenceResolver(csProjReader),
             new ScriptAssemblyLoadService(),
             new ScriptCompilationService(ScriptFileTemplates.DefaultUsings),
-            () => uiApplication
+            () => uiApplication,
+            pods: pods
         );
     }
 
