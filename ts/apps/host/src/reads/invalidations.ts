@@ -1,4 +1,4 @@
-import { canonicalRouteInput, documentRefSchema } from "@pe/agent-contracts";
+import { canonicalRouteInput, documentRefSchema, workKey, workKeySchema } from "@pe/agent-contracts";
 import { subscribePlaces } from "../places.ts";
 import type { RouteWorkspace } from "@pe/runtime";
 import type { HostMarks } from "../document-marks.ts";
@@ -25,13 +25,15 @@ export function readInvalidations(
     }
     publications.invalidate((trace) => matches(trace.name, trace.args));
   };
+  // One persisted Work has many spellings: `from` is carry-over provenance and the address may be
+  // spelled differently. Dependency identity is `workKey()`, the same identity the Work feed uses (D36).
+  const identity = (scope: unknown) => {
+    const key = workKeySchema.safeParse(scope);
+    return key.success ? workKey(key.data) : canonicalRouteInput(scope);
+  };
   const workMatches = (args: unknown, owner: string, scope: unknown) => {
     const input = workInput.input.safeParse(args);
-    return (
-      input.success &&
-      input.data.owner === owner &&
-      canonicalRouteInput(input.data.scope) === canonicalRouteInput(scope)
-    );
+    return input.success && input.data.owner === owner && identity(input.data.scope) === identity(scope);
   };
   let stopWork = () => {},
     stopMarks = () => {};
