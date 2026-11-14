@@ -596,7 +596,7 @@
     "source": "C:\\Users\\kaitp\\.t3\\worktrees\\Pe.Tools\\t3-0267fa47-aed87598c87b1cb9\\.artifacts\\runs\\view-image-recording\\2026-11-14T09-14-51-663Z\\image.json",
     "sourceSha256": "f467d3e42f8621a1b30bf38926a66cad3c97b80ee8e2e9e634d6d568e17d742e",
     "pointer": "$",
-    "canonicalResponseSha256": "899b48683636e0dc7bfe8e73d95743efa41da6f75fa8048d39ab13f11263bac2",
+    "canonicalResponseSha256": "42c90f0824094f5233a5b8919af4c273c605796251aba6d7b8f4493e4b17fadb",
     "lane": "fresh",
     "commit": "bd2e482b949c4813fadb3a09f820cde438c85002",
     "date": "2026-11-14T09:19:10.072Z",

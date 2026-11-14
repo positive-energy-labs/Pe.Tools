@@ -13,7 +13,7 @@ vi.mock("../src/pe-revit-launch.ts", async original => ({
   peRevitLauncher: () => ({ cmd: process.execPath, args: [] }),
 }));
 
-test("capabilities HTTP page discovery includes only the targeted project's Pages", async () => {
+test.each([false, true])("cold capabilities HTTP page discovery includes only the targeted project's Pages (unscoped first: %s)", async (unscopedFirst) => {
   const root = await mkdtemp(join(tmpdir(), "pe-cap-pages-"));
   const firm = join(root, "04 PE Software Files", "Pe.Tools"), project = join(root, "Projects", "Example", "Pe.Tools");
   for (const [home, tier] of [[firm, "firm"], [project, "project"]]) {
@@ -27,6 +27,10 @@ test("capabilities HTTP page discovery includes only the targeted project's Page
   const host = await bootHost({ revitCompositionFactory: () => ({ provider: Layer.succeed(RevitBridge, bridge), routes: Layer.empty }) });
   try {
     const headers = { "x-pe-context": host.terminal, [HOST_RPC_BRIDGE_SESSION_HEADER]: "fixture", [HOST_RPC_DOCUMENT_HEADER]: "project" };
+    if (unscopedFirst) {
+      const free = await (await fetch(`${host.base}/pe/capabilities`, { headers: { "x-pe-context": host.terminal } })).json();
+      expect(free.capabilities.some((row: { key: string }) => row.key === "page:@pages/project-page")).toBe(false);
+    }
     const scoped = await fetch(`${host.base}/pe/capabilities?open=fixture/project`, { headers });
     expect(scoped.status, await scoped.clone().text()).toBe(200);
     const value = await scoped.json();
