@@ -14,6 +14,7 @@ import { readFile } from "node:fs/promises";
 import { basename, dirname, extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
+import { wrongPodModel } from "./pod-model.ts";
 import { Effect, Option } from "effect";
 import { HttpEffect, HttpRouter, HttpServer } from "effect/http";
 import {
@@ -619,7 +620,7 @@ export function createPagesHandler(
     const actDoor = pageActDoor(page);
     const slot = state.binding().slots.default;
     const sessions = await live.sessions();
-    const resolution = resolveSlot(slot, sessions);
+    let resolution: PageTargetReading["resolution"] = resolveSlot(slot, sessions);
     const ref =
       resolution.kind === "resolved" && resolution.target.kind === "document"
         ? resolution.target.ref
@@ -629,8 +630,23 @@ export function createPagesHandler(
           .find((s) => s.session === ref.session)
           ?.documents?.find((d) => d.openId === ref.openId)?.title ?? "")
       : "";
+    const podId = parseContributionKey(page)?.packageId;
+    const model = pods && podId
+      ? (await listPackages(pods)).packages.find((pod) => pod.id === podId)?.for
+      : undefined;
+    if (model && ref) {
+      const response = await cross(page, slot, false, ref, "/pages/target", "/call", {
+        [HOST_RPC_BRIDGE_SESSION_HEADER]: ref.session,
+        [HOST_RPC_DOCUMENT_HEADER]: ref.openId,
+      }, { key: "revit.detail.elements", request: { query: { kind: "ElementReferences", elementIds: model.probes.map((probe) => probe.elementId) } } });
+      if (!response.ok) throw Error(await response.text());
+      const message = wrongPodModel(model, await response.json());
+      if (message) resolution = { kind: "refused", reason: "wrong-model", message };
+    }
     let write: PageWrite | null =
       slot.kind === "none" ? { kind: "read", refusal: unboundRefusal(actDoor) } : null;
+    if (resolution.kind === "refused")
+      write = { kind: "read", refusal: { code: "wrong-model", door: actDoor, reason: resolution.message } };
     if (resolution.kind === "resolved")
       try {
         const basis = admitPage(slot, resolution.target, actDoor);

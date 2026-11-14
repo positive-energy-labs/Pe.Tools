@@ -135,7 +135,7 @@
     if (reading.resolution.kind === "resolved") return pe.doc;
     const code = reading.resolution.reason || reading.resolution.kind;
     const error = new Error(
-      `pe.target: this page's binding names no one document (${code}). Bind it from the chip.`,
+      reading.resolution.message || `pe.target: this page's binding names no one document (${code}). Bind it from the chip.`,
     );
     Object.assign(error, { name: "PeTargetRefusal", code, resolution: reading.resolution });
     banner(error.message);

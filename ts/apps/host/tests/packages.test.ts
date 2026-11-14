@@ -52,6 +52,16 @@ test("a Page's .state folder in a Pod is stale debris, never a member", () => {
     expect(isPackageMember(path), path).toBe(false);
 });
 
+test("C3 admits a tour's model declaration and rejects empty or malformed probes", async () => {
+  const model = { title: "Chadds", probes: [{ elementId: 42, uniqueId: "stable" }] };
+  await put("Original", "pod.json", JSON.stringify({ id: "mixed", for: model }));
+  expect((await listPackages(root)).packages[0]?.for).toEqual(model);
+  for (const invalid of [null, {}, { ...model, probes: [] }, { ...model, probes: [{ elementId: 0, uniqueId: "x" }] }, { ...model, probes: [{ elementId: 1, uniqueId: "" }] }]) {
+    await put("Original", "pod.json", JSON.stringify({ id: "mixed", for: invalid }));
+    expect((await listPackages(root)).packages).toHaveLength(0);
+  }
+});
+
 test("one snapshot lists and captures every authored byte, excluding authority and debris", async () => {
   for (const path of [
     "output/run/input.json",

@@ -6,6 +6,16 @@ namespace Pe.Revit.Tests;
 [TestFixture]
 public sealed class PodManifestValidatorTests {
     [Test]
+    public void Model_identity_is_optional_but_present_probes_must_be_valid() {
+        const string prefix = """{"schemaVersion":2,"id":"tour","name":"Tour","version":"1","for": """;
+        var valid = PodManifestValidator.ValidateJson(prefix + """{"title":"Chadds","probes":[{"elementId":42,"uniqueId":"stable"}]}}""");
+        Assert.That(valid.Success, Is.True);
+        Assert.That(valid.Manifest!.For!.Probes.Single(), Is.EqualTo(new PodModelProbe(42, "stable")));
+        foreach (var model in new[] { "null", "{}", """{"title":"Chadds","probes":[]}""", """{"title":"Chadds","probes":[{"elementId":0,"uniqueId":"x"}]}""", """{"title":"Chadds","probes":[{"elementId":1,"uniqueId":""}]}""" })
+            Assert.That(PodManifestValidator.ValidateJson(prefix + model + "}").Success, Is.False, model);
+    }
+
+    [Test]
     public void Duplicate_manifest_identity_is_rejected_instead_of_silently_replaced() {
         var result = PodManifestValidator.ValidateJson("""{"schemaVersion":2,"id":"alice","id":"bob","name":"Example","version":"1"}""");
         Assert.That(result.Success, Is.False);
