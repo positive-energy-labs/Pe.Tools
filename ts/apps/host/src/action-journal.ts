@@ -315,6 +315,8 @@ const failure = (error: unknown): DispatchFailure => {
       notDispatched: true,
       evidence: { result: error.result },
     };
+  // CommandRejected is raised only on the host, before the step's own native send (the script door's send is its
+  // last statement; bridge and SDK paths raise StepFailure). That is why it may settle as notDispatched (D38).
   if (error instanceof CommandRejected)
     return { state: "failed", error: error.message, status: error.status, notDispatched: true };
   if (error instanceof StepFailure) {

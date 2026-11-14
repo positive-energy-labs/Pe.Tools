@@ -644,6 +644,8 @@ export const makeDispatcher = (ports: DispatchPorts) =>
         if (owed) yield* Ref.set(owed, reply);
         if (reserved)
           yield* Effect.tryPromise({
+            // The stamp follows the send, so its absence alone never proves no send: the effect cannot exit before the
+            // stamp commits or fails (a failed stamp is an uncertain StepFailure), and a crash here settles unknown on restart.
             try: () => ports.markBridgeDispatched(requestId),
             catch: () =>
               new BridgeError("Dispatched; the journal did not record it", 503, {
