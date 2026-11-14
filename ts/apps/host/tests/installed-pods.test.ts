@@ -18,7 +18,8 @@ import { PictureCaptures } from "../src/captures-route.ts";
 
 import { importShippedPods } from "../src/installed-pods.ts";
 import { listPackages } from "../src/packages.ts";
-import { exportPod, importPod, importRecordFile, readZip, writeZip } from "../src/pod-transfer.ts";
+import { exportPod, importRecordFile, readZip, writeZip } from "../src/pod-transfer.ts";
+import { importPod } from "./pod-import.ts";
 import * as settings from "../src/settings.ts";
 import * as store from "@pe/host-contracts/kinds";
 import { productPodsRootPath } from "../src/product-paths.ts";

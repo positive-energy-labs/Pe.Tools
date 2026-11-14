@@ -1,4 +1,3 @@
-import { readFile } from "node:fs/promises";
 import { resolve, basename, dirname, join } from "node:path";
 import { hostState } from "./host-ownership.ts";
 import { createHash } from "node:crypto";
@@ -11,6 +10,7 @@ import {
   installArchive,
   promotedArchive,
   readZip,
+  readArchive,
   retireScratchPage,
   preparePodExport,
   writePodExport,
@@ -283,29 +283,23 @@ export function gatewayExecutor(
             break;
           }
           case "pod.import": {
-            const path = resolve(String(authored.archivePath));
-            const bytes = await readFile(path);
-            const entries = readZip(bytes);
-            const manifest = JSON.parse(entries.get("pod.json")?.toString("utf8") ?? "null") as {
-              id?: string;
-            } | null;
-            if (!manifest?.id) throw refused("Pod archive has no exact destination identity");
+            const { bytes, entries, id, archivePath: path } = await readArchive(String(authored.archivePath));
             consumes.push({
               kind: "file",
               probe: { path },
               expected: createHash("sha256").update(bytes).digest("hex"),
-              bytesBase64: bytes.toString("base64"),
             });
             effects.push(
               ...[...entries.keys()].map((path) => ({
                 kind: "member" as const,
-                pod: manifest.id!,
+                pod: id,
                 path,
               })),
             );
             payload = {
               kind: "host-leaf",
               archive: {
+                // Commit uses the admitted bytes even if the source is replaced or disappears.
                 bytesBase64: bytes.toString("base64"),
                 locator: path,
                 ...(typeof authored.folder === "string" ? { folder: authored.folder } : {}),
