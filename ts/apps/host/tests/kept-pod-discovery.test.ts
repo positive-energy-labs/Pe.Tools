@@ -610,7 +610,7 @@ test("the five-second lifecycle discovery bound includes its initial census", as
   bindPackageLifecycle(lifecycle);
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   try {
-    const opening = expect(requirePackageEnabled("late")).rejects.toThrow("inactive");
+    const opening = expect(requirePackageEnabled("late")).rejects.toMatchObject({ code: "pod.discovery.exceeded" });
     await vi.advanceTimersByTimeAsync(5_000);
     await opening;
   } finally {

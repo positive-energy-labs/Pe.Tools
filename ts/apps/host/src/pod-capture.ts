@@ -215,7 +215,9 @@ export async function discoverPackages(
   roots: PodsRoots,
   read: (roots: readonly string[], signal: AbortSignal, previous?: PackageCensus, signature?: string) => Promise<PackageListing>,
   wait: "request" | "background",
-  readSignature?: (signal: AbortSignal) => Promise<string | undefined>,
+  readSignature?: (signal: AbortSignal, previous?: PackageCensus) => Promise<string | undefined>,
+  resolveSignature?: (signature: string, previous?: PackageCensus) => string,
+  packageId?: string,
 ): Promise<PackageListing> {
   const key = rootsKey(roots);
   let selected: DiscoveryScan | undefined;
@@ -224,6 +226,8 @@ export async function discoverPackages(
   validations.add(validation);
   const choose = (signature: string | undefined) => {
     validation.signal.throwIfAborted();
+    if (signature !== undefined && resolveSignature)
+      signature = resolveSignature(signature, completedCensuses.get(key));
     let scan = discovery.get(key);
     const tooOld = scan && !scan.completed && Date.now() - scan.startedAt >= packageScanMaxAgeMs;
     // Validate joins and late answers too. Unknown metadata never authorizes reuse.
@@ -241,8 +245,11 @@ export async function discoverPackages(
       return scan.promise;
     }
     const cached = completedCensuses.get(key);
-    if (signature !== undefined && cached?.signature === signature &&
-      !cached.listing.packages.some(pod => pod.discoveryFailure)) return Promise.resolve(cached.listing);
+    const retryMiss = packageId !== undefined && cached?.listing.unreadable.length &&
+      !cached.listing.packages.some(pod => pod.id === packageId);
+    if (!retryMiss && signature !== undefined && cached?.signature === signature &&
+      !cached.listing.packages.some(pod => pod.discoveryFailure && (packageId === undefined || pod.id === packageId)))
+      return Promise.resolve(cached.listing);
     const stop = new AbortController();
     const current: DiscoveryScan = {
       stop,
@@ -276,7 +283,7 @@ export async function discoverPackages(
     return current.promise;
   };
   // The metadata walk is inside the request budget and starts after this call's arrival.
-  const work = readSignature ? readSignature(validation.signal).then(choose) : choose(undefined);
+  const work = readSignature ? readSignature(validation.signal, completedCensuses.get(key)).then(choose) : choose(undefined);
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     if (wait === "background") return await work;
@@ -301,6 +308,7 @@ export async function captureIndexedPackage(
   id: string,
   roots: PodsRoots | undefined,
   read: (directory: string, folder: string, signal: AbortSignal) => Promise<AdmittedPackage>,
+  discoverMissing?: (roots: PodsRoots) => Promise<unknown>,
 ): Promise<AdmittedPackage> {
   // Do not resolve homes here: synchronous Drive probing runs outside any async deadline.
   const selectedRoots = roots ?? productRoots;
@@ -309,7 +317,11 @@ export async function captureIndexedPackage(
     throw Error(
       `Pod '${id}' cannot be captured before Pod discovery finishes. Refresh the Pod list and try again.`,
     );
-  const found = census.filter((pod) => pod.id === id);
+  let found = census.filter((pod) => pod.id === id);
+  if (!found.length && discoverMissing && selectedRoots) {
+    await discoverMissing(selectedRoots);
+    found = censuses.get(rootsKey(selectedRoots))?.filter(pod => pod.id === id) ?? [];
+  }
   if (found.length > 1)
     throw Error(
       `Pod id '${id}' is claimed by ${found.map((pod) => pod.directory).join(" and ")}: none is used until the id is unique.`,

@@ -1,6 +1,6 @@
 import { stateSegments } from "@pe/host-contracts/service-identity";
 import { createHash } from "node:crypto";
-import { acquireContentRoots, contentRootsReady } from "./content-roots.ts";
+import { acquireContentRoots, contentRootsReady, contentRootsRefreshMs } from "./content-roots.ts";
 import { createPluginRuntime } from "@pe/agent-contracts";
 import { z } from "zod";
 import {
@@ -19,7 +19,7 @@ import {
   type StoredFile,
 } from "@pe/host-contracts/kinds";
 import { hostState } from "./host-ownership.ts";
-import { packageDiscoveryTimeoutMs } from "./pod-capture.ts";
+import { PackageDiscoveryExceeded, packageDiscoveryTimeoutMs } from "./pod-capture.ts";
 import { productPodsRootPath } from "./product-paths.ts";
 import {
   builtinPeaSkillSnapshots,
@@ -90,22 +90,26 @@ export async function requirePackageEnabled(
     const discover = async () => {
       await lifecycle.ready;
       if (!lifecycle.inventory().some((pod) => pod.id === `pod:${id}`)) {
-        // Queue behind any scan that may have captured bytes before this Pod arrived.
-        await lifecycle.refresh();
+        // A new slug/key is usable before the inventory cadence sees it. Its admission
+        // checks every manifest identity and only this Pod's members.
+        await lifecycle.admit(id);
       } else lifecycle.requestRefresh();
+      // Replacing a runtime scope briefly deactivates it. Wait for that Pod's installation,
+      // within this request's existing budget, rather than turning an edit into a plain 404.
+      await lifecycle.installation(id);
+      if (!lifecycle.active(id)) throw Error(`Pod '${id}' is inactive`);
     };
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
       await Promise.race([
         discover(),
-        new Promise<void>((resolve) => {
-          timer = setTimeout(resolve, packageDiscoveryTimeoutMs);
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => reject(new PackageDiscoveryExceeded(podsRoots ?? productPodsRoots())), packageDiscoveryTimeoutMs);
         }),
       ]);
     } finally {
       clearTimeout(timer);
     }
-    if (!lifecycle.active(id)) throw Error(`Pod '${id}' is inactive`);
   }
   if ((await readDecisions(decisionsKind.in(hostState())))[`pod:${id}`] === false)
     throw Error(`Pod '${id}' is disabled`);
@@ -119,6 +123,8 @@ export async function activePackages(
   const enabled = await Promise.allSettled(
     packages.map((pod) => requirePackageEnabled(pod.id, podsRoots, outsideCensus)),
   );
+  for (const result of enabled)
+    if (result.status === "rejected" && result.reason instanceof PackageDiscoveryExceeded) throw result.reason;
   return packages.filter((_, index) => enabled[index]!.status === "fulfilled");
 }
 
@@ -136,6 +142,8 @@ export function createPackageLifecycle(
   let decisions: Record<string, boolean> = {};
   let initialized = false;
   const signatures = new Map<string, string>();
+  const installations = new Map<string, Promise<void>>();
+  let refreshedAt = Date.now();
   let initialListing: Awaited<ReturnType<typeof listPackages>> = { packages: [], unreadable: [] };
   const listeners = new Set<() => void>();
   const changed = () => {
@@ -177,12 +185,13 @@ export function createPackageLifecycle(
     initialListing = await synchronize();
     initialized = true;
   }
-  async function synchronize() {
+  async function synchronize(packageId?: string) {
     if (closed) return initialListing;
+    if (packageId === undefined) refreshedAt = Date.now();
     // Roots are refreshed by the shared async owner, never by a request or scan.
     const roots = options.packages ? [] : productPodsRoots();
     // Lifecycle owns publication after a slow scan; Page requests bound their own wait for it.
-    const listing = await (options.packages ? options.packages() : listPackages({ podsRoots: roots, wait: "background" }));
+    const listing = await (options.packages ? options.packages({ packageId }) : listPackages({ podsRoots: roots, wait: "background", packageId }));
     if (closed) return initialListing;
     const current = new Set(listing.packages.map((p) => `pod:${p.id}`));
     for (const id of signatures.keys())
@@ -205,7 +214,7 @@ export function createPackageLifecycle(
         .digest("hex");
       if (signatures.get(id) === signature) continue;
       signatures.set(id, signature);
-      await runtime.install(
+      const installation = runtime.install(
         {
           id,
           setup(context) {
@@ -218,6 +227,9 @@ export function createPackageLifecycle(
         },
         decisions[id] !== false,
       );
+      installations.set(id, installation);
+      try { await installation; }
+      finally { if (installations.get(id) === installation) installations.delete(id); }
     }
     if (closed) return initialListing;
     initialListing = listing;
@@ -239,6 +251,16 @@ export function createPackageLifecycle(
       .catch(() => {});
     return next;
   }
+  const requestRefresh = () => {
+    if (closed || Date.now() - refreshedAt < contentRootsRefreshMs) return;
+    return refresh().catch((error) => {
+      if (!closed) console.error("package-lifecycle: background refresh failed; keeping last listing", error);
+    });
+  };
+  // Whole inventory follows the roots cadence. Named requests validate their Pod's members
+  // and all manifest identities independently; human/agent writes still await explicit refresh.
+  const refreshTimer = setInterval(requestRefresh, contentRootsRefreshMs);
+  refreshTimer.unref();
   return {
     // Only startup gates readers. Each action awaits its own refresh before reporting success;
     // unrelated readers serve the completed census even while that action scans a slow drive.
@@ -253,13 +275,9 @@ export function createPackageLifecycle(
     },
     initialized: () => initialized,
     /** One scan in flight. Reads serve the last completed listing until it finishes. */
-    requestRefresh: () => {
-      if (closed) return;
-      return refresh().catch((error) => {
-        if (closed) return;
-        console.error("package-lifecycle: background refresh failed; keeping last listing", error);
-      });
-    },
+    requestRefresh,
+    installation: (id: string) => installations.get(`pod:${id}`),
+    admit: (id: string) => synchronize(id),
     refresh: (initial = false) => {
       // An action may have written after discovery captured its bytes. Queue a fresh census
       // behind that scan rather than joining its stale snapshot. Background readers join neither.
@@ -291,6 +309,7 @@ export function createPackageLifecycle(
     skills: () => runtime.contributions().flatMap((c) => (c.kind === "skill" ? [c.skill] : [])),
     close: async () => {
       closed = true;
+      clearInterval(refreshTimer);
       rootsOwner?.close();
       // The detached initial read may fail after its home has been released.
       void ready.catch(() => {});
