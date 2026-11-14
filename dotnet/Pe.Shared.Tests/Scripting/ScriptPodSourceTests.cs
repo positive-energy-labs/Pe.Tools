@@ -24,9 +24,9 @@ public sealed class ScriptPodSourceTests {
     [Test]
     public void A_statement_body_entrypoint_beside_its_page_compiles_with_the_pods_other_cs_files() {
         var bundle = new ScriptPodSourceBundle(
-            [new("pod.json", Encode("""{"schemaVersion":2,"id":"sample","name":"Sample","version":"1.0.0","entrypoints":[{"sourcePath":"pages/tour/checks/census.csx"},{"sourcePath":"pages/tour/checks/other.csx"}]}""")),
+            [new("pod.json", Encode("""{"schemaVersion":2,"id":"sample","name":"Sample","version":"1.0.0","entrypoints":[{"sourcePath":"pages/tour/checks/census.csx"},{"sourcePath":"pages/tour/checks/other.cs"}]}""")),
              new("pages/tour/checks/census.csx", Encode("using System.Linq;\nvar total = Helper.Values.Sum();\nAnswer = total;")),
-             new("pages/tour/checks/other.csx", Encode("Answer = 1;")),
+             new("pages/tour/checks/other.cs", Encode("Answer = 1;")),
              new("lib/Helper.cs", Encode("public static class Helper { public static readonly int[] Values = [40, 2]; }")),
              new("lib/Base.cs", Encode("public abstract class PeScriptContainer { public int Answer; public abstract void Execute(); }"))]);
 
