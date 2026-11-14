@@ -24,18 +24,54 @@ import * as store from "@pe/host-contracts/kinds";
 import { RouteWorkspace } from "@pe/runtime";
 import { peRouteUrl } from "@pe/agent-contracts/pe-api";
 
+test("a healthy local read completing after 1200 ms is not refused", async () => {
+  await putRoute(join(root, "user"));
+  await content.lifecycle.refresh();
+  const route = (await routes.list()).find((r) => r.packageId === "late")!;
+  await routes.trust(route.key, route.fingerprint, true);
+  await content.lifecycle.refresh();
+  const entered = Promise.withResolvers<void>();
+  const actual = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
+  let first = true;
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  vi.spyOn(filesystem, "open").mockImplementation(async (...args) => {
+    if (first) {
+      first = false;
+      entered.resolve();
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+    }
+    return actual.open(...args);
+  });
+  const reading = routes.bundle(route.key, route.fingerprint).then(
+    (result) => result,
+    (error) => error,
+  );
+  await entered.promise;
+  try {
+    await vi.advanceTimersByTimeAsync(1200);
+    expect(await reading).toMatchObject({ fingerprint: route.fingerprint });
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 test("a detached initial census can fail after close without an unhandled rejection", async () => {
   const entered = Promise.withResolvers<void>();
   const release = Promise.withResolvers<void>();
   let failed = false;
-  const lifecycle = createPackageLifecycle({ machine: stateMachine(root), packages: async () => {
-    entered.resolve(); await release.promise; failed = true;
-    throw Error("home disappeared during shutdown");
-  } });
+  const lifecycle = createPackageLifecycle({
+    machine: stateMachine(root),
+    packages: async () => {
+      entered.resolve();
+      await release.promise;
+      failed = true;
+      throw Error("home disappeared during shutdown");
+    },
+  });
   await entered.promise;
   await lifecycle.close();
   release.resolve();
-  await new Promise(resolve => setImmediate(resolve));
+  await new Promise((resolve) => setImmediate(resolve));
   expect(failed).toBe(true);
 });
 
@@ -168,23 +204,34 @@ test("a held new admission never queues later route inventory readers", async ()
     await release.promise;
     return actual.open(...args);
   });
-  const first = admitting.list().then(
-    () => null,
-    (error) => error,
-  );
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  let answered = false;
+  const first = admitting
+    .list()
+    .then(
+      () => null,
+      (error) => error,
+    )
+    .finally(() => {
+      answered = true;
+    });
   await entered.promise;
   try {
     const later = admitting.list();
-    const result = await Promise.race([
+    const result = Promise.race([
       later,
       new Promise<"blocked">((resolve) => setTimeout(() => resolve("blocked"), 100)),
     ]);
-    expect(result).not.toBe("blocked");
+    await vi.advanceTimersByTimeAsync(100);
+    expect(await result).not.toBe("blocked");
+    await vi.advanceTimersByTimeAsync(30000);
+    expect(answered).toBe(true);
     expect(await first).toMatchObject({ code: "pod.route.check.timeout", retryable: true });
   } finally {
     release.resolve();
     await first;
     admitting.close();
+    vi.useRealTimers();
   }
 });
 
@@ -518,6 +565,7 @@ test("control: a user route present before startup is listed", async () => {
     .toContainEqual(expect.objectContaining({ packageId: "late", trusted: false }));
 });
 afterEach(async () => {
+  vi.useRealTimers();
   routes.close();
   await content.lifecycle.close();
   bindPackageLifecycle(undefined);
@@ -751,12 +799,16 @@ test("RECHECK: stalled open refuses with a retryable deadline", async () => {
   await routes.trust(d.key, d.fingerprint, true);
   const entered = Promise.withResolvers<void>();
   const release = Promise.withResolvers<void>();
+  const secondEntered = Promise.withResolvers<void>();
+  let opens = 0;
   const actual = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
   vi.spyOn(filesystem, "open").mockImplementation(async (...args) => {
     entered.resolve();
+    if (++opens === 2) secondEntered.resolve();
     await release.promise;
     return actual.open(...args);
   });
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   let answered = false;
   const request = routes
     .bundle(d.key, d.fingerprint)
@@ -769,10 +821,10 @@ test("RECHECK: stalled open refuses with a retryable deadline", async () => {
     });
   await entered.promise;
   try {
-    await new Promise((r) => setTimeout(r, 1200));
+    await vi.advanceTimersByTimeAsync(30000);
     expect(answered).toBe(true);
     expect(await request).toMatchObject({ code: "pod.route.check.timeout", retryable: true });
-    const response = await createPluginsHandler(
+    const responding = createPluginsHandler(
       content,
       routes,
     )(
@@ -781,6 +833,9 @@ test("RECHECK: stalled open refuses with a retryable deadline", async () => {
           peRouteUrl("plugins.routeBundle", { params: { key: d.key, hash: d.fingerprint } }),
       ),
     );
+    await secondEntered.promise;
+    await vi.advanceTimersByTimeAsync(30000);
+    const response = await responding;
     expect(response.status).toBe(503);
     expect(await response.json()).toMatchObject({
       code: "pod.route.check.timeout",
@@ -789,6 +844,7 @@ test("RECHECK: stalled open refuses with a retryable deadline", async () => {
   } finally {
     release.resolve();
     await request;
+    vi.useRealTimers();
   }
 });
 

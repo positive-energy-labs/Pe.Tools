@@ -76,12 +76,18 @@ export const trustKind = keptStateKind({
   segments: () => stateSegments("routeTrust"),
 });
 
+// A healthy 16 MB Snowdon journey read returned 1171 ms after the check started locally.
+// Round four times that observed elapsed time up to whole seconds. Google Drive is not measured.
+const POD_ROUTE_CHECK_TIMEOUT_MS = 5000;
+
 /** Transient source IO failure: a caller may retry without changing its trust choice. */
 export class PodRouteCheckTimeout extends Error {
   readonly code = "pod.route.check.timeout";
   readonly retryable = true;
   constructor() {
-    super("Pod route byte check exceeded 1000 ms; retry when the home is available.");
+    super(
+      `Pod route byte check exceeded ${POD_ROUTE_CHECK_TIMEOUT_MS} ms; retry when the home is available.`,
+    );
     this.name = "PodRouteCheckTimeout";
   }
 }
@@ -158,7 +164,7 @@ export function createPodRoutes(
       timer = setTimeout(() => {
         expired = true;
         reject(new PodRouteCheckTimeout());
-      }, 1000);
+      }, POD_ROUTE_CHECK_TIMEOUT_MS);
     });
     try {
       return await Promise.race([check(), deadline]);
