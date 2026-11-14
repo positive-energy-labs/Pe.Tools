@@ -1,4 +1,5 @@
 import { stateScope } from "@pe/host-contracts/service-identity";
+import { contentRootsReady } from "./content-roots.ts";
 import { targetHomes } from "./call-route.ts";
 import { readPlaces, writePlaces } from "./places.ts";
 import { workKeySchema as mountedWorkKeySchema } from "@pe/agent-contracts";
@@ -1218,6 +1219,7 @@ function* hostPeRoutes(
   noteStartupHomes();
   // One host log line per home, with its tier and how it was found; with no firm home, where it looked.
   for (const line of homeLogLines()) yield* Effect.logInfo(line);
+  yield* Effect.promise(() => contentRootsReady());
   let invalidateCatalog = () => {};
   const content = createContributionContent({
     worldRoot: stateScope(hostState(), hostState().agent),

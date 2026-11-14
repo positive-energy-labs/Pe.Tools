@@ -15,6 +15,7 @@ vi.mock("@pe/host-contracts/product-paths", async (original) => ({
 const roots: string[] = [];
 afterEach(async () => {
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
   vi.useRealTimers();
   await Promise.all(
     roots.splice(0).map((root) => filesystem.rm(root, { recursive: true, force: true })),
@@ -24,11 +25,11 @@ afterEach(async () => {
 async function fixture() {
   const root = await filesystem.mkdtemp(join(tmpdir(), "pe-capture-deadline-"));
   roots.push(root);
-  const local = join(root, "local");
-  const foreign = join(root, "foreign");
+  const local = join(root, "local", "Pods");
+  const foreign = join(root, "foreign", "Pods");
   const directory = join(local, "renamed-folder");
   await filesystem.mkdir(directory, { recursive: true });
-  await filesystem.mkdir(foreign);
+  await filesystem.mkdir(foreign, { recursive: true });
   await filesystem.writeFile(
     join(directory, "pod.json"),
     '{"id":"local","entrypoints":[{"sourcePath":"Run.csx"}]}',
@@ -61,7 +62,10 @@ test("capture uses the completed identity census and fresh local bytes without r
 
 test("default capture never probes homes, including when passed admitted bytes", async () => {
   const { local, foreign } = await fixture();
-  const probe = vi.spyOn(productPaths, "homeDirs").mockReturnValue([local, foreign]);
+  vi.stubEnv("PE_TOOLS_PRODUCT_HOME", join(local, ".."));
+  const probe = vi.spyOn(productPaths, "resolveHomes").mockResolvedValue(new Map([["", [
+    { tier: "user", root: join(local, "..") }, { tier: "firm", root: join(foreign, "..") },
+  ]]]));
   const listing = await listPackages();
   probe.mockImplementation(() => {
     throw Error("slow synchronous Drive probe");

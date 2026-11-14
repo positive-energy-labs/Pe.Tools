@@ -257,6 +257,89 @@ test("three quick Page requests reuse one completed census until its disk signat
   expect(scans).toBe(2);
 });
 
+test("unchanged concurrent requests validate metadata but share one full scan", async () => {
+  const { pods } = await reviewedPod();
+  const entered = Promise.withResolvers<void>(), release = Promise.withResolvers<void>();
+  const actual = filesystem.open;
+  let scans = 0;
+  vi.spyOn(filesystem, "open").mockImplementation(async (...args) => {
+    if (String(args[0]) === join(pods, "review", "pod.json")) {
+      scans++; entered.resolve(); await release.promise;
+    }
+    return actual(...args);
+  });
+  const metadata = vi.spyOn(diskSignature, "podsDiskSignature");
+  const first = listPackages({ podsRoots: pods });
+  await entered.promise;
+  const others = [listPackages({ podsRoots: pods }), listPackages({ podsRoots: pods })];
+  try {
+    await vi.waitFor(() => expect(metadata.mock.settledResults.filter(result => result.type === "fulfilled")).toHaveLength(3));
+    await new Promise(resolve => setImmediate(resolve));
+    expect(scans).toBe(1);
+  } finally { release.resolve(); await Promise.all([first, ...others]); }
+});
+
+test.each(["in-flight", "late"])("a request after an edit validates an %s answer against its arrival signature", async (kind) => {
+  const { pods, page } = await reviewedPod();
+  await mkdir(join(pods, "zz-blocker"));
+  await writeFile(join(pods, "zz-blocker", "pod.json"), '{"id":"blocker"}');
+  const entered = Promise.withResolvers<void>(), release = Promise.withResolvers<void>();
+  const actual = filesystem.open;
+  let held = false;
+  vi.spyOn(filesystem, "open").mockImplementation(async (...args) => {
+    if (!held && String(args[0]) === join(pods, "zz-blocker", "pod.json")) {
+      held = true; entered.resolve(); await release.promise;
+    }
+    return actual(...args);
+  });
+  if (kind === "late") vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  const first = listPackages({ podsRoots: pods });
+  const observed = first.catch(error => error);
+  await entered.promise;
+  const complete = discoverPackages(pods, async () => { throw Error("unexpected second reader"); }, "background");
+  try {
+    if (kind === "late") {
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(await observed).toBeInstanceOf(Error);
+      release.resolve(); await complete;
+    }
+    await writeFile(join(page, "index.html"), "<title>v2 after request arrival</title>");
+    const signatureRead = Promise.withResolvers<void>();
+    const original = diskSignature.podsDiskSignature;
+    vi.spyOn(diskSignature, "podsDiskSignature").mockImplementation(async (...args) => {
+      const signature = await original(...args); signatureRead.resolve(); return signature;
+    });
+    const next = listPackages({ podsRoots: pods });
+    await signatureRead.promise;
+    await new Promise(resolve => setImmediate(resolve));
+    release.resolve();
+    const listing = await next;
+    const html = listing.packages.find(pod => pod.id === "review")!.members.find(member => member.path.endsWith("index.html"))!;
+    expect(Buffer.from(html.bytes).toString()).toContain("v2 after request arrival");
+  } finally { release.resolve(); await complete; await observed; }
+});
+
+test("a background floor leaves the old request running but cannot publish its old census", async () => {
+  const { pods } = await reviewedPod();
+  const old = await listPackages({ podsRoots: pods });
+  await filesystem.rename(join(pods, "review"), join(pods, "fresh"));
+  await writeFile(join(pods, "fresh", "pod.json"), '{"id":"fresh"}');
+  const newer = await listPackages({ podsRoots: pods });
+  const release = Promise.withResolvers<packages.PackageListing>();
+  vi.useFakeTimers({ toFake: ["Date"] });
+  let signal: AbortSignal;
+  const signature = async () => "stable";
+  const first = discoverPackages("superseded", (_roots, stop) => { signal = stop; return release.promise; }, "request", undefined, signature);
+  await new Promise(resolve => setImmediate(resolve));
+  vi.setSystemTime(Date.now() + 1_000);
+  expect(await discoverPackages("superseded", async () => newer, "background", Date.now(), signature)).toEqual(newer);
+  expect(signal!.aborted).toBe(false);
+  release.resolve(old);
+  expect(await first).toEqual(old);
+  expect((await capturePackage("fresh", "superseded")).id).toBe("fresh");
+  expect(await discoverPackages("superseded", async () => { throw Error("unchanged listing rescanned"); }, "request", undefined, signature)).toEqual(newer);
+});
+
 test.each(["listPackages", "readPackage"])("%s forwards notBefore in Date.now epoch milliseconds", async (entry) => {
   const { pods } = await reviewedPod();
   const listing = await listPackages({ podsRoots: pods });
@@ -274,7 +357,7 @@ test.each(["listPackages", "readPackage"])("%s forwards notBefore in Date.now ep
     vi.setSystemTime(Date.now() + advance);
     const reading = lookup(Date.now() - (advance ? 0 : 1_000));
     try {
-      expect(metadata).toHaveBeenCalledTimes(advance ? 1 : 0);
+      expect(metadata).toHaveBeenCalledTimes(1);
       expect(signal!.aborted).toBe(false);
     }
     finally { release.resolve(listing); await pending; await reading; }
@@ -428,17 +511,16 @@ test("a stalled folder listing bounds waiters, shares work, and publishes its la
   await vi.advanceTimersByTimeAsync(5_000);
   await refused;
   await joined;
-  expect(spy).toHaveBeenCalledTimes(1);
   release.resolve();
   await vi.waitFor(async () => expect((await capturePackage("late", homes)).id).toBe("late"));
   const folderScans = lines.filter(line => line.startsWith("Pod folder scan "));
   expect(folderScans).toHaveLength(4);
   expect(folderScans[1]).toContain("outcome=completed");
-  const calls = spy.mock.calls.length;
+  const calls = lines.filter(line => line.startsWith("Pod folder scan start")).length;
   expect((await listPackages({ podsRoots: homes })).packages.map(p => p.id)).toEqual(["late"]);
-  expect(spy).toHaveBeenCalledTimes(calls);
+  expect(lines.filter(line => line.startsWith("Pod folder scan start"))).toHaveLength(calls);
   await listPackages({ podsRoots: homes });
-  expect(spy.mock.calls.length).toBeGreaterThan(calls);
+  expect(lines.filter(line => line.startsWith("Pod folder scan start")).length).toBeGreaterThan(calls);
   expect((await capturePackage("late", homes)).id).toBe("late");
 });
 

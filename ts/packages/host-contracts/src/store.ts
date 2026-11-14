@@ -10,7 +10,6 @@
  */
 import { randomUUID } from "node:crypto";
 import {
-  appendFileSync,
   closeSync,
   fstatSync,
   fsyncSync,
@@ -24,9 +23,10 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile, rename, rm } from "node:fs/promises";
 import { z } from "zod";
 import {
+  derivedStoreOf,
   sha256Hex,
   storedNoticeSchema,
   derivedName,
@@ -126,7 +126,7 @@ function writeAtomic(path: string, bytes: Uint8Array | string): void {
       }
     }
   } catch (error) {
-    rmSync(temporary, { force: true });
+    removeFile(temporary);
     throw error;
   }
 }
@@ -235,14 +235,13 @@ function noteStored(file: string, notice: Omit<StoredNotice, "at">): void {
       (row) => row.path === path && row.sha256 === notice.sha256,
     );
     if (posted) return;
-    ensureParent(file);
     const row: StoredNotice = {
       ...notice,
       path,
       reason: oneLine(notice.reason),
       at: new Date().toISOString(),
     };
-    appendFileSync(file, `${JSON.stringify(row)}\n`);
+    appendStoredLine(file, JSON.stringify(row));
   } catch (error) {
     console.warn(`Could not post the notice for '${notice.path}': ${message(error)}`);
   }
@@ -294,7 +293,7 @@ function refuse(path: string, bytes: Buffer | null, policy: ReadRule, why: strin
   const reason = note("discard", oneLine(`Prior bytes: ${blob}. ${why}`));
   owed.delete(resolve(path));
   try {
-    rmSync(path, { force: true });
+    removeFile(path);
   } catch {
     // A held file stays; its bytes rest in the blob store and its notice does not repeat.
   }
@@ -509,7 +508,9 @@ export const readLines = <T>(log: StoredLog<T>) =>
 export const appendLine = <T>(log: StoredLog<T>, value: T): void =>
   appendStoredLine(log.path, JSON.stringify(value));
 
-/** Callers serialize batches. A crash may tear this disposable diagnostic tail. */
+const removeFile = (path: string) => rmSync(path, { force: true });
+
+/** Callers serialize batches. Replace the bounded diagnostic tail atomically. */
 export async function appendLinesBounded<T>(log: StoredLog<T>, values: readonly T[], maxLines: number): Promise<void> {
   if (!Number.isSafeInteger(maxLines) || maxLines < 1) throw Error("Log line limit must be positive");
   const prior = await readFile(log.path, "utf8").catch(error => {
@@ -518,15 +519,15 @@ export async function appendLinesBounded<T>(log: StoredLog<T>, values: readonly 
   });
   const lines = [...prior.split("\n").filter(Boolean), ...values.map(value => JSON.stringify(value))];
   await mkdir(dirname(log.path), { recursive: true });
-  await writeFile(log.path, `${lines.slice(-maxLines).join("\n")}\n`);
+  const temporary = `${log.path}.${randomUUID()}.tmp`;
+  try {
+    await writeFile(temporary, `${lines.slice(-maxLines).join("\n")}\n`);
+    await rename(temporary, log.path);
+  } catch (error) {
+    await rm(temporary, { force: true });
+    throw error;
+  }
 }
-
-const derivedStoreOf = <P extends HomePath | StatePath>(dir: DerivedDir<P>): DerivedStore<P> => ({
-  dir: dir.path,
-  path: dir.file,
-  notices: dir.machine.notices,
-  blobRoot: dir.machine.blobs,
-});
 /** The file a key names in a derived folder, proven by its own hash; see `readDerived`. */
 export const readDerivedIn = <P extends HomePath | StatePath>(
   dir: DerivedDir<P>,

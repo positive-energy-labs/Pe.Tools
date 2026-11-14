@@ -40,6 +40,7 @@ import { requirePackageEnabled, activePackages, projectPodIds, reconcilePackageC
 import { shippedPodsSettled } from "./installed-pods.ts";
 import { LocalOpError } from "./local-error.ts";
 import { PackageDiscoveryExceeded } from "./pod-capture.ts";
+import { contentRootsReady } from "./content-roots.ts";
 import { hostState } from "./host-ownership.ts";
 import { sha256Hex,
   writeHome,
@@ -169,11 +170,11 @@ const projectPodsNote = (ctx: PodContext) =>
               : `The targeted document names the project home '${ctx.pointer}', which was not found on this computer, so only the user and firm homes are listed.`,
       };
 
-const shippedPodsImported = (ctx: PodContext) =>
-  ctx.podsRoot === undefined ? Effect.promise(shippedPodsSettled) : Effect.void;
+const podContentReady = (ctx: PodContext) =>
+  ctx.podsRoot === undefined ? Effect.promise(async () => { await shippedPodsSettled(); await contentRootsReady(ctx.pointer); }) : Effect.void;
 
 export const listPods = Effect.fnUntraced(function* (ctx: PodContext = {}) {
-  yield* shippedPodsImported(ctx);
+  yield* podContentReady(ctx);
   const root = podsRoots(ctx);
   const found = yield* Effect.tryPromise({
     try: () => listPackages({ podsRoots: root }),
@@ -201,7 +202,7 @@ export const resolvePodIdentity = Effect.fnUntraced(function* (
   folder: string,
   ctx: PodContext = {},
 ) {
-  yield* shippedPodsImported(ctx);
+  yield* podContentReady(ctx);
   const root = podsRoots(ctx);
   return yield* Effect.tryPromise({
     try: async () => {
@@ -360,7 +361,7 @@ function parseReceipt(content: string): PodReceipt | string {
 export const readMemberPod = Effect.fnUntraced(function* (pod: string, ctx: PodContext = {}) {
   // A fresh home activates shipped pods only when the background import lands; reading before
   // it would answer "inactive" for a pod that is about to be active (bounded, installed-pods.ts).
-  yield* shippedPodsImported(ctx);
+  yield* podContentReady(ctx);
   yield* Effect.tryPromise({
     try: async () => requirePackageEnabled(pod, ctx.podsRoot, await projectPodIds(ctx.pointer)),
     catch: (error) => new LocalOpError("pod.member.read", errorMessage(error), 403),
@@ -707,7 +708,7 @@ export const composedSpec = Effect.fnUntraced(function* (
 export const podFolder = Effect.fnUntraced(function* (podId: string, ctx: PodContext = {}) {
   // A fresh home activates shipped pods only when the background import lands; reading before
   // it would answer "inactive" for a pod that is about to be active (bounded, installed-pods.ts).
-  yield* shippedPodsImported(ctx);
+  yield* podContentReady(ctx);
   const root = podsRoots(ctx);
   yield* Effect.tryPromise({
     try: async () => requirePackageEnabled(podId, root, await projectPodIds(ctx.pointer)),

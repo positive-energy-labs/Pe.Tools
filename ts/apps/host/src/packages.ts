@@ -19,7 +19,7 @@ import {
 } from "@pe/host-contracts/generated";
 import type { MemberIssue } from "@pe/host-contracts/operation-types";
 import { productPathNames } from "@pe/host-contracts/contracts";
-import { homeDirs, homes, projectHome } from "@pe/host-contracts/product-paths";
+import { contentHomes, contentRootsReady } from "./content-roots.ts";
 import { verifyPodArtifact } from "./pod-artifact.ts";
 import { shippedPodUpdateRefusals } from "./shipped-pod-status.ts";
 import { podModelSchema, type PodModel } from "./pod-model.ts";
@@ -119,7 +119,7 @@ export function kindOfMember(
 
 /** The home a pod's folder sits in, by its tier and folder; undefined for a folder outside every home. */
 export const podHome = (directory: string, pointer?: string | null) => {
-  const home = homes({ pointer }).find(
+  const home = contentHomes(pointer).find(
     (one) => resolve(dirname(directory)) === resolve(one.root, productPathNames.podsDirectoryName),
   );
   return home && { tier: home.tier, path: home.root };
@@ -132,13 +132,13 @@ export const podHome = (directory: string, pointer?: string | null) => {
  */
 export type PodsRoots = string | readonly string[];
 export const productPodsRoots = (pointer?: string | null) => {
-  const roots = homeDirs(productPathNames.podsDirectoryName, { pointer });
+  const roots = contentHomes(pointer).map(home => join(home.root, productPathNames.podsDirectoryName));
   if (!pointer) rememberCaptureRoots(roots);
   return roots;
 };
 /** The Pods folder of the project home a target document's pointer names; null when it names none here. */
 export const projectPodsRoot = (pointer: string | null | undefined) => {
-  const home = projectHome(pointer);
+  const home = contentHomes(pointer).find(home => home.tier === "project")?.root;
   return home && join(home, productPathNames.podsDirectoryName);
 };
 
@@ -157,7 +157,8 @@ export type PackageDiscoveryOptions = {
   /** Date.now() epoch milliseconds. Refuse an in-flight scan started before this floor. */
   notBefore?: number;
 };
-export async function listPackages({ podsRoots = productPodsRoots(), wait = "request", notBefore }: PackageDiscoveryOptions = {}): Promise<PackageListing> {
+export async function listPackages({ podsRoots, wait = "request", notBefore }: PackageDiscoveryOptions = {}): Promise<PackageListing> {
+  if (podsRoots === undefined) { await contentRootsReady(); podsRoots = productPodsRoots(); }
   const listing = await discoverPackages(podsRoots, scanPackages, wait, notBefore,
     signal => podsDiskSignature([podsRoots].flat(), isPackageMember, signal));
   // Import notices are runtime state, not disk bytes; project them even when the census is reused.

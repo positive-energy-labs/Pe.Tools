@@ -1,4 +1,5 @@
 import { stateScope } from "@pe/host-contracts/service-identity";
+import { acquireContentRoots, contentRootsReady } from "./content-roots.ts";
 import { targetHomes } from "./call-route.ts";
 import { readSessionScope } from "./sdk-session.ts";
 import {
@@ -1223,12 +1224,12 @@ export const pagesRoute = (
           }),
       };
       const journal = yield* ActionJournalService;
-      // Reuse roots only for one discovery budget, so a home mounting later is picked up.
-      const defaultHomes = { roots: root(), podRoots: pods(), resolvedAt: Date.now() };
-      const homeRoots = new Map([["", defaultHomes]]);
+      const rootsOwner = acquireContentRoots();
+      yield* Effect.addFinalizer(() => Effect.sync(rootsOwner.close));
+      yield* Effect.promise(() => rootsOwner.ready);
       const handlers = new Map<string, ReturnType<typeof createPagesHandler>>();
       const handler = HttpEffect.fromWebHandler(async (request) => {
-        let podRoots = defaultHomes.podRoots;
+        let podRoots = pods();
         let expired = false;
         let timer: ReturnType<typeof setTimeout> | undefined;
         const discoveryWait: DiscoveryWait = {
@@ -1246,15 +1247,10 @@ export const pagesRoute = (
         const resolvePage = async () => {
           const scope = readSessionScope(Object.fromEntries(request.headers));
           const { pointer } = bridge ? await Effect.runPromise(targetHomes(bridge, scope)) : {};
+          if (root === productPagesRoots || pods === productPodsRoots) await contentRootsReady(pointer);
           if (expired) return timeout;
-          const homeKey = pointer ?? "";
-          let homes = homeRoots.get(homeKey);
-          if (!homes || Date.now() - homes.resolvedAt >= packageDiscoveryTimeoutMs) {
-            homes = { roots: root(pointer), podRoots: pods(pointer), resolvedAt: Date.now() };
-            homeRoots.set(homeKey, homes);
-          }
-          const { roots } = homes;
-          podRoots = homes.podRoots;
+          const roots = root(pointer);
+          podRoots = pods(pointer);
           const key = JSON.stringify([roots, podRoots]);
           let pages = handlers.get(key);
           if (!pages) {

@@ -18,8 +18,9 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
+import * as filesystem from "node:fs/promises";
 import { join } from "node:path";
-import { afterEach, beforeEach, expect, test } from "vite-plus/test";
+import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import { z } from "zod";
 import { stateTree } from "../src/service-identity.ts";
 import {
@@ -53,6 +54,8 @@ import {
 } from "../src/kinds.ts";
 
 const schema = z.strictObject({ name: z.string() });
+vi.mock("node:fs/promises", async original => ({ ...await original<typeof import("node:fs/promises")>() }));
+afterEach(() => vi.restoreAllMocks());
 /** A kind declares a place, a schema and segments, and nothing about notices or blobs. */
 const taskKind = stateKind({
   place: (id: string) => `Task ${id}`,
@@ -215,6 +218,17 @@ test("an async diagnostic tail creates its file asynchronously and keeps the new
   await writing;
   await appendLinesBounded(log, [{ name: "c" }, { name: "d" }, { name: "e" }], 3);
   expect(readLines(log)).toEqual({ kind: "ok", values: [{ name: "c" }, { name: "d" }, { name: "e" }], skipped: 0 });
+});
+
+test("a failed atomic tail replacement preserves the old file and removes its temporary", async () => {
+  const log = eventsLog.in(machine);
+  appendLine(log, { name: "kept" });
+  const before = readFileSync(log.path, "utf8");
+  const rename = vi.spyOn(filesystem, "rename").mockRejectedValue(Error("rename refused"));
+  await expect(appendLinesBounded(log, [{ name: "new" }], 3)).rejects.toThrow("rename refused");
+  expect(rename).toHaveBeenCalledOnce();
+  expect(readFileSync(log.path, "utf8")).toBe(before);
+  expect(readdirSync(join(log.path, "..")).some(name => name.endsWith(".tmp"))).toBe(false);
 });
 
 test("a state log decodes per line, and a derived folder is read and written by its minted dir", () => {

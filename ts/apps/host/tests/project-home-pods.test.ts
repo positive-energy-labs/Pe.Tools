@@ -9,6 +9,7 @@ import { targetHomes } from "../src/call-route.ts";
 import { bindPackageLifecycle, createPackageLifecycle } from "../src/package-lifecycle.ts";
 import { listPods, readMember, writeMember, writeRun, runsDirectory } from "../src/settings.ts";
 import { hostState } from "../src/host-ownership.ts";
+import { contentRootsReady } from "../src/content-roots.ts";
 import { sha256Hex } from "@pe/host-contracts/kinds";
 
 test("a custom Pods root leaves pod and podless output in machine state, like C# PodRuns", () => {
@@ -37,7 +38,7 @@ const pod = (root: string, id: string) => {
     JSON.stringify({ schemaVersion: 2, id, name: id, version: "0.1.0", entrypoints: [] }),
   );
 };
-beforeEach(() => {
+beforeEach(async () => {
   user = mkdtempSync(join(tmpdir(), "pe-user-"));
   drive = mkdtempSync(join(tmpdir(), "pe-drive-"));
   project = home(join(drive, ...pointer.split("/"), "Pe.Tools"), "project");
@@ -45,6 +46,7 @@ beforeEach(() => {
   vi.stubEnv("PE_TOOLS_SHARED_ROOT", home(join(drive, "04 PE Software Files", "Pe.Tools"), "firm"));
   pod(user, "mine");
   pod(project, "site");
+  await contentRootsReady();
 });
 afterEach(() => {
   bindPackageLifecycle(undefined);
