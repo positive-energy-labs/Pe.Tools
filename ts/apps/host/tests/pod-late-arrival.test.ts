@@ -206,15 +206,9 @@ test("a held new admission never queues later route inventory readers", async ()
   });
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   let answered = false;
-  const first = admitting
-    .list()
-    .then(
-      () => null,
-      (error) => error,
-    )
-    .finally(() => {
-      answered = true;
-    });
+  const first = admitting.list().finally(() => {
+    answered = true;
+  });
   await entered.promise;
   try {
     const later = admitting.list();
@@ -226,7 +220,17 @@ test("a held new admission never queues later route inventory readers", async ()
     expect(await result).not.toBe("blocked");
     await vi.advanceTimersByTimeAsync(30000);
     expect(answered).toBe(true);
-    expect(await first).toMatchObject({ code: "pod.route.check.timeout", retryable: true });
+    expect(await first).toContainEqual(expect.objectContaining({
+      key: d.key, admission: expect.objectContaining({ status: "refused", code: "pod.route.check.timeout", retryable: true }),
+    }));
+    release.resolve();
+    vi.mocked(filesystem.open).mockRestore();
+    vi.useRealTimers();
+    // The tiny fixture's JS is deliberately invalid. Reaching admission proves that a
+    // recovered read retries after a deadline, rather than reusing a cached IO refusal.
+    expect(await admitting.list()).toContainEqual(expect.objectContaining({
+      key: d.key, admission: expect.objectContaining({ status: "refused", code: "pod.route.admission.refused", retryable: false }),
+    }));
   } finally {
     release.resolve();
     await first;

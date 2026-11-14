@@ -3,12 +3,12 @@ import { dirname as storedParent } from "node:path";
 import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { actAs } from "./callers.ts";
 import { expect, test, vi } from "vite-plus/test";
-import { mkdir, writeFile, readFile, readdir, rm } from "node:fs/promises";
+import { cp, mkdir, writeFile, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { RouteWorkspace, observeResources } from "@pe/runtime";
-import { bindWork, workKey, type ReadingFrame } from "@pe/agent-contracts";
+import { bindWork, workKey, podRouteDescriptorSchema, type ReadingFrame } from "@pe/agent-contracts";
 import { workFingerprintSchema } from "../../../packages/agent-contracts/src/route-kernel-admission.ts";
 import { builtinData } from "../../../packages/agent-contracts/src/route-kernel.fixtures.ts";
 import { podWire, podHostSource } from "./pod-wire.fixture.ts";
@@ -19,8 +19,9 @@ import { createPodRoutes } from "../src/pod-routes.ts";
 import { createPluginsHandler } from "../src/plugins-handler.ts";
 import { linkedCatalog, peRouteUrl } from "@pe/agent-contracts/pe-api";
 import { admitPodArtifact } from "../src/pod-artifact.ts";
+import * as podArtifacts from "../src/pod-artifact.ts";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
-import { createPeRoutes } from "../src/pe-routes.ts";
+import { createContributionContent, createPeRoutes } from "../src/pe-routes.ts";
 
 async function fixture(
   root: string,
@@ -28,8 +29,9 @@ async function fixture(
   native?: { key: string; cost: "Cheap" | "Bounded" },
   address = `/tool/${encodeURIComponent("route:@fixture/routes/tool/route.artifact")}`,
   initialWork = false,
+  podId = "fixture",
 ) {
-  const typed = await podWire("pod.fixture.tool", address, 2, `Fixture ${salt}`, initialWork);
+  const typed = await podWire(`pod.${podId}.tool`, address, 2, `Fixture ${salt}`, initialWork);
   // The native-link falsifier exercises the executable body's catalog linker.
   const data = native ? {
     ...builtinData,
@@ -65,14 +67,14 @@ entries: {...builtinModule.entries, roster: {...builtinModule.entries.roster, ${
   const wire = JSON.parse(
     JSON.stringify(artifact, (_key, value) => (value instanceof Uint8Array ? [...value] : value)),
   );
-  const directory = join(root, "Pods/fixture/routes/tool");
+  const directory = join(root, `Pods/${podId}/routes/tool`);
   await mkdir(directory, { recursive: true });
   await writeFile(join(directory, "route.artifact"), JSON.stringify(wire));
   const fingerprint = `pod-bytes:${artifact.fingerprint}`;
   await writeFile(
-    join(root, "Pods/fixture/pod.json"),
+    join(root, `Pods/${podId}/pod.json`),
     JSON.stringify({
-      id: "fixture",
+      id: podId,
       routes: [
         {
           artifact: "routes/tool/route.artifact",
@@ -85,6 +87,97 @@ entries: {...builtinModule.entries, roster: {...builtinModule.entries.roster, ${
   );
   return { wire, fingerprint: workFingerprintSchema.parse(fingerprint) };
 }
+
+async function isolatedRefusal() {
+  const root = await mkdtemp(join(tmpdir(), "pe-pod-refusal-"));
+  const published = await fixture(root);
+  await cp(join(root, "Pods/fixture"), join(root, "Pods/renamed"), { recursive: true });
+  const manifest = JSON.parse(await readFile(join(root, "Pods/renamed/pod.json"), "utf8"));
+  await writeFile(join(root, "Pods/renamed/pod.json"), JSON.stringify({ ...manifest, id: "renamed" }));
+  const content = createContributionContent({
+    worldRoot: stateFixture(join(root, "world")), decisionsMachine: stateMachine(root),
+    packages: () => listPackages(join(root, "Pods")),
+  });
+  const workspace = new RouteWorkspace({
+    registrations: [], store: fileRouteDocumentStore(stateFixture(join(root, "Work"))),
+  });
+  const routes = createPodRoutes(content.lifecycle, { workspace, machine: stateMachine(root) });
+  const handler = createPluginsHandler(content, routes);
+  const trust = (id: string, trusted = true, fingerprint = published.fingerprint) => handler(new Request(
+    `http://host/pe/plugin-routes/${encodeURIComponent(`route:@${id}/routes/tool/route.artifact`)}/trust`,
+    { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ fingerprint, trusted }) },
+  ));
+  return {
+    root, routes, workspace, content, trust,
+    inventory: () => handler(new Request("http://host/pe/plugin-routes")),
+    async close() { routes.close(); await content.close(); await rm(root, { recursive: true, force: true }); },
+  };
+}
+
+test("B58: one refused Pod never fails inventory or another Pod's admission", async () => {
+  const f = await isolatedRefusal();
+  try {
+    const refusal = await f.trust("renamed");
+    expect(refusal.status).toBe(409);
+    expect(await refusal.json()).toMatchObject({ error: expect.stringContaining("identity differs") });
+    expect((await f.trust("fixture")).status).toBe(200);
+    const response = await f.inventory();
+    expect(response.status).toBe(200);
+    const rows = await response.json();
+    expect(rows).toContainEqual(expect.objectContaining({ packageId: "fixture", admission: { status: "admitted" } }));
+    expect(f.workspace.admittedRoutes().some(route => route.key === "pod.fixture.tool")).toBe(true);
+  } finally { await f.close(); }
+}, 30_000);
+
+test("B58: a refusal is named, cached by bytes, and permits trust withdrawal", async () => {
+  const f = await isolatedRefusal();
+  const attempts = vi.spyOn(podArtifacts, "admitPodArtifact");
+  try {
+    expect((await f.trust("renamed")).status).toBe(409);
+    const count = attempts.mock.calls.length;
+    expect(count).toBeGreaterThan(0);
+    for (let i = 0; i < 2; i++) {
+      const response = await f.inventory();
+      expect(response.status).toBe(200);
+      expect(podRouteDescriptorSchema.array().parse(await response.json())).toContainEqual(expect.objectContaining({
+        packageId: "renamed", trusted: true,
+        admission: { status: "refused", code: "pod.route.admission.refused", reason: "Admitted route identity differs from its package declaration", retryable: false },
+      }));
+    }
+    expect(attempts).toHaveBeenCalledTimes(count);
+    const row = (await f.routes.list()).find(row => row.packageId === "renamed")!;
+    await expect(f.routes.bundle(row.key, row.fingerprint)).rejects.toThrow("identity differs");
+    expect(attempts).toHaveBeenCalledTimes(count);
+    expect((await f.trust("renamed", false)).status).toBe(200);
+    expect(await (await f.inventory()).json()).toContainEqual(expect.objectContaining({ packageId: "renamed", trusted: false, admission: { status: "untrusted" } }));
+    expect((await f.trust("renamed")).status).toBe(409);
+    expect(attempts).toHaveBeenCalledTimes(count + 1);
+    await writeFile(join(f.root, "Pods/renamed/README.md"), "changed captured bytes");
+    await f.content.lifecycle.refresh();
+    expect((await f.inventory()).status).toBe(200);
+    expect(attempts).toHaveBeenCalledTimes(count + 2);
+  } finally { attempts.mockRestore(); await f.close(); }
+}, 30_000);
+
+test("B58: corrected bytes require their new trust and then admit on the next read", async () => {
+  const f = await isolatedRefusal();
+  try {
+    expect((await f.trust("renamed")).status).toBe(409);
+    const fixed = await fixture(f.root, "corrected", undefined,
+      `/tool/${encodeURIComponent("route:@renamed/routes/tool/route.artifact")}`, false, "renamed");
+    await f.content.lifecycle.refresh();
+    const response = await f.inventory();
+    expect(response.status).toBe(200);
+    const row = (await response.json()).find((row: { packageId: string }) => row.packageId === "renamed");
+    expect(row).toMatchObject({ trusted: false, fingerprint: fixed.fingerprint, admission: { status: "untrusted" } });
+    await expect(f.routes.bundle(row.key, row.fingerprint)).rejects.toThrow("trust");
+    expect((await f.trust("renamed", true, fixed.fingerprint)).status).toBe(200);
+    const next = await f.inventory();
+    expect(next.status).toBe(200);
+    expect(await next.json()).toContainEqual(expect.objectContaining({ packageId: "renamed", admission: { status: "admitted" } }));
+    expect(f.workspace.admittedRoutes().some(route => route.key === "pod.renamed.tool")).toBe(true);
+  } finally { await f.close(); }
+}, 30_000);
 
 test("host and browser refuse a fingerprinted raw-slash Pod address alias", async () => {
   const root = await mkdtemp(join(tmpdir(), "pe-pod-address-"));

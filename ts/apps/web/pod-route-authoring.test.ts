@@ -52,6 +52,7 @@ test("Snowdon publishes deterministic browser and host bytes; tampering either r
     packageId: "snowdon-circuits",
     workRoute: data.key,
     trusted: true,
+    admission: { status: "admitted" },
   });
   const envelope = {
     fingerprint: row.fingerprint,

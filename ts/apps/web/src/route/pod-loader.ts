@@ -12,7 +12,7 @@ export function createPodRouteLoader(
   };
   return {
     async sync(rows: readonly PodRouteDescriptor[]) {
-      const trusted = new Map(rows.filter((row) => row.trusted).map((row) => [row.key, row]));
+      const trusted = new Map(rows.filter((row) => row.trusted && row.admission.status === "admitted").map((row) => [row.key, row]));
       for (const [key, entry] of active)
         if (trusted.get(key)?.fingerprint !== entry.hash) remove(key);
       for (const row of trusted.values()) {

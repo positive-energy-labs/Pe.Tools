@@ -23,6 +23,7 @@ export async function podFixtures() {
         packageId: "snowdon-circuits",
         workRoute: "pod.snowdon-circuits.voltage-drop",
         trusted: true,
+        admission: { status: "admitted" },
       });
       const url = artifacts.get(row.artifact);
       if (!url) throw Error(`Pod fixture artifact is not bundled: ${row.artifact}`);

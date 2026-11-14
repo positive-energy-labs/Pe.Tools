@@ -44,6 +44,7 @@ const podFixture = {
   workRoute: "air-balance",
   fingerprint: `pod-bytes:${"a".repeat(64)}`,
   trusted: false,
+  admission: { status: "untrusted" },
 } satisfies PodRouteDescriptor;
 type PagePeek = { title: string; url: string | null; slug: string };
 
