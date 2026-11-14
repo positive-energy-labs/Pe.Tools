@@ -58,21 +58,16 @@
 
 <script>
 const $ = (id) => document.getElementById(id);
+// Entrypoints of this Pod, by path. Pea runs the same ones as script:@snowdon-ducts/<path>, and gets the same rows.
 const KEYS = {
-  census: "script:@snowdon-ducts/src/Census.cs",
-  inspect: "script:@snowdon-ducts/src/InspectRun.cs",
-  experiment: "script:@snowdon-ducts/src/CoefficientExperiment.cs",
-};
-// A script key answers the whole ScriptExecutionResult { status, data, ... }; the Page's rows are its data.
-const script = async (key, input) => {
-  const result = await pe.do(key, input);
-  if (result?.status !== "Succeeded") throw new Error(`${key} ${result?.status ?? "returned nothing"}`);
-  return result.data;
+  census: "src/Census.cs",
+  inspect: "src/InspectRun.cs",
+  experiment: "src/CoefficientExperiment.cs",
 };
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 
-// One kernel: the event log is shared with every copy of this Page and every agent.
-const reduce = (s, e) => {
+// The event log is the one state: every copy of this Page and every agent replays it.
+const reduce = (s, e, meta) => {
   switch (e.type) {
     case "census": return { ...s, census: e.reading, run: null, picked: null };
     case "pick": return { ...s, picked: e.id, run: null };
@@ -80,26 +75,22 @@ const reduce = (s, e) => {
     case "picture": return { ...s, picture: e.picture };
     case "experiment": return { ...s, experiment: e.reading };
     case "journal": return { ...s, journal: e.lines };
-    case "note": return { ...s, notes: [...s.notes, { text: e.text, at: e.at }] };
+    case "note": return { ...s, notes: [...s.notes, { text: e.text, by: meta.origin }] };
     default: return s;
   }
 };
 const base = { census: null, picked: null, run: null, picture: null, experiment: null, journal: [], notes: [] };
 
-const k = pe.kernel(reduce, base, draw);
-pe.describe(() => {
-  const s = k.state;
-  return [
-    "# Snowdon ducts tour",
-    s.census ? `Document: ${s.census.rows.document}. ${s.census.rows.systemCount} duct systems read at ${new Date(s.census.at).toISOString()}.` : "No census read yet.",
-    s.picked ? `Selected system id ${s.picked} (valid for this open lifetime only).` : "",
-    s.run ? `Run ${s.run.rows.system?.name ?? "?"}: ${s.run.rows.fittingCount ?? 0} fittings, ${s.run.rows.withLoss ?? 0} with a loss parameter.` : "",
-    s.experiment ? `Experiment: ${JSON.stringify(s.experiment.rows)}` : "",
-    ...s.notes.map((n) => `- note: ${n.text}`),
-  ].filter(Boolean).join("\n");
-});
+const describe = (s) => [
+  "# Snowdon ducts tour",
+  s.census ? `Document: ${s.census.rows.document}. ${s.census.rows.systemCount} duct systems read at ${new Date(s.census.at).toISOString()}.` : "No census read yet.",
+  s.picked ? `Selected system id ${s.picked} (valid for this open lifetime only).` : "",
+  s.run ? `Run ${s.run.rows.system?.name ?? "?"}: ${s.run.rows.fittingCount ?? 0} fittings, ${s.run.rows.withLoss ?? 0} with a loss parameter.` : "",
+  s.experiment ? `Experiment: ${JSON.stringify(s.experiment.rows)}` : "",
+  ...s.notes.map((n) => `- note (${n.by}): ${n.text}`),
+].filter(Boolean).join("\n");
 
-function draw(s = k.state) {
+function draw(s) {
   const c = s.census?.rows;
   $("doc").textContent = c ? `Document ${c.document} (Revit ${c.revitVersion}), read ${new Date(s.census.at).toLocaleTimeString()}.` : $("doc").textContent;
   $("systems").innerHTML = c
@@ -116,7 +107,7 @@ function draw(s = k.state) {
       `<table><tr><th>Fitting</th><th>Loss</th><th>Connectors (direction : flow)</th></tr>${r.fittings.map((f) =>
         `<tr><td>${esc(f.name)}</td><td>${f.loss == null ? "unavailable" : f.loss}</td><td>${f.connectors.map((q) => `${esc(q.direction)} : ${q.flow ?? "?"}`).join(", ")}</td></tr>`).join("")}</table>`;
   $("picture").innerHTML = s.picture ? `<img class="facsimile" src="${esc(s.picture.url)}" alt="View ${esc(s.picture.viewName)}"><p class="note">${esc(s.picture.viewName)}, exported ${new Date(s.picture.at).toLocaleTimeString()}</p>` : $("picture").innerHTML;
-  $("notes").innerHTML = s.notes.map((n) => `<li>${esc(n.text)}</li>`).join("");
+  $("notes").innerHTML = s.notes.map((n) => `<li>${esc(n.text)}${n.by === "agent" ? " <em>(Pea)</em>" : ""}</li>`).join("");
   $("inspect").disabled = !s.picked;
   const ids = (r?.fittings || []).map((f) => f.id);
   $("show").disabled = !ids.length;
@@ -128,60 +119,66 @@ function draw(s = k.state) {
 async function busy(label, fn) {
   $("status").textContent = label + "...";
   try { await fn(); if ($("status").textContent === label + "...") $("status").textContent = ""; }
-  catch (e) { $("status").textContent = e.message; } // pe.js also shows the host's refusal across the top
+  catch (e) { $("status").textContent = e.message; } // the compiler's or the host's own words; pe.js also shows a refusal across the top
 }
 
-$("census").onclick = () => busy("Reading census", async () => {
-  const reading = await pe.reading(KEYS.census, () => script(KEYS.census, {}));
-  k.fire({ type: "census", reading });
-});
-$("systems").onclick = (ev) => {
-  const row = ev.target.closest("tr[data-id]");
-  if (row) k.fire({ type: "pick", id: Number(row.dataset.id) });
-};
-$("inspect").onclick = () => busy("Inspecting", async () => {
+(async () => {
+  // `journal` is this copy's own poll, so it stays out of the shared log. `agent` is what Pea may append.
+  const k = await pe.state({
+    reduce, base, render: draw, describe,
+    local: ["journal"],
+    agent: { note: "A remark for the next reader of this Page. Fields: text (string)." },
+  });
+  // pe.script answers the script's Result value and throws otherwise. The reading keeps it unchanged as `rows`,
+  // and firing a shared event waits for the host to keep it.
+  const read = async (type, path) => k.fire({ type, reading: await pe.reading(path, () => pe.script(path)) });
+
+  $("census").onclick = () => busy("Reading census", () => read("census", KEYS.census));
+  $("systems").onclick = (ev) => {
+    const row = ev.target.closest("tr[data-id]");
+    if (row) k.fire({ type: "pick", id: Number(row.dataset.id) });
+  };
   // InspectRun takes the selection's system, or the largest. Select an element of the chosen system in Revit first.
-  const reading = await pe.reading(KEYS.inspect, () => script(KEYS.inspect, {}));
-  k.fire({ type: "run", reading });
-});
-const runIds = () => (k.state.run?.rows.fittings || []).map((f) => f.id);
-$("show").onclick = () => busy("Showing", async () => {
-  const lens = await pe.do("revit.context.lens", { elementIds: runIds().slice(0, 20) });
-  await pe.do("revit.context.show-elements", { elementIds: runIds().slice(0, 20), viewId: lens.viewId });
-});
-$("capture").onclick = () => busy("Capturing", async () => {
-  k.fire({ type: "picture", picture: await pe.picture(runIds().slice(0, 20)) });
-});
-let armed = false;
-$("experiment").onclick = () => busy("Running experiment", async () => {
-  if (!armed) {
-    // Two presses: the first arms, the second changes the bound document.
-    armed = true;
-    $("experiment").textContent = "Confirm: write Comments on this copy";
-    return;
-  }
-  armed = false;
-  $("experiment").textContent = "Annotate ducts with velocity (copy only)";
-  const reading = await pe.reading(KEYS.experiment, () => script(KEYS.experiment, { permissionMode: "NoTransaction" }));
-  k.fire({ type: "experiment", reading });
-});
-$("save-note").onclick = () => {
-  const text = $("note").value.trim();
-  if (text) { k.fire({ type: "note", text, at: Date.now() }); $("note").value = ""; }
-};
+  $("inspect").onclick = () => busy("Inspecting", () => read("run", KEYS.inspect));
+  const runIds = () => (k.state.run?.rows.fittings || []).map((f) => f.id).slice(0, 20);
+  $("show").onclick = () => busy("Showing", async () => {
+    const lens = await pe.do("revit.context.lens", { elementIds: runIds() });
+    await pe.do("revit.context.show-elements", { elementIds: runIds(), viewId: lens.viewId });
+  });
+  $("capture").onclick = () => busy("Capturing", async () => {
+    await k.fire({ type: "picture", picture: await pe.picture(runIds()) });
+  });
+  let armed = false;
+  $("experiment").onclick = () => busy("Running experiment", async () => {
+    if (!armed) {
+      // Two presses: the first arms, the second changes the bound document.
+      armed = true;
+      $("experiment").textContent = "Confirm: write Comments on this copy";
+      return;
+    }
+    armed = false;
+    $("experiment").textContent = "Annotate ducts with velocity (copy only)";
+    await read("experiment", KEYS.experiment); // pod.json declares its mode, NoTransaction, for every door
+  });
+  $("save-note").onclick = async () => {
+    const text = $("note").value.trim();
+    if (!text) return;
+    await k.fire({ type: "note", text });
+    $("note").value = "";
+  };
 
-// Journal: new lines since the last poll, from the host's own read.
-let after = 0;
-setInterval(async () => {
-  if (!pe.doc) return;
-  try {
-    const j = await pe.read("revit.context.journal", { AfterLine: after, MaxLines: 20 });
-    if (j?.lines?.length) { after = j.nextLine ?? after + j.lines.length; k.fire({ type: "journal", lines: [...k.state.journal, ...j.lines].slice(-30) }); }
-  } catch { /* the banner already shows a refusal */ }
-}, 10000);
+  // Journal: new lines since the last poll, from the host's own read.
+  let after = 0;
+  setInterval(async () => {
+    if (!pe.doc) return;
+    try {
+      const j = await pe.read("revit.context.journal", { AfterLine: after, MaxLines: 20 });
+      if (j?.lines?.length) { after = j.nextLine ?? after + j.lines.length; k.fire({ type: "journal", lines: [...k.state.journal, ...j.lines].slice(-30) }); }
+    } catch { /* the banner already shows a refusal */ }
+  }, 10000);
 
-pe.state(k).then(() => pe.target().catch(() => {}));
-draw();
+  pe.target().catch(() => {});
+})();
 </script>
 </body>
 </html>
