@@ -10,7 +10,7 @@ import { connectTestBridge } from "./bridge-fixture.ts";
 import { ActionJournalService } from "../src/receipt-services.ts";
 import type { ActionJournal } from "../src/action-journal.ts";
 import { effectTest, journalAt } from "./effect-test.ts";
-import { rm } from "node:fs/promises";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { actionReceiptSchema } from "@pe/agent-contracts";
@@ -19,8 +19,9 @@ import { readNativeReceipt } from "../src/native-receipts.ts";
 import { originalProcess, sdkEnvelope } from "./native-receipt-fixture.ts";
 import { command } from "../src/command-executor.ts";
 import { z } from "zod";
-import { emitPagePinRevoke } from "../src/control.ts";
 import { bindRevoke } from "../src/revoke.ts";
+import { createPagesHandler } from "../src/pages-route.ts";
+import { asCaller, human } from "./callers.ts";
 
 // The session line's law (ADR 0029 phase 3b; a PROVEN 7.6 GB regression class lives behind it):
 // interrupting a waiter removes it and nothing else; op.cancel never takes a place in the line;
@@ -90,7 +91,8 @@ const harness = Effect.gen(function* () {
   return { life, bridgeScope, socket, socketOf, call, ...first };
 });
 
-effectTest("a Page unpin fences a dispatch whose pin read already returned consent", () =>
+for (const change of ["unpin", "same-session repin"] as const)
+effectTest(`a Page ${change} fences a dispatch whose pin read already returned consent`, () =>
   Effect.gen(function* () {
     const directory = yield* Effect.promise(() => mkdtemp(join(tmpdir(), "pe-pin-fence-")));
     const journal = journalAt(join(directory, "receipts.jsonl"), Date.now);
@@ -104,6 +106,22 @@ effectTest("a Page unpin fences a dispatch whose pin read already returned conse
     yield* Effect.addFinalizer(() => Scope.close(h.bridgeScope, Exit.void));
     const stop = bindRevoke(journal, h.bridge);
     yield* Effect.addFinalizer(() => Effect.sync(stop));
+    yield* Effect.promise(async () => {
+      await mkdir(join(directory, "Pages", "pin"), { recursive: true });
+      await writeFile(join(directory, "Pages", "pin", "index.html"), "<title>Pin</title>");
+    });
+    const handle = createPagesHandler(join(directory, "Pages"), undefined, {
+      sessions: async () => [{ session: h.target.session, documents: [
+        { openId: h.target.openId, title: "A", isActive: false, isFamilyDocument: false },
+        { openId: "other-open", title: "B", isActive: true, isFamilyDocument: false },
+      ] }],
+      forward: async () => { throw Error("Binding must not forward an operation"); },
+    }, undefined,
+      stateFixture(join(directory, "state")));
+    const bind = (choice: unknown) => asCaller(human, handle)(new Request("http://host/pe/pages/pin/binding", {
+      method: "PUT", body: JSON.stringify(choice),
+    }));
+    expect((yield* Effect.promise(() => bind({ kind: "pinned", ref: h.target }))).status).toBe(200);
     let reads = 0;
     let readEntered!: () => void;
     const reading = new Promise<void>((resolve) => { readEntered = resolve; });
@@ -125,7 +143,9 @@ effectTest("a Page unpin fences a dispatch whose pin read already returned conse
     const pending = yield* h.call("test.pin", {}, "pin-race");
     yield* Effect.promise(() => reading);
     // The pin read holds its old consent while the binding write fences dispatch.
-    emitPagePinRevoke("page:@pages/pin");
+    expect((yield* Effect.promise(() => bind(change === "unpin" ? { kind: "none" } : {
+      kind: "pinned", ref: { ...h.target, openId: "other-open" },
+    }))).status).toBe(200);
     returnConsent(null);
     yield* turns();
     const escaped = (yield* Queue.size(h.outgoing)) > 0 ? yield* Queue.takeAll(h.outgoing) : [];

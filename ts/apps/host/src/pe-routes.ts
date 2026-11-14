@@ -159,6 +159,7 @@ import {
   type PageDescriptor,
 } from "./page-libraries.ts";
 import { createPluginsHandler } from "./plugins-handler.ts";
+import { stopPackageDiscovery } from "./pod-capture.ts";
 import { createPodRoutes } from "./pod-routes.ts";
 import { userRoot } from "@pe/host-contracts/product-paths";
 import { graphRouteIds } from "./reads/routes.ts";
@@ -1542,6 +1543,7 @@ function* hostPeRoutes(
       podRoutes.close();
       stopWorkContext?.();
       await content.close();
+      stopPackageDiscovery();
       bindPackageLifecycle(undefined);
     },
     fetch: createPluginsHandler(content, podRoutes),

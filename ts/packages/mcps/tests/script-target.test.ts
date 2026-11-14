@@ -39,7 +39,7 @@ test.each(["read", "do"])("%s names the non-active lifetime in the request and r
       { openId: ref.openId, title: "Brodie", isActive: false, isFamilyDocument: false },
     ] }] });
     if (url.pathname === "/pages/demo--compare/target") return Response.json({
-      page: "page:@demo/pages/compare", slot: "default", binding: { kind: "pinned", address: "C:/Brodie.rvt" },
+      page: "page:@demo/pages/compare", slot: "default", binding: { kind: "pinned", ref },
       resolution: pageResolved ? { kind: "resolved", target: { kind: "document", ref } } : { kind: "choose", reason: "document-closed" }, document: { ...ref, title: "Brodie" }, write: { kind: "pea" },
     });
     if (url.pathname === "/pages/demo--compare/events") return Response.json({ seq: 1 });
