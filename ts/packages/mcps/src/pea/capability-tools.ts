@@ -832,6 +832,7 @@ async function dispatch(
       const reference = parseContributionKey(row.key);
       if (!reference || reference.kind !== "script")
         throw Error(`Malformed script key '${row.key}'.`);
+      const run = podScriptRun(row, payload);
       const admitted = await contributionRead(row);
       if (!admitted.sourceBundle || !admitted.folder)
         throw Error("Frozen admitted script input unavailable");
@@ -851,8 +852,9 @@ async function dispatch(
         requestId,
         timeoutMs: input.timeoutSeconds * 1000,
       });
+      // Only the script's input, mode and timeout pass; the source is the admitted bundle, never the payload's.
       const result = await caller.callOperation("scripting.execute", {
-        ...payload,
+        ...run,
         workspaceKey: admitted.folder,
         sourcePath: reference.path,
         sourceBundle: admitted.sourceBundle,
@@ -1156,6 +1158,26 @@ function documentWork(row: Capability): boolean {
     !!route &&
     route.route !== settingsRouteState.route &&
     route.route !== scheduleGridRouteState.route
+  );
+}
+
+/**
+ * What Pea's payload may say to a declared script: its `input`, the mode and the timeout, nothing
+ * else (pods map, contract C1). The row's declared mode is the default, and a `ReadOnly` entrypoint
+ * never runs as a write.
+ */
+export function podScriptRun(row: Pick<Capability, "key" | "mode">, payload: Record<string, unknown>) {
+  const permissionMode = payload.permissionMode ?? row.mode;
+  if (row.mode === "ReadOnly" && permissionMode !== "ReadOnly")
+    throw Error(
+      `${row.key} is declared ReadOnly in pod.json; it cannot run as ${String(permissionMode)}.`,
+    );
+  return Object.fromEntries(
+    Object.entries({
+      input: payload.input,
+      permissionMode,
+      timeoutSeconds: payload.timeoutSeconds,
+    }).filter(([, value]) => value !== undefined),
   );
 }
 

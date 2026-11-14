@@ -1,11 +1,12 @@
 // Metadata only. A directly unsheeted parent remains a candidate when its dependents are sheeted.
 public sealed class MechanicalPlanCensus : PeScriptContainer
 {
-    public const int MaxPlans = 5000, MaxSheets = 5000, MaxPlacements = 20000, MaxRelatedReferences = 50000;
+    public const int MaxPlans = 5000, MaxSheets = 5000, MaxPlacements = 20000, MaxRelatedReferences = 50000, MaxRows = 200;
 
     public override void Execute()
     {
         if (doc == null) { Result(new { refused = "No active document." }); return; }
+        ProfilerSettings.FromInput((name, fallback) => Arg(name, fallback));
         Profiler.Validate();
         var budget = new ProfilerBudget(ct);
         var provenance = Profiler.Provenance(doc);
@@ -112,7 +113,12 @@ public sealed class MechanicalPlanCensus : PeScriptContainer
             scope = "Non-template mechanical ViewPlan metadata. Direct sheet placement and primary/dependent-family placements are separate. Missing placements are unknown if the sheet/relationship scan is incomplete. No geometry, spatial whole-level coverage, activation, rendering, navigation benefit or mutation is claimed."
         });
         Result(new { status, artifact = artifact.FullPath, mechanicalPlans = plans.Count,
-            directlyUnsheeted = plans.Count(p => p.DirectUnsheeted == true), plansComplete, placementsComplete, diagnostics });
+            directlyUnsheeted = plans.Count(p => p.DirectUnsheeted == true), plansComplete, placementsComplete, diagnostics,
+            // What a Page draws and Pea reads without opening the artifact. null means unknown, never no.
+            rowsListed = Math.Min(plans.Count, MaxRows),
+            rows = plans.Take(MaxRows).Select(p => new { uniqueId = p.UniqueId, name = p.Name, level = p.Level?.Name,
+                sheets = p.DirectSheetIds.Length, directlyUnsheeted = p.DirectUnsheeted,
+                noRelatedPlacements = p.NoRelatedPlacements, dependents = p.DependentCount }).ToArray() });
     }
 
     private List<string> WriteParts(string prefix, List<object> rows, int size)

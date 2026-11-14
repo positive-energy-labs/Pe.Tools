@@ -18,6 +18,31 @@ public sealed class ScriptPodSourceTests {
          new("src/Main.cs", Encode("public static class Main { public static int Run() => Helper.Value; }")),
          new("src/Helper.cs", Encode("public static class Helper { public const int Value = 42; }"))]);
 
+    // Contract C1. Mutants, each run red once: restore `file.Key.StartsWith("src/")` in the normalizer's source
+    // filter (the entrypoint is "lacking"); drop the `WrapStatementBody` call (no `InlineScript` type compiles);
+    // drop the `IsStatementBody` skip (the second statement body breaks the compile).
+    [Test]
+    public void A_statement_body_entrypoint_beside_its_page_compiles_with_the_pods_other_cs_files() {
+        var bundle = new ScriptPodSourceBundle(
+            [new("pod.json", Encode("""{"schemaVersion":2,"id":"sample","name":"Sample","version":"1.0.0","entrypoints":[{"sourcePath":"pages/tour/checks/census.csx"},{"sourcePath":"pages/tour/checks/other.cs"}]}""")),
+             new("pages/tour/checks/census.csx", Encode("using System.Linq;\nvar total = Helper.Values.Sum();\nAnswer = total;")),
+             new("pages/tour/checks/other.cs", Encode("Answer = 1;")),
+             new("lib/Helper.cs", Encode("public static class Helper { public static readonly int[] Values = [40, 2]; }")),
+             new("lib/Base.cs", Encode("public abstract class PeScriptContainer { public int Answer; public abstract void Execute(); }"))]);
+
+        var normalized = ScriptPodSourceNormalizer.Normalize(bundle, "sample", "pages/tour/checks/census.csx");
+        var compiled = new ScriptCompilationService([]).Compile(normalized.SourceSet,
+            [.. new[] { typeof(object), typeof(Enumerable) }.Select(type => MetadataReference.CreateFromFile(type.Assembly.Location)),
+             MetadataReference.CreateFromFile(Path.Combine(Path.GetDirectoryName(typeof(object).Assembly.Location)!, "System.Runtime.dll"))], []);
+
+        Assert.That(compiled.Success, Is.True, string.Join("; ", compiled.Diagnostics.Select(d => d.Message)));
+        Assert.That(normalized.SourceSet.EntryPointSourceName, Is.EqualTo("pages/tour/checks/census.csx"));
+        Assert.That(normalized.SourceSet.Files.Select(f => f.Name), Is.EquivalentTo(new[] { "pages/tour/checks/census.csx", "lib/Helper.cs", "lib/Base.cs" }));
+        dynamic script = Activator.CreateInstance(Assembly.Load(compiled.AssemblyBytes!).GetType("InlineScript")!)!;
+        script.Execute();
+        Assert.That((int)script.Answer, Is.EqualTo(42));
+    }
+
     private static void CompileAndRun(ScriptPodSourceBundle bundle) {
         var normalized = ScriptPodSourceNormalizer.Normalize(bundle, "sample", "src/Main.cs");
         var compiled = new ScriptCompilationService([]).Compile(normalized.SourceSet,
@@ -25,7 +50,7 @@ public sealed class ScriptPodSourceTests {
         Assert.That(compiled.Success, Is.True, string.Join("; ", compiled.Diagnostics.Select(d => d.Message)));
         var assembly = Assembly.Load(compiled.AssemblyBytes!);
         Assert.That(assembly.GetType("Main")!.GetMethod("Run")!.Invoke(null, null), Is.EqualTo(42));
-        Assert.That(normalized.SourceSet.EntryPointSourceName, Is.EqualTo("Main.cs"));
+        Assert.That(normalized.SourceSet.EntryPointSourceName, Is.EqualTo("src/Main.cs"));
         Assert.That(normalized.SourceSet.Files.All(f => f.FullPath is null), Is.True);
     }
 
@@ -142,6 +167,6 @@ public sealed class ScriptPodSourceTests {
         Assert.Throws<FormatException>(() => ScriptPodSourceNormalizer.Normalize(
             bundle with { Files = [new("pod.json", "not base64!"), bundle.Files[1]] }, "sample", "src/Main.cs"));
         Assert.That(ScriptPodSourceNormalizer.Normalize(bundle, "Other Local Copy", "src/Main.cs").Manifest.Id, Is.EqualTo("sample"));
-        Assert.That(ScriptPodSourceNormalizer.Normalize(bundle, "sample", "src/Helper.cs").SourceSet.EntryPointSourceName, Is.EqualTo("Helper.cs"));
+        Assert.That(ScriptPodSourceNormalizer.Normalize(bundle, "sample", "src/Helper.cs").SourceSet.EntryPointSourceName, Is.EqualTo("src/Helper.cs"));
     }
 }

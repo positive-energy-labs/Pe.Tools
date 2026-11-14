@@ -1,5 +1,6 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
+using Newtonsoft.Json.Linq;
 
 namespace Pe.Shared.HostContracts.Scripting;
 
@@ -41,7 +42,9 @@ public record ExecuteRevitScriptRequest(
     int TimeoutSeconds = 600,
     ScriptPodSourceBundle? SourceBundle = null,
     // Host-stamped over anything the input carried; a run with no stamp is the agent's and is held (ADR 0038).
-    ScriptCaller Caller = ScriptCaller.Agent
+    ScriptCaller Caller = ScriptCaller.Agent,
+    // The script's arguments: one JSON object, at most 256 KiB, passed through untouched by every door (contract C1).
+    JObject? Input = null
 );
 
 public record ScriptPodSourceFile(string Path, string BytesBase64);

@@ -5,8 +5,8 @@
  *   await pe.find("show elements");                      // the host's catalog ranked by words → [{ key, kind, title, description }]
  *   await pe.read("revit.context.summary");              // run a read on the bound document; the answer is the op's response
  *   await pe.do("revit.context.show-elements", { elementIds: [1234] });   // run a mutation as this page; waits until it settles
- *   await pe.script("checks/census.csx");                // run C# in Revit: a source string, or a .cs/.csx path beside the page
- *   await pe.do("script:@snowdon-ducts/src/Census.cs");  // run a package's declared script on the bound document
+ *   await pe.script("checks/census.csx", { input: { level: "L2" } });   // run the Pod's declared script; the answer is its Result(...)
+ *   await pe.do("script:@snowdon-ducts/src/Census.cs");  // the same call by key, the key Pea runs too
  *   const k = await pe.state({ reduce, base, render, describe, agent }); // one shared event log
  *   await pe.picture([1234]);                            // lens then view-image: { url, sha, at, viewId, viewName, registration }
  *   await pe.reading("checks/census.csx", run);          // one reading: { source, at, rows } with rows = what `run()` answered
@@ -123,6 +123,8 @@
       null,
     /** The bound document `{ session, openId, title }`, after `pe.target()`. */
     doc: null,
+    /** The whole record of the last script run: `{ status, diagnostics, output, artifacts, data, … }`. */
+    lastRun: null,
   };
   const pageInput = (body) => ({
     params: { slug: pe.slug },
@@ -251,64 +253,96 @@
   pe.read = async (key, request = {}) =>
     json(await client.response("page.call", pageInput({ key, request })));
 
-  /**
-   * Run any op. A read answers at once on the bound document; a mutation runs as this page through
-   * `/pages/<slug>/act`, under the binding (a document a human added to the bound thread, or Pea's own document for a pin), and this
-   * waits until its receipt settles. The answer is the op's response either way. A package script key
-   * (`script:@snowdon-ducts/src/Census.cs`) always acts: it runs that package's declared script on the binding's
-   * document, as this page; `input` passes only `permissionMode` and `timeoutSeconds`.
-   */
-  pe.do = async (key, input = {}) => {
-    if (!key.startsWith("script:")) {
-      const r = await client.response("page.call", pageInput({ key, request: input }));
-      if (r.ok) return json(r);
-      const wire = await r.json().catch(() => null);
-      const answer = wire?.error?.details ?? wire;
-      // Only "this is a mutation" moves on to act; a binding that names no one document stops here.
-      if (!(r.status === 409 && answer && answer.notDispatched && !answer.resolution))
-        return fail(r, answer ?? "");
-    }
+  /** One act as this page (`/pages/<slug>/act`), waited until its receipt settles; answers the settled row. */
+  const act = async (key, input) => {
     let row = await json(await client.response("page.act", pageInput({ key, input })));
     const id = row.id;
     while (row.state === "running") {
       await new Promise((ok) => setTimeout(ok, 250));
       [row = row] = await json(await client.response("actions.read", { query: { id } }));
     }
+    return row;
+  };
+
+  /**
+   * Run any op. A read answers at once on the bound document; a mutation runs as this page through
+   * `/pages/<slug>/act`, under the binding (a document a human added to the bound thread, or Pea's own document for a pin), and this
+   * waits until its receipt settles. The answer is the op's response either way. A script key
+   * (`script:@snowdon-ducts/src/Census.cs`) is `pe.script(key, input)`: the same call, the same answer.
+   */
+  pe.do = async (key, input = {}) => {
+    if (key.startsWith("script:")) return pe.script(key, input);
+    const r = await client.response("page.call", pageInput({ key, request: input }));
+    if (r.ok) return json(r);
+    const wire = await r.json().catch(() => null);
+    const answer = wire?.error?.details ?? wire;
+    // Only "this is a mutation" moves on to act; a binding that names no one document stops here.
+    if (!(r.status === 409 && answer && answer.notDispatched && !answer.resolution))
+      return fail(r, answer ?? "");
+    const row = await act(key, input);
     if (row.state !== "succeeded")
       throw new Error(`${key} ${row.state}: ${row.message || row.error || ""}`.trim());
     return row.result;
   };
 
   /**
-   * Run C# in Revit (`scripting.execute`): Execute-body statements with `doc`, `uidoc`, `app`, `selection` in scope
-   * and `Result(value)` as the answer. `source` is the C#, or a one-line `.cs`/`.csx` path fetched relative to the
-   * page (`checks/census.csx` is the file beside index.html). `mode` is ReadOnly (default; every change rolls back),
-   * WriteTransaction (one host-owned transaction) or NoTransaction (the script owns its transactions). Throws with
-   * the compiler's or the runtime's own message when the script did not succeed; otherwise answers what
-   * `Result(...)` was given.
+   * The key a Pod Page's script path names. `checks/census.csx` is the file beside index.html and `/src/Census.cs`
+   * is from the Pod root; both become `script:@<pod>/<path from the Pod root>`. Null on a scratch Page, which has
+   * no Pod and so no script anyone can name by key.
    */
-  pe.script = async (source, { mode = "ReadOnly", timeoutSeconds = 120 } = {}) => {
-    let scriptContent = source;
-    if (!source.includes("\n") && /\.csx?$/i.test(source)) {
-      const r = await pe.fetch(new URL(source, location.href), { cache: "no-store" });
+  const scriptKey = (path) => {
+    const at = /^page:@([^/]+)\/(pages\/[^/]+)$/.exec(pe.page || "");
+    if (!at || at[1] === "pages") return null;
+    const member = decodeURIComponent(new URL(path, `http://pod/${at[2]}/`).pathname.slice(1));
+    return `script:@${at[1]}/${member}`;
+  };
+
+  /**
+   * Run C# in Revit, one door for every script. `keyOrPath` is a Pod's declared entrypoint, as its key
+   * (`script:@snowdon-ducts/src/Census.cs`) or, on that Pod's own Page, as a `.cs`/`.csx` path (`checks/census.csx`
+   * beside index.html, `/src/Census.cs` from the Pod root). The Pod declares it in pod.json `entrypoints`; a path it
+   * does not declare is refused. A string with a newline is C# source and runs inline (Execute-body statements with
+   * `doc`, `uidoc`, `app`, `selection` in scope), for a scratch Page or a probe; nobody else can run that by name.
+   * `input` is one JSON object the script reads with `Arg<T>("name")`. `mode` is ReadOnly (every change rolls back),
+   * WriteTransaction (one host-owned transaction) or NoTransaction (the script owns its transactions); a declared
+   * entrypoint runs in the mode pod.json gives it, and inline source runs ReadOnly, unless you say otherwise.
+   * Answers what the script gave `Result(...)`. Throws with the compiler's or the runtime's own words when the script
+   * did not succeed; the whole run record (status, diagnostics, output, artifacts) is `error.run` and `pe.lastRun`.
+   */
+  pe.script = async (keyOrPath, { input, mode, permissionMode, timeoutSeconds = 120 } = {}) => {
+    const inline = keyOrPath.includes("\n") || !/^script:@|\.csx?$/i.test(keyOrPath);
+    let key = inline || keyOrPath.startsWith("script:@") ? keyOrPath : scriptKey(keyOrPath);
+    let scriptContent = inline ? keyOrPath : undefined;
+    if (key === null) {
+      // A scratch Page's own file is its own source: it has no Pod to declare it in, so it runs as inline source.
+      const r = await pe.fetch(new URL(keyOrPath, location.href), { cache: "no-store" });
       if (!r.ok) return fail(r);
       scriptContent = await r.text();
     }
-    const run = await pe.do("scripting.execute", {
-      scriptContent,
-      permissionMode: mode,
-      timeoutSeconds,
-    });
-    if (run.status !== "Succeeded") {
-      const why = (run.diagnostics || [])
-        .filter((d) => d.severity === "Error")
-        .map((d) => d.message.split("\n")[0])
-        .join("; ");
-      throw new Error(
-        `script ${run.status}${why ? `: ${why}` : ""}${run.output ? `\n${run.output}` : ""}`,
-      );
-    }
-    return run.data ?? run.result ?? null;
+    const run = { input, permissionMode: mode ?? permissionMode, timeoutSeconds };
+    const row =
+      scriptContent === undefined
+        ? await act(key, run)
+        : await act("scripting.execute", {
+            ...run,
+            scriptContent,
+            permissionMode: run.permissionMode ?? "ReadOnly",
+          });
+    // A settled script answers its run record; a failed one keeps the same record as the receipt's evidence.
+    const answered = row.result ?? row.evidence?.result;
+    const record = answered && typeof answered === "object" ? answered : null;
+    pe.lastRun = record;
+    if (row.state === "succeeded" && record?.status === "Succeeded") return record.data ?? null;
+    const why = (record?.diagnostics || [])
+      .filter((d) => d.severity === "Error")
+      .map((d) => d.message.split("\n")[0])
+      .join("; ");
+    const name = scriptContent === undefined ? key : "script";
+    const error = new Error(
+      `${name} ${record?.status ?? row.state}: ${why || row.message || row.error || ""}${record?.output ? `\n${record.output}` : ""}`.trim(),
+    );
+    error.run = record;
+    throw error;
   };
 
   /**
