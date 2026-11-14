@@ -23,6 +23,8 @@ import { homeDirs, homes, projectHome } from "@pe/host-contracts/product-paths";
 import { verifyPodArtifact } from "./pod-artifact.ts";
 import { shippedPodUpdateRefusals } from "./shipped-pod-status.ts";
 import { podModelSchema, type PodModel } from "./pod-model.ts";
+import { appendLine, stateLog, type StoredLog } from "@pe/host-contracts/kinds";
+import { z } from "zod";
 import {
   captureIndexedPackage,
   rememberCaptureRoots,
@@ -156,10 +158,22 @@ export async function listPackages(
 }
 
 let scanLog = (_message: string) => {};
+export const packageScanLog = stateLog({
+  schema: z.string(),
+  place: () => "Host Pod scan diagnostics",
+  segments: () => ["pod-discovery.jsonl"],
+});
 export const logPackageDiscovery = (message: string) => scanLog(message);
 /** Bound at host composition to the same Effect logger as other host diagnostics. */
-export function bindPackageScanLogger(log: (message: string) => void) {
-  scanLog = log;
+export function bindPackageScanLogger(log: (message: string) => void, file?: StoredLog<string>) {
+  scanLog = (message) => {
+    // Revit-spawned hosts have no readable stdout. Persist independently of launch redirection.
+    if (file) {
+      try { appendLine(file, `${new Date().toISOString()} ${message}`); }
+      catch (error) { log(`Pod scan log append failed: ${String(error)}`); }
+    }
+    log(message);
+  };
 }
 
 async function scanPackages(

@@ -10,9 +10,15 @@ import { importShippedPods } from "../src/installed-pods.ts";
 import { exportPod } from "../src/pod-transfer.ts";
 import { bindPackageScanLogger, capturePackage, listPackages } from "../src/packages.ts";
 import * as packages from "../src/packages.ts";
-import { stopPackageDiscovery } from "../src/pod-capture.ts";
+import { discoverPackages, stopPackageDiscovery } from "../src/pod-capture.ts";
 import { createContributionContent } from "../src/pe-routes.ts";
 import { createPagesHandler } from "../src/pages-route.ts";
+import { pagesRoute } from "../src/pages-route.ts";
+import { serveRoutes } from "./real-server.ts";
+import { detachedBridge } from "./effect-test.ts";
+import { Effect, Layer } from "effect";
+import { ActionJournalService } from "../src/receipt-services.ts";
+import { HOST_RPC_DOCUMENT_HEADER } from "@pe/host-contracts/contracts";
 import {
   bindPackageLifecycle,
   createPackageLifecycle,
@@ -123,6 +129,86 @@ test("folder scans log their folder, start and completed duration", async () => 
   ]);
 });
 
+test.each([5_000, 3_600_000])("late census expires after %i ms instead of masking a fresh reader", async (age) => {
+  vi.useFakeTimers();
+  const late = Promise.withResolvers<packages.PackageListing>();
+  const first = discoverPackages("expiry", () => late.promise, "request");
+  const refused = expect(first).rejects.toThrow("Pod discovery exceeded");
+  await vi.advanceTimersByTimeAsync(5_000);
+  await refused;
+  late.resolve({ packages: [], unreadable: [{ folder: "old", message: "old" }] });
+  await vi.advanceTimersByTimeAsync(0);
+  await vi.advanceTimersByTimeAsync(age);
+  const fresh = vi.fn(async () => ({ packages: [], unreadable: [] }));
+  expect(await discoverPackages("expiry", fresh, "request")).toEqual({ packages: [], unreadable: [] });
+  expect(fresh).toHaveBeenCalledOnce();
+});
+
+test("a lifecycle background reader cannot stamp a kept census with fresh disk metadata", async () => {
+  vi.useFakeTimers();
+  const late = Promise.withResolvers<packages.PackageListing>();
+  const first = discoverPackages("metadata", () => late.promise, "request");
+  const refused = expect(first).rejects.toThrow();
+  await vi.advanceTimersByTimeAsync(5_000);
+  await refused;
+  late.resolve({ packages: [], unreadable: [{ folder: "old", message: "old" }] });
+  await vi.advanceTimersByTimeAsync(0);
+  const fresh = vi.fn(async () => ({ packages: [], unreadable: [] }));
+  expect(await discoverPackages("metadata", fresh, "background")).toEqual({ packages: [], unreadable: [] });
+  expect(fresh).toHaveBeenCalledOnce();
+});
+
+test("a scan at sixty seconds is aborted and replaced; its late completion cannot replace the new census", async () => {
+  vi.useFakeTimers();
+  const late = Promise.withResolvers<packages.PackageListing>();
+  let signal: AbortSignal;
+  const first = discoverPackages("stuck", (_roots, stop) => { signal = stop; return late.promise; }, "request");
+  const refused = expect(first).rejects.toThrow();
+  await vi.advanceTimersByTimeAsync(5_000);
+  await refused;
+  await vi.advanceTimersByTimeAsync(55_000);
+  const fresh = vi.fn(async () => ({ packages: [], unreadable: [] }));
+  const replacement = discoverPackages("stuck", fresh, "request");
+  expect(signal!.aborted).toBe(true);
+  expect(fresh).toHaveBeenCalledOnce();
+  await replacement;
+  late.resolve({ packages: [], unreadable: [{ folder: "old", message: "old" }] });
+  await vi.advanceTimersByTimeAsync(0);
+  await expect(capturePackage("old", "stuck")).rejects.toThrow("No discovered Pod");
+});
+
+test("scan diagnostics reach the host file even with unread stdout", async () => {
+  const root = await mkdtemp(join(tmpdir(), "pe-scan-file-"));
+  const file = packages.packageScanLog.in(stateFixture(join(root, "host", "fixture", "log")));
+  bindPackageScanLogger(() => {}, file);
+  await listPackages(root);
+  const log = await readFile(file.path, "utf8");
+  expect(log).toContain("Pod folder scan start");
+  expect(log).toMatch(/Pod folder scan end .*outcome=completed/);
+});
+
+test("the HTTP discovery deadline includes 1.2 s of target lookup before listing (D23)", async () => {
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<packages.PackageListing>();
+  vi.spyOn(packages, "listPackages").mockImplementation(() => { entered.resolve(); return release.promise; });
+  const root = await mkdtemp(join(tmpdir(), "pe-http-discovery-"));
+  const bridge = detachedBridge({ list: Effect.sleep("1200 millis").pipe(Effect.as([])) });
+  const routes = pagesRoute(() => [], () => root).pipe(Layer.provide(ActionJournalService.live(null)));
+  const server = await serveRoutes(routes, bridge);
+  try {
+    const started = performance.now();
+    const response = await fetch(`${server.base}/pages/late--tour/`, { headers: { [HOST_RPC_DOCUMENT_HEADER]: "doc" } });
+    const body = await response.json();
+    // 250 ms permits socket and timer scheduling, not another discovery budget.
+    expect(performance.now() - started).toBeLessThan(5_250);
+    expect(response.status).toBe(503);
+    expect(body).toMatchObject({ code: "pod.discovery.exceeded", message: expect.stringContaining("5000 ms") });
+  } finally {
+    release.resolve({ packages: [], unreadable: [] });
+    await server.close();
+  }
+});
+
 test("a stalled folder listing bounds waiters, shares work, and publishes its late census", async () => {
   const root = await mkdtemp(join(tmpdir(), "pe-scan-bound-"));
   const entered = Promise.withResolvers<void>();
@@ -154,6 +240,8 @@ test("a stalled folder listing bounds waiters, shares work, and publishes its la
   const calls = spy.mock.calls.length;
   expect((await listPackages(homes)).packages.map(p => p.id)).toEqual(["late"]);
   expect(spy).toHaveBeenCalledTimes(calls);
+  await listPackages(homes);
+  expect(spy.mock.calls.length).toBeGreaterThan(calls);
   expect((await capturePackage("late", homes)).id).toBe("late");
 });
 
@@ -272,6 +360,26 @@ test("the five-second lifecycle discovery bound includes its initial census", as
   }
 });
 
+test("host lifecycle shutdown does not await an unfinished filesystem scan", async () => {
+  const root = await mkdtemp(join(tmpdir(), "pe-close-stalled-scan-"));
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<packages.PackageListing>();
+  const lifecycle = createPackageLifecycle({
+    machine: stateMachine(root),
+    packages: () => { entered.resolve(); return release.promise; },
+  });
+  await entered.promise;
+  try {
+    const started = performance.now();
+    await lifecycle.close();
+    stopPackageDiscovery();
+    expect(performance.now() - started).toBeLessThan(250);
+  } finally {
+    release.resolve({ packages: [], unreadable: [] });
+    await lifecycle.ready;
+  }
+});
+
 test.each(["/pages/late--tour/", "/pages"])("a first Page request %s answers by 5000 ms and never starts lifecycle after expiry", async (path) => {
   const root = await mkdtemp(join(tmpdir(), "pe-first-page-bound-"));
   const home = join(root, "home");
@@ -307,6 +415,7 @@ test.each(["/pages/late--tour/", "/pages"])("a first Page request %s answers by 
     const response = await opening;
     expect(response.status).toBe(503);
     expect(await response.json()).toMatchObject({
+      code: "pod.discovery.exceeded",
       message: `Pod discovery exceeded 5000 ms listing ${pods}. Try again when the folder is available.`,
     });
     expect(Date.now() - started).toBe(5_000);

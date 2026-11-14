@@ -73,7 +73,7 @@ import {
   emitPagePinRevoke,
 } from "./control.ts";
 import { capturePackage, listPackages, productPodsRoots, type AdmittedPackage, type PodsRoots } from "./packages.ts";
-import { PackageDiscoveryExceeded } from "./pod-capture.ts";
+import { PackageDiscoveryExceeded, packageDiscoveryTimeoutMs } from "./pod-capture.ts";
 import { activePackages, requirePackageEnabled } from "./package-lifecycle.ts";
 import {
   pageDescriptors,
@@ -168,7 +168,6 @@ export const pageLibrary = (path: string): string | null => {
 /** One file segment: a leading dot is refused, so editor droppings stay private. */
 const SEGMENT = /^[a-z0-9_-][a-z0-9_.-]*$/i;
 const HEARTBEAT_MS = 15_000;
-const packageDiscoveryTimeoutMs = 5_000;
 const isMissing = (error: unknown) => (error as { code?: string } | null)?.code === "ENOENT";
 
 const pageEventRowSchema = z.object({
@@ -986,7 +985,7 @@ export function createPagesHandler(
 
   return Object.assign((request: Request) => handle(request).catch((error: unknown) => {
     if (error instanceof PackageDiscoveryExceeded)
-      return problem(503, error.message);
+      return json({ code: error.code, error: error.message, message: error.message }, 503);
     throw error;
   }), { observeTarget });
   async function handle(request: Request): Promise<Response> {
@@ -1220,22 +1219,47 @@ export const pagesRoute = (
           }),
       };
       const journal = yield* ActionJournalService;
+      // Content homes freeze at startup. Never re-probe synchronous network markers per request.
+      const defaultHomes = { roots: root(), podRoots: pods() };
+      const homeRoots = new Map([["", defaultHomes]]);
       const handlers = new Map<string, ReturnType<typeof createPagesHandler>>();
       const handler = HttpEffect.fromWebHandler(async (request) => {
-        const scope = readSessionScope(Object.fromEntries(request.headers));
-        const { pointer } = bridge ? await Effect.runPromise(targetHomes(bridge, scope)) : {};
-        const roots = root(pointer),
-          podRoots = pods(pointer);
-        const key = JSON.stringify([roots, podRoots]);
-        let pages = handlers.get(key);
-        if (!pages) {
-          pages = createPagesHandler(roots, podRoots, live, journal);
-          handlers.set(key, pages);
-        }
-        served = pages.observeTarget;
-        return matchPeRoute(request.method, new URL(request.url).pathname)
-          ? servePeRoute(request, pages)
-          : pages(request);
+        let podRoots = defaultHomes.podRoots;
+        let expired = false;
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const timeout = new Promise<Response>((resolve) => {
+          if (request.method !== "GET") return;
+          timer = setTimeout(() => {
+            expired = true;
+            const error = new PackageDiscoveryExceeded(podRoots);
+            resolve(json({ code: error.code, error: error.message, message: error.message }, 503));
+          }, packageDiscoveryTimeoutMs);
+        });
+        const resolvePage = async () => {
+          const scope = readSessionScope(Object.fromEntries(request.headers));
+          const { pointer } = bridge ? await Effect.runPromise(targetHomes(bridge, scope)) : {};
+          if (expired) return timeout;
+          const homeKey = pointer ?? "";
+          let homes = homeRoots.get(homeKey);
+          if (!homes) {
+            homes = { roots: root(pointer), podRoots: pods(pointer) };
+            homeRoots.set(homeKey, homes);
+          }
+          const { roots } = homes;
+          podRoots = homes.podRoots;
+          const key = JSON.stringify([roots, podRoots]);
+          let pages = handlers.get(key);
+          if (!pages) {
+            pages = createPagesHandler(roots, podRoots, live, journal);
+            handlers.set(key, pages);
+          }
+          served = pages.observeTarget;
+          return matchPeRoute(request.method, new URL(request.url).pathname)
+            ? servePeRoute(request, pages)
+            : pages(request);
+        };
+        try { return await Promise.race([resolvePage(), timeout]); }
+        finally { clearTimeout(timer); }
       });
       // One registration claims the bare `/pages` too (a second `add` is refused at boot; see captures).
       yield* router.add("*", "/pages/*", handler);

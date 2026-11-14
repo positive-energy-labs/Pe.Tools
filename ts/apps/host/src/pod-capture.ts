@@ -15,10 +15,13 @@ export function rememberPackageCensus(roots: PodsRoots, listing: PackageListing)
   );
 }
 
+export const packageDiscoveryTimeoutMs = 5_000;
+export const packageScanMaxAgeMs = 60_000;
+
 export class PackageDiscoveryExceeded extends Error {
   readonly code = "pod.discovery.exceeded";
   constructor(roots: PodsRoots) {
-    super(`Pod discovery exceeded 5000 ms listing ${[roots].flat().join(", ")}. Try again when the folder is available.`);
+    super(`Pod discovery exceeded ${packageDiscoveryTimeoutMs} ms listing ${[roots].flat().join(", ")}. Try again when the folder is available.`);
   }
 }
 
@@ -27,9 +30,11 @@ const discovery = new Map<string, {
   promise: Promise<PackageListing>;
   expired: boolean;
   completed: boolean;
+  startedAt: number;
+  completedAt: number;
 }>();
 
-/** Host shutdown alone cancels discovery; a request owns only its wait. */
+/** Shutdown cancels discovery; request expiry alone leaves a recoverable scan running. */
 export function stopPackageDiscovery() {
   for (const scan of discovery.values()) scan.stop.abort();
   discovery.clear();
@@ -42,6 +47,13 @@ export async function discoverPackages(
 ): Promise<PackageListing> {
   const key = rootsKey(roots);
   let scan = discovery.get(key);
+  if (scan && (scan.completed
+    ? wait === "background" || Date.now() - scan.completedAt >= packageDiscoveryTimeoutMs
+    : Date.now() - scan.startedAt >= packageScanMaxAgeMs)) {
+    scan.stop.abort();
+    discovery.delete(key);
+    scan = undefined;
+  }
   if (!scan) {
     const stop = new AbortController();
     const current = {
@@ -49,12 +61,15 @@ export async function discoverPackages(
       promise: read([roots].flat(), stop.signal),
       expired: false,
       completed: false,
+      startedAt: Date.now(),
+      completedAt: 0,
     };
     current.promise = current.promise.then(listing => {
       stop.signal.throwIfAborted();
       rememberPackageCensus(roots, listing);
       current.completed = true;
-      // Keep a late answer until a reader consumes it, then resume fresh discovery.
+      current.completedAt = Date.now();
+      // One request may consume a late answer within 5 s; lifecycle metadata requires a fresh scan.
       if (!current.expired && discovery.get(key) === current) discovery.delete(key);
       return listing;
     }, error => {
@@ -75,7 +90,7 @@ export async function discoverPackages(
         timer = setTimeout(() => {
           scan.expired = true;
           reject(new PackageDiscoveryExceeded(roots));
-        }, 5_000);
+        }, packageDiscoveryTimeoutMs);
       }),
     ]);
   } finally {

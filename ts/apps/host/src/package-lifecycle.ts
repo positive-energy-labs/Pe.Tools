@@ -21,6 +21,7 @@ import {
   type StoredFile,
 } from "@pe/host-contracts/kinds";
 import { hostState } from "./host-ownership.ts";
+import { packageDiscoveryTimeoutMs } from "./pod-capture.ts";
 import { productPodsRootPath } from "./product-paths.ts";
 import {
   builtinPeaSkillSnapshots,
@@ -76,7 +77,6 @@ export const projectPodIds = async (pointer: string | null | undefined) => {
   const root = projectPodsRoot(pointer);
   return root ? (await listPackages(root)).packages.map((pod) => pod.id) : [];
 };
-const packageDiscoveryTimeoutMs = 5_000;
 
 /** Runtime policy only. Membership and export remain exact authored bytes. */
 export async function requirePackageEnabled(
