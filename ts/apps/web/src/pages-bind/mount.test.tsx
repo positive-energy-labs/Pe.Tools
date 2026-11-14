@@ -1,7 +1,10 @@
 // @vitest-environment jsdom
 import { oneName } from "#/route/typed-route";
 import { routeAddress, type PageTargetReading } from "@pe/agent-contracts";
-import { cleanup, render } from "@testing-library/react";
+import { cleanup, fireEvent, render } from "@testing-library/react";
+import { workFingerprintSchema } from "@pe/agent-contracts";
+import { mountTypedRoute } from "../shell/typed-mount";
+import { module as bindRoute } from "./route";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 
 vi.mock("../machine/bay", () => ({ useThreadSummaries: () => null }));
@@ -88,4 +91,40 @@ test("D9: a viewed unbound Page shows its chip, the chip reaches the picker, and
   expect(picker.getByTestId("pages-bind")).toBeTruthy();
   expect(picker.queryByTitle("Page snowdon-ducts--tour")).toBeNull();
   expect(picker.getByRole("link", { name: "Back to the Page" }).getAttribute("href")).toBe(viewed);
+});
+
+/**
+ * D9 on the live lane (drive f1/A): the chip's link drops `view=false` (a default), and a Place reads
+ * an absent key from its memory, so inside the viewed Page the href alone settles on view=true again.
+ * This mounts the real route over the real /bind search with the Place remembering view=true.
+ * Mutant: drop `onBind` from the chip in mount.tsx (the click then only follows the href).
+ */
+test("D9: from a real /bind?view=true Place that remembers view=true, one chip click draws the picker with the query intact", () => {
+  stream.subscribe.mockReset().mockImplementation(() => () => {});
+  const link = routeAddress("bind").link({ page: oneName("pdrop--tour"), view: true, query: { walk: "1" } });
+  let search = new URL(link, "http://host").searchParams;
+  const listeners = new Set<() => void>();
+  const go = (next: URLSearchParams) => { search = new URLSearchParams(next); listeners.forEach((l) => l()); };
+  let remembered: unknown = {};
+  const mount = mountTypedRoute(bindRoute, {
+    address: { read: () => new URLSearchParams(search), write: go, subscribe: (l: () => void) => (listeners.add(l), () => listeners.delete(l)) },
+    fixture: null, target: { kind: "host" }, work: { address: null, open: null }, custody: { current: () => true },
+    memory: () => remembered,
+  } as never, workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`), { sources: {} });
+  // The pane's context, with the mount's own Page port; the picker read is not under test.
+  const ctxOf = () => ({ page: mount.page, value: { state: "ready", value: null }, verb: () => ({ run: vi.fn() }) });
+  try {
+    remembered = ctxOf().page.read(); // the Place's memory of the viewed Page
+    const view = render(<BindBody ctx={ctxOf() as never} />);
+    const chip = view.getByRole("link", { name: "Bind…" });
+    // The cause, held: the href alone, followed in this Place, reads view=true back from memory.
+    go(new URL(chip.getAttribute("href")!, "http://host").searchParams);
+    expect(ctxOf().page.read().view).toBe(true);
+    fireEvent.click(chip);
+    expect(search.get("view")).toBe("false");
+    expect(ctxOf().page.read()).toMatchObject({ view: false, query: { walk: "1" } });
+    view.rerender(<BindBody ctx={ctxOf() as never} />);
+    expect(view.getByTestId("pages-bind")).toBeTruthy();
+    expect(view.queryByTitle("Page pdrop--tour")).toBeNull();
+  } finally { mount.dispose(); }
 });
