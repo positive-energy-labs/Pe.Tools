@@ -1764,9 +1764,7 @@ export class ActionJournal implements ReceiptReader {
                               status: 409,
                               evidence: { result: structuredClone(result) },
                             }
-                        : entered && error instanceof CommandRejected
-                          ? { state: "unknown", error: error.message, status: 503 }
-                          : failure(error);
+                        : failure(error);
                     // A domain refusal cannot erase the journal's durable dispatch evidence.
                     if (held.dispatchedAt && "notDispatched" in outcome && outcome.notDispatched) {
                       const { notDispatched: _, ...uncertain } = outcome;
