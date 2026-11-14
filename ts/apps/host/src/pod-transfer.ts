@@ -490,35 +490,6 @@ export async function retireScratchPage(
     await rmdir(folder).catch(() => {});
 }
 
-/**
- * Move a scratch Page (`Pages/<page>/`) into a new Pod `<id>` as `pages/<page>/`, byte for byte.
- * Page state is machine state under the state root (homes freeze shape 7),
- * so none of it travels: the promoted Page starts unbound with an empty log.
- */
-export async function promotePage(
-  request: { page: string; id: string; name?: string },
-  options: TransferOptions = {},
-): Promise<PodPromote> {
-  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(request.page))
-    throw new TransferRefused(`'${request.page}' is not a scratch Page slug.`, 400);
-  const id = packageIdSchema.safeParse(request.id);
-  if (!id.success)
-    throw new TransferRefused(`'${request.id}' is not a valid, unreserved pod id.`, 400);
-  const found = await scratchPageDirectory(request.page, options.pagesRoot);
-  if (!found) throw new TransferRefused(`'${request.page}' is not a scratch Page slug.`, 400);
-  const source = found.dir;
-  if (!(await lstat(join(source, "index.html")).catch((error) => { console.error("pod-transfer: asynchronous operation failed", error); return null; }))?.isFile())
-    throw new TransferRefused(`No scratch Page '${request.page}' (no index.html).`, 404);
-  const page = await captureDirectory(source);
-  const errors = page.diagnostics.filter((d) => d.severity === "error");
-  if (errors.length)
-    throw new TransferRefused(errors.map((d) => `${d.path}: ${d.message}`).join("; "));
-  const files = promotedArchive({ ...request, id: id.data }, page.members);
-  const installed = await installArchive(writeZip(files), source, id.data, options);
-  await retireScratchPage(source, request.page, files);
-  return { ...installed, key: `page:@${installed.id}/pages/${request.page}` };
-}
-
 const DOS_DATE = (1 << 5) | 1; // 1980-01-01: archives hash the same for the same bytes.
 const UTF8_FLAG = 0x0800;
 
