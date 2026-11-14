@@ -96,6 +96,7 @@ An agent or a person drops a folder of HTML under the product home and the host 
   in one function scope; `tests/pages.test.ts` fails if a page's `esc` or `set` would collide.
 
 ## Owed
+- Pages draw picture marks themselves; a kit component would keep them from being dropped.
 
 - 2026-10-14, wave G cleanup: automatic approval review rejected the command containing removal of the disposable `C:/Users/kaitp/AppData/Local/Temp/pe-route-source-9AP4Oh` source-review fixture (`blocked by policy`, no further reason). It remains. Proof host and Vite were stopped separately; ports 62615 and 62616 are closed.
 - 2026-10-14, wave G round 4: the promoted route's exact-target Revit adapter still needs its own controlled native pass. Browser proof covers manual Work, trust, both palettes and offline export; the portable Page retains the previously proven 448-circuit reading, whose session is now stopped. Do not relabel that retained reading as a new route-native run.

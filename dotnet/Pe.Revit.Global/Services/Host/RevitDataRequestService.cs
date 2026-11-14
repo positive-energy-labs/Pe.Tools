@@ -1412,10 +1412,13 @@ internal sealed class RevitDataRequestService {
             .Where(b => b is not null)
             .ToList();
         if (boxes.Count == 0)
-            throw BridgeOperationExceptions.Conflict("None of the elements has a bounding box to look at.",
-                [BridgeOperationExceptions.Issue("$.elementIds", "ElementsUnboxed",
-                    $"No element in '{document.Title}' with the ids {string.Join(", ", requested)} has model geometry.",
-                    "Pass model elements (not types, views, or systems); for a system pass its members.")]);
+            return new RevitLensData(null, null, false, 0,
+                "None of the elements has a bounding box to look at. Pass model elements; for a system pass its members.", null, []) {
+                Refused = true,
+                NotDrawn = requested.Select(id => new RevitViewImageNotDrawn(id,
+                    RevitViewImageVisibility.Reasons(document.GetElement(id.ToElementId()) is not null,
+                        false, false, false, false, false, false))).ToList()
+            };
 
         var name = string.IsNullOrWhiteSpace(request.Name) ? "Pe lens" : request.Name.Trim();
         var pad = request.PaddingFeet ?? 4.0;

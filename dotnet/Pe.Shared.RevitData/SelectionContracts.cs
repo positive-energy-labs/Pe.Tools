@@ -192,11 +192,15 @@ public record RevitLensRequest(
 /// <param name="Boxed">How many of the elements had geometry and sit inside the box.</param>
 /// <param name="Note">One line on what happened.</param>
 public record RevitLensData(
-    long ViewId,
-    string ViewName,
+    long? ViewId,
+    string? ViewName,
     bool Created,
     int Boxed,
     string Note,
-    Lens Lens,
+    Lens? Lens,
     IReadOnlyList<Hidden> Hidden
-);
+) {
+    /// <summary>No lens was made because none of the requested elements has model bounds.</summary>
+    public bool Refused { get; init; }
+    public IReadOnlyList<RevitViewImageNotDrawn> NotDrawn { get; init; } = [];
+}
