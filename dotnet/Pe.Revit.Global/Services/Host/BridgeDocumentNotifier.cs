@@ -13,12 +13,14 @@ namespace Pe.Revit.Global.Services.Host;
 ///     Publishes document invalidation events to the TS host while the external bridge is
 ///     connected. Pure tracker subscriber: identity, dedupe (ActiveChanged), and sandbox
 ///     filtering (ChangeFilter) are the tracker's job; cache upkeep is DocumentCacheMaintenance's.
-///     Only the notification throttle lives here, and it publishes its trailing edge: a change
+///     Open notifications and script completion share one queued census. Change notifications
+///     publish their trailing edge: a change
 ///     inside the 750 ms window arms one pending publish on the next Revit idle past the window,
 ///     carrying every document that changed in it. Nothing is dropped.
 /// </summary>
 internal sealed class BridgeDocumentNotifier : IDisposable {
     private static readonly TimeSpan DocumentChangedMinInterval = TimeSpan.FromMilliseconds(750);
+    private static readonly TimeSpan RefreshWaitLimit = TimeSpan.FromSeconds(2);
     private readonly IDocumentTracker _documents;
     private readonly RevitTaskQueue _queue;
     private readonly Func<BridgeStateSnapshot> _snapshot;
@@ -29,6 +31,8 @@ internal sealed class BridgeDocumentNotifier : IDisposable {
     private bool _disposed;
     private bool _isInitialized;
     private bool _isReplaying;
+    /// <summary>Shared only until its API callback starts; a later change needs a later census.</summary>
+    private Task? _queuedRefresh;
     private DateTime _lastDocumentChangedNotificationUtc = DateTime.MinValue;
     /// <summary>The single armed trailing publish; null when none is pending.</summary>
     private EventHandler<IdlingEventArgs>? _trailing;
@@ -88,27 +92,64 @@ internal sealed class BridgeDocumentNotifier : IDisposable {
     public Task PublishInitialStateAsync() =>
         this.PublishCurrentAsync(DocumentInvalidationReason.Changed);
 
-    public Task RefreshAfterRunAsync() => this.PublishAfterApiCallAsync();
+    public async Task RefreshAfterRunAsync(CancellationToken cancellationToken) {
+        var refresh = this.QueueRefresh();
+        // Bound the caller's wait, not the queue item: a modal must not cancel the eventual census.
+        using var wait = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var deadline = Task.Delay(RefreshWaitLimit, wait.Token);
+        if (await Task.WhenAny(refresh, deadline).ConfigureAwait(false) != refresh
+            && !cancellationToken.IsCancellationRequested)
+            Log.Warning("Host bridge document refresh exceeded {WaitMs} ms; responding without waiting for the census.",
+                RefreshWaitLimit.TotalMilliseconds);
+        wait.Cancel();
+    }
 
     private void OnOpened(TrackedDocument tracked) {
         if (this._isReplaying)
             return;
         // LoadFamily can remove its internal document without DocumentClosed. UI Idling is not
         // a completion boundary in a headless session; queue a fresh census after this API call.
-        _ = this.PublishAfterApiCallAsync();
-        _ = this.PublishCurrentAsync(DocumentInvalidationReason.Opened);
+        _ = this.QueueRefresh();
     }
 
-    private async Task PublishAfterApiCallAsync() {
+    private Task QueueRefresh() {
+        lock (this._sync) {
+            if (this._disposed)
+                return Task.CompletedTask;
+            if (this._queuedRefresh is not null)
+                return this._queuedRefresh;
+
+            var completion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            this._queuedRefresh = completion.Task;
+            _ = this.PublishAfterApiCallAsync(completion);
+            return completion.Task;
+        }
+    }
+
+    private async Task PublishAfterApiCallAsync(TaskCompletionSource<bool> completion) {
         try {
             var publish = await this._queue.Run(
-                _ => this._disposed ? Task.CompletedTask : this.PublishCurrentAsync(DocumentInvalidationReason.Changed),
+                _ => {
+                    lock (this._sync) {
+                        this._queuedRefresh = null;
+                        if (this._disposed)
+                            return Task.CompletedTask;
+                    }
+                    return this.PublishCurrentAsync(DocumentInvalidationReason.Changed);
+                },
                 // A request id forces queueing even inside a native event outside a queue run.
                 new RevitRunOptions { Label = "bridge document census", RequestId = Guid.NewGuid().ToString("N") }
             ).ConfigureAwait(false);
             await publish.ConfigureAwait(false);
         } catch (Exception ex) {
             Log.Warning(ex, "Host bridge failed to refresh documents after API call.");
+        } finally {
+            lock (this._sync) {
+                // Refusal can bypass the callback. Do not clear a newer queued census.
+                if (ReferenceEquals(this._queuedRefresh, completion.Task))
+                    this._queuedRefresh = null;
+            }
+            completion.TrySetResult(true);
         }
     }
 

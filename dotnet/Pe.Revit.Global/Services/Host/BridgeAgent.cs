@@ -272,50 +272,49 @@ internal sealed class BridgeAgent : IDisposable {
                 throw new InvalidOperationException($"Unsupported bridge operation '{request.OperationKey}'.");
 
             OpCallGate.Require(op.Definition, request.DerivedCommand, request.PayloadJson);
-            Task<OpRun> responseTask;
-            if (op.Thread == OpThread.Revit) {
-                // The op gets the request's own token, never context.Cancellation: the queue disposes
-                // that per-run link when the delegate returns, and an async op (scripting.execute)
-                // returns at its first await, so op.cancel would fire a token nothing links anymore.
-                var run = await this._revitTaskQueue.RunForResult(
-                    context => OpRunner.RunAsync(
-                        op,
-                        request.PayloadJson,
-                        ResolveDocument(op, request.OpenDocumentId, context.Cancellation),
-                        cancellationToken, request.DerivedCommand),
-                    new RevitRunOptions { Label = op.Key },
-                    cancellationToken,
-                    onLateCompletion: result => late.TrySetResult(result)
-                ).ConfigureAwait(false);
-                if (run.Outcome == RevitTaskOutcome.Faulted)
-                    responseTask = run.GetValueOrThrow();
-                else if (!run.Ok) {
-                    deferred = run.Outcome is RevitTaskOutcome.AbandonedStillRunning or RevitTaskOutcome.TimedOut;
-                    if (deferred) RequestEvidence.Uncertain(request.RequestId, run.Outcome.ToString());
-                    if (run.Outcome == RevitTaskOutcome.TimedOut) late.TrySetResult(run);
-                    await this.WriteRevitTaskOutcomeAsync(
-                        request,
-                        receipt,
-                        run.Outcome,
-                        run.Detail,
-                        startedAt,
-                        requestBytes,
-                        cancellationToken
-                    ).ConfigureAwait(false);
-                    return;
-                } else
-                    responseTask = run.Value!;
-            } else {
-                responseTask = OpRunner.RunAsync(op, request.PayloadJson, null, cancellationToken, request.DerivedCommand);
-            }
-
             OpRun ran;
             try {
+                Task<OpRun> responseTask;
+                if (op.Thread == OpThread.Revit) {
+                    // The op gets the request's own token, never context.Cancellation: the queue disposes
+                    // that per-run link when the delegate returns, and an async op (scripting.execute)
+                    // returns at its first await, so op.cancel would fire a token nothing links anymore.
+                    var run = await this._revitTaskQueue.RunForResult(
+                        context => OpRunner.RunAsync(
+                            op,
+                            request.PayloadJson,
+                            ResolveDocument(op, request.OpenDocumentId, context.Cancellation),
+                            cancellationToken, request.DerivedCommand),
+                        new RevitRunOptions { Label = op.Key },
+                        cancellationToken,
+                        onLateCompletion: result => late.TrySetResult(result)
+                    ).ConfigureAwait(false);
+                    if (run.Outcome == RevitTaskOutcome.Faulted)
+                        responseTask = run.GetValueOrThrow();
+                    else if (!run.Ok) {
+                        deferred = run.Outcome is RevitTaskOutcome.AbandonedStillRunning or RevitTaskOutcome.TimedOut;
+                        if (deferred) RequestEvidence.Uncertain(request.RequestId, run.Outcome.ToString());
+                        if (run.Outcome == RevitTaskOutcome.TimedOut) late.TrySetResult(run);
+                        await this.WriteRevitTaskOutcomeAsync(
+                            request,
+                            receipt,
+                            run.Outcome,
+                            run.Detail,
+                            startedAt,
+                            requestBytes,
+                            cancellationToken
+                        ).ConfigureAwait(false);
+                        return;
+                    } else
+                        responseTask = run.Value!;
+                } else {
+                    responseTask = OpRunner.RunAsync(op, request.PayloadJson, null, cancellationToken, request.DerivedCommand);
+                }
                 ran = await responseTask.ConfigureAwait(false);
             } finally {
-                // A script's completion must not outrun the census that removes its transient docs.
+                // Cover prefix faults and early outcomes too, with a bounded wait for the final census.
                 if (request.OperationKey == "scripting.execute")
-                    await this._documentNotifier.RefreshAfterRunAsync().ConfigureAwait(false);
+                    await this._documentNotifier.RefreshAfterRunAsync(cancellationToken).ConfigureAwait(false);
             }
             touched = ran.Touched;
             if (ran.Error is not null)
