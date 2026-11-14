@@ -91,7 +91,6 @@ import {
 import { admitNativeCaller } from "./native-read-policy.ts";
 import { InvalidRead } from "./native-reads.ts";
 import { capturePackage } from "./packages.ts";
-import { exportPod, importPod, promotePage, TransferRefused } from "./pod-transfer.ts";
 import { recordHostFact } from "./receipt-export.ts";
 import { ReadFreshness, RequestIdentity } from "./request-services.ts";
 import {
@@ -1010,8 +1009,13 @@ const dispatchTsOnlyOperation = Effect.fnUntraced(function* (
   captures: TakeoffCaptures,
   via: { caller: Caller; pointers?: ThreadPointers; action?: GatewayLocalContext },
 ) {
+  // pod.export, pod.import and pod.promote have no local entry: the gateway runs their prepared
+  // archive inline (gateway-actions.ts host-leaf), and /call refuses them as mutations.
+  if (!hasLocalEntry(key))
+    return yield* Effect.fail(new BridgeError(`${key} runs only through /actions`, 409, { notDispatched: true }));
   return yield* localEntries[key]({ request, scope, bridge, captures, ...via });
 });
+const hasLocalEntry = (key: string): key is keyof typeof localEntries => Object.hasOwn(localEntries, key);
 
 type LocalCall = {
   request: unknown;
@@ -1101,21 +1105,6 @@ const localEntries = {
       ),
     );
   }),
-  "pod.export": Effect.fnUntraced(function* ({ request }: LocalCall) {
-    const input = yield* decodeRequest("pod.export", request);
-    const captures = yield* PictureCaptureStore;
-    return yield* transfer("pod.export", () => exportPod(input, { captures }));
-  }),
-  "pod.import": Effect.fnUntraced(function* ({ request }: LocalCall) {
-    const input = yield* decodeRequest("pod.import", request);
-    const captures = yield* PictureCaptureStore;
-    return yield* transfer("pod.import", () => importPod(input, { captures }));
-  }),
-  "pod.promote": Effect.fnUntraced(function* ({ request }: LocalCall) {
-    const input = yield* decodeRequest("pod.promote", request);
-    const captures = yield* PictureCaptureStore;
-    return yield* transfer("pod.promote", () => promotePage(input, { captures }));
-  }),
   "pod.runs": Effect.fnUntraced(function* ({ request }: LocalCall) {
     return yield* listRuns(yield* decodeRequest("pod.runs", request));
   }),
@@ -1190,19 +1179,6 @@ const localEntries = {
     return yield* apsAuthToken(yield* decodeRequest("aps.auth.token", request));
   }),
 };
-
-/**
- * Archive transport is host-only. A refusal is a settled answer (the transfer is all-or-nothing, so
- * nothing landed): it fails the receipt with its own status instead of leaving it unknown.
- */
-const transfer = <A>(key: "pod.export" | "pod.import" | "pod.promote", run: () => Promise<A>) =>
-  Effect.tryPromise({
-    try: run,
-    catch: (error) =>
-      error instanceof TransferRefused
-        ? new BridgeError(error.message, error.status, { dispatched: true })
-        : new LocalOpError(key, error instanceof Error ? error.message : String(error)),
-  });
 
 /** A package refusal keeps its own words; identity misses are 404, twins 409, bad members 422. */
 const packageError = (key: string, error: unknown) => {
