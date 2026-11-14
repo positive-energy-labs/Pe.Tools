@@ -252,7 +252,14 @@ test.each(["http", "stdio"])(
           reads.push({ key, ref });
           return key === "revit.context.view-image"
             ? Response.json(
-                { view: { label: "User view" }, lens: { basis: "UserView", viewId: 1 }, hidden: [], byteSize: image.length, width: 1500, height: 1500 },
+                {
+                  view: { label: "User view" },
+                  lens: { basis: "UserView", viewId: 1 },
+                  hidden: [],
+                  byteSize: image.length,
+                  width: 1500,
+                  height: 1500,
+                },
                 { headers: { "x-pe-capture-id": "f-a", "x-pe-capture-url": capturePath } },
               )
             : Response.json({ families: 3 });
@@ -508,6 +515,57 @@ async function withHead<T>(head: Head, body: () => Promise<T>): Promise<T> {
 const run = (tool: ExecutableTool, input: unknown, head = turn) =>
   withHead(head, () => tool.execute!(input as never, { agent: { toolCallId: "call-1" } } as never));
 
+test("C2: Page reads flatten the stamped view and pass the event cursor", async () => {
+  fakeRuntimeHost("http://127.0.0.1:19999");
+  const key = "page:@pages/todo";
+  const state = {
+    seq: 10,
+    text: "nine",
+    textSeq: 9,
+    agent: { note: "text" },
+    events: [{ seq: 10 }],
+  };
+  const target = { page: key, resolution: { kind: "unbound" } };
+  const cursors: (string | null)[] = [];
+  vi.stubGlobal("fetch", async (input: string | URL | Request) => {
+    const url = new URL(input instanceof Request ? input.url : String(input));
+    if (url.pathname === "/pe/capabilities") {
+      const listed = catalog();
+      listed.capabilities.push({
+        key,
+        kind: "page",
+        title: "Todo",
+        description: "",
+        needs: "nothing",
+        effect: "query",
+        mutates: false,
+        source: "pages",
+        rank: 0,
+        input: {},
+        principal: ["human", "pea"],
+        package: { id: "pages", path: "todo/index.html", sha256: "a".repeat(64) },
+        projection: { openUrl: "/pages/todo/" },
+      });
+      return Response.json(listed);
+    }
+    if (url.pathname === "/pages/todo/state") {
+      cursors.push(url.searchParams.get("after"));
+      return Response.json(state);
+    }
+    if (url.pathname === "/pages/todo/target") return Response.json(target);
+    throw Error(`unexpected ${url}`);
+  });
+  expect(await run(peRead, { key, timeoutSeconds: 5 })).toMatchObject({
+    ok: true,
+    result: { ...state, target },
+  });
+  expect(await run(peRead, { key, input: { after: 9 }, timeoutSeconds: 5 })).toMatchObject({
+    ok: true,
+    result: { ...state, target },
+  });
+  expect(cursors).toEqual([null, "9"]);
+});
+
 test("pe_read route graphs read the real host door before releasing their publication", async () => {
   const f = await readDoor();
   fakeRuntimeHost("http://127.0.0.1:19999");
@@ -531,7 +589,7 @@ test("pe_read route graphs read the real host door before releasing their public
       });
     }
     for (const route of ["fans", "ducts"]) {
-      const calls = requests.filter(request => request.read === `route:${route}`);
+      const calls = requests.filter((request) => request.read === `route:${route}`);
       expect(calls).toHaveLength(2);
       expect(calls[0]!.release).not.toBe(true);
       expect(calls[1]).toEqual({ ...calls[0], release: true });
@@ -646,7 +704,9 @@ test("an exact-open turn Target reads and writes route Work under its document's
       const body = JSON.parse(String(init?.body));
       if (body.release) return Response.json({ value: null, state: "superseded" });
       if (body.read.startsWith("route:"))
-        return Response.json({ value: { data: projectRouteRead(routeRegistry[body.read.slice(6)]!.host) } });
+        return Response.json({
+          value: { data: projectRouteRead(routeRegistry[body.read.slice(6)]!.host) },
+        });
       timelineReads.push(body);
       return Response.json({
         value: { data: { rows: [], undo: step, redo: null, refusal: { undo: null, redo: null } } },
@@ -783,7 +843,9 @@ test("ADR 0021: a thread with several targets refuses a call with no override; a
     }
     const body = JSON.parse(typeof init?.body === "string" ? init.body : "{}");
     if (url.pathname === "/pe/reads/value" && body.read?.startsWith("route:"))
-      return Response.json({ value: { data: projectRouteRead(routeRegistry[body.read.slice(6)]!.host) } });
+      return Response.json({
+        value: { data: projectRouteRead(routeRegistry[body.read.slice(6)]!.host) },
+      });
     if (body.key === "bridge.sessions.list")
       return Response.json({
         sessions: [
@@ -1239,7 +1301,9 @@ test("an admitted route's view rows project keys from its agent policy, never th
   const view = rows.find((row) => row.key === "route:fans.view")!;
   expect(view.description).toContain("its keys (fan, viewport; settable: fan)");
   const set = rows.find((row) => row.key === "route:fans.set-view")!;
-  expect(set.input).toMatchObject({ anyOf: [{ properties: { fan: { type: "string", description: "Encoded page field" } } }, {}] });
+  expect(set.input).toMatchObject({
+    anyOf: [{ properties: { fan: { type: "string", description: "Encoded page field" } } }, {}],
+  });
   expect(JSON.stringify(set.input)).not.toContain('"viewport"');
   // A legacy route keeps its own lease projection.
   expect(rows.find((row) => row.key === "route:ducts.view")!.description).not.toContain(
