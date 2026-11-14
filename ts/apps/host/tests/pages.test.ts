@@ -584,18 +584,19 @@ describe("pages", () => {
       ).toEqual({ kind: "choose", reason: "document-closed" });
     });
 
-    it("a pinned binding writes only Pea's documents", async () => {
+    it("a person's pin writes its document as that person's act", async () => {
       bind("S2");
       const yours = await host([session("S1")]);
       await yours.as(human).put("/pe/pages/todo/binding", { kind: "pinned", address: MODEL });
-      expect(await code(await yours.page.post("/pages/todo/act", { key: "k" }))).toMatchObject({
-        code: "grant.required",
-        door: "/pages/todo/act",
+      expect(await (await yours.page.post("/pages/todo/act", { key: "k" })).json()).toMatchObject({
+        caller: { kind: "page", page: "page:@pages/todo" },
+        basis: { kind: "person-pin", page: "page:@pages/todo", boundBy: "human", lifetime: docA },
       });
+      expect(await (await yours.page.get("/pages/todo/target")).json()).toMatchObject({ write: { kind: "human" } });
       const peas = await host([session("S2")]);
       await peas.as(human).put("/pe/pages/todo/binding", { kind: "pinned", address: MODEL });
       expect(await (await peas.page.post("/pages/todo/act", { key: "k" })).json()).toMatchObject({
-        basis: { kind: "acquisition", id: "acq-S2" },
+        basis: { kind: "person-pin", boundBy: "human", lifetime: { session: "S2", openId: "B" } },
       });
     });
 

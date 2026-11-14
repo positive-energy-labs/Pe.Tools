@@ -57,6 +57,26 @@ const receipt = (id: string, state: "failed" | "unknown" | "succeeded", revision
 });
 const none: NoticeSources = { threads: [], receipts: [], works: [], machine: null, stored: [], held: [] };
 
+test.each(["running", "succeeded", "failed"] as const)("a person's pinned Page %s receipt names the Page and pinner in its notice", (state) => {
+  const lifetime = { session: "S1", openId: "A" };
+  const succeeded = receipt("pin", "succeeded").action;
+  if (succeeded.state !== "succeeded") throw Error("fixture did not succeed");
+  const { result: _result, ...base } = succeeded;
+  const action = actionReceiptSchema.parse({
+    ...base,
+    state,
+    caller: { kind: "page", page: "page:@pages/todo" },
+    basis: { kind: "person-pin", page: "page:@pages/todo", boundBy: "human", lifetime },
+    target: { kind: "document", ref: lifetime },
+    ...(state === "succeeded" ? { result: null } : {}),
+    ...(state === "failed" ? { error: "Write failed", status: 500 } : {}),
+  });
+  expect(action.basis).toMatchObject({ kind: "person-pin", page: "page:@pages/todo", boundBy: "human", lifetime });
+  const rows = noticeRows({ ...none, receipts: [{ revision: 1, action }] }, NOW);
+  expect(rows).toHaveLength(1);
+  expect(rows[0]).toMatchObject({ where: "Page page:@pages/todo, as the person who pinned it", verb: state });
+});
+
 test("a succeeded script's held result is one notice, with nothing pending", async () => {
   const journal = testJournal();
   const result = { status: "Succeeded", held: "Held, not done: the person presses Save in Revit." };
