@@ -11,7 +11,9 @@
  * `04 PE Software Files\Pe.Tools`. Pods, Pages and Catalogs read all three; an id is unique across
  * them, and a write lands in the home the thing came from. A machine with no firm home runs.
  */
-import { execFileSync } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
+import { access, readFile, readdir, realpath } from "node:fs/promises";
+import { promisify } from "node:util";
 import { existsSync, readFileSync, readdirSync, realpathSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join, relative, resolve, isAbsolute } from "node:path";
@@ -48,6 +50,17 @@ export function insideTestRoot(path: string): string {
 export function userRoot(): string {
   const override = process.env[productPathNames.productHomeVariable]?.trim();
   return insideTestRoot(override ? resolve(override) : documentsUserRoot());
+}
+
+/** Cache-only user identity for a degraded async resolver; never guesses a Documents folder. */
+export function knownUserRoot(): string | undefined {
+  const override = process.env[productPathNames.productHomeVariable]?.trim();
+  const root = override ? resolve(override) : cached && join(cached, productIdentity.productName);
+  if (root && process.env[testHomeRootVariable]) {
+    const away = relative(resolve(tmpdir()), root);
+    if (away.startsWith("..") || isAbsolute(away)) throw Error(`Test isolation: '${root}' is outside the temp directory.`);
+  }
+  return root;
 }
 
 /** `<Documents>\Pe.Tools` from the known folder, ignoring any override: the default user root. */
@@ -206,12 +219,29 @@ export function sharedDriveRoot(facts?: HomeFacts): string | null {
  * but a forward-slash relative path that stays inside the shared drive root is unbound, never a throw.
  */
 export function projectHome(pointer: string | null | undefined, facts?: HomeFacts): string | null {
-  const base = sharedDriveRoot(facts);
+  const root = projectCandidate(pointer, firmHome(facts).root);
+  return root && markerTier((facts ?? machineFacts([])).marker(insideTestRoot(root))) === "project" ? root : null;
+}
+
+function projectCandidate(pointer: string | null | undefined, firm: string | null): string | null {
+  const parent = firm && dirname(firm);
+  const base = parent && dirname(parent) !== parent ? dirname(parent) : null;
   const segments = pointer?.split("/") ?? [];
   if (!base || !pointer || /[\\:]/.test(pointer)) return null;
   if (segments.some((segment) => !segment.trim() || segment === "." || segment === "..")) return null;
-  const root = insideTestRoot(join(base, ...segments, productIdentity.productName));
-  return markerTier((facts ?? machineFacts([])).marker(root)) === "project" ? root : null;
+  return join(base, ...segments, productIdentity.productName);
+}
+
+/** Cold document binding uses the already resolved firm home; it never probes drives. */
+export async function resolveProjectHome(pointer: string, firm: string | null, signal?: AbortSignal): Promise<string | null> {
+  signal?.throwIfAborted();
+  const root = projectCandidate(pointer, firm);
+  if (!root) return null;
+  const text = await readFile(join(root, productPathNames.homeMarkerFileName), { encoding: "utf8", signal }).catch(error => {
+    if (missingHomePath(error)) return null;
+    throw error;
+  });
+  return markerTier(text) === "project" ? root : null;
 }
 
 /**
@@ -281,6 +311,96 @@ export const homeLogLines = (found = homesFound()): string[] => [
 /** One content folder (`Pods`, `Pages`, `Catalogs`) in every home, in list order. */
 export const homeDirs = (name: string, input?: HomesInput): string[] =>
   homes(input).map((home) => join(home.root, name));
+
+/** Async machine read for long-lived owners. Never probes the network on a request's stack. */
+export type ResolveHomesOptions = {
+  knownFirm?: string;
+  signal?: AbortSignal;
+  onUser?: (root: string) => void;
+  onFirm?: (firm: FirmHome) => void;
+  onPending?: (paths: readonly string[]) => void;
+};
+const missingHomePath = (error: unknown) => error instanceof Error && "code" in error &&
+  (error.code === "ENOENT" || error.code === "ENOTDIR");
+
+export async function resolveHomes(pointers: readonly string[] = [], options: ResolveHomesOptions = {}): Promise<Map<string, Home[]>> {
+  const pending = new Set<string>();
+  const track = async <T>(path: string, read: () => Promise<T>): Promise<T> => {
+    options.signal?.throwIfAborted();
+    pending.add(path); options.onPending?.([...pending]);
+    try {
+      const value = await read();
+      options.signal?.throwIfAborted();
+      return value;
+    } finally { pending.delete(path); options.onPending?.([...pending]); }
+  };
+  const optional = async <T>(read: Promise<T>, absent: T): Promise<T> => read.catch(error => {
+    if (missingHomePath(error)) return absent;
+    throw error;
+  });
+  const check = async (path: string) => {
+    if (process.env[testHomeRootVariable]) {
+      const temp = await realpath(tmpdir());
+      if (![tmpdir(), temp].some(root => {
+        const away = relative(resolve(root), resolve(path));
+        return !away.startsWith("..") && !isAbsolute(away);
+      })) throw Error(`Test isolation: '${path}' is outside the temp directory.`);
+    }
+    return path;
+  };
+  const marker = async (root: string) => {
+    const path = join(await check(root), productPathNames.homeMarkerFileName);
+    return optional(track(path, () => readFile(path, { encoding: "utf8", signal: options.signal })), null);
+  };
+  const override = process.env[productPathNames.productHomeVariable]?.trim();
+  if (!override && !cached) {
+    cached = process.platform === "win32"
+      ? parseDocumentsKnownFolder((await track("Documents known folder (reg.exe)", () => promisify(execFile)("reg.exe", ["query", userShellFolders, "/v", "Personal"], { encoding: "utf8", windowsHide: true, signal: options.signal }))).stdout, process.env)
+      : join(homedir(), "Documents");
+  }
+  const userPath = override ? resolve(override) : cached && join(cached, productIdentity.productName);
+  if (!userPath) throw Error("Documents known folder unreadable");
+  const user = await check(userPath);
+  options.onUser?.(user);
+  const told = process.env[productPathNames.sharedRootVariable]?.trim();
+  let firm: string | null = null;
+  let firmReport: FirmHome;
+  if (options.knownFirm || told) {
+    const root = await check(resolve(options.knownFirm ?? told ?? ""));
+    if (markerTier(await marker(root)) === "firm") firm = root;
+    firmReport = { root: firm, looked: [root] };
+  } else {
+    const drives = process.platform !== "win32" || process.env[testHomeRootVariable] ? [] :
+      (await Promise.all([..."CDEFGHIJKLMNOPQRSTUVWXYZ"].map(async letter => {
+        const root = `${letter}:\\`;
+        return optional(track(root, () => access(root).then(() => root)), null);
+      }))).filter((root): root is string => root !== null);
+    const lists = new Map<string, string[]>(), markers = new Map<string, string | null>();
+    await Promise.all(drives.map(async drive => {
+      const shared = join(drive, productPathNames.sharedDrivesDirectoryName);
+      const names = await optional(track(shared, () => readdir(shared)), []);
+      lists.set(shared, names);
+      await Promise.all([drive, ...names.map(name => join(shared, name))].map(async base => {
+        const root = join(base, ...firmHomeSegments);
+        markers.set(root, await marker(root));
+      }));
+    }));
+    firmReport = probeFirmHome({ drives, list: root => lists.get(root) ?? [], marker: root => markers.get(root) ?? null });
+    firm = firmReport.root;
+  }
+  options.onFirm?.(firmReport);
+  const result = new Map<string, Home[]>();
+  await Promise.all(["", ...pointers].map(async pointer => {
+    const candidate = projectCandidate(pointer, firm);
+    const project = candidate && markerTier(await marker(candidate)) === "project" ? candidate : null;
+    result.set(pointer, [
+      { tier: "user", root: user },
+      ...(project ? [{ tier: "project" as const, root: project }] : []),
+      ...(firm ? [{ tier: "firm" as const, root: firm }] : []),
+    ]);
+  }));
+  return result;
+}
 
 /** The firm home's tiered values, `<firm>\Settings`; null without a firm home. */
 export function firmSettingsDir(facts?: HomeFacts): string | null {

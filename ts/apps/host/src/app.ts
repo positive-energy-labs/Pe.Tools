@@ -25,6 +25,7 @@ import { createServer, type Server } from "node:http";
 import { join } from "node:path";
 import { hostLoadedFamilies } from "../../../packages/mcps/src/pea/families-admission.ts";
 import { RevitBridge, RevitBridgeLive } from "./bridge.ts";
+import { contentHomesFound } from "./content-roots.ts";
 import { makeCallRoute } from "./call-route.ts";
 import { capturesRoute, PictureCaptureStore } from "./captures-route.ts";
 import { bindControl, Refused } from "./control.ts";
@@ -122,13 +123,14 @@ export const hostStatusRoute = HttpRouter.add("GET", hostProcessIdentity.healthP
         },
         undefined,
         yield* bridge.lastRegistrationRefusal,
+        contentHomesFound(),
       ),
     );
   }),
 );
 
 const noRevitHostStatusRoute = HttpRouter.add("GET", hostProcessIdentity.healthPath, () =>
-  Effect.flatMap(getHostStatus({ connected: false }, { revit: false }), Response.json),
+  Effect.flatMap(getHostStatus({ connected: false }, { revit: false }, null, contentHomesFound()), Response.json),
 );
 
 const emptyNotFound = Effect.succeed(Response.empty({ status: 404 }));

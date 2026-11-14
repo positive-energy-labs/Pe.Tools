@@ -29,7 +29,7 @@ test("undeclared modules and malformed route declarations never become executabl
       "throw Error('must not run in host')",
     );
     await writeFile(join(root, "sample/pod.json"), '{"id":"sample"}');
-    expect((await listPackages(root)).packages[0]!.contributions).toEqual([]);
+    expect((await listPackages({ podsRoots: root })).packages[0]!.contributions).toEqual([]);
     await writeFile(
       join(root, "sample/pod.json"),
       JSON.stringify({
@@ -39,7 +39,7 @@ test("undeclared modules and malformed route declarations never become executabl
         ],
       }),
     );
-    const pod = (await listPackages(root)).packages[0]!;
+    const pod = (await listPackages({ podsRoots: root })).packages[0]!;
     expect(pod.diagnostics.some((d) => d.code === "InvalidRoute")).toBe(true);
     expect(pod.contributions.some((c) => c.kind === "route")).toBe(false);
   } finally {

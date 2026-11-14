@@ -172,7 +172,7 @@ test("rollback names a directory kept because a concurrent writer added a file",
 test("a shipped update dropping a member posts one stored keep notice across restarts", async () => {
   await boot();
   const directory = join(pods, "example");
-  const original = (await listPackages(pods)).packages.find(p => p.id === "example")!;
+  const original = (await listPackages({ podsRoots: pods })).packages.find(p => p.id === "example")!;
   const before = await readFile(join(directory, "pages", "tour", "index.html"));
   const manifest = join(root, "examples", "example", "pod.json");
   await writeFile(manifest, (await readFile(manifest, "utf8")).replace("1.0.0", "2.0.0"));
@@ -188,12 +188,12 @@ test("a shipped update dropping a member posts one stored keep notice across res
   expect(await readFile(join(directory, "pages", "tour", "index.html"))).toEqual(before);
   for (const member of original.members)
     expect(await readFile(join(directory, member.path))).toEqual(Buffer.from(member.bytes));
-  expect((await listPackages(pods)).packages.find(p => p.id === "example")!.version).toBe("1.0.0");
+  expect((await listPackages({ podsRoots: pods })).packages.find(p => p.id === "example")!.version).toBe("1.0.0");
 });
 
 test.each(["io", "cas"] as const)("update rolls back a second-member failure (%s) byte for byte and a retry succeeds", async (mode) => {
   await boot();
-  const original = (await listPackages(pods)).packages.find(p => p.id === "example")!;
+  const original = (await listPackages({ podsRoots: pods })).packages.find(p => p.id === "example")!;
   await writeFile(join(root, "examples", "example", "pages", "tour", "index.html"), "<title>Updated</title>");
   await rm(join(shipped, "example.zip"));
   await exportPod({ pod: "example", archivePath: join(shipped, "example.zip") },
@@ -304,7 +304,7 @@ test("a shipped update uses home CAS without moving the pod, and keeps a later u
 test("first boot imports the shipped pod; a restart offers nothing again, even after the user deletes it", async () => {
   const first = await boot();
   expect(first.outcomes.map((o) => o.outcome)).toEqual(["imported"]);
-  expect((await listPackages(pods)).packages.map((p) => [p.id, p.folder])).toEqual([
+  expect((await listPackages({ podsRoots: pods })).packages.map((p) => [p.id, p.folder])).toEqual([
     ["default", "default"],
     ["example", "example"],
   ]);
@@ -318,7 +318,7 @@ test("first boot imports the shipped pod; a restart offers nothing again, even a
   expect((await boot()).outcomes.map((o) => o.outcome)).toEqual(["offered-before"]);
   await rm(join(pods, "example"), { recursive: true });
   expect((await boot()).outcomes.map((o) => o.outcome)).toEqual(["offered-before"]);
-  expect((await listPackages(pods)).packages.map((p) => p.id)).toEqual(["default"]);
+  expect((await listPackages({ podsRoots: pods })).packages.map((p) => p.id)).toEqual(["default"]);
 });
 
 test("a user's pod with the shipped id, or a folder with its name, is never overwritten", async () => {
@@ -347,7 +347,7 @@ test("a user's pod with the shipped id, or a folder with its name, is never over
 
 test("the real examples stage and first-boot import unchanged: same members, project bytes kept, four kinds of keys", async () => {
   const examples = join(import.meta.dirname, "..", "..", "..", "..", "examples", "pods");
-  const source = (await listPackages(examples)).packages.find((p) => p.id === "snowdon-ducts")!;
+  const source = (await listPackages({ podsRoots: examples })).packages.find((p) => p.id === "snowdon-ducts")!;
   const staged = await exportPod(
     { pod: "snowdon-ducts", archivePath: join(shipped, "snowdon-ducts.zip") },
     { podsRoot: examples, captures },
@@ -359,7 +359,7 @@ test("the real examples stage and first-boot import unchanged: same members, pro
   const report = await boot();
 
   expect(report.outcomes.map((o) => o.outcome)).toEqual(["imported", "imported"]);
-  const landed = (await listPackages(pods)).packages.find((p) => p.id === "snowdon-ducts")!;
+  const landed = (await listPackages({ podsRoots: pods })).packages.find((p) => p.id === "snowdon-ducts")!;
   expect(landed.members.map((m) => [m.path, m.sha256])).toEqual(
     source.members.map((m) => [m.path, m.sha256]),
   );
@@ -443,9 +443,9 @@ test("the shipped census resumes a manifest-free folder recorded present by an o
   const member = join(pods, "example", "pages", "tour", "index.html");
   await mkdir(dirname(member), { recursive: true });
   await writeFile(member, readZip(bytes).get("pages/tour/index.html")!);
-  expect((await listPackages(pods)).packages.some(p => p.id === "example")).toBe(false);
+  expect((await listPackages({ podsRoots: pods })).packages.some(p => p.id === "example")).toBe(false);
   expect((await boot()).outcomes).toMatchObject([{ outcome: "imported", id: "example" }]);
-  expect((await listPackages(pods)).packages.some(p => p.id === "example")).toBe(true);
+  expect((await listPackages({ podsRoots: pods })).packages.some(p => p.id === "example")).toBe(true);
 });
 
 test("an unrelated manifest-free example folder is kept with one notice across censuses", async () => {

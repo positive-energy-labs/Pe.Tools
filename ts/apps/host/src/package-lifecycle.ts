@@ -1,14 +1,11 @@
-import { lstat, readdir } from "node:fs/promises";
-import { join } from "node:path";
 import { stateSegments } from "@pe/host-contracts/service-identity";
 import { createHash } from "node:crypto";
+import { acquireContentRoots, contentRootsReady } from "./content-roots.ts";
 import { createPluginRuntime } from "@pe/agent-contracts";
 import { z } from "zod";
 import {
   listPackages,
-  packageDiscoveryTimeoutMs,
   logPackageDiscovery,
-  isPackageMember,
   productPodsRoots,
   projectPodsRoot,
   type AdmittedPackage,
@@ -22,6 +19,7 @@ import {
   type StoredFile,
 } from "@pe/host-contracts/kinds";
 import { hostState } from "./host-ownership.ts";
+import { packageDiscoveryTimeoutMs } from "./pod-capture.ts";
 import { productPodsRootPath } from "./product-paths.ts";
 import {
   builtinPeaSkillSnapshots,
@@ -74,8 +72,9 @@ const readDecisions = async (file: DecisionsFile) => {
  * document, so these are outside it: only a person's off choice gates one.
  */
 export const projectPodIds = async (pointer: string | null | undefined) => {
+  await contentRootsReady(pointer);
   const root = projectPodsRoot(pointer);
-  return root ? (await listPackages(root)).packages.map((pod) => pod.id) : [];
+  return root ? (await listPackages({ podsRoots: root })).packages.map((pod) => pod.id) : [];
 };
 
 /** Runtime policy only. Membership and export remain exact authored bytes. */
@@ -123,41 +122,6 @@ export async function activePackages(
   return packages.filter((_, index) => enabled[index]!.status === "fulfilled");
 }
 
-/** Metadata only, using async IO so even a stalled share leaves the request loop free. */
-async function podsDiskSignature(roots: readonly string[]): Promise<string | undefined> {
-  const entries: unknown[] = [];
-  const walk = async (absolute: string, member: string | undefined): Promise<void> => {
-    const info = await lstat(absolute);
-    entries.push([absolute, info.mode, info.size, info.mtimeMs, info.ctimeMs, info.ino]);
-    if (!info.isDirectory() || info.isSymbolicLink()) return;
-    for (const name of (await readdir(absolute)).sort()) {
-      const path = member === undefined ? undefined : member ? `${member}/${name}` : name;
-      // Invalid names affect admission diagnostics too.
-      try {
-        if (path !== undefined && !isPackageMember(path)) continue;
-      } catch {}
-      await walk(join(absolute, name), member === undefined ? "" : path);
-    }
-  };
-  try {
-    for (const root of roots) {
-      entries.push(root);
-      try {
-        await walk(root, undefined);
-      } catch (error) {
-        if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
-        entries.push("missing");
-      }
-    }
-    // shortcut: an edit preserving file size and timestamps is missed; hash bytes to support it.
-    // No network drive was measured; this gate has only local deterministic evidence.
-    // Google Drive's timestamps are untested; validate them in the post-merge drive.
-    return JSON.stringify(entries);
-  } catch {
-    return undefined;
-  } // Unreadable metadata never authorizes reuse.
-}
-
 export function createPackageLifecycle(
   options: {
     packages?: typeof listPackages;
@@ -165,11 +129,7 @@ export function createPackageLifecycle(
     changed?: () => void;
   } = {},
 ) {
-  // Resolve homes once at startup, never by synchronous drive probing on a refresh request.
-  // Home roots resolve once at startup; the owner's ruling is that the host starts after a shared
-  // drive mounts, so a home mounting later is not watched.
-  const roots = options.packages ? [] : productPodsRoots();
-  let diskSignature: string | undefined;
+  const rootsOwner = options.packages ? undefined : acquireContentRoots();
   let inFlight: Promise<Awaited<ReturnType<typeof listPackages>>> | undefined;
   let closed = false;
   const decisionsFile = decisionsKind.in(options.machine ?? hostState());
@@ -201,6 +161,7 @@ export function createPackageLifecycle(
   });
   let settled: Promise<unknown> = ready;
   async function initialize() {
+    await rootsOwner?.ready;
     decisions = await readDecisions(decisionsFile);
     if (closed) return;
     await runtime.install(
@@ -218,12 +179,10 @@ export function createPackageLifecycle(
   }
   async function synchronize() {
     if (closed) return initialListing;
-    const nextSignature = options.packages ? undefined : await podsDiskSignature(roots);
-    if (closed) return initialListing;
-    if (nextSignature !== undefined && nextSignature === diskSignature && initialListing)
-      return initialListing;
+    // Roots are refreshed by the shared async owner, never by a request or scan.
+    const roots = options.packages ? [] : productPodsRoots();
     // Lifecycle owns publication after a slow scan; Page requests bound their own wait for it.
-    const listing = await (options.packages ? options.packages() : listPackages(roots, "background"));
+    const listing = await (options.packages ? options.packages() : listPackages({ podsRoots: roots, wait: "background" }));
     if (closed) return initialListing;
     const current = new Set(listing.packages.map((p) => `pod:${p.id}`));
     for (const id of signatures.keys())
@@ -260,7 +219,6 @@ export function createPackageLifecycle(
       );
     }
     if (closed) return initialListing;
-    diskSignature = nextSignature;
     initialListing = listing;
     return listing;
   }
@@ -332,6 +290,7 @@ export function createPackageLifecycle(
     skills: () => runtime.contributions().flatMap((c) => (c.kind === "skill" ? [c.skill] : [])),
     close: async () => {
       closed = true;
+      rootsOwner?.close();
       // The detached initial read may fail after its home has been released.
       void ready.catch(() => {});
       // Scans own only reads. A stalled filesystem must not hold shutdown; synchronize refuses

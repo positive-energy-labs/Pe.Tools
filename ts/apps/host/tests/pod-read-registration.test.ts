@@ -110,7 +110,7 @@ leaves:{'${leaf}':async()=>({total:17})}};`,
     }),
   );
   const lifecycle = createPackageLifecycle({
-    packages: () => listPackages(join(root, "Pods")),
+    packages: () => listPackages({ podsRoots: join(root, "Pods") }),
     machine: stateMachine(storedParent(join(root, "enabled.json"))),
   });
   let routes: ReturnType<typeof createPodRoutes> | undefined;

@@ -10,7 +10,6 @@
  */
 import { randomUUID } from "node:crypto";
 import {
-  appendFileSync,
   closeSync,
   fstatSync,
   fsyncSync,
@@ -24,8 +23,10 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+import { mkdir, readFile, writeFile, rename, rm } from "node:fs/promises";
 import { z } from "zod";
 import {
+  derivedStoreOf,
   sha256Hex,
   storedNoticeSchema,
   derivedName,
@@ -36,6 +37,7 @@ import {
   type DerivedStore,
   policyOf,
   settled,
+  decodeLogLines,
 } from "./store-values.ts";
 export {
   sha256Hex,
@@ -63,6 +65,7 @@ const message = (error: unknown) => (error instanceof Error ? error.message : St
 /** Windows refuses a rename while a scanner or the indexer holds the target; the hold ends in milliseconds. */
 const TRANSIENT = new Set(["EPERM", "EBUSY", "EACCES"]);
 const pause = (ms: number) => void Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+const ensureParent = (path: string) => mkdirSync(dirname(path), { recursive: true });
 
 /** The file's bytes, or null when it is missing. A passing hold is waited out, as a rename is. */
 const readOrNull = (path: string): Buffer | null => {
@@ -99,7 +102,7 @@ function writeAtomic(path: string, bytes: Uint8Array | string): void {
     if (prior) restBlob(blobRoot, sha256Hex(prior), prior);
     owed.delete(resolve(path));
   }
-  mkdirSync(dirname(path), { recursive: true });
+  ensureParent(path);
   // A random name keeps two writers from tearing one temp file; a failed write removes its own.
   const temporary = `${path}.${randomUUID()}.tmp`;
   try {
@@ -123,7 +126,7 @@ function writeAtomic(path: string, bytes: Uint8Array | string): void {
       }
     }
   } catch (error) {
-    rmSync(temporary, { force: true });
+    removeFile(temporary);
     throw error;
   }
 }
@@ -152,7 +155,7 @@ function writeHomeFile(
     actualSha256,
   });
   if (opts.expectSha256 === null) {
-    mkdirSync(dirname(path), { recursive: true });
+    ensureParent(path);
     try {
       // ponytail: exclusive create straight onto the target, because a synced drive has no hard
       // link to publish a temp file with. A crash mid-write leaves a torn file, which the keep
@@ -232,14 +235,13 @@ function noteStored(file: string, notice: Omit<StoredNotice, "at">): void {
       (row) => row.path === path && row.sha256 === notice.sha256,
     );
     if (posted) return;
-    mkdirSync(dirname(file), { recursive: true });
     const row: StoredNotice = {
       ...notice,
       path,
       reason: oneLine(notice.reason),
       at: new Date().toISOString(),
     };
-    appendFileSync(file, `${JSON.stringify(row)}\n`);
+    appendStoredLine(file, JSON.stringify(row));
   } catch (error) {
     console.warn(`Could not post the notice for '${notice.path}': ${message(error)}`);
   }
@@ -291,7 +293,7 @@ function refuse(path: string, bytes: Buffer | null, policy: ReadRule, why: strin
   const reason = note("discard", oneLine(`Prior bytes: ${blob}. ${why}`));
   owed.delete(resolve(path));
   try {
-    rmSync(path, { force: true });
+    removeFile(path);
   } catch {
     // A held file stays; its bytes rest in the blob store and its notice does not repeat.
   }
@@ -351,22 +353,9 @@ function readStoredLines<T>(
     skip(null, message(error));
     return { kind: "ok", values: [], skipped: 1 };
   }
-  const values: T[] = [];
-  let skipped = 0;
-  text.split("\n").forEach((line, index) => {
-    if (!line.trim()) return;
-    let why: string;
-    try {
-      const parsed = schema.safeParse(JSON.parse(line));
-      if (parsed.success) return void values.push(parsed.data);
-      why = z.prettifyError(parsed.error);
-    } catch (error) {
-      why = message(error);
-    }
-    skipped++;
-    skip(line, `Line ${index + 1} is left out: ${why}`);
-  });
-  return { kind: "ok", values, skipped };
+  const decoded = decodeLogLines(text, schema);
+  for (const { line, reason } of decoded.problems) skip(line, reason);
+  return { kind: "ok", values: decoded.values, skipped: decoded.problems.length };
 }
 
 /**
@@ -375,7 +364,7 @@ function readStoredLines<T>(
  * continue after a bad line.
  */
 function appendStoredLine(path: string, line: string): void {
-  mkdirSync(dirname(path), { recursive: true });
+  ensureParent(path);
   const file = openSync(path, "a+");
   try {
     const size = fstatSync(file).size;
@@ -519,12 +508,26 @@ export const readLines = <T>(log: StoredLog<T>) =>
 export const appendLine = <T>(log: StoredLog<T>, value: T): void =>
   appendStoredLine(log.path, JSON.stringify(value));
 
-const derivedStoreOf = <P extends HomePath | StatePath>(dir: DerivedDir<P>): DerivedStore<P> => ({
-  dir: dir.path,
-  path: dir.file,
-  notices: dir.machine.notices,
-  blobRoot: dir.machine.blobs,
-});
+const removeFile = (path: string) => rmSync(path, { force: true });
+
+/** Callers serialize batches. Replace the bounded diagnostic tail atomically. */
+export async function appendLinesBounded<T>(log: StoredLog<T>, values: readonly T[], maxLines: number): Promise<void> {
+  if (!Number.isSafeInteger(maxLines) || maxLines < 1) throw Error("Log line limit must be positive");
+  const prior = await readFile(log.path, "utf8").catch(error => {
+    if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
+    return "";
+  });
+  const lines = [...prior.split("\n").filter(Boolean), ...values.map(value => JSON.stringify(value))];
+  await mkdir(dirname(log.path), { recursive: true });
+  const temporary = `${log.path}.${randomUUID()}.tmp`;
+  try {
+    await writeFile(temporary, `${lines.slice(-maxLines).join("\n")}\n`);
+    await rename(temporary, log.path);
+  } catch (error) {
+    await rm(temporary, { force: true });
+    throw error;
+  }
+}
 /** The file a key names in a derived folder, proven by its own hash; see `readDerived`. */
 export const readDerivedIn = <P extends HomePath | StatePath>(
   dir: DerivedDir<P>,

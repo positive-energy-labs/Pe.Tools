@@ -11,7 +11,9 @@ import { NodeServices } from "@effect/platform-node";
 import { FetchHttpClient } from "effect/http";
 import { detachedBridge, pictureCaptures, testJournal } from "./effect-test.ts";
 import { approvedPea } from "./callers.ts";
-import { productPodsRoots } from "../src/packages.ts";
+import { productPodsRoots, isPackageMember } from "../src/packages.ts";
+import { contentRootsReady } from "../src/content-roots.ts";
+import { podsDiskSignature } from "../src/pod-disk-signature.ts";
 import { discoverPackages, stopPackageDiscovery } from "../src/pod-capture.ts";
 import { RequestIdentity, admittedRequestIdentity } from "../src/request-services.ts";
 import { gatewayExecutor } from "../src/gateway-actions.ts";
@@ -192,6 +194,7 @@ it("freezes a supplied snapshot without reading disk and rejects ambiguous or au
 it("answers the typed 503 at both script doors when Pod discovery outlasts its wait", async () => {
   const home = await mkdtemp(join(tmpdir(), "pe-script-pending-"));
   vi.stubEnv("PE_TOOLS_PRODUCT_HOME", home);
+  await contentRootsReady();
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   onTestFinished(async () => {
     stopPackageDiscovery();
@@ -200,7 +203,11 @@ it("answers the typed 503 at both script doors when Pod discovery outlasts its w
     await rm(home, { recursive: true, force: true });
   });
   // The real single-flight discovery with a scan in flight that never lands: every reader joins it.
-  void discoverPackages(productPodsRoots(), () => new Promise(() => {}), "background");
+  const roots = productPodsRoots();
+  const entered = Promise.withResolvers<void>();
+  void discoverPackages(roots, () => { entered.resolve(); return new Promise(() => {}); }, "background",
+    signal => podsDiskSignature(roots, isPackageMember, signal));
+  await entered.promise;
   const input = { sourcePath: "checks/engine.csx", workspaceKey: "pdrop" };
   const pending = { status: 503, refusal: { kind: "domain", code: "pod.discovery.exceeded" } };
 

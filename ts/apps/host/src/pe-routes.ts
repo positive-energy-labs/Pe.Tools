@@ -1,4 +1,6 @@
 import { stateScope } from "@pe/host-contracts/service-identity";
+import { acquireContentRoots, contentHomes, contentHomesFound, contentRootsUnavailable, observeContentRoots, ContentHomeUnavailable } from "./content-roots.ts";
+import { homeLogLines } from "@pe/host-contracts/product-paths";
 import { targetHomes } from "./call-route.ts";
 import { readPlaces, writePlaces } from "./places.ts";
 import { workKeySchema as mountedWorkKeySchema } from "@pe/agent-contracts";
@@ -136,8 +138,7 @@ import {
   resumeWork,
   type NavigationSources,
 } from "./navigation.ts";
-import { createNoticeFeed, noticeRows, noteStartupHomes, type NoticeSources } from "./notice-feed.ts";
-import { homeLogLines } from "@pe/host-contracts/product-paths";
+import { createNoticeFeed, noticeRows, type NoticeSources } from "./notice-feed.ts";
 import { heldSend, heldSends, holdSend, confirmSend, subscribeHeldSends } from "./guards.ts";
 import type { ActionJournal } from "./action-journal.ts";
 import { hostTimeline, timelineReceipts } from "./reads/work-timeline.ts";
@@ -148,6 +149,7 @@ import {
   captureDirectory,
   capturePackage,
   bindPackageScanLogger,
+  packageScanLog,
   listPackages,
   type AdmittedPackage,
 } from "./packages.ts";
@@ -927,9 +929,9 @@ export function createContributionContent(options: {
   /** The agent's working directory: the harness skill projections land here, never in a home. */
   worldRoot: import("@pe/host-contracts/kinds").StateDirectory;
   /** The user home that authors `Skills/` and, by default, `Pages/`; the user root when omitted. */
-  homeRoot?: string;
+  homeRoot?: string | (() => string | undefined);
   /** Scratch Pages in read order; the home's `Pages` when omitted (an isolated test world). */
-  pagesRoots?: readonly string[];
+  pagesRoots?: readonly string[] | (() => readonly string[]);
   packages?: typeof listPackages;
   pages?: (packages: readonly AdmittedPackage[]) => Promise<readonly PageDescriptor[]>;
   /** Runs beside the census. Honor cancellation before home writes; shutdown never joins it. */
@@ -937,8 +939,12 @@ export function createContributionContent(options: {
   decisionsMachine?: import("@pe/host-contracts/kinds").StateRoot;
   changed?: () => void;
 }) {
-  const homeRoot = options.homeRoot ?? userRoot();
-  const pagesRoots = options.pagesRoots ?? [join(homeRoot, "Pages")];
+  const homeRoot = () => typeof options.homeRoot === "function" ? options.homeRoot() : options.homeRoot ?? userRoot();
+  const pagesRoots = () => {
+    if (typeof options.pagesRoots === "function") return options.pagesRoots();
+    const home = homeRoot();
+    return options.pagesRoots ?? (home ? [join(home, "Pages")] : []);
+  };
   const revisions = new Map<string, Map<string, unknown>>();
   const latest = new Map<string, unknown>();
   let snapshot: Promise<CapabilityContent> | undefined;
@@ -1012,12 +1018,14 @@ export function createContributionContent(options: {
       });
   }
   async function build(): Promise<CapabilityContent> {
+    const userHome = homeRoot();
+    if (!userHome) throw new ContentHomeUnavailable();
     await lifecycle.ready;
     const listing = lifecycle.listing();
     admitted = lifecycle.packages();
     const allDescriptors = options.pages
       ? await options.pages(admitted)
-      : await pageDescriptors(admitted, pagesRoots);
+      : await pageDescriptors(admitted, pagesRoots());
     const descriptors = allDescriptors.filter((p) => p.key !== null && p.openUrl !== null);
     const scratch = allDescriptors.filter((p) => p.pod === null).map((p) => p.slug);
     const collisions = pageFolderCollisions(scratch);
@@ -1096,7 +1104,7 @@ export function createContributionContent(options: {
             }),
     );
     const publication = await publishPeaSkills(
-      { productHomePath: homeRoot, agent: options.worldRoot, captureDirectory },
+      { productHomePath: userHome, agent: options.worldRoot, captureDirectory },
       packagedSkills,
       lifecycle.skills(),
     );
@@ -1157,7 +1165,7 @@ export function createContributionContent(options: {
     read: () => {
       if (!snapshot || (!pending && Date.now() - observedAt >= 30_000)) {
         pending = true;
-        snapshot = build().finally(() => {
+        snapshot = build().catch(error => { snapshot = undefined; throw error; }).finally(() => {
           observedAt = Date.now();
           pending = false;
         });
@@ -1168,7 +1176,7 @@ export function createContributionContent(options: {
     pages: async (pointer?: string | null) => {
       const descriptors = options.pages
         ? await options.pages(admitted)
-        : await scratchPageDescriptors(pointer ? productPagesRoots(pointer) : pagesRoots);
+        : await scratchPageDescriptors(pointer ? productPagesRoots(pointer) : pagesRoots());
       return pageRows(descriptors);
     },
     member: (key: string, sha256?: string) =>
@@ -1199,7 +1207,11 @@ function* hostPeRoutes(
     // effect-edge: island, phase 5
     Effect.runSync(entry);
   };
-  bindPackageScanLogger((message) => log(Effect.logInfo(message)));
+  const flushPackageScanLog = bindPackageScanLogger(
+    (message) => log(Effect.logInfo(message).pipe(Effect.provide(runtime))),
+    packageScanLog.in(hostState().directory("host", hostOwnership.serviceName, "log")),
+  );
+  yield* Effect.addFinalizer(() => Effect.promise(flushPackageScanLog));
   const journal = yield* ActionJournalService;
   const hostLog = yield* HostLogService;
   const marks = yield* HostDocumentMarks;
@@ -1210,15 +1222,17 @@ function* hostPeRoutes(
   // Host startup prepares this fixed machine-state directory before any harness can spawn.
   const worldRoot = hostState().agent;
   // Unbound is a working state (ADR 0037 rule 2): the host starts, and the feed says where it looked.
-  noteStartupHomes();
-  // One host log line per home, with its tier and how it was found; with no firm home, where it looked.
-  for (const line of homeLogLines()) yield* Effect.logInfo(line);
+  const rootsOwner = acquireContentRoots();
+  yield* Effect.addFinalizer(() => Effect.sync(rootsOwner.close));
+  for (const line of homeLogLines(contentHomesFound())) yield* Effect.logInfo(line);
   let invalidateCatalog = () => {};
   const content = createContributionContent({
     worldRoot: stateScope(hostState(), hostState().agent),
-    pagesRoots: productPagesRoots(),
+    homeRoot: () => contentHomes().find(home => home.tier === "user")?.root,
+    pagesRoots: productPagesRoots,
     changed: () => invalidateCatalog(),
     bootstrap: async (signal) => {
+      if (!contentHomes().some(home => home.tier === "user")) return;
       const imported = await importShippedPods({ captures: pictures, signal });
       const refused = imported.outcomes.filter((outcome) => outcome.outcome === "refused");
       if (refused.length)
@@ -1380,6 +1394,7 @@ function* hostPeRoutes(
             works: noticeCache.works,
             machine,
             stored: storedNotices(hostState()),
+            firmHomeUnavailable: contentRootsUnavailable(),
             held: heldSends(),
           },
           Date.now(),
@@ -1400,6 +1415,7 @@ function* hostPeRoutes(
           })
           .catch((error) => console.warn("Notice feed: Works unread", error));
       const releases = [
+        observeContentRoots(changed),
         journal.subscribe({ kinds: ["action"] }, receipt),
         subscribeHeldSends(changed),
         threads.observe({ kind: "threads" }, changed) ?? (() => {}),

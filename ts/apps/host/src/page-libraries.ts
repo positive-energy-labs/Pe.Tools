@@ -9,7 +9,7 @@ import {
 } from "@pe/agent-contracts";
 import type { AdmittedPackage } from "./packages.ts";
 import { productPathNames } from "@pe/host-contracts/contracts";
-import { homeDirs } from "@pe/host-contracts/product-paths";
+import { contentHomes, contentRootsReady, ContentHomeUnavailable } from "./content-roots.ts";
 import { sha256Hex as sha } from "./page-artifacts.ts";
 
 /** One Page the host serves, as anything that lists, ranks or opens Pages reads it. */
@@ -73,7 +73,7 @@ export function scratchPageKey(
 /** One Pages folder, or the product's Pages in every home, in list order (user, project, firm). */
 export type PagesRoots = string | readonly string[];
 export const productPagesRoots = (pointer?: string | null) =>
-  homeDirs(productPathNames.pagesDirectoryName, { pointer });
+  contentHomes(pointer).map(home => join(home.root, productPathNames.pagesDirectoryName));
 
 /**
  * Every scratch folder holding an `index.html`, in every home, with its key or why it has none.
@@ -125,8 +125,13 @@ async function scratchPages(pagesRoots: PagesRoots) {
  */
 export async function scratchPageDirectory(
   slug: string,
-  pagesRoots: PagesRoots = productPagesRoots(),
+  pagesRoots?: PagesRoots,
 ) {
+  if (pagesRoots === undefined) {
+    await contentRootsReady();
+    if (!contentHomes().some(home => home.tier === "user")) throw new ContentHomeUnavailable();
+    pagesRoots = productPagesRoots();
+  }
   const roots = [pagesRoots].flat();
   const named = (await scratchPages(roots)).filter(
     (page) => page.folder.toLowerCase() === slug.toLowerCase(),
@@ -142,8 +147,9 @@ export async function scratchPageDirectory(
 
 /** Scratch Pages: every folder under a Pages root holding an `index.html`, newest first. */
 export async function scratchPageDescriptors(
-  pagesRoots: PagesRoots = productPagesRoots(),
+  pagesRoots?: PagesRoots,
 ): Promise<PageDescriptor[]> {
+  if (pagesRoots === undefined) { await contentRootsReady(); pagesRoots = productPagesRoots(); }
   const pages: PageDescriptor[] = [];
   for (const { directory, folder, modified, named } of await scratchPages(pagesRoots)) {
     const bytes = await readFile(join(directory, "index.html"));
@@ -164,7 +170,7 @@ export async function scratchPageDescriptors(
 /** The one Page projection: scratch Pages newest first, then the given packages' Pages by key. */
 export const pageDescriptors = async (
   packages: readonly AdmittedPackage[],
-  pagesRoots: PagesRoots = productPagesRoots(),
+  pagesRoots?: PagesRoots,
 ) => [...(await scratchPageDescriptors(pagesRoots)), ...packagePageDescriptors(packages)];
 
 /**

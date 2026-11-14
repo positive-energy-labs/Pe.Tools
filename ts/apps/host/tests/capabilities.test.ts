@@ -210,7 +210,7 @@ test("one admitted content snapshot publishes exact skill bytes and retains froz
     homeRoot: home,
     packages: async () => {
       listings++;
-      return listPackages(join(home, "Pods"));
+      return listPackages({ podsRoots: join(home, "Pods") });
     },
   });
   try {

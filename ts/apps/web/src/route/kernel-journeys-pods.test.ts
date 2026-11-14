@@ -36,7 +36,7 @@ async function podJourney() {
     filter: (source) => !source.split(/[\\/]/).includes("node_modules"),
   });
   const lifecycle = createPackageLifecycle({
-    packages: () => listPackages(root), machine: stateMachine(host.dir),
+    packages: () => listPackages({ podsRoots: root }), machine: stateMachine(host.dir),
   });
   const routes = createPodRoutes(lifecycle, {
     workspace: host.workspace, machine: stateMachine(host.dir),
@@ -477,8 +477,8 @@ test("JP5 bootstrap replaces only unchanged imports and Home discovers the untru
       const trustPath = stateMachine(host.dir).routeTrust;
       await writeFile(trustPath, JSON.stringify({ [key]: oldTrust }));
       if (modified) await writeFile(resolve(pod, "README.md"), "Keep this authored worksheet note.");
-      const before = (await listPackages(root)).packages.find(p => p.id === manifest.id)!.members.map(m => [m.path, m.sha256]);
-      content = createContributionContent({ worldRoot: stateFixture(host.dir), homeRoot: host.dir, packages: () => listPackages(root),
+      const before = (await listPackages({ podsRoots: root })).packages.find(p => p.id === manifest.id)!.members.map(m => [m.path, m.sha256]);
+      content = createContributionContent({ worldRoot: stateFixture(host.dir), homeRoot: host.dir, packages: () => listPackages({ podsRoots: root }),
         decisionsMachine: stateMachine(host.dir),
         bootstrap: async () => {
           await gate.promise;
@@ -546,7 +546,7 @@ test("JP5 bootstrap replaces only unchanged imports and Home discovers the untru
           expect(screen.getByText("Trust this fingerprint")).toBeTruthy();
         }
       } else {
-        const kept = (await listPackages(root)).packages.find(p => p.id === manifest.id)!;
+        const kept = (await listPackages({ podsRoots: root })).packages.find(p => p.id === manifest.id)!;
         expect(kept.members.map(m => [m.path, m.sha256]), "H16: modified authored members stay byte-identical").toEqual(before);
         expect.soft(kept.diagnostics.find(d => d.code === "ShippedExampleUpdateKept"), "H16: retained stale example has a named refusal").toMatchObject({ message: expect.stringContaining("authored members differ") });
         view.unmount(); cleanup();

@@ -1,7 +1,7 @@
 /** Pure stored-value contracts and content identity; I/O stays in store.ts. */
 import { createHash } from "node:crypto";
 import { z } from "zod";
-import type { At, StoredFile, Stored } from "./kinds.ts";
+import type { At, StoredFile, Stored, DerivedDir } from "./kinds.ts";
 import type { HomePath, StatePath } from "./store-paths.ts";
 
 export const sha256Hex = (bytes: Uint8Array | string) =>
@@ -57,6 +57,13 @@ export type DerivedStore<P extends HomePath | StatePath> = {
   blobRoot: StatePath;
 };
 
+export const derivedStoreOf = <P extends HomePath | StatePath>(dir: DerivedDir<P>): DerivedStore<P> => ({
+  dir: dir.path,
+  path: dir.file,
+  notices: dir.machine.notices,
+  blobRoot: dir.machine.blobs,
+});
+
 export function policyOf(
   file: StoredFile<unknown, "state">,
 ): Extract<ReadRule, { class: "discard" }>;
@@ -89,4 +96,23 @@ export function settled<T>(read: StoredRead<T>): Stored<T> {
   return read.kind === "discarded"
     ? { kind: "set-aside", reason: read.reason, blob: read.blob }
     : read;
+}
+
+/** Decode without I/O; the store owns each refused line's notice and preservation. */
+export function decodeLogLines<T>(text: string, schema: z.ZodType<T>) {
+  const values: T[] = [];
+  const problems: { line: string; reason: string }[] = [];
+  text.split("\n").forEach((line, index) => {
+    if (!line.trim()) return;
+    let why: string;
+    try {
+      const parsed = schema.safeParse(JSON.parse(line));
+      if (parsed.success) return void values.push(parsed.data);
+      why = z.prettifyError(parsed.error);
+    } catch (error) {
+      why = error instanceof Error ? error.message : String(error);
+    }
+    problems.push({ line, reason: `Line ${index + 1} is left out: ${why}` });
+  });
+  return { values, problems };
 }

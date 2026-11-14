@@ -14,6 +14,7 @@ export {
   setAside,
   readLines,
   appendLine,
+  appendLinesBounded,
   readDerivedIn,
   writeDerivedIn,
   refuseDerived,

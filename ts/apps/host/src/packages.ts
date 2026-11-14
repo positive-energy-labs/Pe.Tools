@@ -19,10 +19,13 @@ import {
 } from "@pe/host-contracts/generated";
 import type { MemberIssue } from "@pe/host-contracts/operation-types";
 import { productPathNames } from "@pe/host-contracts/contracts";
-import { homeDirs, homes, projectHome } from "@pe/host-contracts/product-paths";
+import { contentHomes, contentRootsReady, ContentHomeUnavailable } from "./content-roots.ts";
 import { verifyPodArtifact } from "./pod-artifact.ts";
 import { shippedPodUpdateRefusals } from "./shipped-pod-status.ts";
 import { podModelSchema, type PodModel } from "./pod-model.ts";
+import { logPackageDiscovery as scanLog } from "./pod-discovery-log.ts";
+import { podsDiskSignature } from "./pod-disk-signature.ts";
+export { bindPackageScanLogger, logPackageDiscovery, packageScanLog, packageScanLogLineLimit } from "./pod-discovery-log.ts";
 import {
   captureIndexedPackage,
   rememberCaptureRoots,
@@ -116,7 +119,7 @@ export function kindOfMember(
 
 /** The home a pod's folder sits in, by its tier and folder; undefined for a folder outside every home. */
 export const podHome = (directory: string, pointer?: string | null) => {
-  const home = homes({ pointer }).find(
+  const home = contentHomes(pointer).find(
     (one) => resolve(dirname(directory)) === resolve(one.root, productPathNames.podsDirectoryName),
   );
   return home && { tier: home.tier, path: home.root };
@@ -129,13 +132,13 @@ export const podHome = (directory: string, pointer?: string | null) => {
  */
 export type PodsRoots = string | readonly string[];
 export const productPodsRoots = (pointer?: string | null) => {
-  const roots = homeDirs(productPathNames.podsDirectoryName, { pointer });
+  const roots = contentHomes(pointer).map(home => join(home.root, productPathNames.podsDirectoryName));
   if (!pointer) rememberCaptureRoots(roots);
   return roots;
 };
 /** The Pods folder of the project home a target document's pointer names; null when it names none here. */
 export const projectPodsRoot = (pointer: string | null | undefined) => {
-  const home = projectHome(pointer);
+  const home = contentHomes(pointer).find(home => home.tier === "project")?.root;
   return home && join(home, productPathNames.podsDirectoryName);
 };
 
@@ -143,26 +146,33 @@ export const projectPodsRoot = (pointer: string | null | undefined) => {
 const claimedTwice = (id: string, twins: readonly Pick<AdmittedPackage, "directory">[]) =>
   `Pod id '${id}' is claimed by ${twins.map((twin) => twin.directory).join(" and ")}: none is used until the id is unique.`;
 
-export const packageDiscoveryTimeoutMs = 5_000;
 
 /**
  * Read once per snapshot. Hashes, projection, and capture all refer to these exact bytes. A pod id
  * is unique across homes (ADR 0037 rule 4): an id claimed twice, in one Pods folder or in two
  * homes, is refused in every copy. Nothing shadows.
  */
-export async function listPackages(
-  podsRoots: PodsRoots = productPodsRoots(),
-  wait: "request" | "background" = "request",
-): Promise<PackageListing> {
-  return discoverPackages(podsRoots, scanPackages, wait);
+export type PackageDiscoveryOptions = {
+  podsRoots?: PodsRoots;
+  wait?: "request" | "background";
+};
+export async function listPackages({ podsRoots, wait = "request" }: PackageDiscoveryOptions = {}): Promise<PackageListing> {
+  if (podsRoots === undefined) {
+    await contentRootsReady();
+    if (!contentHomes().some(home => home.tier === "user")) throw new ContentHomeUnavailable();
+    podsRoots = productPodsRoots();
+  }
+  const listing = await discoverPackages(podsRoots, scanPackages, wait,
+    signal => podsDiskSignature([podsRoots].flat(), isPackageMember, signal));
+  // Import notices are runtime state, not disk bytes; project them even when the census is reused.
+  return { ...listing, packages: listing.packages.map(pod => ({ ...pod, diagnostics: currentDiagnostics(pod.id, pod.diagnostics) })) };
 }
 
-let scanLog = (_message: string) => {};
-// The D21 startup-failure line in package-lifecycle still logs through this (W22 removed it before that line existed).
-export const logPackageDiscovery = (message: string) => scanLog(message);
-/** Bound at host composition to the same Effect logger as other host diagnostics. */
-export function bindPackageScanLogger(log: (message: string) => void) {
-  scanLog = log;
+function currentDiagnostics(id: string, issues: readonly MemberIssue[]): MemberIssue[] {
+  const diagnostics = issues.filter(issue => issue.code !== "ShippedExampleUpdateKept");
+  const updateRefusal = shippedPodUpdateRefusals.get(id);
+  if (updateRefusal) diagnostics.push({ code: "ShippedExampleUpdateKept", path: "pod.json", message: updateRefusal, severity: "warning" });
+  return diagnostics;
 }
 
 async function scanPackages(
@@ -249,8 +259,8 @@ export function onePackage(
     : refuse(`No installed pod has id '${id}'.`, 404);
 }
 
-export const readPackage = async (id: string, podsRoots: PodsRoots = productPodsRoots()) =>
-  onePackage(await listPackages(podsRoots), id);
+export const readPackage = async (id: string, options: Pick<PackageDiscoveryOptions, "podsRoots"> = {}) =>
+  onePackage(await listPackages(options), id);
 
 /** Freeze admitted bytes, or capture one indexed folder afresh. Member semantics stay native. */
 export async function capturePackage(
@@ -445,14 +455,6 @@ async function readFolder(
       .replace(/^\uFEFF/, ""),
   );
   packageIdSchema.parse(value?.id);
-  const updateRefusal = shippedPodUpdateRefusals.get(value.id);
-  if (updateRefusal)
-    diagnostics.push({
-      code: "ShippedExampleUpdateKept",
-      path: "pod.json",
-      message: updateRefusal,
-      severity: "warning",
-    });
   const entrypoints: PackageEntrypoint[] = [];
   const model = value.for === undefined ? undefined : podModelSchema.parse(value.for);
   for (const entry of Array.isArray(value.entrypoints) ? value.entrypoints : []) {
@@ -552,7 +554,7 @@ async function readFolder(
     directory,
     members,
     entrypoints,
-    diagnostics,
+    diagnostics: currentDiagnostics(value.id, diagnostics),
     contributions: [
       ...contributions,
       ...routes.map((route) => ({

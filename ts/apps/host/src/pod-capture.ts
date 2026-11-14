@@ -15,71 +15,119 @@ export function rememberPackageCensus(roots: PodsRoots, listing: PackageListing)
   );
 }
 
+export const packageDiscoveryTimeoutMs = 5_000;
+export const packageScanMaxAgeMs = 60_000;
+
 export class PackageDiscoveryExceeded extends Error {
   readonly code = "pod.discovery.exceeded";
   constructor(roots: PodsRoots) {
-    super(`Pod discovery exceeded 5000 ms listing ${[roots].flat().join(", ")}. Try again when the folder is available.`);
+    super(`Pod discovery exceeded ${packageDiscoveryTimeoutMs} ms listing ${[roots].flat().join(", ")}. Try again when the folder is available.`);
   }
 }
 
-const discovery = new Map<string, {
+type DiscoveryScan = {
   stop: AbortController;
   promise: Promise<PackageListing>;
   expired: boolean;
   completed: boolean;
-}>();
+  startedAt: number;
+  completedAt: number;
+  signature: string | undefined;
+};
+const discovery = new Map<string, DiscoveryScan>();
+const scans = new Set<DiscoveryScan>();
+const validations = new Set<AbortController>();
+const completedCensuses = new Map<string, { signature: string; listing: PackageListing }>();
 
-/** Host shutdown alone cancels discovery; a request owns only its wait. */
+/** Shutdown cancels discovery; request expiry alone leaves a recoverable scan running. */
 export function stopPackageDiscovery() {
-  for (const scan of discovery.values()) scan.stop.abort();
+  for (const scan of scans) scan.stop.abort();
+  for (const validation of validations) validation.abort();
   discovery.clear();
+  completedCensuses.clear();
 }
 
 export async function discoverPackages(
   roots: PodsRoots,
   read: (roots: readonly string[], signal: AbortSignal) => Promise<PackageListing>,
   wait: "request" | "background",
+  readSignature?: (signal: AbortSignal) => Promise<string | undefined>,
 ): Promise<PackageListing> {
   const key = rootsKey(roots);
-  let scan = discovery.get(key);
-  if (!scan) {
+  let selected: DiscoveryScan | undefined;
+  let expired = false;
+  const validation = new AbortController();
+  validations.add(validation);
+  const choose = (signature: string | undefined) => {
+    validation.signal.throwIfAborted();
+    let scan = discovery.get(key);
+    const tooOld = scan && !scan.completed && Date.now() - scan.startedAt >= packageScanMaxAgeMs;
+    // Validate joins and late answers too. Unknown metadata never authorizes reuse.
+    const changed = scan && readSignature && (signature === undefined || scan.signature !== signature);
+    if (scan && (tooOld || changed ||
+      (scan.completed && (wait === "background" || Date.now() - scan.completedAt >= packageDiscoveryTimeoutMs)))) {
+      // Superseding a read leaves its waiters running. Only age and shutdown cancel IO.
+      if (tooOld) scan.stop.abort();
+      discovery.delete(key);
+      scan = undefined;
+    }
+    if (scan) {
+      selected = scan;
+      if (scan.completed) discovery.delete(key); // A late answer serves at most one reader.
+      return scan.promise;
+    }
+    const cached = completedCensuses.get(key);
+    if (signature !== undefined && cached?.signature === signature) return Promise.resolve(cached.listing);
     const stop = new AbortController();
-    const current = {
+    const current: DiscoveryScan = {
       stop,
       promise: read([roots].flat(), stop.signal),
-      expired: false,
+      expired,
       completed: false,
+      startedAt: Date.now(),
+      completedAt: 0,
+      signature,
     };
     current.promise = current.promise.then(listing => {
       stop.signal.throwIfAborted();
-      rememberPackageCensus(roots, listing);
+      if (discovery.get(key) === current) rememberPackageCensus(roots, listing);
       current.completed = true;
-      // Keep a late answer until a reader consumes it, then resume fresh discovery.
-      if (!current.expired && discovery.get(key) === current) discovery.delete(key);
+      current.completedAt = Date.now();
+      // Only on-time answers enter the checked cache. Late answers keep their one-reader 5 s window.
+      if (!current.expired && discovery.get(key) === current) {
+        if (signature !== undefined) completedCensuses.set(key, { signature, listing });
+        else completedCensuses.delete(key);
+        discovery.delete(key);
+      }
       return listing;
     }, error => {
       if (discovery.get(key) === current) discovery.delete(key);
       throw error;
-    });
+    }).finally(() => scans.delete(current));
     discovery.set(key, current);
-    scan = current;
-  } else if (scan.completed) {
-    discovery.delete(key);
-  }
-  if (wait === "background") return scan.promise;
+    scans.add(current);
+    selected = current;
+    return current.promise;
+  };
+  // The metadata walk is inside the request budget and starts after this call's arrival.
+  const work = readSignature ? readSignature(validation.signal).then(choose) : choose(undefined);
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
+    if (wait === "background") return await work;
     return await Promise.race([
-      scan.promise,
+      work,
       new Promise<never>((_, reject) => {
         timer = setTimeout(() => {
-          scan.expired = true;
+          expired = true;
+          if (selected) selected.expired = true;
           reject(new PackageDiscoveryExceeded(roots));
-        }, 5_000);
+        }, packageDiscoveryTimeoutMs);
       }),
     ]);
   } finally {
     clearTimeout(timer);
+    // A timed-out metadata read must not start an untracked scan after shutdown.
+    void work.finally(() => validations.delete(validation)).catch(() => {});
   }
 }
 

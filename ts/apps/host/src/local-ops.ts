@@ -24,7 +24,7 @@ import type { PeaRuntimeCapabilities } from "@pe/runtime";
 import { resolveHostVersion } from "./host-lifecycle.ts";
 import { hostCapabilities, hostOwnership } from "./host-ownership.ts";
 
-import { homesFound } from "@pe/host-contracts/product-paths";
+import { contentHomesFound } from "./content-roots.ts";
 import { processCustody } from "./machine.ts";
 
 /** Status must answer even when the installed manifest is unreadable; the throw belongs to boot. */
@@ -54,8 +54,8 @@ export function getHostStatus(
   bridge: BridgeSessionView,
   capabilities: PeaRuntimeCapabilities = hostCapabilities,
   runtimeRefusal: string | null = null,
+  found: ReturnType<typeof contentHomesFound> = contentHomesFound(),
 ) {
-  const found = homesFound();
   return Effect.succeed({
     homes: found.homes.map(({ tier, root, found }) => ({ tier, path: root, found })),
     firmHomeNotice: found.firmNotice,

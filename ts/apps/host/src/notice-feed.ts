@@ -10,7 +10,7 @@
  * Plain functions, not Effect: this sits beside the thread store's Readings in the
  * `observeHostResource` island (ADR 0029 phase 5 converts them together).
  */
-import { opendirSync } from "node:fs";
+import { opendir } from "node:fs/promises";
 import { join } from "node:path";
 import {
   attention,
@@ -33,7 +33,7 @@ import {
 import { HOST_RESTARTED } from "@pe/agent-contracts/chat-state";
 import { summarizeFailure } from "@pe/host-contracts/failure-summary";
 import type { ThreadPresence } from "@pe/host-contracts/pe-api";
-import { firmHome, noFirmHomeText, userRoot, type FirmHome } from "@pe/host-contracts/product-paths";
+import { noFirmHomeText, type FirmHome } from "@pe/host-contracts/product-paths";
 import { note, sha256Hex, type StoredNotice, type StateRoot } from "@pe/host-contracts/kinds";
 import { hostState } from "./host-ownership.ts";
 
@@ -44,34 +44,23 @@ const EARLIER_WORK_PLACE = "Work saved by an earlier version";
 /** A setting saved at a home tier (homes MAP slice 6b): the row says what happened; nothing was refused. */
 export const SETTING_WRITE_PLACE = "Setting saved";
 
-function holdsFile(path: string): boolean {
-  const directory = opendirSync(path);
-  try {
-    for (let entry = directory.readSync(); entry; entry = directory.readSync()) {
-      if (entry.isFile() || (entry.isDirectory() && holdsFile(join(path, entry.name)))) return true;
-    }
-    return false;
-  } finally {
-    directory.closeSync();
+async function holdsFileAsync(path: string): Promise<boolean> {
+  for await (const entry of await opendir(path))
+    if (entry.isFile() || (entry.isDirectory() && await holdsFileAsync(join(path, entry.name)))) return true;
+  return false;
+}
+
+/** Run after the async home census; old Work is noticed without blocking requests. */
+export async function noteEarlierWork(user: string, machine: StateRoot = hostState()): Promise<void> {
+  const path = join(user, "Work");
+  try { if (await holdsFileAsync(path)) noteEarlierWorkFinding(path, machine); }
+  catch (error) {
+    if (!(error instanceof Error && "code" in error && error.code === "ENOENT"))
+      console.warn(`Could not check earlier Work at '${path}': ${String(error)}`);
   }
 }
 
-/** The start census posts findings to the same durable feed as stored-file refusals. */
-export function noteStartupHomes(
-  user = userRoot(),
-  firm: FirmHome = firmHome(),
-  machine: StateRoot = hostState(),
-): void {
-  noteNoFirmHome(firm, machine);
-  const path = join(user, "Work");
-  // Homes never hold Work; old Work is noticed, not migrated.
-  try {
-    if (!holdsFile(path)) return;
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT")
-      console.warn(`Could not check earlier Work at '${path}': ${String(error)}`);
-    return;
-  }
+function noteEarlierWorkFinding(path: string, machine: StateRoot) {
   note(machine, {
     class: "keep",
     place: EARLIER_WORK_PLACE,
@@ -87,7 +76,7 @@ export function noteStartupHomes(
  * drive, a second marker) posts again. Silent when a firm home is bound and when nothing was
  * probed, as in a test run: a notice that names no place tells a person nothing.
  */
-export function noteNoFirmHome(firm: FirmHome = firmHome(), machine: StateRoot = hostState()): void {
+export function noteNoFirmHome(firm: FirmHome, machine: StateRoot = hostState()): void {
   const places = firm.refused ?? firm.looked;
   if (firm.root || !places.length) return;
   const reason = noFirmHomeText(firm);
@@ -114,6 +103,8 @@ export interface NoticeSources {
   readonly machine: Machine | null;
   /** `notices(machine)`: files refused as kept or discarded. */
   readonly stored: readonly StoredNotice[];
+  /** False clears the live warning after the roots owner recovers; the durable audit remains. */
+  readonly firmHomeUnavailable?: boolean;
   /** Outward sends held for the person (ADR 0038 guard 3); a held door act is its receipt. */
   readonly held: readonly HeldSend[];
 }
@@ -204,7 +195,8 @@ function threadRow(thread: NoticeSources["threads"][number], now: number): Notic
 const STORED_FOR_MS = 7 * 24 * 3_600_000;
 
 /** A file that did not decode: discarded, or "can't read, kept" (ADR 0039 rule 1). */
-function storedRow(notice: StoredNotice, now: number): NoticeDraft | null {
+function storedRow(notice: StoredNotice, now: number, firmHomeUnavailable?: boolean): NoticeDraft | null {
+  if (firmHomeUnavailable === false && notice.place === FIRM_HOME_PLACE && notice.reason.startsWith("Firm home unavailable at ")) return null;
   // ponytail: a fixed window and no dismiss door; add a dismiss act when a person asks for one.
   if (now - Date.parse(notice.at) > STORED_FOR_MS) return null;
   const kept = notice.class === "keep";
@@ -400,7 +392,7 @@ export function noticeRows(sources: NoticeSources, now: number): NoticeDraft[] {
       const parent = receiptRow(receipt, now);
       return [...(parent ? [parent] : []), ...nativeTouchedRows(receipt.action)];
     }),
-    ...sources.stored.flatMap((notice) => storedRow(notice, now) ?? []),
+    ...sources.stored.flatMap((notice) => storedRow(notice, now, sources.firmHomeUnavailable) ?? []),
     ...sources.held.map((send) => ({
       key: `held:${send.id}`,
       group: "waits" as const,

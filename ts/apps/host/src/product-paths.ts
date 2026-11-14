@@ -1,8 +1,10 @@
 import { join } from "node:path";
 import { productPathNames } from "@pe/host-contracts/contracts";
-import { userRoot } from "@pe/host-contracts/product-paths";
+import { contentHomes, ContentHomeUnavailable } from "./content-roots.ts";
 
 /** The user's Pods folder: where imports and every Pod write land. */
 export function productPodsRootPath(): string {
-  return join(userRoot(), productPathNames.podsDirectoryName);
+  const user = contentHomes().find(home => home.tier === "user")?.root;
+  if (!user) throw new ContentHomeUnavailable();
+  return join(user, productPathNames.podsDirectoryName);
 }

@@ -80,7 +80,7 @@ export async function preparePodExport(
   snapshot?: PackageListing,
 ) {
   const archivePath = zipPath(request.archivePath);
-  const listing = snapshot ?? await listPackages(options.podsRoot);
+  const listing = snapshot ?? await listPackages({ podsRoots: options.podsRoot });
   const pod = unique(listing, request.pod);
   const captured = await capturePackage(pod).catch((error: unknown) => {
     throw new TransferRefused(`Pod '${request.pod}' is not exportable: ${message(error)}`);
@@ -295,7 +295,7 @@ export async function installArchive(
   const podsRoot = options.podsRoot ?? productPodsRootPath();
   // A new pod lands in the user home, and its id must be free in every home (ADR 0037 rule 4).
   const everyRoot = options.podsRoot ?? productPodsRoots();
-  const installed = (await listPackages(everyRoot)).packages.find((p) => p.id === id);
+  const installed = (await listPackages({ podsRoots: everyRoot })).packages.find((p) => p.id === id);
   if (installed)
     throw new TransferRefused(
       `Pod id '${id}' is already installed at '${installed.directory}'. Remove or rename that folder, or import an archive with another id.`,
@@ -357,7 +357,7 @@ export async function installArchive(
         bytes,
       );
     }
-    const admitted = (await listPackages(staging)).packages[0];
+    const admitted = (await listPackages({ podsRoots: staging })).packages[0];
     if (!admitted || admitted.id !== id)
       throw new TransferRefused(`Pod archive '${locator}' is not an admissible pod.`);
     // Manifest last: readers never admit a partially published pod. Home writes use CAS,

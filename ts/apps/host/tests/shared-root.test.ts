@@ -1,4 +1,5 @@
 import { hostState } from "../src/host-ownership.ts";
+import { contentRootsReady } from "../src/content-roots.ts";
 import { ledgerFixture } from "./storage.ts";
 import { mkdtempSync } from "../../../tests/isolated-home/storage.ts";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
@@ -30,12 +31,13 @@ import { peaMcpServer } from "../src/harness/adapter.ts";
 // host-contracts `product-paths.test.ts`.
 let user: string;
 let firm: string;
-beforeEach(() => {
+beforeEach(async () => {
   user = mkdtempSync(join(tmpdir(), "pe-user-"));
   firm = mkdtempSync(join(tmpdir(), "pe-firm-"));
   writeFileSync(join(firm, "pe-home.json"), `{"tier":"firm"}`);
   vi.stubEnv("PE_TOOLS_PRODUCT_HOME", user);
   vi.stubEnv("PE_TOOLS_SHARED_ROOT", firm);
+  await contentRootsReady();
 });
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -103,8 +105,9 @@ test("unbound: with no firm home the host's resolvers all answer, on the user ho
 });
 
 test("a told firm folder with no firm marker is no firm home: its pods are not read", async () => {
-  rmSync(join(firm, "pe-home.json"));
-  pod(firm, "theirs", "theirs", "unproven");
+  const unmarked = join(firm, "unmarked");
+  vi.stubEnv("PE_TOOLS_SHARED_ROOT", unmarked);
+  pod(unmarked, "theirs", "theirs", "unproven");
   expect(homes()).toEqual([{ tier: "user", root: user }]);
   expect((await listPackages()).packages).toEqual([]);
 });

@@ -1,4 +1,5 @@
 import { stateScope } from "@pe/host-contracts/service-identity";
+import { acquireContentRoots, contentRootsReady, contentHomes, ContentHomeUnavailable } from "./content-roots.ts";
 import { targetHomes } from "./call-route.ts";
 import { readSessionScope } from "./sdk-session.ts";
 import {
@@ -73,7 +74,7 @@ import {
   emitPagePinRevoke,
 } from "./control.ts";
 import { capturePackage, listPackages, productPodsRoots, type AdmittedPackage, type PodsRoots } from "./packages.ts";
-import { PackageDiscoveryExceeded } from "./pod-capture.ts";
+import { PackageDiscoveryExceeded, packageDiscoveryTimeoutMs } from "./pod-capture.ts";
 import { activePackages, requirePackageEnabled } from "./package-lifecycle.ts";
 import {
   pageDescriptors,
@@ -168,7 +169,6 @@ export const pageLibrary = (path: string): string | null => {
 /** One file segment: a leading dot is refused, so editor droppings stay private. */
 const SEGMENT = /^[a-z0-9_-][a-z0-9_.-]*$/i;
 const HEARTBEAT_MS = 15_000;
-const packageDiscoveryTimeoutMs = 5_000;
 /** Waits after a discovery expiry before the page-target Reading asks again; then every 10 s. pe.js keeps the same pace. */
 const discoveryRetryMs = [1_000, 2_000, 5_000];
 const isMissing = (error: unknown) => (error as { code?: string } | null)?.code === "ENOENT";
@@ -453,6 +453,7 @@ const unresolved = (door: string, resolution: Exclude<TargetResolution, { kind: 
 
 /** A catalog row's `op:<key>` (what `pe.find` answers) names the operation `<key>`. */
 const bareOp = (key: string) => key.replace(/^op:/, "");
+type DiscoveryWait = { done(): void; readonly expired: boolean };
 
 /**
  * The pages handler over the Pages root and the Pods root: a plain web handler, so tests need no
@@ -467,8 +468,8 @@ export function createPagesHandler(
   stored: StateDirectory = stateScope(hostState(), hostState().pages),
 ) {
   /** One budget covers listing and lifecycle; a late listing must not start another wait. */
-  const pagePackages = async (id?: string): Promise<AdmittedPackage[]> => {
-    if (!pods) return [];
+  const pagePackages = async (id?: string, requestWait?: DiscoveryWait): Promise<AdmittedPackage[]> => {
+    if (!pods) { requestWait?.done(); return []; }
     let expired = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const timeout = new Promise<never>((_, reject) => {
@@ -478,12 +479,14 @@ export function createPagesHandler(
       }, packageDiscoveryTimeoutMs);
     });
     const discover = async () => {
-      const listing = await listPackages(pods);
-      if (expired) return [];
+      const listing = await listPackages({ podsRoots: pods });
+      if (expired || requestWait?.expired) return [];
       return activePackages(listing.packages.filter((pod) => id === undefined || pod.id === id), pods);
     };
     try {
-      return await Promise.race([discover(), timeout]);
+      const listing = await Promise.race([discover(), timeout]);
+      requestWait?.done();
+      return listing;
     } finally {
       clearTimeout(timer);
     }
@@ -496,14 +499,15 @@ export function createPagesHandler(
    * so no key names a home. A scratch slug matches its folder in any casing, so the folder's own
    * name is the one spelling.
    */
-  const dirOf = async (slug: string) => {
+  const dirOf = async (slug: string, requestWait?: DiscoveryWait) => {
     const [id, page, ...more] = slug.split("--");
     if (page === undefined) {
+      requestWait?.done(); // Scratch Pages have no Pod discovery wait.
       const found = await scratchPageDirectory(slug, root);
       return found && { ...found, pod: null, state: join(stored.path, basename(found.dir)) };
     }
     if (more.length || !pods) return null;
-    for (const pod of await pagePackages(id)) {
+    for (const pod of await pagePackages(id, requestWait)) {
       const row = pod.contributions.find(
         (one) => one.kind === "page" && one.path === `pages/${page}`,
       );
@@ -545,10 +549,10 @@ export function createPagesHandler(
   });
 
   /** `GET /pages`: the one Page projection, as rows: scratch newest first, then packaged by key. */
-  const list = async (): Promise<PageRow[]> =>
+  const list = async (requestWait?: DiscoveryWait): Promise<PageRow[]> =>
     (
       await pageDescriptors(
-        await pagePackages(),
+        await pagePackages(undefined, requestWait),
         root,
       )
     ).map((page) => ({
@@ -695,7 +699,7 @@ export function createPagesHandler(
       : "";
     const podId = parseContributionKey(page)?.packageId;
     const model = pods && podId
-      ? (await listPackages(pods)).packages.find((pod) => pod.id === podId)?.for
+      ? (await listPackages({ podsRoots: pods })).packages.find((pod) => pod.id === podId)?.for
       : undefined;
     if (model && ref) {
       const response = await cross(page, slot, false, ref, "/pages/target", "/call", {
@@ -862,7 +866,7 @@ export function createPagesHandler(
       return { problem: `${key} is a ${ref.kind}: it reads and mentions, it never runs.` };
     await requirePackageEnabled(ref.packageId, pods);
     const pod = pods
-      ? (await listPackages(pods)).packages.find((one) => one.id === ref.packageId)
+      ? (await listPackages({ podsRoots: pods })).packages.find((one) => one.id === ref.packageId)
       : undefined;
     const row = pod?.contributions.find((row) => row.kind === "script" && row.key === key);
     if (!pod || !row)
@@ -1002,7 +1006,7 @@ export function createPagesHandler(
     };
   };
 
-  return Object.assign((request: Request) => handle(request).catch((error: unknown) => {
+  return Object.assign((request: Request, requestWait?: DiscoveryWait) => handle(request, requestWait).catch((error: unknown) => {
     if (!(error instanceof PackageDiscoveryExceeded)) throw error;
     // A browser opening the Page itself (a tab, or the app's frame) has no pe.js yet to ask again, so
     // the answer is a document that says the host's words and asks again by itself.
@@ -1019,7 +1023,7 @@ export function createPagesHandler(
     // The code tells pe.js this 503 is a wait, not a refusal: it asks again by itself.
     return json({ error: error.message, message: error.message, code: error.code }, 503);
   }), { observeTarget });
-  async function handle(request: Request): Promise<Response> {
+  async function handle(request: Request, requestWait?: DiscoveryWait): Promise<Response> {
     const caller = currentCaller();
     const url = new URL(request.url);
     if (url.pathname === peRoutes["page.publish"].path && request.method === "POST") {
@@ -1051,7 +1055,7 @@ export function createPagesHandler(
     const parts = url.pathname.split("/").filter(Boolean); // ["pages", slug?, ...rest]
     if (parts[0] === "pe") {
       const [, , slug = "", verb, ...more] = parts;
-      const where = await dirOf(slug);
+      const where = await dirOf(slug, requestWait);
       if (!where || verb !== "binding" || more.length || request.method !== "PUT")
         return problem(
           404,
@@ -1062,8 +1066,8 @@ export function createPagesHandler(
     const wantsHtml = (request.headers.get("accept") ?? "").includes("text/html");
     if (parts.length === 1)
       return wantsHtml
-        ? listPage(await list())
-        : json({ root: [root].flat(), pages: await list() });
+        ? listPage(await list(requestWait))
+        : json({ root: [root].flat(), pages: await list(requestWait) });
     const [, slug = "", ...rest] = parts;
     const library = request.method === "GET" ? pageLibrary(url.pathname) : null;
     if (library !== null)
@@ -1078,7 +1082,7 @@ export function createPagesHandler(
         400,
         "a page slug is its folder name (letters, digits, '.', '_', single '-'); a pod's page is <id>--<page>",
       );
-    const where = await dirOf(slug);
+    const where = await dirOf(slug, requestWait);
     if (!where) return problem(404, `no page ${slug}: no admitted package contributes it`);
     if (rest.length === 0 && !url.pathname.endsWith("/"))
       return Response.redirect(`${url.origin}/pages/${slug}/${url.search}`, 308); // relative links need the slash
@@ -1250,22 +1254,54 @@ export const pagesRoute = (
           }),
       };
       const journal = yield* ActionJournalService;
+      const rootsOwner = acquireContentRoots();
+      yield* Effect.addFinalizer(() => Effect.sync(rootsOwner.close));
+      yield* Effect.promise(() => rootsOwner.ready);
       const handlers = new Map<string, ReturnType<typeof createPagesHandler>>();
       const handler = HttpEffect.fromWebHandler(async (request) => {
-        const scope = readSessionScope(Object.fromEntries(request.headers));
-        const { pointer } = bridge ? await Effect.runPromise(targetHomes(bridge, scope)) : {};
-        const roots = root(pointer),
+        let podRoots = pods();
+        let expired = false;
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const discoveryWait: DiscoveryWait = {
+          done: () => clearTimeout(timer),
+          get expired() { return expired; },
+        };
+        const timeout = new Promise<Response>((resolve) => {
+          if (request.method !== "GET") return;
+          timer = setTimeout(() => {
+            expired = true;
+            const error = new PackageDiscoveryExceeded(podRoots);
+            resolve(json({ code: error.code, error: error.message, message: error.message }, 503));
+          }, packageDiscoveryTimeoutMs);
+        });
+        const resolvePage = async () => {
+          const scope = readSessionScope(Object.fromEntries(request.headers));
+          const { pointer } = bridge ? await Effect.runPromise(targetHomes(bridge, scope)) : {};
+          if (root === productPagesRoots || pods === productPodsRoots) {
+            await contentRootsReady(pointer);
+            if (!contentHomes().some(home => home.tier === "user")) {
+              const error = new ContentHomeUnavailable();
+              return json({ code: error.code, error: error.message, message: error.message }, error.status);
+            }
+          }
+          if (expired) return timeout;
+          const roots = root(pointer);
           podRoots = pods(pointer);
-        const key = JSON.stringify([roots, podRoots]);
-        let pages = handlers.get(key);
-        if (!pages) {
-          pages = createPagesHandler(roots, podRoots, live, journal);
-          handlers.set(key, pages);
-        }
-        served = pages.observeTarget;
-        return matchPeRoute(request.method, new URL(request.url).pathname)
-          ? servePeRoute(request, pages)
-          : pages(request);
+          const key = JSON.stringify([roots, podRoots]);
+          let pages = handlers.get(key);
+          if (!pages) {
+            pages = createPagesHandler(roots, podRoots, live, journal);
+            handlers.set(key, pages);
+          }
+          served = pages.observeTarget;
+          const pageHandler = pages;
+          const answer = (input: Request) => pageHandler(input, discoveryWait);
+          return matchPeRoute(request.method, new URL(request.url).pathname)
+            ? servePeRoute(request, answer)
+            : answer(request);
+        };
+        try { return await Promise.race([resolvePage(), timeout]); }
+        finally { clearTimeout(timer); }
       });
       // One registration claims the bare `/pages` too (a second `add` is refused at boot; see captures).
       yield* router.add("*", "/pages/*", handler);

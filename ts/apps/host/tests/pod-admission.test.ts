@@ -96,7 +96,7 @@ async function isolatedRefusal() {
   await writeFile(join(root, "Pods/renamed/pod.json"), JSON.stringify({ ...manifest, id: "renamed" }));
   const content = createContributionContent({
     worldRoot: stateFixture(join(root, "world")), decisionsMachine: stateMachine(root),
-    packages: () => listPackages(join(root, "Pods")),
+    packages: () => listPackages({ podsRoots: join(root, "Pods") }),
   });
   const workspace = new RouteWorkspace({
     registrations: [], store: fileRouteDocumentStore(stateFixture(join(root, "Work"))),
@@ -245,7 +245,7 @@ test("host and browser refuse a fingerprinted raw-slash Pod address alias", asyn
       "/tool/route:@fixture/routes/tool/route.artifact",
     );
     const lifecycle = createPackageLifecycle({
-      packages: () => listPackages(join(root, "Pods")),
+      packages: () => listPackages({ podsRoots: join(root, "Pods") }),
       machine: stateMachine(storedParent(join(root, "enabled.json"))),
     });
     const workspace = new RouteWorkspace({
@@ -311,7 +311,7 @@ async function setup(saved: unknown = currentWork, blockRead = false, initialWor
   try {
     const artifact = await fixture(root, "first", undefined, undefined, initialWork);
     const lifecycle = createPackageLifecycle({
-      packages: () => listPackages(join(root, "Pods")),
+      packages: () => listPackages({ podsRoots: join(root, "Pods") }),
       machine: stateMachine(storedParent(join(root, "enabled.json"))),
     });
     const disk = fileRouteDocumentStore(stateFixture(join(root, "Work")));
@@ -555,7 +555,7 @@ test("Pea finds, reads, sets and opens a trusted Pod view through its one regist
   try {
     const { fingerprint } = await fixture(root);
     const lifecycle = createPackageLifecycle({
-      packages: () => listPackages(join(root, "Pods")),
+      packages: () => listPackages({ podsRoots: join(root, "Pods") }),
       machine: stateMachine(storedParent(join(root, "enabled.json"))),
     });
     const app = createPeRoutes({
