@@ -925,7 +925,7 @@ public sealed class RevitScriptExecutionService(
     ///     close a sibling. A refused save is explained by ScriptChangeLedger.SaveRefusedWords, which names the
     ///     run's own document's hold beside the fence's. The sibling is not left modified by the rollback, and a
     ///     person's Redo in it survives a run in every mode, even one whose sibling commit was rolled back
-    ///     (SiblingRedoProbeTests, attached Revit 2025, 2026-11-14).
+    ///     (attached Revit 2025, 2026-11-14; the method and verdict are in ADR 0044).
     ///     The fence is also the monitor's scope: a commit in a held sibling is observed as Discarded.
     ///     The honest limit: this bounds a script's commits, not hostile code; a script that returns with a
     ///     transaction still open on a sibling may leave a group Revit will not roll back, and the run then fails
