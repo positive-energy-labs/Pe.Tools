@@ -91,7 +91,7 @@ test("the portable Page authors theme changes through its reducer", async () => 
   assert.equal(h.state().theme, "light");
 });
 
-test("generated portable Page executes the shared instruments with its pe.kernel adapter", async () => {
+test("generated portable Page executes the shared instruments with its pe.state adapter", async () => {
   const route = await module();
   const h = harness(route.initial, route.reducer);
   let mounted;
@@ -130,19 +130,19 @@ test("generated portable Page executes the shared instruments with its pe.kernel
           },
         }),
       },
-      kernel: (reducer, state, changed) => {
+      // The Page's one state door (W45): the Page event log reduced over `base`.
+      state: async ({ reduce, base, render }) => {
         kernel = {
-          state,
+          state: base,
           log: [],
           fire: (event) => {
             kernel.log.push(event);
-            kernel.state = reducer(kernel.state, event);
-            changed();
+            kernel.state = reduce(kernel.state, event);
+            render(kernel.state);
           },
         };
         return kernel;
       },
-      state: async () => {},
       describe() {},
     },
   };

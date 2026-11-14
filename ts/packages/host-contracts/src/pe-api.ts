@@ -454,6 +454,16 @@ export function peRouteTable<S extends PeApiSchemas>(schemas: S) {
       "providers",
       "admin",
     ),
+    // The Pod inventory read survives the route tier (ADR 0045): the lifecycle answers it, plugin.update toggles it.
+    "plugins.list": route(
+      "GET",
+      "/pe/plugins",
+      none,
+      z.array(pluginStatusSchema),
+      "read",
+      "plugins",
+      "read",
+    ),
     "plugin.update": route(
       "PUT",
       "/pe/plugins/:id",
