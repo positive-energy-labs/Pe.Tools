@@ -1435,7 +1435,8 @@ export class ActionJournal implements ReceiptReader {
           ...row,
           state: "failed",
           error: messageOf(error),
-          status: 409,
+          // A rejection names its own status, as a step-time one does in `failure`.
+          status: error instanceof CommandRejected ? error.status : 409,
           notDispatched: true,
           ...(error instanceof CommandRejected ? { refusal: error.refusal } : {}),
         });
