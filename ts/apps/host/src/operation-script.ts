@@ -10,7 +10,7 @@ import {
   isPackageMember,
   listPackages,
 } from "./packages.ts";
-import { StepFailure, nativeStep, refused, io } from "./command-executor.ts";
+import { CommandRejected, StepFailure, nativeStep, refused, io } from "./command-executor.ts";
 import { Effect } from "effect";
 import { z } from "zod";
 import type { RevitBridge } from "./bridge.ts";
@@ -33,18 +33,22 @@ export function runPodScript(
       ? yield* io(() => freezeScript(input)).pipe(Effect.mapError((error) => refused(error instanceof Error ? error.message : String(error))))
       : undefined;
     const sealedInput = captured ? { ...input, sourceBundle: captured.sourceBundle } : input;
-    const bundle = sourceBundleSchema.nullish().parse(sealedInput.sourceBundle);
-    const manifest = bundle?.files.find((file) => file.path === "pod.json");
-    if (manifest) {
-      const raw = JSON.parse(Buffer.from(manifest.bytesBase64, "base64").toString("utf8").replace(/^\uFEFF/, ""));
-      if (raw.for !== undefined) {
-        const model = podModelSchema.parse(raw.for);
-        const detail = yield* nativeStep(bridge, target, "revit.detail.elements", {
-          query: { kind: "ElementReferences", elementIds: model.probes.map((probe) => probe.elementId) },
-        });
-        const message = wrongPodModel(model, detail);
-        if (message) return yield* Effect.fail(refused(message, "wrong-model"));
-      }
+    const model = yield* Effect.try({
+      try: () => {
+        const bundle = sourceBundleSchema.nullish().parse(sealedInput.sourceBundle);
+        const manifest = bundle?.files.find((file) => file.path === "pod.json");
+        if (!manifest) return undefined;
+        const raw = JSON.parse(Buffer.from(manifest.bytesBase64, "base64").toString("utf8").replace(/^\uFEFF/, ""));
+        return raw.for === undefined ? undefined : podModelSchema.parse(raw.for);
+      },
+      catch: () => new CommandRejected({ kind: "domain", code: "script.input", message: "Invalid Pod source bundle or model declaration" }, 400),
+    });
+    if (model) {
+      const detail = yield* nativeStep(bridge, target, "revit.detail.elements", {
+        query: { kind: "ElementReferences", elementIds: model.probes.map((probe) => probe.elementId) },
+      });
+      const message = wrongPodModel(model, detail);
+      if (message) return yield* Effect.fail(refused(message, "wrong-model"));
     }
     return yield* nativeStep(bridge, target, "scripting.execute", sealedInput, requestId);
   });
