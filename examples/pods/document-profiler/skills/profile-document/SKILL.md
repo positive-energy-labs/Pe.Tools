@@ -50,7 +50,7 @@ A value out of bounds throws with the bounds in the message. Rows are capped at 
 - `pe_do page:@document-profiler/pages/profile { "event": { "type": "reading", "reading": { "source": "<the script key>", "at": <ms since epoch>, "rows": <the script's whole answer> }, "input": { ... }, "document": "<title>" } }` records a census you ran. Send the answer whole; do not trim or reshape `rows`.
 - `{ "event": { "type": "note", "text": "<one line>" } }` leaves a line for the person.
 
-The Page declares only `reading` and `note`; any other event type is refused.
+The Page declares only `reading` and `note`, in the `<script type="application/json" id="pe-agent">` block of its HTML; any other event type is refused.
 
 ## Experiments
 

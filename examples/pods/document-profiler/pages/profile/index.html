@@ -25,6 +25,11 @@
   <ul id="notes"></ul>
 </main>
 
+<!-- C2: the events an agent may append. The host reads this from the file; any other type is refused. -->
+<script type="application/json" id="pe-agent">{
+  "reading": "a census run by key: { reading: { source: 'script:@document-profiler/src/<File>.cs', at: <ms>, rows: <the script's whole answer> }, input: <what was passed>, document: <title> }",
+  "note": "one line for the person reading this Page: { text }"
+}</script>
 <script>
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
@@ -111,10 +116,7 @@ const describe = (s) => [
   ...s.notes.map((n) => `- note (${by(n.origin)}): ${n.text}`),
 ].join("\n");
 
-const kernel = pe.state({ reduce, base, render, describe, agent: {
-  reading: "a census run by key: { reading: { source: 'script:@document-profiler/src/<File>.cs', at: <ms>, rows: <the script's whole answer> }, input: <what was passed>, document: <title> }",
-  note: "one line for the person reading this Page: { text }",
-} });
+const kernel = pe.state({ reduce, base, render, describe });
 
 const showDoc = async () => {
   try {
