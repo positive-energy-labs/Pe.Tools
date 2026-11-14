@@ -53,6 +53,7 @@ import {
   type ActionAdmission,
 } from "@pe/agent-contracts";
 import { z } from "zod";
+import { parse, type DefaultTreeAdapterMap } from "parse5";
 import { resourceSnapshot, type OwnerValue } from "@pe/runtime";
 import { RevitBridge } from "./bridge.ts";
 import { hostOwnership, hostState } from "./host-ownership.ts";
@@ -280,7 +281,7 @@ const pageEventsKind = stateLog({
   place: (slug: string) => `Page ${slug}`,
   segments: (_slug: string) => ["events.jsonl"],
 });
-class PageState {
+export class PageState {
   private readonly listeners = new Set<Listener>();
   private readonly signals = new Set<Signal>();
   private unwatch: (() => void) | null = null;
@@ -328,6 +329,45 @@ class PageState {
   }
   projection() {
     return this.stored("text.json", peRoutes["page.text"].body.nullable(), null);
+  }
+  /** Authored content, never machine state: imports and unopened Pages declare the same events. */
+  agent() {
+    const file = join(this.pageDir, "index.html");
+    try {
+      const blocks: DefaultTreeAdapterMap["element"][] = [];
+      const visit = (node: DefaultTreeAdapterMap["node"]) => {
+        if (
+          "tagName" in node &&
+          node.attrs.some((attr) => attr.name === "id" && attr.value === "pe-agent")
+        )
+          blocks.push(node);
+        if ("childNodes" in node) node.childNodes.forEach(visit);
+      };
+      visit(parse(readFileSync(file, "utf8")));
+      if (!blocks.length) return {};
+      const block = blocks[0]!;
+      if (
+        blocks.length !== 1 ||
+        block.tagName !== "script" ||
+        !block.attrs.some((attr) => attr.name === "type" && attr.value === "application/json")
+      )
+        throw Error('expected one <script type="application/json" id="pe-agent">');
+      return z
+        .record(
+          z.string().min(1),
+          z
+            .string()
+            .regex(/\S/)
+            .regex(/^[^\r\n]+$/),
+        )
+        .parse(
+          JSON.parse(block.childNodes.map((node) => ("value" in node ? node.value : "")).join("")),
+        );
+    } catch (error) {
+      throw Error(
+        `Invalid pe-agent declaration in Page file ${file}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   }
   async writeText(value: z.infer<(typeof peRoutes)["page.text"]["body"]>) {
     const seq = lastSeq(await this.rows());
@@ -510,7 +550,7 @@ export function createPagesHandler(
 <pre>&lt;link rel="stylesheet" href="/pages/pe.css"&gt;
 &lt;script src="/pages/pe.js"&gt;&lt;/script&gt;
 &lt;script&gt;
-  const k = await pe.state({ reduce, base: {}, render, describe, agent: {} });
+  const k = await pe.state({ reduce, base: {}, render, describe });
   await pe.do("revit.context.show-elements", { elementIds: [1234] });   // pe.find, pe.read, pe.do: Pea's doors
   await pe.script("checks/census.csx");                        // C# beside the page; pe.picture, pe.diff, pe.reading
 &lt;/script&gt;</pre>
@@ -1018,6 +1058,12 @@ export function createPagesHandler(
       }
     }
     if (verb === "state" && request.method === "GET") {
+      let agent;
+      try {
+        agent = state.agent();
+      } catch (error) {
+        return problem(422, (error as Error).message);
+      }
       const rows = await state.rows();
       const cursor = url.searchParams.has("after") ? Number(url.searchParams.get("after")) : null;
       if (cursor !== null && (!Number.isSafeInteger(cursor) || cursor < 0))
@@ -1028,12 +1074,12 @@ export function createPagesHandler(
         events: cursor === null ? rows.slice(-50) : rows.filter((row) => row.seq > cursor),
         text: projection?.text ?? null,
         textSeq: projection?.seq ?? null,
-        agent: projection?.agent ?? {},
+        agent,
       });
     }
     if (verb === "text" && request.method === "PUT") {
       if (originOf(caller) === "agent")
-        return problem(403, "only a Page or person publishes its text and agent declaration");
+        return problem(403, "only a Page or person publishes its text");
       const parsed = peRoutes["page.text"].body.safeParse(await request.json().catch(() => null));
       if (!parsed.success) return problem(400, parsed.error.message);
       if (!(await state.writeText(parsed.data)))
@@ -1048,7 +1094,12 @@ export function createPagesHandler(
       if (typeof event !== "object" || event === null || Array.isArray(event))
         return problem(400, "an event is one JSON object");
       if (originOf(caller) === "agent") {
-        const agent = state.projection()?.agent ?? {};
+        let agent;
+        try {
+          agent = state.agent();
+        } catch (error) {
+          return problem(422, (error as Error).message);
+        }
         const declared = Object.keys(agent);
         const type = Reflect.get(event, "type");
         if (typeof type !== "string" || !Object.hasOwn(agent, type))

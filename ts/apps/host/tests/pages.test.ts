@@ -4,7 +4,7 @@ import { access, appendFile, mkdir, readFile, rename, rm, writeFile } from "node
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runInNewContext } from "node:vm";
-import { afterEach, describe, expect, it } from "vite-plus/test";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { HOST_RUNTIME_SERVICE_HEADER } from "@pe/host-contracts/contracts";
 import {
   emptyThreadHead,
@@ -16,7 +16,12 @@ import {
   type PageTargetReading,
   type ThreadHead,
 } from "@pe/agent-contracts";
-import { createPagesHandler, type LiveSession, type PageLive } from "../src/pages-route.ts";
+import {
+  createPagesHandler,
+  PageState,
+  type LiveSession,
+  type PageLive,
+} from "../src/pages-route.ts";
 import { readRequestIdentity, type IdentityOptions } from "../src/request-identity.ts";
 import { admitCrossing, bindControl, callerOf, currentCaller, live, Refused } from "../src/control.ts";
 import { asCaller, human, pea, serviceHeaders } from "./callers.ts";
@@ -177,7 +182,9 @@ describe("pages", () => {
   });
 
   it("keeps one event log per page, with origin and seq, and sequence-stamped text instead of a writable snapshot", async () => {
-    const { fetch } = await pagesRoot();
+    const { root, fetch } = await pagesRoot();
+    await mkdir(join(root, "fresh"));
+    await writeFile(join(root, "fresh", "index.html"), "<p>Fresh Page</p>");
     const first = await asCaller({ kind: "page", page: "page:@pages/todo" }, fetch)(
       "/pages/todo/events",
       {
@@ -249,8 +256,127 @@ describe("pages", () => {
     await reader.cancel().catch(() => undefined);
   });
 
-  it("C2: stamps text, bounds reads and refuses undeclared agent events", async () => {
+  it.each(["scratch", "pod"])(
+    "C2: Pea appends a file-declared verdict to an unopened %s Page",
+    async (kind) => {
+      const { root, pods, state, handle } = await pagesRoot();
+      const directory =
+        kind === "scratch" ? join(root, "todo") : join(pods, "kit", "pages", "review");
+      const slug = kind === "scratch" ? "todo" : "kit--review";
+      await mkdir(directory, { recursive: true });
+      if (kind === "pod")
+        await writeFile(
+          join(pods, "kit", "pod.json"),
+          JSON.stringify({ id: "kit", entrypoints: [] }),
+        );
+      const agent = { verdict: "verdict: passed and explanation" };
+      await writeFile(
+        join(directory, "index.html"),
+        `<script id='pe-agent' type='application/json'>${JSON.stringify(agent)}</script>`,
+      );
+      const call = (handler: typeof handle) => asCaller(pea(), handler);
+      const append = (handler: typeof handle, type: string) =>
+        call(handler)(
+          new Request(`http://host/pages/${slug}/events`, {
+            method: "POST",
+            body: JSON.stringify({ type, passed: true }),
+          }),
+        );
+      expect(await (await append(handle, "verdict")).json()).toMatchObject({
+        seq: 1,
+        origin: "agent",
+        event: { type: "verdict", passed: true },
+      });
+      const read = await call(handle)(new Request(`http://host/pages/${slug}/state`));
+      expect(await read.json()).toMatchObject({ seq: 1, agent, text: null, textSeq: null });
+      const refused = await append(handle, "erase");
+      expect(refused.status).toBe(422);
+      expect(await refused.text()).toContain("declared types: verdict");
+      // A new host with discarded machine state still reads only the authored file.
+      await rm(state, { recursive: true, force: true });
+      const reopened = createPagesHandler(root, pods, undefined, undefined, stateFixture(state));
+      expect((await append(reopened, "verdict")).status).toBe(201);
+      await writeFile(
+        join(directory, "index.html"),
+        '<script type="application/json" id="pe-agent">{"review":"review text"}</script>',
+      );
+      expect(await (await append(reopened, "verdict")).text()).toContain("declared types: review");
+    },
+  );
+
+  it.each(["{", "[]", '{"verdict":42}', '{"verdict":""}', '{"verdict":"line\\nbreak"}'])(
+    "C2: refuses malformed file declaration %s with its Page file",
+    async (declaration) => {
+      const { root, fetch } = await pagesRoot();
+      const file = join(root, "todo", "index.html");
+      await writeFile(
+        file,
+        `<script type="application/json" id="pe-agent">${declaration}</script>`,
+      );
+      const agent = asCaller(pea(), fetch);
+      for (const response of [
+        await agent("/pages/todo/state"),
+        await agent("/pages/todo/events", { method: "POST", body: '{"type":"verdict"}' }),
+      ]) {
+        expect(response.status).toBe(422);
+        expect((await response.json()) as unknown).toMatchObject({
+          message: expect.stringContaining(file),
+        });
+      }
+    },
+  );
+
+  it("C2: buffers live rows while SSE replay is in flight", async () => {
     const { fetch } = await pagesRoot();
+    const post = () => fetch("/pages/todo/events", { method: "POST", body: '{"type":"note"}' });
+    await post();
+    const original = PageState.prototype.rows;
+    const prefix = [{ seq: 1, at: "replay", origin: "person", event: { type: "note" } }];
+    let release!: (rows: typeof prefix) => void;
+    let entered!: () => void;
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const rows = vi
+      .spyOn(PageState.prototype, "rows")
+      .mockImplementationOnce(() => {
+        entered();
+        return new Promise((resolve) => {
+          release = resolve;
+        });
+      })
+      .mockImplementation(original);
+    const abort = new AbortController();
+    try {
+      const opening = fetch("/pages/todo/events", { signal: abort.signal });
+      await started;
+      const response = await opening;
+      const reader = response.body!.getReader();
+      expect((await post()).status).toBe(201);
+      release(prefix);
+      const seqs: number[] = [];
+      let text = "";
+      while (!seqs.includes(2)) {
+        const chunk = await reader.read();
+        if (chunk.done) throw Error("SSE ended before live row");
+        text += new TextDecoder().decode(chunk.value);
+        seqs.splice(
+          0,
+          seqs.length,
+          ...Array.from(text.matchAll(/^id: (\d+)$/gm), (match) => Number(match[1])),
+        );
+      }
+      expect(seqs).toEqual([1, 2]);
+      await reader.cancel();
+    } finally {
+      release(prefix);
+      abort.abort();
+      rows.mockRestore();
+    }
+  });
+
+  it("C2: stamps text, bounds reads and refuses undeclared agent events", async () => {
+    const { root, fetch } = await pagesRoot();
     const agent = asCaller(pea(), fetch);
     const append = (type: string) =>
       agent("/pages/todo/events", {
@@ -258,12 +384,24 @@ describe("pages", () => {
         body: JSON.stringify({ type }),
       });
     expect((await append("note")).status).toBe(422);
+    await writeFile(
+      join(root, "todo", "index.html"),
+      '<script type="application/json" id="pe-agent">{"note":"a note: text"}</script>',
+    );
     const put = (seq: number, text: string) =>
       asCaller(human, fetch)("/pages/todo/text", {
         method: "PUT",
-        body: JSON.stringify({ seq, text, agent: { note: "a note: text" } }),
+        body: JSON.stringify({ seq, text }),
       });
     expect((await put(0, "empty")).status).toBe(204);
+    expect(
+      (
+        await asCaller(human, fetch)("/pages/todo/text", {
+          method: "PUT",
+          body: JSON.stringify({ seq: 0, text: "forged declaration", agent: { erase: "erase" } }),
+        })
+      ).status,
+    ).toBe(400);
     const refused = await append("erase");
     expect(refused.status).toBe(422);
     expect(await refused.text()).toContain("note");
@@ -827,7 +965,11 @@ describe("pages", () => {
     };
     type Answer = (url: URL, init: RequestInit) => Response | undefined;
     /** The served bytes in a page at `/pages/todo/`, with fetch and EventSource recorded and the host's answers. */
-    async function page(answer: Answer = () => undefined, pageKey = "page:@pages/todo") {
+    async function page(
+      answer: Answer = () => undefined,
+      pageKey = "page:@pages/todo",
+      declaration?: string,
+    ) {
       const { fetch } = await pagesRoot();
       const source = await (await fetch("/pages/pe.js")).text();
       const sent: Sent[] = [];
@@ -836,6 +978,12 @@ describe("pages", () => {
         prepend: (n) => body.children.unshift(n),
       };
       const nodes = new Map<string, Record<string, unknown>>();
+      if (declaration !== undefined)
+        nodes.set("pe-agent", {
+          tagName: "SCRIPT",
+          type: "application/json",
+          textContent: declaration,
+        });
       const location = new URL("http://127.0.0.1:5180/pages/todo/");
       const window: Record<string, unknown> = { addEventListener: () => {} };
       const streams: {
@@ -1017,14 +1165,18 @@ describe("pages", () => {
         event: { type: "add", value: 4 },
       };
       let rows = [replay];
-      const { pe, streams, sent } = await page((url) => {
-        if (url.pathname.endsWith("/state"))
-          return Response.json({ seq: rows.at(-1)!.seq, events: rows });
-        if (url.pathname.endsWith("/events")) {
-          rows = [replay, live, own];
-          return Response.json(own);
-        }
-      });
+      const { pe, streams, sent } = await page(
+        (url) => {
+          if (url.pathname.endsWith("/state"))
+            return Response.json({ seq: rows.at(-1)!.seq, events: rows });
+          if (url.pathname.endsWith("/events")) {
+            rows = [replay, live, own];
+            return Response.json(own);
+          }
+        },
+        undefined,
+        JSON.stringify({ add: "add value" }),
+      );
       const seen: unknown[] = [];
       const k = (await pe.state!({
         base: 0,
@@ -1033,7 +1185,6 @@ describe("pages", () => {
           return state + event.value;
         },
         describe: (state: number) => String(state),
-        agent: { add: "add value" },
       })) as { state: number; fire(event: unknown): Promise<boolean> };
       expect(k.state).toBe(2);
       expect(streams).toHaveLength(1);
@@ -1047,7 +1198,6 @@ describe("pages", () => {
       expect(sent.filter((row) => row.method === "PUT").at(-1)?.body).toEqual({
         seq: 3,
         text: "9",
-        agent: { add: "add value" },
       });
       expect(sent.some((row) => row.url.endsWith("/snapshot"))).toBe(false);
     });
@@ -1071,6 +1221,35 @@ describe("pages", () => {
       await k.fire(own.event);
       expect(k.state).toBe(5);
     });
+
+    it.each(["pe.kernel", "pe.describe", "pe.state"])(
+      "D6: an old-form Page sees the %s refusal banner",
+      async (name) => {
+        const { pe, body, sent } = await page();
+        const call = () =>
+          name === "pe.state"
+            ? pe.state!({ state: {}, fire: () => {} }, { local: [] })
+            : pe[name.slice(3)]!();
+        const api = name === "pe.state" ? "pe.state(k, {local})" : name;
+        const message = `This Page uses ${api}, which Pe removed on 2026-11-14. Its state is now one call, pe.state({ reduce, base, render, describe }). Ask Pea to update this Page.`;
+        await expect(Promise.resolve().then(call)).rejects.toThrow(message);
+        expect((body.children[0] as { textContent: string }).textContent).toBe(message);
+        expect(sent.some((row) => row.url.includes("/state") || row.method === "PUT")).toBe(false);
+        if (name === "pe.state")
+          await expect(pe.state!({ state: {}, fire: () => {} })).rejects.toThrow(message);
+      },
+    );
+
+    it.each(["{", "[]", '{"verdict":42}'])(
+      "C2: pe.state refuses malformed DOM declaration %s",
+      async (declaration) => {
+        const { pe, sent } = await page(() => undefined, undefined, declaration);
+        await expect(pe.state!({ base: {}, reduce: (state: unknown) => state })).rejects.toThrow(
+          "pe-agent declaration",
+        );
+        expect(sent.some((row) => row.method === "PUT")).toBe(false);
+      },
+    );
 
     it("names the serving runtime on every door and never its own origin or target", async () => {
       const { pe, sent } = await page();

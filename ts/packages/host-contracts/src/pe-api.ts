@@ -1048,7 +1048,6 @@ export function peRouteTable<S extends PeApiSchemas>(schemas: S) {
       z.strictObject({
         seq: z.number().int().nonnegative(),
         text: z.string(),
-        agent: z.record(z.string(), z.string()),
       }),
       none,
       "human-or-page",
