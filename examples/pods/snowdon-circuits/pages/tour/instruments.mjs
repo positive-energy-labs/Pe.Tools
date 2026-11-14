@@ -43,9 +43,7 @@ function VoltageDrop() {
   const refresh = async () => {
     const target = await api.target(); setBound(target);
     const catalog = await api.read('revit.catalog.electrical-circuits', {});
-    const response = await api.do('script:@snowdon-circuits/src/Census.cs', { permissionMode: 'ReadOnly', timeoutSeconds: 60 });
-    if (response?.status !== 'Succeeded') throw new Error('Circuit census ' + (response?.status || 'returned no result') + ': ' + (response?.diagnostics || []).map(d => d.message).join('; '));
-    const values = response.data;
+    const values = await api.do('script:@snowdon-circuits/src/Census.cs', { permissionMode: 'ReadOnly', timeoutSeconds: 60 });
     if (!values || values.error) throw new Error(values?.error || 'Circuit census returned no data.');
     const current = await api.target();
     if (current.session !== target.session || current.openId !== target.openId) throw new Error('The binding changed during the reading. Read circuits again.');
@@ -89,8 +87,7 @@ function VoltageDrop() {
   const inspect = () => act('Inspecting selected circuit', async () => {
     await show(selected);
     const response = await api.do('script:@snowdon-circuits/src/InspectRun.cs', { permissionMode: 'ReadOnly', timeoutSeconds: 60 });
-    if (response?.status !== 'Succeeded') throw new Error('Inspect circuit ' + (response?.status || 'returned no result'));
-    setInspection({ source: 'script:@snowdon-circuits/src/InspectRun.cs', at: Date.now(), rows: response.data });
+    setInspection({ source: 'script:@snowdon-circuits/src/InspectRun.cs', at: Date.now(), rows: response });
     set('tab', 'trace');
   });
   const capture = () => act('Capturing selected circuit', async () => {
