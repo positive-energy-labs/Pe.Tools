@@ -18,7 +18,7 @@ import { z } from "zod";
 import { CommandRejected, StepFailure, io, nativeStep, refused, type CommandContext, type CommandExecutor } from "./command-executor.ts";
 import { scratchPageDirectory } from "./page-libraries.ts";
 import { resolveSdkSession, SdkSession } from "./sdk-session.ts";
-import { freezeScript, requireScriptSuccess } from "./operation-script.ts";
+import { freezeScript, requireScriptSuccess, runPodScript } from "./operation-script.ts";
 import { validateNativeInput } from "./native-input.ts";
 import { projectNativeOutput } from "./native-output.ts";
 import { isViewImage } from "@pe/agent-contracts/native-output-read";
@@ -82,7 +82,7 @@ const preparedGatewaySchema = z.discriminatedUnion("kind", [
 
 /** The gateway observes availability before invoking a public native action. */
 export const gatewayNativeLeaves = (key: string): readonly string[] =>
-  isTsOnlyOperationKey(key) ? [] : ["host.ops.catalog", key];
+  isTsOnlyOperationKey(key) ? [] : ["host.ops.catalog", ...(key === "scripting.execute" ? ["revit.detail.elements"] : []), key];
 
 /** A host-leaf operation, run on the journal-owned attempt fiber with the journal's services. */
 export type GatewayLocalContext = { receiptId: string; settingPath?: string; caller: import("@pe/agent-contracts").Caller };
@@ -430,7 +430,9 @@ export function gatewayExecutor(
           const target = admission.target;
           if (target.kind !== "document" && target.kind !== "session")
             return Effect.fail(refused("Native target required"));
-          const step = nativeStep(
+          const step = key === "scripting.execute" ? runPodScript(bridge,
+            target.kind === "document" ? target.ref : { session: target.session }, input, requestId,
+          ) : nativeStep(
             bridge,
             target.kind === "document" ? target.ref : { session: target.session },
             key,

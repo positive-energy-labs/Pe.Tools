@@ -106,6 +106,7 @@ export const refusalCodes = [
   "page.unbound",
   "page.binding-not-yours",
   "page.use-page-door",
+  "wrong-model",
 ] as const;
 export type RefusalCode = (typeof refusalCodes)[number];
 /** Request admission refuses before any door runs, with one of these or a `RefusalCode`. */
@@ -165,6 +166,7 @@ export type PageWrite =
 export const pageTargetReadingSchema = z.object({
   page: z.string(), slot: z.literal("default"), binding: pageChoiceSchema,
   resolution: z.discriminatedUnion("kind", [
+    z.object({ kind: z.literal("refused"), reason: z.literal("wrong-model"), message: z.string() }),
     z.object({ kind: z.literal("resolved"), target: executionTargetSchema }),
     z.object({ kind: z.literal("checking") }), z.object({ kind: z.literal("failed"), message: z.string() }),
     z.object({ kind: z.literal("choose"), reason: z.enum(["missing", "several-targets", "session-gone", "document-closed", "wrong-document-kind", "ambiguous"]) }),

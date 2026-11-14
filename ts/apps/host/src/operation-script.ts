@@ -10,8 +10,38 @@ import {
   isPackageMember,
   listPackages,
 } from "./packages.ts";
-import { StepFailure } from "./command-executor.ts";
+import { StepFailure, nativeStep, refused, io } from "./command-executor.ts";
+import { Effect } from "effect";
+import type { RevitBridge } from "./bridge.ts";
+import { podModelSchema, wrongPodModel } from "./pod-model.ts";
 import { requirePackageEnabled } from "./package-lifecycle.ts";
+
+/** Every Pod script door reaches this sealed bundle and exact target immediately before execution. */
+export function runPodScript(
+  bridge: RevitBridge["Service"],
+  target: { session: string; openId?: string | null },
+  input: Record<string, unknown>,
+  requestId: string,
+) {
+  return Effect.gen(function* () {
+    const captured = input.sourcePath != null && input.sourceBundle == null ? yield* io(() => freezeScript(input)) : undefined;
+    const sealedInput = captured ? { ...input, sourceBundle: captured.sourceBundle } : input;
+    const bundle = sealedInput.sourceBundle as ScriptingExecute.Req.ScriptPodSourceBundle | undefined;
+    const manifest = bundle?.files.find((file) => file.path === "pod.json");
+    if (manifest) {
+      const raw = JSON.parse(Buffer.from(manifest.bytesBase64, "base64").toString("utf8").replace(/^\uFEFF/, ""));
+      if (raw.for !== undefined) {
+        const model = podModelSchema.parse(raw.for);
+        const detail = yield* nativeStep(bridge, target, "revit.detail.elements", {
+          query: { kind: "ElementReferences", elementIds: model.probes.map((probe) => probe.elementId) },
+        });
+        const message = wrongPodModel(model, detail);
+        if (message) return yield* Effect.fail(refused(message, "wrong-model"));
+      }
+    }
+    return yield* nativeStep(bridge, target, "scripting.execute", sealedInput, requestId);
+  });
+}
 
 export function requireScriptSuccess(value: unknown): void {
   const status = value && typeof value === "object" && "status" in value ? value.status : undefined;
