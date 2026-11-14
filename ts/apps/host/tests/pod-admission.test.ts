@@ -172,7 +172,7 @@ test("B58: corrected bytes require their new trust and then admit on the next re
     const response = await f.inventory();
     expect(response.status).toBe(200);
     const row = (await response.json()).find((row: { packageId: string }) => row.packageId === "renamed");
-    expect(row).toMatchObject({ trusted: false, fingerprint: fixed.fingerprint, admission: { status: "untrusted" } });
+    expect.soft(row).toMatchObject({ trusted: false, fingerprint: fixed.fingerprint, admission: { status: "untrusted" } });
     await expect(f.routes.bundle(row.key, row.fingerprint)).rejects.toThrow("trust");
     expect((await f.trust("renamed", true, fixed.fingerprint)).status).toBe(200);
     const next = await f.inventory();
