@@ -10,6 +10,7 @@ import { importShippedPods } from "../src/installed-pods.ts";
 import { exportPod } from "../src/pod-transfer.ts";
 import { bindPackageScanLogger, capturePackage, listPackages } from "../src/packages.ts";
 import { createContributionContent } from "../src/pe-routes.ts";
+import { createPagesHandler } from "../src/pages-route.ts";
 import {
   bindPackageLifecycle,
   createPackageLifecycle,
@@ -23,6 +24,7 @@ vi.mock("node:fs/promises", async (original) => ({
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
   vi.useRealTimers();
   bindPackageScanLogger(() => {});
   bindPackageLifecycle(undefined);
@@ -160,5 +162,54 @@ test("the five-second lifecycle discovery bound includes its initial census", as
     await lifecycle.close();
     release.resolve({ packages: [], unreadable: [] });
     await lifecycle.ready;
+  }
+});
+
+test("a first Page request can spend 9999 ms in its two discovery waits", async () => {
+  const root = await mkdtemp(join(tmpdir(), "pe-first-page-bound-"));
+  const home = join(root, "home");
+  const pods = join(home, "Pods");
+  vi.stubEnv("PE_TOOLS_PRODUCT_HOME", home);
+  await mkdir(join(pods, "late", "pages", "tour"), { recursive: true });
+  await writeFile(join(pods, "late", "pod.json"), '{"id":"late","entrypoints":[]}');
+  await writeFile(join(pods, "late", "pages", "tour", "index.html"), "<title>Late</title>");
+  const releaseCensus = Promise.withResolvers<{ packages: []; unreadable: [] }>();
+  const lifecycle = createPackageLifecycle({ machine: stateMachine(root), packages: () => releaseCensus.promise });
+  bindPackageLifecycle(lifecycle);
+  const ready = lifecycle.ready;
+  const policyEntered = Promise.withResolvers<void>();
+  vi.spyOn(lifecycle, "ready", "get").mockImplementation(() => {
+    policyEntered.resolve();
+    return ready;
+  });
+  const entered = Promise.withResolvers<void>();
+  const releaseListing = Promise.withResolvers<void>();
+  const actual = filesystem.readdir;
+  vi.spyOn(filesystem, "readdir").mockImplementationOnce(async (...args) => {
+    entered.resolve();
+    await releaseListing.promise;
+    return actual(...args);
+  });
+  vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+  const started = Date.now();
+  let answered = false;
+  const handler = createPagesHandler([], pods, undefined, undefined, stateFixture(join(root, "page-state")));
+  const opening = handler(new Request("http://host/pages/late--tour/")).finally(() => { answered = true; });
+  try {
+    await entered.promise;
+    await vi.advanceTimersByTimeAsync(4_999);
+    releaseListing.resolve();
+    await policyEntered.promise;
+    await vi.advanceTimersByTimeAsync(4_999);
+    expect(answered).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    expect((await opening)?.status).toBe(404);
+    expect(Date.now() - started).toBe(9_999);
+  } finally {
+    releaseListing.resolve();
+    await lifecycle.close();
+    releaseCensus.resolve({ packages: [], unreadable: [] });
+    await ready;
+    await opening;
   }
 });
