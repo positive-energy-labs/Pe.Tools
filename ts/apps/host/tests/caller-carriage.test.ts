@@ -193,17 +193,24 @@ test("the harness, Page and route-state doors carry their caller through the rea
     expect((await at("POST", act, pea, { key: "x" })).code).toBe("page.binding-not-yours");
     humanReached(await at("POST", act, human, { key: "x" }));
     humanReached(await at("POST", act, page, { key: "x" }));
-    // POST /pages/:slug/events: each row's origin is the caller that carried it.
-    for (const headers of [human, page, pea])
-      expect((await at("POST", "/pages/carriage/events", headers, { n: 1 })).status).toBe(201);
-    const state = JSON.parse((await at("GET", "/pages/carriage/state", {})).text) as {
-      events: { origin: string }[];
-    };
-    expect(state.events.map((row) => row.origin)).toEqual([
-      "human",
-      "page:@pages/carriage",
-      "agent",
-    ]);
+    // C2 bounds only agent events; a person and a Page keep their own vocabulary.
+    const events = "/pages/carriage/events";
+    const undeclared = { type: "local-note", n: 1 };
+    for (const headers of [human, page]) {
+      const appended = await at("POST", events, headers, undeclared);
+      expect(appended.status, appended.text).toBe(201);
+    }
+    expect((await at("POST", events, pea, undeclared)).status).toBe(422);
+    const appended = await at("POST", events, pea, { type: "carriage", n: 1 });
+    expect(appended.status, appended.text).toBe(201);
+    const state: unknown = JSON.parse((await at("GET", "/pages/carriage/state", {})).text);
+    expect(state).toMatchObject({
+      events: [
+        { origin: "person", event: undeclared },
+        { origin: "page", event: undeclared },
+        { origin: "agent", event: { type: "carriage", n: 1 } },
+      ],
+    });
     // POST /pe/route-state/:route/:verb: the author is the carried caller.
     const write = "/pe/route-state/families/apply";
     const patch = { patches: [], expectedRevision: 0, press: crypto.randomUUID() };
