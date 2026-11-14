@@ -32,6 +32,7 @@ const discovery = new Map<string, {
   completed: boolean;
   startedAt: number;
   completedAt: number;
+  startedTick: number;
 }>();
 
 /** Shutdown cancels discovery; request expiry alone leaves a recoverable scan running. */
@@ -44,12 +45,14 @@ export async function discoverPackages(
   roots: PodsRoots,
   read: (roots: readonly string[], signal: AbortSignal) => Promise<PackageListing>,
   wait: "request" | "background",
+  /** performance.now() at the metadata read; an older snapshot cannot certify that signature. */
+  notBefore?: number,
 ): Promise<PackageListing> {
   const key = rootsKey(roots);
   let scan = discovery.get(key);
-  if (scan && (scan.completed
+  if (scan && ((notBefore !== undefined && scan.startedTick < notBefore) || (scan.completed
     ? wait === "background" || Date.now() - scan.completedAt >= packageDiscoveryTimeoutMs
-    : Date.now() - scan.startedAt >= packageScanMaxAgeMs)) {
+    : Date.now() - scan.startedAt >= packageScanMaxAgeMs))) {
     scan.stop.abort();
     discovery.delete(key);
     scan = undefined;
@@ -63,6 +66,7 @@ export async function discoverPackages(
       completed: false,
       startedAt: Date.now(),
       completedAt: 0,
+      startedTick: performance.now(),
     };
     current.promise = current.promise.then(listing => {
       stop.signal.throwIfAborted();

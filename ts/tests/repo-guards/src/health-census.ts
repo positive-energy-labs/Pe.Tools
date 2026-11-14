@@ -30,7 +30,7 @@ export const PER_FILE = ["casts", "nonNull", "fsWrites"] as const satisfies read
 export const OWNERS: Record<(typeof PER_FILE)[number], readonly string[]> = {
   casts: [],
   nonNull: [],
-  fsWrites: ["ts/packages/host-contracts/src/store.ts", "ts/apps/host/scripts/stage-web.ts"],
+  fsWrites: ["ts/packages/host-contracts/src/store.ts", "ts/packages/host-contracts/src/store-log.ts", "ts/apps/host/scripts/stage-web.ts"],
 };
 export const NAMES = ["casts", "nonNull", "suppressions", "todos", "longFiles", "fsWrites"] as const satisfies readonly (keyof Health)[];
 

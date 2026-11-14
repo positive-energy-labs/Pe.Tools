@@ -25,6 +25,7 @@ export {
   type StoredNotice,
 } from "./store.ts";
 export { writeGenerated } from "./store.ts";
+export { appendLinesBounded } from "./store-log.ts";
 
 const mintToken = Symbol("kind-mint");
 let mintGenerated: (root: string, segments: readonly string[]) => GeneratedFile;

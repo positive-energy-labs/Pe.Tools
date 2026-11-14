@@ -124,6 +124,7 @@ export async function activePackages(
 }
 
 /** Metadata only, using async IO so even a stalled share leaves the request loop free. */
+const metadataScanSlowMs = 500;
 async function podsDiskSignature(roots: readonly string[]): Promise<string | undefined> {
   const entries: unknown[] = [];
   const walk = async (absolute: string, member: string | undefined): Promise<void> => {
@@ -143,7 +144,13 @@ async function podsDiskSignature(roots: readonly string[]): Promise<string | und
     for (const root of roots) {
       entries.push(root);
       const started = performance.now();
-      logPackageDiscovery(`Pod folder metadata scan start folder=${JSON.stringify(root)}`);
+      let logged = false;
+      const startLog = () => {
+        if (logged) return;
+        logged = true;
+        logPackageDiscovery(`Pod folder metadata scan start folder=${JSON.stringify(root)}`);
+      };
+      const slowLog = setTimeout(startLog, metadataScanSlowMs);
       let outcome = "completed";
       try {
         await walk(root, undefined);
@@ -153,9 +160,13 @@ async function podsDiskSignature(roots: readonly string[]): Promise<string | und
         outcome = "missing";
         entries.push("missing");
       } finally {
-        logPackageDiscovery(
-          `Pod folder metadata scan end folder=${JSON.stringify(root)} durationMs=${Math.round(performance.now() - started)} outcome=${outcome}`,
-        );
+        clearTimeout(slowLog);
+        if (logged || outcome !== "completed" || performance.now() - started >= metadataScanSlowMs) {
+          startLog();
+          logPackageDiscovery(
+            `Pod folder metadata scan end folder=${JSON.stringify(root)} durationMs=${Math.round(performance.now() - started)} outcome=${outcome}`,
+          );
+        }
       }
     }
     // shortcut: an edit preserving file size and timestamps is missed; hash bytes to support it.
@@ -174,10 +185,6 @@ export function createPackageLifecycle(
     changed?: () => void;
   } = {},
 ) {
-  // Resolve homes once at startup, never by synchronous drive probing on a refresh request.
-  // Home roots resolve once at startup; the owner's ruling is that the host starts after a shared
-  // drive mounts, so a home mounting later is not watched.
-  const roots = options.packages ? [] : productPodsRoots();
   let diskSignature: string | undefined;
   let inFlight: Promise<Awaited<ReturnType<typeof listPackages>>> | undefined;
   let closed = false;
@@ -227,12 +234,15 @@ export function createPackageLifecycle(
   }
   async function synchronize() {
     if (closed) return initialListing;
+    // Re-resolve on a scan: a home mounting after startup must join the next census.
+    const roots = options.packages ? [] : productPodsRoots();
+    const signatureStartedAt = performance.now();
     const nextSignature = options.packages ? undefined : await podsDiskSignature(roots);
     if (closed) return initialListing;
     if (nextSignature !== undefined && nextSignature === diskSignature && initialListing)
       return initialListing;
     // Lifecycle owns publication after a slow scan; Page requests bound their own wait for it.
-    const listing = await (options.packages ? options.packages() : listPackages(roots, "background"));
+    const listing = await (options.packages ? options.packages() : listPackages(roots, "background", signatureStartedAt));
     if (closed) return initialListing;
     const current = new Set(listing.packages.map((p) => `pod:${p.id}`));
     for (const id of signatures.keys())
