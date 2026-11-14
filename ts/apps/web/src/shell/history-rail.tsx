@@ -106,7 +106,7 @@ export function RecordedPoints({
   const list = useList({ items, keyOf: item => item.id, search: item => ({ text: [item.label] }), select: "none" });
   return (
     <div>
-      <ListView list={list} aria-label="Recorded points"
+      <ListView list={list} aria-label="Recorded points" maxHeight="min(24rem, 60vh)"
         row={item => ({ label: <a data-point={item.id} href={item.pose && !item.refusal ? pointHref(item.point, item.pose.instance) : undefined}
           aria-disabled={!!item.refusal}>{item.label}</a>, meta: new Date(item.point.at).toLocaleString(),
           sub: item.refusal ? `Unavailable: ${item.refusal}` : undefined })}

@@ -33,7 +33,7 @@ export function GraphHistory({ owner }: { owner: TimelineOwner }) {
     {owner.timelineRefusal() && <div role="status">{owner.timelineRefusal()}</div>}
     {[...new Set(Object.values(owner.timeline()?.refusal ?? {}).filter((reason): reason is string => !!reason))]
       .map(reason => <OutcomeLine key={reason} kind="refused" label={reason} />)}
-    {(owner.timeline() || rows.length > 0) && <ListView list={list} aria-label="Timeline activity" row={row => ({ label: row.label, sub: row.sub, actions: row.actions, lines: 3 })}
+    {(owner.timeline() || rows.length > 0) && <ListView list={list} aria-label="Timeline activity" maxHeight="min(24rem, 60vh)" row={row => ({ label: row.label, sub: row.sub, actions: row.actions, lines: 3 })}
       empty={{ message: "No activity yet", exit: "Run a command or edit Work" }} />}
   </section>;
 }
