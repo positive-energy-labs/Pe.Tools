@@ -100,15 +100,18 @@ public class CmdPltCommands : IExternalCommand {
                                 Execute = item => {
                                     if (item is not PodScriptTaskItem pod) return;
                                     RevitReceipts.PaletteAction(ReceiptPaletteTab.Scripts, mode: ReceiptPaletteMode.ReadOnly);
-                                    PodScriptRunner.Run(uiapp, pod, ScriptPermissionMode.ReadOnly);
+                                    PodScriptRunner.Run(uiapp, pod, full: false);
                                 }
                             },
                             new PaletteAction<IPaletteListItem> {
                                 Name = "Run — full (can modify model)",
                                 Execute = item => {
                                     if (item is not PodScriptTaskItem pod) return;
-                                    RevitReceipts.PaletteAction(ReceiptPaletteTab.Scripts, mode: ReceiptPaletteMode.Write);
-                                    PodScriptRunner.Run(uiapp, pod, ScriptPermissionMode.WriteTransaction);
+                                    // A declared ReadOnly entrypoint is a read here too; the receipt says what ran.
+                                    RevitReceipts.PaletteAction(ReceiptPaletteTab.Scripts,
+                                        mode: pod.Entrypoint.RunMode(full: true) == ScriptPermissionMode.ReadOnly
+                                            ? ReceiptPaletteMode.ReadOnly : ReceiptPaletteMode.Write);
+                                    PodScriptRunner.Run(uiapp, pod, full: true);
                                 }
                             }
                         ) { FilterKeySelector = item => (item as PodScriptTaskItem)?.PodName ?? string.Empty }

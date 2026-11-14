@@ -38,7 +38,8 @@ public record ExecuteRevitScriptRequest(
     string? SourcePath = null,
     string WorkspaceKey = "default",
     string? SourceName = null,
-    ScriptPermissionMode PermissionMode = ScriptPermissionMode.ReadOnly,
+    // Absent, a Pod entrypoint runs in the mode pod.json declares for it, and anything else runs ReadOnly.
+    ScriptPermissionMode? PermissionMode = null,
     int TimeoutSeconds = 600,
     ScriptPodSourceBundle? SourceBundle = null,
     // Host-stamped over anything the input carried; a run with no stamp is the agent's and is held (ADR 0038).

@@ -1,5 +1,4 @@
-import { readFile } from "node:fs/promises";
-import { resolve, basename, dirname } from "node:path";
+import { resolve, basename, dirname, join } from "node:path";
 import { hostState } from "./host-ownership.ts";
 import { createHash } from "node:crypto";
 import { readSettingTiers } from "./tiered-settings.ts";
@@ -7,9 +6,12 @@ import { targetHomes } from "./call-route.ts";
 import { captureDirectory } from "./packages.ts";
 import { directorySnapshot } from "./command-reads.ts";
 import {
-  readZip,
   writeZip,
   installArchive,
+  promotedArchive,
+  readZip,
+  readArchive,
+  retireScratchPage,
   preparePodExport,
   writePodExport,
   archiveExportKind,
@@ -281,29 +283,23 @@ export function gatewayExecutor(
             break;
           }
           case "pod.import": {
-            const path = resolve(String(authored.archivePath));
-            const bytes = await readFile(path);
-            const entries = readZip(bytes);
-            const manifest = JSON.parse(entries.get("pod.json")?.toString("utf8") ?? "null") as {
-              id?: string;
-            } | null;
-            if (!manifest?.id) throw refused("Pod archive has no exact destination identity");
+            const { bytes, entries, id, archivePath: path } = await readArchive(String(authored.archivePath));
             consumes.push({
               kind: "file",
               probe: { path },
               expected: createHash("sha256").update(bytes).digest("hex"),
-              bytesBase64: bytes.toString("base64"),
             });
             effects.push(
               ...[...entries.keys()].map((path) => ({
                 kind: "member" as const,
-                pod: manifest.id!,
+                pod: id,
                 path,
               })),
             );
             payload = {
               kind: "host-leaf",
               archive: {
+                // Commit uses the admitted bytes even if the source is replaced or disappears.
                 bytesBase64: bytes.toString("base64"),
                 locator: path,
                 ...(typeof authored.folder === "string" ? { folder: authored.folder } : {}),
@@ -322,16 +318,21 @@ export function gatewayExecutor(
               probe: { path: source },
               expected: directorySnapshot(captured),
             });
-            const files = new Map<string, Buffer>([
-              [
-                "pod.json",
-                Buffer.from(
-                  `${JSON.stringify({ schemaVersion: 2, id: authored.id, name: authored.name ?? authored.page, version: "0.1.0", entrypoints: [] }, null, 2)}\n`,
-                ),
-              ],
-            ]);
-            for (const member of captured.members)
-              files.set(`pages/${String(authored.page)}/${member.path}`, Buffer.from(member.bytes));
+            const files = promotedArchive(
+              {
+                page: String(authored.page),
+                id: String(authored.id),
+                name: authored.name === undefined ? undefined : String(authored.name),
+              },
+              captured.members,
+            );
+            // The promote also removes these scratch files once the Pod holds them.
+            effects.push(
+              ...captured.members.map((member) => ({
+                kind: "file" as const,
+                path: join(source, member.path),
+              })),
+            );
             effects.push(
               ...[...files.keys()].map((path) => ({
                 kind: "member" as const,
@@ -406,15 +407,14 @@ export function gatewayExecutor(
             const { archive, export: exported } = prepared;
             if (archive)
               return io(async () => {
-                const installed = await installArchive(
-                  Buffer.from(archive.bytesBase64, "base64"),
-                  archive.locator,
-                  archive.folder,
-                  { captures: pictures },
-                );
-                return prepared.promotedPage
-                  ? { ...installed, key: `page:@${installed.id}/pages/${prepared.promotedPage}` }
-                  : installed;
+                const bytes = Buffer.from(archive.bytesBase64, "base64");
+                const installed = await installArchive(bytes, archive.locator, archive.folder, {
+                  captures: pictures,
+                });
+                if (!prepared.promotedPage) return installed;
+                // A promote moves: the locator is the scratch folder the archive was captured from.
+                await retireScratchPage(archive.locator, prepared.promotedPage, readZip(bytes));
+                return { ...installed, key: `page:@${installed.id}/pages/${prepared.promotedPage}` };
               });
             if (exported)
               return io(() => {

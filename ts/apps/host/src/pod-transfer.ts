@@ -1,7 +1,6 @@
 /** Transport consumes packages.ts's captured members; source bytes and local custody stay distinct. */
 import { randomUUID } from "node:crypto";
-import { constants } from "node:fs";
-import { copyFile, cp, lstat, mkdir, readFile, readdir, rename, rm, rmdir, stat } from "node:fs/promises";
+import { lstat, readFile, readdir, rm, rmdir, stat } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { crc32, deflateRawSync, inflateRawSync } from "node:zlib";
 import { message, packageIdSchema, packageMemberPathSchema } from "@pe/agent-contracts";
@@ -10,10 +9,9 @@ import { writeHome, writeState, homeKind, stateKind, type StateRoot, type Stored
 import { stateDirectory, stateTree } from "@pe/host-contracts/service-identity";
 import { hostState } from "./host-ownership.ts";
 import { z } from "zod";
-import type { PodExport, PodImport, PodPromote } from "@pe/host-contracts/operation-types";
+import type { PodExport, PodImport } from "@pe/host-contracts/operation-types";
 import { type PictureCaptures } from "./captures-route.ts";
 import {
-  captureDirectory,
   capturePackage,
   isPackageMember,
   listPackages,
@@ -22,7 +20,6 @@ import {
   type PackageListing,
 } from "./packages.ts";
 import { productPodsRootPath } from "./product-paths.ts";
-import { scratchPageDirectory } from "./page-libraries.ts";
 import { activateImportedPackage, reconcilePackageChanges } from "./package-lifecycle.ts";
 import { sha256Hex as sha256, validatePageHtml, writeArtifact } from "./page-artifacts.ts";
 import { StepFailure } from "./command-executor.ts";
@@ -266,17 +263,19 @@ async function closeCaptures(files: Map<string, Buffer>, store: PictureCaptures)
   return [...named.keys()].sort();
 }
 
-export async function importPod(
-  request: { archivePath: string; folder?: string },
-  options: TransferOptions = {},
-): Promise<PodImport> {
-  const archivePath = zipPath(request.archivePath);
-  const info = await stat(archivePath).catch((error) => { console.error("pod-transfer: asynchronous operation failed", error); return null; });
+/** Decode the import boundary once, before admission captures its destination or bytes. */
+export async function readArchive(path: string) {
+  const archivePath = zipPath(path);
+  const info = await stat(archivePath).catch((error: NodeJS.ErrnoException) => {
+    if (error.code !== "ENOENT" && error.code !== "ENOTDIR") throw error;
+    return null;
+  });
   if (!info?.isFile()) throw new TransferRefused(`No pod archive at ${archivePath}.`, 404);
   if (info.size > MAX_ARCHIVE_BYTES)
     throw new TransferRefused(`Pod archive exceeds ${MAX_ARCHIVE_BYTES} bytes.`);
-  const archive = await readFile(archivePath);
-  return installArchive(archive, archivePath, request.folder, options);
+  const bytes = await readFile(archivePath);
+  const entries = readZip(bytes);
+  return { bytes, entries, id: archiveId(entries), archivePath };
 }
 
 /**
@@ -433,33 +432,6 @@ export const importRecordKind = stateKind({
 export const importRecordFile = (id: string, owner: Pick<TransferOptions, "machine"> = {}) =>
   importRecordKind.in(owner.machine ?? hostState(), id);
 
-/**
- * Move a staged pod into its home whole. One volume: one rename. Across volumes (state on C:, the
- * home on another drive) a rename cannot be one step, so the copy lands `pod.json` last: a listing
- * admits a pod only by its manifest, and so never sees a half copy. A failed copy is removed.
- */
-export async function placePod(staged: string, directory: string, move = rename): Promise<void> {
-  await mkdir(dirname(directory), { recursive: true });
-  try {
-    return await move(staged, directory);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "EXDEV") throw error;
-  }
-  const manifest = join(staged, "pod.json");
-  try {
-    await cp(staged, directory, {
-      recursive: true,
-      errorOnExist: true,
-      force: false,
-      filter: (source) => source !== manifest,
-    });
-    await copyFile(manifest, join(directory, "pod.json"), constants.COPYFILE_EXCL);
-  } catch (error) {
-    await rm(directory, { recursive: true, force: true });
-    throw error;
-  }
-}
-
 /** The manifest id an archive claims; refuses an archive without a valid, unreserved one. */
 export function archiveId(entries: ReadonlyMap<string, Buffer>): string {
   const manifest = entries.get("pod.json");
@@ -479,37 +451,43 @@ export function archiveId(entries: ReadonlyMap<string, Buffer>): string {
   return parsed.data;
 }
 
-/**
- * Wrap a scratch Page (`Pages/<page>/`) as a new Pod `<id>` holding `pages/<page>/`, byte for byte.
- * The scratch Page stays. Page state is machine state under the state root (homes freeze shape 7),
- * so none of it travels: the promoted Page starts unbound with an empty log.
- */
-export async function promotePage(
-  request: { page: string; id: string; name?: string },
-  options: TransferOptions = {},
-): Promise<PodPromote> {
-  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(request.page))
-    throw new TransferRefused(`'${request.page}' is not a scratch Page slug.`, 400);
-  const id = packageIdSchema.safeParse(request.id);
-  if (!id.success)
-    throw new TransferRefused(`'${request.id}' is not a valid, unreserved pod id.`, 400);
-  const found = await scratchPageDirectory(request.page, options.pagesRoot);
-  if (!found) throw new TransferRefused(`'${request.page}' is not a scratch Page slug.`, 400);
-  const source = found.dir;
-  if (!(await lstat(join(source, "index.html")).catch((error) => { console.error("pod-transfer: asynchronous operation failed", error); return null; }))?.isFile())
-    throw new TransferRefused(`No scratch Page '${request.page}' (no index.html).`, 404);
-  const page = await captureDirectory(source);
-  const errors = page.diagnostics.filter((d) => d.severity === "error");
-  if (errors.length)
-    throw new TransferRefused(errors.map((d) => `${d.path}: ${d.message}`).join("; "));
+/** The archive a scratch Page becomes: a new `pod.json` plus `pages/<page>/`, byte for byte. */
+export function promotedArchive(
+  request: { page: string; id: string; name?: string | undefined },
+  members: readonly { path: string; bytes: Uint8Array }[],
+): Map<string, Buffer> {
   const manifest = Buffer.from(
-    `${JSON.stringify({ schemaVersion: 2, id: id.data, name: request.name ?? request.page, version: "0.1.0", entrypoints: [] }, null, 2)}\n`,
+    `${JSON.stringify({ schemaVersion: 2, id: request.id, name: request.name ?? request.page, version: "0.1.0", entrypoints: [] }, null, 2)}\n`,
   );
   const files = new Map<string, Buffer>([["pod.json", manifest]]);
-  for (const member of page.members)
+  for (const member of members)
     files.set(`pages/${request.page}/${member.path}`, Buffer.from(member.bytes));
-  const installed = await installArchive(writeZip(files), source, id.data, options);
-  return { ...installed, key: `page:@${installed.id}/pages/${request.page}` };
+  return files;
+}
+
+/**
+ * The second half of a promote, run only after the Pod is installed: remove the scratch files the Pod
+ * now holds, so one Page has one home. A file is removed only while its bytes still equal the installed
+ * copy; one edited since the capture, and anything the Pod did not take, stays where it is.
+ */
+export async function retireScratchPage(
+  source: string,
+  page: string,
+  installed: ReadonlyMap<string, Buffer>,
+): Promise<void> {
+  const prefix = `pages/${page}/`;
+  const folders = new Set([source]);
+  for (const [path, bytes] of installed) {
+    if (!path.startsWith(prefix)) continue;
+    const file = join(source, path.slice(prefix.length));
+    if (!(await readFile(file).catch(() => null))?.equals(bytes)) continue;
+    await rm(file);
+    for (let folder = dirname(file); folder.length > source.length; folder = dirname(folder))
+      folders.add(folder);
+  }
+  // Deepest first; a folder that still holds something refuses and is left.
+  for (const folder of [...folders].sort((a, b) => b.length - a.length))
+    await rmdir(folder).catch(() => {});
 }
 
 const DOS_DATE = (1 << 5) | 1; // 1980-01-01: archives hash the same for the same bytes.

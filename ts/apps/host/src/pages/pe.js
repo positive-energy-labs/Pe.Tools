@@ -7,7 +7,8 @@
  *   await pe.do("revit.context.show-elements", { elementIds: [1234] });   // run a mutation as this page; waits until it settles
  *   await pe.script("checks/census.csx", { input: { level: "L2" } });   // run the Pod's declared script; the answer is its Result(...)
  *   await pe.do("script:@snowdon-ducts/src/Census.cs");  // the same call by key, the key Pea runs too
- *   const k = await pe.state({ reduce, base, render, describe, agent }); // one shared event log
+ *   const k = await pe.state({ reduce, base, render, describe }); // one shared event log
+ *   // Declare agent events in HTML: <script type="application/json" id="pe-agent">{"verdict":"passed and explanation"}</script>
  *   await pe.picture([1234]);                            // lens then view-image: { url, sha, at, viewId, viewName, registration }
  *   await pe.reading("checks/census.csx", run);          // one reading: { source, at, rows } with rows = what `run()` answered
  *   await pe.diff({ script: "heals/taps.csx" }, ["Mark"]);   // run it and answer what it changed: elements and before/after rows
@@ -25,24 +26,50 @@
 (() => {
   /*pe:offline-state:start*/
   // The export embeds this same reducer/replay path with an offline transport.
-  // reduce(state, event, { origin, seq, at }); agent: { type: "meaning and fields" }.
+  // reduce(state, event, { origin, seq, at }); declare agent events in script#pe-agent[type="application/json"].
   // k.fire(event) waits for a committed row; nav and local event types stay in this tab.
   function installPageState(pe, io) {
     let mounted = false;
-    pe.state = async ({
-      reduce,
-      base,
-      render = () => {},
-      describe = () => "",
-      local = [],
-      agent = {},
-    }) => {
+    // Exception to no shims: these refuse in words; they never run a compatibility path.
+    const retired = (name) => {
+      const message = `This Page uses ${name}, which Pe removed on 2026-11-14. Its state is now one call, pe.state({ reduce, base, render, describe }). Ask Pea to update this Page.`;
+      io.refuse?.(message);
+      throw Error(message);
+    };
+    pe.kernel = () => retired("pe.kernel");
+    pe.describe = () => retired("pe.describe");
+    pe.state = async (options, ...legacy) => {
+      if (legacy.length || typeof options?.fire === "function") retired("pe.state(k, {local})");
+      const { reduce, base, render = () => {}, describe = () => "", local = [] } = options;
       if (mounted) throw Error("pe.state may be called only once per Page");
       mounted = true;
+      const block = document.getElementById("pe-agent");
+      let agent;
+      try {
+        agent = block ? JSON.parse(block.textContent) : {};
+      } catch (error) {
+        throw Error(`Invalid pe-agent declaration in this Page's index.html: ${error.message}`);
+      }
+      if (
+        block &&
+        (block.tagName !== "SCRIPT" ||
+          block.type !== "application/json" ||
+          agent === null ||
+          typeof agent !== "object" ||
+          Array.isArray(agent) ||
+          Object.entries(agent).some(
+            ([type, description]) =>
+              !type ||
+              typeof description !== "string" ||
+              !description.trim() ||
+              /[\r\n]/.test(description),
+          ))
+      )
+        throw Error("Invalid pe-agent declaration in this Page's index.html");
       const k = { state: base };
       let seq = 0;
       let queue = Promise.resolve();
-      const publish = () => io.publish({ seq, text: String(describe(k.state)), agent });
+      const publish = () => io.publish({ seq, text: String(describe(k.state)) });
       const apply = (row) => {
         if (row.seq <= seq) return;
         k.state = reduce(k.state, row.event, { origin: row.origin, seq: row.seq, at: row.at });
@@ -505,7 +532,9 @@
     }, 2000);
   };
   installPageState(pe, {
-    load: (after = 0) => client.response("page.state", { ...pageInput(), query: { after } }).then(json),
+    refuse: banner,
+    load: (after = 0) =>
+      client.response("page.state", { ...pageInput(), query: { after } }).then(json),
     append: (event) => client.response("page.append", pageInput(event)).then(json),
     publish: async (projection) => {
       const r = await client.response("page.text", pageInput(projection));
