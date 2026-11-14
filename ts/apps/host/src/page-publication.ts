@@ -163,7 +163,7 @@ async function capturePage(
                 // The Page's own URL ends in `/`: it has no extension, and it is the document.
                 value:
                   request.url === url
-                    ? PAGE_MEDIA[".html"]!
+                    ? "text/html; charset=utf-8"
                     : (PAGE_MEDIA[extname(destination.pathname)] ?? "application/octet-stream"),
               },
               // Service workers require HTTP(S) script URLs; only self-contained compute workers
