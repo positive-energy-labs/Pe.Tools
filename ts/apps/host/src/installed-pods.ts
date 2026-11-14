@@ -324,7 +324,7 @@ async function offer(
             ? error.message : "its provenance could not be verified";
           shippedPodUpdateRefusals.set(
             id,
-            `${installed.name} was kept with your changes. Only the example update was skipped because ${reason}. To take the update, import the current example into a separate workspace beside this Pod.`,
+            `${installed.name} was kept with your changes. Only the example update was skipped because ${reason}. To take the update, import the current example into a separate workspace beside this Pod, or undo your local edits and the next start takes the update.`,
           );
         }
       }

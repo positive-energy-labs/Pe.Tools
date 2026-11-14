@@ -135,6 +135,8 @@ export const projectPodsRoot = (pointer: string | null | undefined) => {
 const claimedTwice = (id: string, twins: readonly Pick<AdmittedPackage, "directory">[]) =>
   `Pod id '${id}' is claimed by ${twins.map((twin) => twin.directory).join(" and ")}: none is used until the id is unique.`;
 
+export const packageDiscoveryTimeoutMs = 5_000;
+
 /**
  * Read once per snapshot. Hashes, projection, and capture all refer to these exact bytes. A pod id
  * is unique across homes (ADR 0037 rule 4): an id claimed twice, in one Pods folder or in two
@@ -154,10 +156,10 @@ export async function listPackages(
           stop.abort();
           reject(
             Error(
-              `Pod discovery exceeded 5000 ms listing ${roots.join(", ")}. Try again when the folder is available.`,
+              `Pod discovery exceeded ${packageDiscoveryTimeoutMs} ms listing ${roots.join(", ")}. Try again when the folder is available.`,
             ),
           );
-        }, 5_000);
+        }, packageDiscoveryTimeoutMs);
       }),
     ]);
   } finally {
@@ -166,7 +168,6 @@ export async function listPackages(
 }
 
 let scanLog = (_message: string) => {};
-export const logPackageDiscovery = (message: string) => scanLog(message);
 /** Bound at host composition to the same Effect logger as other host diagnostics. */
 export function bindPackageScanLogger(log: (message: string) => void) {
   scanLog = log;

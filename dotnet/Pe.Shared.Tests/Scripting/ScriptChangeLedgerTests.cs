@@ -156,4 +156,22 @@ public sealed class ScriptChangeLedgerTests {
             Assert.That(ScriptChangeLedger.GroupRefusal(Source("// doc.Save();\nvar text = \"x.Save()\";")), Is.Null);
         });
     }
+    [Test]
+    public void A_read_only_runs_failures_are_rolled_back_even_when_the_guard_committed() {
+        const string guard = "PeSandbox::Pe Script ReadOnly";
+        var failures = ScriptChangeLedger.Failures(ScriptPermissionMode.ReadOnly, [[guard]], [Failure(guard, 0)]);
+
+        Assert.That(failures.Single().Outcome, Is.EqualTo(ScriptFailureOutcome.RolledBack));
+    }
+
+    [Test]
+    public void The_same_failure_in_two_attempts_stays_two_failures() {
+        var failures = ScriptChangeLedger.Failures(Write, [["Other"], ["Set"]], [
+            Failure("Set", 0), Failure("Set", 1)
+        ]);
+
+        Assert.That(failures.Select(failure => failure.Outcome), Is.EqualTo(new[] {
+            ScriptFailureOutcome.RolledBack, ScriptFailureOutcome.Committed
+        }));
+    }
 }

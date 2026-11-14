@@ -299,7 +299,7 @@ export function gatewayExecutor(
             payload = {
               kind: "host-leaf",
               archive: {
-                // Commit uses the admitted bytes even if the source is replaced or disappears.
+                // Commit installs the admitted bytes; a changed or missing source is refused as stale.
                 bytesBase64: bytes.toString("base64"),
                 locator: path,
                 ...(typeof authored.folder === "string" ? { folder: authored.folder } : {}),
