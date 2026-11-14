@@ -11,6 +11,8 @@ export async function pickFansWriteScope(
   const scope = '[data-choice-cell="Write scope"]';
   const label = fan.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   await press(scope, `^(None|${label} · )`);
-  await press('[role="listbox"]', `^${label} · \\d+ staged`);
+  // The choice cell's own popup (kit cell.tsx), not the first listbox shown: with Pea open, that is
+  // its threads list (D39, J6 at b83d4da7).
+  await press('[role="listbox"][aria-label="options"]', `^${label} · \\d+ staged`);
   await wait(scope, `^${label} · `);
 }
