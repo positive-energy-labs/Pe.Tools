@@ -25,6 +25,7 @@ import * as store from "@pe/host-contracts/kinds";
 import { RouteWorkspace } from "@pe/runtime";
 import { peRouteUrl } from "@pe/agent-contracts/pe-api";
 import { createPagesHandler } from "../src/pages-route.ts";
+import { setTimeout as realSetTimeout, clearTimeout as realClearTimeout } from "node:timers";
 
 test("a healthy local read completing after 1200 ms is not refused", async () => {
   await putRoute(join(root, "user"));
@@ -635,6 +636,87 @@ test("an unknown Pod waits at most five seconds for a stalled refresh", async ()
   } finally {
     release.resolve();
     vi.useRealTimers();
+    await lifecycle.close();
+    bindPackageLifecycle(content.lifecycle);
+  }
+});
+
+test("a known Page answers while an unrelated late Pod waits for discovery", async () => {
+  await put(join(root, "user"), "existing/pages/tour/index.html", "<title>Existing tour</title>");
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  let calls = 0;
+  const lifecycle = createPackageLifecycle({
+    machine: stateMachine(root),
+    packages: async () => {
+      const listing = await packages.listPackages(join(root, "user/Pods"));
+      if (++calls > 1) {
+        entered.resolve();
+        await release.promise;
+      }
+      return listing;
+    },
+  });
+  await lifecycle.ready;
+  bindPackageLifecycle(lifecycle);
+  const scan = lifecycle.requestRefresh();
+  await entered.promise;
+  await put(join(root, "user"), "late/pod.json", '{"id":"late"}');
+  const handle = createPagesHandler(join(root, "user/Pages"), packages.productPodsRoots(),
+    undefined, undefined, stateFixture(join(root, "page-state")));
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  let timer: ReturnType<typeof realSetTimeout> | undefined;
+  const opening = handle(new Request("http://host/pages/existing--tour/"));
+  try {
+    const response = await Promise.race([
+      opening,
+      new Promise<never>((_, reject) => {
+        timer = realSetTimeout(() => reject(Error("Known Page waited for unrelated discovery")), 1000);
+      }),
+    ]);
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain("Existing tour");
+    expect(lifecycle.active("late")).toBe(false);
+  } finally {
+    realClearTimeout(timer);
+    release.resolve();
+    vi.useRealTimers();
+    await scan;
+    await opening;
+    await lifecycle.close();
+    bindPackageLifecycle(content.lifecycle);
+  }
+});
+
+test("a missed door queues fresh discovery behind a scan captured before arrival", async () => {
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  let calls = 0;
+  const lifecycle = createPackageLifecycle({
+    machine: stateMachine(root),
+    packages: async () => {
+      ++calls;
+      if (calls === 2) {
+        entered.resolve();
+        await release.promise;
+      }
+      if (calls <= 2) return { packages: [], unreadable: [] };
+      return packages.listPackages(join(root, "user/Pods"));
+    },
+  });
+  await lifecycle.ready;
+  bindPackageLifecycle(lifecycle);
+  try {
+    lifecycle.requestRefresh();
+    await entered.promise;
+    await put(join(root, "user"), "late/pod.json", '{"id":"late"}');
+    const opening = requirePackageEnabled("late");
+    await new Promise((resolve) => setImmediate(resolve));
+    release.resolve();
+    await expect(opening).resolves.toBeUndefined();
+    expect(calls).toBe(3);
+  } finally {
+    release.resolve();
     await lifecycle.close();
     bindPackageLifecycle(content.lifecycle);
   }
