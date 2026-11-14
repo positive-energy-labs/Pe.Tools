@@ -85,6 +85,22 @@ test.each([{ input: [] }, { input: { sourceBundle: { files: "invalid" } } }])(
   },
 );
 
+test("/call refuses case-twin native keys before read admission or bridge dispatch", async () => {
+  await withCall(async (send, calls) => {
+    const response = await send({
+      scriptContent: "Result(1);",
+      permissionMode: "ReadOnly",
+      PermissionMode: "NoTransaction",
+    });
+    expect(response.status, await response.clone().text()).toBe(400);
+    expect(await response.json()).toMatchObject({
+      kind: "InvalidRequest",
+      message: expect.stringContaining("must NOT have additional properties"),
+    });
+    expect(calls).toEqual([]);
+  });
+});
+
 async function withCall(
   run: (
     send: (input: unknown, scoped?: boolean) => Promise<Response>,

@@ -82,7 +82,7 @@ export async function bootHost(options: Pick<Partial<import("../src/app.ts").Htt
   mkdirSync(join(home, productPathNames.pagesDirectoryName, "carriage"), { recursive: true });
   writeFileSync(
     join(home, productPathNames.pagesDirectoryName, "carriage", "index.html"),
-    "<!doctype html><title>carriage</title>",
+    '<!doctype html><title>carriage</title><script type="application/json" id="pe-agent">{"count":"Record n, a count."}</script>',
   );
   const prior = {
     LOCALAPPDATA: process.env.LOCALAPPDATA,
