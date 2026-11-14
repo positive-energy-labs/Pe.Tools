@@ -22,6 +22,9 @@ const sourceBundleSchema = z.object({
   files: z.array(z.object({ path: z.string(), bytesBase64: z.string() })),
 });
 
+/** One sentence for both doors that refuse a script with no exact document: this one and `/call`'s admission. */
+export const scriptNeedsDocument = "A script run needs one exact open document target; choose a document before running it.";
+
 /** Every Pod script door reaches this sealed bundle and exact target immediately before execution. */
 export function runPodScript(
   bridge: RevitBridge["Service"],
@@ -31,7 +34,7 @@ export function runPodScript(
 ) {
   return Effect.gen(function* () {
     if (!target.openId)
-      return yield* Effect.fail(refused("A script run needs one exact open document target; choose a document before running it."));
+      return yield* Effect.fail(refused(scriptNeedsDocument));
     const captured = input.sourcePath != null && input.sourceBundle == null
       ? yield* io(() => freezeScript(input)).pipe(Effect.mapError((error) => error instanceof CommandRejected ? error : refused(error instanceof Error ? error.message : String(error))))
       : undefined;

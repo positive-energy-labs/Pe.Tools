@@ -205,38 +205,9 @@ export function gatewayExecutor(
               })),
             );
           }
-          const scriptSession = session;
-          const documents = scriptSession.state?.openDocuments;
-          if (!documents) throw refused("Scripts require a complete sibling document census");
-          consumes.push({
-            kind: "census",
-            // This observation uses bridge lifetime ids; the incarnation probe pins its process.
-            probe: { session: session.sessionId },
-            expected: documents.map((doc) => doc.openId).sort(),
-          });
-          effects.push(
-            ...documents
-              .filter(
-                (doc) =>
-                  !(
-                    readTarget &&
-                    (caller.kind === "pea" ||
-                      (caller.kind === "page" &&
-                        readTarget.session === scriptSession.sessionId &&
-                        readTarget.openId === doc.openId))
-                  ),
-              )
-              .map((doc) => ({
-                kind: "document" as const,
-                ref: { session: scriptSession.sessionId, openId: doc.openId },
-              })),
-          );
-          admitScript(
-            caller,
-            documents.map((doc) => ({ session: scriptSession.sessionId, openId: doc.openId })),
-            "/actions",
-            readTarget,
-          );
+          if (!target) throw refused("Scripts require an exact document target");
+          // The run is fenced natively to its target, so its footprint is that document alone.
+          effects.push(...admitScript(caller, target, "/actions", !!readTarget));
         } else
           effects.push(
             target

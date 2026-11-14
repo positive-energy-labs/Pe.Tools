@@ -11649,7 +11649,9 @@ export namespace ScriptingExecute {
      * `Summary` says the same in one sentence, and says so when Revit rolled back what the run tried to commit.
      * `Undo` names the single entry Ctrl+Z in Revit undoes; when it is null on a run that kept changes,
      * `Ungrouped` says why the run's transactions are separate undo entries. `Overlapped` is true when another
-     * call ran at the same time: the lists may then include that call's changes.
+     * call ran at the same time: the lists may then include that call's changes. A script changes only the
+     * document it runs on: what it commits in another document that was already open is rolled back, and
+     * `Summary` says so.
      *
      */
     export interface ScriptChanges {
@@ -11672,6 +11674,8 @@ export namespace ScriptingExecute {
     }
     /**
      * One failure in Revit's words. `DefinitionId` is Revit's failure definition GUID; `Severity` is Warning, Error or DocumentCorruption.
+     * A commit the run made in another open document, which was rolled back, is one row in the host's words with an empty `DefinitionId`.
+     *
      */
     export interface ScriptFailure {
       message: string;
