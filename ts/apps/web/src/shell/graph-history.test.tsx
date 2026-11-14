@@ -10,12 +10,44 @@ import { scrollBody } from "../route/body";
 import { BandOutlet, RouteControlsProvider } from "../navigation/route-controls";
 import { createFixtureWorkDoor } from "./fixture-work-door";
 import { GraphHistory } from "./graph-history";
-import type { TimelineOwner } from "./situation-band";
+import { TimelineHead, type TimelineOwner } from "./situation-band";
 import { TypedChrome } from "./typed-shell";
 import { mountTypedRoute } from "./typed-mount";
 import { createTimelineClient } from "./work-feed-client";
+import { RecordedPoints } from "./history-rail";
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+
+test("the shell Timeline popover keeps activity in its own Scroll", () => {
+  // D31: removing GraphHistory's maxHeight reproduces assertScrollOwner's popover exception.
+  // jsdom does not load Tailwind: supply the popover's real overflow rule.
+  const css = document.createElement("style");
+  css.textContent = '[data-slot="popover-content"] { overflow-y: auto; }';
+  document.head.append(css);
+  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null);
+  vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
+  const timeline = workTimelineSchema.parse({ rows: [], undo: null, redo: null, refusal: { undo: null, redo: null } });
+  const owner: TimelineOwner = {
+    subscribe: () => () => {}, revision: () => 0, timeline: () => timeline,
+    timelineRefusal: () => null, reviewProblem: () => null, stepTimeline: async () => null,
+    pendingEdits: () => [], discardIntent: () => {}, stopCommand: async () => { throw Error("No running command"); },
+  };
+  try {
+    render(<TimelineHead owner={owner} history={<>
+      <RecordedPoints document={null} route="fans" compare={false}
+        address={{ read: () => new URLSearchParams(), write: () => {}, subscribe: () => () => {} }} />
+      <GraphHistory owner={owner} />
+    </>} />);
+    fireEvent.click(screen.getByRole("button", { name: "Open the Timeline" }));
+    const activity = screen.getByRole("region", { name: "Timeline activity" });
+    const list = activity.querySelector("[data-list-view]");
+    expect(list).not.toBeNull();
+    expect(list?.closest("[data-scroll]")).not.toBeNull();
+    expect(activity.contains(list?.closest("[data-scroll]") ?? null)).toBe(true);
+    const recorded = screen.getByLabelText("Recorded points");
+    expect(recorded.closest("[data-scroll]")).not.toBeNull();
+  } finally { cleanup(); css.remove(); vi.restoreAllMocks(); vi.unstubAllGlobals(); }
+});
 
 test.each(["applied", "undone"])("consumed %s edits retain their state, and only Pea's edit says rejected", (state) => {
   const work = bindWork("notes", null, "one");
