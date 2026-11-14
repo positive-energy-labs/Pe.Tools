@@ -10,28 +10,10 @@ namespace Pe.Revit.Tests;
 
 [TestFixture]
 public sealed class ShippedPodCompilationTests {
-    // Keep this ledger explicit: caller policy is not stored in pod.json. It is the policy of the
-    // first-boot shipped entrypoint, not an inferred property of its source text.
-    private static readonly IReadOnlyDictionary<(string Pod, string Entrypoint), ScriptPermissionMode> EntrypointPolicies =
-        new Dictionary<(string Pod, string Entrypoint), ScriptPermissionMode> {
-            [("document-profiler", "src/MechanicalPlanCensus.cs")] = ScriptPermissionMode.ReadOnly,
-            [("document-profiler", "src/Profile.cs")] = ScriptPermissionMode.ReadOnly,
-            [("document-profiler", "src/ReadCostCensus.cs")] = ScriptPermissionMode.NoTransaction,
-            [("document-profiler", "src/DeletionExperiment.cs")] = ScriptPermissionMode.NoTransaction,
-            [("document-profiler", "src/SaveVariant.cs")] = ScriptPermissionMode.NoTransaction,
-            [("document-profiler", "src/ViewOpenProbe.cs")] = ScriptPermissionMode.NoTransaction,
-            [("snowdon-circuits", "src/Census.cs")] = ScriptPermissionMode.ReadOnly,
-            [("snowdon-circuits", "src/InspectRun.cs")] = ScriptPermissionMode.ReadOnly,
-            [("snowdon-ducts", "src/Census.cs")] = ScriptPermissionMode.ReadOnly,
-            [("snowdon-ducts", "src/InspectRun.cs")] = ScriptPermissionMode.ReadOnly,
-            [("snowdon-ducts", "src/CoefficientExperiment.cs")] = ScriptPermissionMode.NoTransaction
-        };
-
     [Test]
     public void Every_first_boot_shipped_pod_entrypoint_compiles_under_its_shipped_policy() {
         var root = FindRepositoryRoot();
         var examples = Path.Combine(root, "examples", "pods");
-        var exercised = new HashSet<(string Pod, string Entrypoint)>();
         var references = MetadataReferences();
         var projectUsings = Array.Empty<string>();
         var compiler = new ScriptCompilationService(ScriptFileTemplates.DefaultUsings);
@@ -42,10 +24,11 @@ public sealed class ShippedPodCompilationTests {
             var manifest = PodManifestValidator.ValidateJson(File.ReadAllText(Path.Combine(folder, "pod.json"))).Manifest
                 ?? throw new AssertionException($"Shipped Pod '{folder}' has an invalid manifest.");
             foreach (var entrypoint in manifest.Entrypoints) {
-                Assert.That(EntrypointPolicies.TryGetValue((manifest.Id, entrypoint.SourcePath), out var mode), Is.True,
-                    $"Shipped Pod '{manifest.Id}' entrypoint '{entrypoint.SourcePath}' has no explicit shipped policy.");
+                // pod.json declares each shipped entrypoint's mode (contract C1); a shipped one never leaves it to the caller.
+                Assert.That(entrypoint.Mode, Is.Not.Null,
+                    $"Shipped Pod '{manifest.Id}' entrypoint '{entrypoint.SourcePath}' declares no mode in pod.json.");
+                var mode = entrypoint.Mode!.Value;
 
-                exercised.Add((manifest.Id, entrypoint.SourcePath));
                 var normalized = ScriptPodSourceNormalizer.Normalize(bundle, manifest.Id, entrypoint.SourcePath);
                 var selected = ScriptSourceClosure.Select(
                     normalized.SourceSet,
@@ -69,17 +52,24 @@ public sealed class ShippedPodCompilationTests {
                     $"Shipped Pod '{manifest.Id}' entrypoint '{entrypoint.SourcePath}' compile failed: {Diagnostics(result.Diagnostics)}");
             }
         }
-        Assert.That(exercised, Is.EquivalentTo(EntrypointPolicies.Keys), "Every declared shipped entrypoint must be exercised.");
     }
 
     // The bundle production hands C#: capturePackage's sourceBundle, filtered by isCompilerInput
-    // (ts/apps/host/src/packages.ts:65): pod.json, PeScripts.csproj and src/**/*.cs. Never the whole folder:
-    // a pod that is a pnpm workspace member holds node_modules junctions into the TS workspace (~400k files).
+    // (ts/apps/host/src/packages.ts): pod.json, PeScripts.csproj and every .cs and .csx member. Never the whole
+    // folder: a pod that is a pnpm workspace member holds node_modules junctions into the TS workspace (~400k
+    // files), so the walk skips the folders the host's capture skips.
+    private static readonly HashSet<string> Debris = new(StringComparer.OrdinalIgnoreCase) {
+        ".state", "output", "bin", "obj", "node_modules", ".git", ".vs", ".idea", ".cache", "cache", "dist", ".artifacts"
+    };
+
+    private static IEnumerable<string> Scripts(string directory) => Directory.EnumerateFiles(directory)
+        .Where(ScriptingSourcePath.IsScript)
+        .Concat(Directory.EnumerateDirectories(directory)
+            .Where(child => !Debris.Contains(Path.GetFileName(child))).SelectMany(Scripts));
+
     private static ScriptPodSourceBundle Capture(string folder) => new(
         new[] { "pod.json", "PeScripts.csproj" }.Select(name => Path.Combine(folder, name)).Where(File.Exists)
-            .Concat(Directory.Exists(Path.Combine(folder, "src"))
-                ? Directory.EnumerateFiles(Path.Combine(folder, "src"), "*.cs", SearchOption.AllDirectories)
-                : Enumerable.Empty<string>())
+            .Concat(Scripts(folder))
             .OrderBy(path => path, StringComparer.Ordinal)
             .Select(path => new ScriptPodSourceFile(
                 Path.GetRelativePath(folder, path).Replace(Path.DirectorySeparatorChar, '/'),

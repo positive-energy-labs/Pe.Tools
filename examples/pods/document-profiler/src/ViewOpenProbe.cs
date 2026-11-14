@@ -2,6 +2,7 @@ public sealed class ViewOpenProbe : PeScriptContainer
 {
     public override void Execute()
     {
+        ProfilerSettings.FromInput((name, fallback) => Arg(name, fallback));
         if (doc == null || uidoc == null) throw new ArgumentException("Requires the active windowed document in an owned foreground session.");
         Interventions.GuardCopy(doc, ProfilerSettings.EnableViewOpenProbe);
         if (ProfilerSettings.ViewUniqueIds.Length == 0) throw new ArgumentException("Supply explicit ViewUniqueIds.");

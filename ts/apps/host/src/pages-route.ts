@@ -96,7 +96,7 @@ import { stateDirectory } from "@pe/host-contracts/service-identity";
 
 /**
  * Each library file beside its source on the dev lane, so an edit is live on the next request;
- * staged under `<exeDir>/pages` when installed (`scripts/stage-web.mjs`).
+ * staged under `<exeDir>/pages` when installed (`scripts/stage-web.ts`).
  */
 const assetPath = (name: string) => {
   const source = Object.entries(PAGE_LIBRARY_SOURCES).find(([file]) => file === name)?.[1];
@@ -776,10 +776,11 @@ export function createPagesHandler(
   }
 
   /**
-   * The operation a page's act names. A host op runs as sent. A contribution key runs only as a
-   * declared script of an admitted package: `scripting.execute` over that package's captured bytes,
-   * the same frozen input Pea's dispatch sends. The target is the binding's, so a page-sent
-   * selector, bundle or source path is dropped; only the run's mode and timeout pass.
+   * The operation a page's act names. A host op runs as sent, whole. A contribution key runs only
+   * as a declared script of an admitted package: `scripting.execute` over that package's captured
+   * bytes. The target is the binding's, so for a key a page-sent selector, bundle or source path
+   * is dropped; the script's `input`, the run's mode and its timeout pass (pods map, contract C1).
+   * A declared mode is the default, and a write mode asked of a `ReadOnly` entrypoint is refused.
    */
   async function operationOf(
     key: string,
@@ -794,13 +795,23 @@ export function createPagesHandler(
     const pod = pods
       ? (await listPackages(pods)).packages.find((one) => one.id === ref.packageId)
       : undefined;
-    if (!pod?.contributions.some((row) => row.kind === "script" && row.key === key))
-      return { problem: `${key} is no declared script of an admitted package.` };
+    const row = pod?.contributions.find((row) => row.kind === "script" && row.key === key);
+    if (!pod || !row)
+      return {
+        problem: `${key} is no declared script of an admitted package; declare ${ref.path} in pod.json entrypoints.`,
+      };
+    const asked = sent.permissionMode ?? row.mode;
+    if (row.mode === "ReadOnly" && asked !== "ReadOnly")
+      return {
+        problem: `${key} is declared ReadOnly in pod.json; it cannot run as ${String(asked)}.`,
+      };
     const { sourceBundle } = await capturePackage(pod);
     const run = Object.fromEntries(
-      (["permissionMode", "timeoutSeconds"] as const)
-        .filter((name) => sent[name] !== undefined)
-        .map((name) => [name, sent[name]]),
+      Object.entries({
+        input: sent.input,
+        permissionMode: asked,
+        timeoutSeconds: sent.timeoutSeconds,
+      }).filter(([, value]) => value !== undefined),
     );
     return { key: "scripting.execute", input: { ...run, sourcePath: ref.path, sourceBundle } };
   }

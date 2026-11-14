@@ -15,11 +15,13 @@
   "entrypoints": [
     {
       "sourcePath": "src/Census.cs",
+      "mode": "ReadOnly",
       "name": "Circuit census",
       "description": "Read-only numeric electrical facts with explicit units and unavailable values."
     },
     {
       "sourcePath": "src/InspectRun.cs",
+      "mode": "ReadOnly",
       "name": "Inspect selected circuit",
       "description": "Read-only circuit facts for the circuit or connected load selected in Revit."
     }

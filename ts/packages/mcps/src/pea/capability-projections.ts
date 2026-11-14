@@ -255,6 +255,8 @@ function packageRows(pod: PackageProjection): Capability[] {
     .map((entry) => {
       const reference = parseContributionKey(entry.key)!;
       const member = pod.members.find((m) => m.path === entry.sourcePath)!;
+      // A script declared ReadOnly is a read: Revit rolls back whatever it changes, so pe_read runs it.
+      const writes = reference.kind === "script" && entry.mode !== "ReadOnly";
       return {
         key: entry.key,
         kind: reference.kind,
@@ -262,15 +264,18 @@ function packageRows(pod: PackageProjection): Capability[] {
         description:
           entry.description ||
           (reference.kind === "script"
-            ? "Runs the admitted source through scripting.execute; ReadOnly rolls back changes."
+            ? entry.mode === "ReadOnly"
+              ? "Runs the admitted source ReadOnly through scripting.execute: a read, every change rolls back."
+              : "Runs the admitted source through scripting.execute; ReadOnly rolls back changes."
             : reference.kind === "member"
               ? "Read or mention this member. It cannot execute."
               : "Read this Page's shared state and binding; append events or request your own binding through pe_do."),
         needs: reference.kind === "script" ? "document" : "nothing",
-        effect: reference.kind === "script" ? "command" : "query",
-        mutates: reference.kind === "script",
+        effect: writes ? "command" : "query",
+        mutates: writes,
         principal: capabilityPrincipals(reference.kind === "script"),
         input: reference.kind === "script" ? podInputSchema : {},
+        ...(entry.mode ? { mode: entry.mode } : {}),
         package: { id: pod.id, path: member.path, sha256: member.sha256 },
         projection: entry.projection,
         source: "packages",
@@ -279,9 +284,17 @@ function packageRows(pod: PackageProjection): Capability[] {
     });
 }
 
+/** What every door passes to a declared script, and nothing else (pods map, contract C1). */
 const podInputSchema = z.toJSONSchema(
   z.object({
-    permissionMode: z.enum(["ReadOnly", "WriteTransaction", "NoTransaction"]).optional(),
+    input: z
+      .record(z.string(), z.unknown())
+      .optional()
+      .describe('What the script reads with Arg<T>("name"): one JSON object, at most 256 KiB.'),
+    permissionMode: z
+      .enum(["ReadOnly", "WriteTransaction", "NoTransaction"])
+      .optional()
+      .describe("Defaults to the row's mode when pod.json declares one, else ReadOnly."),
     timeoutSeconds: z.number().int().min(1).max(3600).optional(),
   }),
 ) as Record<string, unknown>;
