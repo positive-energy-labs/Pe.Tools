@@ -27,6 +27,7 @@ import type {
 } from "@pe/host-contracts/generated";
 import type { PodDraftSource, PodMemberSource } from "@pe/agent-contracts";
 import {
+  capturePackage,
   isPackageMember,
   listPackages,
   podHome,
@@ -363,8 +364,17 @@ function parseReceipt(content: string): PodReceipt | string {
 /**
  * The Pod half of a member read: policy, then one discovery of every Pod in the home. A caller that
  * reads several members of one Pod as one reading passes the result to each `readMember`.
+ *
+ * `indexed` reads only this Pod's folder, found by the last discovery, as capture does: the bytes are
+ * as fresh, and an id claimed twice since that discovery waits for the next one. The index is a
+ * shortcut and never the answer: any miss (no discovery yet, a folder that moved or changed its id,
+ * a member that no longer admits) asks discovery, which answers as it always did.
  */
-export const readMemberPod = Effect.fnUntraced(function* (pod: string, ctx: PodContext = {}) {
+export const readMemberPod = Effect.fnUntraced(function* (
+  pod: string,
+  ctx: PodContext = {},
+  indexed = false,
+) {
   // A fresh home activates shipped pods only when the background import lands; reading before
   // it would answer "inactive" for a pod that is about to be active (bounded, installed-pods.ts).
   yield* podContentReady(ctx);
@@ -373,7 +383,15 @@ export const readMemberPod = Effect.fnUntraced(function* (pod: string, ctx: PodC
     catch: (error) => new LocalOpError("pod.member.read", errorMessage(error), 403),
   });
   return yield* Effect.tryPromise({
-    try: () => readPackage(pod, { podsRoots: podsRoots(ctx) }),
+    try: (): Promise<AdmittedPackage> =>
+      indexed
+        ? // ponytail: no freshness floor on this fallback. The edits a gate exists to catch cause
+          // these misses, and discovery already refuses to reuse or join a read whose disk signature
+          // differs from one taken after the ask arrives (`choose` in `discoverPackages`,
+          // pod-capture.ts:66). Ceiling: an edit that keeps a member's size and timestamps is not
+          // seen here; hash bytes in the signature if that edit must be caught.
+          capturePackage(pod, ctx.podsRoot).catch(() => readPackage(pod, { podsRoots: podsRoots(ctx) }))
+        : readPackage(pod, { podsRoots: podsRoots(ctx) }),
     catch: (error) =>
       new LocalOpError(
         "pod.member.read",

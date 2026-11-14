@@ -1,9 +1,9 @@
 /**
- * D22: a script run consumes every `.cs`/`.csx` member of its Pod (contract C1), and the journal's
- * gate re-reads every consumed fact at every async boundary. A member read is one discovery of every
- * Pod in the home, so a 34-script Pod in a 35-Pod home cost 34 discoveries (about 115 s) per gate
- * and never reached Revit inside Pea's wait. These tests hold the rule that fixes it: one gate pass
- * reads a Pod once, however many of its members the action consumed.
+ * D22: the journal's gate re-reads every consumed fact at every async boundary. A member read was one
+ * discovery of every Pod in the home, so a 34-script Pod in a 35-Pod home cost 34 discoveries (about
+ * 115 s) per gate and never reached Revit inside Pea's wait. These tests hold the rules that fix it:
+ * one gate pass reads a Pod once, it reads only that Pod's folder once discovery has indexed it, and a
+ * run consumes only the files it compiles.
  */
 import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { mkdir, rm, writeFile } from "node:fs/promises";
@@ -16,7 +16,8 @@ import { z } from "zod";
 import type { Consumed } from "@pe/agent-contracts";
 import { commandResources } from "../src/command-reads.ts";
 import { gatewayExecutor } from "../src/gateway-actions.ts";
-import { bindPackageScanLogger } from "../src/packages.ts";
+import { bindPackageScanLogger, listPackages } from "../src/packages.ts";
+import { scriptRunInputs } from "../src/operation-script.ts";
 import { approvedPea } from "./callers.ts";
 import { detachedBridge, pictureCaptures, testJournal } from "./effect-test.ts";
 
@@ -52,9 +53,10 @@ afterEach(async () => {
 
 /** A Pod of `count` scripts, and the member facts a script run of it consumes. */
 async function pod(id: string, count: number): Promise<Member[]> {
-  await mkdir(join(root, id, "checks"), { recursive: true });
+  for (const folder of ["checks", "src"]) await mkdir(join(root, id, folder), { recursive: true });
   const files = [
     ["pod.json", JSON.stringify({ schemaVersion: 2, id, name: id, version: "0.1.0", entrypoints: [] })],
+    ["src/Shared.cs", "static class Shared { }"],
     ...Array.from({ length: count }, (_, index) => [`checks/c${index}.csx`, `Result(${index});`]),
   ] as const;
   for (const [path, text] of files) await writeFile(join(root, id, path), text);
@@ -88,6 +90,10 @@ test("a script run's gates cost the same Pod discoveries whether it consumed two
   expect(many.action.state, JSON.stringify(many.action)).toBe("succeeded");
   expect(two.scans).toBeGreaterThan(0);
   expect(many.scans).toBe(two.scans);
+  // Discovery has indexed the Pod by now: the next run's gates read its folder and discover nothing.
+  const again = await discoveriesOf("again", await pod("pdrop", 33));
+  expect(again.action.state, JSON.stringify(again.action)).toBe("succeeded");
+  expect(again.scans).toBe(0);
 });
 
 test("a member edited between two gates still refuses the run as stale: no read outlives its pass", async () => {
@@ -101,21 +107,52 @@ test("a member edited between two gates still refuses the run as stale: no read 
   });
 });
 
-test("one gate pass reads a Pod once; new passes and unscoped probes validate disk changes", async () => {
+test("an indexed Pod's pass reads only its own folder, once; the next pass and a probe outside any pass read it again", async () => {
   const members = await pod("pdrop", 5);
+  const c0 = members.find((member) => member.probe.path === "checks/c0.csx")!;
+  await listPackages({ podsRoots: root });
+  scans = 0;
   const probe = resources().probe;
   const pass = {};
   for (const member of members) expect(await probe(member, "admit", pass)).toBe(member.expected);
-  expect(scans).toBe(1);
-  // Freshness is per pass: an edit between two gates is seen by the second.
+  // One reading per pass: the Pod was read at the pass's first probe, so a later edit is the next pass's.
   await writeFile(join(root, "pdrop", "checks/c0.csx"), "Result(99);");
-  expect(await probe(members[1]!, "turn", {})).toBe(sha("Result(99);"));
-  expect(scans).toBe(2);
-  await probe(members[1]!);
-  expect(scans).toBe(2); // An unchanged probe checks metadata, not the Pod's bytes again.
-  await writeFile(join(root, "pdrop", "checks/c1.csx"), "Result(100);");
-  expect(await probe(members[2]!)).toBe(sha("Result(100);"));
-  expect(scans).toBe(3);
+  expect(await probe(c0, "admit", pass)).toBe(c0.expected);
+  expect(await probe(c0, "turn", {})).toBe(sha("Result(99);"));
+  await writeFile(join(root, "pdrop", "checks/c0.csx"), "Result(100);");
+  expect(await probe(c0)).toBe(sha("Result(100);"));
+  await writeFile(join(root, "pdrop", "checks/c0.csx"), "Result(101);");
+  expect(await probe(c0)).toBe(sha("Result(101);"));
+  expect(scans).toBe(0);
+});
+
+test("the index is a shortcut, never the answer: a Pod it does not hold, or holds wrongly, is asked of discovery", async () => {
+  const [first] = await pod("early", 1);
+  await listPackages({ podsRoots: root });
+  const probe = resources().probe;
+  // Arrived after the last discovery.
+  const late = await pod("late", 1);
+  scans = 0;
+  expect(await probe(late[0]!, "admit", {})).toBe(late[0]!.expected);
+  expect(scans).toBe(1);
+  // Indexed, then its folder left the home.
+  await rm(join(root, "early"), { recursive: true });
+  expect(await probe(first!, "admit", {})).toBeNull();
+});
+
+test("a run consumes its entrypoint and every .cs beside it, not another entrypoint's .csx", async () => {
+  const run = async (id: string, edited: string) => {
+    const admitted = (await pod("pdrop", 3)).map((member) => ({ path: member.probe.path, member }));
+    // Native matches the entrypoint with either slash and without case.
+    const consumes = scriptRunInputs(admitted, "checks\\C0.csx").map(({ member }) => member);
+    return (await discoveriesOf(id, consumes, () => writeFile(join(root, "pdrop", edited), "// edited"))).action;
+  };
+  expect((await run("sibling", "checks/c1.csx")).state).toBe("succeeded");
+  for (const [id, path] of [["helper", "src/Shared.cs"], ["entry", "checks/c0.csx"], ["manifest", "pod.json"]] as const)
+    expect(await run(id, path), path).toMatchObject({
+      state: "failed",
+      refusal: { kind: "stale", consumed: [{ probe: { pod: "pdrop", path } }] },
+    });
 });
 
 test("a member that left the Pod probes null; a discovery that ran out of time is not a changed input", async () => {
