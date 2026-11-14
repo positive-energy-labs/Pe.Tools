@@ -32,6 +32,12 @@ async function read(systemUniqueId) {
   if (!system) throw Error('This document has no piping system');
   const members = await pe.read('mep.system.members', { domain: 'piping', systemUniqueId: system, maxElements: 16384 });
   const segments = await pe.read('mep.segment.sizes', {});
+  const current = await pe.target();
+  if (current.session !== target.session || current.openId !== target.openId) {
+    const error = Error('The binding changed during the reading. Read system again.');
+    pe.refuse(error.message);
+    throw error;
+  }
   await k.fire({ type: 'reading', reading: { target, system, systems: roster.systems.filter(s => s.domain === 'piping'), at: new Date().toISOString(), ...fromRevit(members, segments) } });
 }
 function Worksheet({ state }) {
