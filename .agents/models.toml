@@ -4,7 +4,7 @@
 # appears in a SKILL.md or a role charter. A new model is one edit here.
 # Every observation carries a date, an N and its limits. Delete an observation a newer one replaces.
 
-updated = "2026-11-12"
+updated = "2026-11-14"
 
 # ---------------------------------------------------------------- tiers
 # A tier is a kind of work. `model` is a key under [models].
@@ -48,6 +48,9 @@ integrator = "partner" # its work is mechanical; a cheaper tier passed a cold re
 # Read-only jobs that a role hands to subagents.
 [jobs]
 plan-check-reader = "taste" # homes: four readers, three minutes, four plan changes
+tip-reviewer = "slog-writer" # kernel2: the purger's 12 children were 10 on this tier's model and 2 on the taste tier's
+mutant-runner = "slog-writer"
+drive-child = "slog-writer" # kernel2: all 7 of the driver's children, after the owner said this model drives as well
 scour-reader = "taste" # untried on this tier; on 2026-11-12 two readers on the partner tier's model took 8 and 9 minutes for 37 anchored findings
 
 # ---------------------------------------------------------------- models
