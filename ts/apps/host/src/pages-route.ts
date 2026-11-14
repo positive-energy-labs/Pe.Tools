@@ -73,7 +73,7 @@ import {
   subscribeHeads,
   emitPagePinRevoke,
 } from "./control.ts";
-import { capturePackage, listPackages, productPodsRoots, type PodsRoots } from "./packages.ts";
+import { capturePackage, listPackages, productPodsRoots, type AdmittedPackage, type PodsRoots } from "./packages.ts";
 import { activePackages, requirePackageEnabled } from "./package-lifecycle.ts";
 import {
   pageDescriptors,
@@ -462,6 +462,25 @@ export function createPagesHandler(
   /** Where Page state lives: one folder per slug under the machine state root, never in a home. */
   stored: StateDirectory = stateScope(hostState(), hostState().pages),
 ) {
+  /** One budget covers listing and lifecycle; a late listing must not start another wait. */
+  const pagePackages = async (id?: string): Promise<AdmittedPackage[]> => {
+    if (!pods) return [];
+    let expired = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<AdmittedPackage[]>((resolve) => {
+      timer = setTimeout(() => { expired = true; resolve([]); }, 5_000);
+    });
+    const discover = async () => {
+      const listing = await listPackages(pods);
+      if (expired) return [];
+      return activePackages(listing.packages.filter((pod) => id === undefined || pod.id === id), pods);
+    };
+    try {
+      return await Promise.race([discover(), timeout]);
+    } finally {
+      clearTimeout(timer);
+    }
+  };
   /**
    * Where a slug's folder is: `<root>/<slug>`, or for `<id>--<page>` the folder of the one admitted
    * package with that id that contributes `pages/<page>` (a duplicated id contributes nothing).
@@ -477,8 +496,7 @@ export function createPagesHandler(
       return found && { ...found, pod: null, state: join(stored.path, basename(found.dir)) };
     }
     if (more.length || !pods) return null;
-    const candidates = (await listPackages(pods)).packages.filter((pod) => pod.id === id);
-    for (const pod of await activePackages(candidates, pods)) {
+    for (const pod of await pagePackages(id)) {
       const row = pod.contributions.find(
         (one) => one.kind === "page" && one.path === `pages/${page}`,
       );
@@ -523,7 +541,7 @@ export function createPagesHandler(
   const list = async (): Promise<PageRow[]> =>
     (
       await pageDescriptors(
-        pods ? await activePackages((await listPackages(pods)).packages, pods) : [],
+        await pagePackages(),
         root,
       )
     ).map((page) => ({

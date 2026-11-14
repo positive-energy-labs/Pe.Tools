@@ -25,6 +25,8 @@ import {
 import { readRequestIdentity, type IdentityOptions } from "../src/request-identity.ts";
 import { admitCrossing, bindControl, callerOf, currentCaller, live, Refused, onPagePinRevoke } from "../src/control.ts";
 import { asCaller, human, pea, serviceHeaders } from "./callers.ts";
+import * as packages from "../src/packages.ts";
+import * as lifecycle from "../src/package-lifecycle.ts";
 
 const cleanup: (() => Promise<unknown>)[] = [];
 afterEach(async () => {
@@ -60,6 +62,45 @@ async function pagesRoot(live?: PageLive) {
 }
 
 describe("pages", () => {
+  it.each([4000, 6000])("Pod listing taking %i ms shares one five-second Page budget with lifecycle", async (listingMs) => {
+    const { pods, fetch } = await pagesRoot();
+    const directory = join(pods, "late");
+    await mkdir(join(directory, "pages", "tour"), { recursive: true });
+    await writeFile(join(directory, "pod.json"), '{"id":"late"}');
+    await writeFile(join(directory, "pages", "tour", "index.html"), "<title>Late tour</title>");
+    const listing = await packages.listPackages(pods);
+    const entered = Promise.withResolvers<void>();
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const list = vi.spyOn(packages, "listPackages").mockImplementation(async () => {
+      entered.resolve();
+      await new Promise((resolve) => setTimeout(resolve, listingMs));
+      return listing;
+    });
+    const active = vi.spyOn(lifecycle, "activePackages").mockImplementation(async (candidates) => {
+      await new Promise((resolve) => setTimeout(resolve, 4000));
+      return [...candidates];
+    });
+    const delivery: { answer?: Response } = {};
+    const opening = fetch("/pages/late--tour/").then((response) => { delivery.answer = response; return response; });
+    await entered.promise;
+    try {
+      await vi.advanceTimersByTimeAsync(4999);
+      expect(delivery.answer).toBeUndefined();
+      expect(active).toHaveBeenCalledTimes(listingMs < 5000 ? 1 : 0);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(delivery.answer?.status).toBe(404);
+      expect(await (await opening).text()).toContain("no page late--tour: no admitted package contributes it");
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(active).toHaveBeenCalledTimes(listingMs < 5000 ? 1 : 0);
+    } finally {
+      await vi.advanceTimersByTimeAsync(10000);
+      await opening;
+      list.mockRestore();
+      active.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
   it("the Bind redirect keeps the Page's whole query in its query field", async () => {
     const { fetch } = await pagesRoot();
     const response = await fetch("/pages/todo/?walk=1&x=2", {
