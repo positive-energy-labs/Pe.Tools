@@ -32,7 +32,6 @@ import { useSurfaceHost } from "./surface-host";
 import { startFeedback } from "#/components/feedback-picker";
 import "./app-bar.css";
 import { RecordedSourceChip } from "#/machine/devices";
-import { PageBindingChip } from "./chip";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 type LaunchWindow = Window & {
@@ -63,10 +62,6 @@ export function AppBar() {
   );
   const router = useRouter();
   const location = useRouterState({ select: (state) => state.location });
-  const pageSlug =
-    typeof (location.search as Record<string, unknown>).page === "string"
-      ? String((location.search as Record<string, unknown>).page)
-      : null;
   const canGoBack = useCanGoBack();
   const historyIndex = location.state.__TSR_index;
   const [furthestHistory, setFurthestHistory] = useState(historyIndex);
@@ -347,10 +342,9 @@ export function AppBar() {
         className="pe-appbar-commands"
         data-compact={compact || undefined}
         role="group"
-        aria-label="Situation, Page and Tutorial shortcuts"
+        aria-label="Situation and Tutorial shortcuts"
       >
         {compact && <SituationDrawer barAnchor={shellRef.current} rail={actions} />}
-        {pageSlug && <PageBindingChip slug={pageSlug} />}
         {shell.field === "global" && notices && (
           <Button
             kind="quiet"
