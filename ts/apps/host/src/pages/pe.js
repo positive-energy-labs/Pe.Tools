@@ -322,7 +322,8 @@
     const id = row.id;
     while (row.state === "running") {
       await new Promise((ok) => setTimeout(ok, 250));
-      [row = row] = await json(await client.response("actions.read", { query: { id } }));
+      // Polling a sent act's receipt is a read: a lost connection here is retried, never the act itself.
+      [row = row] = await json(await whenDiscovered(() => client.response("actions.read", { query: { id } })));
     }
     return row;
   };

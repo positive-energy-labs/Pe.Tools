@@ -1655,6 +1655,26 @@ describe("pages", () => {
       expect(body.children.find((n) => (n as { id?: string }).id === "pe-refusal")).toMatchObject({ textContent: expect.stringContaining("Failed to fetch") });
     });
 
+    it("D43: a lost connection while polling a sent act's receipt is retried, and the act is sent once", async () => {
+      const { sleep, pass } = owned();
+      let polls = 0;
+      const { pe, sent } = await page((url) => {
+        if (url.pathname.endsWith("/call")) return Response.json({ notDispatched: true }, { status: 409 });
+        if (url.pathname.endsWith("/act")) return Response.json({ id: "a1", state: "running" });
+        if (url.pathname.endsWith("/actions")) {
+          if (++polls === 1) throw new TypeError("Failed to fetch");
+          return Response.json([{ id: "a1", state: "succeeded", result: { kept: true } }]);
+        }
+        return undefined;
+      }, undefined, undefined, sleep);
+      const result = pe.do!("revit.mutate").then((value) => ({ value }), (error) => ({ error }));
+      await pass(250);
+      await pass(1000);
+      expect(await result).toEqual({ value: { kept: true } });
+      expect(sent.filter((r) => r.url.endsWith("/act"))).toHaveLength(1);
+      expect(polls).toBe(2);
+    });
+
     /** The Pages handler's own discovery expiry, through the route envelope the browser receives. */
     const words =
       "Pod discovery exceeded 5000 ms listing G:/Shared drives/Pods. Try again when the folder is available.";
