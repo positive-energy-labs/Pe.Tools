@@ -12,10 +12,10 @@ namespace Pe.Revit.Operations;
 
 /// <summary>What a temporary change sets on a view; named on the answer when its undo does not hold.</summary>
 [Flags]
-public enum ViewTemporary { Crop = 1, ScopeBox = 2, AnnotationCrop = 4, SheetFilter = 8 }
+public enum ViewTemporary { Crop = 1, ScopeBox = 2, AnnotationCrop = 4, SheetFilter = 8, Phase = 16, PhaseFilter = 32 }
 
 public static class ViewTemporaryCodes {
-    /// <summary>The wire codes of `Touched.restoreFailed.views[].left`: crop, scopeBox, annotationCrop, sheetFilter.</summary>
+    /// <summary>The wire codes of `Touched.restoreFailed.views[].left`: crop, scopeBox, annotationCrop, sheetFilter, phase, phaseFilter.</summary>
     public static List<string> Codes(this ViewTemporary what) =>
         Enum.GetValues(typeof(ViewTemporary)).Cast<ViewTemporary>().Where(flag => what.HasFlag(flag))
             .Select(flag => char.ToLowerInvariant(flag.ToString()[0]) + flag.ToString().Substring(1)).ToList();

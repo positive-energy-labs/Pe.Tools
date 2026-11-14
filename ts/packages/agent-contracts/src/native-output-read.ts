@@ -9,13 +9,13 @@ import { executionTargetSchema, type ExecutionTarget } from "./target.ts";
 export const isViewImage = (key: string): key is ViewImageKey =>
   key === VIEW_IMAGE_KEY || key === FOCUSED_VIEW_IMAGE_KEY;
 export type NativeReadOutput<K extends HostOperationKey> = K extends ViewImageKey
-  ? Omit<OpResponseOf<K>,"filePath"> & {capture:CaptureReceipt;imageUrl:string|null} : OpResponseOf<K>;
+  ? Omit<OpResponseOf<K>,"filePath"> & {capture:CaptureReceipt|null;imageUrl:string|null} : OpResponseOf<K>;
 const viewImage=(key:ViewImageKey)=>{
   const entry=hostOpCatalog.find(op=>op.key === key)!;
   const json=JSON.parse(entry.responseSchemaJson);
   delete json.properties.filePath;
   json.required=json.required.filter((name:string)=>name !== "filePath");
-  json.properties.capture=z.toJSONSchema(captureReceiptSchema);
+  json.properties.capture=z.toJSONSchema(captureReceiptSchema.nullable());
   json.required.push("capture");
   return generatedJsonSchema(json);
 };
@@ -25,7 +25,8 @@ export const nativeOutputSchema=<K extends HostOperationKey>(key:K):z.ZodType<Na
   (isViewImage(key) ? image.get(key) ?? image.set(key, viewImage(key)).get(key)! : nativeResponseSchema(key)) as z.ZodType<NativeReadOutput<K>>;
 export function nativeOutputAssets(key:string,value:unknown):string[] {
   if(!isViewImage(key)) return [];
-  const result=captureReceiptSchema.parse((value as {capture:unknown}).capture);
+  const result=captureReceiptSchema.nullable().parse((value as {capture:unknown}).capture);
+  if (!result) return [];
   return [result.sha];
 }
 

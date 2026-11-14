@@ -27,7 +27,7 @@
       "views": [
         {
           "view": { "documentKey": "doc-a", "uniqueId": "view-uid-1", "id": 4001 },
-          "left": ["crop", "scopeBox", "annotationCrop", "sheetFilter"]
+          "left": ["crop", "scopeBox", "annotationCrop", "sheetFilter", "phase", "phaseFilter"]
         }
       ]
     }

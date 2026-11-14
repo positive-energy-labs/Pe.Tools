@@ -8,13 +8,29 @@ import { Link } from "@tanstack/react-router";
 import { captureUrl } from "@pe/agent-contracts";
 
 import { FactChip } from "@pe/kit/lang/chip";
+import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { Provenance, Section } from "@pe/kit/lang/section";
 import { type OpViewProps, UnrecognizedShape, asRecord } from "#/ops/registry";
 
 export function ViewImageView({ data }: OpViewProps) {
   const rec = asRecord(data);
-  if (!rec || typeof rec.filePath !== "string") return <UnrecognizedShape />;
+  if (!rec) return <UnrecognizedShape />;
   const res = rec as unknown as RevitContextViewImage.Res.Response;
+  if (res.refused && Array.isArray(res.notDrawn))
+    return (
+      <Section label={res.view.label ?? "view"}>
+        <OutcomeLine kind="refused" label="Picture refused" says="No requested element can be drawn in this view." />
+        {res.notDrawn.map(item => (
+          <div key={item.elementId} data-revit-ids={String(item.elementId)}>
+            <Provenance>Element {item.elementId}: {item.reasons.join(", ")}</Provenance>
+          </div>
+        ))}
+        {res.restore && !res.restore.held ? (
+          <OutcomeLine kind="error" label="View restore failed" says={res.restore.left.join(", ")} />
+        ) : null}
+      </Section>
+    );
+  if (typeof rec.filePath !== "string") return <UnrecognizedShape />;
   const sha = res.registration?.imageSha256;
   return (
     <Section

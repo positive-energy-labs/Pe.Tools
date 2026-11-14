@@ -357,7 +357,9 @@
    * A picture of elements the agent can cite: `revit.context.lens` boxes a 3D view around them (a mutation, through
    * `pe.do`), then `revit.context.view-image.focus` exports that view cropped to them (it commits a temporary crop and
    * its undo, so it too goes through `pe.do`; its `restore` says whether the undo held). The host keeps the PNG once
-   * per sha at `url`; `marks` locates each element's bounds in image pixels, including in 3D. The default crop adds
+   * per sha at `url`; `marks` locates eligible elements' bounds in image pixels, including in 3D. `notDrawn` names
+   * exclusions; when all are excluded it throws with those typed reasons on error.notDrawn. Phase/filter changes
+   * are temporary too. These checks do not certify pixels or occlusion. The default crop adds
    * twice the focus size on each side for context. `registration` places pixels in model XY when available.
    */
   pe.picture = async (elementIds, { name, paddingFeet, pixelSize, marginPercent = 200 } = {}) => {
@@ -368,6 +370,12 @@
       pixelSize,
       marginPercent,
     });
+    if (image.refused) {
+      const error = new Error(`Picture refused: ${image.notDrawn.map(item => `${item.elementId}: ${item.reasons.join(", ")}`).join("; ")}`);
+      error.notDrawn = image.notDrawn;
+      error.restore = image.restore;
+      throw error;
+    }
     const url = image.imageUrl;
     if (!url) throw new Error(`view-image of ${lens.viewName} was not kept by the host`);
     return {
@@ -378,6 +386,8 @@
       viewName: lens.viewName,
       registration: image.registration || null,
       marks: image.marks,
+      notDrawn: image.notDrawn,
+      restore: image.restore,
     };
   };
 

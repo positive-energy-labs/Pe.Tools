@@ -14,7 +14,9 @@ public enum ViewLeftover {
     [EnumMember(Value = "crop")] Crop,
     [EnumMember(Value = "scopeBox")] ScopeBox,
     [EnumMember(Value = "annotationCrop")] AnnotationCrop,
-    [EnumMember(Value = "sheetFilter")] SheetFilter
+    [EnumMember(Value = "sheetFilter")] SheetFilter,
+    [EnumMember(Value = "phase")] Phase,
+    [EnumMember(Value = "phaseFilter")] PhaseFilter
 }
 
 /// <summary>A view a failed restore left changed, and which of its temporaries are still set.</summary>

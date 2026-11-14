@@ -1270,7 +1270,7 @@ internal sealed class RevitDataRequestService {
         CaptureView(request, activeDocument.Value, null);
 
     // Split from the read (ADR 0042): a handler has one effect, and the crop and the sheet-filter lift are committed.
-    [Op("revit.context.view-image.focus", OpSubject.View, OpTouches.Geometry, Does = "Capture a view cropped to element ids, the current selection or a scope box, or a sheet-filtered schedule with all its rows. Commits a temporary change to that view (crop box set, any scope box cleared, annotation crop on; or the schedule's sheet filter lifted), exports the PNG, then commits its undo. Needs an editable document. The answer's restore says whether the undo held; when it did not, the image is still returned and restore.left names what the view still carries (crop, scopeBox, annotationCrop, sheetFilter). Same request and image as revit.context.view-image.", Title = "Export Focused View Image", Finds = ["view", "sheet", "viewport", "schedule", "image", "capture", "screenshot", "png", "export", "visual", "see", "look", "crop", "focus", "zoom", "registration", "underlay", "plan"], Actor = OpActor.Any, Cost = OpCost.Mutation, Example = "{ \"focus\": { \"elementIds\": [12345] }, \"pixelSize\": 2000 }")]
+    [Op("revit.context.view-image.focus", OpSubject.View, OpTouches.Geometry, Does = "Capture a view cropped to element ids, the current selection or a scope box, or a sheet-filtered schedule with all its rows. For requested elements, temporarily uses the later of the view's phase and their latest creation phase in document order, and a phase filter showing New and Existing. When switching filters, prefers one hiding Demolished and Temporary unless a broader filter draws more requested elements. Commits temporary view state (crop, scope box, annotation crop, phase, phase filter; or the schedule's sheet filter), exports, then commits its undo. Needs an editable document. NotDrawn names requested elements excluded by phase/filter, element/category hiding or bounds; these checks do not certify pixels or occlusion. Refused means every requested element is excluded: no PNG is exported. Restore says whether undo held; restore.left names state left on the view (crop, scopeBox, annotationCrop, sheetFilter, phase, phaseFilter). Same request as revit.context.view-image.", Title = "Export Focused View Image", Finds = ["view", "sheet", "viewport", "schedule", "image", "capture", "screenshot", "png", "export", "visual", "see", "look", "crop", "focus", "zoom", "registration", "underlay", "plan"], Actor = OpActor.Any, Cost = OpCost.Mutation, Example = "{ \"focus\": { \"elementIds\": [12345] }, \"pixelSize\": 2000 }")]
     private RevitViewImageData GetFocusedViewImageCore(RevitViewImageRequest request, RevitDocument activeDocument, SessionWrite scope) =>
         CaptureView(request, activeDocument.Value, scope);
 
@@ -1295,6 +1295,14 @@ internal sealed class RevitDataRequestService {
 
         if (resolved is not View { IsTemplate: false } view) throw CaptureTargetError();
 
+        if (request.Focus is { Selection: true } && request.Focus.ElementIds is not { Count: > 0 })
+            request = request with { Focus = request.Focus with {
+                ElementIds = SelectionOf(RequireUi(document, "selection"))!.Select(id => id.Value()).ToList()
+            } };
+        if (scope is not null && request.Focus?.ElementIds is { Count: > 0 } requestedIds
+            && requestedIds.All(id => document.GetElement(id.ToElementId())?.get_BoundingBox(view) is null))
+            return RevitViewImageExporter.Refused(document, view,
+                RevitViewImageExporter.ReadNotDrawn(document, view, requestedIds));
         var focusBox = ResolveFocusBox(document, view, request.Focus);
         if (focusBox is not null && scope is null)
             throw BridgeOperationExceptions.BadRequest(

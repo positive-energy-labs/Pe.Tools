@@ -33,6 +33,11 @@ export const projectNativeOutput = (
       const raw = nativeResponseSchema(captureKey).parse(
         value,
       ) as OpResponseOf<"revit.context.view-image">;
+      if (raw.refused) {
+        const { filePath: _, ...body } = raw;
+        return nativeOutputSchema(captureKey).parse({ ...body, capture: null, imageUrl: null });
+      }
+      if (!raw.filePath) throw Error("View image has no PNG path and no refusal reasons");
       const focus =
         (request as { focus?: import("@pe/agent-contracts").CaptureReceipt["focus"] } | null)
           ?.focus ?? null;
