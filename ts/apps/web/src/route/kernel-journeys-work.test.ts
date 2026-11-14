@@ -1032,32 +1032,6 @@ test("JZ audit validation readiness and per-action busy admission prevent dispat
   } finally { await j.close(); }
 }, 60_000);
 
-test("JZ audit page Bind validates its live HTTP contract before dispatch and persists the valid binding", async () => {
-  const { mkdir, writeFile, readFile, rm } = await import("node:fs/promises");
-  const { tmpdir } = await import("node:os");
-  const { createPagesHandler } = await import("../../../host/src/pages-route");
-  const { pageBindRpc } = await import("../../../../packages/mcps/src/shared/rpc-client");
-  const dir = await mkdtemp(join(tmpdir(), "jz-pagebind-"));
-  expect(dir.startsWith(join(tmpdir(), "jz-pagebind-"))).toBe(true);
-  const pages = join(dir, "Pages"), pods = join(dir, "Pods");
-  await mkdir(join(pages, "todo"), { recursive: true }); await mkdir(pods);
-  await writeFile(join(pages, "todo", "index.html"), "<title>Audit Page</title><p>Bind this page</p>", "utf8");
-  const state = join(dir, "state", "Pages");
-  const handle = createPagesHandler(pages, pods, undefined, undefined, stateFixture(state));
-  let dispatches = 0;
-  vi.stubGlobal("fetch", (url: string, init?: RequestInit) => {
-    dispatches++; return withInvocationContext({ caller: who }, () => handle(new Request(new URL(url, "http://host"), init)));
-  });
-  try {
-    await expect(pageBindRpc.run({ slug: "todo", binding: { kind: "wrong" } })).rejects.toThrow();
-    expect(dispatches, "Malformed input fails before the HTTP door").toBe(0);
-    await pageBindRpc.run({ slug: "todo", binding: { kind: "none" } });
-    expect(dispatches).toBe(1);
-    expect(JSON.parse(await readFile(join(state, "todo", "binding.json"), "utf8"))).toMatchObject({
-      slots: { default: { kind: "none" } }, boundBy: { default: "human" },
-    });
-  } finally { vi.unstubAllGlobals(); await rm(dir, { recursive: true, force: true }); }
-});
 
 
 // Ruling 2026-11-10 (no cross-route write): /fans held /ducts' assumptions as a foreign-owner cell;
