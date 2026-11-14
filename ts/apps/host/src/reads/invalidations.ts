@@ -27,10 +27,8 @@ export function readInvalidations(
   };
   // One persisted Work has many spellings: `from` is carry-over provenance and the address may be
   // spelled differently. Dependency identity is `workKey()`, the same identity the Work feed uses (D36).
-  const identity = (scope: unknown) => {
-    const key = workKeySchema.safeParse(scope);
-    return key.success ? workKey(key.data) : canonicalRouteInput(scope);
-  };
+  // Every traced and written scope is already a decoded WorkKey, so a malformed one is a bug: throw.
+  const identity = (scope: unknown) => workKey(workKeySchema.parse(scope));
   const workMatches = (args: unknown, owner: string, scope: unknown) => {
     const input = workInput.input.safeParse(args);
     return input.success && input.data.owner === owner && identity(input.data.scope) === identity(scope);
