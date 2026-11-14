@@ -165,7 +165,10 @@ test("B58: corrected bytes require their new trust and then admit on the next re
     expect((await f.trust("renamed")).status).toBe(409);
     const fixed = await fixture(f.root, "corrected", undefined,
       `/tool/${encodeURIComponent("route:@renamed/routes/tool/route.artifact")}`, false, "renamed");
-    await f.content.lifecycle.refresh();
+    // An external repair uses background discovery, with the completed census on the next read.
+    await expect.poll(async () => (await (await f.inventory()).json()).find(
+      (row: { packageId: string }) => row.packageId === "renamed",
+    ), { timeout: 5000 }).toMatchObject({ fingerprint: fixed.fingerprint, trusted: false });
     const response = await f.inventory();
     expect(response.status).toBe(200);
     const row = (await response.json()).find((row: { packageId: string }) => row.packageId === "renamed");
