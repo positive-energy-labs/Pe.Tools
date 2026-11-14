@@ -405,7 +405,7 @@ export async function waitForAction(
           return { state: "detached", id, key: row.key, acceptance: "admitted" };
         // A slice is a poll interval, not a budget: a host that answers late is asked again, so
         // `waitMs` is the only deadline (D35). The caller's own abort and a refusal still throw.
-        if (signal?.aborted || (error as Error | null)?.name !== "TimeoutError") throw error;
+        if (signal?.aborted || !(error instanceof Error) || error.name !== "TimeoutError") throw error;
       }
     }
     return row;

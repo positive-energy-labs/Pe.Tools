@@ -9,6 +9,7 @@ import { captureUrl } from "@pe/agent-contracts";
 
 import { FactChip } from "@pe/kit/lang/chip";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
+import { revitTarget } from "@pe/kit/lang/revit-target";
 import { Provenance, Section } from "@pe/kit/lang/section";
 import { type OpViewProps, UnrecognizedShape, asRecord } from "#/ops/registry";
 
@@ -21,7 +22,7 @@ export function ViewImageView({ data }: OpViewProps) {
       <Section label={res.view.label ?? "view"}>
         <OutcomeLine kind="refused" label="Picture refused" says="No requested element can be drawn in this view." />
         {res.notDrawn.map(item => (
-          <div key={item.elementId} data-revit-ids={String(item.elementId)}>
+          <div key={item.elementId} {...revitTarget([item.elementId])}>
             <Provenance>Element {item.elementId}: {item.reasons.join(", ")}</Provenance>
           </div>
         ))}
