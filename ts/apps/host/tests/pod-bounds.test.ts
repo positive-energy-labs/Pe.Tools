@@ -111,6 +111,8 @@ test("ADV-4 admitted assets cross export/import intact without entering compilat
   const imported = await importPod({ archivePath }, { podsRoot: join(root, "imported") });
   for (const [path, bytes] of all)
     expect(await readFile(join(imported.directory, path))).toEqual(bytes);
+  // This isolated import has no bound lifecycle to refresh the destination census.
+  await listPackages(join(root, "imported"));
   const frozen = await freezeScript({
     sourcePath: "src/Run.cs",
     sourceBundle: (await capturePackage(imported.id, join(root, "imported"))).sourceBundle,
