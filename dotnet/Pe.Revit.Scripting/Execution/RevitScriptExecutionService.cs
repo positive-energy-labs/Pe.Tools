@@ -1,3 +1,4 @@
+using Pe.Revit.Compat;
 using Pe.Revit.Operations;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.DB.Events;
@@ -282,7 +283,7 @@ public sealed class RevitScriptExecutionService(
                         executionId,
                         containerTypeName
                     );
-                    this.ExecuteContainer(containerResult.Container, executionContext, outputSink, plan.PermissionMode, diagnostics);
+                    this.ExecuteContainer(containerResult.Container, executionContext, outputSink, plan, diagnostics);
                     Log.Information(
                         "Revit scripting container execute completed: ExecutionId={ExecutionId}, ContainerType={ContainerTypeName}",
                         executionId,
@@ -858,33 +859,189 @@ public sealed class RevitScriptExecutionService(
         PeScriptContainer container,
         RevitScriptContext context,
         ScriptOutputSink outputSink,
-        ScriptPermissionMode permissionMode,
+        ScriptExecutionPlan plan,
         List<ScriptDiagnostic> diagnostics
     ) {
         using var consoleCapture = outputSink.CreateConsoleCaptureScope();
-        this.ExecuteWithTransactionPolicy(container, context, permissionMode, diagnostics);
+        var mode = plan.PermissionMode;
+        var application = context.App.Application;
+        // The op runner's monitor (Pe.Revit.Operations): one DocumentChanged subscription for calls and scripts.
+        // Every mode watches: the result says what the run changed, or in ReadOnly what it would have.
+        OperationMonitor.Attach(application);
+        using var window = OperationMonitor.Watch(idsOf: context.Document);
+        var run = new RunLedger(window, mode);
+        // Revit raises this for every transaction that finishes with failures, the script's own included. It only
+        // reads: a script's commit that answers RolledBack with no exception is silent everywhere else (defect D5).
+        application.FailuresProcessing += run.OnFailuresProcessing;
+        try {
+            this.ExecuteWithTransactionPolicy(container, context, plan, diagnostics, run);
+        } finally {
+            application.FailuresProcessing -= run.OnFailuresProcessing;
+            if (run.Started) {
+                var commits = run.Commits();
+                outputSink.Failures = ScriptChangeLedger.Failures(mode, run.Committed(), run.Raised);
+                outputSink.Changes = ScriptChangeLedger.Changes(mode, commits, outputSink.Failures, run.Undo, window.Overlapped);
+                // ReadOnly discards everything by design and WriteTransaction reports its own rollback as an error.
+                if (mode == ScriptPermissionMode.NoTransaction
+                    && outputSink.Failures.Any(failure => failure.Outcome == ScriptFailureOutcome.RolledBack))
+                    diagnostics.Add(ScriptDiagnosticFactory.Warning("transaction", outputSink.Changes.Summary));
+            }
+        }
     }
 
     private void ExecuteWithTransactionPolicy(
         PeScriptContainer container,
         RevitScriptContext context,
-        ScriptPermissionMode permissionMode,
-        List<ScriptDiagnostic> diagnostics
+        ScriptExecutionPlan plan,
+        List<ScriptDiagnostic> diagnostics,
+        RunLedger run
     ) {
-        if (permissionMode == ScriptPermissionMode.ReadOnly) {
-            ExecuteInReadOnlyRollbackGuard(container, context, diagnostics);
+        // The name of the run's one entry in Revit's undo list.
+        var undoName = $"Pe script: {Path.GetFileNameWithoutExtension(plan.SourceSet.EntryPointSourceName)}";
+        if (plan.PermissionMode == ScriptPermissionMode.ReadOnly) {
+            ExecuteInReadOnlyRollbackGuard(container, context, diagnostics, run);
             return;
         }
 
-        if (permissionMode == ScriptPermissionMode.WriteTransaction) {
-            this.ExecuteInHostOwnedTransaction(container, context, diagnostics);
+        if (plan.PermissionMode == ScriptPermissionMode.WriteTransaction) {
+            this.ExecuteInHostOwnedTransaction(container, context, diagnostics, run, undoName);
             return;
         }
 
-        // SaveAs and a few other Revit APIs require a quiescent document and reject any open
-        // transaction. NoTransaction is explicit because it has neither rollback nor commit safety;
-        // the script or called library owns any transaction boundaries it needs.
-        container.Execute();
+        // NoTransaction is explicit because it has neither rollback nor commit safety; the script or called
+        // library owns any transaction boundaries it needs. The group below only merges what they commit into
+        // one undo entry: it is assimilated however the script ends, so what a script committed stays committed.
+        ExecuteInUndoGroup(container, context, plan, diagnostics, run, undoName);
+    }
+
+    /// <summary>
+    ///     Runs a NoTransaction script inside a transaction group that is assimilated when it returns, so the
+    ///     transactions it commits are one undo entry. Proven on fresh Revit 2025 (2026-11-14): a group allows
+    ///     EditFamily and LoadFamily inside it and nests a script's own groups, and refuses Save and SaveAs on its
+    ///     document. A script that makes such a call, or a document Revit will not open a group on, runs ungrouped
+    ///     and the result says why.
+    /// </summary>
+    private static void ExecuteInUndoGroup(
+        PeScriptContainer container,
+        RevitScriptContext context,
+        ScriptExecutionPlan plan,
+        List<ScriptDiagnostic> diagnostics,
+        RunLedger run,
+        string undoName
+    ) {
+        TransactionGroup? group = null;
+        if (ScriptChangeLedger.GroupRefusal(plan.SourceSet) is { } refused)
+            run.Undo = new ScriptUndo(Ungrouped: $"the script calls {refused}, which Revit refuses inside a transaction group.");
+        else if (context.Document is not { } document)
+            run.Undo = new ScriptUndo(Ungrouped: "the run has no document.");
+        else {
+            try {
+                group = new TransactionGroup(document, undoName);
+                if (group.Start() != TransactionStatus.Started)
+                    throw new InvalidOperationException("the group did not start.");
+            } catch (Exception ex) {
+                group?.Dispose();
+                group = null;
+                run.Undo = new ScriptUndo(Ungrouped: $"Revit refused a transaction group on this document: {ex.Message}");
+            }
+        }
+
+        try {
+            run.Execute(container);
+        } catch (Exception ex) when (group is not null && ex.Message.Contains("open transaction phase", StringComparison.Ordinal)) {
+            diagnostics.Add(ScriptDiagnosticFactory.Warning("transaction",
+                "The run's transactions were being grouped into one undo entry, and Revit refuses Save, SaveAs and synchronize on a document while a group is open on it. A script whose own source calls one of them runs ungrouped; this call was made from a library."));
+            throw;
+        } finally {
+            if (group is not null) {
+                using (group)
+                    run.Undo = CloseUndoGroup(group, undoName);
+            }
+        }
+    }
+
+    /// <summary>
+    ///     A script that returns with a transaction still open leaves a group Revit will not merge: Assimilate
+    ///     answers Error, and what the script had committed stays (fresh Revit 2025, 2026-11-14).
+    /// </summary>
+    private static ScriptUndo CloseUndoGroup(TransactionGroup group, string undoName) {
+        try {
+            var status = group.Assimilate();
+            return status == TransactionStatus.Committed
+                ? new ScriptUndo(undoName)
+                : new ScriptUndo(Ungrouped: $"Revit did not merge the run's transactions ({status}); a script that returns with a transaction still open causes this.");
+        } catch (Exception ex) {
+            return new ScriptUndo(Ungrouped: $"the run's undo group could not be closed: {ex.Message}");
+        }
+    }
+
+    /// <summary>One run's facts for <see cref="ScriptChangeLedger" />: the commits the monitor saw and the failures Revit raised.</summary>
+    private sealed class RunLedger(OperationMonitor.Window window, ScriptPermissionMode mode) {
+        private readonly List<ScriptRaisedFailure> _raised = [];
+        private IReadOnlyList<ObservedChange>? _guarded;
+        public IReadOnlyList<ScriptRaisedFailure> Raised => this._raised;
+        public ScriptUndo Undo { get; set; } = new();
+        /// <summary>False while the script has not been entered: a run its guard refused changed nothing and says nothing.</summary>
+        public bool Started { get; private set; }
+
+        public void Execute(PeScriptContainer container) {
+            this.Started = true;
+            container.Execute();
+        }
+
+        /// <summary>Every change the run's window saw, in any document.</summary>
+        public IReadOnlyList<ObservedChange> Observed => window.Changes;
+
+        /// <summary>Fixes the ReadOnly run's commits before the guard's group rolls back.</summary>
+        public void KeepGuarded() => this._guarded = window.Changes;
+
+        /// <summary>
+        ///     Commits in the run's document. A write mode leaves out sandbox churn, which was discarded; a
+        ///     ReadOnly run is nothing but its guard's sandbox commit, and that is what it would have changed.
+        /// </summary>
+        public IReadOnlyList<ScriptCommit> Commits() => this.Kept()
+            .Where(change => change.Ids is not null)
+            .Select(change => new ScriptCommit(change.Transactions, change.Ids!.Added, change.Ids.Modified, change.Ids.Deleted))
+            .ToList();
+
+        /// <summary>The transaction names of every commit the run saw, in order, in any document: a failure's transaction may be a family's.</summary>
+        public IReadOnlyList<IReadOnlyList<string>> Committed() => this.Kept().Select(change => change.Transactions).ToList();
+
+        private IEnumerable<ObservedChange> Kept() => (this._guarded ?? window.Changes)
+            .Where(change => mode == ScriptPermissionMode.ReadOnly || !change.Contained);
+
+        /// <summary>Records every failure the accessor holds, in Revit's words. Answers the index of the first one recorded.</summary>
+        public int Observe(FailuresAccessor accessor) {
+            var first = this._raised.Count;
+            var commitsBefore = this.Kept().Count();
+            var transaction = accessor.GetTransactionName();
+            foreach (var failure in accessor.GetFailureMessages()) {
+                List<long> elements;
+                try {
+                    elements = failure.GetFailingElementIds().Concat(failure.GetAdditionalElementIds())
+                        .Select(id => id.Value()).Distinct().OrderBy(id => id).ToList();
+                } catch {
+                    elements = [];
+                }
+                this._raised.Add(new ScriptRaisedFailure(failure.GetDescriptionText(), failure.GetSeverity().ToString(),
+                    failure.GetFailureDefinitionId().Guid.ToString(), elements, transaction, commitsBefore));
+            }
+            return first;
+        }
+
+        /// <summary>The warnings recorded from <paramref name="first" /> on were acknowledged and their transaction went on.</summary>
+        public void Dismiss(int first) {
+            for (var index = first; index < this._raised.Count; index++)
+                this._raised[index] = this._raised[index] with { Dismissed = true };
+        }
+
+        public void OnFailuresProcessing(object? sender, Autodesk.Revit.DB.Events.FailuresProcessingEventArgs args) {
+            try {
+                _ = this.Observe(args.GetFailuresAccessor());
+            } catch (Exception ex) {
+                Log.Warning(ex, "Script run could not read a Revit failure");
+            }
+        }
     }
 
     private const string ReadOnlyGuardTransactionName = DocumentSandbox.TransactionNamePrefix + "Pe Script ReadOnly";
@@ -909,7 +1066,8 @@ public sealed class RevitScriptExecutionService(
     private static void ExecuteInReadOnlyRollbackGuard(
         PeScriptContainer container,
         RevitScriptContext context,
-        List<ScriptDiagnostic> diagnostics
+        List<ScriptDiagnostic> diagnostics,
+        RunLedger run
     ) {
         var document = context.Document ?? throw new RevitScriptTransactionException(
             ScriptExecutionStatus.Rejected,
@@ -935,7 +1093,10 @@ public sealed class RevitScriptExecutionService(
 
             transaction = new Transaction(document, ReadOnlyGuardTransactionName);
             var failureOptions = transaction.GetFailureHandlingOptions();
-            _ = failureOptions.SetFailuresPreprocessor(PeToolsFailureHandling.CreatePreprocessor(guardFailures));
+            _ = failureOptions.SetFailuresPreprocessor(new DelegatingFailuresPreprocessor(accessor => {
+                _ = run.Observe(accessor);
+                return PeToolsFailureHandling.ResolveFailures(accessor, guardFailures);
+            }));
             _ = failureOptions.SetForcedModalHandling(false);
             transaction.SetFailureHandlingOptions(failureOptions);
             if (transaction.Start() != TransactionStatus.Started)
@@ -953,12 +1114,8 @@ public sealed class RevitScriptExecutionService(
             );
         }
 
-        // The op runner's monitor (Pe.Revit.Operations): one DocumentChanged subscription for calls and scripts.
-        OperationMonitor.Attach(context.App.Application);
-        using var mutationMonitor = OperationMonitor.Watch();
-
         try {
-            container.Execute();
+            run.Execute(container);
         } finally {
             try {
                 // Commit fires DocumentChanged with the script's deltas so the monitor can report
@@ -970,6 +1127,8 @@ public sealed class RevitScriptExecutionService(
                 // still discards everything.
             } finally {
                 transaction?.Dispose();
+                // What the run would have changed is what the guard just committed, read before the group discards it.
+                run.KeepGuarded();
                 if (group?.HasStarted() == true)
                     _ = group.RollBack();
                 group?.Dispose();
@@ -986,7 +1145,7 @@ public sealed class RevitScriptExecutionService(
         // as a foreign write (the ViewSchedule.GetTableData regen persist-false-positive). A change
         // whose name escaped the guard is a committed transaction the group rollback does not cover
         // (e.g. another open document), so it persisted. See ReadOnlyGuardMutationClassifier.
-        var changes = mutationMonitor.Changes;
+        var changes = run.Observed;
         if (changes.Any(change => ReadOnlyGuardMutationClassifier.EscapedGuard(change.Transactions, ReadOnlyGuardTransactionName)))
             throw new RevitScriptMutationException(
                 "ReadOnly script execution changed an open Revit document and the changes PERSISTED (a committed transaction the rollback guard does not cover, e.g. another open document). " +
@@ -1013,7 +1172,9 @@ public sealed class RevitScriptExecutionService(
     private void ExecuteInHostOwnedTransaction(
         PeScriptContainer container,
         RevitScriptContext context,
-        List<ScriptDiagnostic> diagnostics
+        List<ScriptDiagnostic> diagnostics,
+        RunLedger run,
+        string undoName
     ) {
         var document = context.Document ?? throw new RevitScriptTransactionException(
             ScriptExecutionStatus.Rejected,
@@ -1028,7 +1189,9 @@ public sealed class RevitScriptExecutionService(
 
         DocumentSandbox sandbox;
         try {
-            sandbox = DocumentSandbox.BeginCommit(document, "Pe Script Execution");
+            // One transaction is one undo entry, named after the entrypoint.
+            sandbox = DocumentSandbox.BeginCommit(document, undoName);
+            run.Undo = new ScriptUndo(undoName);
         } catch (Exception ex) {
             throw new RevitScriptTransactionException(
                 ScriptExecutionStatus.RuntimeFailed,
@@ -1042,8 +1205,13 @@ public sealed class RevitScriptExecutionService(
         // no modal dialog blocks the external-event queue.
         var commitFailures = new List<(bool IsError, string Message)>();
         var failureOptions = sandbox.Transaction.GetFailureHandlingOptions();
-        _ = failureOptions.SetFailuresPreprocessor(new DelegatingFailuresPreprocessor(accessor =>
-            PeToolsFailureHandling.RejectErrors(accessor, commitFailures)));
+        _ = failureOptions.SetFailuresPreprocessor(new DelegatingFailuresPreprocessor(accessor => {
+            var first = run.Observe(accessor);
+            var result = PeToolsFailureHandling.RejectErrors(accessor, commitFailures);
+            // Continue means no error: every failure was a warning, acknowledged and deleted.
+            if (result == FailureProcessingResult.Continue) run.Dismiss(first);
+            return result;
+        }));
         _ = failureOptions.SetClearAfterRollback(true);
         _ = failureOptions.SetForcedModalHandling(false);
         sandbox.Transaction.SetFailureHandlingOptions(failureOptions);
@@ -1051,7 +1219,7 @@ public sealed class RevitScriptExecutionService(
         try {
             // Sandbox dispose rolls back anything uncommitted, so a script exception propagates untouched.
             using (sandbox) {
-                container.Execute();
+                run.Execute(container);
 
                 try {
                     sandbox.Complete();
@@ -1111,7 +1279,9 @@ public sealed class RevitScriptExecutionService(
         resultArtifacts,
         data,
         attribution,
-        ScriptRunScope.Current?.Held
+        ScriptRunScope.Current?.Held,
+        outputSink.Changes,
+        outputSink.Failures
     );
     }
 

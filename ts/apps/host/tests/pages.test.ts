@@ -1145,6 +1145,91 @@ describe("pages", () => {
       expect((pe as unknown as { lastRun: unknown }).lastRun).toEqual(broken);
     });
 
+    // Slice 6. Mutants, each run red once: read `before` from the real run's ids instead of the dry run's
+    // (the deleted element has no row and the modified one no before); drop `mode: "ReadOnly"` from the
+    // first run (the script writes twice); compare on the shown value (the 0.004 change is `unchanged`);
+    // drop `expect` from the before read (the aimed element is unread); delete the array refusal (an
+    // array reaches pe.script and the host is called).
+    it("pe.diff dry-runs a script, runs it, and answers rows from the run's own change ids", async () => {
+      const ids = (...list: number[]) => ({ ids: list, total: list.length });
+      const changes = (kept: boolean) => ({
+        added: ids(3), modified: ids(1), deleted: ids(2), transactions: [], kept,
+        summary: kept ? "Changed 3 elements" : "ReadOnly run", undo: kept ? "Pe script: heal" : null,
+      });
+      let wrote = false;
+      let dryFails = false;
+      const entry = (elementId: number, typeName: string, raw: string, shown: string) => ({
+        elementId, name: `Tap ${elementId}`, categoryName: "Duct Fittings", typeName,
+        requestedParameters: [{ name: "Loss", rawValue: raw, displayValue: shown }],
+      });
+      const { pe, sent } = await page((url, init) => {
+        const body = JSON.parse(String(init.body ?? "{}"));
+        if (url.pathname === "/pages/todo/act") {
+          const dry = body.input.permissionMode === "ReadOnly";
+          if (dry && dryFails)
+            return Response.json({ id: "a", state: "failed", status: 422, evidence: { result: {
+              status: "PolicyRejected", output: "", diagnostics: [{ severity: "Error", message: "script-owned transaction" }] } } });
+          wrote ||= !dry;
+          return Response.json({ id: "a", state: "succeeded", result: {
+            status: "Succeeded", data: { healed: 1 }, diagnostics: [], output: "", changes: changes(!dry) } });
+        }
+        if (url.pathname === "/pages/todo/call")
+          return Response.json({ entries: (body.request.query.elementIds as number[]).flatMap((id) =>
+            id === 1 ? [entry(1, wrote ? "Tight" : "Loose", wrote ? "0.254" : "0.250", "0.25")]
+            : id === 2 && !wrote ? [entry(2, "Loose", "0.1", "0.10")]
+            : id === 3 && wrote ? [entry(3, "Tight", "0.3", "0.30")] : []) });
+        return undefined;
+      }, "page:@ducts/pages/tour");
+      const diff = pe.diff as unknown as (run: object, names?: string[]) => Promise<Record<string, unknown>>;
+
+      const answer = await diff({ script: "heals/taps.csx", input: { tight: true } }, ["Loss"]);
+
+      const posts = sent.filter((one) => one.method === "POST" && /\/(act|call)$/.test(one.url)).map((one) => one.body as {
+        key: string; input?: { permissionMode?: string }; request?: { query: { elementIds: number[] } } });
+      expect(posts.map((one) => one.input?.permissionMode ?? one.request?.query.elementIds ?? "declared")).toEqual([
+        "ReadOnly", [1, 2], "declared", [3, 1],
+      ]);
+      expect(answer).toMatchObject({
+        data: { healed: 1 },
+        changes: { undo: "Pe script: heal", kept: true },
+        dry: { ran: true, why: null },
+        elements: [
+          { id: 3, change: "added", name: "Tap 3", category: "Duct Fittings" },
+          { id: 1, change: "modified", name: "Tap 1", category: "Duct Fittings" },
+          { id: 2, change: "deleted", name: "Tap 2", category: "Duct Fittings" },
+        ],
+        unchanged: 0,
+        truncated: false,
+      });
+      expect(answer.rows).toEqual([
+        { id: 3, change: "added", parameter: "Type", before: null, after: "Tight" },
+        { id: 3, change: "added", parameter: "Loss", before: null, after: "0.30" },
+        { id: 1, change: "modified", parameter: "Type", before: "Loose", after: "Tight" },
+        // The shown value is the same; Revit's raw value changed, so it is a row.
+        { id: 1, change: "modified", parameter: "Loss", before: "0.25", after: "0.25" },
+        { id: 2, change: "deleted", parameter: "Type", before: "Loose", after: null },
+        { id: 2, change: "deleted", parameter: "Loss", before: "0.10", after: null },
+      ]);
+
+      // A script that cannot run ReadOnly still runs for real, and `dry` says why. A modified element nobody
+      // read before has no rows; one the Page named in `expect` was read before and has them.
+      dryFails = true;
+      wrote = false;
+      const blind = await diff({ script: "heals/taps.csx" }, ["Loss"]);
+      expect(blind.dry).toMatchObject({ ran: false, why: expect.stringContaining("script-owned transaction") });
+      expect(blind).toMatchObject({ unread: 1, changes: { kept: true } });
+      expect((blind.rows as { id: number }[]).map((row) => row.id)).toEqual([3, 3]);
+      wrote = false;
+      const aimed = await diff({ script: "heals/taps.csx", expect: [1] }, ["Loss"]);
+      expect(aimed).toMatchObject({ unread: 0, dry: { ran: false } });
+      expect(aimed.rows).toContainEqual({ id: 1, change: "modified", parameter: "Type", before: "Loose", after: "Tight" });
+
+      // The retired (elementIds, parameterNames, run) form is refused in plain words, before anything runs.
+      const acts = sent.length;
+      await expect(diff([1], ["Loss"])).rejects.toThrow(/pe\.diff takes the run itself.*retired/);
+      expect(sent.length).toBe(acts);
+    });
+
     it("C2: one stream reduces replay and live rows with identical metadata, without duplicate echoes", async () => {
       const replay = {
         seq: 1,
