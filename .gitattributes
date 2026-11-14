@@ -39,4 +39,3 @@ examples/pods/** text eol=lf
 # and the freshness guard stays red until `pnpm codegen` (or the pod republish) rewrites it.
 # `python .agents/skills/check.py --fix` sets the driver; without it git reports the conflict as before.
 ts/packages/host-contracts/src/generated/ops-catalog.sha merge=regen
-examples/pods/**/route.artifact merge=regen

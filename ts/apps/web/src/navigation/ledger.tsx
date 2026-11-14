@@ -10,7 +10,6 @@ import { NOTICE_GROUPS, type NoticeRow } from "@pe/agent-contracts";
 import { peClient } from "#/host/pe-client";
 import { followAction } from "#/shell/work-feed-client";
 import { relativeThreadAge } from "#/workbench/thread-navigation";
-import { usePodRoutes } from "#/route/pod-route-context";
 import { previousOf } from "#/host/resource-state";
 import {
   destinationDetail,
@@ -78,7 +77,6 @@ export function useLedgerList(
   query = "",
   kind: ResultKind = "All",
 ) {
-  const pods = usePodRoutes();
   const { rows, status, fault } = useLedgerRows();
   const { snapshot, loading, error } = useNavigation();
   const go = useDestination();
@@ -104,7 +102,7 @@ export function useLedgerList(
         ]
       : []),
     ...(presentation.destinations && (searching || kind !== "All")
-      ? globalItems(snapshot, kind, pods?.rows).map((destination) => ({
+      ? globalItems(snapshot, kind).map((destination) => ({
           kind: "go" as const,
           key: `go:${destination.key}`,
           destination,

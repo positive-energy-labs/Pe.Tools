@@ -143,7 +143,6 @@ export function stateTree(root: string): StateRoot & {
     /** User-added endpoint providers (`harness/providers.ts`). Holds keys: state, not Documents. */
     providers: state("providers.json"),
     pluginDecisions: state("plugins.json"),
-    routeTrust: state("route-trust.json"),
     shippedPods: state("shipped-pods"),
   };
   const machine: StateRoot = paths;

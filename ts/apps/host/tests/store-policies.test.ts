@@ -27,7 +27,6 @@ import { hostOwnership } from "../src/host-ownership.ts";
 import { noticeRows } from "../src/notice-feed.ts";
 import { createPackageLifecycle } from "../src/package-lifecycle.ts";
 import { listPackages } from "../src/packages.ts";
-import { createPodRoutes } from "../src/pod-routes.ts";
 import { createDevices, devicesKind } from "../src/remote-device.ts";
 import { stateTree } from "@pe/host-contracts/service-identity";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
@@ -238,18 +237,6 @@ describe("keep: a person's file is listed \"can't read, kept\", its bytes never 
         await owner.ready;
         return owner.setEnabled("product:skills", false);
       },
-    },
-    {
-      name: "Pod route trust",
-      file: () => stateMachine(root).routeTrust,
-      read: (path: string) =>
-        createPodRoutes(lifecycle(join(root, "none.json")), { machine: stateMachine(storedParent(path)) }).list(),
-      write: (path: string) =>
-        createPodRoutes(lifecycle(join(root, "none.json")), { machine: stateMachine(storedParent(path)) }).trust(
-          "route:@pod/routes/a",
-          HEX,
-          true,
-        ),
     },
   ];
   test.each(kinds.flatMap((kind) => [CORRUPT, WRONG_SHAPE].map((bytes) => ({ ...kind, bytes }))))(

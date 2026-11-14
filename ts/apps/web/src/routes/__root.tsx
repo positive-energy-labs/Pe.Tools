@@ -34,7 +34,6 @@ import { useSurfaceHost } from "#/navigation/surface-host";
 import { appRouteMount, appRouteByPath } from "@pe/agent-contracts";
 import { Button } from "@pe/kit/lang/button";
 import { RemoteDeviceGate } from "#/machine/devices";
-import { PodRoutesProvider } from "#/route/pod-routes";
 
 import { TooltipProvider } from "@pe/kit/lang/tooltip";
 import { ElementMenu } from "#/revit/element-menu";
@@ -95,7 +94,6 @@ export function RootComponent() {
   const shell = useRouterState({ select: (state) => state.location.search.shell });
   if (shell === "card") return <NoticeShell />;
   return (
-    <PodRoutesProvider>
       <NavigationProvider>
         <RouteControlsProvider>
           <SettingsProvider>
@@ -124,7 +122,6 @@ export function RootComponent() {
           </SettingsProvider>
         </RouteControlsProvider>
       </NavigationProvider>
-    </PodRoutesProvider>
   );
 }
 

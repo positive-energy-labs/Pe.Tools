@@ -2,8 +2,6 @@
   "hostCalls": [
     "ts/apps/web/src/grounded-doc/engine.ts#useGroundedDoc/runParse/response:fetch",
     "ts/apps/web/src/revit/observation.tsx#readFamilyPlacements/response:createPeClient",
-    "ts/apps/web/src/route/pod-fixtures.ts#podFixtures/response:fetch",
-    "ts/apps/web/src/route/pod-fixtures.ts#podFixtures/response:fetch",
     "ts/apps/web/src/routes/api/pdf-audit/parse.ts#fetchPdf:fetch",
     "ts/apps/web/src/routes/design-system_.popovers.tsx#ResourcePreviews:hostFetch"
   ],
@@ -52,10 +50,8 @@
   "uncheckedRegistry": [],
   "malformedSources": [],
   "dynamicModules": [
-    "ts/apps/host/src/pod-artifact.ts#admitPodArtifact/loaded:import",
     "ts/apps/web/scripts/heal-click-proof.ts#{ chromium }:require",
     "ts/apps/web/scripts/heal-review-proof.ts#{ chromium }:require",
-    "ts/apps/web/scripts/layout-proof.ts#{ chromium }:require",
-    "ts/apps/web/src/route/pod-artifact.ts#evaluatePodBytes:import"
+    "ts/apps/web/scripts/layout-proof.ts#{ chromium }:require"
   ]
 }

@@ -4,6 +4,8 @@ Rewritten 2026-09-16 after the pod/product boundary grill. Git holds the earlier
 
 ## Decided
 
+- 2026-11-14, owner: Pages are the only Pod UI; a Pod is pod.json plus Pages plus C# scripts. Compiled Pod-route promotion is retired by [ADR 0045](../../adr/0045-pages-only-pod-ui.md). Builtin routes retain kernel Work, History and slots.
+
 - 2026-11-14, pod-pages C1 ([script door contract](MAP.md#c1-script-door-owner-w1-readers-w3-w4-w5-w6-w9)): a `.cs` or `.csx` member anywhere in the Pod can be the selected entrypoint. Only the selected `.csx` compiles; shared helpers declare types in `.cs` files. `RevitScriptingPortTests.Pod_workspace_execution_compiles_all_src_and_uses_helper_files` covers helpers in `src/` and `lib/`, a Page `.csx`, and exclusion of an invalid unselected `.csx`.
 - 2026-11-14, pod-pages D41, re-openable implementor ruling for C1: "A bare path (`src/Compare.cs`) resolves from the Pod root. `./name.csx` (or `../`) resolves beside the Page's index.html. A leading `/` stays the Pod root." This supersedes the earlier "relative resolves beside index.html" rule in `pe.js`; an undeclared path that matches a declared entrypoint under the other reading names that declaration with `did you mean /<declared path>?`, never advice to declare another entrypoint. Evidence: run `pod-pages-20261114/drive/f1/C2c/` and `drive/f1/C2/slice8-pea.txt`; regression: `ts/apps/host/tests/pages.test.ts`.
 - 2026-11-14, pod-pages C3, implementor default, re-openable (owner queue 2): a Pod names its model in `pod.json` as `"for": { "title", "probes": [ { "elementId", "uniqueId" } ] }`. A Pod without `for` is a tool and runs on any model. On another model the Page and every script door refuse with the same `wrong-model` words, so Pea and the Page refuse alike.
@@ -81,6 +83,9 @@ Rewritten 2026-09-16 after the pod/product boundary grill. Git holds the earlier
 - 2026-11-14, pod-pages O-UNDO2: undo posted from a script with `RevitCommandId.LookupCommandId("ID_EDIT_UNDO")`. Revit refused it: "The commandId must be in Autodesk.Revit.UI.PostableCommand or an external command" (`.artifacts/runs/pod-pages-20261114/drive/f1/A5/undo.cs`, `WALK.md:8` beside it). `Document` has no undo call. `RevitCommandId.LookupPostableCommandId(PostableCommand.Undo)` does post, but Revit runs it only when it is idle, so a run cannot undo and read the result back in one call ([ADR 0044](../../adr/0044-a-script-run-is-fenced-to-its-target-document.md), Consequences).
 
 ## Owed
+
+- 2026-11-14, W45: Hydronic firm limits. The Page currently names local defaults of 400 Pa/m and 1.5 m/s; port the former `ctx.files.firm` read of firm `Settings/hydronic.json` through an existing Page door. Accepted owed by the implementor.
+- 2026-11-14, W45: Hydronic marked picture. Add `pe.picture` with real pipe correspondence and prove it on a disposable model. Accepted owed by the implementor.
 
 - Kernel crusade 2 slice 2 deletes the Pod plugin import (ADR 0042 rule 8): `plugins/*/index.js` cannot run host code or observe turn, session or operation hooks; Pages, routes, scripts, skills and settings remain. No shipped example uses it. Owed when a Pod needs host behavior at install: a declared door, never an import.
 - Decode all executable contract members at the loader and remove the double casts at `pod-module.ts:35/:40`. Evidence: `.artifacts/runs/kernel-crusade-20261104/takeover/WAVE-5.md:374`.

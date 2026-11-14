@@ -80,7 +80,6 @@ export type StateRoot = {
   readonly peaWork: StatePath;
   readonly providers: StatePath;
   readonly pluginDecisions: StatePath;
-  readonly routeTrust: StatePath;
   readonly shippedPods: StatePath;
 };
 /** A proven home, bound to the machine whose blob store keeps what a write into it replaces (ADR 0037 rule 7). Minted by `stateTree(root).home(home)`. */

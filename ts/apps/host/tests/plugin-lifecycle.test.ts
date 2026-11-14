@@ -12,7 +12,6 @@ import { createContributionContent } from "../src/pe-routes.ts";
 import { createPluginsHandler } from "../src/plugins-handler.ts";
 import { bindPackageLifecycle, createPackageLifecycle, requirePackageEnabled } from "../src/package-lifecycle.ts";
 import { listPackages } from "../src/packages.ts";
-import { createPodRoutes } from "../src/pod-routes.ts";
 import { createPagesHandler } from "../src/pages-route.ts";
 import { freezeScript } from "../src/operation-script.ts";
 import { readMember } from "../src/settings.ts";
@@ -25,38 +24,6 @@ afterEach(async () => {
   bindPackageLifecycle(undefined);
   vi.unstubAllEnvs();
   if (root) await rm(root, { recursive: true, force: true });
-});
-
-test("route inventory answers while the action awaits its own package reconciliation", async () => {
-  root = await mkdtemp(join(tmpdir(), "pe-plugin-reconcile-"));
-  const machine = stateMachine(root);
-  const captured = Promise.withResolvers<void>();
-  const hold = Promise.withResolvers<void>();
-  let refreshing = false;
-  const lifecycle = createPackageLifecycle({ machine, packages: async () => {
-    if (refreshing) { captured.resolve(); await hold.promise; }
-    return listPackages({ podsRoots: join(root, "Pods") });
-  } });
-  const routes = createPodRoutes(lifecycle, { machine });
-  await lifecycle.ready;
-  refreshing = true;
-  const reconciliation = lifecycle.refresh();
-  await captured.promise;
-  let answered = false;
-  let reconciled = false;
-  void reconciliation.then(() => { reconciled = true; });
-  const inventory = routes.list().then(rows => { answered = true; return rows; });
-  try {
-    await new Promise<void>(resolve => setImmediate(resolve));
-    expect(answered, "inventory must serve the completed census without waiting for the action").toBe(true);
-    expect(reconciled, "the action itself must still await its reconciliation").toBe(false);
-  } finally {
-    hold.resolve();
-    await reconciliation;
-    await inventory;
-    routes.close();
-    await lifecycle.close();
-  }
 });
 
 test("an import before initialization finishes becomes active after the initial census", async () => {

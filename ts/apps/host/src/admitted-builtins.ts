@@ -11,7 +11,7 @@ import {
 import { captureHostModule } from "@pe/agent-contracts";
 import type { HostAdmittedRoute } from "@pe/agent-contracts";
 import { builtinEnrollments, type BuiltinEnrollment } from "./builtin-enrollment.ts";
-import { registerAdmittedHostRoute } from "./pod-routes.ts";
+import { registerAdmittedHostRoute } from "./admitted-host-route.ts";
 
 export class BuiltinEnrollmentFailed extends Schema.TaggedError<BuiltinEnrollmentFailed>()(
   "BuiltinEnrollmentFailed",

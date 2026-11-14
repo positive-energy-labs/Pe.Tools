@@ -1,36 +1,14 @@
 import { matchPeRoute, peRoutes } from "@pe/agent-contracts/pe-api";
-import { message } from "@pe/agent-contracts";
 import type { createContributionContent } from "./pe-routes.ts";
-import { createPodRoutes, PodRouteCheckTimeout } from "./pod-routes.ts";
 
 /** Served behind `servePeRoute`: the route matched and its input parsed before this runs. */
 export function createPluginsHandler(
   content: ReturnType<typeof createContributionContent>,
-  routes = createPodRoutes(content.lifecycle),
 ) {
   return async (request: Request) => {
     const declared = matchPeRoute(request.method, new URL(request.url).pathname)!;
     await content.lifecycle.ready;
     const json = (value: unknown, status = 200) => Response.json(value, { status });
-    try {
-      if (declared.id === "plugins.routes") return json(await routes.list());
-      if (declared.id === "plugins.routeBundle")
-        return Response.json(await routes.bundle(declared.params.key, declared.params.hash), {
-          headers: {
-            "content-type": "application/json; charset=utf-8",
-            "cache-control": "no-store",
-            "x-content-type-options": "nosniff",
-          },
-        });
-      if (declared.id === "plugins.routeTrust") {
-        const body = peRoutes["plugins.routeTrust"].body.parse(await request.json());
-        return json(await routes.trust(declared.params.key, body.fingerprint, body.trusted));
-      }
-    } catch (error) {
-      if (error instanceof PodRouteCheckTimeout)
-        return json({ error: message(error), code: error.code, retryable: error.retryable }, 503);
-      return json({ error: message(error) }, 409);
-    }
     if (request.method === "GET") {
       content.lifecycle.requestRefresh();
       return json(content.lifecycle.inventory());
@@ -43,7 +21,6 @@ export function createPluginsHandler(
     const { enabled } = peRoutes["plugin.update"].body.parse(await request.json());
     await content.lifecycle.setEnabled(id, enabled);
     await content.read();
-    await routes.list();
     return json(content.lifecycle.inventory());
   };
 }

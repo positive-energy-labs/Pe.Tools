@@ -162,7 +162,6 @@ import {
 } from "./page-libraries.ts";
 import { createPluginsHandler } from "./plugins-handler.ts";
 import { PackageDiscoveryExceeded, requirePackageAvailable, stopPackageDiscovery } from "./pod-capture.ts";
-import { createPodRoutes } from "./pod-routes.ts";
 import { userRoot } from "@pe/host-contracts/product-paths";
 import { graphRouteIds } from "./reads/routes.ts";
 import {
@@ -1353,12 +1352,6 @@ function* hostPeRoutes(
         releaseBridge?.();
       };
     },
-    routes: async () =>
-      Object.fromEntries(
-        (await podRoutes.list())
-          .filter((route) => route.trusted)
-          .map((route) => [route.workRoute, `/tool/${encodeURIComponent(route.key)}`]),
-      ),
     threads: async () => {
       const response = await threads.fetch(
         new Request(peRouteUrl("threads.list", {}, hostBaseUrl)),
@@ -1477,7 +1470,6 @@ function* hostPeRoutes(
     // session: 1 to 3 s here, far more with a big cloud model) although the poll already ran one.
     machine: () => machineForRead(hostMachineFace.current(), () => hostMachineFace.refresh()),
     content: async () => {
-      await podRoutes.list();
       return content.read();
     },
     pages: async (scope) => content.pages(bridge ? (await Effect.runPromise(targetHomes(bridge, scope))).pointer : undefined),
@@ -1554,7 +1546,6 @@ function* hostPeRoutes(
     log: hostLog,
     reportContext: threads.reportContext,
   });
-  const podRoutes = createPodRoutes(content.lifecycle, { workspace: routes.workspace, bridge });
   const fetchRoute = routes.fetch;
   routes.fetch = async (request, invocation) => {
     const declared = matchPeRoute(request.method, new URL(request.url).pathname);
@@ -1562,18 +1553,16 @@ function* hostPeRoutes(
       notices.beat(declared.params.caller!, await request.json());
       return Response.json({ ok: true });
     }
-    if (declared?.params.route?.startsWith("pod.")) await podRoutes.list();
     return fetchRoute(request, invocation);
   };
   const plugins = {
     close: async () => {
-      podRoutes.close();
       stopWorkContext?.();
       await content.close();
       stopPackageDiscovery();
       bindPackageLifecycle(undefined);
     },
-    fetch: createPluginsHandler(content, podRoutes),
+    fetch: createPluginsHandler(content),
   };
   return { providers, threads, routes, catalog, machineSpec, notices, plugins, tasks };
 }

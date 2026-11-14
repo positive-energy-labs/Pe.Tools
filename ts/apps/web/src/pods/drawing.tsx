@@ -1,9 +1,4 @@
-import { podRouteFiles } from "../route/pod-skeleton";
-import { podRoutePath } from "../route/pod-address";
-import { Input } from "@pe/kit/lang/input";
-import { useState } from "react";
 import { Button } from "@pe/kit/lang/button";
-import { Code } from "@pe/kit/lang/code";
 import { useList } from "@pe/kit/lang/collection";
 import { ListView } from "@pe/kit/lang/list-view";
 import { podMemberCode } from "@pe/agent-contracts";
@@ -27,12 +22,6 @@ export function Members({ ctx }: { ctx: PodsRosterContext }) {
   });
   return (
     <>
-      {value.value?.pods.flatMap((pod) =>
-        pod.contributions.filter((entry) => entry.kind === "route").map((entry) => (
-          <a key={entry.key} href={podRoutePath(entry.key)}>Manage trust for {entry.name}</a>
-        )),
-      )}
-      <RouteSource packageId={open?.pod ?? ""}/>
       {value.value?.pods.flatMap((pod) =>
         pod.diagnostics.map((diagnostic, i) => (
           <p key={`${pod.id}:${i}`} role="alert">
@@ -87,21 +76,4 @@ export function Runs({ ctx }: { ctx: PodsContext }) {
     </>
   );
 }
-
-/** Source for a typed tool, handed to the same publisher as builtin route modules. */
-function RouteSource({packageId}:{packageId:string}) {
-  const [slug,setSlug]=useState("worksheet");
-  let files:ReturnType<typeof podRouteFiles>|null=null,problem:string|null=null;
-  try {files=podRouteFiles(packageId,slug);} catch(error){problem=String(error);}
-  return <details><summary>New typed tool</summary>
-    <label>Route slug<Input aria-label="Route slug" value={slug} onChange={event=>setSlug(event.target.value)}/></label>
-    {problem?<p role="status">{packageId?problem:"Choose a Pod to generate its typed tool source"}</p>:<>
-      {Object.entries(files??{}).map(([name,source])=><div key={name}>
-        <Code code={source} lang="typescript" title={name}/>
-        <a download={name} href={`data:text/plain;charset=utf-8,${encodeURIComponent(source)}`}>Download {name}</a>
-      </div>)}
-    </>}
-  </details>;
-}
-
 

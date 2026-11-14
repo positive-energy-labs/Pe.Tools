@@ -812,7 +812,6 @@ async function dispatch(
       );
       return { ...answer, target: bound ? { session: bound.session, openId: bound.openId } : { session: null } };
     }
-    case "route":
     case "skill":
     case "member": {
       const answer = await contributionRead(row);

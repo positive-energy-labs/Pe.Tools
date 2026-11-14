@@ -23,7 +23,10 @@
     "apps/host/src/session-route.ts": 1,
     "packages/browser/src/attached-guardian.ts": 1,
     "packages/browser/src/keeper.ts": 1,
-    "packages/mcps/src/shared/host-rpc-caller.ts": 1
+    "packages/mcps/src/shared/host-rpc-caller.ts": 1,
+    "apps/host/src/admitted-host-route.ts": 0,
+    "apps/host/src/content-roots.ts": 0,
+    "apps/host/src/pod-disk-signature.ts": 0
   },
   "tests": {
     "apps/host/tests/boundary.test.ts": 5,
@@ -45,6 +48,10 @@
     "apps/host/tests/vite-web.test.ts": 4,
     "apps/host/tests/work-lifetime.test.ts": 1,
     "packages/browser/tests/acceptance.test.ts": 1,
-    "apps/host/tests/member-probe.test.ts": 0
+    "apps/host/tests/bridge-inventory.test.ts": 0,
+    "apps/host/tests/build-kit.global-setup.ts": 0,
+    "apps/host/tests/content-roots.test.ts": 0,
+    "apps/host/tests/pod-discovery-incremental.test.ts": 0,
+    "apps/web/src/ops/views/context/view-image.test.tsx": 0
   }
 }
