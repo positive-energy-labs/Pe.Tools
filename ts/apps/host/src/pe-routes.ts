@@ -1,5 +1,5 @@
 import { stateScope } from "@pe/host-contracts/service-identity";
-import { acquireContentRoots, contentHomes, contentHomesFound, contentRootsUnavailable, observeContentRoots, ContentHomeUnavailable } from "./content-roots.ts";
+import { acquireContentRoots, contentRootsReady, contentHomes, contentHomesFound, contentRootsUnavailable, observeContentRoots, ContentHomeUnavailable } from "./content-roots.ts";
 import { homeLogLines } from "@pe/host-contracts/product-paths";
 import { targetHomes } from "./call-route.ts";
 import { readPlaces, writePlaces } from "./places.ts";
@@ -1174,6 +1174,7 @@ export function createContributionContent(options: {
     },
     /** Scratch Pages are files an agent writes at any moment; they are never served from the 30 s snapshot. */
     pages: async (pointer?: string | null) => {
+      await contentRootsReady(pointer);
       const descriptors = options.pages
         ? await options.pages(admitted)
         : await scratchPageDescriptors(pointer ? productPagesRoots(pointer) : pagesRoots());

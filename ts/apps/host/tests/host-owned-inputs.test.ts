@@ -93,6 +93,8 @@ test("recorded host-local inputs and immutable capture files replay without a li
                             lens: { basis: "UserView", viewId: 1 },
                             hidden: [],
                             marks: [],
+                            refused: false,
+                            notDrawn: [],
                             registration: {
                               width: 20,
                               height: 10,
