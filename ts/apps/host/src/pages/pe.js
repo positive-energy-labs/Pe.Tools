@@ -112,7 +112,9 @@
       load: async () => ({ seq: exported.events.at(-1)?.seq ?? 0, events: exported.events }),
       publish: async () => {},
       follow: () => {},
-      append: async () => { throw Error("An exported Page cannot append events"); },
+      append: async () => {
+        throw Error("An exported Page cannot append events");
+      },
     });
     return pe;
   }
@@ -179,8 +181,8 @@
    * `pod.discovery.exceeded`). A lost connection is not a final reading.
    * So `send` is sent again after 1 s, 2 s, 5 s, then every 10 s for as long as the page is open, and the page says
    * what it is waiting for in the host's words. Every other answer comes back as it is, at once: a refusal, a 4xx
-   * and any other 503 are never asked twice. Every read goes through here (target, state, its text publish, and
-   * `pe.read` and `pe.do` read probes); Page code never loops. This is the sole read retry owner, including
+   * and any other 503 are never asked twice. Every read goes through here (target, state, its text publish, `pe.find`,
+   * `pe.read`, `pe.do` read probes, receipt polls, and a scratch Page's own source); Page code never loops. This is the sole read retry owner, including
    * fire's catch-up after a committed append. An act (append, `pe.do` mutation, `pe.script`) is never sent twice.
    */
   const DISCOVERY_WAITS = [1000, 2000, 5000];
@@ -192,13 +194,24 @@
       for (let tries = 0; ; tries++) {
         let r, message;
         try {
-          r = await send();
+          const sent = await send();
+          // Headers can arrive and the body still be lost, so the body is read here, inside the retry.
+          r = new Response(
+            [101, 204, 205, 304].includes(sent.status) ? null : await sent.arrayBuffer(),
+            sent,
+          );
         } catch (error) {
           if (!transportFailure(error) || stopped) throw error;
           message = `waiting for the host connection: ${error.message}`;
         }
         if (r) {
-          const late = r.status === 503 ? await r.clone().json().catch(() => null) : null;
+          const late =
+            r.status === 503
+              ? await r
+                  .clone()
+                  .json()
+                  .catch(() => null)
+              : null;
           const expiry = late?.error && typeof late.error === "object" ? late.error : late;
           if (expiry?.code !== "pod.discovery.exceeded" || stopped) return r;
           message = `waiting for the Pods folder: ${expiry.message}`;
@@ -264,7 +277,9 @@
 
   /** The host's reading of this page's default slot: binding, resolution, document, and what a write would do. */
   const readTarget = async () => {
-    const reading = await json(await whenDiscovered(() => client.response("page.target", pageInput())));
+    const reading = await json(
+      await whenDiscovered(() => client.response("page.target", pageInput())),
+    );
     pe.doc = reading.document;
     return reading;
   };
@@ -285,7 +300,8 @@
     if (reading.resolution.kind === "resolved") return pe.doc;
     const code = reading.resolution.reason || reading.resolution.kind;
     const error = new Error(
-      reading.resolution.message || `pe.target: this page's binding names no one document (${code}). Bind it from the chip.`,
+      reading.resolution.message ||
+        `pe.target: this page's binding names no one document (${code}). Bind it from the chip.`,
     );
     Object.assign(error, { name: "PeTargetRefusal", code, resolution: reading.resolution });
     banner(error.message);
@@ -302,7 +318,9 @@
     if (kind) q.set("kind", kind);
     if (pe.doc) q.set("session", pe.doc.session);
     const { capabilities } = await json(
-      await client.response("capabilities.find", { query: Object.fromEntries(q) }),
+      await whenDiscovered(() =>
+        client.response("capabilities.find", { query: Object.fromEntries(q) }),
+      ),
     );
     return capabilities.map(({ key, kind, title, description }) => ({
       key,
@@ -318,12 +336,16 @@
 
   /** One act as this page (`/pages/<slug>/act`), waited until its receipt settles; answers the settled row. */
   const act = async (key, input) => {
-    let row = await json(await sendAct(() => client.response("page.act", pageInput({ key, input }))));
+    let row = await json(
+      await sendAct(() => client.response("page.act", pageInput({ key, input }))),
+    );
     const id = row.id;
     while (row.state === "running") {
       await new Promise((ok) => setTimeout(ok, 250));
       // Polling a sent act's receipt is a read: a lost connection here is retried, never the act itself.
-      [row = row] = await json(await whenDiscovered(() => client.response("actions.read", { query: { id } })));
+      [row = row] = await json(
+        await whenDiscovered(() => client.response("actions.read", { query: { id } })),
+      );
     }
     return row;
   };
@@ -337,7 +359,9 @@
   pe.do = async (key, input = {}) => {
     if (key.startsWith("script:")) return pe.script(key, input);
     // `/call` never dispatches a mutation, so asking it again is safe; `act` below is sent once.
-    const r = await whenDiscovered(() => client.response("page.call", pageInput({ key, request: input })));
+    const r = await whenDiscovered(() =>
+      client.response("page.call", pageInput({ key, request: input })),
+    );
     if (r.ok) return json(r);
     const wire = await r.json().catch(() => null);
     const answer = wire?.error?.details ?? wire;
@@ -381,7 +405,9 @@
     let scriptContent = inline ? keyOrPath : undefined;
     if (key === null) {
       // A scratch Page's own file is its own source: it has no Pod to declare it in, so it runs as inline source.
-      const r = await pe.fetch(new URL(keyOrPath, location.href), { cache: "no-store" });
+      const r = await whenDiscovered(() =>
+        pe.fetch(new URL(keyOrPath, location.href), { cache: "no-store" }),
+      );
       if (!r.ok) return fail(r);
       scriptContent = await r.text();
     }
@@ -421,9 +447,11 @@
    * twice the focus size on each side for context. `registration` places pixels in model XY when available.
    */
   pe.picture = async (elementIds, { name, paddingFeet, pixelSize, marginPercent = 200 } = {}) => {
-    const check = result => {
+    const check = (result) => {
       if (!result.refused) return result;
-      const error = new Error(`Picture refused: ${result.notDrawn.map(item => `${item.elementId}: ${item.reasons.join(", ")}`).join("; ")}`);
+      const error = new Error(
+        `Picture refused: ${result.notDrawn.map((item) => `${item.elementId}: ${item.reasons.join(", ")}`).join("; ")}`,
+      );
       error.refused = true;
       error.notDrawn = result.notDrawn;
       error.restore = result.restore;
@@ -431,12 +459,14 @@
     };
     const lens = await pe.do("revit.context.lens", { elementIds, name, paddingFeet });
     check(lens);
-    const image = check(await pe.do("revit.context.view-image.focus", {
-      target: { id: lens.viewId },
-      focus: { elementIds },
-      pixelSize,
-      marginPercent,
-    }));
+    const image = check(
+      await pe.do("revit.context.view-image.focus", {
+        target: { id: lens.viewId },
+        focus: { elementIds },
+        pixelSize,
+        marginPercent,
+      }),
+    );
     if (!image.imageUrl) throw new Error(`view-image of ${lens.viewName} was not kept by the host`);
     // An <img> or SVG <image> sends no header, so the URL itself names this page's runtime owner (D47).
     const url = streamUrl(image.imageUrl);
@@ -478,7 +508,12 @@
    * run's own words. Throws as `pe.script` does when the real run fails.
    */
   pe.diff = async (run, parameterNames = []) => {
-    if (Array.isArray(run) || typeof run !== "object" || run === null || typeof run.script !== "string")
+    if (
+      Array.isArray(run) ||
+      typeof run !== "object" ||
+      run === null ||
+      typeof run.script !== "string"
+    )
       throw new Error(
         'pe.diff takes the run itself: pe.diff({ script: "heals/x.csx", input, expect: [ids] }, parameterNames). The (elementIds, parameterNames, run) form is retired; the changed ids now come from the run.',
       );
@@ -498,7 +533,10 @@
       for (const e of entries) {
         const values = new Map([["Type", { raw: e.typeName ?? null, shown: e.typeName ?? null }]]);
         for (const p of e.requestedParameters || [])
-          values.set(p.name, { raw: p.rawValue ?? p.value ?? null, shown: p.displayValue ?? p.value ?? null });
+          values.set(p.name, {
+            raw: p.rawValue ?? p.value ?? null,
+            shown: p.displayValue ?? p.value ?? null,
+          });
         elements.set(e.elementId, { name: e.name, category: e.categoryName ?? null, values });
       }
       return elements;
@@ -512,7 +550,9 @@
       if (!error.run) throw error;
       dry.why = error.message;
     }
-    const before = await read([...new Set([...ids(dry.changes, "modified", "deleted"), ...expect])]);
+    const before = await read([
+      ...new Set([...ids(dry.changes, "modified", "deleted"), ...expect]),
+    ]);
     const data = await pe.script(script, { input, mode, timeoutSeconds });
     const changes = pe.lastRun?.changes ?? null;
     const after = await read(ids(changes, "added", "modified"));
@@ -523,19 +563,43 @@
     for (const change of ["added", "modified", "deleted"])
       for (const id of ids(changes, change)) {
         const [b, a] = [before.get(id), after.get(id)];
-        elements.push({ id, change, name: (a ?? b)?.name ?? null, category: (a ?? b)?.category ?? null });
+        elements.push({
+          id,
+          change,
+          name: (a ?? b)?.name ?? null,
+          category: (a ?? b)?.category ?? null,
+        });
         if (change === "modified" && !b) {
           unread++;
           continue;
         }
-        for (const parameter of new Set([...(b?.values.keys() || []), ...(a?.values.keys() || [])])) {
+        for (const parameter of new Set([
+          ...(b?.values.keys() || []),
+          ...(a?.values.keys() || []),
+        ])) {
           const [from, to] = [b?.values.get(parameter), a?.values.get(parameter)];
           if (from && to && from.raw === to.raw) unchanged++;
-          else rows.push({ id, change, parameter, before: from?.shown ?? null, after: to?.shown ?? null });
+          else
+            rows.push({
+              id,
+              change,
+              parameter,
+              before: from?.shown ?? null,
+              after: to?.shown ?? null,
+            });
         }
       }
     const total = (c) => (c ? c.added.total + c.modified.total + c.deleted.total : 0);
-    return { data, changes, dry, elements, rows, unchanged, unread, truncated: total(changes) > elements.length || elements.length > cap };
+    return {
+      data,
+      changes,
+      dry,
+      elements,
+      rows,
+      unchanged,
+      unread,
+      truncated: total(changes) > elements.length || elements.length > cap,
+    };
   };
 
   let streamSeq = 0;
@@ -589,7 +653,9 @@
   installPageState(pe, {
     refuse: banner,
     load: (after = 0) =>
-      whenDiscovered(() => client.response("page.state", { ...pageInput(), query: { after } })).then(json),
+      whenDiscovered(() =>
+        client.response("page.state", { ...pageInput(), query: { after } }),
+      ).then(json),
     append: (event) => sendAct(() => client.response("page.append", pageInput(event))).then(json),
     publish: async (projection) => {
       const r = await whenDiscovered(() => client.response("page.text", pageInput(projection)));
