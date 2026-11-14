@@ -4,6 +4,8 @@ Rewritten 2026-09-16 after the pod/product boundary grill. Git holds the earlier
 
 ## Decided
 
+- 2026-11-14, pod-pages C1 ([script door contract](MAP.md#c1-script-door-owner-w1-readers-w3-w4-w5-w6-w9)): a `.cs` or `.csx` member anywhere in the Pod can be the selected entrypoint. Only the selected `.csx` compiles; shared helpers declare types in `.cs` files. `RevitScriptingPortTests.Pod_workspace_execution_compiles_all_src_and_uses_helper_files` covers helpers in `src/` and `lib/`, a Page `.csx`, and exclusion of an invalid unselected `.csx`.
+
 - 2026-11-03, orchestrator-authorized P1: Pod route members declare strict `{artifact, fingerprint, name, description, page?}`. `artifact` names `routes/<slug>/route.artifact`; fingerprint is `pod-bytes:<digest>`. Legacy route `sourcePath` and descriptor member `sha256` are deleted. `publishPodRoute` uses `buildRouteArtifact` and serializes `RouteArtifactBytes` byte fields as integer-octet arrays. `PodRouteAuthoring` is the typed source declaration. Package inventory verifies actual closure bytes against the manifest fingerprint before route discovery.
 - 2026-11-03, P1 applies routes ruling `0944c85d`: Snowdon's admitted route is an authored copper voltage-drop worksheet with subject display, calculation, Work editing and v1-to-v2 migration. Removed route demo behavior: wire-intent editor, staged native parameter write, native circuit/manual picker, manual fixture and legacy custom renderer/registration. The portable Page tour remains separate. No kernel slot was added to preserve this demo behavior.
 
