@@ -95,7 +95,7 @@ import { stateDirectory } from "@pe/host-contracts/service-identity";
 
 /**
  * Each library file beside its source on the dev lane, so an edit is live on the next request;
- * staged under `<exeDir>/pages` when installed (`scripts/stage-web.mjs`).
+ * staged under `<exeDir>/pages` when installed (`scripts/stage-web.ts`).
  */
 const assetPath = (name: string) => {
   const source = Object.entries(PAGE_LIBRARY_SOURCES).find(([file]) => file === name)?.[1];
