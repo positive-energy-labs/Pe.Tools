@@ -1,10 +1,8 @@
 import { z } from "zod";
 import { hostDescriptorSchema } from "./host-descriptor.ts";
 import type { HostLocalCatalogEntry } from "./operation-types.ts";
-import { podRouteDescriptorSchema } from "./pod-route.ts";
 import { deviceListingSchema, deviceSessionSchema, pairingSchema } from "./remote-device.ts";
 import type { SessionObservation } from "./vendor/generated/pe-revit-contract.ts";
-export * from "./pod-route.ts";
 export * from "./remote-device.ts";
 
 /** An authored scratch Page. Publication needs no document target. */
@@ -455,46 +453,6 @@ export function peRouteTable<S extends PeApiSchemas>(schemas: S) {
       "human",
       "providers",
       "admin",
-    ),
-    "plugins.routes": route(
-      "GET",
-      "/pe/plugin-routes",
-      none,
-      z.array(podRouteDescriptorSchema),
-      "read",
-      "plugins",
-      "read",
-    ),
-    "plugins.routeTrust": route(
-      "PUT",
-      "/pe/plugin-routes/:key/trust",
-      z.strictObject({
-        fingerprint: z.string().regex(/^pod-bytes:[a-f0-9]{64}$/),
-        trusted: z.boolean(),
-      }),
-      z.array(podRouteDescriptorSchema),
-      "human",
-      "plugins",
-      "admin",
-    ),
-    "plugins.routeBundle": route(
-      "GET",
-      "/pe/plugin-routes/:key/bundle/:hash",
-      none,
-      z.unknown(),
-      "read",
-      "plugins",
-      "read",
-      "asset",
-    ),
-    "plugins.list": route(
-      "GET",
-      "/pe/plugins",
-      none,
-      z.array(pluginStatusSchema),
-      "read",
-      "plugins",
-      "read",
     ),
     "plugin.update": route(
       "PUT",

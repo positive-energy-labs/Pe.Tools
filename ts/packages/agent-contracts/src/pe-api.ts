@@ -288,16 +288,7 @@ function hostRouteAxes(leaves: readonly CatalogLink[]): Record<PeRouteId, Catalo
     "provider.remove": axes("None", "One", ["Metadata"], "SessionWrite", "Cheap", []),
     "provider.probe": axes("None", "One", ["Metadata"], "SessionWrite", "Expensive", []),
     "provider.login": axes("None", "One", ["Metadata"], "SessionWrite", "Mutation", []),
-    "plugins.routes": axes("None", "One", ["Metadata"], "SessionWrite", "Bounded", []),
-    "plugins.routeTrust": axes("None", "One", ["Metadata"], "SessionWrite", "Mutation", [
-      "route:plugins.routes",
-    ]),
-    "plugins.routeBundle": axes("None", "One", ["Metadata"], "SessionWrite", "Bounded", [
-      "route:plugins.routes",
-    ]),
-    "plugins.list": axes("None", "One", ["Metadata"], "Read", "Cheap", []),
     "plugin.update": axes("None", "One", ["Metadata"], "SessionWrite", "Mutation", [
-      "route:plugins.routes",
     ]),
     "tasks.list": axes("None", "One", ["Metadata"], "Read", "Cheap", []),
     "tasks.enabled": axes("None", "One", ["Metadata"], "SessionWrite", "Cheap", []),

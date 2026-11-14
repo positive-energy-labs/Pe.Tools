@@ -26,7 +26,6 @@ const html = template
   )
   .replace("<!-- PAGE -->", () => `<script>${safeScript(shared)}\n${safeScript(app)}</script>`);
 
-// Pod routes publish through publish-pod-route.ts and the generic buildRouteArtifact producer.
 for (const [destination, text] of [[new URL("index.html", page), html]]) {
   if (process.argv.includes("--check")) {
     if ((await readFile(destination, "utf8")).replaceAll("\r\n", "\n") !== text)

@@ -6,8 +6,7 @@ import { ListView, type ListRowParts } from "@pe/kit/lang/list-view";
 import { Scroll } from "@pe/kit/lang/scroll";
 import { TOOLS } from "./catalogue";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
-import type { PodRouteDescriptor } from "@pe/agent-contracts";
-import { TASKS, routeKey, friendlyObservation, podPath, resumeRefusal } from "./model";
+import { TASKS, routeKey, friendlyObservation, resumeRefusal } from "./model";
 import { useDestination, useNavigation } from "./state";
 import { Information } from "./popover";
 import type { NavigationWork } from "./navigation-client";
@@ -17,7 +16,6 @@ import { RouteHelpButton } from "#/route/help";
 import { usePublishRouteOptions } from "./options";
 import type { PageOption } from "./option-state";
 import type { DirectorySearch } from "./directory-search";
-import { usePodRoutes } from "#/route/pod-route-context";
 
 type DirectoryPage = DirectorySearch;
 const directoryOptions: readonly PageOption<DirectoryPage>[] = [
@@ -57,16 +55,13 @@ const directoryOptions: readonly PageOption<DirectoryPage>[] = [
 
 type DirectoryItem =
   | { kind: "tool"; tool: (typeof TOOLS)[number]; works: DirectoryItem[] }
-  | { kind: "work"; work: NavigationWork }
-  | { kind: "pod"; pod: PodRouteDescriptor };
+  | { kind: "work"; work: NavigationWork };
 const itemKey = (item: DirectoryItem) =>
   item.kind === "tool"
     ? item.tool.to
-    : item.kind === "work"
-      ? `work:${item.work.id}`
-      : `pod:${item.pod.key}`;
+    : `work:${item.work.id}`;
 const itemTitle = (item: DirectoryItem) =>
-  item.kind === "tool" ? item.tool.title : item.kind === "work" ? item.work.label : item.pod.name;
+  item.kind === "tool" ? item.tool.title : item.work.label;
 
 const AT = new Intl.DateTimeFormat(undefined, { dateStyle: "short", timeStyle: "short" });
 const at = (iso: string) => AT.format(new Date(iso));
@@ -111,7 +106,6 @@ export function Directory({
 }: {
   page: readonly [DirectorySearch, (patch: Partial<DirectorySearch>) => void];
 }) {
-  const pods = usePodRoutes();
   const [page, setPage] = address;
   const { query, exposure, sort, folded } = page;
   usePublishRouteOptions("home", "Tools", directoryOptions, page, setPage);
@@ -119,7 +113,6 @@ export function Directory({
   const go = useDestination();
   const tools = TOOLS.filter((tool) => exposure === "All" || tool.exposure === exposure);
   const items: DirectoryItem[] = [
-    ...(pods?.rows ?? []).map((pod): DirectoryItem => ({ kind: "pod", pod })),
     ...tools.map(
       (tool): DirectoryItem => ({
         kind: "tool",
@@ -145,21 +138,17 @@ export function Directory({
               item.tool.task,
               item.tool.to,
             ]
-          : item.kind === "work"
-            ? [item.work.label, item.work.context, item.work.state]
-            : [item.pod.name, item.pod.description, item.pod.packageId],
+          : [item.work.label, item.work.context, item.work.state],
     }),
     sorts: { workflow: () => 0, name: itemTitle },
     groups: {
       of: (item) =>
-        item.kind === "pod"
-          ? "Pod routes"
-          : item.kind === "tool"
+        item.kind === "tool"
             ? sort === "workflow"
               ? item.tool.task
               : "Tools"
             : "",
-      order: ["Pod routes", ...(sort === "workflow" ? TASKS : ["Tools"])],
+      order: sort === "workflow" ? TASKS : ["Tools"],
     },
     tree: { childrenOf: (item) => (item.kind === "tool" ? item.works : []) },
     state: {
@@ -189,9 +178,7 @@ export function Directory({
       const url =
         item.kind === "tool"
           ? item.tool.to
-          : item.kind === "pod"
-            ? podPath(item.pod)
-            : item.work.url;
+          : item.work.url;
       if (url) go(url);
     },
   });
@@ -214,13 +201,6 @@ export function Directory({
             </p>
           </Information>
         ),
-      };
-    if (item.kind === "pod")
-      return {
-        label: item.pod.name,
-        lines: 2,
-        sub: item.pod.description,
-        meta: item.pod.trusted ? "Trusted" : "Trust required",
       };
     const { tool, works } = item;
     return {

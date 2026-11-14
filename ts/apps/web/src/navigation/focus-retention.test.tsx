@@ -18,7 +18,6 @@ const ports = vi.hoisted(() => ({ read: vi.fn(), call: vi.fn() }));
 vi.mock("./navigation-client", () => ({ navigationClient: () => ({ read: ports.read }) }));
 vi.mock("#/host/pe-client", () => ({ peClient: { call: ports.call } }));
 vi.mock("#/machine/use-machine", () => ({ useMachine: () => ({ reading: { state: "absent" } }) }));
-vi.mock("#/route/pod-routes", () => ({ usePodRoutes: () => null }));
 vi.mock("./surface-host", () => ({ useSurfaceHost: () => ({ surface: "web" }) }));
 // The ledger reads the host's notice feed; focus never re-reads it from the browser.
 vi.mock("#/host/resource-state", async (actual) => ({

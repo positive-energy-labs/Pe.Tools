@@ -11,7 +11,6 @@ import {
 import { captureHostModule } from "@pe/agent-contracts";
 import type { HostAdmittedRoute } from "@pe/agent-contracts";
 import { builtinEnrollments, type BuiltinEnrollment } from "./builtin-enrollment.ts";
-import { registerAdmittedHostRoute } from "./pod-routes.ts";
 
 export class BuiltinEnrollmentFailed extends Schema.TaggedError<BuiltinEnrollmentFailed>()(
   "BuiltinEnrollmentFailed",
@@ -105,7 +104,7 @@ export function admittedBuiltinsLayer(
           routes.set(key, route);
           if (route.data.work?.route === key) {
             const registration = yield* Effect.try({
-              try: () => registerAdmittedHostRoute(route, workspace),
+              try: () => workspace.registerAdmitted(route),
               catch: (reason) => failed(key, reason),
             });
             releases.push(registration.close);

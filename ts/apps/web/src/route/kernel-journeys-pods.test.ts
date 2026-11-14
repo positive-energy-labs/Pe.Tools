@@ -1,230 +1,38 @@
-import { mkdtemp, stateFixture, stateMachine } from "../../../../tests/isolated-home/storage.ts";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
+import { mkdtemp,stateFixture } from "../../../../tests/isolated-home/storage.ts";
 import { snapshot as workSnapshot } from "../ducts/test-fixture";
 // @vitest-environment jsdom
-import { cp, readFile, writeFile } from "node:fs/promises";
-import { resolve } from "node:path";
-import { createHash } from "node:crypto";
-import { expect, test, vi } from "vite-plus/test";
+import { workFingerprintSchema } from "@pe/agent-contracts";
 import { observeResources } from "@pe/runtime";
-import { workFingerprintSchema, bindWork, routeFingerprint, workKey } from "@pe/agent-contracts";
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
+import { expect,test,vi } from "vite-plus/test";
 import { fixture } from "../../../host/tests/host-read-graph.test-support";
-import { createPackageLifecycle } from "../../../host/src/package-lifecycle";
-import { listPackages } from "../../../host/src/packages";
-import { createPodRoutes } from "../../../host/src/pod-routes";
-import { fileRouteDocumentStore } from "../../../host/src/route-document-store";
-import { registeredReads } from "../../../host/src/reads/routes";
-import { loadPodRoute } from "./pod-module";
-import { createPodRouteLoader } from "./pod-loader";
-import { registerTypedRoute } from "../shell/route-registration";
-import { publicRoutes } from "./route-discovery";
 import { mountTypedRoute } from "../shell/typed-mount";
 import { createWorkFeedClient } from "../shell/work-feed-client";
-import type { UseSource } from "../shell/source-contract";
-
-const evaluate = (bytes: Uint8Array) =>
-  import(/* @vite-ignore */ `data:text/javascript;base64,${Buffer.from(bytes).toString("base64")}`);
-
-// The published example supplies executable bytes. Only the native boundary is recorded.
-async function podJourney() {
-  const host = await fixture(true);
-  await host.send(0, []); // Initialize the same HTTP/Work owner used by the Fans journeys.
-  const root = resolve(host.dir, "Pods");
-  const pod = resolve(root, "snowdon-circuits");
-  await cp(resolve(process.cwd(), "../../../examples/pods/snowdon-circuits"), pod, {
-    recursive: true,
-    filter: (source) => !source.split(/[\\/]/).includes("node_modules"),
-  });
-  const lifecycle = createPackageLifecycle({
-    packages: () => listPackages({ podsRoots: root }), machine: stateMachine(host.dir),
-  });
-  const routes = createPodRoutes(lifecycle, {
-    workspace: host.workspace, machine: stateMachine(host.dir),
-  });
-  const [row] = await routes.list();
-  if (!row) throw Error("Published Snowdon is absent");
-  // Recorded authored Work, as in pod-admission.test.tsx. Starting Work is not this story.
-  const key = bindWork(row.workRoute, null);
-  await fileRouteDocumentStore(stateFixture(resolve(host.dir, "work"))).setState({
-    targetKey: workKey(key), route: key.route,
-    value: { version: 1, schemaVersion: 2, revision: 7,
-      doc: { version: 2, inputs: { size: "10", length: 175, amps: 20, voltage: 208, phase: "3" } }, history: [] },
-  });
-  const name = `${row.workRoute}.calculation`;
-  const pending = new Set<Promise<unknown>>();
-  const mounts: ReturnType<typeof mountTypedRoute>[] = [];
-  const listeners = new Set<() => void>();
-  let generation = 0;
-  const source: UseSource = {
-    kind: "use",
-    open(ctx, deliver) {
-      let closed = false;
-      const refresh = () => {
-        const task = host.probe({ read: name, args: ctx.args,
-          subscription: `jp-${++generation}`, generation,
-        }).then(async (response) => {
-          const packet = await response.json();
-          if (!closed && !ctx.signal.aborted)
-            deliver({ kind: "complete", value: packet, revision: generation });
-        });
-        pending.add(task);
-        void task.finally(() => pending.delete(task));
-      };
-      listeners.add(refresh);
-      refresh();
-      return () => { closed = true; listeners.delete(refresh); };
-    },
-  };
-  const stopWork = host.workspace.subscribeUncaptured(() => listeners.forEach((notify) => notify()));
-  const work = createWorkFeedClient({
-    subscribe: observeResources(host.workspace, { observe: () => () => {} }), dirty() {},
-  }, {
-    write: (key, write) => host.workspace.write(key, key.route, "human", write, async () => []),
-    submit: () => { throw Error("This Pod has no native action"); },
-  });
-  const loader = createPodRouteLoader(async (entry) => {
-    const loaded = await loadPodRoute(entry, await routes.bundle(entry.key, entry.fingerprint), evaluate);
-    return registerTypedRoute(loaded.module, loaded.fingerprint);
-  });
-  return {
-    host, pod, lifecycle, routes, row, name, loader,
-    async mount() {
-      const current = (await routes.list())[0]!;
-      const loaded = await loadPodRoute(current, await routes.bundle(current.key, current.fingerprint), evaluate);
-      const mount = mountTypedRoute(loaded.module, {
-        target: { kind: "host" }, fixture: null,
-        work: { address: null, open: null },
-        address: { read: () => new URLSearchParams(), write() {}, subscribe: () => () => {} },
-        memory: () => ({}), custody: { current: () => true },
-      }, loaded.fingerprint, { work, sources: { [name]: source } });
-      mounts.push(mount);
-      mount.subscribe(() => {});
-      await vi.waitFor(() => expect(mount.value()).toMatchObject({ state: "ready" }), { timeout: 20_000 });
-      return mount;
-    },
-    async close() {
-      mounts.forEach((mount) => mount.dispose());
-      loader.dispose(); stopWork();
-      await Promise.allSettled([...pending]);
-      routes.close(); await lifecycle.close(); await host.close();
-    },
-  };
-}
-
-test("JP1 discover, trust and use Snowdon, withdraw it, then reopen the trusted worksheet", async () => {
-  const j = await podJourney();
-  try {
-    expect(j.row.trusted, "H16: discovery is not consent to execute").toBe(false);
-    await expect(j.routes.bundle(j.row.key, j.row.fingerprint), "H16: untrusted bytes are unavailable").rejects.toThrow("trust");
-    await j.loader.sync(await j.routes.list());
-    expect(publicRoutes.typed(j.row.workRoute), "H16: discovery does not register browser code").toBeNull();
-    expect((await j.host.probe({ read: j.name, args: {}, subscription: "untrusted", generation: 0 })).ok,
-      "H16: untrusted Pod has no executable HTTP read").toBe(false);
-    await j.routes.trust(j.row.key, j.row.fingerprint, true);
-    await j.loader.sync(await j.routes.list());
-    const mount = await j.mount();
-    expect(publicRoutes.typed(j.row.workRoute), "H16: verified bytes enter discovery").not.toBeNull();
-    expect(String(mount.draw("calculation")), "H16: verified host calculation reaches the typed pane over HTTP").toContain("Copper voltage-drop worksheet");
-    const inputs = { size: "10", length: 300, amps: 20, voltage: 208, phase: "3" };
-    expect(await mount.draw("calculation", (ctx) => ctx.cells.edit(inputs, { label: "Size the feeder" })),
-      "H16: admitted Pod edits its own Work").toBeNull();
-    await vi.waitFor(() => expect(String(mount.draw("calculation"))).toContain('"length": 300'));
-    await j.lifecycle.setEnabled("pod:snowdon-circuits", false);
-    await j.loader.sync(await j.routes.list());
-    expect(publicRoutes.typed(j.row.workRoute), "H16: withdrawal retires browser registration").toBeNull();
-    expect(registeredReads.reads.has(j.name), "H16: withdrawal retires host registration").toBe(false);
-    expect((await j.host.probe({ read: j.name, args: {}, subscription: "withdrawn", generation: 0 })).ok,
-      "H16: withdrawn host code cannot execute through HTTP").toBe(false);
-    await j.lifecycle.setEnabled("pod:snowdon-circuits", true);
-    await j.loader.sync(await j.routes.list());
-    const reopened = await j.mount();
-    expect(String(reopened.draw("calculation")), "H16: unchanged trusted publication reopens durable Work").toContain('"length": 300');
-    expect((await j.host.workspace.read(bindWork(j.row.workRoute, null), j.row.workRoute))?.doc).toMatchObject({ inputs });
-  } finally { await j.close(); }
-}, 60_000);
-
-test("JP2 reject tampered deliveries and replaced Pod bytes until their new publication is trusted", async () => {
-  const j = await podJourney();
-  try {
-    await j.routes.trust(j.row.key, j.row.fingerprint, true);
-    const trusted = (await j.routes.list())[0]!;
-    const envelope = await j.routes.bundle(trusted.key, trusted.fingerprint);
-    await j.loader.sync([trusted]);
-    const mount = await j.mount();
-    const before = mount.value();
-    for (const client of ["web", "host"]) {
-      const corrupt = structuredClone(envelope);
-      corrupt.artifact.executables.find((entry) => entry.client === client)!.members[0]!.bytes.push(32);
-      await expect(loadPodRoute(trusted, corrupt, evaluate), `H16: ${client} bytes are checked before evaluation`).rejects.toThrow("differ");
-    }
-    const foreign = { ...trusted, workRoute: "pod.foreign.worksheet" };
-    await expect(loadPodRoute(foreign, envelope, evaluate), "H16: foreign inventory cannot borrow this publication").rejects.toThrow("identity");
-    expect(mount.value(), "H16: refused delivery cannot replace the admitted pane").toEqual(before);
-    // A verified browser delivery also contains host bytes. Importing it must not execute them.
-    const hostTrap = structuredClone(envelope);
-    const hostMember = hostTrap.artifact.executables.find((entry) => entry.client === "host")!.members[0]!;
-    hostMember.bytes.push(...new TextEncoder().encode("\nthrow Error('JP host code executed in browser loader');"));
-    (hostTrap.artifact.artifact.executables as { client: string; members: { sha256: string }[] }[])
-      .find((entry) => entry.client === "host")!.members[0]!.sha256 =
-      createHash("sha256").update(Uint8Array.from(hostMember.bytes)).digest("hex");
-    hostTrap.artifact.fingerprint = await routeFingerprint(hostTrap.artifact.artifact);
-    hostTrap.fingerprint = `pod-bytes:${hostTrap.artifact.fingerprint}`;
-    await expect(loadPodRoute({ ...trusted, fingerprint: hostTrap.fingerprint }, hostTrap, evaluate),
-      "H16: importing verified browser code does not execute its host entry").resolves.toMatchObject({ fingerprint: hostTrap.fingerprint });
-    // Publish a valid new closure, rather than only corrupting a transport envelope.
-    const wire = structuredClone(envelope.artifact);
-    const member = wire.executables.find((entry) => entry.client === "web")!.members[0]!;
-    member.bytes.push(...new TextEncoder().encode("\n// JP replacement publication"));
-    (wire.artifact.executables as { client: string; members: { sha256: string }[] }[]).find((entry) => entry.client === "web")!.members[0]!.sha256 =
-      createHash("sha256").update(Uint8Array.from(member.bytes)).digest("hex");
-    wire.fingerprint = await routeFingerprint(wire.artifact);
-    const fingerprint = `pod-bytes:${wire.fingerprint}`;
-    const manifestPath = resolve(j.pod, "pod.json");
-    const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
-    manifest.routes[0].fingerprint = fingerprint;
-    await writeFile(resolve(j.pod, j.row.artifact), JSON.stringify(wire));
-    await writeFile(manifestPath, JSON.stringify(manifest));
-    await j.lifecycle.refresh();
-    const [replacement] = await j.routes.list();
-    expect(replacement?.trusted, "H16: a new digest cannot inherit old trust").toBe(false);
-    await j.loader.sync(await j.routes.list());
-    expect(publicRoutes.typed(j.row.workRoute), "H16: replacement withdraws the old browser closure").toBeNull();
-    expect(registeredReads.reads.has(j.name), "H16: replacement withdraws the old host closure").toBe(false);
-    await expect(j.routes.bundle(j.row.key, j.row.fingerprint), "H16: stale fingerprint cannot fetch replacement code").rejects.toThrow();
-    await j.routes.trust(j.row.key, fingerprint, true);
-    await j.loader.sync(await j.routes.list());
-    await vi.waitFor(() => expect(mount.owner(j.row.workRoute)?.ready,
-      "H16: the old mounted admission cannot silently adopt replacement authority").toBe(false));
-    expect(await mount.draw("calculation", (ctx) => ctx.cells.edit(
-      { size: "10", length: 999, amps: 20, voltage: 208, phase: "3" }, { label: "Stale Pod edit" })),
-      "H16: an old mounted Pod cannot write replacement Work").toMatchObject({ code: "unavailable" });
-    const replaced = await j.mount();
-    expect(String(replaced.draw("calculation")), "H16: explicit trust admits the replacement publication").toContain("Copper voltage-drop worksheet");
-  } finally { await j.close(); }
-}, 60_000);
 
 // Recorded harness events enter the same consumers as the conversation and its context ledger.
-import { createElement, Fragment, useEffect, useState } from "react";
-import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { RegistryContext } from "@effect/atom-react";
+import { harnessEventSchema } from "@pe/agent-contracts";
+import { emptyChatState,selectBreakdown,type ChatMessage } from "@pe/agent-contracts/chat-state";
+import { Pane,PaneFaultProvider } from "@pe/kit/lang/pane";
+import { TooltipProvider } from "@pe/kit/lang/tooltip";
+import { act,cleanup,fireEvent,render,screen,within } from "@testing-library/react";
 import * as Atom from "effect/reactivity/Atom";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { emptyChatState, selectBreakdown, type ChatMessage } from "@pe/agent-contracts/chat-state";
-import { harnessEventSchema } from "@pe/agent-contracts";
-import { CurrentThreadViewOwner } from "../workbench/thread-view";
-import { TranscriptContext } from "../workbench/provider/thread-summary";
-import { useTranscript } from "../workbench/provider/use-workbench";
-import { SessionStrip } from "../workbench/world/lane";
-import { useCacheView } from "../workbench/world/cap";
-import { AssetReel, threadAssets } from "../chat/asset-reel";
-import { TooltipProvider } from "@pe/kit/lang/tooltip";
-import { createPeRoutes } from "../../../host/src/pe-routes";
-import { SettingsBody } from "../machine/body";
-import { MACHINE_SEEDS } from "../machine/open-examples";
-import { reportFault, DIAGNOSTICS_MAX_PENDING } from "../host/diagnostics";
-import { Pane, PaneFaultProvider } from "@pe/kit/lang/pane";
 import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import { createElement,Fragment } from "react";
+import { createPeRoutes } from "../../../host/src/pe-routes";
+import { AssetReel,threadAssets } from "../chat/asset-reel";
+import { DIAGNOSTICS_MAX_PENDING,reportFault } from "../host/diagnostics";
+import { SettingsBody } from "../machine/body";
+import { MACHINE_SEEDS } from "../machine/open-examples";
+import { TranscriptContext } from "../workbench/provider/thread-summary";
+import { useTranscript } from "../workbench/provider/use-workbench";
+import { CurrentThreadViewOwner } from "../workbench/thread-view";
+import { useCacheView } from "../workbench/world/cap";
+import { SessionStrip } from "../workbench/world/lane";
 
 function UsageLedger() {
   const { breakdown, turns } = useTranscript((state) => ({
@@ -316,10 +124,10 @@ test("JP4 inspect a pane fault during an outage", async () => {
   }
 });
 
-import { createRequire } from "node:module";
-import { createReceiptExport } from "../../../host/src/receipt-export";
-import { receiptGoldenEnvelope } from "../../../../packages/agent-contracts/tests/receipt-fixture";
 import { withInvocationContext } from "@pe/runtime/context";
+import { createRequire } from "node:module";
+import { receiptGoldenEnvelope } from "../../../../packages/agent-contracts/tests/receipt-fixture";
+import { createReceiptExport } from "../../../host/src/receipt-export";
 
 async function sendFeedbackWhileDeliveryWaits() {
   const dir = await mkdtemp(resolve(tmpdir(), "jp-feedback-"));
@@ -362,7 +170,7 @@ async function sendFeedbackWhileDeliveryWaits() {
   } finally { request.resolve(Response.json({})); await telemetry.close(); await rm(dir, { recursive: true, force: true }); }
 }
 
-import { RemoteDeviceGate, RecordedSourceChip, useLocalDevice } from "../machine/devices";
+import { RecordedSourceChip,RemoteDeviceGate,useLocalDevice } from "../machine/devices";
 async function openRecordedGuidanceAfterRefusal() {
   let attempt = 0;
   vi.stubGlobal("fetch", async () => Response.json({ version: "jp", features: { peApi: 1, nativeAdapter: 2 } }, {
@@ -429,152 +237,15 @@ test("JZ H29 human-only RPC and forged, foreign and stale review reuse refuse", 
 }, 60_000);
 
 
-import { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } from "@tanstack/react-router";
-import { createContributionContent } from "../../../host/src/pe-routes";
-import { importShippedPods, ledgerKind } from "../../../host/src/installed-pods";
-import { exportPod, installArchive } from "../../../host/src/pod-transfer";
-import { createPluginsHandler } from "../../../host/src/plugins-handler";
-import { PictureCaptures } from "../../../host/src/captures-route";
-import { Directory } from "../navigation/directory";
-import { NavigationProvider } from "../navigation/state";
-
-import { PodRoutesProvider } from "./pod-routes";
-import { Route as PodTrustRoute } from "../routes/tool.$key";
-import { Members } from "../pods/drawing";
-
-test("JP5 bootstrap replaces only unchanged imports and Home discovers the untrusted publication without reload", async () => {
-  for (const modified of [false, true]) {
-    const host = await fixture(true);
-    const root = resolve(host.dir, "Pods"), shipped = resolve(host.dir, "shipped");
-    const captures = new PictureCaptures(stateFixture(resolve(host.dir, "pictures")), 64 * 1024 * 1024, Date.now);
-    const source = resolve(host.dir, "old", "snowdon-circuits");
-    const examples = resolve(process.cwd(), "../../../examples/pods");
-    const gate = Promise.withResolvers<void>();
-    const completed = Promise.withResolvers<Awaited<ReturnType<typeof importShippedPods>>>();
-    let content: ReturnType<typeof createContributionContent> | undefined;
-    let routes: ReturnType<typeof createPodRoutes> | undefined;
-    let view: ReturnType<typeof render> | undefined;
-    try {
-      await cp(resolve(examples, "snowdon-circuits"), source, {
-        recursive: true, filter: path => !path.split(/[\\/]/).includes("node_modules"),
-      });
-      const manifest = JSON.parse(await readFile(resolve(source, "pod.json"), "utf8"));
-      const current = manifest.routes[0];
-      // Reuse a shipped member: an extra legacy file would test the deliberate member-removal refusal.
-      manifest.routes = [{ sourcePath: "routes/voltage-drop/module.ts", name: current.name, description: current.description }];
-      await writeFile(resolve(source, "pod.json"), JSON.stringify(manifest));
-      await writeFile(resolve(source, "routes/voltage-drop/module.ts"), "throw Error('Obsolete Pod must never execute');");
-      const old = await exportPod({ pod: manifest.id, archivePath: resolve(host.dir, "old.zip") },
-        { podsRoot: resolve(host.dir, "old"), captures });
-      // An earlier shipped import, as the bootstrap left it: the import record in the state root its
-      // ledger sits in, and the original archive retained there by its hash.
-      await installArchive(await readFile(old.archivePath), old.archivePath, undefined,
-        { podsRoot: root, machine: stateMachine(host.dir), captures });
-      await cp(old.archivePath, resolve(stateMachine(host.dir).state, "shipped-pod-originals", `${old.archiveSha256}.zip`));
-      await exportPod({ pod: manifest.id, archivePath: resolve(shipped, "snowdon-circuits.zip") }, { podsRoot: examples, captures });
-      const pod = resolve(root, manifest.id), key = `route:@${manifest.id}/${current.artifact}`;
-      const oldTrust = `pod-bytes:${old.archiveSha256}`;
-      const trustPath = stateMachine(host.dir).routeTrust;
-      await writeFile(trustPath, JSON.stringify({ [key]: oldTrust }));
-      if (modified) await writeFile(resolve(pod, "README.md"), "Keep this authored worksheet note.");
-      const before = (await listPackages({ podsRoots: root })).packages.find(p => p.id === manifest.id)!.members.map(m => [m.path, m.sha256]);
-      content = createContributionContent({ worldRoot: stateFixture(host.dir), homeRoot: host.dir, packages: () => listPackages({ podsRoots: root }),
-        decisionsMachine: stateMachine(host.dir),
-        bootstrap: async () => {
-          await gate.promise;
-          try {
-            const report = await importShippedPods({ shippedRoot: shipped, podsRoot: root, captures,
-              ledger: ledgerKind.in(stateMachine(host.dir)) });
-            completed.resolve(report);
-          } catch (error) { completed.reject(error); throw error; }
-        },
-      });
-      routes = createPodRoutes(content.lifecycle, { machine: stateMachine(host.dir) });
-      const handler = createPluginsHandler(content, routes);
-      let inventoryReads = 0, homeMounts = 0;
-      vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
-        const request = new Request(new URL(input instanceof Request ? input.url : String(input), "http://host"), init);
-        if (new URL(request.url).pathname === "/pe/plugin-routes") {
-          const response = await handler(request); inventoryReads++; return response;
-        }
-        if (new URL(request.url).pathname === "/pe/navigation")
-          return Response.json({ observedAt: new Date().toISOString(), works: [], observations: [], truncated: false });
-        throw Error(`Unexpected JP5 request ${request.url}`);
-      });
-      function Home() {
-        const [page, setPage] = useState<Parameters<typeof Directory>[0]["page"][0]>({ query: "snowdon", exposure: "All", sort: "workflow", folded: [] });
-        useEffect(() => { homeMounts++; }, []);
-        return createElement(Directory, { page: [page, patch => setPage(prior => ({ ...prior, ...patch }))] });
-      }
-      const top = createRootRoute({ component: () => createElement(NavigationProvider, null,
-        createElement(PodRoutesProvider, null, createElement(Outlet))) });
-      // File-route mount metadata is normally supplied by the generated route tree.
-      const trustMount = { id: "/tool/$key", path: "/tool/$key", getParentRoute: () => top, component: PodTrustRoute.options.component };
-      const trust = PodTrustRoute.update(trustMount);
-      const router = createRouter({ routeTree: top.addChildren([
-        createRoute({ getParentRoute: () => top, path: "/", component: Home }), trust,
-      ]), history: createMemoryHistory({ initialEntries: ["/"] }) });
-      vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
-      await router.load();
-      view = render(createElement(RouterProvider, { router }));
-      await vi.waitFor(() => expect(inventoryReads).toBe(1));
-      expect(screen.queryByText(current.name), "H16: obsolete declarations cannot become executable Home rows").toBeNull();
-      await act(async () => { gate.resolve(); await completed.promise; });
-      const report = await completed.promise;
-      // Reconciliation's package listing measured about 800 ms; allow 5x that cost here.
-      // The one-second default also races this census on the clean integration baseline.
-      if (!modified && report.outcomes[0]?.outcome === "updated")
-        await vi.waitFor(async () => expect((await routes!.list()).find(row => row.packageId === manifest.id)).toMatchObject({ fingerprint: current.fingerprint }), { timeout: 4_000 });
-      // Import completion precedes the owner's asynchronous lifecycle reconciliation.
-      // The provider's real interval re-reads; neither router nor Home is reloaded or remounted.
-      await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
-      await vi.waitFor(() => expect(inventoryReads).toBeGreaterThan(1));
-      expect(homeMounts, "H16: completion discovers content in the already mounted Home").toBe(1);
-      if (!modified) {
-        expect.soft(report.outcomes[0]?.outcome, "H16: unchanged imported example updates at bootstrap").toBe("updated");
-        const row = (await routes.list()).find(row => row.packageId === manifest.id);
-        expect.soft(row, "H16: replacement publication is discoverable but has no inherited trust").toMatchObject({ trusted: false, fingerprint: current.fingerprint });
-        expect.soft(current.fingerprint).not.toBe(oldTrust);
-        const title = screen.queryByText(current.name);
-        expect.soft(title, "H16: Home gains the published tool without reload").not.toBeNull();
-        if (title) {
-          const item = title.closest('[role="treeitem"]')!;
-          expect(within(item as HTMLElement).getByText("Trust required")).toBeTruthy();
-          fireEvent.click(item);
-          await screen.findByRole("button", { name: `Trust ${current.name} at this fingerprint` });
-          expect(router.state.location.pathname, "H16: Home opens the actual trust page").toBe(`/tool/${encodeURIComponent(key)}`);
-          expect(screen.getByText("Trust this fingerprint")).toBeTruthy();
-        }
-      } else {
-        const kept = (await listPackages({ podsRoots: root })).packages.find(p => p.id === manifest.id)!;
-        expect(kept.members.map(m => [m.path, m.sha256]), "H16: modified authored members stay byte-identical").toEqual(before);
-        expect.soft(kept.diagnostics.find(d => d.code === "ShippedExampleUpdateKept"), "H16: retained stale example has a named refusal").toMatchObject({ message: expect.stringContaining("authored members differ") });
-        view.unmount(); cleanup();
-        view = render(createElement(Members, { ctx: {
-          page: { read: () => ({ member: { kind: "ids", ids: [] }, runs: "member" }), query() {} },
-          value: { state: "ready", value: { pods: [kept] } },
-        } as unknown as Parameters<typeof Members>[0]["ctx"] }));
-        const refusal = screen.getAllByRole("alert").map(node => node.textContent).join(" ");
-        expect.soft(refusal, "H16: the actual Pods pane names the preserved example and reason").toContain("Snowdon Circuits was kept with your changes. Only the example update was skipped because its authored members differ");
-        expect.soft(refusal, "H16: product refusal text never exposes validator internals").not.toMatch(/invalid_type|unrecognized_keys|expected string|received undefined/);
-      }
-    } finally {
-      gate.resolve(); view?.unmount(); cleanup();
-      vi.useRealTimers(); vi.unstubAllGlobals();
-      routes?.close(); await content?.close();
-      await host.close();
-    }
-  }
-}, 60_000);
 
 
+import { readingKey } from "@pe/agent-contracts";
+import { resourceSnapshot } from "@pe/runtime";
 import { machineFixture } from "../../../../packages/agent-contracts/tests/machine-fixture";
 import { hostResourceObserver } from "../../../host/src/resource-adapters";
-import { resourceSnapshot } from "@pe/runtime";
-import { readingKey } from "@pe/agent-contracts";
 import { journalAt } from "../../../host/tests/effect-test";
-import { module as openRoute } from "../open/route";
 import { OpenBody } from "../open/mount";
+import { module as openRoute } from "../open/route";
 const openNavigation = vi.hoisted(() => ({ bypass: false }));
 vi.mock("../navigation/state", async original => {
   const real = await original<typeof import("../navigation/state")>();

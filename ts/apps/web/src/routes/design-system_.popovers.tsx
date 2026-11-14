@@ -1,27 +1,25 @@
-import { useEffect, useState, type ReactNode } from "react";
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { Button } from "@pe/kit/lang/button";
-import { Tooltip, TooltipTrigger, TooltipContent } from "@pe/kit/lang/tooltip";
-import {
-  Popover,
-  PopoverTrigger,
-  SubjectPopoverContent as PopoverContent,
-  PopoverTitle,
-  PopoverDescription,
-  PopoverClose,
-} from "@pe/kit/lang/popover";
-import { HoverCard, HoverCardTrigger, HoverCardContent } from "@pe/kit/lang/hover-card";
-import { ThemeToggle } from "@pe/kit/lang/theme-toggle";
-import { ListPopup } from "@pe/kit/lang/list-popup";
-import { Table } from "@pe/kit/table/table";
-import { FieldOptionPicker, FieldOptionSelect, type FieldOption } from "#/host/field-options";
 import { CATEGORY_OPTIONS } from "#/design-system/specimens-data";
-import type { HostActiveDocumentSummary } from "@pe/host-contracts/operation-types";
-import type { PodRouteDescriptor } from "@pe/host-contracts/pe-api";
-import type { Machine } from "@pe/agent-contracts";
-import { previousOf, useInventory, useReading } from "#/host/resource-state";
-import { usePodRoutes } from "#/route/pod-routes";
+import { FieldOptionPicker,FieldOptionSelect,type FieldOption } from "#/host/field-options";
+import { previousOf,useInventory,useReading } from "#/host/resource-state";
 import { hostFetch } from "#/host/runtime";
+import type { Machine } from "@pe/agent-contracts";
+import type { HostActiveDocumentSummary } from "@pe/host-contracts/operation-types";
+import { Button } from "@pe/kit/lang/button";
+import { HoverCard,HoverCardContent,HoverCardTrigger } from "@pe/kit/lang/hover-card";
+import { ListPopup } from "@pe/kit/lang/list-popup";
+import {
+Popover,
+PopoverClose,
+SubjectPopoverContent as PopoverContent,
+PopoverDescription,
+PopoverTitle,
+PopoverTrigger,
+} from "@pe/kit/lang/popover";
+import { ThemeToggle } from "@pe/kit/lang/theme-toggle";
+import { Tooltip,TooltipContent,TooltipTrigger } from "@pe/kit/lang/tooltip";
+import { Table } from "@pe/kit/table/table";
+import { createFileRoute,Link } from "@tanstack/react-router";
+import { useEffect,useState,type ReactNode } from "react";
 
 export const Route = createFileRoute("/design-system_/popovers")({ component: PopoverHarness });
 
@@ -34,18 +32,6 @@ const documentFixture = {
   isWorkshared: true,
   observedAtUnixMs: Date.parse("2026-10-14T14:30:00Z"),
 } satisfies HostActiveDocumentSummary;
-const podFixture = {
-  key: "route:@mechanical/routes/air-balance",
-  packageId: "mechanical",
-  artifact: "routes/air-balance/route.artifact",
-  name: "Air balance",
-  description: "Compare supply and return observations by room.",
-  page: "pages/air-balance",
-  workRoute: "air-balance",
-  fingerprint: `pod-bytes:${"a".repeat(64)}`,
-  trusted: false,
-  admission: { status: "untrusted" },
-} satisfies PodRouteDescriptor;
 type PagePeek = { title: string; url: string | null; slug: string };
 
 /** Owner rulings 2026-10-14: a resource previews as a bare hint unless it declares state (G) or
@@ -55,8 +41,6 @@ function ResourcePreviews() {
   const session = previousOf(inventory)?.sessions.find((entry) => entry.activeDocumentTitle);
   const machineReading = useReading<Machine>({ kind: "machine" });
   const machine = previousOf(machineReading);
-  const routes = usePodRoutes();
-  const pod = routes?.rows[0] ?? podFixture;
   const [pages, setPages] = useState<PagePeek[]>([]);
   const [pageState, setPageState] = useState("Reading Pages from this host…");
   useEffect(() => {
@@ -95,27 +79,6 @@ function ResourcePreviews() {
               {title} · {freshness}
             </TooltipContent>
           </Tooltip>
-        </PreviewRow>
-        <PreviewRow motif="G" name="Declared state · Pod route" label={pod.name} width="w-80">
-          <div className="space-y-3">
-            <p className="t-display" data-tone={pod.trusted ? "done" : "caution"}>
-              {pod.trusted ? "Trusted" : "Not trusted"}
-            </p>
-            <p>
-              {pod.name} · {pod.packageId}
-            </p>
-            <p>
-              {pod.trusted
-                ? "Admitted to the route loader."
-                : "Execution is blocked until you grant trust."}
-            </p>
-            <p className="text-ink-2">
-              {routes?.rows.length ? "Host route inventory" : "Fixture · host has no Pod route"}
-            </p>
-            <Link to="/tool/$key" params={{ key: pod.key }}>
-              Review route
-            </Link>
-          </div>
         </PreviewRow>
         <PreviewRow
           motif="H"

@@ -71,8 +71,6 @@ public static class PodManifestValidator {
         "description",
         "entrypoints",
         "for",
-        // The host owns route admission; native scripting consumes only entrypoints from the same manifest.
-        "routes"
     };
 
     private static readonly HashSet<string> EntrypointFields = new(StringComparer.Ordinal) {
