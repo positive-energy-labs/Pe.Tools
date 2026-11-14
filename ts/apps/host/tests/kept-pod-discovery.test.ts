@@ -166,7 +166,7 @@ test("the five-second lifecycle discovery bound includes its initial census", as
   }
 });
 
-test("a first Page request answers by 5000 ms and never starts lifecycle after expiry", async () => {
+test.each(["/pages/late--tour/", "/pages"])("a first Page request %s answers by 5000 ms and never starts lifecycle after expiry", async (path) => {
   const root = await mkdtemp(join(tmpdir(), "pe-first-page-bound-"));
   const home = join(root, "home");
   const pods = join(home, "Pods");
@@ -190,7 +190,7 @@ test("a first Page request answers by 5000 ms and never starts lifecycle after e
   const started = Date.now();
   let answered = false;
   const handler = createPagesHandler([], pods, undefined, undefined, stateFixture(join(root, "page-state")));
-  const opening = handler(new Request("http://host/pages/late--tour/")).finally(() => { answered = true; });
+  const opening = handler(new Request(`http://host${path}`)).finally(() => { answered = true; });
   try {
     await entered.promise;
     await vi.advanceTimersByTimeAsync(4_999);
@@ -199,8 +199,10 @@ test("a first Page request answers by 5000 ms and never starts lifecycle after e
     await vi.advanceTimersByTimeAsync(1);
     expect(answered).toBe(true);
     const response = await opening;
-    expect(response.status).toBe(404);
-    expect(await response.text()).toContain("no page late--tour: no admitted package contributes it");
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({
+      message: `Pod discovery exceeded 5000 ms listing ${pods}. Try again when the folder is available.`,
+    });
     expect(Date.now() - started).toBe(5_000);
     releaseListing.resolve(listing);
     await new Promise((resolve) => setImmediate(resolve));
