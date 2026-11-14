@@ -585,7 +585,7 @@ export function createPagesHandler(
 &lt;script&gt;
   const k = await pe.state({ reduce, base: {}, render, describe });
   await pe.do("revit.context.show-elements", { elementIds: [1234] });   // pe.find, pe.read, pe.do: Pea's doors
-  await pe.script("checks/census.csx");                        // C# beside the page; pe.picture, pe.diff, pe.reading
+  await pe.script("./checks/census.csx");                      // C# beside the page; pe.picture, pe.diff, pe.reading
 &lt;/script&gt;</pre>
 <p>Agents reach the same log at <code>GET /pages/&lt;slug&gt;/state</code> (<code>events</code>, <code>text</code>, <code>textSeq</code> and <code>agent</code>) and <code>POST /pages/&lt;slug&gt;/events</code>. The header of <a href="/pages/pe.js">pe.js</a> is the whole reference.</p>
 </body></html>`,
@@ -827,7 +827,7 @@ export function createPagesHandler(
       if (slot.kind === "none") return refused(unboundRefusal(at));
       const resolution = resolveSlot(slot, await live.sessions());
       if (resolution.kind !== "resolved") return unresolved(at, resolution);
-      const action = await operationOf(body.data.key, body.data.input);
+      const action = await operationOf(body.data.key, body.data.input, page);
       if ("problem" in action) return problem(400, action.problem);
       // Decided here first, so a refusal names this door; `/actions` decides again under the same slot.
       admitPage(slot, resolution.target, at, humanBound && readsOnly(action.key, action.input),
@@ -858,6 +858,7 @@ export function createPagesHandler(
   async function operationOf(
     key: string,
     input: unknown,
+    page: string,
   ): Promise<{ key: string; input: Record<string, unknown> } | { problem: string }> {
     const ref = parseContributionKey(key);
     const sent = (input ?? {}) as Record<string, unknown>;
@@ -869,10 +870,28 @@ export function createPagesHandler(
       ? (await listPackages({ podsRoots: pods })).packages.find((one) => one.id === ref.packageId)
       : undefined;
     const row = pod?.contributions.find((row) => row.kind === "script" && row.key === key);
-    if (!pod || !row)
+    if (!pod || !row) {
+      // D41: a path read from the other base names an existing declaration, not a missing entrypoint.
+      const pageRef = parseContributionKey(page);
+      const prefix =
+        pageRef?.kind === "page" && pageRef.packageId === ref.packageId
+          ? `${pageRef.path}/`
+          : null;
+      const alternate = prefix
+        ? ref.path.startsWith(prefix)
+          ? ref.path.slice(prefix.length)
+          : `${prefix}${ref.path}`
+        : null;
+      const declared = pod?.contributions.some(
+        (one) => one.kind === "script" && one.key === `script:@${ref.packageId}/${alternate}`,
+      );
+      const hint = declared
+        ? `did you mean /${alternate}?`
+        : `declare ${ref.path} in pod.json entrypoints.`;
       return {
-        problem: `${key} is no declared script of an admitted package; declare ${ref.path} in pod.json entrypoints.`,
+        problem: `${key} is no declared script of an admitted package; ${hint}`,
       };
+    }
     let run: Record<string, unknown>;
     try {
       run = declaredScriptRun(row, sent);

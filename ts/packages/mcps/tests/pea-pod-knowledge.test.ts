@@ -7,6 +7,19 @@ import { bundledPeaSkills } from "../src/pea/skills.ts";
 const example = join(import.meta.dirname, "../../../../examples/pods/snowdon-ducts");
 const skill = (name: string) => bundledPeaSkills.find((s) => s.name === name)!.content;
 
+test("Page authoring teaches the path rule", () => {
+  for (const name of ["make-page", "build-pod"])
+    expect(skill(name)).toContain(
+      "Bare paths and leading / resolve from the Pod root; ./ and ../ resolve beside the Page's index.html.",
+    );
+});
+
+test("Page authoring distinguishes browser proof from static checks", () => {
+  expect(skill("make-page")).toContain(
+    "A Page no browser has rendered is reported as untested, with what was and was not checked.",
+  );
+});
+
 // What Pea knows about Pods and Pages is one account (pods map, slice 9).
 // Red break: put `pe.describe()` back into make-page step 3, define pod.json in a second skill,
 // or hand pe.state an `agent: {}` argument in make-page step 4.

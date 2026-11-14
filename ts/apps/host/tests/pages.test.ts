@@ -882,6 +882,16 @@ describe("pages", () => {
       expect(await undeclared.text()).toContain(
         "declare pages/tour/checks/other.csx in pod.json entrypoints",
       );
+      for (const [path, declared] of [
+        ["pages/tour/src/Census.cs", "src/Census.cs"],
+        ["checks/census.csx", "pages/tour/checks/census.csx"],
+      ]) {
+        const missed = await act(`script:@ducts/${path}`);
+        expect(missed.status).toBe(400);
+        const refusal = await missed.text();
+        expect(refusal).toContain(`did you mean /${declared}?`);
+        expect(refusal).not.toContain("declare ");
+      }
       // A member reads, never runs; an undeclared source is no script; another package is not this page's.
       for (const key of [
         "member:@ducts/settings/checks.json",
@@ -1271,21 +1281,25 @@ describe("pages", () => {
         "page:@ducts/pages/tour",
       );
       const acts = () => sent.filter((one) => one.url === "/pages/todo/act").map((one) => one.body);
-      expect(await pe.script!("checks/census.csx", { input: { level: "L2" } })).toEqual({ rows: [1] });
+      expect(await pe.script!("./checks/census.csx", { input: { level: "L2" } })).toEqual({ rows: [1] });
       expect(await pe.do!("script:@ducts/src/Census.cs", { input: { level: "L2" }, mode: "WriteTransaction" })).toEqual({ rows: [1] });
       expect(await pe.script!("/src/Census.cs")).toEqual({ rows: [1] });
+      expect(await pe.script!("src/Census.cs")).toEqual({ rows: [1] });
+      expect(await pe.script!("../checks/census.csx")).toEqual({ rows: [1] });
       expect(await pe.script!("Result(1);\n")).toEqual({ rows: [1] });
       expect(acts()).toEqual([
         { key: "script:@ducts/pages/tour/checks/census.csx", input: { input: { level: "L2" }, timeoutSeconds: 120 } },
         { key: "script:@ducts/src/Census.cs", input: { input: { level: "L2" }, permissionMode: "WriteTransaction", timeoutSeconds: 120 } },
         { key: "script:@ducts/src/Census.cs", input: { timeoutSeconds: 120 } },
+        { key: "script:@ducts/src/Census.cs", input: { timeoutSeconds: 120 } },
+        { key: "script:@ducts/pages/checks/census.csx", input: { timeoutSeconds: 120 } },
         { key: "scripting.execute", input: { timeoutSeconds: 120, scriptContent: "Result(1);\n", permissionMode: "ReadOnly" } },
       ]);
       // A Pod Page's script is never fetched and sent as anonymous source.
       expect(sent.some((one) => one.url.endsWith(".csx") || one.url.endsWith(".cs"))).toBe(false);
       expect((pe as unknown as { lastRun: unknown }).lastRun).toEqual(run);
       failing = true;
-      const error = await pe.script!("checks/census.csx").then(
+      const error = await pe.script!("./checks/census.csx").then(
         () => null,
         (thrown: Error & { run?: unknown }) => thrown,
       );
