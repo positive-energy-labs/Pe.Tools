@@ -323,6 +323,7 @@ public sealed class ScriptPodPreparationService(Func<string, object, JObject>? a
     ///     leaves the pod (by `..`, a rooted path, or a link anywhere on the way) and a file that is not there.
     /// </summary>
     public static string MemberFile(string podFolder, string relativePath) {
+        podFolder = Path.GetFullPath(podFolder);
         var path = FullPath(podFolder, NormalizeMemberPath((relativePath ?? string.Empty).Replace('\\', '/')));
         for (var at = path; at is not null && at.Length > podFolder.Length; at = Path.GetDirectoryName(at))
             if ((File.Exists(at) || Directory.Exists(at)) && (File.GetAttributes(at) & FileAttributes.ReparsePoint) != 0)
