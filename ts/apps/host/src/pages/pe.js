@@ -189,34 +189,36 @@
   const whenDiscovered = async (send) => {
     let pending = false;
     try {
-    for (let tries = 0; ; tries++) {
-      let r, message;
-      try {
-        r = await send();
-      } catch (error) {
-        if (!transportFailure(error) || stopped) throw error;
-        message = `waiting for the host connection: ${error.message}`;
+      for (let tries = 0; ; tries++) {
+        let r, message;
+        try {
+          r = await send();
+        } catch (error) {
+          if (!transportFailure(error) || stopped) throw error;
+          message = `waiting for the host connection: ${error.message}`;
+        }
+        if (r) {
+          const late = r.status === 503 ? await r.clone().json().catch(() => null) : null;
+          const expiry = late?.error && typeof late.error === "object" ? late.error : late;
+          if (expiry?.code !== "pod.discovery.exceeded" || stopped) return r;
+          message = `waiting for the Pods folder: ${expiry.message}`;
+        }
+        if (!pending) {
+          pending = true;
+          waiting++;
+        }
+        line("pe-waiting", "status", "#374151", message);
+        await new Promise((ok) => setTimeout(ok, DISCOVERY_WAITS[tries] ?? 10000));
       }
-      if (r) {
-      const late = r.status === 503 ? await r.clone().json().catch(() => null) : null;
-      const expiry = late?.error && typeof late.error === "object" ? late.error : late;
-      if (expiry?.code !== "pod.discovery.exceeded" || stopped) {
-        return r;
-      }
-        message = `waiting for the Pods folder: ${expiry.message}`;
-      }
-      if (!pending) { pending = true; waiting++; }
-      line("pe-waiting", "status", "#374151", message);
-      await new Promise((ok) => setTimeout(ok, DISCOVERY_WAITS[tries] ?? 10000));
-    }
     } finally {
       if (pending && --waiting === 0) line("pe-waiting", "status", "#374151", "");
     }
   };
   // A lost act response proves neither success nor failure. Keep its browser words and never resend it.
   const sendAct = async (send) => {
-    try { return await send(); }
-    catch (cause) {
+    try {
+      return await send();
+    } catch (cause) {
       if (!transportFailure(cause)) throw cause;
       const error = new Error(`Action outcome is unknown: ${cause.message}`, { cause });
       banner(error.message);
