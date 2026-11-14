@@ -67,14 +67,12 @@ test.each(["snowdon-ducts", "snowdon-circuits"])(
       const servedPe = await library("/pages/pe.js");
       expect(servedPe).not.toContain("/*pe:client*/ null");
       expect(servedPe).not.toContain("/*pe:runtime*/ null");
-      const snapshot = null;
       const standalone = await exportPage({
         directory: join(to, "Elsewhere/pages/tour"),
         exports: stateFixture(join(root, "state", "exports")),
         page: `page:@${id}/pages/tour`,
         exportedAt: "2026-10-13T00:00:00.000Z",
         document: null,
-        snapshot,
         events: [],
         library,
       });
@@ -82,7 +80,7 @@ test.each(["snowdon-ducts", "snowdon-circuits"])(
       expect(sha(standalone.html)).toBe(standalone.sha256);
       expect(standalone.html).toContain("connect-src 'none'");
       expect(standalone.html).not.toMatch(/<script[^>]+src=/i);
-      expect(standalone.provenance.snapshot).toEqual(snapshot);
+      expect(standalone.provenance.events).toEqual([]);
       for (const file of standalone.provenance.files.filter((f) => !f.path.startsWith("/")))
         expect(file.sha256, file.path).toBe(
           sha(await readFile(join(source, "pages/tour", file.path))),

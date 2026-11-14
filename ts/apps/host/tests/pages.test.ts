@@ -1,12 +1,6 @@
 import { stateFixture } from "../../../tests/isolated-home/storage.ts";
 import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
-import {
-  access,
-  appendFile,
-  mkdir, readFile,
-  rename,
-  rm,
-  writeFile } from "node:fs/promises";
+import { access, appendFile, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runInNewContext } from "node:vm";
@@ -14,6 +8,7 @@ import { afterEach, describe, expect, it } from "vite-plus/test";
 import { HOST_RUNTIME_SERVICE_HEADER } from "@pe/host-contracts/contracts";
 import {
   emptyThreadHead,
+  pageTargetReadingSchema,
   routeAddress,
   type Caller,
   type DocumentRef,
@@ -22,7 +17,7 @@ import {
 } from "@pe/agent-contracts";
 import { createPagesHandler, type LiveSession, type PageLive } from "../src/pages-route.ts";
 import { readRequestIdentity, type IdentityOptions } from "../src/request-identity.ts";
-import { admitCrossing, bindControl, callerOf, Refused } from "../src/control.ts";
+import { admitCrossing, bindControl, callerOf, currentCaller, Refused } from "../src/control.ts";
 import { asCaller, human, pea, serviceHeaders } from "./callers.ts";
 
 const cleanup: (() => Promise<unknown>)[] = [];
@@ -52,7 +47,9 @@ async function pagesRoot(live?: PageLive) {
   await writeFile(join(root, "loose.html"), "<p>not a page: a file, not a folder</p>");
   const handle = createPagesHandler(root, pods, live, undefined, stateFixture(state));
   const fetch = (path: string, init?: RequestInit) =>
-    handle(new Request(`http://host${path}`, init));
+    (currentCaller().kind === "anonymous" && init?.method === "POST" && path.endsWith("/events")
+      ? asCaller(human, handle)
+      : handle)(new Request(`http://host${path}`, init));
   return { root, pods, state, fetch, handle };
 }
 
@@ -145,7 +142,9 @@ describe("pages", () => {
     await appendFile(log, '{"seq":3,"at":"2026-11-11T00:00:00.000Z","orig');
     const torn = await readFile(log);
     const notices = async () =>
-      (await readFile(join(state, "..", "stored-notices.jsonl"), "utf8")).split("\n").filter(Boolean);
+      (await readFile(join(state, "..", "stored-notices.jsonl"), "utf8"))
+        .split("\n")
+        .filter(Boolean);
     for (const _ of [1, 2]) {
       const { seq, events } = await read();
       expect(events.map((row) => row.event)).toEqual([{ type: "one" }, { type: "two" }]);
@@ -176,7 +175,7 @@ describe("pages", () => {
     expect((await fetch("/pages/todo/index.html", { method: "DELETE" })).status).toBe(405);
   });
 
-  it("keeps one event log per page, with origin and seq, and a snapshot the page writes", async () => {
+  it("keeps one event log per page, with origin and seq, and sequence-stamped text instead of a writable snapshot", async () => {
     const { fetch } = await pagesRoot();
     const first = await asCaller({ kind: "page", page: "page:@pages/todo" }, fetch)(
       "/pages/todo/events",
@@ -189,7 +188,7 @@ describe("pages", () => {
     expect(first.status).toBe(201);
     expect(await first.json()).toMatchObject({
       seq: 1,
-      origin: "page:@pages/todo",
+      origin: "page",
       event: { type: "add", id: "e1" },
     });
     const second = await fetch("/pages/todo/events", {
@@ -197,13 +196,13 @@ describe("pages", () => {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ type: "done", id: "e1" }),
     });
-    expect(await second.json()).toMatchObject({ seq: 2, origin: "agent" });
+    expect(await second.json()).toMatchObject({ seq: 2, origin: "person" });
     expect((await fetch("/pages/todo/events", { method: "POST", body: "[1,2]" })).status).toBe(400);
     const snapshot = await fetch("/pages/todo/snapshot", {
       method: "PUT",
       body: JSON.stringify({ items: [] }),
     });
-    expect(snapshot.status).toBe(204);
+    expect(snapshot.status).toBe(405);
     const state = (await (await fetch("/pages/todo/state")).json()) as {
       seq: number;
       events: unknown[];
@@ -211,12 +210,13 @@ describe("pages", () => {
     };
     expect(state.seq).toBe(2);
     expect(state.events).toHaveLength(2);
-    expect(state.snapshot).toEqual({ items: [] });
+    expect(state).not.toHaveProperty("snapshot");
     expect((await (await fetch("/pages/fresh/state")).json()) as unknown).toEqual({
       seq: 0,
       events: [],
-      snapshot: null,
       text: null,
+      textSeq: null,
+      agent: {},
     });
   });
 
@@ -246,6 +246,58 @@ describe("pages", () => {
     expect(text).toContain("id: 3\n");
     controller.abort();
     await reader.cancel().catch(() => undefined);
+  });
+
+  it("C2: stamps text, bounds reads and refuses undeclared agent events", async () => {
+    const { fetch } = await pagesRoot();
+    const agent = asCaller(pea(), fetch);
+    const append = (type: string) =>
+      agent("/pages/todo/events", {
+        method: "POST",
+        body: JSON.stringify({ type }),
+      });
+    expect((await append("note")).status).toBe(422);
+    const put = (seq: number, text: string) =>
+      asCaller(human, fetch)("/pages/todo/text", {
+        method: "PUT",
+        body: JSON.stringify({ seq, text, agent: { note: "a note: text" } }),
+      });
+    expect((await put(0, "empty")).status).toBe(204);
+    const refused = await append("erase");
+    expect(refused.status).toBe(422);
+    expect(await refused.text()).toContain("note");
+    expect(
+      (
+        await agent("/pages/todo/text", {
+          method: "PUT",
+          body: JSON.stringify({ seq: 0, text: "forged", agent: { erase: "erase" } }),
+        })
+      ).status,
+    ).toBe(403);
+    for (let i = 0; i < 52; i++) expect((await append("note")).status).toBe(201);
+    const state = (await (await fetch("/pages/todo/state")).json()) as { events: unknown[] };
+    expect(state).toMatchObject({
+      seq: 52,
+      text: "empty",
+      textSeq: 0,
+      agent: { note: "a note: text" },
+    });
+    expect(state.events).toHaveLength(50);
+    const tail = (await (await fetch("/pages/todo/state?after=51")).json()) as {
+      events: unknown[];
+    };
+    expect(tail.events).toHaveLength(1);
+    expect(
+      ((await (await fetch("/pages/todo/state?after=0")).json()) as { events: unknown[] }).events,
+    ).toHaveLength(52);
+    expect((await fetch("/pages/todo/state?after=wrong")).status).toBe(400);
+    expect((await put(53, "future")).status).toBe(409);
+    expect((await put(52, "current")).status).toBe(204);
+    expect((await put(51, "old tab")).status).toBe(409);
+    expect(await (await fetch("/pages/todo/state")).json()).toMatchObject({
+      textSeq: 52,
+      text: "current",
+    });
   });
 
   describe("page doors: identity is the path, the target is the binding", () => {
@@ -346,13 +398,13 @@ describe("pages", () => {
       expect(html.indexOf("pe-page")).toBeLessThan(html.indexOf("<p>hi</p>"));
       // A forged x-pe-origin names neither the row nor the crossing.
       const row = await page.post("/pages/todo/events", { type: "x" }, { "x-pe-origin": "human" });
-      expect(await row.json()).toMatchObject({ origin: "page:@pages/todo" });
-      const anonymous = await fetch("/pages/todo/events", {
+      expect(await row.json()).toMatchObject({ origin: "page" });
+      const person = await fetch("/pages/todo/events", {
         method: "POST",
         headers: { "x-pe-origin": "page:@pages/other" },
         body: JSON.stringify({ type: "y" }),
       });
-      expect(await anonymous.json()).toMatchObject({ origin: "agent" });
+      expect(await person.json()).toMatchObject({ origin: "person" });
       const read = await page.post(
         "/pages/todo/call",
         { key: "revit.context.summary" },
@@ -440,7 +492,9 @@ describe("pages", () => {
       const { handle, as } = await host([session("S1")]);
       const seen: unknown[] = [];
       const stop = handle.observeTarget("todo", (result) =>
-        seen.push("value" in result ? [result.value.binding.kind, result.value.write?.kind] : result),
+        seen.push(
+          "value" in result ? [result.value.binding.kind, result.value.write?.kind] : result,
+        ),
       );
       await expect.poll(() => seen).toEqual([["none", "read"]]);
       await as(human).put("/pe/pages/todo/binding", { kind: "thread", thread: "t1" });
@@ -550,7 +604,7 @@ describe("pages", () => {
       ] } }));
       await asCaller(human, fetch)("/pe/pages/tour--tour/binding", { method: "PUT", body: JSON.stringify({ kind: "pinned", address: MODEL }) });
       reads.length = 0; // Binding itself answers a target reading.
-      const target = () => asCaller({ kind: "page", page: "page:@tour/pages/tour" }, fetch)("/pages/tour--tour/target").then((r) => r.json()) as Promise<PageTargetReading>;
+      const target = () => asCaller({ kind: "page", page: "page:@tour/pages/tour" }, fetch)("/pages/tour--tour/target").then(async (r) => pageTargetReadingSchema.parse(await r.json()));
       expect((await target()).resolution).toEqual({ kind: "refused", reason: "wrong-model", message: "this Pod is for Chadds; the bound document is Other" });
       expect(reads).toHaveLength(1);
       expect(reads[0]).toMatchObject({ body: { key: "revit.detail.elements", request: { query: { kind: "ElementReferences", elementIds: [1, 2] } } } });
@@ -671,9 +725,7 @@ describe("pages", () => {
       expect((await put(pea("t9"), { kind: "pinned", address: "C:\\Pea\\Copy.rvt" })).status).toBe(
         200,
       );
-      expect(
-        JSON.parse(await readFile(join(state, "todo", "binding.json"), "utf8")),
-      ).toEqual({
+      expect(JSON.parse(await readFile(join(state, "todo", "binding.json"), "utf8"))).toEqual({
         slots: { default: { kind: "pinned", address: "C:\\Pea\\Copy.rvt" } },
         // Pea set it, so it is no person's consent to the Page's ReadOnly scripts.
         boundBy: { default: "agent" },
@@ -725,6 +777,10 @@ describe("pages", () => {
       const nodes = new Map<string, Record<string, unknown>>();
       const location = new URL("http://127.0.0.1:5180/pages/todo/");
       const window: Record<string, unknown> = { addEventListener: () => {} };
+      const streams: {
+        onmessage?: (message: { data: string }) => void;
+        listeners: Map<string, (message: { data: string }) => void>;
+      }[] = [];
       runInNewContext(source, {
         window,
         location,
@@ -779,11 +835,14 @@ describe("pages", () => {
               ],
             });
           if (url.pathname.endsWith("/state"))
-            return Response.json({ seq: 0, events: [], snapshot: null, text: null });
+            return Response.json({ seq: 0, events: [], text: null, textSeq: null, agent: {} });
+          if (url.pathname.endsWith("/text")) return new Response(null, { status: 204 });
           return new Response("<p>page</p>");
         },
         EventSource: class {
+          listeners = new Map<string, (message: { data: string }) => void>();
           constructor(url: string) {
+            streams.push(this);
             sent.push({
               url: new URL(url).pathname + new URL(url).search,
               method: "GET",
@@ -791,7 +850,9 @@ describe("pages", () => {
               body: undefined,
             });
           }
-          addEventListener() {}
+          addEventListener(name: string, listener: (message: { data: string }) => void) {
+            this.listeners.set(name, listener);
+          }
           close() {}
         },
       });
@@ -801,6 +862,7 @@ describe("pages", () => {
           doc: unknown;
         },
         sent,
+        streams,
         body,
       };
     }
@@ -827,6 +889,81 @@ describe("pages", () => {
       "sec-fetch-dest": "empty",
     };
 
+    it("C2: one stream reduces replay and live rows with identical metadata, without duplicate echoes", async () => {
+      const replay = {
+        seq: 1,
+        origin: "agent",
+        at: "2026-11-14T00:00:00Z",
+        event: { type: "add", value: 2 },
+      };
+      const live = {
+        seq: 2,
+        origin: "person",
+        at: "2026-11-14T00:00:01Z",
+        event: { type: "add", value: 3 },
+      };
+      const own = {
+        seq: 3,
+        origin: "page",
+        at: "2026-11-14T00:00:02Z",
+        event: { type: "add", value: 4 },
+      };
+      let rows = [replay];
+      const { pe, streams, sent } = await page((url) => {
+        if (url.pathname.endsWith("/state"))
+          return Response.json({ seq: rows.at(-1)!.seq, events: rows });
+        if (url.pathname.endsWith("/events")) {
+          rows = [replay, live, own];
+          return Response.json(own);
+        }
+      });
+      const seen: unknown[] = [];
+      const k = (await pe.state!({
+        base: 0,
+        reduce: (state: number, event: { value: number }, meta: unknown) => {
+          seen.push(meta);
+          return state + event.value;
+        },
+        describe: (state: number) => String(state),
+        agent: { add: "add value" },
+      })) as { state: number; fire(event: unknown): Promise<boolean> };
+      expect(k.state).toBe(2);
+      expect(streams).toHaveLength(1);
+      expect(streams[0]!.listeners.has("file")).toBe(true);
+      streams[0]!.onmessage!({ data: JSON.stringify(live) });
+      expect(k.state).toBe(5);
+      await k.fire(own.event);
+      streams[0]!.onmessage!({ data: JSON.stringify(own) });
+      expect(k.state).toBe(9);
+      expect(seen).toEqual([replay, live, own].map(({ seq, origin, at }) => ({ seq, origin, at })));
+      expect(sent.filter((row) => row.method === "PUT").at(-1)?.body).toEqual({
+        seq: 3,
+        text: "9",
+        agent: { add: "add value" },
+      });
+      expect(sent.some((row) => row.url.endsWith("/snapshot"))).toBe(false);
+    });
+
+    it("C2: a POST reply cannot skip an unseen event before its own seq", async () => {
+      const hidden = { seq: 1, origin: "agent", at: "first", event: { value: 2 } };
+      const own = { seq: 2, origin: "page", at: "second", event: { value: 3 } };
+      let rows: (typeof hidden)[] = [];
+      const { pe } = await page((url) => {
+        if (url.pathname.endsWith("/state"))
+          return Response.json({ seq: rows.at(-1)?.seq ?? 0, events: rows });
+        if (url.pathname.endsWith("/events")) {
+          rows = [hidden, own];
+          return Response.json(own);
+        }
+      });
+      const k = (await pe.state!({
+        base: 0,
+        reduce: (state: number, event: { value: number }) => state + event.value,
+      })) as { state: number; fire(event: unknown): Promise<boolean> };
+      await k.fire(own.event);
+      expect(k.state).toBe(5);
+    });
+
     it("names the serving runtime on every door and never its own origin or target", async () => {
       const { pe, sent } = await page();
       expect(pe.page).toBe("page:@pages/todo");
@@ -837,14 +974,14 @@ describe("pages", () => {
         { key: "op:a.x", kind: "op", title: "A", description: "x x x" },
       ]);
       await pe.read!("revit.context.summary");
-      await pe.state!({ base: {}, state: {}, replay() {}, fire() {} });
+      await pe.state!({ base: {}, reduce: (state: unknown) => state });
       const paths = sent.map((r) => r.url);
       expect(paths).toEqual(
         expect.arrayContaining([
           "/pages/todo/target",
           "/pe/capabilities?query=x&session=s1",
           "/pages/todo/call",
-          "/pages/todo/state",
+          "/pages/todo/state?after=0",
         ]),
       );
       expect(paths).not.toContain("/call");
