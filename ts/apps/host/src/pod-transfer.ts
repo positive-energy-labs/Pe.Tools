@@ -1,7 +1,6 @@
 /** Transport consumes packages.ts's captured members; source bytes and local custody stay distinct. */
 import { randomUUID } from "node:crypto";
-import { constants } from "node:fs";
-import { copyFile, cp, lstat, mkdir, readFile, readdir, rename, rm, rmdir, stat } from "node:fs/promises";
+import { lstat, readFile, readdir, rm, rmdir, stat } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { crc32, deflateRawSync, inflateRawSync } from "node:zlib";
 import { message, packageIdSchema, packageMemberPathSchema } from "@pe/agent-contracts";
@@ -432,33 +431,6 @@ export const importRecordKind = stateKind({
 });
 export const importRecordFile = (id: string, owner: Pick<TransferOptions, "machine"> = {}) =>
   importRecordKind.in(owner.machine ?? hostState(), id);
-
-/**
- * Move a staged pod into its home whole. One volume: one rename. Across volumes (state on C:, the
- * home on another drive) a rename cannot be one step, so the copy lands `pod.json` last: a listing
- * admits a pod only by its manifest, and so never sees a half copy. A failed copy is removed.
- */
-export async function placePod(staged: string, directory: string, move = rename): Promise<void> {
-  await mkdir(dirname(directory), { recursive: true });
-  try {
-    return await move(staged, directory);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "EXDEV") throw error;
-  }
-  const manifest = join(staged, "pod.json");
-  try {
-    await cp(staged, directory, {
-      recursive: true,
-      errorOnExist: true,
-      force: false,
-      filter: (source) => source !== manifest,
-    });
-    await copyFile(manifest, join(directory, "pod.json"), constants.COPYFILE_EXCL);
-  } catch (error) {
-    await rm(directory, { recursive: true, force: true });
-    throw error;
-  }
-}
 
 /** The manifest id an archive claims; refuses an archive without a valid, unreserved one. */
 export function archiveId(entries: ReadonlyMap<string, Buffer>): string {
