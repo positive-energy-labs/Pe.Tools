@@ -10,7 +10,7 @@ import { z } from "zod";
 import type { RequestIdentityData } from "@pe/host-internal/request-contracts";
 import { ActionJournal } from "../src/action-journal.ts";
 import { CANCEL_OPERATION_KEY } from "../src/bridge.ts";
-import { command, StepFailure } from "../src/command-executor.ts";
+import { command, StepFailure, refused } from "../src/command-executor.ts";
 import { ActionJournalService } from "../src/receipt-services.ts";
 import { HostLog } from "../src/host-log.ts";
 import { RequestIdentity, admittedRequestIdentity } from "../src/request-services.ts";
@@ -60,6 +60,26 @@ test("unpinning mid-action refuses the next journal step", async () => {
 });
 
 const human = { kind: "human", via: "local" } as const;
+
+test.each([false, true])("domain refusal after step entry, dispatched=%s", async (dispatched) => {
+  const f = await fixture(undefined, false, { probe: async () => null, resolve: () => command(
+    { says: "Refuse", needs: "nothing", effect: "command", dirties: [], input: z.record(z.string(), z.unknown()) }, z.null(), {
+      bind: async () => ({ effects: [] }),
+      run: (_ctx, execution) => execution.step("native", "test.refuse", {}, (id) => Effect.gen(function* () {
+        if (dispatched) yield* Effect.promise(() => markDispatched(id, "bridge"));
+        return yield* Effect.fail(refused("Exact refusal words", "test.refused"));
+      })),
+    }),
+  });
+  try {
+    await f.journal.invoke({ id: "refuse", key: "refuse", target: { kind: "host" }, input: {} }, { caller: human, basis: null });
+    const receipt = await f.journal.wait("refuse");
+    expect(receipt).toMatchObject({ state: dispatched ? "unknown" : "failed", refusal: { code: "test.refused", message: "Exact refusal words" } });
+    expect(receipt.steps[0]).toMatchObject({ state: dispatched ? "unknown" : "failed", error: "Exact refusal words" });
+    if (dispatched) expect(receipt.steps[0]).not.toHaveProperty("notDispatched");
+    else expect(receipt.steps[0]).toHaveProperty("notDispatched", true);
+  } finally { await f.dispose(); }
+});
 
 // ADR 0029 rule 10, durable command: only the native side is mocked; the journal is its live Layer.
 async function fixture(readOwnership?: ReadOwnership, failAfter = false, environment?: Parameters<ActionJournal["bindCommands"]>[0]) {

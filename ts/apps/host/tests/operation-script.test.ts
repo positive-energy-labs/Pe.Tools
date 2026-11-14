@@ -20,6 +20,40 @@ import type { ActionExecution } from "../src/action-journal.ts";
 import type { RevitBridge } from "../src/bridge.ts";
 import type { PictureCaptures } from "../src/captures-route.ts";
 import type { Caller } from "@pe/agent-contracts";
+import { invocationOutcome } from "@pe/agent-contracts";
+
+it("D38 journals a ReadOnly wrong-model refusal before script dispatch", async () => {
+  const root = await mkdtemp(join(tmpdir(), "pe-refused-model-"));
+  const journal = testJournal();
+  onTestFinished(async () => { await journal.close(); await rm(root, { recursive: true, force: true }); });
+  const calls: string[] = [];
+  const bridge = detachedBridge({ invoke: (key) => Effect.sync(() => {
+    calls.push(key);
+    if (key !== "revit.detail.elements") throw Error("Script must never dispatch");
+    return { value: { documentTitle: "Brodie", entries: [] }, target: { session: "s", document: null } };
+  }) });
+  const executor = gatewayExecutor("scripting.execute", bridge, () => Effect.void, pictureCaptures(root));
+  journal.bindCommands({ probe: async () => null, resolve: () => ({
+    ...executor,
+    definition: { says: "Read Pod", needs: "document", effect: "command", dirties: [], input: z.record(z.string(), z.unknown()) },
+    prepared: z.unknown(),
+    bind: async () => ({ effects: [], prepare: async () => ({ kind: "native-leaf" }) }),
+  }) });
+  const sourceBundle = { files: [{ path: "pod.json", bytesBase64: Buffer.from(JSON.stringify({ for: {
+    title: "Chadds", probes: [{ elementId: 42, uniqueId: "chadds-42" }],
+  } })).toString("base64") }] };
+  await journal.invoke({ id: "wrong-model", key: "scripting.execute", target: { kind: "document", ref: { session: "s", openId: "d" } },
+    input: { scriptContent: "Result(1);", permissionMode: "ReadOnly", sourceBundle },
+  }, { caller: approvedPea("wrong-model"), basis: null });
+  const receipt = await journal.wait("wrong-model");
+  expect(receipt).toMatchObject({
+    state: "failed", status: 409, notDispatched: true,
+    refusal: { kind: "domain", code: "wrong-model", message: "this Pod is for Chadds; the bound document is Brodie" },
+    steps: [{ key: "scripting.execute", state: "failed", notDispatched: true }],
+  });
+  expect(invocationOutcome(receipt)).toMatchObject({ state: "refused", reason: "this Pod is for Chadds; the bound document is Brodie" });
+  expect(calls).toEqual(["revit.detail.elements"]);
+});
 
 it("refuses a script with no exact lifetime before native dispatch", async () => {
   const invoke = () : never => { throw Error("dispatched without a lifetime"); };
