@@ -9,6 +9,7 @@ import { pictureCaptures } from "./effect-test.ts";
 import { importShippedPods } from "../src/installed-pods.ts";
 import { exportPod } from "../src/pod-transfer.ts";
 import { bindPackageScanLogger, capturePackage, listPackages } from "../src/packages.ts";
+import * as packages from "../src/packages.ts";
 import { createContributionContent } from "../src/pe-routes.ts";
 import { createPagesHandler } from "../src/pages-route.ts";
 import {
@@ -166,7 +167,7 @@ test("the five-second lifecycle discovery bound includes its initial census", as
   }
 });
 
-test("a first Page request shares one five-second budget across its two discovery waits", async () => {
+test("a first Page request answers by 5000 ms and never starts lifecycle after expiry", async () => {
   const root = await mkdtemp(join(tmpdir(), "pe-first-page-bound-"));
   const home = join(root, "home");
   const pods = join(home, "Pods");
@@ -174,22 +175,17 @@ test("a first Page request shares one five-second budget across its two discover
   await mkdir(join(pods, "late", "pages", "tour"), { recursive: true });
   await writeFile(join(pods, "late", "pod.json"), '{"id":"late","entrypoints":[]}');
   await writeFile(join(pods, "late", "pages", "tour", "index.html"), "<title>Late</title>");
+  const listing = await listPackages(pods);
   const releaseCensus = Promise.withResolvers<{ packages: []; unreadable: [] }>();
   const lifecycle = createPackageLifecycle({ machine: stateMachine(root), packages: () => releaseCensus.promise });
   bindPackageLifecycle(lifecycle);
   const ready = lifecycle.ready;
-  const policyEntered = Promise.withResolvers<void>();
-  vi.spyOn(lifecycle, "ready", "get").mockImplementation(() => {
-    policyEntered.resolve();
-    return ready;
-  });
+  const policy = vi.spyOn(lifecycle, "ready", "get").mockReturnValue(ready);
   const entered = Promise.withResolvers<void>();
-  const releaseListing = Promise.withResolvers<void>();
-  const actual = filesystem.readdir;
-  vi.spyOn(filesystem, "readdir").mockImplementationOnce(async (...args) => {
+  const releaseListing = Promise.withResolvers<typeof listing>();
+  vi.spyOn(packages, "listPackages").mockImplementationOnce(() => {
     entered.resolve();
-    await releaseListing.promise;
-    return actual(...args);
+    return releaseListing.promise;
   });
   vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
   const started = Date.now();
@@ -199,14 +195,19 @@ test("a first Page request shares one five-second budget across its two discover
   try {
     await entered.promise;
     await vi.advanceTimersByTimeAsync(4_999);
-    releaseListing.resolve();
-    await policyEntered.promise;
     expect(answered).toBe(false);
+    expect(policy).not.toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(1);
-    expect((await opening)?.status).toBe(404);
+    expect(answered).toBe(true);
+    const response = await opening;
+    expect(response.status).toBe(404);
+    expect(await response.text()).toContain("no page late--tour: no admitted package contributes it");
     expect(Date.now() - started).toBe(5_000);
+    releaseListing.resolve(listing);
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(policy).not.toHaveBeenCalled();
   } finally {
-    releaseListing.resolve();
+    releaseListing.resolve(listing);
     await lifecycle.close();
     releaseCensus.resolve({ packages: [], unreadable: [] });
     await ready;
