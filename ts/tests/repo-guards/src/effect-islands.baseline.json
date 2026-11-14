@@ -23,8 +23,7 @@
     "apps/host/src/session-route.ts": 1,
     "packages/browser/src/attached-guardian.ts": 1,
     "packages/browser/src/keeper.ts": 1,
-    "packages/mcps/src/shared/host-rpc-caller.ts": 1,
-    "apps/web/src/host/event-source.test-support.ts": 0
+    "packages/mcps/src/shared/host-rpc-caller.ts": 1
   },
   "tests": {
     "apps/host/tests/boundary.test.ts": 5,
