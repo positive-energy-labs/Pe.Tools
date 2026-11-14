@@ -66,7 +66,6 @@ export class Places {
       closed = true; release(); this.refresh = undefined;
       void this.client.call("reads.value", { body: { ...body, release: true } }).catch(() => {});
     };
-    void refresh();
   }
   save(tabs: ThreadTab[]) {
     if (!this.state.ready) throw Error("Places are not available from the host yet.");

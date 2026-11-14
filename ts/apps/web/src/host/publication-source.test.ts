@@ -33,7 +33,9 @@ test("a live publication answered `absent` goes stale and is re-read, never kept
   } });
   const stop = source.open({ signal: new AbortController().signal } as never, frame => frames.push(frame as never)) as () => void;
   await expect.poll(() => stream.listener).toBeDefined();
-  expect(frames.map(frame => frame.kind)).toEqual(["complete"]);
+  expect(reads).toBe(0);
+  stream.listener!({ kind: "snapshot", key: "k", value: { generation: 0, version: 0, state: "absent" } });
+  await expect.poll(() => frames.map(frame => frame.kind)).toEqual(["complete"]);
   stream.listener!({ kind: "snapshot", key: "k", value: { generation: 0, version: 0, state: "absent" } });
   await expect.poll(() => frames.map(frame => frame.kind)).toEqual(["complete", "stale", "complete"]);
   expect(reads).toBe(2);

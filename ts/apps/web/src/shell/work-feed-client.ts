@@ -52,7 +52,10 @@ export function createTimelineClient(client: Pick<typeof peClient, "response"> =
       const controller = new AbortController();
       const source = publicationSource({ async read(_ctx, publication, release) {
         const response = await client.response("reads.value", { body: { ...publication, read: "work.timeline", args, release } });
-        if (!response.ok) throw Error(`Timeline unavailable (${response.status})`);
+        if (!response.ok) {
+          const refusal = z.object({ message: z.string(), problem: z.string() }).safeParse(await response.json().catch(() => null));
+          throw Error(refusal.success ? `${refusal.data.message} [${refusal.data.problem}]` : `Timeline unavailable (${response.status})`);
+        }
         return await response.json();
       } });
       const stop = source.open({ target: { kind: "host" }, workKey: null, workRevision: null, page: {}, work: null,

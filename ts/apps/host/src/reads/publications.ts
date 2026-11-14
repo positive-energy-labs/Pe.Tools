@@ -15,6 +15,7 @@ import {
   type Value,
 } from "./evaluator.ts";
 import { startFlight, type Flight, type ReadLease } from "./read-ownership.ts";
+import { ReadBusy } from "../native-reads.ts";
 
 export interface Publication<T> {
   readonly key: string;
@@ -58,7 +59,10 @@ export class Publications {
     listener();
     return () => {
       listeners.delete(listener);
-      if (!listeners.size) this.listeners.delete(id);
+      if (!listeners.size && this.listeners.get(id) === listeners) {
+        this.listeners.delete(id);
+        this.discard(id);
+      }
     };
   }
   private notify(id: string) {
@@ -116,17 +120,20 @@ export class Publications {
   }
   /** Pin only this ID's release fence before opening inputs; close on every request exit. */
   admission(id: string, generation: number) {
+    const holders = this.listeners.get(id);
     this.admissions.set(id, (this.admissions.get(id) ?? 0) + 1);
     const allowed = generation > (this.released.get(id) ?? -1);
     let closed = false;
     return {
-      current: () => !closed && allowed && generation > (this.released.get(id) ?? -1),
+      current: () => !closed && allowed && (!holders || this.listeners.get(id) === holders) && generation > (this.released.get(id) ?? -1),
       close: () => {
         if (closed) return;
         closed = true;
         const remaining = this.admissions.get(id)! - 1;
         if (remaining) this.admissions.set(id, remaining);
         else this.admissions.delete(id);
+        // An HTTP-only reader holds the slot for its request, never beyond it.
+        if (!remaining && !this.listeners.has(id)) this.discard(id);
         this.pruneReleased();
       },
     };
@@ -153,6 +160,10 @@ export class Publications {
     this.released.delete(id);
     this.released.set(id, generation);
     this.pruneReleased();
+    this.discard(id);
+  }
+  private discard(id: string) {
+    const slot = this.slots.get(id);
     if (slot) {
       // The subscriber is gone: its lease goes, and the last one to go stops the read itself.
       slot.lease?.release();
@@ -186,7 +197,7 @@ export class Publications {
     )
       return obsolete();
     if (!slot) {
-      if (this.slots.size >= this.capacity) throw Error("Read subscription capacity reached");
+      if (this.slots.size >= this.capacity) throw new ReadBusy({ message: "Read subscription capacity reached", status: 429, problem: "read.subscription-capacity" });
     }
     let owner = this.keys.get(key);
     if (!owner) {

@@ -12,7 +12,7 @@ export function hostList() {
     if (door === "places.put") { tabs = input.body.places; emit(); return { places: tabs }; }
     return { value: { data: { places: tabs } } };
   } } as typeof peClient;
-  const stream: Readings = { subscribe: (_request, accept) => { followers.add(accept); return () => { followers.delete(accept); }; }, dirty: () => {} };
+  const stream: Readings = { subscribe: (_request, accept) => { followers.add(accept); accept({ kind: "snapshot", key: "places", value: { state: "absent" } }); return () => { followers.delete(accept); }; }, dirty: () => {} };
   return { client, stream, read: () => tabs, seed: (next: ThreadTab[]) => { tabs = next; emit(); } };
 }
 export const host = hostList();
