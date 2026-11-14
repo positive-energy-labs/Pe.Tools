@@ -16,7 +16,7 @@ import { z } from "zod";
 import type { RevitBridge } from "./bridge.ts";
 import { podModelSchema, wrongPodModel } from "./pod-model.ts";
 import { requirePackageEnabled } from "./package-lifecycle.ts";
-import { PackageDiscoveryExceeded } from "./pod-capture.ts";
+import { PackageDiscoveryExceeded, requireIndexedPackageAvailable } from "./pod-capture.ts";
 
 const sourceBundleSchema = z.object({
   files: z.array(z.object({ path: z.string(), bytesBase64: z.string() })),
@@ -35,8 +35,10 @@ export function runPodScript(
   return Effect.gen(function* () {
     if (!target.openId)
       return yield* Effect.fail(refused(scriptNeedsDocument));
-    const captured = input.sourcePath != null && input.sourceBundle == null
-      ? yield* io(() => freezeScript(input)).pipe(Effect.mapError((error) => error instanceof CommandRejected ? error : refused(error instanceof Error ? error.message : String(error))))
+    const captured = input.sourcePath != null
+      ? yield* io(() => freezeScript(input)).pipe(Effect.mapError((error) => error instanceof PackageDiscoveryExceeded
+        ? new CommandRejected({ kind: "domain", code: error.code, message: error.message }, 503)
+        : error instanceof CommandRejected ? error : refused(error instanceof Error ? error.message : String(error))))
       : undefined;
     const sealedInput = captured ? { ...input, sourceBundle: captured.sourceBundle } : input;
     const model = yield* Effect.try({
@@ -107,7 +109,15 @@ export async function freezeScript(
       } catch (error) { console.warn("ts/apps/host/src/operation-script.ts: fallback after failure", error);
         /* Native preparation owns malformed manifest refusal. */
       }
-      if (typeof id === "string") await requirePackageEnabled(id);
+      if (typeof id === "string") {
+        try { requireIndexedPackageAvailable(id); }
+        catch (error) {
+          throw error instanceof PackageDiscoveryExceeded
+            ? new CommandRejected({ kind: "domain", code: error.code, message: error.message }, 503)
+            : error;
+        }
+        await requirePackageEnabled(id);
+      }
     }
     const bounds = scriptPodMemberBounds;
     let sourceTotal = 0;
@@ -172,5 +182,9 @@ export async function freezeScript(
   });
   const pod = listing.packages.find((pod) => pod.folder === workspace);
   if (!pod) throw Error(`No admitted Pod in workspace '${workspace}'.`);
-  return freezeScript({ ...input, sourceBundle: (await capturePackage(pod)).sourceBundle });
+  return freezeScript({ ...input, sourceBundle: (await capturePackage(pod).catch((error: unknown) => {
+    throw error instanceof PackageDiscoveryExceeded
+      ? new CommandRejected({ kind: "domain", code: error.code, message: error.message }, 503)
+      : error;
+  })).sourceBundle });
 }

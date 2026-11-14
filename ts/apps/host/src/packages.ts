@@ -9,14 +9,10 @@ import {
   podRouteDeclarationSchema,
   type PodRouteDeclaration,
 } from "@pe/agent-contracts";
-import { createHash } from "node:crypto";
 import type { Dirent } from "node:fs";
-import { lstat, open, readdir } from "node:fs/promises";
+import { lstat, readdir } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
-import {
-  scriptPodMemberBounds as memberBounds,
-  type ScriptingExecute,
-} from "@pe/host-contracts/generated";
+import type { ScriptingExecute } from "@pe/host-contracts/generated";
 import type { MemberIssue } from "@pe/host-contracts/operation-types";
 import { productPathNames } from "@pe/host-contracts/contracts";
 import { contentHomes, contentRootsReady, ContentHomeUnavailable } from "./content-roots.ts";
@@ -24,12 +20,18 @@ import { verifyPodArtifact } from "./pod-artifact.ts";
 import { shippedPodUpdateRefusals } from "./shipped-pod-status.ts";
 import { podModelSchema, type PodModel } from "./pod-model.ts";
 import { logPackageDiscovery as scanLog } from "./pod-discovery-log.ts";
-import { podsDiskSignature } from "./pod-disk-signature.ts";
+import { packageDiskFiles, packageDiskSignatures, podsDiskSignature } from "./pod-disk-signature.ts";
 export { bindPackageScanLogger, logPackageDiscovery, packageScanLog, packageScanLogLineLimit } from "./pod-discovery-log.ts";
 import {
   captureIndexedPackage,
   rememberCaptureRoots,
   discoverPackages,
+  type PackageCensus,
+  requirePackageAvailable,
+  capturePodDirectory,
+  incompletePackageRead,
+  PackageReadIncomplete,
+  packageProblem as problem,
 } from "./pod-capture.ts";
 
 export type PackageEntrypoint = {
@@ -55,6 +57,8 @@ export type PackageContribution = {
   mode?: ScriptMode;
 };
 export type AdmittedPackage = {
+  /** Last known admission for discovery only; byte-serving boundaries refuse until recovery. */
+  discoveryFailure?: string;
   for?: PodModel;
   id: string;
   name: string;
@@ -104,7 +108,6 @@ export function isPackageMember(path: string): boolean {
     !parts.some((part) => part === ".env" || part.startsWith(".env.") || part === "context.token")
   );
 }
-
 /** Kind follows the admitted path; declaration exposes a script but does not authorize it. */
 export function kindOfMember(
   path: string,
@@ -165,7 +168,12 @@ export async function listPackages({ podsRoots, wait = "request" }: PackageDisco
   const listing = await discoverPackages(podsRoots, scanPackages, wait,
     signal => podsDiskSignature([podsRoots].flat(), isPackageMember, signal));
   // Import notices are runtime state, not disk bytes; project them even when the census is reused.
-  return { ...listing, packages: listing.packages.map(pod => ({ ...pod, diagnostics: currentDiagnostics(pod.id, pod.diagnostics) })) };
+  return { ...listing, packages: listing.packages.map(pod => {
+    const twins = listing.packages.filter(other => other.id === pod.id);
+    const diagnostics = currentDiagnostics(pod.id, pod.diagnostics);
+    if (twins.length > 1) diagnostics.unshift(problem("DuplicatePodId", "pod.json", claimedTwice(pod.id, twins)));
+    return { ...pod, diagnostics, contributions: twins.length > 1 ? [] : pod.contributions };
+  }) };
 }
 
 function currentDiagnostics(id: string, issues: readonly MemberIssue[]): MemberIssue[] {
@@ -178,7 +186,18 @@ function currentDiagnostics(id: string, issues: readonly MemberIssue[]): MemberI
 async function scanPackages(
   roots: readonly string[],
   signal: AbortSignal,
+  previous?: PackageCensus,
+  signature?: string,
 ): Promise<PackageListing> {
+  // The census owns reuse. Unknown metadata never permits borrowing bytes, and duplicate identity
+  // is projected after reuse so a temporary collision cannot poison an unchanged Pod.
+  const before = previous?.signature === undefined ? undefined : packageDiskSignatures(previous.signature, roots);
+  const after = signature && packageDiskSignatures(signature, roots);
+  const reusable = new Map(previous?.listing.packages
+    .filter(pod => !pod.discoveryFailure && after && before?.has(resolve(pod.directory)) &&
+      before.get(resolve(pod.directory)) === after.get(resolve(pod.directory)))
+    .map(pod => [resolve(pod.directory), pod]));
+  const admitted = new Map(previous?.listing.packages.map(pod => [resolve(pod.directory), pod]));
   const result: PackageListing = { packages: [], unreadable: [] };
   for (const root of roots) {
     signal.throwIfAborted();
@@ -196,7 +215,7 @@ async function scanPackages(
     signal.addEventListener("abort", end, { once: true });
     let listing: PackageListing;
     try {
-      listing = await listPodsFolder(root, signal);
+      listing = await listPodsFolder(root, signal, reusable, admitted, after || new Map());
       signal.throwIfAborted();
       outcome = "completed";
     } finally {
@@ -206,30 +225,25 @@ async function scanPackages(
     result.packages.push(...listing.packages);
     result.unreadable.push(...listing.unreadable);
   }
-  for (const pod of result.packages) {
-    const twins = result.packages.filter((other) => other.id === pod.id);
-    if (twins.length > 1) {
-      pod.diagnostics.unshift(problem("DuplicatePodId", "pod.json", claimedTwice(pod.id, twins)));
-      pod.contributions = [];
-    }
-  }
   return result;
 }
 
-async function listPodsFolder(podsRoot: string, signal: AbortSignal): Promise<PackageListing> {
+async function listPodsFolder(podsRoot: string, signal: AbortSignal, reusable: ReadonlyMap<string, AdmittedPackage>, admitted: ReadonlyMap<string, AdmittedPackage>, signatures: ReadonlyMap<string, string>): Promise<PackageListing> {
   const result: PackageListing = { packages: [], unreadable: [] };
   let entries;
   try {
     entries = await readdir(podsRoot, { withFileTypes: true });
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return result;
+    const previous = [...admitted.values()].filter(pod => resolve(dirname(pod.directory)) === resolve(podsRoot));
+    if (previous.length) return { packages: previous.map(pod => unavailablePackage(pod, error)), unreadable: [] };
     throw error;
   }
   for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
     signal.throwIfAborted();
     if (!entry.isDirectory() && !entry.isSymbolicLink()) continue;
+    const directory = join(podsRoot, entry.name);
     try {
-      const directory = join(podsRoot, entry.name);
       if (entry.isSymbolicLink()) throw Error("Pod folders cannot be links.");
       try {
         await lstat(join(directory, "pod.json"));
@@ -237,14 +251,31 @@ async function listPodsFolder(podsRoot: string, signal: AbortSignal): Promise<Pa
         if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
         throw error;
       }
-      result.packages.push(await readFolder(directory, entry.name, signal));
+      const pod = reusable.get(resolve(directory)) ?? await readFolder(directory, entry.name, signal);
+      const signature = signatures.get(resolve(directory));
+      if (!reusable.has(resolve(directory)) && signature && !pod.diagnostics.some(issue => issue.code === "PackageMemberInvalid")) {
+        const captured = new Set(pod.members.map(member => resolve(directory, member.path)));
+        const expected = packageDiskFiles(signature);
+        if (captured.size !== expected.length || expected.some(path => !captured.has(resolve(path))))
+          throw new PackageReadIncomplete("Pod members changed during capture");
+      }
+      result.packages.push(pod);
     } catch (error) {
       signal.throwIfAborted();
+      const previous = admitted.get(resolve(directory));
+      if (previous && incompletePackageRead(error)) {
+        result.packages.push(unavailablePackage(previous, error));
+        continue;
+      }
       result.unreadable.push({ folder: entry.name, message: message(error) });
     }
   }
   return result;
 }
+
+const unavailablePackage = (pod: AdmittedPackage, error: unknown): AdmittedPackage => ({
+  ...pod, discoveryFailure: message(error),
+});
 
 /** The one admitted package with this id (manifest identity, never a folder alias); a twice-claimed or missing id refuses with its reason. */
 export function onePackage(
@@ -253,7 +284,11 @@ export function onePackage(
   refuse = (reason: string, _status: 404 | 409): Error => Error(reason),
 ): AdmittedPackage {
   const found = listing.packages.filter((pod) => pod.id === id);
-  if (found.length === 1) return found[0]!;
+  if (found.length === 1) {
+    const selected = found[0]!;
+    requirePackageAvailable(selected);
+    return selected;
+  }
   throw found.length
     ? refuse(claimedTwice(id, found), 409)
     : refuse(`No installed pod has id '${id}'.`, 404);
@@ -271,6 +306,7 @@ export async function capturePackage(
     typeof packageOrId === "string"
       ? await captureIndexedPackage(packageOrId, podsRoots, readFolder)
       : packageOrId;
+  requirePackageAvailable(pod);
   const errors = pod.diagnostics.filter((issue) =>
     ["PackageMemberInvalid", "DuplicatePodId"].includes(issue.code),
   );
@@ -287,98 +323,8 @@ export async function capturePackage(
   };
 }
 
-export async function captureDirectory(
-  directory: string,
-  manifestOnly = false,
-  signal?: AbortSignal,
-): Promise<{ members: PackageMember[]; diagnostics: MemberIssue[] }> {
-  const members: PackageMember[] = [];
-  const diagnostics: MemberIssue[] = [];
-  const names = new Set<string>();
-  let directories = 0,
-    files = 0,
-    total = 0;
-  const walk = async (relative: string): Promise<void> => {
-    signal?.throwIfAborted();
-    if (++directories > memberBounds.maxDirectoryCount) throw Error("Pod directory limit exceeded");
-    const absolute = join(directory, relative);
-    if ((await lstat(absolute)).isSymbolicLink()) throw Error("Pod directories cannot be links");
-    for (const entry of (await readdir(absolute, { withFileTypes: true })).sort((a, b) =>
-      a.name.localeCompare(b.name),
-    )) {
-      signal?.throwIfAborted();
-      const path = relative ? `${relative}/${entry.name}` : entry.name;
-      if (manifestOnly && path !== "pod.json") continue;
-      try {
-        if (!isPackageMember(path)) continue;
-        if (names.has(path.toLowerCase())) throw Error("Case-colliding package path");
-        names.add(path.toLowerCase());
-        if (entry.isSymbolicLink()) throw Error("Pod input cannot follow links");
-        if (entry.isDirectory()) {
-          await walk(path);
-          continue;
-        }
-        if (++files > memberBounds.maxFileCount) throw Error("Pod file count limit exceeded");
-        const info = await lstat(join(directory, path));
-        if (!info.isFile() || info.isSymbolicLink())
-          throw Error("Pod input must be a regular file");
-        if (info.size > memberBounds.maxFileBytes)
-          throw Error(`Pod member exceeds ${memberBounds.maxFileBytes} bytes`);
-        if ((total += info.size) > memberBounds.maxTotalBytes)
-          throw Error(`Pod members exceed ${memberBounds.maxTotalBytes} total bytes`);
-        const handle = await open(join(directory, path), "r");
-        let bytes: Buffer;
-        try {
-          const stat = await handle.stat();
-          if (!stat.isFile() || stat.ino !== info.ino || stat.size !== info.size)
-            throw Error("Pod input changed during capture");
-          bytes = Buffer.alloc(stat.size + 1);
-          let count = 0;
-          while (count < bytes.length) {
-            signal?.throwIfAborted();
-            const read = await handle.read(bytes, count, bytes.length - count, null);
-            if (!read.bytesRead) break;
-            count += read.bytesRead;
-          }
-          bytes = bytes.subarray(0, count);
-        } finally {
-          await handle.close();
-        }
-        if (bytes.length !== info.size) throw Error("Pod input changed during capture");
-        let schema: string | null = null;
-        if (path.endsWith(".json")) {
-          try {
-            const value = JSON.parse(bytes.toString("utf8").replace(/^\uFEFF/, ""));
-            schema = typeof value?.$schema === "string" ? value.$schema : null;
-          } catch {
-            diagnostics.push({
-              ...problem("JsonParseError", path, "Member is not valid JSON."),
-              severity: "warning",
-            });
-          }
-        }
-        members.push({
-          path,
-          bytes,
-          sha256: createHash("sha256").update(bytes).digest("hex"),
-          schema,
-        });
-      } catch (error) {
-        signal?.throwIfAborted();
-        diagnostics.push(problem("PackageMemberInvalid", path, message(error)));
-      }
-      if (
-        files > memberBounds.maxFileCount ||
-        directories > memberBounds.maxDirectoryCount ||
-        total > memberBounds.maxTotalBytes
-      )
-        return;
-    }
-  };
-  await walk("");
-  return { members, diagnostics };
-}
-
+export const captureDirectory = (directory: string, manifestOnly = false, signal?: AbortSignal) =>
+  capturePodDirectory(directory, isPackageMember, manifestOnly, signal);
 /**
  * Fresh global identity claims, followed by full admission of only the selected folder. The folder
  * name and the manifest id must each be claimed once across every home.
@@ -569,10 +515,3 @@ async function readFolder(
     routes,
   };
 }
-
-const problem = (code: string, path: string, message: string): MemberIssue => ({
-  code,
-  path,
-  message,
-  severity: "error",
-});

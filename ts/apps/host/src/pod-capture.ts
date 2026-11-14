@@ -1,5 +1,116 @@
-import { resolve } from "node:path";
-import type { AdmittedPackage, PackageListing, PodsRoots } from "./packages.ts";
+import { join, resolve } from "node:path";
+import { createHash } from "node:crypto";
+import { lstat, open, readdir } from "node:fs/promises";
+import { message } from "@pe/agent-contracts";
+import { scriptPodMemberBounds as memberBounds } from "@pe/host-contracts/generated";
+import type { MemberIssue } from "@pe/host-contracts/operation-types";
+import type { AdmittedPackage, PackageListing, PackageMember, PodsRoots } from "./packages.ts";
+
+export class PackageReadIncomplete extends Error {}
+export const incompletePackageRead = (error: unknown) => error instanceof PackageReadIncomplete ||
+  (error instanceof Error && "code" in error && typeof error.code === "string");
+
+export const packageProblem = (code: string, path: string, message: string): MemberIssue => ({
+  code,
+  path,
+  message,
+  severity: "error",
+});
+const problem = packageProblem;
+
+export async function capturePodDirectory(
+  directory: string,
+  isPackageMember: (path: string) => boolean,
+  manifestOnly = false,
+  signal?: AbortSignal,
+): Promise<{ members: PackageMember[]; diagnostics: MemberIssue[] }> {
+  const members: PackageMember[] = [];
+  const diagnostics: MemberIssue[] = [];
+  const names = new Set<string>();
+  let directories = 0,
+    files = 0,
+    total = 0;
+  const walk = async (relative: string): Promise<void> => {
+    signal?.throwIfAborted();
+    if (++directories > memberBounds.maxDirectoryCount) throw Error("Pod directory limit exceeded");
+    const absolute = join(directory, relative);
+    if ((await lstat(absolute)).isSymbolicLink()) throw Error("Pod directories cannot be links");
+    for (const entry of (await readdir(absolute, { withFileTypes: true })).sort((a, b) =>
+      a.name.localeCompare(b.name),
+    )) {
+      signal?.throwIfAborted();
+      const path = relative ? `${relative}/${entry.name}` : entry.name;
+      if (manifestOnly && path !== "pod.json") continue;
+      try {
+        if (!isPackageMember(path)) continue;
+        if (names.has(path.toLowerCase())) throw Error("Case-colliding package path");
+        names.add(path.toLowerCase());
+        if (entry.isSymbolicLink()) throw Error("Pod input cannot follow links");
+        if (entry.isDirectory()) {
+          await walk(path);
+          continue;
+        }
+        if (++files > memberBounds.maxFileCount) throw Error("Pod file count limit exceeded");
+        const info = await lstat(join(directory, path));
+        if (!info.isFile() || info.isSymbolicLink())
+          throw Error("Pod input must be a regular file");
+        if (info.size > memberBounds.maxFileBytes)
+          throw Error(`Pod member exceeds ${memberBounds.maxFileBytes} bytes`);
+        if ((total += info.size) > memberBounds.maxTotalBytes)
+          throw Error(`Pod members exceed ${memberBounds.maxTotalBytes} total bytes`);
+        const handle = await open(join(directory, path), "r");
+        let bytes: Buffer;
+        try {
+          const stat = await handle.stat();
+          if (!stat.isFile() || stat.ino !== info.ino || stat.size !== info.size)
+            throw new PackageReadIncomplete("Pod input changed during capture");
+          bytes = Buffer.alloc(stat.size + 1);
+          let count = 0;
+          while (count < bytes.length) {
+            signal?.throwIfAborted();
+            const read = await handle.read(bytes, count, bytes.length - count, null);
+            if (!read.bytesRead) break;
+            count += read.bytesRead;
+          }
+          bytes = bytes.subarray(0, count);
+        } finally {
+          await handle.close();
+        }
+        if (bytes.length !== info.size) throw new PackageReadIncomplete("Pod input changed during capture");
+        let schema: string | null = null;
+        if (path.endsWith(".json")) {
+          try {
+            const value = JSON.parse(bytes.toString("utf8").replace(/^\uFEFF/, ""));
+            schema = typeof value?.$schema === "string" ? value.$schema : null;
+          } catch {
+            diagnostics.push({
+              ...problem("JsonParseError", path, "Member is not valid JSON."),
+              severity: "warning",
+            });
+          }
+        }
+        members.push({
+          path,
+          bytes,
+          sha256: createHash("sha256").update(bytes).digest("hex"),
+          schema,
+        });
+      } catch (error) {
+        signal?.throwIfAborted();
+        if (incompletePackageRead(error)) throw error;
+        diagnostics.push(problem("PackageMemberInvalid", path, message(error)));
+      }
+      if (
+        files > memberBounds.maxFileCount ||
+        directories > memberBounds.maxDirectoryCount ||
+        total > memberBounds.maxTotalBytes
+      )
+        return;
+    }
+  };
+  await walk("");
+  return { members, diagnostics };
+}
 
 let productRoots: PodsRoots | undefined;
 export const rememberCaptureRoots = (roots: PodsRoots) => {
@@ -7,11 +118,11 @@ export const rememberCaptureRoots = (roots: PodsRoots) => {
 };
 const rootsKey = (roots: PodsRoots) => JSON.stringify([roots].flat().map((root) => resolve(root)));
 // Discovery owns cross-home identity; capture reads fresh bytes only from its selected folder.
-const censuses = new Map<string, Pick<AdmittedPackage, "id" | "folder" | "directory">[]>();
+const censuses = new Map<string, Pick<AdmittedPackage, "id" | "folder" | "directory" | "discoveryFailure">[]>();
 export function rememberPackageCensus(roots: PodsRoots, listing: PackageListing) {
   censuses.set(
     rootsKey(roots),
-    listing.packages.map(({ id, folder, directory }) => ({ id, folder, directory })),
+    listing.packages.map(({ id, folder, directory, discoveryFailure }) => ({ id, folder, directory, discoveryFailure })),
   );
 }
 
@@ -20,9 +131,21 @@ export const packageScanMaxAgeMs = 60_000;
 
 export class PackageDiscoveryExceeded extends Error {
   readonly code = "pod.discovery.exceeded";
-  constructor(roots: PodsRoots) {
-    super(`Pod discovery exceeded ${packageDiscoveryTimeoutMs} ms listing ${[roots].flat().join(", ")}. Try again when the folder is available.`);
+  constructor(roots: PodsRoots, incomplete?: string) {
+    super(incomplete
+      ? `Pod discovery could not complete listing ${[roots].flat().join(", ")}: ${incomplete}. Try again when the folder is available.`
+      : `Pod discovery exceeded ${packageDiscoveryTimeoutMs} ms listing ${[roots].flat().join(", ")}. Try again when the folder is available.`);
   }
+}
+
+/** One availability boundary for indexed captures, admitted bytes, Pages and by-key reads. */
+export function requirePackageAvailable(pod: Pick<AdmittedPackage, "directory" | "discoveryFailure">) {
+  if (pod.discoveryFailure) throw new PackageDiscoveryExceeded(pod.directory, pod.discoveryFailure);
+}
+
+export function requireIndexedPackageAvailable(id: string, roots: PodsRoots | undefined = productRoots) {
+  const pod = roots && censuses.get(rootsKey(roots))?.find(pod => pod.id === id);
+  if (pod) requirePackageAvailable(pod);
 }
 
 type DiscoveryScan = {
@@ -37,7 +160,8 @@ type DiscoveryScan = {
 const discovery = new Map<string, DiscoveryScan>();
 const scans = new Set<DiscoveryScan>();
 const validations = new Set<AbortController>();
-const completedCensuses = new Map<string, { signature: string; listing: PackageListing }>();
+export type PackageCensus = { signature: string | undefined; listing: PackageListing };
+const completedCensuses = new Map<string, PackageCensus>();
 
 /** Shutdown cancels discovery; request expiry alone leaves a recoverable scan running. */
 export function stopPackageDiscovery() {
@@ -49,7 +173,7 @@ export function stopPackageDiscovery() {
 
 export async function discoverPackages(
   roots: PodsRoots,
-  read: (roots: readonly string[], signal: AbortSignal) => Promise<PackageListing>,
+  read: (roots: readonly string[], signal: AbortSignal, previous?: PackageCensus, signature?: string) => Promise<PackageListing>,
   wait: "request" | "background",
   readSignature?: (signal: AbortSignal) => Promise<string | undefined>,
 ): Promise<PackageListing> {
@@ -77,11 +201,12 @@ export async function discoverPackages(
       return scan.promise;
     }
     const cached = completedCensuses.get(key);
-    if (signature !== undefined && cached?.signature === signature) return Promise.resolve(cached.listing);
+    if (signature !== undefined && cached?.signature === signature &&
+      !cached.listing.packages.some(pod => pod.discoveryFailure)) return Promise.resolve(cached.listing);
     const stop = new AbortController();
     const current: DiscoveryScan = {
       stop,
-      promise: read([roots].flat(), stop.signal),
+      promise: read([roots].flat(), stop.signal, cached, signature),
       expired,
       completed: false,
       startedAt: Date.now(),
@@ -95,8 +220,9 @@ export async function discoverPackages(
       current.completedAt = Date.now();
       // Only on-time answers enter the checked cache. Late answers keep their one-reader 5 s window.
       if (!current.expired && discovery.get(key) === current) {
-        if (signature !== undefined) completedCensuses.set(key, { signature, listing });
-        else completedCensuses.delete(key);
+        // Unknown metadata cannot authorize byte reuse, but it must retain identity and retry
+        // markers across repeated IO failures instead of turning the second retry into absence.
+        completedCensuses.set(key, { signature, listing });
         discovery.delete(key);
       }
       return listing;
@@ -153,6 +279,7 @@ export async function captureIndexedPackage(
     throw Error(
       `No discovered Pod has id '${id}'. Refresh the Pod list after adding or moving a Pod.`,
     );
+  requirePackageAvailable(selected);
   const stop = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
