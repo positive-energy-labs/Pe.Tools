@@ -1,15 +1,18 @@
-import { harnessThreadSummarySchema, pageTargetReadingSchema } from "@pe/agent-contracts";
+import { harnessThreadSummarySchema, pageTargetReadingSchema, routeAddress } from "@pe/agent-contracts";
 import { useEffect, useState } from "react";
 import type { PageTargetReading, PageChoice } from "@pe/agent-contracts";
 import { inventoryOf } from "../host/resource-state";
 import { peReadings } from "../host/resource-stream";
 import { BindPicker } from "./bind-picker";
-import { nameOf } from "#/route/typed-route";
+import { PageBindingChip } from "../navigation/chip";
+import { useRouteSearch } from "../route/activity";
+import { nameOf, oneName } from "#/route/typed-route";
 import type { BindContext } from "./route";
 export function BindBody({ ctx }: { ctx: BindContext }) {
   const page = ctx.page.read(),
     slug = nameOf(page.page),
     data = ctx.value.value;
+  const { carry } = routeAddress("bind").read(useRouteSearch());
   // The host names a Page by its key (`page:@<pod>/pages/<page>`), the route by its slug; a reading
   // is kept with the slug it was read for, so one identity is compared in one form.
   const [reading, setReading] = useState<{ slug: string; value: PageTargetReading } | null>(null),
@@ -36,11 +39,16 @@ export function BindBody({ ctx }: { ctx: BindContext }) {
   };
   if (page.view)
     return (
-      <iframe
-        className="size-full flex-1"
-        title={`Page ${slug}`}
-        src={`/pages/${encodeURIComponent(slug)}/?${new URLSearchParams(page.query)}${page.fragment ? `#${page.fragment}` : ""}`}
-      />
+      <>
+        {/* D9: the viewed Page carries its chip here. A Page's refusal says "Bind it from the chip",
+            and the bar draws none for a SubjectRef `page`, so this is the one place it shows. */}
+        <PageBindingChip slug={slug} query={page.query} fragment={page.fragment} />
+        <iframe
+          className="size-full flex-1"
+          title={`Page ${slug}`}
+          src={`/pages/${encodeURIComponent(slug)}/?${new URLSearchParams(page.query)}${page.fragment ? `#${page.fragment}` : ""}`}
+        />
+      </>
     );
   return (
     <>
@@ -48,6 +56,10 @@ export function BindBody({ ctx }: { ctx: BindContext }) {
       {ctx.value.reason && <p role="status">{ctx.value.reason}</p>}
       <BindPicker
         slug={slug}
+        back={routeAddress("bind").link(
+          { page: oneName(slug), view: true, query: page.query, fragment: page.fragment },
+          carry,
+        )}
         reading={reading?.slug === slug ? reading.value : null}
         threads={data ? harnessThreadSummarySchema.array().parse(data.threads) : null}
         documents={

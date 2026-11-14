@@ -167,7 +167,13 @@ public sealed class ModelWrite(Document? document) : OperationScope(document) {
 /// <summary>One committed change Revit reported while a call was running.</summary>
 /// <param name="Contained">Sandbox churn, or a commit in a document the call's scope was discarding when it fired.</param>
 public sealed record ObservedChange(
-    string DocumentTitle, IReadOnlyList<string> Transactions, int Added, int Modified, int Deleted, bool Contained);
+    string DocumentTitle, IReadOnlyList<string> Transactions, int Added, int Modified, int Deleted, bool Contained) {
+    /// <summary>The commit's element ids. Kept only by a window that named this commit's document in <see cref="OperationMonitor.Watch" />.</summary>
+    public ObservedIds? Ids { get; init; }
+}
+
+/// <summary>Every element id of one commit, as Revit reported it.</summary>
+public sealed record ObservedIds(IReadOnlyList<long> Added, IReadOnlyList<long> Modified, IReadOnlyList<long> Deleted);
 
 /// <summary>
 ///     The one DocumentChanged subscription for op calls and script runs. Subscribed once per process, in API
@@ -187,9 +193,12 @@ public static class OperationMonitor {
         application.DocumentChanged += OnDocumentChanged;
     }
 
-    /// <summary>Starts collecting changes. <paramref name="scope" /> is the call's scope, null for a Read.</summary>
-    public static Window Watch(OperationScope? scope = null) {
-        var window = new Window(scope);
+    /// <summary>
+    ///     Starts collecting changes. <paramref name="scope" /> is the call's scope, null for a Read. A window given
+    ///     <paramref name="idsOf" /> also keeps the element ids of every commit in that document; an op call keeps counts only.
+    /// </summary>
+    public static Window Watch(OperationScope? scope = null, Document? idsOf = null) {
+        var window = new Window(scope, idsOf);
         lock (Gate) {
             // ponytail: two calls open at once cannot tell their commits apart (both may target one document), so
             // both are marked and the runner calls nothing unauthorized on a marked call. Give each commit its
@@ -211,16 +220,24 @@ public static class OperationMonitor {
         var sandbox = DocumentSandbox.RollbackScopeActive || DocumentSandbox.IsSandboxTransaction(names);
         var document = args.GetDocument();
         var title = document?.Title ?? "<unknown>";
+        ObservedIds? ids = null;
+        static List<long> Values(ICollection<ElementId> elementIds) => elementIds.Select(id => id.Value()).ToList();
         lock (Gate)
             foreach (var window in Open)
                 window.Add(new ObservedChange(title, names, added, modified, deleted,
-                    sandbox || window.Scope?.Discards(document) == true));
+                    sandbox || window.Scope?.Discards(document) == true) {
+                    // Document.Equals, never ReferenceEquals: Revit hands each event its own wrapper.
+                    Ids = window.IdsOf is { } wanted && document is not null && wanted.Equals(document)
+                        ? ids ??= new ObservedIds(Values(args.GetAddedElementIds()), Values(args.GetModifiedElementIds()), Values(args.GetDeletedElementIds()))
+                        : null
+                });
     }
 
     public sealed class Window : IDisposable {
         private readonly List<ObservedChange> _changes = [];
-        internal Window(OperationScope? scope) => this.Scope = scope;
+        internal Window(OperationScope? scope, Document? idsOf) => (this.Scope, this.IdsOf) = (scope, idsOf);
         public OperationScope? Scope { get; }
+        internal Document? IdsOf { get; }
         /// <summary>Another window was open at some point in this one's life, so its changes may be another call's.</summary>
         public bool Overlapped { get; internal set; }
         public IReadOnlyList<ObservedChange> Changes { get { lock (Gate) return this._changes.ToList(); } }

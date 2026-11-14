@@ -11,7 +11,7 @@
  *   // Declare agent events in HTML: <script type="application/json" id="pe-agent">{"verdict":"passed and explanation"}</script>
  *   await pe.picture([1234]);                            // lens then view-image: { url, sha, at, viewId, viewName, registration }
  *   await pe.reading("checks/census.csx", run);          // one reading: { source, at, rows } with rows = what `run()` answered
- *   await pe.diff([1234], ["Mark"], run);                // read the parameters, run, read again: the rows that changed
+ *   await pe.diff({ script: "heals/taps.csx" }, ["Mark"]);   // run it and answer what it changed: elements and before/after rows
  *
  * `find`, `read` and `do` are the same words and keys as Pea's `pe_find`, `pe_read` and `pe_do`. The host knows which
  * page is calling from the page's own path (`pe.page` is the key it minted) and which document from the page's
@@ -388,42 +388,80 @@
   };
 
   /**
-   * What a write changed: the named parameters of the elements are read (`revit.detail.elements`), `run()` runs, and
-   * they are read again. Values compare on Revit's raw value and show as Revit displays them, so a change hidden by
-   * the document's units precision still counts. Answers `{ rows: [{ id, parameter, before, after }], unchanged }`.
+   * Run a script and answer what it changed, as rows a Page can draw. `run` is `{ script, input, mode,
+   * timeoutSeconds, expect }` with `script` and the rest as `pe.script` takes them. Every run record already says
+   * which elements it added, modified and deleted (`pe.lastRun.changes`); this reads their values around the run.
+   * The script runs twice: first ReadOnly, where Revit rolls every document change back and the record names what it
+   * would change, so those elements are read before; then for real, and the elements it did change are read after.
+   * Only the document is rolled back: whatever the script does outside it (an artifact, a file it writes, a send
+   * outward) happens on both runs. A script that cannot run ReadOnly (it owns its transactions, or edits a family)
+   * is refused before it starts: `dry.ran` is false with the reason in `dry.why`, and the only elements read before
+   * are the ids in `expect`, the ones the Page already knows the script is aimed at. Compared per element: its type,
+   * and each of `parameterNames`, on Revit's raw value, shown as Revit displays it. Answers `{ data, changes, dry,
+   * elements: [{ id, change, name, category }], rows: [{ id, change, parameter, before, after }], unchanged,
+   * unread }`; `change` is added, modified or deleted, `unread` counts modified elements that were not read before
+   * (they have no rows, because nothing says what changed on them), and `changes.summary` and `changes.undo` are the
+   * run's own words. Throws as `pe.script` does when the real run fails.
    */
-  pe.diff = async (elementIds, parameterNames, run) => {
-    const read = async () => {
+  pe.diff = async (run, parameterNames = []) => {
+    if (Array.isArray(run) || typeof run !== "object" || run === null || typeof run.script !== "string")
+      throw new Error(
+        'pe.diff takes the run itself: pe.diff({ script: "heals/x.csx", input, expect: [ids] }, parameterNames). The (elementIds, parameterNames, run) form is retired; the changed ids now come from the run.',
+      );
+    const { script, input, mode, timeoutSeconds, expect = [] } = run;
+    // ponytail: reads at most 500 elements a side; `truncated` says so. Page the read if a Page ever draws more.
+    const cap = 500;
+    const read = async (ids) => {
+      const elements = new Map();
+      if (!ids.length) return elements;
       const { entries } = await pe.read("revit.detail.elements", {
         query: {
           kind: "ElementReferences",
-          elementIds,
+          elementIds: ids.slice(0, cap),
           parameterQuery: { parameters: parameterNames.map((name) => ({ name })) },
         },
       });
-      const values = new Map();
-      for (const e of entries)
+      for (const e of entries) {
+        const values = new Map([["Type", { raw: e.typeName ?? null, shown: e.typeName ?? null }]]);
         for (const p of e.requestedParameters || [])
-          values.set(`${e.elementId}\n${p.name}`, {
-            raw: p.rawValue ?? p.value ?? null,
-            shown: p.displayValue ?? p.value ?? null,
-          });
-      return values;
+          values.set(p.name, { raw: p.rawValue ?? p.value ?? null, shown: p.displayValue ?? p.value ?? null });
+        elements.set(e.elementId, { name: e.name, category: e.categoryName ?? null, values });
+      }
+      return elements;
     };
-    const before = await read();
-    await run();
-    const after = await read();
+    const ids = (changes, ...kinds) => kinds.flatMap((kind) => changes?.[kind]?.ids || []);
+    const dry = { ran: false, why: null, changes: null };
+    try {
+      await pe.script(script, { input, mode: "ReadOnly", timeoutSeconds });
+      Object.assign(dry, { ran: true, changes: pe.lastRun?.changes ?? null });
+    } catch (error) {
+      if (!error.run) throw error;
+      dry.why = error.message;
+    }
+    const before = await read([...new Set([...ids(dry.changes, "modified", "deleted"), ...expect])]);
+    const data = await pe.script(script, { input, mode, timeoutSeconds });
+    const changes = pe.lastRun?.changes ?? null;
+    const after = await read(ids(changes, "added", "modified"));
+    const elements = [];
     const rows = [];
     let unchanged = 0;
-    for (const [key, a] of after) {
-      const b = before.get(key);
-      if (b && b.raw === a.raw) unchanged++;
-      else {
-        const [id, parameter] = key.split("\n");
-        rows.push({ id: Number(id), parameter, before: b ? b.shown : null, after: a.shown });
+    let unread = 0;
+    for (const change of ["added", "modified", "deleted"])
+      for (const id of ids(changes, change)) {
+        const [b, a] = [before.get(id), after.get(id)];
+        elements.push({ id, change, name: (a ?? b)?.name ?? null, category: (a ?? b)?.category ?? null });
+        if (change === "modified" && !b) {
+          unread++;
+          continue;
+        }
+        for (const parameter of new Set([...(b?.values.keys() || []), ...(a?.values.keys() || [])])) {
+          const [from, to] = [b?.values.get(parameter), a?.values.get(parameter)];
+          if (from && to && from.raw === to.raw) unchanged++;
+          else rows.push({ id, change, parameter, before: from?.shown ?? null, after: to?.shown ?? null });
+        }
       }
-    }
-    return { rows, unchanged };
+    const total = (c) => (c ? c.added.total + c.modified.total + c.deleted.total : 0);
+    return { data, changes, dry, elements, rows, unchanged, unread, truncated: total(changes) > elements.length || elements.length > cap };
   };
 
   let streamSeq = 0;
