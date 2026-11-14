@@ -97,12 +97,10 @@ const targetAddress = (target: Target): string | null =>
   target?.kind === "named" ? target.address : null;
 
 /**
- * The fallback when a receipt carries no resolved target: the document the Target names, and no
- * session, because a request is what was typed, never what answered.
+ * A request carries no evidence of which session answered.
  */
-const namedTarget = (target: Target): ResolvedTarget => ({
+const unresolvedTarget = (): ResolvedTarget => ({
   session: null,
-  document: targetAddress(target),
 });
 
 /** The session a Target names, whichever shape it wears. */
@@ -200,7 +198,7 @@ const targetQuery = (target: Target): string => {
  * Carry the lifetime beside an Address for Save As migration; a closed lifetime refuses (E2E-J1).
  */
 async function routeWorkScope(target: Target): Promise<{ query: string; target: ResolvedTarget }> {
-  if (target?.kind !== "open") return { query: targetQuery(target), target: namedTarget(target) };
+  if (target?.kind !== "open") return { query: targetQuery(target), target: unresolvedTarget() };
   const { sessions } = await new HostRpcCaller({ hostBaseUrl: base(), timeoutMs: 30_000 }).call(
     "bridge.sessions.list",
   );
@@ -219,7 +217,7 @@ async function routeWorkScope(target: Target): Promise<{ query: string; target: 
   if (address) query.set("target", address);
   return {
     query: query.toString(),
-    target: { session: target.ref.session, document: address },
+    target: { session: target.ref.session, openId: target.ref.openId },
   };
 }
 
@@ -457,7 +455,7 @@ async function executeTool(
   const requestId = input.actionId ?? requestIdentity(context);
   if (input.key.startsWith("op:")) {
     let revision = 0;
-    let target: ResolvedTarget = { session: null, document: null };
+    let target: ResolvedTarget = { session: null };
     let door: CapabilityIntent["door"] | undefined;
     let scope: Scope | null | undefined;
     try {
@@ -503,7 +501,7 @@ async function executeTool(
               input.target,
               scope ? headRequests(scope) : [],
             );
-            target = { session: selected.bridgeSessionId ?? null, document: null };
+            target = { session: selected.bridgeSessionId ?? null };
             return selected;
           },
         },
@@ -578,7 +576,7 @@ async function executeTool(
         recovered: true,
         target:
           recovered.state === "detached"
-            ? { session: null, document: null }
+            ? { session: null }
             : receiptTarget(recovered),
         result:
           input.key === "op:scripting.execute" || contribution?.kind === "script"
@@ -639,7 +637,7 @@ async function executeTool(
       ok: response.ok,
       key: input.key,
       revision,
-      target: namedTarget(defaultTarget),
+      target: unresolvedTarget(),
       result,
     };
   }
@@ -730,7 +728,6 @@ function receiptTarget(row: ActionReceipt): ResolvedTarget {
         : row.target.kind === "session"
           ? row.target.session
           : null,
-    document: null,
     ...(row.target.kind === "document" ? { openId: row.target.ref.openId } : {}),
   };
 }
@@ -756,7 +753,7 @@ async function dispatch(
   const coerced = coerceJsonObject(input.input);
   const payload: Record<string, unknown> =
     coerced && typeof coerced === "object" ? (coerced as Record<string, unknown>) : {};
-  const scopeTarget = namedTarget(defaultTarget);
+  const scopeTarget = unresolvedTarget();
   // Linked catalog, not row.kind, owns execution; `op:` keys returned earlier, so this is a Pe route.
   if (linkedCatalog().entries.get(row.key)?.discovery?.key === row.key) {
     const response = await callCatalogRoute(base(), row.key, payload, fetch);
@@ -767,8 +764,8 @@ async function dispatch(
       ok: response.ok,
       target:
         response.ok && result.target
-          ? { session: result.target.session, document: result.target.openId }
-          : { session: null, document: null },
+          ? { session: result.target.session, openId: result.target.openId }
+          : { session: null },
       result,
     };
   }
@@ -821,7 +818,7 @@ async function dispatch(
           ? await client.response("page.bind", { params, body: action.binding })
           : await client.response("page.append", { params, body: action.event }),
       );
-      return { ...answer, target: bound ? { session: bound.session, document: null, openId: bound.openId } : { session: null, document: null } };
+      return { ...answer, target: bound ? { session: bound.session, openId: bound.openId } : { session: null } };
     }
     case "route":
     case "skill":
@@ -868,7 +865,7 @@ async function dispatch(
         ok: result.ok,
         target: result.action && result.action.state !== "detached"
           ? receiptTarget(result.action)
-          : { session: target.bridgeSessionId ?? null, document: null, openId: target.openDocumentId ?? undefined },
+          : { session: target.bridgeSessionId ?? null, openId: target.openDocumentId ?? undefined },
         result: scriptResultForModel(result),
       };
     }
@@ -903,7 +900,7 @@ async function dispatch(
             // Acquisition names that command, so an older mounted document cannot satisfy it.
             const opened = await openToolTab(client, viewThread, route, read, defaultTarget);
             if (!opened.mounted)
-              return { ok: true, target: { session: null, document: null }, result: opened };
+              return { ok: true, target: { session: null }, result: opened };
             ({ instance, revision } = opened);
           }
           const builtin = builtinViewRoute(route);
@@ -956,14 +953,12 @@ async function dispatch(
           } else
             result.readingError = `Retained reading reference unavailable (${reference.status})`;
         }
-        const observed = context.document as { session?: unknown } | undefined;
-        const work = context.work as { binding?: unknown; target?: unknown } | undefined;
+        const observed = context.document as { session?: unknown; openId?: unknown } | undefined;
         return {
           ok: response.ok,
           target: {
             session: typeof observed?.session === "string" ? observed.session : null,
-            document:
-              work?.binding === "address" && typeof work.target === "string" ? work.target : null,
+            ...(typeof observed?.openId === "string" ? { openId: observed.openId } : {}),
           },
           result,
         };
@@ -1013,7 +1008,7 @@ async function dispatch(
               query: query.toString(),
               target: {
                 session: open?.session ?? null,
-                document: work.binding === "address" ? work.target : null,
+                ...(open ? { openId: open.openId } : {}),
               },
             };
             if (parsed.member === undefined && mounted.work)
@@ -1047,7 +1042,7 @@ async function dispatch(
         const scope = workspaceId
           ? {
               query: new URLSearchParams({ work: workspaceId }).toString(),
-              target: { session: null, document: null },
+              target: { session: null },
             }
           : (mountedScope ?? (await routeWorkScope(workTarget)));
         const result = peaWorkValue(
@@ -1112,7 +1107,7 @@ async function dispatch(
           const scope = workspaceId
             ? {
                 query: new URLSearchParams({ work: workspaceId }).toString(),
-                target: { session: null, document: null },
+                target: { session: null },
               }
             : (mountedScope ?? (await routeWorkScope(workTarget)));
           const result = await timelineStep(
@@ -1319,7 +1314,7 @@ async function routeWrite(
   const scope = workspaceId
     ? {
         query: new URLSearchParams({ work: workspaceId }).toString(),
-        target: { session: null, document: null },
+        target: { session: null },
       }
     : (mountedScope ?? (await routeWorkScope(defaultTarget)));
   const { query } = scope;
@@ -1341,10 +1336,10 @@ async function routeWrite(
 
 function parseTarget(value: unknown): ResolvedTarget | null {
   if (!value || typeof value !== "object") return null;
-  const record = value as { session?: unknown; document?: unknown };
+  const record = value as { session?: unknown; openId?: unknown };
   return {
     session: typeof record.session === "string" ? record.session : null,
-    document: typeof record.document === "string" ? record.document : null,
+    ...(typeof record.openId === "string" ? { openId: record.openId } : {}),
   };
 }
 
@@ -1472,9 +1467,9 @@ export async function readCatalog(
   }
 }
 
-/** A refusal still names the revision and the document it refused under, so the head can show it. */
+/** A refusal preserves the revision without claiming a resolved session. */
 function refuse(key: string, defaultTarget: Target, revision: number, content: string) {
-  return { isError: true, ok: false, key, content, revision, target: namedTarget(defaultTarget) };
+  return { isError: true, ok: false, key, content, revision, target: unresolvedTarget() };
 }
 
 function requestIdentity(context: unknown): string {
