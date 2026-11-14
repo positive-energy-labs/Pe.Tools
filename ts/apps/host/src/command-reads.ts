@@ -140,16 +140,16 @@ export function commandResources(
         case "sdk-idle":
           return readBootstrapIdle(deps.sdk);
         case "member": {
-          // One gate pass reads a Pod once (D22). A script run consumes every `.cs`/`.csx` member of
-          // its Pod, a member read is a discovery of every Pod in the home, and a gate runs at every
-          // async boundary: read per member, 34 scripts in a 35-Pod home cost 115 s a gate. Each pass
-          // still reads the disk afresh, and a probe outside a pass shares nothing.
+          // One gate pass reads a Pod once, and reads only that Pod's folder (D22). A gate runs at
+          // every async boundary, and a member read was a discovery of every Pod in the home: per
+          // member, 34 scripts in a 35-Pod home cost 115 s a gate, and per pass still 3.4 s. Each
+          // pass still reads the disk afresh, and a probe outside a pass shares nothing.
           const ctx = { podsRoot: deps.podsRoot };
           let pods = pass && podReads.get(pass);
           if (pass && !pods) podReads.set(pass, (pods = new Map()));
           let pod = pods?.get(dependency.probe.pod);
           if (!pod) {
-            pod = runPods(deps, readMemberPod(dependency.probe.pod, ctx));
+            pod = runPods(deps, readMemberPod(dependency.probe.pod, ctx, true));
             pods?.set(dependency.probe.pod, pod);
           }
           return pod.then((admitted) => runPods(deps, readMember(dependency.probe, ctx, admitted))).then(

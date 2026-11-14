@@ -68,6 +68,18 @@ export function requireScriptSuccess(value: unknown): void {
   );
 }
 
+/**
+ * The frozen files one run reads: the manifest and project, its entrypoint, and every `.cs` beside it.
+ * Native compiles a `.csx` only as the entrypoint being run (`ScriptPodSourceNormalizer.Normalize`,
+ * contract C1), so another entrypoint's `.csx` is no input of this run and an edit to it stales
+ * nothing here. The bundle still carries every script: native preparation refuses a Pod whose
+ * declared entrypoint has no file. The entrypoint matches as native matches it.
+ */
+export const scriptRunInputs = <F extends { path: string }>(files: readonly F[], sourcePath: unknown): F[] => {
+  const entrypoint = String(sourcePath).replaceAll("\\", "/").trim().toLowerCase();
+  return files.filter((file) => !/\.csx$/i.test(file.path) || file.path.toLowerCase() === entrypoint);
+};
+
 type FrozenScript = { sourceBundle: ScriptingExecute.Req.ScriptPodSourceBundle };
 
 // Capture is the only mutable-filesystem read for one admitted execution. Native preparation owns

@@ -20,7 +20,7 @@ import { z } from "zod";
 import { CommandRejected, StepFailure, io, nativeStep, refused, type CommandContext, type CommandExecutor } from "./command-executor.ts";
 import { scratchPageDirectory } from "./page-libraries.ts";
 import { resolveSdkSession, SdkSession } from "./sdk-session.ts";
-import { freezeScript, requireScriptSuccess, runPodScript } from "./operation-script.ts";
+import { freezeScript, requireScriptSuccess, runPodScript, scriptRunInputs } from "./operation-script.ts";
 import { validateNativeInput } from "./native-input.ts";
 import { projectNativeOutput } from "./native-output.ts";
 import { isViewImage } from "@pe/agent-contracts/native-output-read";
@@ -195,7 +195,7 @@ export function gatewayExecutor(
               : null;
             if (!pod?.id) throw refused("The captured script has no exact Pod identity");
             consumes.push(
-              ...script.sourceBundle.files.map((file) => ({
+              ...scriptRunInputs(script.sourceBundle.files, admission.input.sourcePath).map((file) => ({
                 kind: "member" as const,
                 probe: { pod: pod.id!, path: file.path },
                 expected: createHash("sha256")
