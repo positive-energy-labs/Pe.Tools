@@ -24,7 +24,6 @@
     "packages/browser/src/attached-guardian.ts": 1,
     "packages/browser/src/keeper.ts": 1,
     "packages/mcps/src/shared/host-rpc-caller.ts": 1,
-    "apps/host/src/admitted-host-route.ts": 0,
     "apps/host/src/content-roots.ts": 0,
     "apps/host/src/pod-disk-signature.ts": 0
   },
