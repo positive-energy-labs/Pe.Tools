@@ -31,7 +31,7 @@ Each cycle, in the reply template `delegate` defines, to the implementor: the me
 
 ## wakes on
 
-A new tip on the integration branch, delivered through the substrate `execute` names. Its own suite finishing. A message from the implementor, the driver or the owner. An integrity hold from any partner.
+A new tip on the integration branch, named in a message from the implementor. Its own suite finishing. A message from the implementor, the driver or the owner. An integrity hold from any partner.
 
 ## handoff
 

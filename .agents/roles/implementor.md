@@ -42,17 +42,17 @@ The implementation history: which child wrote what, which rulings changed the sh
 
 ## produces
 
-Each cycle, in the reply template `delegate` defines: the wave merged and its SHA, what it changed, the driver defects, purger findings and integrator reds still open on it, the SHA each partner last read beside the integration tip, and the Owed list. With it:
+A cycle ends at each wave merged, and at the driver's wake when no wave merged since the last one. At every merge the implementor names the new tip to the purger, the driver and the integrator in a message, because no tool watches the branch for them. Each cycle, in the reply template `delegate` defines: the wave merged and its SHA, what it changed, the driver defects, purger findings and integrator reds still open on it, the SHA each partner last read beside the integration tip, and the Owed list. With it:
 
 - The pulse of the wave, pasted as printed from `python .agents/skills/slot.mine/scripts/pulse.py <base> <tip>` with `--map` naming the map, where the base is the integration tip of the last cycle report. It acts on three of its numbers: a ratchet that rose, a conflicted file the plan did not predict, and a slice not started. It never measures its own tokens, context or cost, because an agent that reads its own cost changes how it works; an outside thread reads them in a retro.
 - The status of every partner thread, because a silent partner is not a working one. A partner whose last run failed, or whose message has sat queued since the driver's last wake, is stalled, and the implementor relaunches it from its charter with its last-read SHA and the run directory.
 - Three counts that should read 0: slices with no writer and no named blocker, slices that passed their writer's checks and are not merged, and partners that are behind the tip with nothing running. A blocker covers only the part of a slice that waits on it, and the rest of that slice starts now.
 
-At the end: the final tip, the integrator's suite result on it, and the driver's row table. It then deletes the run's wake.
+At the end: the final tip, the integrator's suite result on it, and the driver's row table. It then deletes the run's wake with `delete_scheduled_task`, as it does when the run parks, because a parked run wakes on the owner's message alone.
 
 ## wakes on
 
-An owner message. A driver verdict or defect. A purger finding. An integrator triage. A child thread's completion, which wakes it through the substrate `execute` names.
+An owner message. A driver verdict or defect. A purger finding. An integrator triage. A child thread's completion, which wakes it.
 
 ## handoff
 

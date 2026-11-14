@@ -36,7 +36,7 @@ Ordinary building is not a stance: it is the owner's own work under whatever len
 
 ## What the check asserts
 
-The set's `check.py` sits in the skills directory, and `execute` gives the command. The check is the list of what it asserts, and each failure names its rule, so no prose here repeats it. Its `--fix` rewrites the two tables it projects from frontmatter, so nobody edits them by hand. Everything the check does not assert is held by review only.
+The set checks itself with the `check.py` in the skills directory, run from the repo root, and `--fix` reprojects the tables and reinstalls the junction and the commit hook. The check is the list of what it asserts, and each failure names its rule, so no prose here repeats it. Its `--fix` rewrites the two tables it projects from frontmatter, so nobody edits them by hand. Everything the check does not assert is held by review only.
 
 ## Writing a stance
 

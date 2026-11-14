@@ -138,7 +138,7 @@ def admit(kind, as_json):
     if kind not in FLOORS_GIB:
         print(f"unknown kind {kind}; kinds: {', '.join(FLOORS_GIB)}")
         return 2
-    # Owner, 2026-11-10: a full suite runs once per wave, on the merged tip, never inside a writing child. 58% of child tool
+    # Owner, 2026-11-10: a full suite runs on a merged tip, in the thread that owns it, never inside a writing child. 58% of child tool
     # time in the kernel crusade was tests on code still churning. A delegated child runs touched tests (kind light).
     # 2026-11-14: a child whose brief names it the owner of a suite passes --owns-suite: the integrator of a run, or a
     # measurement or a release check outside one. The rule above still binds every writing child. The flag is a statement,

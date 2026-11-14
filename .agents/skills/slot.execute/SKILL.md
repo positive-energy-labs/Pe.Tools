@@ -17,7 +17,7 @@ scope: repo
 - Prefer the repo's command, then the tool's own guide or `--help`. This file does not copy a CLI manual.
 - The shell is PowerShell. `AGENTS.md` Tooling Footguns holds the quoting and exit-code traps.
 - A native claim (Revit, tray, installed host) runs through `tools/acceptance.py`, which does setup, probe, census and teardown. Dev setup is backend-only by default; add `--web` for browser proof. Read its docstring. Record its SDK calls as envelopes under the run's `ev/`.
-- One agent owns a native FALSIFIED from diagnosis through fix to the native re-check, in one task. Splitting cause, fix and re-check across agents costs extra rounds. A run with standing roles is the exception: the driver never edits production code, so the driver owns every re-check, the integrator owns the cause and the fix of main's own reds and of what its merge broke, and the implementor's fix thread owns every other.
+- One agent owns a native FALSIFIED from diagnosis through fix to the native re-check, in one task. Splitting cause, fix and re-check across agents costs extra rounds. A run with standing roles splits it as their charters say.
 
 ## Stack
 
@@ -47,7 +47,6 @@ scope: repo
 
 HTTP responses, source reads, screenshots, logs and hot-reload verdicts are evidence inside a lane. None of them raises the lane.
 
-- Proof is carried, never repeated. A check that passed at one SHA holds at a later one when the diff between them touches none of the paths it reads, so a merge reruns only the falsifiers its resolution touched. The next regular suite on the merged tip is the gate, and a handoff gets no full suite of its own. Generated output whose generator inputs are unchanged carries its earlier audit, with no second codegen and no second pack.
 
 ## Revit control plane
 
@@ -72,14 +71,9 @@ Run pea scripts, host operations, or `pea --prompt` only after the SDK session i
 - After a gate failure, diagnose it and rerun the failed stage. Rerun wider stages only when later changes or open failures invalidate their evidence. Keep the full output in an artifact, and bring into the conversation only the result that changes the decision.
 - Record an unrelated failure with its owner and consequence. It does not expand the current task, and it stays in any readiness claim.
 - Excuse a red as already on the base only after it fails on the current base tip. A test that runs near its timeout is a performance finding first, so profile it before you call it a flake or give it more time.
-- The driver drives a tip as soon as the integrator's build of it exists, and does not wait for the suite. A row driven on a tip whose suite later goes red keeps its stamp for every path the fix does not touch.
-- No tool arms a time box or an alarm for one child yet (the skills ledger holds the Owed line). Until one exists, the thread that set a time box reads each child's age at every wake and every cycle report, and treats a child past its box as the alarm.
-- A run's wake is one T3 schedule bound to the driver's own thread. The driver arms it at launch with `schedule_task` (an interval of 50 minutes, inside the 60-minute prompt cache, titled `<run> wake`), and the implementor deletes it with `delete_scheduled_task` when the run ends or parks, because a parked run wakes on the owner's message alone. The driver writes the schedule's id to `wake.id` in the run directory. The owner sees one entry per run in T3's schedule list and stops a run's wakes by deleting it. The schedule's prompt is the whole checklist, so that no compaction can drop it: read the status of the implementor and of each partner thread; read the integration head against each `last-read/<role>.sha`; name to the implementor any thread whose last run failed or whose message has sat queued since the last wake; when the implementor itself has not run since the last wake while work it could do waits, send it that work and the sentence that no owner message asks for a stop; when the implementor's last cycle report is older than two wakes, send it the report's three duties (the pulse, the partner statuses, the three zero counts); and when nothing changed, reply in one line and stop. `keepalive.py` and its shared tick are not part of a run: the tick stopped twice with no cause found.
-- A new tip on the integration branch reaches a partner in a message from the implementor, which names the tip to the purger, the driver and the integrator at every merge. A standing partner is launched once with `delegate_task` and messaged after that with `t3_thread_send`, and its completion wakes the thread that launched it. A fresh check or review is a new `delegate_task`. That is the substrate the charters point to until the tip watcher in the skills ledger exists. A partner writes the SHA it last read to a file in its run directory every cycle, because the implementor's report and the watcher both read it. A partner whose work is done reads the integration branch's head before it waits: a head newer than the SHA it last read is a tip, whoever failed to send it.
 - A dependency install, an owner-config compile or a focused package test needs no grant, slot or queue. A heavy step (a full suite, a build, a codegen run, a Revit session, a host with a browser) first runs `python .agents/skills/slot.execute/machine.py admit <kind>` and starts on ADMIT, because the machine's memory is the one resource every thread shares and none can see. `admit` exits 0 only on ADMIT, so a script chains it and cannot run through a HOLD; a HOLD goes to the implementor in one line. A delegated child gets REFUSE for `suite` unless its brief names it the owner of one, and then it passes `--owns-suite`; a writing child never owns a suite. `machine.py --help` prints its kinds and the `run`, `who`, `stop` and `prune` verbs. A thread stops what its own checkout started, and a resource left running for another thread is handed over in a message that names it.
 - The commit that changes a tracked generated artifact's source also regenerates the artifact. A check never regenerates a tracked file, because it would change the candidate it claims to verify. Delete the tracked artifact when the build can derive it.
 - Write source files and patches with the edit tool or with git (`git diff --output`, `git apply`). Never use PowerShell `Set-Content`, `Out-File` or a pipe, because they add a BOM, CRLF or codepage bytes. Run a destructive step such as checkout or reset as its own command, after the check that guards it has passed.
-- Send a message that unblocks a running turn as a steer. Queue only what can wait for that turn to end.
 - While the user's dev session runs from the root checkout, a fast-forward of main there rebuilds their dev server and merges over their edits. Land it when they ask or between sessions. Do not fast-forward over a path they modified.
 - A resource hold names the rule it obeys, who set it, and the reading that trips it now. A hold from an earlier batch expires with that batch. A held thread asks the rule's owner in one line and waits at most ten minutes.
 - Run host and web dev servers as background processes. Ports are dynamic, so read the service receipt under `%LOCALAPPDATA%\Positive Energy\Pe.Tools\state\service\`.
@@ -102,15 +96,7 @@ Run pea scripts, host operations, or `pea --prompt` only after the SDK session i
 - A fresh worktree has no dependency install. From `ts`, run `vp i --frozen-lockfile --prefer-offline`. Vite+ owns dependency installation, so never run bare `pnpm install`.
 - A fresh worktree uses the release feed at `%USERPROFILE%\source\feeds\pe-revit-sdk`, or `sdk.feed` in `product.payloads.json`. `pe-revit sdk adopt <version>` repins and regenerates the client. Review its `--plan` first. Do not copy, junction or symlink a feed into the worktree.
 
-## Skill set
-
-The skill set checks itself: `python .agents/skills/check.py` from the repo root, `--fix` to reproject the tables and reinstall the junction and the commit hook. `reflect` says when it must run.
-
 ## Evidence
 
 - Capture complete output before you filter it. Read JSON `diagnostics`, `result`, `nextSteps`, `related` and `binary`, and branch on diagnostic codes rather than one exit number.
 - When state and output disagree, stop. Record both and enter `diagnose`. Do not repair the discrepancy by assumption.
-
-## Admitting new caveats
-
-A caveat enters this file only when it changes a future execution choice and no code, check, tool guide or `AGENTS.md` rule can hold it. Put it at the decision point. A temporary caveat names the condition that deletes it. One-off incidents stay out.

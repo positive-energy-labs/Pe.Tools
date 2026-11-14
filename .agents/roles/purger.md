@@ -56,7 +56,7 @@ An integrity hold goes to the integrator as well.
 
 ## wakes on
 
-A new tip on the integration branch, delivered through the substrate `execute` names. A message from the implementor, the integrator or the owner.
+A new tip on the integration branch, named in a message from the implementor. A message from the implementor, the integrator or the owner.
 
 ## handoff
 

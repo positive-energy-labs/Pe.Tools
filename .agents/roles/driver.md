@@ -37,7 +37,9 @@ It delegates every drive, because rows on separate lanes can be driven at once a
 
 ## wakes on
 
-A new tip on the integration branch, delivered through the substrate `execute` names. A message from the implementor, the integrator or the owner. Its own background command finishing. The run's wake, which it arms at launch as `execute` says and answers by that schedule's checklist. A schedule fires when no thread is running, so the driver is the one thread that notices a stalled implementor or a dead partner. It reports one and never relaunches one.
+A new tip on the integration branch, named in a message from the implementor. A message from the implementor, the integrator or the owner. Its own background command finishing. The run's wake. A schedule fires when no thread is running, so the driver is the one thread that notices a stalled implementor or a dead partner. It reports one and never relaunches one.
+
+The wake is one T3 schedule bound to the driver's own thread, so the owner sees one entry per run and stops a run's wakes by deleting it. The driver arms it at launch with `schedule_task`, titled `<run> wake`, at an interval of 50 minutes, which is inside the 60-minute prompt cache, and writes its id to `wake.id` in the run directory. The schedule's prompt is the whole checklist, so that no compaction can drop it: read the status of the implementor and of each partner thread; read the integration head against each `last-read/<role>.sha`; name to the implementor any thread whose last run failed or whose message has sat queued since the last wake; when the implementor itself has not run since the last wake while work it could do waits, send it that work and the sentence that no owner message asks for a stop; when the implementor's last cycle report is older than two wakes, send it the report's three duties; and when nothing changed, reply in one line and stop.
 
 ## handoff
 
