@@ -67,3 +67,36 @@ test("the Page skills name every door in the pe.js header", async () => {
   for (const door of doors) expect(taught, `pe.${door}`).toContain(`pe.${door}`);
   expect(skill("make-page")).toContain("no pe.js door reads another Page's log");
 });
+
+// Documentation is bundled without a host-source dependency. Compare its words with the owning
+// comments here instead of adding a runtime loader or a second document for installed Pea.
+test("Page skills carry the source contract, not just door names", async () => {
+  const pe = await readFile(
+    join(import.meta.dirname, "../../../apps/host/src/pages/pe.js"),
+    "utf8",
+  );
+  const plain = (text: string) => text.replace(/`/g, "").replace(/\s+/g, " ").trim();
+  const taught = plain(skill("make-page") + skill("build-pod"));
+  // Mutants: an exported pe.untaught = async () => {}, or a changed script option/default.
+  for (const [, door] of pe.matchAll(/pe\.(\w+) = (?:async )?\(/g)) {
+    if (["kernel", "describe"].includes(door!)) continue; // explicit retired refusals
+    expect(taught, `exported pe.${door}`).toContain(`pe.${door}`);
+  }
+  const scriptSignature = pe.match(/pe\.script = async (\(keyOrPath, .*?\)) =>/)![1]!;
+  expect(taught).toContain(`pe.script${scriptSignature}`);
+  const stateOptions = pe.match(/const (\{ reduce, base, render .*? \}) = options/)![1]!;
+  expect(taught).toContain(stateOptions);
+  // Mutants: change the documented target shape, refusal, or script result contract.
+  for (const marker of ["The document this page's binding names, as the host", "Run C# in Revit"]) {
+    const start = pe.indexOf(marker);
+    expect(start, marker).toBeGreaterThanOrEqual(0);
+    const comment = plain(pe.slice(start, pe.indexOf("*/", start)).replace(/^\s*\* ?/gm, ""));
+    if (marker.startsWith("Run C#")) {
+      expect(taught).toContain(comment.slice(comment.indexOf("input is one JSON object")));
+    } else expect(taught).toContain(comment);
+  }
+  const shape = pe.match(/The bound document `(.*?)`, after `pe.target\(\)`/)![1]!;
+  expect(plain(skill("make-page"))).toContain(
+    `pe.doc: The bound document ${shape}, after pe.target().`,
+  );
+});
