@@ -77,6 +77,11 @@ public sealed class OpTouchedTests {
         var left = ((Touched.RestoreFailed)touched).Views.Single();
         Assert.That(left.View, Is.EqualTo(new ViewRef("doc-a", "view-uid-1", 4001)));
         Assert.That(left.Left, Is.EqualTo(new[] { ViewLeftover.Crop, ViewLeftover.AnnotationCrop }));
+        var phaseScope = scope with { Restores = [new ScopeRestore("doc-a", "view-uid-1", 4001,
+            ViewTemporary.Phase | ViewTemporary.PhaseFilter, false)] };
+        var phaseTouched = (Touched.RestoreFailed)OpRunner.Touch(OpEffect.SessionWrite, phaseScope,
+            [Commit("PE temporary crop")], false);
+        Assert.That(phaseTouched.Views.Single().Left, Is.EqualTo(new[] { ViewLeftover.Phase, ViewLeftover.PhaseFilter }));
     }
 
     [Test]

@@ -237,7 +237,7 @@ export const touchedSchema = z.discriminatedUnion("kind", [
     views: z.array(
       z.strictObject({
         view: viewRefSchema,
-        left: z.array(z.enum(["crop", "scopeBox", "annotationCrop", "sheetFilter"])),
+        left: z.array(z.enum(["crop", "scopeBox", "annotationCrop", "sheetFilter", "phase", "phaseFilter"])),
       }),
     ).min(1),
   }),

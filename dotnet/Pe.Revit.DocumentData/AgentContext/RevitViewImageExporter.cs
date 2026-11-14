@@ -8,10 +8,11 @@ namespace Pe.Revit.DocumentData.AgentContext;
 
 /// <summary>
 ///     Exports a graphical view or sheet to a PNG file so agents can visually inspect it.
-///     Captures views exactly as configured — templates, VG overrides, and temporary
+///     Unfocused captures use views as configured — templates, VG overrides, and temporary
 ///     hide/isolate all apply. Never creates or permanently mutates views.
 ///     A cropped view exports unmodified and is cut to exactly its crop arithmetically; focus capture
-///     sets a temporary crop box (clearing any scope box, annotation crop on) then restores it (editable doc only).
+///     sets a temporary crop box (clearing any scope box, annotation crop on), phase and phase filter for requested
+///     elements, then restores them (editable doc only).
 ///     A focused capture of a sheet-filtered schedule lifts the filter the same way. Both temporaries are committed
 ///     and then undone through the op's <see cref="SessionWrite" /> scope; the unfocused read commits nothing.
 /// </summary>
@@ -127,26 +128,53 @@ public static class RevitViewImageExporter {
         var originalCrop = view.CropBox;
         var originalActive = view.CropBoxActive;
         var originalVisible = view.CropBoxVisible;
+        var phaseParam = view.get_Parameter(BuiltInParameter.VIEW_PHASE);
+        var filterParam = view.get_Parameter(BuiltInParameter.VIEW_PHASE_FILTER);
+        var originalPhase = phaseParam?.AsElementId();
+        var originalFilter = filterParam?.AsElementId();
+        var latestPhase = RevitViewImageVisibility.LatestPhase(document.Phases.Cast<Phase>().Select(p => p.Id.Value()),
+            (elementIds ?? []).Select(id => document.GetElement(id.ToElementId()))
+                .Where(e => e is not null).Select(e => e!.CreatedPhaseId.Value()));
+        var phase = latestPhase?.ToElementId();
+        var filter = document.GetElement(originalFilter ?? ElementId.InvalidElementId) as PhaseFilter;
+        // Choose an existing filter; never edit the shared phase filter and affect other views.
+        var captureFilter = phase is null || ShowsNewAndExisting(filter) ? filter
+            : new FilteredElementCollector(document).OfClass(typeof(PhaseFilter)).Cast<PhaseFilter>()
+                .FirstOrDefault(ShowsNewAndExisting);
+        var changePhase = phase is not null && phase != originalPhase && phaseParam is { IsReadOnly: false };
+        var changeFilter = phase is not null && captureFilter is not null && captureFilter.Id != originalFilter
+                           && filterParam is { IsReadOnly: false };
         var what = ViewTemporary.Crop
+                   | (changePhase ? ViewTemporary.Phase : 0)
+                   | (changeFilter ? ViewTemporary.PhaseFilter : 0)
                    | (originalScopeId != ElementId.InvalidElementId ? ViewTemporary.ScopeBox : 0)
                    | (originalAnnotationCrop is not null ? ViewTemporary.AnnotationCrop : 0);
         return scope.Temporarily(view, what, "crop",
             set: () => {
+                if (changePhase) phaseParam!.Set(phase!);
+                if (changeFilter) filterParam!.Set(captureFilter!.Id);
                 if (originalScopeId != ElementId.InvalidElementId) scopeParam!.Set(ElementId.InvalidElementId);
                 ApplyCrop(view, modelBox, marginPercent);
                 if (originalAnnotationCrop is not null) annotationCropParam!.Set(1);
             },
             use: () => {
+                var notDrawn = ReadNotDrawn(document, view, elementIds);
+                if (elementIds is { Count: > 0 } && notDrawn.Count == elementIds.Distinct().Count())
+                    return Refused(document, view, notDrawn) with { Restore = new(true, []) };
                 var producedPath = ExportCropped(document, view, pixelSize, out var refusal);
                 // Read while the temporary crop is still set: it is the crop the image was exported with.
                 var result = BuildResult(document, view, producedPath, pixelSize, TryModelRect(view), null,
                     refusal is { } refused ? (null, refused) : TryRegistration(view, producedPath));
                 return result with {
                     Restore = new(true, []),
-                    Marks = refusal is null ? ProjectMarks(document, view, elementIds, result.Width, result.Height) : []
+                    NotDrawn = notDrawn,
+                    Marks = refusal is null ? ProjectMarks(document, view,
+                        elementIds?.Except(notDrawn.Select(item => item.ElementId)).ToList(), result.Width, result.Height) : []
                 };
             },
             undo: () => {
+                if (changePhase) phaseParam!.Set(originalPhase!);
+                if (changeFilter) filterParam!.Set(originalFilter!);
                 view.CropBox = originalCrop;
                 view.CropBoxActive = originalActive;
                 view.CropBoxVisible = originalVisible;
@@ -155,6 +183,48 @@ public static class RevitViewImageExporter {
                 if (originalScopeId != ElementId.InvalidElementId) scopeParam!.Set(originalScopeId);
             },
             whenLeft: data => data with { Restore = new(false, what.Codes()) });
+    }
+
+    private static bool ShowsNewAndExisting(PhaseFilter? filter) => filter is not null
+        && filter.GetPhaseStatusPresentation(ElementOnPhaseStatus.New) != PhaseStatusPresentation.DontShow
+        && filter.GetPhaseStatusPresentation(ElementOnPhaseStatus.Existing) != PhaseStatusPresentation.DontShow;
+
+    public static RevitViewImageData Refused(Document document, View view, IReadOnlyList<RevitViewImageNotDrawn> reasons) =>
+        new(new(RevitAgentContextHandleKind.View, document.GetDocumentKey(), view.Id.Value(), view.UniqueId, view.Name),
+            null, 0, 0, 0, new(LensBasis.UserView, view.Id.Value()), ReadHidden(document, view)) {
+            Refused = true, NotDrawn = reasons
+        };
+
+    /// <summary>Known exclusions, not a raster/occlusion certificate. Read only after the temporary state commits.</summary>
+    public static IReadOnlyList<RevitViewImageNotDrawn> ReadNotDrawn(Document document, View view, IReadOnlyList<long>? ids) {
+        var phase = view.get_Parameter(BuiltInParameter.VIEW_PHASE)?.AsElementId();
+        var filterId = view.get_Parameter(BuiltInParameter.VIEW_PHASE_FILTER)?.AsElementId();
+        var filter = document.GetElement(filterId ?? ElementId.InvalidElementId) as PhaseFilter;
+        var result = new List<RevitViewImageNotDrawn>();
+        foreach (var id in (ids ?? []).Distinct()) {
+            var element = document.GetElement(id.ToElementId());
+            var status = element is not null && phase is not null && phase != ElementId.InvalidElementId
+                ? element.GetPhaseStatus(phase) : ElementOnPhaseStatus.None;
+            var phaseHidden = status is ElementOnPhaseStatus.Future or ElementOnPhaseStatus.Past
+                || (status != ElementOnPhaseStatus.None && filter is not null
+                    && filter.GetPhaseStatusPresentation(status) == PhaseStatusPresentation.DontShow);
+            var box = element?.get_BoundingBox(null);
+            var reasons = RevitViewImageVisibility.Reasons(element is not null, phaseHidden,
+                element?.IsHidden(view) == true,
+                element?.Category is { } category && view.CanCategoryBeHidden(category.Id) && view.GetCategoryHidden(category.Id),
+                box is not null,
+                box is not null && view.CropBoxActive && Outside(box, view.CropBox, false),
+                box is not null && view is View3D { IsSectionBoxActive: true } threeD && Outside(box, threeD.GetSectionBox(), true));
+            if (reasons.Count > 0) result.Add(new(id, reasons));
+        }
+        return result;
+    }
+
+    private static bool Outside(BoundingBoxXYZ element, BoundingBoxXYZ clip, bool depth) {
+        var points = Corners(element).Select(clip.Transform.Inverse.OfPoint).ToList();
+        return points.Max(p => p.X) < clip.Min.X || points.Min(p => p.X) > clip.Max.X
+            || points.Max(p => p.Y) < clip.Min.Y || points.Min(p => p.Y) > clip.Max.Y
+            || (depth && (points.Max(p => p.Z) < clip.Min.Z || points.Min(p => p.Z) > clip.Max.Z));
     }
 
     /// <summary>

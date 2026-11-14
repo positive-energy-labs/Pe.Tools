@@ -20,7 +20,8 @@ public class OpReceiptResponseTests {
         ["ok-restored"] = OpReceiptResponse.Ok(new JRaw("""{"path":"capture.png"}"""), new Touched.Restored([View])),
         ["ok-restoreFailed"] = OpReceiptResponse.Ok(new JRaw("""{"path":"capture.png"}"""), new Touched.RestoreFailed([
             new ViewLeft(View,
-                [ViewLeftover.Crop, ViewLeftover.ScopeBox, ViewLeftover.AnnotationCrop, ViewLeftover.SheetFilter])
+                [ViewLeftover.Crop, ViewLeftover.ScopeBox, ViewLeftover.AnnotationCrop, ViewLeftover.SheetFilter,
+                    ViewLeftover.Phase, ViewLeftover.PhaseFilter])
         ])),
         ["ok-wrote"] = OpReceiptResponse.Ok(new JRaw("""{"created":[9001]}"""), new Touched.Wrote(["PE place duct"], 1, 2, 0)),
         ["failed-unauthorized"] = OpReceiptResponse.Failed("A read committed a transaction.", 500,

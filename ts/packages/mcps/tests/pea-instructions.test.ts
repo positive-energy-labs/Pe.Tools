@@ -93,6 +93,7 @@ test("capture_view refuses null and named targets before host work and preserves
   const capturePath = `/captures/${createHash("sha256").update(image).digest("hex")}.png`;
   let returnedCapturePath = capturePath;
   let reportedSize = image.length;
+  let refused = false;
   let imageResponse = () => new Response(image, { headers: { "content-type": "image/png" } });
   vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
     const url = new URL(input instanceof Request ? input.url : String(input));
@@ -132,6 +133,8 @@ test("capture_view refuses null and named targets before host work and preserves
         byteSize: reportedSize,
         width: 1500,
         height: 1500,
+        refused,
+        notDrawn: refused ? [{ elementId: 7, reasons: ["PhaseHidden"] }] : [],
         ...({ lens: { basis: "UserView", viewId: 1 }, hidden: [] } satisfies CaptureDisclosure),
       },
       {
@@ -230,6 +233,12 @@ test("capture_view refuses null and named targets before host work and preserves
     expect(streamed.isError).toBe(true);
     expect(JSON.stringify(streamed.content)).toContain("5MB limit");
     expect(cancelled).toBe(true);
+    refused = true;
+    paths.length = 0;
+    const refusal = await client.callTool({ name: "capture_view", arguments: {} });
+    expect(refusal.isError).toBe(true);
+    expect(JSON.stringify(refusal.content)).toContain("capture_view refused: 7: PhaseHidden");
+    expect(paths).not.toContain(capturePath);
   } finally {
     await client.close();
     await server.close();

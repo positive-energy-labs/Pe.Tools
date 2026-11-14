@@ -333,8 +333,9 @@ public record RevitViewImageTarget(
 
 /// <summary>
 ///     Optional crop: exactly one of ElementIds, Selection, or ScopeBox. The view is exported
-///     with a temporary crop box around the focus (rolled back afterwards), so graphics stay
-///     exactly what the user sees. Requires an editable document; not supported on sheets.
+///     with a temporary crop around the focus and, for requested elements, their latest creation phase and a
+///     filter showing New and Existing. Committed view state is restored afterwards. Requires an editable document;
+///     not supported on sheets.
 /// </summary>
 public record RevitViewImageFocus(
     List<long>? ElementIds = null,
@@ -360,7 +361,7 @@ public record RevitViewImageModelRect(
 
 /// <summary>
 ///     Whether a focused capture put the view back. When <see cref="Held" /> is false the image is still good, and
-///     <see cref="Left" /> names what the captured view still carries: crop, scopeBox, annotationCrop, sheetFilter.
+///     <see cref="Left" /> names what the captured view still carries: crop, scopeBox, annotationCrop, sheetFilter, phase, phaseFilter.
 /// </summary>
 public sealed record RevitViewImageRestore(bool Held, IReadOnlyList<string> Left);
 
@@ -380,11 +381,12 @@ public enum HiddenKind { Links, ScopeBoxes, Levels, Grids, ReferencePlanes, Spac
 [JsonConverter(typeof(StringEnumConverter))]
 public enum HiddenWhy { PeDefault, NotEvaluated }
 
+/// <param name="FilePath">Exported PNG, or null on refusal. A refusal has zero byte size and dimensions.</param>
 /// <param name="Width">Delivered PNG width in pixels, read from the final file (not the export width it was cut from).</param>
 /// <param name="Warning">Why the image is far smaller than asked, in words; null when it is not.</param>
 public record RevitViewImageData(
     RevitAgentContextHandle View,
-    string FilePath,
+    string? FilePath,
     long ByteSize,
     int Width,
     int Height,
@@ -395,7 +397,7 @@ public record RevitViewImageData(
     RevitViewImageModelRect? ModelRect = null,
     string? SheetNumber = null,
     RevitViewImageRegistration? Registration = null,
-    // Why Registration is absent; null exactly when it is present.
+    // Why an exported image lacks registration. Refused describes a response with no image.
     RevitViewImageRegistrationRefusal? RegistrationRefusal = null,
     // Null when the capture changed nothing; a focused capture says whether its temporary change was undone.
     RevitViewImageRestore? Restore = null
@@ -409,6 +411,12 @@ public record RevitViewImageData(
     /// <summary>Focus elements' bounding boxes in delivered pixels (origin top-left, Y down).
     ///     Clipped to the image; missing geometry and boxes outside the crop are omitted. Bounds do not certify visibility.</summary>
     public IReadOnlyList<RevitViewImageMark> Marks { get; init; } = [];
+
+    /// <summary>No PNG was exported because every requested element was excluded. NotDrawn gives the reasons.</summary>
+    public bool Refused { get; init; }
+
+    /// <summary>Requested elements excluded by phase/filter, hiding, or bounds. Empty does not certify pixels or occlusion.</summary>
+    public IReadOnlyList<RevitViewImageNotDrawn> NotDrawn { get; init; } = [];
 
     /// <summary>Below this long side a capture is a thumbnail: say so rather than hand it over as a success.</summary>
     public const int SmallLongSide = 400;
@@ -455,6 +463,13 @@ public sealed record RevitViewImagePixelRect(int Left, int Top, int Width, int H
 
 /// <summary>An element's projected bounding box in the delivered PNG, in pixels from the top-left.</summary>
 public sealed record RevitViewImageMark(long ElementId, int Left, int Top, int Width, int Height);
+
+public sealed record RevitViewImageNotDrawn(long ElementId, IReadOnlyList<RevitViewImageNotDrawnReason> Reasons);
+
+[JsonConverter(typeof(StringEnumConverter))]
+public enum RevitViewImageNotDrawnReason {
+    ElementMissing, PhaseHidden, ElementHidden, CategoryHidden, NoBoundingBox, OutsideCrop, OutsideSectionBox
+}
 
 /// <summary>
 ///     Where the PNG sits in the model: model XY (feet) of the image's top-left, top-right and bottom-left pixel

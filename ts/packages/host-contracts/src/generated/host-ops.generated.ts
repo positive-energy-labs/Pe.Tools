@@ -6122,8 +6122,9 @@ export namespace RevitContextViewImage {
     }
     /**
      * Optional crop: exactly one of ElementIds, Selection, or ScopeBox. The view is exported
-     * with a temporary crop box around the focus (rolled back afterwards), so graphics stay
-     * exactly what the user sees. Requires an editable document; not supported on sheets.
+     * with a temporary crop around the focus and, for requested elements, their latest creation phase and a
+     * filter showing New and Existing. Committed view state is restored afterwards. Requires an editable document;
+     * not supported on sheets.
      *
      */
     export interface RevitViewImageFocus {
@@ -6162,10 +6163,21 @@ export namespace RevitContextViewImage {
       | "DegenerateCrop"
       | "AspectDisagrees"
       | "CropOutsideImage";
+    export type RevitViewImageNotDrawnReason =
+      | "ElementMissing"
+      | "PhaseHidden"
+      | "ElementHidden"
+      | "CategoryHidden"
+      | "NoBoundingBox"
+      | "OutsideCrop"
+      | "OutsideSectionBox";
 
     export interface Response {
       view: RevitAgentContextHandle;
-      filePath: string;
+      /**
+       * Exported PNG, or null on refusal. A refusal has zero byte size and dimensions.
+       */
+      filePath?: null | string;
       byteSize: number;
       /**
        * Delivered PNG width in pixels, read from the final file (not the export width it was cut from).
@@ -6195,6 +6207,14 @@ export namespace RevitContextViewImage {
        *                 Clipped to the image; missing geometry and boxes outside the crop are omitted. Bounds do not certify visibility.
        */
       marks: RevitViewImageMark[];
+      /**
+       * No PNG was exported because every requested element was excluded. NotDrawn gives the reasons.
+       */
+      refused: boolean;
+      /**
+       * Requested elements excluded by phase/filter, hiding, or bounds. Empty does not certify pixels or occlusion.
+       */
+      notDrawn: RevitViewImageNotDrawn[];
     }
     export interface RevitAgentContextHandle {
       kind: RevitAgentContextHandleKind;
@@ -6246,7 +6266,7 @@ export namespace RevitContextViewImage {
     }
     /**
      * Whether a focused capture put the view back. When Held is false the image is still good, and
-     * Left names what the captured view still carries: crop, scopeBox, annotationCrop, sheetFilter.
+     * Left names what the captured view still carries: crop, scopeBox, annotationCrop, sheetFilter, phase, phaseFilter.
      *
      */
     export interface RevitViewImageRestore {
@@ -6263,10 +6283,14 @@ export namespace RevitContextViewImage {
       width: number;
       height: number;
     }
+    export interface RevitViewImageNotDrawn {
+      elementId: number;
+      reasons: RevitViewImageNotDrawnReason[];
+    }
   }
 }
 
-/** Capture a view cropped to element ids, the current selection or a scope box, or a sheet-filtered schedule with all its rows. Commits a temporary change to that view (crop box set, any scope box cleared, annotation crop on; or the schedule's sheet filter lifted), exports the PNG, then commits its undo. Needs an editable document. The answer's restore says whether the undo held; when it did not, the image is still returned and restore.left names what the view still carries (crop, scopeBox, annotationCrop, sheetFilter). Same request and image as revit.context.view-image. */
+/** Capture a view cropped to element ids, the current selection or a scope box, or a sheet-filtered schedule with all its rows. For requested elements, temporarily uses their latest creation phase in document order and a phase filter showing New and Existing. Commits temporary view state (crop, scope box, annotation crop, phase, phase filter; or the schedule's sheet filter), exports, then commits its undo. Needs an editable document. NotDrawn names requested elements excluded by phase/filter, element/category hiding or bounds; these checks do not certify pixels or occlusion. Refused means every requested element is excluded: no PNG is exported. Restore says whether undo held; restore.left names state left on the view (crop, scopeBox, annotationCrop, sheetFilter, phase, phaseFilter). Same request as revit.context.view-image. */
 export namespace RevitContextViewImageFocus {
   export namespace Req {
     export interface Request {
@@ -6291,8 +6315,9 @@ export namespace RevitContextViewImageFocus {
     }
     /**
      * Optional crop: exactly one of ElementIds, Selection, or ScopeBox. The view is exported
-     * with a temporary crop box around the focus (rolled back afterwards), so graphics stay
-     * exactly what the user sees. Requires an editable document; not supported on sheets.
+     * with a temporary crop around the focus and, for requested elements, their latest creation phase and a
+     * filter showing New and Existing. Committed view state is restored afterwards. Requires an editable document;
+     * not supported on sheets.
      *
      */
     export interface RevitViewImageFocus {
@@ -6331,10 +6356,21 @@ export namespace RevitContextViewImageFocus {
       | "DegenerateCrop"
       | "AspectDisagrees"
       | "CropOutsideImage";
+    export type RevitViewImageNotDrawnReason =
+      | "ElementMissing"
+      | "PhaseHidden"
+      | "ElementHidden"
+      | "CategoryHidden"
+      | "NoBoundingBox"
+      | "OutsideCrop"
+      | "OutsideSectionBox";
 
     export interface Response {
       view: RevitAgentContextHandle;
-      filePath: string;
+      /**
+       * Exported PNG, or null on refusal. A refusal has zero byte size and dimensions.
+       */
+      filePath?: null | string;
       byteSize: number;
       /**
        * Delivered PNG width in pixels, read from the final file (not the export width it was cut from).
@@ -6364,6 +6400,14 @@ export namespace RevitContextViewImageFocus {
        *                 Clipped to the image; missing geometry and boxes outside the crop are omitted. Bounds do not certify visibility.
        */
       marks: RevitViewImageMark[];
+      /**
+       * No PNG was exported because every requested element was excluded. NotDrawn gives the reasons.
+       */
+      refused: boolean;
+      /**
+       * Requested elements excluded by phase/filter, hiding, or bounds. Empty does not certify pixels or occlusion.
+       */
+      notDrawn: RevitViewImageNotDrawn[];
     }
     export interface RevitAgentContextHandle {
       kind: RevitAgentContextHandleKind;
@@ -6415,7 +6459,7 @@ export namespace RevitContextViewImageFocus {
     }
     /**
      * Whether a focused capture put the view back. When Held is false the image is still good, and
-     * Left names what the captured view still carries: crop, scopeBox, annotationCrop, sheetFilter.
+     * Left names what the captured view still carries: crop, scopeBox, annotationCrop, sheetFilter, phase, phaseFilter.
      *
      */
     export interface RevitViewImageRestore {
@@ -6431,6 +6475,10 @@ export namespace RevitContextViewImageFocus {
       top: number;
       width: number;
       height: number;
+    }
+    export interface RevitViewImageNotDrawn {
+      elementId: number;
+      reasons: RevitViewImageNotDrawnReason[];
     }
   }
 }

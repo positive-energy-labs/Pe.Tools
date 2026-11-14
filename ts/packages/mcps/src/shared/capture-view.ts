@@ -4,7 +4,7 @@ import { contextFetch as fetch } from "@pe/runtime/context";
 import { defaultReadImageMaxBytes, readImage, type ReadImageResult } from "./read-image.ts";
 import z from "zod";
 import type { HostRpcCaller } from "./host-rpc-caller.ts";
-import type { CaptureDisclosure } from "@pe/agent-contracts";
+import type { NativeReadOutput } from "@pe/agent-contracts/native-output-read";
 
 const captureViewInputSchema = z.object({
   target: z
@@ -62,18 +62,7 @@ const captureViewInputSchema = z.object({
     ),
 });
 
-type RevitViewImageData = CaptureDisclosure & {
-  view: { label?: string; elementId?: number };
-  byteSize: number;
-  width: number;
-  height: number;
-  warning?: string | null;
-  viewScale?: number | null;
-  modelRect?: { minX: number; minY: number; maxX: number; maxY: number } | null;
-  sheetNumber?: string | null;
-  /** Set on a focused capture: whether the temporary crop's undo held, and what was left if not. */
-  restore?: { held: boolean; left: string[] } | null;
-};
+type RevitViewImageData = NativeReadOutput<"revit.context.view-image">;
 
 /**
  * One-hop "let me see Revit": export a view through the host, which keeps it as a capture. The
@@ -84,7 +73,7 @@ export function createCaptureViewTool(createHostRpcCaller: () => Promise<HostRpc
   return createTool({
     id: "capture_view",
     description:
-      "SEE a Revit view exactly as the user sees it — templates, VG overrides, and temporary hide/isolate all apply. Captures the active view (default), a view/sheet/viewport by id or name, or a schedule placed on a sheet, optionally cropped to elements / the selection / a scope box. Never creates or restyles views to take a picture. The answer includes the kept PNG as an image, its URL (open it, or put it in a page as <img src>), and its receipt id. Images over 5MB require a smaller pixelSize. Use after placements/mutations so the user can check the result, or to show the user what you are looking at.",
+      "SEE a Revit view: templates, VG overrides, and temporary hide/isolate apply. Captures the active view (default), a view/sheet/viewport by id or name, or a schedule placed on a sheet, optionally cropped to elements / the selection / a scope box. Element focus temporarily uses the latest requested creation phase and a phase filter showing New and Existing, then restores the view. Reports requested elements excluded by phase/filter, hiding or bounds; refuses when all are excluded. Never creates views. The answer includes the kept PNG as an image, its URL (open it, or put it in a page as <img src>), and its receipt id. Images over 5MB require a smaller pixelSize. Use after placements/mutations so the user can check the result, or to show the user what you are looking at.",
     inputSchema: captureViewInputSchema,
     execute: async (input): Promise<ReadImageResult> => {
       const caller = await createHostRpcCaller();
@@ -97,12 +86,18 @@ export function createCaptureViewTool(createHostRpcCaller: () => Promise<HostRpc
         pixelSize: input.pixelSize,
       });
       if (!result.ok) return { text: `capture_view failed: ${result.message}`, isError: true };
-      const data = result.response as RevitViewImageData & { capture?: { id: string; url: string } };
+      const data = result.response as RevitViewImageData;
+      const exclusions = (data.notDrawn ?? []).map(item => `${item.elementId}: ${item.reasons.join(", ")}`).join("; ");
+      const restoreWarning = data.restore && !data.restore.held
+        ? ` View restore failed: ${data.restore.left.join(", ")}.` : "";
+      if (data.refused)
+        return { text: `capture_view refused: ${exclusions}.${restoreWarning}`, isError: true };
       // The read names its capture in headers; the focused command carries it on its result.
       const capture = result.capture ?? data?.capture;
       if (!capture)
         return { text: "capture_view: the host answered without keeping a capture", isError: true };
       const extras = [
+        exclusions ? `not drawn: ${exclusions}` : null,
         `lens ${data.lens.basis} (view ${data.lens.viewId})`,
         ...data.hidden.map(item => `hidden ${item.what}: ${item.count} host-document instances (${item.why}; category switch only)`),
         data.sheetNumber ? `on sheet ${data.sheetNumber}` : null,
@@ -119,8 +114,8 @@ Warning: ${data.warning}`
       }${
         data.restore
           ? data.restore.held
-            ? "\nThe temporary crop was undone; the view is as it was."
-            : `\nWarning: the temporary crop could not be undone. The view was left with: ${data.restore.left.join(", ")}. Tell the user and fix the view's crop.`
+            ? "\nThe temporary view state was undone; the view is as it was."
+            : `\nWarning: temporary view state could not be undone. The view was left with: ${data.restore.left.join(", ")}. Tell the user and restore those settings.`
           : ""
       }`;
       try {
