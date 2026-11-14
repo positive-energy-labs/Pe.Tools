@@ -23,6 +23,8 @@ import { readingAtom, previousOf, useReading, useReadingSlice } from "#/host/res
 import { useProviders } from "./workbench/provider/providers";
 import { machineFixture } from "../../../packages/agent-contracts/tests/machine-fixture";
 import { useThreadStream } from "./workbench/provider/thread-stream";
+import { handle } from "@pe/agent-contracts/handle";
+import { sendCommand } from "./shell/work-feed-client";
 
 type Fake = {
   url: string;
@@ -257,6 +259,58 @@ test("late readings join and leave without reopening the page stream", async () 
   expect(sources).toHaveLength(1);
   release();
   readings.close();
+});
+
+test.each(["before Back", "after Back"])("D24: an identical pinned snapshot %s restores a remounted Page reading", async (arrival) => {
+  const { readings, sources, update } = owner();
+  const request = { kind: "page-target", slug: "pdrop--tour" } as const;
+  const key = readingKey(request);
+  const value = {
+    page: "page:@pdrop/pages/tour", slot: "default",
+    binding: { kind: "pinned", ref: { session: "S", openId: "A" } },
+    resolution: { kind: "resolved", target: { kind: "document", ref: { session: "S", openId: "A" } } },
+    document: { session: "S", openId: "A", title: "Chadds_detached" },
+    write: { kind: "human" },
+  };
+  let named: string | null = null;
+  const accept: Parameters<PeReadings["subscribe"]>[1] = frame => {
+    named = frame.kind === "snapshot" && !frame.stale
+      ? (frame.value as typeof value).document.title : null;
+  };
+  const send = () => sources[0]!.onmessage!({ data: JSON.stringify({ kind: "snapshot", key, value }) });
+  try {
+    // The bind form and Page chip share this key. page.bind sends a PUT, with no client dirty:
+    // the host's binding observer publishes its snapshot on the existing subscription.
+    const leave = readings.subscribe(request, accept);
+    await Promise.resolve();
+    sources[0]!.onopen!();
+    await vi.waitFor(() => expect(update).toHaveBeenCalledTimes(1));
+    send();
+    expect(named).toBe("Chadds_detached");
+    const fetch = vi.fn(async () => Response.json({ bound: true }));
+    await sendCommand(handle("page.bind"), {
+      id: "pin-again", key: "page.bind", target: { kind: "document", ref: value.binding.ref },
+      input: { slug: request.slug, binding: value.binding },
+    }, {
+      fetch, submit: async () => { throw Error("Binding must use its PUT route"); },
+      decode: async (_key, answer) => answer,
+    });
+    expect(fetch).toHaveBeenCalledWith("/pe/pages/pdrop--tour/binding", expect.objectContaining({
+      method: "PUT", body: JSON.stringify(value.binding),
+    }));
+    if (arrival === "before Back") send();
+    leave();
+    readings.subscribe(request, accept);
+    expect(named).toBeNull(); // Retained evidence is not fresh consent.
+    if (arrival === "after Back") send();
+    // Stand in only for the host subscription endpoint: a renewed key gets a snapshot,
+    // while an unchanged subscription sends no more frames after the binding event.
+    update.mockImplementation(async (_connection, add) => {
+      if (add.some(r => readingKey(r) === key)) send();
+    });
+    await vi.waitFor(() => expect(named).toBe("Chadds_detached"));
+    expect(sources).toHaveLength(1);
+  } finally { readings.close(); }
 });
 
 test("an overlapping handover delivers a route command once to each mounted follower", async () => {

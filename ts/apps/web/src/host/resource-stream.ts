@@ -360,8 +360,11 @@ export class PeReadings {
     const generation = this.generation;
     try {
       while (!this.closed && this.connection === connection && this.generation === generation) {
-        const remove = [...this.sent.keys()]
-          .filter((key) => !this.entries.has(key) || this.renew.has(key))
+        // A remount creates a stale owner even when its key never left the host subscription.
+        // Renew that owner's acquisition instead of waiting for an unrelated host edit.
+        const remove = [...this.sent]
+          .filter(([key, request]) => this.entries.get(key)?.request !== request || this.renew.has(key))
+          .map(([key]) => key)
           .slice(0, READING_MAX_KEYS);
         const add = [...this.entries]
           .filter(([key]) => !this.sent.has(key))
