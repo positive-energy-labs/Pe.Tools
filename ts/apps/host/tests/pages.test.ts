@@ -88,8 +88,8 @@ describe("pages", () => {
       expect(delivery.answer).toBeUndefined();
       expect(active).toHaveBeenCalledTimes(listingMs < 5000 ? 1 : 0);
       await vi.advanceTimersByTimeAsync(1);
-      expect(delivery.answer?.status).toBe(404);
-      expect(await (await opening).text()).toContain("no page late--tour: no admitted package contributes it");
+      expect(delivery.answer?.status).toBe(503);
+      expect(await (await opening).text()).toContain("Pod discovery exceeded 5000 ms");
       await vi.advanceTimersByTimeAsync(5000);
       expect(active).toHaveBeenCalledTimes(listingMs < 5000 ? 1 : 0);
     } finally {

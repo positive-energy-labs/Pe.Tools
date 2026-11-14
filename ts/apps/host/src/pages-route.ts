@@ -167,6 +167,7 @@ export const pageLibrary = (path: string): string | null => {
 /** One file segment: a leading dot is refused, so editor droppings stay private. */
 const SEGMENT = /^[a-z0-9_-][a-z0-9_.-]*$/i;
 const HEARTBEAT_MS = 15_000;
+const packageDiscoveryTimeoutMs = 5_000;
 const isMissing = (error: unknown) => (error as { code?: string } | null)?.code === "ENOENT";
 
 const pageEventRowSchema = z.object({
@@ -467,8 +468,11 @@ export function createPagesHandler(
     if (!pods) return [];
     let expired = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const timeout = new Promise<AdmittedPackage[]>((resolve) => {
-      timer = setTimeout(() => { expired = true; resolve([]); }, 5_000);
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        expired = true;
+        reject(Error(`Pod discovery exceeded ${packageDiscoveryTimeoutMs} ms listing ${[pods].flat().join(", ")}. Try again when the folder is available.`));
+      }, packageDiscoveryTimeoutMs);
     });
     const discover = async () => {
       const listing = await listPackages(pods);
@@ -979,7 +983,11 @@ export function createPagesHandler(
     };
   };
 
-  return Object.assign(handle, { observeTarget });
+  return Object.assign((request: Request) => handle(request).catch((error: unknown) => {
+    if (error instanceof Error && error.message.startsWith("Pod discovery exceeded "))
+      return problem(503, error.message);
+    throw error;
+  }), { observeTarget });
   async function handle(request: Request): Promise<Response> {
     const caller = currentCaller();
     const url = new URL(request.url);
