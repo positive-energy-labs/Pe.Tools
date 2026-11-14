@@ -26,7 +26,7 @@ afterEach(async () => {
   if (root) await rm(root, { recursive: true, force: true });
 });
 
-test("route inventory waits for an in-flight package reconciliation", async () => {
+test("route inventory answers while the action awaits its own package reconciliation", async () => {
   root = await mkdtemp(join(tmpdir(), "pe-plugin-reconcile-"));
   const machine = stateMachine(root);
   const captured = Promise.withResolvers<void>();
@@ -42,10 +42,13 @@ test("route inventory waits for an in-flight package reconciliation", async () =
   const reconciliation = lifecycle.refresh();
   await captured.promise;
   let answered = false;
+  let reconciled = false;
+  void reconciliation.then(() => { reconciled = true; });
   const inventory = routes.list().then(rows => { answered = true; return rows; });
   try {
     await new Promise<void>(resolve => setImmediate(resolve));
-    expect(answered, "inventory must not publish the census preceding the pending reconciliation").toBe(false);
+    expect(answered, "inventory must serve the completed census without waiting for the action").toBe(true);
+    expect(reconciled, "the action itself must still await its reconciliation").toBe(false);
   } finally {
     hold.resolve();
     await reconciliation;

@@ -251,10 +251,10 @@ export function createPackageLifecycle(
     return next;
   }
   return {
-    // Host actions require read-your-writes, even when their reconciliation walks a slow drive.
-    // Background discovery never advances this promise: those reads serve the completed census.
+    // Only startup gates readers. Each action awaits its own refresh before reporting success;
+    // unrelated readers serve the completed census even while that action scans a slow drive.
     get ready() {
-      return settled;
+      return ready;
     },
     observeChanges(listener: () => void) {
       listeners.add(listener);

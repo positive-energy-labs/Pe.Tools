@@ -1,7 +1,7 @@
 import { matchPeRoute, peRoutes } from "@pe/agent-contracts/pe-api";
 import { message } from "@pe/agent-contracts";
 import type { createContributionContent } from "./pe-routes.ts";
-import { createPodRoutes } from "./pod-routes.ts";
+import { createPodRoutes, PodRouteCheckTimeout } from "./pod-routes.ts";
 
 /** Served behind `servePeRoute`: the route matched and its input parsed before this runs. */
 export function createPluginsHandler(
@@ -27,6 +27,8 @@ export function createPluginsHandler(
         return json(await routes.trust(declared.params.key, body.fingerprint, body.trusted));
       }
     } catch (error) {
+      if (error instanceof PodRouteCheckTimeout)
+        return json({ error: message(error), code: error.code, retryable: error.retryable }, 503);
       return json({ error: message(error) }, 409);
     }
     if (request.method === "GET") {
