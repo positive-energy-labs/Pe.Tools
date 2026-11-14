@@ -21,6 +21,7 @@ import {
   admitScript,
   mintPageDoor,
   consentedRead,
+  readsOnly,
   writeTerminalContext,
 } from "../src/control.ts";
 import { HOST_CONTEXT_HEADER, productPathNames } from "@pe/host-contracts/contracts";
@@ -52,6 +53,19 @@ let heads: Record<string, ThreadHead> = {};
 /** Pea acquired one copy in Revit "P"; a user document opened there later is not acquired. */
 const acquiredCopy = (ref: DocumentRef) =>
   ref.session === "P" && ref.openId === "copy" ? "acq-copy" : null;
+
+// Contract C1: native runs a Pod entrypoint that names no mode in the mode pod.json declares, which
+// may write, so the host calls it a read only when the run says ReadOnly. Mutant, run red once:
+// restore `(permissionMode ?? "ReadOnly") === "ReadOnly"` for every run (the fourth line fails: a
+// declared WriteTransaction entrypoint would cross as a consented read).
+test("a script run is a read only when its mode is known to be ReadOnly", () => {
+  expect(readsOnly("scripting.execute", {})).toBe(true);
+  expect(readsOnly("scripting.execute", { scriptContent: "Result(1);" })).toBe(true);
+  expect(readsOnly("scripting.execute", { sourcePath: "src/A.cs", permissionMode: "ReadOnly" })).toBe(true);
+  expect(readsOnly("scripting.execute", { sourcePath: "src/A.cs" })).toBe(false);
+  expect(readsOnly("scripting.execute", { scriptContent: "x", permissionMode: "NoTransaction" })).toBe(false);
+  expect(readsOnly("revit.context.summary", { permissionMode: "ReadOnly" })).toBe(false);
+});
 
 test("Pea capability stays independent of thread targets", () => {
   bind();

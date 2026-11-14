@@ -135,6 +135,30 @@ export const contributionSourceSchema = z.strictObject({
 export type ContributionSource = z.infer<typeof contributionSourceSchema>;
 export const scriptModeSchema = z.enum(["ReadOnly", "WriteTransaction", "NoTransaction"]);
 export type ScriptMode = z.infer<typeof scriptModeSchema>;
+/**
+ * What a door may say to a declared script: its `input`, the mode and the timeout, nothing else
+ * (pods map, contract C1). The door always names the mode (the declared one when the caller gave
+ * none, ReadOnly when pod.json declares none) so the host can tell a read from a write before it
+ * admits the run; native applies the same rule
+ * to whatever reaches it (`PodManifest.ModeFor`). A write asked of a `ReadOnly` entrypoint throws.
+ */
+export function declaredScriptRun(
+  row: { key: string; mode?: ScriptMode },
+  sent: Record<string, unknown>,
+): Record<string, unknown> {
+  const permissionMode = sent.permissionMode ?? row.mode ?? "ReadOnly";
+  if (row.mode === "ReadOnly" && permissionMode !== "ReadOnly")
+    throw Error(
+      `${row.key} is declared ReadOnly in pod.json; it cannot run as ${String(permissionMode)}.`,
+    );
+  return Object.fromEntries(
+    Object.entries({
+      input: sent.input,
+      permissionMode,
+      timeoutSeconds: sent.timeoutSeconds,
+    }).filter(([, value]) => value !== undefined),
+  );
+}
 export const contributionProjectionSchema = z
   .strictObject({
     key: contributionKeySchema,

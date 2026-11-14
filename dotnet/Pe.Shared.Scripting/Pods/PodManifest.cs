@@ -17,6 +17,20 @@ public sealed record PodManifest(
     IReadOnlyList<PodEntrypoint> Entrypoints
 ) {
     public PodModel? For { get; init; }
+
+    /// <summary>
+    ///     The mode one run of <paramref name="sourcePath" /> takes, for every door (pods map, contract C1): the
+    ///     mode asked for, else the mode pod.json declares, else ReadOnly. An entrypoint declared ReadOnly is a
+    ///     read, so a write mode asked of it is refused.
+    /// </summary>
+    public ScriptPermissionMode ModeFor(string sourcePath, ScriptPermissionMode? asked) {
+        var declared = this.Entrypoints.FirstOrDefault(entry =>
+            string.Equals(entry.SourcePath, sourcePath, StringComparison.OrdinalIgnoreCase))?.Mode;
+        var mode = asked ?? declared ?? ScriptPermissionMode.ReadOnly;
+        return declared == ScriptPermissionMode.ReadOnly && mode != ScriptPermissionMode.ReadOnly
+            ? throw new ArgumentException($"{sourcePath} is declared ReadOnly in pod.json; it cannot run as {mode}.")
+            : mode;
+    }
 }
 
 public sealed record PodModel(string Title, IReadOnlyList<PodModelProbe> Probes);
@@ -28,7 +42,15 @@ public sealed record PodEntrypoint(
     string? Description,
     // Declared, it is the default for every door, and ReadOnly refuses a caller's write mode (contract C1).
     ScriptPermissionMode? Mode = null
-);
+) {
+    /// <summary>
+    ///     The mode a person's run takes. Safe is always ReadOnly. Full is the declared mode, so an entrypoint
+    ///     declared ReadOnly stays a read and one declared NoTransaction owns its transactions; one that
+    ///     declares none runs in one host-owned transaction.
+    /// </summary>
+    public ScriptPermissionMode RunMode(bool full) =>
+        full ? this.Mode ?? ScriptPermissionMode.WriteTransaction : ScriptPermissionMode.ReadOnly;
+}
 
 public sealed record PodManifestValidationResult(
     PodManifest? Manifest,

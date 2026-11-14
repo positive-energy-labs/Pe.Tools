@@ -318,6 +318,18 @@ public sealed class ScriptPodPreparationService(Func<string, object, JObject>? a
         return fullPath;
     }
 
+    /// <summary>
+    ///     The absolute path of a live file a pod carries, for a running script's `PodFile`. Refuses a path that
+    ///     leaves the pod (by `..`, a rooted path, or a link anywhere on the way) and a file that is not there.
+    /// </summary>
+    public static string MemberFile(string podFolder, string relativePath) {
+        var path = FullPath(podFolder, NormalizeMemberPath((relativePath ?? string.Empty).Replace('\\', '/')));
+        for (var at = path; at is not null && at.Length > podFolder.Length; at = Path.GetDirectoryName(at))
+            if ((File.Exists(at) || Directory.Exists(at)) && (File.GetAttributes(at) & FileAttributes.ReparsePoint) != 0)
+                throw new InvalidDataException($"PodFile cannot follow a link: {relativePath}");
+        return File.Exists(path) ? path : throw new FileNotFoundException($"This Pod has no file '{relativePath}'.", path);
+    }
+
     private static string? ReadSchema(string path, byte[] bytes) {
         if (!path.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
             return null;
