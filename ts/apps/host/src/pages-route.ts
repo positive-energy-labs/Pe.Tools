@@ -169,6 +169,8 @@ export const pageLibrary = (path: string): string | null => {
 const SEGMENT = /^[a-z0-9_-][a-z0-9_.-]*$/i;
 const HEARTBEAT_MS = 15_000;
 const packageDiscoveryTimeoutMs = 5_000;
+/** Waits after a discovery expiry before the page-target Reading asks again; then every 10 s. pe.js keeps the same pace. */
+const discoveryRetryMs = [1_000, 2_000, 5_000];
 const isMissing = (error: unknown) => (error as { code?: string } | null)?.code === "ENOENT";
 
 const pageEventRowSchema = z.object({
@@ -957,36 +959,53 @@ export function createPagesHandler(
     let closed = false;
     let turn = 0;
     let stops: (() => void)[] = [];
-    const fail = (error: unknown) => {
-      if (!closed) publish({ error: error instanceof Error ? error.message : String(error) });
+    let retry: ReturnType<typeof setTimeout> | undefined;
+    /**
+     * A discovery expiry is a slow folder, not a missing Page: the failure carries the host's words,
+     * and `again` asks after 1 s, 2 s, 5 s, then every 10 s while someone follows. Nothing else is asked twice.
+     */
+    const fail = (error: unknown, again?: () => void, tries = 0) => {
+      if (closed) return;
+      publish({ error: error instanceof Error ? error.message : String(error) });
+      if (again && error instanceof PackageDiscoveryExceeded)
+        retry = setTimeout(again, discoveryRetryMs[tries] ?? 10_000);
     };
-    void (async () => {
+    const start = async () => {
       const where = pageKeyOf(slug) ? await dirOf(slug) : null;
       if (closed) return;
       if (!where) return fail(`no page ${slug}`);
-      const send = () => {
+      const send = (tries = 0) => {
         const mine = ++turn;
-        void target(where.key, stateOf(where)).then((value) => {
-          if (!closed && mine === turn) publish({ value });
-        }, fail);
+        clearTimeout(retry);
+        void target(where.key, stateOf(where)).then(
+          (value) => {
+            if (!closed && mine === turn) publish({ value });
+          },
+          (error: unknown) => fail(error, mine === turn ? () => send(tries + 1) : undefined, tries),
+        );
       };
       stops = [
-        subscribeHeads(send),
+        subscribeHeads(() => send()),
         stateOf(where).hear((event) => {
           if (event === "binding") send();
         }),
       ];
       send();
-    })().catch(fail);
+    };
+    const boot = (tries = 0) =>
+      void start().catch((error: unknown) => fail(error, () => boot(tries + 1), tries));
+    boot();
     return () => {
       closed = true;
+      clearTimeout(retry);
       for (const stop of stops) stop();
     };
   };
 
   return Object.assign((request: Request) => handle(request).catch((error: unknown) => {
+    // The code tells pe.js this 503 is a wait, not a refusal: it asks again by itself.
     if (error instanceof PackageDiscoveryExceeded)
-      return problem(503, error.message);
+      return json({ error: error.message, message: error.message, code: error.code }, 503);
     throw error;
   }), { observeTarget });
   async function handle(request: Request): Promise<Response> {

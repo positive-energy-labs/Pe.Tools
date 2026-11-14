@@ -156,19 +156,45 @@
     url.searchParams.set(RUNTIME.query, RUNTIME.service);
     return url.href;
   };
-  /** The host's refusal across the top of the page, word for word; one banner, the latest refusal. */
-  const banner = (message) => {
+  /** One line across the top of the page in the host's words; an empty message hides it. */
+  const line = (id, role, background, message) => {
     if (typeof document === "undefined" || !document.body) return;
-    let note = document.getElementById("pe-refusal");
+    let note = document.getElementById(id);
     if (!note) {
+      if (!message) return;
       note = document.createElement("div");
-      note.id = "pe-refusal";
-      note.setAttribute("role", "alert");
-      note.style.cssText =
-        "position:sticky;top:0;z-index:2147483647;padding:8px 12px;background:#7f1d1d;color:#fff;font:13px/1.4 system-ui,sans-serif;white-space:pre-wrap";
+      note.id = id;
+      note.setAttribute("role", role);
+      note.style.cssText = `position:sticky;top:0;z-index:2147483647;padding:8px 12px;background:${background};color:#fff;font:13px/1.4 system-ui,sans-serif;white-space:pre-wrap`;
       document.body.prepend(note);
     }
     note.textContent = message;
+    note.hidden = !message;
+  };
+  /** The host's refusal, word for word; one banner, the latest refusal. */
+  const banner = (message) => line("pe-refusal", "alert", "#7f1d1d", message);
+  /**
+   * A boot read the host cannot answer yet. Pod discovery that outlasts its budget answers 503 with the code
+   * `pod.discovery.exceeded`: the Pods folder is slow, not gone, and the same request a moment later is answered.
+   * So `send` is sent again after 1 s, 2 s, 5 s, then every 10 s for as long as the page is open, and the page says
+   * what it is waiting for in the host's words. Every other answer comes back as it is, at once: a refusal, a 4xx
+   * and any other 503 are never asked twice. Every boot read goes through here; Page code never loops.
+   */
+  const DISCOVERY_WAITS = [1000, 2000, 5000];
+  let waiting = 0;
+  const whenDiscovered = async (send) => {
+    for (let tries = 0; ; tries++) {
+      const r = await send();
+      const late = r.status === 503 ? await r.clone().json().catch(() => null) : null;
+      const expiry = late?.error && typeof late.error === "object" ? late.error : late;
+      if (expiry?.code !== "pod.discovery.exceeded" || stopped) {
+        if (tries && --waiting === 0) line("pe-waiting", "status", "#374151", "");
+        return r;
+      }
+      if (!tries) waiting++;
+      line("pe-waiting", "status", "#374151", `waiting for the Pods folder: ${expiry.message}`);
+      await new Promise((ok) => setTimeout(ok, DISCOVERY_WAITS[tries] ?? 10000));
+    }
   };
   /**
    * The host's own refusal, word for word, is the error message. A door refusal (`refusal.code`, e.g. `grant.required`,
@@ -209,7 +235,7 @@
 
   /** The host's reading of this page's default slot: binding, resolution, document, and what a write would do. */
   const readTarget = async () => {
-    const reading = await json(await client.response("page.target", pageInput()));
+    const reading = await json(await whenDiscovered(() => client.response("page.target", pageInput())));
     pe.doc = reading.document;
     return reading;
   };
@@ -515,10 +541,10 @@
   installPageState(pe, {
     refuse: banner,
     load: (after = 0) =>
-      client.response("page.state", { ...pageInput(), query: { after } }).then(json),
+      whenDiscovered(() => client.response("page.state", { ...pageInput(), query: { after } })).then(json),
     append: (event) => client.response("page.append", pageInput(event)).then(json),
     publish: async (projection) => {
-      const r = await client.response("page.text", pageInput(projection));
+      const r = await whenDiscovered(() => client.response("page.text", pageInput(projection)));
       if (r.status === 409) return; // Another tab published a newer prefix; its text wins.
       if (!r.ok) return fail(r);
     },

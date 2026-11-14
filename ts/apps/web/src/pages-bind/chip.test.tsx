@@ -71,6 +71,19 @@ test("access-061/062: a disconnected Page reading immediately stops naming its d
   await waitFor(() => expect(screen.queryByText("MEP")).toBeNull());
   expect(screen.getByText("unverified")).toBeTruthy();
 });
+test("W34: a discovery expiry shows the host's words, and the next served reading names the document again", async () => {
+  await renderChip();
+  const words = "Pod discovery exceeded 5000 ms listing G:/Pods. Try again when the folder is available.";
+  act(() => stream.send({ kind: "failure", key: "k", error: words }));
+  expect((await screen.findByRole("status")).textContent).toBe(words);
+  expect(screen.getByText("unverified")).toBeTruthy();
+  // The host asks discovery again by itself and serves the Reading on the same subscription.
+  act(() => stream.send({ kind: "snapshot", key: "k", value: writes }));
+  expect(await screen.findByText("MEP")).toBeTruthy();
+  expect(screen.queryByText("unverified")).toBeNull();
+  expect(screen.queryByRole("status")).toBeNull();
+  expect(stream.requests).toHaveLength(1);
+});
 test("D24, ADR 0043: a person's pin that writes names its document, never the bare kind", async () => {
   await renderChip();
   const pinned: PageTargetReading = {
