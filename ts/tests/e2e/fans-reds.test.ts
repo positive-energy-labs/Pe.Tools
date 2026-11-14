@@ -436,8 +436,16 @@ test("H1: a MUAS-1 ESP write refuses for its shared type and MUAS-2 keeps its va
     await expect.poll(status, { timeout: 180_000, message: "sheet re-read" }).toBe("");
     const state = () =>
       page.evaluate(() => ({
-        popover: document.querySelector('[data-write-outcome="refused"]')?.textContent ?? null,
-        armed: !!document.querySelector('[data-write-action="armed"]'),
+        // D43: per-cell refusals draw in the popover body, not only as a whole-plan outcome.
+        popover:
+          document.querySelector('[data-write-outcome="refused"]')?.textContent ??
+          [document.querySelector("[data-write-popover]")?.textContent ?? ""].find((text) => /refused/i.test(text)) ??
+          null,
+        // D43: the kit marks `armed` whenever a plan is held, refused or not (kit write-action.tsx);
+        // Apply is offered only as an enabled "Write to Revit" button inside the popover.
+        armed: [...document.querySelectorAll("[data-write-popover] button")].some(
+          (b) => b.textContent?.trim() === "Write to Revit" && !(b as HTMLButtonElement).disabled,
+        ),
         // The state word is hyphenated when the host cannot say (`outcome-unknown`, run 3 at d3e0ec65).
         chip: /sheet.plan\nyou · [\w-]+ · [\d:]+/.exec(document.body.innerText)?.[0] ?? null,
       }));
