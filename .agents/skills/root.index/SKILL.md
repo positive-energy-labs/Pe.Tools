@@ -12,34 +12,24 @@ The user states intent. You pick the route and drive it: invoke each hop that al
 
 ## Grammar
 
-A *root* frames the set, a *loop* is a workflow, a *pass* is a one-time ask, a *lens* stacks on top, and a *slot* holds repo rules and repo facts. Exactly one loop or pass owns the route at a time. `reflect` holds the kind semantics, and you read its file (never invoke it) before any skill edit. `AGENTS.md` projects the Prevents column as its routing table.
+A *root* frames the set, a *loop* is a workflow, a *pass* is a one-time ask, a *lens* stacks on top, and a *slot* holds repo rules and repo facts. Exactly one loop or pass owns the route at a time. Read `reflect` before any skill edit, because it holds the kind semantics. The route table in `AGENTS.md` says what each stance prevents, and this table adds its kind and its stop.
 
-| Kind | Stance | Figure/It is | Prevents | Rounds | User-only | Stop |
-|---|---|---|---|---|---|---|
-| root | `index` | Wayfinder, who names the next island and paddles nothing | the skipped hop: work begun without a route named | - | no | - |
-| root | `reflect` | Theseus' ship and the Ulysses contract — the set refits itself, and binds its own cold reader | set drift: a skill edited by feel, never run cold | - | no | - |
-| lens | `delegate` | Falconer — the bird hunts; the falconer keeps the judgment and counts every bird home | context rot: one session carrying everything, the main agent building | no | no |  |
-| lens | `house` | Cartographer, a chart someone steers by where they cannot see the bottom | templated surfaces: a screen that fits no house | no | no |  |
-| lens | `prove` | Assayer, who stamps only the bar the fire has tested | plausible, not real: done on a mock, a count, a screenshot, or another agent's word; or built on assumed soil, a shape settled before the real model was examined | no | no |  |
-| lens | `purge` | Shiva at the winnowing floor, who lets the wind decide what returns | bloat: adding to a place that already has too much | no | no |  |
-| pass | `relay` | Herald — the message to the next session | the dropped handoff: the next session re-derives what this one knew | no | no | baton delivered |
-| pass | `release` | Ferryman — the crossing ends on the other bank | premature release closure: shipped bytes never made the crossing | no | no | exact published bytes reached the consumer, promised outcomes proven, failures and gaps recorded |
-| pass | `retro` | After-action review — what was meant, what happened, why, what to keep; no blame, no grade | the repeated cost: a costly session pattern paid again because nobody measured it | no | no | findings stated in chat, anchored, quantified, ranked by level, and handed to `reflect`, `docs`, or the owner; machine artifacts in the run directory |
-| loop | `close` | Keystone — a settled surface needs its backend real | shims for done: a settled surface over a fake backend | yes | no | shims zero or deferred, workflow driven by hand |
-| loop | `control` | Governor — the flyball reads the engine and moves one valve, never the piston | the unbounded run: work with no frozen limits, or the same wave sent twice at a plateau | yes | **yes** | every signature landed, given up, or owed; or two dry waves |
-| loop | `diagnose` | Coroner — something is broken | guessed fix: a diff before a cause | yes | no | cause named, failing site shown, red reproducer in hand |
-| loop | `grill` | Socrates — an idea, settleable by talking | decisions made for the user: a plan built on verdicts never given | yes | no | no open decision left, user confirms |
-| loop | `muse` | Demiurge in the realm of forms — architecture, API, data shape, seam is open | first shape kept: a seam settled before the alternatives were seen | yes | no | two rounds adding no shape and killing none |
-| loop | `protoui` | Lineup, where the witness picks and the officer never does | wrong product: canonizing a surface nobody felt | yes | no | two dry rounds |
-| loop | `teach` | Master — a concept the user wants to own | the answer handed over: the user owns nothing | yes | no | transfer demonstrated |
-| loop | `tune` | Tuner with the fork — a temperament, never a string | tuned by ear: a constant fixed by hand where a rule should hold | yes | no | before/after from one instrument, rule landed with its guard, purge done, open rulings listed |
-| slot | `debrief` | the accident investigator who reads the voice recorder against the flight data and the wreckage | the summary: a recording remembered as prose nobody can point at | - | - | - |
-| slot | `docs` | where durable knowledge lives, this repo; rebuilt like Ise, swept like a sand mandala | lost decisions: verdicts in chat, nowhere else | - | - | - |
-| slot | `execute` | the chain of custody, where every hand between claim and reality signs | the wrong reality: a claim proved on a lane that cannot falsify it | - | - | - |
-| slot | `mine` | Registrar, who freezes the register before reading it | rumor: a finding without lineage | - | - | - |
-| slot | `page` | the orrery, not the painting, a page that holds state and turns | the painting: a page with no state behind it | - | - | - |
-| slot | `recon` | the surveyor who walks the boundary before mapping the interior | rumor about a rival: a claim about their product nobody traced to their bytes | - | - | - |
-| slot | `show-me` | the sketch on the back of the envelope | the wall of text: a topic explained in prose that a diagram would settle | - | - | - |
+| Kind | Stance | Stop |
+|---|---|---|
+| root | `index`, `reflect` | - |
+| lens | `delegate`, `house`, `prove`, `purge` | - |
+| pass | `relay` | baton delivered |
+| pass | `release` | exact published bytes reached the consumer, promised outcomes proven, failures and gaps recorded |
+| pass | `retro` | findings stated in chat, anchored, quantified, ranked by level, and handed to `reflect`, `docs`, or the owner; machine artifacts in the run directory |
+| loop | `close` | shims zero or deferred, workflow driven by hand |
+| loop | `control` **user-only** | every signature landed, given up, or owed; or two dry waves |
+| loop | `diagnose` | cause named, failing site shown, red reproducer in hand |
+| loop | `grill` | no open decision left, user confirms |
+| loop | `muse` | two rounds adding no shape and killing none |
+| loop | `protoui` | two dry rounds |
+| loop | `teach` | transfer demonstrated |
+| loop | `tune` | before/after from one instrument, rule landed with its guard, purge done, open rulings listed |
+| slot | `debrief`, `docs`, `execute`, `mine`, `page`, `recon`, `show-me` | - |
 
 Real work starts with the two accounts in `AGENTS.md` Always 1. A pasted failure goes to `diagnose`. `control` is user-only, so name it and stop. Suggest `/relay` when you and the user stay misaligned.
 

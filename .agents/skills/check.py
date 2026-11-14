@@ -88,36 +88,38 @@ def main():
         if len(uniq) > 1:
             fail('triggers', '%r is claimed by %s' % (phrase, ', '.join(uniq)))
 
-    # 4. the index table is a projection of dirnames + frontmatter; --fix rewrites it, otherwise it must match
+    # 4. the index table and the AGENTS.md routing table project dirnames + frontmatter; --fix rewrites them, otherwise they must match
     idx = skills.get('root.index')
     if not idx:
         fail('root.index', 'missing')
     else:
-        order = {k: i for i, k in enumerate(('root', 'lens', 'pass', 'loop', 'slot'))}
-        want = ['| Kind | Stance | Figure/It is | Prevents | Rounds | User-only | Stop |', '|---|---|---|---|---|---|---|']
+        # The index table holds only what no other projection carries: the kind, who may start a stance, and its stop.
+        # AGENTS.md carries what each stance prevents, and the harness listing carries each description.
+        order = ('root', 'lens', 'pass', 'loop', 'slot')
+        rows = {k: [] for k in order}
         routes = ['| About to commit | Stance |', '|---|---|']
-        for d, (kind, name, text) in sorted(skills.items(), key=lambda kv: (order[kv[1][0]], kv[0])):
+        for d, (kind, name, text) in sorted(skills.items(), key=lambda kv: (order.index(kv[1][0]), kv[0])):
             fm = frontmatter(text) or ''
             figure, stop, prevents = field(fm, 'figure'), field(fm, 'stop'), field(fm, 'prevents')
             prevents = prevents.strip('"') if prevents else prevents
             if not figure:
-                fail(d, 'no frontmatter figure:; the index table projects it')
+                fail(d, 'no frontmatter figure:')
             if not prevents:
-                fail(d, 'no frontmatter prevents:; the index table and AGENTS.md routing project it')
+                fail(d, 'no frontmatter prevents:; the AGENTS.md routing table projects it')
             elif kind != 'root':
                 routes.append('| %s | `%s` |' % (prevents, name))
             if kind in ('pass', 'loop') and not stop:
                 fail(d, 'a %s with no frontmatter stop:' % kind)
             if kind == 'slot' and field(fm, 'scope') not in ('skills', 'repo'):
                 fail(d, 'a slot needs scope: skills | repo')
-            user_only = '**yes**' if field(fm, 'disable-model-invocation') == 'true' else 'no'
-            if kind == 'slot':
-                want.append('| slot | `%s` | %s | %s | - | - | - |' % (name, figure, prevents))
-            elif kind == 'root':
-                want.append('| root | `%s` | %s | %s | - | %s | - |' % (name, figure, prevents, user_only))
-            else:
-                want.append('| %s | `%s` | %s | %s | %s | %s | %s |' % (
-                    kind, name, figure, prevents, 'yes' if kind == 'loop' else 'no', user_only, stop or ''))
+            label = '`%s`' % name + (' **user-only**' if field(fm, 'disable-model-invocation') == 'true' else '')
+            rows[kind].append((label, stop or ''))
+        want = ['| Kind | Stance | Stop |', '|---|---|---|']
+        for kind in order:
+            if kind in ('pass', 'loop'):  # a route owner gets its own row, because its stop is its contract
+                want += ['| %s | %s | %s |' % (kind, label, stop) for label, stop in rows[kind]]
+            elif rows[kind]:
+                want.append('| %s | %s | - |' % (kind, ', '.join(label for label, _ in rows[kind])))
         want = '\n'.join(want)
         # AGENTS.md carries the same failures as its always-on routing table, between markers
         agents = os.path.join(os.path.dirname(os.path.dirname(HERE)), 'AGENTS.md')
