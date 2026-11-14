@@ -426,6 +426,11 @@ def dev_session(run: str, state: dict, args: list[str]) -> None:
     window = [] if "--foreground" in args else ["--background"]
     state["sessions"].append(session)
     save(run, state)
+    # TODO: T-1: --quarantine is always passed, and one session holds the 2025 add-in quarantine lease at a
+    # time, so one fresh pe-revit test anywhere refuses every acceptance drive (session.quarantine-unavailable).
+    # machine.py admit cannot see the lease, so it admits a drive that cannot start.
+    # TODO: L2b: this start's result is not checked, so a refused start still ends setup with exit 0 and no
+    # session; setup_installed refuses on the same failure. Seen in pod-pages drive/f1/setup-1-quarantine-unavailable.log.
     sdk(run, "session-start", ["session", "start", "--id", session, "--year", "2025", "--quarantine", *window])
     for i, doc in enumerate(docs):
         # Copied models keep their link paths; a link that did not travel stays unloaded.
