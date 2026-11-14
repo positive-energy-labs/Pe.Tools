@@ -22,7 +22,7 @@ public sealed class SiblingFenceProofTests {
             $"{args.GetDocument().Title} {args.Operation} [{string.Join(",", args.GetTransactionNames())}] +{args.GetAddedElementIds().Count} ~{args.GetModifiedElementIds().Count} -{args.GetDeletedElementIds().Count}");
         application.DocumentChanged += OnChanged;
         var facts = new List<string>();
-        void Fact(string name, object? value) { facts.Add($"{name}: {value}"); TestContext.Out.WriteLine($"FACT {name}: {value}"); }
+        void Fact(string name, object? value) => facts.Add($"{name}: {value}");
         try {
             Assert.That(target.Equals(sibling), Is.False);
             Fact("open documents", string.Join(", ", application.Documents.Cast<Document>().Select(each => each.Title)));
@@ -147,7 +147,8 @@ public sealed class SiblingFenceProofTests {
                 Assert.That(sibling.ProjectInformation.Name, Is.EqualTo("person-edit"));
         } finally {
             application.DocumentChanged -= OnChanged;
-            TestContext.Out.WriteLine("VERDICT TABLE\n" + string.Join("\n", facts));
+            // Console, not TestContext.Out: the fresh rung's results file keeps only the console.
+            Console.WriteLine("[PE_SIBLING_FENCE_FACTS]\n" + string.Join("\n", facts));
         }
     }
 

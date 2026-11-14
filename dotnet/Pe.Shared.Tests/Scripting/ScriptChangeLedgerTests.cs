@@ -133,6 +133,34 @@ public sealed class ScriptChangeLedgerTests {
         Assert.That(ScriptChangeLedger.Changes(Write, commits, [], new ScriptUndo("heal")).Overlapped, Is.False);
     }
 
+    // D14: a commit in a document the run was not run on is rolled back by the sibling fence. It is the host's
+    // row, not one of Revit's, so the summary never says "Revit said" for it. Mutant, run red once (2026-11-14):
+    // drop the `FencedWords` term from Changes; the summary no longer names the sibling.
+    [Test]
+    public void A_commit_in_a_document_the_run_was_not_run_on_is_reported_as_rolled_back() {
+        ScriptFencedCommit[] fenced = [new("Chadds", ["Rename sibling"], 1), new("Chadds", ["Move", "Tag"], 3)];
+        var changes = ScriptChangeLedger.Changes(Write, [Commit("one", added: [1])], [], new ScriptUndo("heal"), fenced: fenced);
+        var failures = ScriptChangeLedger.FencedFailures(fenced);
+
+        Assert.Multiple(() => {
+            Assert.That(changes.Summary, Is.EqualTo(
+                "Changed 1 element (1 added, 0 modified, 0 deleted) in 1 transaction. One undo entry: 'heal'. " +
+                "The run also committed 2 transactions in 'Chadds', which it was not run on. Those were rolled back: a script changes only the document it runs on."));
+            Assert.That(changes.Kept, Is.True);
+            Assert.That(changes.Added.Ids, Is.EqualTo(new long[] { 1 }));
+            Assert.That(failures.Select(failure => failure.Message), Is.EqualTo(new[] {
+                "A script changes only the document it runs on. This run committed 'Rename sibling' in 'Chadds' (1 element), and that was rolled back: nothing changed there. To change 'Chadds', run the script on it.",
+                "A script changes only the document it runs on. This run committed 'Move', 'Tag' in 'Chadds' (3 elements), and that was rolled back: nothing changed there. To change 'Chadds', run the script on it."
+            }));
+            Assert.That(failures.Select(failure => failure.Transaction), Is.EqualTo(new[] { "Rename sibling", "Move, Tag" }));
+            Assert.That(failures, Has.All.Matches<ScriptFailure>(failure =>
+                failure.Outcome == ScriptFailureOutcome.RolledBack && failure.DefinitionId.Length == 0 && failure.ElementIds.Count == 0));
+            Assert.That(ScriptChangeLedger.Changes(ScriptPermissionMode.ReadOnly, [], [], new ScriptUndo(), fenced: fenced[..1]).Summary, Is.EqualTo(
+                "ReadOnly run: it would change no element. The run also committed 1 transaction in 'Chadds', which it was not run on. That was rolled back: a script changes only the document it runs on."));
+            Assert.That(ScriptChangeLedger.Changes(Write, [], [], new ScriptUndo()).Summary, Is.EqualTo("No element changed."));
+        });
+    }
+
     [Test]
     public void A_run_that_could_not_be_grouped_says_why() {
         var changes = Changes(Write, [Commit("one", added: [1]), Commit("two", added: [2])],

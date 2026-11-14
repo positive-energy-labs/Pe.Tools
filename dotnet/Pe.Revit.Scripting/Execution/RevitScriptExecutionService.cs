@@ -868,24 +868,120 @@ public sealed class RevitScriptExecutionService(
         // The op runner's monitor (Pe.Revit.Operations): one DocumentChanged subscription for calls and scripts.
         // Every mode watches: the result says what the run changed, or in ReadOnly what it would have.
         OperationMonitor.Attach(application);
-        using var window = OperationMonitor.Watch(idsOf: context.Document);
+        // Raised before anything is watched or run: a sibling that cannot be fenced refuses the run.
+        var fence = SiblingFence.Raise(application, context.Document);
+        using var window = OperationMonitor.Watch(fence, idsOf: context.Document);
         var run = new RunLedger(window, mode);
         // Revit raises this for every transaction that finishes with failures, the script's own included. It only
         // reads: a script's commit that answers RolledBack with no exception is silent everywhere else (defect D5).
         application.FailuresProcessing += run.OnFailuresProcessing;
+        string? unfenced = null;
+        var threw = true;
         try {
-            this.ExecuteWithTransactionPolicy(container, context, plan, diagnostics, run);
+            fence.Run(() => this.ExecuteWithTransactionPolicy(container, context, plan, diagnostics, run));
+            threw = false;
+        } catch (Exception ex) when (fence.Titles.Count != 0 && ex.Message.Contains("open transaction phase", StringComparison.Ordinal)) {
+            diagnostics.Add(ScriptDiagnosticFactory.Warning("fence",
+                $"Revit refuses Save, SaveAs and synchronize on a document that has a transaction group open, and this run holds one on every other open document ({string.Join(", ", fence.Titles.Select(title => $"'{title}'"))}) so that a script changes only the document it runs on. To save one of those, run the script on it."));
+            throw;
         } finally {
             application.FailuresProcessing -= run.OnFailuresProcessing;
+            // The fence's own rollback may raise changes; the run's commits are fixed before it.
+            run.KeepGuarded();
+            unfenced = fence.Lower();
             if (run.Started) {
                 var commits = run.Commits();
-                outputSink.Failures = ScriptChangeLedger.Failures(mode, run.Committed(), run.Raised);
-                outputSink.Changes = ScriptChangeLedger.Changes(mode, commits, outputSink.Failures, run.Undo, window.Overlapped);
+                var fenced = run.Fenced();
+                var raised = ScriptChangeLedger.Failures(mode, run.Committed(), run.Raised);
+                outputSink.Changes = ScriptChangeLedger.Changes(mode, commits, raised, run.Undo, window.Overlapped, fenced);
+                outputSink.Failures = [.. raised, .. ScriptChangeLedger.FencedFailures(fenced)];
                 // ReadOnly discards everything by design and WriteTransaction reports its own rollback as an error.
                 if (mode == ScriptPermissionMode.NoTransaction
-                    && outputSink.Failures.Any(failure => failure.Outcome == ScriptFailureOutcome.RolledBack))
+                    && raised.Any(failure => failure.Outcome == ScriptFailureOutcome.RolledBack))
                     diagnostics.Add(ScriptDiagnosticFactory.Warning("transaction", outputSink.Changes.Summary));
+                else if (fenced.Count != 0)
+                    diagnostics.Add(ScriptDiagnosticFactory.Warning("fence", ScriptChangeLedger.FencedWords(fenced)));
             }
+            // The script's own exception is already on its way out; the fence's words must not be lost with it.
+            if (unfenced is not null && threw)
+                diagnostics.Add(ScriptDiagnosticFactory.Error("fence", unfenced));
+        }
+
+        if (unfenced is not null)
+            throw new RevitScriptTransactionException(ScriptExecutionStatus.RuntimeFailed, unfenced, stage: "fence");
+    }
+
+    /// <summary>
+    ///     Fences a run to its target document (D14): a transaction group is held open on every other document
+    ///     that was open when the run started, and is rolled back when the run ends, whatever the mode. What the
+    ///     run commits in such a sibling is discarded, so a caller needs authority over the target alone (host
+    ///     <c>admitScript</c>). A document the run opens itself (EditFamily, a file it opens) was not open at the
+    ///     start, has no group and stays writable. Proven on fresh Revit 2025 (2026-11-14, SiblingFenceProofTests):
+    ///     groups are held on several documents at once, a sibling commits under the fence in every mode's
+    ///     transaction shape and the rollback discards it, and a person's earlier unsaved edits in the sibling
+    ///     stay. Revit refuses Save, SaveAs and Close on a document with a group open, so a run cannot save or
+    ///     close a sibling, and the result says why. The sibling is not left modified by the rollback.
+    ///     The fence is also the monitor's scope: a commit in a held sibling is observed as Discarded.
+    ///     The honest limit: this bounds a script's commits, not hostile code; a script that returns with a
+    ///     transaction still open on a sibling may leave a group Revit will not roll back, and the run then fails
+    ///     and names that document.
+    /// </summary>
+    private sealed class SiblingFence : OperationScope {
+        // The sandbox prefix keeps document-event consumers from treating the fence's rollback as a real change.
+        private const string Name = DocumentSandbox.TransactionNamePrefix + "Pe Script Fence";
+        private readonly List<(Document Document, string Title, TransactionGroup Group)> _held = [];
+
+        private SiblingFence(Document? target) : base(target) { }
+
+        /// <summary>The titles of the siblings held, for the result's words.</summary>
+        public IReadOnlyList<string> Titles => this._held.Select(held => held.Title).ToList();
+
+        public static SiblingFence Raise(Autodesk.Revit.ApplicationServices.Application application, Document? target) {
+            var fence = new SiblingFence(target);
+            foreach (Document sibling in application.Documents) {
+                // Revit opens no transaction on a linked or read-only document, so a run cannot commit there.
+                if ((target is not null && sibling.Equals(target)) || sibling.IsLinked || sibling.IsReadOnly) continue;
+                var title = sibling.Title;
+                TransactionGroup? group = null;
+                try {
+                    group = new TransactionGroup(sibling, Name);
+                    if (group.Start() != TransactionStatus.Started)
+                        throw new InvalidOperationException("the group did not start.");
+                    fence._held.Add((sibling, title, group));
+                } catch (Exception ex) {
+                    group?.Dispose();
+                    _ = fence.Lower();
+                    throw new RevitScriptTransactionException(
+                        ScriptExecutionStatus.Rejected,
+                        $"The script was not run. A script changes only the document it runs on, and Revit would not let the run protect '{title}', which is also open: {ex.Message} Close '{title}', or run the script on a copy in its own Revit.",
+                        ex,
+                        "fence"
+                    );
+                }
+            }
+            return fence;
+        }
+
+        /// <summary>Runs <paramref name="work" /> with every held sibling marked as discarding, for the change monitor.</summary>
+        public void Run(Action work) => this._held
+            .Aggregate(work, (inner, held) => () => _ = this.Discarding(held.Document, () => { inner(); return true; }))();
+
+        /// <summary>Rolls every sibling back. Answers null when all held, else which siblings did not and why.</summary>
+        public string? Lower() {
+            var failed = new List<string>();
+            foreach (var (_, title, group) in this._held) {
+                try {
+                    var status = group.RollBack();
+                    if (status != TransactionStatus.RolledBack) failed.Add($"'{title}' ({status})");
+                } catch (Exception ex) {
+                    failed.Add($"'{title}' ({ex.Message})");
+                } finally {
+                    group.Dispose();
+                }
+            }
+            this._held.Clear();
+            return failed.Count == 0 ? null
+                : $"A script changes only the document it runs on, and what this run did to {string.Join(", ", failed)} could not be rolled back. Check that document before you save it; closing it without saving discards the run's changes.";
         }
     }
 
@@ -992,8 +1088,17 @@ public sealed class RevitScriptExecutionService(
         /// <summary>Every change the run's window saw, in any document.</summary>
         public IReadOnlyList<ObservedChange> Observed => window.Changes;
 
-        /// <summary>Fixes the ReadOnly run's commits before the guard's group rolls back.</summary>
-        public void KeepGuarded() => this._guarded = window.Changes;
+        /// <summary>Fixes the run's commits before a group rolls back: the ReadOnly guard's, then the sibling fence's.</summary>
+        public void KeepGuarded() => this._guarded ??= window.Changes;
+
+        /// <summary>
+        ///     What the run committed in a fenced sibling, which the fence rolls back. Sandbox churn there is left
+        ///     out: its own sandbox already discarded it, and the script committed nothing.
+        /// </summary>
+        public IReadOnlyList<ScriptFencedCommit> Fenced() => (this._guarded ?? window.Changes)
+            .Where(change => change.Discarded && !DocumentSandbox.IsSandboxTransaction(change.Transactions))
+            .Select(change => new ScriptFencedCommit(change.DocumentTitle, change.Transactions, change.Added + change.Modified + change.Deleted))
+            .ToList();
 
         /// <summary>
         ///     Commits in the run's document. A write mode leaves out sandbox churn, which was discarded; a
@@ -1055,7 +1160,8 @@ public sealed class RevitScriptExecutionService(
     ///     from treating the churn as a real change, and is also how the guard tells its own contained
     ///     churn from a genuine escape: a DocumentChanged carrying a transaction name that is NOT the
     ///     guard's (a committed transaction the group rollback does not cover — for example a change to
-    ///     another open document) persisted and stays a hard error. Regeneration that a script's reads
+    ///     a document the script opened) persisted and stays a hard error; a commit in a sibling that was
+    ///     already open is rolled back by <see cref="SiblingFence" /> and is no escape. Regeneration that a script's reads
     ///     force (e.g. ViewSchedule.GetTableData) raises DocumentChanged under the guard's OWN
     ///     transaction name, or with none at all, and is discarded by the group rollback — it is
     ///     contained, never a persist. Classification is by transaction NAME, never by Document
@@ -1144,11 +1250,13 @@ public sealed class RevitScriptExecutionService(
         // Document wrapper than context.Document, so ReferenceEquals misreads the guard's own churn
         // as a foreign write (the ViewSchedule.GetTableData regen persist-false-positive). A change
         // whose name escaped the guard is a committed transaction the group rollback does not cover
-        // (e.g. another open document), so it persisted. See ReadOnlyGuardMutationClassifier.
+        // (a document the script opened itself), so it persisted. A commit in a sibling that was open
+        // when the run started is Discarded: the sibling fence rolls it back, and the result says so.
+        // See ReadOnlyGuardMutationClassifier.
         var changes = run.Observed;
-        if (changes.Any(change => ReadOnlyGuardMutationClassifier.EscapedGuard(change.Transactions, ReadOnlyGuardTransactionName)))
+        if (changes.Any(change => !change.Discarded && ReadOnlyGuardMutationClassifier.EscapedGuard(change.Transactions, ReadOnlyGuardTransactionName)))
             throw new RevitScriptMutationException(
-                "ReadOnly script execution changed an open Revit document and the changes PERSISTED (a committed transaction the rollback guard does not cover, e.g. another open document). " +
+                "ReadOnly script execution changed a Revit document and the changes PERSISTED (a committed transaction the rollback guard does not cover, e.g. a document the script opened). " +
                 MutationSummary(changes) +
                 " Rerun with permissionMode=WriteTransaction for intentional changes."
             );

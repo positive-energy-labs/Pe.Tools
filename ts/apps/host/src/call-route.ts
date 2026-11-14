@@ -359,25 +359,11 @@ function callRoutes(
           if (target.kind !== "host")
             bridgeSessionId = target.kind === "document" ? target.ref.session : target.session;
           openDocumentId = target.kind === "document" ? target.ref.openId : null;
-          if (entry.script && resolvedSession) {
-            const current = yield* (yield* SdkSession).resolve({
-              bridgeSessionId: resolvedSession.sessionId,
-              openDocumentId: openDocumentId ?? undefined,
-            });
+          if (entry.script && target.kind === "document")
             yield* Effect.try({
-              try: () =>
-                admitScript(
-                  caller,
-                  current.state?.openDocuments.map((doc) => ({
-                    session: current.sessionId,
-                    openId: doc.openId,
-                  })) ?? [],
-                  "/call",
-                  target.kind === "document" && readsOnly(key, request) ? target.ref : undefined,
-                ),
+              try: () => admitScript(caller, target.ref, "/call", readsOnly(key, request)),
               catch: (error) => error,
             });
-          }
         }
       }
       if (entry.reading) {

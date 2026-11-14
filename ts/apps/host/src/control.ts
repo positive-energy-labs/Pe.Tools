@@ -439,39 +439,33 @@ const admissionOn = (thread: string, lifetime: DocumentRef) =>
         sameRef(target.request.ref, lifetime),
     )?.admission ?? null;
 
-/** K9: a ReadOnly target needs read consent; every other open lifetime still needs write authority. */
+/**
+ * A script run's footprint, admitted: its target alone. Departs from ADR 0017 rule 7 (K9, authority
+ * over every open document): native code now fences a run to its target, rolling back whatever it
+ * commits in any other document that was open when it started (`RevitScriptExecutionService`
+ * `SiblingFence`, fresh Revit 2025, 2026-11-14), so a sibling needs no authority. The boundary that
+ * still holds: the target needs write authority unless the run is a consented ReadOnly read
+ * (ADR 0043), which has no footprint.
+ */
 export function admitScript(
   caller: Caller,
-  documents: readonly DocumentRef[],
+  target: DocumentRef,
   door: string,
-  readTarget?: DocumentRef,
-): void {
-  if (caller.kind === "human") return;
-  const ungranted = documents.filter((ref) => {
-    if (readTarget && sameRef(ref, readTarget) && readConsent(caller, readTarget)) return false;
-    try {
-      admitCrossing(caller, { kind: "document", ref }, door);
-      return false;
-    } catch (error) {
-      if (!(error instanceof Refused)) throw error;
-      return true;
-    }
-  });
-  if (ungranted.length)
-    throw refuse(
-      "script.ungranted-documents",
-      door,
-      `Refused at ${door}: scripts can access every open document; this caller lacks authority for ${ungranted.map(refText).join(", ")}. Bind the Page or device to those documents, close them, or use a separate copy.`,
-    );
+  readOnly: boolean,
+): Footprint {
+  if (readOnly && readConsent(caller, target)) return [];
+  const effect = { kind: "document" as const, ref: target };
+  if (caller.kind !== "human") admitCrossing(caller, effect, door);
+  return [effect];
 }
 
 /* ── The crossing ─────────────────────────────────────────────────────────────────────── */
 
 /**
  * A script whose requested mode is ReadOnly (the contract default). Revit rolls back its changes to
- * the target document, so the target needs no write authority; the guard does not roll back a
- * commit on a sibling document, so Pages and external devices still need sibling authority. It is
- * a read for Pea, a human and a Page pinned by a human to this exact document.
+ * the target document, so the target needs no write authority, and the native sibling fence rolls
+ * back a commit on any other open document (`admitScript`). It is a read for Pea, a human and a
+ * Page pinned by a human to this exact document.
  * External MCP keeps it a write. NoTransaction and WriteTransaction are always writes.
  */
 export const readsOnly = (key: string, input: unknown): boolean => {
@@ -501,14 +495,13 @@ export const consentedRead = (
   target?: DocumentRef,
 ): boolean =>
   // TODO(readonly-script-isolation): docs/features/routes/LEDGER.md#s7-d090a2a7d4 User ruling 2026-10-29: Pea ReadOnly scripts must run without
-  // approval. Revisit sibling-document/filesystem isolation later; do not restore blanket approval.
+  // approval. Sibling documents are fenced natively (`admitScript`); revisit filesystem isolation later; do not restore blanket approval.
   readsOnly(key, input) && readConsent(caller, target);
 
 /**
  * Admit one crossing at `door`, or throw `Refused`. Null means the crossing needs no basis: a
  * consented read, a host leaf, or a lifecycle selection whose census belongs to the Instances
- * action. A human-pinned Page's exact read target still leaves its script's sibling census
- * subject to `admitScript`.
+ * action.
  */
 export function admitCrossing(
   caller: Caller,

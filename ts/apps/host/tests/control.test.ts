@@ -22,6 +22,7 @@ import {
   mintPageDoor,
   consentedRead,
   readsOnly,
+  validateFootprintCaller,
   writeTerminalContext,
 } from "../src/control.ts";
 import { HOST_CONTEXT_HEADER, productPathNames } from "@pe/host-contracts/contracts";
@@ -42,12 +43,51 @@ const headWith = (lifetimes: DocumentRef[], revision = 3): ThreadHead => ({
   revision,
 });
 
-test("Pea scripts do not borrow authority from thread targets; their full footprint enters consent", () => {
+test("Pea scripts do not borrow authority from thread targets; their target is their footprint", () => {
   bind(acquiredCopy);
   heads.t1 = headWith([docA]);
-  expect(() =>
-    admitScript(pea, [docA, { session: "S1", openId: "other" }], "/actions"),
-  ).not.toThrow();
+  expect(admitScript(pea, docA, "/actions", false)).toEqual([{ kind: "document", ref: docA }]);
+  expect(admitScript(pea, docA, "/actions", true)).toEqual([]);
+});
+
+// D14: a second open document blocked every pinned Page's script with script.ungranted-documents.
+// Native code fences a run to its target (RevitScriptExecutionService SiblingFence), so the target
+// is the whole footprint and no other open document is asked about. Mutant, run red once
+// (2026-11-14): widen `admitScript`'s effect back to the process, `{ kind: "session", session:
+// target.session }`, which is what authority over every open document meant.
+test("a script needs authority over its target alone, whatever else is open beside it", () => {
+  bind();
+  bindControl({ deviceThread: (device) => (device === "d1" ? "t1" : null) });
+  heads.t1 = headWith([docA]);
+  // The second document open in the same Revit: nobody granted it to anyone.
+  const sibling: DocumentRef = { session: docA.session, openId: "sibling" };
+  const device: Caller = { kind: "external-mcp", context: "m", label: "MCP", device: "d1" };
+  const minted = mintPageDoor(
+    "page:@pages/pin",
+    { kind: "pinned", address: address("C:/Jobs/Pin.rvt") },
+    "/pages/pin/act",
+    true,
+    docA,
+  );
+  try {
+    const identity = callerOf({ kind: "local" }, { [HOST_CONTEXT_HEADER]: minted.token });
+    if ("refusal" in identity) throw Error(identity.refusal.detail);
+    for (const caller of [identity.caller, device]) {
+      const footprint = admitScript(caller, docA, "/actions", false);
+      expect(footprint).toEqual([{ kind: "document", ref: docA }]);
+      // The journal's own check of the footprint it was handed, before dispatch.
+      expect(() => validateFootprintCaller(caller, footprint)).not.toThrow();
+      // The fence is no grant: a run aimed at the sibling itself still needs authority over it.
+      expect(refusal(() => admitScript(caller, sibling, "/actions", false))).toBe("grant.required");
+    }
+    // ADR 0043: the person's pin consents to a ReadOnly run on its own document, and only there.
+    expect(admitScript(identity.caller, docA, "/actions", true)).toEqual([]);
+    expect(refusal(() => admitScript(identity.caller, sibling, "/actions", true))).toBe("grant.required");
+    // An external device's ReadOnly run stays a write.
+    expect(admitScript(device, docA, "/actions", true)).toEqual([{ kind: "document", ref: docA }]);
+  } finally {
+    minted.retire();
+  }
 });
 let heads: Record<string, ThreadHead> = {};
 /** Pea acquired one copy in Revit "P"; a user document opened there later is not acquired. */
@@ -119,9 +159,6 @@ test("a human Page pin consents only to the exact minted document lifetime", () 
       .toEqual({ kind: "person-pin", page: "page:@pages/pin", boundBy: "human", lifetime: docA });
     expect(refusal(() => admitCrossing(identity.caller, { kind: "document", ref: docB }, "/actions")))
       .toBe("grant.required");
-    expect(() => admitScript(identity.caller, [docA], "/actions")).not.toThrow();
-    expect(refusal(() => admitScript(identity.caller, [docA, docB], "/actions")))
-      .toBe("script.ungranted-documents");
     expect(consentedRead(identity.caller, "scripting.execute", {}, docA)).toBe(true);
     expect(consentedRead(identity.caller, "scripting.execute", {}, docB)).toBe(false);
     expect(
@@ -137,9 +174,6 @@ test("a human Page pin consents only to the exact minted document lifetime", () 
         admitCrossing(identity.caller, { kind: "document", ref: docB }, "/actions", true),
       ),
     ).toBe("grant.required");
-    expect(refusal(() => admitScript(identity.caller, [docA, docB], "/actions", docB))).toBe(
-      "script.ungranted-documents",
-    );
     // Even an acquisition elsewhere cannot widen this person's pin to another lifetime.
     bind((ref) => ref.openId === docB.openId ? "acq-other" : null);
     expect(refusal(() => admitCrossing(identity.caller, { kind: "document", ref: docB }, "/actions")))

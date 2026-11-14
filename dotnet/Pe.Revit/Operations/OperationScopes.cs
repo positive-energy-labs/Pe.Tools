@@ -170,6 +170,8 @@ public sealed record ObservedChange(
     string DocumentTitle, IReadOnlyList<string> Transactions, int Added, int Modified, int Deleted, bool Contained) {
     /// <summary>The commit's element ids. Kept only by a window that named this commit's document in <see cref="OperationMonitor.Watch" />.</summary>
     public ObservedIds? Ids { get; init; }
+    /// <summary>The window's scope was discarding this commit's document when it fired, told by Document.Equals: a script run's fenced sibling.</summary>
+    public bool Discarded { get; init; }
 }
 
 /// <summary>Every element id of one commit, as Revit reported it.</summary>
@@ -223,14 +225,16 @@ public static class OperationMonitor {
         ObservedIds? ids = null;
         static List<long> Values(ICollection<ElementId> elementIds) => elementIds.Select(id => id.Value()).ToList();
         lock (Gate)
-            foreach (var window in Open)
-                window.Add(new ObservedChange(title, names, added, modified, deleted,
-                    sandbox || window.Scope?.Discards(document) == true) {
+            foreach (var window in Open) {
+                var discarded = window.Scope?.Discards(document) == true;
+                window.Add(new ObservedChange(title, names, added, modified, deleted, sandbox || discarded) {
                     // Document.Equals, never ReferenceEquals: Revit hands each event its own wrapper.
                     Ids = window.IdsOf is { } wanted && document is not null && wanted.Equals(document)
                         ? ids ??= new ObservedIds(Values(args.GetAddedElementIds()), Values(args.GetModifiedElementIds()), Values(args.GetDeletedElementIds()))
-                        : null
+                        : null,
+                    Discarded = discarded
                 });
+            }
     }
 
     public sealed class Window : IDisposable {

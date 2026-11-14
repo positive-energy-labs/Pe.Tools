@@ -18,6 +18,12 @@ public sealed record ScriptRaisedFailure(
     string Message, string Severity, string DefinitionId, IReadOnlyList<long> ElementIds, string Transaction,
     int CommitsBefore, bool Dismissed = false);
 
+/// <summary>
+///     One commit the run made in a document it was not run on. The run's sibling fence rolled it back, so
+///     nothing changed there (RevitScriptExecutionService SiblingFence).
+/// </summary>
+public sealed record ScriptFencedCommit(string Document, IReadOnlyList<string> Transactions, int Elements);
+
 /// <summary>How a write run's transactions sit in Revit's undo list.</summary>
 /// <param name="Undo">The one entry's name, when the run's transactions are one entry.</param>
 /// <param name="Ungrouped">Why they are separate entries, when they are.</param>
@@ -68,10 +74,35 @@ public static class ScriptChangeLedger {
                 : ScriptFailureOutcome.RolledBack))
         .ToList();
 
+    /// <summary>
+    ///     The <c>failures</c> rows for what the sibling fence rolled back, in the host's words: Revit raised none
+    ///     of these, so they carry no definition id and no element ids (the ids belong to another document).
+    /// </summary>
+    public static List<ScriptFailure> FencedFailures(IReadOnlyList<ScriptFencedCommit> fenced) => fenced
+        .Select(commit => new ScriptFailure(
+            $"A script changes only the document it runs on. This run committed {Quoted(commit.Transactions)} in '{commit.Document}' " +
+            $"({commit.Elements} element{(commit.Elements == 1 ? "" : "s")}), and that was rolled back: nothing changed there. " +
+            $"To change '{commit.Document}', run the script on it.",
+            "Error", "", [], string.Join(", ", commit.Transactions), ScriptFailureOutcome.RolledBack))
+        .ToList();
+
+    /// <summary>One sentence for every fenced commit of a run; empty when there is none.</summary>
+    public static string FencedWords(IReadOnlyList<ScriptFencedCommit> fenced) {
+        if (fenced.Count == 0) return "";
+        var documents = fenced.Select(commit => commit.Document).Distinct(StringComparer.Ordinal).Select(title => $"'{title}'");
+        return $"The run also committed {fenced.Count} transaction{(fenced.Count == 1 ? "" : "s")} in {string.Join(", ", documents)}, " +
+               $"which it was not run on. {(fenced.Count == 1 ? "That was" : "Those were")} rolled back: a script changes only the document it runs on.";
+    }
+
+    private static string Quoted(IReadOnlyList<string> names) =>
+        names.Count == 0 ? "a transaction" : string.Join(", ", names.Select(name => $"'{name}'"));
+
+    /// <param name="failures">The failures Revit raised (<see cref="Failures" />), without the fence's own rows.</param>
     /// <param name="overlapped">Another call's window was open during this run, so a commit here may be that call's.</param>
+    /// <param name="fenced">What the run committed in documents it was not run on, which was rolled back.</param>
     public static ScriptChanges Changes(
         ScriptPermissionMode mode, IReadOnlyList<ScriptCommit> commits, IReadOnlyList<ScriptFailure> failures, ScriptUndo undo,
-        bool overlapped = false) {
+        bool overlapped = false, IReadOnlyList<ScriptFencedCommit>? fenced = null) {
         // Net over the run, in commit order: added then modified is added; added then deleted is nothing.
         HashSet<long> added = [], modified = [], deleted = [];
         foreach (var commit in commits) {
@@ -90,6 +121,7 @@ public static class ScriptChangeLedger {
         var ungrouped = grouped && entry is null ? undo.Ungrouped ?? "the run was not grouped." : null;
         return new ScriptChanges(Bound(added), Bound(modified), Bound(deleted), transactions, kept,
             Summary(mode, added.Count, modified.Count, deleted.Count, commits.Count, failures, entry, ungrouped)
+            + (fenced is { Count: > 0 } ? " " + FencedWords(fenced) : "")
             + (overlapped ? " Another call ran at the same time; these may include its changes." : ""),
             entry, ungrouped, overlapped);
     }
