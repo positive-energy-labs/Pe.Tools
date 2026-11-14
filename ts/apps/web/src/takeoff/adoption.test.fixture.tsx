@@ -17,6 +17,7 @@ import { bindControl } from "../../../host/src/control";
 import { testRegistry } from "../../../host/tests/effect-test";
 import { fixture, ref, path, gate } from "../../../host/tests/host-read-graph.test-support";
 import { createWorkFeedClient } from "../shell/work-feed-client";
+import { fixtureTimeline } from "../shell/fixture-work-door";
 import { completion } from "../shell/work-door-observation";
 import { mountTypedRoute, type TypedMount } from "../shell/typed-mount";
 import type { UseSource } from "../shell/source-contract";
@@ -298,7 +299,7 @@ export async function journey(options: { unreadable?: { elementId: number | null
       },
     },
     routeRegistry[options.route ?? "takeoffs"]!.fingerprint,
-    { work, sources: { "takeoffs.adoption": source("takeoffs.adoption"), "takeoffs.views": source("takeoffs.views"), "families.view": source("families.view") } },
+    { work, timeline: fixtureTimeline(host.workspace), sources: { "takeoffs.adoption": source("takeoffs.adoption"), "takeoffs.views": source("takeoffs.views"), "families.view": source("families.view") } },
   );
   const stop = mount.subscribe(() => {});
   await waitFor(() => expect(mount.startAction()).not.toBeNull());

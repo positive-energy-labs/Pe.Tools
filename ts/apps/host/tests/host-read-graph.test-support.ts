@@ -258,6 +258,7 @@ export async function fixture(
   };
   return {
     dir,
+    holdPublication,
     get reads() { return reads; },
     inputs,
     journal,

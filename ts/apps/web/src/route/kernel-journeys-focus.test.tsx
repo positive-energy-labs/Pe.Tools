@@ -45,6 +45,7 @@ import { RecordedPoints } from "../shell/history-rail";
 import { historySnapshotSchema } from "../shell/history";
 import { ref, path } from "../../../host/tests/host-read-graph.test-support";
 import { publicationSource } from "../host/publication-source";
+import { hostEventSource } from "../host/event-source.test-support";
 import { routeRegistry } from "./registry";
 
 const render = (node: import("react").ReactNode) => renderView(node, { wrapper: StandaloneBand });
@@ -72,6 +73,7 @@ test("JZ Families History offers published values and marks ambiguous publicatio
   vi.stubGlobal("fetch", request);
   const pose = { instance: "families:history-journey", route: "families", page: {}, href: "/families" };
   const publish = async (subscription: string) => {
+    j.host.holdPublication(subscription);
     const response = await request("/pe/reads/value", { method: "POST", headers: {
       "content-type": "application/json", "x-pe-history-page": encodeURIComponent(JSON.stringify(pose)),
     }, body: JSON.stringify({ read: "families.view", args: { target: ref, readId: "" }, subscription, generation: 1 }) });
@@ -79,36 +81,8 @@ test("JZ Families History offers published values and marks ambiguous publicatio
     return response.json();
   };
   const mountsToClose: mounts.TypedMount[] = [];
-  const streams = new Set<{ close(): void }>();
-  // Browser EventSource over the real host SSE handler; no fixture chooses invalidations.
-  class Stream {
-    onmessage?: (event: { data: string }) => void;
-    onerror?: () => void;
-    private reader?: ReadableStreamDefaultReader<Uint8Array>;
-    private closed = false;
-    constructor(url: string) {
-      streams.add(this);
-      void (async () => {
-        const response = await j.host.request(new Request(new URL(url, "http://host")));
-        this.reader = response.body!.getReader();
-        if (this.closed) return void this.reader.cancel();
-        let buffer = "";
-        const decoder = new TextDecoder();
-        while (!this.closed) {
-          const frame = await this.reader.read(); if (frame.done) break;
-          buffer += decoder.decode(frame.value, { stream: true });
-          let end: number;
-          while ((end = buffer.indexOf("\n\n")) >= 0) {
-            const frame = buffer.slice(0, end); buffer = buffer.slice(end + 2);
-            for (const line of frame.split("\n")) if (line.startsWith("data: ")) this.onmessage?.({ data: line.slice(6) });
-          }
-        }
-      })().catch(() => { if (!this.closed) this.onerror?.(); });
-    }
-    addEventListener() {}
-    removeEventListener() {}
-    close() { this.closed = true; void this.reader?.cancel(); streams.delete(this); }
-  }
+  const { Stream, streams, fetch: streamFetch } = hostEventSource(j.host.request);
+  vi.stubGlobal("fetch", streamFetch);
   vi.stubGlobal("EventSource", Stream);
   const workListeners = new Set<(state: any) => void>();
   const refreshWork = async () => {

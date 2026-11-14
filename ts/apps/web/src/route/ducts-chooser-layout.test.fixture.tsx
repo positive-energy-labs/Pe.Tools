@@ -13,6 +13,7 @@ import { mountTypedRoute } from "../shell/typed-mount";
 import { makeAtomRegistry } from "../shell/owner";
 import { SubjectDoor, typedSubjectDoor } from "../shell/subject";
 import { createWorkFeedClient } from "../shell/work-feed-client";
+import { fixtureTimeline } from "../shell/fixture-work-door";
 import { workFingerprintSchema } from "@pe/agent-contracts";
 import type { ReadingDelivery } from "../shell/source-contract";
 
@@ -41,6 +42,7 @@ const mount = mountTypedRoute(ducts, {
     [network.key]: { kind: "use", open(_ctx, deliver) { complete = deliver; } },
     [ducts.spec.core!.key]: { kind: "use", open() {} },
   },
+  timeline: fixtureTimeline(),
 });
 Object.assign(window, { settleChooser() {
   complete({ kind: "complete", value: publication({ ...networkValue, sourceVersion: "recorded-EX1", systemReads: { completed: networkValue.systems.map(s => s.id), missing: [] } }), revision: 1 });
