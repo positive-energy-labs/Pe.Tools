@@ -102,21 +102,25 @@ async function bootstrap(machine: Machine, home: string) {
   const stray = stateDirectory(stateFixture(agent), ".claude", "skills", "stray").path;
   await mkdir(stray, { recursive: true });
   await writeFile(join(stray, "SKILL.md"), `written by an agent on ${machine.name}`);
+  // The content starts this import and never waits for it, and its close does not hold shutdown on
+  // it. The fixture holds it instead, so no ledger write is in flight when the temp root is removed.
+  let imported: Promise<unknown> = Promise.resolve();
   const content = createContributionContent({
     worldRoot: stateFixture(agent),
     homeRoot: home,
     packages: () => listPackages(pods),
     decisionsMachine: stateMachine(storedParent(join(machine.state, "plugins.json"))),
     bootstrap: () =>
-      importShippedPods({
+      (imported = importShippedPods({
         shippedRoot: join(machine.install, "pods"),
         podsRoot: pods,
         ledger: ledgerFixture(join(machine.state, "shipped-pods.json")),
         captures: pictureCaptures(join(machine.state, "captures")),
-      }),
+      })),
   });
   await content.read();
   await content.close();
+  await imported;
   await writePeaCodexProjectConfig(agent, ["mine"]);
   await fileRouteDocumentStore(stateFixture(join(machine.state, "Work"))).setState({
     targetKey: "document:one",
@@ -139,8 +143,8 @@ async function bootstrap(machine: Machine, home: string) {
   };
   for (const slug of ["todo", "example--tour"]) {
     await send("POST", `/pages/${slug}/events`, { type: "note", by: machine.name });
-    await send("PUT", `/pages/${slug}/snapshot`, { title: machine.name });
-    await send("PUT", `/pages/${slug}/text`, `# ${machine.name}`);
+    // The text is stamped with the log sequence it was derived at: the event above is seq 1.
+    await send("PUT", `/pages/${slug}/text`, { seq: 1, text: `# ${machine.name}` });
     await send("PUT", `/pe/pages/${slug}/binding`, { kind: "thread", thread: T3_THREAD });
     await send("POST", `/pages/${slug}/export`, {});
   }
@@ -198,8 +202,7 @@ test("M1: two machines bootstrap one home and leave it byte-identical apart from
       join("Agent", ".claude", "skills", "stray", "SKILL.md"),
       join("Agent", ".codex", "config.toml"),
       join("Pages", "todo", "events.jsonl"),
-      join("Pages", "todo", "snapshot.json"),
-      join("Pages", "todo", "snapshot.md"),
+      join("Pages", "todo", "text.json"),
       join("Pages", "todo", "binding.json"),
       join("Pages", "example--tour", "events.jsonl"),
       join("Pages", "example--tour", "binding.json"),
