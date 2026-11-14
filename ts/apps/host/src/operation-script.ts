@@ -12,9 +12,14 @@ import {
 } from "./packages.ts";
 import { StepFailure, nativeStep, refused, io } from "./command-executor.ts";
 import { Effect } from "effect";
+import { z } from "zod";
 import type { RevitBridge } from "./bridge.ts";
 import { podModelSchema, wrongPodModel } from "./pod-model.ts";
 import { requirePackageEnabled } from "./package-lifecycle.ts";
+
+const sourceBundleSchema = z.object({
+  files: z.array(z.object({ path: z.string(), bytesBase64: z.string() })),
+});
 
 /** Every Pod script door reaches this sealed bundle and exact target immediately before execution. */
 export function runPodScript(
@@ -28,7 +33,7 @@ export function runPodScript(
       ? yield* io(() => freezeScript(input)).pipe(Effect.mapError((error) => refused(error instanceof Error ? error.message : String(error))))
       : undefined;
     const sealedInput = captured ? { ...input, sourceBundle: captured.sourceBundle } : input;
-    const bundle = sealedInput.sourceBundle as ScriptingExecute.Req.ScriptPodSourceBundle | undefined;
+    const bundle = sourceBundleSchema.nullish().parse(sealedInput.sourceBundle);
     const manifest = bundle?.files.find((file) => file.path === "pod.json");
     if (manifest) {
       const raw = JSON.parse(Buffer.from(manifest.bytesBase64, "base64").toString("utf8").replace(/^\uFEFF/, ""));
