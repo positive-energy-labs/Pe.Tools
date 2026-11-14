@@ -34,10 +34,12 @@ import {
   projectPodsRoot,
   readPackage,
   resolvePackageIdentity,
+  type AdmittedPackage,
 } from "./packages.ts";
 import { requirePackageEnabled, activePackages, projectPodIds, reconcilePackageChanges } from "./package-lifecycle.ts";
 import { shippedPodsSettled } from "./installed-pods.ts";
 import { LocalOpError } from "./local-error.ts";
+import { PackageDiscoveryExceeded } from "./pod-capture.ts";
 import { hostState } from "./host-ownership.ts";
 import { sha256Hex,
   writeHome,
@@ -351,24 +353,40 @@ function parseReceipt(content: string): PodReceipt | string {
   }
 }
 
-export const readMember = Effect.fnUntraced(function* (member: PodMember, ctx: PodContext = {}) {
+/**
+ * The Pod half of a member read: policy, then one discovery of every Pod in the home. A caller that
+ * reads several members of one Pod as one reading passes the result to each `readMember`.
+ */
+export const readMemberPod = Effect.fnUntraced(function* (pod: string, ctx: PodContext = {}) {
   // A fresh home activates shipped pods only when the background import lands; reading before
   // it would answer "inactive" for a pod that is about to be active (bounded, installed-pods.ts).
   yield* shippedPodsImported(ctx);
   yield* Effect.tryPromise({
-    try: async () =>
-      requirePackageEnabled(member.pod, ctx.podsRoot, await projectPodIds(ctx.pointer)),
+    try: async () => requirePackageEnabled(pod, ctx.podsRoot, await projectPodIds(ctx.pointer)),
     catch: (error) => new LocalOpError("pod.member.read", errorMessage(error), 403),
   });
-  const admitted = yield* Effect.tryPromise({
-    try: () => readPackage(member.pod, podsRoots(ctx)),
+  return yield* Effect.tryPromise({
+    try: () => readPackage(pod, podsRoots(ctx)),
     catch: (error) =>
       new LocalOpError(
         "pod.member.read",
         errorMessage(error),
-        errorMessage(error).includes("claimed") ? 409 : 404,
+        // A discovery that ran out of its wait read nothing: it is not a Pod that is gone.
+        error instanceof PackageDiscoveryExceeded
+          ? 503
+          : errorMessage(error).includes("claimed")
+            ? 409
+            : 404,
       ),
   });
+});
+
+export const readMember = Effect.fnUntraced(function* (
+  member: PodMember,
+  ctx: PodContext = {},
+  pod?: AdmittedPackage,
+) {
+  const admitted = pod ?? (yield* readMemberPod(member.pod, ctx));
   const captured = admitted.members.find((item) => item.path === member.path);
   if (!captured)
     return yield* Effect.fail(

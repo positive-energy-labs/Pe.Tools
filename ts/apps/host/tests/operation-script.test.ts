@@ -2,13 +2,17 @@ import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expect, it, onTestFinished } from "vite-plus/test";
+import { expect, it, onTestFinished, vi } from "vite-plus/test";
 import { freezeScript, runPodScript } from "../src/operation-script.ts";
 import { fixtureNative } from "./fixture-native.ts";
-import { Effect } from "effect";
+import { Cause, Effect } from "effect";
+import { z } from "zod";
 import { NodeServices } from "@effect/platform-node";
 import { FetchHttpClient } from "effect/http";
-import { detachedBridge, pictureCaptures } from "./effect-test.ts";
+import { detachedBridge, pictureCaptures, testJournal } from "./effect-test.ts";
+import { approvedPea } from "./callers.ts";
+import { productPodsRoots } from "../src/packages.ts";
+import { discoverPackages, stopPackageDiscovery } from "../src/pod-capture.ts";
 import { RequestIdentity, admittedRequestIdentity } from "../src/request-services.ts";
 import { gatewayExecutor } from "../src/gateway-actions.ts";
 import type { CommandContext } from "../src/command-executor.ts";
@@ -148,4 +152,53 @@ it("freezes a supplied snapshot without reading disk and rejects ambiguous or au
       }),
     ).rejects.toThrow();
   }
+});
+
+// D22b. Mutant: drop the PackageDiscoveryExceeded branch in freezeScript and both doors answer 409.
+it("answers the typed 503 at both script doors when Pod discovery outlasts its wait", async () => {
+  const home = await mkdtemp(join(tmpdir(), "pe-script-pending-"));
+  vi.stubEnv("PE_TOOLS_PRODUCT_HOME", home);
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  onTestFinished(async () => {
+    stopPackageDiscovery();
+    vi.useRealTimers();
+    vi.unstubAllEnvs();
+    await rm(home, { recursive: true, force: true });
+  });
+  // The real single-flight discovery with a scan in flight that never lands: every reader joins it.
+  void discoverPackages(productPodsRoots(), () => new Promise(() => {}), "background");
+  const input = { sourcePath: "checks/engine.csx", workspaceKey: "pdrop" };
+  const pending = { status: 503, refusal: { kind: "domain", code: "pod.discovery.exceeded" } };
+
+  // Real I/O runs between the fake seconds, so each reader reaches its wait before the clock passes it.
+  const outlast = async <T>(work: Promise<T>) => {
+    let done = false;
+    void work.then(() => (done = true), () => (done = true));
+    for (let second = 0; second < 60 && !done; second++) {
+      await new Promise((resolve) => setImmediate(resolve));
+      await vi.advanceTimersByTimeAsync(1_000);
+    }
+    return work;
+  };
+
+  const exit = await outlast(Effect.runPromiseExit(runPodScript(detachedBridge(), { session: "s", openId: "o" }, input, "pending")));
+  expect(exit._tag === "Failure" && Cause.squash(exit.cause)).toMatchObject(pending);
+
+  const journal = testJournal();
+  const executor = gatewayExecutor("scripting.execute", detachedBridge(), () => Effect.succeed(null), pictureCaptures(home));
+  journal.bindCommands({ probe: async () => null, resolve: () => ({
+    ...executor,
+    definition: async () => ({ says: "Run script", needs: "nothing", effect: "command", dirties: [], input: z.record(z.string(), z.unknown()) }),
+    bind: async () => (await freezeScript(input), { effects: [], prepare: async () => ({ kind: "host-leaf" }) }),
+  }) });
+  const admitted = outlast(journal.invoke(
+    { id: "pending", key: "scripting.execute", target: { kind: "host" }, input },
+    { caller: approvedPea("pending"), basis: null },
+  ));
+  expect(await admitted).toMatchObject({
+    state: "failed",
+    notDispatched: true,
+    ...pending,
+    error: expect.stringContaining("Pod discovery exceeded 5000 ms"),
+  });
 });
