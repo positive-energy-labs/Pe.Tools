@@ -294,7 +294,8 @@ public sealed class PodTests {
 
         var run = PodRuns.NewRunFolder("office");
         Directory.CreateDirectory(Path.Combine(run, "source", "00-family.json"));
-        Assert.Throws<UnauthorizedAccessException>(() => PodRuns.WriteInputIn(run, new { operation = "test" }, PodRuns.ComposedInput(source, "{}")));
+        Assert.That(Assert.Throws<IOException>(() => PodRuns.WriteInputIn(run, new { operation = "test" }, PodRuns.ComposedInput(source, "{}")))!.Message,
+            Does.Contain("Cannot write run input 'source/00-family.json': a directory already occupies that file path."));
         Assert.That(Directory.EnumerateFiles(run, "*", SearchOption.AllDirectories), Is.Empty);
     }
 
@@ -648,6 +649,9 @@ public sealed class PodTests {
             foreach (var escape in new[] { "../outside/secret.txt", "assets/../../outside/secret.txt", Path.Combine(outside, "secret.txt"), "" })
                 Assert.Throws<InvalidDataException>(() => ScriptPodPreparationService.MemberFile(folder, escape), escape);
             Assert.That(Assert.Throws<InvalidDataException>(() => ScriptPodPreparationService.MemberFile(folder, "linked/secret.txt"))!.Message,
+                Does.Contain("cannot follow a link"));
+            var nonCanonicalFolder = folder + string.Concat(Enumerable.Repeat(Path.DirectorySeparatorChar + ".", 100));
+            Assert.That(Assert.Throws<InvalidDataException>(() => ScriptPodPreparationService.MemberFile(nonCanonicalFolder, "linked/secret.txt"))!.Message,
                 Does.Contain("cannot follow a link"));
             Assert.That(Assert.Throws<FileNotFoundException>(() => ScriptPodPreparationService.MemberFile(folder, "assets/missing.rfa"))!.Message,
                 Is.EqualTo("This Pod has no file 'assets/missing.rfa'."));
