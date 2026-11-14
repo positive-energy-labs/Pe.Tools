@@ -55,6 +55,8 @@ async function capturePage(
   origin: string,
   library: (path: string) => string | null,
 ) {
+  const pageKey = pageKeyOf(input.slug);
+  if (!pageKey) throw Error(`Invalid Page slug '${input.slug}'`);
   const executablePath = [
     "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
     "C:/Program Files/Microsoft/Edge/Application/msedge.exe",
@@ -143,7 +145,7 @@ async function capturePage(
           try {
             body =
               request.url === url
-                ? withPageKey(input.html, pageKeyOf(input.slug)!)
+                ? withPageKey(input.html, pageKey)
                 : library(destination.pathname);
           } catch (error) {
             failures.push(`Page library ${destination.pathname}: ${(error as Error).message}`);
@@ -389,6 +391,9 @@ export async function commitPagePublication(
   expectedVersion: string | null,
 ) {
   const { input, capture, origin } = prepared;
+  const key = pageKeyOf(input.slug);
+  const openUrl = key && pageOpenUrl(key);
+  if (!key || !openUrl) throw Error(`Invalid Page slug '${input.slug}'`);
   const pages = await pageHomeRoot(source, input.slug);
   const index = join(pages, input.slug, "index.html");
   await ordinaryPath(index);
@@ -408,10 +413,10 @@ export async function commitPagePublication(
   return {
     ok: true as const,
     kind: "page" as const,
-    key: pageKeyOf(input.slug)!,
+    key,
     slug: input.slug,
     title: input.title,
-    openUrl: new URL(pageOpenUrl(pageKeyOf(input.slug)!)!, origin).href,
+    openUrl: new URL(openUrl, origin).href,
     capture,
   };
 }
@@ -468,9 +473,11 @@ export const pagePublicationExecutor = (
     {
       async bind(context) {
         const input = context.admission.input;
+        const page = pageKeyOf(input.slug);
+        if (!page) throw Error(`Invalid Page slug '${input.slug}'`);
         const version = await pageVersion(root, input.slug);
         return {
-          effects: [{ kind: "publication", page: pageKeyOf(input.slug)! }],
+          effects: [{ kind: "publication", page }],
           consumes: [
             {
               kind: "file",

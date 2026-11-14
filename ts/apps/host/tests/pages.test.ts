@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it } from "vite-plus/test";
 import { HOST_RUNTIME_SERVICE_HEADER } from "@pe/host-contracts/contracts";
 import {
   emptyThreadHead,
+  pageTargetReadingSchema,
   type Caller,
   type DocumentRef,
   type PageTargetReading,
@@ -588,7 +589,7 @@ describe("pages", () => {
       ] } }));
       await asCaller(human, fetch)("/pe/pages/tour--tour/binding", { method: "PUT", body: JSON.stringify({ kind: "pinned", address: MODEL }) });
       reads.length = 0; // Binding itself answers a target reading.
-      const target = () => asCaller({ kind: "page", page: "page:@tour/pages/tour" }, fetch)("/pages/tour--tour/target").then((r) => r.json()) as Promise<PageTargetReading>;
+      const target = () => asCaller({ kind: "page", page: "page:@tour/pages/tour" }, fetch)("/pages/tour--tour/target").then(async (r) => pageTargetReadingSchema.parse(await r.json()));
       expect((await target()).resolution).toEqual({ kind: "refused", reason: "wrong-model", message: "this Pod is for Chadds; the bound document is Other" });
       expect(reads).toHaveLength(1);
       expect(reads[0]).toMatchObject({ body: { key: "revit.detail.elements", request: { query: { kind: "ElementReferences", elementIds: [1, 2] } } } });

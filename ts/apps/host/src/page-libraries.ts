@@ -177,7 +177,8 @@ export function packagePageDescriptors(packages: readonly AdmittedPackage[]): Pa
       pod.contributions.flatMap((row) => {
         const member = pod.members.find((one) => one.path === row.memberPath);
         if (row.kind !== "page" || !member) return [];
-        const slug = pageSlugOf(row.key)!;
+        const slug = pageSlugOf(row.key);
+        if (!slug) throw Error(`Invalid Page key '${row.key}'`);
         return [
           {
             key: row.key,
