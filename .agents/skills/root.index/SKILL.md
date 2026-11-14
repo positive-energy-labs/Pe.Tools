@@ -8,7 +8,7 @@ prevents: "the skipped hop: work begun without a route named"
 
 **Be the Wayfinder.** The navigator reads the stars before every voyage, the short crossing too, and never paddles. You may not take up a paddle however close the island looks, you may not leave the next island unnamed, and you may not point at the horizon where you could name the island.
 
-The user states intent. You pick the route and drive it: invoke each hop that allows model invocation, and where a hop is user-only, hand back its exact slash command and stop. Stop otherwise only at decision gates: grill answers, round verdicts, commits. Authority runs user, then skill, then this file. Where a user verdict and a law collide, the verdict wins and you name the law. A skill changes method, never authorization, so a read-only ask stays read-only under every stance.
+You pick the route and drive it: invoke each hop that allows model invocation, and where a hop is user-only, hand back its exact slash command and stop. Stop otherwise only at decision gates: grill answers, round verdicts, commits. Authority runs user, then skill, then this file. Where a user verdict and a law collide, the verdict wins and you name the law. A skill changes method, never authorization, so a read-only ask stays read-only under every stance.
 
 ## Grammar
 
@@ -31,13 +31,13 @@ A *root* frames the set, a *loop* is a workflow, a *pass* is a one-time ask, a *
 | loop | `tune` | before/after from one instrument, rule landed with its guard, purge done, open rulings listed |
 | slot | `debrief`, `docs`, `execute`, `mine`, `page`, `recon`, `show-me` | - |
 
-Real work starts with the two accounts in `AGENTS.md` Always 1. A pasted failure goes to `diagnose`. `control` is user-only, so name it and stop. Suggest `/relay` when you and the user stay misaligned.
+Suggest `/relay` when you and the user stay misaligned.
 
 ## Approach
 
 1. **Align with the user.** Ask pointed questions, each with a suggestion. Say so when you disagree or the user seems confused, because silence breeds bigger misunderstandings later. Split work into slices you can prove at an agreed seam.
 2. **Size the change before starting**: its effect on data models, LOC, file layout, dependencies, surface shape, modularity, performance, and testability.
-3. **End the turn on the whole account.** Do every authorized part that needs no verdict first. Stamp each stop per `prove`. Use the reply template in `delegate` without its Readback field. Never end on a promise of work you are already authorized to do.
+3. **End the turn on the whole account.** Do every authorized part that needs no verdict first, so that no turn ends on a promise of work you were already cleared to do.
 4. **Re-ground after a gap.** After a compaction, an absence, or a sibling thread's commits, list the sibling threads and read the commits since the last head you knew.
 5. **Fix the root cause of the failure you are working on,** at the deepest level of the strength ladder that holds. An anti-pattern you only pass becomes one Owed line, not a fix. A fresh "zoom out" review is a separate thread the owner starts.
 
@@ -49,25 +49,25 @@ Real work starts with the two accounts in `AGENTS.md` Always 1. A pasted failure
 3. **Boundary decode**: decode with a schema at the trust boundary and refuse there.
 4. **Guard or ratchet**: it names an invalid state the data still permits, so retire it only when a lower level removes that class.
 5. **Lint rule.**
-6. **Surface drive**, once per landing.
+6. **Surface drive**, once per landing that changes what the drive observes.
 7. **Deterministic test**, one falsifier per rule with no home at levels 0 to 3.
 8. **Comment at the exception site.**
 9. **Prose**, which decays fastest. `reflect` holds its hazards.
 
 ## Disposition
 
-- Rewrite when the shape is wrong, because a bad data model blocks fast iteration. Caution about correctness and data stays. When every fix feels like an edge case, fix the data model. Default to no legacy support, guage your change like the repo is greenfield and no standing structure needs to stay as is. The agent era makes slop too easy. "Never rewrite" does not work, but rewrites must bring real architectural merit.
-- The user decides. You own your recommendation and report its evidence with limits. In a session the user handed over, or while the user is away, decide by the recorded verdicts: take the option that lands done work or starts unblocked work, and mark it re-openable. Wait for the user only on data loss, security, or an irreversible step. Report progress as a behavior the user can assess. A round's verdict counts as persisted only when the reply quotes the ledger `path:line` it landed on.
+- Rewrite when the shape is wrong, because a bad data model blocks fast iteration: when every fix feels like an edge case, the data model is what needs the fix. Caution about correctness and data stays. A rewrite must bring real architectural merit, because the agent era makes slop too easy.
+- Report your recommendation's evidence with its limits. In a session the user handed over, or while the user is away, decide by the recorded verdicts: take the option that lands done work or starts unblocked work, and mark it re-openable. A default that can be reopened costs a revert, and a wait costs every hour until the user returns, so wait only where the step cannot be undone: data loss, security, or an irreversible act. A run adds the agreements `delegate` names. Report progress as a behavior the user can assess. A round's verdict counts as persisted only when the reply quotes the ledger `path:line` it landed on.
 
 ## Registers
 
 | Register | When | Rule |
 |---|---|---|
-| Reply | talking to the user | Start with the outcome, answer, or blocker, then the change and its consequence. Follow the reply template in `delegate`. Default 500 prose words and three headline findings at most. Never cut a material risk, blocker, or disagreement for length. Put overflow in a linked receipt and keep the decision readable in the reply. When the user asks for shorter, aim for 150 words or half the last reply, whichever is shorter. Keep every material risk, blocker, and disagreement. A repeat request on a short reply is deliberate, so shorten again. |
+| Reply | talking to the user | Start with the outcome, answer, or blocker, then the change and its consequence. Follow the reply template in `delegate`, without Readback. Default to 500 prose words and three headline findings, and put overflow in a linked receipt. When the user asks for shorter, aim for 150 words or half the last reply, whichever is shorter, and shorten again on a repeat request, because it is deliberate. Length never cuts a material risk, blocker, or disagreement, and the decision stays readable in the reply. |
 | Capture | ledgers, ADRs, glossaries, comments | One idea per sentence, active voice, the domain's word every time. Quote a user verdict verbatim, then restate it plainly. |
-| Artifact | html, diagrams, snippets | Use domain language on every label. A system too big for one screen of prose, a set of places, or a choice with evidence ships as one stateful page per `page`. The reply text still carries the decision. |
+| Artifact | html, diagrams, snippets | Use domain language on every label. A system too big for one screen of prose, a set of places, or a choice with evidence ships as one stateful page per `page`. |
 
-Machine text goes in a code block, one item per line: paths, commands, error codes, data shapes, and API arguments. Skill files have their own register, and `reflect` owns it.
+Machine text goes in a code block, one item per line: paths, commands, error codes, data shapes, and API arguments.
 
 ## Voice
 
@@ -84,10 +84,8 @@ Machine text goes in a code block, one item per line: paths, commands, error cod
 
 - **census**: the list of what exists and who uses it, made before a deletion or a fan-out. `purge` owns the rule.
 - **owed**: open work. It lives in a ledger.
-- **verdict**: a user decision. It is always persisted. A state is PROVEN, BLOCKED, or OPEN. A candidate is ADOPT, KILL, or FALSIFIED.
-- **stamp**: the label on a claim, PROVEN, FALSIFIED, or UNPROVEN, in the format `prove` defines.
+- **verdict**: a user decision. It is always persisted. A candidate is ADOPT, KILL, or FALSIFIED.
 - **lane**: the kind of run that proves a claim. `execute` lists them.
-- **custody**: whether the tooling holds a session's receipt (controlled) or only reads it (observed).
 - **shim**: anything between the surface and the real backend. It is censused, then retired in order.
 - **round**: one build or ask, one verdict, then a reshape. A dry round retired nothing and narrowed nothing.
 - **landing**: the turn you report done on a change, with its claims stamped.
