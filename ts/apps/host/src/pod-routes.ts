@@ -76,7 +76,8 @@ export const trustKind = keptStateKind({
   segments: () => stateSegments("routeTrust"),
 });
 
-// A healthy 16 MB Snowdon journey read returned 1171 ms after the check started locally.
+// A healthy 16 MB Snowdon check took 1171 ms locally: background census validation of
+// numeric byte arrays delays both file callbacks and timers on this same event loop.
 // Round four times that observed elapsed time up to whole seconds. Google Drive is not measured.
 const POD_ROUTE_CHECK_TIMEOUT_MS = 5000;
 
@@ -103,6 +104,10 @@ export function createPodRoutes(
 ) {
   const file = trustKind.in(options.machine ?? hostState());
   const registrations = new Map<string, { hash: string; dispose: () => void }>();
+  const refusals = new Map<string, {
+    bytes: string;
+    admission: Extract<PodRouteDescriptor["admission"], { status: "refused" }>;
+  }>();
   const cancelChecks = new Set<() => void>();
   async function currentArtifact(
     pod: AdmittedPackage,
@@ -188,6 +193,13 @@ export function createPodRoutes(
     return read.kind === "ok" ? read.value : {};
   };
   const admitting = new Set<string>();
+  const capturedBytes = (pod: AdmittedPackage) => JSON.stringify([
+    pod.directory, pod.members.map(member => [member.path, member.sha256]),
+  ]);
+  function refuse(admission: Extract<PodRouteDescriptor["admission"], { status: "refused" }>): never {
+    if (admission.code === "pod.route.check.timeout") throw new PodRouteCheckTimeout();
+    throw Error(admission.reason);
+  }
   // An admission belongs to its initiating request, never a shared inventory queue.
   const list = () => readList();
   function current(key: string, fingerprint: string) {
@@ -216,7 +228,8 @@ export function createPodRoutes(
     if (closed) return [];
     lifecycle.requestRefresh();
     const trust = await decisions();
-    const descriptors = lifecycle.packages().flatMap((pod) => {
+    const pods = lifecycle.packages();
+    const descriptors: PodRouteDescriptor[] = pods.flatMap((pod) => {
       if (pod.diagnostics.some((d) => d.code === "InvalidRoute")) return [];
       return (pod.routes ?? []).map((route) => {
         const key = `route:@${pod.id}/${route.artifact}`;
@@ -227,9 +240,12 @@ export function createPodRoutes(
           workRoute: `pod.${pod.id}.${route.artifact.split("/")[1]}`,
           fingerprint: route.fingerprint,
           trusted: trust[key] === route.fingerprint,
+          admission: { status: trust[key] === route.fingerprint ? "pending" : "untrusted" },
         };
       });
     });
+    for (const key of refusals.keys())
+      if (!descriptors.some(route => route.key === key)) refusals.delete(key);
     for (const [key, registration] of registrations) {
       if (
         !descriptors.some(
@@ -241,6 +257,18 @@ export function createPodRoutes(
       }
     }
     for (const route of descriptors) {
+      const pod = pods.find(pod => pod.id === route.packageId)!;
+      const bytes = capturedBytes(pod);
+      const refused = refusals.get(route.key);
+      // A refusal is evidence about this captured census and trust choice, never authority.
+      // Even a non-route member edit retries admission; an unchanged census never does.
+      if (refused && (!route.trusted || refused.bytes !== bytes)) refusals.delete(route.key);
+      const cached = refusals.get(route.key);
+      if (cached) {
+        route.admission = cached.admission;
+        continue;
+      }
+      if (registrations.has(route.key)) route.admission = { status: "admitted" };
       if (
         route.trusted &&
         !registrations.has(route.key) &&
@@ -248,9 +276,10 @@ export function createPodRoutes(
         options.workspace
       ) {
         admitting.add(route.key);
+        let checked = false;
         try {
-          const pod = lifecycle.packages().find((pod) => pod.id === route.packageId)!;
           const value = await currentArtifact(pod, route);
+          checked = true;
           const evidence = await verifyPodArtifact(value, route.fingerprint);
           const host = evidence.executables.some((entry) => entry.client === "host")
             ? await loadPodHostEntry(value, route.fingerprint)
@@ -268,6 +297,20 @@ export function createPodRoutes(
           const registration = registerAdmittedHostRoute(admitted, options.workspace, host);
           const dispose = registration.close;
           registrations.set(route.key, { hash: route.fingerprint, dispose });
+          route.admission = { status: "admitted" };
+        } catch (error) {
+          if (closed) return [];
+          const timeout = error instanceof PodRouteCheckTimeout;
+          const admission: Extract<PodRouteDescriptor["admission"], { status: "refused" }> = {
+            status: "refused",
+            code: timeout ? error.code : "pod.route.admission.refused",
+            reason: contracts.message(error),
+            retryable: timeout,
+          };
+          // Only matching fresh bytes can pin a refusal to this census. A failed check says
+          // nothing about those captured bytes after a repair; deadlines stay request-local too.
+          if (checked) refusals.set(route.key, { bytes, admission });
+          route.admission = admission;
         } finally {
           admitting.delete(route.key);
         }
@@ -301,12 +344,19 @@ export function createPodRoutes(
         console.error("pod-routes: asynchronous operation failed", error);
       });
       await write;
-      return list();
+      const rows = await list();
+      const route = rows.find(route => route.key === key);
+      if (trusted && route?.admission.status === "refused") refuse(route.admission);
+      return rows;
     },
     async bundle(key: string, hash: string) {
       const route = (await list()).find((route) => route.key === key);
       if (!route || route.fingerprint !== hash || !route.trusted)
         throw Error("Route trust is absent or its bytes changed");
+      if (route.admission.status === "refused") refuse(route.admission);
+      // An in-flight admission is not authority. Refuse now so this reader never joins it.
+      if (route.admission.status !== "admitted")
+        throw Error("Pod route admission is pending; retry after it completes");
       const pod = lifecycle.packages().find((pod) => pod.id === route.packageId)!;
       const { wire } = await verifyPodArtifact(
         await currentArtifact(pod, route),
@@ -314,6 +364,11 @@ export function createPodRoutes(
       );
       // ponytail: JSON number arrays inflate payload roughly 3?4x; move to base64 or a raw octet-stream if Pod artifacts grow.
       if (closed) throw Error("Pod routes are closed");
+      // Byte verification yields: withdrawal or reconciliation may have ended this admission.
+      const decision = stored();
+      if (decision.kind !== "ok" || decision.value[key] !== hash ||
+          registrations.get(key)?.hash !== hash || !current(key, hash))
+        throw Error("Pod route admission changed; inspect it before delivery");
       return { fingerprint: route.fingerprint, artifact: wire };
     },
     close() {
@@ -324,6 +379,7 @@ export function createPodRoutes(
       stopChanges();
       for (const registration of registrations.values()) registration.dispose();
       registrations.clear();
+      refusals.clear();
     },
   };
 }

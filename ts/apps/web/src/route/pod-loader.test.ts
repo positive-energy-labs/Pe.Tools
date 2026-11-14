@@ -11,9 +11,21 @@ const row = podRouteDescriptorSchema.parse({
   artifact: "routes/tool/route.artifact",
   fingerprint: `pod-bytes:${"a".repeat(64)}`,
   trusted: true,
+  admission: { status: "admitted" },
 });
 
 describe("Pod route byte custody", () => {
+  it("never loads a trusted route whose host admission was refused", async () => {
+    let loads = 0;
+    const loader = createPodRouteLoader(async () => { loads++; return () => {}; });
+    const refused = { ...row, admission: { status: "refused", code: "pod.route.admission.refused", reason: "identity differs", retryable: false } };
+    await loader.sync([podRouteDescriptorSchema.parse(refused)]);
+    await loader.sync([podRouteDescriptorSchema.parse(refused)]);
+    expect(loads).toBe(0);
+    await loader.sync([row]);
+    expect(loads).toBe(1);
+    loader.dispose();
+  });
   it("never imports untrusted bytes and disposes a changed or disabled route", async () => {
     const events: string[] = [];
     const loader = createPodRouteLoader(async (entry) => {

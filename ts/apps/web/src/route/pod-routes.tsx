@@ -43,7 +43,8 @@ export function PodRoutesProvider({ children }: { children: ReactNode }) {
     });
     const publish = async (next: PodRouteDescriptor[]) => {
       setRows(next);
-      setErrors({});
+      setErrors(Object.fromEntries(next.flatMap(row => row.admission.status === "refused"
+        ? [[row.key, readableRefusal(row.admission.reason, "Pod route unavailable: its artifact does not match the typed route contract. Rebuild this Pod before trusting it.")]] : [])));
       await loader.sync(next);
     };
     return { loader, publish };

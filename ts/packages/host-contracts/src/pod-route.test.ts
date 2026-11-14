@@ -31,6 +31,7 @@ test("one strict Pod declaration carries a package artifact and Pod fingerprint"
       packageId: "pod",
       workRoute: "pod.pod.voltage-drop",
       trusted: true,
+      admission: { status: "admitted" },
       sha256: "a".repeat(64),
     }).success,
   ).toBe(false);

@@ -807,6 +807,7 @@ test("a delivered route-view-open for a trusted Pod creates its Place at the reg
     packageId: "snowdon-circuits",
     workRoute: "pod.snowdon-circuits.voltage-drop",
     trusted: true,
+    admission: { status: "admitted" },
   });
   const artifact = JSON.parse(await readFile(resolve(pods, row.artifact), "utf8"));
   podRoute = await loadPodRoute(

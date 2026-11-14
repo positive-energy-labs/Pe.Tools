@@ -17,5 +17,14 @@ export const podRouteDescriptorSchema = podRouteDeclarationSchema.extend({
   packageId: z.string().min(1),
   workRoute: z.string().min(1).max(100),
   trusted: z.boolean(),
+  admission: z.discriminatedUnion("status", [
+    z.strictObject({ status: z.enum(["untrusted", "pending", "admitted"]) }),
+    z.strictObject({
+      status: z.literal("refused"),
+      code: z.string(),
+      reason: z.string(),
+      retryable: z.boolean(),
+    }),
+  ]),
 });
 export type PodRouteDescriptor = z.infer<typeof podRouteDescriptorSchema>;

@@ -44,6 +44,7 @@ async function fixture() {
     packageId: "snowdon-circuits",
     workRoute: "pod.snowdon-circuits.voltage-drop",
     trusted: true,
+    admission: { status: "admitted" },
   });
   return {
     row,
