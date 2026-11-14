@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en" data-pe>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hydronic sizing</title>
+<script src="/pages/pe.js"></script>
+<script id="pe-agent" type="application/json">{"limits":"maxVelocity in m/s and maxFriction in Pa/m","choose":"uniqueId and diameter in mm"}</script>
+<main id="app">Loading hydronic worksheet…</main>
+<script type="module">
+import { fromRevit, size } from './size.mjs';
+await pe.kitReady;
+const { h, createRoot, React, Button, Input, Code } = pe.kit;
+const root = createRoot(document.getElementById('app'));
+let k, message = '', busy = false;
+const render = state => root.render(h(Worksheet, { state }));
+const reduce = (state, event) => {
+  if (event.type === 'limits') return { ...state, limits: { maxVelocity: event.maxVelocity, maxFriction: event.maxFriction } };
+  if (event.type === 'choose') return { ...state, chosen: { ...state.chosen, [event.uniqueId]: event.diameter } };
+  if (event.type === 'reading') return { ...state, reading: event.reading, chosen: {} };
+  if (event.type === 'receipt') return { ...state, receipt: event.receipt };
+  return state;
+};
+async function act(run) {
+  busy = true; message = ''; render(k.state);
+  try { await run(); } catch (error) { message = error.message; }
+  finally { busy = false; render(k.state); }
+}
+async function read(systemUniqueId) {
+  const target = await pe.target();
+  const roster = await pe.read('mep.system.members', {});
+  const system = systemUniqueId || roster.systems.find(s => s.domain === 'piping')?.uniqueId;
+  if (!system) throw Error('This document has no piping system');
+  const members = await pe.read('mep.system.members', { systemUniqueId: system });
+  const segments = await pe.read('mep.segment.sizes', {});
+  await k.fire({ type: 'reading', reading: { target, system, systems: roster.systems.filter(s => s.domain === 'piping'), at: new Date().toISOString(), ...fromRevit(members, segments) } });
+}
+function Worksheet({ state }) {
+  const reading = state.reading;
+  const result = reading ? size(reading.pipes, reading.catalogs, state.limits, state.chosen, reading.rooted) : null;
+  const fire = event => act(() => k.fire(event));
+  return h('article', null,
+    h('h1', null, 'Hydronic pipe sizing'),
+    h('p', null, 'Water at 60 °C, commercial steel. Limits are local; firm Settings/hydronic.json is not loaded.'),
+    h(Button, { disabled: busy, onClick: () => act(() => read(reading?.system)) }, 'Read system'),
+    reading && h('select', { 'aria-label': 'Piping system', value: reading.system, disabled: busy, onChange: e => act(() => read(e.target.value)) }, reading.systems.map(s => h('option', { key: s.uniqueId, value: s.uniqueId }, s.name))),
+    ...Object.entries(state.limits).map(([key, value]) => h('label', { key }, key === 'maxVelocity' ? 'Max velocity (m/s)' : 'Max friction (Pa/m)', h(Input, { type: 'number', min: 0.01, value, disabled: busy, onChange: e => { const n = Number(e.target.value); if (n > 0 && Number.isFinite(n)) fire({ type: 'limits', ...state.limits, [key]: n }); } }))),
+    h('p', { role: 'status' }, message || (busy ? 'Working…' : reading ? 'Read at ' + reading.at : 'No reading. Bind a document, then read its piping system.')),
+    result && h(React.Fragment, null,
+      h('p', null, result.unresolved.length + ' unresolved. Pump head: ' + (result.pumpHead.pa === null ? 'Unavailable' : result.pumpHead.pa.toFixed(0) + ' Pa')),
+      h('table', null, h('thead', null, h('tr', null, ...['Pipe', 'Flow L/s', 'Current mm', 'Candidate mm', 'Status', 'Chosen mm'].map(t => h('th', { key: t }, t)))),
+        h('tbody', null, result.rows.map(row => h('tr', { key: row.uniqueId },
+          ...[row.label, row.flow ?? 'Unavailable', row.diameter, row.candidate ?? 'Unavailable', row.status].map((v, i) => h('td', { key: i }, v)),
+          h('td', null, h('select', { 'aria-label': 'Diameter for ' + row.label, disabled: busy, value: state.chosen[row.uniqueId] ?? '', onChange: e => fire({ type: 'choose', uniqueId: row.uniqueId, diameter: e.target.value ? Number(e.target.value) : null }) }, h('option', { value: '' }, 'Keep current'), (reading.catalogs[row.segment] || []).map(s => h('option', { key: s.nominal, value: s.nominal }, s.nominal)))))))),
+      h(Button, { disabled: busy || !Object.values(state.chosen).some(Boolean), onClick: () => act(async () => {
+        const target = await pe.target();
+        if (target.session !== reading.target.session || target.openId !== reading.target.openId) throw Error('Binding changed. Read again before applying.');
+        const edits = result.rows.filter(r => state.chosen[r.uniqueId]).map(r => ({ uniqueId: r.uniqueId, expected: r.diameter, diameter: state.chosen[r.uniqueId] }));
+        const receipt = await pe.diff({ script: '/pages/sizing/Heal.cs', input: { edits } }, ['Diameter']);
+        await k.fire({ type: 'receipt', receipt });
+        await read(reading.system);
+      }) }, 'Apply chosen diameters')),
+    state.receipt && h(Code, { code: JSON.stringify(state.receipt.rows, null, 2), lang: 'json', title: 'Before and after' }));
+}
+k = await pe.state({ reduce, base: { limits: { maxVelocity: 1.5, maxFriction: 400 }, chosen: {}, reading: null, receipt: null }, render, describe: state => '# Hydronic sizing\n' + JSON.stringify(state, null, 2) });
+</script>
+</html>
