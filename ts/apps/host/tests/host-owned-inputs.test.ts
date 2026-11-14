@@ -44,6 +44,7 @@ test("recorded host-local inputs and immutable capture files replay without a li
     view: {},
     focus: null,
     registration: null,
+    marks: [],
   });
   const nativePath = join(dir, "native.png");
   await writeFile(nativePath, bytes);
@@ -91,6 +92,7 @@ test("recorded host-local inputs and immutable capture files replay without a li
                             height: 10,
                             lens: { basis: "UserView", viewId: 1 },
                             hidden: [],
+                            marks: [],
                             registration: {
                               width: 20,
                               height: 10,
