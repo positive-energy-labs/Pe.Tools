@@ -225,6 +225,8 @@ def fits(free, commit, rows, budget, headroom=HEADROOM):
 
 def run(argv):
     parser = argparse.ArgumentParser(description=__doc__)
+    # TODO: T-2: no revit-test kind here, though machine.py admit accepts one, so a fresh Revit test can be
+    # gated on an admit reading but never held in this queue.
     parser.add_argument("kind", choices=["light", *BUDGETS])
     parser.add_argument("--wait", type=float, default=60, help="queue deadline in seconds, 0..600")
     parser.add_argument("--owns-suite", action="store_true")
@@ -243,6 +245,8 @@ def run(argv):
     if executable is None:
         raise FileNotFoundError(command[0])
     command[0] = executable
+    # TODO: T-MACH: this refuses `npx <tool>`, the form a writer reaches for first (npx is a .cmd on Windows).
+    # The words name pnpm only. Name the direct form for a package bin too (node node_modules/<pkg>/bin/<tool>).
     if executable.lower().endswith((".cmd", ".bat")):
         raise ValueError("batch forwarding is unsupported; invoke an executable or node <pnpm.cjs> directly")
     if options.kind == "light":
@@ -317,6 +321,9 @@ def run(argv):
             count, ws, private, peak = job_read(row["job"])
             peak_ws = max(peak_ws, ws)
             peak_commit = max(peak_commit, peak, private)
+            # TODO: R-7: after the child exits, a job that still counts more than one process keeps this loop
+            # and its reservation "running", with no descendant in the process tree. Seen four times. Each held
+            # later suites at HOLD until a hand stop or the 2 h shell limit. Not diagnosed (pod-pages OWED-integrator.md).
             if child.poll() is not None and count <= 1:
                 result = child.returncode
                 return result

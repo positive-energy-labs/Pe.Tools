@@ -163,6 +163,7 @@ The route kernel and every web route's shared shape ([ADR 0026](../../adr/0026-o
     - the bind roster's page filter;
     - the bind body slug;
     - the `/pages/<slug>/bind` redirect.
+- pod-pages R-6 (2026-11-14, integrator at 56579118): `ts/apps/web/src/route/kernel-journeys-geometry.test.tsx` and `route/pod-admission.test.tsx` are red only under load, and the geometry file also failed alone on main 9c526aa2. A red here stops a merge check for a change that did not touch either route. Evidence: `.artifacts/runs/pod-pages-20261114/suite-56579118/CLASSES.md:18`. Next step: run each alone three times on the tip and read where the time goes, because a test near its timeout is a performance finding first.
 - `route/kernel-journeys-reads.test.ts` is flaky alone: at c80e644a one of two alone runs failed and the other passed 9/9, under load from parallel writers. Cause not run down.
 - Host `tests/dev-takeover.test.ts` is flaky alone: at b2caafd3 one of two alone runs failed and the other passed, and it took 237 s in the gate. Cause not run down.
 - After a host restart, the Pea thread list read "Thread list is not current; reconnecting." Whether it clears is unobserved (drive 11, a19a3fa8).
