@@ -24,6 +24,129 @@ import * as store from "@pe/host-contracts/kinds";
 import { RouteWorkspace } from "@pe/runtime";
 import { peRouteUrl } from "@pe/agent-contracts/pe-api";
 
+test("a detached initial census can fail after close without an unhandled rejection", async () => {
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  let failed = false;
+  const lifecycle = createPackageLifecycle({ machine: stateMachine(root), packages: async () => {
+    entered.resolve(); await release.promise; failed = true;
+    throw Error("home disappeared during shutdown");
+  } });
+  await entered.promise;
+  await lifecycle.close();
+  release.resolve();
+  await new Promise(resolve => setImmediate(resolve));
+  expect(failed).toBe(true);
+});
+
+test("shutdown aborts optional bootstrap without waiting for its read", async () => {
+  const started = Promise.withResolvers<AbortSignal>();
+  const release = Promise.withResolvers<void>();
+  const resumed = Promise.withResolvers<void>();
+  const published = vi.fn();
+  const owned = createContributionContent({
+    worldRoot: stateFixture(join(root, "held-world")),
+    decisionsMachine: stateMachine(root),
+    packages: async () => ({ packages: [], unreadable: [] }),
+    bootstrap: async (signal) => {
+      started.resolve(signal);
+      await release.promise;
+      try {
+        signal.throwIfAborted();
+        published();
+      } finally {
+        resumed.resolve();
+      }
+    },
+  });
+  const signal = await started.promise;
+  const closing = owned.close();
+  try {
+    expect(
+      await Promise.race([
+        closing.then(() => true),
+        new Promise((resolve) => setTimeout(() => resolve(false), 100)),
+      ]),
+    ).toBe(true);
+    expect(signal.aborted).toBe(true);
+  } finally {
+    release.resolve();
+    await closing;
+    await resumed.promise;
+  }
+  expect(published).not.toHaveBeenCalled();
+});
+
+test("shutdown abandons a held census and never publishes its late result", async () => {
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  let hold = false;
+  const lifecycle = createPackageLifecycle({
+    machine: stateMachine(root),
+    packages: async () => {
+      const listing = await packages.listPackages(join(root, "user/Pods"));
+      if (hold) {
+        entered.resolve();
+        await release.promise;
+      }
+      return listing;
+    },
+  });
+  await lifecycle.ready;
+  await put(join(root, "user"), "late/pod.json", '{"id":"late"}');
+  hold = true;
+  const scan = lifecycle.refresh();
+  await entered.promise;
+  const closing = lifecycle.close();
+  try {
+    expect(
+      await Promise.race([
+        closing.then(() => true),
+        new Promise((resolve) => setTimeout(() => resolve(false), 100)),
+      ]),
+    ).toBe(true);
+  } finally {
+    release.resolve();
+    await scan;
+    await closing;
+  }
+  expect(lifecycle.inventory()).toEqual([]);
+  expect(lifecycle.packages()).toEqual([]);
+});
+
+test("shutdown cancels byte checks before the deadline without waiting for open", async () => {
+  await putRoute(join(root, "user"));
+  await content.lifecycle.refresh();
+  const route = (await routes.list()).find((r) => r.packageId === "late")!;
+  await routes.trust(route.key, route.fingerprint, true);
+  await content.lifecycle.refresh();
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const actual = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
+  vi.spyOn(filesystem, "open").mockImplementation(async (...args) => {
+    entered.resolve();
+    await release.promise;
+    return actual.open(...args);
+  });
+  const checking = routes.bundle(route.key, route.fingerprint).then(
+    () => null,
+    (error) => error,
+  );
+  await entered.promise;
+  routes.close();
+  try {
+    expect(
+      await Promise.race([
+        checking,
+        new Promise((resolve) => setTimeout(() => resolve("blocked"), 100)),
+      ]),
+    ).toMatchObject({ message: "Pod routes are closed" });
+  } finally {
+    release.resolve();
+    await checking;
+  }
+});
+
 test("a held new admission never queues later route inventory readers", async () => {
   await putRoute(join(root, "user"));
   await content.lifecycle.refresh();
@@ -649,9 +772,20 @@ test("RECHECK: stalled open refuses with a retryable deadline", async () => {
     await new Promise((r) => setTimeout(r, 1200));
     expect(answered).toBe(true);
     expect(await request).toMatchObject({ code: "pod.route.check.timeout", retryable: true });
-    const response = await createPluginsHandler(content, routes)(new Request("http://host" + peRouteUrl("plugins.routeBundle", { params: { key: d.key, hash: d.fingerprint } })));
+    const response = await createPluginsHandler(
+      content,
+      routes,
+    )(
+      new Request(
+        "http://host" +
+          peRouteUrl("plugins.routeBundle", { params: { key: d.key, hash: d.fingerprint } }),
+      ),
+    );
     expect(response.status).toBe(503);
-    expect(await response.json()).toMatchObject({ code: "pod.route.check.timeout", retryable: true });
+    expect(await response.json()).toMatchObject({
+      code: "pod.route.check.timeout",
+      retryable: true,
+    });
   } finally {
     release.resolve();
     await request;

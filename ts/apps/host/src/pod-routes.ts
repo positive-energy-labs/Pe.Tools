@@ -97,10 +97,12 @@ export function createPodRoutes(
 ) {
   const file = trustKind.in(options.machine ?? hostState());
   const registrations = new Map<string, { hash: string; dispose: () => void }>();
+  const cancelChecks = new Set<() => void>();
   async function currentArtifact(
     pod: AdmittedPackage,
     route: PodRouteDescriptor,
   ): Promise<unknown> {
+    if (closed) throw Error("Pod routes are closed");
     let expired = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const withinDeadline = () => {
@@ -145,7 +147,14 @@ export function createPodRoutes(
       const value: unknown = JSON.parse(bytes.toString("utf8"));
       return value;
     }
+    let cancel = () => {};
     const deadline = new Promise<never>((_, reject) => {
+      cancel = () => {
+        expired = true;
+        clearTimeout(timer);
+        reject(Error("Pod routes are closed"));
+      };
+      cancelChecks.add(cancel);
       timer = setTimeout(() => {
         expired = true;
         reject(new PodRouteCheckTimeout());
@@ -158,6 +167,7 @@ export function createPodRoutes(
       registrations.delete(route.key);
       throw error;
     } finally {
+      cancelChecks.delete(cancel);
       clearTimeout(timer);
     }
   }
@@ -278,6 +288,7 @@ export function createPodRoutes(
           await currentArtifact(pod, route);
           trust[key] = hash;
         } else delete trust[key];
+        if (closed) throw Error("Pod routes are closed");
         writeState(file, JSON.stringify(trust));
       });
       tail = write.catch((error) => {
@@ -296,10 +307,14 @@ export function createPodRoutes(
         route.fingerprint,
       );
       // ponytail: JSON number arrays inflate payload roughly 3?4x; move to base64 or a raw octet-stream if Pod artifacts grow.
+      if (closed) throw Error("Pod routes are closed");
       return { fingerprint: route.fingerprint, artifact: wire };
     },
     close() {
       closed = true;
+      for (const cancel of cancelChecks) cancel();
+      cancelChecks.clear();
+      admitting.clear();
       stopChanges();
       for (const registration of registrations.values()) registration.dispose();
       registrations.clear();

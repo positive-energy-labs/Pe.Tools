@@ -64,6 +64,7 @@ async function shippedPodsRoot(options: TransferOptions & { ledger?: ReturnType<
   const examples = join(hostOwnership.sourceRoot!, "examples", "pods");
   await readdir(examples);
   const listing = await listPackages(examples);
+  options.signal?.throwIfAborted();
   if (listing.unreadable.length)
     throw Error(`Unreadable shipped Pods: ${listing.unreadable.map((pod) => pod.message).join("; ")}`);
   // The complete admitted input snapshot includes vendored dependencies. Content-addressed
@@ -75,10 +76,12 @@ async function shippedPodsRoot(options: TransferOptions & { ledger?: ReturnType<
   for (const pod of listing.packages) {
     const file = shippedArchiveKind.in(machine, fingerprint, pod.id);
     const archivePath = file.path;
-    await writePodExport(await preparePodExport(
+    const prepared = await preparePodExport(
       { pod: pod.id, archivePath },
       { podsRoot: examples, captures: options.captures }, listing,
-    ), file);
+    );
+    options.signal?.throwIfAborted();
+    await writePodExport(prepared, file);
   }
   return shipped;
 }
@@ -134,10 +137,12 @@ export const importShippedPods = (
  * an inline probe then fails before it runs ("No unique admitted pod owns output folder", Cody,
  * 2026-10-14). Written once; an existing manifest is never touched.
  */
-async function ensureDefaultPod(podsRoot: string | undefined): Promise<void> {
+async function ensureDefaultPod(podsRoot: string | undefined, signal?: AbortSignal): Promise<void> {
   const key = scriptingWorkspaceIdentity.defaultWorkspaceKey;
   // Another home may already hold the default pod; a second one would refuse both.
-  if ((await listPackages(podsRoot ?? productPodsRoots())).packages.some((pod) => pod.id === key))
+  const listing = await listPackages(podsRoot ?? productPodsRoots());
+  signal?.throwIfAborted();
+  if (listing.packages.some((pod) => pod.id === key))
     return;
   podsRoot ??= productPodsRootPath();
   const wrote = writeHome(
@@ -158,7 +163,8 @@ async function ensureDefaultPod(podsRoot: string | undefined): Promise<void> {
 async function run(
   options: TransferOptions & { shippedRoot?: string | null; ledger?: ReturnType<typeof ledgerKind.in> },
 ): Promise<ShippedPodsReport> {
-  await ensureDefaultPod(options.podsRoot);
+  options.signal?.throwIfAborted();
+  await ensureDefaultPod(options.podsRoot, options.signal);
   let shippedRoot = options.shippedRoot ?? null;
   let archives: string[];
   try {
@@ -166,6 +172,7 @@ async function run(
     if (!shippedRoot) return { shippedRoot, outcomes: [] };
     archives = (await readdir(shippedRoot)).filter((name) => /\.zip$/i.test(name)).sort();
   } catch (error) {
+    options.signal?.throwIfAborted();
     note(options.machine ?? hostState(), {
       class: "keep", place: "Shipped examples",
       path: shippedRoot ?? join(hostOwnership.sourceRoot ?? dirname(process.execPath), "examples", "pods"),
@@ -186,6 +193,7 @@ async function run(
   const everyRoot = options.podsRoot ?? productPodsRoots();
   const outcomes: ShippedPodOutcome[] = [];
   for (const archive of archives) {
+    options.signal?.throwIfAborted();
     const path = join(shippedRoot, archive);
     const bytes = await readFile(path);
     const sha256 = createHash("sha256").update(bytes).digest("hex");
@@ -209,6 +217,7 @@ async function run(
       outcome: outcomes.at(-1)!.outcome,
     };
   }
+  options.signal?.throwIfAborted();
   writeState(ledgerFile, `${JSON.stringify(ledger, null, 2)}\n`);
   return { shippedRoot, outcomes };
 }
@@ -222,6 +231,7 @@ async function offer(
   installed?: AdmittedPackage,
 ): Promise<ShippedPodOutcome> {
   try {
+    options.signal?.throwIfAborted();
     const id = archiveId(readZip(bytes));
     // Installed archives may be replaced on upgrade. Retain every offered version in writable state.
     await mkdir(options.originalsRoot.path, { recursive: true });
@@ -275,6 +285,7 @@ async function offer(
           }
           try {
             for (const [member, content] of [...next].sort(([a], [b]) => Number(a === "pod.json") - Number(b === "pod.json"))) {
+              options.signal?.throwIfAborted();
               const prior = fresh.members.find((m) => m.path === member);
               const target = join(installed.directory, member);
               const file = podMemberKind.in(
@@ -296,15 +307,19 @@ async function offer(
             for (const [member, content] of next)
               if (/^captures\/[0-9a-f]{64}\.png$/.test(member)) await options.captures!.adopt(content);
             await activateImportedPackage(id, options.podsRoot ?? productPodsRootPath());
+            options.signal?.throwIfAborted();
             writeState(importRecordFile(id, options), `${JSON.stringify({ archiveSha256: sha256, archive, date: new Date().toISOString() })}\n`);
             return { archive, sha256, outcome: "updated", id, folder: installed.folder };
           } catch (error) {
+            // Shutdown keeps already-published bytes; rollback must not restore a released home.
+            options.signal?.throwIfAborted();
             const kept = rollbackHomeMembers(writes);
             if (writes.length) await reconcilePackageChanges();
             if (kept.length) throw Error(`its update failed: ${String(error)}; rollback kept: ${kept.join("; ")}`, { cause: error });
             throw error;
           }
         } catch (error) {
+          options.signal?.throwIfAborted();
           console.error("Shipped example update kept", { id, error });
           const reason = error instanceof Error && /^(its |the replacement )/.test(error.message)
             ? error.message : "its provenance could not be verified";
@@ -322,6 +337,8 @@ async function offer(
     const imported = await installArchive(bytes, path, undefined, options);
     return { archive, sha256, outcome: "imported", id: imported.id, folder: imported.folder };
   } catch (error) {
+    // Cancellation is owned by startup, not an offer refusal or a new notice.
+    options.signal?.throwIfAborted();
     const reason =
       error instanceof Error || error instanceof TransferRefused ? error.message : String(error);
     if (

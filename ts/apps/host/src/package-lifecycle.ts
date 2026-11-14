@@ -159,6 +159,7 @@ export function createPackageLifecycle(
   let initialListing: Awaited<ReturnType<typeof listPackages>> = { packages: [], unreadable: [] };
   const listeners = new Set<() => void>();
   const changed = () => {
+    if (closed) return;
     options.changed?.();
     for (const listener of listeners) listener();
   };
@@ -179,6 +180,7 @@ export function createPackageLifecycle(
   let settled: Promise<unknown> = ready;
   async function initialize() {
     decisions = await readDecisions(decisionsFile);
+    if (closed) return;
     await runtime.install(
       {
         id: "product:skills",
@@ -193,10 +195,13 @@ export function createPackageLifecycle(
     initialized = true;
   }
   async function synchronize() {
+    if (closed) return initialListing;
     const nextSignature = options.packages ? undefined : await podsDiskSignature(roots);
+    if (closed) return initialListing;
     if (nextSignature !== undefined && nextSignature === diskSignature && initialListing)
       return initialListing;
     const listing = await (options.packages ? options.packages() : listPackages(roots));
+    if (closed) return initialListing;
     const current = new Set(listing.packages.map((p) => `pod:${p.id}`));
     for (const id of signatures.keys())
       if (!current.has(id)) {
@@ -204,6 +209,7 @@ export function createPackageLifecycle(
         signatures.delete(id);
       }
     for (const pod of listing.packages) {
+      if (closed) return initialListing;
       const id = `pod:${pod.id}`;
       const signature = createHash("sha256")
         .update(
@@ -230,6 +236,7 @@ export function createPackageLifecycle(
         decisions[id] !== false,
       );
     }
+    if (closed) return initialListing;
     diskSignature = nextSignature;
     initialListing = listing;
     return listing;
@@ -267,6 +274,7 @@ export function createPackageLifecycle(
     requestRefresh: () => {
       if (closed) return;
       void refresh().catch((error) => {
+        if (closed) return;
         console.error("package-lifecycle: background refresh failed; keeping last listing", error);
       });
     },
@@ -293,6 +301,7 @@ export function createPackageLifecycle(
     active: (id: string) => runtime.active(`pod:${id}`),
     setEnabled: async (id: string, enabled: boolean) => {
       await ready;
+      if (closed) throw Error("Pod lifecycle is closed");
       await runtime.setEnabled(id, enabled);
     },
     packages: () =>
@@ -300,8 +309,10 @@ export function createPackageLifecycle(
     skills: () => runtime.contributions().flatMap((c) => (c.kind === "skill" ? [c.skill] : [])),
     close: async () => {
       closed = true;
-      await inFlight?.catch(() => {});
-      await ready;
+      // The detached initial read may fail after its home has been released.
+      void ready.catch(() => {});
+      // Scans own only reads. A stalled filesystem must not hold shutdown; synchronize refuses
+      // publication after its pending read returns. The data-only runtime has no filesystem hooks.
       await runtime.close();
       changed();
     },

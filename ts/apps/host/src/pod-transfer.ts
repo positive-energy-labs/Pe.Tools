@@ -47,6 +47,8 @@ const CAPTURE_MEMBER = /^captures\/([0-9a-f]{64})\.(png|json)$/;
 const MAX_ARCHIVE_BYTES = scriptPodMemberBounds.maxTotalBytes * 2;
 
 export type TransferOptions = {
+  /** Optional startup work stops publishing when its host closes. */
+  readonly signal?: AbortSignal;
   readonly podsRoot?: string;
   /** Where this machine keeps what it derives about pods; the product's `state` folder when absent. */
   readonly machine?: StateRoot;
@@ -287,6 +289,7 @@ export async function installArchive(
   folderName: string | undefined,
   options: TransferOptions = {},
 ): Promise<PodImport> {
+  options.signal?.throwIfAborted();
   const entries = readZip(archive);
   const id = archiveId(entries);
   const folder = localFolder(folderName ?? id);
@@ -361,6 +364,7 @@ export async function installArchive(
     // Manifest last: readers never admit a partially published pod. Home writes use CAS,
     // including first imports, rather than renaming machine state onto a synced drive.
     for (const [path, bytes] of [...entries].sort(([a], [b]) => Number(a === "pod.json") - Number(b === "pod.json"))) {
+      options.signal?.throwIfAborted();
       const target = join(directory, path);
       if (resumed.has(path)) {
         if (sha256(await readFile(target)) !== resumed.get(path))
@@ -386,6 +390,7 @@ export async function installArchive(
     for (const [path, bytes] of entries)
       if (CAPTURE_MEMBER.exec(path)?.[2] === "png") await store.adopt(bytes);
     await activateImportedPackage(id, podsRoot);
+    options.signal?.throwIfAborted();
     writeState(
       importRecordFile(id, options),
       `${JSON.stringify({ archiveSha256, archive: basename(locator), date: new Date().toISOString() }, null, 2)}\n`,
@@ -399,6 +404,9 @@ export async function installArchive(
       diagnostics: admitted.diagnostics,
     };
   } catch (error) {
+    // Shutdown abandons startup publication with its bytes kept for the normal resume path.
+    // Rollback may restore home bytes, so it must not run after the home has been released.
+    options.signal?.throwIfAborted();
     const kept = rollbackHomeMembers(writes);
     if (writes.length) await reconcilePackageChanges();
     // Remove only empty directories, never resumed members or a later writer's files.

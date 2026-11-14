@@ -24,6 +24,23 @@ import * as store from "@pe/host-contracts/kinds";
 import { productPodsRootPath } from "../src/product-paths.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
 import { shippedPodUpdateRefusals } from "../src/shipped-pod-status.ts";
+import * as packages from "../src/packages.ts";
+
+test("cancelled startup never creates a home after its held listing returns", async () => {
+  const stop = new AbortController();
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const list = packages.listPackages;
+  vi.spyOn(packages, "listPackages").mockImplementationOnce(async (...args) => {
+    entered.resolve(); await release.promise; return list(...args);
+  });
+  const pending = importShippedPods({ shippedRoot: shipped, ledger: ledgerFixture(ledger), podsRoot: pods, captures, signal: stop.signal });
+  await entered.promise;
+  stop.abort();
+  release.resolve();
+  await expect(pending).rejects.toThrow();
+  expect(existsSync(pods)).toBe(false);
+});
 
 let root: string;
 let shipped: string;
