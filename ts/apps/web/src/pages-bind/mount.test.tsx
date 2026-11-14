@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { oneName } from "#/route/typed-route";
-import type { PageTargetReading } from "@pe/agent-contracts";
+import { routeAddress, type PageTargetReading } from "@pe/agent-contracts";
 import { cleanup, render } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 
@@ -16,6 +16,19 @@ vi.mock("#/host/resource-state", () => ({
 import { BindBody } from "./mount";
 
 afterEach(cleanup);
+
+test("the Bind viewer carries the Page query from the shell URL into the iframe", () => {
+  const address = routeAddress("bind");
+  const link = address.link({ page: oneName("todo"), view: true, query: { walk: "1", x: "2" } });
+  const page = address.read(Object.fromEntries(new URL(link, "http://host").searchParams)).page;
+  const ctx = {
+    page: { read: () => page },
+    value: { state: "ready", value: null },
+    verb: () => ({ run: vi.fn() }),
+  };
+  const screen = render(<BindBody ctx={ctx as never} />);
+  expect(screen.getByTitle("Page todo").getAttribute("src")).toBe("/pages/todo/?walk=1&x=2");
+});
 
 /**
  * Drive 7, fix line 1: the host names a Page by its key (`page:@<pod>/pages/<page>`), the route by

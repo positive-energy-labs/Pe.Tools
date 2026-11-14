@@ -75,6 +75,8 @@ export const projectPodIds = async (pointer: string | null | undefined) => {
   const root = projectPodsRoot(pointer);
   return root ? (await listPackages(root)).packages.map((pod) => pod.id) : [];
 };
+const packageDiscoveryTimeoutMs = 5_000;
+
 /** Runtime policy only. Membership and export remain exact authored bytes. */
 export async function requirePackageEnabled(
   id: string,
@@ -85,7 +87,21 @@ export async function requirePackageEnabled(
   if (typeof podsRoots === "string" && podsRoots !== productPodsRootPath()) return;
   if (serving && !outsideCensus.includes(id)) {
     await serving.ready;
-    serving.requestRefresh();
+    if (!serving.inventory().some((pod) => pod.id === `pod:${id}`)) {
+      // Queue behind any scan that may have captured bytes before this Pod arrived.
+      const refresh = serving.refresh();
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        await Promise.race([
+          refresh,
+          new Promise<void>((resolve) => {
+            timer = setTimeout(resolve, packageDiscoveryTimeoutMs);
+          }),
+        ]);
+      } finally {
+        clearTimeout(timer);
+      }
+    } else serving.requestRefresh();
     if (!serving.active(id)) throw Error(`Pod '${id}' is inactive`);
   }
   if ((await readDecisions(decisionsKind.in(hostState())))[`pod:${id}`] === false)
@@ -273,7 +289,7 @@ export function createPackageLifecycle(
     /** One scan in flight. Reads serve the last completed listing until it finishes. */
     requestRefresh: () => {
       if (closed) return;
-      void refresh().catch((error) => {
+      return refresh().catch((error) => {
         if (closed) return;
         console.error("package-lifecycle: background refresh failed; keeping last listing", error);
       });

@@ -462,7 +462,6 @@ function hostRouteAxes(leaves: readonly CatalogLink[]): Record<PeRouteId, Catalo
     "page.state": axes("None", "One", ["Metadata"], "Read", "Bounded", []),
     "page.append": axes("None", "One", ["Metadata"], "SessionWrite", "Cheap", []),
     "page.events": axes("None", "One", ["Metadata"], "Read", "Bounded", []),
-    "page.snapshot": axes("None", "One", ["Metadata"], "SessionWrite", "Bounded", []),
     "page.text": axes("None", "One", ["Metadata"], "SessionWrite", "Bounded", []),
   } satisfies Record<Exclude<PeRouteId, CommandKey>, Declaration>;
   const declarations: Partial<Record<PeRouteId, Declaration>> = { ...doorOnly };

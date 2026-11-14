@@ -27,11 +27,17 @@ const basis = {
   page: "page:@pages/test",
   exportedAt: "2026-10-13T12:00:00.000Z",
   document: { session: "s", openId: "d", title: "Model" },
-  snapshot: { volts: 120, text: "</script>$&$1" },
-  events: [],
+  events: [
+    {
+      seq: 1,
+      at: "2026-10-13T12:00:00.000Z",
+      origin: "agent",
+      event: { volts: 120, text: "</script>$&$1" },
+    },
+  ],
 };
 
-it("pins local scripts, imported CSS and relative assets, snapshot, document and exact source hashes", async () => {
+it("pins local scripts, imported CSS and relative assets, event log, document and exact source hashes", async () => {
   const { directory } = await fixture(
     '<head><link rel="stylesheet" href="assets/main.css"><script src="/pages/pe.js"></script><script src="app.js"></script></head><img src="assets/icon.svg">',
   );
@@ -64,9 +70,7 @@ it("pins local scripts, imported CSS and relative assets, snapshot, document and
   expect(result.html).not.toContain("EventSource");
   expect(result.html).not.toContain("pe.read =");
   expect(result.provenance.document).toEqual(basis.document);
-  expect(result.provenance.snapshotSha256).toBe(
-    createHash("sha256").update(JSON.stringify(basis.snapshot)).digest("hex"),
-  );
+  expect(result.provenance.events).toEqual(basis.events);
   expect(result.provenance.files.find((file) => file.path === "app.js")?.sha256).toBe(
     createHash("sha256").update(app).digest("hex"),
   );
@@ -79,7 +83,6 @@ it("pins local scripts, imported CSS and relative assets, snapshot, document and
   const window: {
     pe?: {
       state(k: unknown): Promise<unknown>;
-      kernel(reduce: (s: unknown, e: unknown) => unknown, base: unknown): { state: unknown };
       read?: unknown;
       target(...selector: unknown[]): Promise<unknown>;
     };
@@ -88,14 +91,21 @@ it("pins local scripts, imported CSS and relative assets, snapshot, document and
     window,
     document: { getElementById: () => ({ textContent: snapshot }) },
   });
-  const kernel = window.pe!.kernel((state) => state, {});
-  await window.pe!.state(kernel);
-  expect(kernel.state).toEqual(basis.snapshot);
+  const seen: unknown[] = [];
+  const kernel = (await window.pe!.state({
+    base: {},
+    reduce: (_state: unknown, event: unknown, meta: unknown) => {
+      seen.push(meta);
+      return event;
+    },
+  })) as { state: unknown };
+  expect(kernel.state).toEqual(basis.events[0]!.event);
+  expect(seen).toEqual([{ origin: "agent", seq: 1, at: basis.events[0]!.at }]);
   expect(window.pe!.read).toBeUndefined();
   // Shipped Pages can inspect snapshot provenance without acquiring a live document.
   expect(typeof window.pe!.target).toBe("function");
   expect(await window.pe!.target()).toEqual(basis.document);
-  await expect(window.pe!.target("another document")).rejects.toThrow("snapshot");
+  await expect(window.pe!.target("another document")).rejects.toThrow("exported Page");
 });
 
 it("downloads the same host-persisted artifact and rejects destination path injection", async () => {
@@ -104,11 +114,17 @@ it("downloads the same host-persisted artifact and rejects destination path inje
   );
   const state = await mkdtemp(join(tmpdir(), "pe-export-state-"));
   roots.push(state);
-  const handle = createPagesHandler(root, undefined, undefined, undefined, stateFixture(join(state, "Pages")));
+  const handle = createPagesHandler(
+    root,
+    undefined,
+    undefined,
+    undefined,
+    stateFixture(join(state, "Pages")),
+  );
   const response = await handle(
     new Request("http://host/pages/page/export", {
       method: "POST",
-      body: JSON.stringify({ snapshot: basis.snapshot }),
+      body: JSON.stringify({}),
     }),
   );
   expect(response.status).toBe(200);
@@ -116,14 +132,15 @@ it("downloads the same host-persisted artifact and rejects destination path inje
   const html = await response.text();
   const hash = response.headers.get("x-pe-export-sha256")!;
   // The export is kept with the Page's state, keyed by the slug; the Page's own folder gains nothing.
-  expect(
-    await readFile(join(state, "Pages", "page", "exports", `${hash}.html`), "utf8"),
-  ).toBe(html);
+  expect(await readFile(join(state, "Pages", "page", "exports", `${hash}.html`), "utf8")).toBe(
+    html,
+  );
   await expect(access(join(directory, ".state"))).rejects.toThrow();
   const manifest = JSON.parse(
     /<script id="pe-export" type="application\/json">([\s\S]*?)<\/script>/.exec(html)![1]!,
   );
-  expect(manifest.snapshot).toEqual(basis.snapshot);
+  expect(manifest).not.toHaveProperty("snapshot");
+  expect(manifest.events).toEqual([]);
   expect(manifest.document).toBeNull();
   const rejected = await handle(
     new Request("http://host/pages/page/export", {
@@ -156,17 +173,27 @@ it.each([
   "<script>import(variable)</script>",
 ])("refuses unsupported executable dependencies: %s", async (html) => {
   const { directory } = await fixture(html);
-  await expect(exportPage({ directory, exports: stateFixture(exportsOf(directory)), ...basis, library: async () => "" })).rejects.toThrow(
-    /unsupported|external/i,
-  );
+  await expect(
+    exportPage({
+      directory,
+      exports: stateFixture(exportsOf(directory)),
+      ...basis,
+      library: async () => "",
+    }),
+  ).rejects.toThrow(/unsupported|external/i);
 });
 
 it("refuses traversal and symlinks outside the Page", async () => {
   const { root, directory } = await fixture('<script src="../outside.js"></script>');
   await writeFile(join(root, "outside.js"), "secret");
-  await expect(exportPage({ directory, exports: stateFixture(exportsOf(directory)), ...basis, library: async () => "" })).rejects.toThrow(
-    /outside/i,
-  );
+  await expect(
+    exportPage({
+      directory,
+      exports: stateFixture(exportsOf(directory)),
+      ...basis,
+      library: async () => "",
+    }),
+  ).rejects.toThrow(/outside/i);
   const outside = join(root, "external");
   await mkdir(outside);
   await writeFile(join(outside, "outside.js"), "secret");
@@ -175,9 +202,14 @@ it("refuses traversal and symlinks outside the Page", async () => {
     join(directory, "index.html"),
     '<script src="assets/linked/outside.js"></script>',
   );
-  await expect(exportPage({ directory, exports: stateFixture(exportsOf(directory)), ...basis, library: async () => "" })).rejects.toThrow(
-    /outside/i,
-  );
+  await expect(
+    exportPage({
+      directory,
+      exports: stateFixture(exportsOf(directory)),
+      ...basis,
+      library: async () => "",
+    }),
+  ).rejects.toThrow(/outside/i);
 });
 
 it("embeds local module dependencies as data URLs and preserves dollar expressions", async () => {
@@ -187,7 +219,12 @@ it("embeds local module dependencies as data URLs and preserves dollar expressio
     'import { value } from "./value.mjs"; window.value=value;',
   );
   await writeFile(join(directory, "value.mjs"), 'export const value = "$&$1";');
-  const result = await exportPage({ directory, exports: stateFixture(exportsOf(directory)), ...basis, library: async () => "" });
+  const result = await exportPage({
+    directory,
+    exports: stateFixture(exportsOf(directory)),
+    ...basis,
+    library: async () => "",
+  });
   expect(result.html).toContain('from "data:text/javascript;base64,');
   expect(result.provenance.files.map((file) => file.path)).toContain("value.mjs");
 });
@@ -197,8 +234,13 @@ it.each(["async", "defer"])(
   async (flag) => {
     const { directory } = await fixture(`<script ${flag} src="app.js"></script>`);
     await writeFile(join(directory, "app.js"), "window.test = true;");
-    await expect(exportPage({ directory, exports: stateFixture(exportsOf(directory)), ...basis, library: async () => "" })).rejects.toThrow(
-      /unsupported.*(?:async|defer)/i,
-    );
+    await expect(
+      exportPage({
+        directory,
+        exports: stateFixture(exportsOf(directory)),
+        ...basis,
+        library: async () => "",
+      }),
+    ).rejects.toThrow(/unsupported.*(?:async|defer)/i);
   },
 );

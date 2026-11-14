@@ -1,18 +1,18 @@
 import { z } from "zod";
+import { pageKeyOf, pageOpenUrl } from "@pe/agent-contracts";
 import { command, io, StepFailure } from "./command-executor.ts";
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import { lstat, readdir, readFile, stat } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { lstat, readdir, readFile } from "node:fs/promises";
+import { basename, dirname, extname, join, resolve } from "node:path";
 import { createServer } from "node:net";
 import { connectCdp, openBrowser, type BrowserSession, type CdpClient } from "@pe/browser";
 import type { PictureCaptures } from "./captures-route.ts";
 import { pagePublicationSchema, type PagePublication } from "@pe/host-contracts/pe-api";
-import { validatePageHtml } from "./page-artifacts.ts";
-import type { PagesRoots } from "./page-libraries.ts";
+import { PAGE_MEDIA, validatePageHtml } from "./page-artifacts.ts";
+import { scratchPageDirectory, scratchPageDescriptors, type PagesRoots } from "./page-libraries.ts";
 import { writeHome, homeKind } from "@pe/host-contracts/kinds";
 import { hostState } from "./host-ownership.ts";
-import { basename } from "node:path";
 const pageIndexKind = homeKind({
   schema: z.string(),
   place: (_pages: string, slug: string) => `Page ${slug}`,
@@ -55,6 +55,8 @@ async function capturePage(
   origin: string,
   library: (path: string) => string | null,
 ) {
+  const pageKey = pageKeyOf(input.slug);
+  if (!pageKey) throw Error(`Invalid Page slug '${input.slug}'`);
   const executablePath = [
     "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
     "C:/Program Files/Microsoft/Edge/Application/msedge.exe",
@@ -143,7 +145,7 @@ async function capturePage(
           try {
             body =
               request.url === url
-                ? withPageKey(input.html, `page:@pages/${input.slug}`)
+                ? withPageKey(input.html, pageKey)
                 : library(destination.pathname);
           } catch (error) {
             failures.push(`Page library ${destination.pathname}: ${(error as Error).message}`);
@@ -158,12 +160,7 @@ async function capturePage(
             responseHeaders: [
               {
                 name: "Content-Type",
-                value:
-                  request.url === url
-                    ? "text/html; charset=utf-8"
-                    : destination.pathname.endsWith(".css")
-                      ? "text/css"
-                      : "text/javascript",
+                value: PAGE_MEDIA[extname(destination.pathname)] ?? "application/octet-stream",
               },
               // Service workers require HTTP(S) script URLs; only self-contained compute workers
               // may start outside page Fetch. Their networking still meets the deny proxy.
@@ -336,20 +333,18 @@ export type PagesSource = PagesRoots | (() => PagesRoots);
  * claim, and no listing admits a twin (ADR 0037 rule 4).
  */
 export async function pageHomeRoot(source: PagesSource, slug: string): Promise<string> {
-  const roots = [typeof source === "function" ? source() : source].flat();
-  const holding: string[] = [];
-  // The listing's rule (`scratchPages`): a folder is a Page only when its index.html is a file, so
-  // an empty leftover folder in one home claims nothing.
-  for (const root of roots)
-    if (await stat(join(root, slug, "index.html")).then((entry) => entry.isFile(), () => false))
-      holding.push(root);
-  if (holding.length > 1)
+  const roots = typeof source === "function" ? source() : source;
+  const found = await scratchPageDirectory(slug, roots);
+  if (!found)
     throw new StepFailure(
-      `Page '${slug}' is claimed by ${holding.map((root) => join(root, slug)).join(" and ")}: none is published until the name is unique.`,
+      (await scratchPageDescriptors(roots)).find(
+        (page) => page.slug.toLowerCase() === slug.toLowerCase(),
+      )?.reason ??
+        `Page '${slug}' has no unique folder or valid key; none is published until the name is unique.`,
       409,
       "refused",
     );
-  return resolve(holding[0] ?? roots[0]!);
+  return dirname(found.dir);
 }
 
 /** Keep the exact authored HTML and existing .state; candidate capture precedes atomic replacement. */
@@ -396,11 +391,14 @@ export async function commitPagePublication(
   expectedVersion: string | null,
 ) {
   const { input, capture, origin } = prepared;
-  const index = join(await pageHomeRoot(source, input.slug), input.slug, "index.html");
+  const key = pageKeyOf(input.slug);
+  const openUrl = key && pageOpenUrl(key);
+  if (!key || !openUrl) throw Error(`Invalid Page slug '${input.slug}'`);
+  const pages = await pageHomeRoot(source, input.slug);
+  const index = join(pages, input.slug, "index.html");
   await ordinaryPath(index);
   // The write door (ADR 0037 rules 5 and 7): the frozen version is the compare-and-swap, the write
   // lands in the home that holds the Page, and an overwrite rests the prior bytes in `state\Blobs`.
-  const pages = await pageHomeRoot(source, input.slug);
   const file = pageIndexKind.in(
     hostState().home({ root: dirname(pages), tier: "user" }),
     basename(pages),
@@ -415,10 +413,10 @@ export async function commitPagePublication(
   return {
     ok: true as const,
     kind: "page" as const,
-    key: `page:@pages/${input.slug}`,
+    key,
     slug: input.slug,
     title: input.title,
-    openUrl: `${origin}/pages/${input.slug}/`,
+    openUrl: new URL(openUrl, origin).href,
     capture,
   };
 }
@@ -475,9 +473,11 @@ export const pagePublicationExecutor = (
     {
       async bind(context) {
         const input = context.admission.input;
+        const page = pageKeyOf(input.slug);
+        if (!page) throw Error(`Invalid Page slug '${input.slug}'`);
         const version = await pageVersion(root, input.slug);
         return {
-          effects: [{ kind: "publication", page: `page:@pages/${input.slug}` }],
+          effects: [{ kind: "publication", page }],
           consumes: [
             {
               kind: "file",
