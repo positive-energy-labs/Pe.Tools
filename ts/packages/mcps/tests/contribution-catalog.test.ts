@@ -188,6 +188,9 @@ test("a ReadOnly entrypoint is a read Pea runs with pe_read, with its input, and
   expect(
     declaredScriptRun({ key: "script:@a/src/B.cs" }, { permissionMode: "NoTransaction", timeoutSeconds: 9 }),
   ).toEqual({ permissionMode: "NoTransaction", timeoutSeconds: 9 });
+  expect(declaredScriptRun({ key: "script:@a/src/B.cs" }, {})).toEqual({
+    permissionMode: "ReadOnly",
+  });
 });
 
 test("Page shelf follows its projected URL and never borrows the Page action door", async () => {
@@ -198,6 +201,10 @@ test("Page shelf follows its projected URL and never borrows the Page action doo
     const url = new URL(input instanceof Request ? input.url : String(input));
     paths.push(url.pathname);
     if (url.pathname === "/pe/capabilities") return Response.json(catalog());
+    if (url.pathname === "/pages/snowdon-ducts--tour/target") return Response.json({
+      page: pod.contributions[1]!.key, slot: "default", binding: { kind: "none" },
+      resolution: { kind: "choose", reason: "missing" }, document: null, write: null,
+    });
     return Response.json({ text: "Page text" });
   });
   expect(
@@ -210,7 +217,7 @@ test("Page shelf follows its projected URL and never borrows the Page action doo
   await peDo.execute(
     {
       key: pod.contributions[1]!.key,
-      input: { binding: { kind: "pinned", address: "C:/Ducts.rvt" } },
+      input: { binding: { kind: "pinned", ref: { session: "S", openId: "D" } } },
       timeoutSeconds: 30,
     },
     undefined,

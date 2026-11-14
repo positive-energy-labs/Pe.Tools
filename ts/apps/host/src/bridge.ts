@@ -10,7 +10,7 @@ export { RevitProcessAlive, CANCEL_OPERATION_KEY } from "@pe/host-internal/dispa
 export type { BridgeRequest } from "@pe/host-internal/dispatch";
 import type { BridgeStateSnapshot, ValidationIssue } from "@pe/host-contracts/contracts";
 
-import { admittedRouteEntries } from "@pe/agent-contracts";
+import { admittedRouteEntries, addressSchema } from "@pe/agent-contracts";
 import { linkedCatalog } from "@pe/agent-contracts/pe-api";
 import { catalogCommandContext } from "./catalog-command-context.ts";
 import { StepFailure } from "./command-executor.ts";
@@ -23,6 +23,14 @@ import { ActionJournalService } from "./receipt-services.ts";
 import { receiptProducerSchema, type DocumentRef, type ReceiptProducer } from "@pe/agent-contracts";
 import { runtimeOwnerRejection } from "@pe/host-contracts/service-identity";
 import { hostOwnership } from "./host-ownership.ts";
+/** Decode native inventory once: detached PathName values are labels, not file addresses. */
+export const decodeInventoryState = (state: BridgeStateSnapshot): BridgeStateSnapshot => ({
+  ...state,
+  openDocuments: state.openDocuments.map((document) => ({
+    ...document,
+    address: addressSchema.safeParse(document.address).data ?? null,
+  })),
+});
 import {
   BRIDGE_CONTRACT_VERSION,
   computeBridgeSessionId,
@@ -447,7 +455,7 @@ export const RevitBridgeLive = Layer.effect(
               return;
             }
             // Registration admitted a valid process incarnation before assigning its broker id.
-            const registration = frame.registration;
+            const registration = { ...frame.registration, state: decodeInventoryState(frame.registration.state) };
             const sessionId = (yield* Effect.promise(() => computeBridgeSessionId(registration)))!;
             // inFlight is captured from one process handle. Evidence tagged with another
             // incarnation than the registration's cannot vouch for this session's old jobs.
@@ -536,7 +544,7 @@ export const RevitBridgeLive = Layer.effect(
             }
             if (session && (yield* current)) {
               const prevState = yield* Ref.get(session.state);
-              const nextState = frame.stateSync.state;
+              const nextState = decodeInventoryState(frame.stateSync.state);
               yield* Ref.set(session.state, nextState);
               yield* emit({
                 sessionId: session.sessionId,

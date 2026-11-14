@@ -3,7 +3,7 @@ import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it, onTestFinished } from "vite-plus/test";
-import { freezeScript } from "../src/operation-script.ts";
+import { freezeScript, runPodScript } from "../src/operation-script.ts";
 import { fixtureNative } from "./fixture-native.ts";
 import { Effect } from "effect";
 import { NodeServices } from "@effect/platform-node";
@@ -16,6 +16,13 @@ import type { ActionExecution } from "../src/action-journal.ts";
 import type { RevitBridge } from "../src/bridge.ts";
 import type { PictureCaptures } from "../src/captures-route.ts";
 import type { Caller } from "@pe/agent-contracts";
+
+it("refuses a script with no exact lifetime before native dispatch", async () => {
+  const invoke = () : never => { throw Error("dispatched without a lifetime"); };
+  const result = await Effect.runPromiseExit(runPodScript(detachedBridge({ invoke }), { session: "s" }, { scriptContent: "Result(doc.Title);" }, "target-proof"));
+  expect(result._tag).toBe("Failure");
+  expect(JSON.stringify(result)).toContain("one exact open document target");
+});
 
 it("C3 refuses a Pod script before execution on any missing or mismatched probe, and permits a matching model", async () => {
   const root = await mkdtemp(join(tmpdir(), "pe-pod-model-"));

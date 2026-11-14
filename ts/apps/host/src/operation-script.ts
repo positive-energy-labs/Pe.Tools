@@ -29,6 +29,8 @@ export function runPodScript(
   requestId: string,
 ) {
   return Effect.gen(function* () {
+    if (!target.openId)
+      return yield* Effect.fail(refused("A script run needs one exact open document target; choose a document before running it."));
     const captured = input.sourcePath != null && input.sourceBundle == null
       ? yield* io(() => freezeScript(input)).pipe(Effect.mapError((error) => refused(error instanceof Error ? error.message : String(error))))
       : undefined;

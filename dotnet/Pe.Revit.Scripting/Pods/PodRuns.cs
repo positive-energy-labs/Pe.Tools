@@ -115,6 +115,10 @@ public static class PodRuns {
     public static List<string> WriteInputIn(string runFolder, object metadata, IReadOnlyList<PodRunInputFile> files) {
         var written = new List<string>();
         try {
+            foreach (var name in files.Select(file => file.File).Append("input.json")) {
+                if (Directory.Exists(Path.Combine(runFolder, name.Replace('/', Path.DirectorySeparatorChar))))
+                    throw new IOException($"Cannot write run input '{name}': a directory already occupies that file path.");
+            }
             foreach (var file in files) {
                 var path = Path.Combine(runFolder, file.File.Replace('/', Path.DirectorySeparatorChar));
                 _ = Directory.CreateDirectory(Path.GetDirectoryName(path)!);

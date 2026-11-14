@@ -90,6 +90,7 @@ import {
 } from "./local-ops.ts";
 import { admitNativeCaller } from "./native-read-policy.ts";
 import { InvalidRead } from "./native-reads.ts";
+import { validateNativeInput } from "./native-input.ts";
 import { capturePackage } from "./packages.ts";
 import { recordHostFact } from "./receipt-export.ts";
 import { ReadFreshness, RequestIdentity } from "./request-services.ts";
@@ -1458,5 +1459,11 @@ const nativeCallBody = (req: HttpServerRequest.HttpServerRequest) => Effect.gen(
   if (!isRecord(body) || typeof body.key !== "string") return yield* Effect.fail(invalidBody("body must be { key: string, request?: object }"));
   const unknown = Object.keys(body).find((key) => key !== "key" && key !== "request");
   if (unknown) return yield* Effect.fail(invalidBody(unknownBodyKeyMessage(unknown)));
+  const key = body.key;
+  if (!isTsOnlyOperationKey(key))
+    yield* Effect.try({
+      try: () => validateNativeInput(key, body.request ?? {}),
+      catch: (error) => new InvalidHostRequest(key, said(error)),
+    });
   return { key: body.key, request: body.request };
 });

@@ -11,6 +11,8 @@ export type ResolvedTarget = {
   session: string | null;
   /** The document Address, never an openId. */
   document: string | null;
+  /** Exact open lifetime, distinct from the persisted document Address. */
+  openId?: string;
   nativeObservation?: { source: "native"; document: DocumentRef; requestId: string };
 };
 import {

@@ -147,7 +147,7 @@ test("a human Page pin consents only to the exact minted document lifetime", () 
   bind();
   const minted = mintPageDoor(
     "page:@pages/pin",
-    { kind: "pinned", address: address("C:/Jobs/Pin.rvt") },
+    { kind: "pinned", ref: docA },
     "/pages/pin/act",
     true,
     docA,
@@ -185,7 +185,7 @@ test("a human Page pin consents only to the exact minted document lifetime", () 
 test("an agent Page pin cannot borrow a person's write consent", () => {
   bind();
   const minted = mintPageDoor("page:@pages/pin",
-    { kind: "pinned", address: address("C:/Jobs/Pin.rvt") }, "/pages/pin/act", false, docA);
+    { kind: "pinned", ref: docA }, "/pages/pin/act", false, docA);
   try {
     const identity = callerOf({ kind: "local" }, { [HOST_CONTEXT_HEADER]: minted.token });
     if ("refusal" in identity) throw Error(identity.refusal.detail);
@@ -263,7 +263,7 @@ test("a retiring host leaves the terminal context another host wrote since", asy
 test("a page native read keeps only its minted door through request admission", () => {
   bind();
   const minted = mintPageDoor("page:@pages/pin", {
-    kind: "pinned", address: address("C:/Jobs/Pin.rvt"),
+    kind: "pinned", ref: docA,
   }, "/pages/pin/act", true, docA);
   try {
     const transport = callerOf({ kind: "local" }, { [HOST_CONTEXT_HEADER]: minted.token });

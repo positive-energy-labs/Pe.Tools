@@ -2,6 +2,7 @@
 import {
   address,
   emptyThreadHead,
+  pageChoiceSchema,
   type HarnessThreadSummary,
   type PageTargetReading,
 } from "@pe/agent-contracts";
@@ -18,6 +19,17 @@ vi.mock("#/host/resource-state", () => ({
 import { BindPicker } from "./bind-picker";
 
 afterEach(cleanup);
+
+test.each(["Chadds_detached.rvt", null])("a detached inventory row (%s) can be picked by lifetime", (address) => {
+  const onBind = vi.fn();
+  const ref = { session: "S", openId: "detached" };
+  const screen = render(<BindPicker slug="pdrop--tour" back="/bind" reading={null}
+    threads={[]} documents={[{ title: "Chadds detached", address, ref, revit: "Revit 2025" }]}
+    outcome={null} onBind={onBind} />);
+  fireEvent.click(screen.getByText("Chadds detached"));
+  expect(onBind).toHaveBeenCalledOnce();
+  expect(pageChoiceSchema.parse(onBind.mock.calls[0]![0])).toEqual({ kind: "pinned", ref });
+});
 
 const MODEL = "C:\\Jobs\\Project A MEP.rvt";
 const reading: PageTargetReading = {
@@ -84,8 +96,8 @@ test("the picker shows what the host resolved and binds a thread, a pin, or noth
   fireEvent.click(screen.getByText("Duct loss walk"));
   expect(onBind).toHaveBeenLastCalledWith({ kind: "thread", thread: "t-duct-1" });
   fireEvent.click(screen.getAllByText("Project A MEP").at(-1)!);
-  expect(onBind).toHaveBeenLastCalledWith({ kind: "pinned", address: MODEL });
-  // An unsaved document has no Address, so it refuses the pin.
+  expect(onBind).toHaveBeenLastCalledWith({ kind: "pinned", ref: { session: "S", openId: "A" } });
+  // An unsaved document still has an exact lifetime to pin.
   fireEvent.click(screen.getByText("Project1"));
-  expect(onBind).toHaveBeenCalledTimes(2);
+  expect(onBind).toHaveBeenLastCalledWith({ kind: "pinned", ref: { session: "S", openId: "B" } });
 });
