@@ -97,7 +97,7 @@ Shared files: `pe.js` (W1, W2, W3, W7, W9 on separate functions), `pages-route.t
 - Slice 3 is half built: Pea already reads, appends to and binds a Page (`ts/packages/mcps/src/pea/capability-tools.ts:771-807`). What was missing is a key for the Page's checks, a declared event vocabulary, origin on the Page, and freshness (plancheck C section 1).
 - Slice 2's code landed in kernel2; what is left is the first request after a drop answering 404 until a reload (plancheck B slice 2 item 1), and the real drive drop.
 - The Pod-route census is about 1,090 to 1,630 non-test and 2,370 to 2,650 test lines plus two 16 MB artifacts zipped into every build, not 810 and 1,150 (plancheck B section 4; purger headline 4).
-- The suspected API gap is filter order, not the enable toggle (plancheck C section 2); row 8a settles it.
+- The suspected API gap is filter order, not the enable toggle (plancheck C section 2). Row 8a, PROVEN on a detached Chadds copy (template 727218, 56 filters, driver `drive/8a/detached/spike-output.json`): `SetIsFilterEnabled` on a view template commits and reads back; order has no setter, and removing every filter then re-adding it in order with overrides, visibility and the enabled flag re-applied commits and reads back 56 of 56; read order only from `GetOrderedFilters`. The manager copies the whole `OverrideGraphicSettings`. On an attached workshared copy every write rolls back silently (D5). The rules inside a `ParameterFilterElement` are a different object and were not tested.
 - Main cannot stage the installed payload (D1, `ts/apps/host/scripts/stage-web.mjs:47`), so slices 5 and 8 wait for the integrator's fix.
 
 ## Deletion criteria
