@@ -476,7 +476,7 @@ export function createPagesHandler(
       }, packageDiscoveryTimeoutMs);
     });
     const discover = async () => {
-      const listing = await listPackages(pods);
+      const listing = await listPackages({ podsRoots: pods });
       if (expired || requestWait?.expired) return [];
       return activePackages(listing.packages.filter((pod) => id === undefined || pod.id === id), pods);
     };
@@ -696,7 +696,7 @@ export function createPagesHandler(
       : "";
     const podId = parseContributionKey(page)?.packageId;
     const model = pods && podId
-      ? (await listPackages(pods)).packages.find((pod) => pod.id === podId)?.for
+      ? (await listPackages({ podsRoots: pods })).packages.find((pod) => pod.id === podId)?.for
       : undefined;
     if (model && ref) {
       const response = await cross(page, slot, false, ref, "/pages/target", "/call", {
@@ -863,7 +863,7 @@ export function createPagesHandler(
       return { problem: `${key} is a ${ref.kind}: it reads and mentions, it never runs.` };
     await requirePackageEnabled(ref.packageId, pods);
     const pod = pods
-      ? (await listPackages(pods)).packages.find((one) => one.id === ref.packageId)
+      ? (await listPackages({ podsRoots: pods })).packages.find((one) => one.id === ref.packageId)
       : undefined;
     const row = pod?.contributions.find((row) => row.kind === "script" && row.key === key);
     if (!pod || !row)

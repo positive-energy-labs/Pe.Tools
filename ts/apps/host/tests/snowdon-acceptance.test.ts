@@ -45,7 +45,7 @@ test.each(["snowdon-ducts", "snowdon-circuits"])(
         exported.members.map((m) => [m.path, m.sha256]).sort(([a], [b]) => a!.localeCompare(b!)),
       ).toEqual(before);
       await importPod({ archivePath, folder: "Elsewhere" }, { podsRoot: to });
-      const pod = await readPackage(id, to);
+      const pod = await readPackage(id, { podsRoots: to });
       expect(pod.diagnostics.filter((d) => d.severity === "error")).toEqual([]);
       expect(
         (await capturePackage(pod)).members

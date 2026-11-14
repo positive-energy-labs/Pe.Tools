@@ -145,7 +145,7 @@ test("shutdown abandons a held census and never publishes its late result", asyn
   const lifecycle = createPackageLifecycle({
     machine: stateMachine(root),
     packages: async () => {
-      const listing = await packages.listPackages(join(root, "user/Pods"));
+      const listing = await packages.listPackages({ podsRoots: join(root, "user/Pods") });
       if (hold) {
         entered.resolve();
         await release.promise;
@@ -418,16 +418,14 @@ test("failed import reconciles rollback after its Pod was admitted", async () =>
 test("REVIEW: host member write must reconcile before the next inventory", async () => {
   const entered = Promise.withResolvers<void>();
   const release = Promise.withResolvers<void>();
-  const { lstat: original } =
-    await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
-  vi.spyOn(filesystem, "lstat").mockImplementation(async (...args) => {
-    if (String(args[0]) === join(root, "user", "Pods")) {
-      entered.resolve();
-      await release.promise;
-    }
-    return original(...args);
+  const original = packages.listPackages;
+  vi.spyOn(packages, "listPackages").mockImplementationOnce(async (options) => {
+    const listing = await original(options);
+    entered.resolve();
+    await release.promise;
+    return listing;
   });
-  // Only the lifecycle's metadata scan uses the mocked import; the member door uses its own IO.
+  // Hold lifecycle publication after discovery; the member door can still validate its census.
   content.lifecycle.requestRefresh();
   await entered.promise;
   let writeReturned = false;
@@ -500,7 +498,7 @@ test("REVIEW: discovery queued after an action cannot overwrite it", async () =>
   const lifecycle = createPackageLifecycle({
     machine: stateMachine(root),
     packages: async () => {
-      const listing = await packages.listPackages(join(root, "user/Pods"));
+      const listing = await packages.listPackages({ podsRoots: join(root, "user/Pods") });
       if (++calls === 2) {
         captured.resolve();
         await release.promise;
@@ -649,7 +647,7 @@ test("a known Page answers while an unrelated late Pod waits for discovery", asy
   const lifecycle = createPackageLifecycle({
     machine: stateMachine(root),
     packages: async () => {
-      const listing = await packages.listPackages(join(root, "user/Pods"));
+      const listing = await packages.listPackages({ podsRoots: join(root, "user/Pods") });
       if (++calls > 1) {
         entered.resolve();
         await release.promise;
@@ -701,7 +699,7 @@ test("a missed door queues fresh discovery behind a scan captured before arrival
         await release.promise;
       }
       if (calls <= 2) return { packages: [], unreadable: [] };
-      return packages.listPackages(join(root, "user/Pods"));
+      return packages.listPackages({ podsRoots: join(root, "user/Pods") });
     },
   });
   await lifecycle.ready;
@@ -723,10 +721,13 @@ test("a missed door queues fresh discovery behind a scan captured before arrival
 });
 
 test("unchanged refreshes reuse the full listing", async () => {
-  const list = vi.spyOn(packages, "listPackages");
-  await content.lifecycle.refresh();
-  await content.lifecycle.refresh();
-  expect(list).not.toHaveBeenCalled();
+  const scans: string[] = [];
+  packages.bindPackageScanLogger(line => { if (line.startsWith("Pod folder scan start ")) scans.push(line); });
+  try {
+    await content.lifecycle.refresh();
+    await content.lifecycle.refresh();
+    expect(scans).toEqual([]);
+  } finally { packages.bindPackageScanLogger(() => {}); }
 });
 
 test("an action after discovery captures bytes gets its own fresh reconciliation", async () => {
@@ -736,7 +737,7 @@ test("an action after discovery captures bytes gets its own fresh reconciliation
   const lifecycle = createPackageLifecycle({
     machine: stateMachine(root),
     packages: async () => {
-      const listing = await packages.listPackages(join(root, "user/Pods"));
+      const listing = await packages.listPackages({ podsRoots: join(root, "user/Pods") });
       if (++calls === 2) {
         captured.resolve();
         await release.promise;

@@ -26,10 +26,10 @@ vi.mock("../src/packages.ts", async (original) => {
   const { PackageDiscoveryExceeded } = await import("../src/pod-capture.ts");
   return {
     ...real,
-    readPackage: (id: string, roots: Parameters<typeof real.readPackage>[1]) =>
+    readPackage: (id: string, options: Parameters<typeof real.readPackage>[1]) =>
       id === "never-lands"
-        ? Promise.reject(new PackageDiscoveryExceeded(roots ?? []))
-        : real.readPackage(id, roots),
+        ? Promise.reject(new PackageDiscoveryExceeded(options?.podsRoots ?? []))
+        : real.readPackage(id, options),
   };
 });
 
@@ -101,7 +101,7 @@ test("a member edited between two gates still refuses the run as stale: no read 
   });
 });
 
-test("one gate pass reads a Pod once; the next pass, and a probe outside any pass, read it again", async () => {
+test("one gate pass reads a Pod once; new passes and unscoped probes validate disk changes", async () => {
   const members = await pod("pdrop", 5);
   const probe = resources().probe;
   const pass = {};
@@ -112,8 +112,10 @@ test("one gate pass reads a Pod once; the next pass, and a probe outside any pas
   expect(await probe(members[1]!, "turn", {})).toBe(sha("Result(99);"));
   expect(scans).toBe(2);
   await probe(members[1]!);
-  await probe(members[2]!);
-  expect(scans).toBe(4);
+  expect(scans).toBe(2); // An unchanged probe checks metadata, not the Pod's bytes again.
+  await writeFile(join(root, "pdrop", "checks/c1.csx"), "Result(100);");
+  expect(await probe(members[2]!)).toBe(sha("Result(100);"));
+  expect(scans).toBe(3);
 });
 
 test("a member that left the Pod probes null; a discovery that ran out of time is not a changed input", async () => {

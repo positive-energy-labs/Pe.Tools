@@ -105,7 +105,7 @@ async function bootstrap(machine: Machine, home: string) {
   const content = createContributionContent({
     worldRoot: stateFixture(agent),
     homeRoot: home,
-    packages: () => listPackages(pods),
+    packages: () => listPackages({ podsRoots: pods }),
     decisionsMachine: stateMachine(storedParent(join(machine.state, "plugins.json"))),
     bootstrap: () =>
       importShippedPods({

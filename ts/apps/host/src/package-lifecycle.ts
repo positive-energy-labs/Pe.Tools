@@ -1,5 +1,3 @@
-import { lstat, readdir } from "node:fs/promises";
-import { join } from "node:path";
 import { stateSegments } from "@pe/host-contracts/service-identity";
 import { createHash } from "node:crypto";
 import { createPluginRuntime } from "@pe/agent-contracts";
@@ -7,7 +5,6 @@ import { z } from "zod";
 import {
   listPackages,
   logPackageDiscovery,
-  isPackageMember,
   productPodsRoots,
   projectPodsRoot,
   type AdmittedPackage,
@@ -75,7 +72,7 @@ const readDecisions = async (file: DecisionsFile) => {
  */
 export const projectPodIds = async (pointer: string | null | undefined) => {
   const root = projectPodsRoot(pointer);
-  return root ? (await listPackages(root)).packages.map((pod) => pod.id) : [];
+  return root ? (await listPackages({ podsRoots: root })).packages.map((pod) => pod.id) : [];
 };
 
 /** Runtime policy only. Membership and export remain exact authored bytes. */
@@ -123,61 +120,6 @@ export async function activePackages(
   return packages.filter((_, index) => enabled[index]!.status === "fulfilled");
 }
 
-/** Metadata only, using async IO so even a stalled share leaves the request loop free. */
-const metadataScanSlowMs = 500;
-async function podsDiskSignature(roots: readonly string[]): Promise<string | undefined> {
-  const entries: unknown[] = [];
-  const walk = async (absolute: string, member: string | undefined): Promise<void> => {
-    const info = await lstat(absolute);
-    entries.push([absolute, info.mode, info.size, info.mtimeMs, info.ctimeMs, info.ino]);
-    if (!info.isDirectory() || info.isSymbolicLink()) return;
-    for (const name of (await readdir(absolute)).sort()) {
-      const path = member === undefined ? undefined : member ? `${member}/${name}` : name;
-      // Invalid names affect admission diagnostics too.
-      try {
-        if (path !== undefined && !isPackageMember(path)) continue;
-      } catch {}
-      await walk(join(absolute, name), member === undefined ? "" : path);
-    }
-  };
-  try {
-    for (const root of roots) {
-      entries.push(root);
-      const started = performance.now();
-      let logged = false;
-      const startLog = () => {
-        if (logged) return;
-        logged = true;
-        logPackageDiscovery(`Pod folder metadata scan start folder=${JSON.stringify(root)}`);
-      };
-      const slowLog = setTimeout(startLog, metadataScanSlowMs);
-      let outcome = "completed";
-      try {
-        await walk(root, undefined);
-      } catch (error) {
-        outcome = "failed";
-        if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
-        outcome = "missing";
-        entries.push("missing");
-      } finally {
-        clearTimeout(slowLog);
-        if (logged || outcome !== "completed" || performance.now() - started >= metadataScanSlowMs) {
-          startLog();
-          logPackageDiscovery(
-            `Pod folder metadata scan end folder=${JSON.stringify(root)} durationMs=${Math.round(performance.now() - started)} outcome=${outcome}`,
-          );
-        }
-      }
-    }
-    // shortcut: an edit preserving file size and timestamps is missed; hash bytes to support it.
-    // No network drive was measured; this gate has only local deterministic evidence.
-    // Google Drive's timestamps are untested; validate them in the post-merge drive.
-    return JSON.stringify(entries);
-  } catch {
-    return undefined;
-  } // Unreadable metadata never authorizes reuse.
-}
-
 export function createPackageLifecycle(
   options: {
     packages?: typeof listPackages;
@@ -185,7 +127,6 @@ export function createPackageLifecycle(
     changed?: () => void;
   } = {},
 ) {
-  let diskSignature: string | undefined;
   let inFlight: Promise<Awaited<ReturnType<typeof listPackages>>> | undefined;
   let closed = false;
   const decisionsFile = decisionsKind.in(options.machine ?? hostState());
@@ -236,13 +177,9 @@ export function createPackageLifecycle(
     if (closed) return initialListing;
     // Re-resolve on a scan: a home mounting after startup must join the next census.
     const roots = options.packages ? [] : productPodsRoots();
-    const signatureStartedAt = performance.now();
-    const nextSignature = options.packages ? undefined : await podsDiskSignature(roots);
-    if (closed) return initialListing;
-    if (nextSignature !== undefined && nextSignature === diskSignature && initialListing)
-      return initialListing;
+    const signatureStartedAt = Date.now();
     // Lifecycle owns publication after a slow scan; Page requests bound their own wait for it.
-    const listing = await (options.packages ? options.packages() : listPackages(roots, "background", signatureStartedAt));
+    const listing = await (options.packages ? options.packages() : listPackages({ podsRoots: roots, wait: "background", notBefore: signatureStartedAt }));
     if (closed) return initialListing;
     const current = new Set(listing.packages.map((p) => `pod:${p.id}`));
     for (const id of signatures.keys())
@@ -279,7 +216,6 @@ export function createPackageLifecycle(
       );
     }
     if (closed) return initialListing;
-    diskSignature = nextSignature;
     initialListing = listing;
     return listing;
   }

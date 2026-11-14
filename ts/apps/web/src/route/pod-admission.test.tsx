@@ -129,7 +129,7 @@ async function harness(stale = false) {
     filter: (source) => !source.split(/[\\/]/).includes("node_modules"),
   });
   const lifecycle = createPackageLifecycle({
-    packages: () => listPackages(resolve(dir, "Pods")),
+    packages: () => listPackages({ podsRoots: resolve(dir, "Pods") }),
     machine: stateMachine(dir),
   });
   const store = fileRouteDocumentStore(stateFixture(resolve(dir, "Work"))),

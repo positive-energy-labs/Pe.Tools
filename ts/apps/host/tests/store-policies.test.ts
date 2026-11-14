@@ -226,7 +226,7 @@ describe("discard: the corrupt bytes are gone, with one notice that does not rep
 
 describe("keep: a person's file is listed \"can't read, kept\", its bytes never change, and no write lands over it", () => {
   const lifecycle = (decisionsPath: string) =>
-    createPackageLifecycle({ packages: () => listPackages(join(root, "Pods")), machine: stateMachine(storedParent(decisionsPath)) });
+    createPackageLifecycle({ packages: () => listPackages({ podsRoots: join(root, "Pods") }), machine: stateMachine(storedParent(decisionsPath)) });
   const kinds = [
     {
       name: "Pod on and off choices",

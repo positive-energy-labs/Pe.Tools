@@ -24,6 +24,7 @@ import { verifyPodArtifact } from "./pod-artifact.ts";
 import { shippedPodUpdateRefusals } from "./shipped-pod-status.ts";
 import { podModelSchema, type PodModel } from "./pod-model.ts";
 import { logPackageDiscovery as scanLog } from "./pod-discovery-log.ts";
+import { podsDiskSignature } from "./pod-disk-signature.ts";
 export { bindPackageScanLogger, logPackageDiscovery, packageScanLog, packageScanLogLineLimit } from "./pod-discovery-log.ts";
 import {
   captureIndexedPackage,
@@ -150,12 +151,24 @@ const claimedTwice = (id: string, twins: readonly Pick<AdmittedPackage, "directo
  * is unique across homes (ADR 0037 rule 4): an id claimed twice, in one Pods folder or in two
  * homes, is refused in every copy. Nothing shadows.
  */
-export async function listPackages(
-  podsRoots: PodsRoots = productPodsRoots(),
-  wait: "request" | "background" = "request",
-  notBefore?: number,
-): Promise<PackageListing> {
-  return discoverPackages(podsRoots, scanPackages, wait, notBefore);
+export type PackageDiscoveryOptions = {
+  podsRoots?: PodsRoots;
+  wait?: "request" | "background";
+  /** Date.now() epoch milliseconds. Refuse an in-flight scan started before this floor. */
+  notBefore?: number;
+};
+export async function listPackages({ podsRoots = productPodsRoots(), wait = "request", notBefore }: PackageDiscoveryOptions = {}): Promise<PackageListing> {
+  const listing = await discoverPackages(podsRoots, scanPackages, wait, notBefore,
+    signal => podsDiskSignature([podsRoots].flat(), isPackageMember, signal));
+  // Import notices are runtime state, not disk bytes; project them even when the census is reused.
+  return { ...listing, packages: listing.packages.map(pod => ({ ...pod, diagnostics: currentDiagnostics(pod.id, pod.diagnostics) })) };
+}
+
+function currentDiagnostics(id: string, issues: readonly MemberIssue[]): MemberIssue[] {
+  const diagnostics = issues.filter(issue => issue.code !== "ShippedExampleUpdateKept");
+  const updateRefusal = shippedPodUpdateRefusals.get(id);
+  if (updateRefusal) diagnostics.push({ code: "ShippedExampleUpdateKept", path: "pod.json", message: updateRefusal, severity: "warning" });
+  return diagnostics;
 }
 
 async function scanPackages(
@@ -242,8 +255,9 @@ export function onePackage(
     : refuse(`No installed pod has id '${id}'.`, 404);
 }
 
-export const readPackage = async (id: string, podsRoots: PodsRoots = productPodsRoots()) =>
-  onePackage(await listPackages(podsRoots), id);
+/** notBefore uses Date.now() epoch milliseconds, as listPackages does. */
+export const readPackage = async (id: string, options: Pick<PackageDiscoveryOptions, "podsRoots" | "notBefore"> = {}) =>
+  onePackage(await listPackages(options), id);
 
 /** Freeze admitted bytes, or capture one indexed folder afresh. Member semantics stay native. */
 export async function capturePackage(
@@ -438,14 +452,6 @@ async function readFolder(
       .replace(/^\uFEFF/, ""),
   );
   packageIdSchema.parse(value?.id);
-  const updateRefusal = shippedPodUpdateRefusals.get(value.id);
-  if (updateRefusal)
-    diagnostics.push({
-      code: "ShippedExampleUpdateKept",
-      path: "pod.json",
-      message: updateRefusal,
-      severity: "warning",
-    });
   const entrypoints: PackageEntrypoint[] = [];
   const model = value.for === undefined ? undefined : podModelSchema.parse(value.for);
   for (const entry of Array.isArray(value.entrypoints) ? value.entrypoints : []) {
@@ -545,7 +551,7 @@ async function readFolder(
     directory,
     members,
     entrypoints,
-    diagnostics,
+    diagnostics: currentDiagnostics(value.id, diagnostics),
     contributions: [
       ...contributions,
       ...routes.map((route) => ({

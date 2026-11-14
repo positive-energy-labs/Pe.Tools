@@ -13,7 +13,7 @@ import { bootHost } from "./real-server.ts";
 // that fix (2026-11-12) this test was red: the four shipped pods listed and `default` did not.
 test("the first pod.list after healthy on a fresh home lists every shipped pod and the default pod", async () => {
   const shipped = (
-    await listPackages(join(hostOwnership.sourceRoot!, "examples", "pods"))
+    await listPackages({ podsRoots: join(hostOwnership.sourceRoot!, "examples", "pods") })
   ).packages.map((pod) => pod.id);
   // The sentinel: the checkout does ship pods to miss.
   expect(shipped.length).toBeGreaterThan(1);

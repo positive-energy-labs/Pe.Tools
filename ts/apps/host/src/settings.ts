@@ -176,7 +176,7 @@ export const listPods = Effect.fnUntraced(function* (ctx: PodContext = {}) {
   yield* shippedPodsImported(ctx);
   const root = podsRoots(ctx);
   const found = yield* Effect.tryPromise({
-    try: () => listPackages(root),
+    try: () => listPackages({ podsRoots: root }),
     catch: (error) => new LocalOpError("pod.list", errorMessage(error), 400),
   });
   const project = yield* Effect.promise(() => projectPodIds(ctx.pointer));
@@ -366,7 +366,7 @@ export const readMemberPod = Effect.fnUntraced(function* (pod: string, ctx: PodC
     catch: (error) => new LocalOpError("pod.member.read", errorMessage(error), 403),
   });
   return yield* Effect.tryPromise({
-    try: () => readPackage(pod, podsRoots(ctx)),
+    try: () => readPackage(pod, { podsRoots: podsRoots(ctx) }),
     catch: (error) =>
       new LocalOpError(
         "pod.member.read",
@@ -714,7 +714,7 @@ export const podFolder = Effect.fnUntraced(function* (podId: string, ctx: PodCon
     catch: (error) => new LocalOpError("pod.resolve", errorMessage(error), 403),
   });
   const pod = yield* Effect.tryPromise({
-    try: () => readPackage(podId, root),
+    try: () => readPackage(podId, { podsRoots: root }),
     catch: (error) =>
       new LocalOpError(
         "pod.resolve",

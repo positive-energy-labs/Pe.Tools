@@ -58,7 +58,7 @@ const noCaptures = new PictureCaptures(
   0,
   () => 0,
 );
-const listing = await listPackages(examples);
+const listing = await listPackages({ podsRoots: examples });
 if (listing.unreadable.length) {
   console.error(`unreadable example pods: ${JSON.stringify(listing.unreadable)}`);
   process.exit(1);

@@ -1,0 +1,59 @@
+import { lstat, readdir } from "node:fs/promises";
+import { join } from "node:path";
+import { logPackageDiscovery } from "./pod-discovery-log.ts";
+
+const metadataScanSlowMs = 500;
+
+/** Metadata only. Unreadable metadata never authorizes reuse; a missing root is a known state. */
+export async function podsDiskSignature(
+  roots: readonly string[],
+  include: (path: string) => boolean,
+  signal?: AbortSignal,
+): Promise<string | undefined> {
+  const entries: unknown[] = [];
+  const walk = async (absolute: string, member: string | undefined): Promise<void> => {
+    signal?.throwIfAborted();
+    const info = await lstat(absolute);
+    signal?.throwIfAborted();
+    entries.push([absolute, info.mode, info.size, info.mtimeMs, info.ctimeMs, info.ino]);
+    if (!info.isDirectory() || info.isSymbolicLink()) return;
+    for (const name of (await readdir(absolute)).sort()) {
+      signal?.throwIfAborted();
+      const path = member === undefined ? undefined : member ? `${member}/${name}` : name;
+      try { if (path !== undefined && !include(path)) continue; } catch {}
+      await walk(join(absolute, name), member === undefined ? "" : path);
+    }
+  };
+  try {
+    for (const root of roots) {
+      entries.push(root);
+      const started = performance.now();
+      let logged = false;
+      const startLog = () => {
+        if (logged) return;
+        logged = true;
+        logPackageDiscovery(`Pod folder metadata scan start folder=${JSON.stringify(root)}`);
+      };
+      const slowLog = setTimeout(startLog, metadataScanSlowMs);
+      let outcome = "completed";
+      try { await walk(root, undefined); }
+      catch (error) {
+        outcome = "failed";
+        if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
+        outcome = "missing";
+        entries.push("missing");
+      } finally {
+        clearTimeout(slowLog);
+        if (logged || outcome !== "completed" || performance.now() - started >= metadataScanSlowMs) {
+          startLog();
+          logPackageDiscovery(`Pod folder metadata scan end folder=${JSON.stringify(root)} durationMs=${Math.round(performance.now() - started)} outcome=${outcome}`);
+        }
+      }
+    }
+    // Metadata-preserving edits need byte hashing; Google Drive timestamp behavior needs the live drive.
+    return JSON.stringify(entries);
+  } catch {
+    signal?.throwIfAborted();
+    return undefined;
+  }
+}

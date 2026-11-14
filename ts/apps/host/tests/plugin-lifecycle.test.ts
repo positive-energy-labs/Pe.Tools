@@ -35,7 +35,7 @@ test("route inventory answers while the action awaits its own package reconcilia
   let refreshing = false;
   const lifecycle = createPackageLifecycle({ machine, packages: async () => {
     if (refreshing) { captured.resolve(); await hold.promise; }
-    return listPackages(join(root, "Pods"));
+    return listPackages({ podsRoots: join(root, "Pods") });
   } });
   const routes = createPodRoutes(lifecycle, { machine });
   await lifecycle.ready;
@@ -69,7 +69,7 @@ test("an import before initialization finishes becomes active after the initial 
   const census = new Promise<void>(resolve => { captured = resolve; });
   let initial = true;
   const lifecycle = createPackageLifecycle({ packages: async () => {
-    const listing = await listPackages(join(root, "Pods"));
+    const listing = await listPackages({ podsRoots: join(root, "Pods") });
     if (initial) { initial = false; captured(); await hold; }
     return listing;
   } });
@@ -137,7 +137,7 @@ test("public disable removes Page, script, member, catalog and receipted skill; 
   }
   const content = createContributionContent({
     worldRoot: stateFixture(root),
-    packages: () => listPackages(pods),
+    packages: () => listPackages({ podsRoots: pods }),
   });
   bindPackageLifecycle(content.lifecycle);
   const manage = createPluginsHandler(content);
@@ -204,7 +204,7 @@ test("Pod JavaScript is never imported and its package contribution still instal
   );
   const { createPackageLifecycle } = await import("../src/package-lifecycle.ts");
   const lifecycle = createPackageLifecycle({
-    packages: () => listPackages(pods),
+    packages: () => listPackages({ podsRoots: pods }),
     machine: stateMachine(storedParent(join(root, "plugins.json"))),
   });
   bindPackageLifecycle(lifecycle);
