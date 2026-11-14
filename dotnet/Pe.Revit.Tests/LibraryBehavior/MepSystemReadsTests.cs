@@ -105,10 +105,10 @@ public sealed class MepSystemReadsTests {
 
     [Test]
     public void Members_read_reports_hydronic_members_directions_source_and_bounds() {
-        var roster = MepSystemReads.Members(_document, new());
+        var roster = MepSystemReads.Members(_document, new()).Value!;
         var native = _system;
         Assert.That(native.BaseEquipment?.Id, Is.EqualTo(_equipment.Id), "fixture: the equipment is the system's base equipment");
-        var result = MepSystemReads.Members(_document, new(native.UniqueId));
+        var result = MepSystemReads.Members(_document, new(native.UniqueId)).Value!;
         TestContext.WriteLine(JsonConvert.SerializeObject(result));
         var system = result.Systems.Single(row => row.UniqueId == native.UniqueId);
         var pipes = result.Elements.Where(row => row.Kind == "curve").ToArray();
@@ -153,14 +153,14 @@ public sealed class MepSystemReadsTests {
             .Where(port => port.Domain == Domain.DomainPiping && port.ConnectorType is ConnectorType.End or ConnectorType.Curve &&
                 (port.MEPSystem?.Id == native.Id || port.Id == native.BaseEquipmentConnector?.Id) && port.Direction == FlowDirectionType.Out).Select(port => port.Id);
         Assert.That(system.Source.Value!.OutConnectorIds, Is.EquivalentTo(outIds));
-        Assert.Throws<ArgumentException>(() => MepSystemReads.Members(_document, new(native.UniqueId, MaxElements: 1)));
-        Assert.Throws<ArgumentException>(() => MepSystemReads.Members(_document, new("missing")));
-        Assert.Throws<ArgumentOutOfRangeException>(() => MepSystemReads.Members(_document, new(MaxSystems: 0)));
+        Assert.That(MepSystemReads.Members(_document, new(native.UniqueId, MaxElements: 1)).Refusal?.Code, Is.EqualTo("MepBoundExceeded"));
+        Assert.That(MepSystemReads.Members(_document, new("missing")).Refusal?.Code, Is.EqualTo("MepSystemsEmpty"));
+        Assert.That(MepSystemReads.Members(_document, new(MaxSystems: 0)).Refusal?.Code, Is.EqualTo("MepBoundInvalid"));
     }
 
     [Test]
     public void Segment_sizes_preserve_every_native_segment_and_all_three_diameters() {
-        var result = MepSystemReads.SegmentSizes(_document, new());
+        var result = MepSystemReads.SegmentSizes(_document, new()).Value!;
         var native = new FilteredElementCollector(_document).OfClass(typeof(PipeSegment)).Cast<PipeSegment>().ToArray();
         TestContext.WriteLine(JsonConvert.SerializeObject(result));
         Assert.That(result.Segments.Select(row => row.UniqueId), Is.EquivalentTo(native.Select(segment => segment.UniqueId)));
@@ -171,8 +171,28 @@ public sealed class MepSystemReadsTests {
             Assert.That(row.Sizes, Is.EqualTo(segment.GetSizes().Select(size =>
                 new MepSizeRow(size.NominalDiameter, size.InnerDiameter, size.OuterDiameter))));
         }
-        Assert.Throws<ArgumentException>(() => MepSystemReads.SegmentSizes(_document, new(MaxSizesPerSegment: 1)));
-        Assert.Throws<ArgumentOutOfRangeException>(() => MepSystemReads.SegmentSizes(_document, new(MaxSegments: 0)));
+        Assert.That(MepSystemReads.SegmentSizes(_document, new(MaxSizesPerSegment: 1)).Refusal?.Code, Is.EqualTo("MepBoundExceeded"));
+        Assert.That(MepSystemReads.SegmentSizes(_document, new(MaxSegments: 0)).Refusal?.Code, Is.EqualTo("MepBoundInvalid"));
+    }
+
+    [Test]
+    public void Bounds_return_typed_refusals_and_explicit_system_bypasses_roster_bound() {
+        var over = MepSystemReads.Members(_document, new(MaxSystems: 1, Domain: "piping"));
+        Assert.That(over.Value, Is.Null);
+        Assert.That(over.Refusal, Is.EqualTo(new MepReadRefusal("MepBoundExceeded", "$.maxSystems",
+            "More than 1 MEP systems (requested maxSystems=1). Narrow domain to piping or duct, or pass systemUniqueId. Or raise maxSystems up to 1024.")));
+        var one = MepSystemReads.Members(_document, new(_system.UniqueId, MaxSystems: 1, Domain: "piping"));
+        Assert.That(one.Refusal, Is.Null);
+        Assert.That(one.Value!.Systems.Single().UniqueId, Is.EqualTo(_system.UniqueId));
+        Assert.That(MepSystemReads.Members(_document, new(Domain: "duct")).Refusal?.Code, Is.EqualTo("MepSystemsEmpty"));
+        Assert.That(MepSystemReads.Members(_document, new(Domain: "typo")).Refusal?.Code, Is.EqualTo("MepDomainInvalid"));
+        foreach (var bound in new[] { 0, 1025 })
+            Assert.That(MepSystemReads.Members(_document, new(MaxSystems: bound)).Refusal?.Code, Is.EqualTo("MepBoundInvalid"));
+        foreach (var bound in new[] { 0, 16385 })
+            Assert.That(MepSystemReads.Members(_document, new(MaxElements: bound)).Refusal?.Code, Is.EqualTo("MepBoundInvalid"));
+        Assert.That(MepSystemReads.SegmentSizes(_document, new(MaxSegments: 1025)).Refusal?.Path, Is.EqualTo("$.maxSegments"));
+        foreach (var bound in new[] { 0, 4097 })
+            Assert.That(MepSystemReads.SegmentSizes(_document, new(MaxSizesPerSegment: bound)).Refusal?.Path, Is.EqualTo("$.maxSizesPerSegment"));
     }
 
     /// <summary>

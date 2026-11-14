@@ -4,6 +4,12 @@ using Pe.Shared.RevitData.Mep;
 
 namespace Pe.Revit.Global.Lib.Mep;
 
+public sealed record MepReadRefusal(string Code, string Path, string Message);
+public sealed record MepReadResult<T>(T? Value, MepReadRefusal? Refusal) where T : class {
+    public static implicit operator MepReadResult<T>(T value) => new(value, null);
+    public static implicit operator MepReadResult<T>(MepReadRefusal refusal) => new(null, refusal);
+}
+
 /// <summary>
 ///     Document-owned, read-only facts of any MEP system and of the segment size catalog. Domain is data: one
 ///     <see cref="Spec" /> row per domain, so a new domain is a new row, never a new read. Bounds refuse rather than
@@ -22,36 +28,48 @@ public static class MepSystemReads {
 
     private static Spec SpecOf(MEPSystem system) => system is PipingSystem ? Piping : Duct;
 
-    public static MepSystemMembersData Members(Document document, MepSystemMembersRequest request) {
-        Bound(request.MaxSystems, 1024, nameof(request.MaxSystems));
-        Bound(request.MaxElements, 16384, nameof(request.MaxElements));
-        var systems = new FilteredElementCollector(document).OfClass(typeof(PipingSystem)).Cast<MEPSystem>()
-            .Concat(new FilteredElementCollector(document).OfClass(typeof(MechanicalSystem)).Cast<MEPSystem>())
+    public static MepReadResult<MepSystemMembersData> Members(Document document, MepSystemMembersRequest request) {
+        if ((Bound(request.MaxSystems, 1024, "maxSystems") ?? Bound(request.MaxElements, 16384, "maxElements")) is { } invalid)
+            return invalid;
+        if (request.Domain is not (null or "piping" or "duct"))
+            return new MepReadRefusal("MepDomainInvalid", "$.domain", "Set domain to piping or duct, or omit it for both.");
+        IEnumerable<MEPSystem> scope = request.SystemUniqueId is { } id
+            ? document.GetElement(id) is MEPSystem system ? [system] : []
+            : (request.Domain == "duct" ? Enumerable.Empty<MEPSystem>() : new FilteredElementCollector(document).OfClass(typeof(PipingSystem)).Cast<MEPSystem>())
+                .Concat(request.Domain == "piping" ? [] : new FilteredElementCollector(document).OfClass(typeof(MechanicalSystem)).Cast<MEPSystem>());
+        var systems = scope.Where(system => request.Domain is null || SpecOf(system).Name == request.Domain)
             .OrderBy(system => system.Id.Value()).Take(request.MaxSystems + 1).ToArray();
-        RequireCount(systems.Length, request.MaxSystems, "MEP systems");
-        var selected = request.SystemUniqueId is null ? null : systems.SingleOrDefault(system => system.UniqueId == request.SystemUniqueId)
-            ?? throw new ArgumentException("SystemUniqueId must identify an MEP system in this document.");
+        if (RequireCount(systems.Length, request.MaxSystems, 1024, "maxSystems", "MEP systems", "Narrow domain to piping or duct, or pass systemUniqueId.") is { } overflow)
+            return overflow;
+        if (systems.Length == 0)
+            return new MepReadRefusal("MepSystemsEmpty", "$.systemUniqueId", "No MEP systems match this scope. Choose a system in this document or change domain.");
+        var selected = request.SystemUniqueId is null ? null : systems.Single();
         var members = selected is null ? [] : Network(selected).Where(element => KindOf(element) is not null)
             .GroupBy(element => element.Id.Value()).Select(group => group.First())
             .OrderBy(element => element.Id.Value()).Take(request.MaxElements + 1).ToArray();
-        RequireCount(members.Length, request.MaxElements, "system members");
-        return new(systems.Select(Row).ToArray(), request.SystemUniqueId,
+        if (RequireCount(members.Length, request.MaxElements, 16384, "maxElements", "system members", "Choose a smaller system.") is { } memberOverflow)
+            return memberOverflow;
+        return new MepSystemMembersData(systems.Select(Row).ToArray(), request.SystemUniqueId,
             members.Select(element => Member(element, SpecOf(selected!))).ToArray());
     }
 
     /// <summary>Every segment of the document with its nominal, inner and outer sizes. Revit's segment elements are pipe segments.</summary>
-    public static MepSegmentSizesData SegmentSizes(Document document, MepSegmentSizesRequest request) {
-        Bound(request.MaxSegments, 1024, nameof(request.MaxSegments));
-        Bound(request.MaxSizesPerSegment, 4096, nameof(request.MaxSizesPerSegment));
+    public static MepReadResult<MepSegmentSizesData> SegmentSizes(Document document, MepSegmentSizesRequest request) {
+        if ((Bound(request.MaxSegments, 1024, "maxSegments") ?? Bound(request.MaxSizesPerSegment, 4096, "maxSizesPerSegment")) is { } invalid)
+            return invalid;
         var segments = new FilteredElementCollector(document).OfClass(typeof(PipeSegment)).Cast<PipeSegment>()
             .OrderBy(segment => segment.Id.Value()).Take(request.MaxSegments + 1).ToArray();
-        RequireCount(segments.Length, request.MaxSegments, "segments");
-        return new(segments.Select(segment => {
+        if (RequireCount(segments.Length, request.MaxSegments, 1024, "maxSegments", "segments", "Remove unused segments from the document.") is { } overflow)
+            return overflow;
+        var rows = new List<MepSegmentRow>();
+        foreach (var segment in segments) {
             var sizes = segment.GetSizes().Take(request.MaxSizesPerSegment + 1).ToArray();
-            RequireCount(sizes.Length, request.MaxSizesPerSegment, $"sizes of segment {segment.UniqueId}");
-            return new MepSegmentRow(segment.UniqueId, segment.Id.Value(), segment.Name, Piping.Name, "pipe-segment",
-                sizes.Select(size => new MepSizeRow(size.NominalDiameter, size.InnerDiameter, size.OuterDiameter)).ToArray());
-        }).ToArray());
+            if (RequireCount(sizes.Length, request.MaxSizesPerSegment, 4096, "maxSizesPerSegment", $"sizes of segment {segment.UniqueId}", "Reduce that segment's size catalog.") is { } sizeOverflow)
+                return sizeOverflow;
+            rows.Add(new MepSegmentRow(segment.UniqueId, segment.Id.Value(), segment.Name, Piping.Name, "pipe-segment",
+                sizes.Select(size => new MepSizeRow(size.NominalDiameter, size.InnerDiameter, size.OuterDiameter)).ToArray()));
+        }
+        return new MepSegmentSizesData(rows);
     }
 
     private static IEnumerable<Element> Network(MEPSystem system) => system switch {
@@ -113,10 +131,8 @@ public static class MepSystemReads {
             return new(MepReadState.Error, default, $"{ex.GetType().FullName}: {ex.Message}");
         }
     }
-    private static void Bound(int value, int maximum, string name) {
-        if (value < 1 || value > maximum) throw new ArgumentOutOfRangeException(name, $"Expected 1 to {maximum}.");
-    }
-    private static void RequireCount(int count, int maximum, string name) {
-        if (count > maximum) throw new ArgumentException($"More than {maximum} {name}; increase the requested bound.");
-    }
+    private static MepReadRefusal? Bound(int value, int maximum, string name) => value < 1 || value > maximum
+        ? new("MepBoundInvalid", "$." + name, $"{name} must be from 1 to {maximum}; set {name} within that range.") : null;
+    private static MepReadRefusal? RequireCount(int count, int bound, int maximum, string field, string name, string narrow) => count > bound
+        ? new("MepBoundExceeded", "$." + field, $"More than {bound} {name} (requested {field}={bound}). {narrow} Or raise {field} up to {maximum}.") : null;
 }

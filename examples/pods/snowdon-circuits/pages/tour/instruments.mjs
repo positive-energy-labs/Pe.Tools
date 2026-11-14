@@ -112,7 +112,7 @@ function VoltageDrop() {
   useEffect(() => {
     api.onState?.(state);
   }, [state]);
-  const change = (key, value) => fire({ type: selected ? 'override' : 'input', key, value });
+  const change = (key, value) => fire(selected ? { type: 'override', id: selected.id, key, value } : { type: 'input', key, value });
   const pick = (key, label, options) => h('div', { className: 'field', key }, h('span', { className: 'muted' }, label), h(Picker, {
     anchor: 'trigger', face: 'field', triggerLabel: label, trigger: options.find(o => o.value === input[key])?.label ?? 'Unavailable · choose override', 'aria-label': label,
     items: options, keyOf: o => o.value, labelOf: o => o.label, filter: 'substring', empty: 'No options', selected: input[key] ? [input[key]] : [], select: 'single', onPick: o => change(key, o.value), row: o => ({ label: o.label }),
@@ -142,7 +142,7 @@ function VoltageDrop() {
       h('p', { className: 'result-note muted' }, 'Select a panel row to fill the calculator and highlight its connected loads and wires in Revit. Missing values require an override.')),
     picture ? h('figure', { className: 'capture' }, h('img', { src: picture.url, alt: picture.document.title + ' · panel ' + picture.panel + ' circuit ' + picture.number + ' connected loads and wires', style: { maxWidth: '100%' } }), h('figcaption', { className: 'muted' }, picture.document.title + ' · circuit element ' + picture.circuitId + ' · captured ' + when(picture.at) + ' · ', h('a', { href: picture.url, target: '_blank', rel: 'noreferrer' }, picture.viewName + ' / view ' + picture.viewId))) : null,
     h('div', { className: 'workspace' },
-      h('section', { 'aria-label': 'Results' }, h('div', { className: 'section-head' }, h('h2', null, selected ? selected.panel + ' / ' + selected.number : 'Manual example'), selected ? h(Button, { label: 'Clear circuit overrides', onClick: () => fire({ type: 'clear-overrides' }) }, 'Use measured values') : null),
+      h('section', { 'aria-label': 'Results' }, h('div', { className: 'section-head' }, h('h2', null, selected ? selected.panel + ' / ' + selected.number : 'Manual example'), selected ? h(Button, { label: 'Clear circuit overrides', onClick: () => fire({ type: 'clear-overrides', id: selected.id }) }, 'Use measured values') : null),
         result.status === 'unavailable' ? h('p', { className: 'error' }, result.reason) : h('div', { className: 'summary', 'aria-live': 'polite' }, ...[['Voltage drop', result.drop, 'V'], ['Percent drop', result.percent, '%'], ['At the load', result.delivered, 'V']].map(([label, value, unit]) => h('div', { key: label }, h('div', { className: 'muted' }, label), h('div', { className: 'metric', 'data-testid': label }, fmt(value), h('span', { className: 'unit' }, unit))))),
         h('label', { className: 'target' }, 'Design target · %', h(Input, { 'aria-label': 'Design target percent', type: 'number', min: 0.01, step: 'any', value: state.target, onChange: event => set('target', event.target.value) })),
         h('div', { className: 'section-head' }, h('h2', null, 'Conductor comparison')), h(Table, { rows: comparison, columns: [

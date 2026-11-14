@@ -253,11 +253,13 @@
         j = { ...j.error.details, message: j.error.message };
       m = j.message || j.error || j.title || m;
     } catch {}
-    const error = new Error(`${r.status} ${r.statusText}${m ? `: ${m}` : ""}`);
-    if (j && (j.refusal || j.resolution)) {
+    const issue = j?.issues?.[0] ?? j?.evidence?.issues?.[0];
+    const refused = r.status >= 400 && r.status < 500;
+    const error = new Error(refused ? m : `${r.status} ${r.statusText}${m ? `: ${m}` : ""}`);
+    if (j && (j.refusal || j.resolution || refused)) {
       Object.assign(error, {
         name: "PeRefusal",
-        code: j.refusal ? j.refusal.code : j.resolution.reason || j.resolution.kind,
+        code: j.refusal ? j.refusal.code : j.resolution?.reason || j.resolution?.kind || issue?.code,
         refusal: j.refusal || null,
         resolution: j.resolution || null,
       });

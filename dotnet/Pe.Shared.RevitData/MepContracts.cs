@@ -22,7 +22,9 @@ public sealed record MepMember(string UniqueId, long ElementId, string Name, str
     MepFact<double?> FlowCubicFeetPerSecond, MepFact<double?> NominalDiameterFt, MepFact<double?> InnerDiameterFt,
     MepFact<double?> WidthFt, MepFact<double?> HeightFt, MepFact<double?> LengthFt,
     MepFact<MepElementRef> Segment, MepFact<MepElementRef> Type, IReadOnlyList<MepPort> Connectors);
-public sealed record MepSystemMembersRequest(string? SystemUniqueId = null, int MaxSystems = 256, int MaxElements = 4096);
+/// <summary>Domain narrows before the roster bound: piping or duct. A system id reads only that system.</summary>
+public sealed record MepSystemMembersRequest(string? SystemUniqueId = null, int MaxSystems = 256, int MaxElements = 4096,
+    string? Domain = null);
 public sealed record MepSystemMembersData(IReadOnlyList<MepSystemRow> Systems, string? SystemUniqueId,
     IReadOnlyList<MepMember> Elements);
 public sealed record MepSegmentSizesRequest(int MaxSegments = 256, int MaxSizesPerSegment = 512);

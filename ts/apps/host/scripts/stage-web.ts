@@ -1,6 +1,6 @@
 // Stages the built web SPA into the host payload (contract with the C# installer:
 // static root = <dir of Pe.Host.exe>/web/client). Run via `pnpm --filter @pe/host build:payload`.
-import { cpSync, existsSync, mkdirSync, rmSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { splitWebMaps } from "./web-maps.mjs";
@@ -29,6 +29,9 @@ for (const [name, source] of Object.entries(PAGE_LIBRARY_SOURCES)) {
   const from = fileURLToPath(new URL(source, new URL("../src/page-library-sources.ts", import.meta.url)));
   const to = join(pages, name);
   mkdirSync(dirname(to), { recursive: true });
+  // A kit built outside NODE_ENV=production calls jsxDEV, which production React lacks: no kit component would draw.
+  if (name === "kit/pe-kit.js" && readFileSync(from, "utf8").includes("jsxDEV"))
+    throw Error(`${from} is a development build (jsxDEV); rebuild @pe/kit with NODE_ENV=production`);
   cpSync(from, to);
 }
 console.log(`staged page assets -> ${pages}`);
