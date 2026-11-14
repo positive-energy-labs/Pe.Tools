@@ -14,6 +14,11 @@ namespace Pe.Revit.Tests;
 ///     state says `done`. The verdict lines are in `log.txt` beside it. Without the state file the step is ignored.
 ///     Each scenario: commit an edit in the sibling and post Undo; next step, check the undo landed, do the
 ///     scenario's act, and post Redo; next step, read whether the edit is back.
+///     Verdict (2026-11-14, Revit 2025, 15 attached runs): Redo is KEPT after nothing (the control), after a
+///     ReadOnly, a WriteTransaction and a NoTransaction run on the target, after a ReadOnly run whose commit in
+///     this document the fence rolled back, and after a ReadOnly run on this document itself. It is LOST after a
+///     raw committed transaction in this document, which shows the probe can see a loss.
+///     `CanPostCommand(Redo)` answered true at every point, so it tells nothing; only the readback does.
 /// </summary>
 [TestFixture, Explicit("One step of a multi-run probe; see the runbook in the summary.")]
 public sealed class SiblingRedoProbeTests {
@@ -56,9 +61,9 @@ public sealed class SiblingRedoProbeTests {
         }
         var target = Open(uiApplication, state.Value<string>("target")!, activate: false);
         var sibling = Open(uiApplication, state.Value<string>("sibling")!, activate: true);
-        var scenario = (step - 1) / 2;
 
         if (step % 2 == 1) {
+            var scenario = (step - 1) / 2;
             // The act: the Undo posted by the last step has run, or the instrument is broken.
             var undone = sibling.ProjectInformation.Name == state.Value<string>("name");
             Say($"scenario {scenario}: {Scenarios[scenario].Name}");
@@ -68,10 +73,11 @@ public sealed class SiblingRedoProbeTests {
             uiApplication.PostCommand(redo);
             state["undone"] = undone;
         } else {
+            // An even step closes scenario step/2 - 1 and opens scenario step/2.
+            var scenario = step / 2;
             if (step > 0) {
                 var kept = sibling.ProjectInformation.Name == $"edit-{scenario - 1}";
-                var done = scenario - 1;
-                Say($"  VERDICT scenario {done}: Redo {(kept ? "KEPT" : "LOST")} (name '{sibling.ProjectInformation.Name}', undo landed {state.Value<bool>("undone")})");
+                Say($"  VERDICT scenario {scenario - 1}: Redo {(kept ? "KEPT" : "LOST")} (name '{sibling.ProjectInformation.Name}', expected 'edit-{scenario - 1}' when kept, undo landed {state.Value<bool>("undone")})");
                 state["name"] = sibling.ProjectInformation.Name;
             }
             if (scenario < Scenarios.Length) {

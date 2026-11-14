@@ -31,10 +31,10 @@ What is superseded: the second and third sentences of ADR 0017 rule 7, and the w
 - A pinned Page, an external device and Pea run scripts on their target whatever else is open beside it.
 - The journal's record of a script changes shape. A reader that expected one effect per open document, or a `census` consume, finds the target only.
 - Proof: `SiblingFenceProofTests` (the platform facts) and `ScriptSiblingFenceTests` (through the service), fresh Revit 2025, 15 passed at 56812dc3. Each rule has a mutant that was run red once: the fence removed in `SiblingFence.Raise`, and `admitScript` widened to the process in `control.test.ts`.
+- A person's Redo in a sibling survives a run. On Revit 2025 a posted Redo still restored the sibling's undone edit after a ReadOnly, a WriteTransaction and a NoTransaction run on the target, and after a run that committed in the sibling and was rolled back; a raw commit in the sibling took it, as expected (`SiblingRedoProbeTests`, attached session, 2026-11-14). A ReadOnly run on a document itself keeps that document's Redo too.
 - The fence bounds documents that are open when the run starts, not documents the run opens. It does not contain hostile code, and it does nothing for files a script writes outside Revit. A consented ReadOnly read, admitted with no authority over its target, can still open a file from disk, commit in it and save it. This is the recorded stance that the grant is a guard and not a boundary; no code changes for it.
 - Open limits, each UNPROVEN:
   - A workshared sibling: whether a rolled-back commit leaves borrowed elements or other central state.
-  - A sibling's redo stack after the commit and rollback.
   - The skip of linked and read-only documents, which rests on Revit opening no transaction on them.
   - `EditFamily` plus `LoadFamily` back into a fenced sibling. Revit accepted the calls; the check after the rollback was flawed.
   - A script that returns with a transaction still open on a sibling. The group may not roll back; the run then fails and names the document.
