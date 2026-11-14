@@ -1,8 +1,29 @@
 import { lstat, readdir } from "node:fs/promises";
-import { join } from "node:path";
+import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { logPackageDiscovery } from "./pod-discovery-log.ts";
 
 const metadataScanSlowMs = 500;
+
+/** Partition the same metadata witness by immediate Pod folder, without a second disk walk. */
+export function packageDiskSignatures(signature: string, roots: readonly string[]): Map<string, string> {
+  const grouped = new Map<string, unknown[]>();
+  const resolved = roots.map(root => resolve(root));
+  const entries: unknown = JSON.parse(signature);
+  if (!Array.isArray(entries)) return new Map();
+  for (const entry of entries) {
+    if (!Array.isArray(entry) || typeof entry[0] !== "string") continue;
+    for (const root of resolved) {
+      const path = relative(root, entry[0]);
+      if (!path || isAbsolute(path) || path.startsWith(`..${sep}`) || path === "..") continue;
+      const directory = join(root, path.split(sep)[0] ?? path);
+      const members = grouped.get(directory) ?? [];
+      members.push(entry);
+      grouped.set(directory, members);
+      break;
+    }
+  }
+  return new Map([...grouped].map(([directory, entries]) => [directory, JSON.stringify(entries)]));
+}
 
 /** Metadata only. Unreadable metadata never authorizes reuse; a missing root is a known state. */
 export async function podsDiskSignature(

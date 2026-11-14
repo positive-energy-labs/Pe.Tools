@@ -20,8 +20,10 @@ export const packageScanMaxAgeMs = 60_000;
 
 export class PackageDiscoveryExceeded extends Error {
   readonly code = "pod.discovery.exceeded";
-  constructor(roots: PodsRoots) {
-    super(`Pod discovery exceeded ${packageDiscoveryTimeoutMs} ms listing ${[roots].flat().join(", ")}. Try again when the folder is available.`);
+  constructor(roots: PodsRoots, incomplete?: string) {
+    super(incomplete
+      ? `Pod discovery could not complete listing ${[roots].flat().join(", ")}: ${incomplete}. Try again when the folder is available.`
+      : `Pod discovery exceeded ${packageDiscoveryTimeoutMs} ms listing ${[roots].flat().join(", ")}. Try again when the folder is available.`);
   }
 }
 
@@ -37,7 +39,8 @@ type DiscoveryScan = {
 const discovery = new Map<string, DiscoveryScan>();
 const scans = new Set<DiscoveryScan>();
 const validations = new Set<AbortController>();
-const completedCensuses = new Map<string, { signature: string; listing: PackageListing }>();
+export type PackageCensus = { signature: string; listing: PackageListing };
+const completedCensuses = new Map<string, PackageCensus>();
 
 /** Shutdown cancels discovery; request expiry alone leaves a recoverable scan running. */
 export function stopPackageDiscovery() {
@@ -49,7 +52,7 @@ export function stopPackageDiscovery() {
 
 export async function discoverPackages(
   roots: PodsRoots,
-  read: (roots: readonly string[], signal: AbortSignal) => Promise<PackageListing>,
+  read: (roots: readonly string[], signal: AbortSignal, previous?: PackageCensus, signature?: string) => Promise<PackageListing>,
   wait: "request" | "background",
   readSignature?: (signal: AbortSignal) => Promise<string | undefined>,
 ): Promise<PackageListing> {
@@ -81,7 +84,7 @@ export async function discoverPackages(
     const stop = new AbortController();
     const current: DiscoveryScan = {
       stop,
-      promise: read([roots].flat(), stop.signal),
+      promise: read([roots].flat(), stop.signal, cached, signature),
       expired,
       completed: false,
       startedAt: Date.now(),

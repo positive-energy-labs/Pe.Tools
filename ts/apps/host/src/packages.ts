@@ -24,12 +24,14 @@ import { verifyPodArtifact } from "./pod-artifact.ts";
 import { shippedPodUpdateRefusals } from "./shipped-pod-status.ts";
 import { podModelSchema, type PodModel } from "./pod-model.ts";
 import { logPackageDiscovery as scanLog } from "./pod-discovery-log.ts";
-import { podsDiskSignature } from "./pod-disk-signature.ts";
+import { packageDiskSignatures, podsDiskSignature } from "./pod-disk-signature.ts";
 export { bindPackageScanLogger, logPackageDiscovery, packageScanLog, packageScanLogLineLimit } from "./pod-discovery-log.ts";
 import {
   captureIndexedPackage,
   rememberCaptureRoots,
   discoverPackages,
+  type PackageCensus,
+  PackageDiscoveryExceeded,
 } from "./pod-capture.ts";
 
 export type PackageEntrypoint = {
@@ -165,7 +167,12 @@ export async function listPackages({ podsRoots, wait = "request" }: PackageDisco
   const listing = await discoverPackages(podsRoots, scanPackages, wait,
     signal => podsDiskSignature([podsRoots].flat(), isPackageMember, signal));
   // Import notices are runtime state, not disk bytes; project them even when the census is reused.
-  return { ...listing, packages: listing.packages.map(pod => ({ ...pod, diagnostics: currentDiagnostics(pod.id, pod.diagnostics) })) };
+  return { ...listing, packages: listing.packages.map(pod => {
+    const twins = listing.packages.filter(other => other.id === pod.id);
+    const diagnostics = currentDiagnostics(pod.id, pod.diagnostics);
+    if (twins.length > 1) diagnostics.unshift(problem("DuplicatePodId", "pod.json", claimedTwice(pod.id, twins)));
+    return { ...pod, diagnostics, contributions: twins.length > 1 ? [] : pod.contributions };
+  }) };
 }
 
 function currentDiagnostics(id: string, issues: readonly MemberIssue[]): MemberIssue[] {
@@ -178,7 +185,18 @@ function currentDiagnostics(id: string, issues: readonly MemberIssue[]): MemberI
 async function scanPackages(
   roots: readonly string[],
   signal: AbortSignal,
+  previous?: PackageCensus,
+  signature?: string,
 ): Promise<PackageListing> {
+  // The census owns reuse. Unknown metadata never permits borrowing bytes, and duplicate identity
+  // is projected after reuse so a temporary collision cannot poison an unchanged Pod.
+  const before = previous && packageDiskSignatures(previous.signature, roots);
+  const after = signature && packageDiskSignatures(signature, roots);
+  const reusable = new Map(previous?.listing.packages
+    .filter(pod => after && before?.has(resolve(pod.directory)) &&
+      before.get(resolve(pod.directory)) === after.get(resolve(pod.directory)))
+    .map(pod => [resolve(pod.directory), pod]));
+  const admitted = new Set(previous?.listing.packages.map(pod => resolve(pod.directory)));
   const result: PackageListing = { packages: [], unreadable: [] };
   for (const root of roots) {
     signal.throwIfAborted();
@@ -196,7 +214,7 @@ async function scanPackages(
     signal.addEventListener("abort", end, { once: true });
     let listing: PackageListing;
     try {
-      listing = await listPodsFolder(root, signal);
+      listing = await listPodsFolder(root, signal, reusable, admitted);
       signal.throwIfAborted();
       outcome = "completed";
     } finally {
@@ -206,30 +224,25 @@ async function scanPackages(
     result.packages.push(...listing.packages);
     result.unreadable.push(...listing.unreadable);
   }
-  for (const pod of result.packages) {
-    const twins = result.packages.filter((other) => other.id === pod.id);
-    if (twins.length > 1) {
-      pod.diagnostics.unshift(problem("DuplicatePodId", "pod.json", claimedTwice(pod.id, twins)));
-      pod.contributions = [];
-    }
-  }
   return result;
 }
 
-async function listPodsFolder(podsRoot: string, signal: AbortSignal): Promise<PackageListing> {
+async function listPodsFolder(podsRoot: string, signal: AbortSignal, reusable: ReadonlyMap<string, AdmittedPackage>, admitted: ReadonlySet<string>): Promise<PackageListing> {
   const result: PackageListing = { packages: [], unreadable: [] };
   let entries;
   try {
     entries = await readdir(podsRoot, { withFileTypes: true });
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return result;
+    if ([...admitted].some(directory => resolve(dirname(directory)) === resolve(podsRoot)))
+      throw new PackageDiscoveryExceeded(podsRoot, message(error));
     throw error;
   }
   for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
     signal.throwIfAborted();
     if (!entry.isDirectory() && !entry.isSymbolicLink()) continue;
+    const directory = join(podsRoot, entry.name);
     try {
-      const directory = join(podsRoot, entry.name);
       if (entry.isSymbolicLink()) throw Error("Pod folders cannot be links.");
       try {
         await lstat(join(directory, "pod.json"));
@@ -237,9 +250,15 @@ async function listPodsFolder(podsRoot: string, signal: AbortSignal): Promise<Pa
         if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
         throw error;
       }
-      result.packages.push(await readFolder(directory, entry.name, signal));
+      const pod = reusable.get(resolve(directory)) ?? await readFolder(directory, entry.name, signal);
+      // Arrival metadata requires fresh admission (W26): a partial read cannot publish absence or
+      // stale bytes. Only a completed walk missing the folder/manifest authorizes removal.
+      if (admitted.has(resolve(directory)) && pod.diagnostics.some(issue => issue.code === "PackageMemberInvalid"))
+        throw Error("Previously admitted Pod could not be completely read");
+      result.packages.push(pod);
     } catch (error) {
       signal.throwIfAborted();
+      if (admitted.has(resolve(directory))) throw new PackageDiscoveryExceeded(podsRoot, message(error));
       result.unreadable.push({ folder: entry.name, message: message(error) });
     }
   }
