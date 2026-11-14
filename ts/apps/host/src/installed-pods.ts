@@ -320,10 +320,12 @@ async function offer(
           }
         } catch (error) {
           options.signal?.throwIfAborted();
-          console.error("Shipped example update kept", { id, error });
           const reason = error instanceof Error && /^(its |the replacement )/.test(error.message)
             ? error.message : "its provenance could not be verified";
-          shippedPodUpdateRefusals.set(id, `Example update kept ${installed.name}: ${reason}. Restore the original import or import the current example into a separate workspace.`);
+          shippedPodUpdateRefusals.set(
+            id,
+            `${installed.name} was kept with your changes. Only the example update was skipped because ${reason}. To take the update, import the current example into a separate workspace beside this Pod.`,
+          );
         }
       }
       return {
