@@ -45,7 +45,7 @@ purger = "partner"
 driver = "partner"
 integrator = "partner" # its work is mechanical; a cheaper tier passed a cold read and no run (see observations)
 
-# Read-only jobs that a role hands to subagents.
+# Jobs that a role hands to children.
 [jobs]
 plan-check-reader = "taste" # homes: four readers, three minutes, four plan changes
 tip-reviewer = "slog-writer" # kernel2: the purger's 12 children were 10 on this tier's model and 2 on the taste tier's
