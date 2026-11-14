@@ -27,13 +27,13 @@ test.each([false, true])("Page Pod bootstrap preserves authored changes: %s", as
     await cp(old.archivePath, resolve(machine.state, "shipped-pod-originals", `${old.archiveSha256}.zip`));
     await exportPod({ pod: "snowdon-circuits", archivePath: resolve(shippedRoot, "snowdon-circuits.zip") }, { podsRoot: examples, captures });
     if (modified) await writeFile(resolve(podsRoot, "snowdon-circuits/README.md"), "Keep this authored worksheet note.");
-    const before = (await listPackages({ podsRoots })).packages[0]!.members.map(m => [m.path, m.sha256]);
+    const before = (await listPackages({ podsRoots: podsRoot })).packages[0]!.members.map(m => [m.path, m.sha256]);
     const completed = Promise.withResolvers<Awaited<ReturnType<typeof importShippedPods>>>();
-    content = createContributionContent({ worldRoot: stateFixture(directory), homeRoot: directory, packages: () => listPackages({ podsRoots }), decisionsMachine: machine,
+    content = createContributionContent({ worldRoot: stateFixture(directory), homeRoot: directory, packages: () => listPackages({ podsRoots: podsRoot }), decisionsMachine: machine,
       bootstrap: async () => { try { const report = await importShippedPods({ shippedRoot, podsRoot, captures, ledger: ledgerKind.in(machine) }); completed.resolve(report); } catch (error) { completed.reject(error); throw error; } } });
     const report = await completed.promise;
     await content.lifecycle.ready;
-    const kept = (await listPackages({ podsRoots })).packages[0]!;
+    const kept = (await listPackages({ podsRoots: podsRoot })).packages[0]!;
     if (modified) {
       expect(kept.members.map(m => [m.path, m.sha256])).toEqual(before);
       expect(kept.diagnostics.find(d => d.code === "ShippedExampleUpdateKept")).toMatchObject({ message: expect.stringContaining("authored members differ") });
