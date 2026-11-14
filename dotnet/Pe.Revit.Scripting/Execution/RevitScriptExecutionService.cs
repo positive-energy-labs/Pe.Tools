@@ -31,7 +31,9 @@ public sealed class RevitScriptExecutionService(
     ScriptAssemblyLoadService assemblyLoadService,
     ScriptCompilationService compilationService,
     Func<UIApplication?> uiApplicationAccessor,
-    Action<string>? notificationSink = null
+    Action<string>? notificationSink = null,
+    // The host's word on where a pod's folder is. A test names its own home here, never the person's host.
+    ScriptPodPreparationService? pods = null
 ) {
     private const int MaxInlineSourceBytes = 256 * 1024;
 
@@ -436,12 +438,8 @@ public sealed class RevitScriptExecutionService(
             return (null, ScriptExecutionStatus.Rejected, diagnostics);
         }
 
-        if (request.Input is { } input && Encoding.UTF8.GetByteCount(input.ToString(Newtonsoft.Json.Formatting.None)) > MaxInlineSourceBytes) {
-            diagnostics.Add(ScriptDiagnosticFactory.Error("normalize", "Script input may not exceed 256 KiB."));
-            return (null, ScriptExecutionStatus.Rejected, diagnostics);
-        }
-
         try {
+            ScriptInputBounds.Require(request.Input);
             RequireTargetLifetime(uiApplication, document);
             // Relative reference paths resolve against the pod's own folder, and only the host knows which home
             // holds it. An inline snippet has no pod and no authored references; its base is the pod-less runs.
@@ -452,6 +450,7 @@ public sealed class RevitScriptExecutionService(
             PodManifest? podManifest = null;
             PodReceipt? preparedAttribution = null;
             string? projectSeed = null;
+            var permissionMode = request.PermissionMode ?? ScriptPermissionMode.ReadOnly;
             if (hasInlineContent) {
                 sourceSet = this.MaterializeInlineSnippet(
                     request.ScriptContent,
@@ -473,13 +472,11 @@ public sealed class RevitScriptExecutionService(
                 executionMode = ScriptWorkspaceExecutionMode.Pod;
                 podManifest = captured.Manifest;
                 // The frozen manifest owns identity; the host names the absolute folder that holds it today.
-                workspaceRoot = new ScriptPodPreparationService().ResolveFolder(podManifest.Id);
+                workspaceRoot = (pods ?? new ScriptPodPreparationService()).ResolveFolder(podManifest.Id);
                 projectSeed = captured.ProjectSeed;
                 var member = preparation.Members.Single(item => string.Equals(item.Path, sourceSet.EntryPointSourceName, StringComparison.OrdinalIgnoreCase));
-                // A declared ReadOnly entrypoint is a read at every door; this is the one refusal they all reach.
-                if (request.PermissionMode != ScriptPermissionMode.ReadOnly && podManifest.Entrypoints.Any(entry =>
-                        entry.Mode == ScriptPermissionMode.ReadOnly && string.Equals(entry.SourcePath, member.Path, StringComparison.OrdinalIgnoreCase)))
-                    throw new ArgumentException($"{member.Path} is declared ReadOnly in pod.json; it cannot run as {request.PermissionMode}.");
+                // The declared mode is the default and a declared ReadOnly is a read: the one rule every door reaches.
+                permissionMode = podManifest.ModeFor(member.Path, request.PermissionMode);
                 // Outcome and output references are settled when CreateResult observes the final result.
                 preparedAttribution = PodReceipt.ForSavedMember(podManifest.Id, member.Path, member.Sha256, "scripting.execute", null, PodRunOutcome.Failed, [], null);
             }
@@ -501,7 +498,7 @@ public sealed class RevitScriptExecutionService(
                     targetFramework,
                     runtimeAssemblyPath,
                     workspaceRoot,
-                    request.PermissionMode,
+                    permissionMode,
                     sourceSet,
                     executionMode,
                     podManifest,

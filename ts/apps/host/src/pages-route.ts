@@ -31,6 +31,8 @@ import {
   addressSchema,
   pageBindingSchema,
   parseContributionKey,
+  declaredScriptRun,
+  message,
   pageKeyOf,
   pageChoiceSchema,
   resolveCallTarget,
@@ -841,19 +843,13 @@ export function createPagesHandler(
       return {
         problem: `${key} is no declared script of an admitted package; declare ${ref.path} in pod.json entrypoints.`,
       };
-    const asked = sent.permissionMode ?? row.mode;
-    if (row.mode === "ReadOnly" && asked !== "ReadOnly")
-      return {
-        problem: `${key} is declared ReadOnly in pod.json; it cannot run as ${String(asked)}.`,
-      };
+    let run: Record<string, unknown>;
+    try {
+      run = declaredScriptRun(row, sent);
+    } catch (error) {
+      return { problem: message(error) };
+    }
     const { sourceBundle } = await capturePackage(pod);
-    const run = Object.fromEntries(
-      Object.entries({
-        input: sent.input,
-        permissionMode: asked,
-        timeoutSeconds: sent.timeoutSeconds,
-      }).filter(([, value]) => value !== undefined),
-    );
     return { key: "scripting.execute", input: { ...run, sourcePath: ref.path, sourceBundle } };
   }
 

@@ -474,9 +474,16 @@ export function admitScript(
  * a read for Pea, a human and a Page pinned by a human to this exact document.
  * External MCP keeps it a write. NoTransaction and WriteTransaction are always writes.
  */
-export const readsOnly = (key: string, input: unknown): boolean =>
-  key === "scripting.execute" &&
-  ((input as { permissionMode?: unknown } | null)?.permissionMode ?? "ReadOnly") === "ReadOnly";
+export const readsOnly = (key: string, input: unknown): boolean => {
+  if (key !== "scripting.execute") return false;
+  const run = (input ?? {}) as { permissionMode?: unknown; sourcePath?: unknown };
+  // A Pod entrypoint run that names no mode takes the mode pod.json declares (native
+  // `PodManifest.ModeFor`), which may write, so it is a read only when it says ReadOnly. The Page
+  // door and Pea door always name the mode (`declaredScriptRun`). Inline source defaults to ReadOnly.
+  return run.sourcePath == null
+    ? (run.permissionMode ?? "ReadOnly") === "ReadOnly"
+    : run.permissionMode === "ReadOnly";
+};
 
 /** Who may run a ReadOnly script on `target` without write authority; a person's pin consents only to its own lifetime. */
 const readConsent = (caller: Caller, target?: DocumentRef): boolean => {

@@ -10,6 +10,8 @@ import {
   readPackage,
 } from "../src/packages.ts";
 import { createHash } from "node:crypto";
+import { Schema } from "effect";
+import { podCaptureResponseSchema } from "@pe/host-contracts/operation-types";
 import { routeFingerprint } from "../../../packages/agent-contracts/src/route-module.ts";
 import { builtinData } from "../../../packages/agent-contracts/src/route-kernel.fixtures.ts";
 
@@ -122,6 +124,13 @@ test("an entrypoint is any script of the Pod, keeps its declared mode, and gets 
   expect(pod.contributions.find((row) => row.key === "script:@mixed/heals/Fix.cs")).not.toHaveProperty("mode");
   expect(pod.diagnostics.filter((issue) => issue.code === "InvalidEntrypoint")).toHaveLength(2);
   expect(kindOfMember("pages/tour/checks/census.csx", pod.entrypoints)).toBe("script");
+  // `pod.capture` and `pod.list` carry the declared mode on the wire. Mutant, run red once: drop
+  // `mode` from `podEntrypointSchema` (the decode strips it).
+  const wire = Schema.decodeUnknownSync(podCaptureResponseSchema)(await capturePackage(pod));
+  expect(wire.entrypoints).toEqual([
+    expect.objectContaining({ sourcePath: "pages/tour/checks/census.csx", mode: "ReadOnly" }),
+    expect.objectContaining({ sourcePath: "heals/Fix.cs", mode: null }),
+  ]);
   // Every script of the Pod is a compiler input, so the entrypoint compiles beside the others.
   expect((await capturePackage(pod)).sourceBundle.files.map((file) => file.path).sort()).toEqual([
     "PeScripts.csproj",

@@ -58,16 +58,9 @@ public sealed class RevitScriptContext(
     ///     The absolute path of a file the running Pod carries. The live file, not the bytes the run captured.
     ///     Refuses a path that leaves the Pod (by `..`, a rooted path, or a link) and a file that is not there.
     /// </summary>
-    public string PodFile(string relativePath) {
-        if (this.PodFolder is null)
-            throw new InvalidOperationException("this script runs outside a Pod; PodFile names a file of the Pod a declared entrypoint runs from.");
-        var path = Pods.ScriptPodPreparationService.FullPath(this.PodFolder,
-            Pods.ScriptPodPreparationService.NormalizeMemberPath((relativePath ?? string.Empty).Replace('\\', '/')));
-        for (var at = path; at is not null && at.Length > this.PodFolder.Length; at = Path.GetDirectoryName(at))
-            if ((File.Exists(at) || Directory.Exists(at)) && (File.GetAttributes(at) & FileAttributes.ReparsePoint) != 0)
-                throw new InvalidDataException($"PodFile cannot follow a link: {relativePath}");
-        return File.Exists(path) ? path : throw new FileNotFoundException($"This Pod has no file '{relativePath}'.", path);
-    }
+    public string PodFile(string relativePath) => this.PodFolder is null
+        ? throw new InvalidOperationException("this script runs outside a Pod; PodFile names a file of the Pod a declared entrypoint runs from.")
+        : Pods.ScriptPodPreparationService.MemberFile(this.PodFolder, relativePath);
 
     /// <summary>Structured result set by the script via Result(...); returned as the response's data field.</summary>
     public JToken? ResultData { get; private set; }
