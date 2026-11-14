@@ -46,6 +46,8 @@ type Published = {
 /** The durable versions are kept BEFORE the synchronous publication commit, never acknowledged by a browser. */
 export class History {
   private readonly published = new Map<string, Published>();
+  // Recording-owned references to durable takings, not live Values, slots or read leases.
+  private readonly recorded = new Map<string, Published>();
   private readonly poses = new Map<string, HistoryPose>();
   private readonly synced = new Set<string>();
   private pending: Promise<unknown> = Promise.resolve();
@@ -118,6 +120,7 @@ export class History {
     });
     return () => {
       this.published.set(subscription, kept);
+      this.recorded.set(canonicalJson([addressKey(address), pose.instance, read]), kept);
       this.poses.set(canonicalJson([addressKey(address), pose.instance]), pose);
       const basis = canonicalJson([
         addressKey(address),
@@ -157,7 +160,9 @@ export class History {
   private snapshot(address: Address, reason: RecordingPointReason): RecordingPoint {
     if (!this.writer || this.writer.capture.truncated())
       throw fail("History storage is full or unavailable");
-    const slots = this.openPublications().filter((p) => sameAddress(p.address, address));
+    const live = this.openPublications().filter((p) => sameAddress(p.address, address));
+    // With no live pane, an explicit capture keeps the last recorded evidence; it runs no read.
+    const slots = live.length ? live : [...this.recorded.values()].filter((p) => sameAddress(p.address, address));
     if (!slots.length) throw fail("No published Values for this document");
     const end = this.writer.takingCursor();
     return {

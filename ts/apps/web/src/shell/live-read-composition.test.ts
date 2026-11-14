@@ -163,7 +163,25 @@ test("an empty ancestor directory cannot invalidate the missing firm input mid-r
       clearTimeout(timeout);
     }
   });
+  let closeStream: (() => Promise<void>) | undefined;
   try {
+    // A publication watch is a live holder: establish it before the HTTP-only request ends.
+    const keys = JSON.stringify([{ kind: "publication", subscription: "metadata", generation: 1 }]);
+    const events = await fetch(`${host.base}/pe/resources?keys=${encodeURIComponent(keys)}`, {
+      headers: host.headers,
+      signal: AbortSignal.timeout(10000),
+    });
+    const reader = events.body!.getReader();
+    closeStream = () => reader.cancel();
+    let received = "";
+    const until = async (state: string) => {
+      while (!received.includes(`"state":"${state}"`)) {
+        const chunk = await reader.read();
+        if (chunk.done) throw Error(`SSE closed before ${state}`);
+        received += new TextDecoder().decode(chunk.value);
+      }
+    };
+    await until("absent");
     const response = await fetch(`${host.base}/pe/reads/value`, {
       method: "POST",
       headers: host.headers,
@@ -176,32 +194,14 @@ test("an empty ancestor directory cannot invalidate the missing firm input mid-r
     });
     const result = await response.json();
     expect(result.state, JSON.stringify(result)).toBe("current");
-    const keys = JSON.stringify([{ kind: "publication", subscription: "metadata", generation: 1 }]);
-    const events = await fetch(`${host.base}/pe/resources?keys=${encodeURIComponent(keys)}`, {
-      headers: host.headers,
-      signal: AbortSignal.timeout(10000),
-    });
-    const reader = events.body!.getReader();
-    let received = "";
-    const until = async (state: string) => {
-      while (!received.includes(`"state":"${state}"`)) {
-        const chunk = await reader.read();
-        if (chunk.done) throw Error(`SSE closed before ${state}`);
-        received += new TextDecoder().decode(chunk.value);
-      }
-    };
-    try {
-      await until("current");
-      await writeFile(
-        join(host.inputRoot, "Settings", "ducts.json"),
-        JSON.stringify({ ...FIRM_SEED, version: "changed" }),
-      );
-      await until("refresh-needed");
-    } finally {
-      await reader.cancel();
-    }
+    await until("current");
+    await writeFile(
+      join(host.inputRoot, "Settings", "ducts.json"),
+      JSON.stringify({ ...FIRM_SEED, version: "changed" }),
+    );
+    await until("refresh-needed");
   } finally {
-    await host.close();
+    try { await closeStream?.(); } finally { await host.close(); }
   }
 });
 

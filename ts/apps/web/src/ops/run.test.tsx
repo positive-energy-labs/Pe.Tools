@@ -10,6 +10,7 @@ import { oneName } from "../route/typed-route";
 import { TypedChrome } from "../shell/typed-shell";
 import * as mounts from "../shell/typed-mount";
 import type { UseSource } from "../shell/source-contract";
+import { fixtureTimeline } from "../shell/fixture-work-door";
 import { module as ops } from "./route";
 
 const io = vi.hoisted(() => ({ fetch: vi.fn(), fault: vi.fn() }));
@@ -74,7 +75,7 @@ function journey() {
     address: { read: () => new URLSearchParams(), write() {}, subscribe: () => () => {} },
     fixture: null, target: { kind: "document", ref: { session: "s", openId: "chadds-r4" } },
     work: { address: null, open: null }, custody: { current: () => true }, memory: () => ({}),
-  }, workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`), { sources: { "ops.workspace": source } });
+  }, workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`), { timeline: fixtureTimeline(), sources: { "ops.workspace": source } });
   function Journey() {
     useSyncExternalStore(mount.subscribe, mount.revision, mount.revision);
     return <KeyScopeHost id="ops-run"><TypedChrome mount={mount} document={<span>Chadds-r4</span>} /></KeyScopeHost>;

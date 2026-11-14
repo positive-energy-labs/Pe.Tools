@@ -11,6 +11,8 @@ import type { Scene3DProps } from "../scene/scene3d";
 import { TestAttention } from "../test-attention";
 import { makeAtomRegistry } from "../shell/owner";
 import { mountTypedRoute } from "../shell/typed-mount";
+import { fixtureTimeline } from "../shell/fixture-work-door";
+import { hostEventSource } from "../host/event-source.test-support";
 import { route } from "./typed-route";
 import { module as fans } from "../fans/route";
 import { RosterBody } from "../fans/mount";
@@ -105,7 +107,7 @@ function pictureJourney() {
       work: { address: null, open: null },
       address: { read: () => new URLSearchParams(), write() {}, subscribe: () => () => {} },
       custody: { current: () => true }, memory: () => ({ viewport: { kind: "orbit", yaw: 225, elev: 32, zoom: 1, pivot: [0, 0, 0] } }),
-    }, stamp, { sources: { "fans.sheet": { kind: "use", open(ctx, deliver) {
+    }, stamp, { timeline: fixtureTimeline(), sources: { "fans.sheet": { kind: "use", open(ctx, deliver) {
       const packet = structuredClone(fans.spec.core!.source.provide!("layout", ctx.args));
       const data = packet.value!.data as any;
       data.sheetSnapshot.sourceVersion = `h04-${openId}`;
@@ -199,7 +201,6 @@ test("JZ Fans Revert removes A from Plan before staging B",async()=>{
  trace.results=[];
  trace.submit.mockClear();
  const originalFetch=globalThis.fetch;
- const streams=new Set<any>();
  const requests:any[]=[];
  let bridge:any;
  const roster=nativeResponseSchema("ducts.snapshot.roster").parse(rosterCapture);
@@ -232,14 +233,7 @@ test("JZ Fans Revert removes A from Plan before staging B",async()=>{
    return originalFetch(`${host.base}${target.pathname}${target.search}`,{...init,headers});
  };
  trace.fetch.mockImplementation(forward);vi.stubGlobal("fetch",forward);
- class Stream {
-   onopen:any;onmessage:any;onerror:any;controller=new AbortController();
-   keys=new Set<string>();
-   constructor(readonly url:string){streams.add(this);void this.start(url);}
-   deliver(data:string){this.onmessage?.({data});}
-   async start(url:string){try{const response=await forward(url,{signal:this.controller.signal});if(!response.ok)throw Error(await response.text());this.onopen?.({});const reader=response.body!.getReader();let buffer="";while(!this.controller.signal.aborted){const chunk=await reader.read();if(chunk.done)break;buffer+=new TextDecoder().decode(chunk.value);let end;while((end=buffer.indexOf("\n\n"))>=0){const frame=buffer.slice(0,end);buffer=buffer.slice(end+2);const data=frame.split("\n").filter(s=>s.startsWith("data:")).map(s=>s.slice(5).trimStart()).join("\n");if(data)this.deliver(data);}}}catch(error){if(!this.controller.signal.aborted)this.onerror?.(error);}}
-   close(){this.controller.abort();streams.delete(this);}
- }
+ const {Stream,streams}=hostEventSource(request=>forward(request.url,{signal:request.signal}));
  vi.stubGlobal("ResizeObserver",class {observe(){} unobserve(){} disconnect(){}});
  vi.stubGlobal("EventSource",Stream);
  const unbind=bindActionReadings();
