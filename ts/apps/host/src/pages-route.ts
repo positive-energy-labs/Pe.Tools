@@ -73,6 +73,7 @@ import {
   emitPagePinRevoke,
 } from "./control.ts";
 import { capturePackage, listPackages, productPodsRoots, type AdmittedPackage, type PodsRoots } from "./packages.ts";
+import { PackageDiscoveryExceeded } from "./pod-capture.ts";
 import { activePackages, requirePackageEnabled } from "./package-lifecycle.ts";
 import {
   pageDescriptors,
@@ -471,7 +472,7 @@ export function createPagesHandler(
     const timeout = new Promise<never>((_, reject) => {
       timer = setTimeout(() => {
         expired = true;
-        reject(Error(`Pod discovery exceeded ${packageDiscoveryTimeoutMs} ms listing ${[pods].flat().join(", ")}. Try again when the folder is available.`));
+        reject(new PackageDiscoveryExceeded(pods));
       }, packageDiscoveryTimeoutMs);
     });
     const discover = async () => {
@@ -984,7 +985,7 @@ export function createPagesHandler(
   };
 
   return Object.assign((request: Request) => handle(request).catch((error: unknown) => {
-    if (error instanceof Error && error.message.startsWith("Pod discovery exceeded "))
+    if (error instanceof PackageDiscoveryExceeded)
       return problem(503, error.message);
     throw error;
   }), { observeTarget });

@@ -15,6 +15,74 @@ export function rememberPackageCensus(roots: PodsRoots, listing: PackageListing)
   );
 }
 
+export class PackageDiscoveryExceeded extends Error {
+  readonly code = "pod.discovery.exceeded";
+  constructor(roots: PodsRoots) {
+    super(`Pod discovery exceeded 5000 ms listing ${[roots].flat().join(", ")}. Try again when the folder is available.`);
+  }
+}
+
+const discovery = new Map<string, {
+  stop: AbortController;
+  promise: Promise<PackageListing>;
+  expired: boolean;
+  completed: boolean;
+}>();
+
+/** Host shutdown alone cancels discovery; a request owns only its wait. */
+export function stopPackageDiscovery() {
+  for (const scan of discovery.values()) scan.stop.abort();
+  discovery.clear();
+}
+
+export async function discoverPackages(
+  roots: PodsRoots,
+  read: (roots: readonly string[], signal: AbortSignal) => Promise<PackageListing>,
+  wait: "request" | "background",
+): Promise<PackageListing> {
+  const key = rootsKey(roots);
+  let scan = discovery.get(key);
+  if (!scan) {
+    const stop = new AbortController();
+    const current = {
+      stop,
+      promise: read([roots].flat(), stop.signal),
+      expired: false,
+      completed: false,
+    };
+    current.promise = current.promise.then(listing => {
+      stop.signal.throwIfAborted();
+      rememberPackageCensus(roots, listing);
+      current.completed = true;
+      // Keep a late answer until a reader consumes it, then resume fresh discovery.
+      if (!current.expired && discovery.get(key) === current) discovery.delete(key);
+      return listing;
+    }, error => {
+      if (discovery.get(key) === current) discovery.delete(key);
+      throw error;
+    });
+    discovery.set(key, current);
+    scan = current;
+  } else if (scan.completed) {
+    discovery.delete(key);
+  }
+  if (wait === "background") return scan.promise;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      scan.promise,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+          scan.expired = true;
+          reject(new PackageDiscoveryExceeded(roots));
+        }, 5_000);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function captureIndexedPackage(
   id: string,
   roots: PodsRoots | undefined,

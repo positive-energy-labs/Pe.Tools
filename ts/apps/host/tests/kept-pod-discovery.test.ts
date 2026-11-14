@@ -10,6 +10,7 @@ import { importShippedPods } from "../src/installed-pods.ts";
 import { exportPod } from "../src/pod-transfer.ts";
 import { bindPackageScanLogger, capturePackage, listPackages } from "../src/packages.ts";
 import * as packages from "../src/packages.ts";
+import { stopPackageDiscovery } from "../src/pod-capture.ts";
 import { createContributionContent } from "../src/pe-routes.ts";
 import { createPagesHandler } from "../src/pages-route.ts";
 import {
@@ -30,6 +31,7 @@ afterEach(() => {
   bindPackageScanLogger(() => {});
   bindPackageLifecycle(undefined);
   shippedPodUpdateRefusals.clear();
+  stopPackageDiscovery();
 });
 
 test.each(["edited", "missing-record"])(
@@ -121,7 +123,7 @@ test("folder scans log their folder, start and completed duration", async () => 
   ]);
 });
 
-test("a stalled folder listing is refused at five seconds, logged, and cannot list the next home later", async () => {
+test("a stalled folder listing bounds waiters, shares work, and publishes its late census", async () => {
   const root = await mkdtemp(join(tmpdir(), "pe-scan-bound-"));
   const entered = Promise.withResolvers<void>();
   const release = Promise.withResolvers<void>();
@@ -134,16 +136,120 @@ test("a stalled folder listing is refused at five seconds, logged, and cannot li
     return actual(...args);
   });
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-  const scan = listPackages([root, join(root, "next-home")]);
+  await mkdir(join(root, "late"));
+  await writeFile(join(root, "late", "pod.json"), '{"id":"late"}');
+  const homes = [root, join(root, "next-home")];
+  const scan = listPackages(homes);
   const refused = expect(scan).rejects.toThrow("Pod discovery exceeded 5000 ms");
+  const joined = expect(listPackages(homes)).rejects.toThrow("Pod discovery exceeded 5000 ms");
   await entered.promise;
   await vi.advanceTimersByTimeAsync(5_000);
   await refused;
-  expect(lines).toHaveLength(2);
-  expect(lines[1]).toContain("outcome=timed-out");
-  release.resolve();
-  await new Promise((resolve) => setImmediate(resolve));
+  await joined;
   expect(spy).toHaveBeenCalledTimes(1);
+  release.resolve();
+  await vi.waitFor(async () => expect((await capturePackage("late", homes)).id).toBe("late"));
+  expect(lines).toHaveLength(4);
+  expect(lines[1]).toContain("outcome=completed");
+  const calls = spy.mock.calls.length;
+  expect((await listPackages(homes)).packages.map(p => p.id)).toEqual(["late"]);
+  expect(spy).toHaveBeenCalledTimes(calls);
+  expect((await capturePackage("late", homes)).id).toBe("late");
+});
+
+test("startup census timeout is observed before any reader attaches (D21 crash)", async () => {
+  const root = await mkdtemp(join(tmpdir(), "pe-startup-crash-"));
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const actual = filesystem.readdir;
+  vi.spyOn(filesystem, "readdir").mockImplementationOnce(async (...args) => {
+    entered.resolve();
+    await release.promise;
+    return actual(...args);
+  });
+  const notices: string[] = [];
+  bindPackageScanLogger(line => notices.push(line));
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  const lifecycle = createPackageLifecycle({ machine: stateMachine(root), packages: () => listPackages(root) });
+  try {
+    await entered.promise;
+    await vi.advanceTimersByTimeAsync(5_000);
+    await new Promise(resolve => setImmediate(resolve));
+    expect(notices.some(line => line.includes("startup census failed"))).toBe(true);
+    await expect(lifecycle.ready).resolves.toBeUndefined();
+  } finally {
+    release.resolve();
+    await lifecycle.close();
+    await lifecycle.ready.catch(() => {});
+  }
+});
+
+test("host shutdown aborts an outstanding scan before publishing its census", async () => {
+  const root = await mkdtemp(join(tmpdir(), "pe-scan-shutdown-"));
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const actual = filesystem.readdir;
+  vi.spyOn(filesystem, "readdir").mockImplementationOnce(async (...args) => {
+    entered.resolve();
+    await release.promise;
+    return actual(...args);
+  });
+  const scan = listPackages(root);
+  const refused = expect(scan).rejects.toThrow();
+  await entered.promise;
+  stopPackageDiscovery();
+  release.resolve();
+  await refused;
+  await expect(capturePackage("late", root)).rejects.toThrow("before Pod discovery finishes");
+});
+
+test("a discovery-like message without the typed error is not an expiry refusal", async () => {
+  const error = Error("Pod discovery exceeded an unrelated failure");
+  vi.spyOn(packages, "listPackages").mockRejectedValueOnce(error);
+  const root = await mkdtemp(join(tmpdir(), "pe-scan-tag-"));
+  const handler = createPagesHandler([], root, undefined, undefined, stateFixture(join(root, "state")));
+  await expect(handler(new Request("http://host/pages"))).rejects.toBe(error);
+});
+
+test("a slow startup scan publishes activation so the next Page request succeeds", async () => {
+  const root = await mkdtemp(join(tmpdir(), "pe-page-retry-"));
+  const home = join(root, "home");
+  const pods = join(home, "Pods");
+  vi.stubEnv("PE_TOOLS_PRODUCT_HOME", home);
+  await mkdir(join(pods, "late", "pages", "tour"), { recursive: true });
+  await writeFile(join(pods, "late", "pod.json"), '{"id":"late"}');
+  await writeFile(join(pods, "late", "pages", "tour", "index.html"), "<title>Late</title>");
+  vi.spyOn(packages, "productPodsRoots").mockReturnValue([pods]);
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const actual = filesystem.readdir;
+  let scans = 0;
+  vi.spyOn(filesystem, "readdir").mockImplementation(async (...args) => {
+    if (String(args[0]) === pods && args[1] && typeof args[1] === "object" && args[1].withFileTypes) {
+      scans++;
+      entered.resolve();
+      await release.promise;
+    }
+    return actual(...args);
+  });
+  const lifecycle = createPackageLifecycle({ machine: stateMachine(root) });
+  bindPackageLifecycle(lifecycle);
+  await entered.promise;
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  const handler = createPagesHandler([], [pods], undefined, undefined, stateFixture(join(root, "page-state")));
+  try {
+    const opening = handler(new Request("http://host/pages/late--tour/"));
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect((await opening).status).toBe(503);
+    release.resolve();
+    await lifecycle.ready;
+    expect(lifecycle.active("late")).toBe(true);
+    expect((await handler(new Request("http://host/pages/late--tour/"))).status).toBe(200);
+    expect(scans).toBe(1);
+  } finally {
+    release.resolve();
+    await lifecycle.close();
+  }
 });
 
 test("the five-second lifecycle discovery bound includes its initial census", async () => {

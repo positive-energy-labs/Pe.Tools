@@ -26,7 +26,7 @@ import { podModelSchema, type PodModel } from "./pod-model.ts";
 import {
   captureIndexedPackage,
   rememberCaptureRoots,
-  rememberPackageCensus,
+  discoverPackages,
 } from "./pod-capture.ts";
 
 export type PackageEntrypoint = {
@@ -150,29 +150,9 @@ const claimedTwice = (id: string, twins: readonly Pick<AdmittedPackage, "directo
  */
 export async function listPackages(
   podsRoots: PodsRoots = productPodsRoots(),
+  wait: "request" | "background" = "request",
 ): Promise<PackageListing> {
-  const roots = [podsRoots].flat();
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const stop = new AbortController();
-  try {
-    const listing = await Promise.race([
-      scanPackages(roots, stop.signal),
-      new Promise<never>((_, reject) => {
-        timer = setTimeout(() => {
-          stop.abort();
-          reject(
-            Error(
-              `Pod discovery exceeded 5000 ms listing ${roots.join(", ")}. Try again when the folder is available.`,
-            ),
-          );
-        }, 5_000);
-      }),
-    ]);
-    rememberPackageCensus(roots, listing);
-    return listing;
-  } finally {
-    clearTimeout(timer);
-  }
+  return discoverPackages(podsRoots, scanPackages, wait);
 }
 
 let scanLog = (_message: string) => {};
@@ -197,7 +177,7 @@ async function scanPackages(
       if (ended) return;
       ended = true;
       scanLog(
-        `Pod folder scan end folder=${JSON.stringify(root)} durationMs=${Math.round(performance.now() - started)} outcome=${signal.aborted ? "timed-out" : outcome}`,
+        `Pod folder scan end folder=${JSON.stringify(root)} durationMs=${Math.round(performance.now() - started)} outcome=${signal.aborted ? "aborted" : outcome}`,
       );
     };
     signal.addEventListener("abort", end, { once: true });
@@ -244,8 +224,9 @@ async function listPodsFolder(podsRoot: string, signal: AbortSignal): Promise<Pa
         if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
         throw error;
       }
-      result.packages.push(await readFolder(directory, entry.name));
+      result.packages.push(await readFolder(directory, entry.name, signal));
     } catch (error) {
+      signal.throwIfAborted();
       result.unreadable.push({ folder: entry.name, message: message(error) });
     }
   }
