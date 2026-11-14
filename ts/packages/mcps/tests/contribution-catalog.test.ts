@@ -188,6 +188,9 @@ test("a ReadOnly entrypoint is a read Pea runs with pe_read, with its input, and
   expect(
     declaredScriptRun({ key: "script:@a/src/B.cs" }, { permissionMode: "NoTransaction", timeoutSeconds: 9 }),
   ).toEqual({ permissionMode: "NoTransaction", timeoutSeconds: 9 });
+  expect(declaredScriptRun({ key: "script:@a/src/B.cs" }, {})).toEqual({
+    permissionMode: "ReadOnly",
+  });
 });
 
 test("Page shelf follows its projected URL and never borrows the Page action door", async () => {
