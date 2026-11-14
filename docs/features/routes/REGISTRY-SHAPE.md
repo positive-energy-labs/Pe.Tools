@@ -56,7 +56,7 @@ Replaced by **the address table**, `packages/agent-contracts/src/routes/table.ge
 - `apps/web/src/route/builtin-inventory.ts` (`BuiltinKey`, `typedBuiltin`, `builtinRouteKeys`, `builtinRouteStamp`): importers `route/builtin-routes.tsx`, `route-graphs.test.ts`, the 17 TanStack files. Keeps its exports, reads `registry.ts`.
 - `apps/web/src/route/builtins.neutral.ts` (`builtins`, `isBuiltinKey`): keeps its exports, reads `registry.ts`.
 - `apps/host/src/admitted-builtins.ts`: `constructorWorkRegistrations` (`:37`) and the inventory check (`:66-70`) read `Object.keys(routeRegistry)`.
-- `apps/host/src/builtin-inputs.ts:60,175,187` (composition) and `:934` (`registeredReads.leaves`), `apps/host/src/pod-routes.ts:29` (`registeredReads.register`): unchanged API.
+- `apps/host/src/builtin-inputs.ts:60,175,187` (composition) and `:934` (`registeredReads.leaves`): unchanged API.
 - `packages/agent-contracts/src/route-directory.ts:21-37` (`AppRoute.iconKey`, a 16-name union) and `apps/web/src/navigation/catalogue.ts:1-36` (`ICONS`, the same 16 imported by name): the icon closed set. The directory schema is already `icon: z.string()` (`route-kernel-data.ts:210`).
 - `packages/agent-contracts/src/{fans,ducts,families}-read.ts`: the hand capability objects (`fansSheetCapability` and kin) that mirror a host `read(...)`. Importers: the route (`apps/web/src/fans/route.ts:13`) and the host read.
 

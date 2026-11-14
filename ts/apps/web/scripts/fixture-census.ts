@@ -26,10 +26,6 @@ const canonicalFixtures: Record<
     fixtureKind: "demo-fixture",
   },
   "/takeoffs": { canonicalReviewUrl: "/takeoffs?demo=sync", fixtureKind: "demo-fixture" },
-  "/tool/$key": {
-    canonicalReviewUrl: `/tool/${encodeURIComponent("route:@snowdon-circuits/routes/voltage-drop/index.js")}`,
-    fixtureKind: "live-route",
-  },
 } as const;
 
 const compare = (left: string, right: string) => (left < right ? -1 : left > right ? 1 : 0);
