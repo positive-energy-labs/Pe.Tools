@@ -33,8 +33,8 @@ export declare function hydraulics(flow: number, inner: number): {
 };
 /** One row per pipe and the unresolved list; the pump head stays greyed until that list is empty. */
 export declare function size(pipes: readonly Pipe[], catalogs: Readonly<Record<string, readonly Size[]>>, limits: Limits, chosen: Readonly<Record<string, number>>, rooted?: boolean): {
-    rows: any;
-    unresolved: any;
+    rows: (Pipe & { candidate: number | null; chosen: number | null; status: Status })[];
+    unresolved: Closer[];
     pumpHead: {
         pa: number | null;
         greyed: boolean;
@@ -44,7 +44,7 @@ export declare function size(pipes: readonly Pipe[], catalogs: Readonly<Record<s
  * peers from the source's base connector: Revit reports Bidirectional there, so direction cannot root it.
  * `rooted` is false when a pipe is not reached from the source; the pump head then stays greyed. */
 export declare function fromRevit(read: MepSystemMembers.Res.Response, segments: MepSegmentSizes.Res.Response): {
-    pipes: any;
-    catalogs: any;
-    rooted: any;
+    pipes: Pipe[];
+    catalogs: Record<string, Size[]>;
+    rooted: boolean;
 };
