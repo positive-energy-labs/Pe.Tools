@@ -78,11 +78,11 @@ import { PackageDiscoveryExceeded, packageDiscoveryTimeoutMs, requirePackageAvai
 import { activePackages, requirePackageEnabled } from "./package-lifecycle.ts";
 import {
   pageDescriptors,
-  PAGE_LIBRARY_SOURCES,
   productPagesRoots,
   scratchPageDirectory,
   type PagesRoots,
 } from "./page-libraries.ts";
+import { PAGE_LIBRARY_SOURCES } from "./page-library-sources.ts";
 import { exportPage } from "./page-export.ts";
 import { escapeHtml, withPageKey } from "./page-publication.ts";
 import type { ActionJournal } from "./action-journal.ts";
