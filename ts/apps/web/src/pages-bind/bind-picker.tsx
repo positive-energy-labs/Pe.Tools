@@ -54,6 +54,7 @@ const search = (choice: Choice) => ({
 
 export function BindPicker({
   slug,
+  back,
   reading,
   threads,
   documents,
@@ -62,6 +63,8 @@ export function BindPicker({
   onBind,
 }: {
   slug: string;
+  /** The viewed Page's link, its query intact. */
+  back: string;
   reading: PageTargetReading | null;
   threads: readonly HarnessThreadSummary[] | null;
   documents: readonly Pinnable[] | null;
@@ -121,12 +124,15 @@ export function BindPicker({
       <Section
         label={`Bind ${reading?.page ?? slug}`}
         aside={
-          <Button
-            label="Unbind"
-            kind="framed"
-            refusal={binding?.kind === "none" ? "This Page is not bound." : null}
-            onClick={() => onBind({ kind: "none" })}
-          />
+          <>
+            <a href={back}>Back to the Page</a>
+            <Button
+              label="Unbind"
+              kind="framed"
+              refusal={binding?.kind === "none" ? "This Page is not bound." : null}
+              onClick={() => onBind({ kind: "none" })}
+            />
+          </>
         }
       >
         {reading ? (
@@ -152,10 +158,7 @@ export function BindPicker({
             data-tone={outcome.ok ? undefined : "caution"}
             role="status"
           >
-            {outcome.message}{" "}
-            {outcome.ok ? (
-              <a href={`/pages/${encodeURIComponent(slug)}/`}>Back to the Page</a>
-            ) : null}
+            {outcome.message}
           </p>
         ) : null}
       </Section>

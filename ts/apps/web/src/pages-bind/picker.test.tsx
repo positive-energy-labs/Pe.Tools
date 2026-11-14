@@ -55,6 +55,7 @@ test("the picker shows what the host resolved and binds a thread, a pin, or noth
   const onBind = vi.fn();
   const screen = render(
     <BindPicker
+      back="/bind?view=true"
       slug="pdrop--tour"
       reading={reading}
       threads={[thread("t-duct-1", "Duct loss walk")]}
