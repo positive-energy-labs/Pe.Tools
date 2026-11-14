@@ -6,10 +6,10 @@ import type { RevitBridge } from "./bridge.ts";
 import { runPods, type FamilyActionDependencies } from "./family-actions.ts";
 import { assertFresh, assertSealed } from "./document-marks.ts";
 import { readOriginalProcess } from "./native-receipts.ts";
-import { readMember } from "./settings.ts";
+import { readMember, readMemberPod } from "./settings.ts";
 import { captureDirectory, listPackages } from "./packages.ts";
 import { readMachineSession } from "./machine.ts";
-import { onePackage } from "./packages.ts";
+import { onePackage, type AdmittedPackage } from "./packages.ts";
 import { join } from "node:path";
 import { readFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
@@ -77,6 +77,9 @@ export function commandReadOwnership(
   return { readOwnership, nativeRead };
 }
 
+/** One gate pass's Pod reads, by Pod id; a pass is garbage once its gate returns. */
+const podReads = new WeakMap<object, Map<string, Promise<AdmittedPackage>>>();
+
 /** Current resource facts only. ActionJournal owns comparisons and every async fence. */
 export function commandResources(
   bridge: RevitBridge["Service"],
@@ -108,7 +111,7 @@ export function commandResources(
       )
         throw Error("Target document lifetime or kind differs from the command contract");
     },
-    async probe(dependency, moment) {
+    async probe(dependency, moment, pass) {
       switch (dependency.kind) {
         case "receipt": {
           const current = await readReceipt(dependency.probe.id);
@@ -136,19 +139,27 @@ export function commandResources(
           return readBootstrapInstallation(dependency.probe.year, deps.sdk);
         case "sdk-idle":
           return readBootstrapIdle(deps.sdk);
-        case "member":
-          return runPods(deps,
-            readMember(
-              { pod: dependency.probe.pod, path: dependency.probe.path },
-              { podsRoot: deps.podsRoot },
-            ),
-          ).then(
+        case "member": {
+          // One gate pass reads a Pod once (D22). A script run consumes every `.cs`/`.csx` member of
+          // its Pod, a member read is a discovery of every Pod in the home, and a gate runs at every
+          // async boundary: read per member, 34 scripts in a 35-Pod home cost 115 s a gate. Each pass
+          // still reads the disk afresh, and a probe outside a pass shares nothing.
+          const ctx = { podsRoot: deps.podsRoot };
+          let pods = pass && podReads.get(pass);
+          if (pass && !pods) podReads.set(pass, (pods = new Map()));
+          let pod = pods?.get(dependency.probe.pod);
+          if (!pod) {
+            pod = runPods(deps, readMemberPod(dependency.probe.pod, ctx));
+            pods?.set(dependency.probe.pod, pod);
+          }
+          return pod.then((admitted) => runPods(deps, readMember(dependency.probe, ctx, admitted))).then(
             (value) => value.sha256,
             (error: { statusCode?: number }) => {
               if (error.statusCode === 404) return null;
               throw error;
             },
           );
+        }
         case "document-mark":
           if ("sealed" in dependency.probe)
             await assertSealed(deps.marks!, dependency.probe.ref, dependency.probe.sealed);

@@ -1081,6 +1081,7 @@ export class ActionJournal implements ReceiptReader {
         message: error.message,
       });
     }
+    const pass = {};
     for (const dependency of row.consumes) {
       if (dependency.kind === "work") {
         // Retirement compares each submitted cell against live Work itself.
@@ -1170,7 +1171,7 @@ export class ActionJournal implements ReceiptReader {
         );
         if (ownWrite) continue;
         if (!this.environment) throw Error("Command resource probes are unavailable");
-        const current = await this.environment.probe(dependency, moment);
+        const current = await this.environment.probe(dependency, moment, pass);
         if (canonicalRouteInput(current) !== canonicalRouteInput(dependency.expected))
           throw new CommandRejected({ kind: "stale", consumed: [dependency] });
       }
@@ -1434,7 +1435,8 @@ export class ActionJournal implements ReceiptReader {
           ...row,
           state: "failed",
           error: messageOf(error),
-          status: 409,
+          // A rejection names its own status, as a step-time one does in `failure`.
+          status: error instanceof CommandRejected ? error.status : 409,
           notDispatched: true,
           ...(error instanceof CommandRejected ? { refusal: error.refusal } : {}),
         });

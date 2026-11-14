@@ -16,6 +16,7 @@ import { z } from "zod";
 import type { RevitBridge } from "./bridge.ts";
 import { podModelSchema, wrongPodModel } from "./pod-model.ts";
 import { requirePackageEnabled } from "./package-lifecycle.ts";
+import { PackageDiscoveryExceeded } from "./pod-capture.ts";
 
 const sourceBundleSchema = z.object({
   files: z.array(z.object({ path: z.string(), bytesBase64: z.string() })),
@@ -32,7 +33,7 @@ export function runPodScript(
     if (!target.openId)
       return yield* Effect.fail(refused("A script run needs one exact open document target; choose a document before running it."));
     const captured = input.sourcePath != null && input.sourceBundle == null
-      ? yield* io(() => freezeScript(input)).pipe(Effect.mapError((error) => refused(error instanceof Error ? error.message : String(error))))
+      ? yield* io(() => freezeScript(input)).pipe(Effect.mapError((error) => error instanceof CommandRejected ? error : refused(error instanceof Error ? error.message : String(error))))
       : undefined;
     const sealedInput = captured ? { ...input, sourceBundle: captured.sourceBundle } : input;
     const model = yield* Effect.try({
@@ -147,7 +148,13 @@ export async function freezeScript(
   if (input.workspaceKey != null && typeof input.workspaceKey !== "string")
     throw Error("Invalid Pod workspace identity");
   const workspace = (input.workspaceKey as string | undefined) || "default";
-  const listing = await listPackages();
+  // Discovery that outlasts its wait says so at every script door, typed and 503 as Pages answer
+  // it: the Pod was not looked for, so "no admitted Pod" would be a guess.
+  const listing = await listPackages().catch((error: unknown) => {
+    throw error instanceof PackageDiscoveryExceeded
+      ? new CommandRejected({ kind: "domain", code: error.code, message: error.message }, 503)
+      : error;
+  });
   const pod = listing.packages.find((pod) => pod.folder === workspace);
   if (!pod) throw Error(`No admitted Pod in workspace '${workspace}'.`);
   return freezeScript({ ...input, sourceBundle: (await capturePackage(pod)).sourceBundle });
