@@ -15,10 +15,13 @@ export function rememberPackageCensus(roots: PodsRoots, listing: PackageListing)
   );
 }
 
+export const packageDiscoveryTimeoutMs = 5_000;
+export const packageScanMaxAgeMs = 60_000;
+
 export class PackageDiscoveryExceeded extends Error {
   readonly code = "pod.discovery.exceeded";
   constructor(roots: PodsRoots) {
-    super(`Pod discovery exceeded 5000 ms listing ${[roots].flat().join(", ")}. Try again when the folder is available.`);
+    super(`Pod discovery exceeded ${packageDiscoveryTimeoutMs} ms listing ${[roots].flat().join(", ")}. Try again when the folder is available.`);
   }
 }
 
@@ -27,35 +30,66 @@ const discovery = new Map<string, {
   promise: Promise<PackageListing>;
   expired: boolean;
   completed: boolean;
+  startedAt: number;
+  completedAt: number;
 }>();
+const completedCensuses = new Map<string, { signature: string; listing: PackageListing }>();
 
-/** Host shutdown alone cancels discovery; a request owns only its wait. */
+/** Shutdown cancels discovery; request expiry alone leaves a recoverable scan running. */
 export function stopPackageDiscovery() {
   for (const scan of discovery.values()) scan.stop.abort();
   discovery.clear();
+  completedCensuses.clear();
 }
 
 export async function discoverPackages(
   roots: PodsRoots,
   read: (roots: readonly string[], signal: AbortSignal) => Promise<PackageListing>,
   wait: "request" | "background",
+  /** Date.now() epoch milliseconds. Refuse an in-flight scan started before this floor. */
+  notBefore?: number,
+  readSignature?: (signal: AbortSignal) => Promise<string | undefined>,
 ): Promise<PackageListing> {
   const key = rootsKey(roots);
   let scan = discovery.get(key);
+  const olderThanFloor = scan && notBefore !== undefined && scan.startedAt < notBefore;
+  if (scan && (olderThanFloor || (scan.completed
+    ? wait === "background" || Date.now() - scan.completedAt >= packageDiscoveryTimeoutMs
+    : Date.now() - scan.startedAt >= packageScanMaxAgeMs))) {
+    // A freshness floor must not cancel another request's valid read (notably startup import).
+    if (!olderThanFloor || (!scan.completed && Date.now() - scan.startedAt >= packageScanMaxAgeMs)) scan.stop.abort();
+    discovery.delete(key);
+    scan = undefined;
+  }
   if (!scan) {
     const stop = new AbortController();
+    let signature: string | undefined;
+    const checked = async () => {
+      signature = await readSignature?.(stop.signal);
+      stop.signal.throwIfAborted();
+      const cached = completedCensuses.get(key);
+      if (signature !== undefined && cached?.signature === signature) return cached.listing;
+      return read([roots].flat(), stop.signal);
+    };
     const current = {
       stop,
-      promise: read([roots].flat(), stop.signal),
+      promise: readSignature ? checked() : read([roots].flat(), stop.signal),
       expired: false,
       completed: false,
+      startedAt: Date.now(),
+      completedAt: 0,
     };
     current.promise = current.promise.then(listing => {
       stop.signal.throwIfAborted();
-      rememberPackageCensus(roots, listing);
+      if (discovery.get(key) === current) rememberPackageCensus(roots, listing);
       current.completed = true;
-      // Keep a late answer until a reader consumes it, then resume fresh discovery.
-      if (!current.expired && discovery.get(key) === current) discovery.delete(key);
+      current.completedAt = Date.now();
+      // Only on-time answers enter the checked cache. Late answers keep their one-reader 5 s window.
+      if (!current.expired && discovery.get(key) === current) {
+        if (signature !== undefined) completedCensuses.set(key, { signature, listing });
+        else completedCensuses.delete(key);
+        discovery.delete(key);
+      }
       return listing;
     }, error => {
       if (discovery.get(key) === current) discovery.delete(key);
@@ -75,7 +109,7 @@ export async function discoverPackages(
         timer = setTimeout(() => {
           scan.expired = true;
           reject(new PackageDiscoveryExceeded(roots));
-        }, 5_000);
+        }, packageDiscoveryTimeoutMs);
       }),
     ]);
   } finally {

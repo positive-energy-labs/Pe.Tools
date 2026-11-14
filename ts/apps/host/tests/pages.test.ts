@@ -68,7 +68,7 @@ describe("pages", () => {
     await mkdir(join(directory, "pages", "tour"), { recursive: true });
     await writeFile(join(directory, "pod.json"), '{"id":"late"}');
     await writeFile(join(directory, "pages", "tour", "index.html"), "<title>Late tour</title>");
-    const listing = await packages.listPackages(pods);
+    const listing = await packages.listPackages({ podsRoots: pods });
     const entered = Promise.withResolvers<void>();
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     const list = vi.spyOn(packages, "listPackages").mockImplementation(async () => {

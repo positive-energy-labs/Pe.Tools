@@ -18,6 +18,7 @@ import { commandResources } from "../src/command-reads.ts";
 import { gatewayExecutor } from "../src/gateway-actions.ts";
 import { bindPackageScanLogger, listPackages } from "../src/packages.ts";
 import { scriptRunInputs } from "../src/operation-script.ts";
+import { discoverPackages, stopPackageDiscovery } from "../src/pod-capture.ts";
 import { approvedPea } from "./callers.ts";
 import { detachedBridge, pictureCaptures, testJournal } from "./effect-test.ts";
 
@@ -27,10 +28,10 @@ vi.mock("../src/packages.ts", async (original) => {
   const { PackageDiscoveryExceeded } = await import("../src/pod-capture.ts");
   return {
     ...real,
-    readPackage: (id: string, roots: Parameters<typeof real.readPackage>[1]) =>
+    readPackage: (id: string, options: Parameters<typeof real.readPackage>[1]) =>
       id === "never-lands"
-        ? Promise.reject(new PackageDiscoveryExceeded(roots ?? []))
-        : real.readPackage(id, roots),
+        ? Promise.reject(new PackageDiscoveryExceeded(options?.podsRoots ?? []))
+        : real.readPackage(id, options),
   };
 });
 
@@ -62,6 +63,8 @@ async function pod(id: string, count: number): Promise<Member[]> {
   for (const [path, text] of files) await writeFile(join(root, id, path), text);
   return files.map(([path, text]) => ({ kind: "member", probe: { pod: id, path }, expected: sha(text) }));
 }
+/** A gate pass that starts now. */
+const now = () => ({ startedAt: Date.now() });
 const resources = () =>
   commandResources(detachedBridge(), { podsRoot: root } as never, async () => undefined);
 
@@ -110,15 +113,15 @@ test("a member edited between two gates still refuses the run as stale: no read 
 test("an indexed Pod's pass reads only its own folder, once; the next pass and a probe outside any pass read it again", async () => {
   const members = await pod("pdrop", 5);
   const c0 = members.find((member) => member.probe.path === "checks/c0.csx")!;
-  await listPackages(root);
+  await listPackages({ podsRoots: root });
   scans = 0;
   const probe = resources().probe;
-  const pass = {};
+  const pass = { startedAt: Date.now() };
   for (const member of members) expect(await probe(member, "admit", pass)).toBe(member.expected);
   // One reading per pass: the Pod was read at the pass's first probe, so a later edit is the next pass's.
   await writeFile(join(root, "pdrop", "checks/c0.csx"), "Result(99);");
   expect(await probe(c0, "admit", pass)).toBe(c0.expected);
-  expect(await probe(c0, "turn", {})).toBe(sha("Result(99);"));
+  expect(await probe(c0, "turn", now())).toBe(sha("Result(99);"));
   await writeFile(join(root, "pdrop", "checks/c0.csx"), "Result(100);");
   expect(await probe(c0)).toBe(sha("Result(100);"));
   await writeFile(join(root, "pdrop", "checks/c0.csx"), "Result(101);");
@@ -128,16 +131,34 @@ test("an indexed Pod's pass reads only its own folder, once; the next pass and a
 
 test("the index is a shortcut, never the answer: a Pod it does not hold, or holds wrongly, is asked of discovery", async () => {
   const [first] = await pod("early", 1);
-  await listPackages(root);
+  await listPackages({ podsRoots: root });
   const probe = resources().probe;
   // Arrived after the last discovery.
   const late = await pod("late", 1);
   scans = 0;
-  expect(await probe(late[0]!, "admit", {})).toBe(late[0]!.expected);
+  expect(await probe(late[0]!, "admit", now())).toBe(late[0]!.expected);
   expect(scans).toBe(1);
   // Indexed, then its folder left the home.
   await rm(join(root, "early"), { recursive: true });
-  expect(await probe(first!, "admit", {})).toBeNull();
+  expect(await probe(first!, "admit", now())).toBeNull();
+});
+
+// Mutant: drop `notBefore` from the fallback in `readMemberPod` and the pass answers the old bytes.
+test("a pass that misses the index reads a discovery begun after it started, never an older one in flight", async () => {
+  const [manifest] = await pod("pdrop", 2);
+  const before = await listPackages({ podsRoots: root });
+  // An older scan of this home, begun before the edit, that lands late with what it read then.
+  let land = (_listing: typeof before) => {};
+  void discoverPackages(root, () => new Promise((resolve) => (land = resolve)), "background");
+  // The Pod in this folder takes another id: the index no longer finds `pdrop` here, and discovery must say so.
+  await writeFile(join(root, "pdrop", "pod.json"), JSON.stringify({ schemaVersion: 2, id: "renamed", name: "renamed", version: "0.1.0", entrypoints: [] }));
+  // The pass starts on a later millisecond than the older scan did.
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  const answer = resources().probe(manifest!, "dispatch", now());
+  const late = setTimeout(() => land(before), 250);
+  expect(await answer).toBeNull();
+  clearTimeout(late);
+  stopPackageDiscovery();
 });
 
 test("a run consumes its entrypoint and every .cs beside it, not another entrypoint's .csx", async () => {
@@ -158,10 +179,10 @@ test("a run consumes its entrypoint and every .cs beside it, not another entrypo
 test("a member that left the Pod probes null; a discovery that ran out of time is not a changed input", async () => {
   const [, member] = await pod("pdrop", 1);
   const probe = resources().probe;
-  expect(await probe({ ...member!, probe: { pod: "pdrop", path: "checks/gone.csx" } }, "admit", {})).toBeNull();
-  expect(await probe({ ...member!, probe: { pod: "absent", path: "pod.json" } }, "admit", {})).toBeNull();
+  expect(await probe({ ...member!, probe: { pod: "pdrop", path: "checks/gone.csx" } }, "admit", now())).toBeNull();
+  expect(await probe({ ...member!, probe: { pod: "absent", path: "pod.json" } }, "admit", now())).toBeNull();
   // Discovery's 5 s wait ran out (pod-capture.ts): the Pod was not read, so nothing is known to have changed.
   await expect(
-    probe({ ...member!, probe: { pod: "never-lands", path: "pod.json" } }, "dispatch", {}),
+    probe({ ...member!, probe: { pod: "never-lands", path: "pod.json" } }, "dispatch", now()),
   ).rejects.toMatchObject({ statusCode: 503, message: expect.stringContaining("Pod discovery exceeded") });
 });

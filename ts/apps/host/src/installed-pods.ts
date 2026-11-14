@@ -63,7 +63,7 @@ async function shippedPodsRoot(options: TransferOptions & { ledger?: ReturnType<
   if (hostOwnership.lane === "installed") return join(dirname(process.execPath), "pods");
   const examples = join(hostOwnership.sourceRoot!, "examples", "pods");
   await readdir(examples);
-  const listing = await listPackages(examples);
+  const listing = await listPackages({ podsRoots: examples });
   options.signal?.throwIfAborted();
   if (listing.unreadable.length)
     throw Error(`Unreadable shipped Pods: ${listing.unreadable.map((pod) => pod.message).join("; ")}`);
@@ -140,7 +140,7 @@ export const importShippedPods = (
 async function ensureDefaultPod(podsRoot: string | undefined, signal?: AbortSignal): Promise<void> {
   const key = scriptingWorkspaceIdentity.defaultWorkspaceKey;
   // Another home may already hold the default pod; a second one would refuse both.
-  const listing = await listPackages(podsRoot ?? productPodsRoots());
+  const listing = await listPackages({ podsRoots: podsRoot ?? productPodsRoots() });
   signal?.throwIfAborted();
   if (listing.packages.some((pod) => pod.id === key))
     return;
@@ -197,7 +197,7 @@ async function run(
     const path = join(shippedRoot, archive);
     const bytes = await readFile(path);
     const sha256 = createHash("sha256").update(bytes).digest("hex");
-    const installed = (await listPackages(everyRoot)).packages.find(pod => pod.id === archiveId(readZip(bytes)));
+    const installed = (await listPackages({ podsRoots: everyRoot })).packages.find(pod => pod.id === archiveId(readZip(bytes)));
     // A manifest-free folder may be a prior torn import, even if an old host called it present.
     const partial = !installed && await lstat(join(options.podsRoot ?? productPodsRootPath(), archiveId(readZip(bytes))))
       .catch((error: NodeJS.ErrnoException) => { if (error.code !== "ENOENT") throw error; return null; });

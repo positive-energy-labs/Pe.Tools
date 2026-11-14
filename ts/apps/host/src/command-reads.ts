@@ -90,7 +90,7 @@ export function commandResources(
     work: deps.workspace,
     workReads: deps.workReads,
     async effectPath(effect) {
-      const listing = await listPackages(deps.podsRoot);
+      const listing = await listPackages({ podsRoots: deps.podsRoot });
       if (listing.unreadable.length)
         throw Error("Cannot resolve member effects against an unreadable Pod catalog");
       if (!listing.packages.some((pod) => pod.id === effect.pod)) return undefined;
@@ -149,7 +149,10 @@ export function commandResources(
           if (pass && !pods) podReads.set(pass, (pods = new Map()));
           let pod = pods?.get(dependency.probe.pod);
           if (!pod) {
-            pod = runPods(deps, readMemberPod(dependency.probe.pod, ctx, true));
+            pod = runPods(
+              deps,
+              readMemberPod(dependency.probe.pod, ctx, { notBefore: pass?.startedAt ?? Date.now() }),
+            );
             pods?.set(dependency.probe.pod, pod);
           }
           return pod.then((admitted) => runPods(deps, readMember(dependency.probe, ctx, admitted))).then(
@@ -210,7 +213,7 @@ export function commandResources(
         case "directory":
           return directorySnapshot(await captureDirectory(dependency.probe.path));
         case "catalog": {
-          const listing = await listPackages(deps.podsRoot);
+          const listing = await listPackages({ podsRoots: deps.podsRoot });
           if (listing.unreadable.length)
             throw Error("Cannot verify an unreadable Pod dependency catalog");
           return listing.packages

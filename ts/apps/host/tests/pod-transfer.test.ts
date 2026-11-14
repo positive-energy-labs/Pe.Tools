@@ -278,7 +278,7 @@ test("export vendors, ports the project, closes captures; import into a renamed 
   expect(await otherStore.blob(sha)).not.toBeNull();
   // An imported capture is an old observation: held by hash, never a new taking on this host.
   expect(await otherStore.list()).toEqual([]);
-  const keys = (await listPackages(otherPods)).packages[0]!.contributions.map((c) => c.key);
+  const keys = (await listPackages({ podsRoots: otherPods })).packages[0]!.contributions.map((c) => c.key);
   expect(keys).toEqual(
     expect.arrayContaining([
       "page:@ducts/pages/tour",
@@ -322,7 +322,7 @@ test("pod.export and pod.import cross /actions with no session and no native cal
   const missing = await act("pod.import", { archivePath: "relative.zip" });
   expect(missing).toMatchObject({ error: expect.stringContaining("relative.zip") });
   expect(missing).toMatchObject({ state: "failed", notDispatched: true, steps: [] });
-  expect((await listPackages(pods)).packages.map((pod) => pod.id)).toEqual(["ducts"]);
+  expect((await listPackages({ podsRoots: pods })).packages.map((pod) => pod.id)).toEqual(["ducts"]);
   expect((await native.journal.list()).flatMap(row => row.steps).filter(step => step.kind === "native")).toEqual([]);
 });
 
@@ -351,7 +351,7 @@ test.each([
   await writeFile(archivePath, zip(files as Record<string, string | Buffer>));
 
   await expect(importPod({ archivePath }, { podsRoot: pods })).rejects.toThrow(refusal);
-  expect((await listPackages(pods)).packages).toEqual([]);
+  expect((await listPackages({ podsRoots: pods })).packages).toEqual([]);
 });
 
 test("an entry that inflates past its declared size is refused (decompression bomb)", async () => {

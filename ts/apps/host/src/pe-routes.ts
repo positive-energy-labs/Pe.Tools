@@ -148,6 +148,7 @@ import {
   captureDirectory,
   capturePackage,
   bindPackageScanLogger,
+  packageScanLog,
   listPackages,
   type AdmittedPackage,
 } from "./packages.ts";
@@ -1199,7 +1200,11 @@ function* hostPeRoutes(
     // effect-edge: island, phase 5
     Effect.runSync(entry);
   };
-  bindPackageScanLogger((message) => log(Effect.logInfo(message)));
+  const flushPackageScanLog = bindPackageScanLogger(
+    (message) => log(Effect.logInfo(message).pipe(Effect.provide(runtime))),
+    packageScanLog.in(hostState().directory("host", hostOwnership.serviceName, "log")),
+  );
+  yield* Effect.addFinalizer(() => Effect.promise(flushPackageScanLog));
   const journal = yield* ActionJournalService;
   const hostLog = yield* HostLogService;
   const marks = yield* HostDocumentMarks;

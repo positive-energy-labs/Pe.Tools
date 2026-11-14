@@ -34,7 +34,7 @@ async function fixture() {
     '{"id":"local","entrypoints":[{"sourcePath":"Run.csx"}]}',
   );
   await filesystem.writeFile(join(directory, "Run.csx"), "Result(1);");
-  await listPackages([local, foreign]);
+  await listPackages({ podsRoots: [local, foreign] });
   return { local, foreign, directory };
 }
 
@@ -111,9 +111,9 @@ test("the completed census refuses duplicate ids and replaces old claims after r
   const { local, foreign } = await fixture();
   await filesystem.mkdir(join(foreign, "twin"));
   await filesystem.writeFile(join(foreign, "twin", "pod.json"), '{"id":"local"}');
-  await listPackages([local, foreign]);
+  await listPackages({ podsRoots: [local, foreign] });
   await expect(capturePackage("local", [local, foreign])).rejects.toThrow("is claimed by");
   await filesystem.rm(join(foreign, "twin"), { recursive: true });
-  await listPackages([local, foreign]);
+  await listPackages({ podsRoots: [local, foreign] });
   expect((await capturePackage("local", [local, foreign])).id).toBe("local");
 });

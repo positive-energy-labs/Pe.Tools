@@ -177,7 +177,7 @@ export const listPods = Effect.fnUntraced(function* (ctx: PodContext = {}) {
   yield* shippedPodsImported(ctx);
   const root = podsRoots(ctx);
   const found = yield* Effect.tryPromise({
-    try: () => listPackages(root),
+    try: () => listPackages({ podsRoots: root }),
     catch: (error) => new LocalOpError("pod.list", errorMessage(error), 400),
   });
   const project = yield* Effect.promise(() => projectPodIds(ctx.pointer));
@@ -361,12 +361,14 @@ function parseReceipt(content: string): PodReceipt | string {
  * `indexed` reads only this Pod's folder, found by the last discovery, as capture does: the bytes are
  * as fresh, and an id claimed twice since that discovery waits for the next one. The index is a
  * shortcut and never the answer: any miss (no discovery yet, a folder that moved or changed its id,
- * a member that no longer admits) asks discovery, which answers as it always did.
+ * a member that no longer admits) asks discovery, which answers as it always did. The edits a
+ * freshness gate exists to catch cause those misses, so that discovery begins at or after
+ * `notBefore` (`Date.now()` ms): a scan already in flight read the disk before the edit.
  */
 export const readMemberPod = Effect.fnUntraced(function* (
   pod: string,
   ctx: PodContext = {},
-  indexed = false,
+  indexed?: { notBefore: number },
 ) {
   // A fresh home activates shipped pods only when the background import lands; reading before
   // it would answer "inactive" for a pod that is about to be active (bounded, installed-pods.ts).
@@ -378,8 +380,10 @@ export const readMemberPod = Effect.fnUntraced(function* (
   return yield* Effect.tryPromise({
     try: (): Promise<AdmittedPackage> =>
       indexed
-        ? capturePackage(pod, ctx.podsRoot).catch(() => readPackage(pod, podsRoots(ctx)))
-        : readPackage(pod, podsRoots(ctx)),
+        ? capturePackage(pod, ctx.podsRoot).catch(() =>
+            readPackage(pod, { podsRoots: podsRoots(ctx), notBefore: indexed.notBefore }),
+          )
+        : readPackage(pod, { podsRoots: podsRoots(ctx) }),
     catch: (error) =>
       new LocalOpError(
         "pod.member.read",
@@ -727,7 +731,7 @@ export const podFolder = Effect.fnUntraced(function* (podId: string, ctx: PodCon
     catch: (error) => new LocalOpError("pod.resolve", errorMessage(error), 403),
   });
   const pod = yield* Effect.tryPromise({
-    try: () => readPackage(podId, root),
+    try: () => readPackage(podId, { podsRoots: root }),
     catch: (error) =>
       new LocalOpError(
         "pod.resolve",

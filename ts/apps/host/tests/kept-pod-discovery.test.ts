@@ -1,6 +1,9 @@
-import { afterEach, expect, test, vi } from "vite-plus/test";
+import { afterEach, expect, onTestFinished, test, vi } from "vite-plus/test";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import * as filesystem from "node:fs/promises";
+import * as syncFilesystem from "node:fs";
+import * as pageExport from "../src/page-export.ts";
+import * as diskSignature from "../src/pod-disk-signature.ts";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { mkdtemp, stateFixture, stateMachine } from "../../../tests/isolated-home/storage.ts";
@@ -10,9 +13,15 @@ import { importShippedPods } from "../src/installed-pods.ts";
 import { exportPod } from "../src/pod-transfer.ts";
 import { bindPackageScanLogger, capturePackage, listPackages } from "../src/packages.ts";
 import * as packages from "../src/packages.ts";
-import { stopPackageDiscovery } from "../src/pod-capture.ts";
+import { discoverPackages, stopPackageDiscovery } from "../src/pod-capture.ts";
 import { createContributionContent } from "../src/pe-routes.ts";
 import { createPagesHandler } from "../src/pages-route.ts";
+import { pagesRoute } from "../src/pages-route.ts";
+import { serveRoutes } from "./real-server.ts";
+import { detachedBridge } from "./effect-test.ts";
+import { Effect, Layer } from "effect";
+import { ActionJournalService } from "../src/receipt-services.ts";
+import { HOST_RPC_DOCUMENT_HEADER } from "@pe/host-contracts/contracts";
 import {
   bindPackageLifecycle,
   createPackageLifecycle,
@@ -23,6 +32,9 @@ import { shippedPodUpdateRefusals } from "../src/shipped-pod-status.ts";
 vi.mock("node:fs/promises", async (original) => ({
   ...await original<typeof import("node:fs/promises")>(),
 }));
+vi.mock("node:fs", async (original) => ({ ...await original<typeof import("node:fs")>() }));
+vi.mock("../src/page-export.ts", async (original) => ({ ...await original<typeof import("../src/page-export.ts")>() }));
+vi.mock("../src/pod-disk-signature.ts", async (original) => ({ ...await original<typeof import("../src/pod-disk-signature.ts")>() }));
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -78,7 +90,7 @@ test.each(["edited", "missing-record"])(
       worldRoot: stateFixture(join(root, "agent")),
       homeRoot: join(root, "home"),
       decisionsMachine: stateMachine(root),
-      packages: () => listPackages(podsRoot),
+      packages: () => listPackages({ podsRoots: podsRoot }),
     });
     try {
       const catalog = await content.read();
@@ -116,11 +128,281 @@ test("folder scans log their folder, start and completed duration", async () => 
   const root = await mkdtemp(join(tmpdir(), "pe-scan-log-"));
   const lines: string[] = [];
   bindPackageScanLogger((line) => lines.push(line));
-  expect(await listPackages(root)).toEqual({ packages: [], unreadable: [] });
+  expect(await listPackages({ podsRoots: root })).toEqual({ packages: [], unreadable: [] });
   expect(lines).toEqual([
     `Pod folder scan start folder=${JSON.stringify(root)}`,
     expect.stringMatching(/Pod folder scan end folder=.+ durationMs=\d+ outcome=completed/),
   ]);
+});
+
+test.each([5_000, 3_600_000])("late census expires after %i ms instead of masking a fresh reader", async (age) => {
+  vi.useFakeTimers();
+  const late = Promise.withResolvers<packages.PackageListing>();
+  const first = discoverPackages("expiry", () => late.promise, "request");
+  const refused = expect(first).rejects.toThrow("Pod discovery exceeded");
+  await vi.advanceTimersByTimeAsync(5_000);
+  await refused;
+  late.resolve({ packages: [], unreadable: [{ folder: "old", message: "old" }] });
+  await vi.advanceTimersByTimeAsync(0);
+  await vi.advanceTimersByTimeAsync(age);
+  const fresh = vi.fn(async () => ({ packages: [], unreadable: [] }));
+  expect(await discoverPackages("expiry", fresh, "request")).toEqual({ packages: [], unreadable: [] });
+  expect(fresh).toHaveBeenCalledOnce();
+});
+
+test("a lifecycle background reader cannot stamp a kept census with fresh disk metadata", async () => {
+  vi.useFakeTimers();
+  const late = Promise.withResolvers<packages.PackageListing>();
+  const first = discoverPackages("metadata", () => late.promise, "request");
+  const refused = expect(first).rejects.toThrow();
+  await vi.advanceTimersByTimeAsync(5_000);
+  await refused;
+  late.resolve({ packages: [], unreadable: [{ folder: "old", message: "old" }] });
+  await vi.advanceTimersByTimeAsync(0);
+  const fresh = vi.fn(async () => ({ packages: [], unreadable: [] }));
+  expect(await discoverPackages("metadata", fresh, "background")).toEqual({ packages: [], unreadable: [] });
+  expect(fresh).toHaveBeenCalledOnce();
+});
+
+test("a scan at sixty seconds is aborted and replaced; its late completion cannot replace the new census", async () => {
+  const { pods } = await reviewedPod();
+  const oldListing = await listPackages({ podsRoots: pods });
+  await filesystem.rename(join(pods, "review"), join(pods, "moved"));
+  await writeFile(join(pods, "moved", "pod.json"), '{"id":"fresh"}');
+  const freshListing = await listPackages({ podsRoots: pods });
+  vi.useFakeTimers();
+  const late = Promise.withResolvers<packages.PackageListing>();
+  let signal: AbortSignal;
+  const first = discoverPackages("stuck", (_roots, stop) => { signal = stop; return late.promise; }, "request");
+  const refused = expect(first).rejects.toThrow();
+  const backgroundRefused = expect(discoverPackages("stuck", () => late.promise, "background")).rejects.toThrow();
+  await vi.advanceTimersByTimeAsync(5_000);
+  await refused;
+  await vi.advanceTimersByTimeAsync(55_000);
+  const fresh = vi.fn(async () => freshListing);
+  const replacement = discoverPackages("stuck", fresh, "request");
+  expect(signal!.aborted).toBe(true);
+  expect(fresh).toHaveBeenCalledOnce();
+  await replacement;
+  expect((await capturePackage("fresh", "stuck")).id).toBe("fresh");
+  late.resolve(oldListing); // This reader ignores AbortSignal, as a stuck native filesystem call can.
+  await vi.advanceTimersByTimeAsync(0);
+  await backgroundRefused;
+  expect((await capturePackage("fresh", "stuck")).id).toBe("fresh");
+});
+
+test("scan diagnostics reach the host file even with unread stdout", async () => {
+  const root = await mkdtemp(join(tmpdir(), "pe-scan-file-"));
+  const file = packages.packageScanLog.in(stateFixture(join(root, "host", "fixture", "log")));
+  const flush = bindPackageScanLogger(() => {}, file);
+  await listPackages({ podsRoots: root });
+  await flush();
+  const log = await readFile(file.path, "utf8");
+  expect(log).toContain("Pod folder scan start");
+  expect(log).toMatch(/Pod folder scan end .*outcome=completed/);
+});
+
+test("the HTTP discovery deadline includes 1.2 s of target lookup before listing (D23)", async () => {
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<packages.PackageListing>();
+  vi.spyOn(packages, "listPackages").mockImplementation(() => { entered.resolve(); return release.promise; });
+  const root = await mkdtemp(join(tmpdir(), "pe-http-discovery-"));
+  const bridge = detachedBridge({ list: Effect.sleep("1200 millis").pipe(Effect.as([])) });
+  const routes = pagesRoute(() => [], () => root).pipe(Layer.provide(ActionJournalService.live(null)));
+  const server = await serveRoutes(routes, bridge);
+  try {
+    const started = performance.now();
+    const response = await fetch(`${server.base}/pages/late--tour/`, { headers: { [HOST_RPC_DOCUMENT_HEADER]: "doc" } });
+    const body = await response.json();
+    // 250 ms permits socket and timer scheduling, not another discovery budget.
+    expect(performance.now() - started).toBeLessThan(5_250);
+    expect(response.status).toBe(503);
+    expect(body).toMatchObject({ code: "pod.discovery.exceeded", message: expect.stringContaining("5000 ms") });
+  } finally {
+    release.resolve({ packages: [], unreadable: [] });
+    await server.close();
+  }
+});
+
+async function reviewedPod() {
+  const root = await mkdtemp(join(tmpdir(), "pe-w26-review-"));
+  const pods = join(root, "Pods");
+  const page = join(pods, "review", "pages", "tour");
+  await mkdir(page, { recursive: true });
+  await writeFile(join(pods, "review", "pod.json"), '{"id":"review"}');
+  await writeFile(join(page, "index.html"), "<html><head><title>Review</title></head><body>v1</body></html>");
+  return { root, pods, page };
+}
+
+test("three quick Page requests reuse one completed census until its disk signature changes", async () => {
+  const { root, pods, page } = await reviewedPod();
+  const actual = filesystem.readdir;
+  let scans = 0;
+  vi.spyOn(filesystem, "readdir").mockImplementation(async (...args) => {
+    if (String(args[0]) === pods && args[1] && typeof args[1] === "object" && args[1].withFileTypes) scans++;
+    return actual(...args);
+  });
+  vi.useFakeTimers({ toFake: ["Date"] });
+  const handler = createPagesHandler([], pods, undefined, undefined, stateFixture(join(root, "page-state")));
+  for (const path of ["/pages", "/pages/review--tour/", "/pages"]) {
+    expect((await handler(new Request(`http://host${path}`))).status).toBe(200);
+    vi.setSystemTime(Date.now() + 1_000);
+  }
+  expect(scans).toBe(1);
+  vi.setSystemTime(Date.now() + 60_000);
+  expect((await handler(new Request("http://host/pages/review--tour/"))).status).toBe(200);
+  expect(scans).toBe(1); // On-time answers have no late-answer TTL.
+  await writeFile(join(page, "index.html"), "<title>Changed after the census</title>");
+  expect(await (await handler(new Request("http://host/pages/review--tour/"))).text()).toContain("Changed after the census");
+  expect(scans).toBe(2);
+});
+
+test.each(["listPackages", "readPackage"])("%s forwards notBefore in Date.now epoch milliseconds", async (entry) => {
+  const { pods } = await reviewedPod();
+  const listing = await listPackages({ podsRoots: pods });
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(2_000_000_000_000);
+  const metadata = vi.spyOn(diskSignature, "podsDiskSignature").mockResolvedValue("epoch-fixture");
+  const lookup = (notBefore: number) => entry === "readPackage"
+    ? packages.readPackage("review", { podsRoots: pods, notBefore: notBefore })
+    : packages.listPackages({ podsRoots: pods, wait: "request", notBefore: notBefore });
+  for (const advance of [0, 1_000]) {
+    metadata.mockClear();
+    const release = Promise.withResolvers<packages.PackageListing>();
+    let signal: AbortSignal;
+    const pending = discoverPackages(pods, (_roots, stop) => { signal = stop; return release.promise; }, "background").catch(() => undefined);
+    vi.setSystemTime(Date.now() + advance);
+    const reading = lookup(Date.now() - (advance ? 0 : 1_000));
+    try {
+      expect(metadata).toHaveBeenCalledTimes(advance ? 1 : 0);
+      expect(signal!.aborted).toBe(false);
+    }
+    finally { release.resolve(listing); await pending; await reading; }
+  }
+});
+
+test.each(["target", "export"])("a slow %s GET keeps its own rules after discovery answers", async (verb) => {
+  const { pods } = await reviewedPod();
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const actualExport = pageExport.exportPage;
+  if (verb === "export") vi.spyOn(pageExport, "exportPage").mockImplementation(async (input) => {
+    entered.resolve();
+    await release.promise;
+    return actualExport(input);
+  });
+  const bridge = detachedBridge({ list: verb === "target" ? Effect.promise(async () => {
+    entered.resolve();
+    await release.promise;
+    return [];
+  }) : Effect.succeed([]) });
+  const server = await serveRoutes(pagesRoute(() => [], () => pods).pipe(Layer.provide(ActionJournalService.live(null))), bridge);
+  let response: Promise<Response> | undefined;
+  try {
+    let answered = false;
+    response = fetch(`${server.base}/pages/review--tour/${verb}`).then(r => { answered = true; return r; });
+    await entered.promise;
+    await new Promise(resolve => setTimeout(resolve, 5_100));
+    expect(answered).toBe(false);
+    release.resolve();
+    expect((await response).status).toBe(200);
+  } finally {
+    release.resolve();
+    await response;
+    await server.close();
+  }
+});
+
+test("lifecycle does not stamp an older in-flight scan with the current disk signature", async () => {
+  const { root, pods, page } = await reviewedPod();
+  const old = await listPackages({ podsRoots: pods });
+  const release = Promise.withResolvers<void>();
+  const older = discoverPackages(pods, async () => { await release.promise; return old; }, "background").catch(() => undefined);
+  await writeFile(join(page, "index.html"), "<title>v2, changed behind the pending scan</title>");
+  vi.spyOn(packages, "productPodsRoots").mockReturnValue([pods]);
+  const actualList = packages.listPackages;
+  vi.spyOn(packages, "listPackages").mockImplementation((...args) => {
+    release.resolve();
+    return actualList(...args);
+  });
+  const lifecycle = createPackageLifecycle({ machine: stateMachine(root) });
+  try {
+    await lifecycle.ready;
+    await older;
+    const html = () => Buffer.from(lifecycle.listing().packages[0]!.members.find(m => m.path.endsWith("index.html"))!.bytes).toString();
+    expect(html()).toContain("v2, changed");
+    await lifecycle.refresh();
+    expect(html()).toContain("v2, changed");
+  } finally { release.resolve(); await older; await lifecycle.close(); }
+});
+
+test("scan diagnostics do not write synchronously", async () => {
+  const { root } = await reviewedPod();
+  const file = packages.packageScanLog.in(stateFixture(join(root, "host-log")));
+  const flush = bindPackageScanLogger(() => {}, file);
+  onTestFinished(flush);
+  const write = vi.spyOn(syncFilesystem, "writeFileSync");
+  packages.logPackageDiscovery("Pod folder scan start folder=async");
+  expect(write).not.toHaveBeenCalled();
+  await vi.waitFor(async () => expect(await readFile(file.path, "utf8")).toContain("folder=async"));
+});
+
+test("scan diagnostics keep the newest 1000 lines and exclude request chatter", async () => {
+  const { root } = await reviewedPod();
+  const file = packages.packageScanLog.in(stateFixture(join(root, "host-log")));
+  const flush = bindPackageScanLogger(() => {}, file);
+  onTestFinished(flush);
+  packages.logPackageDiscovery("request /pages, not a scan");
+  for (let i = 0; i < 1_020; i++) packages.logPackageDiscovery(`Pod folder scan end folder=${i}`);
+  packages.logPackageDiscovery("request /pages, after the scans");
+  await flush();
+  await vi.waitFor(async () => expect(await readFile(file.path, "utf8")).toContain("folder=1019"));
+  const lines = (await readFile(file.path, "utf8")).trim().split("\n");
+  expect(lines).toHaveLength(1_000);
+  expect(lines[0]).toContain("folder=20");
+  expect(lines.join("\n")).not.toContain("request /pages");
+});
+
+test("Page roots discover a home mounted after composition once their short cache expires", async () => {
+  const { pods } = await reviewedPod();
+  let mounted = false;
+  const server = await serveRoutes(pagesRoute(() => [], () => mounted ? [pods] : []).pipe(Layer.provide(ActionJournalService.live(null))), detachedBridge());
+  try {
+    expect((await (await fetch(`${server.base}/pages`)).json()).pages).toEqual([]);
+    mounted = true;
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(Date.now() + 5_001);
+    const listing = await (await fetch(`${server.base}/pages`)).json();
+    expect(listing.pages).toContainEqual(expect.objectContaining({ key: "page:@review/pages/tour" }));
+  } finally { vi.useRealTimers(); await server.close(); }
+});
+
+test("lifecycle discovers a home mounted after its startup census", async () => {
+  const { root, pods } = await reviewedPod();
+  const roots = vi.spyOn(packages, "productPodsRoots").mockReturnValue([]);
+  const lifecycle = createPackageLifecycle({ machine: stateMachine(root) });
+  try {
+    await lifecycle.ready;
+    expect(lifecycle.active("review")).toBe(false);
+    roots.mockReturnValue([pods]);
+    await lifecycle.refresh();
+    expect(lifecycle.active("review")).toBe(true);
+  } finally { await lifecycle.close(); }
+});
+
+test("unchanged lifecycle reads do not log fast metadata scans per request", async () => {
+  const { root, pods } = await reviewedPod();
+  vi.spyOn(packages, "productPodsRoots").mockReturnValue([pods]);
+  const lines: string[] = [];
+  bindPackageScanLogger(line => lines.push(line));
+  const lifecycle = createPackageLifecycle({ machine: stateMachine(root) });
+  try {
+    await lifecycle.ready;
+    const before = lines.length;
+    await lifecycle.refresh();
+    await lifecycle.refresh();
+    expect(lines).toHaveLength(before);
+  } finally { await lifecycle.close(); }
 });
 
 test("a stalled folder listing bounds waiters, shares work, and publishes its late census", async () => {
@@ -139,9 +421,9 @@ test("a stalled folder listing bounds waiters, shares work, and publishes its la
   await mkdir(join(root, "late"));
   await writeFile(join(root, "late", "pod.json"), '{"id":"late"}');
   const homes = [root, join(root, "next-home")];
-  const scan = listPackages(homes);
+  const scan = listPackages({ podsRoots: homes });
   const refused = expect(scan).rejects.toThrow("Pod discovery exceeded 5000 ms");
-  const joined = expect(listPackages(homes)).rejects.toThrow("Pod discovery exceeded 5000 ms");
+  const joined = expect(listPackages({ podsRoots: homes })).rejects.toThrow("Pod discovery exceeded 5000 ms");
   await entered.promise;
   await vi.advanceTimersByTimeAsync(5_000);
   await refused;
@@ -149,11 +431,14 @@ test("a stalled folder listing bounds waiters, shares work, and publishes its la
   expect(spy).toHaveBeenCalledTimes(1);
   release.resolve();
   await vi.waitFor(async () => expect((await capturePackage("late", homes)).id).toBe("late"));
-  expect(lines).toHaveLength(4);
-  expect(lines[1]).toContain("outcome=completed");
+  const folderScans = lines.filter(line => line.startsWith("Pod folder scan "));
+  expect(folderScans).toHaveLength(4);
+  expect(folderScans[1]).toContain("outcome=completed");
   const calls = spy.mock.calls.length;
-  expect((await listPackages(homes)).packages.map(p => p.id)).toEqual(["late"]);
+  expect((await listPackages({ podsRoots: homes })).packages.map(p => p.id)).toEqual(["late"]);
   expect(spy).toHaveBeenCalledTimes(calls);
+  await listPackages({ podsRoots: homes });
+  expect(spy.mock.calls.length).toBeGreaterThan(calls);
   expect((await capturePackage("late", homes)).id).toBe("late");
 });
 
@@ -170,7 +455,7 @@ test("startup census timeout is observed before any reader attaches (D21 crash)"
   const notices: string[] = [];
   bindPackageScanLogger(line => notices.push(line));
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-  const lifecycle = createPackageLifecycle({ machine: stateMachine(root), packages: () => listPackages(root) });
+  const lifecycle = createPackageLifecycle({ machine: stateMachine(root), packages: () => listPackages({ podsRoots: root }) });
   try {
     await entered.promise;
     await vi.advanceTimersByTimeAsync(5_000);
@@ -194,7 +479,7 @@ test("host shutdown aborts an outstanding scan before publishing its census", as
     await release.promise;
     return actual(...args);
   });
-  const scan = listPackages(root);
+  const scan = listPackages({ podsRoots: root });
   const refused = expect(scan).rejects.toThrow();
   await entered.promise;
   stopPackageDiscovery();
@@ -272,6 +557,26 @@ test("the five-second lifecycle discovery bound includes its initial census", as
   }
 });
 
+test("host lifecycle shutdown does not await an unfinished filesystem scan", async () => {
+  const root = await mkdtemp(join(tmpdir(), "pe-close-stalled-scan-"));
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<packages.PackageListing>();
+  const lifecycle = createPackageLifecycle({
+    machine: stateMachine(root),
+    packages: () => { entered.resolve(); return release.promise; },
+  });
+  await entered.promise;
+  try {
+    const started = performance.now();
+    await lifecycle.close();
+    stopPackageDiscovery();
+    expect(performance.now() - started).toBeLessThan(250);
+  } finally {
+    release.resolve({ packages: [], unreadable: [] });
+    await lifecycle.ready;
+  }
+});
+
 test.each(["/pages/late--tour/", "/pages"])("a first Page request %s answers by 5000 ms and never starts lifecycle after expiry", async (path) => {
   const root = await mkdtemp(join(tmpdir(), "pe-first-page-bound-"));
   const home = join(root, "home");
@@ -280,7 +585,7 @@ test.each(["/pages/late--tour/", "/pages"])("a first Page request %s answers by 
   await mkdir(join(pods, "late", "pages", "tour"), { recursive: true });
   await writeFile(join(pods, "late", "pod.json"), '{"id":"late","entrypoints":[]}');
   await writeFile(join(pods, "late", "pages", "tour", "index.html"), "<title>Late</title>");
-  const listing = await listPackages(pods);
+  const listing = await listPackages({ podsRoots: pods });
   const releaseCensus = Promise.withResolvers<{ packages: []; unreadable: [] }>();
   const lifecycle = createPackageLifecycle({ machine: stateMachine(root), packages: () => releaseCensus.promise });
   bindPackageLifecycle(lifecycle);
@@ -307,6 +612,7 @@ test.each(["/pages/late--tour/", "/pages"])("a first Page request %s answers by 
     const response = await opening;
     expect(response.status).toBe(503);
     expect(await response.json()).toMatchObject({
+      code: "pod.discovery.exceeded",
       message: `Pod discovery exceeded 5000 ms listing ${pods}. Try again when the folder is available.`,
     });
     expect(Date.now() - started).toBe(5_000);

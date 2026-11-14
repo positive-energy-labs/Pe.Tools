@@ -24,6 +24,7 @@ import { z } from "zod";
 import { stateTree } from "../src/service-identity.ts";
 import {
   appendLine,
+  appendLinesBounded,
   derivedIn,
   derivedKey,
   generatedKind,
@@ -205,6 +206,15 @@ test("a kept-state kind and a home kind are never set aside", () => {
   });
   expect(read(settings)).toMatchObject({ kind: "ok", value: { name: "a" } });
   expect(notices(machine).map((n) => n.class)).toEqual(["keep", "keep"]);
+});
+
+test("an async diagnostic tail creates its file asynchronously and keeps the newest lines across batches", async () => {
+  const log = eventsLog.in(machine);
+  const writing = appendLinesBounded(log, [{ name: "a" }, { name: "b" }], 3);
+  expect(existsSync(log.path)).toBe(false);
+  await writing;
+  await appendLinesBounded(log, [{ name: "c" }, { name: "d" }, { name: "e" }], 3);
+  expect(readLines(log)).toEqual({ kind: "ok", values: [{ name: "c" }, { name: "d" }, { name: "e" }], skipped: 0 });
 });
 
 test("a state log decodes per line, and a derived folder is read and written by its minted dir", () => {

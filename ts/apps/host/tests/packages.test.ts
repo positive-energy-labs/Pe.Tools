@@ -57,10 +57,10 @@ test("a Page's .state folder in a Pod is stale debris, never a member", () => {
 test("C3 admits a tour's model declaration and rejects empty or malformed probes", async () => {
   const model = { title: "Chadds", probes: [{ elementId: 42, uniqueId: "stable" }] };
   await put("Original", "pod.json", JSON.stringify({ id: "mixed", for: model }));
-  expect((await listPackages(root)).packages[0]?.for).toEqual(model);
+  expect((await listPackages({ podsRoots: root })).packages[0]?.for).toEqual(model);
   for (const invalid of [null, {}, { ...model, probes: [] }, { ...model, probes: [{ elementId: 0, uniqueId: "x" }] }, { ...model, probes: [{ elementId: 1, uniqueId: "" }] }]) {
     await put("Original", "pod.json", JSON.stringify({ id: "mixed", for: invalid }));
-    expect((await listPackages(root)).packages).toHaveLength(0);
+    expect((await listPackages({ podsRoots: root })).packages).toHaveLength(0);
   }
 });
 
@@ -78,7 +78,7 @@ test("one snapshot lists and captures every authored byte, excluding authority a
     ".env",
   ])
     await put("Original", path, "secret");
-  const pod = await readPackage("mixed", root);
+  const pod = await readPackage("mixed", { podsRoots: root });
   expect(pod.members.map((member) => member.path).sort()).toEqual(Object.keys(authored).sort());
   await put("Original", "README.md", "changed after read");
   const capture = await capturePackage(pod);
@@ -113,7 +113,7 @@ test("an entrypoint is any script of the Pod, keeps its declared mode, and gets 
       ],
     }),
   );
-  const pod = await readPackage("mixed", root);
+  const pod = await readPackage("mixed", { podsRoots: root });
   expect(pod.contributions.filter((row) => row.kind === "script")).toEqual([
     expect.objectContaining({ key: "script:@mixed/heals/Fix.cs" }),
     expect.objectContaining({
@@ -142,14 +142,14 @@ test("an entrypoint is any script of the Pod, keeps its declared mode, and gets 
 });
 
 test("folder rename preserves keys; duplicate manifest identities refuse resolution and capture", async () => {
-  const before = await readPackage("mixed", root);
+  const before = await readPackage("mixed", { podsRoots: root });
   await rename(join(root, "Original"), join(root, "Renamed"));
-  expect((await readPackage("mixed", root)).contributions).toEqual(before.contributions);
+  expect((await readPackage("mixed", { podsRoots: root })).contributions).toEqual(before.contributions);
   await put("Twin", "pod.json", '{"id":"mixed"}');
-  await expect(readPackage("mixed", root)).rejects.toThrow(
+  await expect(readPackage("mixed", { podsRoots: root })).rejects.toThrow(
     `is claimed by ${join(root, "Renamed")} and ${join(root, "Twin")}`,
   );
-  const listing = await listPackages(root);
+  const listing = await listPackages({ podsRoots: root });
   expect(listing.packages.every((pod) => pod.contributions.length === 0)).toBe(true);
   await expect(capturePackage(listing.packages[0]!)).rejects.toThrow(/claimed/);
 });
@@ -159,7 +159,7 @@ test("unsafe members report their path and refuse capture without hiding healthy
   const oversized = await open(join(root, "Original", "assets/large.bin"), "r+");
   await oversized.truncate(64 * 1024 * 1024 + 1);
   await oversized.close();
-  const pod = await readPackage("mixed", root);
+  const pod = await readPackage("mixed", { podsRoots: root });
   expect(pod.diagnostics).toContainEqual(
     expect.objectContaining({ path: "assets/large.bin", severity: "error" }),
   );
@@ -171,7 +171,7 @@ test("directory links cannot admit files outside the package", async () => {
   await mkdir(join(root, "outside"));
   await writeFile(join(root, "outside", "secret"), "secret");
   await symlink(join(root, "outside"), join(root, "Original", "linked"), "junction");
-  const pod = await readPackage("mixed", root);
+  const pod = await readPackage("mixed", { podsRoots: root });
   expect(pod.diagnostics).toContainEqual(
     expect.objectContaining({ path: "linked", severity: "error" }),
   );
@@ -211,10 +211,10 @@ test("route inventory binds actual artifact bytes to the declared fingerprint", 
   };
   await put("Original", "pod.json", JSON.stringify({ id: "mixed", routes: [route] }));
   await put("Original", route.artifact, JSON.stringify(envelope));
-  expect((await readPackage("mixed", root)).routes).toEqual([route]);
+  expect((await readPackage("mixed", { podsRoots: root })).routes).toEqual([route]);
   envelope.executables[0]!.members[0]!.bytes[0] = 0;
   await put("Original", route.artifact, JSON.stringify(envelope));
-  const tampered = await readPackage("mixed", root);
+  const tampered = await readPackage("mixed", { podsRoots: root });
   expect(tampered.routes).toEqual([]);
   expect(tampered.diagnostics).toContainEqual(
     expect.objectContaining({ code: "RouteFingerprintMismatch", path: route.artifact }),
@@ -229,7 +229,7 @@ test("route inventory binds actual artifact bytes to the declared fingerprint", 
       ],
     }),
   );
-  expect((await readPackage("mixed", root)).diagnostics).toContainEqual(
+  expect((await readPackage("mixed", { podsRoots: root })).diagnostics).toContainEqual(
     expect.objectContaining({ code: "InvalidRoute" }),
   );
 });
