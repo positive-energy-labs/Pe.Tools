@@ -1,7 +1,7 @@
 /** Transient routing to the journal that owns a wire request. No execution or writable state lives here. */
 export type DispatchRefusal = { kind: "cancelled" | "refused"; message: string };
 type Owner = {
-  refusal(): DispatchRefusal | null;
+  refusal(): DispatchRefusal | null | Promise<DispatchRefusal | null>;
   validate(): Promise<DispatchRefusal | null>;
   dispatched(transport: "bridge" | "sdk"): Promise<void>;
   terminal?(touched: unknown, evidenceJson?: string | null): Promise<void>;
@@ -15,7 +15,7 @@ export function bindActionDispatch(id: string, owner: Owner) {
     if (owners.get(id) === owner) owners.delete(id);
   };
 }
-export const dispatchRefusal = (id: string) => owners.get(id)?.refusal() ?? null;
+export const dispatchRefusal = (id: string) => Promise.resolve(owners.get(id)?.refusal() ?? null);
 export const validateDispatch = (id: string) => owners.get(id)?.validate() ?? Promise.resolve(null);
 export const markDispatched = (id: string, transport: "bridge" | "sdk") => owners.get(id)?.dispatched(transport) ?? Promise.resolve();
 export const recordNativeTerminal = (id: string, touched: unknown, evidenceJson?: string | null) =>

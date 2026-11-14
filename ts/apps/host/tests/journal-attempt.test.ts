@@ -17,11 +17,53 @@ import { RequestIdentity, admittedRequestIdentity } from "../src/request-service
 import { settle } from "./effect-test.ts";
 import type { ReadOwnership } from "../src/reads/read-ownership.ts";
 import { markDispatched, recordNativeTerminal } from "../src/action-dispatch.ts";
+import { bindControl, callerOf, mintPageDoor } from "../src/control.ts";
+import { address } from "@pe/agent-contracts";
+
+test("unpinning mid-action refuses the next journal step", async () => {
+  const lifetime = { session: "S", openId: "D" };
+  let pin: typeof lifetime | null = lifetime;
+  bindControl({ pagePin: async () => pin });
+  const minted = mintPageDoor("page:@pages/pin", { kind: "pinned", address: address("C:/Pin.rvt") }, "/pages/pin/act", true, lifetime);
+  const first = Deferred.makeUnsafe<void>();
+  const entered: string[] = [];
+  const f = await fixture(undefined, false, { probe: async () => null, resolve: () => command(
+    { says: "Two steps", needs: "document", effect: "command", dirties: [], input: z.record(z.string(), z.unknown()) }, z.null(), {
+      bind: async () => ({ effects: [] }),
+      run: (_ctx, execution) => execution.step("publication", "first", {}, () => {
+        entered.push("first");
+        return Deferred.await(first);
+      }).pipe(Effect.andThen(() => execution.step("publication", "second", {}, () => {
+        entered.push("second");
+        return Effect.succeed(null);
+      }))),
+    }),
+  });
+  try {
+    const identity = callerOf({ kind: "local" }, { "x-pe-context": minted.token });
+    if (!("caller" in identity)) throw Error("Page context not minted");
+    const admitted = await f.journal.invoke({ id: "pin-steps", key: "two", target: { kind: "document", ref: lifetime }, input: {} }, {
+      caller: identity.caller, basis: { kind: "person-pin", page: "page:@pages/pin", boundBy: "human", lifetime },
+    });
+    expect(admitted, JSON.stringify(admitted)).toMatchObject({ state: "running" });
+    await vi.waitFor(() => expect(entered).toEqual(["first"]));
+    minted.retire(); // The journal retained its own caller, as a held action does.
+    pin = null;
+    Deferred.doneUnsafe(first, Effect.void);
+    expect(await f.journal.wait("pin-steps")).toMatchObject({ state: "failed", refusal: { code: "grant.revoked" } });
+    expect(entered).toEqual(["first"]);
+  } finally {
+    Deferred.doneUnsafe(first, Effect.void);
+    minted.retire();
+    bindControl({ pagePin: undefined });
+    await f.dispose();
+  }
+});
 
 const human = { kind: "human", via: "local" } as const;
 
 // ADR 0029 rule 10, durable command: only the native side is mocked; the journal is its live Layer.
-async function fixture(readOwnership?: ReadOwnership, failAfter = false) {
+async function fixture(readOwnership?: ReadOwnership, failAfter = false, environment?: Parameters<ActionJournal["bindCommands"]>[0]) {
   const dir = await mkdtemp(join(tmpdir(), "pe-attempt-"));
   const host = Scope.makeUnsafe();
   const journal = Context.get(
@@ -31,7 +73,7 @@ async function fixture(readOwnership?: ReadOwnership, failAfter = false) {
   const native = Deferred.makeUnsafe<unknown, StepFailure>();
   const calls: { key: string; requestId: string }[] = [];
   const seen: { identity?: RequestIdentityData; interrupted: boolean; cancelsSettled: number } = { interrupted: false, cancelsSettled: 0 };
-  journal.bindCommands({
+  journal.bindCommands(environment ?? {
     readOwnership,
     probe: async () => null,
     resolve: () =>

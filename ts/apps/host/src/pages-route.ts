@@ -58,6 +58,7 @@ import { RevitBridge } from "./bridge.ts";
 import { hostOwnership, hostState } from "./host-ownership.ts";
 import {
   admitPage,
+  bindControl,
   currentCaller,
   mintPageDoor,
   pageActDoor,
@@ -460,6 +461,19 @@ export function createPagesHandler(
     }
     return state;
   };
+  bindControl({
+    pagePin: async (page) => {
+      const slug = pageActDoor(page).split("/")[2]!;
+      const sessions = await live.sessions();
+      // Consent belongs to machine Page state, independent of the current content home.
+      const binding = new PageState("", stateDirectory(stored, slug)).binding();
+      if (binding.boundBy.default !== "human" || binding.slots.default.kind !== "pinned")
+        return null;
+      const resolution = resolveSlot(binding.slots.default, sessions);
+      return resolution.kind === "resolved" && resolution.target.kind === "document"
+        ? resolution.target.ref : null;
+    },
+  });
 
   /** `GET /pages`: the one Page projection, as rows: scratch newest first, then packaged by key. */
   const list = async (): Promise<PageRow[]> =>

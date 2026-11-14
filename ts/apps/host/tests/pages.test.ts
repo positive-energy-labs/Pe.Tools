@@ -11,13 +11,14 @@ import {
   pageTargetReadingSchema,
   routeAddress,
   type Caller,
+  type Basis,
   type DocumentRef,
   type PageTargetReading,
   type ThreadHead,
 } from "@pe/agent-contracts";
 import { createPagesHandler, type LiveSession, type PageLive } from "../src/pages-route.ts";
 import { readRequestIdentity, type IdentityOptions } from "../src/request-identity.ts";
-import { admitCrossing, bindControl, callerOf, currentCaller, Refused } from "../src/control.ts";
+import { admitCrossing, bindControl, callerOf, currentCaller, live, Refused } from "../src/control.ts";
 import { asCaller, human, pea, serviceHeaders } from "./callers.ts";
 
 const cleanup: (() => Promise<unknown>)[] = [];
@@ -326,7 +327,7 @@ describe("pages", () => {
     });
     afterEach(() => {
       heads = {};
-      bindControl({ heads: null, acquired: () => null, acquiredSession: () => null });
+      bindControl({ heads: null, acquired: () => null, acquiredSession: () => null, pagePin: undefined });
     });
     /** `peaSession`: every document there is one Pea acquired. */
     const bind = (peaSession?: string) =>
@@ -652,6 +653,37 @@ describe("pages", () => {
       expect(await (await peas.page.post("/pages/todo/act", { key: "k" })).json()).toMatchObject({
         basis: { kind: "person-pin", boundBy: "human", lifetime: { session: "S2", openId: "B" } },
       });
+    });
+
+    it("a Pea pin cannot consent to a write after its acquisition is released", async () => {
+      bind("S1");
+      const f = await host([session("S1")]);
+      expect((await f.as(pea("t1")).put("/pe/pages/todo/binding", { kind: "pinned", address: MODEL })).status).toBe(200);
+      // Pinning needs acquisition. Release it before the write so only boundBy distinguishes consent.
+      bind();
+      const response = await f.page.post("/pages/todo/act", { key: "k" });
+      expect(response.status).toBe(403);
+      expect(await code(response)).toMatchObject({ code: "grant.required", door: "/pages/todo/act" });
+      expect(f.forwarded).toEqual([]);
+    });
+
+    it.each(["unpin", "repin", "agent", "reopen"] as const)("a person's pin is rechecked after %s before the next step and resume", async (change) => {
+      bind();
+      const sessions = [session("S1"), session("S2", "C:/Other.rvt")];
+      const f = await host(sessions);
+      await f.as(human).put("/pe/pages/todo/binding", { kind: "pinned", address: MODEL });
+      const response = await f.page.post("/pages/todo/act", { key: "k" });
+      expect(response.status).toBe(202);
+      const { basis } = await response.json() as { basis: Basis };
+      expect(await live(basis, "step")).toBeNull();
+      if (change === "reopen") sessions[0] = session("S1", MODEL, "new-opening");
+      else {
+        if (change === "agent") bind("S1");
+        await f.as(change === "agent" ? pea("t1") : human).put("/pe/pages/todo/binding",
+          change === "unpin" ? { kind: "none" } : { kind: "pinned", address: change === "repin" ? "C:/Other.rvt" : MODEL });
+      }
+      for (const moment of ["step", "authorize", "native dispatch"])
+        expect((await live(basis, moment))?.refusal).toMatchObject({ code: "grant.revoked", door: moment, lifetime: docA });
     });
 
     it("no binding is choose with one Revit or two, never a guess at the active document", async () => {
