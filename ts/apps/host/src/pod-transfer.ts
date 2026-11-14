@@ -9,10 +9,9 @@ import { writeHome, writeState, homeKind, stateKind, type StateRoot, type Stored
 import { stateDirectory, stateTree } from "@pe/host-contracts/service-identity";
 import { hostState } from "./host-ownership.ts";
 import { z } from "zod";
-import type { PodExport, PodImport, PodPromote } from "@pe/host-contracts/operation-types";
+import type { PodExport, PodImport } from "@pe/host-contracts/operation-types";
 import { type PictureCaptures } from "./captures-route.ts";
 import {
-  captureDirectory,
   capturePackage,
   isPackageMember,
   listPackages,
@@ -21,7 +20,6 @@ import {
   type PackageListing,
 } from "./packages.ts";
 import { productPodsRootPath } from "./product-paths.ts";
-import { scratchPageDirectory } from "./page-libraries.ts";
 import { activateImportedPackage, reconcilePackageChanges } from "./package-lifecycle.ts";
 import { sha256Hex as sha256, validatePageHtml, writeArtifact } from "./page-artifacts.ts";
 import { StepFailure } from "./command-executor.ts";
