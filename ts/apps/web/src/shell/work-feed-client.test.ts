@@ -9,7 +9,7 @@ import { createTimelineClient, createWorkFeedClient } from "./work-feed-client";
 
 test("Timeline reads host order, releases its publication, and sends the offered step with every Work", async () => {
   const stop = vi.fn();
-  vi.spyOn(peReadings, "subscribe").mockReturnValue(stop);
+  vi.spyOn(peReadings, "subscribe").mockImplementation((_request, accept) => { accept({ kind: "snapshot", key: "publication", value: { generation: 0, state: "absent" } }); return stop; });
   const works = [key, { ...key, route: "second" }];
   const expected = { work: works[1]!, revision: 1, label: "Second" };
   const rows = [
@@ -32,9 +32,24 @@ test("Timeline reads host order, releases its publication, and sends the offered
 });
 const key = { binding: "host", route: "note", target: null } as const;
 
+test("Timeline displays the named capacity refusal", async () => {
+  vi.spyOn(peReadings, "subscribe").mockImplementation((_request, accept) => {
+    accept({ kind: "snapshot", key: "publication", value: { generation: 0, state: "absent" } });
+    return () => {};
+  });
+  const client = createTimelineClient({ response: async () => Response.json({
+    message: "Read subscription capacity reached", problem: "read.subscription-capacity",
+  }, { status: 429 }) });
+  const deliver = vi.fn(), close = client.open([], deliver);
+  try {
+    await vi.waitFor(() => expect(deliver).toHaveBeenCalledWith(null,
+      "Error: Read subscription capacity reached [read.subscription-capacity]"));
+  } finally { close(); vi.restoreAllMocks(); }
+});
+
 test("the no-owner document head reads and steps the same host document scope", async () => {
   const stop = vi.fn();
-  vi.spyOn(peReadings, "subscribe").mockReturnValue(stop);
+  vi.spyOn(peReadings, "subscribe").mockImplementation((_request, accept) => { accept({ kind: "snapshot", key: "publication", value: { generation: 0, state: "absent" } }); return stop; });
   const document = { binding: "open", route: "chat", target: null, open: { session: "proof", openId: "document" } } as const;
   const expected = { work: { ...document, route: "fans" }, revision: 1, label: "Fans" };
   const response = vi.fn(async (name: string, _input: unknown) => Response.json(name === "reads.value"

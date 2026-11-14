@@ -15,6 +15,7 @@ import {
   type Value,
 } from "./evaluator.ts";
 import { startFlight, type Flight, type ReadLease } from "./read-ownership.ts";
+import { ReadBusy } from "../native-reads.ts";
 
 export interface Publication<T> {
   readonly key: string;
@@ -32,6 +33,8 @@ export type StartFlight = <T>(run: (signal: AbortSignal) => Promise<T>) => Fligh
 /** One entry per (read,args), one generation per client subscription; no client acknowledgement. */
 export class Publications {
   private readonly slots = new Map<string, Slot>();
+  private readonly waiting = new Map<string, Pick<Publication<unknown>, "key" | "generation">>();
+  private retryVersion = 0;
   private readonly released = new Map<string, number>();
   private readonly admissions = new Map<string, number>();
   private readonly retainedBytes = new Map<string, number>();
@@ -40,7 +43,7 @@ export class Publications {
     string,
     { version: number; flights: Map<string, Flight<Publication<unknown>>> }
   >();
-  private readonly listeners = new Map<string, Set<() => void>>();
+  private readonly listeners = new Map<string, Set<(retry?: Publication<unknown>) => void>>();
   private readonly flightInputs = new WeakMap<Flight<Publication<unknown>>, Pending>();
   constructor(
     private readonly capacity = 128,
@@ -48,9 +51,9 @@ export class Publications {
     private readonly open: StartFlight = startFlight,
   ) {}
   observe(id: string, notify: (publication: Publication<unknown>) => void) {
-    const listeners = this.listeners.get(id) ?? new Set<() => void>();
-    const listener = () => {
-      const value = this.slots.get(id)?.published;
+    const listeners = this.listeners.get(id) ?? new Set<(retry?: Publication<unknown>) => void>();
+    const listener = (retry?: Publication<unknown>) => {
+      const value = retry ?? this.slots.get(id)?.published;
       if (value) notify(value);
     };
     listeners.add(listener);
@@ -58,14 +61,17 @@ export class Publications {
     listener();
     return () => {
       listeners.delete(listener);
-      if (!listeners.size) this.listeners.delete(id);
+      if (!listeners.size && this.listeners.get(id) === listeners) {
+        this.listeners.delete(id);
+        this.discard(id);
+      }
     };
   }
-  private notify(id: string) {
+  private notify(id: string, retry?: Publication<unknown>) {
     const listeners = this.listeners.get(id);
     for (const listener of listeners ?? []) {
       try {
-        listener();
+        listener(retry);
       } catch {
         listeners?.delete(listener);
       }
@@ -116,17 +122,20 @@ export class Publications {
   }
   /** Pin only this ID's release fence before opening inputs; close on every request exit. */
   admission(id: string, generation: number) {
+    const holders = this.listeners.get(id);
     this.admissions.set(id, (this.admissions.get(id) ?? 0) + 1);
     const allowed = generation > (this.released.get(id) ?? -1);
     let closed = false;
     return {
-      current: () => !closed && allowed && generation > (this.released.get(id) ?? -1),
+      current: () => !closed && allowed && (!holders || this.listeners.get(id) === holders) && generation > (this.released.get(id) ?? -1),
       close: () => {
         if (closed) return;
         closed = true;
         const remaining = this.admissions.get(id)! - 1;
         if (remaining) this.admissions.set(id, remaining);
         else this.admissions.delete(id);
+        // An HTTP-only reader holds the slot for its request, never beyond it.
+        if (!remaining && !this.listeners.has(id)) this.discard(id);
         this.pruneReleased();
       },
     };
@@ -148,11 +157,16 @@ export class Publications {
   }
   release(id: string, generation: number) {
     const slot = this.slots.get(id);
-    if (generation < (slot?.generation ?? -1) ||
+    if (generation < Math.max(slot?.generation ?? -1, this.waiting.get(id)?.generation ?? -1) ||
       generation < (this.released.get(id) ?? -1)) return;
     this.released.delete(id);
     this.released.set(id, generation);
     this.pruneReleased();
+    this.discard(id);
+  }
+  private discard(id: string) {
+    this.waiting.delete(id);
+    const slot = this.slots.get(id);
     if (slot) {
       // The subscriber is gone: its lease goes, and the last one to go stops the read itself.
       slot.lease?.release();
@@ -164,6 +178,15 @@ export class Publications {
     this.bytes -= this.retainedBytes.get(id) ?? 0;
     this.retainedBytes.delete(id);
     this.pruneKeys();
+    if (slot) {
+      // A capacity refusal owns no slot. Wake only its live holders, on their existing stream.
+      for (const [waitingId, waiting] of [...this.waiting]) {
+        if (this.slots.size >= this.capacity) break;
+        this.waiting.delete(waitingId);
+        // Distinct versions survive stream snapshot deduplication if this holder loses capacity again.
+        this.notify(waitingId, immutable({ ...waiting, version: ++this.retryVersion, value: null, state: "refresh-needed" }));
+      }
+    }
   }
   /** A recipe's data type is its own; a publication leaves this door as the wire carries it, unknown. */
   async publish<I>(
@@ -186,8 +209,12 @@ export class Publications {
     )
       return obsolete();
     if (!slot) {
-      if (this.slots.size >= this.capacity) throw Error("Read subscription capacity reached");
+      if (this.slots.size >= this.capacity) {
+        if (this.listeners.has(id)) this.waiting.set(id, { key, generation });
+        throw new ReadBusy({ message: "Read subscription capacity reached", status: 429, problem: "read.subscription-capacity" });
+      }
     }
+    this.waiting.delete(id);
     let owner = this.keys.get(key);
     if (!owner) {
       if (this.keys.size >= 512) throw Error("Read key capacity reached");

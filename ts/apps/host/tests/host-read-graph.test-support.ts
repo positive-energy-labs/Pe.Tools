@@ -15,6 +15,7 @@ import { join } from "node:path";
 import { Context, Effect, Layer, Schema } from "effect";
 import { HttpRouter } from "effect/http";
 import { expect } from "vite-plus/test";
+import { z } from "zod";
 import { canonicalJson, HostNativeRead } from "@pe/host-internal/native-read";
 import { address, bindWork } from "@pe/agent-contracts";
 import { peRouteUrl } from "@pe/agent-contracts/pe-api";
@@ -203,6 +204,16 @@ export async function fixture(
     }).pipe(Layer.provide(CaptureStore.layer(stateFixture(join(dir, "captures"))))),
     { disableLogger: true },
   );
+  // Initialize the lazy owner before tests install input-open barriers. These fixtures hold
+  // publications directly; publication-connections.test.ts exercises real stream cleanup.
+  const ready = await actAs(who, () => web.handler(new Request("http://host/pe/resources?connection=fixture"),
+    Context.make(RequestIdentity, admittedRequestIdentity(who, scope))));
+  await ready.body!.cancel();
+  const holders = new Map<string, () => void>();
+  const holdPublication = (subscription: string) => {
+    if (holders.has(subscription)) return;
+    holders.set(subscription, reads.publications.observe(canonicalJson([who, subscription]), () => {}));
+  };
   const send = async (
     generation: number,
     fan: string[],
@@ -212,6 +223,7 @@ export async function fixture(
     at?: string,
   ) => {
     const admitted = admittedRequestIdentity(who, scope);
+    holdPublication(subscription);
     if (hold) holds.set(admitted.requestId, hold);
     const response = await actAs(who, () =>
       web.handler(
@@ -274,8 +286,10 @@ export async function fixture(
         await reader.cancel();
       }
     },
-    probe: (body: unknown) =>
-      actAs(who, () =>
+    probe: async (body: unknown) => {
+      const parsed = z.object({ subscription: z.string() }).safeParse(body);
+      if (parsed.success) holdPublication(parsed.data.subscription);
+      return actAs(who, () =>
         web.handler(
           new Request(new URL(peRouteUrl("reads.value", {}), "http://host"), {
             method: "POST",
@@ -284,7 +298,8 @@ export async function fixture(
           }),
           Context.make(RequestIdentity, admittedRequestIdentity(who, scope)),
         ),
-      ),
+      );
+    },
     send,
     history: async (query = "", body?: unknown) => {
       const response = await actAs(who, () =>
@@ -322,6 +337,7 @@ export async function fixture(
       return nativeHold;
     },
     async close() {
+      for (const release of holders.values()) release();
       nativeHold?.release.resolve();
       for (const hold of holds.values()) hold.release.resolve();
       await web.dispose();

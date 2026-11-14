@@ -109,9 +109,9 @@ test("JZ read subscriptions reclaim capacity through release and reject released
     await send("shared-right", 1, 1000, true);
     // The simultaneous slot cap remains a limit, rather than a churn counter.
     for (let i = 0; i < 128; i++) expect((await send(`live-${i}`, 0, i)).state).toBe("current");
-    const full = await f.probe({ read: definition.name, subscription: "overflow", generation: 0, args: 128 });
-    expect(full.status).not.toBe(200);
-    expect(await full.text()).toContain("Read subscription capacity reached");
+    const full = await f.probe({ read: "work.timeline", subscription: "overflow", generation: 0, args: { works: [] } });
+    expect(full.status).toBe(429);
+    expect(await full.json()).toMatchObject({ problem: "read.subscription-capacity", message: "Read subscription capacity reached" });
     await send("live-0", 0, 0, true);
     expect((await send("overflow", 0, 128)).state).toBe("current");
   } finally {
@@ -298,6 +298,7 @@ test("History reopens the host's exact publication after newer Values, with no l
     expect(stale.history.publications[0]!.state).toBe("refresh-needed");
     expect((await cold.publication(point.id, "fans.sheet", "fans.sheet")) as object).toEqual(first);
     const publications = new Publications();
+    publications.observe("slot", () => {});
     let revision = 0,
       committed = false;
     const input = leaf("input", z.null(), z.number());

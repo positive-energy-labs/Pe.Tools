@@ -443,6 +443,10 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
     const admission = graphRequest ? publications.admission(
       canonicalJson([identity.caller, graphRequest.subscription]), graphRequest.generation,
     ) : undefined;
+    if (admission) {
+      if (web.signal.aborted) admission.close();
+      else web.signal.addEventListener("abort", admission.close, { once: true });
+    }
     try {
     const recipe: ConsumerRecipe = {
       key: declared.id,
@@ -1106,12 +1110,14 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
           const at = writer?.capture.begin();
           if (at != null) await invoke(writer!.capture.stop(at, "io", { site: "builtin", op: consumption?.recipe.key ?? "read.finish" }));
         } finally {
+          if (admission) web.signal.removeEventListener("abort", admission.close);
           admission?.close();
           if (consumption) await invoke(consumption.close);
         }
       },
     };
     } catch (error) {
+      if (admission) web.signal.removeEventListener("abort", admission.close);
       admission?.close();
       throw error;
     }
