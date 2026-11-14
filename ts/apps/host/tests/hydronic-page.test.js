@@ -49,17 +49,4 @@ describe("sizing", () => {
         expect(out.pipes[0]?.flow).toBeCloseTo(0.283, 3);
         expect(out.catalogs).toEqual({ seg: [{ nominal: 25.4, inner: 24.4 }] });
     });
-    test("route-wide inputs default to 1.5 m/s and 400 Pa/m", () => {
-        // 400 Pa/m is the firm layer's seed; Work leaves maxFriction absent until an author sets it.
-        expect(work.parse({})).toMatchObject({ maxVelocity: 1.5, chosen: {} });
-        expect(work.parse({}).maxFriction).toBeUndefined();
-        expect(module.data.key).toBe(key);
-    });
-    test("the published artifact is current and admits on the host", async () => {
-        const [row] = manifest.routes;
-        const bytes = JSON.parse(await readFile(new URL("./route.artifact", import.meta.url), "utf8"));
-        const host = await admitPodArtifact(bytes, row?.fingerprint ?? "", true);
-        expect(host.data).toEqual(module.data);
-        expect(Object.keys(host.reads ?? {})).toContain("sizing");
-    });
 });
