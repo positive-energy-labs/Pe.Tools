@@ -205,7 +205,9 @@ export function createPackageLifecycle(
       decisions = next;
     },
   });
-  const ready = initialize();
+  const ready = initialize().catch(error => {
+    if (!closed) logPackageDiscovery(`Pod startup census failed; retry on refresh: ${String(error)}`);
+  });
   let settled: Promise<unknown> = ready;
   async function initialize() {
     decisions = await readDecisions(decisionsFile);
@@ -229,7 +231,8 @@ export function createPackageLifecycle(
     if (closed) return initialListing;
     if (nextSignature !== undefined && nextSignature === diskSignature && initialListing)
       return initialListing;
-    const listing = await (options.packages ? options.packages() : listPackages(roots));
+    // Lifecycle owns publication after a slow scan; Page requests bound their own wait for it.
+    const listing = await (options.packages ? options.packages() : listPackages(roots, "background"));
     if (closed) return initialListing;
     const current = new Set(listing.packages.map((p) => `pod:${p.id}`));
     for (const id of signatures.keys())
