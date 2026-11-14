@@ -437,8 +437,9 @@
       pixelSize,
       marginPercent,
     }));
-    const url = image.imageUrl;
-    if (!url) throw new Error(`view-image of ${lens.viewName} was not kept by the host`);
+    if (!image.imageUrl) throw new Error(`view-image of ${lens.viewName} was not kept by the host`);
+    // An <img> or SVG <image> sends no header, so the URL itself names this page's runtime owner (D47).
+    const url = streamUrl(image.imageUrl);
     return {
       url,
       sha: (url.match(/([a-f0-9]{64})/i) || [])[1] || null,

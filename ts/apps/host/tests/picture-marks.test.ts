@@ -18,7 +18,7 @@ test("an unboxed lens carries per-element refusals without inventing a view", ()
 test("pe.picture answers pixel marks and asks for surrounding context", async () => {
   const source = (await readFile(new URL("../src/pages/pe.js", import.meta.url), "utf8")).replace(
     "/*pe:runtime*/ null",
-    JSON.stringify({ header: "x-pe-runtime", service: "proof" }),
+    JSON.stringify({ header: "x-pe-runtime", query: "pe-runtime", service: "proof" }),
   );
   // pe.js registers a `pagehide` listener at load; this bare context has no DOM to supply one.
   const window: Record<string, unknown> = { addEventListener() {} };
@@ -41,7 +41,8 @@ test("pe.picture answers pixel marks and asks for surrounding context", async ()
     .mockResolvedValueOnce({ imageUrl: "/captures/picture.png", marks, notDrawn, width: 1500, height: 1441 });
   const answer = await pe.picture([7]);
   expect(answer.marks).toEqual(marks);
-  expect(answer.url).toBe("/captures/picture.png");
+  // An <img> sends no header, so the URL carries the runtime owner the dev proxy requires (D47).
+  expect(answer.url).toBe("http://localhost/captures/picture.png?pe-runtime=proof");
   expect(answer.notDrawn).toEqual(notDrawn);
   expect(answer).toMatchObject({ width: 1500, height: 1441 });
   expect(pe.do).toHaveBeenLastCalledWith("revit.context.view-image.focus", {
