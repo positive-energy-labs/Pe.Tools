@@ -515,56 +515,67 @@ async function withHead<T>(head: Head, body: () => Promise<T>): Promise<T> {
 const run = (tool: ExecutableTool, input: unknown, head = turn) =>
   withHead(head, () => tool.execute!(input as never, { agent: { toolCallId: "call-1" } } as never));
 
-test("C2: Page reads flatten the stamped view and pass the event cursor", async () => {
-  fakeRuntimeHost("http://127.0.0.1:19999");
-  const key = "page:@pages/todo";
-  const state = {
-    seq: 10,
-    text: "nine",
-    textSeq: 9,
-    agent: { note: "text" },
-    events: [{ seq: 10 }],
-  };
-  const target = { page: key, resolution: { kind: "unbound" } };
-  const cursors: (string | null)[] = [];
-  vi.stubGlobal("fetch", async (input: string | URL | Request) => {
-    const url = new URL(input instanceof Request ? input.url : String(input));
-    if (url.pathname === "/pe/capabilities") {
-      const listed = catalog();
-      listed.capabilities.push({
-        key,
-        kind: "page",
-        title: "Todo",
-        description: "",
-        needs: "nothing",
-        effect: "query",
-        mutates: false,
-        source: "pages",
-        rank: 0,
-        input: {},
-        principal: ["human", "pea"],
-        package: { id: "pages", path: "todo/index.html", sha256: "a".repeat(64) },
-        projection: { openUrl: "/pages/todo/" },
-      });
-      return Response.json(listed);
-    }
-    if (url.pathname === "/pages/todo/state") {
-      cursors.push(url.searchParams.get("after"));
-      return Response.json(state);
-    }
-    if (url.pathname === "/pages/todo/target") return Response.json(target);
-    throw Error(`unexpected ${url}`);
-  });
-  expect(await run(peRead, { key, timeoutSeconds: 5 })).toMatchObject({
-    ok: true,
-    result: { ...state, target },
-  });
-  expect(await run(peRead, { key, input: { after: 9 }, timeoutSeconds: 5 })).toMatchObject({
-    ok: true,
-    result: { ...state, target },
-  });
-  expect(cursors).toEqual([null, "9"]);
-});
+test.each([false, true])(
+  "C2: Page reads preserve file declarations and pass the cursor, unopened=%s",
+  async (unopened) => {
+    fakeRuntimeHost("http://127.0.0.1:19999");
+    const key = "page:@pages/todo";
+    const state = unopened
+      ? {
+          seq: 0,
+          text: null,
+          textSeq: null,
+          agent: { verdict: "passed and explanation" },
+          events: [],
+        }
+      : {
+          seq: 10,
+          text: "nine",
+          textSeq: 9,
+          agent: { note: "text" },
+          events: [{ seq: 10 }],
+        };
+    const target = { page: key, resolution: { kind: "unbound" } };
+    const cursors: (string | null)[] = [];
+    vi.stubGlobal("fetch", async (input: string | URL | Request) => {
+      const url = new URL(input instanceof Request ? input.url : String(input));
+      if (url.pathname === "/pe/capabilities") {
+        const listed = catalog();
+        listed.capabilities.push({
+          key,
+          kind: "page",
+          title: "Todo",
+          description: "",
+          needs: "nothing",
+          effect: "query",
+          mutates: false,
+          source: "pages",
+          rank: 0,
+          input: {},
+          principal: ["human", "pea"],
+          package: { id: "pages", path: "todo/index.html", sha256: "a".repeat(64) },
+          projection: { openUrl: "/pages/todo/" },
+        });
+        return Response.json(listed);
+      }
+      if (url.pathname === "/pages/todo/state") {
+        cursors.push(url.searchParams.get("after"));
+        return Response.json(state);
+      }
+      if (url.pathname === "/pages/todo/target") return Response.json(target);
+      throw Error(`unexpected ${url}`);
+    });
+    expect(await run(peRead, { key, timeoutSeconds: 5 })).toMatchObject({
+      ok: true,
+      result: { ...state, target },
+    });
+    expect(await run(peRead, { key, input: { after: 9 }, timeoutSeconds: 5 })).toMatchObject({
+      ok: true,
+      result: { ...state, target },
+    });
+    expect(cursors).toEqual([null, "9"]);
+  },
+);
 
 test("pe_read route graphs read the real host door before releasing their publication", async () => {
   const f = await readDoor();
