@@ -192,6 +192,70 @@ public sealed class ScriptChangesTests {
         });
     }
 
+    // A warning under the host-owned transaction is read by the host's preprocessor and may reach the event too.
+    // It is one failure, acknowledged, and its transaction goes on.
+    [Test]
+    public void A_warning_in_a_host_owned_write_is_dismissed_once_and_the_write_is_kept(UIApplication uiApplication) {
+        var document = OpenBlankProject(uiApplication, "warning");
+
+        var result = Run(uiApplication, document, """
+            doc!.ProjectInformation.Name = "__pe_warned__";
+            var warning = Autodesk.Revit.ApplicationServices.Application.GetFailureDefinitionRegistry().ListAllFailureDefinitions()
+                .First(definition => definition.GetSeverity() == FailureSeverity.Warning);
+            var message = new FailureMessage(warning.GetId());
+            message.SetFailingElement(doc.ProjectInformation.Id);
+            _ = doc.PostFailure(message);
+            Result(new { definition = warning.GetId().Guid.ToString() });
+            """, ScriptPermissionMode.WriteTransaction, "warned");
+
+        Assert.That(result.Status, Is.EqualTo(ScriptExecutionStatus.Succeeded), Words(result));
+        Assert.Multiple(() => {
+            Assert.That(document.ProjectInformation.Name, Is.EqualTo("__pe_warned__"));
+            Assert.That(result.Failures, Has.Count.EqualTo(1), string.Join(" | ", result.Failures!.Select(failure => $"{failure.Outcome} {failure.Message}")));
+            Assert.That(result.Failures![0].Outcome, Is.EqualTo(ScriptFailureOutcome.Dismissed));
+            Assert.That(result.Failures[0].Severity, Is.EqualTo("Warning"));
+            Assert.That(result.Failures[0].DefinitionId, Is.EqualTo(JToken.FromObject(result.Data!).Value<string>("definition")));
+            Assert.That(result.Changes!.Kept, Is.True);
+            Assert.That(result.Changes.Overlapped, Is.False);
+            Assert.That(result.Changes.Summary, Does.Not.Contain("rolled back"));
+        });
+    }
+
+    // What document-profiler's ViewOpenProbe does in NoTransaction: activate a view, close a view tab, export an
+    // image. The run's undo group must change nothing about those calls, so the same script runs grouped and
+    // ungrouped (the XElement.Save line only carries the name that ungroups it) and must answer the same.
+    [Test]
+    public void The_undo_group_changes_nothing_about_view_activation_view_close_and_image_export(UIApplication uiApplication) {
+        const string script = """
+            string Try(Action act) { try { act(); return "ok"; } catch (Exception e) { return $"{e.GetType().Name}: {e.Message}"; } }
+            var start = uidoc!.ActiveView;
+            var other = new FilteredElementCollector(doc!).OfClass(typeof(ViewPlan)).Cast<View>().First(view => !view.IsTemplate && view.Id != start.Id);
+            using (var transaction = new Transaction(doc, "Probe change")) { _ = transaction.Start(); doc.ProjectInformation.Name = "__pe_probe__"; _ = transaction.Commit(); }
+            var image = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "pe-probe-" + System.Guid.NewGuid().ToString("N"));
+            Result(new {
+                activate = Try(() => uidoc.ActiveView = other),
+                close = Try(() => uidoc.GetOpenUIViews().First(view => view.ViewId == start.Id).Close()),
+                export = Try(() => {
+                    var options = new ImageExportOptions { FilePath = image, ExportRange = ExportRange.SetOfViews, ZoomType = ZoomFitType.FitToPage, PixelSize = 256 };
+                    options.SetViewsAndSheets(new List<ElementId> { other.Id });
+                    doc.ExportImage(options);
+                })
+            });
+            """;
+        JToken Answers(string name, string source) {
+            var result = Run(uiApplication, OpenBlankProject(uiApplication, name), source, ScriptPermissionMode.NoTransaction, name);
+            Assert.That(result.Status, Is.EqualTo(ScriptExecutionStatus.Succeeded), Words(result));
+            Assert.That(result.Changes!.Undo == $"Pe script: {name}", Is.EqualTo(name == "views-grouped"), result.Changes.Summary);
+            TestContext.Out.WriteLine($"{name}: {JToken.FromObject(result.Data!).ToString(Newtonsoft.Json.Formatting.None)}");
+            return JToken.FromObject(result.Data!);
+        }
+
+        var ungrouped = Answers("views-ungrouped", "new System.Xml.Linq.XElement(\"x\").Save(System.IO.TextWriter.Null);\n" + script);
+        var grouped = Answers("views-grouped", script);
+
+        Assert.That(grouped.ToString(), Is.EqualTo(ungrouped.ToString()), "the group refuses a call that runs without it");
+    }
+
     private static ExecuteRevitScriptData Run(UIApplication uiApplication, Document document, string script, ScriptPermissionMode mode, string name) =>
         RevitScriptExecutionService.CreateDefault(() => uiApplication).Execute(document,
             new ExecuteRevitScriptRequest(script, SourceName: name, PermissionMode: mode), "changes-" + Guid.NewGuid().ToString("N"));

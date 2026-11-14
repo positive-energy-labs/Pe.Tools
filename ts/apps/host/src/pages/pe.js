@@ -380,19 +380,27 @@
   };
 
   /**
-   * Run a script and answer what it changed, as rows a Page can draw. `run` is `{ script, input, mode, timeoutSeconds }`
-   * with `script` and the rest as `pe.script` takes them. Every run record already says which elements it added,
-   * modified and deleted (`pe.lastRun.changes`); this reads their values around the run. The script runs twice:
-   * first ReadOnly, where Revit rolls everything back and the record names what it would change, so those elements
-   * are read before; then for real, and the elements it did change are read after. A script that cannot run
-   * ReadOnly (it owns its transactions, or edits a family) has no before: `dry.ran` is false with the reason in
-   * `dry.why`, and every row's `before` is null. Compared per element: its type, and each of `parameterNames`, on
-   * Revit's raw value, shown as Revit displays it. Answers `{ data, changes, dry, elements: [{ id, change, name,
-   * category }], rows: [{ id, change, parameter, before, after }], unchanged }`; `change` is added, modified or
-   * deleted, and `changes.summary` and `changes.undo` are the run's own words. Throws as `pe.script` does when the
-   * real run fails.
+   * Run a script and answer what it changed, as rows a Page can draw. `run` is `{ script, input, mode,
+   * timeoutSeconds, expect }` with `script` and the rest as `pe.script` takes them. Every run record already says
+   * which elements it added, modified and deleted (`pe.lastRun.changes`); this reads their values around the run.
+   * The script runs twice: first ReadOnly, where Revit rolls every document change back and the record names what it
+   * would change, so those elements are read before; then for real, and the elements it did change are read after.
+   * Only the document is rolled back: whatever the script does outside it (an artifact, a file it writes, a send
+   * outward) happens on both runs. A script that cannot run ReadOnly (it owns its transactions, or edits a family)
+   * is refused before it starts: `dry.ran` is false with the reason in `dry.why`, and the only elements read before
+   * are the ids in `expect`, the ones the Page already knows the script is aimed at. Compared per element: its type,
+   * and each of `parameterNames`, on Revit's raw value, shown as Revit displays it. Answers `{ data, changes, dry,
+   * elements: [{ id, change, name, category }], rows: [{ id, change, parameter, before, after }], unchanged,
+   * unread }`; `change` is added, modified or deleted, `unread` counts modified elements that were not read before
+   * (they have no rows, because nothing says what changed on them), and `changes.summary` and `changes.undo` are the
+   * run's own words. Throws as `pe.script` does when the real run fails.
    */
-  pe.diff = async ({ script, input, mode, timeoutSeconds }, parameterNames = []) => {
+  pe.diff = async (run, parameterNames = []) => {
+    if (Array.isArray(run) || typeof run !== "object" || run === null || typeof run.script !== "string")
+      throw new Error(
+        'pe.diff takes the run itself: pe.diff({ script: "heals/x.csx", input, expect: [ids] }, parameterNames). The (elementIds, parameterNames, run) form is retired; the changed ids now come from the run.',
+      );
+    const { script, input, mode, timeoutSeconds, expect = [] } = run;
     // ponytail: reads at most 500 elements a side; `truncated` says so. Page the read if a Page ever draws more.
     const cap = 500;
     const read = async (ids) => {
@@ -422,17 +430,22 @@
       if (!error.run) throw error;
       dry.why = error.message;
     }
-    const before = await read(ids(dry.changes, "modified", "deleted"));
+    const before = await read([...new Set([...ids(dry.changes, "modified", "deleted"), ...expect])]);
     const data = await pe.script(script, { input, mode, timeoutSeconds });
     const changes = pe.lastRun?.changes ?? null;
     const after = await read(ids(changes, "added", "modified"));
     const elements = [];
     const rows = [];
     let unchanged = 0;
+    let unread = 0;
     for (const change of ["added", "modified", "deleted"])
       for (const id of ids(changes, change)) {
         const [b, a] = [before.get(id), after.get(id)];
         elements.push({ id, change, name: (a ?? b)?.name ?? null, category: (a ?? b)?.category ?? null });
+        if (change === "modified" && !b) {
+          unread++;
+          continue;
+        }
         for (const parameter of new Set([...(b?.values.keys() || []), ...(a?.values.keys() || [])])) {
           const [from, to] = [b?.values.get(parameter), a?.values.get(parameter)];
           if (from && to && from.raw === to.raw) unchanged++;
@@ -440,7 +453,7 @@
         }
       }
     const total = (c) => (c ? c.added.total + c.modified.total + c.deleted.total : 0);
-    return { data, changes, dry, elements, rows, unchanged, truncated: total(changes) > elements.length || elements.length > cap };
+    return { data, changes, dry, elements, rows, unchanged, unread, truncated: total(changes) > elements.length || elements.length > cap };
   };
 
   let streamSeq = 0;

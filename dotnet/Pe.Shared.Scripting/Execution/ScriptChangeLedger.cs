@@ -9,9 +9,10 @@ public sealed record ScriptCommit(
     IReadOnlyList<string> Transactions, IReadOnlyList<long> Added, IReadOnlyList<long> Modified, IReadOnlyList<long> Deleted);
 
 /// <summary>
-///     One failure as Revit raised it. <paramref name="CommitsBefore" /> is how many commits the run had seen when
-///     it was raised: its transaction committed only if a later commit carries its name.
-///     <paramref name="Dismissed" /> is a warning the host's own handling acknowledged.
+///     One failure as Revit raised it. <paramref name="CommitsBefore" /> is how many commits, in any document,
+///     the run had seen when it was raised: Revit commits in order on one thread, so its transaction committed
+///     only if the very next commit carries its name. <paramref name="Dismissed" /> is a warning the host's own
+///     handling acknowledged.
 /// </summary>
 public sealed record ScriptRaisedFailure(
     string Message, string Severity, string DefinitionId, IReadOnlyList<long> ElementIds, string Transaction,
@@ -38,28 +39,39 @@ public static class ScriptChangeLedger {
     /// </summary>
     private static readonly HashSet<string> RefusedInGroup = new(StringComparer.Ordinal) { "Save", "SaveAs", "SynchronizeWithCentral" };
 
-    /// <summary>The first call in <paramref name="sources" /> that Revit refuses inside a transaction group; null when there is none.</summary>
+    /// <summary>
+    ///     The first call in <paramref name="sources" /> that Revit refuses inside a transaction group; null when
+    ///     there is none. The caller passes the entrypoint's dependency closure (ScriptSourceClosure), never the
+    ///     whole Pod: a helper the entrypoint uses that saves must ungroup it, and a sibling script that saves must not.
+    /// </summary>
     public static string? GroupRefusal(ScriptSourceSet sources) => sources.Files
         .SelectMany(file => CSharpSyntaxTree.ParseText(file.Content).GetRoot().DescendantNodes().OfType<InvocationExpressionSyntax>())
         .Select(call => call.Expression is MemberAccessExpressionSyntax member ? member.Name.Identifier.ValueText : null)
         .FirstOrDefault(name => name is not null && RefusedInGroup.Contains(name));
 
+    /// <param name="committed">The transaction names of every commit the run saw, in order, in any document.</param>
+    /// <remarks>
+    ///     ponytail: a commit that changed no element raises no change event, so a warning in one reads RolledBack.
+    ///     Read the event's own rollback notice if that ever misleads.
+    /// </remarks>
     public static List<ScriptFailure> Failures(
-        ScriptPermissionMode mode, IReadOnlyList<ScriptCommit> commits, IReadOnlyList<ScriptRaisedFailure> raised) => raised
-        // Revit may process one failure in several passes; it is one failure.
-        .GroupBy(failure => (failure.Transaction, failure.DefinitionId, failure.Message, Elements: string.Join(",", failure.ElementIds)))
-        .Select(group => group.Last())
+        ScriptPermissionMode mode, IReadOnlyList<IReadOnlyList<string>> committed, IReadOnlyList<ScriptRaisedFailure> raised) => raised
+        // Revit may hand one failure of one attempt to several readers (a preprocessor, then the event); it is one failure.
+        .GroupBy(failure => (failure.Transaction, failure.CommitsBefore, failure.DefinitionId, failure.Message, Elements: string.Join(",", failure.ElementIds)))
+        .Select(group => group.First() with { Dismissed = group.Any(failure => failure.Dismissed) })
         .Select(failure => new ScriptFailure(failure.Message, failure.Severity, failure.DefinitionId, failure.ElementIds.ToList(),
             failure.Transaction,
             mode == ScriptPermissionMode.ReadOnly ? ScriptFailureOutcome.RolledBack
             : failure.Dismissed ? ScriptFailureOutcome.Dismissed
-            : commits.Skip(failure.CommitsBefore).Any(commit => commit.Transactions.Contains(failure.Transaction, StringComparer.Ordinal))
+            : committed.ElementAtOrDefault(failure.CommitsBefore)?.Contains(failure.Transaction, StringComparer.Ordinal) == true
                 ? ScriptFailureOutcome.Committed
                 : ScriptFailureOutcome.RolledBack))
         .ToList();
 
+    /// <param name="overlapped">Another call's window was open during this run, so a commit here may be that call's.</param>
     public static ScriptChanges Changes(
-        ScriptPermissionMode mode, IReadOnlyList<ScriptCommit> commits, IReadOnlyList<ScriptFailure> failures, ScriptUndo undo) {
+        ScriptPermissionMode mode, IReadOnlyList<ScriptCommit> commits, IReadOnlyList<ScriptFailure> failures, ScriptUndo undo,
+        bool overlapped = false) {
         // Net over the run, in commit order: added then modified is added; added then deleted is nothing.
         HashSet<long> added = [], modified = [], deleted = [];
         foreach (var commit in commits) {
@@ -77,8 +89,9 @@ public static class ScriptChangeLedger {
         var entry = !grouped ? null : undo.Undo ?? (commits.Count == 1 ? commits[0].Transactions.FirstOrDefault() : null);
         var ungrouped = grouped && entry is null ? undo.Ungrouped ?? "the run was not grouped." : null;
         return new ScriptChanges(Bound(added), Bound(modified), Bound(deleted), transactions, kept,
-            Summary(mode, added.Count, modified.Count, deleted.Count, commits.Count, failures, entry, ungrouped),
-            entry, ungrouped);
+            Summary(mode, added.Count, modified.Count, deleted.Count, commits.Count, failures, entry, ungrouped)
+            + (overlapped ? " Another call ran at the same time; these may include its changes." : ""),
+            entry, ungrouped, overlapped);
     }
 
     private static string Summary(

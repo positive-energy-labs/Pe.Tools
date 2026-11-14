@@ -16,7 +16,9 @@ public sealed class ScriptChangeLedgerTests {
         new(Central, severity, "0d9b1e3a-0000-0000-0000-000000000001", [77], transaction, commitsBefore, dismissed);
 
     private static ScriptChanges Changes(ScriptPermissionMode mode, ScriptCommit[] commits, ScriptRaisedFailure[]? raised = null, ScriptUndo? undo = null) =>
-        ScriptChangeLedger.Changes(mode, commits, ScriptChangeLedger.Failures(mode, commits, raised ?? []), undo ?? new ScriptUndo());
+        ScriptChangeLedger.Changes(mode, commits, ScriptChangeLedger.Failures(mode, Names(commits), raised ?? []), undo ?? new ScriptUndo());
+
+    private static List<IReadOnlyList<string>> Names(ScriptCommit[] commits) => commits.Select(commit => commit.Transactions).ToList();
 
     [Test]
     public void Ids_are_net_over_the_runs_commits_in_order() {
@@ -77,11 +79,11 @@ public sealed class ScriptChangeLedgerTests {
     }
 
     [Test]
-    public void A_failure_is_committed_only_when_its_transaction_commits_after_it() {
+    public void A_failure_is_committed_only_when_the_very_next_commit_is_its_transaction() {
         ScriptCommit[] commits = [Commit("first", modified: [1]), Commit("second", modified: [2])];
-        var failures = ScriptChangeLedger.Failures(Write, commits, [
+        var failures = ScriptChangeLedger.Failures(Write, Names(commits), [
             Failure("first", 1),                                 // raised after 'first' had committed once: this attempt did not
-            Failure("second", 1, "Warning"),                     // 'second' committed after it
+            Failure("second", 1, "Warning"),                     // 'second' is the next commit
             Failure("host", 2, "Warning", dismissed: true)
         ]);
 
@@ -90,6 +92,45 @@ public sealed class ScriptChangeLedgerTests {
         }));
         Assert.That(ScriptChangeLedger.Changes(Write, commits, failures, new ScriptUndo("heal")).Summary, Is.EqualTo(
             $"Changed 2 elements (0 added, 2 modified, 0 deleted) in 2 transactions. One undo entry: 'heal'. Revit rolled back 1 transaction ('first'). Revit said: {Central}"));
+    }
+
+    // Transaction names are not unique: a script commits "Set" twice, the first rolled back by an error.
+    [Test]
+    public void A_rolled_back_attempt_is_not_committed_by_a_later_transaction_of_the_same_name() {
+        ScriptCommit[] commits = [Commit("Other", modified: [1]), Commit("Set", modified: [2])];
+        var failures = ScriptChangeLedger.Failures(Write, Names(commits), [Failure("Set", 0)]);
+
+        Assert.That(failures.Single().Outcome, Is.EqualTo(ScriptFailureOutcome.RolledBack));
+        Assert.That(ScriptChangeLedger.Changes(Write, commits, failures, new ScriptUndo("heal")).Summary,
+            Does.Contain("Revit rolled back 1 transaction ('Set')."));
+    }
+
+    // A commit in a family document is a commit: a warning there stands, though the run's own document lists none of it.
+    [Test]
+    public void A_failure_in_another_documents_transaction_is_judged_by_that_commit() {
+        var failures = ScriptChangeLedger.Failures(Write, [["Family edit"]], [Failure("Family edit", 0, "Warning")]);
+
+        Assert.That(failures.Single().Outcome, Is.EqualTo(ScriptFailureOutcome.Committed));
+    }
+
+    // The preprocessor and the event may both hand over one warning of one attempt; the acknowledged copy decides.
+    [Test]
+    public void A_warning_read_twice_in_one_attempt_is_dismissed_once() {
+        var failures = ScriptChangeLedger.Failures(ScriptPermissionMode.WriteTransaction, [["Pe script: heal"]], [
+            Failure("Pe script: heal", 0, "Warning", dismissed: true), Failure("Pe script: heal", 0, "Warning")
+        ]);
+
+        Assert.That(failures.Single().Outcome, Is.EqualTo(ScriptFailureOutcome.Dismissed));
+    }
+
+    [Test]
+    public void A_run_beside_another_call_says_its_changes_may_be_the_others() {
+        ScriptCommit[] commits = [Commit("one", added: [1])];
+        var changes = ScriptChangeLedger.Changes(Write, commits, [], new ScriptUndo("heal"), overlapped: true);
+
+        Assert.That(changes.Overlapped, Is.True);
+        Assert.That(changes.Summary, Does.EndWith("Another call ran at the same time; these may include its changes."));
+        Assert.That(ScriptChangeLedger.Changes(Write, commits, [], new ScriptUndo("heal")).Overlapped, Is.False);
     }
 
     [Test]
@@ -105,10 +146,13 @@ public sealed class ScriptChangeLedgerTests {
     [Test]
     public void A_save_in_the_scripts_own_source_is_a_call_revit_refuses_in_a_group() {
         static ScriptSourceSet Source(string content) => new([new ScriptSourceFile("heal.csx", content)], "heal.csx");
+        // The set is the entrypoint's dependency closure: a helper in it that saves ungroups the run.
+        ScriptSourceSet closure = new([new ScriptSourceFile("heals/heal.csx", "Keep.Variant(doc);"), new ScriptSourceFile("src/Keep.cs", "doc.SaveAs(path);")], "heals/heal.csx");
 
         Assert.Multiple(() => {
             Assert.That(ScriptChangeLedger.GroupRefusal(Source("doc.SaveAs(path, options);")), Is.EqualTo("SaveAs"));
             Assert.That(ScriptChangeLedger.GroupRefusal(Source("var family = doc.EditFamily(f); family.LoadFamily(doc, load);")), Is.Null);
+            Assert.That(ScriptChangeLedger.GroupRefusal(closure), Is.EqualTo("SaveAs"));
             Assert.That(ScriptChangeLedger.GroupRefusal(Source("// doc.Save();\nvar text = \"x.Save()\";")), Is.Null);
         });
     }

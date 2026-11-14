@@ -882,8 +882,8 @@ public sealed class RevitScriptExecutionService(
             application.FailuresProcessing -= run.OnFailuresProcessing;
             if (run.Started) {
                 var commits = run.Commits();
-                outputSink.Failures = ScriptChangeLedger.Failures(mode, commits, run.Raised);
-                outputSink.Changes = ScriptChangeLedger.Changes(mode, commits, outputSink.Failures, run.Undo);
+                outputSink.Failures = ScriptChangeLedger.Failures(mode, run.Committed(), run.Raised);
+                outputSink.Changes = ScriptChangeLedger.Changes(mode, commits, outputSink.Failures, run.Undo, window.Overlapped);
                 // ReadOnly discards everything by design and WriteTransaction reports its own rollback as an error.
                 if (mode == ScriptPermissionMode.NoTransaction
                     && outputSink.Failures.Any(failure => failure.Outcome == ScriptFailureOutcome.RolledBack))
@@ -1002,15 +1002,21 @@ public sealed class RevitScriptExecutionService(
         ///     Commits in the run's document. A write mode leaves out sandbox churn, which was discarded; a
         ///     ReadOnly run is nothing but its guard's sandbox commit, and that is what it would have changed.
         /// </summary>
-        public IReadOnlyList<ScriptCommit> Commits() => (this._guarded ?? window.Changes)
-            .Where(change => change.Ids is not null && (mode == ScriptPermissionMode.ReadOnly || !change.Contained))
+        public IReadOnlyList<ScriptCommit> Commits() => this.Kept()
+            .Where(change => change.Ids is not null)
             .Select(change => new ScriptCommit(change.Transactions, change.Ids!.Added, change.Ids.Modified, change.Ids.Deleted))
             .ToList();
+
+        /// <summary>The transaction names of every commit the run saw, in order, in any document: a failure's transaction may be a family's.</summary>
+        public IReadOnlyList<IReadOnlyList<string>> Committed() => this.Kept().Select(change => change.Transactions).ToList();
+
+        private IEnumerable<ObservedChange> Kept() => (this._guarded ?? window.Changes)
+            .Where(change => mode == ScriptPermissionMode.ReadOnly || !change.Contained);
 
         /// <summary>Records every failure the accessor holds, in Revit's words. Answers the index of the first one recorded.</summary>
         public int Observe(FailuresAccessor accessor) {
             var first = this._raised.Count;
-            var commitsBefore = this.Commits().Count;
+            var commitsBefore = this.Kept().Count();
             var transaction = accessor.GetTransactionName();
             foreach (var failure in accessor.GetFailureMessages()) {
                 List<long> elements;

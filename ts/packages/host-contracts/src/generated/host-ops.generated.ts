@@ -11648,7 +11648,8 @@ export namespace ScriptingExecute {
      * lists are what it would have changed, and Revit rolled it back. `Transactions` names each commit in order.
      * `Summary` says the same in one sentence, and says so when Revit rolled back what the run tried to commit.
      * `Undo` names the single entry Ctrl+Z in Revit undoes; when it is null on a run that kept changes,
-     * `Ungrouped` says why the run's transactions are separate undo entries.
+     * `Ungrouped` says why the run's transactions are separate undo entries. `Overlapped` is true when another
+     * call ran at the same time: the lists may then include that call's changes.
      *
      */
     export interface ScriptChanges {
@@ -11660,6 +11661,7 @@ export namespace ScriptingExecute {
       summary: string;
       undo?: null | string;
       ungrouped?: null | string;
+      overlapped: boolean;
     }
     /**
      * Element ids of one kind of change. `Ids` holds at most 2,000; `Total` counts them all.

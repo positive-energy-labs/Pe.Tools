@@ -967,7 +967,9 @@ describe("pages", () => {
 
     // Slice 6. Mutants, each run red once: read `before` from the real run's ids instead of the dry run's
     // (the deleted element has no row and the modified one no before); drop `mode: "ReadOnly"` from the
-    // first run (the script writes twice); compare on the shown value (the 0.004 change is `unchanged`).
+    // first run (the script writes twice); compare on the shown value (the 0.004 change is `unchanged`);
+    // drop `expect` from the before read (the aimed element is unread); delete the array refusal (an
+    // array reaches pe.script and the host is called).
     it("pe.diff dry-runs a script, runs it, and answers rows from the run's own change ids", async () => {
       const ids = (...list: number[]) => ({ ids: list, total: list.length });
       const changes = (kept: boolean) => ({
@@ -1029,12 +1031,23 @@ describe("pages", () => {
         { id: 2, change: "deleted", parameter: "Loss", before: "0.10", after: null },
       ]);
 
-      // A script that cannot run ReadOnly still runs for real; its rows have no before, and `dry` says why.
+      // A script that cannot run ReadOnly still runs for real, and `dry` says why. A modified element nobody
+      // read before has no rows; one the Page named in `expect` was read before and has them.
       dryFails = true;
+      wrote = false;
       const blind = await diff({ script: "heals/taps.csx" }, ["Loss"]);
       expect(blind.dry).toMatchObject({ ran: false, why: expect.stringContaining("script-owned transaction") });
-      expect((blind.rows as { before: unknown }[]).every((row) => row.before === null)).toBe(true);
-      expect(blind.changes).toMatchObject({ kept: true });
+      expect(blind).toMatchObject({ unread: 1, changes: { kept: true } });
+      expect((blind.rows as { id: number }[]).map((row) => row.id)).toEqual([3, 3]);
+      wrote = false;
+      const aimed = await diff({ script: "heals/taps.csx", expect: [1] }, ["Loss"]);
+      expect(aimed).toMatchObject({ unread: 0, dry: { ran: false } });
+      expect(aimed.rows).toContainEqual({ id: 1, change: "modified", parameter: "Type", before: "Loose", after: "Tight" });
+
+      // The retired (elementIds, parameterNames, run) form is refused in plain words, before anything runs.
+      const acts = sent.length;
+      await expect(diff([1], ["Loss"])).rejects.toThrow(/pe\.diff takes the run itself.*retired/);
+      expect(sent.length).toBe(acts);
     });
 
     it("C2: one stream reduces replay and live rows with identical metadata, without duplicate echoes", async () => {
