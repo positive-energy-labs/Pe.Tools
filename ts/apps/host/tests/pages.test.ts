@@ -1594,6 +1594,67 @@ describe("pages", () => {
       }
     });
 
+    it.each(["target", "state", "text", "read", "do"])("D43: %s retries transport reads on 1/2/5/10 seconds and clears its waiting line", async (door) => {
+      const { sleep, pass, waits } = owned();
+      let attempts = 0;
+      const path = door === "read" || door === "do" ? "call" : door;
+      const { pe, body } = await page((url) => {
+        if (url.pathname.endsWith(`/${path}`) && ++attempts <= 5) throw new TypeError("Failed to fetch");
+        return undefined;
+      }, undefined, undefined, sleep);
+      const result = door === "target" ? pe.target!()
+        : door === "read" || door === "do" ? pe[door]!("revit.context.summary")
+        : pe.state!({ base: 0, reduce: (s: unknown) => s });
+      // Observe rejection immediately so the red mutant leaves no unhandled rejection.
+      const outcome = result.then((value) => ({ value }), (error) => ({ error }));
+      for (const ms of [1000, 2000, 5000, 10000, 10000]) {
+        await pass(ms);
+        const note = body.children.find((node) => (node as { id?: string }).id === "pe-waiting");
+        expect(note).toMatchObject({ textContent: expect.stringContaining("Failed to fetch") });
+      }
+      expect(await outcome).not.toHaveProperty("error");
+      expect(attempts).toBe(6);
+      expect(waits).toEqual([]);
+      expect(body.children.find((node) => (node as { id?: string }).id === "pe-waiting")).toMatchObject({ hidden: true });
+    });
+
+    it("D43: committed fire catches up after transport loss without appending twice, including an SSE echo", async () => {
+      const { sleep, pass } = owned();
+      const row = { seq: 1, origin: "page", at: "2026-11-14T00:00:00Z", event: { type: "add" } };
+      let committed = false, reads = 0;
+      const { pe, streams, sent } = await page((url) => {
+        if (url.pathname.endsWith("/events")) { committed = true; return Response.json(row); }
+        if (url.pathname.endsWith("/state") && committed) {
+          if (++reads === 1) throw new TypeError("Failed to fetch");
+          return Response.json({ seq: 1, events: [row] });
+        }
+        return undefined;
+      }, undefined, undefined, sleep);
+      const k = await pe.state!({ base: 0, reduce: (s: number) => s + 1 }) as { state: number; fire(e: unknown): Promise<boolean> };
+      const result = k.fire(row.event).then((value) => ({ value }), (error) => ({ error }));
+      await pass(1000);
+      streams[0]!.onmessage!({ data: JSON.stringify(row) });
+      expect(await result).toEqual({ value: true });
+      expect(k.state).toBe(1);
+      expect(sent.filter((r) => r.url.endsWith("/events"))).toHaveLength(1);
+    });
+
+    it.each(["append", "mutation", "script"])("D43: %s transport loss reports unknown outcome and never retries", async (door) => {
+      const { sleep, waits } = owned();
+      const { pe, sent, body } = await page((url) => {
+        if (url.pathname.endsWith("/call")) return Response.json({ notDispatched: true }, { status: 409 });
+        if (url.pathname.endsWith("/events") || url.pathname.endsWith("/act")) throw new TypeError("Failed to fetch");
+        return undefined;
+      }, undefined, undefined, sleep);
+      const result = door === "script" ? pe.script!("script:@kit/src/Copy.cs")
+        : door === "mutation" ? pe.do!("revit.mutate")
+        : (await pe.state!({ base: 0, reduce: (s: unknown) => s }) as { fire(e: unknown): Promise<unknown> }).fire({ type: "add" });
+      await expect(result).rejects.toThrow(/outcome.*unknown.*Failed to fetch/i);
+      expect(sent.filter((r) => /\/(events|act)$/.test(r.url))).toHaveLength(1);
+      expect(waits).toEqual([]);
+      expect(body.children.find((n) => (n as { id?: string }).id === "pe-refusal")).toMatchObject({ textContent: expect.stringContaining("Failed to fetch") });
+    });
+
     /** The Pages handler's own discovery expiry, through the route envelope the browser receives. */
     const words =
       "Pod discovery exceeded 5000 ms listing G:/Shared drives/Pods. Try again when the folder is available.";
