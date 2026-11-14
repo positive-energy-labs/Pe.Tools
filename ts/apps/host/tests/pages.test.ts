@@ -139,6 +139,43 @@ describe("pages", () => {
     }
   });
 
+  it.each(["document", "iframe"])("W34: a %s request for a Page that discovery cannot find yet gets the host's words and asks again by itself", async (dest) => {
+    const { pods, fetch } = await pagesRoot();
+    const directory = join(pods, "late");
+    await mkdir(join(directory, "pages", "tour"), { recursive: true });
+    await writeFile(join(directory, "pod.json"), '{"id":"late"}');
+    await writeFile(join(directory, "pages", "tour", "index.html"), "<title>Late tour</title>");
+    const listing = await packages.listPackages(pods);
+    let slow = true;
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const list = vi.spyOn(packages, "listPackages").mockImplementation(async () => {
+      if (slow) await new Promise((resolve) => setTimeout(resolve, 6000));
+      return listing;
+    });
+    const open = () => fetch("/pages/late--tour/?walk=1", { headers: { accept: "text/html,*/*", "sec-fetch-dest": dest } });
+    try {
+      const opening = open();
+      await vi.advanceTimersByTimeAsync(5000);
+      const waiting = await opening;
+      expect(waiting.status).toBe(503);
+      expect(waiting.headers.get("content-type")).toContain("text/html");
+      const html = await waiting.text();
+      expect(html).toContain('<meta http-equiv="refresh"');
+      expect(html).toContain("waiting for the Pods folder: Pod discovery exceeded 5000 ms listing");
+      expect(html).toContain("Try again when the folder is available.");
+      // The same request, once the folder answers, is the Page (or its place in the app).
+      slow = false;
+      vi.useRealTimers();
+      const served = await open();
+      expect(served.status).toBe(dest === "document" ? 302 : 200);
+    } finally {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      await vi.advanceTimersByTimeAsync(10000);
+      list.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
   it("the Bind redirect keeps the Page's whole query in its query field", async () => {
     const { fetch } = await pagesRoot();
     const response = await fetch("/pages/todo/?walk=1&x=2", {
@@ -1594,6 +1631,49 @@ describe("pages", () => {
       expect(rendered).toEqual([{ tries: 0 }]);
       expect(asked).toEqual({ target: 3, state: 5 });
       expect(note()?.hidden).toBe(true);
+      expect(waits).toEqual([]);
+    });
+
+    // Seen live (A7c): target and state answered 200, the text publish answered 503, and `k` never came back.
+    it("W34: the store still loads when its text publish answers a discovery 503 after the state read answered", async () => {
+      const { sleep, pass } = owned();
+      let text = 0;
+      const { pe } = await page(
+        (url) => (url.pathname.endsWith("/text") && ++text <= 2 ? late() : undefined),
+        undefined,
+        undefined,
+        sleep,
+      );
+      const loading = pe.state!({ reduce: (s: unknown) => s, base: { tries: 5 } }) as Promise<{ state: unknown }>;
+      await pass(1000);
+      await pass(2000);
+      expect((await loading).state).toEqual({ tries: 5 });
+      expect(text).toBe(3);
+    });
+
+    // Seen live (A7c): the Page's own reads through `/call` answered 503 and its panel stayed unusable.
+    it("W34: pe.read and pe.do ask a read again on a discovery 503; an act is never sent twice", async () => {
+      const { sleep, pass, waits } = owned();
+      let calls = 0;
+      const { pe, sent } = await page(
+        (url) => {
+          if (url.pathname.endsWith("/call")) return ++calls <= 2 || calls === 4 ? late() : undefined;
+          if (url.pathname.endsWith("/act")) return late();
+          return undefined;
+        },
+        undefined,
+        undefined,
+        sleep,
+      );
+      const read = pe.read!("revit.context.journal", { maxLines: 60 });
+      await pass(1000);
+      await pass(2000);
+      expect(await read).toEqual({ ok: true });
+      const done = pe.do!("revit.catalog.warnings");
+      await pass(1000);
+      expect(await done).toEqual({ ok: true });
+      await expect(pe.script!("script:@kit/src/Census.cs")).rejects.toThrow("503");
+      expect(sent.filter((request) => request.url.endsWith("/act"))).toHaveLength(1);
       expect(waits).toEqual([]);
     });
 

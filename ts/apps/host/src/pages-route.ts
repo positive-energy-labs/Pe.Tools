@@ -1003,10 +1003,21 @@ export function createPagesHandler(
   };
 
   return Object.assign((request: Request) => handle(request).catch((error: unknown) => {
+    if (!(error instanceof PackageDiscoveryExceeded)) throw error;
+    // A browser opening the Page itself (a tab, or the app's frame) has no pe.js yet to ask again, so
+    // the answer is a document that says the host's words and asks again by itself.
+    // ponytail: a fixed 2 s pause; each ask already spends the 5 s discovery budget before it answers.
+    if (
+      request.method === "GET" &&
+      (request.headers.get("accept") ?? "").includes("text/html") &&
+      !matchPeRoute("GET", new URL(request.url).pathname)
+    )
+      return new Response(
+        `<!doctype html><meta charset="utf-8"><meta http-equiv="refresh" content="2"><title>Waiting for the Pods folder</title><p role="status" style="margin:0;padding:8px 12px;background:#374151;color:#fff;font:13px/1.4 system-ui,sans-serif;white-space:pre-wrap">waiting for the Pods folder: ${escapeHtml(error.message)}</p>`,
+        { status: 503, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } },
+      );
     // The code tells pe.js this 503 is a wait, not a refusal: it asks again by itself.
-    if (error instanceof PackageDiscoveryExceeded)
-      return json({ error: error.message, message: error.message, code: error.code }, 503);
-    throw error;
+    return json({ error: error.message, message: error.message, code: error.code }, 503);
   }), { observeTarget });
   async function handle(request: Request): Promise<Response> {
     const caller = currentCaller();

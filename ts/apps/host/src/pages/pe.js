@@ -178,7 +178,8 @@
    * `pod.discovery.exceeded`: the Pods folder is slow, not gone, and the same request a moment later is answered.
    * So `send` is sent again after 1 s, 2 s, 5 s, then every 10 s for as long as the page is open, and the page says
    * what it is waiting for in the host's words. Every other answer comes back as it is, at once: a refusal, a 4xx
-   * and any other 503 are never asked twice. Every boot read goes through here; Page code never loops.
+   * and any other 503 are never asked twice. Every read goes through here (target, state, its text publish, and
+   * `pe.read`); Page code never loops. An act (`pe.do` on a mutation, `pe.script`) is never sent twice.
    */
   const DISCOVERY_WAITS = [1000, 2000, 5000];
   let waiting = 0;
@@ -285,7 +286,7 @@
 
   /** Run a read on the bound document (`/pages/<slug>/call`). A mutation is refused here by the host; use `pe.do`. */
   pe.read = async (key, request = {}) =>
-    json(await client.response("page.call", pageInput({ key, request })));
+    json(await whenDiscovered(() => client.response("page.call", pageInput({ key, request }))));
 
   /** One act as this page (`/pages/<slug>/act`), waited until its receipt settles; answers the settled row. */
   const act = async (key, input) => {
@@ -306,7 +307,8 @@
    */
   pe.do = async (key, input = {}) => {
     if (key.startsWith("script:")) return pe.script(key, input);
-    const r = await client.response("page.call", pageInput({ key, request: input }));
+    // `/call` never dispatches a mutation, so asking it again is safe; `act` below is sent once.
+    const r = await whenDiscovered(() => client.response("page.call", pageInput({ key, request: input })));
     if (r.ok) return json(r);
     const wire = await r.json().catch(() => null);
     const answer = wire?.error?.details ?? wire;
