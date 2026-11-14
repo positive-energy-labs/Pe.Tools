@@ -353,6 +353,8 @@ type Sources = {
   /** The held acquisition that started the Revit behind this bridge session. */
   acquiredSession: (session: string) => string | null;
   deviceThread?: (device: string) => string | null;
+  /** The current human pin, resolved against the current document inventory. */
+  pagePin?: (page: string) => Promise<DocumentRef | null>;
 };
 const sources: Sources = {
   heads: null,
@@ -671,9 +673,17 @@ export function mintPageDoor(
  * D4: the step-begin and native-dispatch check. A grant basis holds while its thread still targets that exact lifetime
  * under the same admission; a Full-access basis while the switch stays Full or a human has since
  * added the document; a document acquisition while that acquisition still holds that exact
- * lifetime; every other basis holds for the attempt.
+ * lifetime; a person's pin while its current human binding resolves to that exact lifetime.
  */
-export function live(basis: Basis | null, door = "step begin"): Refused | null {
+export async function live(basis: Basis | null, door = "step begin"): Promise<Refused | null> {
+  if (basis?.kind === "person-pin") {
+    const pin = await sources.pagePin?.(basis.page);
+    return pin && sameRef(pin, basis.lifetime)
+      ? null
+      : refuse("grant.revoked", door,
+          `Refused at ${door}: this Page no longer has a person's pin on the admitted document.`,
+          { lifetime: basis.lifetime });
+  }
   if (basis?.kind === "grant" && basis.device) {
     try {
       if (sources.deviceThread?.(basis.device) !== basis.thread)

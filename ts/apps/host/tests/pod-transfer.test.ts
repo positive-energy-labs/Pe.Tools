@@ -22,7 +22,7 @@ import { commandTable } from "@pe/agent-contracts/command-axes";
 const homeVariable = productPathNames.productHomeVariable;
 import type { PictureCaptures } from "../src/captures-route.ts";
 import { listPackages } from "../src/packages.ts";
-import { exportPod, importPod, importRecordFile, placePod, writeZip } from "../src/pod-transfer.ts";
+import { exportPod, importPod, importRecordFile, writeZip } from "../src/pod-transfer.ts";
 
 
 let root: string;
@@ -366,7 +366,7 @@ test("an entry that inflates past its declared size is refused (decompression bo
   ).rejects.toThrow(/does not inflate within its declared size/);
 });
 
-test("pod.promote wraps a scratch Page byte for byte, unbound, without touching the original", async () => {
+test("pod.promote moves a scratch Page into a new Pod byte for byte, unbound, and keeps what the Pod did not take", async () => {
   expect(commandTable["pod.promote"]).toMatchObject({ effect: "SessionWrite", via: "command" });
   const pages = join(root, "Documents", "Pe.Tools", "Pages");
   const html = "<!doctype html><title>Notes</title><script src=/pages/pe.js></script>";
@@ -386,9 +386,15 @@ test("pod.promote wraps a scratch Page byte for byte, unbound, without touching 
   await expect(readFile(join(inPod, ".state", "binding.json"))).rejects.toThrow();
   expect(await readFile(join(pages, "notes", ".state", "events.jsonl"), "utf8")).toBe('{"seq":1}\n');
   expect(await readFile(join(pages, "notes", ".state", "binding.json"), "utf8")).toBe("{}");
-  expect(JSON.stringify(await act("pod.promote", { page: "notes", id: "my-notes" }))).toContain(
+  // One Page, one home: the scratch copy is gone, and the debris the Pod refused is still there to read.
+  await expect(readFile(join(pages, "notes", "index.html"))).rejects.toThrow();
+  // A promote that cannot install removes nothing.
+  await mkdir(join(pages, "again"), { recursive: true });
+  await writeFile(join(pages, "again", "index.html"), html);
+  expect(JSON.stringify(await act("pod.promote", { page: "again", id: "my-notes" }))).toContain(
     "already installed",
   );
+  expect(await readFile(join(pages, "again", "index.html"), "utf8")).toBe(html);
   const missing = await act("pod.promote", { page: "missing", id: "other" });
   expect(missing).toMatchObject({ error: expect.stringContaining(join(pages, "missing")) });
   expect(missing).toMatchObject({ state: "failed", notDispatched: true, steps: [] });
@@ -396,26 +402,3 @@ test("pod.promote wraps a scratch Page byte for byte, unbound, without touching 
   expect((await native.journal.list()).flatMap(row => row.steps).filter(step => step.kind === "native")).toEqual([]);
 });
 
-test("a staged pod crossing volumes is copied with pod.json last, and a failed copy leaves nothing", async () => {
-  const staged = join(root, "state", "pod-importing", "x", "pod");
-  await mkdir(join(staged, "settings"), { recursive: true });
-  await writeFile(join(staged, "pod.json"), '{"id":"pod"}');
-  await writeFile(join(staged, "settings", "a.json"), "{}");
-  const crossVolume = async () => {
-    throw Object.assign(Error("cross-device link not permitted"), { code: "EXDEV" });
-  };
-  const placed = join(root, "home", "Pods", "pod");
-  await mkdir(join(root, "home", "Pods"), { recursive: true });
-  await placePod(staged, placed, crossVolume);
-  expect((await readdir(placed, { recursive: true })).sort()).toEqual(
-    ["pod.json", "settings", join("settings", "a.json")].sort(),
-  );
-  expect(await readFile(join(placed, "pod.json"), "utf8")).toBe('{"id":"pod"}');
-  // A copy that cannot finish (the manifest is missing) removes what it placed: no manifest, no pod.
-  await rm(join(staged, "pod.json"));
-  const failed = join(root, "home", "Pods", "failed");
-  await expect(placePod(staged, failed, crossVolume)).rejects.toThrow();
-  expect(await readdir(join(root, "home", "Pods"))).toEqual(["pod"]);
-  // Any other rename failure is not papered over.
-  await expect(placePod(staged, failed, async () => { throw Error("EPERM"); })).rejects.toThrow("EPERM");
-});

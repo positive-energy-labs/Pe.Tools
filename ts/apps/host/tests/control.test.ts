@@ -63,14 +63,14 @@ test("Pea capability stays independent of thread targets", () => {
   expect(admitCrossing(pea, { kind: "document", ref: docA }, "/actions")).toBeNull();
 });
 
-test("external device target removal revokes its own transport exception", () => {
+test("external device target removal revokes its own transport exception", async () => {
   bind();
   bindControl({ deviceThread: () => "t1" });
   heads.t1 = headWith([docA]);
   const external: Caller = { kind: "external-mcp", context: "m", label: "device", device: "d1" };
   const basis = admitCrossing(external, { kind: "document", ref: docA }, "/actions");
   heads.t1 = emptyThreadHead;
-  expect(live(basis)?.refusal.code).toBe("grant.revoked");
+  expect((await live(basis))?.refusal.code).toBe("grant.revoked");
 });
 
 test("an external MCP device writes only its thread's human-added targets", () => {
@@ -174,14 +174,14 @@ afterEach(() => {
   });
 });
 
-test("re-adding a target cannot revive an external device's older admission", () => {
+test("re-adding a target cannot revive an external device's older admission", async () => {
   bind();
   bindControl({ deviceThread: () => "t1" });
   heads.t1 = headWith([docA]);
   const external: Caller = { kind: "external-mcp", context: "m", label: "device", device: "d1" };
   const basis = admitCrossing(external, { kind: "document", ref: docA }, "/actions");
   heads.t1 = headWith([docA], 5);
-  expect(live(basis)?.refusal.code).toBe("grant.revoked");
+  expect((await live(basis))?.refusal.code).toBe("grant.revoked");
 });
 
 /**

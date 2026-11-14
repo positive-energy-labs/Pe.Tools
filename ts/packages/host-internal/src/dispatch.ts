@@ -28,7 +28,7 @@ export interface DispatchPorts {
   command(): string | undefined;
   commandLeafRefusal(key: string, command: string | undefined): string | null;
   bridgeValidateDispatch(id: string): Promise<DispatchRefusal | null>;
-  bridgeDispatchRefusal(id: string): DispatchRefusal | null;
+  bridgeDispatchRefusal(id: string): Promise<DispatchRefusal | null>;
   markBridgeDispatched(id: string): Promise<void>;
   recordBridgeQueue(
     key: string,
@@ -568,6 +568,7 @@ export const makeDispatcher = (ports: DispatchPorts) =>
         }
         // Dispatch is fenced by incarnation (this session object) and connection epoch: the
         // request records the epoch it goes out on, read in the same step that marks it dispatched.
+        const refusal = reserved ? yield* Effect.promise(() => ports.bridgeDispatchRefusal(requestId)) : null;
         const connection = yield* Ref.get(session.connection);
         if (!connection) return yield* Effect.fail(new NoRevitSession());
         const phase = yield* Ref.modify(
@@ -581,7 +582,6 @@ export const makeDispatcher = (ports: DispatchPorts) =>
             if (requests.get(requestId)?.phase === "cancelled")
               return ["cancelled", requests] as const;
             if (reserved && fence !== revocation) return ["waiting", requests] as const;
-            const refusal = reserved ? ports.bridgeDispatchRefusal(requestId) : null;
             if (refusal) return [{ refusal }, requests] as const;
             const next = new Map(requests);
             next.set(requestId, {

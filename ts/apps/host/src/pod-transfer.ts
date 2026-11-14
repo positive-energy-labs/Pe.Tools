@@ -1,7 +1,6 @@
 /** Transport consumes packages.ts's captured members; source bytes and local custody stay distinct. */
 import { randomUUID } from "node:crypto";
-import { constants } from "node:fs";
-import { copyFile, cp, lstat, mkdir, readFile, readdir, rename, rm, rmdir, stat } from "node:fs/promises";
+import { lstat, readFile, readdir, rm, rmdir, stat } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { crc32, deflateRawSync, inflateRawSync } from "node:zlib";
 import { message, packageIdSchema, packageMemberPathSchema } from "@pe/agent-contracts";
@@ -433,33 +432,6 @@ export const importRecordKind = stateKind({
 export const importRecordFile = (id: string, owner: Pick<TransferOptions, "machine"> = {}) =>
   importRecordKind.in(owner.machine ?? hostState(), id);
 
-/**
- * Move a staged pod into its home whole. One volume: one rename. Across volumes (state on C:, the
- * home on another drive) a rename cannot be one step, so the copy lands `pod.json` last: a listing
- * admits a pod only by its manifest, and so never sees a half copy. A failed copy is removed.
- */
-export async function placePod(staged: string, directory: string, move = rename): Promise<void> {
-  await mkdir(dirname(directory), { recursive: true });
-  try {
-    return await move(staged, directory);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "EXDEV") throw error;
-  }
-  const manifest = join(staged, "pod.json");
-  try {
-    await cp(staged, directory, {
-      recursive: true,
-      errorOnExist: true,
-      force: false,
-      filter: (source) => source !== manifest,
-    });
-    await copyFile(manifest, join(directory, "pod.json"), constants.COPYFILE_EXCL);
-  } catch (error) {
-    await rm(directory, { recursive: true, force: true });
-    throw error;
-  }
-}
-
 /** The manifest id an archive claims; refuses an archive without a valid, unreserved one. */
 export function archiveId(entries: ReadonlyMap<string, Buffer>): string {
   const manifest = entries.get("pod.json");
@@ -479,9 +451,48 @@ export function archiveId(entries: ReadonlyMap<string, Buffer>): string {
   return parsed.data;
 }
 
+/** The archive a scratch Page becomes: a new `pod.json` plus `pages/<page>/`, byte for byte. */
+export function promotedArchive(
+  request: { page: string; id: string; name?: string | undefined },
+  members: readonly { path: string; bytes: Uint8Array }[],
+): Map<string, Buffer> {
+  const manifest = Buffer.from(
+    `${JSON.stringify({ schemaVersion: 2, id: request.id, name: request.name ?? request.page, version: "0.1.0", entrypoints: [] }, null, 2)}\n`,
+  );
+  const files = new Map<string, Buffer>([["pod.json", manifest]]);
+  for (const member of members)
+    files.set(`pages/${request.page}/${member.path}`, Buffer.from(member.bytes));
+  return files;
+}
+
 /**
- * Wrap a scratch Page (`Pages/<page>/`) as a new Pod `<id>` holding `pages/<page>/`, byte for byte.
- * The scratch Page stays. Page state is machine state under the state root (homes freeze shape 7),
+ * The second half of a promote, run only after the Pod is installed: remove the scratch files the Pod
+ * now holds, so one Page has one home. A file is removed only while its bytes still equal the installed
+ * copy; one edited since the capture, and anything the Pod did not take, stays where it is.
+ */
+export async function retireScratchPage(
+  source: string,
+  page: string,
+  installed: ReadonlyMap<string, Buffer>,
+): Promise<void> {
+  const prefix = `pages/${page}/`;
+  const folders = new Set([source]);
+  for (const [path, bytes] of installed) {
+    if (!path.startsWith(prefix)) continue;
+    const file = join(source, path.slice(prefix.length));
+    if (!(await readFile(file).catch(() => null))?.equals(bytes)) continue;
+    await rm(file);
+    for (let folder = dirname(file); folder.length > source.length; folder = dirname(folder))
+      folders.add(folder);
+  }
+  // Deepest first; a folder that still holds something refuses and is left.
+  for (const folder of [...folders].sort((a, b) => b.length - a.length))
+    await rmdir(folder).catch(() => {});
+}
+
+/**
+ * Move a scratch Page (`Pages/<page>/`) into a new Pod `<id>` as `pages/<page>/`, byte for byte.
+ * Page state is machine state under the state root (homes freeze shape 7),
  * so none of it travels: the promoted Page starts unbound with an empty log.
  */
 export async function promotePage(
@@ -502,13 +513,9 @@ export async function promotePage(
   const errors = page.diagnostics.filter((d) => d.severity === "error");
   if (errors.length)
     throw new TransferRefused(errors.map((d) => `${d.path}: ${d.message}`).join("; "));
-  const manifest = Buffer.from(
-    `${JSON.stringify({ schemaVersion: 2, id: id.data, name: request.name ?? request.page, version: "0.1.0", entrypoints: [] }, null, 2)}\n`,
-  );
-  const files = new Map<string, Buffer>([["pod.json", manifest]]);
-  for (const member of page.members)
-    files.set(`pages/${request.page}/${member.path}`, Buffer.from(member.bytes));
+  const files = promotedArchive({ ...request, id: id.data }, page.members);
   const installed = await installArchive(writeZip(files), source, id.data, options);
+  await retireScratchPage(source, request.page, files);
   return { ...installed, key: `page:@${installed.id}/pages/${request.page}` };
 }
 

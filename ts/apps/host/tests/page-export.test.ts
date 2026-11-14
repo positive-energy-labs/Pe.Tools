@@ -89,7 +89,9 @@ it("pins local scripts, imported CSS and relative assets, event log, document an
   } = {};
   runInNewContext(runtime, {
     window,
-    document: { getElementById: () => ({ textContent: snapshot }) },
+    document: {
+      getElementById: (id: string) => (id === "pe-export" ? { textContent: snapshot } : null),
+    },
   });
   const seen: unknown[] = [];
   const kernel = (await window.pe!.state({

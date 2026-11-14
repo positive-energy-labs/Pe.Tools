@@ -20,12 +20,14 @@ export const bundledPeaSkills: readonly BundledPeaSkill[] = [
     name: "make-page",
     content: String.raw`---
 name: make-page
-description: Use for a chart, table, diagram, comparison, calculation walk, or mechanism explanation with one pe_do Page call. It validates and publishes HTML and returns a visible PNG plus an open URL. No Revit model needed for illustrations.
+description: Use for a chart, table, diagram, comparison, calculation walk, or mechanism explanation published as a scratch Page with one pe_do Page call. It validates and publishes HTML and returns a visible PNG plus an open URL. No Revit model needed for illustrations. A Page that belongs to a Pod is a file in that Pod; build-pod owns it.
 ---
 
 # Make a Page
 
-Use pe_do({kind: "page", slug, title, html}) before the final reply when a visual would explain a mechanism, comparison, or calculation. Send a complete self-contained HTML document with inline style and script. The host checks it, captures it, and writes Pages/<slug>/index.html under its product home. Its result includes the canonical Page key, absolute openUrl, and a PNG shown in the conversation. Return its openUrl with a short takeaway; the person already sees the picture. Default to a compact single view for teaching: one diagram or comparison, short labels, and only controls that clarify an assumption. Aim for about 3 KB of HTML for the first visual. Every correction or update resubmits complete HTML through the same Page call with the same slug. Keep that HTML in the turn; never locate, read, or patch Page files through a terminal or direct access to the content home. If the call refuses, fix the stated problem and resubmit the HTML.
+This skill makes scratch Pages: drafts under Pages/<slug>/ that only the Page call writes. A scratch Page has no scripts you can name by key. A Page that runs a Pod's scripts, or that travels with a tool, is the file pages/<page>/index.html inside the Pod, written with file tools; skill:@product/skills/build-pod owns that. The Page code below (pe.js) is the same in both.
+
+Use pe_do({kind: "page", slug, title, html}) before the final reply when a visual would explain a mechanism, comparison, or calculation. Send a complete self-contained HTML document with inline style and script. The host checks it, captures it, and writes Pages/<slug>/index.html under its product home. Its result includes the canonical Page key, absolute openUrl, and a PNG shown in the conversation. Return its openUrl with a short takeaway; the person already sees the picture. Default to a compact single view for teaching: one diagram or comparison, short labels, and only controls that clarify an assumption. Aim for about 3 KB of HTML for the first visual. Every correction or update resubmits complete HTML through the same Page call with the same slug. Keep that HTML in the turn; never locate, read, or patch a scratch Page's files through a terminal or direct access to the content home. If the call refuses, fix the stated problem and resubmit the HTML.
 
 Worked example, the Snowdon duct-loss shape (page:@snowdon-ducts/pages/tour): explain the pressure budget as straight duct plus fittings plus a VAV allowance. For a teaching illustration, publish it directly with assumed inputs rather than waiting for that example's model binding:
 
@@ -35,10 +37,10 @@ The one result supplies the open URL and screenshot. Replace the assumed values 
 
 1. For a new explanation, call pe_do with kind page directly. For adapting an existing Page, discover and read its canonical key first. Update a scratch Page by publishing its slug again; the host keeps its shared state and binding.
 2. Inline CSS, JavaScript, and SVG are sufficient. /pages/pe.js and pe.kit are available when the Page needs host state or richer controls. Keep the explanation focused; do not fetch their source for a simple illustration.
-3. For model-backed work, use pe.target(), pe.read(key), pe.do(key, input), pe.script(path), pe.describe() and shared Page state. Keep the host Bind chip. Never choose Revit session/document headers, imitate Pea, or hide a refusal. Binding is required before model reads or actions, not for an assumed-input illustration.
-4. script:@<manifest-id>/src/File.cs selects the admitted source file. member:@<manifest-id>/settings/file.json is data and cannot execute. Pea reads a Page through pe_read, and appends an event or requests its own pinned binding through pe_do; the Page's action door belongs to the Page.
+3. For model-backed work, use pe.target(), pe.read(key) and pe.do(key, input). Keep the host Bind chip. Never choose Revit session/document headers, imitate Pea, or hide a refusal. Binding is required before model reads or actions, not for an assumed-input illustration. The Page must draw without throwing while unbound, or the publish fails.
+4. Shared state is one call: const k = await pe.state({ reduce, base, render, describe, local: [] }). The event log is the authority, and every copy of the Page and every agent replays it. reduce(state, event, meta) gets meta = { origin: "page" | "agent" | "person", seq, at }; render(state) draws; describe(state) returns the markdown an agent reads. k.fire(event) of a shared event returns a Promise: the host keeps the event, then it is reduced with the host's seq and time, so await it or ignore it and never branch on its value. A type listed in local applies at once in this copy only. The events an agent may append are declared once, in the Page's HTML, not in the pe.state call: <script type="application/json" id="pe-agent">{ "<type>": "<one line: what it means and its fields>" }</script>. The host reads that block from the Page file, so you can append before any browser has opened the Page, and an append of any other type is refused with that list. You read a Page with pe_read page:@..., which answers { seq, text, textSeq, agent, events, target }: text is describe's output as of textSeq, and events is the tail (pass after to page back). You append with pe_do page:@... { event }, stamped origin agent.
 5. Read actual observations before presenting model claims. Label illustrations and stale observations. The publication call already validates and captures the Page; use its returned URL and image instead of rediscovering or reopening it. A capture proves what rendered, not engineering correctness or a Revit action. After a model edit, obtain an independent reading and its receipt.
-6. Share a scratch Page through op:pod.promote, or adapt an installed Pod under a distinct manifest id. Export with op:pod.export and import with op:pod.import. These archive doors need no Revit. Keep authored support files; binding authority and runtime output never travel.
+6. A scratch Page worth keeping, sharing or giving scripts becomes a Pod: op:pod.promote moves it into a new Pod as pages/<slug>/ (the scratch copy is removed and its event log does not follow), and build-pod takes it from there.
 `,
   },
   {
@@ -154,7 +156,7 @@ The user asked to learn, not to be told. The master corrects the hand and never 
     name: "write-revit-csharp-script",
     content: String.raw`---
 name: write-revit-csharp-script
-description: Write and run a C# Revit script when code is the clearest way to inspect, mutate, or experiment against a connected model. Use for one-off probes, gaps in host operations, and durable multi-step work. Covers inline snippets, workspace files, and Pod rules. Not for changing values a route shows (family or type parameters, schedule cells, takeoffs, parameter links); edit those with edit-shared-work and use their semantic apply command.
+description: Write and run a C# Revit script when code is the clearest way to inspect, mutate, or experiment against a connected model. Use for one-off probes, gaps in host operations, and durable multi-step work. Covers inline snippets and workspace files; build-pod owns scripts that live in a Pod. Not for changing values a route shows (family or type parameters, schedule cells, takeoffs, parameter links); edit those with edit-shared-work and use their semantic apply command.
 ---
 
 # Write Revit C# Script
@@ -172,7 +174,7 @@ description: Write and run a C# Revit script when code is the clearest way to in
 
 Building or fixing a family from a cut sheet follows build-revit-family.
 
-A Pod is a workspace with a root pod.json declaring entrypoints; the build-pod skill defines it and owns building or adapting one.
+A script worth keeping becomes a Pod entrypoint. skill:@product/skills/build-pod is the one account of that: the manifest, a script's input, its declared mode, the files it reads and the key every door runs it by.
 
 For a probe, report the answer and the permissionMode it ran under. For a mutation, add the script path, diagnostics, and the verification readback.
 
@@ -250,7 +252,44 @@ For a Pod with Revit script entrypoints, pe_find must first establish an exact c
 
 ## What a Pod is
 
-A Pod is one folder under Pods/<folder>/ in a content home holding pod.json and authored source, guides, settings, assets, Pages and skills. The host admits one bounded membership set; runtime/build debris and binding authority never travel. pod.json holds schemaVersion, id, name, version, description, and optional script entrypoints; nothing else. Libraries offer operations for JSON members; do not bind a JSON file to an operation in the manifest. A folder without pod.json is not a Pod.
+A Pod is one folder under Pods/<folder>/ in a content home. It holds pod.json and authored files: C# scripts, Pages, skills, settings, assets and guides. Everything a tool needs travels in that folder. A folder without pod.json is not a Pod. The host admits one bounded membership set; build debris, run output, Page state and binding authority are machine state and never sit in the Pod.
+
+pod.json holds schemaVersion (2), id, name, version, description, entrypoints, and an optional for; write nothing else in it. Some shipped Pods also declare routes. That tier is frozen: never add, edit or copy a route. Libraries offer operations for JSON members; do not bind a JSON file to an operation in the manifest.
+
+### Scripts: one key, every door
+
+An entrypoint is { "sourcePath", "name"?, "description"?, "mode"? }. sourcePath is any .cs or .csx file of the Pod at any path, src/Compare.cs or pages/tour/checks/taps.csx alike. The file is a PeScriptContainer class or a bare statement body. The Pod's other .cs files compile beside it, so a shared helper is a static class in its own file.
+
+- mode is ReadOnly, WriteTransaction or NoTransaction. Declare ReadOnly on every check and report: a ReadOnly entrypoint is a read, you run it with pe_read, and any caller asking it for a write mode is refused. An entrypoint with no mode lets the caller choose and writes by default.
+- Input is one JSON object, at most 256 KiB, handed through unchanged by every door. Read it with Arg<T>("name") or Arg<T>("name", fallback); the raw object is Input (a JsonElement). A missing or ill-typed argument throws in plain words naming it. Give a fallback wherever the palette button, which sends no input, should still do something useful.
+- PodFile("assets/Tag.rfa") answers the absolute path of a file of the running Pod. Never write an absolute path in a script; it breaks the moment the Pod is shared.
+- Result(value) is the script's answer. Every door answers exactly that value.
+
+The key is script:@<id>/<sourcePath>, and three doors run it with the same input and the same answer:
+
+- A Page: const rows = await pe.script("src/Compare.cs", { input: { a, b } }). A relative path resolves to this Pod's key; pe.do("script:@<id>/src/Compare.cs", { input }) is the same call. Options are input, mode and timeoutSeconds. It answers the Result value and throws with the compiler's or runtime's own words; the full run record is on the error and on pe.lastRun.
+- You: pe_read script:@<id>/<path> { input } for a ReadOnly entrypoint, pe_do script:@<id>/<path> { input, permissionMode, timeoutSeconds } for the rest. The catalog row carries the declared mode.
+- A person: the palette button described below.
+
+Declare every script a Page runs. A path the Pod does not declare is refused with "declare <path> in pod.json entrypoints". Inline source (pe.script with a multi-line string) is for scratch Pages and probes only: it has no key, so you could not run the check the Page shows, and the person and you would be reading different things.
+
+### Pages: files in the Pod
+
+A Pod's Page is the file pages/<page>/index.html: plain HTML that loads /pages/pe.js. Write and edit it with your file tools in the Pod folder, with any files it needs beside it. The pe_do Page call writes scratch Pages only and cannot place a Page in a Pod. The key is page:@<id>/pages/<page>; find it with pe_find after writing and open the address that row gives. Nothing restarts: a Pod or a file you write is seen on the next discovery.
+
+Page code is what skill:@product/skills/make-page steps 3 and 4 describe (pe.target, pe.read, pe.do, pe.state), plus pe.script by key. Three rules make a Page something you can use as well as a person:
+
+- It draws unbound without throwing, and never names its own document. The chip binds it.
+- What a script answered goes into the event log unchanged, for example await k.fire({ type: "compared", rows }), so the rows on screen are the rows you get from the same key.
+- Its HTML declares the events you may append in a <script type="application/json" id="pe-agent"> block (make-page step 4), and its describe text says what the Page currently shows.
+
+### for: a tour of one model
+
+"for": { "title": "<document title>", "probes": [{ "elementId": 123, "uniqueId": "..." }] } says the Pod's content is one model's elements. Its Pages and every run of its scripts then refuse on any other document with "this Pod is for <title>; the bound document is <title>". Leave for out of a tool, which must run on any model; add it only when the Pod stores that model's element ids.
+
+### Skills: what you will know next time
+
+skills/<name>/SKILL.md, with name and description front matter, is the only guidance in a Pod that reaches an agent. AGENTS.md and README.md are for people reading the folder. Write one skill per Pod: its keys, each entrypoint's input and answer, the events its Page accepts, and what it must never be used for.
 
 ## Identity: three facts
 
@@ -258,7 +297,7 @@ A Pod is one folder under Pods/<folder>/ in a content home holding pod.json and 
 - The pod.json id names the package. Conflicting installed ids refuse; give an adapted derivative a distinct id.
 - Each member's SHA-256 identifies its exact bytes. It is derived on read, never stored. The human version is a label, not an update policy.
 
-Canonical keys are script:@<id>/src/File.cs, page:@<id>/pages/<page>, skill:@<id>/skills/<skill>, and member:@<id>/settings/file.json. sourcePath is script identity; no entrypoint id or folder alias survives. Address operation inputs as { pod: <id>, path: <relative path> }. Members are read/mention-only. Other admitted support files remain readable package members.
+Canonical keys are script:@<id>/<sourcePath>, page:@<id>/pages/<page>, skill:@<id>/skills/<skill>, and member:@<id>/settings/file.json. sourcePath is script identity; no entrypoint id or folder alias survives. A member: key is data and never executes. Address operation inputs as { pod: <id>, path: <relative path> }. Members are read/mention-only. Other admitted support files remain readable package members.
 
 ## Compose, share, and adapt
 
@@ -287,14 +326,14 @@ A Pod is not a compiled add-in. The ladder is: a script proves the idea, a decla
 ## Loop
 
 1. Name the nouns from the user's workflow, not from the API: what they start with, what they want at the end, what they decide along the way. Settle the intent before anything compounds.
-2. Lay out two or three shapes side by side, from one inline probe to a multi-entrypoint Pod, and say what each makes impossible. The user picks; one shape on the table is always one you would argue against.
-3. Bootstrap the workspace, then make the chain real end to end on the real model: one entrypoint, one readback, before any polish. Stubs and placeholders are scaffolding; count them and strike them one per round.
-4. Drive the whole workflow by hand with the user on real parts, ending with the user pressing the entrypoint in the palette themselves. That is the bar for done, and it gets a proof readback.
+2. Choose the shape. When the ask already says what the Pod holds, what goes in and what it does, that is the shape: build it, and say in the reply which shape you took. Do not ask; a question ends a one-shot turn with nothing built. Only when the shape is open, lay out two or three side by side, from one inline probe to a Pod with a Page and several entrypoints, say what each makes impossible, and let the user pick.
+3. Bootstrap the workspace, then make the chain real end to end on the real model: one entrypoint run by its key, one readback, before any polish; then the Page that calls the same key. Stubs and placeholders are scaffolding; count them and strike them one per round.
+4. Drive the whole workflow on real parts: run every entrypoint by key with real input, then pe_read the Page. With a person in the turn, end with them pressing it themselves, in the Page or the palette. With no person in the turn, report what you ran and read back, and name what a person has still to press.
 5. Purge: delete anything the working Pod does not need. Keep the why in a short README the user can hand to a colleague.
 
 ## Adapting an existing Pod
 
-Read pod.json and the entrypoints before touching anything. Run the current entrypoint ReadOnly to see what it does today, name the change in the user's words, then change one entrypoint at a time and read back. A Pod that stopped working is diagnosed from its compiler and runtime diagnostics first, not rewritten.
+Read pod.json, the entrypoints and the Pod's skill before touching anything. To change a shipped or shared Pod, copy it under a new manifest id first. Run the current entrypoint ReadOnly to see what it does today, name the change in the user's words, then change one entrypoint at a time and read back. A Pod that stopped working is diagnosed from its compiler and runtime diagnostics first, not rewritten.
 
 When more than a sentence is needed, report what the Pod does in the user's words, which palette entry runs it and under which action, what it will not do, and what remains scaffolding.
 `,
