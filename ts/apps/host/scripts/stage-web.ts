@@ -54,7 +54,7 @@ const examples = join(here, "..", "..", "..", "..", "examples", "pods");
 const shipped = join(here, "..", "dist-installed", "pods");
 rmSync(shipped, { recursive: true, force: true });
 const noCaptures = new PictureCaptures(
-  stateTree(join(shipped, ".no-captures")).directory("captures"),
+  join(shipped, ".no-captures"),
   0,
   () => 0,
 );
