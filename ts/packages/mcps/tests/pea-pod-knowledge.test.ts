@@ -31,8 +31,26 @@ test("build-pod is the one home of what a Pod is, and no text teaches a retired 
   for (const where of ["make-page", "build-pod", "pages/tour/index.html"])
     expect(taught.get(where), where).toContain('id="pe-agent"');
   for (const [where, text] of taught)
-    expect(/\bagent\s*[:=]\s*\{/.test(text), `${where} hands pe.state an agent argument`).toBe(false);
+    expect(/\bagent\s*[:=]\s*\{/.test(text), `${where} hands pe.state an agent argument`).toBe(
+      false,
+    );
   for (const [where, text] of taught)
     for (const retired of ["pe.kernel", "pe.describe", "GET /pages/", ".state/"])
       expect(text.includes(retired), `${where} still teaches ${retired}`).toBe(false);
+});
+
+// An installed Pea has no checkout, so a door the skills do not name is a door it cannot learn (D39:
+// a cold Pea read host source for pe.reading and for whether one Page reads another's log).
+// Red break: add a `await pe.<door>(` line to the pe.js header that neither skill names.
+test("the Page skills name every door in the pe.js header", async () => {
+  const pe = await readFile(
+    join(import.meta.dirname, "../../../apps/host/src/pages/pe.js"),
+    "utf8",
+  );
+  const header = pe.slice(0, pe.indexOf("*/"));
+  const doors = [...new Set([...header.matchAll(/\bpe\.([a-z]+)\(/g)].map((m) => m[1]))];
+  expect(doors).toContain("reading");
+  const taught = skill("make-page") + skill("build-pod");
+  for (const door of doors) expect(taught, `pe.${door}`).toContain(`pe.${door}`);
+  expect(skill("make-page")).toContain("no pe.js door reads another Page's log");
 });
