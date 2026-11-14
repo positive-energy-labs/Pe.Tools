@@ -77,3 +77,43 @@ test("D37 HTTP-only reads release their slots when the request finishes", async 
   expect((await f.publish("two")).state).toBe("current");
   expect(f.publications.history()).toEqual({});
 });
+
+test("D37 capacity recovery wakes only live, unreleased refused holders", async () => {
+  const publications = new Publications(1);
+  const old = publications.observe("old", () => {});
+  await publications.publish("old", 0, definition, 1, port);
+  const woke: string[] = [];
+  const closed = publications.observe("closed", () => woke.push("closed"));
+  const released = publications.observe("released", () => woke.push("released"));
+  const live = publications.observe("live", publication => {
+    expect(publication).toMatchObject({ generation: 1, state: "refresh-needed", value: null });
+    woke.push("live");
+  });
+  try {
+    for (const id of ["closed", "released", "live"])
+      await expect(publications.publish(id, 1, definition, 1, port)).rejects.toMatchObject({ problem: "read.subscription-capacity" });
+    closed();
+    publications.release("released", 1);
+    publications.release("live", 0); // An old generation cannot withdraw the successor's wait.
+    old();
+    expect(woke).toEqual(["live"]);
+  } finally { old(); closed(); released(); live(); }
+});
+
+test("D37 successive capacity recoveries carry distinct stream snapshots", async () => {
+  const publications = new Publications(1), versions: number[] = [];
+  const first = publications.observe("first", () => {});
+  const second = publications.observe("second", () => {});
+  const waiting = publications.observe("waiting", publication => versions.push(publication.version));
+  try {
+    await publications.publish("first", 0, definition, 1, port);
+    await expect(publications.publish("waiting", 0, definition, 1, port)).rejects.toMatchObject({ status: 429 });
+    first();
+    // Another HTTP acquisition wins the free slot before the notified holder retries.
+    await publications.publish("second", 0, definition, 1, port);
+    await expect(publications.publish("waiting", 0, definition, 1, port)).rejects.toMatchObject({ status: 429 });
+    second();
+    expect(versions).toHaveLength(2);
+    expect(new Set(versions).size).toBe(2);
+  } finally { first(); second(); waiting(); }
+});

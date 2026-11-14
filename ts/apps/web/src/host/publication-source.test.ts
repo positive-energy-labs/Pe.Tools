@@ -1,9 +1,16 @@
 import { expect, test, vi } from "vite-plus/test";
 import { publicationSource } from "./publication-source";
+import { z } from "zod";
+import { Publications } from "../../../host/src/reads/publications.ts";
+import { read, type InputPort } from "../../../host/src/reads/evaluator.ts";
+import type { Readings } from "./resource-stream";
 
-const stream = vi.hoisted(() => ({ listener: undefined as ((frame: unknown) => void) | undefined }));
+const stream = vi.hoisted((): { listener?: Parameters<Readings["subscribe"]>[1]; subscribe?: Readings["subscribe"] } => ({}));
 vi.mock("./resource-stream", () => ({
-  peReadings: { subscribe: (_request: unknown, listener: (frame: unknown) => void) => { stream.listener = listener; return () => {}; } },
+  peReadings: { subscribe: (...args: Parameters<Readings["subscribe"]>) => {
+    if (stream.subscribe) return stream.subscribe(...args);
+    stream.listener = args[1]; return () => {};
+  } },
 }));
 
 // The host re-evaluates a raced read itself (host tests: resource-content-http), so its refusal lasts.
@@ -19,6 +26,37 @@ test("a refusal with nothing retained is shown once with the host's reason; the 
   await new Promise(resolve => setTimeout(resolve, 600));
   expect(reads).toBe(1);
   stop();
+});
+
+test("D37 an overlapping reload refused at capacity recovers when the old connection closes", async () => {
+  const publications = new Publications(1);
+  const definition = read("reload-probe", { input: z.number(), output: z.number(), run: (_ctx, value) => value });
+  const port: InputPort = { evaluation: "reload", origin: {}, revision: () => 0, take: async () => null };
+  const disconnectOld = publications.observe("old-page", () => {});
+  await publications.publish("old-page", 0, definition, 1, port);
+  stream.subscribe = (request, accept) => {
+    if (request.kind !== "publication") throw Error("Expected publication holder");
+    const release = publications.observe(request.subscription, publication => accept({ kind: "snapshot", key: "reload", value: publication }));
+    accept({ kind: "snapshot", key: "reload", value: { generation: 0, state: "absent" } });
+    return release;
+  };
+  const frames: { kind: string }[] = [];
+  let attempts = 0;
+  const source = publicationSource({ read: async (_ctx, publication, release) => {
+    if (release) publications.release(publication.subscription, publication.generation);
+    else attempts++;
+    return publications.publish(publication.subscription, publication.generation, definition, 1, port);
+  } });
+  const stop = source.open({ signal: new AbortController().signal,
+    publication: { subscription: "new-page", generation: 0 } } as never, frame => frames.push(frame)) as () => void;
+  try {
+    await expect.poll(() => frames.at(-1)?.kind).toBe("failure");
+    expect(attempts).toBe(1);
+    disconnectOld();
+    await expect.poll(() => frames.at(-1)?.kind).toBe("complete");
+    expect(attempts).toBe(2);
+    expect(Object.keys(publications.history())).toEqual(["new-page"]);
+  } finally { stop(); disconnectOld(); stream.subscribe = undefined; }
 });
 
 // A host restart under a live tab: the stream reconnects and the new host, holding no slot, answers

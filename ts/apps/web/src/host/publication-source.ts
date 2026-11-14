@@ -21,8 +21,7 @@ export function publicationSource<T extends { generation: number; version: numbe
         // 6 sockets). A fence or reconnect of that stream is not this read's staleness: the host
         // answers the key again, and `refresh-needed` then says whether to read.
         if (result.state === "superseded") return;
-        // The host settles a raced read itself (`Publications.publish`), so a refusal here lasts:
-        // it is shown with the host's reason, and a retained Value is re-read on its event above.
+        // A refusal keeps the host's reason until a host event permits another acquisition.
         held = !!result.value;
         if (!result.value) return deliver({ kind: "failure", error: result.reason ?? "Refresh needed" });
         deliver({ kind: "complete", value: result, revision: result.version, sourceVersion: result.value.evaluation,
