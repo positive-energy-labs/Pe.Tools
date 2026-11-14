@@ -546,7 +546,6 @@ async function executeTool(
       return {
         ...refuse(
           input.key,
-          null,
           revision,
           refusal ? JSON.stringify({ refusal }) : message(error),
         ),
@@ -610,14 +609,12 @@ async function executeTool(
   if (/^(pod|script|page|skill|member):/.test(input.key) && !contribution)
     return refuse(
       input.key,
-      defaultTarget,
       revision,
       "Legacy or malformed contribution key; obtain a canonical key with pe_find.",
     );
   if (contribution?.kind === "member" && replayOperations)
     return refuse(
       input.key,
-      defaultTarget,
       revision,
       "Members are read/mention-only and cannot execute.",
     );
@@ -646,7 +643,6 @@ async function executeTool(
   if (!row)
     return refuse(
       input.key,
-      defaultTarget,
       revision,
       `Unknown capability '${input.key}'. Find keys with pe_find.`,
     );
@@ -660,7 +656,6 @@ async function executeTool(
   if (principal === "anonymous" || (!row.principal.includes(principal) && !pairedOperation))
     return refuse(
       row.key,
-      defaultTarget,
       revision,
       principal === "external-mcp"
         ? "grant.context-cannot-hold: external MCP cannot run this capability until human pairing exists, including ReadOnly scripts."
@@ -676,17 +671,15 @@ async function executeTool(
   )
     return refuse(
       row.key,
-      defaultTarget,
       revision,
       "pe_read reads a Page; use pe_do for an event or binding.",
     );
   const refusal = gate(row);
-  if (refusal) return refuse(row.key, defaultTarget, revision, refusal);
+  if (refusal) return refuse(row.key, revision, refusal);
   // TODO: docs/features/routes/LEDGER.md#s7-eaaaf0f792 a temporary document needs an owner that releases it when the harness turn ends.
   if (row.key === "op:family.temporary.acquire")
     return refuse(
       row.key,
-      defaultTarget,
       revision,
       "family.temporary.acquire has no turn-owned release on the harness lane.",
     );
@@ -698,7 +691,6 @@ async function executeTool(
   )
     return refuse(
       row.key,
-      defaultTarget,
       revision,
       "Target overrides are supported by op: capabilities and document-owned route Work only.",
     );
@@ -715,8 +707,8 @@ async function executeTool(
   } catch (error) {
     const refusal = refusalSchema.safeParse((error as { refusal?: unknown } | null)?.refusal).data;
     if (refusal)
-      return { ...refuse(row.key, defaultTarget, revision, JSON.stringify({ refusal })), refusal };
-    return refuse(row.key, defaultTarget, revision, message(error));
+      return { ...refuse(row.key, revision, JSON.stringify({ refusal })), refusal };
+    return refuse(row.key, revision, message(error));
   }
 }
 
@@ -1468,7 +1460,7 @@ export async function readCatalog(
 }
 
 /** A refusal preserves the revision without claiming a resolved session. */
-function refuse(key: string, defaultTarget: Target, revision: number, content: string) {
+function refuse(key: string, revision: number, content: string) {
   return { isError: true, ok: false, key, content, revision, target: unresolvedTarget() };
 }
 
