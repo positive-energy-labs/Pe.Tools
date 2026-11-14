@@ -21,7 +21,8 @@ import { importShippedPods } from "../src/installed-pods.ts";
 import { readDuctCatalogs } from "../src/duct-catalogs.ts";
 import { listPods, listRuns, readMember, saveMember, writeMember, writeRun } from "../src/settings.ts";
 import { sourceRunDirectory } from "../src/family-actions.ts";
-import { importPod, writeZip } from "../src/pod-transfer.ts";
+import { writeZip } from "../src/pod-transfer.ts";
+import { importPod } from "./pod-import.ts";
 import { peaMcpServer } from "../src/harness/adapter.ts";
 
 // ADR 0037: the user home always, the firm home after it, each proven by its marker. A test names

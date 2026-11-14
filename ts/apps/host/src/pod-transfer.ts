@@ -9,10 +9,9 @@ import { writeHome, writeState, homeKind, stateKind, type StateRoot, type Stored
 import { stateDirectory, stateTree } from "@pe/host-contracts/service-identity";
 import { hostState } from "./host-ownership.ts";
 import { z } from "zod";
-import type { PodExport, PodImport, PodPromote } from "@pe/host-contracts/operation-types";
+import type { PodExport, PodImport } from "@pe/host-contracts/operation-types";
 import { type PictureCaptures } from "./captures-route.ts";
 import {
-  captureDirectory,
   capturePackage,
   isPackageMember,
   listPackages,
@@ -21,7 +20,6 @@ import {
   type PackageListing,
 } from "./packages.ts";
 import { productPodsRootPath } from "./product-paths.ts";
-import { scratchPageDirectory } from "./page-libraries.ts";
 import { activateImportedPackage, reconcilePackageChanges } from "./package-lifecycle.ts";
 import { sha256Hex as sha256, validatePageHtml, writeArtifact } from "./page-artifacts.ts";
 import { StepFailure } from "./command-executor.ts";
@@ -265,17 +263,19 @@ async function closeCaptures(files: Map<string, Buffer>, store: PictureCaptures)
   return [...named.keys()].sort();
 }
 
-export async function importPod(
-  request: { archivePath: string; folder?: string },
-  options: TransferOptions = {},
-): Promise<PodImport> {
-  const archivePath = zipPath(request.archivePath);
-  const info = await stat(archivePath).catch((error) => { console.error("pod-transfer: asynchronous operation failed", error); return null; });
+/** Decode the import boundary once, before admission captures its destination or bytes. */
+export async function readArchive(path: string) {
+  const archivePath = zipPath(path);
+  const info = await stat(archivePath).catch((error: NodeJS.ErrnoException) => {
+    if (error.code !== "ENOENT" && error.code !== "ENOTDIR") throw error;
+    return null;
+  });
   if (!info?.isFile()) throw new TransferRefused(`No pod archive at ${archivePath}.`, 404);
   if (info.size > MAX_ARCHIVE_BYTES)
     throw new TransferRefused(`Pod archive exceeds ${MAX_ARCHIVE_BYTES} bytes.`);
-  const archive = await readFile(archivePath);
-  return installArchive(archive, archivePath, request.folder, options);
+  const bytes = await readFile(archivePath);
+  const entries = readZip(bytes);
+  return { bytes, entries, id: archiveId(entries), archivePath };
 }
 
 /**
