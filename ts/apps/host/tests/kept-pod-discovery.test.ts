@@ -346,18 +346,28 @@ test.each(["listPackages", "readPackage"])("%s forwards notBefore in Date.now ep
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(2_000_000_000_000);
   const metadata = vi.spyOn(diskSignature, "podsDiskSignature").mockResolvedValue("epoch-fixture");
+  const directories = vi.spyOn(filesystem, "readdir");
+  const fullScans = () => directories.mock.calls.filter(([path, options]) => String(path) === pods &&
+    options && typeof options === "object" && options.withFileTypes).length;
   const lookup = (notBefore: number) => entry === "readPackage"
     ? packages.readPackage("review", { podsRoots: pods, notBefore: notBefore })
     : packages.listPackages({ podsRoots: pods, wait: "request", notBefore: notBefore });
   for (const advance of [0, 1_000]) {
+    stopPackageDiscovery();
     metadata.mockClear();
+    directories.mockClear();
     const release = Promise.withResolvers<packages.PackageListing>();
+    const entered = Promise.withResolvers<void>();
     let signal: AbortSignal;
-    const pending = discoverPackages(pods, (_roots, stop) => { signal = stop; return release.promise; }, "background").catch(() => undefined);
+    const pending = discoverPackages(pods, (_roots, stop) => { signal = stop; entered.resolve(); return release.promise; },
+      "background", undefined, async () => "epoch-fixture").catch(() => undefined);
+    await entered.promise;
     vi.setSystemTime(Date.now() + advance);
     const reading = lookup(Date.now() - (advance ? 0 : 1_000));
     try {
+      await new Promise(resolve => setImmediate(resolve));
       expect(metadata).toHaveBeenCalledTimes(1);
+      expect(fullScans()).toBe(advance ? 1 : 0);
       expect(signal!.aborted).toBe(false);
     }
     finally { release.resolve(listing); await pending; await reading; }
