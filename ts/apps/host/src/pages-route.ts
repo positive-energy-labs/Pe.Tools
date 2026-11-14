@@ -38,7 +38,6 @@ import {
   resolveCallTarget,
   headRequests,
   emptyThreadHead,
-  resolvePinned,
   unboundPage,
   readingKey,
   type ReadingFrame,
@@ -252,7 +251,8 @@ function resolveSlot(slot: PageChoice, sessions: readonly LiveSession[]): Target
       headRequests(threadHead(slot.thread) ?? emptyThreadHead),
       inventoryOf(sessions),
     );
-  if (slot.kind === "pinned") return resolvePinned(slot.address, inventoryOf(sessions));
+  if (slot.kind === "pinned") return resolveCallTarget(
+    { needs: "document", target: { kind: "open", ref: slot.ref } }, [], inventoryOf(sessions));
   return { kind: "choose", reason: "missing" };
 }
 
@@ -893,7 +893,7 @@ export function createPagesHandler(
     if (!parsed.success)
       return problem(
         400,
-        "a binding is { kind: thread, thread } | { kind: pinned, address } | { kind: none }",
+        "a binding is { kind: thread, thread } | { kind: pinned, ref: { session, openId } } | { kind: none }",
       );
     const slot = parsed.data;
     if (caller.kind === "anonymous")
@@ -911,7 +911,7 @@ export function createPagesHandler(
     if (caller.kind !== "human") {
       const resolution =
         slot.kind === "pinned"
-          ? resolvePinned(slot.address, inventoryOf(await live.sessions()))
+          ? resolveSlot(slot, await live.sessions())
           : null;
       const lifetime =
         resolution?.kind === "resolved" && resolution.target.kind === "document"
@@ -934,7 +934,8 @@ export function createPagesHandler(
       current.slots.default?.kind === "pinned" &&
       (caller.kind !== "human" ||
         slot.kind !== "pinned" ||
-        slot.address !== current.slots.default.address)
+        slot.ref.session !== current.slots.default.ref.session ||
+        slot.ref.openId !== current.slots.default.ref.openId)
     )
       emitPagePinRevoke(page);
     return json(await target(page, state));

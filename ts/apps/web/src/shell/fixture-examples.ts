@@ -79,7 +79,7 @@ export const routeExamples = {
       target: {
         page: "clinic-review",
         slot: "default",
-        binding: { kind: "pinned", address: "C:/Fixtures/Clinic.rvt" },
+        binding: { kind: "pinned", ref: { session: "S", openId: "D" } },
         resolution: {
           kind: "resolved",
           target: { kind: "document", ref: { session: "fixture", openId: "clinic" } },

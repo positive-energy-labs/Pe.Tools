@@ -6,6 +6,33 @@ import { podArtifactSchema, verifyPodArtifact } from "../src/pod-artifact.ts";
 
 const examples = join(import.meta.dirname, "../../../../examples/pods");
 
+test("every example Pod Page script path resolves to a declared entrypoint", async () => {
+  let checked = 0;
+  for (const pod of (await readdir(examples, { withFileTypes: true })).filter((entry) => entry.isDirectory())) {
+    const root = join(examples, pod.name);
+    const pages = join(root, "pages");
+    const files = await readdir(pages, { recursive: true }).catch((error: NodeJS.ErrnoException) => {
+      if (error.code === "ENOENT") return [];
+      throw error;
+    });
+    if (!files.length) continue;
+    const manifest = JSON.parse(await readFile(join(root, "pod.json"), "utf8"));
+    const declared = new Set(manifest.entrypoints.map((entry: { sourcePath: string }) => entry.sourcePath));
+    for (const file of files.filter((file) => file.endsWith(".html"))) {
+      const html = await readFile(join(pages, file), "utf8");
+      for (const match of html.matchAll(/(["'`])([^\s"'`<>]+\.csx?)\1/g)) {
+        const path = match[2]!;
+        const member = path.startsWith(`script:@${manifest.id}/`)
+          ? path.slice(`script:@${manifest.id}/`.length)
+          : new URL(path, `http://pod/pages/${file.split(sep).join("/")}`).pathname.slice(1);
+        expect(declared.has(member), `${pod.name}/pages/${file}: ${path} resolves to undeclared ${member}`).toBe(true);
+        checked++;
+      }
+    }
+  }
+  expect(checked).toBeGreaterThan(0);
+});
+
 async function verifyExamples(root: string) {
   const artifacts: string[] = [];
   for (const pod of (await readdir(root, { withFileTypes: true })).filter((entry) => entry.isDirectory())) {

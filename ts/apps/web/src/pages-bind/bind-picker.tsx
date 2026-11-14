@@ -5,7 +5,6 @@
  */
 import { useMemo } from "react";
 import {
-  address,
   type HarnessThreadSummary,
   type PageChoice,
   type PageTargetReading,
@@ -20,7 +19,7 @@ import { emptyListState, listOf, useList } from "@pe/kit/lang/collection";
 import { ListView } from "@pe/kit/lang/list-view";
 import { Section } from "@pe/kit/lang/section";
 
-/** One document a pin can name: saved, so it has an Address. */
+/** One open lifetime a pin can name, including detached and unsaved documents. */
 export interface Pinnable {
   title: string;
   address: string | null;
@@ -44,7 +43,7 @@ const DOCUMENTS = "Pin a document";
 const keyOf = (choice: Choice) =>
   choice.kind === "thread"
     ? `thread:${choice.thread.id}`
-    : `doc:${choice.doc.revit}/${choice.doc.address ?? choice.doc.title}`;
+    : `doc:${choice.doc.ref.session}/${choice.doc.ref.openId}`;
 const search = (choice: Choice) => ({
   text:
     choice.kind === "thread"
@@ -98,8 +97,8 @@ export function BindPicker({
     choice.kind === "thread"
       ? binding?.kind === "thread" && binding.thread === choice.thread.id
       : binding?.kind === "pinned" &&
-        !!choice.doc.address &&
-        binding.address.toLowerCase() === choice.doc.address.toLowerCase(),
+        binding.ref.session === choice.doc.ref.session &&
+        binding.ref.openId === choice.doc.ref.openId,
   );
   const list = useList({
     ...(inventory ? listOf(inventory, () => items) : {}),
@@ -112,12 +111,10 @@ export function BindPicker({
       order: [THREADS, DOCUMENTS],
     },
     state: { ...emptyListState(), selected: bound ? [keyOf(bound)] : [] },
-    refusalOf: (choice) =>
-      choice.kind === "doc" && !choice.doc.address ? "Unsaved: there is no Address to pin." : null,
     onPick: (choice) =>
       choice.kind === "thread"
         ? onBind({ kind: "thread", thread: choice.thread.id })
-        : choice.doc.address && onBind({ kind: "pinned", address: address(choice.doc.address) }),
+        : onBind({ kind: "pinned", ref: choice.doc.ref }),
   });
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4" data-testid="pages-bind">
@@ -198,7 +195,7 @@ export function BindPicker({
                 label: choice.doc.title,
                 aside: choice.doc.revit,
                 title:
-                  "A pin names a saved file, so it survives a reopen. It writes only to Pea's own documents.",
+                  "A pin names this open document until it closes. A person's pin lets the Page act on it.",
               }
         }
       />

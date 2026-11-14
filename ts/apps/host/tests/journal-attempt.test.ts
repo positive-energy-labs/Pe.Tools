@@ -18,13 +18,12 @@ import { settle } from "./effect-test.ts";
 import type { ReadOwnership } from "../src/reads/read-ownership.ts";
 import { markDispatched, recordNativeTerminal } from "../src/action-dispatch.ts";
 import { bindControl, callerOf, mintPageDoor } from "../src/control.ts";
-import { address } from "@pe/agent-contracts";
 
 test("unpinning mid-action refuses the next journal step", async () => {
   const lifetime = { session: "S", openId: "D" };
   let pin: typeof lifetime | null = lifetime;
   bindControl({ pagePin: async () => pin });
-  const minted = mintPageDoor("page:@pages/pin", { kind: "pinned", address: address("C:/Pin.rvt") }, "/pages/pin/act", true, lifetime);
+  const minted = mintPageDoor("page:@pages/pin", { kind: "pinned", ref: lifetime }, "/pages/pin/act", true, lifetime);
   const first = Deferred.makeUnsafe<void>();
   const entered: string[] = [];
   const f = await fixture(undefined, false, { probe: async () => null, resolve: () => command(
