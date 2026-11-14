@@ -29,7 +29,9 @@ test('review: a blocked changed Pod must not prevent a healthy Page from answeri
    if(String(args[0])===blocked) await gate;
    return original(...args);
   });
+  const started=performance.now();
   const response=await handler(new Request('http://host/pages/healthy--hello/'));
+  console.log('HEALTHY LATENCY',Math.round(performance.now()-started));
   console.log('HEALTHY RESPONSE',response.status,await response.clone().text());
   expect(response.status).toBe(200);
  } finally {
