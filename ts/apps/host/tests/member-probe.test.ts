@@ -35,6 +35,22 @@ vi.mock("../src/packages.ts", async (original) => {
   };
 });
 
+// The race tests' release event: discovery was asked. The real call decides whether the asker joins the
+// scan in flight or replaces it before it returns, so a listener told after it lands the older scan
+// only once that is settled, at any machine speed.
+const discoveryAsked = vi.hoisted(() => ({ listener: undefined as (() => void) | undefined }));
+vi.mock("../src/pod-capture.ts", async (original) => {
+  const real = await original<typeof import("../src/pod-capture.ts")>();
+  return {
+    ...real,
+    discoverPackages: (...args: Parameters<typeof real.discoverPackages>) => {
+      const answer = real.discoverPackages(...args);
+      discoveryAsked.listener?.();
+      return answer;
+    },
+  };
+});
+
 type Member = Extract<Consumed, { kind: "member" }>;
 const sha = (text: string) => createHash("sha256").update(text).digest("hex");
 
@@ -48,6 +64,7 @@ beforeEach(async () => {
   });
 });
 afterEach(async () => {
+  discoveryAsked.listener = undefined;
   stopPackageDiscovery();
   bindPackageScanLogger(() => {});
   await rm(root, { recursive: true, force: true });
@@ -72,14 +89,18 @@ const resources = () =>
 type Probe = ReturnType<typeof resources>["probe"];
 
 /**
- * An older discovery of this home, in flight from now. Releasing it lets it land a little later with
- * what the disk held when it began, as a slow scan that started before an edit does.
+ * An older discovery of this home, in flight from now. It lands with what the disk held when it began,
+ * as a slow scan that started before an edit does, and only once discovery has been asked again after
+ * `arm()`: by then the asker has joined it or replaced it.
  */
 async function olderScan() {
   const before = await listPackages({ podsRoots: root });
-  let land = (_listing: typeof before) => {};
-  void discoverPackages(root, () => new Promise((resolve) => (land = resolve)), "background");
-  return () => void setTimeout(() => land(before), 250);
+  let arm = () => {};
+  const askedAgain = new Promise<void>((resolve) => {
+    arm = () => void (discoveryAsked.listener = resolve);
+  });
+  void discoverPackages(root, () => askedAgain.then(() => before), "background");
+  return arm;
 }
 /** The Pod in `pdrop`'s folder takes another id, so the index no longer finds `pdrop` there; then a millisecond passes. */
 async function renamePod() {
@@ -169,29 +190,40 @@ test("the index is a shortcut, never the answer: a Pod it does not hold, or hold
   expect(await probe(first!, "admit", now())).toBeNull();
 });
 
+// The instrument the three race tests stand on. If discovery ever awaits before it decides, the release
+// event above no longer means "joined or replaced", and this goes red first.
+test("discovery decides join-or-replace before the call returns", async () => {
+  let reads = 0;
+  const read = () => (reads++, new Promise<never>(() => {}));
+  void discoverPackages(root, read, "background");
+  void discoverPackages(root, read, "background");
+  expect(reads).toBe(1); // joined: no second read
+  void discoverPackages(root, read, "background", Date.now() + 60_000);
+  expect(reads).toBe(2); // replaced: the scan in flight is older than the floor
+});
+
 // Mutant: drop `notBefore` from the fallback in `readMemberPod` and the pass answers the old bytes.
 test("a pass that misses the index reads a discovery begun after it started, never an older one in flight", async () => {
   const [manifest] = await pod("pdrop", 2);
-  const release = await olderScan();
+  const arm = await olderScan();
   await renamePod();
-  const answer = resources().probe(manifest!, "dispatch", now());
-  release();
-  expect(await answer).toBeNull();
+  arm();
+  expect(await resources().probe(manifest!, "dispatch", now())).toBeNull();
 });
 
 // F-W25c-1. Mutant: `startedAt: 0` in `gate()` and the run succeeds on the bytes the older scan read.
 test("the last gate before a step runs refuses an index miss while an older discovery is in flight", async () => {
   const members = await pod("pdrop", 2);
   const moments: (string | undefined)[] = [];
-  let release: (() => void) | undefined;
+  let arm: (() => void) | undefined;
   const { action } = await discoveriesOf("raced", members, undefined, (probe) => async (dependency, moment, pass) => {
     if (moments.at(-1) !== moment) moments.push(moment);
-    // The last gate's pass has started: the older scan may land, with what it read before the edit.
-    if (moment === "step" && release) release = void release();
+    // The last gate's pass has started: the older scan lands once this pass has asked discovery.
+    if (moment === "step" && arm) arm = void arm();
     const answer = await probe(dependency, moment, pass);
     // The gate before it has read every member: an older scan starts, then the edit misses the index.
     if (moment === "prepared" && dependency.kind === "member" && dependency.probe.path === members.at(-1)!.probe.path) {
-      release = await olderScan();
+      arm = await olderScan();
       await renamePod();
     }
     return answer;
@@ -207,12 +239,11 @@ test("the last gate before a step runs refuses an index miss while an older disc
 // Mutant: drop `notBefore` from the catalog probe and the pass answers the older scan's hashes.
 test("the catalog probe reads a discovery begun after its pass started", async () => {
   await pod("pdrop", 1);
-  const release = await olderScan();
+  const arm = await olderScan();
   await writeFile(join(root, "pdrop", "checks/c0.csx"), "Result(99);");
   await new Promise((resolve) => setTimeout(resolve, 5));
-  const answer = resources().probe({ kind: "catalog", probe: {}, expected: [] }, "step", now());
-  release();
-  expect(await answer).toEqual([{
+  arm();
+  expect(await resources().probe({ kind: "catalog", probe: {}, expected: [] }, "step", now())).toEqual([{
     id: "pdrop",
     members: expect.arrayContaining([{ path: "checks/c0.csx", sha256: sha("Result(99);") }]),
   }]);
