@@ -102,7 +102,6 @@ public sealed class PodManifestValidatorTests {
     [Test]
     public void Entrypoint_source_paths_must_stay_under_src_and_be_cs_files() {
         foreach (var sourcePath in new[] {
-            "Main.cs",
             "src/../Main.cs",
             "src/Main.txt",
             "C:/temp/Main.cs"
@@ -121,12 +120,27 @@ public sealed class PodManifestValidatorTests {
         );
 
         foreach (var sourcePath in new[] {
-            "Main.cs",
             "src/../Main.cs",
             "src/Main.txt",
             "C:/temp/Main.cs"
         })
             Assert.Throws<ArgumentException>(() => ScriptingSourcePath.NormalizeWorkspaceSourcePath(sourcePath));
+    }
+
+    // Contract C1. Mutants, each run red once: restore the `src/` segment check in
+    // `ScriptingSourcePath.NormalizeWorkspaceSourcePath` (the first assertion fails); drop "mode" from
+    // `EntrypointFields` (the same); accept any string as a mode (the last assertion fails).
+    [Test]
+    public void An_entrypoint_is_any_script_of_the_pod_and_may_declare_its_mode() {
+        var result = PodManifestValidator.ValidateJson(MinimalManifest("connector-audit", "pages/tour/checks/census.csx")
+            .Replace("\"sourcePath\": \"pages/tour/checks/census.csx\"", "\"sourcePath\": \"pages/tour/checks/census.csx\", \"mode\": \"ReadOnly\""));
+
+        Assert.That(result.Success, Is.True, string.Join("; ", result.Diagnostics.Select(d => d.Message)));
+        Assert.That(result.Manifest!.Entrypoints.Single().Mode, Is.EqualTo(Pe.Shared.HostContracts.Scripting.ScriptPermissionMode.ReadOnly));
+        Assert.That(PodManifestValidator.ValidateJson(MinimalManifest("connector-audit", "Run.cs")).Manifest!.Entrypoints.Single().Mode, Is.Null);
+        foreach (var mode in new[] { "readonly", "Write", "1" })
+            Assert.That(PodManifestValidator.ValidateJson(MinimalManifest("connector-audit", "src/Main.cs")
+                .Replace("\"sourcePath\": \"src/Main.cs\"", $"\"sourcePath\": \"src/Main.cs\", \"mode\": \"{mode}\"")).Success, Is.False, mode);
     }
 
     [Test]

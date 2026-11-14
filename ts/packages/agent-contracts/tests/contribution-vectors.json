@@ -8,6 +8,13 @@
       "sourcePath": "src/Census.cs"
     },
     {
+      "key": "script:@snowdon-ducts/pages/tour/checks/census.csx",
+      "kind": "script",
+      "packageId": "snowdon-ducts",
+      "path": "pages/tour/checks/census.csx",
+      "sourcePath": "pages/tour/checks/census.csx"
+    },
+    {
       "key": "page:@snowdon-ducts/pages/tour",
       "kind": "page",
       "packageId": "snowdon-ducts",
@@ -72,9 +79,17 @@
     "recent:C:/Model.rvt"
   ],
   "sourcePaths": {
-    "accepted": ["src/Census.cs", "src/Nested/InspectRun.cs", "src/Helper File.cs", "src/Case.CS"],
-    "rejected": [
+    "accepted": [
+      "src/Census.cs",
+      "src/Nested/InspectRun.cs",
+      "src/Helper File.cs",
+      "src/Case.CS",
       "Census.cs",
+      "SRC/Census.cs",
+      "pages/tour/checks/census.csx",
+      "pages/tour/Heal.CSX"
+    ],
+    "rejected": [
       "src/../Census.cs",
       "src/./Census.cs",
       "src\\Census.cs",
@@ -85,7 +100,7 @@
       " src/Census.cs",
       "src/ Census.cs",
       "src/Census.txt",
-      "SRC/Census.cs",
+      "src/Census.csproj",
       "C:/src/Census.cs",
       "/src/Census.cs",
       "src/%43ensus.cs",

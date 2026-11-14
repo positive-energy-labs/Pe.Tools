@@ -423,7 +423,7 @@ public sealed class RevitScriptExecutionService(
         if (hasInlineContent && (hasSourcePath || request.SourceBundle is not null)) {
             diagnostics.Add(ScriptDiagnosticFactory.Error(
                 "normalize",
-                "Provide either scriptContent (inline C#) or sourcePath (a pod entrypoint under src/), not both."
+                "Provide either scriptContent (inline C#) or sourcePath (a pod entrypoint), not both."
             ));
             return (null, ScriptExecutionStatus.Rejected, diagnostics);
         }
@@ -431,8 +431,13 @@ public sealed class RevitScriptExecutionService(
         if (!hasInlineContent && !hasSourcePath) {
             diagnostics.Add(ScriptDiagnosticFactory.Error(
                 "normalize",
-                "Provide scriptContent (inline C#) or sourcePath (a pod entrypoint under src/)."
+                "Provide scriptContent (inline C#) or sourcePath (a pod entrypoint)."
             ));
+            return (null, ScriptExecutionStatus.Rejected, diagnostics);
+        }
+
+        if (request.Input is { } input && Encoding.UTF8.GetByteCount(input.ToString(Newtonsoft.Json.Formatting.None)) > MaxInlineSourceBytes) {
+            diagnostics.Add(ScriptDiagnosticFactory.Error("normalize", "Script input may not exceed 256 KiB."));
             return (null, ScriptExecutionStatus.Rejected, diagnostics);
         }
 
@@ -470,7 +475,11 @@ public sealed class RevitScriptExecutionService(
                 // The frozen manifest owns identity; the host names the absolute folder that holds it today.
                 workspaceRoot = new ScriptPodPreparationService().ResolveFolder(podManifest.Id);
                 projectSeed = captured.ProjectSeed;
-                var member = preparation.Members.Single(item => string.Equals(item.Path, "src/" + sourceSet.EntryPointSourceName, StringComparison.OrdinalIgnoreCase));
+                var member = preparation.Members.Single(item => string.Equals(item.Path, sourceSet.EntryPointSourceName, StringComparison.OrdinalIgnoreCase));
+                // A declared ReadOnly entrypoint is a read at every door; this is the one refusal they all reach.
+                if (request.PermissionMode != ScriptPermissionMode.ReadOnly && podManifest.Entrypoints.Any(entry =>
+                        entry.Mode == ScriptPermissionMode.ReadOnly && string.Equals(entry.SourcePath, member.Path, StringComparison.OrdinalIgnoreCase)))
+                    throw new ArgumentException($"{member.Path} is declared ReadOnly in pod.json; it cannot run as {request.PermissionMode}.");
                 // Outcome and output references are settled when CreateResult observes the final result.
                 preparedAttribution = PodReceipt.ForSavedMember(podManifest.Id, member.Path, member.Sha256, "scripting.execute", null, PodRunOutcome.Failed, [], null);
             }
@@ -498,7 +507,8 @@ public sealed class RevitScriptExecutionService(
                     podManifest,
                     preparedAttribution,
                     canonicalProjectContent,
-                    hasInlineContent
+                    hasInlineContent,
+                    request.Input
                 ),
                 ScriptExecutionStatus.Succeeded,
                 diagnostics
@@ -560,7 +570,7 @@ public sealed class RevitScriptExecutionService(
         if (!sourceName.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
             sourceName += ".cs";
 
-        var normalizedContent = NormalizeInlineSnippet(scriptContent);
+        var normalizedContent = this._entryPointResolver.WrapStatementBody(scriptContent);
         this.PersistInlineTrace(normalizedContent, sourceName, executionId);
 
         return new ScriptSourceSet([
@@ -570,34 +580,6 @@ public sealed class RevitScriptExecutionService(
             )
         ], sourceName);
     }
-
-    private string NormalizeInlineSnippet(string scriptContent) {
-        if (this._entryPointResolver.ContainsContainerDeclaration(scriptContent) || this._entryPointResolver.ContainsTypeDeclaration(scriptContent))
-            return scriptContent;
-
-        var root = CSharpSyntaxTree.ParseText(scriptContent).GetCompilationUnitRoot();
-        var leadingUsings = root.Usings.Count == 0
-            ? string.Empty
-            : string.Join(Environment.NewLine, root.Usings.Select(item => item.ToFullString().TrimEnd())) +
-              Environment.NewLine + Environment.NewLine;
-        var bodyStart = root.Usings.Count == 0 ? 0 : root.Usings.Last().Span.End;
-        var body = scriptContent[bodyStart..].TrimStart('\r', '\n');
-
-        return $$"""
-               {{leadingUsings}}public sealed class InlineScript : PeScriptContainer
-               {
-                   public override void Execute()
-                   {
-               {{IndentInlineSnippet(body)}}
-                   }
-               }
-               """;
-    }
-
-    private static string IndentInlineSnippet(string scriptContent) => string.Join(
-        Environment.NewLine,
-        scriptContent.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n').Select(line => "        " + line)
-    );
 
     private void PersistInlineTrace(string scriptContent, string sourceName, string executionId) {
         try {
@@ -737,7 +719,10 @@ public sealed class RevitScriptExecutionService(
             outputSink.Artifacts!,
             cancellationToken,
             outputSink.WriteLine,
-            this._notificationSink
+            this._notificationSink,
+            plan.Input,
+            // The folder the host named for this Pod's manifest id; an inline run has none.
+            plan.ExecutionMode == ScriptWorkspaceExecutionMode.Pod ? plan.WorkspaceRoot : null
         );
     }
 

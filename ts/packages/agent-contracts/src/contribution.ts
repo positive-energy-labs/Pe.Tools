@@ -54,7 +54,8 @@ export const contributionReferenceSchema = z
     if (packageId === "pages") return kind === "page" && pageFolder.test(path);
     if (packageId === "skills" || packageId === "product")
       return kind === "skill" && /^skills\/[a-z0-9]+(?:-[a-z0-9]+)*$/.test(path);
-    if (kind === "script") return /^src\/.+\.cs$/i.test(path) && path.startsWith("src/");
+    // Any `.cs` or `.csx` member a Pod declares, wherever it lives (pods map, contract C1).
+    if (kind === "script") return /\.csx?$/i.test(path);
     if (kind === "page") return /^pages\/[a-z0-9]+(?:-[a-z0-9]+)*$/.test(path);
     if (kind === "skill") return /^skills\/[a-z0-9]+(?:-[a-z0-9]+)*$/.test(path);
     if (kind === "route") return /^routes\/[a-z0-9]+(?:-[a-z0-9]+)*\/route\.artifact$/.test(path);
@@ -132,6 +133,8 @@ export const contributionSourceSchema = z.strictObject({
   sha256: packageMemberSchema.shape.sha256,
 });
 export type ContributionSource = z.infer<typeof contributionSourceSchema>;
+export const scriptModeSchema = z.enum(["ReadOnly", "WriteTransaction", "NoTransaction"]);
+export type ScriptMode = z.infer<typeof scriptModeSchema>;
 export const contributionProjectionSchema = z
   .strictObject({
     key: contributionKeySchema,
@@ -139,6 +142,8 @@ export const contributionProjectionSchema = z
     title: z.string(),
     description: z.string(),
     projection: capabilityProjectionSchema.optional(),
+    /** A script's declared mode. `ReadOnly` makes its row a read; absent, the caller chooses. */
+    mode: scriptModeSchema.optional(),
   })
   .refine(({ key, sourcePath }) => {
     const reference = parseContributionKey(key);

@@ -3,6 +3,7 @@ public sealed class SaveVariant : PeScriptContainer
     public override void Execute()
     {
         if (doc == null) { Result(new { refused = "No active document." }); return; }
+        ProfilerSettings.FromInput((name, fallback) => Arg(name, fallback));
         try {
             Interventions.Guard(doc);
             if (ProfilerSettings.Candidates.Length != 1 || string.IsNullOrWhiteSpace(ProfilerSettings.VariantPath) ||

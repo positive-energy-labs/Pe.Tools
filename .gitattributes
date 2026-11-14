@@ -22,6 +22,12 @@
 # vp check can never be green on a clean tree while git sees phantom modifications after --fix.
 ts/** text=auto eol=lf
 
+# Generators emit LF; keep their tracked outputs identical after Windows checkout.
+*.generated.cs text eol=lf
+*.generated.ts text eol=lf
+*.generated.json text eol=lf
+ts/packages/host-contracts/src/native-adapter.schema.json text eol=lf
+
 # Company acceptance inputs retain their original bytes, including mixed line endings.
 
 # Shipped example Pods are byte-exact fixtures (tests read them, products copy them): LF on every checkout.

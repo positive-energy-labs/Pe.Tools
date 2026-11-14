@@ -148,10 +148,12 @@ public sealed class ScriptPodPreparationService(Func<string, object, JObject>? a
                 diagnostics.Add(ScriptDiagnosticFactory.Error(Stage, $"Entrypoint '{entrypoint.SourcePath}' has no source file.", entrypoint.SourcePath));
                 continue;
             }
-            var types = new Pe.Shared.Scripting.Analysis.ScriptEntryPointResolver("PeScriptContainer")
-                .ResolveContainerTypeNames(Encoding.UTF8.GetString(source));
-            if (types.Count != 1)
-                diagnostics.Add(ScriptDiagnosticFactory.Error(Stage, $"Entrypoint '{entrypoint.SourcePath}' must declare exactly one non-abstract PeScriptContainer; found {types.Count}.", entrypoint.SourcePath));
+            var resolver = new Pe.Shared.Scripting.Analysis.ScriptEntryPointResolver("PeScriptContainer");
+            var text = Encoding.UTF8.GetString(source);
+            var types = resolver.ResolveContainerTypeNames(text);
+            // A statement body declares no type; it runs wrapped as the one container.
+            if (types.Count != 1 && !resolver.IsStatementBody(text))
+                diagnostics.Add(ScriptDiagnosticFactory.Error(Stage, $"Entrypoint '{entrypoint.SourcePath}' must be Execute-body statements or declare exactly one non-abstract PeScriptContainer; found {types.Count}.", entrypoint.SourcePath));
         }
         return diagnostics.Any(diagnostic => diagnostic.Severity == ScriptDiagnosticSeverity.Error)
             ? new RefusedPod(folder, members, diagnostics)

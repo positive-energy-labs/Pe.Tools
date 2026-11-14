@@ -22,10 +22,6 @@ public sealed class ScriptEntryPointResolver(
             .ToList();
     }
 
-    public bool ContainsContainerDeclaration(string sourceContent) {
-        return this.ResolveContainerTypeNames(sourceContent).Count > 0;
-    }
-
     public IReadOnlyList<string> ResolveContainerTypeNames(string sourceContent) {
         var root = CSharpSyntaxTree.ParseText(sourceContent).GetCompilationUnitRoot();
         return ResolveContainerDeclarations(root).Select(GetFullTypeName).ToList();
@@ -34,6 +30,38 @@ public sealed class ScriptEntryPointResolver(
     public bool ContainsTypeDeclaration(string sourceContent) {
         var root = CSharpSyntaxTree.ParseText(sourceContent).GetCompilationUnitRoot();
         return root.DescendantNodes().OfType<BaseTypeDeclarationSyntax>().Any();
+    }
+
+    /// <summary>True when the file is a statement body: it declares no type, so it runs only once wrapped.</summary>
+    public bool IsStatementBody(string sourceContent) => !this.ContainsTypeDeclaration(sourceContent);
+
+    /// <summary>
+    ///     The one wrapping of a statement body, for an inline snippet and a Pod entrypoint alike: leading using
+    ///     directives stay at file scope and the rest becomes `Execute()` of one container. A file that declares a
+    ///     type is returned as written.
+    /// </summary>
+    public string WrapStatementBody(string sourceContent) {
+        if (!this.IsStatementBody(sourceContent))
+            return sourceContent;
+
+        var root = CSharpSyntaxTree.ParseText(sourceContent).GetCompilationUnitRoot();
+        var leadingUsings = root.Usings.Count == 0
+            ? string.Empty
+            : string.Join(Environment.NewLine, root.Usings.Select(item => item.ToFullString().TrimEnd())) +
+              Environment.NewLine + Environment.NewLine;
+        var bodyStart = root.Usings.Count == 0 ? 0 : root.Usings.Last().Span.End;
+        var body = string.Join(Environment.NewLine, sourceContent.Substring(bodyStart).TrimStart('\r', '\n')
+            .Replace("\r\n", "\n").Replace('\r', '\n').Split('\n').Select(line => "        " + line));
+
+        return $$"""
+               {{leadingUsings}}public sealed class InlineScript : {{this._baseContainerTypeName}}
+               {
+                   public override void Execute()
+                   {
+               {{body}}
+                   }
+               }
+               """;
     }
 
     private IEnumerable<ClassDeclarationSyntax> ResolveContainerDeclarations(CompilationUnitSyntax root) => root.DescendantNodes()
