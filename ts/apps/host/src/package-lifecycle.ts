@@ -6,6 +6,7 @@ import { createPluginRuntime } from "@pe/agent-contracts";
 import { z } from "zod";
 import {
   listPackages,
+  packageDiscoveryTimeoutMs,
   logPackageDiscovery,
   isPackageMember,
   productPodsRoots,
@@ -76,7 +77,6 @@ export const projectPodIds = async (pointer: string | null | undefined) => {
   const root = projectPodsRoot(pointer);
   return root ? (await listPackages(root)).packages.map((pod) => pod.id) : [];
 };
-const packageDiscoveryTimeoutMs = 5_000;
 
 /** Runtime policy only. Membership and export remain exact authored bytes. */
 export async function requirePackageEnabled(
@@ -142,20 +142,11 @@ async function podsDiskSignature(roots: readonly string[]): Promise<string | und
   try {
     for (const root of roots) {
       entries.push(root);
-      const started = performance.now();
-      logPackageDiscovery(`Pod folder metadata scan start folder=${JSON.stringify(root)}`);
-      let outcome = "completed";
       try {
         await walk(root, undefined);
       } catch (error) {
-        outcome = "failed";
         if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
-        outcome = "missing";
         entries.push("missing");
-      } finally {
-        logPackageDiscovery(
-          `Pod folder metadata scan end folder=${JSON.stringify(root)} durationMs=${Math.round(performance.now() - started)} outcome=${outcome}`,
-        );
       }
     }
     // shortcut: an edit preserving file size and timestamps is missed; hash bytes to support it.

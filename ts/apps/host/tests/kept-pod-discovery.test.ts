@@ -98,6 +98,7 @@ test.each(["edited", "missing-record"])(
           message: expect.stringContaining("import the current example into a separate workspace"),
         }),
       ]);
+      expect(pod.diagnostics[0]!.message).toContain("undo your local edits and the next start takes the update");
       const captured = await capturePackage("example", podsRoot);
       expect(
         Buffer.from(
