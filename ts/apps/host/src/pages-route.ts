@@ -618,7 +618,8 @@ export function createPagesHandler(
 
   async function target(page: string, state: PageState): Promise<PageTargetReading> {
     const actDoor = pageActDoor(page);
-    const slot = state.binding().slots.default;
+    const binding = state.binding();
+    const slot = binding.slots.default;
     const sessions = await live.sessions();
     let resolution: PageTargetReading["resolution"] = resolveSlot(slot, sessions);
     const ref =
@@ -649,8 +650,10 @@ export function createPagesHandler(
       write = { kind: "read", refusal: { code: "wrong-model", door: actDoor, reason: resolution.message } };
     if (resolution.kind === "resolved")
       try {
-        const basis = admitPage(slot, resolution.target, actDoor);
+        const basis = admitPage(slot, resolution.target, actDoor, false,
+          binding.boundBy.default === "human" && slot.kind === "pinned" && ref ? { page, target: ref } : undefined);
         write =
+          basis?.kind === "person-pin" ? { kind: "human" } :
           basis?.kind === "grant" ? { kind: "thread", thread: basis.thread } : { kind: "pea" };
       } catch (error) {
         if (!(error instanceof Refused)) throw error;
@@ -725,7 +728,7 @@ export function createPagesHandler(
     });
     const binding = state.binding();
     const slot = binding.slots.default;
-    // Only a person's pin consents to ReadOnly on its resolved document; thread bindings need a human-added target.
+    // A person's pin consents to its resolved document (ADR 0043); thread bindings need a human-added target.
     const humanBound = binding.boundBy.default === "human" && slot.kind === "pinned";
     try {
       if (verb === "call") {
@@ -761,7 +764,8 @@ export function createPagesHandler(
       const action = await operationOf(body.data.key, body.data.input);
       if ("problem" in action) return problem(400, action.problem);
       // Decided here first, so a refusal names this door; `/actions` decides again under the same slot.
-      admitPage(slot, resolution.target, at, humanBound && readsOnly(action.key, action.input));
+      admitPage(slot, resolution.target, at, humanBound && readsOnly(action.key, action.input),
+        humanBound && resolution.target.kind === "document" ? { page, target: resolution.target.ref } : undefined);
       return await cross(
         page,
         slot,

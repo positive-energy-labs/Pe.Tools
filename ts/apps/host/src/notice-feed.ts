@@ -290,6 +290,8 @@ function receiptRow(
   { revision, action: receipt }: NoticeSources["receipts"][number],
   now: number,
 ): NoticeDraft | null {
+  const pin = receipt.basis?.kind === "person-pin" ? receipt.basis : null;
+  const who = pin ? `Page ${pin.page}, as the person who pinned it` : callerWord(receipt.caller);
   // A held act (ADR 0038) is one row that waits on the person, in its own words, never a failure.
   // A held send's one row is its `held` source, which carries Confirm; its receipt adds no second.
   const resultHeld = receipt.state === "succeeded" && "result" in receipt &&
@@ -305,7 +307,7 @@ function receiptRow(
           revision,
           verb: "held",
           what: receipt.key,
-          where: callerWord(receipt.caller),
+          where: who,
           says: resultHeld ?? heldRefusal!.message,
           at: receipt.startedAt,
           url: null,
@@ -321,13 +323,13 @@ function receiptRow(
   const kept = result && typeof result === "object" && "kept" in result && Array.isArray(result.kept)
     ? result.kept.filter((path): path is string => typeof path === "string")
     : [];
-  const group = RECEIPT_GROUP[receipt.state] ?? (kept.length ? "unread" : undefined);
+  const group = RECEIPT_GROUP[receipt.state] ?? (kept.length || pin ? "unread" : undefined);
   if (!group) return null;
   const failure =
     "error" in receipt
       ? summarizeFailure(receipt.error)
       : {
-          summary: receipt.state === "succeeded" ? "Cleanup finished with kept files." : "The outcome is not known. Check Revit before running it again.",
+          summary: receipt.state === "succeeded" ? (pin ? "Finished on the document this person pinned." : "Cleanup finished with kept files.") : "The outcome is not known. Check Revit before running it again.",
           door: null,
           detail: null,
         };
@@ -337,7 +339,7 @@ function receiptRow(
     revision,
     verb: refused ? (invocationOutcome(receipt).state === "stale" ? "stale" : "refused") : receipt.state,
     what: receipt.key,
-    where: callerWord(receipt.caller),
+    where: who,
     says: `${refused && "error" in receipt ? receipt.error : failure.summary}${refusedTail ? " Earlier steps already changed something; clean up before running it again." : ""}`,
     at: receipt.startedAt,
     // The failure's door is the row's address; a receipt itself has no page yet.
