@@ -22,9 +22,104 @@ import { writeMember, saveMember } from "../src/settings.ts";
 import { installArchive, writeZip, exportPod } from "../src/pod-transfer.ts";
 import * as store from "@pe/host-contracts/kinds";
 
+test("FINAL REVIEW: an action reconciliation must not block discovery reads", async () => {
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const { lstat: original } =
+    await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
+  vi.spyOn(filesystem, "lstat").mockImplementation(async (...args) => {
+    entered.resolve();
+    await release.promise;
+    return original(...args);
+  });
+  const action = content.lifecycle.refresh();
+  await entered.promise;
+  let answered = false;
+  const reading = Promise.all([inventory(), routes.list()]).then(() => {
+    answered = true;
+  });
+  try {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(answered, "inventory must serve the completed census while action scans disk").toBe(
+      true,
+    );
+  } finally {
+    release.resolve();
+    await action;
+    await reading;
+  }
+});
+
+test("FINAL REVIEW: a removed trusted Pod must not serve an admitted bundle", async () => {
+  await putRoute(join(root, "user"));
+  await content.lifecycle.refresh();
+  const descriptor = (await routes.list()).find((route) => route.packageId === "late")!;
+  await routes.trust(descriptor.key, descriptor.fingerprint, true);
+  await content.lifecycle.refresh();
+  await rm(join(root, "user/Pods/late"), { recursive: true });
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const { lstat: original } =
+    await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
+  vi.spyOn(filesystem, "lstat").mockImplementation(async (...args) => {
+    entered.resolve();
+    await release.promise;
+    return original(...args);
+  });
+  content.lifecycle.requestRefresh();
+  await entered.promise;
+  try {
+    await expect(routes.bundle(descriptor.key, descriptor.fingerprint)).rejects.toThrow();
+  } finally {
+    release.resolve();
+    await content.lifecycle.refresh();
+  }
+});
+
+test.each(["pod.json", "routes/tool/route.artifact"])(
+  "cached trust refuses edited %s while discovery is held",
+  async (path) => {
+    await putRoute(join(root, "user"));
+    await content.lifecycle.refresh();
+    const descriptor = (await routes.list()).find((route) => route.packageId === "late")!;
+    await routes.trust(descriptor.key, descriptor.fingerprint, true);
+    await content.lifecycle.refresh();
+    const target = join(root, "user/Pods/late", path);
+    const changed = await filesystem.readFile(target);
+    changed[changed.length - 1] = 32; // Same size; the last captured byte was a closing brace.
+    await writeFile(target, changed);
+    const entered = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const { lstat: original } =
+      await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
+    vi.spyOn(filesystem, "lstat").mockImplementation(async (...args) => {
+      entered.resolve();
+      await release.promise;
+      return original(...args);
+    });
+    content.lifecycle.requestRefresh();
+    await entered.promise;
+    try {
+      await expect(routes.bundle(descriptor.key, descriptor.fingerprint)).rejects.toThrow();
+      await expect(routes.trust(descriptor.key, descriptor.fingerprint, true)).rejects.toThrow();
+    } finally {
+      release.resolve();
+      await content.lifecycle.refresh();
+    }
+  },
+);
+
 test("an export written inside a Pod reconciles its new archive member", async () => {
-  await exportPod({ pod: "existing", archivePath: join(root, "user/Pods/existing/copy.zip") }, { machine: stateMachine(root) });
-  expect(content.lifecycle.listing().packages.find(p => p.id === "existing")!.members.map(m => m.path)).toContain("copy.zip");
+  await exportPod(
+    { pod: "existing", archivePath: join(root, "user/Pods/existing/copy.zip") },
+    { machine: stateMachine(root) },
+  );
+  expect(
+    content.lifecycle
+      .listing()
+      .packages.find((p) => p.id === "existing")!
+      .members.map((m) => m.path),
+  ).toContain("copy.zip");
 });
 
 test("failed import reconciles rollback after its Pod was admitted", async () => {

@@ -1,4 +1,7 @@
 import { stateSegments } from "@pe/host-contracts/service-identity";
+import { open } from "node:fs/promises";
+import { join } from "node:path";
+import type { AdmittedPackage } from "./packages.ts";
 import type { RevitBridge } from "./bridge.ts";
 import * as contracts from "@pe/agent-contracts";
 import { z } from "zod";
@@ -84,6 +87,46 @@ export function createPodRoutes(
 ) {
   const file = trustKind.in(options.machine ?? hostState());
   const registrations = new Map<string, { hash: string; dispose: () => void }>();
+  async function currentArtifact(
+    pod: AdmittedPackage,
+    route: PodRouteDescriptor,
+  ): Promise<unknown> {
+    try {
+      // The census is discovery, not authority. Re-read the declaration and the artifact that
+      // contains every executable byte before granting admission or returning a trusted bundle.
+      for (const path of ["pod.json", route.artifact]) {
+        const member = pod.members.find((member) => member.path === path);
+        if (!member) throw Error("Pod route member is absent");
+        const file = await open(join(pod.directory, path), "r");
+        try {
+          const facts = await file.stat();
+          if (!facts.isFile() || facts.size !== member.bytes.length)
+            throw Error("Pod route member changed size or kind");
+          // Bound a concurrent replacement/growth by the already-admitted member size.
+          const bytes = Buffer.alloc(member.bytes.length + 1);
+          let count = 0;
+          while (count < bytes.length) {
+            const read = await file.read(bytes, count, bytes.length - count, null);
+            if (!read.bytesRead) break;
+            count += read.bytesRead;
+          }
+          if (count !== member.bytes.length || !bytes.subarray(0, count).equals(member.bytes))
+            throw Error("Pod route bytes changed; inspect the current Pod before admission");
+          if (path === route.artifact) {
+            const value: unknown = JSON.parse(bytes.subarray(0, count).toString("utf8"));
+            return value;
+          }
+        } finally {
+          await file.close();
+        }
+      }
+      throw Error("Pod route artifact is absent");
+    } catch (error) {
+      registrations.get(route.key)?.dispose();
+      registrations.delete(route.key);
+      throw error;
+    }
+  }
   let closed = false;
   let tail = Promise.resolve();
   // A person's trust decisions, so `keep` (MAP decision log 92bdf2df names `route-trust.json`). A
@@ -153,8 +196,7 @@ export function createPodRoutes(
     for (const route of descriptors) {
       if (route.trusted && !registrations.has(route.key) && options.workspace) {
         const pod = lifecycle.packages().find((pod) => pod.id === route.packageId)!;
-        const bytes = pod.members.find((member) => member.path === route.artifact)!.bytes;
-        const value: unknown = JSON.parse(Buffer.from(bytes).toString("utf8"));
+        const value = await currentArtifact(pod, route);
         const evidence = await verifyPodArtifact(value, route.fingerprint);
         const host = evidence.executables.some((entry) => entry.client === "host")
           ? await loadPodHostEntry(value, route.fingerprint)
@@ -188,8 +230,12 @@ export function createPodRoutes(
         if (!route || route.fingerprint !== hash)
           throw Error("Route changed or is inactive; inspect its current bytes before trusting");
         const trust = read.kind === "ok" ? read.value : {};
-        if (trusted) trust[key] = hash;
-        else delete trust[key];
+        if (trusted) {
+          const pod = lifecycle.packages().find((pod) => pod.id === route.packageId);
+          if (!pod) throw Error("Pod is inactive");
+          await currentArtifact(pod, route);
+          trust[key] = hash;
+        } else delete trust[key];
         writeState(file, JSON.stringify(trust));
       });
       tail = write.catch((error) => {
@@ -203,9 +249,8 @@ export function createPodRoutes(
       if (!route || route.fingerprint !== hash || !route.trusted)
         throw Error("Route trust is absent or its bytes changed");
       const pod = lifecycle.packages().find((pod) => pod.id === route.packageId)!;
-      const member = pod.members.find((member) => member.path === route.artifact)!;
       const { wire } = await verifyPodArtifact(
-        JSON.parse(Buffer.from(member.bytes).toString("utf8")),
+        await currentArtifact(pod, route),
         route.fingerprint,
       );
       // ponytail: JSON number arrays inflate payload roughly 3?4x; move to base64 or a raw octet-stream if Pod artifacts grow.

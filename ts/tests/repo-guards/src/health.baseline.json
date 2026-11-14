@@ -515,7 +515,7 @@
     "ts/apps/host/src/pe-routes.ts": 26,
     "ts/apps/host/src/plugins-handler.ts": 1,
     "ts/apps/host/src/pod-artifact.ts": 6,
-    "ts/apps/host/src/pod-routes.ts": 4,
+    "ts/apps/host/src/pod-routes.ts": 2,
     "ts/apps/host/src/pod-transfer.ts": 11,
     "ts/apps/host/src/reads/history.ts": 6,
     "ts/apps/host/src/reads/publications.ts": 3,
