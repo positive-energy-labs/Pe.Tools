@@ -24,9 +24,16 @@ test.each(["with-from", "without-from", "path-only", "canonical-handle"] as cons
     const host = await fixture();
     let mount: ReturnType<typeof mountTypedRoute> | undefined;
     const requests: unknown[] = [];
-    const spy = vi.spyOn(peReadings, "subscribe").mockImplementation((request: any, deliver: any) =>
-      request.kind !== "publication" ? () => {} : host.reads.publications.observe(
-        canonicalJson([who, request.subscription]), (value) => deliver({ kind: "snapshot", stale: false, value })));
+    // The host's resource stream: a subscription with no slot yet first reads `absent`
+    // (apps/host/src/builtin-inputs.ts), which is the page's cue to acquire it (D37).
+    const spy = vi.spyOn(peReadings, "subscribe").mockImplementation((request: any, deliver: any) => {
+      if (request.kind !== "publication") return () => {};
+      let sent = false;
+      const stop = host.reads.publications.observe(canonicalJson([who, request.subscription]),
+        (value) => { sent = true; deliver({ kind: "snapshot", stale: false, value }); });
+      if (!sent) deliver({ kind: "snapshot", stale: false, value: { generation: request.generation, version: 0, state: "absent" } });
+      return stop;
+    });
     try {
       const initial = await host.send(0, []);
       const fan = initial.value!.data.rows.find((row) => row.mark === "MUAS-1")!;
