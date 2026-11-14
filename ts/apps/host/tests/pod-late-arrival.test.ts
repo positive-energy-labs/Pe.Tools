@@ -21,6 +21,79 @@ import { settle } from "./effect-test.ts";
 import { writeMember, saveMember } from "../src/settings.ts";
 import { installArchive, writeZip, exportPod } from "../src/pod-transfer.ts";
 import * as store from "@pe/host-contracts/kinds";
+import { RouteWorkspace } from "@pe/runtime";
+import { peRouteUrl } from "@pe/agent-contracts/pe-api";
+
+test("a held new admission never queues later route inventory readers", async () => {
+  await putRoute(join(root, "user"));
+  await content.lifecycle.refresh();
+  const d = (await routes.list()).find((r) => r.packageId === "late")!;
+  await routes.trust(d.key, d.fingerprint, true);
+  await content.lifecycle.refresh();
+  const admitting = createPodRoutes(content.lifecycle, {
+    machine: stateMachine(root),
+    workspace: new RouteWorkspace({
+      registrations: [],
+      store: { getState: async () => null, setState: async () => {} },
+    }),
+  });
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const actual = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
+  vi.spyOn(filesystem, "open").mockImplementation(async (...args) => {
+    entered.resolve();
+    await release.promise;
+    return actual.open(...args);
+  });
+  const first = admitting.list().then(
+    () => null,
+    (error) => error,
+  );
+  await entered.promise;
+  try {
+    const later = admitting.list();
+    const result = await Promise.race([
+      later,
+      new Promise<"blocked">((resolve) => setTimeout(() => resolve("blocked"), 100)),
+    ]);
+    expect(result).not.toBe("blocked");
+    expect(await first).toMatchObject({ code: "pod.route.check.timeout", retryable: true });
+  } finally {
+    release.resolve();
+    await first;
+    admitting.close();
+  }
+});
+
+test("a valid same-size manifest edit is refused by byte comparison", async () => {
+  await putRoute(join(root, "user"));
+  await content.lifecycle.refresh();
+  const d = (await routes.list()).find((r) => r.packageId === "late")!;
+  await routes.trust(d.key, d.fingerprint, true);
+  await content.lifecycle.refresh();
+  const path = join(root, "user/Pods/late/pod.json");
+  const before = await filesystem.readFile(path, "utf8");
+  const after = before.replace('"name":"Late"', '"name":"Fate"');
+  expect(after.length).toBe(before.length);
+  expect(JSON.parse(after).routes[0].name).toBe("Fate");
+  await writeFile(path, after);
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const actual = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
+  vi.spyOn(filesystem, "lstat").mockImplementation(async (...args) => {
+    entered.resolve();
+    await release.promise;
+    return actual.lstat(...args);
+  });
+  content.lifecycle.requestRefresh();
+  await entered.promise;
+  try {
+    await expect(routes.bundle(d.key, d.fingerprint)).rejects.toThrow("bytes changed");
+  } finally {
+    release.resolve();
+    await content.lifecycle.refresh();
+  }
+});
 
 test("FINAL REVIEW: an action reconciliation must not block discovery reads", async () => {
   const entered = Promise.withResolvers<void>();
@@ -254,7 +327,7 @@ test("REVIEW: discovery queued after an action cannot overwrite it", async () =>
 
 vi.mock("node:fs/promises", async (load) => {
   const actual = await load<typeof import("node:fs/promises")>();
-  return { ...actual, lstat: vi.fn(actual.lstat) };
+  return { ...actual, lstat: vi.fn(actual.lstat), open: vi.fn(actual.open) };
 });
 
 let root: string;
@@ -546,4 +619,70 @@ test("inventory read refreshes member bytes in a Pod present at startup", async 
       ).toString();
     })
     .toBe("after");
+});
+
+test("RECHECK: stalled open refuses with a retryable deadline", async () => {
+  await putRoute(join(root, "user"));
+  await content.lifecycle.refresh();
+  const d = (await routes.list()).find((r) => r.packageId === "late")!;
+  await routes.trust(d.key, d.fingerprint, true);
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const actual = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
+  vi.spyOn(filesystem, "open").mockImplementation(async (...args) => {
+    entered.resolve();
+    await release.promise;
+    return actual.open(...args);
+  });
+  let answered = false;
+  const request = routes
+    .bundle(d.key, d.fingerprint)
+    .then(
+      () => null,
+      (error) => error,
+    )
+    .finally(() => {
+      answered = true;
+    });
+  await entered.promise;
+  try {
+    await new Promise((r) => setTimeout(r, 1200));
+    expect(answered).toBe(true);
+    expect(await request).toMatchObject({ code: "pod.route.check.timeout", retryable: true });
+    const response = await createPluginsHandler(content, routes)(new Request("http://host" + peRouteUrl("plugins.routeBundle", { params: { key: d.key, hash: d.fingerprint } })));
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({ code: "pod.route.check.timeout", retryable: true });
+  } finally {
+    release.resolve();
+    await request;
+  }
+});
+
+test("RECHECK: manifest may disappear between check and bundle", async () => {
+  await putRoute(join(root, "user"));
+  await content.lifecycle.refresh();
+  const d = (await routes.list()).find((r) => r.packageId === "late")!;
+  await routes.trust(d.key, d.fingerprint, true);
+  const actual = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  vi.spyOn(filesystem, "lstat").mockImplementation(async (...args) => {
+    entered.resolve();
+    await release.promise;
+    return actual.lstat(...args);
+  });
+  content.lifecycle.requestRefresh();
+  await entered.promise;
+  vi.spyOn(filesystem, "open").mockImplementation(async (...args) => {
+    if (String(args[0]).endsWith("route.artifact"))
+      await rm(join(root, "user/Pods/late/pod.json"), { force: true });
+    return actual.open(...args);
+  });
+  try {
+    await expect(routes.bundle(d.key, d.fingerprint)).rejects.toThrow();
+    await expect(actual.stat(join(root, "user/Pods/late/pod.json"))).rejects.toThrow();
+  } finally {
+    release.resolve();
+    await content.lifecycle.refresh();
+  }
 });

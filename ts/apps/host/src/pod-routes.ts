@@ -76,6 +76,16 @@ export const trustKind = keptStateKind({
   segments: () => stateSegments("routeTrust"),
 });
 
+/** Transient source IO failure: a caller may retry without changing its trust choice. */
+export class PodRouteCheckTimeout extends Error {
+  readonly code = "pod.route.check.timeout";
+  readonly retryable = true;
+  constructor() {
+    super("Pod route byte check exceeded 1000 ms; retry when the home is available.");
+    this.name = "PodRouteCheckTimeout";
+  }
+}
+
 /** Trusted browser extensions have the shell's authority. Trust is local, explicit and content-pinned. */
 export function createPodRoutes(
   lifecycle: ReturnType<typeof createPackageLifecycle>,
@@ -91,40 +101,64 @@ export function createPodRoutes(
     pod: AdmittedPackage,
     route: PodRouteDescriptor,
   ): Promise<unknown> {
-    try {
-      // The census is discovery, not authority. Re-read the declaration and the artifact that
-      // contains every executable byte before granting admission or returning a trusted bundle.
-      for (const path of ["pod.json", route.artifact]) {
-        const member = pod.members.find((member) => member.path === path);
-        if (!member) throw Error("Pod route member is absent");
-        const file = await open(join(pod.directory, path), "r");
-        try {
-          const facts = await file.stat();
-          if (!facts.isFile() || facts.size !== member.bytes.length)
-            throw Error("Pod route member changed size or kind");
-          // Bound a concurrent replacement/growth by the already-admitted member size.
-          const bytes = Buffer.alloc(member.bytes.length + 1);
-          let count = 0;
-          while (count < bytes.length) {
-            const read = await file.read(bytes, count, bytes.length - count, null);
-            if (!read.bytesRead) break;
-            count += read.bytesRead;
-          }
-          if (count !== member.bytes.length || !bytes.subarray(0, count).equals(member.bytes))
-            throw Error("Pod route bytes changed; inspect the current Pod before admission");
-          if (path === route.artifact) {
-            const value: unknown = JSON.parse(bytes.subarray(0, count).toString("utf8"));
-            return value;
-          }
-        } finally {
-          await file.close();
+    let expired = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const withinDeadline = () => {
+      if (expired) throw new PodRouteCheckTimeout();
+    };
+    async function memberBytes(path: string): Promise<Buffer> {
+      withinDeadline();
+      const member = pod.members.find((member) => member.path === path);
+      if (!member) throw Error("Pod route member is absent");
+      const file = await open(join(pod.directory, path), "r");
+      try {
+        withinDeadline();
+        const facts = await file.stat();
+        withinDeadline();
+        if (!facts.isFile() || facts.size !== member.bytes.length)
+          throw Error("Pod route member changed size or kind");
+        const bytes = Buffer.alloc(member.bytes.length + 1);
+        let count = 0;
+        while (count < bytes.length) {
+          const read = await file.read(bytes, count, bytes.length - count, null);
+          withinDeadline();
+          if (!read.bytesRead) break;
+          count += read.bytesRead;
         }
+        if (count !== member.bytes.length || !bytes.subarray(0, count).equals(member.bytes))
+          throw Error("Pod route bytes changed; inspect the current Pod before admission");
+        return bytes.subarray(0, count);
+      } finally {
+        // An OS call cannot always be cancelled. A late open still closes its handle, but the
+        // request's deadline does not wait for that cleanup or allow later admission.
+        await file.close();
       }
-      throw Error("Pod route artifact is absent");
+    }
+    async function check(): Promise<unknown> {
+      await memberBytes("pod.json");
+      const bytes = await memberBytes(route.artifact);
+      // Confirm the declaration after reading the artifact. Filesystem checks across two paths
+      // are not atomic: either path can change after this final observation. Only checked bytes
+      // are delivered; no cached bytes gain authority from this remaining filesystem window.
+      await memberBytes("pod.json");
+      withinDeadline();
+      const value: unknown = JSON.parse(bytes.toString("utf8"));
+      return value;
+    }
+    const deadline = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        expired = true;
+        reject(new PodRouteCheckTimeout());
+      }, 1000);
+    });
+    try {
+      return await Promise.race([check(), deadline]);
     } catch (error) {
       registrations.get(route.key)?.dispose();
       registrations.delete(route.key);
       throw error;
+    } finally {
+      clearTimeout(timer);
     }
   }
   let closed = false;
@@ -137,12 +171,9 @@ export function createPodRoutes(
     const read = stored();
     return read.kind === "ok" ? read.value : {};
   };
-  let listing = Promise.resolve<PodRouteDescriptor[]>([]);
-  function list(): Promise<PodRouteDescriptor[]> {
-    const next = listing.then(readList, readList);
-    listing = next;
-    return next;
-  }
+  const admitting = new Set<string>();
+  // An admission belongs to its initiating request, never a shared inventory queue.
+  const list = () => readList();
   function current(key: string, fingerprint: string) {
     return lifecycle
       .packages()
@@ -194,25 +225,36 @@ export function createPodRoutes(
       }
     }
     for (const route of descriptors) {
-      if (route.trusted && !registrations.has(route.key) && options.workspace) {
-        const pod = lifecycle.packages().find((pod) => pod.id === route.packageId)!;
-        const value = await currentArtifact(pod, route);
-        const evidence = await verifyPodArtifact(value, route.fingerprint);
-        const host = evidence.executables.some((entry) => entry.client === "host")
-          ? await loadPodHostEntry(value, route.fingerprint)
-          : undefined;
-        const admitted = await admitPodArtifact(value, route.fingerprint);
-        if (
-          admitted.data.key !== route.workRoute ||
-          admitted.data.work?.route !== route.workRoute ||
-          admitted.data.address !== `/tool/${encodeURIComponent(route.key)}`
-        )
-          throw Error("Admitted route identity differs from its package declaration");
-        if (closed) return [];
-        if (!current(route.key, route.fingerprint)) continue;
-        const registration = registerAdmittedHostRoute(admitted, options.workspace, host);
-        const dispose = registration.close;
-        registrations.set(route.key, { hash: route.fingerprint, dispose });
+      if (
+        route.trusted &&
+        !registrations.has(route.key) &&
+        !admitting.has(route.key) &&
+        options.workspace
+      ) {
+        admitting.add(route.key);
+        try {
+          const pod = lifecycle.packages().find((pod) => pod.id === route.packageId)!;
+          const value = await currentArtifact(pod, route);
+          const evidence = await verifyPodArtifact(value, route.fingerprint);
+          const host = evidence.executables.some((entry) => entry.client === "host")
+            ? await loadPodHostEntry(value, route.fingerprint)
+            : undefined;
+          const admitted = await admitPodArtifact(value, route.fingerprint);
+          if (
+            admitted.data.key !== route.workRoute ||
+            admitted.data.work?.route !== route.workRoute ||
+            admitted.data.address !== `/tool/${encodeURIComponent(route.key)}`
+          )
+            throw Error("Admitted route identity differs from its package declaration");
+          if (closed) return [];
+          if (!current(route.key, route.fingerprint)) continue;
+          if ((await decisions())[route.key] !== route.fingerprint) continue;
+          const registration = registerAdmittedHostRoute(admitted, options.workspace, host);
+          const dispose = registration.close;
+          registrations.set(route.key, { hash: route.fingerprint, dispose });
+        } finally {
+          admitting.delete(route.key);
+        }
       }
     }
     return descriptors;
