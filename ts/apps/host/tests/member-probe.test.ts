@@ -48,6 +48,7 @@ beforeEach(async () => {
   });
 });
 afterEach(async () => {
+  stopPackageDiscovery();
   bindPackageScanLogger(() => {});
   await rm(root, { recursive: true, force: true });
 });
@@ -68,12 +69,37 @@ const now = () => ({ startedAt: Date.now() });
 const resources = () =>
   commandResources(detachedBridge(), { podsRoot: root } as never, async () => undefined);
 
+type Probe = ReturnType<typeof resources>["probe"];
+
+/**
+ * An older discovery of this home, in flight from now. Releasing it lets it land a little later with
+ * what the disk held when it began, as a slow scan that started before an edit does.
+ */
+async function olderScan() {
+  const before = await listPackages({ podsRoots: root });
+  let land = (_listing: typeof before) => {};
+  void discoverPackages(root, () => new Promise((resolve) => (land = resolve)), "background");
+  return () => void setTimeout(() => land(before), 250);
+}
+/** The Pod in `pdrop`'s folder takes another id, so the index no longer finds `pdrop` there; then a millisecond passes. */
+async function renamePod() {
+  await writeFile(join(root, "pdrop", "pod.json"), JSON.stringify({ schemaVersion: 2, id: "renamed", name: "renamed", version: "0.1.0", entrypoints: [] }));
+  await new Promise((resolve) => setTimeout(resolve, 5));
+}
+
 /** The whole action through the real journal and the real probes; returns the discoveries it cost. */
-async function discoveriesOf(id: string, consumes: Member[], prepare = async () => {}) {
+async function discoveriesOf(
+  id: string,
+  consumes: Member[],
+  prepare = async () => {},
+  /** The test's seat at the journal's own probe calls: a production gate has no hook between its passes. */
+  around = (probe: Probe): Probe => probe,
+) {
   const journal = testJournal();
   const executor = gatewayExecutor("scripting.execute", detachedBridge(),
     () => Effect.succeed({ status: "Succeeded" }), pictureCaptures(root));
-  journal.bindCommands({ ...resources(), resolve: () => ({
+  const real = resources();
+  journal.bindCommands({ ...real, probe: around(real.probe), resolve: () => ({
     ...executor,
     definition: async () => ({ says: "Run script", needs: "nothing", effect: "command", dirties: [], input: z.record(z.string(), z.unknown()) }),
     bind: async () => ({ effects: [], consumes, prepare: async () => (await prepare(), { kind: "host-leaf" }) }),
@@ -146,19 +172,50 @@ test("the index is a shortcut, never the answer: a Pod it does not hold, or hold
 // Mutant: drop `notBefore` from the fallback in `readMemberPod` and the pass answers the old bytes.
 test("a pass that misses the index reads a discovery begun after it started, never an older one in flight", async () => {
   const [manifest] = await pod("pdrop", 2);
-  const before = await listPackages({ podsRoots: root });
-  // An older scan of this home, begun before the edit, that lands late with what it read then.
-  let land = (_listing: typeof before) => {};
-  void discoverPackages(root, () => new Promise((resolve) => (land = resolve)), "background");
-  // The Pod in this folder takes another id: the index no longer finds `pdrop` here, and discovery must say so.
-  await writeFile(join(root, "pdrop", "pod.json"), JSON.stringify({ schemaVersion: 2, id: "renamed", name: "renamed", version: "0.1.0", entrypoints: [] }));
-  // The pass starts on a later millisecond than the older scan did.
-  await new Promise((resolve) => setTimeout(resolve, 5));
+  const release = await olderScan();
+  await renamePod();
   const answer = resources().probe(manifest!, "dispatch", now());
-  const late = setTimeout(() => land(before), 250);
+  release();
   expect(await answer).toBeNull();
-  clearTimeout(late);
-  stopPackageDiscovery();
+});
+
+// F-W25c-1. Mutant: `startedAt: 0` in `gate()` and the run succeeds on the bytes the older scan read.
+test("the last gate before a step runs refuses an index miss while an older discovery is in flight", async () => {
+  const members = await pod("pdrop", 2);
+  const moments: (string | undefined)[] = [];
+  let release: (() => void) | undefined;
+  const { action } = await discoveriesOf("raced", members, undefined, (probe) => async (dependency, moment, pass) => {
+    if (moments.at(-1) !== moment) moments.push(moment);
+    // The last gate's pass has started: the older scan may land, with what it read before the edit.
+    if (moment === "step" && release) release = void release();
+    const answer = await probe(dependency, moment, pass);
+    // The gate before it has read every member: an older scan starts, then the edit misses the index.
+    if (moment === "prepared" && dependency.kind === "member" && dependency.probe.path === members.at(-1)!.probe.path) {
+      release = await olderScan();
+      await renamePod();
+    }
+    return answer;
+  });
+  // The fixture's host-leaf step has no bridge dispatch, so `step` is its last gate, straight after `prepared`.
+  expect(moments.slice(-2)).toEqual(["prepared", "step"]);
+  expect(action).toMatchObject({
+    state: "failed",
+    refusal: { kind: "stale", consumed: [{ probe: { pod: "pdrop", path: "pod.json" } }] },
+  });
+});
+
+// Mutant: drop `notBefore` from the catalog probe and the pass answers the older scan's hashes.
+test("the catalog probe reads a discovery begun after its pass started", async () => {
+  await pod("pdrop", 1);
+  const release = await olderScan();
+  await writeFile(join(root, "pdrop", "checks/c0.csx"), "Result(99);");
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  const answer = resources().probe({ kind: "catalog", probe: {}, expected: [] }, "step", now());
+  release();
+  expect(await answer).toEqual([{
+    id: "pdrop",
+    members: expect.arrayContaining([{ path: "checks/c0.csx", sha256: sha("Result(99);") }]),
+  }]);
 });
 
 test("a run consumes its entrypoint and every .cs beside it, not another entrypoint's .csx", async () => {

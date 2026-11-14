@@ -213,7 +213,11 @@ export function commandResources(
         case "directory":
           return directorySnapshot(await captureDirectory(dependency.probe.path));
         case "catalog": {
-          const listing = await listPackages({ podsRoots: deps.podsRoot });
+          // No older than its pass, as the member fallback: a scan in flight read the disk before.
+          const listing = await listPackages({
+            podsRoots: deps.podsRoot,
+            notBefore: pass?.startedAt ?? Date.now(),
+          });
           if (listing.unreadable.length)
             throw Error("Cannot verify an unreadable Pod dependency catalog");
           return listing.packages
