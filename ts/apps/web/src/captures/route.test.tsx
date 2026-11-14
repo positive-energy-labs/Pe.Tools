@@ -21,6 +21,7 @@ test("a retained picture names its runtime owner and reports a failed image", as
           view: { name: "Ground plan" },
           focus: null,
           registration: null,
+          marks: [],
           byteSize: 93823,
           url: `/captures/${sha}.png`,
         },
