@@ -81,6 +81,11 @@ test.each(["edited", "missing-record"])(
       expect(pod.contributions.map((c) => c.key)).toEqual(
         expect.arrayContaining(["script:@example/src/Run.cs", "page:@example/pages/tour"]),
       );
+      const executable = content.member("script:@example/src/Run.cs");
+      expect(executable).toMatchObject({
+        content: mine,
+        sourceBundle: { files: expect.any(Array) },
+      });
       expect(pod.diagnostics).toEqual([
         expect.objectContaining({
           code: "ShippedExampleUpdateKept",
@@ -88,11 +93,6 @@ test.each(["edited", "missing-record"])(
           message: expect.stringContaining("import the current example into a separate workspace"),
         }),
       ]);
-      const executable = content.member("script:@example/src/Run.cs");
-      expect(executable).toMatchObject({
-        content: mine,
-        sourceBundle: { files: expect.any(Array) },
-      });
       const captured = await capturePackage("example", podsRoot);
       expect(
         Buffer.from(
