@@ -23,7 +23,6 @@ export type PageExportInput = {
   page: string;
   exportedAt: string;
   document: unknown;
-  snapshot: unknown;
   events: readonly unknown[];
   /** Only host-owned presentation libraries; never the live pe.js doors. */
   library(path: string): Promise<string>;
@@ -53,7 +52,7 @@ const replaceAsync = async (
   return result + source.slice(at);
 };
 
-/** Pin the source graph and a host-stamped snapshot into one network-independent presentation. */
+/** Pin the source graph and a host-stamped event log into one network-independent presentation. */
 export async function exportPage(input: PageExportInput) {
   const root = await realpath(input.directory);
   const files = new Map<string, PinnedFile>();
@@ -151,23 +150,16 @@ export async function exportPage(input: PageExportInput) {
   if (/<(?:base|iframe|object|embed)\b/i.test(original))
     throw Error("Page export has an unsupported base, iframe, object or embed element");
   const needsPe = /<script\b[^>]*\bsrc=["']\/pages\/pe\.js["']/i.test(original);
-  const kernelSource = needsPe
-    ? /  pe\.kernel = [\s\S]*?\n  };/m.exec(await hostLibrary("/pages/pe.js"))?.[0]
-    : "";
-  if (needsPe && !kernelSource)
-    throw Error("pe.js must expose its presentation kernel for Page export");
+  const source = needsPe ? await hostLibrary("/pages/pe.js") : "";
+  const start = source.indexOf("/*pe:offline-state:start*/");
+  const end = source.indexOf("/*pe:offline-state:end*/");
+  if (needsPe && (start < 0 || end <= start))
+    throw Error("pe.js must mark its offline-safe Page state block");
+  const stateSource = needsPe ? source.slice(start, end) : "";
   const offline = `(() => {
 const exported = JSON.parse(document.getElementById("pe-export").textContent);
-const pe = { exported, page: exported.page, doc: exported.document, kitReady: null };
-pe.describe = () => {};
-pe.target = async (...selector) => {
-  if (selector.length) throw Error("An exported snapshot cannot select another document");
-  if (!pe.doc) throw Error("This snapshot has no document reading");
-  return pe.doc;
-};
-${kernelSource}
-pe.state = async (k) => { k.replay(exported.snapshot === null ? exported.events.map(row => row.event) : [], exported.snapshot ?? k.base); return k; };
-window.pe = pe;
+${stateSource}
+window.pe = offlinePage(exported);
 })();`;
   let hasKit = false;
   let html = await replaceAsync(
@@ -242,8 +234,6 @@ window.pe = pe;
     page: input.page,
     exportedAt: input.exportedAt,
     document: input.document,
-    snapshot: input.snapshot,
-    snapshotSha256: sha(JSON.stringify(input.snapshot)),
     events: input.events,
     files: [...files.values()].sort((a, b) => a.path.localeCompare(b.path)),
   };
@@ -252,6 +242,10 @@ window.pe = pe;
     ? html.replace(/<head\b[^>]*>/i, (head) => head + pinned)
     : pinned + html;
   const sha256 = sha(html);
-  const path = await writeArtifact(input.exports.path, pageExportKind.in(input.exports, sha256), html);
+  const path = await writeArtifact(
+    input.exports.path,
+    pageExportKind.in(input.exports, sha256),
+    html,
+  );
   return { html, sha256, path, provenance };
 }

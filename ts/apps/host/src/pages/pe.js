@@ -7,8 +7,7 @@
  *   await pe.do("revit.context.show-elements", { elementIds: [1234] });   // run a mutation as this page; waits until it settles
  *   await pe.script("checks/census.csx");                // run C# in Revit: a source string, or a .cs/.csx path beside the page
  *   await pe.do("script:@snowdon-ducts/src/Census.cs");  // run a package's declared script on the bound document
- *   await pe.state(kernel);                              // share a kit kernel's event log with every copy and every agent
- *   pe.describe(() => `# ${kernel.state.title}`);        // what the page says, as markdown, kept beside the snapshot for agents
+ *   const k = await pe.state({ reduce, base, render, describe, agent }); // one shared event log
  *   await pe.picture([1234]);                            // lens then view-image: { url, sha, at, viewId, viewName, registration }
  *   await pe.reading("checks/census.csx", run);          // one reading: { source, at, rows } with rows = what `run()` answered
  *   await pe.diff([1234], ["Mark"], run);                // read the parameters, run, read again: the rows that changed
@@ -24,6 +23,92 @@
  * it; a page's own request to its host goes through `pe.fetch(url, init)` (same signature as `fetch`).
  */
 (() => {
+  /*pe:offline-state:start*/
+  // The export embeds this same reducer/replay path with an offline transport.
+  // reduce(state, event, { origin, seq, at }); agent: { type: "meaning and fields" }.
+  // k.fire(event) waits for a committed row; nav and local event types stay in this tab.
+  function installPageState(pe, io) {
+    let mounted = false;
+    pe.state = async ({
+      reduce,
+      base,
+      render = () => {},
+      describe = () => "",
+      local = [],
+      agent = {},
+    }) => {
+      if (mounted) throw Error("pe.state may be called only once per Page");
+      mounted = true;
+      const k = { state: base };
+      let seq = 0;
+      let queue = Promise.resolve();
+      const publish = () => io.publish({ seq, text: String(describe(k.state)), agent });
+      const apply = (row) => {
+        if (row.seq <= seq) return;
+        k.state = reduce(k.state, row.event, { origin: row.origin, seq: row.seq, at: row.at });
+        seq = row.seq;
+        render(k.state);
+      };
+      const saved = await io.load();
+      for (const row of saved.events) apply(row);
+      seq = saved.seq;
+      render(k.state);
+      await publish();
+      io.follow((row) => {
+        if (row.seq <= seq) return;
+        apply(row);
+        queue = queue
+          .then(publish)
+          .catch((error) => console.error("pe.state: text not kept", error));
+      });
+      k.fire = (event) => {
+        if (event.type === "nav" || local.includes(event.type)) {
+          const next = reduce(k.state, event, {
+            origin: "page",
+            seq,
+            at: new Date().toISOString(),
+          });
+          if (next === k.state) return false;
+          k.state = next;
+          render(k.state);
+          return true;
+        }
+        // Only committed rows render, so live and replay receive identical metadata.
+        const job = queue.then(async () => {
+          await io.append(event);
+          // A reply can overtake SSE. Read the prefix before publishing its sequence.
+          for (const row of (await io.load(seq)).events) apply(row);
+          await publish();
+          return true;
+        });
+        queue = job.catch((error) => console.error("pe.state: event not kept", error));
+        return job;
+      };
+      return k;
+    };
+  }
+  function offlinePage(exported) {
+    const pe = {
+      exported,
+      page: exported.page,
+      doc: exported.document,
+      kitReady: Promise.resolve(null),
+    };
+    pe.target = async (...selector) => {
+      if (selector.length) throw Error("An exported Page cannot select another document");
+      if (!pe.doc) throw Error("This export has no document reading");
+      return pe.doc;
+    };
+    installPageState(pe, {
+      load: async () => ({ seq: exported.events.at(-1)?.seq ?? 0, events: exported.events }),
+      publish: async () => {},
+      follow: () => {},
+      append: async () => { throw Error("An exported Page cannot append events"); },
+    });
+    return pe;
+  }
+  /*pe:offline-state:end*/
+
   // The serving host writes `{ header, query, service }` here (pages-route), so the page names the runtime that
   // served it, like the web app's `hostFetch`: a host that later takes over the port refuses this copy.
   const RUNTIME = /*pe:runtime*/ null;
@@ -230,10 +315,10 @@
    * A picture of elements the agent can cite: `revit.context.lens` boxes a 3D view around them (a mutation, through
    * `pe.do`), then `revit.context.view-image.focus` exports that view cropped to them (it commits a temporary crop and
    * its undo, so it too goes through `pe.do`; its `restore` says whether the undo held). The host keeps the PNG once
-   * per sha at `url`; `registration` places its pixels in model XY (null when the host refused to register it).
+   * per sha at `url`; `marks` locates each element's bounds in image pixels, including in 3D. The default crop adds
+   * twice the focus size on each side for context. `registration` places pixels in model XY when available.
    */
-  // TODO: with `focus` set, view-image crops to the elements alone; one 7 in elbow came back as two unreadable arcs (pdrop-tour walk, 2026-10-05). Widen the crop (margin, or focus off and the lens box only) so a person can tell what they are looking at.
-  pe.picture = async (elementIds, { name, paddingFeet, pixelSize, marginPercent } = {}) => {
+  pe.picture = async (elementIds, { name, paddingFeet, pixelSize, marginPercent = 200 } = {}) => {
     const lens = await pe.do("revit.context.lens", { elementIds, name, paddingFeet });
     const image = await pe.do("revit.context.view-image.focus", {
       target: { id: lens.viewId },
@@ -241,7 +326,7 @@
       pixelSize,
       marginPercent,
     });
-    const url = image.captureUrl || image.imageUrl;
+    const url = image.imageUrl;
     if (!url) throw new Error(`view-image of ${lens.viewName} was not kept by the host`);
     return {
       url,
@@ -250,6 +335,7 @@
       viewId: lens.viewId,
       viewName: lens.viewName,
       registration: image.registration || null,
+      marks: image.marks,
     };
   };
 
@@ -298,136 +384,78 @@
     return { rows, unchanged };
   };
 
-  /**
-   * The page's text projection: `fn()` answers markdown describing what the page shows now. `pe.state` writes it
-   * beside the snapshot after every change, so `GET /pages/<slug>/state` tells an agent what the page says.
-   */
-  let describe = null;
-  pe.describe = (fn) => {
-    describe = fn;
-  };
-
-  /**
-   * The smallest kernel: `reduce(state, event)` over a log. `fire` applies one event and renders (false when nothing
-   * changed), `replay` rebuilds from a base. Hand the result to `pe.state` to share it.
-   */
-  pe.kernel = (reduce, base, render = () => {}) => {
-    const k = { state: base, base, log: [] };
-    k.fire = (ev) => {
-      const next = reduce(k.state, ev);
-      if (next === k.state) return false;
-      k.log.push(ev);
-      k.state = next;
-      render(next);
-      return true;
-    };
-    k.replay = (events, from = base) => {
-      k.state = from;
-      k.log = [];
-      for (const ev of events) {
-        const next = reduce(k.state, ev);
-        if (next !== k.state) (k.log.push(ev), (k.state = next));
-      }
-      render(k.state);
-      return k;
-    };
-    return k;
-  };
-
-  /**
-   * Share a kit kernel's event log through the host. Replays the saved log into `k`, sends every later `k.fire`
-   * to `/pages/<slug>/events`, follows other copies and agents live, and keeps `/pages/<slug>/state`'s snapshot
-   * current. Event types in `local` stay in this copy; hash navigation (`nav`) always does. Resolves to `k` once
-   * the replay is in.
-   */
-  pe.state = async (k, { local = [] } = {}) => {
-    const isLocal = (ev) => ev.type === "nav" || local.includes(ev.type);
-    const mine = new Set();
-    let seq = 0;
-    let timer;
-    const snapshot = () => {
-      clearTimeout(timer);
-      timer = setTimeout(() => {
-        client.response("page.snapshot", pageInput(k.state)).catch(() => {});
-        if (describe)
-          client.response("page.text", pageInput(String(describe(k.state)))).catch(() => {});
-      }, 150);
-    };
-    const saved = await json(await client.response("page.state", pageInput()));
-    seq = saved.seq;
-    k.replay(
-      saved.events.map((row) => row.event),
-      k.base,
-    ); // from the kernel's base, so the URL's view state survives the replay
-    const fire = k.fire;
-    k.fire = (ev) => {
-      if (isLocal(ev)) return fire(ev);
-      ev.eventId ||= crypto.randomUUID(); // ours, so the echo over SSE is skipped; `id` stays the page's own
-      if (!fire(ev)) return false;
-      mine.add(ev.eventId);
-      snapshot();
-      client
-        .response("page.append", pageInput(ev))
-        .then(json)
-        .then((row) => (seq = Math.max(seq, row.seq)))
-        .catch((e) => console.error("pe.state: the host did not keep an event", e));
-      return true;
-    };
-    // A browser's own EventSource retry was seen to never fire after a dev host restart (2026-10-04), so the
-    // stream is replaced by a watchdog: on error, when it never opens, or when the host's heartbeat (every 15 s)
-    // stops. It resumes from the last seq seen; nothing is lost, the host replays.
-    let retryMs = 1000;
-    let heard = Date.now();
-    const follow = () => {
-      const es = new EventSource(
-        streamUrl(client.url("page.events", { ...pageInput(), query: { after: seq } })),
-      );
+  let streamSeq = 0;
+  let rowListener = null;
+  const pendingRows = [];
+  let stopped = false;
+  let retryMs = 1000;
+  let heard = Date.now();
+  let retry;
+  let watchdog;
+  const follow = () => {
+    if (stopped) return;
+    const es = new EventSource(
+      streamUrl(client.url("page.events", { ...pageInput(), query: { after: streamSeq } })),
+    );
+    pe.events = es;
+    heard = Date.now();
+    es.onopen = () => {
+      retryMs = 1000;
       heard = Date.now();
-      es.onopen = () => ((retryMs = 1000), (heard = Date.now()));
-      es.addEventListener("ping", () => (heard = Date.now()));
-      es.onmessage = (m) => {
-        heard = Date.now();
-        const row = JSON.parse(m.data);
-        seq = Math.max(seq, row.seq);
-        if (mine.delete(row.event.eventId)) return; // our own fire, already applied
-        if (fire(row.event)) snapshot();
-      };
-      const replace = () => {
-        es.close();
-        clearInterval(watch);
-        setTimeout(follow, retryMs);
-        retryMs = Math.min(retryMs * 2, 10000);
-      };
-      es.onerror = replace;
-      const watch = setInterval(() => {
-        if (Date.now() - heard > (es.readyState === 1 ? 45000 : 10000)) replace();
-      }, 2000);
-      pe.events = es;
     };
-    follow();
-    // ponytail: undo stays local to one copy; a shared undo is an event of its own when a page needs it.
-    return k;
+    es.onmessage = (message) => {
+      heard = Date.now();
+      const row = JSON.parse(message.data);
+      streamSeq = Math.max(streamSeq, row.seq);
+      if (rowListener) rowListener(row);
+      else pendingRows.push(row);
+    };
+    es.addEventListener("ping", () => {
+      heard = Date.now();
+    });
+    es.addEventListener("file", (message) => {
+      heard = Date.now();
+      if (/\.(html|m?js|css)$/i.test(JSON.parse(message.data).path)) location.reload();
+    });
+    let replaced = false;
+    const replace = () => {
+      if (replaced) return;
+      replaced = true;
+      es.close();
+      clearInterval(watchdog);
+      if (stopped) return;
+      retry = setTimeout(follow, retryMs);
+      retryMs = Math.min(retryMs * 2, 10000);
+    };
+    es.onerror = replace;
+    watchdog = setInterval(() => {
+      if (Date.now() - heard > (es.readyState === 1 ? 45000 : 10000)) replace();
+    }, 2000);
   };
-
-  // Keep the Page's source fresh. Binding controls belong to SPA chrome.
-  if (pe.slug && typeof EventSource === "function") {
-    const followFiles = () => {
-      const events = new EventSource(
-        streamUrl(
-          client.url("page.events", { ...pageInput(), query: { after: Number.MAX_SAFE_INTEGER } }),
-        ),
-      );
-      events.addEventListener("file", (message) => {
-        if (/\.(html|m?js|css)$/i.test(JSON.parse(message.data).path)) location.reload();
-      });
-      events.onerror = () => {
-        events.close();
-        setTimeout(followFiles, 2000);
-      };
-      window.addEventListener("pagehide", () => events.close(), { once: true });
-    };
-    followFiles();
-  }
+  installPageState(pe, {
+    load: (after = 0) => client.response("page.state", { ...pageInput(), query: { after } }).then(json),
+    append: (event) => client.response("page.append", pageInput(event)).then(json),
+    publish: async (projection) => {
+      const r = await client.response("page.text", pageInput(projection));
+      if (r.status === 409) return; // Another tab published a newer prefix; its text wins.
+      if (!r.ok) return fail(r);
+    },
+    follow: (listen) => {
+      rowListener = listen;
+      for (const row of pendingRows.splice(0)) listen(row);
+    },
+  });
+  if (pe.slug && typeof EventSource === "function") follow();
+  window.addEventListener(
+    "pagehide",
+    () => {
+      stopped = true;
+      clearTimeout(retry);
+      clearInterval(watchdog);
+      pe.events?.close();
+    },
+    { once: true },
+  );
 
   window.pe = pe;
   /** One host-served presentation bundle; pages await this before mounting their instruments. */

@@ -10,6 +10,7 @@ test("a plan draws only a paired URL and finite two-dimensional native registrat
     height: 480,
     lens: { basis: "UserView", viewId: 1 },
     hidden: [],
+    marks: [],
     registration: {
       width: 800,
       height: 480,

@@ -80,6 +80,19 @@ export function pageKeyOf(slug: string): string | null {
   return !more.length && parseContributionKey(key) ? key : null;
 }
 
+/** The served slug and URL for a canonical Page key. */
+export function pageSlugOf(key: string): string | null {
+  const ref = parseContributionKey(key);
+  if (ref?.kind !== "page") return null;
+  return ref.packageId === "pages"
+    ? ref.path
+    : `${ref.packageId}--${ref.path.slice("pages/".length)}`;
+}
+export function pageOpenUrl(key: string): string | null {
+  const slug = pageSlugOf(key);
+  return slug === null ? null : `/pages/${slug}/`;
+}
+
 export function contributionKey(reference: ContributionReference): string {
   const { kind, packageId, path } = contributionReferenceSchema.parse(reference);
   return `${kind}:@${packageId}/${path}`;

@@ -510,7 +510,7 @@
     "ts/apps/host/src/packages.ts": 2,
     "ts/apps/host/src/page-export.ts": 8,
     "ts/apps/host/src/page-libraries.ts": 2,
-    "ts/apps/host/src/page-publication.ts": 7,
+    "ts/apps/host/src/page-publication.ts": 6,
     "ts/apps/host/src/pages-route.ts": 2,
     "ts/apps/host/src/pe-routes.ts": 26,
     "ts/apps/host/src/plugins-handler.ts": 1,

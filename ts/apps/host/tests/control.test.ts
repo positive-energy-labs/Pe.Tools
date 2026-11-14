@@ -101,6 +101,13 @@ test("a human Page pin consents only to the exact minted document lifetime", () 
   try {
     const identity = callerOf({ kind: "local" }, { "x-pe-context": minted.token });
     if ("refusal" in identity) throw Error(identity.refusal.detail);
+    expect(admitCrossing(identity.caller, { kind: "document", ref: docA }, "/actions"))
+      .toEqual({ kind: "person-pin", page: "page:@pages/pin", boundBy: "human", lifetime: docA });
+    expect(refusal(() => admitCrossing(identity.caller, { kind: "document", ref: docB }, "/actions")))
+      .toBe("grant.required");
+    expect(() => admitScript(identity.caller, [docA], "/actions")).not.toThrow();
+    expect(refusal(() => admitScript(identity.caller, [docA, docB], "/actions")))
+      .toBe("script.ungranted-documents");
     expect(consentedRead(identity.caller, "scripting.execute", {}, docA)).toBe(true);
     expect(consentedRead(identity.caller, "scripting.execute", {}, docB)).toBe(false);
     expect(
@@ -119,9 +126,27 @@ test("a human Page pin consents only to the exact minted document lifetime", () 
     expect(refusal(() => admitScript(identity.caller, [docA, docB], "/actions", docB))).toBe(
       "script.ungranted-documents",
     );
+    // Even an acquisition elsewhere cannot widen this person's pin to another lifetime.
+    bind((ref) => ref.openId === docB.openId ? "acq-other" : null);
+    expect(refusal(() => admitCrossing(identity.caller, { kind: "document", ref: docB }, "/actions")))
+      .toBe("grant.required");
   } finally {
     minted.retire();
   }
+});
+test("an agent Page pin cannot borrow a person's write consent", () => {
+  bind();
+  const minted = mintPageDoor("page:@pages/pin",
+    { kind: "pinned", address: address("C:/Jobs/Pin.rvt") }, "/pages/pin/act", false, docA);
+  try {
+    const identity = callerOf({ kind: "local" }, { [HOST_CONTEXT_HEADER]: minted.token });
+    if ("refusal" in identity) throw Error(identity.refusal.detail);
+    expect(refusal(() => admitCrossing(identity.caller, { kind: "document", ref: docA }, "/actions")))
+      .toBe("grant.required");
+    bind(() => "acq-copy");
+    expect(admitCrossing(identity.caller, { kind: "document", ref: docA }, "/actions"))
+      .toMatchObject({ kind: "acquisition", id: "acq-copy" });
+  } finally { minted.retire(); }
 });
 const bind = (acquired: (ref: DocumentRef) => string | null = () => null) =>
   bindControl({

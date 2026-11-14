@@ -107,7 +107,7 @@ export class PictureCaptures {
   /** Keep one taking: the blob if this sha is new, then one appended receipt. */
   async keep(
     bytes: Buffer,
-    facts: Pick<CaptureReceipt, "origin" | "document" | "view" | "focus" | "registration">,
+    facts: Pick<CaptureReceipt, "origin" | "document" | "view" | "focus" | "registration" | "marks">,
   ): Promise<CaptureReceipt> {
     const sha = sha256Hex(bytes);
     if (facts.registration && facts.registration.imageSha256 !== sha)

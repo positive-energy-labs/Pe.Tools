@@ -180,6 +180,7 @@ async function shared(store: PictureCaptures) {
     view: { name: "Level 1" },
     focus: null,
     registration: null,
+    marks: [],
   });
   await writePod("Global Library", {
     "pod.json": JSON.stringify({
