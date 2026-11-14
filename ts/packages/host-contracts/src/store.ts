@@ -24,6 +24,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { z } from "zod";
 import {
   sha256Hex,
@@ -36,6 +37,7 @@ import {
   type DerivedStore,
   policyOf,
   settled,
+  decodeLogLines,
 } from "./store-values.ts";
 export {
   sha256Hex,
@@ -352,22 +354,9 @@ function readStoredLines<T>(
     skip(null, message(error));
     return { kind: "ok", values: [], skipped: 1 };
   }
-  const values: T[] = [];
-  let skipped = 0;
-  text.split("\n").forEach((line, index) => {
-    if (!line.trim()) return;
-    let why: string;
-    try {
-      const parsed = schema.safeParse(JSON.parse(line));
-      if (parsed.success) return void values.push(parsed.data);
-      why = z.prettifyError(parsed.error);
-    } catch (error) {
-      why = message(error);
-    }
-    skipped++;
-    skip(line, `Line ${index + 1} is left out: ${why}`);
-  });
-  return { kind: "ok", values, skipped };
+  const decoded = decodeLogLines(text, schema);
+  for (const { line, reason } of decoded.problems) skip(line, reason);
+  return { kind: "ok", values: decoded.values, skipped: decoded.problems.length };
 }
 
 /**
@@ -519,6 +508,19 @@ export const readLines = <T>(log: StoredLog<T>) =>
   readStoredLines(log.path, log.schema, { place: log.place, notices: log.machine.notices });
 export const appendLine = <T>(log: StoredLog<T>, value: T): void =>
   appendStoredLine(log.path, JSON.stringify(value));
+
+/** Callers serialize batches. A crash may tear this disposable diagnostic tail. */
+export async function appendLinesBounded<T>(log: StoredLog<T>, values: readonly T[], maxLines: number): Promise<void> {
+  if (!Number.isSafeInteger(maxLines) || maxLines < 1) throw Error("Log line limit must be positive");
+  const prior = await readFile(log.path, "utf8").catch(error => {
+    if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
+    return "";
+  });
+  const lines = [...prior.split("\n").filter(Boolean), ...values.map(value => JSON.stringify(value))];
+  await mkdir(dirname(log.path), { recursive: true });
+  await writeFile(log.path, `${lines.slice(-maxLines).join("\n")}\n`);
+}
+
 const derivedStoreOf = <P extends HomePath | StatePath>(dir: DerivedDir<P>): DerivedStore<P> => ({
   dir: dir.path,
   path: dir.file,

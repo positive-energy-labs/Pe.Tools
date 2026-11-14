@@ -90,3 +90,22 @@ export function settled<T>(read: StoredRead<T>): Stored<T> {
     ? { kind: "set-aside", reason: read.reason, blob: read.blob }
     : read;
 }
+
+/** Decode without I/O; the store owns each refused line's notice and preservation. */
+export function decodeLogLines<T>(text: string, schema: z.ZodType<T>) {
+  const values: T[] = [];
+  const problems: { line: string; reason: string }[] = [];
+  text.split("\n").forEach((line, index) => {
+    if (!line.trim()) return;
+    let why: string;
+    try {
+      const parsed = schema.safeParse(JSON.parse(line));
+      if (parsed.success) return void values.push(parsed.data);
+      why = z.prettifyError(parsed.error);
+    } catch (error) {
+      why = error instanceof Error ? error.message : String(error);
+    }
+    problems.push({ line, reason: `Line ${index + 1} is left out: ${why}` });
+  });
+  return { values, problems };
+}
