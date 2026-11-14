@@ -8,7 +8,8 @@ import { expect, test } from "vite-plus/test";
 import { capturePackage, readPackage, isPackageMember } from "../src/packages.ts";
 import { exportPage } from "../src/page-export.ts";
 import { createPagesHandler } from "../src/pages-route.ts";
-import { exportPod, importPod } from "../src/pod-transfer.ts";
+import { exportPod } from "../src/pod-transfer.ts";
+import { importPod } from "./pod-import.ts";
 
 const examples = join(import.meta.dirname, "../../../../examples/pods");
 const sha = (bytes: string | Uint8Array) => createHash("sha256").update(bytes).digest("hex");

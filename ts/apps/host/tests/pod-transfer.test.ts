@@ -22,7 +22,8 @@ import { commandTable } from "@pe/agent-contracts/command-axes";
 const homeVariable = productPathNames.productHomeVariable;
 import type { PictureCaptures } from "../src/captures-route.ts";
 import { listPackages } from "../src/packages.ts";
-import { exportPod, importPod, importRecordFile, writeZip } from "../src/pod-transfer.ts";
+import { exportPod, importRecordFile, writeZip } from "../src/pod-transfer.ts";
+import { importPod } from "./pod-import.ts";
 
 
 let root: string;

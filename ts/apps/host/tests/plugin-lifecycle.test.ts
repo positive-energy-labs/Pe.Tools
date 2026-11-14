@@ -17,7 +17,8 @@ import { createPagesHandler } from "../src/pages-route.ts";
 import { freezeScript } from "../src/operation-script.ts";
 import { readMember } from "../src/settings.ts";
 import { servePeRoute } from "@pe/agent-contracts/pe-api";
-import { importPod, exportPod, writeZip } from "../src/pod-transfer.ts";
+import { exportPod, writeZip } from "../src/pod-transfer.ts";
+import { importPod } from "./pod-import.ts";
 
 let root = "";
 afterEach(async () => {
