@@ -10,6 +10,34 @@ namespace Pe.Revit.Tests;
 /// <summary>Retain the actual lens DTO on an owned model copy; never synthesize a reply.</summary>
 public sealed class NativeLensFixtureRecorder {
     [Test]
+    public void Lens_refuses_unboxed_and_missing_elements_without_creating_a_view(UIApplication ui) {
+        var doc = RevitFamilyFixtureHarness.CreateProjectDocument(ui.Application);
+        try {
+            var unboxed = doc.ProjectInformation;
+            const long missing = int.MaxValue;
+            Assert.That(unboxed.get_BoundingBox(null), Is.Null, "fixture must have no model bounds");
+            Assert.That(doc.GetElement(missing.ToElementId()), Is.Null);
+            var before = new FilteredElementCollector(doc).OfClass(typeof(View)).ToElementIds();
+            var request = new RevitLensRequest([unboxed.Id.Value(), missing], "Refused lens");
+            var method = typeof(RevitDataRequestService).GetMethod("LensCore", BindingFlags.Static | BindingFlags.NonPublic)!;
+            var wrapper = Activator.CreateInstance(method.GetParameters()[1].ParameterType,
+                BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance, null, [doc], null);
+            var response = (RevitLensData)method.Invoke(null, [request, wrapper, new Pe.Revit.Operations.SessionWrite(doc)])!;
+            Assert.Multiple(() => {
+                Assert.That(response.Refused, Is.True);
+                Assert.That(response.ViewId, Is.Null);
+                Assert.That(response.Lens, Is.Null);
+                Assert.That(response.NotDrawn.Select(item => item.ElementId), Is.EquivalentTo(request.ElementIds));
+                Assert.That(response.NotDrawn.Single(item => item.ElementId == unboxed.Id.Value()).Reasons,
+                    Is.EqualTo(new[] { RevitViewImageNotDrawnReason.NoBoundingBox }));
+                Assert.That(response.NotDrawn.Single(item => item.ElementId == missing).Reasons,
+                    Is.EqualTo(new[] { RevitViewImageNotDrawnReason.ElementMissing }));
+                Assert.That(new FilteredElementCollector(doc).OfClass(typeof(View)).ToElementIds(), Is.EquivalentTo(before));
+            });
+        } finally { RevitFamilyFixtureHarness.CloseDocument(doc); }
+    }
+
+    [Test]
     public void Record_lens_DTO_on_an_owned_project_copy(UIApplication ui) {
         var output = Environment.GetEnvironmentVariable("PE_NATIVE_FIXTURE_OUTPUT")
             ?? Path.Combine(Path.GetTempPath(), "pe-lens-native-fixture");
@@ -38,8 +66,11 @@ public sealed class NativeLensFixtureRecorder {
                 modelCopy = model, date = DateTime.UtcNow.ToString("O"), rung = "fresh"
             }, Formatting.Indented, settings));
             Assert.That(response.Boxed, Is.EqualTo(1));
-            Assert.That(response.Lens.Basis, Is.EqualTo(LensBasis.PeDefault));
-            var view = (View)doc.GetElement(response.ViewId.ToElementId());
+            Assert.That(response.Refused, Is.False);
+            Assert.That(response.Lens, Is.Not.Null);
+            Assert.That(response.Lens!.Basis, Is.EqualTo(LensBasis.PeDefault));
+            Assert.That(response.ViewId, Is.Not.Null);
+            var view = (View)doc.GetElement(response.ViewId!.Value.ToElementId());
             foreach (var item in Pe.Revit.DocumentData.AgentContext.RevitViewImageExporter.LensCategories) {
                 if (!view.CanCategoryBeHidden(new ElementId(item.Category))) continue;
                 Assert.That(view.GetCategoryHidden(new ElementId(item.Category)), Is.True);
