@@ -42,7 +42,12 @@ export function BindBody({ ctx }: { ctx: BindContext }) {
       <>
         {/* D9: the viewed Page carries its chip here, the one place it is drawn. A Page's refusal says
             "Bind it from the chip". */}
-        <PageBindingChip slug={slug} query={page.query} fragment={page.fragment} />
+        <PageBindingChip
+          slug={slug}
+          query={page.query}
+          fragment={page.fragment}
+          onBind={() => ctx.page.pose({ view: false }, "named")}
+        />
         <iframe
           className="size-full flex-1"
           title={`Page ${slug}`}

@@ -14,11 +14,18 @@ export function PageBindingChip({
   slug,
   query,
   fragment,
+  onBind,
 }: {
   slug: string;
   /** The viewed Page's own query and fragment: the bind choice holds them for the way back. */
   query?: Record<string, string>;
   fragment?: string;
+  /**
+   * The owning Place's own move to the bind choice. A link drops a default (`view=false`), and a
+   * Place reads an absent key from its memory, so inside the viewed Page the href alone lands back
+   * on `view=true` (D9). The href stays for a new tab, which has no memory.
+   */
+  onBind?: () => void;
 }) {
   const { carry } = routeAddress("bind").read(useRouteSearch());
   const [reading, setReading] = useState<PageTargetReading | null>(null);
@@ -55,7 +62,19 @@ export function PageBindingChip({
           <span className="face-mono">{write?.kind ?? "unverified"}</span>
         </TooltipHint>
       )}
-      <a href={routeAddress("bind").link({ page: oneName(slug), query, fragment }, carry)}>Bind…</a>
+      <a
+        href={routeAddress("bind").link({ page: oneName(slug), query, fragment }, carry)}
+        onClick={
+          onBind &&
+          ((event) => {
+            if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey) return;
+            event.preventDefault();
+            onBind();
+          })
+        }
+      >
+        Bind…
+      </a>
       {refusal && (
         <span role="status" data-tone="caution">
           {refusal}
