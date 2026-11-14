@@ -14,10 +14,17 @@ namespace Pe.Revit.Tests;
 public sealed class HydronicHealTests {
     // The second stale pipe must not permit a partial first write. Readback uses native
     // parameters, independent of the script's receipt and its claimed status.
-    [TestCase(0)]
-    [TestCase(1)]
-    [TestCase(-1)]
-    public void Declared_hydronic_heal_refuses_stale_evidence_atomically_and_reads_back_good_sizes(UIApplication ui, int stale) {
+    // RevitTest injects UIApplication into ordinary tests, not NUnit TestCase arguments.
+    [Test]
+    public void Declared_hydronic_heal_refuses_a_changed_first_pipe(UIApplication ui) => Verify(ui, 0);
+
+    [Test]
+    public void Declared_hydronic_heal_refuses_a_changed_second_pipe_without_a_partial_first_write(UIApplication ui) => Verify(ui, 1);
+
+    [Test]
+    public void Declared_hydronic_heal_keeps_requested_diameters_on_independent_readback(UIApplication ui) => Verify(ui, -1);
+
+    private static void Verify(UIApplication ui, int stale) {
         var home = Path.Combine(Path.GetTempPath(), "pe-hydronic-" + Guid.NewGuid().ToString("N"));
         var id = "heal-proof-" + Guid.NewGuid().ToString("N");
         var root = Path.Combine(home, "Pods", id);
