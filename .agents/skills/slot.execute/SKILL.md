@@ -64,7 +64,7 @@ dotnet tool run pe-revit -- <command> --json
 ```
 
 - Run `test --plan` or `session start --plan` before the first Revit contact in a checkout.
-- Never use `Stop-Process`, `taskkill`, or a direct Revit launch. `pe-revit session` owns the Revit lifecycle. A wedged Revit ends with `session reset`, never a kill.
+- Never use `Stop-Process`, `taskkill`, or a direct Revit launch. `pe-revit session` owns the Revit lifecycle.
 - Raw `dotnet test` is banned for Revit-backed projects, because it launches or reuses Revit itself. Terminal `dotnet build` and `publish` are safe beside a running session.
 - An agent's own Revit starts in the background, so a dialog with no proved answer fails the op instead of waiting for a person. `guide session` gives the form.
 - An HR verdict proves delivery, not behavior. Re-run the behavior after it. A cold swap discards unsaved edits, so use another session shape for work that must survive.
@@ -97,8 +97,7 @@ Run pea scripts, host operations, or `pea --prompt` only after the SDK session i
 - Run host and web dev servers as background processes. Ports are dynamic, so read the service receipt under `%LOCALAPPDATA%\Positive Energy\Pe.Tools\state\service\`.
 - `pea` is checkout-pinned. Read the checkout and host URL it reports before you treat its answer as evidence, especially from a worktree.
 - Discover host operations before you call them. Put a structured request in a file, never in PowerShell quoting. End a mutation script with an independent read-back.
-- Pea's `revit_docs_search` tool (`ts/packages/mcps/src/shared/autodesk-docs/`) searches the Revit platform record. Use sources `help` and `blog` first. `help` covers the newest Revit year. `prove` says when a claim must cite it.
-- Before you tell the user a tool or account capability is absent, read the tool's own protocol and help. `.agents/skills/slot.execute/meter.py` reads the Claude and Codex usage meters and changes nothing. Redeem a reset credit (`account/rateLimitResetCredit/consume`, with a fresh idempotency key) only on the user's rule.
+- Before you tell the user a tool or account capability is absent, read the tool's own protocol and help. `.agents/skills/slot.execute/meter.py` reads the Claude and Codex usage meters and changes nothing.
 - Show a picture to the user with a markdown image whose absolute path uses forward slashes, such as `![x](C:/Users/.../out.png)`, because a backslash path does not render in T3 chat. Put the backslash path in a code block beside it for copying.
 
 ## Browser
@@ -117,7 +116,6 @@ Run pea scripts, host operations, or `pea --prompt` only after the SDK session i
 - A worktree is cut from a commit, so a tool or rule that is uncommitted in the launching checkout does not exist for the child, and neither does one on a branch its base has not merged. Commit it and merge it before the launch.
 - A fresh worktree has no dependency install. From `ts`, run `vp i --frozen-lockfile --prefer-offline`. Vite+ owns dependency installation, so never run bare `pnpm install`.
 - A fresh worktree uses the release feed at `%USERPROFILE%\source\feeds\pe-revit-sdk`, or `sdk.feed` in `product.payloads.json`. `pe-revit sdk adopt <version>` repins and regenerates the client. Review its `--plan` first. Do not copy, junction or symlink a feed into the worktree.
-- Bare `pe-revit` on PATH is the product shim. Run `dotnet tool run pe-revit -- dev link` once from any checkout, so the shim's dev lane runs the pinned tool of the current directory. `dotnet tool run pe-revit -- <verb>` is the same tool without the shim.
 - Herdr is for agents and processes the user must see. Otherwise it is overhead. Herdr is PowerShell. Use one named Herdr session per worktree. Parse the session, workspace, tab and pane ids it returns, and never infer focus.
 - Before first use, resolve `herdr` with `Get-Command herdr`. If it is absent, set `HERDR_BIN` to the executable or report the agent lane unavailable.
 
