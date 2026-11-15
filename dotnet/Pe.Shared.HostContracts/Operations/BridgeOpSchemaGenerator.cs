@@ -30,6 +30,7 @@ public static class BridgeOpSchemaGenerator {
         FlattenInheritanceHierarchy = true,
         // Honor C# nullable annotations: string stays non-nullable, string? becomes ["string","null"].
         DefaultReferenceTypeNullHandling = ReferenceTypeNullHandling.NotNull,
+        SchemaProcessors = { new ExplicitNullability() },
         SerializerSettings = new JsonSerializerSettings {
             NullValueHandling = NullValueHandling.Ignore,
             ContractResolver = new DefaultContractResolver {
@@ -41,6 +42,30 @@ public static class BridgeOpSchemaGenerator {
             Converters = [new StringEnumConverter()]
         }
     };
+
+    // Generic T? loses reference nullability in reflection. The serializer's explicit AllowNull
+    // contract remains authoritative, including for unconstrained optional wrappers such as MepFact<T>.
+    private sealed class ExplicitNullability : ISchemaProcessor {
+        public void Process(SchemaProcessorContext context) {
+            foreach (var pair in context.Schema.Properties) {
+                var property = FindClrProperty(context.ContextualType.Type, pair.Key);
+                if (property?.GetCustomAttribute<JsonPropertyAttribute>()?.Required != Required.AllowNull || IsNullable(pair.Value))
+                    continue;
+                var schema = pair.Value;
+                // An unconstrained JSON value already accepts null; setting its type to Null would narrow it.
+                if (schema.Type == JsonObjectType.None && schema.Reference is null && schema.OneOf.Count == 0)
+                    continue;
+                if (schema.Reference is { } reference) {
+                    schema.Reference = null;
+                    schema.OneOf.Add(new JsonSchema { Reference = reference });
+                }
+                if (schema.OneOf.Count > 0)
+                    schema.OneOf.Add(new JsonSchema { Type = JsonObjectType.Null });
+                else
+                    schema.Type |= JsonObjectType.Null;
+            }
+        }
+    }
 
     public static string GetRequestSchemaJson(Type type) =>
         SchemaJsonByType.GetOrAdd(
@@ -129,7 +154,8 @@ public static class BridgeOpSchemaGenerator {
 
     private static PropertyInfo? FindClrProperty(Type type, string jsonName) =>
         type.GetProperties(BindingFlags.Public | BindingFlags.Instance)
-            .FirstOrDefault(property => string.Equals(property.Name, jsonName, StringComparison.OrdinalIgnoreCase));
+            .FirstOrDefault(property => string.Equals(property.GetCustomAttribute<JsonPropertyAttribute>()?.PropertyName ?? property.Name,
+                jsonName, StringComparison.OrdinalIgnoreCase));
 
     // Complex types reachable from a property: unwrap Nullable<T>, arrays, and
     // generic containers (lists, dictionaries) down to their type arguments.

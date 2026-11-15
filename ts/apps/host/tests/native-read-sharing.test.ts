@@ -7,7 +7,7 @@ import { testHostInputs, journalAt, callRouteOver } from "./effect-test.ts";
 import { Context, Deferred, Effect, Fiber, Layer, Schema } from "effect";
 import { NodeHttpClient, NodeServices } from "@effect/platform-node";
 import { expect, test, vi } from "vite-plus/test";
-import { detachedBridge, sessionView, effectTest, settle } from "./effect-test.ts";
+import { detachedBridge, sessionView, effectTest, settle, captureLogs } from "./effect-test.ts";
 import { NativeReads, NativeReadLimits } from "../src/native-reads.ts";
 import { commandReadOwnership } from "../src/command-reads.ts";
 import { RevitBridge, CANCEL_OPERATION_KEY } from "../src/bridge.ts";
@@ -15,7 +15,8 @@ import { prepareRead } from "../../../packages/host-internal/src/read-admission.
 import type { DoorFailure, NativeAnswer, NativeOutcome } from "@pe/host-internal/request-contracts";
 import { HttpRouter } from "effect/http";
 import { retainedDuctsRead } from "../src/call-route.ts";
-import { RequestIdentity, admittedRequestIdentity } from "../src/request-services.ts";
+import { RequestIdentity, admittedRequestIdentity, readSchemas } from "../src/request-services.ts";
+import { httpProblems } from "../src/http-problems.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
 import { replay } from "./sdk-replay.ts";
 import type { ActionJournal } from "../src/action-journal.ts";
@@ -98,6 +99,32 @@ const makeHarness = (holdCancel = false) =>
     return { reads, jobs, cancels, answer, cancelWaiters: () => cancelWaiters };
   });
 const harness = makeHarness();
+
+effectTest("native response decode names the first Ajv path and keyword in the 502 and host log", () => {
+  const logs = captureLogs();
+  return Effect.gen(function* () {
+    const { reads, jobs, answer } = yield* harness;
+    const schemas = yield* readSchemas("mep.system.members");
+    const read = yield* prepareRead({ ...descriptor, operationKey: "mep.system.members" }, {}, schemas.request, schemas.response);
+    const pending = yield* reads.join(read, "session").pipe(Effect.result, Effect.forkScoped);
+    yield* until(() => jobs.length === 1);
+    yield* answer(0, { systems: "invalid", elements: [] });
+    yield* Deferred.succeed(jobs[0]!.terminal, "native-acknowledged");
+    const result = yield* Fiber.join(pending);
+    expect(result._tag).toBe("Failure");
+    if (result._tag !== "Failure") return;
+    const web = HttpRouter.toWebHandler(HttpRouter.add("GET", "/decode", () => Effect.fail(result.failure))
+      .pipe(Layer.provide(httpProblems)), { disableLogger: true });
+    yield* Effect.addFinalizer(() => Effect.promise(web.dispose));
+    const response = yield* Effect.promise(() => web.handler(new Request("http://host/decode")));
+    expect(response.status).toBe(502);
+    const problem = yield* Effect.promise(() => response.json());
+    expect(problem).toMatchObject({ problem: "read.response", message: expect.stringContaining("/systems (type)") });
+    const logged = logs.lines.find((line) => JSON.stringify(line.message).includes("Native read decode failed"));
+    expect(JSON.stringify(logged?.message)).toContain("op=mep.system.members");
+    expect(JSON.stringify(logged?.message)).toContain("/systems (type)");
+  }).pipe(Effect.provide(logs.layer));
+});
 
 effectTest("command reads wait for native cleanup after the answer; Stop detaches only their lease", () =>
   Effect.gen(function* () {

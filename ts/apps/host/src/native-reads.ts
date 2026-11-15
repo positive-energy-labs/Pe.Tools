@@ -202,13 +202,16 @@ export class NativeReads extends Context.Service<
               Effect.flatMap((answer) =>
                 decodePreparedRead(read, answer.value).pipe(
                   Effect.mapError(
-                    () =>
+                    (error) =>
                       new InvalidRead({
-                        message: "Native response violates its operation Schema",
+                        message: `Native response violates its operation Schema: ${error.message}`,
                         status: 502,
                         problem: "read.response",
                       }),
                   ),
+                  Effect.tapError((error) => Effect.logError(
+                    `Native read decode failed op=${descriptor.operationKey} request=${joined.requestId}: ${error.message}`,
+                  )),
                   Effect.map((value) => ({ ...answer, value })),
                 ),
               ),

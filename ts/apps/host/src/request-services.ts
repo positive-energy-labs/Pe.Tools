@@ -86,7 +86,11 @@ export const readSchemas = Effect.fn("ReadAdmission.schemas")(function* (key: st
         const validate = ajv.compile(raw);
         return Schema.Json.check(
           Schema.makeFilter(
-            (value) => validate(value) || "Value violates the generated native contract",
+            (value) => {
+              if (validate(value)) return true;
+              const issue = validate.errors![0]!;
+              return `Value violates the generated native contract at ${issue.instancePath || "/"} (${issue.keyword}): ${issue.message}`;
+            },
           ),
         );
       };
