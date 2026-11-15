@@ -174,22 +174,24 @@ test("a scan at sixty seconds is aborted and replaced; its late completion canno
   vi.useFakeTimers();
   const late = Promise.withResolvers<packages.PackageListing>();
   let signal: AbortSignal;
-  const first = discoverPackages("stuck", (_roots, stop) => { signal = stop; return late.promise; }, "request");
+  const signature = async () => "[]";
+  const first = discoverPackages("stuck", (_roots, stop) => { signal = stop; return late.promise; }, "request", signature);
   const refused = expect(first).rejects.toThrow();
-  const backgroundRefused = expect(discoverPackages("stuck", () => late.promise, "background")).rejects.toThrow();
+  const backgroundRefused = expect(discoverPackages("stuck", () => late.promise, "background", signature)).rejects.toThrow();
   await vi.advanceTimersByTimeAsync(5_000);
   await refused;
   await vi.advanceTimersByTimeAsync(55_000);
   const fresh = vi.fn(async () => freshListing);
-  const replacement = discoverPackages("stuck", fresh, "request");
+  const replacement = discoverPackages("stuck", fresh, "request", signature);
+  await replacement;
   expect(signal!.aborted).toBe(true);
   expect(fresh).toHaveBeenCalledOnce();
-  await replacement;
-  expect((await capturePackage("fresh", "stuck")).id).toBe("fresh");
+  const checked = () => discoverPackages("stuck", async () => { throw Error("fresh census was replaced"); }, "request", signature);
+  expect(await checked()).toEqual(freshListing);
   late.resolve(oldListing); // This reader ignores AbortSignal, as a stuck native filesystem call can.
   await vi.advanceTimersByTimeAsync(0);
   await backgroundRefused;
-  expect((await capturePackage("fresh", "stuck")).id).toBe("fresh");
+  expect(await checked()).toEqual(freshListing);
 });
 
 test("scan diagnostics reach the host file even with unread stdout", async () => {
@@ -340,7 +342,6 @@ test("a changed signature leaves the old request running but cannot publish its 
   expect(signal!.aborted).toBe(false);
   release.resolve(old);
   expect(await first).toEqual(old);
-  expect((await capturePackage("fresh", "superseded")).id).toBe("fresh");
   expect(await discoverPackages("superseded", async () => { throw Error("unchanged listing rescanned"); }, "request", signature)).toEqual(newer);
 });
 
@@ -491,7 +492,7 @@ test("a stalled folder listing bounds waiters, shares work, and publishes its la
   await refused;
   await joined;
   release.resolve();
-  await vi.waitFor(async () => expect((await capturePackage("late", homes)).id).toBe("late"));
+  await vi.waitFor(() => expect(lines.filter(line => line.startsWith("Pod folder scan end"))).toHaveLength(2));
   const folderScans = lines.filter(line => line.startsWith("Pod folder scan "));
   expect(folderScans).toHaveLength(4);
   expect(folderScans.filter(line => line.startsWith("Pod folder scan end"))).toEqual([

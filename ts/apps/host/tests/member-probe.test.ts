@@ -2,7 +2,7 @@
  * D22: the journal's gate re-reads every consumed fact at every async boundary. A member read was one
  * discovery of every Pod in the home, so a 34-script Pod in a 35-Pod home cost 34 discoveries (about
  * 115 s) per gate and never reached Revit inside Pea's wait. These tests hold the rules that fix it:
- * one gate pass reads a Pod once, it reads only that Pod's folder once discovery has indexed it, and a
+ * one gate pass reads a Pod once, scopes its member capture while refreshing manifest identities, and a
  * run consumes only the files it compiles.
  */
 import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
@@ -90,10 +90,10 @@ test("a script run's gates cost the same Pod discoveries whether it consumed two
   expect(many.action.state, JSON.stringify(many.action)).toBe("succeeded");
   expect(two.scans).toBeGreaterThan(0);
   expect(many.scans).toBe(two.scans);
-  // Discovery has indexed the Pod by now: the next run's gates read its folder and discover nothing.
+  // Rewriting the files requires one fresh scoped capture, independent of the consumed member count.
   const again = await discoveriesOf("again", await pod("pdrop", 33));
   expect(again.action.state, JSON.stringify(again.action)).toBe("succeeded");
-  expect(again.scans).toBe(0);
+  expect(again.scans).toBe(two.scans);
 });
 
 test("a member edited between two gates still refuses the run as stale: no read outlives its pass", async () => {
@@ -107,7 +107,7 @@ test("a member edited between two gates still refuses the run as stale: no read 
   });
 });
 
-test("an indexed Pod's pass reads only its own folder, once; the next pass and a probe outside any pass read it again", async () => {
+test("a pass freezes one scoped Pod snapshot; the next pass and independent probes see edits", async () => {
   const members = await pod("pdrop", 5);
   const c0 = members.find((member) => member.probe.path === "checks/c0.csx")!;
   await listPackages({ podsRoots: root });
@@ -115,15 +115,19 @@ test("an indexed Pod's pass reads only its own folder, once; the next pass and a
   const probe = resources().probe;
   const pass = {};
   for (const member of members) expect(await probe(member, "admit", pass)).toBe(member.expected);
+  expect(scans).toBe(0);
   // One reading per pass: the Pod was read at the pass's first probe, so a later edit is the next pass's.
   await writeFile(join(root, "pdrop", "checks/c0.csx"), "Result(99);");
   expect(await probe(c0, "admit", pass)).toBe(c0.expected);
+  expect(scans).toBe(0);
   expect(await probe(c0, "turn", {})).toBe(sha("Result(99);"));
+  expect(scans).toBe(1);
   await writeFile(join(root, "pdrop", "checks/c0.csx"), "Result(100);");
   expect(await probe(c0)).toBe(sha("Result(100);"));
+  expect(scans).toBe(2);
   await writeFile(join(root, "pdrop", "checks/c0.csx"), "Result(101);");
   expect(await probe(c0)).toBe(sha("Result(101);"));
-  expect(scans).toBe(0);
+  expect(scans).toBe(3);
 });
 
 test("the index is a shortcut, never the answer: a Pod it does not hold, or holds wrongly, is asked of discovery", async () => {

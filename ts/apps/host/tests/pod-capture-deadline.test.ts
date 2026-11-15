@@ -40,19 +40,25 @@ async function fixture() {
   return { local, foreign, directory };
 }
 
-// Mutant: restore capturePackage(string) -> readPackage(id, podsRoots), rescanning every home.
-test("capture uses the completed identity census and fresh local bytes without reading a slow foreign home", async () => {
+// Mutant: the scoped by-key census walks an unchanged neighbour's member directory.
+test("capture refreshes every home's identity and local bytes without walking foreign members", async () => {
   const { local, foreign, directory } = await fixture();
+  const neighbour = join(foreign, "neighbour");
+  await filesystem.mkdir(neighbour);
+  await filesystem.writeFile(join(neighbour, "pod.json"), '{"id":"neighbour"}');
+  await filesystem.writeFile(join(neighbour, "Run.csx"), "Result(0);");
+  await listPackages({ podsRoots: [local, foreign] });
   await filesystem.writeFile(join(directory, "Run.csx"), "Result(2);");
   const actual = filesystem.readdir;
   const spy = vi.spyOn(filesystem, "readdir").mockImplementation(async (...args) => {
-    if (String(args[0]) === foreign) return await new Promise<never>(() => {});
+    if (String(args[0]) === neighbour) return await new Promise<never>(() => {});
     return actual(...args);
   });
   const started = performance.now();
   const captured = await capturePackage("local", [local, foreign]);
   expect(performance.now() - started).toBeLessThan(1_000);
-  expect(spy.mock.calls.map(([path]) => String(path))).toEqual([directory]);
+  expect(spy.mock.calls.map(([path]) => String(path))).toEqual(expect.arrayContaining([local, foreign, directory]));
+  expect(spy.mock.calls.map(([path]) => String(path))).not.toContain(neighbour);
   expect(
     Buffer.from(
       captured.sourceBundle.files.find((file) => file.path === "Run.csx")!.bytesBase64,
@@ -81,9 +87,8 @@ test("a stalled selected folder refuses at its Pod bound and stops walking when 
   const entered = Promise.withResolvers<void>();
   const release = Promise.withResolvers<void>();
   const actual = filesystem.readdir;
-  const spy = vi.spyOn(filesystem, "readdir").mockImplementationOnce(async (...args) => {
-    entered.resolve();
-    await release.promise;
+  const spy = vi.spyOn(filesystem, "readdir").mockImplementation(async (...args) => {
+    if (String(args[0]) === directory) { entered.resolve(); await release.promise; }
     return actual(...args);
   });
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
@@ -98,7 +103,7 @@ test("a stalled selected folder refuses at its Pod bound and stops walking when 
   const reads = vi.spyOn(filesystem, "open");
   release.resolve();
   await new Promise((resolve) => setImmediate(resolve));
-  expect(spy).toHaveBeenCalledTimes(1);
+  expect(spy.mock.calls.filter(([path]) => String(path) === directory)).toHaveLength(1);
   expect(reads).not.toHaveBeenCalled();
 });
 
@@ -110,7 +115,7 @@ test("cold capture refuses without a scan, and a changed manifest cannot reuse a
   );
   expect(spy).not.toHaveBeenCalled();
   await filesystem.writeFile(join(directory, "pod.json"), '{"id":"other"}');
-  await expect(capturePackage("local", [local, foreign])).rejects.toThrow("Pod identity changed");
+  await expect(capturePackage("local", [local, foreign])).rejects.toThrow("No discovered Pod");
 });
 
 test("the completed census refuses duplicate ids and replaces old claims after rediscovery", async () => {

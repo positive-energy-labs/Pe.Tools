@@ -7,6 +7,11 @@
   ],
   "type": "module",
   "exports": {
+    "./script-revision": {
+      "types": "./src/script-revision.ts",
+      "import": "./src/script-revision.ts",
+      "default": "./src/script-revision.ts"
+    },
     "./contracts": {
       "types": "./src/contracts/index.ts",
       "import": "./src/contracts/index.ts",

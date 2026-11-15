@@ -4,6 +4,8 @@ import { buildCapabilities } from "../src/pea/capabilities.ts";
 import { peDo, peRead } from "../src/pea/capability-tools.ts";
 import { fakeRuntimeHost } from "./runtime-host-fixture.ts";
 import { machineFixture } from "../../agent-contracts/tests/machine-fixture.ts";
+import { createHash } from "node:crypto";
+import { scriptSourceRevision } from "@pe/host-contracts/script-revision";
 
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 
@@ -16,9 +18,18 @@ test.each(["read", "do"])("%s names the non-active lifetime in the request and r
   const key = "script:@demo/src/Run.cs";
   const ref = { session: "s", openId: "brodie-lifetime" };
   const operations = hostOpCatalog.filter((op) => op.key === "scripting.execute");
+  let helperVersion = 1;
+  const bundle = (version: number) => ({ files: [
+    { path: "src/Run.cs", bytesBase64: Buffer.from("Result(Helper.V);").toString("base64") },
+    { path: "src/Helper.cs", bytesBase64: Buffer.from(`class Helper { const int V=${version}; }`).toString("base64") },
+    { path: "pod.json", bytesBase64: Buffer.from('{"id":"demo"}').toString("base64") },
+  ] });
+  const members = (value: ReturnType<typeof bundle>) => value.files.map(file => ({ path: file.path,
+    sha256: createHash("sha256").update(Buffer.from(file.bytesBase64, "base64")).digest("hex"), sizeBytes: 1 }));
+  const originalBundle = bundle(1), originalRevision = scriptSourceRevision(members(originalBundle));
   const capabilities = buildCapabilities({ ops: operations, routes: [], skills: [], packages: [{
     id: "demo", folder: "demo", diagnostics: [],
-    members: ["src/Run.cs", "pages/compare/index.html"].map((path) => ({ path, sha256: "a".repeat(64), sizeBytes: 1 })),
+    members: [...members(originalBundle), { path: "pages/compare/index.html", sha256: "a".repeat(64), sizeBytes: 1 }],
     contributions: [
       { key, sourcePath: "src/Run.cs", title: "Run", description: "", mode: "ReadOnly" },
       { key: "page:@demo/pages/compare", sourcePath: "pages/compare/index.html", title: "Compare", description: "", projection: { openUrl: "/pages/demo--compare/", pane: "page" } },
@@ -26,13 +37,20 @@ test.each(["read", "do"])("%s names the non-active lifetime in the request and r
   }] });
   const admitted: Record<string, unknown>[] = [];
   let pageResolved = true;
+  let corruptRevision = false;
   vi.stubGlobal("fetch", async (input: Request | string | URL, init?: RequestInit) => {
     const request = input instanceof Request ? input : new Request(String(input), init);
     const url = new URL(request.url);
     if (url.pathname === "/pe/scope/self") return Response.json({ thread: "t", revision: 1,
       targets: [{ request: { kind: "open", ref: { session: "s", openId: "chadds-lifetime" } }, admission: { revision: 1, at: new Date().toISOString(), via: "local" } }] });
     if (url.pathname === "/pe/capabilities") return Response.json({ at: new Date().toISOString(), machine: machineFixture(), sources: {}, diagnostics: [], capabilities });
-    if (url.pathname === "/pe/contributions") return Response.json({ sha256: "a".repeat(64), folder: "demo", sourceBundle: { files: [] } });
+    if (url.pathname === "/pe/contributions") {
+      const pin = url.searchParams.get("sha256");
+      const sourceBundle = pin === originalRevision ? originalBundle : bundle(helperVersion);
+      const sha256 = scriptSourceRevision(members(sourceBundle));
+      if (pin && pin !== sha256) return Response.json({ error: "revision unavailable" }, { status: 409 });
+      return Response.json({ sha256: corruptRevision ? originalRevision : sha256, folder: "demo", sourceBundle });
+    }
     if (url.pathname === "/ops") return Response.json({ operations, bridgeSessionId: "s" });
     if (url.pathname === "/call") return Response.json({ sessions: [{ sessionId: "s", connected: true, openDocuments: [
       { openId: "chadds-lifetime", title: "Chadds", isActive: true, isFamilyDocument: false },
@@ -66,6 +84,15 @@ test.each(["read", "do"])("%s names the non-active lifetime in the request and r
   const bound = await run({ page: "page:@demo/pages/compare" });
   expect(bound, JSON.stringify(bound)).toMatchObject({ ok: true, target: { session: "s", openId: ref.openId } });
   expect(admitted.at(-1)).toMatchObject({ target: { kind: "document", ref } });
+  helperVersion = 2;
+  const fresh = await run({ target: { kind: "open", ref } });
+  expect(fresh).toMatchObject({ ok: true, package: { sha256: scriptSourceRevision(members(bundle(2))) } });
+  expect(admitted.at(-1)).toMatchObject({ input: { sourceBundle: bundle(2) } });
+  corruptRevision = true;
+  const beforeCorrupt = admitted.length;
+  expect(await run({ target: { kind: "open", ref } })).toMatchObject({ ok: false, content: expect.stringContaining("revision unavailable") });
+  expect(admitted).toHaveLength(beforeCorrupt);
+  corruptRevision = false;
   pageResolved = false;
   const count = admitted.length;
   expect(await run({ page: "page:@demo/pages/compare" })).toMatchObject({ ok: false, content: expect.stringContaining("document-closed") });

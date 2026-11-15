@@ -1,6 +1,7 @@
 import { callCatalogRoute, linkedCatalog } from "@pe/agent-contracts/pe-api";
 import { createPeClient, peRoutes } from "@pe/agent-contracts/pe-api";
 import { pagePublicationSchema, pagePublicationResultSchema } from "@pe/host-contracts/pe-api";
+import { scriptSourceBundleRevision } from "@pe/host-contracts/script-revision";
 import type { HostSessionScope } from "@pe/host-contracts/operation-types";
 import {
   carriesCallerContext,
@@ -1156,7 +1157,10 @@ function documentWork(row: Capability): boolean {
 
 async function contributionRead(row: Capability) {
   if (!row.package) throw Error("Contribution has no admitted source");
-  const query = new URLSearchParams({ key: row.key, sha256: row.package.sha256 });
+  // Named runs follow edits even while the inventory row is cached. Explicit HTTP pins
+  // and sealed Work keep their revision; a named run validates the current whole bundle.
+  const script = row.kind === "script";
+  const query = new URLSearchParams({ key: row.key, ...(!script ? { sha256: row.package.sha256 } : {}) });
   const response = await createPeClient(base(), fetch).response("contributions.read", {
     query: Object.fromEntries(query),
   });
@@ -1168,8 +1172,12 @@ async function contributionRead(row: Capability) {
     sourceBundle?: { files: { path: string; bytesBase64: string }[] };
     error?: string;
   };
-  if (!response.ok || answer.sha256 !== row.package.sha256)
+  const revision = script
+    ? answer.sourceBundle && scriptSourceBundleRevision(answer.sourceBundle)
+    : row.package.sha256;
+  if (!response.ok || !revision || answer.sha256 !== revision)
     throw Error(answer.error ?? "Admitted contribution revision unavailable");
+  if (script) row.package = { ...row.package, sha256: revision };
   return answer;
 }
 
