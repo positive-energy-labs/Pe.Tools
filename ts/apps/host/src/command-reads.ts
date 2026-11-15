@@ -140,7 +140,7 @@ export function commandResources(
         case "sdk-idle":
           return readBootstrapIdle(deps.sdk);
         case "member": {
-          // One gate pass reads a Pod once, and reads only that Pod's folder (D22). A gate runs at
+          // One gate pass captures a Pod once, scoped to its members plus every manifest identity (D22). A gate runs at
           // every async boundary, and a member read was a discovery of every Pod in the home: per
           // member, 34 scripts in a 35-Pod home cost 115 s a gate, and per pass still 3.4 s. Each
           // pass still reads the disk afresh, and a probe outside a pass shares nothing.
