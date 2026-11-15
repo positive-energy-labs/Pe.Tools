@@ -26,6 +26,27 @@ afterEach(async () => {
   if (root) await rm(root, { recursive: true, force: true });
 });
 
+test("unchanged inventory refresh does not republish a Pod", async () => {
+  root = await mkdtemp(join(tmpdir(), "pe-plugin-unchanged-"));
+  const pods = join(root, "Pods");
+  await mkdir(join(pods, "circuits/pages/tour"), { recursive: true });
+  await writeFile(join(pods, "circuits/pod.json"), '{"id":"circuits"}');
+  await writeFile(join(pods, "circuits/pages/tour/index.html"), "<title>Circuits</title>");
+  const changed = vi.fn();
+  const lifecycle = createPackageLifecycle({ machine: stateMachine(root), changed,
+    packages: () => listPackages({ podsRoots: pods }) });
+  try {
+    await lifecycle.ready;
+    expect(lifecycle.active("circuits")).toBe(true);
+    const publication = lifecycle.packages()[0];
+    changed.mockClear();
+    await lifecycle.refresh();
+    await lifecycle.refresh();
+    expect(changed).not.toHaveBeenCalled();
+    expect(lifecycle.packages()[0]).toBe(publication);
+  } finally { await lifecycle.close(); }
+});
+
 test("an import before initialization finishes becomes active after the initial census", async () => {
   root = await mkdtemp(join(tmpdir(), "pe-plugin-early-import-"));
   vi.stubEnv("PE_TOOLS_PRODUCT_HOME", root);

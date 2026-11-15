@@ -132,6 +132,30 @@ test.each([400, 409])("a subscription %s reacquires every key and keeps deliveri
   } finally { readings.close(); vi.useRealTimers(); }
 });
 
+test("a pending initial subscription is not mistaken for a silent subscribed stream", async () => {
+  vi.useFakeTimers();
+  const { readings, sources, update } = owner();
+  let admit!: () => void;
+  update.mockImplementationOnce(() => new Promise<void>(resolve => { admit = resolve; }));
+  const received = vi.fn();
+  try {
+    readings.subscribe(head, received);
+    await vi.advanceTimersByTimeAsync(0);
+    sources[0]!.onopen!();
+    await vi.advanceTimersByTimeAsync(31_000);
+    expect(sources).toHaveLength(1);
+    expect(sources[0]!.closed).toBe(false);
+    admit();
+    await vi.advanceTimersByTimeAsync(0);
+    sources[0]!.onmessage!(snapshot({ revision: 1 }));
+    await vi.advanceTimersByTimeAsync(31_000);
+    sources[0]!.onmessage!(snapshot({ revision: 2 }));
+    expect(received).toHaveBeenLastCalledWith(expect.objectContaining({ value: { revision: 2 } }));
+    expect(sources).toHaveLength(1);
+    expect(update).toHaveBeenCalledOnce();
+  } finally { readings.close(); vi.useRealTimers(); }
+});
+
 test("a publication waits through a silent stream and acquires after the replacement's first frame", async () => {
   vi.useFakeTimers();
   const random = vi.spyOn(Math, "random").mockReturnValue(1);
