@@ -19,7 +19,7 @@ import { contentHomes, contentRootsReady, ContentHomeUnavailable } from "./conte
 import { shippedPodUpdateRefusals } from "./shipped-pod-status.ts";
 import { podModelSchema, type PodModel } from "./pod-model.ts";
 import { logPackageDiscovery as scanLog } from "./pod-discovery-log.ts";
-import { observedPackageDirectories, packageDiskFailure, packageDiskFiles, packageDiskSignatures, podsDiskSignature, resolvePackageDiskSignature } from "./pod-disk-signature.ts";
+import { observedPackageDirectories, packageDiskFailure, packageDiskFiles, packageDiskSignatures, podsDiskSignature, resolvePackageDiskSignature, samePackageDiskSignature } from "./pod-disk-signature.ts";
 export { bindPackageScanLogger, logPackageDiscovery, packageScanLog, packageScanLogLineLimit } from "./pod-discovery-log.ts";
 import {
   captureIndexedPackage,
@@ -171,7 +171,7 @@ export async function listPackages({ podsRoots, wait = "request", packageId }: P
     (signal, previous) => podsDiskSignature([root], isPackageMember, signal,
       { packageId, previous }),
     (signature, previous) => resolvePackageDiskSignature(signature, previous, [root]), packageId,
-    (signature, previous) => observedPackageDirectories(signature, [root], previous), { current, changed, generation }), packageId);
+    (signature, previous) => observedPackageDirectories(signature, [root], previous), { current, changed, generation }, samePackageDiskSignature), packageId);
   // Import notices are runtime state, not disk bytes; project them even when the census is reused.
   return { ...listing, packages: listing.packages.map(pod => {
     const twins = listing.packages.filter(other => other.id === pod.id);
@@ -200,7 +200,7 @@ async function scanPackages(
   const after = signature && packageDiskSignatures(signature, roots);
   const reusable = new Map(previous?.listing.packages
     .filter(pod => !pod.discoveryFailure && after && before?.has(resolve(pod.directory)) &&
-      before.get(resolve(pod.directory)) === after.get(resolve(pod.directory)))
+      samePackageDiskSignature(before.get(resolve(pod.directory)), after.get(resolve(pod.directory))))
     .map(pod => [resolve(pod.directory), pod]));
   const admitted = new Map(previous?.listing.packages.map(pod => [resolve(pod.directory), pod]));
   const result: PackageListing = { packages: [], unreadable: [] };

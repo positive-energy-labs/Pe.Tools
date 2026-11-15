@@ -9,6 +9,15 @@ import { readPackageWork, type PackageCensus } from "./pod-capture.ts";
 const metadataScanSlowMs = 500;
 const witnessTickMs = 2_000;
 
+/** Hash observation time governs trust, not byte identity. */
+export function samePackageDiskSignature(a: string | undefined, b: string | undefined): boolean {
+  if (a === b) return true;
+  if (a === undefined || b === undefined) return false;
+  const identity = (value: string) => { const rows: unknown[] = JSON.parse(value);
+    return JSON.stringify(rows.map(row => Array.isArray(row) && row.length === 8 ? row.slice(0, 7) : row)); };
+  return identity(a) === identity(b);
+}
+
 /** Retained rows are observations of identity only. Resolve them against the census at selection,
  * not the snapshot at arrival, so simultaneous requests cannot roll back another Pod's witness. */
 export function resolvePackageDiskSignature(signature: string, previous: PackageCensus | undefined, roots: readonly string[]): string {
@@ -25,7 +34,8 @@ export function resolvePackageDiskSignature(signature: string, previous: Package
     // of reading a neighbour. Its last identity stays, but its bytes remain unavailable.
     if (failure && !retained.some(row => row[1] === "unavailable"))
       retained.push([row[0], "unavailable", failure]);
-    return retained;
+    const manifest = row[2];
+    return retained.map(entry => Array.isArray(manifest) && entry[0] === manifest[0] ? manifest : entry);
   }));
 }
 
@@ -93,13 +103,15 @@ export async function podsDiskSignature(
   const before = previous?.signature ? packageDiskSignatures(previous.signature, roots) : new Map<string, string>();
   const row = async (absolute: string, info: Stats, signal?: AbortSignal, prior?: unknown[]) => {
     const value = [absolute, info.mode, info.size, info.mtimeMs, info.ctimeMs, info.ino];
-    // Recent writes can share a filesystem tick. Re-hash them before reuse; older
-    // members keep their stat witness and any already-observed digest without IO.
+    const hashedAt = Date.now();
+    // A hash taken inside the filesystem tick stays suspect until a later hash
+    // confirms it outside that tick. Older first observations need only their stat.
     // ponytail: an older file rewritten with identical metadata (a deliberate mtime reset)
     // remains outside this witness; ordinary recent edits never depend on timestamp luck.
-    if (info.isFile() && info.size <= scriptPodMemberBounds.maxFileBytes && Date.now() - info.mtimeMs <= witnessTickMs)
-      return [...value, createHash("sha256").update(await readFile(absolute, { signal })).digest("hex")];
-    return prior?.length === 7 && value.every((part, index) => part === prior[index]) ? [...value, prior[6]] : value;
+    if (info.isFile() && info.size <= scriptPodMemberBounds.maxFileBytes &&
+      (typeof prior?.[7] === "number" ? prior[7] : hashedAt) - info.mtimeMs <= witnessTickMs)
+      return [...value, createHash("sha256").update(await readFile(absolute, { signal })).digest("hex"), hashedAt];
+    return prior?.length === 8 && value.every((part, index) => part === prior[index]) ? prior : value;
   };
   const walk = async (absolute: string, member: string, entries: unknown[], signal: AbortSignal, prior: ReadonlyMap<unknown, unknown[]>): Promise<void> => {
     signal.throwIfAborted();
@@ -154,8 +166,8 @@ export async function podsDiskSignature(
                 const pod = admitted.get(directory);
                 // A miss retries uncaptured candidates: their old IO refusal is no evidence
                 // that the requested id is absent. Known neighbours need not retry them.
-                if (scope?.packageId !== undefined && prior && (pod ? pod.id !== scope.packageId : targetKnown) && JSON.stringify(oldManifest) === JSON.stringify(manifestRow))
-                  return [[directory, "retained"]];
+                if (scope?.packageId !== undefined && prior && (pod ? pod.id !== scope.packageId : targetKnown) && JSON.stringify(oldManifest?.slice(0, 7)) === JSON.stringify(manifestRow.slice(0, 7)))
+                  return [[directory, "retained", manifestRow]];
                 await walk(directory, "", entries, signal, new Map(oldRows.map(row => [row[0], row])));
                 return entries;
               });

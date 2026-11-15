@@ -13,6 +13,8 @@ import { createPluginsHandler } from "../src/plugins-handler.ts";
 import { servePeRoute } from "@pe/agent-contracts/pe-api";
 import { contentRootsRefreshMs } from "../src/content-roots.ts";
 import { freezeScript } from "../src/operation-script.ts";
+import { readMemberPod } from "../src/settings.ts";
+import { Effect } from "effect";
 
 const reinstall = vi.hoisted((): { hold: { entered: () => void; wait: Promise<void> } | undefined } => ({ hold: undefined }));
 vi.mock("@pe/agent-contracts", async original => {
@@ -78,6 +80,20 @@ test("an older unchanged member reuses its witness without reading bytes", async
   expect((await readPackage("requested", { podsRoots: pods })).id).toBe("requested");
   for (const calls of [opened.mock.calls, read.mock.calls])
     expect(calls.map(([path]) => String(path)).filter(path => path.startsWith(pods))).toEqual([]);
+});
+
+// REVIEW-d76b3324-ev/review-fe.test.ts: a young witness cannot age into trust.
+test.each(["package", "settings", "indexed-settings"])("recent witness stays safe after its window elapses: %s", async door => {
+  const { pods, page } = await fixture(), path = page("requested");
+  const frozen = await fs.lstat(path), original = fs.lstat;
+  vi.spyOn(fs, "lstat").mockImplementation(async (...args) => String(args[0]) === path ? frozen : original(...args));
+  const clock = vi.spyOn(Date, "now").mockReturnValue(frozen.mtimeMs + 1999);
+  const read = () => door === "package" ? readPackage("requested", { podsRoots: pods })
+    : Effect.runPromise(readMemberPod("requested", { podsRoot: pods }, door === "indexed-settings"));
+  await read(); await fs.writeFile(path, "<title>changed!!</title>"); clock.mockReturnValue(frozen.mtimeMs + 2001);
+  expect(Buffer.from((await read()).members.find(member => member.path === "pages/hello/index.html")?.bytes ?? []).toString()).toContain("changed!!");
+  const reads = vi.spyOn(fs, "readFile"); clock.mockReturnValue(frozen.mtimeMs + 10000); await read();
+  expect(reads.mock.calls.map(([path]) => String(path))).not.toContain(path);
 });
 
 // Mutant: a Page asks for a whole-home member witness instead of its own Pod and every identity.

@@ -387,6 +387,7 @@ export async function discoverPackages(
   packageId?: string,
   observedDirectories?: (signature: string | undefined, previous?: PackageCensus) => ReadonlySet<string>,
   home?: HomePublication,
+  signaturesEqual = (a: string | undefined, b: string | undefined) => a === b,
 ): Promise<PackageListing> {
   const key = rootsKey(roots);
   let selected: DiscoveryScan | undefined;
@@ -404,7 +405,7 @@ export async function discoverPackages(
     let scan = discovery.get(key);
     const tooOld = scan && !scan.completed && Date.now() - scan.startedAt >= packageScanMaxAgeMs;
     // Validate joins and late answers too. Unknown metadata never authorizes reuse.
-    const changed = scan && readSignature && (signature === undefined || scan.signature !== signature);
+    const changed = scan && readSignature && (signature === undefined || !signaturesEqual(scan.signature, signature));
     if (scan && (tooOld || changed ||
       (scan.completed && (wait === "background" || Date.now() - scan.completedAt >= packageDiscoveryTimeoutMs)))) {
       // Superseding a read leaves its waiters running. Only age and shutdown cancel IO.
@@ -414,15 +415,15 @@ export async function discoverPackages(
     }
     const retryMiss = cached?.listing.unreadable.length && (wait === "background" ||
       (packageId !== undefined && !cached.listing.packages.some(pod => pod.id === packageId)));
-    if (!retryMiss && signature !== undefined && cached?.signature === signature &&
+    if (!retryMiss && signature !== undefined && cached && signaturesEqual(cached.signature, signature) &&
       !cached.listing.packages.some(pod => pod.discoveryFailure && (packageId === undefined || pod.id === packageId))) {
-      if ((!home || home.current()) && observations) completedCensuses.set(key, { ...cached,
+      if ((!home || home.current()) && observations) completedCensuses.set(key, { ...cached, signature,
         homeGeneration: home?.generation, observedAt: observedAt(cached.listing, cached, observations) });
       return Promise.resolve(cached.listing);
     }
     if (scan) {
       // Matching post-arrival witnesses can share work, including its publication authority.
-      if (home?.current()) { scan.home = home; scan.authorized = true; }
+      if (home?.current()) { scan.home = home; scan.authorized = true; scan.signature = signature; }
       selected = scan;
       if (observations) {
         scan.observations ??= new Map();
@@ -484,7 +485,7 @@ export async function discoverPackages(
       if (publishing && (!current.expired || current.home)) {
         // Unknown metadata cannot authorize byte reuse, but it must retain identity and retry
         // markers across repeated IO failures instead of turning the second retry into absence.
-        completedCensuses.set(key, { signature: current.expired ? undefined : signature,
+        completedCensuses.set(key, { signature: current.expired ? undefined : current.signature,
           homeGeneration: current.home?.generation, listing: published, observedAt: observedAt(published, latest, current.observations) });
         if (!current.expired) discovery.delete(key);
         current.home?.changed();
