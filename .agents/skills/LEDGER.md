@@ -88,6 +88,8 @@ Each line is the number a law or a rate in the tier file rests on. One run each 
 - 2026-11-14, `execute` holds how code runs and nothing about how a run is coordinated (kaitpw: "that separates responsibility better imo"). The wake's mechanics went to the driver charter, tip delivery and the definition of a cycle to the implementor charter, partner mechanics and the alarm stand-in to `delegate`, carried proof to `prove`, the check command to `reflect`. Herdr is retired, unused since 2026-10-16. The Revit custody rules stay in `execute` beside AGENTS.md's copy on the owner's word. Loaded files: 24,944 words on 2026-11-13, 21,564 after. Measured from 998 sessions (`.artifacts/runs/prune-20261114/C-execute.md`); no line was shown to cause a behavior, so cuts rest on zero use, on code that enforces the same thing, or on a second home.
 
 ## Tried & rejected
+
+- 2026-11-15, deleted the unused `slot.execute/keepalive.py` idle tick and its dedicated model entry: each run now has one wake schedule on the driver's thread. Historical session measurements remain in `retro.py`.
 - 2026-11-14, `execute`'s section "Admitting new caveats" killed: `reflect`'s ladder walk before any new law says the same for every skill.
 
 - 2026-11-14, "Prefer a gate to a disposition. A number, a forbidden action, a Glossary word, or a slot pointer moves the model" as `reflect`'s rule for a law (from 2026-08-25): killed by the owner's ruling of this date that rationale matters more than prescription. What survives is its last clause, cut a sentence that only describes good behavior.
@@ -134,7 +136,6 @@ Each line is the number a law or a rate in the tier file rests on. One run each 
 - The purger writes test code and reviews every merged tip, so no thread reads the purger's own merged changes with a mutant.
 - Charters use "Owed" for a partner's backlog line and for the ruling that closes a row. One word for two things remains.
 - `prove` sent a reader to the platform documentation search that `execute` named, and `execute` struck that line on 2026-11-14 as unused. `prove` now says to search the platform's own documentation and names no tool. Restore the pointer if a tool exists.
-- The tier file's keepalive rule for the smallest Claude model has no caller inside a run. Census `keepalive.py`'s users outside a run before the rule and the script go.
 - Delete the `CLAUDE.md` bridge when Claude Code's native `AGENTS.md` support is switched on, or the file loads twice.
 - Descriptions: one sentence of situation, three to five verbatim phrases marked as examples, and the not-for line, with routing weight moved to the failure table.
 - `execute` absorbs `docs/loop/RIG.md`'s mechanics (worktree naming, waiters), then `docs/loop/` deletes. `RIG.md` still names deleted scripts.

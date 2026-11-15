@@ -121,13 +121,6 @@ provider = "claude"
 meter = "weekly_all"
 rules = []
 
-[models.haiku]
-names = ["Haiku"]
-id = "claude-haiku-5-5"
-provider = "claude"
-meter = "weekly_all"
-rules = ["Runs the keepalive tick and nothing that needs judgment."]
-
 [models.astra]
 names = ["Astra"]
 id = "gpt-6-astra"
