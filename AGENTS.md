@@ -125,17 +125,6 @@ After any large change, clarify user intent and capture the durable knowledge. A
 
 Scratch and run output go under `.artifacts/`, which is gitignored. Anything the user must review, commit or hand forward is a doc, and `docs` names its home.
 
-## Critical Entry Points
-
-- `dotnet/Pe.App/AppCore.cs` - desktop Revit payload startup, host bridge bootstrap, ribbon/task initialization; the SDK generates the Revit application adapter.
-- `dotnet/Pe.App/ButtonRegistry.cs` - top-level desktop command and ribbon exposure.
-- `ts/apps/host/src/index.ts` - TS-built `Pe.Host.exe` HTTP/RPC/WebSocket host entrypoint.
-- `ts/apps/pea/` - TypeScript Pea CLI/runtime surface. `pea host` and `pea script` are the operator surface; `pea --prompt` runs one headless Pea turn for black-box product probes.
-- `dotnet/Pe.Shared.StorageRuntime/` - C# storage roots, module/document identity, runtime state/output/log files, APS settings lookup, and small settings metadata contracts.
-- `dotnet/Pe.Revit.Global/` - document-owned Revit helpers, APS contracts, and DA-safe collector seams that both shells can share.
-- `dotnet/Pe.Revit/Extensions/` - strong primitives such as `FamilyDocument`, value coercion helpers, formula helpers, and parameter lookup helpers.
-- `dotnet/Pe.Revit.FamilyFoundry/OperationProcessor.cs` - main Family Foundry execution orchestrator; intent and decisions in `docs/features/family/LEDGER.md`.
-
 ## Shared Language
 
 ### Runtime / iteration language
@@ -160,7 +149,6 @@ Scratch and run output go under `.artifacts/`, which is gitignored. Anything the
 | **document-owned**    | Behavior that can be derived from a specific `Document` without needing UI session state | Prefer `Document` extensions, as close to `Pe.Revit` as possible                                                       |
 | **document session**  | Open/active/UI-tab state for documents in the current Revit process                      | Keep this in `UIApplication` or session-aware helpers                                        |
 | **artifact**          | A durable machine-readable output produced by a command or DA workitem                   | Prefer this over vague `report` when the file is the actual output contract                  |
-| **inference endpoint** | A user-added provider of one harness: a base URL plus key stored in `providers.json` and passed to the harness child as env (ADR 0014, superseded by ADR 0015). Claude's speaks the Messages API, Codex's the Responses API. Pea sends no model call itself | Prefer "endpoint provider" for the record and "subscription provider" for the harness's own login; avoid naming Tailscale, Codex, or a cloud as a Pea feature |
 
 ## Routing
 
@@ -173,12 +161,3 @@ No external issue tracker. Durable knowledge lives in feature ledgers (`docs/fea
 ### Product surfaces
 
 `docs/design/SURFACE-PHILOSOPHY.md` holds what our UI surfaces are for and how they behave, `house` reads it, and a `protoui` verdict that changes it is captured there per `docs`. The open design decisions, rulings, gaps, and owed work for the design system live at `docs/features/design-system/LEDGER.md`. The web app's design-system route is the executable design authority.
-
-## Living Memory
-
-- Minimize API surface area. Favor type-safety, nullability correctness, generics, `nameof`, pattern matching, and small explicit contracts.
-- Prefer `Result<T>` / `Try...` patterns on public or user-facing flows instead of exceptions when failure is expected.
-- Use Serilog `Log.*` instead of `Console.WriteLine` or `Debug.WriteLine` in runtime code.
-- DA-safe collector paths must not depend on `UIApplication`, WPF, ribbon helpers, or interactive session services. Keep those in UI-specific packages and helpers.
-- Prefer `Document` / `FamilyDocument` as the public entrypoints for document-owned collect/capture/apply flows, even when the returned models still live in a feature package.
-- When validating DA collection performance, start narrow and bounded. Category filters are a verification tool, not just a product feature.

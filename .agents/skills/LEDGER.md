@@ -132,7 +132,6 @@ Each line is the number a law or a rate in the tier file rests on. One run each 
 - Charters use "Owed" for a partner's backlog line and for the ruling that closes a row. One word for two things remains.
 - `prove` sent a reader to the platform documentation search that `execute` named, and `execute` struck that line on 2026-11-14 as unused. `prove` now says to search the platform's own documentation and names no tool. Restore the pointer if a tool exists.
 - The tier file's keepalive rule for the smallest Claude model has no caller inside a run. Census `keepalive.py`'s users outside a run before the rule and the script go.
-- `AGENTS.md` is 2,905 words always-on against a 1,500 target. Candidates left: Critical Entry Points is a map, Shared Language holds one feature term (inference endpoint), and Living Memory is C# style that could live in the `dotnet` package files.
 - Delete the `CLAUDE.md` bridge when Claude Code's native `AGENTS.md` support is switched on, or the file loads twice.
 - Descriptions: one sentence of situation, three to five verbatim phrases marked as examples, and the not-for line, with routing weight moved to the failure table.
 - `execute` absorbs `docs/loop/RIG.md`'s mechanics (worktree naming, waiters), then `docs/loop/` deletes. `RIG.md` still names deleted scripts.
