@@ -75,6 +75,7 @@ import {
   HttpServerResponse,
 } from "effect/http";
 import { createHash } from "node:crypto";
+import { scriptSourceRevision } from "@pe/host-contracts/script-revision";
 import { unwatchFile, watchFile } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -987,7 +988,7 @@ export function createContributionContent(options: {
   const remember = (key: string, value: { sha256: string } & Record<string, unknown>) => {
     let versions = revisions.get(key);
     if (!versions) revisions.set(key, (versions = new Map()));
-    versions.set(value.sha256, value);
+    if (!versions.has(value.sha256)) versions.set(value.sha256, value);
     if (versions.size > 4) versions.delete(versions.keys().next().value!);
     latest.set(key, value);
   };
@@ -1124,7 +1125,7 @@ export function createContributionContent(options: {
           remember(c.key, {
             ...value,
             folder: pod.folder,
-            ...(c.kind === "script" ? { sourceBundle: frozen.sourceBundle } : {}),
+            ...(c.kind === "script" ? { sha256: scriptSourceRevision(pod.members), sourceBundle: frozen.sourceBundle } : {}),
           });
       }
     }
@@ -1200,7 +1201,7 @@ export function createContributionContent(options: {
         const member = pod.members.find(member => member.path === path);
         if (!member) return undefined;
         const value = memberValue(member.bytes, member.sha256);
-        remember(key, ref.kind === "script" ? { ...value, folder: pod.folder,
+        remember(key, ref.kind === "script" ? { ...value, folder: pod.folder, sha256: scriptSourceRevision(pod.members),
           sourceBundle: (await capturePackage(pod)).sourceBundle } :
           ref.kind === "page" ? { ...value, folder: pod.folder } : value);
       }

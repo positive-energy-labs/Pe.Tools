@@ -125,7 +125,7 @@ export const capabilityProjectionSchema = z.strictObject({
   pane: z.string().min(1).optional(),
 });
 export type CapabilityProjection = z.infer<typeof capabilityProjectionSchema>;
-/** The exact admitted entry bytes behind a catalog row, including directory entrypoints. */
+/** Exact admitted revision: scripts commit to the source bundle; other rows to their entry bytes. */
 export const contributionSourceSchema = z.strictObject({
   id: namespaceIdSchema,
   path: packageMemberPathSchema,

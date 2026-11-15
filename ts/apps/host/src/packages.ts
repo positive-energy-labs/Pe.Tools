@@ -13,6 +13,8 @@ import { dirname, join, resolve } from "node:path";
 import type { ScriptingExecute } from "@pe/host-contracts/generated";
 import type { MemberIssue } from "@pe/host-contracts/operation-types";
 import { productPathNames } from "@pe/host-contracts/contracts";
+import { isCompilerSource, isCompilerInput } from "@pe/host-contracts/script-revision";
+export { isCompilerSource, isCompilerInput } from "@pe/host-contracts/script-revision";
 import { contentHomes, contentRootsReady, ContentHomeUnavailable } from "./content-roots.ts";
 import { shippedPodUpdateRefusals } from "./shipped-pod-status.ts";
 import { podModelSchema, type PodModel } from "./pod-model.ts";
@@ -77,11 +79,6 @@ export type CapturedPackage = AdmittedPackage & {
   sourceBundle: ScriptingExecute.Req.ScriptPodSourceBundle;
   memberBundle: ScriptingExecute.Req.ScriptPodSourceBundle;
 };
-
-/** A script is any `.cs` or `.csx` member; native compiles the entrypoint beside the Pod's other `.cs` files. */
-export const isCompilerSource = (path: string) => /\.csx?$/i.test(path);
-export const isCompilerInput = (path: string) =>
-  path === "pod.json" || path === "PeScripts.csproj" || isCompilerSource(path);
 
 // One exclusion policy for authored input. Page state lives under the machine state root (homes
 // freeze shape 7), so a `.state` folder inside a pod is debris, never a portable member.
@@ -342,14 +339,14 @@ export function onePackage(
 export const readPackage = async (id: string, options: Pick<PackageDiscoveryOptions, "podsRoots"> = {}) =>
   onePackage(await listPackages({ ...options, packageId: id }), id);
 
-/** Freeze admitted bytes, or capture one indexed folder afresh. Member semantics stay native. */
+/** Freeze admitted bytes, or a fresh scoped census for a key. Member semantics stay native. */
 export async function capturePackage(
   packageOrId: AdmittedPackage | string,
   podsRoots?: PodsRoots,
 ): Promise<CapturedPackage> {
   const pod =
     typeof packageOrId === "string"
-      ? await captureIndexedPackage(packageOrId, podsRoots, readFolder,
+      ? await captureIndexedPackage(packageOrId, podsRoots,
         roots => listPackages({ podsRoots: roots, packageId: packageOrId }))
       : packageOrId;
   requirePackageAvailable(pod);

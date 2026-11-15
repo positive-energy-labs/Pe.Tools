@@ -254,10 +254,14 @@ test.each(["before", "after"])("a failed Pod keeps its marker when its capture e
       failedGate.resolve();
       expect((await failing).status).toBe(503);
     }
-    opened.mockRestore();
+    opened.mockImplementation(async (...args) => {
+      if (String(args[0]) === page("requested")) throw Object.assign(Error("still busy"), { code: "EBUSY" });
+      return original(...args);
+    });
     await expect(capturePackage("requested", pods)).rejects.toMatchObject({ code: "pod.discovery.exceeded" });
     await expect(freezeScript({ sourcePath: "Run.csx", sourceBundle: sealed.sourceBundle }))
       .rejects.toMatchObject({ status: 503, refusal: { code: "pod.discovery.exceeded" } });
+    opened.mockRestore();
     expect(await (await request()).text()).toContain("failing changed Page");
   } finally { failedGate.resolve(); peerGate.resolve(); }
 });

@@ -378,21 +378,17 @@ export async function discoverPackages(
 export async function captureIndexedPackage(
   id: string,
   roots: PodsRoots | undefined,
-  read: (directory: string, folder: string, signal: AbortSignal) => Promise<AdmittedPackage>,
-  discoverMissing?: (roots: PodsRoots) => Promise<unknown>,
+  discover: (roots: PodsRoots) => Promise<PackageListing>,
 ): Promise<AdmittedPackage> {
   // Do not resolve homes here: synchronous Drive probing runs outside any async deadline.
   const selectedRoots = roots ?? productRoots;
-  const census = selectedRoots && censuses.get(rootsKey(selectedRoots));
-  if (!census)
+  if (!selectedRoots || !censuses.has(rootsKey(selectedRoots)))
     throw Error(
       `Pod '${id}' cannot be captured before Pod discovery finishes. Refresh the Pod list and try again.`,
     );
-  let found = census.filter((pod) => pod.id === id);
-  if (!found.length && discoverMissing && selectedRoots) {
-    await discoverMissing(selectedRoots);
-    found = censuses.get(rootsKey(selectedRoots))?.filter(pod => pod.id === id) ?? [];
-  }
+  // Known keys need the same fresh identity check as misses. Freeze that census's
+  // selected bytes instead of recapturing an indexed folder after the check.
+  const found = (await discover(selectedRoots)).packages.filter(pod => pod.id === id);
   if (found.length > 1)
     throw Error(
       `Pod id '${id}' is claimed by ${found.map((pod) => pod.directory).join(" and ")}: none is used until the id is unique.`,
@@ -403,14 +399,5 @@ export async function captureIndexedPackage(
       `No discovered Pod has id '${id}'. Refresh the Pod list after adding or moving a Pod.`,
     );
   requirePackageAvailable(selected);
-  const pod = await readPackageWork(selected.directory, undefined,
-    signal => read(selected.directory, selected.folder, signal)).catch((error: unknown) => {
-      if (incompletePackageRead(error)) throw new PackageDiscoveryExceeded(selected.directory, message(error));
-      throw error;
-    });
-  if (pod.id !== id)
-    throw Error(
-      `Pod identity changed in '${selected.directory}'. Refresh the Pod list and try again.`,
-    );
-  return pod;
+  return selected;
 }
