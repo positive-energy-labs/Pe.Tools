@@ -107,7 +107,7 @@ test("a member edited between two gates still refuses the run as stale: no read 
   });
 });
 
-test("a pass freezes one scoped Pod snapshot; the next pass and independent probes see edits", async () => {
+test.each(Array.from({ length: 20 }, (_, index) => index))("a pass freezes one scoped Pod snapshot; the next pass and independent probes see edits %s", async () => {
   const members = await pod("pdrop", 5);
   const c0 = members.find((member) => member.probe.path === "checks/c0.csx")!;
   await listPackages({ podsRoots: root });

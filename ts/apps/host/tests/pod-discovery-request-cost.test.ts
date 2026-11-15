@@ -49,12 +49,36 @@ async function fixture() {
     await fs.mkdir(join(page(id), ".."), { recursive: true });
     await fs.writeFile(join(pods, id, "pod.json"), JSON.stringify({ id }));
     await fs.writeFile(page(id), `<title>${id}</title>`);
+    // Stat-only reuse is tested outside the recent-write ambiguity window.
+    const old = new Date(Date.now() - 5_000);
+    await fs.utimes(join(pods, id, "pod.json"), old, old);
+    await fs.utimes(page(id), old, old);
   }
   const handler = createPagesHandler([], pods, undefined, undefined, stateFixture(join(root, "state")));
   const request = (id = "requested") => handler(new Request(`http://host/pages/${id}--hello/`));
   expect((await request()).status).toBe(200);
   return { root, pods, page, request };
 }
+
+test("a recent equal-metadata overwrite is re-hashed before witness reuse", async () => {
+  const { pods, page } = await fixture();
+  const path = page("requested");
+  await fs.writeFile(path, "<title>requested</title>");
+  await readPackage("requested", { podsRoots: pods });
+  const frozen = await fs.lstat(path), original = fs.lstat;
+  vi.spyOn(fs, "lstat").mockImplementation(async (...args) => String(args[0]) === path ? frozen : original(...args));
+  await fs.writeFile(path, "<title>changed!!</title>");
+  const pod = await readPackage("requested", { podsRoots: pods });
+  expect(Buffer.from(pod.members.find(member => member.path === "pages/hello/index.html")?.bytes ?? []).toString()).toContain("changed!!");
+});
+
+test("an older unchanged member reuses its witness without reading bytes", async () => {
+  const { pods } = await fixture();
+  const opened = vi.spyOn(fs, "open"), read = vi.spyOn(fs, "readFile");
+  expect((await readPackage("requested", { podsRoots: pods })).id).toBe("requested");
+  for (const calls of [opened.mock.calls, read.mock.calls])
+    expect(calls.map(([path]) => String(path)).filter(path => path.startsWith(pods))).toEqual([]);
+});
 
 // Mutant: a Page asks for a whole-home member witness instead of its own Pod and every identity.
 test("a Page validates its own members and every manifest, never unrelated members", async () => {

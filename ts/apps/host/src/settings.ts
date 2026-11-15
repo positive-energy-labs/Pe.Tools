@@ -388,8 +388,8 @@ export const readMemberPod = Effect.fnUntraced(function* (
         ? // ponytail: no freshness floor on this fallback. The edits a gate exists to catch cause
           // these misses, and discovery already refuses to reuse or join a read whose disk signature
           // differs from one taken after the ask arrives (`choose` in `discoverPackages`,
-          // pod-capture.ts:66). Ceiling: an edit that keeps a member's size and timestamps is not
-          // seen here; hash bytes in the signature if that edit must be caught.
+          // pod-capture.ts). Both paths share podsDiskSignature's recent-member byte witness;
+          // only older files deliberately rewritten with identical metadata escape it.
           capturePackage(pod, ctx.podsRoot).catch(() => readPackage(pod, { podsRoots: podsRoots(ctx) }))
         : readPackage(pod, { podsRoots: podsRoots(ctx) }),
     catch: (error) =>

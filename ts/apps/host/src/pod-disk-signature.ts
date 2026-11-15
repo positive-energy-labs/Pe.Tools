@@ -1,9 +1,13 @@
-import { lstat, readdir } from "node:fs/promises";
+import { lstat, readdir, readFile } from "node:fs/promises";
+import type { Stats } from "node:fs";
+import { createHash } from "node:crypto";
+import { scriptPodMemberBounds } from "@pe/host-contracts/generated";
 import { join, resolve, sep } from "node:path";
 import { logPackageDiscovery } from "./pod-discovery-log.ts";
 import { readPackageWork, type PackageCensus } from "./pod-capture.ts";
 
 const metadataScanSlowMs = 500;
+const witnessTickMs = 2_000;
 
 /** Retained rows are observations of identity only. Resolve them against the census at selection,
  * not the snapshot at arrival, so simultaneous requests cannot roll back another Pod's witness. */
@@ -87,19 +91,27 @@ export async function podsDiskSignature(
   const admitted = new Map(previous?.listing.packages.map(pod => [resolve(pod.directory), pod]));
   const targetKnown = previous?.listing.packages.some(pod => pod.id === scope?.packageId);
   const before = previous?.signature ? packageDiskSignatures(previous.signature, roots) : new Map<string, string>();
-  const row = (absolute: string, info: Awaited<ReturnType<typeof lstat>>) =>
-    [absolute, info.mode, info.size, info.mtimeMs, info.ctimeMs, info.ino];
-  const walk = async (absolute: string, member: string, entries: unknown[], signal: AbortSignal): Promise<void> => {
+  const row = async (absolute: string, info: Stats, signal?: AbortSignal, prior?: unknown[]) => {
+    const value = [absolute, info.mode, info.size, info.mtimeMs, info.ctimeMs, info.ino];
+    // Recent writes can share a filesystem tick. Re-hash them before reuse; older
+    // members keep their stat witness and any already-observed digest without IO.
+    // ponytail: an older file rewritten with identical metadata (a deliberate mtime reset)
+    // remains outside this witness; ordinary recent edits never depend on timestamp luck.
+    if (info.isFile() && info.size <= scriptPodMemberBounds.maxFileBytes && Date.now() - info.mtimeMs <= witnessTickMs)
+      return [...value, createHash("sha256").update(await readFile(absolute, { signal })).digest("hex")];
+    return prior?.length === 7 && value.every((part, index) => part === prior[index]) ? [...value, prior[6]] : value;
+  };
+  const walk = async (absolute: string, member: string, entries: unknown[], signal: AbortSignal, prior: ReadonlyMap<unknown, unknown[]>): Promise<void> => {
     signal.throwIfAborted();
     const info = await lstat(absolute);
     signal.throwIfAborted();
-    entries.push(row(absolute, info));
+    entries.push(await row(absolute, info, signal, prior.get(absolute)));
     if (!info.isDirectory() || info.isSymbolicLink()) return;
     for (const name of (await readdir(absolute)).sort()) {
       signal.throwIfAborted();
       const path = member ? `${member}/${name}` : name;
       try { if (!include(path)) continue; } catch {}
-      await walk(join(absolute, name), path, entries, signal);
+      await walk(join(absolute, name), path, entries, signal, prior);
     }
   };
   try {
@@ -121,7 +133,7 @@ export async function podsDiskSignature(
         // Keep choose's late-publication path; per-Pod timers start only after this root IO.
         const info = await lstat(root);
         signal?.throwIfAborted();
-        entries.push(row(root, info));
+        entries.push(await row(root, info, signal));
         if (info.isDirectory() && !info.isSymbolicLink()) {
           const names = await readdir(root);
           const children = await Promise.all(names.sort().map(async name => {
@@ -131,20 +143,20 @@ export async function podsDiskSignature(
               return await readPackageWork(directory, signal, async signal => {
                 const entries: unknown[] = [];
                 const prior = before.get(resolve(directory));
+                const oldRows: unknown[][] = prior ? JSON.parse(prior) : [];
                 // Every manifest is checked after arrival, even when only another Pod's
                 // members are needed. An in-place id edit must still revoke unique claims.
                 const manifest = join(directory, "pod.json");
                 const info = await lstat(manifest);
                 signal.throwIfAborted();
-                manifestRow = row(manifest, info);
-                const oldRows: unknown[][] = prior ? JSON.parse(prior) : [];
                 const oldManifest = oldRows.find(row => row[0] === manifest);
+                manifestRow = await row(manifest, info, signal, oldManifest);
                 const pod = admitted.get(directory);
                 // A miss retries uncaptured candidates: their old IO refusal is no evidence
                 // that the requested id is absent. Known neighbours need not retry them.
                 if (scope?.packageId !== undefined && prior && (pod ? pod.id !== scope.packageId : targetKnown) && JSON.stringify(oldManifest) === JSON.stringify(manifestRow))
                   return [[directory, "retained"]];
-                await walk(directory, "", entries, signal);
+                await walk(directory, "", entries, signal, new Map(oldRows.map(row => [row[0], row])));
                 return entries;
               });
             } catch (error) {
