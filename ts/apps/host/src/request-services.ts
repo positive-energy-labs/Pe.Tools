@@ -88,8 +88,10 @@ export const readSchemas = Effect.fn("ReadAdmission.schemas")(function* (key: st
           Schema.makeFilter(
             (value) => {
               if (validate(value)) return true;
-              const issue = validate.errors![0]!;
-              return `Value violates the generated native contract at ${issue.instancePath || "/"} (${issue.keyword}): ${issue.message}`;
+              const issue = validate.errors?.[0];
+              return issue
+                ? `Value violates the generated native contract at ${issue.instancePath || "/"} (${issue.keyword}): ${issue.message}`
+                : "Value violates the generated native contract";
             },
           ),
         );

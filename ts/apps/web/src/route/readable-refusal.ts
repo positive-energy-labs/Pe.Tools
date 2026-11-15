@@ -14,8 +14,6 @@ export function readableRefusal(error: unknown, fallback: string): string {
 
 export function podDiagnostic(issue: { code: string; message: string }): string {
   switch (issue.code) {
-    case "InvalidRoute": return "Route unavailable: this Pod does not declare a current typed route artifact. Import the current example or rebuild this Pod.";
-    case "RouteFingerprintMismatch": return "Route unavailable: its artifact bytes do not match the declared fingerprint. Rebuild this Pod before trusting it.";
     case "InvalidEntrypoint":
     case "MissingEntrypoint": return "Script unavailable: its declared entrypoint has no admitted source. Repair this Pod's script declaration.";
     case "ShippedExampleUpdateKept": return readableRefusal(issue.message, "Example update kept: its provenance could not be verified. Your Pod was preserved.");
