@@ -15,6 +15,7 @@ import {
   capturePackage,
   isPackageMember,
   listPackages,
+  readPackageDirectory,
   onePackage,
   productPodsRoots,
   type PackageListing,
@@ -357,9 +358,14 @@ export async function installArchive(
         bytes,
       );
     }
-    const admitted = (await listPackages({ podsRoots: staging })).packages[0];
-    if (!admitted || admitted.id !== id)
-      throw new TransferRefused(`Pod archive '${locator}' is not an admissible pod.`);
+    // Owned local staging is installation work, not a latency-bounded home discovery request.
+    const admitted = await readPackageDirectory(join(staging, folder), folder, options.signal).catch(error => {
+      options.signal?.throwIfAborted();
+      throw new TransferRefused(`Pod archive '${locator}' is not an admissible pod: ${message(error)}.`);
+    });
+    if (admitted.id !== id || admitted.members.length !== entries.size ||
+      admitted.members.some(member => !entries.has(member.path) || member.sha256 !== sha256(entries.get(member.path)!)))
+      throw new TransferRefused(`Pod archive '${locator}' changed during staging capture.`);
     // Manifest last: readers never admit a partially published pod. Home writes use CAS,
     // including first imports, rather than renaming machine state onto a synced drive.
     for (const [path, bytes] of [...entries].sort(([a], [b]) => Number(a === "pod.json") - Number(b === "pod.json"))) {
@@ -388,7 +394,7 @@ export async function installArchive(
     const store = options.captures!;
     for (const [path, bytes] of entries)
       if (CAPTURE_MEMBER.exec(path)?.[2] === "png") await store.adopt(bytes);
-    await activateImportedPackage(id, podsRoot);
+    await activateImportedPackage({ ...admitted, directory }, podsRoot);
     options.signal?.throwIfAborted();
     writeState(
       importRecordFile(id, options),

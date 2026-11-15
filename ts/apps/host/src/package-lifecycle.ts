@@ -50,12 +50,17 @@ export async function reconcilePackageChanges() {
 }
 
 /** Import also records the person's explicit on choice. Ordinary writes preserve that choice. */
-export async function activateImportedPackage(id: string, podsRoot: string) {
+export async function activateImportedPackage(pod: string | AdmittedPackage, podsRoot: string) {
   const lifecycle = serving;
   if (podsRoot !== productPodsRootPath() || !lifecycle) return;
   await lifecycle.ready;
-  await lifecycle.refresh();
-  await lifecycle.setEnabled(`pod:${id}`, true);
+  if (typeof pod !== "string") {
+    await lifecycle.activate(pod);
+    if (!lifecycle.active(pod.id)) throw Error(`Pod '${pod.id}' could not be activated`);
+    return;
+  }
+  await lifecycle.admit(pod);
+  await lifecycle.setEnabled(`pod:${pod}`, true);
 }
 /**
  * A person's choices, so `keep` (MAP decision log 92bdf2df names `plugins.json`). A file that does
@@ -187,13 +192,17 @@ export function createPackageLifecycle(
     initialListing = await synchronize();
     initialized = true;
   }
-  async function synchronize(packageId?: string) {
+  async function synchronize(packageId?: string, imported?: AdmittedPackage) {
     if (closed) return initialListing;
     if (packageId === undefined) refreshedAt = Date.now();
     // Roots are refreshed by the shared async owner, never by a request or scan.
     const roots = options.packages ? [] : productPodsRoots();
     // Lifecycle owns publication after a slow scan; Page requests bound their own wait for it.
-    const listing = await (options.packages ? options.packages({ packageId }) : listPackages({ podsRoots: roots, wait: "background", packageId }));
+    // Import already admitted these exact bytes before CAS publication. A second bounded capture
+    // can expire during startup and turn a successful write into an unknown plugin and rollback.
+    const listing = imported
+      ? { ...initialListing, packages: [...initialListing.packages.filter(p => p.id !== imported.id), imported] }
+      : await (options.packages ? options.packages({ packageId }) : listPackages({ podsRoots: roots, wait: "background", packageId }));
     if (closed) return initialListing;
     const current = new Set(listing.packages.map((p) => `pod:${p.id}`));
     for (const id of signatures.keys())
@@ -234,6 +243,9 @@ export function createPackageLifecycle(
       finally { if (installations.get(id) === installation) installations.delete(id); }
     }
     if (closed) return initialListing;
+    if (imported) {
+      await runtime.setEnabled(`pod:${imported.id}`, true);
+    }
     initialListing = listing;
     return listing;
   }
@@ -264,14 +276,14 @@ export function createPackageLifecycle(
   // and all manifest identities independently; human/agent writes still await explicit refresh.
   const refreshTimer = setInterval(() => { if (!closed) void backgroundRefresh(); }, contentRootsRefreshMs);
   refreshTimer.unref();
-  function reconcile(initial = false, packageId?: string) {
+  function reconcile(initial = false, packageId?: string, imported?: AdmittedPackage) {
     // A named admission, like an action, must follow a read begun before its arrival.
     // Otherwise that older lifecycle publication could remove the newly active Pod.
     const next = (inFlight ?? settled)
       .catch(() => ready)
       .then(() => {
         if (closed || initial) return initialListing;
-        return synchronize(packageId);
+        return synchronize(packageId, imported);
       });
     inFlight = next;
     void next.finally(() => {
@@ -297,6 +309,7 @@ export function createPackageLifecycle(
     requestRefresh,
     installation: (id: string) => installations.get(`pod:${id}`),
     admit: (id: string) => reconcile(false, id),
+    activate: (pod: AdmittedPackage) => reconcile(false, pod.id, pod),
     refresh: reconcile,
     listing: () => initialListing,
     inventory: runtime.inventory,

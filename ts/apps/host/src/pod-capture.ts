@@ -186,6 +186,7 @@ export async function readPackageWork<T>(
     stop.signal.addEventListener("abort", rejectAborted, { once: true });
     if (stop.signal.aborted) rejectAborted();
   });
+  // TODO: Request deadlines also charge event-loop starvation to Pod IO; distinguish these causes.
   const timer = setTimeout(() => stop.abort(new PackageReadIncomplete(
     `Pod work exceeded ${packagePodWorkTimeoutMs} ms reading '${directory}'`,
   )), packagePodWorkTimeoutMs);
