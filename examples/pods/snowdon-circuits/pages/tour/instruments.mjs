@@ -20,6 +20,7 @@ function VoltageDrop() {
   const [error, setError] = useState('');
   const [bound, setBound] = useState(null);
   const [filter, setFilter] = useState('');
+  const [panels, setPanels] = useState('');
   const [inspection, setInspection] = useState(null);
   const [picture, setPicture] = useState(null);
   const rows = state.reading?.rows || [];
@@ -41,13 +42,15 @@ function VoltageDrop() {
     return target;
   };
   const refresh = async () => {
+    const panelNames = [...new Set(panels.split(',').map(name => name.trim()).filter(Boolean))];
+    if (!panelNames.length) throw new Error('Enter at least one panel name before reading circuits.');
     const target = await api.target(); setBound(target);
-    const catalog = await api.read('revit.catalog.electrical-circuits', {});
+    const catalog = await api.read('revit.catalog.electrical-circuits.roster', { filter: { panelNames } });
     const values = await api.do('script:@snowdon-circuits/src/Census.cs', { permissionMode: 'ReadOnly', timeoutSeconds: 60 });
     if (!values || values.error) throw new Error(values?.error || 'Circuit census returned no data.');
     const current = await api.target();
     if (current.session !== target.session || current.openId !== target.openId) throw new Error('The binding changed during the reading. Read circuits again.');
-    await fire({ type: 'reading', reading: { v: SCHEMA_VERSION, source: 'revit.catalog.electrical-circuits + script:@snowdon-circuits/src/Census.cs', at: Date.now(), document: target, copyOnly: values.copyOnly, total: values.total, rows: adaptCircuits(catalog, values), issues: catalog.issues || [] } });
+    await fire({ type: 'reading', reading: { v: SCHEMA_VERSION, panelNames, source: 'revit.catalog.electrical-circuits.roster + script:@snowdon-circuits/src/Census.cs', at: Date.now(), document: target, copyOnly: values.copyOnly, total: values.total, rows: adaptCircuits(catalog, values), issues: catalog.issues || [] } });
   };
   const assertCopy = async () => {
     const target = await assertTarget();
@@ -132,7 +135,7 @@ function VoltageDrop() {
   const trace = result.status === 'unavailable' ? result.reason : 'Copper K method · 75 °C, PF = 1\nΔV = ' + result.multiplier.toFixed(6) + ' × 12.9 × ' + input.amps + ' × ' + input.length + ' / ' + result.area + '\n   = ' + result.drop.toFixed(6) + ' V\nDrop = ' + result.percent.toFixed(6) + '%\n\n' + (selected ? 'Circuit element ' + selected.id + ' · ' + selected.panel + ' / ' + selected.number + '\nOverrides: ' + JSON.stringify(overrides) : 'Manually entered example; no Revit measurement') + '\n\nPoles 1/2 use the single-phase two-wire model.\nThree poles assume balanced three phase.\nOne-way path length. No reactance, ampacity, derating or code check.';
   return h(React.Fragment, null, h('style', null, worksheetCss), h('main', { className: 'snowdon-circuits' },
     h('header', { className: 'mast' }, h('span', { className: 'eyebrow' }, 'PE / Electrical'), h('div', { className: 'actions' }, h('span', { className: 'muted' }, offline ? 'Snapshot · ' + (api.exported?.document?.title || state.reading?.document?.title || 'Manual worksheet') : bound?.title || 'Choose a document'), h(Button, { label: 'Change theme', onClick: () => set('theme', state.theme === 'dark' ? 'light' : 'dark') }, state.theme === 'dark' ? 'Light' : 'Dark'))),
-    h('div', { className: 'heading' }, h('div', null, h('h1', null, 'Voltage drop'), h('p', { className: 'muted' }, 'Read real electrical circuits. Compare conductors against an explicit design target.')), h('div', { className: 'actions' }, !offline ? h(Button, { label: 'Read circuits', kind: 'framed', disabled: !!busy, onClick: () => act('Reading circuits', refresh) }, 'Read circuits') : null, !offline ? h(Button, { label: 'Export snapshot', kind: 'framed', disabled: !!busy, onClick: exportPage }, 'Export snapshot') : null)),
+    h('div', { className: 'heading' }, h('div', null, h('h1', null, 'Voltage drop'), h('p', { className: 'muted' }, 'Read real electrical circuits. Compare conductors against an explicit design target.')), h('div', { className: 'actions' }, !offline ? h('label', null, 'Panel names', h(Input, { 'aria-label': 'Panel names', placeholder: 'Panel names, separated by commas', value: panels, onChange: event => setPanels(event.target.value) })) : null, !offline ? h(Button, { label: 'Read circuits', kind: 'framed', disabled: !!busy, onClick: () => act('Reading circuits', refresh) }, 'Read circuits') : null, !offline ? h(Button, { label: 'Export snapshot', kind: 'framed', disabled: !!busy, onClick: exportPage }, 'Export snapshot') : null)),
     error ? h('p', { role: 'alert', className: 'error' }, error) : null,
     busy ? h('p', { role: 'status', className: 'muted' }, busy) : null,
     h('section', { 'aria-label': 'Electrical circuits' }, h('div', { className: 'section-head' }, h('h2', null, 'Electrical circuits'), h('span', { className: 'muted' }, (state.reading?.document?.title || 'No document reading') + ' · ' + when(state.reading?.at))),

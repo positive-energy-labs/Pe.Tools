@@ -4090,212 +4090,6 @@ export namespace RevitCatalogConceptEvidence {
   }
 }
 
-/** Read electrical circuit facts, connected load identity, panel names, circuit numbers, optional nearby proxy context, and compact filter diagnostics from the active Revit document. */
-export namespace RevitCatalogElectricalCircuits {
-  export namespace Req {
-    export type ParameterIdentityKind = "SharedGuid" | "BuiltInParameter" | "ParameterElement" | "NameFallback";
-
-    export interface Request {
-      filter?: null | ElectricalCircuitFilter;
-      options?: null | ElectricalCircuitsCatalogOptions;
-    }
-    export interface ElectricalCircuitFilter {
-      panelNames?: string[];
-      circuitNumbers?: string[];
-      loadNames?: string[];
-    }
-    export interface ElectricalCircuitsCatalogOptions {
-      parameterQuery?: null | RequestedParameterQuery;
-      includeNearbyProxyContext?: boolean;
-      nearbyRadiusFeet?: number;
-      maxNearbyCandidatesPerElement?: number;
-      maxNearbyCandidatesPerCircuit?: number;
-    }
-    export interface RequestedParameterQuery {
-      parameters?: ParameterReference[];
-    }
-    export interface ParameterReference {
-      identity?: null | ParameterIdentity;
-      name?: null | string;
-      sharedGuid?: null | string;
-    }
-    export interface ParameterIdentity {
-      key: string;
-      kind: ParameterIdentityKind;
-      name: string;
-      builtInParameterId?: number | null;
-      sharedGuid?: null | string;
-      parameterElementId?: number | null;
-    }
-  }
-  export namespace Res {
-    export type ElectricalInsightRole =
-      | "Panel"
-      | "DownstreamPanel"
-      | "LoadFamilyInstance"
-      | "ProxyFixture"
-      | "InlineElectricalEquipment"
-      | "Circuit"
-      | "Wire"
-      | "LoadClassification"
-      | "Element";
-    export type ElementIdentitySource = "None" | "RequestedParameter" | "Mark";
-    export type ParameterIdentityKind = "SharedGuid" | "BuiltInParameter" | "ParameterElement" | "NameFallback";
-    export type RequestedParameterStorageType = "None" | "String" | "Integer" | "Double" | "ElementId";
-    export type RequestedParameterValueSource = "None" | "Instance" | "Type";
-    export type ElectricalNearbyProxyCandidateMatchReason =
-      | "NearbyIdentityCandidate"
-      | "RequestedParameterIdentityMatch"
-      | "MarkIdentityMatch";
-    export type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
-
-    export interface Response {
-      entries: ElectricalCircuitCatalogEntry[];
-      issues: RevitDataIssue[];
-      filterReport?: null | ElectricalCatalogFilterReport;
-    }
-    export interface ElectricalCircuitCatalogEntry {
-      circuitId: number;
-      circuitUniqueId: string;
-      circuitNumber: string;
-      loadName?: null | string;
-      panelId?: number | null;
-      panelUniqueId?: null | string;
-      panelName?: null | string;
-      slotIndex?: null | string;
-      ways?: null | string;
-      polesNumber: number;
-      voltage?: null | string;
-      apparentLoad?: null | string;
-      apparentCurrent?: null | string;
-      trueLoad?: null | string;
-      trueCurrent?: null | string;
-      rating?: null | string;
-      frame?: null | string;
-      ratingOverride: boolean;
-      ratingOverrideValueDisplay?: null | string;
-      wireSize?: null | string;
-      wireTypeName?: null | string;
-      isEmpty: boolean;
-      isMultipleNetwork: boolean;
-      hasCustomCircuitPath: boolean;
-      hasPathOffset: boolean;
-      hasProxyLikeConnectedElements: boolean;
-      proxyLikeConnectedElementCount: number;
-      proxyInferenceRecommended: boolean;
-      primaryConnectedRole?: null | ElectricalInsightRole;
-      connectedRoles: ElectricalInsightRole[];
-      connectedElements: ElectricalCircuitConnectedElementEntry[];
-      wires: ElectricalCircuitWireEntry[];
-      nearbyProxyCandidates?: ElectricalNearbyProxyCandidateEntry[] | null;
-    }
-    export interface ElectricalCircuitConnectedElementEntry {
-      elementId: number;
-      elementUniqueId: string;
-      className: string;
-      categoryName?: null | string;
-      name: string;
-      familyName?: null | string;
-      typeName?: null | string;
-      mark?: null | string;
-      effectiveIdentity?: null | string;
-      effectiveIdentitySource: ElementIdentitySource;
-      role: ElectricalInsightRole;
-      hasElectricalConnector: boolean;
-      electricalSystemCount: number;
-      requestedParameters?: RequestedElementParameterValue[] | null;
-    }
-    /**
-     * A requested parameter read plus its write surface (all write-surface fields null when the
-     * parameter was not found):
-     * ParameterId — raw parameter handle (Parameter.Id) usable as the write target for
-     * parameter-apply operations; type-ness of the resolved value is already carried by Source
-     * (Instance vs Type).
-     * RawValue — invariant raw value: String as-is, Integer invariant, Double G17 in internal
-     * units, ElementId as long.
-     * IsReadOnly — from Parameter.IsReadOnly ONLY; deliberately not derived from
-     * Parameter.UserModifiable, which reports false for writable built-ins (Mark, Type Comments)
-     * whose Set() succeeds — proven in ScheduleCellBindingProofTests.
-     *
-     */
-    export interface RequestedElementParameterValue {
-      definition: ParameterDefinitionDescriptor;
-      found: boolean;
-      isBlank: boolean;
-      value?: null | string;
-      displayValue?: null | string;
-      storageType: RequestedParameterStorageType;
-      source: RequestedParameterValueSource;
-      parameterId?: number | null;
-      rawValue?: null | string;
-      isReadOnly?: boolean | null;
-      name: string;
-      identity: ParameterIdentity;
-    }
-    export interface ParameterDefinitionDescriptor {
-      identity: ParameterIdentity;
-      isInstance?: boolean | null;
-      dataTypeId?: null | string;
-      dataTypeLabel?: null | string;
-      groupTypeId?: null | string;
-      groupTypeLabel?: null | string;
-      visible?: boolean | null;
-      userModifiable?: boolean | null;
-      description?: null | string;
-    }
-    export interface ParameterIdentity {
-      key: string;
-      kind: ParameterIdentityKind;
-      name: string;
-      builtInParameterId?: number | null;
-      sharedGuid?: null | string;
-      parameterElementId?: number | null;
-    }
-    export interface ElectricalCircuitWireEntry {
-      wireId: number;
-      wireUniqueId: string;
-      wireTypeName?: null | string;
-      wiringType: string;
-      hotConductorCount: number;
-      neutralConductorCount: number;
-      groundConductorCount: number;
-    }
-    export interface ElectricalNearbyProxyCandidateEntry {
-      elementId: number;
-      elementUniqueId: string;
-      className: string;
-      categoryName?: null | string;
-      name: string;
-      familyName?: null | string;
-      typeName?: null | string;
-      mark?: null | string;
-      effectiveIdentity?: null | string;
-      effectiveIdentitySource: ElementIdentitySource;
-      role: ElectricalInsightRole;
-      distanceFeet: number;
-      matchReason: ElectricalNearbyProxyCandidateMatchReason;
-      requestedParameters?: RequestedElementParameterValue[] | null;
-    }
-    export interface RevitDataIssue {
-      code: string;
-      severity: RevitDataIssueSeverity;
-      message: string;
-      familyName?: null | string;
-      typeName?: null | string;
-      parameterName?: null | string;
-    }
-    export interface ElectricalCatalogFilterReport {
-      appliedPanelNames: string[];
-      appliedCircuitNumbers: string[];
-      appliedLoadNames: string[];
-      appliedMarks: string[];
-      ignoredBlankFilterValues: string[];
-      candidateCountBeforeFilter: number;
-      matchedCount: number;
-    }
-  }
-}
-
 /** Read circuit metadata and connected load identities without nearby geometry. */
 export namespace RevitCatalogElectricalCircuitsRoster {
   export namespace Req {
@@ -12245,7 +12039,6 @@ export interface HostOps {
   "revit.apply.parameter-values": { request: RevitApplyParameterValues.Req.Request; response: RevitApplyParameterValues.Res.Response };
   "revit.apply.parameters-service-cache.refresh": { request: RevitApplyParametersServiceCacheRefresh.Req.Request; response: RevitApplyParametersServiceCacheRefresh.Res.Response };
   "revit.catalog.concept-evidence": { request: RevitCatalogConceptEvidence.Req.Request; response: RevitCatalogConceptEvidence.Res.Response };
-  "revit.catalog.electrical-circuits": { request: RevitCatalogElectricalCircuits.Req.Request; response: RevitCatalogElectricalCircuits.Res.Response };
   "revit.catalog.electrical-circuits.roster": { request: RevitCatalogElectricalCircuitsRoster.Req.Request; response: RevitCatalogElectricalCircuitsRoster.Res.Response };
   "revit.catalog.electrical-load-classifications": { request: RevitCatalogElectricalLoadClassifications.Req.Request; response: RevitCatalogElectricalLoadClassifications.Res.Response };
   "revit.catalog.electrical-panels": { request: RevitCatalogElectricalPanels.Req.Request; response: RevitCatalogElectricalPanels.Res.Response };
@@ -12351,7 +12144,6 @@ export const hostOpKeys = [
   "revit.apply.parameter-values",
   "revit.apply.parameters-service-cache.refresh",
   "revit.catalog.concept-evidence",
-  "revit.catalog.electrical-circuits",
   "revit.catalog.electrical-circuits.roster",
   "revit.catalog.electrical-load-classifications",
   "revit.catalog.electrical-panels",
@@ -12457,7 +12249,6 @@ export const hostOpSafety = {
   "revit.apply.parameter-values": {"costTier":"Mutation","subject":"Elements","touches":"Metadata","effect":"ModelWrite","cardinality":"One","internal":true},
   "revit.apply.parameters-service-cache.refresh": {"costTier":"Mutation","subject":"None","touches":"Metadata","effect":"SessionWrite","cardinality":"One","internal":false},
   "revit.catalog.concept-evidence": {"costTier":"Cheap","subject":"Document","touches":"Metadata","effect":"Read","cardinality":"One","internal":false},
-  "revit.catalog.electrical-circuits": {"costTier":"Cheap","subject":"Document","touches":"Geometry","effect":"Read","cardinality":"One","internal":false},
   "revit.catalog.electrical-circuits.roster": {"costTier":"Cheap","subject":"Document","touches":"Topology","effect":"Read","cardinality":"One","internal":false},
   "revit.catalog.electrical-load-classifications": {"costTier":"Cheap","subject":"Document","touches":"Metadata","effect":"Read","cardinality":"One","internal":false},
   "revit.catalog.electrical-panels": {"costTier":"Cheap","subject":"Document","touches":"Metadata","effect":"Read","cardinality":"One","internal":false},

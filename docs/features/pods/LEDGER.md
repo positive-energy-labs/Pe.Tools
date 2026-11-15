@@ -67,6 +67,8 @@ Rewritten 2026-09-16 after the pod/product boundary grill. Git holds the earlier
 
 - 2026-10-24: Actual basement1444670 Project Browser opening on owned Chadds copy returned input in630ms, showed correct title/Ready while viewport blank, and first drawn observation bounded~11?28s. Use visual/API availability sensors separately; title/Ready and ActiveView setter do not certify drawn completion. Long-idle first-touch and CPU99% before trigger limit attribution. Evidence `.artifacts/accept/document-profiler-gui-levels-20261024-resume-ahk-off/REPORT.md`.
 
+- 2026-11-14, W51: Snowdon circuits reads the existing `revit.catalog.electrical-circuits.roster` with explicit panel names. The uncallable Document/Geometry catalog alias is removed; nearby geometry remains on the panel-bounded `.walk` operation. The Chadds driver must re-drive rows and an override surviving reload.
+
 ## Tried & rejected
 
 - Retired by ADR 0045: B54, kernel crusade 2 (same run): one admitted Pod route read through `route:@<id>/…` returns 38.5 MB to Pea. Owed before Pea builds Pods: bound or page a Pod route read's payload for the agent.

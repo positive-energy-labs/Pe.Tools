@@ -12,6 +12,22 @@ public sealed class CatalogCallGateTests {
         Assert.Catch(() => OpCallGate.Require(definition, null, payload));
     }
     [Test]
+    public void Snowdon_page_circuit_read_is_admitted_by_its_declared_gate() {
+        var root = new DirectoryInfo(TestContext.CurrentContext.TestDirectory);
+        while (root != null && !Directory.Exists(Path.Combine(root.FullName, "examples", "pods"))) root = root.Parent;
+        Assert.That(root, Is.Not.Null, "Run from a repo checkout.");
+        var page = File.ReadAllText(Path.Combine(root!.FullName, "examples/pods/snowdon-circuits/pages/tour/instruments.mjs"));
+        var key = System.Text.RegularExpressions.Regex.Match(page, @"api.read\('([^']*electrical-circuits[^']*)'").Groups[1].Value;
+        var method = typeof(Pe.Revit.Global.Services.Host.RevitDataRequestService).GetMethods(
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+            .Single(m => m.GetCustomAttributesData().Any(a => a.AttributeType == typeof(OpAttribute)
+                && (string)a.ConstructorArguments[0].Value! == key));
+        var attribute = OpRegistry.ReadAttribute(method.GetCustomAttributesData().Single(a => a.AttributeType == typeof(OpAttribute)));
+        var definition = OpRegistry.Define(attribute, method);
+        Assert.DoesNotThrow(() => OpCallGate.Require(definition, null));
+    }
+
+    [Test]
     public void Direct_internal_write_is_refused_but_a_derived_command_reaches_it() {
         var leaf = Leaf(OpSubject.Elements, OpEffect.ModelWrite, internalLeaf: true);
         Assert.Catch(() => OpCallGate.Require(leaf, null));
