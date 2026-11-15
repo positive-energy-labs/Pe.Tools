@@ -34,7 +34,7 @@ public static class MepSystemReads {
         if (request.Domain is not (null or "piping" or "duct"))
             return new MepReadRefusal("MepDomainInvalid", "$.domain", "Set domain to piping or duct, or omit it for both.");
         IEnumerable<MEPSystem> scope = request.SystemUniqueId is { } id
-            ? document.GetElement(id) is MEPSystem system ? [system] : []
+            ? document.GetElement(id) is MEPSystem system and (PipingSystem or MechanicalSystem) ? [system] : []
             : (request.Domain == "duct" ? Enumerable.Empty<MEPSystem>() : new FilteredElementCollector(document).OfClass(typeof(PipingSystem)).Cast<MEPSystem>())
                 .Concat(request.Domain == "piping" ? [] : new FilteredElementCollector(document).OfClass(typeof(MechanicalSystem)).Cast<MEPSystem>());
         var systems = scope.Where(system => request.Domain is null || SpecOf(system).Name == request.Domain)
