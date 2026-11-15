@@ -585,6 +585,7 @@ def main():
     args.out.mkdir(parents=True, exist_ok=True)
     with (args.out / "turns.jsonl").open("w", encoding="utf-8", newline="\n") as stream:
         for row in rows:
+            # TODO: Redact credentials before retained authored text leaves the session corpus.
             stream.write(json.dumps(row, ensure_ascii=False) + "\n")
     with (args.out / "sessions.jsonl").open("w", encoding="utf-8", newline="\n") as stream:
         for row in sorted(miner.sessions.values(), key=lambda item: (item["store"], item["session"])):

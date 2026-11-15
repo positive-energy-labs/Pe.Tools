@@ -73,6 +73,8 @@ def free_gib():
     return status.ullAvailPhys / 2**30, status.ullTotalPhys / 2**30
 
 
+# TODO: Distinguish idle MSBuild/Roslyn servers from active builds before offering cleanup.
+# TODO: Measure kernel-pool memory under writer load before attributing growth to uptime.
 def processes():
     script = ("[Console]::OutputEncoding = [Text.Encoding]::UTF8; Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId,Name,CommandLine,"
               "WorkingSetSize,@{n='Created';e={$_.CreationDate.ToUniversalTime().ToString('o')}} | ConvertTo-Json -Compress")
@@ -136,6 +138,7 @@ def safe_admit(kind, as_json):
         return 3
 
 
+# TODO: Include the per-year SDK quarantine lease in revit-drive admission.
 def admit(kind, as_json):
     if kind not in FLOORS_GIB:
         print(f"unknown kind {kind}; kinds: {', '.join(FLOORS_GIB)}")
