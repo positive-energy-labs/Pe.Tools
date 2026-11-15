@@ -79,15 +79,28 @@ test("review: a byte return rejects an A generation superseded after that reques
   } finally { stopPackageDiscovery(); release.resolve(); returnSnapshot.resolve(); }
 });
 
-test("review: a cold hung home's unknown identity refuses with that home's typed unavailable reason", async () => {
-  const { homes, entered, release } = await fixture();
-  stopPackageDiscovery(); await listPackages({ podsRoots: homes[0] });
+test.each([
+  { door: "selection", cold: true }, { door: "Page", cold: true },
+  { door: "selection", cold: false }, { door: "Page", cold: false },
+])("review: a hung home's unknown identity refuses through $door, cold=$cold", async ({ door, cold }) => {
+  const { root, homes, entered, release } = await fixture();
+  if (cold) { stopPackageDiscovery(); await listPackages({ podsRoots: homes[0] }); }
+  else await fs.writeFile(join(homes[1], "blocked", "pod.json"), '{"id":"new"}');
+  const id = cold ? "blocked" : "new";
   let result: unknown;
-  const work = listPackages({ podsRoots: homes, packageId: "blocked", wait: "background" })
-    .then(listing => onePackage(listing, "blocked")).catch(error => { result = error; });
+  let status: number | undefined;
+  const pages = createPagesHandler([], homes, undefined, undefined, stateTree(root).directory("cold-page-state"));
+  const work = (door === "Page" ? pages(new Request(`http://host/pages/${id}--hello/`))
+    .then(async response => { status = response.status; result = await response.json(); })
+    : listPackages({ podsRoots: homes, packageId: id, wait: "background" })
+      .then(listing => onePackage(listing, id)).catch(error => { result = error; }));
   await entered.promise;
   await new Promise(resolve => realSetTimeout(resolve, 50));
   await vi.advanceTimersByTimeAsync(packageDiscoveryTimeoutMs);
-  try { await work; expect(result).toMatchObject({ code: "pod.discovery.exceeded", message: expect.stringContaining(homes[1]) }); }
+  try {
+    await work;
+    if (door === "Page") expect(status).toBe(503);
+    expect(result).toMatchObject({ code: "pod.discovery.exceeded", message: expect.stringContaining(homes[1]) });
+  }
   finally { stopPackageDiscovery(); release.resolve(); }
 });

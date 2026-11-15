@@ -305,15 +305,18 @@ export async function discoverPackageHomes(
     } finally { clearTimeout(timer); }
   });
   void Promise.all(pending).catch(() => {}); // Peer work remains alive, including through shutdown.
-  const completed = await Promise.all(selected.length ? selected.map(index => pending[index]) : pending);
+  let completed = await Promise.all(selected.length ? selected.map(index => pending[index]) : pending);
+  if (selected.length && !completed.some(result => result.packages.some(pod => pod.id === packageId)))
+    completed = await Promise.all(pending); // A refreshed miss searches the other homes too.
   if (homeEpoch !== epoch) throw new PackageDiscoveryExceeded(roots, "Discovery stopped");
   const failed = completed.flatMap(result => result.packages).find(pod => packageId !== undefined && pod.id === packageId && pod.discoveryFailure);
   if (failed) requirePackageAvailable(failed); // A newer global recovery does not turn this failed read into success.
   const results = homes.map(root => homeListing(root));
   const listing: PackageListing = { packages: results.flatMap(result => result.packages), unreadable: results.flatMap(result => result.unreadable) };
   if (listing.packages.length) listing.homeGenerations = new Map(homes.map(root => [rootsKey(root), completedCensuses.get(rootsKey(root))?.homeGeneration]));
-  const unknown = homes.filter(root => !completedCensuses.has(rootsKey(root)) && homeControls.get(rootsKey(root))?.failure);
+  const unknown = homes.filter(root => homeControls.get(rootsKey(root))?.failure);
   if (unknown.length) listing.unknownHomes = unknown;
+  if (packageId !== undefined && !listing.packages.some(pod => pod.id === packageId)) requireKnownPackageIdentity(listing);
   // Cold request readers retain W26's typed refusal and late-census recovery. Inventory
   // readers can still describe an empty healthy home beside an unavailable one.
   if (wait === "request" && !listing.packages.length && listing.unreadable.some(row => homes.includes(row.folder)))
