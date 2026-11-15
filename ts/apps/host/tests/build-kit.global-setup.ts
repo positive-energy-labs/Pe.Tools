@@ -2,6 +2,7 @@
 // (`PAGE_LIBRARY_SOURCES`), and that output is never committed. Every host test run builds it here,
 // so a run of one file reads the same bytes the whole suite does.
 import { execSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 export default function buildKit() {
@@ -12,4 +13,7 @@ export default function buildKit() {
     env: { ...process.env, NODE_ENV: "production" },
     stdio: ["ignore", "ignore", "inherit"],
   });
+  // The built bytes are the proof, not the flag: a development kit fails every host test here (fa689643 review).
+  if (readFileSync(new URL("../../../packages/kit/dist/pe-kit.js", import.meta.url), "utf8").includes("jsxDEV"))
+    throw Error("@pe/kit built a development bundle (jsxDEV); host tests need the production kit");
 }

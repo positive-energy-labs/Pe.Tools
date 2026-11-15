@@ -170,13 +170,16 @@ async function busy(label, fn) {
 
   // Journal: new lines since the last poll, from the host's own read.
   // The first poll takes the newest rows; each later one asks past the last row's line.
-  let after;
+  // One poll at a time: a slow read must finish (and fire) before the next asks, or two ask past the same line.
+  let after, polling = false;
   setInterval(async () => {
-    if (!pe.doc) return;
+    if (!pe.doc || polling) return;
+    polling = true;
     try {
       const j = await pe.read("revit.context.journal", after === undefined ? { maxLines: 20 } : { afterLine: after, maxLines: 20 });
       if (j.rows.length) { after = j.rows.at(-1).line; k.fire({ type: "journal", lines: [...k.state.journal, ...j.rows.map((r) => r.text)].slice(-30) }); }
     } catch (error) { $("journal").textContent = error.message; }
+    finally { polling = false; }
   }, 10000);
 
   pe.target().catch(() => {});
