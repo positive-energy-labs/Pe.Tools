@@ -100,7 +100,7 @@ An agent or a person drops a folder of HTML under the product home and the host 
 ## Owed
 - Pages draw picture marks themselves; a kit component would keep them from being dropped.
 
-- Page isolation (SEC-1, owner queue 12): the pods ledger holds the line, with branch `pp/page-isolation` and its open review fixes.
+- Page isolation (SEC-1, owner queue 12) is rejected; the pods ledger holds the line under Tried & rejected.
 - 2026-11-14: Hydronic sizing Page firm limits and marked pictures. The retired route read `Settings/hydronic.json` through `ctx.files.firm`; no equivalent Page door was established. Local limits name their defaults. Port a marked `pe.picture` with real element correspondence and prove the declared diameter heal on a disposable Revit model.
 
 - 2026-10-14, wave G cleanup: automatic approval review rejected the command containing removal of the disposable `C:/Users/kaitp/AppData/Local/Temp/pe-route-source-9AP4Oh` source-review fixture (`blocked by policy`, no further reason). It remains. Proof host and Vite were stopped separately; ports 62615 and 62616 are closed.
