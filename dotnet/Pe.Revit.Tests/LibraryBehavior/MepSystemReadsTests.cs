@@ -6,6 +6,9 @@ using Pe.Revit.Global.Lib.Mep;
 using Pe.Shared.RevitData;
 using Pe.Shared.RevitData.Mep;
 using Pe.Revit.DocumentData.Parameters;
+using Pe.Revit.Global.Services.Host;
+using Pe.Shared.HostContracts.Operations;
+using System.Reflection;
 
 namespace Pe.Revit.Tests;
 
@@ -193,6 +196,32 @@ public sealed class MepSystemReadsTests {
         Assert.That(MepSystemReads.SegmentSizes(_document, new(MaxSegments: 1025)).Refusal?.Path, Is.EqualTo("$.maxSegments"));
         foreach (var bound in new[] { 0, 4097 })
             Assert.That(MepSystemReads.SegmentSizes(_document, new(MaxSizesPerSegment: bound)).Refusal?.Path, Is.EqualTo("$.maxSizesPerSegment"));
+    }
+
+    [Test]
+    public void Explicit_piping_system_refuses_a_duct_domain() {
+        var result = MepSystemReads.Members(_document, new(_system.UniqueId, Domain: "duct"));
+        Assert.Multiple(() => {
+            Assert.That(result.Value, Is.Null);
+            Assert.That(result.Refusal?.Code, Is.EqualTo("MepSystemsEmpty"));
+        });
+    }
+
+    [Test]
+    public void Bridge_mep_refusal_is_bad_request_with_the_library_issue_code_and_path() {
+        var method = typeof(RevitDataRequestService).GetMethod("MepRead", BindingFlags.Static | BindingFlags.NonPublic)
+            ?.MakeGenericMethod(typeof(MepSystemMembersData)) ?? throw new AssertionException("MEP bridge adapter not found.");
+        var refusal = new MepReadRefusal("MepBoundExceeded", "$.maxSystems", "More than 1 MEP systems. Raise maxSystems.");
+        var result = new MepReadResult<MepSystemMembersData>(null, refusal);
+        var invocation = Assert.Throws<TargetInvocationException>(() => method.Invoke(null, [result]));
+        var error = invocation?.InnerException as BridgeOperationException
+            ?? throw new AssertionException("The bridge did not project its typed refusal.");
+        Assert.Multiple(() => {
+            Assert.That(error.StatusCode, Is.EqualTo(400));
+            Assert.That(error.Message, Is.EqualTo(refusal.Message));
+            Assert.That(error.Issues.Single().Code, Is.EqualTo(refusal.Code));
+            Assert.That(error.Issues.Single().InstancePath, Is.EqualTo(refusal.Path));
+        });
     }
 
     /// <summary>
