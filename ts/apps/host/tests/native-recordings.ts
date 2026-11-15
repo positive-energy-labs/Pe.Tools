@@ -7,7 +7,6 @@ const directory = join(import.meta.dirname, "native-recordings");
 const provenance = JSON.parse(readFileSync(join(directory, "provenance.json"), "utf8")) as Record<string, { operation: string; source: string; canonicalResponseSha256: string; requestFile?: string }>;
 
 export function nativeRecordings(...names: string[]) {
-  // 2026-11-14: retained-view-image adds refused:false and notDrawn:[] by hand after W33.
   const responses: Record<string, unknown> = {};
   const sources: Record<string, string> = {};
   for (const name of names) {

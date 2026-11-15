@@ -19,7 +19,7 @@ const sdk = (extra: string[]) => execFileSync("dotnet", [...args, ...extra], {
   cwd: root, env, encoding: "utf8", stdio: ["ignore", "pipe", "inherit"], maxBuffer: 32 * 1024 * 1024,
 });
 writeFileSync(join(output, "plan.json"), sdk(["--plan"]));
-execFileSync("python", [".agents/skills/slot.execute/machine.py", "admit", "revit-drive"], { cwd: root, stdio: "inherit" });
+execFileSync("python", [".agents/skills/slot.execute/machine.py", "admit", "revit-test"], { cwd: root, stdio: "inherit" });
 const receipt = sdk([]);
 writeFileSync(join(output, "sdk.json"), receipt);
 const envelope = JSON.parse(receipt);
@@ -44,5 +44,16 @@ provenance["retained-view-image"] = {
   recorderSha256: sha(readFileSync(join(root, "dotnet/Pe.Revit.Tests/Proofs/NativeLensFixtureRecorder.cs"))),
 };
 writeFileSync(join(import.meta.dirname, "retained-view-image.json"), JSON.stringify(image) + "\n");
+const lensSource = join(output, "lens.json");
+const lensBytes = readFileSync(lensSource);
+const lens = JSON.parse(lensBytes.toString("utf8"));
+provenance["fresh-revit.context.lens"] = {
+  ...provenance["retained-view-image"],
+  operation: lens.operation, source: lensSource, sourceSha256: sha(lensBytes), pointer: "response",
+  canonicalResponseSha256: sha(canonicalJson(lens.response)),
+  requestFile: "fresh-revit.context.lens-request.json",
+};
+writeFileSync(join(import.meta.dirname, "fresh-revit.context.lens.json"), JSON.stringify(lens.response) + "\n");
+writeFileSync(join(import.meta.dirname, "fresh-revit.context.lens-request.json"), JSON.stringify(lens.request) + "\n");
 writeFileSync(provenanceFile, JSON.stringify(provenance, null, 2) + "\n");
 console.log(`Recorded native response unchanged from ${source}; SDK receipt ${join(output, "sdk.json")}`);
