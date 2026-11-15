@@ -157,6 +157,11 @@ export function requirePackageAvailable(pod: Pick<AdmittedPackage, "directory" |
   if (pod.discoveryFailure) throw new PackageDiscoveryExceeded(pod.directory, pod.discoveryFailure);
 }
 
+export function requireKnownPackageIdentity(listing: PackageListing) {
+  if (listing.unknownHomes?.length)
+    throw new PackageDiscoveryExceeded([...listing.unknownHomes], "Home identity inventory is unavailable");
+}
+
 export function requireIndexedPackageAvailable(id: string, roots: PodsRoots | undefined = productRoots) {
   const pod = roots && censuses.get(rootsKey(roots))?.find(pod => pod.id === id);
   if (pod && pod.generation !== completedCensuses.get(rootsKey(pod.home))?.homeGeneration)
@@ -251,11 +256,16 @@ export async function discoverPackageHomes(
   roots: PodsRoots,
   wait: "request" | "background",
   read: (root: string, current: () => boolean, changed: () => void, generation: number) => Promise<PackageListing>,
+  packageId?: string,
 ): Promise<PackageListing> {
   const homes = [...new Map([roots].flat().map(root => [rootsKey(root), resolve(root)])).values()];
   rootViews.set(rootsKey(homes), homes);
   const epoch = homeEpoch;
-  const results = await Promise.all(homes.map(async root => {
+  // Owner's no-wait rule: an admitted Pod waits only for its own home. Uniqueness
+  // uses the other homes' last-published identities, including while they are hung.
+  const selected = homes.flatMap((root, index) => completedCensuses.get(rootsKey(root))?.listing.packages
+    .some(pod => pod.id === packageId) ? [index] : []);
+  const pending = homes.map(async root => {
     const key = rootsKey(root), previous = homeControls.get(key);
     const control = { generation: (previous?.generation ?? 0) + 1, failure: previous?.failure };
     homeControls.set(key, control);
@@ -293,9 +303,17 @@ export async function discoverPackageHomes(
       if (homeEpoch !== epoch) throw error;
       return unavailable(String(error));
     } finally { clearTimeout(timer); }
-  }));
+  });
+  void Promise.all(pending).catch(() => {}); // Peer work remains alive, including through shutdown.
+  const completed = await Promise.all(selected.length ? selected.map(index => pending[index]) : pending);
   if (homeEpoch !== epoch) throw new PackageDiscoveryExceeded(roots, "Discovery stopped");
-  const listing = { packages: results.flatMap(result => result.packages), unreadable: results.flatMap(result => result.unreadable) };
+  const failed = completed.flatMap(result => result.packages).find(pod => packageId !== undefined && pod.id === packageId && pod.discoveryFailure);
+  if (failed) requirePackageAvailable(failed); // A newer global recovery does not turn this failed read into success.
+  const results = homes.map(root => homeListing(root));
+  const listing: PackageListing = { packages: results.flatMap(result => result.packages), unreadable: results.flatMap(result => result.unreadable) };
+  if (listing.packages.length) listing.homeGenerations = new Map(homes.map(root => [rootsKey(root), completedCensuses.get(rootsKey(root))?.homeGeneration]));
+  const unknown = homes.filter(root => !completedCensuses.has(rootsKey(root)) && homeControls.get(rootsKey(root))?.failure);
+  if (unknown.length) listing.unknownHomes = unknown;
   // Cold request readers retain W26's typed refusal and late-census recovery. Inventory
   // readers can still describe an empty healthy home beside an unavailable one.
   if (wait === "request" && !listing.packages.length && listing.unreadable.some(row => homes.includes(row.folder)))
@@ -516,16 +534,22 @@ export async function captureIndexedPackage(
     );
   // Known keys need the same fresh identity check as misses. Freeze that census's
   // selected bytes instead of recapturing an indexed folder after the check.
-  const found = (await discover(selectedRoots)).packages.filter(pod => pod.id === id);
+  const listing = await discover(selectedRoots);
+  const found = listing.packages.filter(pod => pod.id === id);
   if (found.length > 1)
     throw Error(
       `Pod id '${id}' is claimed by ${found.map((pod) => pod.directory).join(" and ")}: none is used until the id is unique.`,
     );
   const selected = found[0];
-  if (!selected)
+  if (!selected) {
+    requireKnownPackageIdentity(listing);
     throw Error(
       `No discovered Pod has id '${id}'. Refresh the Pod list after adding or moving a Pod.`,
     );
+  }
+  const home = rootsKey(dirname(resolve(selected.directory)));
+  if (listing.homeGenerations && listing.homeGenerations.get(home) !== completedCensuses.get(home)?.homeGeneration)
+    throw new PackageDiscoveryExceeded(selected.directory, "Home generation changed before capture returned");
   requirePackageAvailable(selected);
   return selected;
 }

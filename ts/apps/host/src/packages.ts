@@ -28,6 +28,7 @@ import {
   discoverPackageHomes,
   type PackageCensus,
   requirePackageAvailable,
+  requireKnownPackageIdentity,
   capturePodDirectory,
   incompletePackageRead,
   PackageReadIncomplete,
@@ -75,6 +76,8 @@ export type AdmittedPackage = {
 export type PackageListing = {
   packages: AdmittedPackage[];
   unreadable: { folder: string; message: string }[];
+  homeGenerations?: ReadonlyMap<string, number | undefined>;
+  unknownHomes?: readonly string[];
 };
 export type CapturedPackage = AdmittedPackage & {
   sourceBundle: ScriptingExecute.Req.ScriptPodSourceBundle;
@@ -168,7 +171,7 @@ export async function listPackages({ podsRoots, wait = "request", packageId }: P
     (signal, previous) => podsDiskSignature([root], isPackageMember, signal,
       { packageId, previous }),
     (signature, previous) => resolvePackageDiskSignature(signature, previous, [root]), packageId,
-    (signature, previous) => observedPackageDirectories(signature, [root], previous), { current, changed, generation }));
+    (signature, previous) => observedPackageDirectories(signature, [root], previous), { current, changed, generation }), packageId);
   // Import notices are runtime state, not disk bytes; project them even when the census is reused.
   return { ...listing, packages: listing.packages.map(pod => {
     const twins = listing.packages.filter(other => other.id === pod.id);
@@ -332,6 +335,7 @@ export function onePackage(
     requirePackageAvailable(selected);
     return selected;
   }
+  if (!found.length) requireKnownPackageIdentity(listing);
   throw found.length
     ? refuse(claimedTwice(id, found), 409)
     : refuse(`No installed pod has id '${id}'.`, 404);
