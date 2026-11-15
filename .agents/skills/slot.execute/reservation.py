@@ -25,6 +25,7 @@ import uuid
 GIB = 2**30
 # Existing floors minus the four-GiB stop headroom. These are envelopes, not caps.
 BUDGETS = {"codegen": 4, "suite": 4, "browser": 4}
+ADMIT_ONLY = ("revit-test", "revit-drive")
 HEADROOM = 4 * GIB
 K = c.WinDLL("kernel32", use_last_error=True)
 P = c.WinDLL("psapi", use_last_error=True)
@@ -224,16 +225,18 @@ def fits(free, commit, rows, budget, headroom=HEADROOM):
 
 
 def run(argv):
-    parser = argparse.ArgumentParser(description=__doc__)
-    # TODO: T-2: no revit-test kind here, though machine.py admit accepts one, so a fresh Revit test can be
-    # gated on an admit reading but never held in this queue.
-    parser.add_argument("kind", choices=["light", *BUDGETS])
+    parser = argparse.ArgumentParser(description=__doc__, epilog="admit-only: " + ", ".join(ADMIT_ONLY)
+                                     + "; pe-revit session owns SDK lifetimes, outside this kill-on-close job")
+    parser.add_argument("kind", choices=["light", *BUDGETS, *ADMIT_ONLY])
     parser.add_argument("--wait", type=float, default=60, help="queue deadline in seconds, 0..600")
     parser.add_argument("--owns-suite", action="store_true")
     parser.add_argument("--home", type=Path)
     parser.add_argument("--receipt", type=Path)
     split = argv.index("--") if "--" in argv else len(argv)
     options = parser.parse_args(argv[:split])
+    if options.kind in ADMIT_ONLY:
+        print(f"REFUSE {options.kind}: admit-only; pe-revit session owns SDK lifetimes, outside this kill-on-close job", file=sys.stderr)
+        return 4
     command = argv[split + 1:]
     if not command or not 0 <= options.wait <= 600:
         parser.error("needs -- command and a wait between 0 and 600 seconds")

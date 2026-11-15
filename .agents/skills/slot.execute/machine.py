@@ -18,6 +18,7 @@ kinds: light (one package tsc, touched tests, one C# build, a guard)
 Floors come from the 2026-11-03 machine budget: measured footprint plus about 2 GiB headroom.
 `stop` never touches Revit (pe-revit session owns it), the installed product host, T3, Claude, Codex, or Helium.
 `admit` is diagnostic only: a snapshot cannot reserve capacity. Use `run` for a bounded command.
+admit-only: revit-test, revit-drive; pe-revit session owns SDK lifetimes, outside run's kill-on-close job.
 Pruning editors and bystander apps is explicit; admission never stops someone else's work.
 Receipts: .artifacts/machine/stops.jsonl in the root checkout, one line per stop, with the caller's T3 thread.
 """

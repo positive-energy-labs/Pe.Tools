@@ -268,12 +268,30 @@ time.sleep(.6)'''))
         self.assertEqual(result.returncode, 7, result.stderr)
         self.assertFalse((self.home/'reservations.sqlite3').exists())
         result = subprocess.run([sys.executable,str(machine),'run','revit-test','--',sys.executable], capture_output=True)
-        self.assertEqual(result.returncode, 2)
+        self.assertEqual(result.returncode, 4)
         batch = self.home/'command with spaces.cmd'
         batch.write_text('@exit /b 7\n')
         result = subprocess.run([sys.executable,str(machine),'run','light','--',str(batch)],capture_output=True)
         self.assertEqual(result.returncode, 3, result.stderr)
         self.assertIn(b'batch forwarding is unsupported',result.stderr)
+
+    def test_sdk_session_kinds_are_explicitly_admit_only(self):
+        machine = HERE / 'machine.py'
+        for kind in ('revit-test', 'revit-drive'):
+            with self.subTest(kind=kind):
+                result = subprocess.run([sys.executable, str(machine), 'run', kind,
+                                         '--home', str(self.home), '--', sys.executable,
+                                         '-c', 'raise SystemExit(99)'], capture_output=True, text=True, timeout=5)
+                self.assertEqual(result.returncode, 4, result.stderr)
+                self.assertEqual(len(result.stderr.strip().splitlines()), 1)
+                self.assertIn('admit-only', result.stderr)
+                self.assertIn('pe-revit session', result.stderr)
+                self.assertIn('kill-on-close', result.stderr)
+                self.assertFalse((self.home/'reservations.sqlite3').exists())
+        for arguments in (['--help'], ['run', '--help']):
+            result = subprocess.run([sys.executable, str(machine), *arguments], capture_output=True, text=True, timeout=5)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn('admit-only: revit-test, revit-drive', result.stdout)
 
     def test_inherited_job_requires_running_owner_namespace_and_capacity(self):
         script = r'''
