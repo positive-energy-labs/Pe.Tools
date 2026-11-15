@@ -12,7 +12,7 @@ Speed per thread: tool_wall (hours by tool kind, Bash/PowerShell/exec classified
 idle_gaps (T3 runs table: waiting between runs), keepalive (each wake: idle minutes since the last API call, HIT when the next call reads more cache than it writes),
 cold_calls (API calls writing over 50k cache tokens and more than they read). Keepalive and cold_calls are Claude-only (Codex rollouts carry no cache-write count).
 --tree also measures every descendant thread (lineage rootThreadId = the named thread) that has runs: native session by provider ref, else by worktree path
-(Claude project dir, Codex rollout cwd); each session file counts once. It adds a tree_total row. Descendants with runs but no session make that row a floor.
+(Claude project dir, unique Codex rollout cwd and creation time inside a run; archived rollouts included); each session file counts once. It adds a tree_total row. Descendants with runs but no session make that row a floor.
 Waits: each gap between consecutive runs is attributed to the trigger of the next run (owner, message from <thread>, own command, child completion, keepalive, system, unknown); per thread `gaps` and `waits` (hours by cause).
 commands: every Bash/PowerShell command and Codex exec cmd split on && ; | and newlines, cd/export/echo/VAR= segments dropped, timeout/npx/pnpm exec/--filter/-C stripped, keyed program + first subcommand (loops: `poll loop`); a call's whole wall (a background command's runs to its completion notification) goes to its heaviest segment (test > build > guard > other).
 --branch/--base add `landmark`: per slice N, 80% of final churn, the first `Slice N gated`/`Wave ... gated` first-parent commit, and gate tail = gate - 80% (open slices run to the window end); headline median tail and gated slices per 10 wall hours.
@@ -26,7 +26,9 @@ Per thread `admits` ({t, kind, verdict, free_gib} from tool results with an `ADM
 --cycles <thread> (repeatable) measures message reply intervals. Free text ends at the first outbound `t3_thread_send` attempt to the sender: reply latency only, completion unknown. Explicit JSON work_event messages (see work_event()) correlate a work_id and full candidate SHA across requested, runnable, useful_feedback and accepted phases; these remain reported evidence. `cycles` stores reply_min separately from work_minutes and milestone timestamps/durations; `cycle_summary` separates median_reply_min from median_reported_work_min and counts unknown completion.
 Each interval's families partition foreground tool families, `idle` (no run in flight), and `run_remainder` (run time not covered by a foreground call, not measured model time). first_browser_min is time to a browser call, never measured setup or useful feedback. Background commands are not foreground calls. A --cycles thread outside the tree is measured like a root with no descendants
 (top-level `partners` in retro.json, its own PARTNERS lane); one already in the tree keeps its place. The landmark's window is the tree's; the page's `window` also holds the partners' runs.
-retro.json is {threads, partners, commands, landmark, window, lanes, rollup}. Owner turns are human turns: createdBy=user AND creationSource web|mobile (server-sourced user rows are agent text). Prints aggregates only, never session text.
+Manual owner forks are listed separately and excluded from tree totals, lanes and idle wall time. Run forks count records from their own first run only.
+The rollup idle_wall is the complement of the union of all tree runs, including threads without native sessions; it reports all gaps and gaps over five minutes separately.
+retro.json is {session_fallback, threads, partners, commands, landmark, window, lanes, rollup}. Owner turns are human turns: createdBy=user AND creationSource web|mobile (server-sourced user rows are agent text). Prints aggregates only, never session text.
 """
 import argparse, collections, datetime, functools, glob, html, json, math, os, re, sqlite3, statistics, subprocess, sys
 
@@ -172,12 +174,19 @@ def resolve(db, prefix):
     return tid, title, [(r["driver"], r["nativeId"]) for r in refs if r.get("nativeId")]
 
 
-def descendants_of(db, tid):
+def descendants_of(db, tid, include_manual=False):
+    rows = []
     for t, title, pj in db.execute("select thread_id, title, payload_json from orchestration_v2_projection_threads where payload_json like ?", ("%" + tid + "%",)):
         try: p = json.loads(pj) or {}
         except ValueError: continue
         lin = p.get("lineage") or {}
-        if lin.get("rootThreadId") == tid and lin.get("parentThreadId") is not None: yield t, title, p
+        if lin.get("rootThreadId") == tid and lin.get("parentThreadId") is not None: rows.append((t, title, p))
+    excluded = {t for t, _, p in rows if p.get("forkedFrom") and p.get("creationSource") in ("web", "mobile")}
+    while True:
+        more = {t for t, _, p in rows if (p.get("lineage") or {}).get("parentThreadId") in excluded}
+        if more <= excluded: break
+        excluded |= more
+    yield from (r for r in rows if include_manual or r[0] not in excluded)
 
 
 def idle_gaps(db, tid):
@@ -201,11 +210,12 @@ def owner_turns_and_hours(db, tid):
     return n, span, round(active, 1), descendants
 
 
-def claude(path, m):
+def claude(path, m, since=None):
     seen = set(); names = {}; starts = {}; notif = {}; done = []; last = None
     for line in open(path, encoding="utf-8", errors="replace"):
         try: e = json.loads(line)
         except ValueError: continue
+        if since and (not e.get("timestamp") or ts(e["timestamp"]) < since): continue
         t = e.get("type")
         if t == "queue-operation":  # a background command's real end: its completion notification, matched by tool-use id
             if e.get("operation") == "enqueue" and (mm := re.search(r"<tool-use-id>(\S+?)</tool-use-id>", e.get("content") or "")): notif[mm[1]] = e.get("timestamp")
@@ -257,12 +267,18 @@ def codex_args(x):
     except (ValueError, TypeError): return {}
 
 
-def codex(path, m):
+def codex(path, m, since=None):
     names = {}; starts = {}; prev = collections.Counter(); last = None; cur_model = m.get("selected") or "?"  # tokens before the first turn_context belong to the selected model, not "?"
     for line in open(path, encoding="utf-8", errors="replace"):
         try: e = json.loads(line)
         except ValueError: continue
         t = e.get("type"); p = e.get("payload") or {}; when = e.get("timestamp")
+        if since and (not when or ts(when) < since):
+            if t == "turn_context": cur_model = p.get("model") or "?"
+            if t == "event_msg" and p.get("type") == "token_count" and p.get("info"):
+                u = p["info"].get("total_token_usage") or {}
+                prev = collections.Counter(input_tokens=u.get("input_tokens", 0) - u.get("cached_input_tokens", 0), cache_read_input_tokens=u.get("cached_input_tokens", 0), output_tokens=u.get("output_tokens", 0))
+            continue
         if t == "compacted":
             m["compactions"] += 1; m["curve"].append([when, 0, "COMPACT"])
         elif t == "turn_context":
@@ -492,21 +508,39 @@ norm = lambda p: os.path.normcase(os.path.normpath(p))
 
 
 @functools.cache
-def codex_cwds():
-    d = collections.defaultdict(list)
-    for f in glob.glob(f"{HOME}/.codex/sessions/*/*/*/rollout-*.jsonl"):
-        try: d[norm(json.loads(open(f, encoding="utf-8").readline())["payload"]["cwd"])].append(f)
+def codex_sessions():
+    files = glob.glob(f"{HOME}/.codex/sessions/*/*/*/rollout-*.jsonl") + glob.glob(f"{HOME}/.codex/archived_sessions/rollout-*.jsonl")
+    out = []
+    for f in files:
+        try:
+            with open(f, encoding="utf-8") as h: e = json.loads(h.readline())
+            p = e["payload"]
+            if e.get("type") == "session_meta" and p.get("cwd") and p.get("timestamp"):
+                out.append((f, norm(p["cwd"]), ts(p["timestamp"])))
         except (OSError, ValueError, KeyError): pass
-    return d
+    return out
 
 
-def native_files(refs, wt, seen):
-    """Session files for one thread: its provider refs, else its worktree. Each file is handed out once per `seen`."""
+def native_files(refs, wt, seen, runs=(), diagnostics=None, tid="?"):
+    """Prefer native ids, including archived rollouts. Fallback requires exactly one cwd/start candidate."""
     fs = []
     for driver, nid in refs:
-        fs += [(driver, f) for f in glob.glob(f"{HOME}/.claude/projects/*/{nid}.jsonl" if driver == "claudeAgent" else f"{HOME}/.codex/sessions/*/*/*/rollout-*-{nid}.jsonl")]
+        paths = glob.glob(f"{HOME}/.claude/projects/*/{nid}.jsonl") if driver == "claudeAgent" else [f for f, _, _ in codex_sessions() if f.endswith(f"-{nid}.jsonl")]
+        fs += [(driver, f) for f in paths]
+        if diagnostics is not None and any("archived_sessions" in f for f in paths): diagnostics.setdefault("archived", []).append(tid)
     if not fs and wt:
-        fs = [("claudeAgent", f) for f in glob.glob(f"{HOME}/.claude/projects/{re.sub('[^A-Za-z0-9]', '-', wt)}/*.jsonl")] + [("codex", f) for f in codex_cwds().get(norm(wt), [])]
+        if not refs or any(d == "codex" for d, _ in refs):
+            # Session creation must fall inside a recorded run, on the exact worktree.
+            candidates = [("codex", f) for f, cwd, start in codex_sessions() if cwd == norm(wt) and any(ts(a) <= start <= ts(b) for a, b in runs if b)]
+            if len(candidates) == 1:
+                fs = candidates
+                if diagnostics is not None: diagnostics["matched"].append(tid)
+            elif len(candidates) > 1:
+                ids = [os.path.basename(f) for _, f in candidates]
+                if diagnostics is not None: diagnostics["ambiguous"][tid] = ids
+                print(f"{tid}: ambiguous cwd/start fallback: {', '.join(ids)} (UNPROVEN)")
+        elif any(d == "claudeAgent" for d, _ in refs):
+            fs = [("claudeAgent", f) for f in glob.glob(f"{HOME}/.claude/projects/{re.sub('[^A-Za-z0-9]', '-', wt)}/*.jsonl")]
     fs = [(d, f) for d, f in fs if norm(f) not in seen]; seen.update(norm(f) for _, f in fs)
     return fs
 
@@ -515,8 +549,12 @@ def measure(db, rates, tid, label, title, files):
     if not files: return None
     sel = db.execute("select json_extract(payload_json,'$.modelSelection.model') from orchestration_v2_projection_threads where thread_id=?", (tid,)).fetchone()
     m = new_metrics(label, title, sel[0] if sel else None); m["tid"] = tid
+    payload = json.loads(db.execute("select payload_json from orchestration_v2_projection_threads where thread_id=?", (tid,)).fetchone()[0])
+    first = db.execute("select min(requested_at) from orchestration_v2_projection_runs where thread_id=?", (tid,)).fetchone()[0]
+    since = ts(first) if first and (payload.get("forkedFrom") or {}).get("type") == "run" else None
+    m["records_since"] = first if since else None
     for driver, f in files:
-        m["sessions"].append(os.path.splitext(os.path.basename(f))[0]); (claude if driver == "claudeAgent" else codex)(f, m)
+        m["sessions"].append(os.path.splitext(os.path.basename(f))[0]); (claude if driver == "claudeAgent" else codex)(f, m, since)
     m["owner_turns"], m["hours"], m["active_hours"], m["descendant_threads_unpriced"] = owner_turns_and_hours(db, tid)
     m["idle_gaps"] = idle_gaps(db, tid); m["gaps"] = gaps(db, tid, thread_names(db)); m["waits"] = waits(m["gaps"])
     m["model"], m["cost"] = cost(m, rates)
@@ -537,19 +575,23 @@ def merge_commands(ms):
     return {k: dict(v, hours=round(v["hours"], 3)) for k, v in sorted(c.items(), key=lambda kv: -kv[1]["hours"])}
 
 
-def tree(db, rates, prefix, seen, kids_too=True):
+def tree(db, rates, prefix, seen, kids_too=True, diagnostics=None):
     """Measure a named thread; with kids_too also every descendant that has runs and a native session. Prints and returns None when the root has none."""
     tid, title, refs = resolve(db, prefix)
-    m = measure(db, rates, tid, prefix, title, native_files(refs, None, seen)) if tid else None
+    payload = json.loads(db.execute("select payload_json from orchestration_v2_projection_threads where thread_id=?", (tid,)).fetchone()[0]) if tid else {}
+    m = measure(db, rates, tid, prefix, title, native_files(refs, payload.get("worktreePath"), seen, db.execute(RUNS, (tid,)).fetchall(), diagnostics, tid)) if tid else None
     if not m:
         print(f"{prefix}: no native session found (UNPROVEN)"); return None
     if kids_too:
         kids, missing = [], 0
         for t, ktitle, p in descendants_of(db, tid):
             if not db.execute("select 1 from orchestration_v2_projection_runs where thread_id=? limit 1", (t,)).fetchone(): continue  # Agent sidechain: shares its parent's worktree
-            k = measure(db, rates, t, t, ktitle, native_files(resolve(db, t)[2], p.get("worktreePath"), seen))
+            k = measure(db, rates, t, t, ktitle, native_files(resolve(db, t)[2], p.get("worktreePath"), seen, db.execute(RUNS, (t,)).fetchall(), diagnostics, t))
             if k: k["curve"] = []; kids.append(k)
             else: missing += 1
+        manual_ids = {t for t, _, _ in descendants_of(db, tid, True)} - {t for t, _, _ in descendants_of(db, tid)}
+        m["manual_forks"] = [k for t in sorted(manual_ids) if db.execute("select 1 from orchestration_v2_projection_runs where thread_id=?", (t,)).fetchone() and (k := tree(db, rates, t, seen, False, diagnostics))]
+        for k in m["manual_forks"]: k["thread"] += ":manual-fork-excluded"
         m["descendants"] = kids; m["tree_total"] = tree_total(m, kids, missing)
         if missing: print(f"{prefix}: {missing} descendant(s) with runs but no native session found; tree row is a floor (UNPROVEN)")
     return m
@@ -779,6 +821,9 @@ def measures_line(lm, ro):
         if (tr := lm.get("trough")) and tr["h"]: p.append(f"fewer than half the peak of {tr['peak']} child threads ran for {tr['h']:.1f}h ({tr['frm'][11:16]}Z to {tr['to'][11:16]}Z)")
         if lm["tail_test_share"] is not None: p.append(f"{lm['tail_test_share']:.0%} of tail churn is test code")
         if lm["tail_quiet_share"] is not None: p.append(f"{lm['tail_quiet_share']:.0%} of churn-tail hours outside the 30-minute commit-proximity proxy (not measured idle)")
+    if "idle_wall" in ro:
+        idle = ro["idle_wall"]
+        p.append(f"no tree thread running: {idle['total_h']:.2f}h total; {len(idle['over_5m'])} gaps over 5m ({idle['over_5m_total_h']:.2f}h): " + "; ".join(f"{g['start']} {g['minutes']:.2f}m" for g in idle["over_5m"]))
     v = collections.Counter(r["verdict"] for r in ro["admits"]); d = sum(r["verdict"] == "HOLD" and r["kind"] == "revit-drive" for r in ro["admits"])
     p.append(f"{len(ro['admits'])} admission readings: {v['HOLD']} HOLD ({d} revit-drive), {v['REFUSE']} REFUSE")
     # idle after the command finished is the stall; idle while it still ran is the thread waiting on its own command, which its completion ends
@@ -840,6 +885,22 @@ def window(db, tids):
     return ts(a), ts(b)
 
 
+def idle_wall(db, roots, with_descendants=True):
+    """Complement of the union of runs, within the first request to last completion."""
+    tids = set(roots) | ({t for r in roots for t, _, _ in descendants_of(db, r)} if with_descendants else set())
+    runs = [r for t in tids for r in db.execute(RUNS, (t,))]
+    if not runs: return dict(total_h=0, over_5m_total_h=0, over_5m=[])
+    end = max(ts(b or a) for a, b in runs)
+    intervals = sorted((ts(a), ts(b) if b else end) for a, b in runs)
+    cursor = intervals[0][0]; gaps = []
+    for a, b in intervals:
+        if a > cursor: gaps.append((cursor, a))
+        cursor = max(cursor, b)
+    return dict(total_h=round(sum((b-a).total_seconds() for a,b in gaps)/3600, 2),
+                over_5m_total_h=round(sum((b-a).total_seconds() for a,b in gaps if (b-a).total_seconds() > 300)/3600, 2),
+                over_5m=[dict(start=utc(a), end=utc(b), minutes=round((b-a).total_seconds()/60, 2)) for a,b in gaps if (b-a).total_seconds() > 300])
+
+
 def main():
     sys.stdout.reconfigure(encoding='utf-8')  # thread titles hold characters the Windows console codec refuses
     a = argparse.ArgumentParser(); a.add_argument("--out", required=True); a.add_argument("--tree", action="store_true"); a.add_argument("--branch"); a.add_argument("--base"); a.add_argument("--cycles", action="append", default=[])
@@ -848,7 +909,8 @@ def main():
     os.makedirs(a.out, exist_ok=True)
     db = sqlite3.connect(f"file:{T3}/statev2.sqlite?mode=ro", uri=True)
     rates = pricing.load_rates(T3)
-    seen = set(); out = [m for m in (tree(db, rates, p, seen, a.tree) for p in a.threads) if m]
+    diagnostics = dict(matched=[], ambiguous={}, archived=[])
+    seen = set(); out = [m for m in (tree(db, rates, p, seen, a.tree, diagnostics) for p in a.threads) if m]
     allm = [x for m in out for x in [m] + m.get("descendants", [])]
     cmds = merge_commands(allm); lm = None; names = thread_names(db); byid = {x["tid"]: x for x in allm}; partners = []
     for p in a.cycles:  # a partner measured like a root without descendants, then its message intervals
@@ -857,7 +919,7 @@ def main():
         if tid not in byid: byid[tid] = m; partners.append(m)
         runs = db.execute(RUNS, (tid,)).fetchall(); cs, un, fam = work_cycles(runs, wake_runs(db, tid, names), m["sends"], m["ivs"], names); m["cycles"] = cs; m["cycle_summary"] = cycle_summary(cs, un, fam, sum((ts(b) - ts(a)).total_seconds() for a, b in runs if b) / 3600)
     for x in allm + partners: x.pop("sends", None)
-    ro = rollup(allm); ro["cycles"] = [dict(label=(m["title"] or m["tid"]).split(":")[0], **m["cycle_summary"]) for m in byid.values() if "cycle_summary" in m]
+    ro = rollup(allm); ro["idle_wall"] = idle_wall(db, [m["tid"] for m in out], a.tree); ro["cycles"] = [dict(label=(m["title"] or m["tid"]).split(":")[0], **m["cycle_summary"]) for m in byid.values() if "cycle_summary" in m]
     specs = lane_specs(db, out, partners) if a.tree else []  # the lanes' threads, with or without a native session
     win = window(db, [s["tid"] for s in specs if s["group"] != "PARTNERS"] or [x["tid"] for x in allm]) if allm else None  # the landmark's window is the tree's; partners may run past it
     pwin = window(db, [s["tid"] for s in specs]) if specs else win  # the page's window holds every lane
@@ -867,9 +929,10 @@ def main():
         lm = landmark(commits, *gates_and_marks(a.branch, a.base, *win), *win, desc_runs(db, [m["tid"] for m in out]))
         lm["unmerged"] = unmerged; lm["lost_writers"] = lost_writers(allm, authors)
     fill_lanes(db, specs, byid, names, pwin[1]) if specs else None
-    json.dump(dict(threads=out, partners=partners, commands=cmds, landmark=lm, window=[t.isoformat() for t in pwin] if pwin else None, lanes=specs, rollup=ro), open(f"{a.out}/retro.json", "w"), indent=1, default=dict)
+    json.dump(dict(session_fallback=diagnostics, threads=out, partners=partners, commands=cmds, landmark=lm, window=[t.isoformat() for t in pwin] if pwin else None, lanes=specs, rollup=ro), open(f"{a.out}/retro.json", "w"), indent=1, default=dict)
+    print(f"Codex cwd/start fallback matched {len(diagnostics['matched'])} thread(s); {len(diagnostics['ambiguous'])} ambiguous; {len(diagnostics['archived'])} matched by archived native id")
     print(" | ".join(COLS + EXTRA + ["tool calls", "tool output MB", "top inflow"]))
-    rows = [x for m in out for x in [m] + ([m["tree_total"]] if "tree_total" in m else [])] + partners
+    rows = [x for m in out for x in [m] + ([m["tree_total"]] if "tree_total" in m else [])] + [k for m in out for k in m.get("manual_forks", [])] + partners
     for m in rows:
         top = m["tool_output"].most_common(1)
         print(" | ".join(map(str, cells(m) + [sum(m["tool_calls"].values()), round(sum(m["tool_output"].values()) / 1e6, 2), top[0][0] if top else "-"])))
