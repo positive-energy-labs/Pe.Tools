@@ -37,6 +37,10 @@ effectTest("EventSource query ownership carries its minted human into native adm
       const nav = await fetch(base, { headers: { accept: "text/html", "sec-fetch-mode": "navigate", "sec-fetch-dest": "document" } });
       const cookie = nav.headers.get("set-cookie")!.split(";")[0]!;
       await nav.body?.cancel();
+      const revisit = await fetch(base, { headers: { cookie, accept: "text/html", "sec-fetch-site": "none",
+        "sec-fetch-mode": "navigate", "sec-fetch-dest": "document" } });
+      expect(revisit.headers.get("set-cookie")!.split(";")[0]).toBe(cookie);
+      await revisit.body?.cancel();
       const headers = { cookie, referer: `${base}/fans`, "sec-fetch-site": "same-origin" };
       const send = async (query: string, extra: Record<string, string> = {}) => {
         const response = await fetch(`${base}/pe/resources${query}`, { headers: { ...headers, ...extra } });
