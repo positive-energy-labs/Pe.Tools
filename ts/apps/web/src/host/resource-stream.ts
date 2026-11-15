@@ -67,6 +67,7 @@ export class PeReadings {
   private connection = "";
   private sent = new Map<string, ReadingRequest>();
   private updating = false;
+  private admission?: AbortController;
   private readonly renew = new Set<string>();
   /** A replacement cannot retire the active stream until it has opened. */
   private opening?: Source;
@@ -107,7 +108,8 @@ export class PeReadings {
       connection: string,
       add: ReadingRequest[],
       remove: string[],
-    ) => Promise<void> = async (connection, add, remove) => {
+      signal: AbortSignal,
+    ) => Promise<void> = async (connection, add, remove, signal) => {
       const url = new URL(
         peRouteUrl("resources.subscriptions", {}, resolveWorkbenchConfig().origin),
       );
@@ -116,6 +118,7 @@ export class PeReadings {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ add, remove }),
+        signal,
       });
       if (!response.ok) throw Error(`Reading subscriptions: ${response.status}`);
     },
@@ -124,6 +127,7 @@ export class PeReadings {
   /** Retire this owner's transport. Idempotent, and one-way: no further request is ever issued. */
   close() {
     this.closed = true;
+    this.admission?.abort();
     this.watchSilence = undefined;
     this.cancelDelivery?.();
     this.cancelDelivery = undefined;
@@ -203,6 +207,7 @@ export class PeReadings {
     const hide = () => {
       if (this.hidden) return;
       this.hidden = true;
+      this.admission?.abort();
       clearTimeout(this.retry);
       this.retry = undefined;
       clearTimeout(this.watchdog);
@@ -308,6 +313,7 @@ export class PeReadings {
   }
 
   private lose() {
+    this.admission?.abort();
     this.cancelDelivery?.();
     this.cancelDelivery = undefined;
     this.pending.clear();
@@ -375,7 +381,22 @@ export class PeReadings {
           const initial = this.sent.size === 0;
           for (const [key] of add) this.renew.delete(key);
           // Subscription admission remains authoritative: failure still fences the live wire.
-          await this.update(connection, add.map(([, entry]) => entry.request), remove);
+          const admission = new AbortController();
+          this.admission = admission;
+          let deadline!: ReturnType<typeof setTimeout>;
+          const expired = new Promise<never>((_resolve, reject) => {
+            admission.signal.addEventListener("abort", () => reject(admission.signal.reason), { once: true });
+            deadline = setTimeout(() => admission.abort(Error("Reading subscription admission timed out")), READING_DEADLINE_MS);
+          });
+          try {
+            await Promise.race([
+              this.update(connection, add.map(([, entry]) => entry.request), remove, admission.signal),
+              expired,
+            ]);
+          } finally {
+            clearTimeout(deadline);
+            if (this.admission === admission) this.admission = undefined;
+          }
           if (this.closed || this.connection !== connection || this.generation !== generation) break;
           for (const key of remove) this.sent.delete(key);
           for (const [key, entry] of add) this.sent.set(key, entry.request);
@@ -414,6 +435,7 @@ export class PeReadings {
     const observationEpoch = this.observationEpoch;
     const url = new URL(this.url());
     url.searchParams.delete("keys");
+    this.admission?.abort();
     this.connection = crypto.randomUUID();
     url.searchParams.set("connection", this.connection);
     this.sent = new Map();
