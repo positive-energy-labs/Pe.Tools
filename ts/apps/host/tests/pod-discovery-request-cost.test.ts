@@ -11,8 +11,9 @@ import { stateTree } from "@pe/host-contracts/service-identity";
 import { createContributionContent } from "../src/pe-routes.ts";
 import { createPluginsHandler } from "../src/plugins-handler.ts";
 import { servePeRoute } from "@pe/agent-contracts/pe-api";
+import { contentRootsRefreshMs } from "../src/content-roots.ts";
 
-const reinstall = vi.hoisted(() => ({ hold: undefined as undefined | { entered: () => void; wait: Promise<void> } }));
+const reinstall = vi.hoisted((): { hold: { entered: () => void; wait: Promise<void> } | undefined } => ({ hold: undefined }));
 vi.mock("@pe/agent-contracts", async original => {
   const actual = await original<typeof import("@pe/agent-contracts")>();
   return { ...actual, createPluginRuntime: (...args: Parameters<typeof actual.createPluginRuntime>) => {
@@ -32,6 +33,7 @@ vi.mock("node:fs/promises", async original => ({ ...(await original<typeof impor
 const roots: string[] = [];
 afterEach(async () => {
   vi.restoreAllMocks();
+  vi.useRealTimers();
   stopPackageDiscovery();
   bindPackageLifecycle(undefined);
   reinstall.hold = undefined;
@@ -128,6 +130,7 @@ test("a new Pod requested before the inventory cadence is discovered immediately
 
 test("whole inventory reads use the cadence and explicit refresh sees a newly dropped Pod", async () => {
   const { root, pods, page } = await fixture();
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
   const content = createContributionContent({ worldRoot: stateTree(root).directory("agent"),
     decisionsMachine: stateTree(join(root, "machine")),
     packages: options => listPackages({ ...options, podsRoots: pods }) });
@@ -145,6 +148,10 @@ test("whole inventory reads use the cadence and explicit refresh sees a newly dr
     expect(await (await inventory()).text()).not.toContain("pod:dropped");
     await content.lifecycle.refresh();
     expect(await (await inventory()).text()).toContain("pod:dropped");
+    await fs.writeFile(page("dropped"), "<title>timer refresh after explicit refresh</title>");
+    await vi.advanceTimersByTimeAsync(contentRootsRefreshMs);
+    await expect.poll(() => Buffer.from(content.lifecycle.packages().find(pod => pod.id === "dropped")!
+      .members.find(member => member.path === "pages/hello/index.html")!.bytes).toString()).toContain("timer refresh");
     const handler = createPagesHandler([], [pods], undefined, undefined, stateTree(root).directory("page-state"));
     expect((await handler(new Request("http://host/pages"))).status).toBe(200);
   } finally { await content.close(); }

@@ -251,16 +251,33 @@ export function createPackageLifecycle(
       .catch(() => {});
     return next;
   }
-  const requestRefresh = () => {
-    if (closed || Date.now() - refreshedAt < contentRootsRefreshMs) return;
-    return refresh().catch((error) => {
+  const backgroundRefresh = () => refresh().catch((error) => {
       if (!closed) console.error("package-lifecycle: background refresh failed; keeping last listing", error);
     });
+  const requestRefresh = () => {
+    if (closed || Date.now() - refreshedAt < contentRootsRefreshMs) return;
+    return backgroundRefresh();
   };
   // Whole inventory follows the roots cadence. Named requests validate their Pod's members
   // and all manifest identities independently; human/agent writes still await explicit refresh.
-  const refreshTimer = setInterval(requestRefresh, contentRootsRefreshMs);
+  const refreshTimer = setInterval(() => { if (!closed) void backgroundRefresh(); }, contentRootsRefreshMs);
   refreshTimer.unref();
+  function reconcile(initial = false, packageId?: string) {
+    // A named admission, like an action, must follow a read begun before its arrival.
+    // Otherwise that older lifecycle publication could remove the newly active Pod.
+    const next = (inFlight ?? settled)
+      .catch(() => ready)
+      .then(() => {
+        if (closed || initial) return initialListing;
+        return synchronize(packageId);
+      });
+    inFlight = next;
+    void next.finally(() => {
+      if (inFlight === next) inFlight = undefined;
+    }).catch(() => {});
+    settled = next;
+    return next;
+  }
   return {
     // Only startup gates readers. Each action awaits its own refresh before reporting success;
     // unrelated readers serve the completed census even while that action scans a slow drive.
@@ -277,25 +294,8 @@ export function createPackageLifecycle(
     /** One scan in flight. Reads serve the last completed listing until it finishes. */
     requestRefresh,
     installation: (id: string) => installations.get(`pod:${id}`),
-    admit: (id: string) => synchronize(id),
-    refresh: (initial = false) => {
-      // An action may have written after discovery captured its bytes. Queue a fresh census
-      // behind that scan rather than joining its stale snapshot. Background readers join neither.
-      const next = (inFlight ?? settled)
-        .catch(() => ready)
-        .then(() => {
-          if (closed || initial) return initialListing;
-          return synchronize();
-        });
-      inFlight = next;
-      void next
-        .finally(() => {
-          if (inFlight === next) inFlight = undefined;
-        })
-        .catch(() => {});
-      settled = next;
-      return next;
-    },
+    admit: (id: string) => reconcile(false, id),
+    refresh: reconcile,
     listing: () => initialListing,
     inventory: runtime.inventory,
     active: (id: string) => runtime.active(`pod:${id}`),

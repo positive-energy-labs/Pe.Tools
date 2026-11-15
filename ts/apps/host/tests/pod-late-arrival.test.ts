@@ -20,6 +20,7 @@ import * as packages from "../src/packages.ts";
 import { createPagesHandler } from "../src/pages-route.ts";
 import { createContributionContent } from "../src/pe-routes.ts";
 import { createPluginsHandler } from "../src/plugins-handler.ts";
+import { contentRootsRefreshMs } from "../src/content-roots.ts";
 import { exportPod,installArchive,writeZip } from "../src/pod-transfer.ts";
 
 test("a detached initial census can fail after close without an unhandled rejection", async () => {
@@ -260,7 +261,7 @@ test("an unknown Pod waits at most five seconds for a stalled refresh", async ()
   bindPackageLifecycle(lifecycle);
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   try {
-    const refusal = expect(requirePackageEnabled("missing")).rejects.toThrow("inactive");
+    const refusal = expect(requirePackageEnabled("missing")).rejects.toMatchObject({ code: "pod.discovery.exceeded" });
     await entered.promise;
     await vi.advanceTimersByTimeAsync(5000);
     await refusal;
@@ -291,7 +292,7 @@ test("a known Page answers while an unrelated late Pod waits for discovery", asy
   });
   await lifecycle.ready;
   bindPackageLifecycle(lifecycle);
-  const scan = lifecycle.requestRefresh();
+  const scan = lifecycle.refresh();
   await entered.promise;
   await put(join(root, "user"), "late/pod.json", '{"id":"late"}');
   const handle = createPagesHandler(join(root, "user/Pages"), packages.productPodsRoots(),
@@ -339,7 +340,7 @@ test("a missed door queues fresh discovery behind a scan captured before arrival
   await lifecycle.ready;
   bindPackageLifecycle(lifecycle);
   try {
-    lifecycle.requestRefresh();
+    void lifecycle.refresh();
     await entered.promise;
     await put(join(root, "user"), "late/pod.json", '{"id":"late"}');
     const opening = requirePackageEnabled("late");
@@ -381,7 +382,7 @@ test("an action after discovery captures bytes gets its own fresh reconciliation
   });
   try {
     await lifecycle.ready;
-    lifecycle.requestRefresh();
+    void lifecycle.refresh();
     await captured.promise;
     await put(join(root, "user"), "late/pod.json", '{"id":"late"}');
     const action = lifecycle.refresh();
@@ -423,12 +424,14 @@ test("removed members and Pods disappear after refresh", async () => {
 for (const tier of ["user", "firm"] as const) {
   const arrive = () =>
     put(tier === "firm" ? firm : join(root, "user"), "late/pod.json", '{"id":"late"}');
-  test(`${tier}: inventory discovers a Pod dropped after startup`, async () => {
+  test(`${tier}: inventory discovers a Pod dropped after startup on its cadence`, async () => {
     await arrive();
+    vi.spyOn(Date, "now").mockReturnValue(Date.now() + contentRootsRefreshMs);
     await expect.poll(inventory).toContainEqual(expect.objectContaining({ id: "pod:late" }));
   });
   test(`${tier}: discovery activates without a toggle`, async () => {
     await arrive();
+    vi.spyOn(Date, "now").mockReturnValue(Date.now() + contentRootsRefreshMs);
     await inventory();
     await expect
       .poll(async () => {
@@ -461,8 +464,9 @@ for (const tier of ["user", "firm"] as const) {
   });
 
 }
-test("inventory read refreshes member bytes in a Pod present at startup", async () => {
+test("inventory cadence refreshes member bytes in a Pod present at startup", async () => {
   await put(join(root, "user"), "existing/README.md", "after");
+  vi.spyOn(Date, "now").mockReturnValue(Date.now() + contentRootsRefreshMs);
   await inventory();
   await expect
     .poll(async () => {
@@ -543,6 +547,7 @@ test("a slow filesystem scan leaves inventory and unrelated HTTP reads available
   const address = server.address();
   if (!address || typeof address === "string") throw Error("Expected TCP listener");
   const base = `http://127.0.0.1:${address.port}`;
+  const refreshing = content.lifecycle.refresh();
   try {
     const first = fetch(`${base}/pe/plugins`).then((r) => r.json());
     await entered.promise;
@@ -575,6 +580,7 @@ test("a slow filesystem scan leaves inventory and unrelated HTTP reads available
     await expect(opening).resolves.toBeUndefined();
   } finally {
     release.resolve();
+    await refreshing;
     await content.lifecycle.refresh();
     server.closeAllConnections();
     await new Promise<void>((resolve) => server.close(() => resolve()));
@@ -596,7 +602,7 @@ test("REVIEW: host member write must reconcile before the next inventory", async
     return listing;
   });
   // Hold lifecycle publication after discovery; the member door can still validate its census.
-  content.lifecycle.requestRefresh();
+  void content.lifecycle.refresh();
   await entered.promise;
   let writeReturned = false;
   const writing = settle(
