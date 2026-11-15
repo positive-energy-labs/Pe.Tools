@@ -586,8 +586,18 @@ test("a slow startup scan publishes activation so the next Page request succeeds
   await entered.promise;
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   const handler = createPagesHandler([], [pods], undefined, undefined, stateFixture(join(root, "page-state")));
+  const validated = Promise.withResolvers<void>();
+  const signature = diskSignature.podsDiskSignature;
+  vi.spyOn(diskSignature, "podsDiskSignature").mockImplementation(async (...args) => {
+    const value = await signature(...args);
+    validated.resolve();
+    return value;
+  });
   try {
     const opening = handler(new Request("http://host/pages/late--tour/"));
+    // Advance the virtual deadline only after native metadata IO has drained. The capture
+    // root remains held; otherwise the clock fabricates an unrelated per-Pod metadata timeout.
+    await validated.promise;
     await vi.advanceTimersByTimeAsync(5_000);
     expect((await opening).status).toBe(503);
     release.resolve();
