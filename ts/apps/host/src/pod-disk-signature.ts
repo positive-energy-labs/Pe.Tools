@@ -10,10 +10,13 @@ const metadataScanSlowMs = 500;
 export function resolvePackageDiskSignature(signature: string, previous: PackageCensus | undefined, roots: readonly string[]): string {
   const rows: unknown[][] = JSON.parse(signature);
   const before = previous?.signature ? packageDiskRows(previous.signature, roots) : new Map<string, unknown[][]>();
+  const failures = new Map<string, string>();
+  for (const pod of previous?.listing.packages ?? [])
+    if (pod.discoveryFailure) failures.set(resolve(pod.directory), pod.discoveryFailure);
   return JSON.stringify(rows.flatMap(row => {
     if (!Array.isArray(row) || row[1] !== "retained") return [row];
     const retained = before.get(String(row[0])) ?? [];
-    const failure = previous?.listing.packages.find(pod => pod.directory === row[0])?.discoveryFailure;
+    const failure = failures.get(String(row[0]));
     // A previous capture failure is retried when this Pod is used, never as a side effect
     // of reading a neighbour. Its last identity stays, but its bytes remain unavailable.
     if (failure && !retained.some(row => row[1] === "unavailable"))
@@ -56,6 +59,14 @@ function packageDiskRows(signature: string, roots: readonly string[]): Map<strin
   return grouped;
 }
 
+/** Only retained rows lack a new member observation. Missing/failed identities are observations too. */
+export function observedPackageDirectories(signature: string | undefined, roots: readonly string[], previous?: PackageCensus): ReadonlySet<string> {
+  const rows = signature ? packageDiskRows(signature, roots) : new Map<string, unknown[][]>();
+  const retained = new Set([...rows].filter(([, entries]) => entries.some(row => row[1] === "retained")).map(([directory]) => directory));
+  return new Set([...rows.keys(), ...(previous?.listing.packages.map(pod => resolve(pod.directory)) ?? [])]
+    .filter(directory => !retained.has(directory)));
+}
+
 /** A completed capture must not silently omit a regular member the arrival walk saw. */
 export function packageDiskFiles(signature: string): string[] {
   const entries: unknown = JSON.parse(signature);
@@ -73,6 +84,7 @@ export async function podsDiskSignature(
 ): Promise<string | undefined> {
   roots = roots.map(root => resolve(root));
   const previous = scope?.previous;
+  const admitted = new Map(previous?.listing.packages.map(pod => [resolve(pod.directory), pod]));
   const targetKnown = previous?.listing.packages.some(pod => pod.id === scope?.packageId);
   const before = previous?.signature ? packageDiskSignatures(previous.signature, roots) : new Map<string, string>();
   const row = (absolute: string, info: Awaited<ReturnType<typeof lstat>>) =>
@@ -127,7 +139,7 @@ export async function podsDiskSignature(
                 manifestRow = row(manifest, info);
                 const oldRows: unknown[][] = prior ? JSON.parse(prior) : [];
                 const oldManifest = oldRows.find(row => row[0] === manifest);
-                const pod = previous?.listing.packages.find(pod => resolve(pod.directory) === resolve(directory));
+                const pod = admitted.get(directory);
                 // A miss retries uncaptured candidates: their old IO refusal is no evidence
                 // that the requested id is absent. Known neighbours need not retry them.
                 if (scope?.packageId !== undefined && prior && (pod ? pod.id !== scope.packageId : targetKnown) && JSON.stringify(oldManifest) === JSON.stringify(manifestRow))

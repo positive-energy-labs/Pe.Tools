@@ -3,15 +3,16 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { capturePackage, listPackages, readPackage } from "../src/packages.ts";
-import { stopPackageDiscovery } from "../src/pod-capture.ts";
+import { rememberCaptureRoots, stopPackageDiscovery } from "../src/pod-capture.ts";
 import { createPagesHandler } from "../src/pages-route.ts";
 import { stateFixture } from "../../../tests/isolated-home/storage.ts";
 import { bindPackageLifecycle, createPackageLifecycle } from "../src/package-lifecycle.ts";
 import { stateTree } from "@pe/host-contracts/service-identity";
-import { createContributionContent } from "../src/pe-routes.ts";
+import { createContributionContent, createPeRoutes } from "../src/pe-routes.ts";
 import { createPluginsHandler } from "../src/plugins-handler.ts";
 import { servePeRoute } from "@pe/agent-contracts/pe-api";
 import { contentRootsRefreshMs } from "../src/content-roots.ts";
+import { freezeScript } from "../src/operation-script.ts";
 
 const reinstall = vi.hoisted((): { hold: { entered: () => void; wait: Promise<void> } | undefined } => ({ hold: undefined }));
 vi.mock("@pe/agent-contracts", async original => {
@@ -209,4 +210,100 @@ test("an unavailable neighbour's capture is retried only when that Pod is used",
   expect(response.status).toBe(503);
   expect(await response.text()).toContain("pod.discovery.exceeded");
   expect(opened.mock.calls.map(([path]) => String(path))).toContain(page("other"));
+});
+
+test.each(["before", "after"])("a failed Pod keeps its marker when its capture ends %s a peer's capture", async order => {
+  const { pods, page, request } = await fixture();
+  await fs.writeFile(join(pods, "requested", "Run.csx"), "Result(1);");
+  await fs.writeFile(join(pods, "requested", "pod.json"), '{"id":"requested","entrypoints":[{"sourcePath":"Run.csx"}]}');
+  await listPackages({ podsRoots: pods });
+  rememberCaptureRoots(pods);
+  const sealed = await capturePackage("requested", pods);
+  const failedGate = Promise.withResolvers<void>(), failedEntered = Promise.withResolvers<void>();
+  const peerGate = Promise.withResolvers<void>(), peerEntered = Promise.withResolvers<void>();
+  const original = fs.open;
+  let heldFailed = false, heldPeer = false;
+  const opened = vi.spyOn(fs, "open").mockImplementation(async (...args) => {
+    if (String(args[0]) === page("requested") && !heldFailed) {
+      heldFailed = true;
+      failedEntered.resolve();
+      await failedGate.promise;
+      throw Object.assign(Error("busy"), { code: "EBUSY" });
+    }
+    if (order === "before" && String(args[0]) === page("other") && !heldPeer) {
+      heldPeer = true;
+      peerEntered.resolve();
+      await peerGate.promise;
+    }
+    return original(...args);
+  });
+  try {
+    await fs.writeFile(page("requested"), "<title>failing changed Page</title>");
+    const failing = request();
+    await failedEntered.promise;
+    await fs.writeFile(page("other"), "<title>fresh peer</title>");
+    const peer = request("other");
+    if (order === "before") {
+      await peerEntered.promise;
+      failedGate.resolve();
+      expect((await failing).status).toBe(503);
+      peerGate.resolve();
+      expect(await (await peer).text()).toContain("fresh peer");
+    } else {
+      expect(await (await peer).text()).toContain("fresh peer");
+      failedGate.resolve();
+      expect((await failing).status).toBe(503);
+    }
+    opened.mockRestore();
+    await expect(capturePackage("requested", pods)).rejects.toMatchObject({ code: "pod.discovery.exceeded" });
+    await expect(freezeScript({ sourcePath: "Run.csx", sourceBundle: sealed.sourceBundle }))
+      .rejects.toMatchObject({ status: 503, refusal: { code: "pod.discovery.exceeded" } });
+    expect(await (await request()).text()).toContain("failing changed Page");
+  } finally { failedGate.resolve(); peerGate.resolve(); }
+});
+
+test("an older failed capture cannot replace a newer successful capture of that Pod", async () => {
+  const { pods, page, request } = await fixture();
+  const gate = Promise.withResolvers<void>(), entered = Promise.withResolvers<void>();
+  const original = fs.open;
+  let held = false;
+  const opened = vi.spyOn(fs, "open").mockImplementation(async (...args) => {
+    if (String(args[0]) === page("requested") && !held) {
+      held = true;
+      entered.resolve();
+      await gate.promise;
+      throw Object.assign(Error("older busy read"), { code: "EBUSY" });
+    }
+    return original(...args);
+  });
+  try {
+    await fs.writeFile(page("requested"), "<title>older pending</title>");
+    const older = request();
+    await entered.promise;
+    await fs.writeFile(page("requested"), "<title>newer successful observation wins</title>");
+    expect(await (await request()).text()).toContain("newer successful observation wins");
+    gate.resolve();
+    expect((await older).status).toBe(503);
+    opened.mockRestore();
+    const pod = await capturePackage("requested", pods);
+    expect(Buffer.from(pod.members.find(member => member.path === "pages/hello/index.html")!.bytes).toString())
+      .toContain("newer successful observation wins");
+  } finally { gate.resolve(); }
+});
+
+test("a named contribution read sees edited script bytes before the inventory cadence", async () => {
+  const { root, pods } = await fixture();
+  await fs.writeFile(join(pods, "requested", "Run.csx"), "Result(1);");
+  await fs.writeFile(join(pods, "requested", "pod.json"), '{"id":"requested","entrypoints":[{"sourcePath":"Run.csx"}]}');
+  const content = createContributionContent({ worldRoot: stateTree(root).directory("agent"), homeRoot: root,
+    decisionsMachine: stateTree(join(root, "machine")), packages: options => listPackages({ ...options, podsRoots: pods }) });
+  try {
+    await content.read();
+    const app = createPeRoutes({ registrations: [], store: { getState: async () => null, setState: async () => {} },
+      heads: { observe: () => () => {} }, contributionRead: content.member });
+    const read = () => app.fetch(new Request("http://host/pe/contributions?key=script%3A%40requested%2FRun.csx"));
+    expect(await (await read()).json()).toMatchObject({ content: "Result(1);" });
+    await fs.writeFile(join(pods, "requested", "Run.csx"), "Result(2);");
+    expect(await (await read()).json()).toMatchObject({ content: "Result(2);" });
+  } finally { await content.close(); }
 });

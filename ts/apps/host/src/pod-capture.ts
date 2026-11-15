@@ -163,6 +163,7 @@ type DiscoveryScan = {
   startedAt: number;
   completedAt: number;
   signature: string | undefined;
+  observations?: Map<string, number>;
 };
 const discovery = new Map<string, DiscoveryScan>();
 const scans = new Set<DiscoveryScan>();
@@ -200,8 +201,55 @@ export async function readPackageWork<T>(
     validations.delete(stop);
   }
 }
-export type PackageCensus = { signature: string | undefined; listing: PackageListing };
+export type PackageCensus = {
+  signature: string | undefined;
+  listing: PackageListing;
+  /** Observation order belongs to this census, alongside its bytes; it is not another cache. */
+  observedAt?: ReadonlyMap<string, number>;
+};
 const completedCensuses = new Map<string, PackageCensus>();
+let observationSequence = 0;
+
+function observedAt(listing: PackageListing, previous: PackageCensus | undefined, observations: ReadonlyMap<string, number> | undefined) {
+  if (!observations) return previous?.observedAt;
+  return new Map(listing.packages.map(pod => {
+    const directory = resolve(pod.directory);
+    return [directory, Math.max(previous?.observedAt?.get(directory) ?? 0, observations.get(directory) ?? 0)];
+  }));
+}
+
+/** A peer may publish a failure while this scan reads. Unobserved Pods keep that newer status. */
+function retainUnobserved(listing: PackageListing, previous: PackageCensus | undefined, observations: ReadonlyMap<string, number> | undefined): PackageListing {
+  if (!previous || !observations) return listing;
+  const latest = new Map(previous.listing.packages.map(pod => [resolve(pod.directory), pod]));
+  return { ...listing, packages: listing.packages.map(pod => {
+    const directory = resolve(pod.directory), known = latest.get(directory);
+    return known?.id === pod.id && (!observations.has(directory) ||
+      (observations.get(directory) ?? 0) < (previous.observedAt?.get(directory) ?? 0)) ? known : pod;
+  }) };
+}
+
+/** Superseded reads never publish old bytes, but an unrelated Pod cannot erase their refusal.
+ * A newer observation of the same Pod wins, including a successful recovery. */
+function recordUnavailable(roots: PodsRoots, key: string, listing: PackageListing, observations: ReadonlyMap<string, number> | undefined) {
+  const previous = completedCensuses.get(key);
+  if (!previous || !observations) return;
+  const failures = new Map(listing.packages.filter(pod => pod.discoveryFailure).map(pod => [resolve(pod.directory), pod]));
+  if (!failures.size) return;
+  let changed = false;
+  const versions = new Map(previous.observedAt);
+  const packages = previous.listing.packages.map(pod => {
+    const directory = resolve(pod.directory), failed = failures.get(directory), version = observations.get(directory);
+    if (failed?.id !== pod.id || version === undefined || version <= (previous.observedAt?.get(directory) ?? 0)) return pod;
+    changed = true;
+    versions.set(directory, version);
+    return { ...pod, discoveryFailure: failed.discoveryFailure };
+  });
+  if (!changed) return;
+  const marked = { ...previous.listing, packages };
+  completedCensuses.set(key, { ...previous, listing: marked, observedAt: versions });
+  rememberPackageCensus(roots, marked);
+}
 
 /** Shutdown cancels discovery; request expiry alone leaves a recoverable scan running. */
 export function stopPackageDiscovery() {
@@ -218,6 +266,7 @@ export async function discoverPackages(
   readSignature?: (signal: AbortSignal, previous?: PackageCensus) => Promise<string | undefined>,
   resolveSignature?: (signature: string, previous?: PackageCensus) => string,
   packageId?: string,
+  observedDirectories?: (signature: string | undefined, previous?: PackageCensus) => ReadonlySet<string>,
 ): Promise<PackageListing> {
   const key = rootsKey(roots);
   let selected: DiscoveryScan | undefined;
@@ -226,8 +275,12 @@ export async function discoverPackages(
   validations.add(validation);
   const choose = (signature: string | undefined) => {
     validation.signal.throwIfAborted();
+    const cached = completedCensuses.get(key);
+    const version = ++observationSequence;
+    const observed = observedDirectories?.(signature, cached);
+    const observations = observed && new Map([...observed].map(directory => [directory, version]));
     if (signature !== undefined && resolveSignature)
-      signature = resolveSignature(signature, completedCensuses.get(key));
+      signature = resolveSignature(signature, cached);
     let scan = discovery.get(key);
     const tooOld = scan && !scan.completed && Date.now() - scan.startedAt >= packageScanMaxAgeMs;
     // Validate joins and late answers too. Unknown metadata never authorizes reuse.
@@ -239,17 +292,22 @@ export async function discoverPackages(
       discovery.delete(key);
       scan = undefined;
     }
+    const retryMiss = cached?.listing.unreadable.length && (wait === "background" ||
+      (packageId !== undefined && !cached.listing.packages.some(pod => pod.id === packageId)));
+    if (!retryMiss && signature !== undefined && cached?.signature === signature &&
+      !cached.listing.packages.some(pod => pod.discoveryFailure && (packageId === undefined || pod.id === packageId))) {
+      if (observations) completedCensuses.set(key, { ...cached, observedAt: observedAt(cached.listing, cached, observations) });
+      return Promise.resolve(cached.listing);
+    }
     if (scan) {
       selected = scan;
+      if (observations) {
+        scan.observations ??= new Map();
+        for (const [directory, version] of observations) scan.observations.set(directory, version);
+      }
       if (scan.completed) discovery.delete(key); // A late answer serves at most one reader.
       return scan.promise;
     }
-    const cached = completedCensuses.get(key);
-    const retryMiss = packageId !== undefined && cached?.listing.unreadable.length &&
-      !cached.listing.packages.some(pod => pod.id === packageId);
-    if (!retryMiss && signature !== undefined && cached?.signature === signature &&
-      !cached.listing.packages.some(pod => pod.discoveryFailure && (packageId === undefined || pod.id === packageId)))
-      return Promise.resolve(cached.listing);
     const stop = new AbortController();
     const current: DiscoveryScan = {
       stop,
@@ -259,20 +317,25 @@ export async function discoverPackages(
       startedAt: Date.now(),
       completedAt: 0,
       signature,
+      observations,
     };
     current.promise = current.promise.then(listing => {
       stop.signal.throwIfAborted();
-      if (discovery.get(key) === current) rememberPackageCensus(roots, listing);
+      const latest = completedCensuses.get(key);
+      const publishing = discovery.get(key) === current;
+      const published = publishing ? retainUnobserved(listing, latest, current.observations) : listing;
+      if (publishing) rememberPackageCensus(roots, published);
       current.completed = true;
       current.completedAt = Date.now();
       // Only on-time answers enter the checked cache. Late answers keep their one-reader 5 s window.
       if (!current.expired && discovery.get(key) === current) {
         // Unknown metadata cannot authorize byte reuse, but it must retain identity and retry
         // markers across repeated IO failures instead of turning the second retry into absence.
-        completedCensuses.set(key, { signature, listing });
+        completedCensuses.set(key, { signature, listing: published, observedAt: observedAt(published, latest, current.observations) });
         discovery.delete(key);
       }
-      return listing;
+      recordUnavailable(roots, key, listing, current.observations);
+      return published;
     }, error => {
       if (discovery.get(key) === current) discovery.delete(key);
       throw error;

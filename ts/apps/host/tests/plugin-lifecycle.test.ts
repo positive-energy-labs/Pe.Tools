@@ -125,7 +125,7 @@ test("public disable removes Page, script, member, catalog and receipted skill; 
     );
   expect((await toggle(false)).status).toBe(200);
   expect((await content.read()).packages).toEqual([]);
-  expect(content.member("member:sample/settings/input.json")).toBeUndefined();
+  expect(await content.member("member:@sample/settings/input.json")).toBeUndefined();
   expect((await pages(new Request("http://host/pages/sample--tour/"))).status).toBe(404);
   const sourceBundle = {
     files: Object.entries(bytes).map(([path, text]) => ({

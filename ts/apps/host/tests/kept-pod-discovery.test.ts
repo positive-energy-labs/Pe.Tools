@@ -98,7 +98,7 @@ test.each(["edited", "missing-record"])(
       expect(pod.contributions.map((c) => c.key)).toEqual(
         expect.arrayContaining(["script:@example/src/Run.cs", "page:@example/pages/tour"]),
       );
-      const executable = content.member("script:@example/src/Run.cs");
+      const executable = await content.member("script:@example/src/Run.cs");
       expect(executable).toMatchObject({
         content: mine,
         sourceBundle: { files: expect.any(Array) },

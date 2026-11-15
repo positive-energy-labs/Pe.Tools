@@ -82,11 +82,12 @@ export async function requirePackageEnabled(
   id: string,
   podsRoots?: PodsRoots,
   outsideCensus: readonly string[] = [],
+  owner = serving,
 ) {
   // Only the product's Pods carry policy: the content homes, or the user's Pods an import writes.
   if (typeof podsRoots === "string" && podsRoots !== productPodsRootPath()) return;
-  if (serving && !outsideCensus.includes(id)) {
-    const lifecycle = serving;
+  if (owner && !outsideCensus.includes(id)) {
+    const lifecycle = owner;
     const discover = async () => {
       await lifecycle.ready;
       if (!lifecycle.inventory().some((pod) => pod.id === `pod:${id}`)) {
@@ -119,9 +120,10 @@ export async function activePackages(
   packages: readonly AdmittedPackage[],
   podsRoots?: PodsRoots,
   outsideCensus: readonly string[] = [],
+  owner = serving,
 ) {
   const enabled = await Promise.allSettled(
-    packages.map((pod) => requirePackageEnabled(pod.id, podsRoots, outsideCensus)),
+    packages.map((pod) => requirePackageEnabled(pod.id, podsRoots, outsideCensus, owner)),
   );
   for (const result of enabled)
     if (result.status === "rejected" && result.reason instanceof PackageDiscoveryExceeded) throw result.reason;

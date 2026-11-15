@@ -17,7 +17,7 @@ import { contentHomes, contentRootsReady, ContentHomeUnavailable } from "./conte
 import { shippedPodUpdateRefusals } from "./shipped-pod-status.ts";
 import { podModelSchema, type PodModel } from "./pod-model.ts";
 import { logPackageDiscovery as scanLog } from "./pod-discovery-log.ts";
-import { packageDiskFailure, packageDiskFiles, packageDiskSignatures, podsDiskSignature, resolvePackageDiskSignature } from "./pod-disk-signature.ts";
+import { observedPackageDirectories, packageDiskFailure, packageDiskFiles, packageDiskSignatures, podsDiskSignature, resolvePackageDiskSignature } from "./pod-disk-signature.ts";
 export { bindPackageScanLogger, logPackageDiscovery, packageScanLog, packageScanLogLineLimit } from "./pod-discovery-log.ts";
 import {
   captureIndexedPackage,
@@ -169,7 +169,8 @@ export async function listPackages({ podsRoots, wait = "request", packageId }: P
   const listing = await discoverPackages(podsRoots, scanPackages, wait,
     (signal, previous) => podsDiskSignature([podsRoots].flat(), isPackageMember, signal,
       { packageId, previous }),
-    (signature, previous) => resolvePackageDiskSignature(signature, previous, [podsRoots].flat()), packageId);
+    (signature, previous) => resolvePackageDiskSignature(signature, previous, [podsRoots].flat()), packageId,
+    (signature, previous) => observedPackageDirectories(signature, [podsRoots].flat(), previous));
   // Import notices are runtime state, not disk bytes; project them even when the census is reused.
   return { ...listing, packages: listing.packages.map(pod => {
     const twins = listing.packages.filter(other => other.id === pod.id);
