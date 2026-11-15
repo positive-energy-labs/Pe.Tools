@@ -3419,7 +3419,7 @@ export namespace MepSystemMembers {
     }
     export interface MepFactOfMepElementRef {
       state: MepReadState;
-      value: MepElementRef;
+      value: MepElementRef | null;
       error?: null | string;
     }
     export interface MepElementRef {
@@ -3434,7 +3434,7 @@ export namespace MepSystemMembers {
     }
     export interface MepFactOfMepSource {
       state: MepReadState;
-      value: MepSource;
+      value: MepSource | null;
       error?: null | string;
     }
     /**
@@ -3456,7 +3456,7 @@ export namespace MepSystemMembers {
     }
     export interface MepFactOfString {
       state: MepReadState;
-      value: string;
+      value: null | string;
       error?: null | string;
     }
     export interface MepPeer {

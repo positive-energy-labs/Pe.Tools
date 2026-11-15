@@ -1,0 +1,22 @@
+{
+  "systems": [
+    {
+      "uniqueId": "2562e6bd-f77c-4bc4-ba5a-25535e376335-00582299",
+      "elementId": 5780610,
+      "name": "SCW 2",
+      "domain": "piping",
+      "systemType": {
+        "state": "Value",
+        "value": {
+          "uniqueId": "d6db6104-df64-4d80-9f5a-20e8c8f2e32f-0040b9ff",
+          "elementId": 4241919,
+          "name": "SCW - Softened Cold Water"
+        }
+      },
+      "classification": "DomesticColdWater",
+      "flowCubicFeetPerSecond": { "state": "Value", "value": 0.03342014079588089 },
+      "source": { "state": "Absent", "value": null }
+    }
+  ],
+  "elements": []
+}
