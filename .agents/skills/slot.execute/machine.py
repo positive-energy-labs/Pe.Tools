@@ -2,7 +2,8 @@
 
 usage: python machine.py admit <kind> [--json]   ADMIT, HOLD, or REFUSE (suite in a delegated child that does not own one); exit 0, 3 or 4
        python machine.py run <kind> [--wait 60] [--owns-suite] -- <command> [args...]
-           atomic, bounded admission held over the whole process tree (codegen, suite, browser)
+           atomic admission for the command's lifetime (codegen, suite, browser)
+           leftover job members are reported and stopped on coordinator exit
        python machine.py admit suite --owns-suite   a delegated child whose brief names it the owner of a suite says so
        python machine.py who [--all] [--json]     every process this repo's work can attribute, biggest first
        python machine.py stop <pid> [<pid>...]    stop processes `who` marks stoppable; refuses the rest; writes a receipt
@@ -18,6 +19,7 @@ kinds: light (one package tsc, touched tests, one C# build, a guard)
 Floors come from the 2026-11-03 machine budget: measured footprint plus about 2 GiB headroom.
 `stop` never touches Revit (pe-revit session owns it), the installed product host, T3, Claude, Codex, or Helium.
 `admit` is diagnostic only: a snapshot cannot reserve capacity. Use `run` for a bounded command.
+admit-only: revit-test, revit-drive; pe-revit session owns SDK lifetimes, outside run's kill-on-close job.
 Pruning editors and bystander apps is explicit; admission never stops someone else's work.
 Receipts: .artifacts/machine/stops.jsonl in the root checkout, one line per stop, with the caller's T3 thread.
 """
