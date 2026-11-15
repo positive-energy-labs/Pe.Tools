@@ -81,7 +81,7 @@ A skill edit is level 9 on `index`'s strength ladder, the weakest. The writer an
 - Before adding a law, walk the ladder for a type, a projection, a boundary decode, or a guard that can hold the rule instead.
 - The user rules on every stance edit. In a sanctioned autonomous session, file the edit as Owed instead of landing it.
 - Run the check after any edit. A set that fails the check is not landed.
-- A fresh agent, given only the text, proves the edit by doing the intended thing. The writer lists the acts the reader must do before the read starts, and the read passes when the reader does every one. The reader is a model of another family where one is available.
+- A fresh agent, given only the text, proves the edit by doing the intended thing. The writer lists the acts the reader must do before the read starts, and the read passes when the reader does every one. The reader is a model of another family where one is available. The reader is briefed the way the owner briefs a real thread: a short, loose ask from inside a situation, with the gaps a real ask has, and no word that a text is under test or which one. A reader told what is being tested goes and finds it, and a law that holds only when the reader is looking for it has not been read cold. The acts are checked against what the reader did, never against what it says it would do.
 - An edit made after a read is unread until a reader reads it. Fixes go in batches between reads, and only the reads that failed are run again.
 - A role charter is edited under these same laws.
 - A killed law moves to the ledger beside `index` with the reason it was killed.

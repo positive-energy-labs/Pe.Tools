@@ -108,7 +108,7 @@ A run is a large change staffed by the standing roles. Each charter holds its ro
 
 ## Standing roles [scope: repo]
 
-The standing roles work from the charters in `.agents/roles/` (implementor, purger, driver, integrator), and the tier file names each role's tier. A role is relieved by handoff and labelled by its charter name in retros. A second track of work is its own root with its own queue, or it waits; it is never a partner of the implementor. A record keeper is launched only when the owner asks for one, with the retro corpus scripts as its instrument.
+The standing roles work from the charters in `.agents/roles/` (implementor, purger, driver, integrator, lead), and the tier file names each role's tier. A role is relieved by handoff and labelled by its charter name in retros. A second track of work is its own root with its own queue, or it waits; it is never a partner of the implementor. A record keeper is launched only when the owner asks for one, with the retro corpus scripts as its instrument.
 
 ## Models [scope: repo]
 

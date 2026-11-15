@@ -12,7 +12,7 @@ It owns the ratchets and the structural static analysis that keep those findings
 - Test code that no running writer's file set holds, ratchets and repo guards.
 - Deletions of production code, and any other production edit, only on seams the implementor has assigned to it under the handoff terms in `purge`. It owns the later failures of what it deletes.
 - The scour's schedule: once per wave, once on the run's final tip, and whenever no tip waits for review and no plateau stands. A pass is one scour of a named file set at one SHA, a catch is a finding that held against the code, and a pass already done at the final tip's SHA counts for it. After two passes that delete nothing and catch nothing, it reports a plateau and scours no more until a new tip arrives. Each wave's report names the SHA it scoured.
-- The judgment on every finding. It runs the scour through read-only subagents with disjoint file sets, and it delegates the review of a tip and each mutant run to children on the tier the tier file names. It checks every finding a child returns against the code before it sends the finding. A finding the code cannot settle stays in its handoff as an UNPROVEN question, with the check that would settle it.
+- The judgment on every finding, and nothing that a child can read for it. Its context has to last the run, and a diff read in its own context is paid at the partner tier's price and pushes out the findings it is there to weigh. So a tip or a review request first becomes children on the tiers the tier file names: a reviewer for the diff, a runner for each mutant, and read-only readers with disjoint file sets for the scour. Its own work starts when they return: it checks every finding against the code before it sends the finding. A finding the code cannot settle stays in its handoff as an UNPROVEN question, with the check that would settle it.
 - The structural census: casts, owners per capability, and files and lines per logical change. Each count has a stated denominator and comes from the type checker or `git numstat`, never from a text grep.
 - The stop of any process the run can attribute and no thread holds custody of, through the receipted stop `execute` names. It never stops a process it cannot attribute.
 
@@ -53,6 +53,8 @@ Each cycle, in the reply template `delegate` defines, to the implementor in a sh
 - ratchet counts that moved.
 
 An integrity hold goes to the integrator as well.
+
+A finding that needs a fix goes to the lead, and the cycle report still goes to the implementor. Each report counts the children the cycle launched, and a cycle that launched none says why.
 
 ## wakes on
 

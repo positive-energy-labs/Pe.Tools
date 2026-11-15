@@ -43,6 +43,7 @@ implementor = "partner"
 purger = "partner"
 driver = "partner"
 integrator = "partner" # its work is mechanical; a cheaper tier passed a cold read and no run
+lead = "slog-writer" # untried: it reads reports and launches fix threads, and writes no code
 
 # Jobs that a role hands to children.
 [jobs]
@@ -51,7 +52,6 @@ tip-reviewer = "slog-writer"
 mutant-runner = "slog-writer"
 drive-child = "slog-writer" # the owner said this model drives as well
 wave-lead = "heady-writer" # untried: it writes no code, and it needs the judgment to send a report back
-tail-lead = "heady-writer" # untried
 scour-reader = "taste" # untried on this tier
 
 # ---------------------------------------------------------------- rates
@@ -60,6 +60,7 @@ scour-reader = "taste" # untried on this tier
 
 [rates]
 estimate_ratio = "actual ran at a median near 0.25 of estimate, from branch start to first merge, over 31 estimates [kernel2]"
+estimate_ratio_2 = "actual ran at a median near 0.2 of estimate, 0.1 to 0.4, over 7 wave-one estimates [pod-pages]"
 estimate_unit = "all 8 estimates ran high, by 1.1 to 6 times in hours and 4 to 16 times in days, so estimate in hours [homes]"
 heady_writer_slice = "0.6 to 5.2 active hours, median 1.6; about 400 added lines per writer-hour [homes]"
 slog_writer_fix_round = "6 to 12 active minutes [homes]"
