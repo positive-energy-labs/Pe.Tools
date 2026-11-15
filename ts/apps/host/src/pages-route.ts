@@ -479,7 +479,7 @@ export function createPagesHandler(
       }, packageDiscoveryTimeoutMs);
     });
     const discover = async () => {
-      const listing = await listPackages({ podsRoots: pods });
+      const listing = await listPackages({ podsRoots: pods, packageId: id });
       if (expired || requestWait?.expired) return [];
       for (const pod of listing.packages) if (pod.id === id) requirePackageAvailable(pod);
       return activePackages(listing.packages.filter((pod) => id === undefined || pod.id === id), pods);
@@ -495,7 +495,6 @@ export function createPagesHandler(
   /**
    * Where a slug's folder is: `<root>/<slug>`, or for `<id>--<page>` the folder of the one admitted
    * package with that id that contributes `pages/<page>` (a duplicated id contributes nothing).
-   * ponytail: a pod page's request lists the packages once; cache by snapshot if pods get large.
    * `state` is the Page's state folder, named by its slug alone: a Page id is unique across homes,
    * so no key names a home. A scratch slug matches its folder in any casing, so the folder's own
    * name is the one spelling.
@@ -706,7 +705,7 @@ export function createPagesHandler(
       : "";
     const podId = parseContributionKey(page)?.packageId;
     const model = pods && podId
-      ? (await listPackages({ podsRoots: pods })).packages.find((pod) => pod.id === podId)?.for
+      ? (await listPackages({ podsRoots: pods, packageId: podId })).packages.find((pod) => pod.id === podId)?.for
       : undefined;
     if (model && ref) {
       const response = await cross(page, slot, false, ref, "/pages/target", "/call", {
@@ -874,7 +873,7 @@ export function createPagesHandler(
       return { problem: `${key} is a ${ref.kind}: it reads and mentions, it never runs.` };
     await requirePackageEnabled(ref.packageId, pods);
     const pod = pods
-      ? (await listPackages({ podsRoots: pods })).packages.find((one) => one.id === ref.packageId)
+      ? (await listPackages({ podsRoots: pods, packageId: ref.packageId })).packages.find((one) => one.id === ref.packageId)
       : undefined;
     if (pod) requirePackageAvailable(pod);
     const row = pod?.contributions.find((row) => row.kind === "script" && row.key === key);

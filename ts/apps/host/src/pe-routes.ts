@@ -144,7 +144,7 @@ import type { ActionJournal } from "./action-journal.ts";
 import { hostTimeline, timelineReceipts } from "./reads/work-timeline.ts";
 import type { TimelineReceipts } from "@pe/runtime";
 import { observePageTarget } from "./pages-route.ts";
-import { createPackageLifecycle, bindPackageLifecycle } from "./package-lifecycle.ts";
+import { activePackages, createPackageLifecycle, bindPackageLifecycle } from "./package-lifecycle.ts";
 import {
   captureDirectory,
   capturePackage,
@@ -1185,10 +1185,25 @@ export function createContributionContent(options: {
         : await scratchPageDescriptors(pointer ? productPagesRoots(pointer) : pagesRoots());
       return pageRows(descriptors);
     },
-    member: (key: string, sha256?: string) => {
-      const id = parseContributionKey(key)?.packageId;
-      const pod = admitted.find(pod => pod.id === id);
-      if (pod) requirePackageAvailable(pod);
+    member: async (key: string, sha256?: string) => {
+      const ref = parseContributionKey(key);
+      // The catalog is a 30 s projection. A named Pod read validates its own bytes and every
+      // identity now; explicit hashes still name retained immutable revisions of that member.
+      if (ref && (admitted.some(pod => pod.id === ref.packageId) || !latest.has(key))) {
+        const listing = await (options.packages ?? listPackages)({ packageId: ref.packageId });
+        const [pod, ...duplicates] = listing.packages.filter(pod => pod.id === ref.packageId);
+        if (!pod || duplicates.length) return undefined;
+        requirePackageAvailable(pod);
+        if (pod.diagnostics.some(issue => issue.severity === "error") ||
+          !(await activePackages([pod], undefined, [], lifecycle)).length) return undefined;
+        const path = ref.kind === "member" ? ref.path : pod.contributions.find(row => row.key === key)?.memberPath;
+        const member = pod.members.find(member => member.path === path);
+        if (!member) return undefined;
+        const value = memberValue(member.bytes, member.sha256);
+        remember(key, ref.kind === "script" ? { ...value, folder: pod.folder,
+          sourceBundle: (await capturePackage(pod)).sourceBundle } :
+          ref.kind === "page" ? { ...value, folder: pod.folder } : value);
+      }
       return latest.has(key) ? (sha256 ? revisions.get(key)?.get(sha256) : latest.get(key)) : undefined;
     },
   };

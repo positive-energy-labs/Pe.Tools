@@ -276,12 +276,12 @@ test("one admitted content snapshot publishes exact skill bytes and retains froz
       "src/Census.cs",
     ]);
     const skill = catalog.capabilities.find((c) => c.key === "skill:@shelf-test/skills/check")!;
-    const skillBytes = content.member(skill.key, skill.package!.sha256) as { content: string };
-    expect(skillBytes.content).toBe(input["skills/check/SKILL.md"]);
+    const skillBytes = await content.member(skill.key, skill.package!.sha256);
+    expect(skillBytes).toMatchObject({ content: input["skills/check/SKILL.md"] });
     for (const root of [".agents", ".claude"]) {
       expect(
         readFileSync(join(home, root, "skills", "shelf-test--check", "SKILL.md"), "utf8"),
-      ).toBe(skillBytes.content);
+      ).toBe(input["skills/check/SKILL.md"]);
       expect(
         readFileSync(join(home, root, "skills", "shelf-test--check", "support.txt"), "utf8"),
       ).toBe(input["skills/check/support.txt"]);
@@ -295,7 +295,7 @@ test("one admitted content snapshot publishes exact skill bytes and retains froz
         )
       ).status,
     ).toBe(409);
-    expect(content.member("member:@shelf-test/README.md")).toMatchObject({
+    expect(await content.member("member:@shelf-test/README.md")).toMatchObject({
       content: input["README.md"],
     });
   } finally {

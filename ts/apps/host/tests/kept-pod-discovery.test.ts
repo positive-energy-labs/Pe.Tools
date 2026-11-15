@@ -98,7 +98,7 @@ test.each(["edited", "missing-record"])(
       expect(pod.contributions.map((c) => c.key)).toEqual(
         expect.arrayContaining(["script:@example/src/Run.cs", "page:@example/pages/tour"]),
       );
-      const executable = content.member("script:@example/src/Run.cs");
+      const executable = await content.member("script:@example/src/Run.cs");
       expect(executable).toMatchObject({
         content: mine,
         sourceBundle: { files: expect.any(Array) },
@@ -610,7 +610,7 @@ test("the five-second lifecycle discovery bound includes its initial census", as
   bindPackageLifecycle(lifecycle);
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   try {
-    const opening = expect(requirePackageEnabled("late")).rejects.toThrow("inactive");
+    const opening = expect(requirePackageEnabled("late")).rejects.toMatchObject({ code: "pod.discovery.exceeded" });
     await vi.advanceTimersByTimeAsync(5_000);
     await opening;
   } finally {
