@@ -181,7 +181,7 @@ def main(argv=None):
              'Local: ' + now.astimezone().strftime('%Y-%m-%d %H:%M:%S %Z (%z)'),
              'Branch: ' + args.branch, 'Tip: `%s` (%s) %s' % (tip, tip[:8], subject),
              'Previous tip: ' + previous, '', '## Merged since the last cycle', '']
-    lines.append(optional(lambda: git('log', '--merges', '--reverse', '--format=%h %s', previous + '..' + tip)) or 'none')
+    lines.append(optional(lambda: git('log', '--first-parent', '--merges', '--reverse', '--format=%h %s', previous + '..' + tip)) or 'none')
     lines += ['', '## Pulse', '', optional(lambda: pulse(previous, tip, args.map)), '', '## Partners', '']
     threads = optional(lambda: thread_snapshot(args.root, now))
     partners = partner_rows(threads, args.run_dir, tip) if isinstance(threads, list) else []
