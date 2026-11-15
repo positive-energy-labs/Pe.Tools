@@ -31,10 +31,12 @@ async function fixture() {
 }
 
 // Mutant: refresh identity only when the requested key is absent from the old census.
-test("a known by-key capture refuses a newly added cross-home twin on that request", async () => {
+test("a known by-key capture refuses a newly published cross-home twin on that request", async () => {
   const { second, homes } = await fixture();
   await fs.mkdir(join(second, "twin"));
   await fs.writeFile(join(second, "twin", "pod.json"), '{"id":"requested"}');
+  // Owner's no-wait rule uses peer homes' last-published identities.
+  await listPackages({ podsRoots: second });
   await expect(capturePackage("requested", homes)).rejects.toThrow(/claimed by|duplicate/i);
 });
 

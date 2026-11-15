@@ -1,4 +1,4 @@
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { createHash } from "node:crypto";
 import { lstat, open, readdir } from "node:fs/promises";
 import { message } from "@pe/agent-contracts";
@@ -121,13 +121,20 @@ let productRoots: PodsRoots | undefined;
 export const rememberCaptureRoots = (roots: PodsRoots) => {
   productRoots = roots;
 };
-const rootsKey = (roots: PodsRoots) => JSON.stringify([roots].flat().map((root) => resolve(root)));
+const rootsKey = (roots: PodsRoots) => JSON.stringify([roots].flat().map((root) => {
+  const absolute = resolve(root);
+  return process.platform === "win32" ? absolute.toLowerCase() : absolute;
+}));
 // Discovery owns cross-home identity; capture reads fresh bytes only from its selected folder.
-const censuses = new Map<string, Pick<AdmittedPackage, "id" | "folder" | "directory" | "discoveryFailure">[]>();
+const censuses = new Map<string, Map<string, Pick<AdmittedPackage, "id" | "folder" | "directory" | "discoveryFailure"> & { home: string; generation?: number }>>();
 export function rememberPackageCensus(roots: PodsRoots, listing: PackageListing) {
   censuses.set(
     rootsKey(roots),
-    listing.packages.map(({ id, folder, directory, discoveryFailure }) => ({ id, folder, directory, discoveryFailure })),
+    new Map(listing.packages.map(({ id, folder, directory, discoveryFailure }) => {
+      const home = dirname(resolve(directory));
+      return [id, { id, folder, directory, discoveryFailure, home,
+        generation: completedCensuses.get(rootsKey(home))?.homeGeneration }] as const;
+    }).reverse()), // Keep the first claim, as the availability lookup did before indexing.
   );
 }
 
@@ -150,12 +157,21 @@ export function requirePackageAvailable(pod: Pick<AdmittedPackage, "directory" |
   if (pod.discoveryFailure) throw new PackageDiscoveryExceeded(pod.directory, pod.discoveryFailure);
 }
 
+export function requireKnownPackageIdentity(listing: PackageListing) {
+  if (listing.unknownHomes?.length)
+    throw new PackageDiscoveryExceeded([...listing.unknownHomes], "Home identity inventory is unavailable");
+}
+
 export function requireIndexedPackageAvailable(id: string, roots: PodsRoots | undefined = productRoots) {
-  const pod = roots && censuses.get(rootsKey(roots))?.find(pod => pod.id === id);
+  const pod = roots && censuses.get(rootsKey(roots))?.get(id);
+  if (pod && pod.generation !== completedCensuses.get(rootsKey(pod.home))?.homeGeneration)
+    throw new PackageDiscoveryExceeded(pod.home, "Home generation changed; refresh the identity view");
   if (pod) requirePackageAvailable(pod);
 }
 
 type DiscoveryScan = {
+  home?: HomePublication;
+  authorized?: boolean;
   stop: AbortController;
   promise: Promise<PackageListing>;
   expired: boolean;
@@ -203,13 +219,113 @@ export async function readPackageWork<T>(
   }
 }
 export type PackageCensus = {
+  homeGeneration?: number;
   signature: string | undefined;
   listing: PackageListing;
   /** Observation order belongs to this census, alongside its bytes; it is not another cache. */
   observedAt?: ReadonlyMap<string, number>;
 };
 const completedCensuses = new Map<string, PackageCensus>();
+type HomePublication = { generation: number; current(): boolean; changed(): void };
+// Controls contain no member bytes. The census above is the only witness/snapshot store,
+// keyed by physical home; root-set indexes below contain identities only.
+const homeControls = new Map<string, { generation: number; failure?: string }>();
+const rootViews = new Map<string, readonly string[]>();
+let homeEpoch = 0;
 let observationSequence = 0;
+
+function homeListing(root: string, unavailable?: string): PackageListing {
+  const key = rootsKey(root), listing = completedCensuses.get(key)?.listing;
+  const failure = unavailable ?? homeControls.get(key)?.failure;
+  if (!failure) return listing ?? { packages: [], unreadable: [] };
+  return { packages: listing?.packages.map(pod => ({ ...pod, discoveryFailure: failure,
+    diagnostics: [...pod.diagnostics, problem("PodHomeUnavailable", "pod.json", failure)], contributions: [] })) ?? [],
+    unreadable: [{ folder: root, message: failure }] };
+}
+
+function publishViews() {
+  for (const roots of rootViews.values()) rememberPackageCensus([...roots], {
+    packages: roots.flatMap(root => homeListing(root).packages),
+    unreadable: roots.flatMap(root => homeListing(root).unreadable),
+  });
+}
+
+/** Each home owns its work. A response can project an unavailable home while native IO
+ * remains alive; its eventual publication reprojects every view from current home states. */
+export async function discoverPackageHomes(
+  roots: PodsRoots,
+  wait: "request" | "background",
+  read: (root: string, current: () => boolean, changed: () => void, generation: number) => Promise<PackageListing>,
+  packageId?: string,
+): Promise<PackageListing> {
+  const homes = [...new Map([roots].flat().map(root => [rootsKey(root), resolve(root)])).values()];
+  const view = rootsKey(homes);
+  rootViews.set(view, homes);
+  const epoch = homeEpoch;
+  // Owner's no-wait rule: an admitted Pod waits only for its own home. Uniqueness
+  // uses the other homes' last-published identities, including while they are hung.
+  const selected = homes.flatMap((root, index) => packageId !== undefined && censuses.get(rootsKey(root))?.has(packageId) ? [index] : []);
+  const pending = homes.map(async root => {
+    const key = rootsKey(root), previous = homeControls.get(key);
+    const control = { generation: (previous?.generation ?? 0) + 1, failure: previous?.failure };
+    homeControls.set(key, control);
+    const current = () => homeEpoch === epoch && homeControls.get(key) === control;
+    const unavailable = (reason: string) => {
+      const latest = homeControls.get(key);
+      // A pending peer is not recovery. Only a newer published witness defeats this
+      // refusal; otherwise continuous arrivals could hide a permanently stalled home.
+      if (homeEpoch === epoch && latest &&
+        (completedCensuses.get(key)?.homeGeneration ?? 0) <= control.generation) {
+        latest.failure = reason;
+        publishViews();
+      }
+      return homeListing(root, reason);
+    };
+    const changed = () => {
+      if (current()) control.failure = undefined;
+      if (homeEpoch === epoch) publishViews();
+    };
+    const work = read(root, current, changed, control.generation).then(listing => {
+      if (current()) { control.failure = undefined; publishViews(); }
+      return listing;
+    });
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      // Two existing per-Pod phases retain their budgets; publication keeps the final third.
+      // This bounds the response, not the native read or its late completion.
+      return await Promise.race([work, new Promise<PackageListing>(resolve => {
+        timer = setTimeout(() => {
+          const failure = `Home work exceeded ${packageDiscoveryTimeoutMs - packagePodWorkTimeoutMs} ms reading '${root}'`;
+          resolve(unavailable(failure));
+        }, packageDiscoveryTimeoutMs - packagePodWorkTimeoutMs);
+      })]);
+    } catch (error) {
+      if (homeEpoch !== epoch) throw error;
+      return unavailable(String(error));
+    } finally { clearTimeout(timer); }
+  });
+  void Promise.all(pending).catch(() => {}); // Peer work remains alive, including through shutdown.
+  let completed = await Promise.all(selected.length ? selected.map(index => pending[index]) : pending);
+  let satisfied = packageId !== undefined && censuses.get(view)?.has(packageId);
+  if (selected.length && !satisfied) {
+    completed = await Promise.all(pending); // A refreshed miss searches the other homes too.
+    satisfied = packageId !== undefined && censuses.get(view)?.has(packageId);
+  }
+  if (homeEpoch !== epoch) throw new PackageDiscoveryExceeded(roots, "Discovery stopped");
+  const failed = completed.flatMap(result => result.packages).find(pod => packageId !== undefined && pod.id === packageId && pod.discoveryFailure);
+  if (failed) requirePackageAvailable(failed); // A newer global recovery does not turn this failed read into success.
+  const results = homes.map(root => homeListing(root));
+  const listing: PackageListing = { packages: results.flatMap(result => result.packages), unreadable: results.flatMap(result => result.unreadable) };
+  if (listing.packages.length) listing.homeGenerations = new Map(homes.map(root => [rootsKey(root), completedCensuses.get(rootsKey(root))?.homeGeneration]));
+  const unknown = homes.filter(root => homeControls.get(rootsKey(root))?.failure);
+  if (unknown.length) listing.unknownHomes = unknown;
+  if (packageId !== undefined && !satisfied) requireKnownPackageIdentity(listing);
+  // Cold request readers retain W26's typed refusal and late-census recovery. Inventory
+  // readers can still describe an empty healthy home beside an unavailable one.
+  if (wait === "request" && !listing.packages.length && listing.unreadable.some(row => homes.includes(row.folder)))
+    throw new PackageDiscoveryExceeded(roots);
+  return listing;
+}
 
 function observedAt(listing: PackageListing, previous: PackageCensus | undefined, observations: ReadonlyMap<string, number> | undefined) {
   if (!observations) return previous?.observedAt;
@@ -250,14 +366,19 @@ function recordUnavailable(roots: PodsRoots, key: string, listing: PackageListin
   const marked = { ...previous.listing, packages };
   completedCensuses.set(key, { ...previous, listing: marked, observedAt: versions });
   rememberPackageCensus(roots, marked);
+  publishViews();
 }
 
 /** Shutdown cancels discovery; request expiry alone leaves a recoverable scan running. */
 export function stopPackageDiscovery() {
+  homeEpoch++;
   for (const scan of scans) scan.stop.abort();
   for (const validation of validations) validation.abort();
   discovery.clear();
   completedCensuses.clear();
+  homeControls.clear();
+  rootViews.clear();
+  censuses.clear();
 }
 
 export async function discoverPackages(
@@ -268,6 +389,8 @@ export async function discoverPackages(
   resolveSignature?: (signature: string, previous?: PackageCensus) => string,
   packageId?: string,
   observedDirectories?: (signature: string | undefined, previous?: PackageCensus) => ReadonlySet<string>,
+  home?: HomePublication,
+  signaturesEqual = (a: string | undefined, b: string | undefined) => a === b,
 ): Promise<PackageListing> {
   const key = rootsKey(roots);
   let selected: DiscoveryScan | undefined;
@@ -285,7 +408,7 @@ export async function discoverPackages(
     let scan = discovery.get(key);
     const tooOld = scan && !scan.completed && Date.now() - scan.startedAt >= packageScanMaxAgeMs;
     // Validate joins and late answers too. Unknown metadata never authorizes reuse.
-    const changed = scan && readSignature && (signature === undefined || scan.signature !== signature);
+    const changed = scan && readSignature && (signature === undefined || !signaturesEqual(scan.signature, signature));
     if (scan && (tooOld || changed ||
       (scan.completed && (wait === "background" || Date.now() - scan.completedAt >= packageDiscoveryTimeoutMs)))) {
       // Superseding a read leaves its waiters running. Only age and shutdown cancel IO.
@@ -295,22 +418,46 @@ export async function discoverPackages(
     }
     const retryMiss = cached?.listing.unreadable.length && (wait === "background" ||
       (packageId !== undefined && !cached.listing.packages.some(pod => pod.id === packageId)));
-    if (!retryMiss && signature !== undefined && cached?.signature === signature &&
+    if (!retryMiss && signature !== undefined && cached && signaturesEqual(cached.signature, signature) &&
       !cached.listing.packages.some(pod => pod.discoveryFailure && (packageId === undefined || pod.id === packageId))) {
-      if (observations) completedCensuses.set(key, { ...cached, observedAt: observedAt(cached.listing, cached, observations) });
+      if ((!home || home.current()) && observations) completedCensuses.set(key, { ...cached, signature,
+        homeGeneration: home?.generation, observedAt: observedAt(cached.listing, cached, observations) });
       return Promise.resolve(cached.listing);
     }
     if (scan) {
+      // Matching post-arrival witnesses can share work, including its publication authority.
+      if (home?.current()) { scan.home = home; scan.authorized = true; scan.signature = signature; }
       selected = scan;
       if (observations) {
         scan.observations ??= new Map();
         for (const [directory, version] of observations) scan.observations.set(directory, version);
       }
-      if (scan.completed) discovery.delete(key); // A late answer serves at most one reader.
+      if (scan.completed) {
+        discovery.delete(key); // A late answer serves at most one reader.
+        if (home?.current()) {
+          const finished = scan;
+          return finished.promise.then(listing => {
+            validation.signal.throwIfAborted();
+            if (home.current()) {
+              const latest = completedCensuses.get(key);
+              const published = retainUnobserved(listing, latest, finished.observations);
+              completedCensuses.set(key, { signature: finished.expired ? undefined : signature,
+                homeGeneration: home.generation,
+                listing: published, observedAt: observedAt(published, latest, finished.observations) });
+              rememberPackageCensus(roots, published);
+              home.changed();
+              return published;
+            }
+            return listing;
+          });
+        }
+      }
       return scan.promise;
     }
     const stop = new AbortController();
     const current: DiscoveryScan = {
+      home,
+      authorized: !home || home.current(),
       stop,
       promise: read([roots].flat(), stop.signal, cached, signature),
       expired,
@@ -331,19 +478,24 @@ export async function discoverPackages(
         }
       }
       const latest = completedCensuses.get(key);
-      const publishing = discovery.get(key) === current;
+      const publishing = discovery.get(key) === current && (!current.home || current.home.current());
       const published = publishing ? retainUnobserved(listing, latest, current.observations) : listing;
       if (publishing) rememberPackageCensus(roots, published);
       current.completed = true;
       current.completedAt = Date.now();
-      // Only on-time answers enter the checked cache. Late answers keep their one-reader 5 s window.
-      if (!current.expired && discovery.get(key) === current) {
+      // A late home snapshot is retained without a reusable witness. Its existing scan
+      // keeps the one-reader 5 s window; a later reader must validate/capture afresh.
+      if (publishing && (!current.expired || current.home)) {
         // Unknown metadata cannot authorize byte reuse, but it must retain identity and retry
         // markers across repeated IO failures instead of turning the second retry into absence.
-        completedCensuses.set(key, { signature, listing: published, observedAt: observedAt(published, latest, current.observations) });
-        discovery.delete(key);
+        completedCensuses.set(key, { signature: current.expired ? undefined : current.signature,
+          homeGeneration: current.home?.generation, listing: published, observedAt: observedAt(published, latest, current.observations) });
+        if (!current.expired) discovery.delete(key);
+        current.home?.changed();
       }
-      recordUnavailable(roots, key, listing, current.observations);
+      // A superseded capture can still report a valid Pod failure, but a root observation
+      // that was already obsolete when selected cannot overwrite newer home knowledge.
+      if (current.authorized) recordUnavailable(roots, key, listing, current.observations);
       return published;
     }, error => {
       if (discovery.get(key) === current) discovery.delete(key);
@@ -389,16 +541,22 @@ export async function captureIndexedPackage(
     );
   // Known keys need the same fresh identity check as misses. Freeze that census's
   // selected bytes instead of recapturing an indexed folder after the check.
-  const found = (await discover(selectedRoots)).packages.filter(pod => pod.id === id);
+  const listing = await discover(selectedRoots);
+  const found = listing.packages.filter(pod => pod.id === id);
   if (found.length > 1)
     throw Error(
       `Pod id '${id}' is claimed by ${found.map((pod) => pod.directory).join(" and ")}: none is used until the id is unique.`,
     );
   const selected = found[0];
-  if (!selected)
+  if (!selected) {
+    requireKnownPackageIdentity(listing);
     throw Error(
       `No discovered Pod has id '${id}'. Refresh the Pod list after adding or moving a Pod.`,
     );
+  }
+  const home = rootsKey(dirname(resolve(selected.directory)));
+  if (listing.homeGenerations && listing.homeGenerations.get(home) !== completedCensuses.get(home)?.homeGeneration)
+    throw new PackageDiscoveryExceeded(selected.directory, "Home generation changed before capture returned");
   requirePackageAvailable(selected);
   return selected;
 }

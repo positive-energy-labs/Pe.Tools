@@ -19,7 +19,7 @@ import {
   type StoredFile,
 } from "@pe/host-contracts/kinds";
 import { hostState } from "./host-ownership.ts";
-import { PackageDiscoveryExceeded, packageDiscoveryTimeoutMs } from "./pod-capture.ts";
+import { PackageDiscoveryExceeded, packageDiscoveryTimeoutMs, requirePackageAvailable } from "./pod-capture.ts";
 import { productPodsRootPath } from "./product-paths.ts";
 import {
   builtinPeaSkillSnapshots,
@@ -229,6 +229,7 @@ export function createPackageLifecycle(
         {
           id,
           setup(context) {
+            requirePackageAvailable(pod);
             const errors = pod.diagnostics.filter((d) =>
               ["PackageMemberInvalid", "DuplicatePodId"].includes(d.code),
             );
