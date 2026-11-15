@@ -260,6 +260,17 @@ export async function discoverPackageHomes(
     const control = { generation: (previous?.generation ?? 0) + 1, failure: previous?.failure };
     homeControls.set(key, control);
     const current = () => homeEpoch === epoch && homeControls.get(key) === control;
+    const unavailable = (reason: string) => {
+      const latest = homeControls.get(key);
+      // A pending peer is not recovery. Only a newer published witness defeats this
+      // refusal; otherwise continuous arrivals could hide a permanently stalled home.
+      if (homeEpoch === epoch && latest &&
+        (completedCensuses.get(key)?.homeGeneration ?? 0) <= control.generation) {
+        latest.failure = reason;
+        publishViews();
+      }
+      return homeListing(root, reason);
+    };
     const changed = () => {
       if (current()) control.failure = undefined;
       if (homeEpoch === epoch) publishViews();
@@ -275,17 +286,12 @@ export async function discoverPackageHomes(
       return await Promise.race([work, new Promise<PackageListing>(resolve => {
         timer = setTimeout(() => {
           const failure = `Home work exceeded ${packageDiscoveryTimeoutMs - packagePodWorkTimeoutMs} ms reading '${root}'`;
-          if (current()) {
-            control.failure = failure;
-            publishViews();
-          }
-          resolve(homeListing(root, failure));
+          resolve(unavailable(failure));
         }, packageDiscoveryTimeoutMs - packagePodWorkTimeoutMs);
       })]);
     } catch (error) {
       if (homeEpoch !== epoch) throw error;
-      if (current()) { control.failure = String(error); publishViews(); }
-      return homeListing(root, String(error));
+      return unavailable(String(error));
     } finally { clearTimeout(timer); }
   }));
   if (homeEpoch !== epoch) throw new PackageDiscoveryExceeded(roots, "Discovery stopped");
