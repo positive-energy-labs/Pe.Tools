@@ -104,3 +104,27 @@ test.each([
   }
   finally { stopPackageDiscovery(); release.resolve(); }
 });
+
+// REVIEW-d76b3324-ev/review-d76.test.ts: completed A is not the served projection.
+test("superseded A result cannot hide a current A miss while B search is pending", async () => {
+  const { root, homes, release, entered: peerEntered } = await fixture();
+  const pages = createPagesHandler([], homes, undefined, undefined, stateTree(root).directory("superseded-state"));
+  await fs.writeFile(join(homes[0], "healthy", "pages", "hello", "index.html"), "recapture A");
+  await fs.writeFile(join(homes[1], "blocked", "pod.json"), '{"id":"healthy"}');
+  const manifest = join(homes[0], "healthy", "pod.json"), gate = Promise.withResolvers<void>(), entered = Promise.withResolvers<void>();
+  const original = fs.open; let held = false;
+  vi.spyOn(fs, "open").mockImplementation(async (...args) => {
+    const handle = await original(...args);
+    if (String(args[0]) === manifest && !held) { held = true; const close = handle.close.bind(handle);
+      handle.close = async () => { entered.resolve(); await gate.promise; return close(); }; }
+    return handle;
+  });
+  let status: number | undefined;
+  const work = pages(new Request("http://host/pages/healthy--hello/")).then(response => { status = response.status; });
+  try {
+    await entered.promise; await peerEntered.promise; await fs.writeFile(manifest, '{"id":"renamed"}');
+    expect((await listPackages({ podsRoots: homes[0] })).packages.map(pod => pod.id)).toEqual(["renamed"]);
+    gate.resolve(); await new Promise(resolve => realSetTimeout(resolve, 120)); await vi.advanceTimersByTimeAsync(1000);
+    expect(status).toBeUndefined(); release.resolve(); await work; expect(status).toBe(200);
+  } finally { gate.resolve(); release.resolve(); await work; }
+});
