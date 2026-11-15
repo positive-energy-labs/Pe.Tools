@@ -45,6 +45,7 @@ def run(R):
                             relationship=lin.get("relationshipToParent"), branch=d.get("branch"), worktree=d.get("worktreePath"),
                             model_selection=d.get("modelSelection"), created_by=d.get("createdBy"), creation_source=d.get("creationSource"),
                             archived_at=d.get("archivedAt"), deleted_at=d.get("deletedAt"), history_origin=d.get("historyOrigin"))
+    # TODO: Reconcile requested modelSelection with executedModel/native model switches in per-run records.
     runs = {}
     for rid, tid, ordn, status, req, comp, pj in c.execute(f"select run_id,thread_id,ordinal,status,requested_at,completed_at,payload_json from {RN}"):
         if tid not in threads or not R.inwin(norm(req)): continue
@@ -53,6 +54,7 @@ def run(R):
                          provider=ms.get("instanceId"), model=ms.get("model"), effort=effort(ms), user_message_id=d.get("userMessageId"),
                          delegated_task=d.get("delegatedTaskId"), handoff=d.get("contextHandoffId"))
     msg_user = {r["user_message_id"]: r["run_id"] for r in runs.values() if r["user_message_id"]}
+    # TODO: Redact credentials before raw owner or agent text enters exported corpus events.
     events, last_assist, active = [], {}, set(r["thread"] for r in runs.values())
     for mid, tid, rid, role, created, pj in c.execute(f"select message_id,thread_id,run_id,role,created_at,payload_json from {M}"):
         if tid not in threads: continue

@@ -20,6 +20,8 @@ import datetime, json, re, subprocess, sys
 
 DIR = 'ts/tests/repo-guards/src'
 CONFLICT_BAND = 2.0        # percent of merged lines; the owner's ceiling is 12.5 (one part in eight)
+# TODO: Add a tip/last-read watcher that wakes idle partners once per unread integration tip.
+# TODO: Arm child time boxes and checkpoint wakes rather than relying on the driver's age checks.
 ESTIMATE_BAND = (0.5, 2.0)  # actual over estimate
 
 

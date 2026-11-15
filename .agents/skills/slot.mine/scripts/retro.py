@@ -120,6 +120,7 @@ def family(name, cmd):
     return "browser" if re.search(r"preview_|playwright|browser|device_", name) else "poll" if re.search(r"wait|sleep|monitor", name, re.I) else "other"
 
 
+# TODO: Ignore PowerShell $env: assignments and the d alias; distinguish unnamed python -c scripts.
 def prefixes(cmd):
     """(key of the heaviest segment, keys of the others). ponytail: quotes are collapsed and heredocs cut, not parsed; a `;` inside a collapsed string cannot split."""
     cmd = re.sub(r"\"([^\"\s]*\.(?:exe|cmd|bat|ps1))\"", r"\1", re.split(r"<<-?\s*['\"]?\w+", cmd)[0])  # a quoted program path keeps its name
@@ -189,12 +190,14 @@ def descendants_of(db, tid, include_manual=False):
     yield from (r for r in rows if include_manual or r[0] not in excluded)
 
 
+# TODO: Union overlapping runs so idle gaps cannot become negative.
 def idle_gaps(db, tid):
     runs = db.execute("select requested_at, completed_at from orchestration_v2_projection_runs where thread_id=? and completed_at is not null order by requested_at", (tid,)).fetchall()
     g = [(ts(b[0]) - ts(a[1])).total_seconds() / 60 for a, b in zip(runs, runs[1:])]
     return dict(n=len(g), total_h=round(sum(g) / 60, 2), over_5m=sum(x > 5 for x in g), over_60m=sum(x > 60 for x in g), max_min=round(max(g or [0])))
 
 
+# TODO: Report the union of overlapping run durations rather than their sum as active_hours.
 def owner_turns_and_hours(db, tid):
     # span = first request to last completion (includes idle); active = sum of run durations (includes queue/wait, an upper bound)
     n = 0
@@ -901,6 +904,8 @@ def idle_wall(db, roots, with_descendants=True):
                 over_5m=[dict(start=utc(a), end=utc(b), minutes=round((b-a).total_seconds()/60, 2)) for a,b in gaps if (b-a).total_seconds() > 300])
 
 
+# TODO: Bound shared partner threads to each run's window and discover partners beyond --cycles.
+# TODO: Join estimates to actuals and report writer-running share per tail; completion needs work events, not reply times.
 def main():
     sys.stdout.reconfigure(encoding='utf-8')  # thread titles hold characters the Windows console codec refuses
     a = argparse.ArgumentParser(); a.add_argument("--out", required=True); a.add_argument("--tree", action="store_true"); a.add_argument("--branch"); a.add_argument("--base"); a.add_argument("--cycles", action="append", default=[])

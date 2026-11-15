@@ -4,6 +4,7 @@ Codex: a private stdio `codex app-server`, method account/rateLimits/read.
 Redeem is a separate, deliberate act: account/rateLimitResetCredit/consume with an idempotencyKey.
 """
 import json, os, subprocess, threading, time, urllib.request, datetime
+# TODO: Log readings and tier guidance; report burn rate versus reset time and wire the delegate hook.
 def claude():
     tok = json.load(open(os.path.expanduser('~/.claude/.credentials.json'), encoding='utf-8'))['claudeAiOauth']['accessToken']
     r = urllib.request.Request('https://api.anthropic.com/api/oauth/usage', headers={'Authorization': 'Bearer ' + tok, 'anthropic-beta': 'oauth-2025-04-20', 'User-Agent': 'claude-code'})
