@@ -11,8 +11,8 @@ import {
 } from "@pe/agent-contracts/pe-api";
 /** Scratch Pages and admitted Pod Pages share serving, binding and event state. See pe.js for the author API. */
 import { readFileSync, watch } from "node:fs";
-import { readFile } from "node:fs/promises";
-import { basename, dirname, extname, join } from "node:path";
+import { readFile, realpath } from "node:fs/promises";
+import { basename, dirname, extname, isAbsolute, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { wrongPodModel } from "./pod-model.ts";
@@ -599,7 +599,13 @@ export function createPagesHandler(
       return problem(400, "that is not a page file path");
     const path = join(dir, ...segments);
     try {
-      const raw = await readFile(path);
+      // The segment check is lexical; a junction or symlink inside the Page could still lead anywhere on the
+      // machine, so the resolved file must stay under the resolved Page folder (as page-export.ts does).
+      const actual = await realpath(path);
+      const within = relative(await realpath(dir), actual);
+      if (within.startsWith("..") || isAbsolute(within))
+        return problem(404, `no ${segments.join("/")} in page ${slug}`);
+      const raw = await readFile(actual);
       const bytes =
         segments.length === 1 && segments[0] === "index.html"
           ? withPageKey(raw.toString("utf8"), page)
