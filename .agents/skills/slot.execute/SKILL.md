@@ -61,7 +61,7 @@ The SDK owns build, process, session, document, test, package and install mechan
 - Never mutate installed product state without the user's explicit authority.
 - The generated `ts/packages/host-contracts/src/vendor/generated/pe-revit-contract.ts` owns `pe-revit` argv and envelopes. Do not hand-write either.
 - A Revit-backed drive runs on its own controlled session, a disposable copy of the model, and an isolated product home (`PE_TOOLS_PRODUCT_HOME`), all named in its receipt. `pea script` against that session needs the same `PE_TOOLS_PRODUCT_HOME`, or it reports no running dev host.
-- `--quarantine` boots Revit with third-party add-ins disabled, which about halves startup and cuts memory. The SDK gives it to one live session per Revit year, because it works by editing one per-user settings file that Revit itself rewrites at boot and at shutdown. A second quarantined `session start` of that year is refused with `session.quarantine-unavailable` until the first session's process exits, and `machine.py admit` does not see the lease.
+- `--quarantine` boots Revit with third-party add-ins disabled, which about halves startup and cuts memory. Sessions of one Revit year share it: the first disables the rows in a per-user settings file and later ones join, and the settings return when the last of them stops. So when the last holder crashes, third-party add-ins stay off in the user's next Revit until any session start, stop or restart runs; `session list` does not restore them. `machine.py admit` does not see the hold.
 
 ## Host, web and Pea
 
