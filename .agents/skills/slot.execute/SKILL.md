@@ -86,7 +86,7 @@ Run pea scripts, host operations, or `pea --prompt` only after the SDK session i
 
 - Browser proof is `pea browser`, and `pea browser guide` is its manual: launch, headless measurement, the observer connection and cleanup.
 - A scripted `element.click()`, a dispatched event, a store call or an endpoint never stands in for a UI step.
-- The harness preview and T3 preview tools only show the user a page. Their timeouts are tool limits, not product findings. Computer Use is banned on this machine.
+- The harness preview and T3 preview tools only show the user a page. Their timeouts are tool limits, not product findings. The T3 preview produces no frames while the desktop window is hidden, so drive a lane with `pea browser` headless. Computer Use is banned on this machine.
 - A repeatable journey is a list of named actions under `ts/tests/e2e/`, played by `walk.ts`, and `f1-fans.ts` is the pattern. An action finds its control by role and name, draws each choice from the seed, and checks a rule instead of a remembered value. Run one from `ts` on a fresh tab against a real Revit session with `node --import jiti/register tests/e2e/<journey>.ts --seed <n>`. `--walk <n>` plays n actions picked at random by the seed in place of the fixed list. A green journey alone gates nothing, because the driver also explores by hand in every gate drive. One-off checks use the CLI verbs (`pea browser SESSION click|type|press|shot`). Inspect console, network and visible state. If no browser can be driven, stamp the browser claim UNPROVEN and prove only the lower lane.
 
 ## Worktrees

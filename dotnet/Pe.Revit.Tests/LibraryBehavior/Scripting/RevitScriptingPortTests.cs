@@ -50,7 +50,7 @@ public sealed class RevitScriptingPortTests {
         }
     }
 
-    // Contract C1 (docs/features/pods/MAP.md), on real Revit. Mutants, each run red once:
+    // Contract C1, the script door (docs/features/pods/LEDGER.md, "pod-pages C1"), on real Revit. Mutants, each run red once:
     //   - drop `plan.Input` from `BuildExecutionContext` (the first run fails: "needs the argument 'level'");
     //   - pass `null` for the Pod folder there (the first run fails: "this script runs outside a Pod");
     //   - drop the `WrapStatementBody` call in `ScriptPodSourceNormalizer.Normalize` (the first run fails to compile);
