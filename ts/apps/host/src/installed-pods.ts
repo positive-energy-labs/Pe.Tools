@@ -356,6 +356,10 @@ async function offer(
       });
       return { archive, sha256, outcome: "present", id, reason };
     }
+    note(options.machine ?? hostState(), {
+      class: "keep", place: `Shipped example ${archiveId(readZip(bytes))}`, path,
+      sha256, reason: `Shipped example import failed. Import '${path}' from Pods to try again. Reason: ${reason}`,
+    });
     return { archive, sha256, outcome: "refused", reason };
   }
 }
