@@ -364,7 +364,10 @@ export async function installArchive(
       throw new TransferRefused(`Pod archive '${locator}' is not an admissible pod: ${message(error)}.`);
     });
     if (admitted.id !== id || admitted.members.length !== entries.size ||
-      admitted.members.some(member => !entries.has(member.path) || member.sha256 !== sha256(entries.get(member.path)!)))
+      admitted.members.some(member => {
+        const bytes = entries.get(member.path);
+        return !bytes || member.sha256 !== sha256(bytes);
+      }))
       throw new TransferRefused(`Pod archive '${locator}' changed during staging capture.`);
     // Manifest last: readers never admit a partially published pod. Home writes use CAS,
     // including first imports, rather than renaming machine state onto a synced drive.
