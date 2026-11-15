@@ -91,7 +91,7 @@ test("one snapshot lists and captures every authored byte, excluding authority a
   expect(kindOfMember("skills/inspect/SKILL.md")).toBe("skill");
 });
 
-// Contract C1. Mutants, each run red once: restore the `src/` test in `readFolder`'s entrypoint
+// Contract C1. Mutants, each run red once: restore the `src/` test in `readPackageDirectory`'s entrypoint
 // parse (no row for the check beside the Page); drop `mode` from the contribution row; accept any
 // string as a mode (no InvalidEntrypoint for "Write").
 test("an entrypoint is any script of the Pod, keeps its declared mode, and gets a script row where it lives", async () => {

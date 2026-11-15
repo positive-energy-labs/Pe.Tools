@@ -286,7 +286,7 @@ async function listPodsFolder(podsRoot: string, signal: AbortSignal, reusable: R
           if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
           throw error;
         }
-        const pod = reusable.get(resolve(directory)) ?? await readFolder(directory, entry.name, signal);
+        const pod = reusable.get(resolve(directory)) ?? await readPackageDirectory(directory, entry.name, signal);
         const signature = signatures.get(resolve(directory));
         if (!reusable.has(resolve(directory)) && signature && !pod.diagnostics.some(issue => issue.code === "PackageMemberInvalid")) {
           const captured = new Set(pod.members.map(member => resolve(directory, member.path)));
@@ -419,7 +419,7 @@ export async function resolvePackageIdentity(
   if (folders !== 1) throw Error("No unique output Pod folder");
   if (!selected || claims.filter((claim) => claim.id === selected.id).length !== 1)
     throw Error("No unique admitted Pod owns this output folder; duplicate manifest identity");
-  const pod = await readFolder(selected.directory, selected.folder);
+  const pod = await readPackageDirectory(selected.directory, selected.folder);
   if (
     pod.id !== selected.id ||
     pod.members.find((member) => member.path === "pod.json")?.sha256 !== selected.manifestSha256
@@ -429,7 +429,8 @@ export async function resolvePackageIdentity(
   return { id: pod.id, folder: pod.folder };
 }
 
-async function readFolder(
+/** Admit a known directory; the caller owns its deadline and cancellation. */
+export async function readPackageDirectory(
   directory: string,
   folder: string,
   signal?: AbortSignal,
