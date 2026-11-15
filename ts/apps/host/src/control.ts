@@ -80,8 +80,11 @@ const browserCookiePair = (headers: Readonly<Record<string, string | undefined>>
     .find((part) => part.startsWith(`${BROWSER_CONTEXT_COOKIE}=`));
 
 /** Mint on a verified SPA navigation; headers on a later API request cannot create a human. */
-export function mintBrowserContext(principal: RequestPrincipal): string {
-  const token = randomBytes(24).toString("base64url");
+export function mintBrowserContext(principal: RequestPrincipal, headers: Readonly<Record<string, string | undefined>> = {}): string {
+  const existing = browserCookiePair(headers)?.slice(BROWSER_CONTEXT_COOKIE.length + 1);
+  // Navigation in another tab must not change the owner of already-open Readings.
+  const token = existing && browserContexts.get(existing)?.transport === transportKey(principal)
+    ? existing : randomBytes(24).toString("base64url");
   browserContexts.set(token, {
     transport: transportKey(principal),
     caller:

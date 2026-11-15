@@ -107,6 +107,31 @@ function owner(
   return { readings, sources, subscriptions, update };
 }
 
+test.each([400, 409])("a subscription %s reacquires every key and keeps delivering", async status => {
+  vi.useFakeTimers();
+  const { readings, sources, update, subscriptions } = owner();
+  const received = vi.fn();
+  update.mockRejectedValueOnce(Error(`Reading subscriptions: ${status}`));
+  try {
+    readings.subscribe(head, received);
+    await vi.advanceTimersByTimeAsync(0);
+    sources[0]!.onopen!();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(sources[0]!.closed).toBe(true);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(sources).toHaveLength(2);
+    expect(sources[1]!.url).not.toBe(sources[0]!.url);
+    sources[1]!.onopen!();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(subscriptions.has(readingKey(head))).toBe(true);
+    for (const revision of [1, 2]) {
+      sources[1]!.onmessage!(snapshot({ revision }));
+      expect(received).toHaveBeenLastCalledWith(expect.objectContaining({ kind: "snapshot", value: { revision } }));
+    }
+    expect(update).toHaveBeenCalledTimes(2);
+  } finally { readings.close(); vi.useRealTimers(); }
+});
+
 test("a publication waits through a silent stream and acquires after the replacement's first frame", async () => {
   vi.useFakeTimers();
   const random = vi.spyOn(Math, "random").mockReturnValue(1);

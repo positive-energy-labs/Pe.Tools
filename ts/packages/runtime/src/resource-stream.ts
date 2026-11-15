@@ -129,7 +129,7 @@ export function observeResources(
 // Subscription ownership is host-local and scoped to the same observer as the stream.
 const connections = new WeakMap<
   ResourceObserver,
-  Map<string, { update: (add: ReadingRequest[], remove: string[], owner: string | null) => Promise<void> }>
+  Map<string, { update: (add: ReadingRequest[], remove: string[], owner: string | null) => Response | void }>
 >();
 /** The host and its borrowed-read proxy admit the same bounded subscription body. */
 export function decodeResourceSubscriptionUpdate(raw: string): { add: ReadingRequest[]; remove: string[] } | { error: string } {
@@ -152,16 +152,15 @@ export function decodeResourceSubscriptionUpdate(raw: string): { add: ReadingReq
 export async function updateResourceSubscriptions(request: Request, observe: ResourceObserver, owner: string | null = null): Promise<Response> {
   const id = new URL(request.url).searchParams.get("connection") ?? "";
   const update = connections.get(observe)?.get(id);
-  if (!update) return Response.json({ error: "Reading connection retired" }, { status: 409 });
+  if (!update) return retiredConnection();
   const value = decodeResourceSubscriptionUpdate(await request.text());
   if ("error" in value) return Response.json({ error: value.error }, { status: 400 });
-  try {
-    await update.update(value.add, value.remove, owner);
-    return Response.json({ ok: true });
-  } catch {
-    return Response.json({ error: "Invalid resource keys" }, { status: 400 });
-  }
+  return update.update(value.add, value.remove, owner) ?? Response.json({ ok: true });
 }
+
+const retiredConnection = () => Response.json(
+  { code: "reading.retired", error: "Reading connection retired" }, { status: 409 },
+);
 
 /** The pseudo-key of the one host log lane in the ready set. */
 const LOG = "\u0000log";
@@ -373,9 +372,11 @@ export function resourceResponse(
             }
           }
         };
-        if (connection) registry!.set(connection, { update: async (add, remove, caller) => {
-          if (closed) throw Error("Connection is closed");
-          if (owner && caller !== owner) throw Error("Foreign reading connection");
+        if (connection) registry!.set(connection, { update: (add, remove, caller) => {
+          if (closed) return retiredConnection();
+          if (owner && caller !== owner) return Response.json(
+            { code: "reading.foreign", error: "Foreign reading connection" }, { status: 403 },
+          );
           update(add, remove);
         } });
         update([...requested.values()], []);

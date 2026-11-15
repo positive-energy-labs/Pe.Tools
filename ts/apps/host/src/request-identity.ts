@@ -348,7 +348,7 @@ export async function readRequestIdentity(
     const ownNavigation =
       navigation && ["same-origin", "none", undefined].includes(headers["sec-fetch-site"]);
     if ("principal" in result && !isRemote && ownNavigation && !pathname.startsWith("/pages"))
-      result = { ...result, setCookie: mintBrowserContext(result.principal) };
+      result = { ...result, setCookie: mintBrowserContext(result.principal, headers) };
   }
   options.share.observe(result, pathname, host);
   return result;

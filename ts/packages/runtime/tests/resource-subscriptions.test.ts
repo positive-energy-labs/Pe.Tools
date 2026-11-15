@@ -1,6 +1,11 @@
 import { expect, test, vi } from "vite-plus/test";
 import { readingKey } from "@pe/agent-contracts";
-import { resourceResponse, updateResourceSubscriptions, type ResourceObserver } from "../src/resource-stream.ts";
+import { decodeResourceSubscriptionUpdate, resourceResponse, updateResourceSubscriptions, type ResourceObserver } from "../src/resource-stream.ts";
+
+test.each(["hydronic--sizing", "snowdon-circuits--tour", "snowdon-ducts--tour"])("the captured %s update decodes", slug => {
+  const body = { add: [{ kind: "page-target", slug }], remove: [] };
+  expect(decodeResourceSubscriptionUpdate(JSON.stringify(body))).toEqual(body);
+});
 
 test("subscription updates preserve caller ownership without any recording or ACK policy", async () => {
   const stop = vi.fn();
@@ -12,13 +17,32 @@ test("subscription updates preserve caller ownership without any recording or AC
     method: "POST", body: JSON.stringify({ add, remove }),
   }), observe, owner);
   try {
-    expect((await update("caller-B", [request], [])).status).toBe(400);
+    const foreign = await update("caller-B", [request], []);
+    expect(foreign.status).toBe(403);
+    expect(await foreign.json()).toMatchObject({ code: "reading.foreign", error: "Foreign reading connection" });
     expect(observe).not.toHaveBeenCalled();
     expect((await update("caller-A", [request], [])).status).toBe(200);
     expect(observe).toHaveBeenCalledOnce();
-    expect((await update("caller-B", [], [readingKey(request)])).status).toBe(400);
+    expect((await update("caller-B", [], [readingKey(request)])).status).toBe(403);
     expect(stop).not.toHaveBeenCalled();
   } finally { await reader.cancel(); }
   expect(stop).toHaveBeenCalledOnce();
   expect((await update("caller-A", [request], [])).status).toBe(409);
+});
+
+test("retirement while the update body is arriving stays a retirement refusal", async () => {
+  const observe: ResourceObserver = () => () => {};
+  const response = resourceResponse(new Request("http://host/pe/resources?connection=racing"), observe);
+  let body!: ReadableStreamDefaultController<Uint8Array>;
+  const request = new Request("http://host/pe/resource-subscriptions?connection=racing", {
+    method: "POST", duplex: "half",
+    body: new ReadableStream({ start(controller) { body = controller; } }),
+  } as RequestInit);
+  const updating = updateResourceSubscriptions(request, observe);
+  await response.body!.cancel();
+  body.enqueue(new TextEncoder().encode(JSON.stringify({ add: [{ kind: "machine" }], remove: [] })));
+  body.close();
+  const refusal = await updating;
+  expect(refusal.status).toBe(409);
+  expect(await refusal.json()).toMatchObject({ code: "reading.retired", error: "Reading connection retired" });
 });
