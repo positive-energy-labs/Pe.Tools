@@ -307,3 +307,23 @@ test("a named contribution read sees edited script bytes before the inventory ca
     expect(await (await read()).json()).toMatchObject({ content: "Result(2);" });
   } finally { await content.close(); }
 });
+
+test("an incomplete root listing cannot remove an admitted Pod that still has its manifest", async () => {
+  const { pods, page, request } = await fixture();
+  const original = fs.readdir;
+  const listing = vi.spyOn(fs, "readdir").mockImplementation(async (...args) => {
+    const entries = await original(...args);
+    return String(args[0]) === pods && typeof args[1] === "object" && args[1]?.withFileTypes
+      ? entries.filter(entry => String(entry.name) !== "requested") : entries;
+  });
+  await fs.writeFile(page("other"), "<title>fresh beside incomplete enumeration</title>");
+  expect(await (await request("other")).text()).toContain("fresh beside incomplete enumeration");
+  await expect(capturePackage("requested", pods)).rejects.toMatchObject({ code: "pod.discovery.exceeded" });
+  const refused = await request();
+  expect(refused.status).toBe(503);
+  expect(await refused.text()).toContain("pod.discovery.exceeded");
+  listing.mockRestore();
+  expect((await request()).status).toBe(200);
+  await fs.rm(join(pods, "requested"), { recursive: true });
+  expect((await request()).status).toBe(404);
+});

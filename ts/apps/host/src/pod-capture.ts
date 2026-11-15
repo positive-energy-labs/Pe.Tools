@@ -321,6 +321,14 @@ export async function discoverPackages(
     };
     current.promise = current.promise.then(listing => {
       stop.signal.throwIfAborted();
+      if (current.observations) {
+        const before = new Map(cached?.listing.packages.map(pod => [resolve(pod.directory), pod.discoveryFailure]));
+        for (const pod of listing.packages) {
+          const directory = resolve(pod.directory);
+          if (pod.discoveryFailure && pod.discoveryFailure !== before.get(directory) && !current.observations.has(directory))
+            current.observations.set(directory, version);
+        }
+      }
       const latest = completedCensuses.get(key);
       const publishing = discovery.get(key) === current;
       const published = publishing ? retainUnobserved(listing, latest, current.observations) : listing;

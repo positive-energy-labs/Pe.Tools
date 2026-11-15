@@ -252,6 +252,27 @@ async function listPodsFolder(podsRoot: string, signal: AbortSignal, reusable: R
     if (previous.length) return { packages: previous.map(pod => unavailablePackage(pod, error)), unreadable: [] };
     throw error;
   }
+  const nameKey = (name: string) => process.platform === "win32" ? name.toLowerCase() : name;
+  const present = new Set(entries.map(entry => nameKey(entry.name)));
+  // An omitted entry can be a partial Drive listing. Require an actual absence before
+  // withdrawing an admission; a readable or stalled manifest keeps only this Pod unavailable.
+  const missing = [...admitted.values()].filter(pod =>
+    resolve(dirname(pod.directory)) === resolve(podsRoot) && !present.has(nameKey(pod.folder)))
+    .map(async pod => {
+      try {
+        await readPackageWork(pod.directory, signal, async signal => {
+          await lstat(join(pod.directory, "pod.json"));
+          signal.throwIfAborted();
+          throw new PackageReadIncomplete(`Pod folder listing omitted '${pod.directory}'`);
+        });
+      } catch (error) {
+        signal.throwIfAborted();
+        if (error instanceof Error && "code" in error && error.code === "ENOENT")
+          return { packages: [], unreadable: [] };
+        return { packages: [unavailablePackage(pod, error)], unreadable: [] };
+      }
+      return { packages: [], unreadable: [] };
+    });
   const listings = await Promise.all(entries.sort((a, b) => a.name.localeCompare(b.name)).map(async entry => {
     signal.throwIfAborted();
     const result: PackageListing = { packages: [], unreadable: [] };
@@ -289,7 +310,7 @@ async function listPodsFolder(podsRoot: string, signal: AbortSignal, reusable: R
       result.unreadable.push({ folder: entry.name, message: message(error) });
     }
     return result;
-  }));
+  }).concat(missing));
   for (const listing of listings) {
     result.packages.push(...listing.packages);
     result.unreadable.push(...listing.unreadable);
