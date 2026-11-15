@@ -59,6 +59,15 @@ if mode == 'cancel-running':
 if mode == 'spawn-fail':
     def fail(*a, **kw): raise OSError('injected spawn failure')
     R.subprocess.Popen = fail
+if mode == 'stale-count':
+    real_read = R.job_read
+    def stale_read(name):
+        _, ws, private, peak = real_read(name)
+        return 99, ws, private, peak
+    R.job_read = stale_read
+if mode == 'report-fail':
+    def fail_report(name): raise OSError('injected survivor reading failure')
+    R.job_survivors = fail_report
 if mode == 'baseline':
     job = 'Local\\Pe.Tools.baseline.' + uuid.uuid4().hex
     handle = R.own_job(job)
@@ -172,15 +181,24 @@ class ReservationTests(unittest.TestCase):
         self.assertEqual(replacement.wait(timeout=6), 0)
         self.assertEqual(self.rows(), [])
 
-    def test_waits_for_grandchild_after_launcher_exits(self):
+    def test_releases_and_reports_grandchild_after_launcher_exits(self):
         grandchild = self.home/'grandchild.py'
-        grandchild.write_text(CHILD)
-        self.child.write_text('import subprocess,sys\nsubprocess.Popen([sys.executable,' + repr(str(grandchild)) + ',sys.argv[1]])\n')
-        p, receipt = self.start('descendant')
-        until(lambda: Path(str(receipt)+'.child').exists())
-        self.assertIsNone(p.poll())
-        self.assertEqual(p.wait(timeout=5), 0)
-        self.assertIn('end', json.loads(Path(str(receipt)+'.child').read_text()))
+        grandchild.write_text(CHILD.replace('time.sleep(.6)', 'time.sleep(20)'))
+        self.child.write_text('import subprocess,sys,time\nfrom pathlib import Path\nsubprocess.Popen([sys.executable,' + repr(str(grandchild)) + ',sys.argv[1]])\nwhile not Path(sys.argv[1]).exists(): time.sleep(.01)\nraise SystemExit(7)\n')
+        p, receipt = self.start('descendant', 'suite')
+        child_file = Path(str(receipt)+'.child')
+        until(child_file.exists)
+        pid = json.loads(child_file.read_text())['pid']
+        self.assertEqual(p.wait(timeout=3), 7)
+        self.assertNotIn('end', json.loads(child_file.read_text()))
+        report = json.loads(receipt.read_text())
+        self.assertEqual(report['survivors'], [dict(pid=pid, name='python.exe')])
+        self.assertIn(str(pid).encode(), p.stderr.read())
+        until(lambda: R.identity(pid) is None)  # supervisor exit still closes its kill-on-close job
+        self.assertEqual(self.rows(), [])
+        self.child.write_text(CHILD)
+        replacement, _ = self.start('replacement-suite', 'suite')
+        self.assertEqual(replacement.wait(timeout=5), 0)
         self.assertEqual(self.rows(), [])
 
     def test_nested_launcher_uses_verified_outer_job(self):
@@ -191,6 +209,16 @@ class ReservationTests(unittest.TestCase):
         self.assertEqual(p.wait(timeout=6), 0)
         self.assertIn('end', json.loads(Path(str(receipt)+'.child').read_text()))
         self.assertEqual(self.rows(), [])
+
+    def test_stale_count_and_survivor_read_failure_cannot_hold_completion(self):
+        for mode in ('stale-count', 'report-fail'):
+            with self.subTest(mode=mode):
+                p, receipt = self.start(mode, mode)
+                self.assertEqual(p.wait(timeout=5), 0)
+                self.assertEqual(self.rows(), [])
+                self.assertEqual(json.loads(receipt.read_text())['survivors'], [])
+                if mode == 'report-fail':
+                    self.assertIn(b'survivor reading failed', p.stderr.read())
 
     def test_second_suite_waits_without_blocking_ready_browser(self):
         self.child.write_text(CHILD.replace('time.sleep(.6)', '''if 'first-suite' in sys.argv[1]:

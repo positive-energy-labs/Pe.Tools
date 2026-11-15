@@ -2,6 +2,8 @@
 
 The caller joins a kill-on-close Job BEFORE spawning. Never use this for SDK
 sessions or persistent services: their lifecycle authority is elsewhere.
+The launched command's exit releases admission; leftover helpers are reported
+and stopped by job closure when the coordinator exits.
 Only migrated launchers participate. Envelopes are admission estimates, not OS
 memory limits; unmanaged work or a job exceeding its envelope can exhaust RAM.
 """
@@ -48,6 +50,7 @@ set_job = api(K, "SetInformationJobObject", [w.HANDLE, c.c_int, c.c_void_p, w.DW
 query_job = api(K, "QueryInformationJobObject", [w.HANDLE, c.c_int, c.c_void_p, w.DWORD, c.c_void_p])
 assign_job = api(K, "AssignProcessToJobObject", [w.HANDLE, w.HANDLE])
 in_job = api(K, "IsProcessInJob", [w.HANDLE, w.HANDLE, c.POINTER(w.BOOL)])
+process_image = api(K, "QueryFullProcessImageNameW", [w.HANDLE, w.DWORD, w.LPWSTR, c.POINTER(w.DWORD)])
 
 
 def checked(ok):
@@ -104,6 +107,41 @@ def identity(pid):
         close(handle)
 
 
+def job_pids(handle):
+    # Fail closed on an unexpectedly large job, rather than miss its consumption.
+    ids = c.create_string_buffer(65536)
+    checked(query_job(handle, 3, ids, len(ids), None))
+    count = w.DWORD.from_buffer(ids, 4).value
+    return list((c.c_size_t * count).from_buffer(ids, 8))
+
+
+def job_survivors(name):
+    handle = checked(open_job(4, False, name))
+    try:
+        survivors = []
+        for pid in job_pids(handle):
+            if pid == os.getpid():
+                continue
+            ph = open_process(0x101000, False, pid)
+            if not ph:
+                if c.get_last_error() == 87:
+                    continue
+                survivors.append(dict(pid=pid, name='unknown (access denied)'))
+                continue
+            try:
+                if wait_process(ph, 0) == 0:
+                    continue
+                image = c.create_unicode_buffer(32768)
+                size = w.DWORD(len(image))
+                name_ok = process_image(ph, 0, image, c.byref(size))
+                survivors.append(dict(pid=pid, name=Path(image.value).name if name_ok else 'unknown'))
+            finally:
+                close(ph)
+        return survivors
+    finally:
+        close(handle)
+
+
 def job_read(name):
     handle = open_job(4, False, name)  # JOB_OBJECT_QUERY
     if not handle:
@@ -111,11 +149,7 @@ def job_read(name):
             return 0, 0, 0, 0
         raise c.WinError(c.get_last_error())
     try:
-        # Fail closed on an unexpectedly large job, rather than miss its consumption.
-        ids = c.create_string_buffer(65536)
-        checked(query_job(handle, 3, ids, len(ids), None))
-        count = w.DWORD.from_buffer(ids, 4).value
-        pids = (c.c_size_t * count).from_buffer(ids, 8)
+        pids = job_pids(handle)
         ws = private = 0
         for pid in pids:
             ph = open_process(0x410, False, pid)
@@ -139,7 +173,7 @@ def job_read(name):
                 close(ph)
         limits = ExtendedLimits()
         checked(query_job(handle, 9, c.byref(limits), c.sizeof(limits), None))
-        return count, ws, private, limits.peak_job
+        return len(pids), ws, private, limits.peak_job
     finally:
         close(handle)
 
@@ -296,6 +330,8 @@ def run(argv):
     admitted = None
     peak_ws = peak_commit = 0
     result = 3
+    command_finished = False
+    survivors = []
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(130))
     try:
         while True:
@@ -321,15 +357,22 @@ def run(argv):
         child = subprocess.Popen(command, env={**os.environ, "PE_MACHINE_RESERVATION_JOB": row["job"],
                                                "PE_MACHINE_RESERVATION_HOME": str(options.home)})
         while True:
-            count, ws, private, peak = job_read(row["job"])
+            if child.poll() is not None:
+                command_finished = True
+                result = child.returncode
+                # Bounded commands own completion. Helpers remain in the kill-on-close job,
+                # but neither surviving helpers nor stale job counts may hold the suite lock.
+                try:
+                    survivors = job_survivors(row["job"])
+                    if survivors:
+                        print("command exited; remaining job members (stopped on coordinator exit): "
+                              + json.dumps(survivors), file=sys.stderr)
+                except OSError as error:
+                    print(f"command exited; survivor reading failed: {error}", file=sys.stderr)
+                return result
+            _, ws, private, peak = job_read(row["job"])
             peak_ws = max(peak_ws, ws)
             peak_commit = max(peak_commit, peak, private)
-            # TODO: R-7: after the child exits, a job that still counts more than one process keeps this loop
-            # and its reservation "running", with no descendant in the process tree. Seen four times. Each held
-            # later suites at HOLD until a hand stop or the 2 h shell limit. Not diagnosed (pod-pages OWED-integrator.md).
-            if child.poll() is not None and count <= 1:
-                result = child.returncode
-                return result
             time.sleep(0.05)
     except (KeyboardInterrupt, SystemExit):
         result = 130
@@ -338,13 +381,13 @@ def run(argv):
         finished = time.monotonic()
         # A cancelled/crashed supervisor leaves its row until its job is empty.
         # OS handle closure kills only its own descendants, then the next reader sweeps it.
-        if job_read(row["job"])[0] <= 1:
+        if command_finished or job_read(row["job"])[0] <= 1:
             with state(options.home, time.monotonic() + 2) as rows:
                 rows[:] = [r for r in rows if r["id"] != row["id"]]
         if options.receipt:
             options.receipt.parent.mkdir(parents=True, exist_ok=True)
             ended = time.monotonic()
-            options.receipt.write_text(json.dumps({**row, "result": result,
+            options.receipt.write_text(json.dumps({**row, "result": result, "survivors": survivors,
                 "setup_s": setup_done - started,
                 "queue_s": (admitted or finished) - setup_done,
                 "execution_s": finished - admitted if admitted else 0, "cleanup_s": ended - finished,

@@ -2,7 +2,8 @@
 
 usage: python machine.py admit <kind> [--json]   ADMIT, HOLD, or REFUSE (suite in a delegated child that does not own one); exit 0, 3 or 4
        python machine.py run <kind> [--wait 60] [--owns-suite] -- <command> [args...]
-           atomic, bounded admission held over the whole process tree (codegen, suite, browser)
+           atomic admission for the command's lifetime (codegen, suite, browser)
+           leftover job members are reported and stopped on coordinator exit
        python machine.py admit suite --owns-suite   a delegated child whose brief names it the owner of a suite says so
        python machine.py who [--all] [--json]     every process this repo's work can attribute, biggest first
        python machine.py stop <pid> [<pid>...]    stop processes `who` marks stoppable; refuses the rest; writes a receipt
