@@ -122,7 +122,38 @@ async function journal(value: ReturnType<typeof action>) {
 
 test("v8 retained target and nested Work evidence roundtrip without an epoch change", () => {
   for (const target of [exact, broker]) {
-    const original = action(target);
+    const base = action(target);
+    const original = persistedActionReceiptSchema.parse({
+      ...base,
+      basis: {
+        kind: "acquisition",
+        id: "original-acquisition",
+        scope: { kind: "document", lifetime: broker.ref },
+      },
+      effects: [{ kind: "document", ref: broker.ref }],
+      consumes: [
+        ...base.consumes,
+        {
+          kind: "document-mark",
+          probe: { ref: broker.ref, takenAt: "original-mark" },
+          expected: true,
+        },
+        { kind: "incarnation", probe: { target: broker, process }, expected: true },
+      ],
+      snapshots: [
+        {
+          id: "original-snapshot",
+          address: {
+            binding: "address",
+            route: "families",
+            target: "C:\\Original.rvt",
+            from: broker.ref,
+          },
+          workRevision: 7,
+          readingHashes: {},
+        },
+      ],
+    });
     const snapshot = readJournalSnapshot(bytes(original))!;
     expect(snapshot.discarded).toBeNull();
     expect(snapshot.receipts).toHaveLength(1);
@@ -140,7 +171,26 @@ test("v8 retained target and nested Work evidence roundtrip without an epoch cha
     expect(row.body.value.consumes).toEqual(original.consumes);
     expect(row.body.value.prepared).toEqual(original.prepared);
     expect(row.body.value.steps).toEqual(original.steps);
+    expect(row.body.value.basis).toEqual(original.basis);
+    expect(row.body.value.effects).toEqual(original.effects);
+    expect(row.body.value.snapshots).toEqual(original.snapshots);
   }
+});
+
+test("malformed complete rows still fail closed instead of becoming unavailable originals", () => {
+  const valid = bytes(action());
+  for (const target of [
+    { kind: "document", ref: { session: broker.ref.session } },
+    { kind: "document", ref: { ...broker.ref, processIncarnation: { pid: 82836 } } },
+    { kind: "unavailable-original", original: broker },
+  ]) {
+    const lines = valid.toString("utf8").trimEnd().split("\n");
+    const row = JSON.parse(lines.at(-1)!);
+    row.receipt.body.value.target = target;
+    lines[lines.length - 1] = JSON.stringify(row);
+    expect(() => readJournalSnapshot(Buffer.from(`${lines.join("\n")}\n`))).toThrow();
+  }
+  expect(readJournalSnapshot(valid)?.receipts).toHaveLength(1);
 });
 
 test("unavailable-original is inspectable and never a fresh admission target", () => {
