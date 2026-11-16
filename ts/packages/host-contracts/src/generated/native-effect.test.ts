@@ -36,6 +36,34 @@ describe("C# native Effect projection", () => {
     expect(() => Schema.decodeUnknownSync(decoder)(1)).toThrow();
     expect(Schema.decodeUnknownSync(decoder)(2)).toBe(2);
   });
+  it("retains false schemas on properties, definition targets and union arms", async () => {
+    for (const input of [
+      { type: "object", properties: { blocked: false }, additionalProperties: false },
+      { type: "object", properties: { blocked: { $ref: "#/$defs/Blocked" } }, $defs: { Blocked: false }, additionalProperties: false },
+    ]) {
+      const decoder = await generated({ $schema: "https://json-schema.org/draft/2020-12/schema", ...input });
+      expect(Schema.decodeUnknownSync(decoder)({})).toEqual({});
+      expect(() => Schema.decodeUnknownSync(decoder)({ blocked: 1 })).toThrow();
+    }
+    const union = await generated({ $schema: "https://json-schema.org/draft/2020-12/schema", anyOf: [false, { type: "string" }] });
+    expect(() => Schema.decodeUnknownSync(union)(1)).toThrow();
+    expect(Schema.decodeUnknownSync(union)("allowed")).toBe("allowed");
+    expect(() => schemaCode({ $schema: "http://json-schema.org/draft-04/schema#", type: "object", properties: { blocked: false } })).toThrow();
+  });
+  it("applies referenced defaults like inline twins through object, optional and array composition", async () => {
+    const inline = await generated({ type: "object", additionalProperties: false, properties: { count: { type: "integer", default: 8 } } });
+    const referenced = await generated({ $schema: "https://json-schema.org/draft/2020-12/schema", type: "object", additionalProperties: false,
+      properties: { count: { $ref: "#/$defs/Count" } }, $defs: { Count: { type: "integer", default: 8 } } });
+    const alias = await generated({ $schema: "https://json-schema.org/draft/2020-12/schema", type: "object", additionalProperties: false,
+      properties: { count: { $ref: "#/$defs/Alias" } }, $defs: { Alias: { $ref: "#/$defs/Count" }, Count: { type: "integer", default: 8 } } });
+    for (const decoder of [inline, referenced, alias]) {
+      expect(Schema.decodeUnknownSync(decoder)({})).toEqual({ count: 8 });
+      const composed = Schema.Struct({ optional: Schema.optionalKey(decoder), rows: Schema.Array(decoder), object: Schema.Struct({ nested: decoder }) });
+      expect(Schema.decodeUnknownSync(composed)({ optional: {}, rows: [{}], object: { nested: {} } })).toEqual({ optional: { count: 8 }, rows: [{ count: 8 }], object: { nested: { count: 8 } } });
+      expect(Schema.decodeUnknownSync(composed)({ rows: [], object: { nested: { count: 5 } } })).toEqual({ rows: [], object: { nested: { count: 5 } } });
+      expect(() => Schema.decodeUnknownSync(composed)({ rows: [{ count: 1, excess: true }], object: { nested: {} } })).toThrow();
+    }
+  });
   it("preserves defaults, requiredness, nullability, exact IDs, int32 and dates", async () => {
     const decoder = await generated({ type: "object", additionalProperties: false,
       properties: { count: { type: "integer", format: "int32", default: 8 }, id: { type: "integer", format: "int64" }, at: { type: ["string", "null"], format: "date-time" } }, required: ["id", "at"] });

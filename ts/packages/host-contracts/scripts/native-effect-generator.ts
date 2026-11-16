@@ -13,7 +13,12 @@ const keywords = new Set([
   "x-enumNames", "x-enumFlags", "x-options",
 ]);
 
-function normalize(input: Node, path: string, draft04: boolean): Node {
+function normalize(input: Node | boolean, path: string, draft04: boolean): Node | boolean {
+  // Object spread would erase false before the importer can lower it to Never.
+  if (typeof input === "boolean") {
+    if (draft04) throw Error(`${path}: draft04 boolean schema unsupported`);
+    return input;
+  }
   const node = { ...input };
   for (const key of Object.keys(node))
     if (!keywords.has(key)) throw Error(`${path}: unsupported keyword ${key}`);
@@ -55,7 +60,9 @@ function normalize(input: Node, path: string, draft04: boolean): Node {
     if (node[key]) node[key] = Object.fromEntries(Object.entries(node[key]).map(([name, value]) =>
       [name, normalize(value as Node, `${path}/${key}/${name}`, draft04)]));
   for (const key of ["items", "additionalProperties"])
-    if (node[key] && typeof node[key] === "object") {
+    if (key === "items" && typeof node[key] === "boolean")
+      node[key] = normalize(node[key], `${path}/${key}`, draft04);
+    else if (node[key] && typeof node[key] === "object") {
       if (Array.isArray(node[key])) throw Error(`${path}: tuple items unsupported`);
       node[key] = normalize(node[key], `${path}/${key}`, draft04);
     }
@@ -75,24 +82,36 @@ function wrap(node: Rep.Representation, runtime: (code: string) => string): Rep.
 
 // Importer's annotations preserve formats/defaults but do not implement them.
 // Augment its representation at those two metadata seams before its code emitter.
-function augment(node: Rep.Representation): Rep.Representation {
+function effectiveDefault(node: Rep.Representation, references: Rep.References, seen = new Set<string>()): unknown {
+  if (node._tag === "Reference") {
+    if (seen.has(node.$ref)) throw Error(`Cyclic default reference ${node.$ref}`);
+    if (!Object.hasOwn(references, node.$ref)) throw Error(`Missing default reference ${node.$ref}`);
+    seen.add(node.$ref);
+    return effectiveDefault(references[node.$ref], references, seen);
+  }
+  if (node.annotations?.default !== undefined) return node.annotations.default;
+  return node._tag === "Suspend" ? effectiveDefault(node.thunk, references, seen) : undefined;
+}
+
+function augment(node: Rep.Representation, references: Rep.References): Rep.Representation {
+  const recur = (node: Rep.Representation) => augment(node, references);
   let result = node;
   switch (node._tag) {
     case "Objects": result = { ...node,
       propertySignatures: node.propertySignatures.map(property => {
-        let type = augment(property.type);
-        const value = "annotations" in property.type ? property.type.annotations?.default : undefined;
+        let type = recur(property.type);
+        const value = effectiveDefault(property.type, references);
         if (property.isOptional && value !== undefined) {
           type = wrap(type, code => `${code}.pipe(Schema.withDecodingDefaultKey(Effect.succeed(${JSON.stringify(value)})))`);
           return { ...property, type, isOptional: false };
         }
         return { ...property, type };
       }),
-      indexSignatures: node.indexSignatures.map(s => ({ parameter: augment(s.parameter), type: augment(s.type) })),
+      indexSignatures: node.indexSignatures.map(s => ({ parameter: recur(s.parameter), type: recur(s.type) })),
     }; break;
-    case "Arrays": result = { ...node, elements: node.elements.map(e => ({ ...e, type: augment(e.type) })), rest: node.rest.map(augment) }; break;
-    case "Union": result = { ...node, types: node.types.map(augment) }; break;
-    case "Suspend": result = { ...node, thunk: augment(node.thunk) }; break;
+    case "Arrays": result = { ...node, elements: node.elements.map(e => ({ ...e, type: recur(e.type) })), rest: node.rest.map(recur) }; break;
+    case "Union": result = { ...node, types: node.types.map(recur) }; break;
+    case "Suspend": result = { ...node, thunk: recur(node.thunk) }; break;
   }
   const format = "annotations" in node ? node.annotations?.format : undefined;
   if (format === "date-time")
@@ -107,6 +126,7 @@ export function schemaCode(input: Node): Rep.CodeDocument {
   if (dialect !== undefined && dialect !== "http://json-schema.org/draft-04/schema#" &&
     dialect !== "https://json-schema.org/draft/2020-12/schema") throw Error(`Unsupported dialect ${dialect}`);
   const normalized = normalize(input, "#", dialect === "http://json-schema.org/draft-04/schema#");
+  if (typeof normalized === "boolean") throw Error("Boolean root unsupported; use an object root");
   const document = dialect === "https://json-schema.org/draft/2020-12/schema" || dialect === undefined
     ? JsonSchema.fromSchemaDraft2020_12(normalized)
     : JsonSchema.fromSchemaDraft07(normalized);
@@ -118,8 +138,8 @@ export function schemaCode(input: Node): Rep.CodeDocument {
   const representation = Rep.toRepresentations([schema.ast]);
   return Rep.toCodeDocument({
     ...representation,
-    representations: representation.representations.map(augment) as [Rep.Representation, ...Rep.Representation[]],
-    references: Object.fromEntries(Object.entries(representation.references).map(([key, value]) => [key, augment(value)])),
+    representations: representation.representations.map(node => augment(node, representation.references)) as [Rep.Representation, ...Rep.Representation[]],
+    references: Object.fromEntries(Object.entries(representation.references).map(([key, value]) => [key, augment(value, representation.references)])),
   });
 }
 
