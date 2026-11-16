@@ -42,7 +42,12 @@ class CycleTests(unittest.TestCase):
         rows = '| row | stamp |\n|---|---|\n| a | PROVEN at abc |\n| b | UNPROVEN, was PROVEN |\nPROVEN in prose\n'
         self.assertEqual(row_counts(rows), {'PROVEN': 1, 'FALSIFIED': 0, 'UNPROVEN': 1})
         waves = wave_rows('Wave: 1 cv/a cv/b\n- Wave: 2 cv/c, cv/d\n', 'Merge cv/a: x\nMerge cv/b\nMerge cv/c-fix', ['cv/c'])
-        self.assertEqual([(w['n'], w['merged'], w['started'], w['closed']) for w in waves], [('1', 2, 2, True), ('2', 0, 1, False)])
+        self.assertEqual([(w['n'], w['merged'], w['started'], w['status']) for w in waves], [('1', 2, 2, 'UNKNOWN'), ('2', 0, 1, 'UNKNOWN')])
+
+    def test_merged_hands_do_not_close_active_wave(self):
+        text = 'Wave: 0 cv/a cv/b cv/c\nWave-Status: 0 ACTIVE\n'
+        waves = wave_rows(text, 'Merge cv/a\nMerge cv/b\nMerge cv/c', [])
+        self.assertEqual((waves[0]['merged'], waves[0]['total'], waves[0]['status']), (3, 3, 'ACTIVE'))
 
     def test_estimate_is_hours_and_lines(self):
         self.assertEqual(re.findall(ESTIMATE, 'Estimate: cv/a 2h\nEstimate: cv/b 0.5h 400L -\nEstimate: cv/c 1h 90L\n'),
