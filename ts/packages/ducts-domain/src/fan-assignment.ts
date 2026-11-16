@@ -15,9 +15,6 @@ export interface FanAssignment {
   system: string;
 }
 
-/** Units owed a base, with the systems that must be split in Revit before one can be named. */
-export type OwedBase = Map<number, FanAssignment[]> & { split?: Map<string, number[]> };
-
 type Shape = Pick<DuctSnapshot, "groups" | "nodes"> & Partial<Pick<DuctSnapshot, "systems">>;
 
 // Derived lookup only, not a second source of model truth: snapshots are immutable and a new read
@@ -63,54 +60,4 @@ export function fanCandidates(snapshot: Shape, unitId: number, group?: string): 
     .filter((s) => s.baseEquipmentId == null && classes.has(s.classification))
     .map((s) => ({ unitId, systemId: s.id, system: s.name }))
     .sort((a, b) => a.system.localeCompare(b.system));
-}
-
-/**
- * Every unit whose role is fan while no system names it base equipment, with the systems it could be
- * made the fan of. A unit already some system's base is answered; one with no candidate is left out.
- * A system takes one base equipment, so it is offered once: to its network's lead fan (`lead`, the
- * fan that owns the trunk) when one is known. A system whose candidate fans sit in separate networks
- * (SA 19 on Project A: FC-17's and FC-35's) is offered to none; it is returned in `split` to be split in
- * Revit first.
- */
-export function fansOwedBase(
-  snapshot: Shape,
-  roles: ReadonlyMap<number, { role: "fan" | "passive" }>,
-  lead: (group: string) => number | null = () => null,
-): OwedBase {
-  const based = new Set(
-    (snapshot.systems ?? []).map((s) => s.baseEquipmentId).filter((id) => id != null),
-  );
-  const offers: FanAssignment[] = [];
-  for (const [id, r] of roles) {
-    if (r.role !== "fan" || based.has(id)) continue;
-    offers.push(...fanCandidates(snapshot, id));
-  }
-  // The networks a unit offers a system from: the groups it roots that carry that system.
-  const networks = (a: FanAssignment) =>
-    (indexOf(snapshot).groups.get(a.unitId) ?? [])
-      .filter((g) => g.systemNames.includes(a.system))
-      .map((g) => g.id);
-  const split = new Map<string, number[]>();
-  const bySystem = new Map<string, FanAssignment[]>();
-  for (const a of offers) bySystem.set(a.system, [...(bySystem.get(a.system) ?? []), a]);
-  const kept = [...bySystem.values()].flatMap((list) => {
-    const groups = new Set(list.flatMap(networks));
-    if (groups.size > 1 && new Set(list.map((a) => a.unitId)).size > 1) {
-      split.set(
-        list[0]!.system,
-        [...new Set(list.map((a) => a.unitId))].sort((a, b) => a - b),
-      );
-      return [];
-    }
-    const head = groups.size === 1 ? lead([...groups][0]!) : null;
-    return head != null && list.some((a) => a.unitId === head)
-      ? list.filter((a) => a.unitId === head)
-      : list;
-  });
-  const out: OwedBase = new Map();
-  for (const a of kept) out.set(a.unitId, [...(out.get(a.unitId) ?? []), a]);
-  for (const list of out.values()) list.sort((a, b) => a.system.localeCompare(b.system));
-  if (split.size) out.split = split;
-  return out;
 }

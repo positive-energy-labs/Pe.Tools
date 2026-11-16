@@ -1,6 +1,6 @@
 {
-  "testFiles": 842,
-  "total": 306,
+  "testFiles": 841,
+  "total": 305,
   "byFile": {
     "apps/host/tests/admission.test.ts": 1,
     "apps/host/tests/admitted-builtins.test.ts": 1,
@@ -116,7 +116,6 @@
     "packages/agent-contracts/src/takeoffs.test.ts": 3,
     "packages/agent-contracts/tests/contribution.test.ts": 1,
     "packages/ducts-domain/src/equivalent-length.test.ts": 1,
-    "packages/ducts-domain/src/kernel/apply-request.test.ts": 1,
     "packages/ducts-domain/src/loss-breakdown.test.ts": 1,
     "packages/ducts-domain/src/loss-rules.test.ts": 1,
     "packages/ducts-domain/src/no-runs.test.ts": 1,

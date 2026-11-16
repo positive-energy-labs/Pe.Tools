@@ -2,5 +2,4 @@
 export * from "./fitting-facts.ts";
 export * from "./price-leg.ts";
 export * from "./inferred-joins.ts";
-export * from "./apply-request.ts";
 export * from "./terminal-flow.ts";
