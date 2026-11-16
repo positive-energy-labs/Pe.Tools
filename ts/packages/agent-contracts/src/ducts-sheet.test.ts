@@ -89,3 +89,25 @@ it("lets a layer or a tier file hold one side of a sided criterion; the engine b
   expect(ductsFirmSchema.safeParse(firm).success).toBe(true);
   expect(ductsBaseSchema.safeParse(firm).success).toBe(false);
 });
+
+it("a resolved wire value agrees with its status, as the kernel resolution does (P-024)", async () => {
+  const { ductsInputsSchema } = await import("./ducts-sheet.ts");
+  const cfm = ductsInputsSchema.shape.terminals.valueType.shape.cfm;
+  const base = { units: "cfm", version: null };
+  const ok = [
+    { ...base, status: "valid", value: 100, source: "model", author: null, ref: "model:7/Flow" },
+    { ...base, status: "valid", value: 100, source: "Work", author: "pea", ref: "work:fans/flows/k" },
+    { ...base, status: "invalid", value: null, source: "Work", author: null, ref: "work:fans/flows/k" },
+    { ...base, status: "missing", value: null, source: "none", author: null, ref: null },
+  ];
+  const bad = [
+    { ...base, status: "valid", value: 100, source: "none", author: null, ref: null },
+    { ...base, status: "valid", value: 100, source: "Work", author: null, ref: "work:fans/flows/k" },
+    { ...base, status: "valid", value: null, source: "model", author: null, ref: "model:7/Flow" },
+    { ...base, status: "invalid", value: 100, source: "model", author: null, ref: "model:7/Flow" },
+    { ...base, status: "missing", value: null, source: "firm", author: null, ref: "firm:x" },
+    { ...base, status: "valid", value: 100, source: "model", author: null, ref: " " },
+  ];
+  expect(ok.map(v => cfm.safeParse(v).success)).toEqual(ok.map(() => true));
+  expect(bad.map(v => cfm.safeParse(v).success)).toEqual(bad.map(() => false));
+});

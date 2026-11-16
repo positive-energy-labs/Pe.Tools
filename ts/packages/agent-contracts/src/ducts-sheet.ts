@@ -36,7 +36,18 @@ const resolved = <T extends z.ZodType>(value: T) =>
     units: z.string().nullable(),
     version: z.union([z.string(), z.number()]).nullable(),
     status: z.enum(["valid", "missing", "invalid"]),
-  });
+  // The flat shape keeps one object type for the engine's readers; this refine holds it to the kernel
+  // union (`ValueResolution`, work-value.ts): each status admits only its own value, source, author and ref.
+  }).refine(r => {
+    const value = (r as { value?: unknown }).value;
+    return r.status === "missing"
+      ? value === null && r.source === "none" && r.author === null && r.ref === null && r.version === null
+      : r.source !== "none" && !!r.ref?.trim() && (r.status === "invalid" ? value === null
+        : value !== null && ((r.source !== "Work" && r.source !== "run") || r.author === "human" || r.author === "pea"));
+  },
+    "a resolved value must agree with its status: missing has no source, author or ref; valid and invalid cite a ref; valid Work names its caller");
+/** Compile-time tie: every kernel resolution is a wire `resolved` value. A field the kernel adds or retypes fails here. */
+((r: import("./work-value.ts").ValueResolution<number>): z.output<ReturnType<typeof resolved<z.ZodNullable<z.ZodNumber>>>> => r) satisfies unknown;
 // TODO: docs/features/routes/LEDGER.md#s7-2f8fa50d55 G1 render authored Work values separately; badge source from this reading (Work/model/firm/default).
 export type Resolved<T> = Omit<import("./work-value.ts").ValueResolution<T>, "value"> & {
   value: T;
