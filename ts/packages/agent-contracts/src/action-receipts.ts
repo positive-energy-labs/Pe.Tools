@@ -15,6 +15,7 @@ import {
   retainedRefusalSchema,
   retainedFootprintSchema,
   type RetainedOriginalTarget,
+  type RetainedWorkKey,
 } from "./receipt-evidence.ts";
 export {
   retainedDocumentRefSchema,
