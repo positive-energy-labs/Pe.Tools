@@ -349,8 +349,6 @@ const RULES: Rule[] = [
   { id: "nav-list-kit", doctrine: "N3", pattern: /<ul\b|<li\b|role=["']list["']/g,
     roots: [W + "**/*.tsx"], allow: allow({
       "components/lang/leg-strip.tsx": "Fixed receipt-stage chips have no picks or navigation.",
-      "ducts/docs.tsx": "Tutorial prose has no row navigation.",
-      "ducts/introduction.tsx": "Shared public tutorial prose has no row navigation.",
       "lib/schema-to-field-render/field-metadata.tsx": "Static validation messages have no picks.",
     }), cannotSee: "Rows built by helpers; ListReading is the wave-4 kit reading name." },
   { id: "list-column-width-owner", doctrine: "L3",
