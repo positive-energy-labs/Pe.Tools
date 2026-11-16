@@ -134,8 +134,6 @@ const titlesOf = (grids: ReturnType<typeof toGrids>) =>
 const subject = ({
   detail: _detail,
   basis: _basis,
-  edits: _edits,
-  proposal: _proposal,
   ...args
 }: DuctsSheetRequest): DuctsSheetRequest => args;
 const walk = read("fans.walk", {
@@ -503,7 +501,7 @@ export const ductSheet = read("ducts.sheet", {
 export const fanRoster = read("fans.roster", {
   input: ductsRosterRequestSchema,
   output: ductsRosterResponseSchema,
-  async run(ctx, { target }) {
+  async run(ctx, { target, mark }) {
     const saved = await ctx.read(designLayers, target),
       design = ductsDesign(saved.ducts, saved.fans);
     const slots = ductParameterSlots(saved.settings);
@@ -524,6 +522,7 @@ export const fanRoster = read("fans.roster", {
     const roster = suggestRoster(snapshot, [], rosterInputs(inputs)),
       label = elementLabeler(snapshot);
     const activeSlot = slots.terminalFlow ?? snapshot.slots?.terminalFlow ?? "terminalFlow";
+    const wanted = mark?.trim().toLowerCase();
     return ductsRosterResponseSchema.parse({
       target,
       activeSlot,
@@ -542,7 +541,7 @@ export const fanRoster = read("fans.roster", {
           ratedEspInWg: inputs.units[String(port.unitId)]?.esp.value ?? null,
           confirmed: roster.fans.includes(port),
         };
-      }),
+      }).filter((row) => wanted === undefined || row.mark.trim().toLowerCase() === wanted),
     });
   },
 });

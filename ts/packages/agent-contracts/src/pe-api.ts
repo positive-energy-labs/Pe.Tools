@@ -24,13 +24,21 @@ const threadHistoryInput = z.strictObject({
   offset: z.number().int().nonnegative().default(0),
   limit: z.number().int().min(1).max(100).default(50),
 });
+/** What Pea is shown for reads.value: the named duct reads carry their real args; any other registered read keeps open args. */
+const namedRead = <S extends z.ZodType>(read: string, args: S) =>
+  schemas.valueReadRequest.extend({ read: z.literal(read), args });
+const valueReadInput = z.union([
+  namedRead("fans.roster", schemas.ductsRosterRequestSchema),
+  namedRead("ducts.sheet", schemas.ductsSheetRequestSchema),
+  schemas.valueReadRequest,
+]);
 const routeCatalog: Record<
   string,
   {
     description: string;
   }
 > = {
-  "reads.value": { description: "Publish a registered host Value. Supply read, args, subscription and generation. Use fans.roster for fan ports, ducts.sheet for a pressure sheet, and fans.sheet for the Fans worksheet." },
+  "reads.value": { description: "Publish a registered host Value. Supply read, args, subscription (any unique string) and generation (0 for a first read); the result is in value.data. Use fans.roster with args {target, mark} to find a fan port by its mark, ducts.sheet for a pressure sheet, and fans.sheet for the Fans worksheet." },
   "blobs.put": { description: "Retain uploaded bytes before command admission. Send fileName and base64, then use the returned immutable BlobRef as command input." },
   "threads.history": {
     description:
@@ -90,7 +98,7 @@ export const peRoutes: {[K in keyof Routes]: Routes[K] & {catalog: CatalogRow}} 
                   needs: "nothing",
                   effect: "query",
                   principal: ["human", "pea"],
-                  input: z.toJSONSchema(key === "threads.history" ? threadHistoryInput : row.body),
+                  input: z.toJSONSchema(key === "threads.history" ? threadHistoryInput : key === "reads.value" ? valueReadInput : row.body),
                 },
               }
             : {}),

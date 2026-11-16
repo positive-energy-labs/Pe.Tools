@@ -279,15 +279,6 @@ const common = {
   target: documentRefSchema,
   basis: z.string().min(1).optional(),
   detail: detail.optional(),
-  /** Pending edits to apply to document Work before computing. */
-  edits: sheetEditsSchema.optional(),
-  /** Basis-bound calculation ruling. Does not change the Revit model. */
-  proposal: z
-    .strictObject({
-      pair: z.tuple([z.string().min(1), z.string().min(1)]),
-      verdict: z.enum(["accept", "reject"]),
-    })
-    .optional(),
 };
 export const ductsSheetRequestSchema = z.discriminatedUnion("mode", [
   z.strictObject({ ...common, mode: z.literal("fan"), unitId: elementId, portIndex }),
@@ -300,7 +291,14 @@ export const ductsSheetRequestSchema = z.discriminatedUnion("mode", [
   }),
 ]);
 export type DuctsSheetRequest = z.infer<typeof ductsSheetRequestSchema>;
-export const ductsRosterRequestSchema = z.strictObject({ target: documentRefSchema });
+export const ductsRosterRequestSchema = z.strictObject({
+  target: documentRefSchema,
+  mark: z
+    .string()
+    .min(1)
+    .optional()
+    .describe("Equipment mark, e.g. MA-1. Returns only the ports whose mark matches (case-insensitive). Omit for the whole roster."),
+});
 export type DuctsRosterRequest = z.infer<typeof ductsRosterRequestSchema>;
 
 /** Shared product instructions for Pea and the sheet tutorial. */
@@ -308,10 +306,10 @@ export const DUCTS_SHEET_GUIDE = {
   summary:
     "Read one fan's pressure-drop sheet. Each number is a sum along a path; an incomplete known subtotal is never required ESP.",
   walk: [
-    "Read route:reads.value (read fans.roster) with the exact target {session, openId}. Match the equipment mark, then use its unitId and portIndex; marks are not unique. A family or type name (Fantech MUAS 10, Greenheck ESD-403) identifies a product, not the unit the person named; match the mark. Suggestions remain unconfirmed until the engineer rules.",
+    "Read route:reads.value (read fans.roster) with {target: {session, openId}, mark}: it returns only the ports whose mark matches, case-insensitive. Use the row's unitId and portIndex; marks are not unique, so several rows can return, and no row means no fan port carries that mark. Omit mark only when the whole roster is wanted. A family or type name (Fantech MUAS 10, Greenheck ESD-403) identifies a product, not the unit the person named; match the mark. Suggestions remain unconfirmed until the engineer rules.",
     "Read route:reads.value (read ducts.sheet) with {target, mode: 'fan', unitId, portIndex}. For a named start and end, use mode 'chain', start {elementId, connector?}, end {elementId}, and asserted direction 'supply' or 'return'. A chain makes no fan ESP claim.",
     "Read the sheet's blockers back to the person with their element and connector, effect on the total, and closer. Report known subtotal, completeness, and required ESP exactly as returned. Never call an incomplete path critical.",
-    "Accept or reject a returned heal proposal with the same fan request, its basis, and proposal {pair, verdict}. This writes a join ruling to document Work (edits.joins), never a Revit heal. Assumed ESP uses the continued walk; flow and pricing gaps still withhold it. An open end a person rules capped is written as edits.ends [{end: {elementId, connector}, verdict: 'capped'}]; it is then neither an end nor a blocker. Every other input is an edit on Work's own key: edits.flows (a terminal's cfm), edits.terminalDrops, edits.componentDrops, edits.esp and edits.equipmentFlows (a unit's), edits.roles and edits.kinds (rulings), edits.criteria (the project's design criteria over the firm file). A fitting's pricing is in the inputs detail's fittings census (rule, table, matched or chosen): edits.tables {ruleKey: {table}} swaps the table every fitting of that rule reads; a not-priced fitting is closed with edits.assignments {family: {rule}} (one of its candidates; prices every fitting of the family no rule matches), or, on a path through a proposed tee, tap or transition only (a transition replaces a capped end, one straight path), a typed edits.fittingDrops {key: {inWg}} for that one path. The inputs detail returns every resolved value with its source (run, Work, model, firm, default, none), units, version and missing/invalid status. A 'sibling-fan' end is another fan sharing the trunk, priced to the junction and carrying none of this fan's flow.",
+    "The sheet read takes no edits and writes nothing; every ruling and input below is staged in document Work through the route's Work verbs, then the sheet is read again. A returned heal proposal is accepted or rejected as a join ruling, edits.joins [{pair, verdict}], never a Revit heal. Assumed ESP uses the continued walk; flow and pricing gaps still withhold it. An open end a person rules capped is written as edits.ends [{end: {elementId, connector}, verdict: 'capped'}]; it is then neither an end nor a blocker. Every other input is an edit on Work's own key: edits.flows (a terminal's cfm), edits.terminalDrops, edits.componentDrops, edits.esp and edits.equipmentFlows (a unit's), edits.roles and edits.kinds (rulings), edits.criteria (the project's design criteria over the firm file). A fitting's pricing is in the inputs detail's fittings census (rule, table, matched or chosen): edits.tables {ruleKey: {table}} swaps the table every fitting of that rule reads; a not-priced fitting is closed with edits.assignments {family: {rule}} (one of its candidates; prices every fitting of the family no rule matches), or, on a path through a proposed tee, tap or transition only (a transition replaces a capped end, one straight path), a typed edits.fittingDrops {key: {inWg}} for that one path. The inputs detail returns every resolved value with its source (run, Work, model, firm, default, none), units, version and missing/invalid status. A 'sibling-fan' end is another fan sharing the trunk, priced to the junction and carrying none of this fan's flow.",
     "Use the returned next handles with the same target, mode, and basis to read a path's legs, walked elements, or inputs and provenance. A stale response means read a new overview; never reuse a handle against a different basis.",
     "Read inputs detail for the full closer notes and candidates. Propose a sourced default or a basis-bound previewed heal for a blocker, with its effect on the total. Use only an available typed preview/write contract and the returned candidate. If that door is unavailable, report it as owed; do not substitute old group heals. After an authorized change, read a new sheet and report its measured effect. Unknown effects stay unknown until recomputed.",
   ],
