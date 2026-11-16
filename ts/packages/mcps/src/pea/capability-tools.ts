@@ -16,6 +16,7 @@ import {
   builtinViewRoute,
   familyCatalogRequest,
   refusalSchema,
+  workKey,
   workKeySchema,
   workHandleSchema,
   workTimelineSchema,
@@ -1107,6 +1108,7 @@ async function dispatch(
             scope.query,
             direction,
             input.expectedRevision,
+            scope.target,
           );
           return { ok: !("isError" in result), target: scope.target, result };
         }
@@ -1343,15 +1345,35 @@ function parseTarget(value: unknown): ResolvedTarget | null {
 }
 
 /**
+ * The read whose publication names a route's Place: the Works its page reads beside its own. The
+ * browser collects them from every publication it holds (`typed-mount.ts` `timelineWorks`); Pea
+ * holds none, so it evaluates the route's roster once.
+ */
+// ponytail: one row per route with cross-Work reads; the route graph should name this read when a
+// second route needs it (it carries no read names today).
+const PLACE_READS: Record<string, string> = { fans: "fans.roster" };
+
+/** One evaluation of a registered host read; the publication it opened is released. */
+async function valueOnce(read: string, args: unknown) {
+  const client = createPeClient(base(), fetch);
+  const body = { read, args, subscription: `pea-step-${crypto.randomUUID()}`, generation: 0 };
+  const response = await client.response("reads.value", { body });
+  const wire = (await response.json()) as { value?: { data?: unknown; works?: unknown } | null };
+  void client.response("reads.value", { body: { ...body, release: true } }).catch(() => {});
+  return { status: response.status, value: wire.value ?? null };
+}
+
+/**
  * Pea's undo and redo go through the host Timeline's one step door (ADR 0042), as a person's do:
- * read `work.timeline` for this Work, then send back the step it offers. The host picks Pea's own
- * last step and refuses one a Revit write already consumed.
+ * read `work.timeline` for this Place, then send back the step it offers. The host picks Pea's own
+ * last step, refuses one a Revit write already consumed, and adds the findings Work itself.
  */
 async function timelineStep(
   route: string,
   queryString: string,
   direction: "undo" | "redo",
   expectedRevision: number,
+  target: ResolvedTarget,
 ): Promise<Record<string, unknown>> {
   const view = await routeFetch(route, queryString);
   const key = workHandleSchema.safeParse(view.handle).data?.key;
@@ -1359,26 +1381,27 @@ async function timelineStep(
     throw new Error(
       `Work changed before restoring. Read route:${route} again and pass its expectedRevision.`,
     );
-  const client = createPeClient(base(), fetch);
-  const body = {
-    read: WORK_TIMELINE_READ,
-    args: { works: [key] },
-    subscription: `pea-step-${crypto.randomUUID()}`,
-    generation: 0,
-  };
-  const response = await client.response("reads.value", { body });
-  const wire = (await response.json()) as { value?: { data?: unknown } | null };
-  // One-shot read: release the publication it opened.
-  void client.response("reads.value", { body: { ...body, release: true } }).catch(() => {});
-  const timeline = workTimelineSchema.safeParse(wire.value?.data).data;
+  const place = PLACE_READS[route];
+  // As in the browser, a read with no current publication adds no member: the owner still steps.
+  const read =
+    place && target.session && target.openId
+      ? z.array(workKeySchema).safeParse(
+          (await valueOnce(place, { target: { session: target.session, openId: target.openId } }))
+            .value?.works,
+        ).data ?? []
+      : [];
+  // The owner first: a duplicate read key must not replace it.
+  const works = [...new Map([key, ...read].map((member) => [workKey(member), member])).values()];
+  const { status, value } = await valueOnce(WORK_TIMELINE_READ, { works });
+  const timeline = workTimelineSchema.safeParse(value?.data).data;
   if (!timeline)
-    throw new Error(`The Timeline for route:${route} could not be read (${response.status}).`);
+    throw new Error(`The Timeline for route:${route} could not be read (${status}).`);
   const expected = timeline[direction];
   if (!expected)
     throw new Error(
       timeline.refusal[direction] ?? `Nothing of Pea's to ${direction} on route:${route}.`,
     );
-  return routeFetch(route, queryString, { direction, works: [key], expected }, "work.history");
+  return routeFetch(route, queryString, { direction, works, expected }, "work.history");
 }
 
 async function routeGraph(route: string): Promise<unknown> {
