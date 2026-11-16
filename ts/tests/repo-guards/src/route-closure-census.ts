@@ -11,14 +11,14 @@
 // The edges that stood at f38543da are a frozen list (route-closure.baseline.json) that only shrinks.
 // `node src/route-closure-census.ts` prints the census; `--tighten` rewrites the baseline, refusing growth.
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join, posix, resolve } from "node:path";
+import { join, posix, resolve, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
 
 const TS = resolve(import.meta.dirname, "../../..");
 const WEB_KEY = "apps/web/src/";
 const WEB = join(TS, WEB_KEY);
-const PRODUCTS = join(TS, "products");
+import { routeFolderCandidates } from "@pe/host-contracts/route-startup";
 const EXEMPT = "design-system";
 const HOST_DOORS = new Set(["peClient", "callOp", "callCompose", "callHostRpc", "hostFetch"]);
 export const isProduction = (path: string) =>
@@ -79,9 +79,7 @@ export function closureCensus(sources: Record<string, string>, routes: ReadonlyS
 }
 
 const productWebs = () =>
-  existsSync(PRODUCTS)
-    ? readdirSync(PRODUCTS, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => `products/${e.name}/web`)
-    : [];
+  routeFolderCandidates(resolve(TS, "..")).map((path) => relative(TS, path).replaceAll("\\", "/")).filter((key) => key.startsWith("products/"));
 
 export const routeFolders = (): Set<string> =>
   new Set([
