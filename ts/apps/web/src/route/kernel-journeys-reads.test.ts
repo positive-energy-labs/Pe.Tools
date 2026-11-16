@@ -163,7 +163,7 @@ test("JZ Plan route switch: Ducts reads preserve the Fans seal; changed Work sta
     const key = mounted.work()!.handle.key;
     const staged = await j.host.workspace.apply(key, "fans", "human", [
       { path: ["writeIntent"], value: { edit: { value: { walk: { unitId: row.unitId, portIndex: row.portIndex } } } } },
-      { path: ["equipmentFlows", elementSubject(row), "edit"], value: { value: { cfm: 925, source: "test" } } },
+      { path: ["equipmentFlows", elementSubject(row), "edit"], value: { value: 925, ref: "test" } },
     ], mounted.work()!.revision);
     expect(staged.ok).toBe(true);
     mounted.refresh();

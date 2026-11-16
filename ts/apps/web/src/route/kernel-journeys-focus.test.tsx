@@ -630,7 +630,7 @@ test("JZ Fans undo after apply: public write journey leaves an honest toolbar re
       { path: ["writeIntent", "edit"], value: { value: { groups: ["group:g1"] } } },
     ], "Choose fan walk");
     await stage("fans", [
-      { path: ["flows", elementSubject(workSnapshot.nodes.find(node => node.id === 4)!), "edit"], value: { value: { cfm: 250 } } },
+      { path: ["flows", elementSubject(workSnapshot.nodes.find(node => node.id === 4)!), "edit"], value: { value: 250 } },
       { path: ["calculation", "terminalFlow", "edit"], value: { value: { kind: "balanced-design", source: "test" } } },
     ], "Edit fan airflow");
     await screen.findByRole("button", { name: "Undo Edit fan airflow" });
@@ -1147,7 +1147,7 @@ test.each([false, true])(
         },
         {
           path: ["equipmentFlows", elementSubject(realMuas.nodes.find(node => node.id === 14577391)!), "edit"],
-          value: { value: { cfm: 925, source: "test" } },
+          value: { value: 925, ref: "test" },
         },
       ],
       f.fans.work()!.revision,
@@ -1717,7 +1717,7 @@ test("JZ E8-03 a typed Fans refused Plan explains the atomic Apply hold at the a
   const key = f.fans.workBasis()!.token.scope.identity.work!;
   await f.ws.apply(key, "fans", "human", [
     { path: ["writeIntent"], value: { edit: { value: { walk: { unitId: 14577391, portIndex: 2 } } } } },
-    { path: ["equipmentFlows", elementSubject(realMuas.nodes.find(node => node.id === 14577391)!), "edit"], value: { value: { cfm: 925, source: "test" } } },
+    { path: ["equipmentFlows", elementSubject(realMuas.nodes.find(node => node.id === 14577391)!), "edit"], value: { value: 925, ref: "test" } },
   ], f.fans.work()!.revision);
   f.fans.refresh("value");
   await vi.waitFor(() => expect(f.typed.value().state === "ready").toBe(true));
@@ -1964,7 +1964,7 @@ test("JZ Plan refusal marker holds a valid sealed ancillary-only review at the t
   await vi.waitFor(() => expect(f.fans.work()).not.toBeNull());
   await f.ws.apply(f.fans.workBasis()!.token.scope.identity.work!, "fans", "human", [
     { path: ["writeIntent"], value: { edit: { value: { walk: { unitId: 14577391, portIndex: 2 } } } } },
-    { path: ["equipmentFlows", elementSubject(realMuas.nodes.find(node => node.id === 14577391)!), "edit"], value: { value: { cfm: 925, source: "test" } } },
+    { path: ["equipmentFlows", elementSubject(realMuas.nodes.find(node => node.id === 14577391)!), "edit"], value: { value: 925, ref: "test" } },
   ], f.fans.work()!.revision);
   f.fans.refresh("value"); await vi.waitFor(() => expect(f.typed.value().state === "ready").toBe(true));
   const reason = "MUAS-1: required airflow parameter is missing; add the missing parameter";
