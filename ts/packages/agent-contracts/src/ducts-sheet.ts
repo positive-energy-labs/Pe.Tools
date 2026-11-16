@@ -41,7 +41,9 @@ const resolved = <T extends z.ZodType>(value: T) =>
   }).refine(r => {
     const value = (r as { value?: unknown }).value;
     return r.status === "missing"
-      ? value === null && r.source === "none" && r.author === null && r.ref === null && r.version === null
+      // Exception to the kernel union (`missing` has `ref: null`): the engine states where it looked on a missing
+      // value ("family placeholder 1 on 2"), so a ref is admitted here until the engine stops. No source, author or version still holds.
+      ? value === null && r.source === "none" && r.author === null && r.version === null
       : r.source !== "none" && !!r.ref?.trim() && (r.status === "invalid" ? value === null
         : value !== null && ((r.source !== "Work" && r.source !== "run") || r.author === "human" || r.author === "pea"));
   },

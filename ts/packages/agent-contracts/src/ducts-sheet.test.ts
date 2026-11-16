@@ -99,6 +99,8 @@ it("a resolved wire value agrees with its status, as the kernel resolution does 
     { ...base, status: "valid", value: 100, source: "Work", author: "pea", ref: "work:fans/flows/k" },
     { ...base, status: "invalid", value: null, source: "Work", author: null, ref: "work:fans/flows/k" },
     { ...base, status: "missing", value: null, source: "none", author: null, ref: null },
+    // The one admitted departure from the kernel union: the engine's "where it looked" ref on a missing value.
+    { ...base, status: "missing", value: null, source: "none", author: null, ref: "family placeholder 1 on 2" },
   ];
   const bad = [
     { ...base, status: "valid", value: 100, source: "none", author: null, ref: null },

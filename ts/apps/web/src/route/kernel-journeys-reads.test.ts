@@ -1,3 +1,4 @@
+import { VOCABULARY } from "@pe/ducts-domain/sheet/scoped-snapshot";
 import { mkdtemp, stateFixture } from "../../../../tests/isolated-home/storage.ts";
 import { refusalOf, valueOf } from "./typed-route";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
@@ -491,7 +492,7 @@ test("JX3 open fixture Fans, change scope and attempt a native write without liv
 
 async function compareSystemAnswers() {
   // Existing native-shaped purpose capture, with the same shared-fan variant as system-list.test.ts.
-  const snapshot = nativeResponseSchema("ducts.snapshot.walk").parse(savedNetwork);
+  const snapshot = nativeResponseSchema("ducts.snapshot.walk").parse({ ...savedNetwork, vocabulary: VOCABULARY });
   for (const element of [...snapshot.nodes, ...snapshot.segments])
     element.uniqueId ||= `jx-native-${element.id}`;
   snapshot.groups[0]!.systemNames.push("SA 2");

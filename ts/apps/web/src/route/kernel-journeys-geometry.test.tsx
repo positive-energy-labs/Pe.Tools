@@ -1,3 +1,4 @@
+import { VOCABULARY } from "@pe/ducts-domain/sheet/scoped-snapshot";
 // These witnesses test capture and camera ownership; resolve the lazy module before their timed gestures.
 import "./slots/picture/pane.tsx";
 import { valueOf } from "./typed-route";
@@ -203,8 +204,8 @@ test("JZ Fans Revert removes A from Plan before staging B",async()=>{
  const originalFetch=globalThis.fetch;
  const requests:any[]=[];
  let bridge:any;
- const roster=nativeResponseSchema("ducts.snapshot.roster").parse(rosterCapture);
- const walk=nativeResponseSchema("ducts.snapshot.walk").parse(walkCapture);
+ const roster=nativeResponseSchema("ducts.snapshot.roster").parse({ ...rosterCapture, vocabulary: VOCABULARY });
+ const walk=nativeResponseSchema("ducts.snapshot.walk").parse({ ...walkCapture, vocabulary: VOCABULARY });
  const tables=nativeResponseSchema("ducts.tables").parse({folder:"fixture",tables:{},missing:[],unsupported:{}});
  const native=Layer.effect(HostNativeRead,Effect.gen(function*(){
    bridge=yield* connectTestBridge(); trace.target=bridge.target;

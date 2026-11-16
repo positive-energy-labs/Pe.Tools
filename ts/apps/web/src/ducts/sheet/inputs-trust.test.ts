@@ -156,7 +156,7 @@ it("picking the rule's own table over a typed choice clears it instead of typing
         source: "Work",
         units: null,
         version: null,
-        status: "valid", author: null, ref: "test",
+        status: "valid", author: "human", ref: "test",
       },
     },
   });
@@ -199,7 +199,7 @@ it("unmatched fittings group by family, and a choice in Work no fitting of this 
           source: "Work",
           units: null,
           version: null,
-          status: "valid", author: null, ref: "test",
+          status: "valid", author: "human", ref: "test",
         },
       },
     }),

@@ -1,3 +1,4 @@
+import { VOCABULARY } from "@pe/ducts-domain/sheet/scoped-snapshot";
 /** Test support: the six-element slice and the saved synthetic snapshot, both typed with no cast. */
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import {
@@ -14,7 +15,7 @@ import saved from "./fixtures/synthetic-snapshot.json" with { type: "json" };
 
 /** A fresh copy of the saved synthetic snapshot, decoded by the wire schema the page itself uses. */
 export const syntheticSnapshot = (): DuctSnapshot =>
-  nativeResponseSchema("ducts.snapshot.walk").parse(structuredClone(saved));
+  nativeResponseSchema("ducts.snapshot.walk").parse({ ...structuredClone(saved), vocabulary: VOCABULARY });
 
 const links = [
   [100, 1],

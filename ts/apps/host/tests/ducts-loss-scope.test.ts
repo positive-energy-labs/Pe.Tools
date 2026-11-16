@@ -1,3 +1,4 @@
+import { DUCT_UNIT_KINDS, FAN_BLOCKER_KINDS } from "@pe/host-contracts/generated";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
 // U4 wires the real fans Work for callers without one.
 import { neutralFansWork } from "@pe/agent-contracts";
@@ -13,8 +14,11 @@ import { ductsDesign, fansDocumentSchema, stagedDucts } from "@pe/agent-contract
 import { price, applyRequest } from "@pe/ducts-domain/pricing";
 import { EMPTY_CATALOGS } from "@pe/ducts-domain/catalog";
 
+// The saved captures predate the native vocabulary; it is the generated one, added whole.
+const walkCapture = { parse: (raw: object) => nativeResponseSchema("ducts.snapshot.walk").parse({ ...raw, vocabulary: { unitKinds: [...DUCT_UNIT_KINDS], blockerKinds: [...FAN_BLOCKER_KINDS] } }) };
+
 test("fan preview survives identical re-pricing but rejects changed model inputs", () => {
-  const snapshot = nativeResponseSchema("ducts.snapshot.walk").parse(
+  const snapshot = walkCapture.parse(
     JSON.parse(
       readFileSync(
         new URL(
@@ -96,7 +100,7 @@ test("fan preview survives identical re-pricing but rejects changed model inputs
 });
 
 test("fan loss preparation reads both sides and carries authored drops into preview", async () => {
-  const snapshot = nativeResponseSchema("ducts.snapshot.walk").parse(
+  const snapshot = walkCapture.parse(
     JSON.parse(
       readFileSync(
         new URL(
@@ -142,7 +146,7 @@ test("unscoped losses do not fire a healing read", async () => {
 
 test("an authored terminal flow inside a fan walk with no network groups reaches the scoped plan", () => {
   // The real-twin fan walk has no groups and no node groupId, like the Snowdon walk that planned an empty request.
-  const snapshot = nativeResponseSchema("ducts.snapshot.walk").parse(
+  const snapshot = walkCapture.parse(
     JSON.parse(readFileSync(new URL("../../../packages/host-contracts/src/fixtures/k2-four-fan-walk.json", import.meta.url), "utf8")),
   );
   expect(snapshot.groups).toHaveLength(0);
