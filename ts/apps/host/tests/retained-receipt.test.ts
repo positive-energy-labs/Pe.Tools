@@ -16,6 +16,12 @@ import {
   persistActionReceipt,
   persistReceipt,
   projectActionReceipt,
+  address as documentAddress,
+  retainedDocumentRefSchema,
+  retainedWorkKeySchema,
+  projectRetainedDocument,
+  projectRetainedWork,
+  sameReceiptWork,
 } from "@pe/agent-contracts";
 import { Effect } from "effect";
 
@@ -209,6 +215,38 @@ test("unavailable-original is inspectable and never a fresh admission target", (
     }).success,
   ).toBe(false);
   expect(view.outcome).toEqual(projectActionReceipt(original).outcome);
+});
+
+test("captures share retained document and Work projection without promoting historical open identity", () => {
+  const old = retainedDocumentRefSchema.parse(broker.ref);
+  const full = retainedDocumentRefSchema.parse(exact.ref);
+  const original = retainedWorkKeySchema.parse({
+    binding: "open",
+    route: "families",
+    target: null,
+    open: old,
+  });
+  const current = retainedWorkKeySchema.parse({ ...original, open: full });
+  const unavailable = executionTargetSchema.safeParse(exact).success ? original : current;
+  const view = projectRetainedWork(unavailable);
+  expect(view).toEqual({ kind: "unavailable-original", original: unavailable });
+  expect(projectRetainedDocument(unavailable.binding === "open" ? unavailable.open : old)).toEqual({
+    kind: "unavailable-original",
+    original: { kind: "document", ref: unavailable.binding === "open" ? unavailable.open : old },
+  });
+  const address = retainedWorkKeySchema.parse({
+    binding: "address",
+    route: "families",
+    target: "C:\\Original.rvt",
+    from: old,
+  });
+  expect(
+    sameReceiptWork(address, {
+      binding: "address",
+      route: "families",
+      target: documentAddress("C:\\original.rvt"),
+    }),
+  ).toBe(true);
 });
 
 test("retained original-id observation and retry preserve disk identity and do not resolve a new label", async () => {

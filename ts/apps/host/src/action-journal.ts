@@ -65,6 +65,7 @@ import {
   type Caller,
   type DocumentRef,
   type ActionReceipt,
+  type ExecutableActionReceipt,
   receiptSchema,
   receiptBodySchema,
   receiptJoinSchema,
@@ -191,7 +192,7 @@ const pathInside = (root: string, path: string) => {
     (relative !== ".." && !relative.startsWith("..\\") && !win32.isAbsolute(relative))
   );
 };
-const effectsOverlap = (a: Footprint, b: Footprint) =>
+const effectsOverlap = (a: ActionReceipt["effects"], b: ActionReceipt["effects"]) =>
   a.some((x) =>
     b.some((y) => {
       if (x.kind === "document" && y.kind === "session") return x.ref.session === y.session;
@@ -737,10 +738,12 @@ export class ActionJournal implements ReceiptReader {
   }
   async dispatchRefusal(requestId: string): Promise<DispatchRefusal | null> {
     const action = this.stepAction.get(requestId);
-    const row = action ? this.rows.get(action) : undefined;
-    if (!row) return null;
-    if (!executableActionReceiptSchema.safeParse(row).success)
+    const retained = action ? this.rows.get(action) : undefined;
+    if (!retained) return null;
+    const executable = executableActionReceiptSchema.safeParse(retained);
+    if (!executable.success)
       return {kind:"refused",message:"Original execution identity is unavailable"};
+    const row = executable.data;
     const inputRefusal = this.inputContext?.check({ kind: "command", key: row.key });
     if (inputRefusal) return { kind: "refused", message: inputRefusal.message };
     if (row.cancellationRequested)
@@ -1289,20 +1292,21 @@ export class ActionJournal implements ReceiptReader {
     // Keep only this action's in-memory authority across the HTTP request's retirement.
     // Receipt callers remain portable data; every continuation still checks live trust.
     crossing = { ...crossing, caller: retainActionCaller(crossing.caller) };
-    const context = this.context(admission, crossing, prior?.consumes ?? []);
+    const activePrior = prior ? executableActionReceiptSchema.parse(prior) : undefined;
+    const context = this.context(admission, crossing, activePrior?.consumes ?? []);
     let executor!: CommandExecutor;
     let definition!: Command;
     let binding: CommandBinding | undefined;
-    let row: ActionReceipt = {
+    let row: ExecutableActionReceipt = {
       id: admission.id,
       key: admission.key,
       caller: crossing.caller,
       basis: crossing.basis,
       target: structuredClone(admission.target),
       input: structuredClone(admission.input),
-      consumes: prior?.consumes ?? [],
+      consumes: activePrior?.consumes ?? [],
       claims: prior?.claims ?? [],
-      effects: prior?.effects ?? [],
+      effects: activePrior?.effects ?? [],
       steps: prior?.steps ?? [],
       prepared: prior?.prepared ?? { state: "unprepared" },
       recovery: prior?.recovery ?? [],
@@ -1474,10 +1478,10 @@ export class ActionJournal implements ReceiptReader {
         this.notify();
         return structuredClone(failed);
       }
-      row = actionReceiptSchema.parse({
+      row = executableActionReceiptSchema.parse(actionReceiptSchema.parse({
         ...row,
         state: "running",
-      });
+      }));
       try {
         await this.commit([row]);
       } catch (error) {
@@ -1485,10 +1489,10 @@ export class ActionJournal implements ReceiptReader {
         throw error;
       }
       this.notify();
-      const save = (update: (current: ActionReceipt) => ActionReceipt) =>
+      const save = (update: (current: ExecutableActionReceipt) => ExecutableActionReceipt) =>
         this.serial(async () => {
-          row = this.rows.get(row.id) ?? row;
-          const next = actionReceiptSchema.parse(update(row));
+          row = executableActionReceiptSchema.parse(this.rows.get(row.id) ?? row);
+          const next = executableActionReceiptSchema.parse(actionReceiptSchema.parse(update(row)));
           await this.commit([next]);
           this.notify();
           row = next;
@@ -1750,7 +1754,7 @@ export class ActionJournal implements ReceiptReader {
                   await journal.export(row.id, `steps/${step.id}.json`, step).catch((error) => {
                     throw refused(`Step input export failed: ${String(error)}`, "step.export");
                   });
-                  row = journal.rows.get(row.id) ?? row;
+                  row = executableActionReceiptSchema.parse(journal.rows.get(row.id) ?? row);
                   const postcondition =
                     kind === "publication" &&
                     key === "work.retire" &&
@@ -2103,9 +2107,11 @@ export class ActionJournal implements ReceiptReader {
       recovered.target.kind !== "unavailable-original" &&
       recovered.steps.every((step) => step.state === "succeeded")
     ) {
+      const executable = executableActionReceiptSchema.safeParse(recovered);
+      if (!executable.success) return recovered;
       await this.invoke(
         { id: recovered.id, key: recovered.key, target: recovered.target, input: recovered.input },
-        { caller: recovered.caller, basis: recovered.basis },
+        { caller: recovered.caller, basis: executable.data.basis },
         true,
         true,
       );

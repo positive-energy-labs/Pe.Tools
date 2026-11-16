@@ -1,12 +1,13 @@
 import { basisSchema, callerSchema } from "./caller.ts";
 import { z } from "zod";
-import { workKeySchema } from "./route-state.ts";
+import { workKeySchema, workKey, type WorkKey } from "./route-state.ts";
 import { footprintSchema } from "./run-registry.ts";
-import { executionTargetSchema, type ExecutionTarget } from "./target.ts";
+import { executionTargetSchema, sameAddress, type ExecutionTarget } from "./target.ts";
 import { consumedSchema, claimSchema, commandRefusalSchema } from "./command.ts";
 import { nativeProcessSchema } from "./native-process.ts";
 export { nativeProcessSchema, type NativeProcess } from "./native-process.ts";
 import {
+  retainedDocumentRefSchema,
   retainedOriginalTargetSchema,
   retainedWorkKeySchema,
   retainedBasisSchema,
@@ -14,8 +15,16 @@ import {
   retainedRefusalSchema,
   retainedFootprintSchema,
   type RetainedOriginalTarget,
+  type RetainedWorkKey,
 } from "./receipt-evidence.ts";
-export { retainedOriginalTargetSchema, type RetainedOriginalTarget } from "./receipt-evidence.ts";
+export {
+  retainedDocumentRefSchema,
+  type RetainedDocumentRef,
+  retainedOriginalTargetSchema,
+  type RetainedOriginalTarget,
+  retainedWorkKeySchema,
+  type RetainedWorkKey,
+} from "./receipt-evidence.ts";
 
 /** Observation only: an original whose public execution identity cannot be established. */
 export const unavailableOriginalTargetSchema = z.strictObject({
@@ -27,6 +36,48 @@ export const receiptTargetSchema = z.union([
   unavailableOriginalTargetSchema,
 ]);
 export type ReceiptTarget = ExecutionTarget | z.infer<typeof unavailableOriginalTargetSchema>;
+export const receiptDocumentTargetSchema = z.union([
+  executionTargetSchema.options[3],
+  z.strictObject({
+    kind: z.literal("unavailable-original"),
+    original: z.strictObject({
+      kind: z.literal("document"),
+      ref: retainedDocumentRefSchema,
+    }),
+  }),
+]);
+export type ReceiptDocumentTarget = z.infer<typeof receiptDocumentTargetSchema>;
+/** Captures and receipts share one read projection; neither resolves a label. */
+export function projectRetainedDocument(
+  ref: z.infer<typeof retainedDocumentRefSchema>,
+): ReceiptDocumentTarget {
+  const target = { kind: "document" as const, ref };
+  const fresh = executionTargetSchema.options[3].safeParse(target);
+  return fresh.success ? fresh.data : { kind: "unavailable-original", original: target };
+}
+export function projectReceiptTarget(original: RetainedOriginalTarget): ReceiptTarget {
+  if (original.kind === "document") return projectRetainedDocument(original.ref);
+  const fresh = executionTargetSchema.safeParse(original);
+  return fresh.success ? fresh.data : { kind: "unavailable-original", original };
+}
+export const receiptWorkBindingSchema = z.discriminatedUnion("kind", [
+  z.strictObject({ kind: z.literal("work"), key: workKeySchema }),
+  z.strictObject({ kind: z.literal("unavailable-original"), original: retainedWorkKeySchema }),
+]);
+export type ReceiptWorkBinding = z.infer<typeof receiptWorkBindingSchema>;
+export function projectRetainedWork(original: RetainedWorkKey): ReceiptWorkBinding {
+  const fresh = workKeySchema.safeParse(original);
+  return fresh.success
+    ? { kind: "work", key: fresh.data }
+    : { kind: "unavailable-original", original };
+}
+/** Read association only. Address provenance is not identity; original open keys are never reinterpreted. */
+export function sameReceiptWork(original: RetainedWorkKey, current: WorkKey): boolean {
+  if (original.binding === "address" && current.binding === "address")
+    return original.route === current.route && sameAddress(original.target, current.target);
+  const projected = projectRetainedWork(original);
+  return projected.kind === "work" && workKey(projected.key) === workKey(current);
+}
 
 /** One public outcome vocabulary across host receipts, Pea and the shell Timeline. */
 export const invocationOutcomeSchema = z.strictObject({
@@ -211,15 +262,9 @@ export const actionReceiptSchema: z.ZodType<ActionReceipt> = actionReceiptDefini
   (row) => ({ ...row, outcome: invocationOutcome(row) }),
 );
 export function projectActionReceipt(row: PersistedActionReceipt): ActionReceipt {
-  const fresh = executionTargetSchema.safeParse(row.target);
   return actionReceiptSchema.parse({
     ...row,
-    target: fresh.success
-      ? fresh.data
-      : {
-          kind: "unavailable-original",
-          original: row.target,
-        },
+    target: projectReceiptTarget(row.target),
   });
 }
 /** The public unavailable case is a projection. Disk keeps the exact original target. */

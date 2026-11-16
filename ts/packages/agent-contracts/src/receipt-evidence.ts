@@ -15,6 +15,7 @@ export const retainedDocumentRefSchema = z.strictObject({
   openId: z.string().min(1),
   processIncarnation: incarnation.optional(),
 });
+export type RetainedDocumentRef = z.infer<typeof retainedDocumentRefSchema>;
 export const retainedOriginalTargetSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("host") }),
   z.strictObject({
@@ -54,6 +55,7 @@ export const retainedWorkKeySchema = z.discriminatedUnion("binding", [
   }),
   z.object({ ...workFields, binding: z.literal("host") }),
 ]);
+export type RetainedWorkKey = z.infer<typeof retainedWorkKeySchema>;
 const handle = z.strictObject({
   key: retainedWorkKeySchema,
   revision: z.number().int().nonnegative(),
