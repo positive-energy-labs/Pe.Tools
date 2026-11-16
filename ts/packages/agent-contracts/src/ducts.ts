@@ -20,7 +20,7 @@
 import { decode, subjectOf, subjectRefCodeSchema } from "./subject-ref.ts";
 import { z } from "zod";
 import { serveSetting, type SettingTierRead } from "./tiered-setting.ts";
-import { DUCT_PARAMETER_KEYS, DUCT_UNIT_KINDS, DUCTS_CRITERIA_CELLS, criteriaLayer } from "./ducts-sheet.ts";
+import { DUCT_PARAMETER_KEYS, DUCT_UNIT_KINDS, DUCTS_CRITERIA_CELLS, criteriaLayer, criteriaMeta } from "./ducts-sheet.ts";
 
 import { draftCellSchema, type Author } from "./draft.ts";
 import type { FansDocument } from "./fans.ts";
@@ -394,6 +394,8 @@ export function stagedDucts(doc: DuctsRouteDocument | null, fans: FansDocument) 
     calculation: stagedOf("fans", "calculation", fans.calculation),
     rules: stagedOf("ducts", "rules", doc?.rules ?? {}),
     criteria: criteriaLayer(doc?.criteria ?? {}),
+    /** Who staged each criterion and its ref; without it a staged criterion has no author and cannot resolve. */
+    criteriaMeta: criteriaMeta(doc?.criteria ?? {}),
     kinds: stagedOf("ducts", "kinds", doc?.kinds ?? {}),
     assumptions: stagedOf("ducts", "assumptions", doc?.assumptions ?? {}),
     catalogs: stagedOf("ducts", "catalogs", doc?.catalogs ?? {}),
@@ -408,6 +410,21 @@ export function stagedDucts(doc: DuctsRouteDocument | null, fans: FansDocument) 
     labelParameter: doc?.labelParameter?.edit?.value ?? null,
     workingPhase: doc?.workingPhase?.edit?.value ?? null,
   };
+}
+
+/**
+ * The staged values alone, per segment, for a reader that prices and never attributes: group
+ * pricing and the survey, which phase 3 retires with the group write path. Departs from "every
+ * consumer reads the cell" (wave 2 amendment 2) because those readers resolve no provenance; the
+ * resolver, and anything that names an author, reads `stagedDucts`.
+ */
+export function stagedValues(doc: DuctsRouteDocument | null, fans: FansDocument) {
+  const cells = stagedDucts(doc, fans);
+  const bare = <V>(segment: Record<string, StagedCell<V>>) => Object.fromEntries(Object.entries(segment).map(([key, cell]) => [key, cell.value])) as Record<string, V>;
+  return { ...cells, calculation: bare(cells.calculation), rules: bare(cells.rules), kinds: bare(cells.kinds), assumptions: bare(cells.assumptions),
+    catalogs: bare(cells.catalogs), ruleAssignments: bare(cells.ruleAssignments), terminalDrops: bare(cells.terminalDrops),
+    componentDrops: bare(cells.componentDrops), esp: bare(cells.esp), equipmentFlows: bare(cells.equipmentFlows), roles: bare(cells.roles),
+    flows: bare(cells.flows), subject: bare(cells.subject) };
 }
 
 /**

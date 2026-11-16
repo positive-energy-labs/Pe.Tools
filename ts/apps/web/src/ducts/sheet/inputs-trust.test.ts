@@ -20,7 +20,7 @@ const firm = <T>(value: T): Resolved<T> => ({
   ref: "seed",
   units: null,
   version: null,
-  status: "valid",
+  status: "valid", author: null,
 });
 const inputs = (extra: Partial<DuctsInputs> = {}): DuctsInputs =>
   ductsInputsSchema.parse({
@@ -64,13 +64,13 @@ const unit = (kind: "erv" | "air-handler", source: "Work" | "default") => ({
     source,
     units: null,
     version: null,
-    status: "valid" as const,
+    status: "valid" as const, author: null, ref: "test",
     ...(source === "default" ? { ref: "name" } : {}),
   },
   role: {
     units: null,
     version: null,
-    status: "valid" as const,
+    status: "valid" as const, author: null,
     value: "fan" as const,
     source: "default" as const,
     ref: "name",
@@ -78,7 +78,7 @@ const unit = (kind: "erv" | "air-handler", source: "Work" | "default") => ({
   cfm: {
     units: "cfm",
     version: null,
-    status: "valid" as const,
+    status: "valid" as const, author: null,
     value: 35,
     source: "model" as const,
     ref: "PE_M_Fan_AirFlow",
@@ -86,7 +86,7 @@ const unit = (kind: "erv" | "air-handler", source: "Work" | "default") => ({
   esp: {
     units: "in-wg",
     version: null,
-    status: "missing" as const,
+    status: "missing" as const, author: null, ref: null,
     value: null,
     source: "none" as const,
   },
@@ -156,7 +156,7 @@ it("picking the rule's own table over a typed choice clears it instead of typing
         source: "Work",
         units: null,
         version: null,
-        status: "valid",
+        status: "valid", author: null, ref: "test",
       },
     },
   });
@@ -199,7 +199,7 @@ it("unmatched fittings group by family, and a choice in Work no fitting of this 
           source: "Work",
           units: null,
           version: null,
-          status: "valid",
+          status: "valid", author: null, ref: "test",
         },
       },
     }),

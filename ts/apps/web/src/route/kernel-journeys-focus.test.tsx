@@ -1071,9 +1071,9 @@ test("JZ Fans native before: stage, Plan, inspect method and unset pressure; unr
     await vi.waitFor(() => expect(f.fans.work()).not.toBeNull());
     await f.ws.apply(f.fans.workBasis()!.token.scope.identity.work!, "fans", "human", [
       { path: ["writeIntent"], value: { edit: { value: { walk: { unitId: 14577391, portIndex: 2 } } } } },
-      { path: ["equipmentFlows", elementSubject(realMuas.nodes.find(node => node.id === 14577391)!), "edit"], value: { value: { cfm: 1000, source: "Work" } } },
+      { path: ["equipmentFlows", elementSubject(realMuas.nodes.find(node => node.id === 14577391)!), "edit"], value: { value: 1000 } },
     ], f.fans.work()!.revision);
-    await vi.waitFor(() => expect(f.fans.work()!.value.equipmentFlows[elementSubject(realMuas.nodes.find(node => node.id === 14577391)!)]?.edit?.value.cfm).toBe(1000));
+    await vi.waitFor(() => expect(f.fans.work()!.value.equipmentFlows[elementSubject(realMuas.nodes.find(node => node.id === 14577391)!)]?.edit?.value).toBe(1000));
     f.fans.refresh("value");
     for (const id of ["value"])
       await vi.waitFor(() => expect(f.fans.readingStatus(id).snapshot).toMatchObject({ state: "ready" }));

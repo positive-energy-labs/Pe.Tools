@@ -14,7 +14,7 @@ import { useAdmittedSubject } from "#/shell/subject";
 import {
   DUCT_UNIT_KINDS,
   neutralFansWork,
-  stagedDucts,
+  stagedValues,
   subjectCode,
   type RouteStatePatch,
 } from "@pe/agent-contracts";
@@ -108,7 +108,7 @@ function useNetworkData(ctx: NetworkContext) {
     | null;
   const pricingData = useValue(pricing);
   const priced = pricing.state === "ready" ? pricingData : undefined;
-  const edit = useMemo(() => stagedDucts(workDoc ?? null, workDoc ?? neutralFansWork), [workDoc]);
+  const edit = useMemo(() => stagedValues(workDoc ?? null, workDoc ?? neutralFansWork), [workDoc]);
   const seen = held?.effectiveDesign ?? null;
   const attentionDoc = doc ? `${doc.session}/${doc.openId}` : "ducts:unbound";
   const selection = useMemo(

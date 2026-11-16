@@ -8,7 +8,7 @@ import { neutralFansWork } from "@pe/agent-contracts";
  * snapshot is cached per proximity verdict set, so a edit number re-solves only `next`.
  */
 import {
-  stagedDucts,
+  stagedValues,
   workingPhaseOf,
   type DuctFinding,
   type DuctsDesign,
@@ -139,7 +139,7 @@ export function survey(
   const hit = last.get(snapshot);
   if (!roomFlows && hit && hit.work === work) return hit.survey;
   const t = tolerated(snapshot, work);
-  const edit = stagedDucts(work, work ?? neutralFansWork);
+  const edit = stagedValues(work, work ?? neutralFansWork);
   // Roles are proposed on the groups as Revit cuts them; then a passive unit passes air through.
   const units = equipmentFlows(t.snapshot, edit.equipmentFlows);
   const roles = unitRoles(t.snapshot, units, edit.roles);
