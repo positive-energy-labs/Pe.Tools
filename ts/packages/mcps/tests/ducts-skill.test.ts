@@ -1,4 +1,5 @@
-import { ductsSheetRequestSchema } from "@pe/agent-contracts";
+import { DUCTS_SHEET_GUIDE, ductsRosterRequestSchema, ductsSheetRequestSchema } from "@pe/agent-contracts";
+import { peRoutes } from "@pe/agent-contracts/pe-api";
 import { renderDuctsSkill } from "../src/pea/ducts-skill.ts";
 import { expect, test } from "vite-plus/test";
 
@@ -43,4 +44,25 @@ test("the ducts skill triggers on airflow and connectivity questions, not only p
   for (const step of ["Locate the project folder", "Inventory the project folder", "Rank the sources", "Find the design basis", "fetch the manufacturer's published data yourself", "the text layer reports a struck row as live", "Report one row per component on the walked path", "A cell may stay blank only after you ran a WebSearch"]) {
     expect(text).toContain(step);
   }
+});
+
+test("the fan read takes no edits or proposal, and the guide claims no write through it", () => {
+  const target = { session: "dev", openId: "project" };
+  const fan = { target, mode: "fan", unitId: 14577391, portIndex: 2 };
+  for (const dead of [{ edits: {} }, { proposal: { pair: ["1:0", "2:0"], verdict: "accept" } }])
+    expect(ductsSheetRequestSchema.safeParse({ ...fan, ...dead }).success).toBe(false);
+  const guide = JSON.stringify(DUCTS_SHEET_GUIDE);
+  expect(guide).not.toMatch(/proposal \{pair|This writes a join ruling/);
+  expect(guide).toContain("The sheet read takes no edits and writes nothing");
+});
+
+test("Pea is shown the roster's by-mark lookup in the reads.value input schema", () => {
+  const target = { session: "dev", openId: "project" };
+  expect(ductsRosterRequestSchema.safeParse({ target }).success).toBe(true);
+  expect(ductsRosterRequestSchema.safeParse({ target, mark: "MA-1" }).success).toBe(true);
+  const input = JSON.stringify(peRoutes["reads.value"].catalog.discovery?.input);
+  for (const shown of ['"const":"fans.roster"', '"mark"', '"const":"ducts.sheet"', '"unitId"'])
+    expect(input).toContain(shown);
+  expect(input).not.toContain('"proposal"');
+  expect(DUCTS_SHEET_GUIDE.walk[0]).toContain("{target: {session, openId}, mark}");
 });

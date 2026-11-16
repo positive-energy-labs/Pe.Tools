@@ -1,5 +1,4 @@
 import { DUCTS_SHEET_GUIDE } from "@pe/agent-contracts";
-import { z } from "zod";
 
 export function renderDuctsSkill(): string {
   return [
@@ -34,12 +33,4 @@ export function renderDuctsSkill(): string {
     ...DUCTS_SHEET_GUIDE.never.map((rule) => `- ${rule}`),
     "",
   ].join("\n");
-}
-
-export const ductsGuideInputSchema = z.strictObject({
-  section: z.enum(["summary", "walk", "never"]).optional(),
-});
-export type DuctsGuideSection = keyof typeof DUCTS_SHEET_GUIDE;
-export function ductsGuideReading(section?: DuctsGuideSection) {
-  return section ? { [section]: DUCTS_SHEET_GUIDE[section] } : DUCTS_SHEET_GUIDE;
 }
