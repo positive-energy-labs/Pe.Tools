@@ -4,15 +4,12 @@ import { decode, uniqueIdSchema, subjectRefCodeSchema } from "./subject-ref.ts";
 import { documentRefSchema } from "./target.ts";
 import { VALUE_SOURCES } from "./work-value.ts";
 import { settingWrittenSchema } from "./tiered-setting.ts";
+import { DUCT_UNIT_KINDS, FAN_BLOCKER_KINDS } from "@pe/host-contracts/generated";
+import { FAN_PARAMETER_KEYS, fanClaimSchema, fanCloserSchema, legEvidenceSchema, fanParameterCohortSchema, fanEspValuesSchema } from "./fans-inputs.ts";
+export { DUCT_UNIT_KINDS } from "@pe/host-contracts/generated";
+export type { DuctUnitKind } from "@pe/host-contracts/generated";
 /** The parameter slots `ducts.snapshot` reads and `ducts.apply` writes through. */
-export const DUCT_PARAMETER_KEYS = [
-  "fanStatic",
-  "fanFlow",
-  "componentDrop",
-  "terminalDrop",
-  "fittingCoefficient",
-  "terminalFlow",
-] as const;
+export const DUCT_PARAMETER_KEYS = FAN_PARAMETER_KEYS;
 
 const elementSubjectSchema: z.ZodType<string> = subjectRefCodeSchema.refine(code => {
   const ref = decode(code); return ref.ok && ref.value.keyKind === "UniqueId";
@@ -127,15 +124,6 @@ export const ductsCriteriaEditsSchema = z.strictObject({
   allowanceInWg: sided(nonneg.nullable().optional()).optional(),
 });
 export type DuctsCriteriaEdits = z.infer<typeof ductsCriteriaEditsSchema>;
-export const DUCT_UNIT_KINDS = [
-  "fan-coil",
-  "air-handler",
-  "erv",
-  "muas",
-  "dehumidifier",
-  "other",
-] as const;
-export type DuctUnitKind = (typeof DUCT_UNIT_KINDS)[number];
 const unitRole = z.enum(["fan", "passive"]);
 export const joinRulingSchema = z.strictObject({
   pair: z.tuple([z.string().min(1), z.string().min(1)]),
@@ -352,6 +340,7 @@ const totals = z.object({
   requiredEspAssumedInWg: z.number().nullable(),
 });
 const leg = z.object({
+  evidence: legEvidenceSchema.optional(),
   id: z.string(),
   elementId,
   kind: z.enum(["duct", "fitting", "accessory", "equipment", "terminal"]),
@@ -382,18 +371,8 @@ const healProposal = z.object({
 });
 const blocker = z.object({
   id: z.string(),
-  kind: z.enum([
-    "open-end",
-    "inferred-join",
-    "unknown-drop",
-    "no-flow",
-    "flow-mismatch",
-    "shared-leg",
-    "class-change",
-    "not-priced",
-    "implausible-loss",
-    "equipment-pairing",
-  ]),
+  kind: z.enum(FAN_BLOCKER_KINDS),
+  typedCloser: fanCloserSchema.optional(),
   elementId,
   /** The element's `UniqueId:` SubjectRef code; absent only for a stand-in with no element. */
   subject: elementSubjectSchema.optional(),
@@ -509,6 +488,9 @@ const worksheetSide = z.object({
   elementSections: z.record(z.string(), z.array(z.string())),
 });
 export const ductsSheetOverviewSchema = z.object({
+  claim: fanClaimSchema.optional(),
+  espValues: fanEspValuesSchema.optional(),
+  cohorts: z.array(fanParameterCohortSchema).optional(),
   ...responseBase,
   kind: z.literal("overview"),
   mode: z.enum(["fan", "chain"]),
@@ -622,7 +604,7 @@ export const ductsRosterResponseSchema = z.object({
       /** Display disambiguators for a duplicate mark; the UniqueId is identity, never text. */
       level: z.string().nullable().optional(),
       system: z.string().nullable().optional(),
-      kind: z.enum(["fan-coil", "air-handler", "erv", "muas", "dehumidifier", "other"]),
+      kind: z.enum(DUCT_UNIT_KINDS),
       side: z.enum(["supply", "return", "exhaust", "outdoor"]),
       ratedEspInWg: z.number().nullable(),
       confirmed: z.boolean().optional(),
