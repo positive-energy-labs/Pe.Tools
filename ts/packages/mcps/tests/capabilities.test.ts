@@ -81,7 +81,7 @@ test("host route read joins the fans field and losses input to their real schema
   expect(() => projectRouteRead({ ...host, schemas: {} })).toThrow("missing field schema");
 });
 
-function catalog(): CapabilityCatalog {
+function catalog(routes = [familiesRouteState]): CapabilityCatalog {
   return {
     at: "2026-09-04T00:00:00.000Z",
     machine: machineFixture([{ session: "b1", documents: null }]),
@@ -89,7 +89,7 @@ function catalog(): CapabilityCatalog {
     diagnostics: [],
     capabilities: buildCapabilities({
       ops,
-      routes: [familiesRouteState],
+      routes,
       packages,
       skills: admittedSkills,
     }),
@@ -799,6 +799,83 @@ test("an exact-open turn Target reads and writes route Work under its document's
     expect(gone.isError).toBe(true);
     expect(gone.content).toContain("no longer open");
     expect(routeCalls).toHaveLength(2);
+  } finally {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  }
+});
+
+test("W0-1: a Pea undo on /fans steps the Ducts edit the fans read used", async () => {
+  fakeRuntimeHost("http://127.0.0.1:9");
+  const project = "C:\\Models\\projectA.rvt";
+  const ref = { session: "b1", openId: "project-a" };
+  const fansWork = { binding: "address", route: "fans", target: project };
+  const ductsWork = { ...fansWork, route: "ducts" };
+  const step = { work: ductsWork, revision: 7, label: "Ducts supply velocity 925" };
+  const reads: { read: string; args: { works?: { route: string }[] } }[] = [];
+  const historyBodies: unknown[] = [];
+  vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
+    const url = new URL(input instanceof Request ? input.url : String(input));
+    const body = typeof init?.body === "string" ? JSON.parse(init.body) : undefined;
+    if (body?.key === "bridge.sessions.list")
+      return Response.json({
+        sessions: [
+          {
+            sessionId: "b1",
+            connected: true,
+            openDocuments: [{ openId: "project-a", address: project, isFamilyDocument: false }],
+          },
+        ],
+      });
+    if (url.pathname === "/pe/capabilities") return Response.json(catalog([routeRegistry.fans!.host.workState as never]));
+    if (url.pathname === "/pe/reads/value") {
+      if (body.release) return Response.json({ value: null, state: "superseded" });
+      if (body.read.startsWith("route:"))
+        return Response.json({ value: { data: projectRouteRead(routeRegistry.fans!.host) } });
+      reads.push(body);
+      // The roster's publication names the Works its evaluation reached: Fans and Ducts.
+      if (body.read === "fans.roster")
+        return Response.json({ value: { data: { rows: [] }, works: [fansWork, ductsWork] } });
+      // The host Timeline stand-in: Pea's last step is a Ducts edit, offered only to a Place that names Ducts.
+      const member = body.args.works.some((key: { route: string }) => key.route === "ducts");
+      return Response.json({
+        value: {
+          data: {
+            rows: [],
+            undo: member ? step : null,
+            redo: null,
+            refusal: { undo: null, redo: null },
+          },
+        },
+      });
+    }
+    if (!url.pathname.includes("/route-state/fans")) throw Error(`unexpected ${url.pathname}`);
+    if (url.pathname.endsWith("/history")) historyBodies.push(body);
+    return Response.json({
+      route: "fans",
+      revision: 4,
+      handle: { key: fansWork, revision: 4 },
+      doc: {},
+      ok: true,
+    });
+  });
+  try {
+    const undone = await run(
+      peDo,
+      {
+        key: "route:fans.history",
+        input: { direction: "undo" },
+        expectedRevision: 4,
+        timeoutSeconds: 30,
+      },
+      { ...turn, targets: [{ request: { kind: "open", ref }, admission: null }] },
+    );
+    expect(undone, JSON.stringify(undone)).toMatchObject({ ok: true });
+    expect(reads[0]).toMatchObject({ read: "fans.roster", args: { target: ref } });
+    // The owner once, then the read Work; never the findings Work, which the host adds.
+    expect(historyBodies).toEqual([
+      { direction: "undo", works: [fansWork, ductsWork], expected: step },
+    ]);
   } finally {
     vi.unstubAllGlobals();
     vi.unstubAllEnvs();
