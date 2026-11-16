@@ -10,13 +10,13 @@ import { nativeEffectSchemas, nativeEffectResponseDefinitions } from "./native-e
 import { nativeRecordings, nativeRecordingRequest } from "../../../../apps/host/tests/native-recordings.ts";
 
 const jiti = createJiti(import.meta.url);
-async function generatedModule(input: Record<string, any>, definitions = false) {
+async function generatedModule(input: Record<string, any>, definitions = false, witness = "") {
   const dir = mkdtempSync(resolve(import.meta.dirname, ".native-effect-test-"));
   const file = resolve(dir, "generated.ts");
-  writeFileSync(file, nativeEffectPrelude + emitSchema(input, "Test", definitions));
+  writeFileSync(file, nativeEffectPrelude + emitSchema(input, "Test", definitions) + witness);
   try {
-    if (definitions) {
-      const program = ts.createProgram([file], { noEmit: true, strict: true, skipLibCheck: true, types: ["node"], module: ts.ModuleKind.NodeNext, moduleResolution: ts.ModuleResolutionKind.NodeNext, target: ts.ScriptTarget.ESNext });
+    if (definitions || witness) {
+      const program = ts.createProgram([file], { noEmit: true, strict: true, exactOptionalPropertyTypes: true, skipLibCheck: true, types: ["node"], module: ts.ModuleKind.NodeNext, moduleResolution: ts.ModuleResolutionKind.NodeNext, target: ts.ScriptTarget.ESNext });
       expect(ts.getPreEmitDiagnostics(program).map(d => ts.flattenDiagnosticMessageText(d.messageText, "\n"))).toEqual([]);
     }
     return (await jiti.import<{ Test: { decoder: Schema.Decoder<unknown>; definitions: Record<string, Schema.Decoder<unknown>> } }>(file)).Test;
@@ -26,6 +26,61 @@ async function generatedModule(input: Record<string, any>, definitions = false) 
 async function generated(input: Record<string, any>) { return (await generatedModule(input)).decoder; }
 
 describe("C# native Effect projection", () => {
+  it("separates recursive alias/default/nullable Wire authoring from populated Value", async () => {
+    expect(Schema.decodeUnknownSync(nativeEffectSchemas["revit.resolve.family-instances"].request)({ familyId: 1, familyUniqueId: "family" })).toEqual({ familyId: 1, familyUniqueId: "family", maxResults: 500 });
+    const made = await generatedModule({ $schema: "https://json-schema.org/draft/2020-12/schema", type: "object", additionalProperties: false,
+      properties: { node: { $ref: "#/$defs/Node" }, nullable: { type: ["integer", "null"], default: null } },
+      $defs: { Node: { type: "object", additionalProperties: false, properties: { count: { $ref: "#/$defs/Alias" }, next: { $ref: "#/$defs/Node" } } }, Alias: { $ref: "#/$defs/Count" }, Count: { type: "integer", default: 8 } },
+    }, true, `
+const wire: Test.Wire = { node: { next: {} } };
+const nullable: Test.Wire = { nullable: null };
+const value: Test.Value = { nullable: null, node: { count: 8, next: { count: 8 } } };
+// @ts-expect-error decoded root default must be populated
+const missingRoot: Test.Value = {};
+// @ts-expect-error recursive decoded child default must be populated
+const missingChild: Test.Value = { nullable: null, node: { count: 8, next: {} } };
+// @ts-expect-error an absent wire key is not explicit undefined
+const undefinedKey: Test.Wire = { nullable: undefined };
+`);
+    const decode = Schema.decodeUnknownSync(made.decoder);
+    expect(decode({ node: { next: {} } })).toEqual({ nullable: null, node: { count: 8, next: { count: 8 } } });
+    expect(() => decode({ nullable: undefined })).toThrow();
+  });
+  it("composes both image deliveries without exposing paths or losing native disclosure", () => {
+    const recording = nativeRecordings("retained-view-image").responses["revit.context.view-image"];
+    const receipt = Schema.Struct({ sha: Schema.String });
+    for (const key of ["revit.context.view-image", "revit.context.view-image.focus"] as const) {
+      const raw = Schema.decodeUnknownSync(nativeEffectSchemas[key].response)(recording);
+      const { filePath: _, imageUrl: __, ...native } = raw;
+      const delivery = nativeEffectSchemas[key].delivery(receipt);
+      const decode = Schema.decodeUnknownSync(delivery);
+      const delivered = { ...native, capture: { sha: "asset" }, imageUrl: "/captures/asset.png" };
+      expect(decode(delivered)).toEqual(delivered);
+      expect(decode({ ...native, refused: true, capture: null, imageUrl: null })).toEqual({ ...native, refused: true, capture: null, imageUrl: null });
+      for (const invalid of [{ ...delivered, filePath: "private.png" }, { ...delivered, extra: true }, { ...delivered, capture: {} }, { ...delivered, imageUrl: undefined }, { ...delivered, width: 2147483648 }, { ...delivered, marks: [{ elementId: 9007199254740992, left: 0, top: 0, width: 1, height: 1 }] }])
+        expect(() => decode(invalid, { onExcessProperty: "ignore" })).toThrow();
+      const composed = Schema.Struct({ optional: Schema.optionalKey(delivery), rows: Schema.Array(delivery) });
+      expect(Schema.decodeUnknownSync(composed)({ rows: [delivered] })).toEqual({ rows: [delivered] });
+    }
+  });
+  it("refuses image delivery source drift and root checks with operation provenance", () => {
+    for (const key of ["revit.context.view-image", "revit.context.view-image.focus"]) {
+      const source = JSON.parse(hostOpCatalog.find(op => op.key === key)!.responseSchemaJson);
+      const compile = (response: object) => generateNativeEffect([{ key, requestSchemaJson: "{}", responseSchemaJson: JSON.stringify(response) }]);
+      for (const field of ["filePath", "imageUrl"]) {
+        const missing = structuredClone(source);
+        delete missing.properties[field];
+        expect(() => compile(missing)).toThrow(`${key}/response: Error: #/delivery/${field}`);
+        const changed = structuredClone(source);
+        changed.properties[field] = { type: "integer" };
+        expect(() => compile(changed)).toThrow(`${key}/response: Error: #/delivery/${field}`);
+      }
+      // This importer subset refuses object-cardinality checks before mapFields can drop them.
+      expect(() => compile({ ...source, minProperties: 1 })).toThrow(`${key}/response: Error: #: unsupported keyword minProperties`);
+      const { $schema: _, definitions, ...branch } = source;
+      expect(() => compile({ $schema: source.$schema, definitions, anyOf: [branch, { type: "null" }] })).toThrow(`${key}/response: Error: #/delivery`);
+    }
+  });
   it("emits definition roots with recursion, defaults, false and escaped source keys", async () => {
     const definitions = Object.fromEntries([
       ["Node", { type: "object", additionalProperties: false, properties: { value: { type: "integer" }, count: { $ref: "#/$defs/Count" }, next: { $ref: "#/$defs/Node" } }, required: ["value"] }],

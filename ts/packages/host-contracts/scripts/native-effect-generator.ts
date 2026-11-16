@@ -161,28 +161,54 @@ function compileSchemas(input: Node, includeDefinitions: boolean) {
   let code = Rep.toCodeDocument(project(false));
   // Use the upstream recursive partition, not a second dependency graph or name match.
   if (Object.keys(code.references.recursives).length) code = Rep.toCodeDocument(project(true));
-  return { code, definitionKeys: includeDefinitions ? keys : [] };
+  return { code, wire: Rep.toCodeDocument(representation), representation, definitionKeys: includeDefinitions ? keys : [] };
 }
 
 export function schemaCode(input: Node): Rep.CodeDocument {
   return compileSchemas(input, false).code;
 }
 
-export function emitSchema(input: Node, name: string, includeDefinitions = false): string {
-  const { code: doc, definitionKeys } = compileSchemas(input, includeDefinitions);
+export function emitSchema(input: Node, name: string, includeDefinitions = false, delivery = false): string {
+  const { code: doc, wire, representation, definitionKeys } = compileSchemas(input, includeDefinitions);
   const recursive = Object.keys(doc.references.recursives).length > 0;
   const declarations = doc.references.nonRecursives.map(ref => `${recursive ? `type ${ref.$ref} = ${ref.code.Type};\n` : ""}const ${ref.$ref}${recursive ? `: Schema.Decoder<${ref.$ref}>` : ""} = ${ref.code.runtime};`);
   for (const [name, code] of Object.entries(doc.references.recursives))
     declarations.push(`type ${name} = ${code.Type};\nconst ${name}: Schema.Decoder<${name}> = ${code.runtime};`);
-  if (doc.artifacts.length) throw Error("Catalog projection does not support imported code artifacts");
+  if (doc.artifacts.length || wire.artifacts.length) throw Error("Catalog projection does not support imported code artifacts");
+  // Upstream owns type syntax and recursive references. The pre-augmentation
+  // graph retains optional wire keys that decoding defaults populate in Value.
+  const wireReferences = [...wire.references.nonRecursives.map(ref => [ref.$ref, ref.code] as const), ...Object.entries(wire.references.recursives)];
+  const unique = (base: string, used: readonly string[]) => {
+    while (used.includes(base)) base += "_";
+    return base;
+  };
+  const wireNamespace = unique("WireTypes", [...doc.references.nonRecursives.map(ref => ref.$ref), ...Object.keys(doc.references.recursives)]);
+  const wireRoot = unique("Root", wireReferences.map(([key]) => key));
+  const wireTypes = `namespace ${wireNamespace} {\n${wireReferences.map(([key, code]) => `type ${key} = ${code.Type};`).join("\n")}\nexport type ${wireRoot} = ${wire.codes[0].Type};\n}\nexport type Wire = ${wireNamespace}.${wireRoot};\nexport type Value = typeof codec.Type;\n`;
+  if (delivery) {
+    const root = representation.representations[0];
+    // mapFields drops object checks. Refuse a changed source shape rather than
+    // preserve checks whose meaning may depend on the removed delivery fields.
+    if (root._tag !== "Objects" || root.checks.length || root.indexSignatures.length ||
+      root.propertySignatures.some(property => property.name === "capture"))
+      throw Error("#/delivery: expected an unchecked closed image response Struct");
+    for (const key of ["filePath", "imageUrl"]) {
+      const property = root.propertySignatures.find(property => property.name === key);
+      if (!property?.isOptional || property.type._tag !== "Union" || property.type.checks.length ||
+        property.type.types.length !== 2 || !property.type.types.some(type => type._tag === "Null") ||
+        !property.type.types.some(type => type._tag === "String" && type.checks.length === 0))
+        throw Error(`#/delivery/${key}: expected optional nullable string`);
+    }
+  }
+  const deliveryFactory = delivery ? `export function delivery<S extends Schema.ConstraintDecoder<unknown, never>>(receipt: S) {\nreturn strictDecoder(codec.mapFields(fields => ({ ...Struct.omit(fields, ["filePath", "imageUrl"]), capture: Schema.NullOr(receipt), imageUrl: Schema.NullOr(Schema.String) })));\n}\n` : "";
   const definitions = includeDefinitions
     ? `export const definitions = {\n${definitionKeys.map((key, i) => `  [${JSON.stringify(key)}]: strictDecoder(${doc.codes[i + 1].runtime}),`).join("\n")}\n} as const;\n`
     : "";
-  return `export namespace ${name} {\n${doc.artifacts.map(a => a._tag === "Import" ? a.importDeclaration : "").join("\n")}\n${declarations.join("\n")}\nconst codec = ${doc.codes[0].runtime};\nexport const decoder: Schema.Decoder<typeof codec.Type> = Schema.declareConstructor<typeof codec.Type>()([], () => (input, _ast, options) => SchemaParser.decodeUnknownEffect(codec)(input, { ...options, onExcessProperty: "error" }));\n${definitions}}\n`;
+  return `export namespace ${name} {\n${doc.artifacts.map(a => a._tag === "Import" ? a.importDeclaration : "").join("\n")}\n${declarations.join("\n")}\nconst codec = ${doc.codes[0].runtime};\n${wireTypes}export const decoder = strictDecoder(codec);\n${deliveryFactory}${definitions}}\n`;
 }
 
 export const nativeEffectPrelude = `// Generated by host-typegen from C# JSON Schema. Do not edit.
-import { Effect, Schema, SchemaParser } from "effect";
+import { Effect, Schema, SchemaParser, Struct } from "effect";
 function strictDecoder<S extends Schema.ConstraintDecoder<unknown, never>>(codec: S): Schema.Decoder<S["Type"]> {
   return Schema.declareConstructor<S["Type"]>()([], () => (input, _ast, options) => SchemaParser.decodeUnknownEffect(codec)(input, { ...options, onExcessProperty: "error" }));
 }
@@ -201,19 +227,26 @@ function validDateTime(value: string): boolean {
 export function generateNativeEffect(operations: readonly Operation[]): string {
   const chunks = [nativeEffectPrelude];
   const rows: string[] = [];
+  const types: string[] = [];
   operations.forEach((op, index) => {
     const fields: string[] = [];
+    const directions: string[] = [];
     for (const direction of ["request", "response", "artifact"] as const) {
       const json = op[`${direction}SchemaJson`];
       if (!json) continue;
       const name = `Op${index}${direction}`;
-      try { chunks.push(emitSchema(JSON.parse(json), name, direction === "response")); }
+      const delivery = direction === "response" && (op.key === "revit.context.view-image" || op.key === "revit.context.view-image.focus");
+      try { chunks.push(emitSchema(JSON.parse(json), name, direction === "response", delivery)); }
       catch (cause) { throw Error(`${op.key}/${direction}: ${String(cause)}`, { cause }); }
       fields.push(`${direction}: ${name}.decoder`);
+      if (delivery) fields.push(`delivery: ${name}.delivery`);
+      directions.push(`${direction}: { wire: ${name}.Wire; value: ${name}.Value }`);
     }
     rows.push(`${JSON.stringify(op.key)}: { ${fields.join(", ")} }`);
+    types.push(`${JSON.stringify(op.key)}: { ${directions.join("; ")} };`);
   });
   chunks.push(`export const nativeEffectSchemas = {\n${rows.join(",\n")}\n} as const;\n`);
   chunks.push(`export const nativeEffectResponseDefinitions = {\n${operations.map((op, i) => `  [${JSON.stringify(op.key)}]: Op${i}response.definitions,`).join("\n")}\n} as const;\n`);
+  chunks.push(`export interface NativeEffectValues {\n${types.join("\n")}\n}\nexport type NativeKey = keyof NativeEffectValues;\nexport type NativeRequestWire<K extends NativeKey> = NativeEffectValues[K]["request"]["wire"];\nexport type NativeRequestValue<K extends NativeKey> = NativeEffectValues[K]["request"]["value"];\nexport type NativeResponseValue<K extends NativeKey> = NativeEffectValues[K]["response"]["value"];\n`);
   return chunks.join("\n");
 }
