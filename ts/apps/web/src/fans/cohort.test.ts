@@ -9,7 +9,7 @@ import { espWarnings } from "./picture.tsx";
 const uid = (n: number) => `3f2c9a10-0000-4000-8000-00000000000${n}-0001e240`;
 const members = [1, 2].map(n => ({ elementId: n, uniqueId: uid(n) }));
 const cohort = { parameter: "fanStatic", owner: { kind: "type" as const, id: 9 }, members, basis: "b1", complete: true };
-const cells = (values: Record<string, unknown>) => Object.fromEntries(Object.entries(values).map(([k, value]) => [k, { edit: { value } }]));
+const cells = (values: Record<string, unknown>, ref?: string) => Object.fromEntries(Object.entries(values).map(([k, value]) => [k, { edit: { value, ...(ref ? { ref } : {}) } }]));
 /** Work as the host lands it: the caller stamped on each changed cell, then stored and decoded again. */
 const landed = (doc: unknown, by: "human" | "pea") => fansDocumentSchema.parse(JSON.parse(JSON.stringify(stampChanges(doc, undefined, by, 4))));
 
@@ -17,23 +17,24 @@ test("a cohort ESP staged by Pea keeps one caller and one value on every member 
   const staged = stageEspCohort(cohort, "b1", { inWg: 0.6 });
   if ("refused" in staged) throw Error(staged.refused);
   const fans = landed({ esp: cells(staged.esp) }, "pea");
-  const { esp, authored } = stagedDucts(null, fans);
-  for (const member of members) {
-    expect(esp[elementSubject(member)]).toEqual({ inWg: 0.6 });
-    expect(authored.esp[elementSubject(member)]).toMatchObject({ value: { inWg: 0.6 }, author: "pea", source: "Work", version: 4 });
-  }
+  const { esp } = stagedDucts(null, fans);
+  for (const member of members)
+    expect(esp[elementSubject(member)]).toEqual({ value: { inWg: 0.6 }, by: "pea", ref: `work:fans/esp/${elementSubject(member)}` });
   expect(fanWriteCells(fans, { nodes: [{ uniqueId: uid(1) }], segments: [] } as never, [cohort]).map(([, key]) => key)).toEqual(members.map(m => elementSubject(m)));
 });
 
 test("a taken default keeps its original source and ref beside the caller; an unstamped legacy cell stays unknown", () => {
   const key = elementSubject({ uniqueId: uid(1) }), old = elementSubject({ uniqueId: uid(2) });
-  const human = landed({ terminalDrops: cells({ [key]: { inWg: 0.03, source: "firm ducts.json#terminalDrop" } }) }, "human");
-  const legacy = fansDocumentSchema.parse({ flows: cells({ [old]: { cfm: 100 } }) });
+  // The caller cites the default's evidence on the cell's own `ref`; the host stamps `by` and keeps the citation.
+  const human = landed({ terminalDrops: cells({ [key]: { inWg: 0.03 } }, "firm ducts.json#terminalDrop") }, "human");
+  const legacy = fansDocumentSchema.parse({ flows: cells({ [old]: 100 }) });
+  // A stored legacy `{ cfm, source }` is not decoded into a number with a made-up author: the schema refuses it.
+  expect(fansDocumentSchema.safeParse({ flows: cells({ [old]: { cfm: 100, source: "balancing report" } }) }).success).toBe(false);
   const design = ductsDesign(null, { ...human, flows: legacy.flows });
-  const { authored, terminalDrops } = stagedDucts(design, design);
-  expect(terminalDrops[key]).toEqual({ inWg: 0.03, source: "firm ducts.json#terminalDrop" });
-  expect(authored.terminalDrops[key]).toMatchObject({ author: "human", source: "Work", ref: "firm ducts.json#terminalDrop" });
-  expect(authored.flows[old]).toMatchObject({ author: "unknown", ref: `flows/${old}`, version: null });
+  const { terminalDrops, flows } = stagedDucts(design, design);
+  expect(terminalDrops[key]).toEqual({ value: { inWg: 0.03 }, by: "human", ref: "firm ducts.json#terminalDrop" });
+  // No stamp, no caller: handed over as `unknown`, which the resolver holds invalid; never a guessed human or Pea.
+  expect(flows[old]).toEqual({ value: 100, by: "unknown", ref: `work:fans/flows/${old}` });
 });
 
 const blocker = (kind: SheetBlocker["kind"], detail: string): SheetBlocker =>

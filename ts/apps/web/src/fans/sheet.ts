@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { DUCT_UNIT_ROLES, fanWriteRows, routeAddress, subjectCode, type fansSheetData, type Immutable, type Resolved } from "@pe/agent-contracts";
-import { local, parameter, store, type BindingDraw, type CellLayer, type EnumChoice, type SheetSlot } from "@pe/agent-contracts/slots";
+import { DUCT_UNIT_ROLES, fanWriteRows, routeAddress, subjectCode, type fansSheetData, type Immutable } from "@pe/agent-contracts";
+import { local, parameter, store, type BindingDraw, type CellLayer, type Domain, type EnumChoice, type SheetSlot } from "@pe/agent-contracts/slots";
 import { fanWriteCells } from "@pe/ducts-domain/staged";
 import { suggestKind, suggestRole } from "@pe/ducts-domain/roster";
 import { sheetSystems } from "@pe/ducts-domain/sheet/scoped-snapshot";
@@ -39,12 +39,12 @@ const rowsOf = (read: Read, ids: readonly string[]) =>
   ids.flatMap((id) => { const s = subjectOf(snapshotOf(read), id); return s ? [s] : []; });
 
 /**
- * A resolved input as a model layer under Work, in the cell's shape (`{ inWg }`, `{ cfm }`). The
+ * A resolved input as a model layer under Work, in the cell's shape (`{ inWg }`, a plain cfm). The
  * source is the tier the host served: `project` or `firm` only when that home's file states the
  * value; a criterion no home states is `default`, and says so when the firm home was not found.
  */
 const SOURCES: Readonly<Record<string, CellLayer["source"]>> = { Work: "work", "model-store": "model-store", project: "project", firm: "firm", default: "default" };
-const layer = (resolved: Immutable<Resolved<unknown>> | undefined, wrap: (v: unknown) => unknown, read?: Read): CellLayer | null => {
+const layer = (resolved: { readonly value: unknown; readonly source: string; readonly units?: string | null; readonly ref?: string | null } | undefined, wrap: (v: unknown) => unknown, read?: Read): CellLayer | null => {
   if (!resolved || resolved.value == null) return null;
   const source = SOURCES[resolved.source] ?? "model";
   const firm = read?.sheetView.firm;
@@ -74,10 +74,12 @@ const scopeChoices = (read: Read): readonly EnumChoice[] => {
 const DIGITS: Readonly<Record<string, number>> = { "in-wg": 4, cfm: 0 };
 const input = (name: string, draw: BindingDraw) => {
   const row = fanWriteRows().find((r) => r.name === name);
-  if (!row?.parameter || row.domain.kind !== "object") throw Error(`${name} is not a writable fan input`);
-  const fields = Object.fromEntries(Object.entries(row.domain.fields).map(([key, field]) =>
-    [key, field.kind === "number" && field.unit && field.unit in DIGITS ? { ...field, digits: DIGITS[field.unit] } : field]));
-  return parameter(row.parameter, { kind: "object", fields }, draw);
+  if (!row?.parameter) throw Error(`${name} is not a writable fan input`);
+  const drawn = (domain: Domain): Domain =>
+    domain.kind === "number" && domain.unit && domain.unit in DIGITS ? { ...domain, digits: DIGITS[domain.unit] }
+    : domain.kind === "object" ? { ...domain, fields: Object.fromEntries(Object.entries(domain.fields).map(([key, field]) => [key, drawn(field)])) }
+    : domain;
+  return parameter(row.parameter, drawn(row.domain), draw);
 };
 
 export const fansSheet = {
@@ -122,7 +124,7 @@ export const fansSheet = {
       model: (read: Read, row) => {
         const id = idOf(read, row!), node = snapshotOf(read)?.nodes.find((n) => n.id === id);
         const conflict = id === fanUnit(read) ? read?.open?.inputs?.notes.find((n) => n.kind === "flow-conflict")?.text : undefined;
-        const base = layer(inputsOf(read)?.units[String(id)]?.cfm, (v) => ({ cfm: v })) ?? { value: null };
+        const base = layer(inputsOf(read)?.units[String(id)]?.cfm, (v) => v) ?? { value: null };
         return {
           ...base,
           ...(conflict ? { note: conflict.replace(/^fan \d+: /, "Conflict: ") } : {}),
@@ -140,7 +142,7 @@ export const fansSheet = {
     flows: input("flows", {
       rows: (read: Read) => rowsOf(read, Object.keys(inputsOf(read)?.terminals ?? {})),
       rowLabel: (read, row) => nameOf(read, row, "Terminal airflow"),
-      model: (read: Read, row) => layer(inputsOf(read)?.terminals[String(idOf(read, row!))]?.cfm, (v) => ({ cfm: v })),
+      model: (read: Read, row) => layer(inputsOf(read)?.terminals[String(idOf(read, row!))]?.cfm, (v) => v),
     }),
     terminalDrops: input("terminalDrops", {
       rows: (read: Read) => rowsOf(read, Object.keys(inputsOf(read)?.terminals ?? {})),

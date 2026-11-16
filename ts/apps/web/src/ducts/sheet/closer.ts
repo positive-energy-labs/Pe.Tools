@@ -77,7 +77,7 @@ export type Closer = {
 
 export type CloserContext = {
   /** The resolved default terminal drop (firm or project), with its source; null until inputs land. */
-  terminalDrop: Resolved<number> | null;
+  terminalDrop: Pick<Resolved<number>, "value" | "source"> & { ref?: string | null } | null;
   /** `elementLabeler`: total, never an id. */
   nameOf: (id: number) => string;
   /** The sheet-wide refusal (busy, inputs detail not yet read); null when verbs may run. */

@@ -1191,15 +1191,17 @@ export class RouteWorkspace {
   async #decodeStored(targetKey: string, spec: RouteStateSpec<z.ZodType>, raw: unknown) {
     if (raw == null) return null;
     try {
-      return { raw, envelope: parseEnvelope(raw, spec) };
+      const envelope = parseEnvelope(raw, spec);
+      // A staged value with no host stamp has no caller. It is set aside, never read as someone's edit.
+      const unstamped = stagedRows(spec.route, raw).filter(row => row.by == null).length;
+      if (unstamped) throw Error(`${unstamped} staged row${unstamped === 1 ? " carries" : "s carry"} no caller stamp.`);
+      return { raw, envelope };
     } catch (error) {
-      // One notice for the whole record: the refusal, then every staged row it held.
-      const rows = stagedRows(spec.route, raw);
+      // One notice for the whole record: every staged row it held, then why it was refused.
       await this.#store.setState({ targetKey, route: spec.route, value: null,
-        reason: [error instanceof Error ? error.message : String(error),
-          ...(rows.length ? [`Set aside ${rows.length} staged row${rows.length === 1 ? "" : "s"}: ${rows.map(row =>
-            `${row.work}/${row.segment}${row.row === row.segment ? "" : `/${row.row}`} (source ${row.source ?? "unstated"}, ref ${row.ref ?? "none"})`).join("; ")}`] : []),
-        ].join(" ") });
+        reason: [setAsideRows(spec.route, raw), error instanceof z.ZodError
+          ? `${error.issues[0]?.path.join("/")}: ${error.issues[0]?.message}` : error instanceof Error ? error.message : String(error)]
+          .filter(Boolean).join(" ") });
       return null;
     }
   }
@@ -1394,20 +1396,38 @@ function emptyEnvelope(spec: RouteStateSpec<z.ZodType>): RouteEnvelope<unknown> 
 /**
  * The staged rows of a stored record, read by structure alone (any object holding an `edit` rung
  * with a value), so a record no schema decodes is still listed. `source` and `ref` are whatever
- * text the rung or its value states; an unstamped row reports none, never an invented one.
+ * text the rung or its value states, `by` the host's stamp; an unstamped row reports none, never an invented one.
  */
 export function stagedRows(route: string, raw: unknown) {
   const record = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === "object" && !Array.isArray(value);
   const text = (edit: Record<string, unknown>, key: string) =>
     [edit[key], record(edit.value) ? edit.value[key] : undefined].find((v): v is string => typeof v === "string" && v !== "") ?? null;
-  const walk = (node: unknown, path: string[]): { work: string; segment: string; row: string; source: string | null; ref: string | null }[] => {
+  const walk = (node: unknown, path: string[]): { work: string; segment: string; row: string; by: string | null; source: string | null; ref: string | null }[] => {
     if (!record(node)) return [];
     const edit = node.edit;
     if (path.length && record(edit) && (Object.hasOwn(edit, "value") || edit.delete === true))
-      return [{ work: route, segment: path[0]!, row: path.slice(1).join("/") || path[0]!, source: text(edit, "source"), ref: text(edit, "ref") }];
+      return [{ work: route, segment: path[0]!, row: path.slice(1).join("/") || path[0]!, by: typeof edit.by === "string" ? edit.by : null, source: text(edit, "source"), ref: text(edit, "ref") }];
     return Object.entries(node).flatMap(([key, value]) => walk(value, [...path, key]));
   };
   return walk(record(raw) && record(raw.doc) ? raw.doc : raw, []);
+}
+
+/**
+ * The rows of a refused record as one line of the notice. The store keeps a notice short, so the
+ * list stops at a budget and says how many rows it left to the kept bytes, rather than be cut mid-row.
+ */
+// ponytail: fixed 300-character budget for the list; raise it with the store's own notice limit if rows are lost in practice.
+function setAsideRows(route: string, raw: unknown): string {
+  const rows = stagedRows(route, raw).map(row =>
+    `${row.segment}${row.row === row.segment ? "" : `/${row.row}`} by ${row.by ?? "nobody"}${row.source ? ` source ${row.source}` : ""}${row.ref ? ` ref ${row.ref}` : ""}`);
+  if (!rows.length) return "";
+  const shown: string[] = [];
+  for (const row of rows) {
+    if (shown.join("; ").length + row.length > 300) break;
+    shown.push(row);
+  }
+  const rest = rows.length - shown.length;
+  return `Set aside ${rows.length} staged row${rows.length === 1 ? "" : "s"} of ${route}: ${shown.join("; ")}${rest ? `; and ${rest} more in the kept bytes` : ""}.`;
 }
 
 function parseEnvelope(raw: unknown, spec: RouteStateSpec<z.ZodType>): RouteEnvelope<unknown> {

@@ -563,7 +563,36 @@ test("refused stored Work is set aside with one reason that lists each staged ro
   expect(reasons).toHaveLength(1);
   const reason = reasons[0]!;
   expect(reason).toContain("Set aside 4 staged rows");
-  for (const row of ["test-route/esp/legacy (source unstated, ref none)", "test-route/esp/cited (source submittal p3, ref none)", "test-route/esp/torn (source unstated", "test-route/writeIntent (source unstated"])
+  expect(reason).toMatch(/^Set aside 4 staged rows of test-route: /);
+  for (const row of ["esp/legacy by nobody;", "esp/cited by pea source submittal p3;", "esp/torn by nobody;", "writeIntent by nobody."])
     expect(reason.split(row)).toHaveLength(2);
   expect(reason).not.toContain("bare");
+});
+
+test("stored Work that decodes but holds an unstamped cell is set aside once; a cited ref survives a seed and a stamped record reads", async () => {
+  const { store } = memoryStore(), reasons: (string | undefined)[] = [];
+  const recording: RouteDocumentStore = { ...store, setState: async (input) => { if (input.value == null) reasons.push(input.reason); return store.setState(input); } };
+  const spec = { ...cellSpec, schema: z.object({ esp: z.record(z.string(), draftCellSchema(z.object({ inWg: z.number() }))).default({}) }) };
+  const routes = workspace(recording, { registration: { spec } });
+  await store.setState({ targetKey: workKey(documentA), route: "test-route", value: { version: 1, schemaVersion: 1, revision: 3,
+    doc: { esp: { stamped: { edit: { value: { inWg: 1 }, by: "human" } }, legacy: { edit: { value: { inWg: 0.4 } } } } } } });
+  expect(await routes.readUncaptured(documentA, "test-route")).toBeNull();
+  expect(reasons).toHaveLength(1);
+  expect(reasons[0]).toContain("1 staged row carries no caller stamp");
+  expect(reasons[0]!.split("esp/legacy by nobody")).toHaveLength(2);
+  expect(reasons[0]).not.toContain("esp/stamped by nobody");
+  const started = await routes.start(documentA, { esp: { a: { edit: { value: { inWg: 1 }, ref: "submittal p3" } } } }, "human");
+  expect(started).toMatchObject({ ok: true, doc: { esp: { a: { edit: { by: "human", ref: "submittal p3" } } } } });
+  expect(await routes.readUncaptured(documentA, "test-route")).toMatchObject({ revision: 1 });
+  expect(reasons).toHaveLength(1);
+});
+
+test("a record with more rows than one notice holds names how many it left to the kept bytes", async () => {
+  const { store } = memoryStore(), reasons: (string | undefined)[] = [];
+  const recording: RouteDocumentStore = { ...store, setState: async (input) => { if (input.value == null) reasons.push(input.reason); return store.setState(input); } };
+  const esp = Object.fromEntries(Array.from({ length: 60 }, (_, i) => [`unit-${i}`, { edit: { value: { inWg: 1 } } }]));
+  await store.setState({ targetKey: workKey(documentA), route: "test-route", value: { version: 1, schemaVersion: 99, revision: 3, doc: { esp } } });
+  expect(await workspace(recording, { registration: { spec: cellSpec } }).readUncaptured(documentA, "test-route")).toBeNull();
+  expect(reasons[0]).toMatch(/^Set aside 60 staged rows of test-route: esp\/unit-0 by nobody; .*; and \d+ more in the kept bytes\. /);
+  expect(reasons[0]!.indexOf("schemaVersion")).toBeLessThan(450);
 });

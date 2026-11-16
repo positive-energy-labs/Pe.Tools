@@ -51,7 +51,7 @@ test("D25: a retained resolved Work airflow keeps Work provenance after its live
   const row = elementSubject(unit);
   const read = { sheetSnapshot: { ...snapshot, nodes: [unit] }, sheetView: { inputs: { units: { "7": { cfm: { value: 1234, source: "Work" } } } } } };
   const cells = sheetCells({ ...fansSheet, bindings: { equipmentFlows: fansSheet.bindings.equipmentFlows } }, { rows: [], work: fansDocumentSchema.parse({}), model: [], read });
-  expect(cells.find(cell => cell.row === row)).toMatchObject({ value: { cfm: 1234 }, source: "work", pending: null });
+  expect(cells.find(cell => cell.row === row)).toMatchObject({ value: 1234, source: "work", pending: null });
   const view = drawn(read, {}, () => handle({}), "equipmentFlows", "refreshing");
   expect(view.container.querySelector('[data-input-source="work"]')?.textContent).toBe("work");
   expect(view.container.querySelector('[data-sheet-cell]')?.textContent).not.toContain("model");

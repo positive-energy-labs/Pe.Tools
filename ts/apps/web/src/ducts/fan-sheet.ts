@@ -12,7 +12,7 @@ import {
   type DuctsInputs,
   type DuctsSheetOverview,
   type DuctsSheetRequest,
-  fanClaimSchema, fanCloserSchema, fanEspValuesSchema, encounterSchema, fanIssueSchema, stagedDucts,
+  fanClaimSchema, fanCloserSchema, fanEspValuesSchema, encounterSchema, fanIssueSchema,
 } from "@pe/agent-contracts";
 import { elementLabeler } from "@pe/ducts-domain/element-label";
 import { slotCoverage } from "@pe/ducts-domain/kernel/terminal-flow";
@@ -174,11 +174,7 @@ const sheetModel = read("fans.calculation", {
   async run(ctx, request) {
     const saved = await ctx.read(designLayers, request.target);
     const design = ductsDesign(saved.ducts, saved.fans),
-      base = workLayer(design),
-      staged = stagedDucts(design, design).authored.esp;
-    // The engine's staged ESP names who staged it: the caller the host stamped on the Work cell, and its evidence.
-    const work = { ...base, esp: Object.fromEntries(Object.entries(base.esp ?? {}).map(([key, cell]) =>
-      [key, { ...cell, ...(staged[key] ? { by: staged[key].author, ref: staged[key].ref } : {}) }])) };
+      work = workLayer(design);
     const criteria = resolveCriteria(work, null, firmLayer(saved.firm, saved.settings));
     const tolerances = {
       autoJoinGapIn: criteria.autoJoinGapIn.value,

@@ -1,5 +1,5 @@
 import { expect, test } from "vite-plus/test";
-import { fansDocumentSchema } from "@pe/agent-contracts";
+import { fansDocumentSchema, stagedDucts } from "@pe/agent-contracts";
 import { fanWriteCells, stageEspCohort } from "./staged.ts";
 import { elementSubject } from "./work-subject.ts";
 
@@ -15,7 +15,7 @@ test("a complete cohort stages one value on every member, and only its off-walk 
   const cell = (value: unknown) => ({ edit: { value } });
   const doc = fansDocumentSchema.parse({
     esp: { ...Object.fromEntries(Object.entries(staged.esp).map(([k, v]) => [k, cell(v)])), [elementSubject(stranger!)]: cell({ inWg: 2 }) },
-    equipmentFlows: { [elementSubject(peer!)]: cell({ cfm: 500 }) },
+    equipmentFlows: { [elementSubject(peer!)]: cell(500) },
   });
   // Without native membership the walk still clips: nothing off it is written.
   expect(fanWriteCells(doc, snapshot)).toEqual([["esp", elementSubject(onWalk!)]]);
@@ -31,4 +31,18 @@ test("an incomplete, stale or misowned cohort refuses and stages nothing", () =>
   expect(stageEspCohort({ ...cohort, owner: { kind: "instance", id: 1 } }, "b1", { inWg: 1 })).toHaveProperty("refused");
   expect(stageEspCohort({ ...cohort, members: [] }, "b1", { inWg: 1 })).toHaveProperty("refused");
   expect(stageEspCohort({ ...cohort, owner: { kind: "instance", id: 1 }, members: [onWalk!] }, "b1", { inWg: 1 })).toHaveProperty("esp");
+});
+
+test("stagedDucts hands the resolver { value, by, ref } cells: airflow a plain number, a cited ref kept, else the cell's location", () => {
+  const key = elementSubject(onWalk!), other = elementSubject(peer!);
+  const fans = fansDocumentSchema.parse({
+    flows: { [key]: { edit: { value: 250, by: "pea", ref: "balancing report p2" } }, [other]: { edit: { value: 90 } } },
+    esp: { [key]: { edit: { value: { inWg: 0.5 }, by: "human" } }, [other]: {} },
+  });
+  const staged = stagedDucts(null, fans);
+  expect(staged.flows).toEqual({
+    [key]: { value: 250, by: "pea", ref: "balancing report p2" },
+    [other]: { value: 90, by: "unknown", ref: `work:fans/flows/${other}` },
+  });
+  expect(staged.esp).toEqual({ [key]: { value: { inWg: 0.5 }, by: "human", ref: `work:fans/esp/${key}` } });
 });

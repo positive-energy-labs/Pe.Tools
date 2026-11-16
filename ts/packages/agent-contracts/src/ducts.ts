@@ -23,7 +23,7 @@ import { serveSetting, type SettingTierRead } from "./tiered-setting.ts";
 import { DUCT_PARAMETER_KEYS, DUCT_UNIT_KINDS, DUCTS_CRITERIA_CELLS, criteriaLayer } from "./ducts-sheet.ts";
 
 import { draftCellSchema, type Author } from "./draft.ts";
-import type { DuctFlow, DuctUnitRole, FansDocument } from "./fans.ts";
+import type { FansDocument } from "./fans.ts";
 import { type RouteStateSpec } from "./route-state.ts";
 
 export const ductAssumptionSchema = z.discriminatedUnion("kind", [
@@ -372,52 +372,38 @@ export const ductsDesign = (ducts: DuctsRouteDocument | null, fans: FansDocument
   ...(ducts ?? ductsDocumentSchema.parse({})),
 });
 
-const stagedOf = <V>(cells: Record<string, { edit?: { value?: V } | null } | undefined>) =>
-  Object.fromEntries(
-    Object.entries(cells).flatMap(([key, cell]) =>
-      cell?.edit?.value === undefined ? [] : [[key, cell.edit.value]],
-    ),
-  ) as Record<string, V>;
-
 /**
- * Each staged cell with what its value alone drops: `author` is the caller the host stamped (a cell
- * with no stamp stays `unknown`, never promoted), `source` the tier it now sits in, and `ref` the
- * evidence its value names (`source` text on a drop or flow), else the cell's own address.
+ * One staged cell as the resolver reads it (wave 2 amendment 2): the value, the caller the host
+ * stamped (`by`), and the evidence the caller cited, else the cell's own location, which says where
+ * the evidence lives and claims nothing more. A cell with no stamp reads `unknown`: the resolver
+ * holds it invalid, and the runtime sets such stored Work aside before it is read.
  */
-const authoredOf = <V>(segment: string, cells: Record<string, { edit?: { value?: V; by?: Author; base?: number | null } | null } | undefined>) =>
-  Object.fromEntries<{ value: V; author: Author; source: "Work"; ref: string; version: number | null }>(
+export type StagedCell<V> = { value: V; by: Author; ref: string };
+const stagedOf = <V>(work: "fans" | "ducts", segment: string, cells: Record<string, { edit?: { value?: V; by?: Author; ref?: string } | null } | undefined>) =>
+  Object.fromEntries<StagedCell<V>>(
     Object.entries(cells).flatMap(([key, cell]) => {
       const edit = cell?.edit;
-      if (edit?.value === undefined) return [];
-      const stated = (edit.value as { source?: unknown } | null)?.source;
-      return [[key, { value: edit.value, author: edit.by ?? ("unknown" as const), source: "Work" as const,
-        ref: typeof stated === "string" && stated.trim() ? stated : `${segment}/${key}`, version: edit.base ?? null }]];
+      return edit?.value === undefined ? [] : [[key, { value: edit.value, by: edit.by ?? "unknown", ref: edit.ref?.trim() ? edit.ref : `work:${work}/${segment}/${key}` }]];
     }),
   );
 
-/** Staged edits only, per segment. */
+/** Staged edits only, per segment, each as a `StagedCell`. */
 export function stagedDucts(doc: DuctsRouteDocument | null, fans: FansDocument) {
   return {
-    /** The fan cells again, with caller and evidence kept beside the value; the bare segments below stay for pricing. */
-    authored: {
-      terminalDrops: authoredOf("terminalDrops", fans.terminalDrops), componentDrops: authoredOf("componentDrops", fans.componentDrops),
-      esp: authoredOf("esp", fans.esp), equipmentFlows: authoredOf("equipmentFlows", fans.equipmentFlows),
-      flows: authoredOf("flows", fans.flows), roles: authoredOf("roles", fans.roles),
-    },
-    calculation: stagedOf(fans.calculation),
-    rules: stagedOf(doc?.rules ?? {}),
+    calculation: stagedOf("fans", "calculation", fans.calculation),
+    rules: stagedOf("ducts", "rules", doc?.rules ?? {}),
     criteria: criteriaLayer(doc?.criteria ?? {}),
-    kinds: stagedOf(doc?.kinds ?? {}) as Record<string, { kind: (typeof DUCT_UNIT_KINDS)[number] }>,
-    assumptions: stagedOf<DuctAssumption>(doc?.assumptions ?? {}),
-    catalogs: stagedOf(doc?.catalogs ?? {}),
-    ruleAssignments: stagedOf(doc?.ruleAssignments ?? {}),
-    terminalDrops: stagedOf(fans.terminalDrops),
-    componentDrops: stagedOf(fans.componentDrops),
-    esp: stagedOf(fans.esp),
-    equipmentFlows: stagedOf(fans.equipmentFlows) as Record<string, DuctFlow>,
-    roles: stagedOf(fans.roles) as Record<string, DuctUnitRole>,
-    flows: stagedOf(fans.flows) as Record<string, DuctFlow>,
-    subject: stagedOf<readonly number[]>(doc?.subject ?? {}),
+    kinds: stagedOf("ducts", "kinds", doc?.kinds ?? {}),
+    assumptions: stagedOf("ducts", "assumptions", doc?.assumptions ?? {}),
+    catalogs: stagedOf("ducts", "catalogs", doc?.catalogs ?? {}),
+    ruleAssignments: stagedOf("ducts", "ruleAssignments", doc?.ruleAssignments ?? {}),
+    terminalDrops: stagedOf("fans", "terminalDrops", fans.terminalDrops),
+    componentDrops: stagedOf("fans", "componentDrops", fans.componentDrops),
+    esp: stagedOf("fans", "esp", fans.esp),
+    equipmentFlows: stagedOf("fans", "equipmentFlows", fans.equipmentFlows),
+    roles: stagedOf("fans", "roles", fans.roles),
+    flows: stagedOf("fans", "flows", fans.flows),
+    subject: stagedOf("ducts", "subject", doc?.subject ?? {}),
     labelParameter: doc?.labelParameter?.edit?.value ?? null,
     workingPhase: doc?.workingPhase?.edit?.value ?? null,
   };

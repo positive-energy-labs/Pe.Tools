@@ -142,8 +142,21 @@ test("set-aside fans Work names every staged row in its one notice, and the byte
     expect(await new RouteWorkspace({ store, registrations: [{ spec }] }).readUncaptured(key, spec.route)).toBeNull();
     expect(await readFile(blobOf(prior, path))).toEqual(prior);
     expect(posted(path)).toHaveLength(1);
-    expect(posted(path)[0]!.reason).toContain("Set aside 2 staged rows");
-    expect(posted(path)[0]!.reason).toContain("fans/esp/unitA (source unstated, ref none)");
-    expect(posted(path)[0]!.reason).toContain("fans/terminalDrops/grille (source firm table 4, ref none)");
+    expect(posted(path)[0]!.reason).toContain("Set aside 2 staged rows of fans: esp/unitA by nobody; terminalDrops/grille by human source firm table 4.");
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test("a stored legacy { cfm, source } airflow is set aside at the current schema and listed once, not decoded", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "pe-work-set-aside-")), spec = fansRouteState;
+  const store = fileRouteDocumentStore(stateFixture(dir));
+  const key = bindWork(spec.route, null), targetKey = workKey(key);
+  try {
+    await store.setState({ targetKey, route: spec.route, value: { version: 1, schemaVersion: spec.schemaVersion, revision: 2, history: [],
+      doc: { ...spec.schema.parse({}), equipmentFlows: { unitA: { edit: { value: { cfm: 900, source: "balancing report" } } } } } } });
+    const path = join(dir, (await readdir(dir))[0]!), prior = await readFile(path);
+    expect(await new RouteWorkspace({ store, registrations: [{ spec }] }).readUncaptured(key, spec.route)).toBeNull();
+    expect(await readFile(blobOf(prior, path))).toEqual(prior);
+    expect(posted(path)).toHaveLength(1);
+    expect(posted(path)[0]!.reason.split("equipmentFlows/unitA by nobody source balancing report.")).toHaveLength(2);
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
