@@ -1,5 +1,8 @@
 import { expect, test } from "vite-plus/test";
-import { fansDocumentSchema, stagedDucts } from "@pe/agent-contracts";
+import { ductsDocumentSchema, fansDocumentSchema, stagedDucts } from "@pe/agent-contracts";
+import { editPatches } from "./sheet/edits.ts";
+import { resolveCriteria } from "./sheet/inputs.ts";
+import { TEST_FIRM } from "./sheet/test-inputs.ts";
 import { fanWriteCells, stageEspCohort } from "./staged.ts";
 import { elementSubject } from "./work-subject.ts";
 
@@ -44,4 +47,24 @@ test("stagedDucts hands the resolver { value, by, ref } cells: airflow a plain n
     [key]: { value: 250, by: "pea", ref: "balancing report p2" },
   });
   expect(staged.esp).toEqual({ [key]: { value: { inWg: 0.5 }, by: "human", ref: `work:fans/esp/${key}` } });
+});
+
+test("a staged criterion resolves from Work with the caller who staged it and the ref they cited", () => {
+  const ducts = ductsDocumentSchema.parse({ criteria: { terminalDropInWg: { edit: { value: 0.07, by: "pea", ref: "spec 23 37 13" } } } });
+  const { criteria, criteriaMeta } = stagedDucts(ducts, fansDocumentSchema.parse({}));
+  expect(resolveCriteria({ criteria, criteriaMeta }, null, TEST_FIRM).terminalDropInWg)
+    .toMatchObject({ status: "valid", value: 0.07, source: "Work", author: "pea", ref: "spec 23 37 13" });
+  // The same staged value with no stamp names nobody: the resolver refuses it outright and never falls back to the firm value.
+  const bare = stagedDucts(ductsDocumentSchema.parse({ criteria: { terminalDropInWg: { edit: { value: 0.07 } } } }), fansDocumentSchema.parse({}));
+  expect(() => resolveCriteria({ criteria: bare.criteria, criteriaMeta: bare.criteriaMeta }, null, TEST_FIRM)).toThrow("Invalid ducts criterion from Work");
+});
+
+test("a sheet edit's cited ref lands on the cell it cites, and airflow is a plain number", () => {
+  const key = elementSubject(onWalk!), other = elementSubject(peer!);
+  expect(editPatches({ flows: { [key]: 250 }, terminalDrops: { [key]: { inWg: 0.03 }, [other]: { inWg: 0.1 } },
+    refs: { terminalDrops: { [key]: "firm ducts.json#terminalDrop" } } })).toEqual([
+    { path: ["flows", key, "edit"], value: { value: 250 } },
+    { path: ["terminalDrops", key, "edit"], value: { value: { inWg: 0.03 }, ref: "firm ducts.json#terminalDrop" } },
+    { path: ["terminalDrops", other, "edit"], value: { value: { inWg: 0.1 } } },
+  ]);
 });

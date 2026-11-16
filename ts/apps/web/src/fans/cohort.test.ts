@@ -47,6 +47,10 @@ test("typed closers choose the cell and carry the offer's provenance; the blocke
   const drop = describeCloser(blocker("unknown-drop", "component 9 has no drop"), null, { ...context,
     fix: () => ({ kind: "cell", target: { work: "fans", segment: "terminalDrops", row: "r" }, offers: [offer] }) });
   expect(drop.action).toEqual({ kind: "drop", elementId: 9, value: 0.03, terminal: true, ref: "firm ducts.json#terminalDrop" });
+  // The engine names the cell and offers nothing: the resolved firm default is the offer, cited as such.
+  const firm = describeCloser(blocker("unknown-drop", "x"), null, { ...context, terminalDrop: { value: 0.04, source: "firm", ref: "firm:terminalDropInWg" },
+    fix: () => ({ kind: "cell", target: { work: "fans", segment: "terminalDrops", row: "r" }, offers: [] }) });
+  expect(firm.action).toEqual({ kind: "drop", elementId: 9, value: 0.04, terminal: true, ref: "firm firm:terminalDropInWg" });
   // The prose says "the fan's own flow"; the typed target is a terminal's flow.
   const flow = describeCloser(blocker("no-flow", "the fan's own flow into this end has no typed share"), 250, { ...context,
     fix: () => ({ kind: "cell", target: { work: "fans", segment: "flows", row: "r" }, offers: [] }) });
