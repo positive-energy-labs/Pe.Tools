@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { Context, Effect, Layer, RcMap, Schema } from "effect";
+import { Context, Effect, Exit, Layer, Option, RcMap, Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import type { SqlError } from "effect/sql/SqlError";
 import { Workflow } from "effect/workflow";
@@ -8,6 +8,8 @@ import {
   CommandId,
   ExecutionId,
   Generation,
+  OwnerOutcome,
+  type OwnerStepObservation,
   type CommandObservation,
   type CommandRef,
   type InertTicket,
@@ -22,6 +24,7 @@ import {
   type CommandLimits,
 } from "./model.ts";
 import type { CommandClosure } from "./closure.ts";
+import { makeActivityResults } from "./activity-results.ts";
 
 // This tag and its reference-only envelope do not vary with feature schemas or adapter names.
 const root = Workflow.make("Pe.CommandWorkflow", {
@@ -66,6 +69,7 @@ const observation = (row: CommandRow): CommandObservation => ({
   stop: row.stop,
   result: row.result,
   problem: row.problem,
+  ownerSteps: [],
 });
 const decodeRow = Schema.decodeUnknownEffect(CommandRow);
 const decodeDescriptor = Schema.decodeUnknownEffect(CommandDescriptor);
@@ -88,6 +92,7 @@ export const initializeCommandTables = Effect.gen(function* () {
 export const makeService = (options: FoundationOptions) =>
   Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient;
+    const activityResult = yield* makeActivityResults(root);
     const limits = options.limits ?? commandLimits;
     const storage = <A, R>(body: Effect.Effect<A, CommandFailure | SqlError, R>) =>
       body.pipe(Effect.catchTag("SqlError", () => Effect.fail(failure("storage"))));
@@ -128,6 +133,33 @@ export const makeService = (options: FoundationOptions) =>
     });
     const visible = (row: CommandRow, binding: Binding) =>
       row.binding.principal === binding.principal && row.binding.authority === binding.authority;
+    const observeRow = Effect.fn("CommandService.observeRow")(function* (row: CommandRow) {
+      const steps =
+        yield* sql`SELECT occurrence,descriptor FROM command_steps WHERE command_id=${row.id} ORDER BY occurrence`;
+      const ownerSteps: OwnerStepObservation[] = [];
+      for (const raw of steps) {
+        const step = yield* Schema.decodeUnknownEffect(
+          Schema.Struct({ occurrence: Schema.Int, descriptor: Schema.String }),
+        )(raw).pipe(Effect.mapError(() => failure("storage", { id: row.id })));
+        const descriptor = yield* Effect.try({
+          try: () => JSON.parse(step.descriptor),
+          catch: () => failure("storage", { id: row.id }),
+        });
+        const { kind } = yield* Schema.decodeUnknownEffect(Schema.Struct({ kind: Schema.String }))(
+          descriptor,
+        ).pipe(Effect.mapError(() => failure("storage", { id: row.id })));
+        if (kind !== "native" && kind !== "outside") continue;
+        const { identity, result } = yield* activityResult(row, step.occurrence, OwnerOutcome);
+        ownerSteps.push(
+          Option.isNone(result)
+            ? { _tag: "Unresolved", ...identity, reason: "pending" }
+            : Exit.isFailure(result.value)
+              ? { _tag: "Unresolved", ...identity, reason: "activity-failed" }
+              : { _tag: "Recorded", ...identity, outcome: result.value.value },
+        );
+      }
+      return { ...observation(row), ownerSteps };
+    });
     const requireNotStopped = Effect.fn("CommandService.requireNotStopped")(function* (
       ref: CommandRef,
     ) {
@@ -233,7 +265,12 @@ export const makeService = (options: FoundationOptions) =>
         VALUES(${id},${body},'allocated',${Buffer.byteLength(body)},${binding.parent},${binding.stopWithParent ? 1 : 0})`;
         }),
       );
-      return { _tag: "InertTicket", ref, intent: normalized } satisfies InertTicket;
+      return {
+        _tag: "InertTicket",
+        ref,
+        authored: intent,
+        intent: normalized,
+      } satisfies InertTicket;
     });
     const submit = Effect.fn("CommandService.submit")(function* (
       ref: CommandRef,
@@ -243,7 +280,7 @@ export const makeService = (options: FoundationOptions) =>
       if (!visible(row, binding) || json(row.binding) !== json(binding))
         return yield* failure("conflict", ref);
       // Duplicate submit does not resolve/prepare the feature again. Observation is not new permission.
-      if (row.state !== "allocated") return observation(row);
+      if (row.state !== "allocated") return yield* observeRow(row);
       yield* gate(ref);
       const facts = yield* RcMap.get(preparations, row.id).pipe(
         Effect.catchTag("ExceededCapacityError", () => Effect.fail(failure("overload", ref))),
@@ -255,7 +292,7 @@ export const makeService = (options: FoundationOptions) =>
       return yield* sql.withTransaction(
         Effect.gen(function* () {
           const current = yield* load(ref);
-          if (current.state !== "allocated") return observation(current);
+          if (current.state !== "allocated") return yield* observeRow(current);
           yield* decision(ref, facts.version);
           const [count] = yield* sql<{ n: number; active: number; bytes: number }>`
         SELECT count(admission_order) AS n,
@@ -288,7 +325,7 @@ export const makeService = (options: FoundationOptions) =>
     const read = Effect.fn("CommandService.read")(function* (ref: CommandRef, binding: Binding) {
       const row = yield* load(ref);
       if (!visible(row, binding)) return yield* failure("unauthorized", ref);
-      return observation(row);
+      return yield* observeRow(row);
     });
     const stop = Effect.fn("CommandService.stop")(function* (ref: CommandRef, binding: Binding) {
       return yield* sql.withTransaction(
@@ -311,6 +348,8 @@ export const makeService = (options: FoundationOptions) =>
       load,
       sql,
       limits,
+      activityResult: <A>(ref: CommandRef, occurrence: number, success: Schema.Codec<A>) =>
+        storage(Effect.flatMap(load(ref), (row) => activityResult(row, occurrence, success))),
     };
   });
 

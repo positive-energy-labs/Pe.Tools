@@ -162,7 +162,7 @@ export const commandProgram = (row: CommandRow) =>
         const input = yield* Schema.decodeUnknownEffect(inputSchema)(request).pipe(
           Effect.mapError(() => fail("invalid")),
         );
-        const { name, requestId } = yield* step("native", operation, json(input));
+        const { name, requestId, index } = yield* step("native", operation, json(input));
         const outcome = yield* Activity.make({
           name,
           success: OwnerOutcome,
@@ -177,7 +177,17 @@ export const commandProgram = (row: CommandRow) =>
           }),
         });
         if (outcome.outcome !== "completed" || outcome.value === null)
-          return yield* fail("unavailable");
+          return yield* new CommandFailure({
+            problem: "unavailable",
+            ref,
+            ownerStep: {
+              _tag: "Recorded",
+              occurrence: index,
+              requestId,
+              attempt: yield* Activity.CurrentAttempt,
+              outcome,
+            },
+          });
         const raw = yield* Effect.try({
           try: () => JSON.parse(outcome.value!),
           catch: () => fail("invalid"),
@@ -236,7 +246,7 @@ export const commandProgram = (row: CommandRow) =>
         operation: OutsideOperation,
         input: string,
       ) {
-        const { name, index } = yield* step("outside", operation, input);
+        const { name, index, requestId } = yield* step("outside", operation, input);
         const outcome = yield* Activity.make({
           name,
           success: OwnerOutcome,
@@ -263,7 +273,18 @@ export const commandProgram = (row: CommandRow) =>
             return yield* bounded(OwnerOutcome, owner.invoke(row, operation, input));
           }),
         });
-        if (outcome.outcome !== "completed") return yield* fail("unavailable");
+        if (outcome.outcome !== "completed")
+          return yield* new CommandFailure({
+            problem: "unavailable",
+            ref,
+            ownerStep: {
+              _tag: "Recorded",
+              occurrence: index,
+              requestId,
+              attempt: yield* Activity.CurrentAttempt,
+              outcome,
+            },
+          });
         return outcome;
       }),
       /** Ordered leaves and repeated operations share the same cursor. No parallel racing counters. */

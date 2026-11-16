@@ -23,12 +23,20 @@ const decodeRecord = Schema.decodeUnknownSync(InvocationRecord);
 const decodeTicket = Schema.decodeUnknownSync(InertTicket);
 const decodeObservation = Schema.decodeUnknownSync(CommandObservation);
 const sameIntent = (a: NewCommand, b: NewCommand) => a.key === b.key && a.input === b.input;
+const corresponding = (ref: CommandRef, observation: CommandObservation) => {
+  if (observation.ref.id !== ref.id) throw new CommandFailure({ problem: "conflict", ref });
+  return observation;
+};
 
 /** One protocol for Page, MCP and CLI; transport failure preserves SubmissionPending and its ref. */
 export function commandInvocation(slot: InvocationSlot, transport: CommandTransport) {
   const load = async () => {
     const raw = await slot.read();
-    return raw === undefined ? undefined : decodeRecord(raw);
+    if (raw === undefined) return undefined;
+    const record = decodeRecord(raw);
+    if (record._tag === "Accepted" || record._tag === "Terminal")
+      corresponding(record.ticket.ref, record.observation);
+    return record;
   };
   const unavailable = (ref: CommandRef | null): never => {
     throw new CommandFailure({ problem: "unavailable", ref });
@@ -36,7 +44,7 @@ export function commandInvocation(slot: InvocationSlot, transport: CommandTransp
   const submit = async (record: InvocationRecord): Promise<CommandObservation> => {
     if (record._tag === "Allocating" || record._tag === "Unavailable")
       return unavailable(record._tag === "Unavailable" ? record.ref : null);
-    if (record._tag === "Terminal") return record.observation;
+    if (record._tag === "Terminal") return corresponding(record.ticket.ref, record.observation);
     const { ticket } = record;
     // This durable write is mandatory even for a retry of an already accepted invocation.
     await slot.write({ _tag: "SubmissionPending", ticket });
@@ -49,8 +57,7 @@ export function commandInvocation(slot: InvocationSlot, transport: CommandTransp
       if (error instanceof CommandFailure) throw error;
       throw new CommandFailure({ problem: "observation-lost", ref: ticket.ref, cause: error });
     }
-    if (observation.ref.id !== ticket.ref.id)
-      throw new CommandFailure({ problem: "conflict", ref: ticket.ref });
+    corresponding(ticket.ref, observation);
     try {
       await slot.write({
         _tag:
@@ -80,7 +87,7 @@ export function commandInvocation(slot: InvocationSlot, transport: CommandTransp
         // Allocating is inert. A lost reply may orphan only inert host rows.
         await slot.write({ _tag: "Allocating", intent });
         const ticket = decodeTicket(await transport.allocate(intent));
-        if (!sameIntent(ticket.intent, intent))
+        if (!sameIntent(ticket.authored, intent) || ticket.intent.key !== intent.key)
           throw new CommandFailure({ problem: "conflict", ref: ticket.ref });
         record = { _tag: "Allocated", ticket };
         await slot.write(record);
@@ -93,6 +100,10 @@ export function commandInvocation(slot: InvocationSlot, transport: CommandTransp
         if (!record) return unavailable(null);
         return submit(record);
       }),
-    observe: (ref: CommandRef) => transport.read(ref).then(decodeObservation),
+    observe: (ref: CommandRef) =>
+      transport
+        .read(ref)
+        .then(decodeObservation)
+        .then((observation) => corresponding(ref, observation)),
   };
 }
