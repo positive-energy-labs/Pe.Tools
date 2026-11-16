@@ -12,8 +12,8 @@ const incarnation = z.strictObject({
 });
 export const retainedDocumentRefSchema = z.strictObject({
   session: z.string().min(1),
-  openId: z.string().min(1),
   processIncarnation: incarnation.optional(),
+  openId: z.string().min(1),
 });
 export type RetainedDocumentRef = z.infer<typeof retainedDocumentRefSchema>;
 export const retainedOriginalTargetSchema = z.discriminatedUnion("kind", [
