@@ -146,7 +146,7 @@ export function worksheet(sheet: Sheet, limits: WorksheetLimits): Worksheet {
 
     const delivering = paths.filter((p) => delivers(p.end));
     const complete = (p: SheetPath) =>
-      p.complete && p.legIds.every((id) => leg(id).lossInWg != null && leg(id).flowCfm != null);
+      p.blockerIds.length === 0 && p.legIds.every((id) => leg(id).lossInWg != null && leg(id).flowCfm != null);
     const certified = delivering.length > 0 && delivering.every(complete);
     // F1 (2026-11-10): the worst is over complete branches only; a partial sum is no known loss.
     const known = delivering.filter(complete);

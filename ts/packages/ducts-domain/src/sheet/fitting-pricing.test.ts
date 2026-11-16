@@ -16,7 +16,7 @@ import {
 } from "../test-snapshot.ts";
 import { buildSheet, resolveInputs, type SheetSnapshot } from "./index.ts";
 import { grids } from "./tables.fixture.ts";
-import { inputsFor, TEST_FIRM } from "./test-inputs.ts";
+import { inputsFor, TEST_FIRM , cell } from "./test-inputs.ts";
 
 // The size string is the bare diameter here, not the shared `round`'s `8"ø`.
 const round = (d: number) => ({ shape: "round" as const, size: `${d}`, diameterIn: d });
@@ -157,10 +157,10 @@ it("the resolver reads Work's ruleAssignments and per-path proposed drops with a
     snapshot: network,
     firm: TEST_FIRM,
     work: {
-      ruleAssignments: { "Round Elbow": { rule: "elbow-15d-45-le10" } },
+      ruleAssignments: { "Round Elbow": cell("elbow-15d-45-le10") },
       assumptions: {
-        "component-drop:proposed:1:1|2:0>7": { kind: "component-drop", inWg: 0.04 },
-        "component-drop:Damper": { kind: "component-drop", inWg: 0.1 },
+        "component-drop:proposed:1:1|2:0>7": cell({ kind: "component-drop", inWg: 0.04 }),
+        "component-drop:Damper": cell({ kind: "component-drop", inWg: 0.1 }),
       },
     },
   });
@@ -169,6 +169,8 @@ it("the resolver reads Work's ruleAssignments and per-path proposed drops with a
     "Round Elbow": {
       value: "elbow-15d-45-le10",
       source: "Work",
+      author: "human",
+      ref: "work:test",
       units: null,
       status: "valid",
       version: null,
@@ -178,6 +180,8 @@ it("the resolver reads Work's ruleAssignments and per-path proposed drops with a
     "proposed:1:1|2:0>7": {
       value: 0.04,
       source: "Work",
+      author: "human",
+      ref: "work:test",
       units: "in-wg",
       status: "valid",
       version: null,

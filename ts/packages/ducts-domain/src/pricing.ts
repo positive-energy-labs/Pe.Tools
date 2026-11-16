@@ -507,13 +507,12 @@ export function applyRequest(
     .flatMap((node) => {
       const flow = priced.flows.get(node.id);
       if (flow?.cfm == null) return [];
-      const stated = priced.edit.flows[elementSubject(node)]?.source;
       return [
         {
           ...flowWrite(
             node.id,
             flow.cfm,
-            flow.source === "override" ? (stated ?? "override") : flow.source,
+            flow.source,
           ),
           slot: flowWriteSlot(node.id, node.flowParameter, priced.edit.parameters.terminalFlow),
         },
@@ -522,7 +521,7 @@ export function applyRequest(
     .sort((a, b) => a.id - b.id);
   const roots = new Set(snapshot.groups.filter((g) => scoped.has(g.id)).flatMap((g) => g.rootIds));
   const equipmentFlows = Object.entries(priced.edit.equipmentFlows)
-    .map(([id, flow]) => flowWrite(workElementId(snapshot, id), flow.cfm, flow.source ?? null))
+    .map(([id, flow]) => flowWrite(workElementId(snapshot, id), flow, null))
     // Any unit rooted in the group, not the baseline's one pick (it is blind to a edit passive role).
     .filter(({ id }) => !scoped.size || roots.has(id))
     .sort((a, b) => a.id - b.id);

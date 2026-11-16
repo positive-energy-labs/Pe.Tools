@@ -1,5 +1,5 @@
 import { elementSubject } from "../work-subject.ts";
-import { criteriaCellOf, resolveValue, type DuctsCriteriaCell, type ValueLayers, type ValueSource } from "@pe/agent-contracts";
+import { criteriaCellOf, resolveValue, type DuctsCriteriaCell, type ValueCell, type ValueLayers, type ValueSource } from "@pe/agent-contracts";
 /** Duct-specific acquisition feeds the shared Work resolver; observed parameters and catalogs belong to the model layer. */
 import type {
   DuctUnitKind,
@@ -10,34 +10,78 @@ import type {
   SheetEdits,
   Resolved,
 } from "@pe/agent-contracts";
+import type { Author } from "@pe/agent-contracts";
 import { catalogLinkKey, catalogLoss, type Catalogs } from "../catalog.ts";
+import type { SourcedValue } from "@pe/agent-contracts";
+import { ENCOUNTER_KEY, type EncounterRuling } from "./encounters.ts";
 import { slotFlowOf } from "../kernel/terminal-flow.ts";
 import { suggestKind, suggestRole } from "../roster.ts";
 import type { SheetSnapshot } from "./build.ts";
 
 type Node = SheetSnapshot["nodes"][number];
 
+/**
+ * One staged cell at the Work-to-resolver seam (contract amendment 2): the value, the host-stamped
+ * caller, and the cited ref or the cell's location `work:<work>/<segment>/<row>`. Airflow is a number.
+ */
+export interface WorkCell<T> {
+  value: T;
+  by: Author;
+  ref: string;
+}
+type Cells<T> = Readonly<Record<string, WorkCell<T>>>;
 /** Work's staged edits, as `stagedDucts(doc)` shapes them; every segment optional so tests pass literals. */
 export interface WorkLayer {
-  flows?: Readonly<Record<string, { cfm: number }>>;
-  terminalDrops?: Readonly<Record<string, { inWg: number }>>;
-  componentDrops?: Readonly<Record<string, { inWg: number }>>;
-  esp?: Readonly<Record<string, { inWg: number }>>;
-  equipmentFlows?: Readonly<Record<string, { cfm: number }>>;
-  roles?: Readonly<Record<string, { role: "fan" | "passive" }>>;
-  kinds?: Readonly<Record<string, { kind: DuctUnitKind }>>;
+  flows?: Cells<number>;
+  terminalDrops?: Cells<number>;
+  componentDrops?: Cells<number>;
+  /** Staged required ESP (Q2): never rated, never pressure authority. */
+  esp?: Cells<number>;
+  equipmentFlows?: Cells<number>;
+  roles?: Cells<"fan" | "passive">;
+  kinds?: Cells<DuctUnitKind>;
   criteria?: DuctsCriteriaLayer;
+  /** Who staged each criterion cell and its ref (`criteriaMeta`); a criterion with none resolves invalid. */
+  criteriaMeta?: Partial<Record<DuctsCriteriaCell, Pick<WorkCell<unknown>, "by" | "ref">>>;
   /** Loss-rule key to table (Work `rules`). */
-  rules?: Readonly<Record<string, { table: string }>>;
+  rules?: Cells<string>;
   /** Fitting family to the rule key it is priced as where no rule matches (Work `ruleAssignments`). */
-  ruleAssignments?: Readonly<Record<string, { rule: string }>>;
-  catalogs?: Readonly<Record<string, { table: string }>>;
+  ruleAssignments?: Cells<string>;
+  catalogs?: Cells<string>;
   /**
    * `join:<a>|<b>` and `open-end:<id>:<connector>` verdict cells; `component-drop:<family>` overrides;
    * `component-drop:proposed:<pair>><toward>` a typed drop on one path through a proposed fitting.
    */
-  assumptions?: Readonly<Record<string, { kind: string; verdict?: string; inWg?: number }>>;
+  assumptions?: Cells<{ kind: string; verdict?: string; inWg?: number }>;
 }
+
+/** A staged cell as a value layer: its caller is the author, its ref the evidence. */
+const staged = <T, V = T>(
+  cell: WorkCell<T> | undefined,
+  value: (v: T) => V | null | undefined = (v) => v as unknown as V,
+): ValueCell<V> => ({ value: cell ? value(cell.value) : undefined, author: cell?.by ?? null, ref: cell?.ref });
+/** A Work criterion as a value layer: the author is its cell's `by`. */
+const authored = <T>(
+  layer: WorkLayer | null | undefined,
+  cell: DuctsCriteriaCell,
+  value: T | undefined,
+): ValueCell<T> => ({
+  value,
+  author: layer?.criteriaMeta?.[cell]?.by ?? null,
+  ref: layer?.criteriaMeta?.[cell]?.ref ?? `work:ducts/criteria/${cell}`,
+});
+/** Every model, store, project, firm and default layer cell: no author, and a ref of its tier and location. */
+const observed = <T>(
+  tier: string,
+  at: string | number,
+  value: T | null | undefined,
+  version?: string | number,
+): ValueCell<T> => ({
+  value,
+  author: null,
+  ref: `${tier}:${at}`,
+  ...(version == null ? {} : { version }),
+});
 
 /** Where a retired authored value lives: Pe's provenance store parameter on Project Information. */
 const STORE = "_PE_DuctLosses";
@@ -147,10 +191,10 @@ export function resolveCriteria(
     const tier = firm.served?.[cell] ?? "firm";
     const result = resolveValue(
       {
-        run: { value: immediate },
-        Work: { value: typed },
-        "model-store": { value: stored, ref: STORE },
-        [tier]: { value: base, ...(tier === "firm" ? { version: firm.version } : {}) },
+        run: authored(run, cell, immediate),
+        Work: authored(work, cell, typed),
+        "model-store": observed("model-store", `criteria.${cell}/${STORE}`, stored),
+        [tier]: observed(tier, cell, base, tier === "firm" ? firm.version : undefined),
       },
       units,
     );
@@ -222,6 +266,11 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
   const slots: Partial<NonNullable<SheetSnapshot["slots"]>> = snapshot.slots ?? {};
 
   const criteria = resolveCriteria(work, store, firm, run, layers.versions);
+  // A part's typed drop, else the drop its family was given (`component-drop:<family>`).
+  const typedDropOf = (key: string, family: string | null | undefined): ValueCell<number> =>
+    work.componentDrops?.[key]
+      ? staged(work.componentDrops[key])
+      : staged(family ? work.assumptions?.[`component-drop:${family}`] : undefined, (a) => a.inWg);
 
   const flowSlot = slots.terminalFlow ?? "terminalFlow";
   const terminals: DuctsInputs["terminals"] = {};
@@ -231,33 +280,39 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
   for (const n of snapshot.nodes) {
     const id = String(n.id), key = elementSubject(n);
     if (n.kind === "terminal") {
-      const typed = work.flows?.[key]?.cfm;
       const stored = store.terminalFlows?.[id]?.cfm;
       const revit = slotFlowOf(n, flowSlot).cfm;
       const cfm = pick(
         {
-          run: { value: run.flows?.[key]?.cfm },
-          Work: { value: typed },
-          "model-store": { value: stored, ref: STORE },
-          model: { value: positive(revit), ref: flowSlot },
+          run: staged(run.flows?.[key]),
+          Work: staged(work.flows?.[key]),
+          "model-store": observed("model-store", `${id}/${STORE}`, stored),
+          model: observed("model", `${id}/${flowSlot}`, positive(revit)),
         },
         "cfm",
       );
-      const typedDrop = work.terminalDrops?.[key]?.inWg;
       const storedDrop = store.terminals?.[id]?.inWg;
+      const dropCell = criteriaCellOf("terminalDropInWg")!;
+      const tables = Object.fromEntries(
+        Object.entries(work.catalogs ?? {}).map(([k, c]) => [k, { table: c.value }]),
+      );
       const catalog =
         catalogs && Object.keys(catalogs).length
-          ? catalogLoss(n, cfm.value, catalogs, work.catalogs ?? {})
+          ? catalogLoss(n, cfm.value, catalogs, tables)
           : null;
       const parameter = positive(n.terminalDrop?.catalogDropInWg);
       const drop = pick(
         {
-          run: { value: run.terminalDrops?.[key]?.inWg ?? run.criteria?.terminalDropInWg },
-          Work: { value: typedDrop ?? work.criteria?.terminalDropInWg },
-          "model-store": { value: storedDrop ?? store.criteria?.terminalDropInWg, ref: STORE },
-          model: { value: catalog?.dp ?? parameter, ref: catalog?.table },
+          run: run.terminalDrops?.[key]
+            ? staged(run.terminalDrops[key])
+            : authored(run, dropCell, run.criteria?.terminalDropInWg),
+          Work: work.terminalDrops?.[key]
+            ? staged(work.terminalDrops[key])
+            : authored(work, dropCell, work.criteria?.terminalDropInWg),
+          "model-store": observed("model-store", `${id}/${STORE}`, storedDrop ?? store.criteria?.terminalDropInWg),
+          model: observed("model", `${id}/${catalog?.table ?? slots.terminalDrop ?? "terminalDrop"}`, catalog?.dp ?? parameter),
           // The per-terminal fallback is the criterion's base, under the tier that served it.
-          [firm.served?.terminalDropInWg ?? "firm"]: { value: firm.criteria.terminalDropInWg, version: firm.version },
+          [firm.served?.terminalDropInWg ?? "firm"]: observed(firm.served?.terminalDropInWg ?? "firm", dropCell, firm.criteria.terminalDropInWg, firm.version),
         },
         "in-wg",
       );
@@ -267,20 +322,20 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
       const suggestion = suggestKind(n);
       const kind = pick<DuctUnitKind>(
         {
-          run: { value: run.kinds?.[kindKey]?.kind },
-          Work: { value: work.kinds?.[kindKey]?.kind },
-          "model-store": { value: store.kinds?.[kindKey]?.kind as DuctUnitKind, ref: STORE },
-          default: { value: suggestion.kind, ref: suggestion.ref },
+          run: staged(run.kinds?.[kindKey]),
+          Work: staged(work.kinds?.[kindKey]),
+          "model-store": observed("model-store", `${kindKey}/${STORE}`, store.kinds?.[kindKey]?.kind as DuctUnitKind),
+          default: observed("default", `${id}/${suggestion.ref}`, suggestion.kind),
         },
         null,
         isKind,
       ) as Resolved<DuctUnitKind>;
       const role = pick<"fan" | "passive">(
         {
-          run: { value: run.roles?.[key]?.role },
-          Work: { value: work.roles?.[key]?.role },
-          "model-store": { value: store.roles?.[id]?.role as "fan" | "passive", ref: STORE },
-          default: { value: suggestRole(n, kind.value), ref: "name" },
+          run: staged(run.roles?.[key]),
+          Work: staged(work.roles?.[key]),
+          "model-store": observed("model-store", `${id}/${STORE}`, store.roles?.[id]?.role as "fan" | "passive"),
+          default: observed("default", `${id}/name`, suggestRole(n, kind.value)),
         },
         null,
         isRole,
@@ -290,55 +345,46 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
         components[id] = {
           drop: pick(
             {
-              run: { value: run.componentDrops?.[key]?.inWg },
-              Work: {
-                value:
-                  work.componentDrops?.[key]?.inWg ??
-                  (n.family ? work.assumptions?.[`component-drop:${n.family}`]?.inWg : undefined),
-              },
-              model: { value: positive(factOf(n, "pressureDrop")), ref: slots.componentDrop },
+              run: staged(run.componentDrops?.[key]),
+              Work: typedDropOf(key, n.family),
+              model: observed("model", `${id}/${slots.componentDrop ?? "Pressure Drop"}`, positive(factOf(n, "pressureDrop"))),
             },
             "in-wg",
           ),
         };
         continue;
       }
-      const typedCfm = work.equipmentFlows?.[key]?.cfm;
       const storedCfm = store.equipmentFlows?.[id]?.cfm;
       const revitCfm = positive(factOf(n, "fanFlow"));
       const cfm = pick(
         {
-          run: { value: run.equipmentFlows?.[key]?.cfm },
-          Work: { value: typedCfm },
-          "model-store": { value: storedCfm, ref: STORE },
-          model: { value: revitCfm, ref: slots.fanFlow ?? "fanFlow" },
+          run: staged(run.equipmentFlows?.[key]),
+          Work: staged(work.equipmentFlows?.[key]),
+          "model-store": observed("model-store", `${id}/${STORE}`, storedCfm),
+          model: observed("model", `${id}/${slots.fanFlow ?? "fanFlow"}`, revitCfm),
         },
         "cfm",
       );
+      // Q2 (kaitpw 2026-11-16): rated ESP reads the model alone. A staged required ESP is another
+      // value with another source (`stagedEsp`) and never demotes or replaces this one.
       const esp = pick(
         {
-          run: { value: run.esp?.[key]?.inWg },
-          Work: { value: work.esp?.[key]?.inWg },
-          model: {
-            value: positive(factOf(n, "externalStatic")),
-            ref: slots.fanStatic ?? "fanStatic",
-          },
+          model: observed("model", `${id}/${slots.fanStatic ?? "fanStatic"}`, positive(factOf(n, "externalStatic"))),
         },
         "in-wg",
       );
       units[id] = { kind, role, cfm, esp };
-      const typedDrop = work.componentDrops?.[key]?.inWg;
-      if (typedDrop != null || run.componentDrops?.[key])
+      if (work.componentDrops?.[key] || run.componentDrops?.[key])
         components[id] = {
           drop: pick(
-            { run: { value: run.componentDrops?.[key]?.inWg }, Work: { value: typedDrop } },
+            { run: staged(run.componentDrops?.[key]), Work: staged(work.componentDrops?.[key]) },
             "in-wg",
           ),
         };
     } else {
       // Accessories, fittings and caps: a drop only where something states one, or where a stated
-      const typed = work.componentDrops?.[key]?.inWg;
-      const family = n.family ? work.assumptions?.[`component-drop:${n.family}`]?.inWg : undefined;
+      const typed = work.componentDrops?.[key]?.value;
+      const family = n.family ? work.assumptions?.[`component-drop:${n.family}`]?.value.inWg : undefined;
       const stated = n.kind === "accessory" ? positive(factOf(n, "pressureDrop")) : null;
       const placeholder = n.family && stated != null ? placeholders.get(n.family) : undefined;
       if (
@@ -350,12 +396,9 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
       ) {
         const resolved = pick(
           {
-            run: { value: run.componentDrops?.[key]?.inWg },
-            Work: { value: typed ?? family },
-            model: {
-              value: placeholder ? null : stated,
-              ref: slots.componentDrop ?? "Pressure Drop",
-            },
+            run: staged(run.componentDrops?.[key]),
+            Work: typedDropOf(key, n.family),
+            model: observed("model", `${id}/${slots.componentDrop ?? "Pressure Drop"}`, placeholder ? null : stated),
           },
           "in-wg",
         );
@@ -375,25 +418,22 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
 
   // A duct priced by hand: a typed drop replaces its friction (segments carry no other drop source).
   for (const seg of snapshot.segments) {
-    const typed = work.componentDrops?.[elementSubject(seg)]?.inWg;
-    if (typed != null || run.componentDrops?.[elementSubject(seg)])
+    const at = elementSubject(seg);
+    if (work.componentDrops?.[at] || run.componentDrops?.[at])
       components[String(seg.id)] = {
         drop: pick(
-          { run: { value: run.componentDrops?.[elementSubject(seg)]?.inWg }, Work: { value: typed } },
+          { run: staged(run.componentDrops?.[at]), Work: staged(work.componentDrops?.[at]) },
           "in-wg",
         ),
       };
   }
 
+  const verdictOf = (a: { kind: string; verdict?: string }) => (a.kind === "verdict" ? a.verdict : null);
   const verdictAt = (key: string) =>
     resolveValue({
-      run: {
-        value: run.assumptions?.[key]?.kind === "verdict" ? run.assumptions[key]!.verdict : null,
-      },
-      Work: {
-        value: work.assumptions?.[key]?.kind === "verdict" ? work.assumptions[key]!.verdict : null,
-      },
-      "model-store": { value: store.verdicts?.[key]?.verdict, ref: STORE },
+      run: staged(run.assumptions?.[key], verdictOf),
+      Work: staged(work.assumptions?.[key], verdictOf),
+      "model-store": observed("model-store", `${key}/${STORE}`, store.verdicts?.[key]?.verdict),
     }).value;
   const joins: DuctsInputs["rulings"]["joins"] = [];
   const ends: DuctsInputs["rulings"]["ends"] = [];
@@ -426,9 +466,9 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
     ...Object.keys(store.rules ?? {}),
   ])) {
     const value = pick({
-      run: { value: run.rules?.[key]?.table },
-      Work: { value: work.rules?.[key]?.table },
-      "model-store": { value: store.rules?.[key]?.table, ref: STORE },
+      run: staged(run.rules?.[key]),
+      Work: staged(work.rules?.[key]),
+      "model-store": observed("model-store", `${key}/${STORE}`, store.rules?.[key]?.table),
     });
     if (value.value != null) tables[key] = value as Resolved<string>;
   }
@@ -438,8 +478,8 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
     ...Object.keys(work.ruleAssignments ?? {}),
   ])) {
     const value = pick({
-      run: { value: run.ruleAssignments?.[family]?.rule },
-      Work: { value: work.ruleAssignments?.[family]?.rule },
+      run: staged(run.ruleAssignments?.[family]),
+      Work: staged(work.ruleAssignments?.[family]),
     });
     if (value.value != null) assignments[family] = value as Resolved<string>;
   }
@@ -451,8 +491,8 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
     if (!key.startsWith(`${COMPONENT_DROP}${PROPOSED}`)) continue;
     const value = pick(
       {
-        run: { value: run.assumptions?.[key]?.inWg },
-        Work: { value: work.assumptions?.[key]?.inWg },
+        run: staged(run.assumptions?.[key], (a) => a.inWg),
+        Work: staged(work.assumptions?.[key], (a) => a.inWg),
       },
       "in-wg",
     );
@@ -470,6 +510,48 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
     assignments,
     fittingDrops,
   };
+}
+
+/** A resolved number as the contract's sourced value; the kernel resolution already carries author and ref. */
+export function sourced(r: Resolved<number | null> | undefined): SourcedValue<number> {
+  if (!r || r.source === "none" || r.status === "missing")
+    return { status: "missing", value: null, source: "none", author: null, ref: null, version: null, units: r?.units ?? null };
+  const rest = { source: r.source, author: r.author, ref: r.ref ?? r.source, version: r.version, units: r.units };
+  return r.status === "valid" && r.value != null
+    ? { status: "valid", value: r.value, ...rest }
+    : { status: "invalid", value: null, ...rest };
+}
+
+/** Staged required ESP by unit element id (Q2): the run and Work layers only, with who staged it. A cell no known caller staged resolves invalid (kernel law), never a guess. */
+export function stagedEsp(
+  layers: Pick<InputLayers, "snapshot" | "run" | "work">,
+): Record<string, SourcedValue<number>> {
+  return Object.fromEntries(
+    layers.snapshot.nodes.flatMap((n) => {
+      const key = elementSubject(n);
+      const cell = layers.run?.esp?.[key] ?? layers.work?.esp?.[key];
+      if (!cell) return [];
+      const r = resolveValue(
+        { [layers.run?.esp?.[key] ? "run" : "Work"]: staged(cell) },
+        "in-wg",
+        (v: number) => Number.isFinite(v) && v >= 0,
+      );
+      return [[String(n.id), r] as const];
+    }),
+  );
+}
+
+/** A person's encounter verdicts: `encounter:<element>:<connector>` assumption cells, `accept` or `refuse`. */
+export function encounterRulings(layers: Pick<InputLayers, "run" | "work">): EncounterRuling[] {
+  const cells = { ...layers.work?.assumptions, ...layers.run?.assumptions };
+  return Object.entries(cells).flatMap(([key, cell]): EncounterRuling[] => {
+    const [elementId, connector] = key.startsWith("encounter:") ? key.slice(10).split(":").map(Number) : [];
+    const verdict = cell.value.verdict === "accept" ? "accepted" : cell.value.verdict === "refuse" ? "refused" : null;
+    const at = { elementId: elementId!, connector: connector! };
+    return verdict && Number.isInteger(elementId) && Number.isInteger(connector) && ENCOUNTER_KEY(at) === key
+      ? [{ at, verdict }]
+      : [];
+  });
 }
 
 const KINDS: readonly string[] = [

@@ -4,6 +4,12 @@
 // Drift gate: pnpm --filter @pe/host-contracts codegen:check  (offline, deterministic)
 // Live parity: pnpm --filter @pe/host-contracts codegen:verify-live -- --session <id>
 
+export const DUCT_UNIT_KINDS = ["fan-coil","air-handler","erv","muas","dehumidifier","other"] as const;
+export type DuctUnitKind = (typeof DUCT_UNIT_KINDS)[number];
+
+export const FAN_BLOCKER_KINDS = ["open-end","inferred-join","unknown-drop","no-flow","flow-mismatch","shared-leg","class-change","not-priced","implausible-loss","equipment-pairing","backflow","direction-mismatch"] as const;
+export type FanBlockerKind = (typeof FAN_BLOCKER_KINDS)[number];
+
 /** Upsert a synthetic data table in one host-owned transaction: a key schedule whose rows are freely user-editable and whose cells are shared parameters on stable row elements — ideal for arbitrary agent-authored tables like design conditions or install notes. Can also place the table on a sheet. Authored element schedules apply through schedule.apply. */
 export namespace DataTableApply {
   export namespace Req {
@@ -1284,6 +1290,21 @@ export namespace DuctsSnapshotRoster {
       | "no-component-drop"
       | "no-terminal-flow"
       | "high-velocity";
+    export type DuctParameterOwnerKind = "instance" | "type";
+    export type DuctUnitKind = "fan-coil" | "air-handler" | "erv" | "muas" | "dehumidifier" | "other";
+    export type FanBlockerKind =
+      | "open-end"
+      | "inferred-join"
+      | "unknown-drop"
+      | "no-flow"
+      | "flow-mismatch"
+      | "shared-leg"
+      | "class-change"
+      | "not-priced"
+      | "implausible-loss"
+      | "equipment-pairing"
+      | "backflow"
+      | "direction-mismatch";
 
     /**
      * Store is Pe's `_PE_DuctLosses` provenance blob, absent when the model has none. StoreError is set instead when
@@ -1311,6 +1332,9 @@ export namespace DuctsSnapshotRoster {
       fanFlowCandidates?: DuctAirflowCandidate[] | null;
       walk?: null | DuctWalk;
       tolerances?: null | DuctHealthTolerances;
+      reach?: null | DuctReach;
+      parameterCohorts?: DuctFanParameterCohort[] | null;
+      vocabulary: DuctFanVocabulary;
     }
     /**
      * The document read, when, and how long the read took. NetworkBasedCalculations is DuctSettings' engine switch:
@@ -1815,6 +1839,38 @@ export namespace DuctsSnapshotRoster {
     export interface DuctHealthTolerances {
       candidateBoxIn: number;
       autoJoinGapIn: number;
+    }
+    /**
+     * Completeness of physical growth for a systems selector; failed peer reads are not open ends.
+     */
+    export interface DuctReach {
+      unreadPeers: DuctRef[];
+      complete: boolean;
+    }
+    /**
+     * Document-wide membership, including off-walk instances. Basis is the snapshot Document.ReadAt in round-trip format.
+     */
+    export interface DuctFanParameterCohort {
+      parameter: string;
+      owner: DuctParameterOwner;
+      members: DuctParameterMember[];
+      basis: string;
+      complete: boolean;
+    }
+    export interface DuctParameterOwner {
+      kind: DuctParameterOwnerKind;
+      id: number;
+    }
+    export interface DuctParameterMember {
+      elementId: number;
+      uniqueId: string;
+    }
+    /**
+     * Native words published in the snapshot catalog, projected by host-typegen.
+     */
+    export interface DuctFanVocabulary {
+      unitKinds: DuctUnitKind[];
+      blockerKinds: FanBlockerKind[];
     }
   }
 }
@@ -1915,6 +1971,21 @@ export namespace DuctsSnapshotWalk {
       | "no-component-drop"
       | "no-terminal-flow"
       | "high-velocity";
+    export type DuctParameterOwnerKind = "instance" | "type";
+    export type DuctUnitKind = "fan-coil" | "air-handler" | "erv" | "muas" | "dehumidifier" | "other";
+    export type FanBlockerKind =
+      | "open-end"
+      | "inferred-join"
+      | "unknown-drop"
+      | "no-flow"
+      | "flow-mismatch"
+      | "shared-leg"
+      | "class-change"
+      | "not-priced"
+      | "implausible-loss"
+      | "equipment-pairing"
+      | "backflow"
+      | "direction-mismatch";
 
     /**
      * Store is Pe's `_PE_DuctLosses` provenance blob, absent when the model has none. StoreError is set instead when
@@ -1942,6 +2013,9 @@ export namespace DuctsSnapshotWalk {
       fanFlowCandidates?: DuctAirflowCandidate[] | null;
       walk?: null | DuctWalk;
       tolerances?: null | DuctHealthTolerances;
+      reach?: null | DuctReach;
+      parameterCohorts?: DuctFanParameterCohort[] | null;
+      vocabulary: DuctFanVocabulary;
     }
     /**
      * The document read, when, and how long the read took. NetworkBasedCalculations is DuctSettings' engine switch:
@@ -2446,6 +2520,38 @@ export namespace DuctsSnapshotWalk {
     export interface DuctHealthTolerances {
       candidateBoxIn: number;
       autoJoinGapIn: number;
+    }
+    /**
+     * Completeness of physical growth for a systems selector; failed peer reads are not open ends.
+     */
+    export interface DuctReach {
+      unreadPeers: DuctRef[];
+      complete: boolean;
+    }
+    /**
+     * Document-wide membership, including off-walk instances. Basis is the snapshot Document.ReadAt in round-trip format.
+     */
+    export interface DuctFanParameterCohort {
+      parameter: string;
+      owner: DuctParameterOwner;
+      members: DuctParameterMember[];
+      basis: string;
+      complete: boolean;
+    }
+    export interface DuctParameterOwner {
+      kind: DuctParameterOwnerKind;
+      id: number;
+    }
+    export interface DuctParameterMember {
+      elementId: number;
+      uniqueId: string;
+    }
+    /**
+     * Native words published in the snapshot catalog, projected by host-typegen.
+     */
+    export interface DuctFanVocabulary {
+      unitKinds: DuctUnitKind[];
+      blockerKinds: FanBlockerKind[];
     }
   }
 }

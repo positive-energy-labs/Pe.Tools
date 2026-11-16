@@ -251,8 +251,13 @@ it.skipIf(!existsSync(CHADDS))(
     expect(Object.keys(blind.fittingDrops)).toEqual(["proposed:14663546:0|14663850:1>14663850"]);
     // ba4fd56c (G7): closing geometry does not supply missing inflow measurements.
     const missing = ["no-flow:13771684:0", "no-flow:13975612:1"];
-    expect(ids(blind.closed.blockers)).toEqual(missing);
-    expect(ids(blind.closed.assumed.blockers)).toEqual(missing);
+    // Q3 (kaitpw 2026-11-16): a real tie-in on this model, not a misread. RV-25 (13770618) discharges
+    // its supply (c2, family direction out) through 13927827 into FC-23's supply trunk 13771256 at c7,
+    // which Revit reads `in`. FC-23's supply meets that discharge, so the encounter is backflow and unruled.
+    const met = ["backflow:13771256:7", ...missing];
+    expect(ids(blind.closed.blockers)).toEqual(met);
+    expect(ids(blind.closed.assumed.blockers)).toEqual(met);
+    expect(blind.closed.claim.kind).toBe("incomplete");
     // Honest reading of that closure: the blind loop accepts the same-class stub 17 in away
     // before the cross-class grille 0.01 in away (an unruled crossing never heads a candidate
     // list), so the plenums close in series, 14517389 -> 14663504 -> 14663546 -> grille 14663850.
@@ -274,10 +279,10 @@ it.skipIf(!existsSync(CHADDS))(
         fittingDrops: blind.fittingDrops,
       }),
     });
-    expect(ids(blindPriced.blockers)).toEqual(missing);
-    expect(ids(blindPriced.assumed.blockers)).toEqual(missing);
-    expect(blindPriced.blockers.every((b) => b.kind === "no-flow")).toBe(true);
-    expect(blindPriced.totals.return.complete).toBe(false);
+    expect(ids(blindPriced.blockers)).toEqual(met);
+    expect(ids(blindPriced.assumed.blockers)).toEqual(met);
+    expect(blindPriced.blockers.every((b) => b.kind === "no-flow" || b.kind === "backflow")).toBe(true);
+    expect(blindPriced.totals.return.worstPath).toBeNull();
     expect(blindPriced.totals.requiredEspInWg).toBeNull();
 
     // The per-plenum closure: accept each stub's own grille first (the pair each inferred-join
@@ -290,8 +295,8 @@ it.skipIf(!existsSync(CHADDS))(
         { pair: ["14663546:0", "14663850:1"], verdict: "accept" },
       ],
     );
-    expect(ids(seeded.closed.blockers)).toEqual(missing);
-    expect(ids(seeded.closed.assumed.blockers)).toEqual(missing);
+    expect(ids(seeded.closed.blockers)).toEqual(met);
+    expect(ids(seeded.closed.assumed.blockers)).toEqual(met);
     expect(returnTerminals(seeded.closed)).toEqual([
       13884018, 14548688, 14584961, 14663834, 14663850,
     ]);
@@ -306,9 +311,9 @@ it.skipIf(!existsSync(CHADDS))(
         fittingDrops: seeded.fittingDrops,
       }),
     });
-    expect(ids(seededPriced.blockers)).toEqual(missing);
-    expect(seededPriced.blockers.every((b) => b.kind === "no-flow")).toBe(true);
-    expect(seededPriced.totals.return.complete).toBe(false);
+    expect(ids(seededPriced.blockers)).toEqual(met);
+    expect(seededPriced.blockers.every((b) => b.kind === "no-flow" || b.kind === "backflow")).toBe(true);
+    expect(seededPriced.totals.return.worstPath).toBeNull();
     expect(seededPriced.totals.requiredEspInWg).toBeNull();
   },
   240_000,
@@ -508,6 +513,7 @@ it.skipIf(!existsSync(CHADDS))(
           units: "in-wg",
           status: "missing",
           version: null,
+          author: null,
           ref: `family placeholder 1 on ${n}`,
         })),
       );

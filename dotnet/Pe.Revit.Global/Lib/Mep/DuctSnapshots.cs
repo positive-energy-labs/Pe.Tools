@@ -128,17 +128,20 @@ public static class DuctSnapshots {
                 AirflowCandidates(RawOf(DuctNodeKind.Terminal), ungrouped),
                 AirflowCandidates(RawOf(DuctNodeKind.Equipment), ungrouped),
                 Walk: walk,
-                Tolerances: tolerances);
+                Tolerances: tolerances,
+                ParameterCohorts: Cohorts(doc, RawOf(DuctNodeKind.Equipment), slots, readAt));
         }
 
         List<DuctSegment> segments;
         var nodes = new List<DuctNode>();
         List<Element> terminalElements, equipment;
         List<DuctSystem> systems;
+        DuctReach? reach = null;
         if (selector is { Kind: DuctSelectorKind.Systems }) {
             // The same elements the document read would give these systems' groups, so the analysis below answers them
             // the same; a group no named system touches is never read.
-            var (named, members) = SystemMembers(doc, selector);
+            var (named, members, completeness) = SystemMembers(doc, selector, peers);
+            reach = completeness;
             segments = [];
             foreach (var e in members) Build(reader, e, null, nodes, segments);
             // As in the document read, an inline part in a member duct is in the read (its own group until the route splices it).
@@ -185,7 +188,9 @@ public static class DuctSnapshots {
             new DuctPhases(phases.Select(ph => ph.Name).ToList(), PhaseViews(doc, phaseNames)),
             AirflowCandidates(terminalElements, groupsOf),
             AirflowCandidates(equipment, rootedBy),
-            Tolerances: tolerances);
+            Tolerances: tolerances,
+            Reach: reach,
+            ParameterCohorts: Cohorts(doc, equipment, slots, readAt));
     }
 
     /// <summary>
@@ -259,7 +264,7 @@ public static class DuctSnapshots {
     ///     terminals and stops at equipment (reached, never expanded): DuctNetwork.Analyze cuts equipment out, so the
     ///     result holds every group the systems touch whole, with its roots, exactly as the document read holds it.
     /// </summary>
-    private static (List<MechanicalSystem> Systems, List<Element> Members) SystemMembers(Document doc, DuctSnapshotSelector selector) {
+    private static (List<MechanicalSystem> Systems, List<Element> Members, DuctReach Reach) SystemMembers(Document doc, DuctSnapshotSelector selector, Func<Connector, IEnumerable<Connector>> readPeers) {
         var ids = selector.SystemIds ?? throw new ArgumentException("selector.systemIds is required for kind systems");
         if (ids.Count == 0) throw new ArgumentException("selector.systemIds names no system.");
         var systems = ids.Distinct().Select(id =>
@@ -268,6 +273,7 @@ public static class DuctSnapshots {
             .OrderBy(m => m.Name, StringComparer.Ordinal).ToList();
         var members = new Dictionary<long, Element>();
         var queue = new Queue<Element>();
+        var unreadPeers = new List<DuctRef>();
         void Reach(Element? e) {
             // Equipment with no HVAC port is not in the document read either.
             if (e is null || !Walkable(e) || members.ContainsKey(e.Id.Value())) return;
@@ -281,12 +287,25 @@ public static class DuctSnapshots {
             foreach (Element e in Try(() => m.Elements) ?? new ElementSet()) Reach(e);
             Reach(Try(() => m.BaseEquipment));
         }
-        while (queue.Count > 0)
-            foreach (var port in HvacConnectors(queue.Dequeue()))
-            foreach (var peer in Try(() => Peers(port).ToList()) ?? [])
-                Reach(peer.Owner);
-        return (systems, members.Values.OrderBy(e => e.Id.Value()).ToList());
+        while (queue.Count > 0) {
+            var element = queue.Dequeue();
+            foreach (var port in HvacConnectors(element)) {
+                List<Connector> connected;
+                try { connected = readPeers(port).ToList(); }
+                catch (Exception ex) when (IsRevitFailure(ex)) {
+                    unreadPeers.Add(new DuctRef(element.Id.Value(), port.Id));
+                    continue;
+                }
+                foreach (var peer in connected) Reach(peer.Owner);
+            }
+        }
+        return (systems, members.Values.OrderBy(e => e.Id.Value()).ToList(), new DuctReach(unreadPeers));
     }
+
+    private static IReadOnlyList<DuctFanParameterCohort> Cohorts(Document doc, IEnumerable<Element> equipment, DuctParameterSlots slots, DateTimeOffset readAt) =>
+        equipment.SelectMany(e => new[] { slots.FanStatic, slots.FanFlow }.Distinct()
+            .Select(name => DuctApplier.ParameterCohort(doc, e.Id.Value(), name, readAt.ToString("O"))))
+            .OfType<DuctFanParameterCohort>().GroupBy(c => (c.Parameter, c.Owner)).Select(g => g.First()).ToList();
 
     /// <summary>The `ids` selector: exactly the named walkable elements, in id order, raw.</summary>
     private static (List<DuctNode> Nodes, List<DuctSegment> Segments) Selected(Reader r, DuctSnapshotSelector selector) {

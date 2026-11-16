@@ -5,6 +5,7 @@
  * (`tests/repo-guards/src/test-casts.guard.test.ts`) keeps new ones out of the tests.
  */
 import type { DuctSnapshot } from "./types.ts";
+import { VOCABULARY } from "./sheet/scoped-snapshot.ts";
 
 export type Node = DuctSnapshot["nodes"][number];
 export type Segment = DuctSnapshot["segments"][number];
@@ -129,6 +130,7 @@ export const slots: DuctSnapshot["slots"] = {
 export const snapshotOf = (over: Partial<DuctSnapshot> = {}): DuctSnapshot => ({
   document: { title: "t", readAt: "", elapsedMs: 0, networkBasedCalculations: true },
   coordinateEncoding: "native-double",
+  vocabulary: VOCABULARY,
   levels: [],
   groups: [],
   nodes: [],

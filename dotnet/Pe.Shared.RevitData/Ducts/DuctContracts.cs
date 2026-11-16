@@ -151,6 +151,21 @@ public sealed record DuctWalk(
     long ElapsedMs,
     IReadOnlyList<DuctRef> UnreadPeers);
 
+/// <summary>Completeness of physical growth for a systems selector; failed peer reads are not open ends.</summary>
+public sealed record DuctReach(IReadOnlyList<DuctRef> UnreadPeers) {
+    public bool Complete => this.UnreadPeers.Count == 0;
+}
+
+[JsonConverter(typeof(StringEnumConverter))]
+public enum DuctParameterOwnerKind {
+    [EnumMember(Value = "instance")] Instance,
+    [EnumMember(Value = "type")] Type
+}
+public sealed record DuctParameterOwner(DuctParameterOwnerKind Kind, long Id);
+public sealed record DuctParameterMember(long ElementId, string UniqueId);
+/// <summary>Document-wide membership, including off-walk instances. Basis is the snapshot Document.ReadAt in round-trip format.</summary>
+public sealed record DuctFanParameterCohort(string Parameter, DuctParameterOwner Owner, IReadOnlyList<DuctParameterMember> Members, string Basis, bool Complete);
+
 /// <summary>One open end the walk stopped at and what the candidate box around it held (CandidateCount first, cheap; CandidateIds only under the cap).</summary>
 public sealed record DuctOpenEnd(long ElementId, int Connector, double[] Point, int CandidateCount, IReadOnlyList<long> CandidateIds);
 
@@ -221,7 +236,11 @@ public sealed record DuctSnapshotData(
     IReadOnlyList<DuctAirflowCandidate>? AirflowCandidates = null,
     IReadOnlyList<DuctAirflowCandidate>? FanFlowCandidates = null,
     DuctWalk? Walk = null,
-    DuctHealthTolerances? Tolerances = null);
+    DuctHealthTolerances? Tolerances = null,
+    DuctReach? Reach = null,
+    IReadOnlyList<DuctFanParameterCohort>? ParameterCohorts = null) {
+    public DuctFanVocabulary Vocabulary => DuctFanVocabulary.All;
+}
 
 /// <summary>
 ///     The near-miss tolerances Issues were measured under, the one home for both (ducts LEDGER 2026-10-29).
