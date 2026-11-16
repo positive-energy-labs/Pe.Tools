@@ -1,3 +1,4 @@
+import { DUCT_UNIT_KINDS, FAN_BLOCKER_KINDS } from "@pe/host-contracts/generated";
 /**
  * The dev-only subject fixture for the ducts scene: the Project A makeup-air path Pea traced on
  * 2026-10-17 (`.artifacts/fixtures/makeup-path.json`, 88 ordered elements) as a minimal
@@ -517,6 +518,7 @@ const connectorsOf = (i: number) =>
   }));
 
 const snapshot: DuctSnapshot = {
+  vocabulary: { unitKinds: [...DUCT_UNIT_KINDS], blockerKinds: [...FAN_BLOCKER_KINDS] },
   coordinateEncoding: "native-double",
   document: {
     title: "scene fixture (Project A makeup-air trace)",
