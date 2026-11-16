@@ -805,6 +805,45 @@ test("an exact-open turn Target reads and writes route Work under its document's
   }
 });
 
+test("pe_do route Work accepts the SDK session id pe_read accepts (rooms-draw-baseline 2026-11-16)", async () => {
+  // Pea read rooms Work with {session: "acc-rdb"} and then had its edit refused "no longer open":
+  // pe_do skipped the SDK-to-bridge rewrite that pe_read applies.
+  fakeRuntimeHost("http://127.0.0.1:9");
+  const projectA = "C:\\Models\\projectA.rvt";
+  const familiesWork = { binding: "address", route: "families", target: projectA };
+  vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
+    const url = new URL(input instanceof Request ? input.url : String(input));
+    if (typeof init?.body === "string" && JSON.parse(init.body).key === "bridge.sessions.list")
+      return Response.json({
+        sessions: [{ sessionId: "b1", sdkSessionId: "acc-x", connected: true,
+          openDocuments: [{ openId: "project-a", address: projectA, isFamilyDocument: false }] }],
+      });
+    if (url.pathname === "/pe/capabilities") return Response.json(catalog());
+    if (url.pathname === "/pe/reads/value") {
+      const body = JSON.parse(String(init?.body));
+      return body.release
+        ? Response.json({ value: null, state: "superseded" })
+        : Response.json({ value: { data: projectRouteRead(routeRegistry[body.read.slice(6)]!.host) } });
+    }
+    if (!url.pathname.includes("/route-state/")) throw Error(`unexpected ${url.pathname}`);
+    return Response.json({ route: "families", revision: 2, handle: { key: familiesWork, revision: 2 }, doc: {}, ok: true });
+  });
+  const target = { kind: "open", ref: { session: "acc-x", openId: "project-a" } };
+  try {
+    const read = (await run(peRead, { key: "route:families", target, timeoutSeconds: 30 }, turn)) as { ok: boolean };
+    expect(read.ok).toBe(true);
+    const edit = (await run(peDo, {
+      key: "route:families.edit", target, expectedRevision: 2, timeoutSeconds: 30,
+      input: { patches: [{ path: ["intent"], value: "x" }] },
+    }, turn)) as { ok?: boolean; content?: string };
+    expect(edit.content ?? "").not.toContain("no longer open");
+    expect(edit.ok).toBe(true);
+  } finally {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  }
+});
+
 test("a linked catalog route dispatches through its declared transport whatever its presentation kind", async () => {
   fakeRuntimeHost("http://127.0.0.1:9");
   const listed = catalog();

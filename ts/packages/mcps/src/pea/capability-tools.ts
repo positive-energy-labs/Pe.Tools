@@ -203,7 +203,9 @@ async function routeWorkScope(target: Target): Promise<{ query: string; target: 
   const { sessions } = await new HostRpcCaller({ hostBaseUrl: base(), timeoutMs: 30_000 }).call(
     "bridge.sessions.list",
   );
-  const session = sessions.find((session) => session.sessionId === target.ref.session);
+  // pe_do skips bridgeTarget, so an SDK session id (as op results print it) resolves here too.
+  const id = bridgeSessionFor(target.ref.session, sessions);
+  const session = sessions.find((session) => session.sessionId === id);
   if (session && !session.connected)
     throw Error(
       "The document's session is disconnected; its open document inventory is unavailable.",
@@ -214,11 +216,11 @@ async function routeWorkScope(target: Target): Promise<{ query: string; target: 
       "The Chat's document is no longer open in its session; ask the person to pick an open document again.",
     );
   const address = addressSchema.safeParse(document.address).data ?? null;
-  const query = new URLSearchParams({ open: `${target.ref.session}/${target.ref.openId}` });
+  const query = new URLSearchParams({ open: `${id}/${target.ref.openId}` });
   if (address) query.set("target", address);
   return {
     query: query.toString(),
-    target: { session: target.ref.session, openId: target.ref.openId },
+    target: { session: id, openId: target.ref.openId },
   };
 }
 
