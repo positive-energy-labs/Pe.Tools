@@ -91,4 +91,10 @@ it("Q4: the family's connector direction sets MUAS-1's roles, and the network's 
     directionMismatch: { discharge: 2, networkDischarge: 1 },
   });
   expect(sheet.notes.find((n) => n.kind === "direction")!.text).toContain("family connector direction");
+  // The unmodified capture never yields `complete`: the mismatch is a blocking issue on the fan.
+  for (const s of [sheet, replay(false, snapshot)]) {
+    expect(s.claim.kind).toBe("incomplete");
+    expect(s.claim.blockingIds).toContain("direction-mismatch:14577391");
+    expect(s.totals.requiredEspInWg).toBeNull();
+  }
 });

@@ -851,6 +851,16 @@ it("end terminals decide direction despite reversed metadata; an outdoor louver 
     directionMismatch: { discharge: 0, networkDischarge: 1 },
   });
   expect(ruled.notes.find((i) => i.kind === "direction")!.text).toContain("family connector direction");
+  // The mismatch is the only thing wrong with this calc, and it alone withholds `complete`.
+  expect(ruled.claim).toMatchObject({
+    kind: "incomplete",
+    coverage: [],
+    blockingIds: ["direction-mismatch:100"],
+  });
+  expect(ruled.issues).toEqual([
+    expect.objectContaining({ id: "direction-mismatch:100", severity: "blocking", closer: expect.objectContaining({ kind: "none" }) }),
+  ]);
+  expect(ruled.totals.requiredEspInWg).toBeNull();
 });
 
 it("a Greenheck ESD louver classified Supply Air is still an outdoor inlet end (Chadds 14088043)", () => {
@@ -1489,10 +1499,11 @@ it("H5 through two real calcs: a guest discharging into a host's supply trunk is
     partType: "Tee",
     connectors: [conn(0, [20, 1], round(8)), conn(1, [41, 0], round(8)), conn(2, [30, 1], round(8))],
   });
-  const grille = (id: number, from: number) =>
-    node(id, "terminal", { connectors: [conn(0, [from, 1], round(8))] });
+  // Classified, so the network's ends agree with each family's direction and no mismatch is raised.
+  const grille = (id: number, from: number, cls = "ReturnAir") =>
+    node(id, "terminal", { connectors: [conn(0, [from, 1], round(8), "end", [0, 0, 0], cls)] });
   const snap = snapshot(
-    [two(200, 20, 22), two(300, 30, 32), tee40, grille(42, 41), grille(23, 22), grille(33, 32)],
+    [two(200, 20, 22), two(300, 30, 32), tee40, grille(42, 41, "SupplyAir"), grille(23, 22), grille(33, 32)],
     [run(20, [200, 0], [40, 0]), run(30, [300, 0], [40, 2]), run(41, [40, 1], [42, 0]), run(22, [200, 1], [23, 0]), run(32, [300, 1], [33, 0])],
   );
   const roster = [fanPort(200, 0, 1), fanPort(300, 0, 1)];

@@ -1958,6 +1958,21 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
         effectInWg: m.encounter.static.kind === "host-calc" ? m.encounter.static.inWg : null,
         closer: { kind: "ruling", note: "rule this tie-in accepted or refused" },
       });
+  // Q4 (implementor default 2026-11-16, queued to the owner): a family direction the network reads the
+  // other way is an error, and an unruled error is never a warning, so it withholds `complete`.
+  if (directionMismatch)
+    pricer.blockers.set(`direction-mismatch:${unit.id}`, {
+      id: `direction-mismatch:${unit.id}`,
+      // OWED(writer A): `direction-mismatch` is not in the native FanBlockerKind vocabulary yet; the cast goes when it is.
+      kind: "direction-mismatch" as Blocker["kind"],
+      elementId: unit.id,
+      effectInWg: null,
+      detail: `the family says ${g.name(unit.id)} discharges by connector ${directionMismatch.discharge}; its network's ends read connector ${directionMismatch.networkDischarge} (${directionMismatch.evidence})`,
+      closer: {
+        kind: "ruling",
+        note: "correct the family's connector direction, or have the mismatch ruled",
+      },
+    });
   const cited = new Set(paths.flatMap((p) => p.blockerIds));
   const backflow = new Set(
     met.filter((m) => m.policy.backflow).map((m) => backflowId(m.encounter)),
