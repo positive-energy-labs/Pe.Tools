@@ -277,7 +277,16 @@ describe.each(["native", "outside"] as const)("PUR-C4-02 %s owner-result preserv
       Effect.scoped(
         Effect.gen(function* () {
           const dir = directory();
+          const started = performance.now();
+          const mark = (phase: string) =>
+            appendFileSync(
+              join(dir, "phases.jsonl"),
+              `${JSON.stringify({ kind, outcome: outcome.outcome, phase, ms: performance.now() - started })}\n`,
+            );
+          mark("scope-start");
+          yield* Effect.addFinalizer(() => Effect.sync(() => mark("scope-released")));
           const closure = yield* closureAt(dir);
+          mark("closure-sealed");
           const settled = yield* Deferred.make<Exit.Exit<string, CommandFailure>>();
           let invoked = 0;
           const completed = {
@@ -312,10 +321,14 @@ describe.each(["native", "outside"] as const)("PUR-C4-02 %s owner-result preserv
             ),
           );
           const service = Context.get(context, CommandService);
+          mark("graph-built");
           yield* Effect.gen(function* () {
             const ticket = yield* service.allocate(intent, binding);
+            mark("allocated");
             yield* service.submit(ticket.ref, binding);
+            mark("accepted");
             const exit = yield* Deferred.await(settled);
+            mark("feature-settled");
             expect(Exit.isFailure(exit)).toBe(true);
             if (Exit.isSuccess(exit)) return yield* Effect.die(new Error("Expected owner failure"));
             const error = Option.getOrThrow(Cause.findErrorOption(exit.cause));
@@ -333,6 +346,7 @@ describe.each(["native", "outside"] as const)("PUR-C4-02 %s owner-result preserv
             expect(error.ref).toEqual(ticket.ref);
             expect(error.ownerStep).toEqual(expected);
             const observed = yield* service.read(ticket.ref, binding);
+            mark("observed");
             expect(observed.ownerSteps).toEqual([
               {
                 _tag: "Recorded",
@@ -347,6 +361,7 @@ describe.each(["native", "outside"] as const)("PUR-C4-02 %s owner-result preserv
               observed.ownerSteps,
             );
             expect(invoked).toBe(2);
+            mark("assertions-complete");
           }).pipe(Effect.provideContext(context));
         }),
       ),
