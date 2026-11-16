@@ -3,7 +3,7 @@ import raw from "./fixtures/manual-d-20261102.json" with { type: "json" };
 import live from "./fixtures/muas-local-20261102.json" with { type: "json" };
 import tables from "./fixtures/manual-d-tables.json" with { type: "json" };
 import { buildSheet, type SheetSnapshot } from "./build.ts";
-import { inputsFor } from "./test-inputs.ts";
+import { inputsFor, withFamilyFlipped } from "./test-inputs.ts";
 import { suggestRoster } from "../roster.ts";
 import { toGrids } from "../loss-grid.ts";
 import { accessoryWrites } from "./accessory-writes.ts";
@@ -13,8 +13,11 @@ import { accessoryWrites } from "./accessory-writes.ts";
 it.each([raw, live])(
   "tap census retains the controlling path instead of the last visited path",
   (capture) => {
-    const snapshot = capture as unknown as SheetSnapshot;
-    const r = suggestRoster(snapshot);
+    // Q4 (kaitpw 2026-11-16): MUAS-1's family reads c2 out, c1 in, against its network. Before Q4 the ends chose
+    // the roles and this capture priced as recorded; now the family does, so the roles the numbers below were
+    // certified under are stated on the capture. The roster still comes from the capture as read.
+    const snapshot = withFamilyFlipped(capture as unknown as SheetSnapshot, 14577391);
+    const r = suggestRoster(capture as unknown as SheetSnapshot);
     const s = buildSheet({
       snapshot,
       fan: { unitId: 14577391, portIndex: 2 },

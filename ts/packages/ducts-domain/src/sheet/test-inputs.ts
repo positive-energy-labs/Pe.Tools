@@ -112,3 +112,23 @@ export function inputsFor(snapshot: SheetSnapshot, s: InputsShorthand = {}): Duc
     : snapshot;
   return resolveInputs({ snapshot: snap as SheetSnapshot, work, firm: s.firm ?? TEST_FIRM });
 }
+
+/**
+ * Test-only: the same capture with one unit's connector directions swapped, the family as the network
+ * reads it. Q4 makes the family's direction the authority, so a capture whose family reads backwards
+ * prices the wrong way round; tests that prove pricing on that capture's real geometry state the roles here.
+ */
+export const withFamilyFlipped = <S extends SheetSnapshot>(snapshot: S, unitId: number): S => ({
+  ...snapshot,
+  nodes: snapshot.nodes.map((n) =>
+    n.id !== unitId
+      ? n
+      : {
+          ...n,
+          connectors: n.connectors.map((c) => ({
+            ...c,
+            direction: c.direction === "in" ? "out" : c.direction === "out" ? "in" : c.direction,
+          })),
+        },
+  ),
+});

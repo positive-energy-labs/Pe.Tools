@@ -113,6 +113,8 @@ export function hostStatic(
   if (host === "cycle") return gap("cycle", "depends on this fan's own calc");
   if (host === "absent") return gap("host-calc", "has no calc");
   if (host.network !== network) return gap("host-calc", "calc is at a stale basis");
+  if (host.claim.kind === "incomplete" && host.claim.coverage.some((g) => g.kind === "cycle"))
+    return gap("cycle", "calc waits on this fan's own calc");
   if (host.claim.kind !== "complete") return gap("host-calc", `calc is ${host.claim.kind}`);
   for (const p of host.paths) {
     if (p.side !== "supply") continue;
@@ -152,7 +154,13 @@ export function claimOf(f: ClaimFacts): FanClaim {
       blocking.add(m.policy.backflow ? backflowId(e) : ENCOUNTER_KEY(e));
     // Added once, on the path that ends there; a return tie-in carries no static row at all.
     if (e.static.kind === "host-calc") tieIn.set(m.path, e.static.inWg);
-    else if (m.policy.static === "host-calc" && e.verdict === "accepted")
+    else if (
+      m.policy.static === "host-calc" &&
+      e.verdict === "accepted" &&
+      !coverage.some(
+        (g) => g.elementId === e.elementId && (g.kind === "host-calc" || g.kind === "cycle"),
+      )
+    )
       coverage.push({ kind: "host-calc", elementId: e.elementId, ref: "tie-in static unresolved" });
   }
   const whole = (p: SheetPath) =>

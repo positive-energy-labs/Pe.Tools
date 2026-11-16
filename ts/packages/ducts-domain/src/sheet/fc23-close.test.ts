@@ -279,9 +279,9 @@ it.skipIf(!existsSync(CHADDS))(
         fittingDrops: blind.fittingDrops,
       }),
     });
-    expect(ids(blindPriced.blockers)).toEqual(missing);
-    expect(ids(blindPriced.assumed.blockers)).toEqual(missing);
-    expect(blindPriced.blockers.every((b) => b.kind === "no-flow")).toBe(true);
+    expect(ids(blindPriced.blockers)).toEqual(met);
+    expect(ids(blindPriced.assumed.blockers)).toEqual(met);
+    expect(blindPriced.blockers.every((b) => b.kind === "no-flow" || b.kind === "backflow")).toBe(true);
     expect(blindPriced.totals.return.worstPath).toBeNull();
     expect(blindPriced.totals.requiredEspInWg).toBeNull();
 
@@ -295,8 +295,8 @@ it.skipIf(!existsSync(CHADDS))(
         { pair: ["14663546:0", "14663850:1"], verdict: "accept" },
       ],
     );
-    expect(ids(seeded.closed.blockers)).toEqual(missing);
-    expect(ids(seeded.closed.assumed.blockers)).toEqual(missing);
+    expect(ids(seeded.closed.blockers)).toEqual(met);
+    expect(ids(seeded.closed.assumed.blockers)).toEqual(met);
     expect(returnTerminals(seeded.closed)).toEqual([
       13884018, 14548688, 14584961, 14663834, 14663850,
     ]);
@@ -311,8 +311,8 @@ it.skipIf(!existsSync(CHADDS))(
         fittingDrops: seeded.fittingDrops,
       }),
     });
-    expect(ids(seededPriced.blockers)).toEqual(missing);
-    expect(seededPriced.blockers.every((b) => b.kind === "no-flow")).toBe(true);
+    expect(ids(seededPriced.blockers)).toEqual(met);
+    expect(seededPriced.blockers.every((b) => b.kind === "no-flow" || b.kind === "backflow")).toBe(true);
     expect(seededPriced.totals.return.worstPath).toBeNull();
     expect(seededPriced.totals.requiredEspInWg).toBeNull();
   },

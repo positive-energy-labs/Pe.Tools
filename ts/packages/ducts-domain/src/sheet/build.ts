@@ -1950,8 +1950,7 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
     if (m.policy.backflow && !pricer.blockers.has(backflowId(m.encounter)))
       pricer.blockers.set(backflowId(m.encounter), {
         id: backflowId(m.encounter),
-        // OWED(writer A): `backflow` is not in the native FanBlockerKind vocabulary yet (DuctFanVocabulary.cs); the cast goes when it is.
-        kind: "backflow" as Blocker["kind"],
+        kind: "backflow",
         elementId: m.encounter.elementId,
         connector: m.encounter.connector,
         owner: m.encounter.host,
