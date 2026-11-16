@@ -161,6 +161,8 @@ Staffing: Sol or Terra can run every role from these briefs. Each brief carries 
 
 Wave: 0 t3/converge-s4-wave0-shared-foundation t3/s2-identity-root-fix t3/s3-native-effect-generator
 
+Wave-Status: 0 ACTIVE
+
 Estimate: t3/converge-s4-wave0-shared-foundation 1.5h 700L +
 
 Estimate: t3/s2-identity-root-fix 2.0h 1200L 0
@@ -174,6 +176,10 @@ S3 artifact `0c3127d` merged inactive at `888819f2`: seven files, +2,885/-1 line
 Shared foundation initial estimate was 1.5 writer-hours; full C1-C6 and producer wiring is estimated at 6-10 writer-hours and 1,800-3,000 production lines. Actual labor is unknown. Current PUR correction is 0.4h / 48min / 250 production lines, with a 500 moved lines checkpoint. Admitted basis and settlement has a 180min box and a 1,400 moved lines checkpoint. The SDK probe has a 72min box and a 700 moved lines checkpoint. S2 resolver proposal 0.5-1h / 30-80 lines is not accepted as a complete cutover. These are estimates, not measured labor or caps. The accepted integration branch is `crusade/converge-wave0`.
 
 The next coupled foundation freezes admitted intent, seals and dependencies and adds evidence-bound conditional Work settlement before producer cutovers. Keep Workflow, Activity and SQL. Fresh effect permission is distinct from settlement of an already proven effect: Stop or revocation cannot permit a new effect, but must allow conditional settlement while preserving newer edits. SMELL-01/02 hold adoption of the incomplete contracts by proving consumers only. Inactive integration and independent S2, S3 and SDK work proceed. Non-author falsification precedes lifting the holds. S2 coordinates the public SDK identity and incarnation to private bridge resolver contract with S4. S3 generated artifact authorship proceeds in parallel; consumer schema switches follow coordination.
+
+Wave 0 remains active: S1-S4 are unfinished, 29 acceptance rows are UNPROVEN and zero runtime waves are accepted at the current checkpoint. Branch-hand merges do not close a wave; the partner closes it after the full report and handoff. Source-integrity and receipt-consumer corrections precede coupled basis and evidence-backed settlement, which precede producer cutover. Independent S1 production source follows the `8b` build release while S2 propagation and S3 codec grounding continue.
+
+The receipt correction moved 848 lines, including 483 production lines, against an initial 0.6h / 250L estimate and a 1h / 500L replan. Source-integrity is estimated at 0.6h / 200L with a 72min / 400 moved lines checkpoint; receipt-consumer correction at 0.2h / 50L with a 24min / 100 moved lines checkpoint. Coupled basis and settlement remains 1.5h / 700L with a 180min / 1,400 moved lines checkpoint. Restricted S1 is estimated at 2-4h / 200-400L, with a 36min / 400 production moved lines checkpoint. Labor and rate are unknown; foundational inquiry is uncapped.
 
 ## Deletion criteria
 
