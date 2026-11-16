@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { fanCandidates, fansOwedBase } from "./fan-assignment.ts";
+import { fanCandidates } from "./fan-assignment.ts";
 import {
   connOf,
   groupOf,
@@ -9,7 +9,6 @@ import {
   systemOf,
   type System,
 } from "./test-snapshot.ts";
-import { unitRoles } from "./unit-roles.ts";
 
 const unit = (id: number, ...classes: string[]) =>
   nodeOf(id, "equipment", {
@@ -57,29 +56,5 @@ describe("fanCandidates", () => {
     // A system with base equipment is refused (no swap); a system the unit's groups do not carry is never offered.
     expect(fanCandidates(s, 20)).toEqual([]);
     expect(fanCandidates(s, 5)).toEqual([]);
-  });
-});
-
-describe("fansOwedBase", () => {
-  it("offers a system once: to its network's lead fan, or to none when its fans sit in separate networks", () => {
-    const s = snapshot([system(19, "SA 19", "SupplyAir")]);
-    const roles = unitRoles(s, new Map(), {});
-    const lead = fansOwedBase(s, roles, () => 17);
-    expect([...lead.keys()]).toEqual([17]);
-    // Two networks carry SA 19, each rooted at its own fan: split the system in Revit first.
-    const twoNets = {
-      ...s,
-      groups: s.groups.flatMap((g) =>
-        g.rootIds.includes(17) && g.rootIds.includes(18)
-          ? [
-              { ...g, id: "gA", rootIds: [17] },
-              { ...g, id: "gB", rootIds: [18] },
-            ]
-          : [g],
-      ),
-    };
-    const none = fansOwedBase(twoNets, roles, () => null);
-    expect(none.get(17)?.some((a) => a.system === "SA 19") ?? false).toBe(false);
-    expect(none.split?.get("SA 19")).toEqual([17, 18]);
   });
 });

@@ -8,7 +8,7 @@ import { neutralFansWork } from "@pe/agent-contracts";
 import type { DuctsDesign } from "@pe/agent-contracts";
 
 import { EMPTY_CATALOGS, type Catalogs } from "./catalog.ts";
-import { fanCandidates, fansOwedBase } from "./fan-assignment.ts";
+import { fanCandidates } from "./fan-assignment.ts";
 import { healPlan } from "./heal.ts";
 import type { Grids } from "./loss-grid.ts";
 import { price } from "./pricing.ts";
@@ -94,47 +94,6 @@ export const healTarget = (
   throw Error(
     `${groups.length} networks in ${where} heal in Revit; select an element in one, or use its Heal row in the inbox`,
   );
-};
-
-/**
- * The fan the chosen system is offered, as the page offers it (`fansOwedBase` with the lead fan):
- * with several, the selected unit, else the `previewed` pair; otherwise refused, with why. `name`
- * is the person's word for a unit id.
- */
-export const offeredFan = (
-  snapshot: DuctSnapshot,
-  doc: DuctsDesign | null,
-  grids: Grids | null,
-  catalogs: Catalogs | null,
-  system: string,
-  selected: string,
-  previewed: { unitId: number; systemId: number } | null,
-  name: (id: number) => string | null,
-) => {
-  if (!system) throw Error("Choose a system to make its fan");
-  const priced = grids ? price(snapshot, grids, doc, (doc) ?? neutralFansWork, catalogs ?? EMPTY_CATALOGS) : null;
-  const owed = fansOwedBase(
-    snapshot,
-    (priced ?? survey(snapshot, doc)).roles,
-    (g) => priced?.next.byGroup[g]?.fans[0]?.unit ?? null,
-  );
-  const split = owed.split?.get(system);
-  if (split)
-    throw Error(
-      `${system} spans separate networks with their own fans (${split.map((u) => name(u) ?? u).join(", ")}); Revit gives a system one fan, so split ${system} in Revit first`,
-    );
-  const offers = [...owed.values()].flat().filter((a) => a.system === system);
-  if (!offers.length)
-    throw Error(
-      `No unit is offered as the fan of ${system}: it has its base equipment, or none of its units is a fan`,
-    );
-  if (offers.length === 1) return { ...offers[0]!, unit: name(offers[0]!.unitId) };
-  const id = selectedId(selected);
-  const pick =
-    offers.find((a) => a.unitId === id) ??
-    offers.find((a) => a.unitId === previewed?.unitId && a.systemId === previewed.systemId);
-  if (pick) return { ...pick, unit: name(pick.unitId) };
-  throw Error(`${offers.length} units could be the fan of ${system}; select one`);
 };
 
 /** The pair as a candidate over the snapshot the route read; throws why it is not offered. */
