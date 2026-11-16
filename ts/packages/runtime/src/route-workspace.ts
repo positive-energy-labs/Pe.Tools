@@ -17,6 +17,7 @@ import {
 } from "@pe/agent-contracts";
 import {
   applyPatches,
+  stampChanges,
   routeDocDelta,
   canonicalRouteInput,
   refuse,
@@ -867,7 +868,8 @@ export class RouteWorkspace {
   /** The journal calls this only after consent. The write tail makes absence a compare-and-set. */
   async start(scope:WorkKey,seed:unknown,by:WorkAuthor,receiptId?:string):Promise<RouteStateWriteResult> {
     this.#authorize("publish");
-    const doc=this.validateSeed(scope,seed);
+    // Every seeded cell is the caller's: a seed's own `by` is never read, so it cannot name another author.
+    const doc=this.validateSeed(scope,stampChanges(this.validateSeed(scope,seed),undefined,by,0));
     const spec=this.#registry.get(scope.route)!.spec;
     return this.#serialized(async()=>{
       if(await this.#store.getState({targetKey:workKey(scope),route:scope.route}) != null)
@@ -1191,8 +1193,14 @@ export class RouteWorkspace {
     try {
       return { raw, envelope: parseEnvelope(raw, spec) };
     } catch (error) {
+      // One notice for the whole record: the refusal, then every staged row it held.
+      const rows = stagedRows(spec.route, raw);
       await this.#store.setState({ targetKey, route: spec.route, value: null,
-        reason: error instanceof Error ? error.message : String(error) });
+        reason: [error instanceof Error ? error.message : String(error),
+          ...(rows.length ? [`Set aside ${rows.length} staged row${rows.length === 1 ? "" : "s"}: ${rows.map(row =>
+            `${row.work}/${row.segment}${row.row === row.segment ? "" : `/${row.row}`} (source ${row.source ?? "unstated"}, ref ${row.ref ?? "none"})`).join("; ")}`] : []),
+        ].join("
+") });
       return null;
     }
   }
@@ -1382,6 +1390,25 @@ function emptyEnvelope(spec: RouteStateSpec<z.ZodType>): RouteEnvelope<unknown> 
     revision: 0,
     doc: empty.data,
   };
+}
+
+/**
+ * The staged rows of a stored record, read by structure alone (any object holding an `edit` rung
+ * with a value), so a record no schema decodes is still listed. `source` and `ref` are whatever
+ * text the rung or its value states; an unstamped row reports none, never an invented one.
+ */
+export function stagedRows(route: string, raw: unknown) {
+  const record = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === "object" && !Array.isArray(value);
+  const text = (edit: Record<string, unknown>, key: string) =>
+    [edit[key], record(edit.value) ? edit.value[key] : undefined].find((v): v is string => typeof v === "string" && v !== "") ?? null;
+  const walk = (node: unknown, path: string[]): { work: string; segment: string; row: string; source: string | null; ref: string | null }[] => {
+    if (!record(node)) return [];
+    const edit = node.edit;
+    if (path.length && record(edit) && (Object.hasOwn(edit, "value") || edit.delete === true))
+      return [{ work: route, segment: path[0]!, row: path.slice(1).join("/") || path[0]!, source: text(edit, "source"), ref: text(edit, "ref") }];
+    return Object.entries(node).flatMap(([key, value]) => walk(value, [...path, key]));
+  };
+  return walk(record(raw) && record(raw.doc) ? raw.doc : raw, []);
 }
 
 function parseEnvelope(raw: unknown, spec: RouteStateSpec<z.ZodType>): RouteEnvelope<unknown> {

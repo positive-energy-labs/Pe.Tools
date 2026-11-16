@@ -133,6 +133,8 @@ function LedgerContent({ ctx, snapshot }: { ctx: SheetContext; snapshot: DuctSna
   const closerOf = (blocker: import("../ducts/sheet/tiers").SheetBlocker, typed: number | null): Closer => {
     const closer = describeCloser(blocker, typed, {
       terminalDrop: state.inputs?.criteria.terminalDropInWg ?? null,
+      // A terminal of this walk is a row of the resolved inputs; the blocker's prose is never read.
+      terminal: (id) => Object.hasOwn(state.inputs?.terminals ?? {}, String(id)),
       nameOf,
       wait: busy
         ? "Wait for the current read"

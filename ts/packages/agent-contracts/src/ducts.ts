@@ -22,7 +22,7 @@ import { z } from "zod";
 import { serveSetting, type SettingTierRead } from "./tiered-setting.ts";
 import { DUCT_PARAMETER_KEYS, DUCT_UNIT_KINDS, DUCTS_CRITERIA_CELLS, criteriaLayer } from "./ducts-sheet.ts";
 
-import { draftCellSchema } from "./draft.ts";
+import { draftCellSchema, type Author } from "./draft.ts";
 import type { DuctFlow, DuctUnitRole, FansDocument } from "./fans.ts";
 import { type RouteStateSpec } from "./route-state.ts";
 
@@ -379,9 +379,31 @@ const stagedOf = <V>(cells: Record<string, { edit?: { value?: V } | null } | und
     ),
   ) as Record<string, V>;
 
+/**
+ * Each staged cell with what its value alone drops: `author` is the caller the host stamped (a cell
+ * with no stamp stays `unknown`, never promoted), `source` the tier it now sits in, and `ref` the
+ * evidence its value names (`source` text on a drop or flow), else the cell's own address.
+ */
+const authoredOf = <V>(segment: string, cells: Record<string, { edit?: { value?: V; by?: Author; base?: number | null } | null } | undefined>) =>
+  Object.fromEntries<{ value: V; author: Author; source: "Work"; ref: string; version: number | null }>(
+    Object.entries(cells).flatMap(([key, cell]) => {
+      const edit = cell?.edit;
+      if (edit?.value === undefined) return [];
+      const stated = (edit.value as { source?: unknown } | null)?.source;
+      return [[key, { value: edit.value, author: edit.by ?? ("unknown" as const), source: "Work" as const,
+        ref: typeof stated === "string" && stated.trim() ? stated : `${segment}/${key}`, version: edit.base ?? null }]];
+    }),
+  );
+
 /** Staged edits only, per segment. */
 export function stagedDucts(doc: DuctsRouteDocument | null, fans: FansDocument) {
   return {
+    /** The fan cells again, with caller and evidence kept beside the value; the bare segments below stay for pricing. */
+    authored: {
+      terminalDrops: authoredOf("terminalDrops", fans.terminalDrops), componentDrops: authoredOf("componentDrops", fans.componentDrops),
+      esp: authoredOf("esp", fans.esp), equipmentFlows: authoredOf("equipmentFlows", fans.equipmentFlows),
+      flows: authoredOf("flows", fans.flows), roles: authoredOf("roles", fans.roles),
+    },
     calculation: stagedOf(fans.calculation),
     rules: stagedOf(doc?.rules ?? {}),
     criteria: criteriaLayer(doc?.criteria ?? {}),

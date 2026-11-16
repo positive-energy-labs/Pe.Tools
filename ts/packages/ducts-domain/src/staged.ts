@@ -1,5 +1,5 @@
 /** What the Work has edit for a write, counted from the document alone. */
-import { workElementId } from "./work-subject.ts";
+import { elementSubject, workElementId } from "./work-subject.ts";
 import { decode } from "@pe/agent-contracts";
 import type { DuctsApplyInput, DuctsDesign, WorkPath, FansDocument } from "@pe/agent-contracts";
 import type { DuctsApply } from "@pe/host-contracts/generated";
@@ -7,15 +7,37 @@ import type { DuctsApply } from "@pe/host-contracts/generated";
 import { pendingRulings } from "./rulings.ts";
 import type { DuctSnapshot } from "./types.ts";
 
-/** Fan targets are a projection of current edits, never a list frozen when scope was chosen. */
-export function fanWriteCells(doc: FansDocument | null, snapshot: Pick<DuctSnapshot, "nodes" | "segments">) {
+/** A native parameter cohort as the contract names it (`FanParameterCohort`), read structurally. */
+type Cohort = { owner: { kind: "instance" | "type"; id: number }; members: readonly { elementId: number; uniqueId: string }[]; basis: string; complete: boolean };
+const SEGMENTS = ["terminalDrops", "componentDrops", "esp", "flows", "equipmentFlows", "roles"] as const;
+
+/**
+ * Fan targets are a projection of current edits, never a list frozen when scope was chosen. The walk
+ * clips every segment. `cohorts` widens `esp` alone, and only to the members of a complete cohort
+ * that has a member on the walk: an off-walk peer is in scope because native named it, never by default.
+ */
+export function fanWriteCells(doc: FansDocument | null, snapshot: Pick<DuctSnapshot, "nodes" | "segments">, cohorts: readonly Cohort[] = []) {
   const here = new Set([...snapshot.nodes, ...snapshot.segments].map(element => element.uniqueId));
-  return (["terminalDrops", "componentDrops", "esp", "flows", "equipmentFlows", "roles"] as const).flatMap(segment =>
+  const peers = new Set(cohorts.filter(c => c.complete && c.members.some(m => here.has(m.uniqueId))).flatMap(c => c.members.map(m => m.uniqueId)));
+  return SEGMENTS.flatMap(segment =>
     Object.entries(doc?.[segment] ?? {}).flatMap(([id, cell]) => {
       const ref = decode(id);
-      return cell.edit != null && ref.ok && ref.value.keyKind === "UniqueId" && here.has(ref.value.key) ? [[segment, id] as const] : [];
+      return cell.edit != null && ref.ok && ref.value.keyKind === "UniqueId" && (here.has(ref.value.key) || (segment === "esp" && peers.has(ref.value.key))) ? [[segment, id] as const] : [];
     }),
   );
+}
+
+/**
+ * One staged ESP for every member of a cohort, off-walk members included: the same value on each
+ * key, so one Work write stamps them with one caller. Refuses, staging nothing, unless native
+ * reported the whole membership at the basis being read. The native guard rechecks at apply.
+ */
+export function stageEspCohort(cohort: Cohort, basis: string, value: { inWg: number }): { esp: Record<string, { inWg: number }> } | { refused: string } {
+  if (!cohort.complete) return { refused: "The model has not reported every element that shares this value" };
+  if (cohort.basis !== basis) return { refused: "The shared-value membership is from an earlier read; read again" };
+  if (!cohort.members.length || (cohort.owner.kind === "instance" && cohort.members.length !== 1))
+    return { refused: "An instance value belongs to exactly one element" };
+  return { esp: Object.fromEntries(cohort.members.map(m => [elementSubject(m), { ...value }])) };
 }
 
 /**

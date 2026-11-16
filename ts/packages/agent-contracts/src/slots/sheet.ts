@@ -11,7 +11,8 @@ export type Domain =
   | NumberDomain
   | { kind: "enum"; shape: z.ZodType; choices: readonly EnumChoice[] | ((read: any, row?: string) => readonly EnumChoice[]) }
   | OptionsDomain
-  | { kind: "object"; fields: Readonly<Record<string, Domain>> };
+  /** `text` names optional free-text keys that ride beside the fields (where a number came from); they draw no editor. */
+  | { kind: "object"; fields: Readonly<Record<string, Domain>>; text?: readonly string[] };
 export type Home = z.output<typeof homeSchema>;
 
 export type DomainValue<D extends Domain> = D extends NumberDomain ? number
@@ -20,6 +21,7 @@ export type DomainValue<D extends Domain> = D extends NumberDomain ? number
   : D extends { kind: "object"; fields: infer F extends Record<string, Domain> } ? { [K in keyof F]: DomainValue<F[K]> }
   : never;
 /** Decode is independent of the choices a current read happens to offer. */
+const textKeys = (text: readonly string[] = []) => Object.fromEntries(text.map(key => [key, z.string().optional()]));
 export function schemaOf<const D extends Domain>(domain: D): z.ZodType<DomainValue<D>>;
 export function schemaOf(domain: Domain): z.ZodType {
   switch (domain.kind) {
@@ -32,7 +34,7 @@ export function schemaOf(domain: Domain): z.ZodType {
     }
     case "enum": return domain.shape;
     case "options": return z.string().min(1);
-    case "object": return z.strictObject(Object.fromEntries(Object.entries(domain.fields).map(([key, field]) => [key, schemaOf(field)])));
+    case "object": return z.strictObject({ ...textKeys(domain.text), ...Object.fromEntries(Object.entries(domain.fields).map(([key, field]) => [key, schemaOf(field)])) });
   }
 }
 
@@ -150,12 +152,12 @@ export const SHEET_COMMANDS = { plan: "sheet.plan", apply: "sheet.apply" } as co
 export type DomainData = NumberDomain
   | { kind: "enum"; shape: Record<string, unknown> }
   | { kind: "options"; handle: "revit.catalog.field-options"; input?: Record<string, unknown>; persist: "value" | "label"; mode: "constraint" | "suggestion" }
-  | { kind: "object"; fields: Record<string, DomainData> };
+  | { kind: "object"; fields: Record<string, DomainData>; text?: string[] };
 export const domainDataSchema: z.ZodType<DomainData> = z.lazy(() => z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("number"), unit: z.string().optional(), min: z.number().optional(), exclusiveMin: z.number().optional(), max: z.number().optional(), digits: z.number().int().nonnegative().optional() }),
   z.strictObject({ kind: z.literal("enum"), shape: z.record(z.string(), z.unknown()) }),
   z.strictObject({ kind: z.literal("options"), handle: z.literal("revit.catalog.field-options"), input: z.record(z.string(), z.unknown()).optional(), persist: z.enum(["value", "label"]), mode: z.enum(["constraint", "suggestion"]) }),
-  z.strictObject({ kind: z.literal("object"), fields: z.record(z.string(), domainDataSchema) }),
+  z.strictObject({ kind: z.literal("object"), fields: z.record(z.string(), domainDataSchema), text: z.array(z.string().min(1)).optional() }),
 ]));
 export const homeSchema = z.discriminatedUnion("at", [
   z.strictObject({ at: z.literal("parameter"), parameter: z.string().min(1) }),
@@ -174,14 +176,14 @@ export type SheetSlotData = z.output<typeof sheetSlotDataSchema>;
 const domainData = (domain: Domain): DomainData => {
   switch (domain.kind) {
     case "enum": return { kind: domain.kind, shape: JSON.parse(JSON.stringify(z.toJSONSchema(domain.shape), (key, value) => key === "~standard" ? undefined : value)) };
-    case "object": return { kind: domain.kind, fields: Object.fromEntries(Object.entries(domain.fields).map(([key, value]) => [key, domainData(value)])) };
+    case "object": return { kind: domain.kind, fields: Object.fromEntries(Object.entries(domain.fields).map(([key, value]) => [key, domainData(value)])), ...(domain.text ? { text: [...domain.text] } : {}) };
     case "options": return { kind: domain.kind, handle: domain.handle.key, ...(typeof domain.input === "function" ? {} : { input: { ...domain.input } }), persist: domain.persist, mode: domain.mode };
     default: return domain;
   }
 };
 export function schemaOfData(domain: z.output<typeof domainDataSchema>): z.ZodType {
   if (domain.kind === "enum") return z.fromJSONSchema(domain.shape);
-  if (domain.kind === "object") return z.strictObject(Object.fromEntries(Object.entries(domain.fields).map(([key, value]) => [key, schemaOfData(value)])));
+  if (domain.kind === "object") return z.strictObject({ ...textKeys(domain.text), ...Object.fromEntries(Object.entries(domain.fields).map(([key, value]) => [key, schemaOfData(value)])) });
   if (domain.kind === "options") return z.string().min(1);
   return schemaOf(domain);
 }

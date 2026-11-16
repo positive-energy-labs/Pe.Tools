@@ -48,8 +48,9 @@ const layer = (resolved: Immutable<Resolved<unknown>> | undefined, wrap: (v: unk
   if (!resolved || resolved.value == null) return null;
   const source = SOURCES[resolved.source] ?? "model";
   const firm = read?.sheetView.firm;
+  // The evidence the resolver named rides with the value; only a refused firm home replaces it.
   return { value: wrap(resolved.value), source, ...(resolved.units ? { unit: resolved.units } : {}),
-    ...(source === "default" && firm && "refused" in firm ? { ref: ENGINE_DEFAULT_NO_SHARED_ROOT } : {}) };
+    ...(source === "default" && firm && "refused" in firm ? { ref: ENGINE_DEFAULT_NO_SHARED_ROOT } : resolved.ref ? { ref: resolved.ref } : {}) };
 };
 
 const units = (read: Read) => Object.keys(inputsOf(read)?.units ?? {});
@@ -67,7 +68,9 @@ const scopeChoices = (read: Read): readonly EnumChoice[] => {
   ];
 };
 const inWg = { kind: "object", fields: { inWg: { kind: "number", min: 0, unit: "in-wg", digits: 4 } } } as const;
-const cfm = { kind: "object", fields: { cfm: { kind: "number", min: 0, unit: "cfm", digits: 0 } } } as const;
+// `source` is the stated evidence Fans Work admits beside a drop or a flow (`fansDocumentSchema`); ESP has none.
+const drop = { ...inWg, text: ["source"] } as const;
+const cfm = { kind: "object", fields: { cfm: { kind: "number", min: 0, unit: "cfm", digits: 0 } }, text: ["source"] } as const;
 
 export const fansSheet = {
   draft: true,
@@ -131,12 +134,12 @@ export const fansSheet = {
       rowLabel: (read, row) => nameOf(read, row, "Terminal airflow"),
       model: (read: Read, row) => layer(inputsOf(read)?.terminals[String(idOf(read, row!))]?.cfm, (v) => ({ cfm: v })),
     }),
-    terminalDrops: parameter("terminalDrop", inWg, {
+    terminalDrops: parameter("terminalDrop", drop, {
       rows: (read: Read) => rowsOf(read, Object.keys(inputsOf(read)?.terminals ?? {})),
       rowLabel: (read, row) => nameOf(read, row, "Terminal drop"),
       model: (read: Read, row) => layer(inputsOf(read)?.terminals[String(idOf(read, row!))]?.drop, (v) => ({ inWg: v }), read),
     }),
-    componentDrops: parameter("componentDrop", inWg, {
+    componentDrops: parameter("componentDrop", drop, {
       rows: (read: Read) => rowsOf(read, Object.keys(inputsOf(read)?.components ?? {})),
       rowLabel: (read, row) => nameOf(read, row, "Part drop"),
       model: (read: Read, row) => layer(inputsOf(read)?.components[String(idOf(read, row!))]?.drop, (v) => ({ inWg: v })),
