@@ -187,10 +187,9 @@ it("a complete sheet: required ESP = worst supply + worst return + allowances", 
   expect(supply[0]!.knownInWg).toBeCloseTo(T8, 6);
   expect(supply[1]!.knownInWg).toBeCloseTo(T6, 6);
   expect(sheet.paths.find((p) => p.side === "return")!.knownInWg).toBeCloseTo(R, 6);
-  expect(sheet.paths.every((p) => p.complete)).toBe(true);
+  expect(sheet.claim.kind).toBe("complete");
   expect(sheet.blockers).toEqual([]);
   expect(sheet.totals.supply).toMatchObject({
-    complete: true,
     worstPath: expect.closeTo(T8, 6),
     allowanceInWg: 0.1,
   });
@@ -243,7 +242,7 @@ it("a complete sheet: required ESP = worst supply + worst return + allowances", 
   expect(missing.basis).not.toBe(sheet.basis);
   // A terminal with no flow withholds every leg it shares, and the total.
   expect(missing.blockers.map((b) => b.id)).toContain("no-flow:8:0");
-  expect(missing.paths.find((p) => p.end.elementId === 6)!.complete).toBe(false);
+  expect(missing.claim.kind).toBe("incomplete");
   expect(missing.totals.requiredEspInWg).toBeNull();
 });
 
@@ -424,7 +423,7 @@ it("an open end blocks its side; a vacant opposed port within the default gap au
     // Slice 5: a blocker names its element by the codec's UniqueId SubjectRef, minted here.
     subject: `UniqueId:6d52156a-3876-4d76-b641-341454252f26-${(51).toString(16).padStart(8, "0")}`,
   });
-  expect(sheet.totals.supply).toMatchObject({ complete: false, worstPath: null });
+  expect(sheet.totals.supply).toMatchObject({ worstPath: null });
   // The supply's one end carries nothing, so it carries what the return delivers.
   expect(sheet.legs["51:0>1"]).toMatchObject({
     flowCfm: 100,
@@ -439,7 +438,7 @@ it("an open end blocks its side; a vacant opposed port within the default gap au
     ),
   ).toBe(true);
   expect(sheet.legs["53:0>1"]!.lossSource.ref).toContain("auto-joined");
-  expect(ret.complete).toBe(true);
+  expect(ret.blockerIds).toEqual([]);
   expect(sheet.totals.requiredEspInWg).toBeNull();
   // A person's accept closes the join; the open supply end still withholds ESP.
   const ruled = buildSheet({
@@ -450,7 +449,7 @@ it("an open end blocks its side; a vacant opposed port within the default gap au
       rulings: [{ pair: ["52:1", "53:0"], verdict: "accept" }],
     }),
   });
-  expect(ruled.paths.find((p) => p.side === "return")!.complete).toBe(true);
+  expect(ruled.paths.find((p) => p.side === "return")!.blockerIds).toEqual([]);
   expect(ruled.totals.return.worstPath).toBeCloseTo(
     friction(roundSection(6), 100, 10 + 10, 0.0003).dp + 0.02,
     5,
@@ -609,12 +608,25 @@ it.skipIf(!existsSync(CHADDS))(
     const plenum = sheet.blockers.find((b) => b.id === "inferred-join:14122436:1")!;
     expect(plenum.detail).toMatch(/^this end faces .+, already capped/);
     expect(plenum.closer.candidate).toMatchObject({ toElementId: 14106988, toConnector: 1 });
-    expect(sheet.paths.find((p) => p.end.kind === "joins-other-fan")!.end.fan).toMatchObject({
-      unitId: 13760867,
+    // Q4 (kaitpw 2026-11-16): MUAS-1's family states c2 out, c1 in, and now sets the roles; its ends read the
+    // other way, which is the mismatch fact. Each line below names what the network-chosen roles gave.
+    // Q4: was a `joins-other-fan` end on the supply; FC-23 is now met on the return side as a sibling.
+    expect(sheet.paths.find((p) => p.end.fan?.unitId === 13760867)).toMatchObject({
+      side: "return",
+      end: { kind: "sibling-fan" },
     });
-    expect(sheet.fan).toMatchObject({ inletPortIndex: 2, dischargePortIndex: 1 });
-    expect(sheet.notes.find((i) => i.kind === "direction")!.text).toContain("ends:");
-    expect(sheet.paths.find((p) => p.end.elementId === 14122436)!.side).toBe("return");
+    // Q4: was { inletPortIndex: 2, dischargePortIndex: 1 } with no mismatch.
+    expect(sheet.fan).toMatchObject({
+      inletPortIndex: 1,
+      dischargePortIndex: 2,
+      directionMismatch: { discharge: 2, networkDischarge: 1 },
+    });
+    // Q4: was "ends:".
+    expect(sheet.notes.find((i) => i.kind === "direction")!.text).toContain(
+      "family connector direction",
+    );
+    // Q4: was "return".
+    expect(sheet.paths.find((p) => p.end.elementId === 14122436)!.side).toBe("supply");
     expect(sheet.blockers.some((b) => b.kind === "class-change")).toBe(false);
     expect(sheet.totals.requiredEspInWg).toBeNull();
 
@@ -630,9 +642,12 @@ it.skipIf(!existsSync(CHADDS))(
         endCfm: { 14577391: 150, 6105264: 35, 6953852: 50, 13760867: 1200 },
       }),
     });
-    expect(asserted.fan.flowCfm).toBe(150);
-    // The intake (damper to the capped plenum) at 150 cfm: W0-A's independent sum was 0.006478.
-    expect(asserted.totals.return.knownInWg).toBeCloseTo(0.006478, 6);
+    // Q4: was 150. Under the family's roles the typed flow reaches no carrying end: the intake is the
+    // supply side and ends at the capped plenum's open end, and the real discharge is siblings carrying none.
+    expect(asserted.fan.flowCfm).toBe(0);
+    // Q4: was 0.006478 (the intake at 150 cfm, W0-A's independent sum). Nothing is priced on either side now.
+    expect(asserted.totals.return.knownInWg).toBe(0);
+    expect(asserted.totals.supply.knownInWg).toBe(0);
     expect(asserted.totals.requiredEspInWg).toBeNull();
   },
   // Parses a 14 MB retained snapshot; under the serial verify suite it took 11.8 s.
@@ -809,7 +824,33 @@ it("end terminals decide direction despite reversed metadata; an outdoor louver 
     ["return", 10],
   ]);
   expect(sheet.notes.find((i) => i.kind === "direction")!.text).toContain("ends:");
+  // Both connectors read `out`: the family states no direction, so none is manufactured and no mismatch is claimed.
+  expect(sheet.fan.directionMismatch).toBeNull();
   expect(sheet.blockers).toEqual([]);
+  // Q4: one `out` facing one `in` is the family's word; it sets the roles and the network's reading is a mismatch fact.
+  const stated = snapshot(
+    [
+      node(100, "equipment", {
+        connectors: [conn(0, [10, 0], round(8)), { ...conn(1, [20, 0], round(8)), direction: "in" }],
+      }),
+      louver,
+      supply,
+    ],
+    [],
+  );
+  const ruled = buildSheet({
+    snapshot: stated,
+    fan: { unitId: 100, portIndex: 0 },
+    roster: [fanPort(100, 0, 1)],
+    grids,
+    inputs: inputsFor(stated, { endCfm: { 10: 100, 20: 100 } }),
+  });
+  expect(ruled.fan).toMatchObject({
+    dischargePortIndex: 0,
+    inletPortIndex: 1,
+    directionMismatch: { discharge: 0, networkDischarge: 1 },
+  });
+  expect(ruled.notes.find((i) => i.kind === "direction")!.text).toContain("family connector direction");
 });
 
 it("a Greenheck ESD louver classified Supply Air is still an outdoor inlet end (Chadds 14088043)", () => {
@@ -943,7 +984,7 @@ it("a branch-entry tap onto this fan's own network is a split (R-Q4): the walk c
   expect(
     sheet.notes.some((i) => i.kind === "merge" && i.text.startsWith("merge 2 branch loss:")),
   ).toBe(false);
-  expect(sheet.paths.every((p) => p.complete)).toBe(true);
+  expect(sheet.paths.flatMap((p) => p.blockerIds)).toEqual([]);
   const beyond = buildChain({
     ...input,
     start: { elementId: 100, connector: 0 },
@@ -1074,6 +1115,20 @@ it("R-SHARE: a louver shared with a sibling's inlet carries both consumers; this
     inputs: inputsFor(snap, { endCfm: { 100: 150, 20: 150, 30: 1120 } }),
   });
   expect(typed.fan).toMatchObject({ dischargePortIndex: 1, inletPortIndex: 0 });
+  // Two fans sharing a trunk: the encounter is accepted with no static, so the shared legs carry the
+  // total physical flow (asserted below) and the sibling's pressure is never summed into this fan's.
+  expect(typed.encounters).toEqual([
+    expect.objectContaining({
+      host: { unitId: 200, portIndex: 1 },
+      side: "return",
+      verdict: "accepted",
+      static: { kind: "none" },
+    }),
+  ]);
+  expect(typed.blockers.some((b) => b.kind === "backflow")).toBe(false);
+  expect(
+    typed.claim.kind === "complete" ? typed.claim.requiredEspInWg : typed.claim.knownInWg,
+  ).toBeCloseTo(typed.totals.supply.knownInWg + typed.totals.return.knownInWg, 6);
   expect(typed.paths.find((p) => p.side === "return" && p.end.fan?.unitId === 200)?.end.kind).toBe(
     "sibling-fan",
   );
@@ -1330,8 +1385,8 @@ it("a missing terminal flow withholds path completeness and required ESP", () =>
     grids,
     inputs,
   });
-  expect(sheet.paths.find((p) => p.end.elementId === 6)?.complete).toBe(false);
-  expect(sheet.totals.supply.complete).toBe(false);
+  expect(sheet.claim.kind).toBe("incomplete");
+  expect(sheet.totals.supply.worstPath).toBeNull();
   expect(sheet.totals.requiredEspInWg).toBeNull();
   expect(sheet.blockers.some((b) => b.kind === "no-flow")).toBe(true);
 });
@@ -1373,5 +1428,159 @@ it("model fan flow conflict names its slot and the terminal sum", () => {
     text: expect.stringContaining(
       "1200 cfm (model:PE_M_Fan_AirFlow) conflicts with 942 cfm (walked end sum)",
     ),
+  });
+});
+
+it("lost native coverage never reads complete, and typed evidence reproduces each leg's loss without its text", () => {
+  const input = {
+    fan: { unitId: 100, portIndex: 0 },
+    roster: [fanPort(100, 0, 1)],
+    grids,
+    inputs: inputsFor(network, {
+      endCfm: { 6: 200, 8: 100, 10: 300 },
+      drops: { 6: 0.05, 8: 0.08, 10: 0.03 },
+    }),
+  };
+  const walk = { startId: 100, hops: 1, elementsReached: 1, openEnds: 0, candidates: [], truncated: false, elapsedMs: 0, unreadPeers: [] };
+  const whole = buildSheet({ ...input, snapshot: { ...network, walk } });
+  expect(whole.claim.kind).toBe("complete");
+  const unread = buildSheet({
+    ...input,
+    snapshot: { ...network, walk: { ...walk, unreadPeers: [{ elementId: 3, connector: 1 }] } },
+  });
+  expect(unread.claim).toMatchObject({
+    kind: "incomplete",
+    coverage: [{ kind: "native-peer", elementId: 3, ref: "3:1" }],
+  });
+  expect(unread.totals.requiredEspInWg).toBeNull();
+  expect(
+    buildSheet({ ...input, snapshot: { ...network, walk: { ...walk, truncated: true } } }).claim,
+  ).toMatchObject({ kind: "incomplete", coverage: [{ kind: "budget" }] });
+  expect(
+    buildSheet({ ...input, snapshot: { ...network, reach: { unreadPeers: [], complete: false } } }).claim,
+  ).toMatchObject({ kind: "incomplete", coverage: [{ kind: "native-peer", elementId: null }] });
+  const kinds = new Set<string>();
+  for (const leg of Object.values(whole.legs)) {
+    const e = leg.evidence;
+    kinds.add(e.kind);
+    if (e.kind === "coefficient")
+      expect(e.coefficient * e.velocityPressureInWg).toBeCloseTo(leg.lossInWg!, 4);
+    if (e.kind === "drop") expect(e.value).toMatchObject({ status: "valid", value: leg.lossInWg });
+  }
+  expect([...kinds].sort()).toEqual(["coefficient", "drop", "friction"]);
+  expect(whole.legs["9:0>1"]!.evidence).toMatchObject({
+    kind: "friction",
+    lengthFt: 20,
+    roughnessFt: 0.0003,
+    hydraulicDiameterFt: expect.closeTo(8 / 12, 6),
+  });
+});
+
+it("H5 through two real calcs: a guest discharging into a host's supply trunk is backflow, never complete unruled, and mutual acceptance is a cycle", () => {
+  // Host 200:0 -> duct 20 -> tee 40 -> duct 41 -> grille 42; guest 300:0 -> duct 30 -> the same tee.
+  // Each unit returns through its own duct and grille (22 -> 23, 32 -> 33).
+  const two = (id: number, out: number, back: number) =>
+    node(id, "equipment", {
+      connectors: [conn(0, [out, 0], round(8)), { ...conn(1, [back, 0], round(8)), direction: "in" }],
+    });
+  const run = (id: number, from: [number, number], to: [number, number]) =>
+    duct(id, 10, round(8), [[0, 0, 0], [10, 0, 0]], [conn(0, from, round(8)), conn(1, to, round(8))]);
+  const tee40 = node(40, "fitting", {
+    partType: "Tee",
+    connectors: [conn(0, [20, 1], round(8)), conn(1, [41, 0], round(8)), conn(2, [30, 1], round(8))],
+  });
+  const grille = (id: number, from: number) =>
+    node(id, "terminal", { connectors: [conn(0, [from, 1], round(8))] });
+  const snap = snapshot(
+    [two(200, 20, 22), two(300, 30, 32), tee40, grille(42, 41), grille(23, 22), grille(33, 32)],
+    [run(20, [200, 0], [40, 0]), run(30, [300, 0], [40, 2]), run(41, [40, 1], [42, 0]), run(22, [200, 1], [23, 0]), run(32, [300, 1], [33, 0])],
+  );
+  const roster = [fanPort(200, 0, 1), fanPort(300, 0, 1)];
+  const inputs = inputsFor(snap, {
+    endCfm: { 42: 300, 23: 200, 33: 100, 200: 200, 300: 100 },
+    drops: { 40: 0.04, 42: 0.03, 23: 0.03, 33: 0.03 },
+  });
+  const calc = (unitId: number, rulings: { elementId: number; connector: number }[] = []) =>
+    buildSheet({
+      snapshot: snap,
+      fan: { unitId, portIndex: 0 },
+      roster,
+      grids,
+      inputs,
+      encounterRulings: rulings.map((at) => ({ at, verdict: "accepted" as const })),
+    });
+  const guest = calc(300);
+  // Unruled: an error at the tee, a boundary, never complete. Duct 41 is the shared trunk.
+  expect(guest.claim).toMatchObject({ kind: "to-boundary", blockingIds: ["backflow:40:0"] });
+  expect(guest.encounters).toEqual([
+    {
+      fan: { unitId: 300, portIndex: 0 },
+      host: { unitId: 200, portIndex: 0 },
+      elementId: 40,
+      connector: 0,
+      side: "supply",
+      verdict: "unruled",
+      static: { kind: "none" },
+    },
+  ]);
+  expect(guest.issues.find((i) => i.id === "backflow:40:0")).toMatchObject({
+    kind: "backflow",
+    severity: "blocking",
+    closer: { kind: "encounter" },
+  });
+  expect(guest.legs["41:0>1"]!.flowCfm).toBe(300);
+  const mine = { elementId: 40, connector: 0 };
+  const theirs = { elementId: 40, connector: 2 };
+  // Accepted here, but the host's own calc is unruled at the same tee: no number, never complete.
+  expect(calc(300, [mine]).claim).toMatchObject({
+    kind: "incomplete",
+    coverage: [{ kind: "host-calc", elementId: 40, ref: "host 200:0 calc is to-boundary" }],
+  });
+  // Both accepted: each waits on the other. A cycle, never complete, from either side.
+  for (const id of [300, 200])
+    expect(calc(id, [mine, theirs]).claim).toMatchObject({
+      kind: "incomplete",
+      coverage: [{ kind: "cycle" }],
+    });
+  // A complete host calc at this read's basis answers: its loss to the tee (duct 20) is added once.
+  const host = calc(200);
+  const complete = {
+    kind: "complete",
+    basis: host.basis,
+    requiredEspInWg: 1,
+    coverage: [],
+    blockingIds: [],
+  } as const;
+  const withHost = (network: string) =>
+    buildSheet({
+      snapshot: snap,
+      fan: { unitId: 300, portIndex: 0 },
+      roster,
+      grids,
+      inputs,
+      encounterRulings: [{ at: mine, verdict: "accepted" }],
+      hosts: new Map([["200:0", { ...host, claim: complete, network }]]),
+    });
+  const answered = withHost(host.network);
+  const tieIn = host.legs["20:0>1"]!.lossInWg!;
+  expect(answered.encounters[0]!.static).toMatchObject({
+    kind: "host-calc",
+    basis: host.basis,
+    inWg: expect.closeTo(tieIn, 6),
+  });
+  const supply = answered.paths.filter((p) => p.side === "supply");
+  expect(answered.claim).toMatchObject({
+    kind: "complete",
+    requiredEspInWg: expect.closeTo(
+      Math.max(supply[0]!.knownInWg, supply.find((p) => p.end.fan)!.knownInWg + tieIn) +
+        answered.totals.return.knownInWg,
+      5,
+    ),
+  });
+  // Backflow stays on the calc as an error after the ruling, no longer blocking.
+  expect(answered.issues.find((i) => i.kind === "backflow")).toMatchObject({ severity: "warning" });
+  expect(withHost("stale").claim).toMatchObject({
+    kind: "incomplete",
+    coverage: [{ kind: "host-calc", ref: "host 200:0 calc is at a stale basis" }],
   });
 });

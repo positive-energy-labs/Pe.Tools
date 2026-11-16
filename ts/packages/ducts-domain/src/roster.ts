@@ -149,6 +149,15 @@ function inferredPorts(
 }
 
 /**
+ * Q4 (kaitpw 2026-11-16): which of a paired port's two connectors the family says is the discharge.
+ * Only one `out` facing one `in` states a direction; unknown or bidirectional metadata states none.
+ */
+export function familyDischarge(node: Node, a: number, b: number): number | null {
+  const dir = (index: number) => node.connectors.find((p) => p.index === index)?.direction;
+  return dir(a) === "out" && dir(b) === "in" ? a : dir(a) === "in" && dir(b) === "out" ? b : null;
+}
+
+/**
  * The fan ports a kind finds on a unit's own connectors: an ERV needs exactly one classified outlet
  * per side, every other fan kind exactly one outlet, and `other` / `dehumidifier` are never
  * proposed a fan. The one rule the roster and the sheet's kind options both read.

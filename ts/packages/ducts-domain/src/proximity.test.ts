@@ -17,6 +17,7 @@ import { survey } from "./survey.ts";
 import { groupTree } from "./topology.ts";
 import type { DuctSnapshot } from "./types.ts";
 import { TEST_SLOTS } from "./sheet/test-inputs.ts";
+import { VOCABULARY } from "./sheet/scoped-snapshot.ts";
 
 type Node = DuctSnapshot["nodes"][number];
 type Segment = DuctSnapshot["segments"][number];
@@ -87,6 +88,7 @@ const snap = (segments: Segment[], nodes: Node[] = []): DuctSnapshot => {
   const groupIds = [...new Set([...segments, ...nodes].map((s) => s.groupId!))];
   return {
     coordinateEncoding: "native-double",
+    vocabulary: VOCABULARY,
     document: {
       title: "t",
       readAt: "2026-10-16T00:00:00Z",

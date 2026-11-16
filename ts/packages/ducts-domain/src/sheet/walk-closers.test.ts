@@ -73,7 +73,7 @@ it("auto-joins exactly 3 inches, records sheet input and leg provenance, and obe
     grids: {},
   };
   const chain = buildChain(input);
-  expect(chain.path!.complete).toBe(true);
+  expect(chain.path!.blockerIds).toEqual([]);
   expect(
     chain.notes.some((i) => i.text.startsWith("auto-joined") && i.text.endsWith("across 3.000 in, default ≤3 in")),
   ).toBe(true);

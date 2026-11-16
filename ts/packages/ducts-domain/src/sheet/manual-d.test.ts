@@ -2,14 +2,17 @@ import { expect, it } from "vite-plus/test";
 import raw from "./fixtures/manual-d-20261102.json" with { type: "json" };
 import tables from "./fixtures/manual-d-tables.json" with { type: "json" };
 import { buildSheet, type SheetSnapshot } from "./build.ts";
-import { inputsFor } from "./test-inputs.ts";
+import { inputsFor, withFamilyFlipped } from "./test-inputs.ts";
 import { suggestRoster } from "../roster.ts";
 import { friction, roundSection } from "../loss-physics.ts";
 import { lookupGrid, toGrids } from "../loss-grid.ts";
 // u2-w2, controlled snapshot, 2026-11-02 12:06–12:09 UTC; Project A --unsynced keep.
 // Read-only walks from MUAS-1, FC-23 and intake plenum 14106988; no model changes/sync.
-const snapshot = raw as unknown as SheetSnapshot;
-const r = suggestRoster(snapshot),
+// Q4 (kaitpw 2026-11-16): MUAS-1's family reads c2 out, c1 in, against its network. Before Q4 the ends chose
+// the roles and this capture priced as recorded; now the family does, so the roles the numbers below were
+// certified under are stated on the capture. The roster still comes from the capture as read.
+const snapshot = withFamilyFlipped(raw as unknown as SheetSnapshot, 14577391);
+const r = suggestRoster(raw as unknown as SheetSnapshot),
   roster = [...r.fans, ...r.suggestions];
 const grids = toGrids({ tables });
 function replay(id: number) {
@@ -35,6 +38,8 @@ it("Manual D real r52 taps price and both MUAS sides complete", () => {
     lookupGrid(grids["SD5-18"]!.Cb1!, 50 / 865, 1).value * friction(roundSection(10), 50, 0).pv,
   ).toBeCloseTo(2.49, 4);
   const s = replay(14577391);
+  // Q4: was network-chosen with no stated family; the family (as stated above) now sets discharge c1.
+  expect(s.fan).toMatchObject({ dischargePortIndex: 1, inletPortIndex: 2 });
   expect(s.blockers).toEqual([]);
   expect(s.totals.supply.worstPath).toBeCloseTo(2.057835, 6);
   expect(s.totals.return.worstPath).toBeCloseTo(0.600244, 6);

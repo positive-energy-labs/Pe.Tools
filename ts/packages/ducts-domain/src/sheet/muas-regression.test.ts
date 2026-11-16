@@ -2,7 +2,7 @@ import { expect, it } from "vite-plus/test";
 import raw from "./fixtures/muas-real.json" with { type: "json" };
 import type { SheetSnapshot } from "./build.ts";
 import { buildSheet } from "./build.ts";
-import { inputsFor } from "./test-inputs.ts";
+import { inputsFor, withFamilyFlipped } from "./test-inputs.ts";
 import { suggestRoster } from "../roster.ts";
 const snapshot = raw as unknown as SheetSnapshot;
 // Retained Chadds topology: .artifacts/tmp/ducts-sheet/chadds-snapshot-health.json,
@@ -22,14 +22,18 @@ const flows = {
   13760867: 1200,
 };
 const joins = [{ pair: ["14106988:1", "14122436:1"] as const, verdict: "accept" as const }];
-function replay(restore: boolean) {
+// Q4 (kaitpw 2026-11-16): MUAS-1's family reads c2 out, c1 in, against its network. Before Q4 the ends chose
+// the roles and this capture priced as recorded; now the family does, so the roles the numbers below were
+// certified under are stated on the capture. The roster still comes from the capture as read.
+const asNetworkReads = withFamilyFlipped(snapshot, 14577391);
+function replay(restore: boolean, on: SheetSnapshot = asNetworkReads) {
   const roster = suggestRoster(snapshot);
   return buildSheet({
-    snapshot,
+    snapshot: on,
     roster: [...roster.fans, ...roster.suggestions],
     fan: { unitId: 14577391, portIndex: 2 },
     grids: {},
-    inputs: inputsFor(snapshot, {
+    inputs: inputsFor(on, {
       slot: "revit:Flow",
       rulings: joins,
       endCfm: restore ? flows : { 14577391: 900, 14088043: 1120 },
@@ -77,4 +81,14 @@ it("silencer and heater are always editable Parts, including before a drop is ty
   expect(inputsFor(snapshot, { roles: { 14577396: "fan" } }).units["14577396"]?.role.value).toBe(
     "fan",
   );
+});
+it("Q4: the family's connector direction sets MUAS-1's roles, and the network's other reading is a mismatch fact", () => {
+  // Unit 14577391 states c2 out and c1 in; its ends (the louver plenum, FC-23's return) read the other way.
+  const sheet = replay(true, snapshot);
+  expect(sheet.fan).toMatchObject({
+    dischargePortIndex: 2,
+    inletPortIndex: 1,
+    directionMismatch: { discharge: 2, networkDischarge: 1 },
+  });
+  expect(sheet.notes.find((n) => n.kind === "direction")!.text).toContain("family connector direction");
 });

@@ -11,6 +11,7 @@ import { phased } from "./phases.ts";
 import { tolerated } from "./survey.ts";
 import type { DuctSnapshot } from "./types.ts";
 import { TEST_SLOTS } from "./sheet/test-inputs.ts";
+import { VOCABULARY } from "./sheet/scoped-snapshot.ts";
 
 type Segment = DuctSnapshot["segments"][number];
 type Connector = Segment["connectors"][number];
@@ -62,6 +63,7 @@ const snap = (segments: Segment[], order: string[] | null = ORDER): DuctSnapshot
   const groupIds = [...new Set(segments.map((s) => s.groupId!))];
   return {
     coordinateEncoding: "native-double",
+    vocabulary: VOCABULARY,
     document: {
       title: "t",
       readAt: "2026-10-19T00:00:00Z",

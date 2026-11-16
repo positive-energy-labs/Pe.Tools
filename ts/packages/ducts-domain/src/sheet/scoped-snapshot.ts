@@ -5,6 +5,13 @@
  * issues), so every element joins one `sheet` group: the picture and namer draw by group.
  */
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
+import { DUCT_UNIT_KINDS, FAN_BLOCKER_KINDS } from "@pe/host-contracts/generated";
+
+/** The native fan vocabulary as a snapshot carries it; a snapshot built in TS states the generated lists. */
+export const VOCABULARY: DuctSnapshot["vocabulary"] = {
+  unitKinds: [...DUCT_UNIT_KINDS],
+  blockerKinds: [...FAN_BLOCKER_KINDS],
+};
 
 export const SHEET_GROUP = "sheet";
 
@@ -12,6 +19,7 @@ export const SHEET_GROUP = "sheet";
 export const EMPTY_SNAPSHOT: DuctSnapshot = {
   document: { title: "", readAt: "", elapsedMs: 0, networkBasedCalculations: false },
   coordinateEncoding: "native-double",
+  vocabulary: VOCABULARY,
   levels: [],
   groups: [],
   nodes: [],
