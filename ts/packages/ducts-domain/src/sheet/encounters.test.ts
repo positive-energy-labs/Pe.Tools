@@ -85,7 +85,7 @@ it("an encounter sits at the path's last leg; a ruling changes its verdict, neve
     static: { kind: "none" },
   });
   const ruled = encountersOf(SELF, paths, legs, [
-    { at: { elementId: 20, connector: 2 }, verdict: "accepted" },
+    { at: { elementId: 20, connector: 2 }, verdict: "accepted", by: "human", ref: "work:test" },
   ]);
   expect(ruled[0]!.encounter).toMatchObject({ verdict: "accepted", static: { kind: "none" } });
 });
@@ -113,7 +113,7 @@ it("H5: the host static is its calc's cumulative loss to the tie-in, and only a 
 
 it("a positive tie-in static is added once, on its own path; an accepted tie-in with no host number is a gap", () => {
   const accepted = () =>
-    encountersOf(SELF, paths, legs, [{ at: { elementId: 20, connector: 2 }, verdict: "accepted" }]);
+    encountersOf(SELF, paths, legs, [{ at: { elementId: 20, connector: 2 }, verdict: "accepted", by: "human", ref: "work:test" }]);
   // Accepted, but no host calc answered: never complete.
   expect(claimOf(facts({ met: accepted() }))).toMatchObject({
     kind: "incomplete",
@@ -130,7 +130,7 @@ it("a positive tie-in static is added once, on its own path; an accepted tie-in 
     blockingIds: [],
   });
   const refused = encountersOf(SELF, paths, legs, [
-    { at: { elementId: 20, connector: 2 }, verdict: "refused" },
+    { at: { elementId: 20, connector: 2 }, verdict: "refused", by: "human", ref: "work:test" },
   ]);
   expect(claimOf(facts({ met: refused })).kind).toBe("incomplete");
 });

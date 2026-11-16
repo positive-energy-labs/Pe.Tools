@@ -6,6 +6,18 @@ import type { DuctSnapshot } from "../types.ts";
 import type { SheetSnapshot } from "./build.ts";
 import { END_KEY, FITTING_DROP_CELL, JOIN_KEY, resolveInputs, type WorkCell, type WorkLayer } from "./inputs.ts";
 
+/** Test-only: a native walk that read every peer, so a fixture's coverage is known (P-028). */
+export const TEST_WALK: NonNullable<DuctSnapshot["walk"]> = {
+  startId: 0,
+  hops: 0,
+  elementsReached: 0,
+  openEnds: 0,
+  candidates: [],
+  truncated: false,
+  elapsedMs: 0,
+  unreadPeers: [],
+};
+
 /** Test-only: a staged cell as a person staged it (contract amendment 2). */
 export const cell = <T>(value: T, by: WorkCell<T>["by"] = "human", ref = "work:test"): WorkCell<T> => ({
   value,

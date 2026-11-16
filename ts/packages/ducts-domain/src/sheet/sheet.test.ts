@@ -1,4 +1,4 @@
-import { inputsFor, TEST_FIRM, TEST_SLOTS } from "./test-inputs.ts";
+import { inputsFor, TEST_FIRM, TEST_SLOTS, TEST_WALK } from "./test-inputs.ts";
 /**
  * The path engine, deterministic. Synthetic: the kernel's independently computed network
  * (price-leg.test.ts, handcalc.py totals T6/T8) hung off a roster fan with a return run; a
@@ -78,6 +78,7 @@ const duct = (
 const snapshot = (nodes: Node[], segments: Segment[]): SheetSnapshot => ({
   nodes,
   segments,
+  walk: TEST_WALK,
   document: {
     title: "synthetic",
     readAt: "2026-10-27",
@@ -259,6 +260,8 @@ it("chain mode prices one asserted chain at a typed flow, with no ESP claim", ()
   });
   expect(chain.path!.legIds).toEqual(["1:0>1", "2:0>1", "3:0>2", "4:0>1", "7:0>1", "8:0>"]);
   expect(Object.values(chain.legs).every((l) => l.flowCfm === 100)).toBe(true);
+  // P-031: chain legs carry the pricer's evidence, never the shared placeholder.
+  expect(Object.values(chain.legs).map((l) => l.evidence.kind)).not.toContain("unpriced");
   expect(chain.path!.end.kind).toBe("terminal");
   expect(chain).not.toHaveProperty("totals");
 });
@@ -1527,7 +1530,7 @@ it("H5 through two real calcs: a guest discharging into a host's supply trunk is
       roster,
       grids,
       inputs,
-      encounterRulings: rulings.map((at) => ({ at, verdict: "accepted" as const })),
+      encounterRulings: rulings.map((at) => ({ at, verdict: "accepted" as const, by: "human" as const, ref: "work:test" })),
     });
   const guest = calc(300);
   // Unruled: an error at the tee, a boundary, never complete. Duct 41 is the shared trunk.
@@ -1552,6 +1555,22 @@ it("H5 through two real calcs: a guest discharging into a host's supply trunk is
   // 100 (300 less the host's 200); from the tee out, the shared trunk carries the physical 300.
   expect(guest.legs["30:0>1"]!.flowCfm).toBe(100);
   expect(guest.legs["41:0>1"]!.flowCfm).toBe(300);
+  // Map rule 6: each fan prices shared duct 41 on its own sheet, after its own run and never the other's.
+  const host = calc(200);
+  // Both sheets charge duct 41 its loss at the physical 300 cfm, and each charges its own run to the tee:
+  // the host's duct 20 at 200 cfm, the guest's duct 30 at 100, neither on the other's sheet.
+  expect(host.legs["41:0>1"]!.lossInWg).toBeGreaterThan(0);
+  expect(host.legs["41:0>1"]!.lossInWg).toBe(guest.legs["41:0>1"]!.lossInWg);
+  expect(host.legs["20:0>1"]!.lossInWg).toBeGreaterThan(guest.legs["30:0>1"]!.lossInWg!);
+  expect(Object.keys(host.legs)).not.toContain("30:0>1");
+  expect(Object.keys(guest.legs)).not.toContain("20:0>1");
+  // P-028: the same calc over a snapshot that read no coverage is incomplete and says so.
+  expect(
+    buildSheet({ snapshot: { ...snap, walk: undefined }, fan: { unitId: 300, portIndex: 0 }, roster, grids, inputs }).claim,
+  ).toMatchObject({
+    kind: "incomplete",
+    coverage: [{ kind: "native-peer", elementId: null, ref: "coverage unread: the snapshot carries no walk and no reach" }],
+  });
   // Unclassified grilles: the only thing the supply side meets is the host's discharge, which is the
   // encounter and no vote on direction. The guest gets the backflow and no direction mismatch.
   const bare = network();
@@ -1583,7 +1602,6 @@ it("H5 through two real calcs: a guest discharging into a host's supply trunk is
       coverage: [{ kind: "cycle" }],
     });
   // A complete host calc at this read's basis answers: its loss to the tee (duct 20) is added once.
-  const host = calc(200);
   const complete = {
     kind: "complete",
     basis: host.basis,
@@ -1598,7 +1616,7 @@ it("H5 through two real calcs: a guest discharging into a host's supply trunk is
       roster,
       grids,
       inputs,
-      encounterRulings: [{ at: mine, verdict: "accepted" }],
+      encounterRulings: [{ at: mine, verdict: "accepted", by: "human", ref: "work:test" }],
       hosts: new Map([["200:0", { ...host, claim: complete, network }]]),
     });
   const answered = withHost(host.network);

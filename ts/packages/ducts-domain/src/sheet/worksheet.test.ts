@@ -45,6 +45,7 @@ const sheet = {
     path(["a1", "a2", "e6"], 60, 0.08),
     path(["a1", "x7"], 70, 0.05, "sibling-fan"),
   ],
+  claim: { kind: "complete" },
 } as unknown as Sheet;
 (sheet.legs as Record<string, Leg>).x7 = leg("x7", 0, 0, 0);
 
@@ -86,6 +87,7 @@ it("a leg merging back into a run starts a new section", () => {
       [leg("x1", 2, 0, 0), leg("y2", 1, 0, 0), leg("z3", 1, 0, 0)].map((l) => [l.id, l]),
     ),
     paths: [path(["x1", "y2"], 1, 0.1), path(["x1", "z3"], 2, 0.1)],
+    claim: { kind: "complete" },
   } as unknown as Sheet;
   expect(
     worksheet(s, { maxFpm: { supply: 900, return: 700 } }).supply.sections.map((x) => x.legIds),
@@ -103,6 +105,7 @@ it("a side with no terminal: other fans' ports and streams it delivers to set th
       path(["a1", "x7"], 8, 0.01, "open-end"),
       path(["a1", "a2", "b3", "d5"], 6105264, 0.021895, "roster-fan-port"),
     ],
+    claim: { kind: "complete" },
   } as unknown as Sheet;
   const w = worksheet(muas, { maxFpm: { supply: 900, return: 700 } }).supply;
   expect(w.worstKnownInWg).toBe(0.028054);

@@ -1,5 +1,5 @@
 import { fittingPricingSchema } from "@pe/agent-contracts";
-import { inputsFor } from "./test-inputs.ts";
+import { inputsFor, TEST_WALK } from "./test-inputs.ts";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { expect, it } from "vite-plus/test";
 import type { DuctSnapshot } from "../types.ts";
@@ -64,6 +64,7 @@ const roster = [
 ] as FanPort[];
 function fixture() {
   return snapshotOf({
+    walk: TEST_WALK,
     slots: { ...slots, terminalFlow: "named" },
     nodes: [
       node(100, "equipment", [
@@ -507,6 +508,11 @@ it("a proposed join's turn at the fan root is priced on its path, not by the uni
     6,
   );
   expect(typed.totals.requiredEspInWg).toBeNull();
+  // P-031: the typed drop keeps the person who staged it and its ref, never restamped as an engine default.
+  expect(Object.values(typed.assumed.legs).map((l) => l.evidence)).toContainEqual({
+    kind: "drop",
+    value: expect.objectContaining({ value: 0.02, source: "Work", author: "human", ref: "work:test" }),
+  });
 });
 
 const retained =
@@ -567,6 +573,7 @@ it("assumed flow borrows a receiving unit's flow only through its intake, never 
   const units = (bDirection: "in" | "out", aKind: FanPort["kind"] = "muas") => {
     const dir = (p: Port, d: string): Port => ({ ...p, direction: d });
     const snapshot = snapshotOf({
+    walk: TEST_WALK,
       slots: { ...slots, terminalFlow: "named" },
       nodes: [
         node(300, "equipment", [

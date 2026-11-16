@@ -86,6 +86,29 @@ const mergeCandidates = (lists: readonly (Candidates | null | undefined)[]): Can
   );
 };
 
+type Coverage = Pick<DuctSnapshot, "walk" | "reach">;
+/**
+ * Coverage over several reads (P-021, P-012): unread peers union, a walk is truncated if any part's
+ * was, a reach is complete only if every part's was. The last part's other walk fields stand.
+ */
+export function mergeCoverage(parts: readonly Coverage[]): Coverage {
+  const walks = parts.flatMap((p) => (p.walk ? [p.walk] : []));
+  const reaches = parts.flatMap((p) => (p.reach ? [p.reach] : []));
+  const peers = (all: readonly { unreadPeers: NonNullable<Coverage["reach"]>["unreadPeers"] }[]) =>
+    byKey(
+      all.flatMap((x) => x.unreadPeers),
+      (p) => `${p.elementId}:${p.connector}`,
+    );
+  return {
+    walk: walks.length
+      ? { ...walks.at(-1)!, truncated: walks.some((w) => w.truncated), unreadPeers: peers(walks) }
+      : parts.at(-1)?.walk,
+    reach: reaches.length
+      ? { complete: reaches.every((r) => r.complete), unreadPeers: peers(reaches) }
+      : parts.at(-1)?.reach,
+  };
+}
+
 /**
  * Several `systems` reads as one snapshot, later parts winning. Elements, groups, flows, issues and
  * systems join by id, so a group two reads share (each answers it whole) counts once.
@@ -115,6 +138,7 @@ export function mergeSnapshots(parts: readonly DuctSnapshot[]): DuctSnapshot | n
   const readAt = parts.map((p) => p.document.readAt).sort();
   return {
     ...last,
+    ...mergeCoverage(parts),
     document: {
       ...last.document,
       readAt: readAt.at(-1)!,
@@ -148,6 +172,5 @@ export function mergeSnapshots(parts: readonly DuctSnapshot[]): DuctSnapshot | n
     ).sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0)),
     airflowCandidates: mergeCandidates(parts.map((p) => p.airflowCandidates)),
     fanFlowCandidates: mergeCandidates(parts.map((p) => p.fanFlowCandidates)),
-    walk: null,
   };
 }
