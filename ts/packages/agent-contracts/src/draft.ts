@@ -19,8 +19,9 @@ const deletableRung = <V extends z.ZodType>(value: V) =>
 const oneWrite = (rung: { value?: unknown; delete?: true }) =>
   (rung.delete === true) !== Object.hasOwn(rung, "value");
 const ONE_WRITE = { error: "a rung sets a value or deletes the property: exactly one" };
+export const authorSchema = z.enum(["human", "pea", "unknown"]);
 const CHANGE_META = {
-  by: z.enum(["human", "pea", "unknown"]).optional(),
+  by: authorSchema.optional(),
   at: z.string().nullable().optional(),
   base: z.number().int().nonnegative().nullable().optional(),
   note: z.string().nullish(),
@@ -71,7 +72,7 @@ export interface Rung {
   delete?: true;
 }
 
-export type Author = "human" | "pea" | "unknown";
+export type Author = z.infer<typeof authorSchema>;
 export type Change = Rung & {
   by?: Author;
   at?: string | null;

@@ -5,24 +5,26 @@ import type { Immutable } from "./route-kernel-data.ts";
 import { ductCalculationSchema } from "./ducts.ts";
 import { draftCellSchema } from "./draft.ts";
 import type { RouteStateSpec } from "./route-state.ts";
+import { FAN_INPUTS } from "./fans-inputs.ts";
+import { schemaOf } from "./slots/sheet.ts";
 const elementSubjectSchema: z.ZodType<string> = subjectRefCodeSchema.refine(code => {
   const ref = decode(code); return ref.ok && ref.value.keyKind === "UniqueId";
 });
 
 const dropSchema = z.strictObject({
-  inWg: z.number().nonnegative(),
+  inWg: schemaOf(FAN_INPUTS[3].domain.fields.inWg),
   /** Where the number came from: a catalog page, a submittal, "rule of thumb". */
   source: z.string().optional(),
 });
 export type DuctDrop = z.infer<typeof dropSchema>;
 /** The external static Pe writes to an air mover (a unit id key); staged only, never a side effect. */
-const espSchema = z.strictObject({ inWg: z.number().nonnegative() });
+const espSchema = schemaOf(FAN_INPUTS[0].domain);
 export const DUCT_UNIT_ROLES = ["fan", "passive"] as const;
 /** Whether an air mover moves air (`fan`) or only sits in the path with a loss (`passive`). */
 const roleSchema = z.strictObject({ role: z.enum(DUCT_UNIT_ROLES) });
 export type DuctUnitRole = z.infer<typeof roleSchema>;
 /** A stated design flow; `source` says where (a balancing report, a note, a person). */
-const flowSchema = z.strictObject({ cfm: z.number().nonnegative(), source: z.string().optional() });
+const flowSchema = z.strictObject({ cfm: schemaOf(FAN_INPUTS[2].domain.fields.cfm), source: z.string().optional() });
 export type DuctFlow = z.infer<typeof flowSchema>;
 
 export const fansDocumentSchema = z.strictObject({

@@ -23,6 +23,37 @@ public sealed class DuctApplyPlanReviewProofTests {
     private static readonly ForgeTypeId FlowUnit = UnitTypeId.CubicFeetPerMinute;
 
     [Test]
+    public void Systems_reach_reports_failed_peer_reads_instead_of_claiming_complete(UIApplication ui) {
+        var app = ui.Application;
+        var doc = app.NewProjectDocument(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+            $"Autodesk\\RVT {app.VersionNumber}\\Templates\\English-Imperial\\Mechanical-Default.rte"));
+        try {
+            Autodesk.Revit.DB.Mechanical.Duct duct;
+            using (var t = new Transaction(doc, "Systems peer failure fixture")) {
+                t.Start();
+                var system = new FilteredElementCollector(doc).OfClass(typeof(MechanicalSystemType)).Cast<MechanicalSystemType>()
+                    .First(s => s.SystemClassification == MEPSystemClassification.SupplyAir);
+                var type = new FilteredElementCollector(doc).OfClass(typeof(DuctType)).Cast<DuctType>().First();
+                var level = new FilteredElementCollector(doc).OfClass(typeof(Level)).Cast<Level>().First();
+                duct = Autodesk.Revit.DB.Mechanical.Duct.Create(doc, system.Id, type.Id, level.Id, new XYZ(0, 0, 10), new XYZ(10, 0, 10));
+                Assert.That(t.Commit(), Is.EqualTo(TransactionStatus.Committed));
+            }
+            Assert.That(duct.MEPSystem, Is.Not.Null);
+            var selector = new DuctSnapshotSelector(DuctSelectorKind.Systems, SystemIds: [duct.MEPSystem!.Id.Value()]);
+            var control = DuctSnapshots.SnapshotWithPeers(doc, selector, _ => []);
+            var damaged = DuctSnapshots.SnapshotWithPeers(doc, selector, _ => throw new InvalidOperationException("forced peer read failure"));
+            var expected = DuctSnapshots.HvacConnectors(duct).Select(c => new DuctRef(duct.Id.Value(), c.Id)).ToList();
+            Assert.Multiple(() => {
+                Assert.That(control.Reach!.Complete, Is.True);
+                Assert.That(control.Reach.UnreadPeers, Is.Empty);
+                Assert.That(damaged.Reach!.Complete, Is.False);
+                Assert.That(damaged.Reach.UnreadPeers, Is.EquivalentTo(expected));
+                Assert.That(damaged.Walk, Is.Null, "systems growth carries its own completeness, not a fabricated from walk");
+            });
+        } finally { doc.Close(false); }
+    }
+
+    [Test]
     public void Accessory_method_unset_existing_loss_and_reported_pressure_are_native(UIApplication ui) {
         var path = Environment.GetEnvironmentVariable("PE_DUCT_REVIEW_FIXTURE");
         Assert.That(File.Exists(path), Is.True, "PE_DUCT_REVIEW_FIXTURE must name an owned copy of the existing duct model");

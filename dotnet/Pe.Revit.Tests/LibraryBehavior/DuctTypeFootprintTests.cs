@@ -41,6 +41,16 @@ public sealed class DuctTypeFootprintTests {
             }
             double TypeValue() => type.LookupParameter(TypeStatic).AsDouble();
             var before = TypeValue();
+            var cohort = DuctApplier.ParameterCohort(project, one.Id.Value(), TypeStatic, "snapshot:1")!;
+            var instanceCohort = DuctApplier.ParameterCohort(project, one.Id.Value(), InstanceStatic, "snapshot:1")!;
+            Assert.Multiple(() => {
+                Assert.That(cohort.Complete, Is.True);
+                Assert.That(cohort.Owner, Is.EqualTo(new DuctParameterOwner(DuctParameterOwnerKind.Type, type.Id.Value())));
+                Assert.That(cohort.Members.Select(m => m.ElementId), Is.EquivalentTo(new[] { one.Id.Value(), two.Id.Value() }), "includes the off-walk peer");
+                Assert.That(cohort.Members.Select(m => m.UniqueId), Is.EquivalentTo(new[] { one.UniqueId, two.UniqueId }));
+                Assert.That(instanceCohort.Members, Has.Count.EqualTo(1));
+                Assert.That(instanceCohort.Owner.Kind, Is.EqualTo(DuctParameterOwnerKind.Instance));
+            });
             var store = new DuctLossStore { Version = DuctLossStore.CurrentVersion };
             DuctApplyRequest Ask(DuctParameterSlotOverrides? slots, params DuctEquipmentWrite[] writes) =>
                 new(slots, [], [], [], writes, [], [], store);
