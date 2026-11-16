@@ -71,12 +71,23 @@ export function currentRouteStartupProjection(root: string, receipt: RouteStartu
  * Those inputs are invisible to the git inventory, so the receipt is off while one exists.
  * `git check-ignore` exits 1 when none of the paths is ignored. */
 const noIgnoredRouteInput = (root: string) => {
-  const source = resolve(root, "ts/apps/web/src");
-  const paths = readdirSync(source, { withFileTypes: true })
-    .filter((d) => d.isDirectory())
-    .flatMap((d) => ["route.ts", "graph.ts"].map((name) => join(source, d.name, name)))
+  const paths = routeFolderCandidates(root)
+    .flatMap((folder) => ["route.ts", "graph.ts"].map((name) => join(folder, name)))
     .filter(existsSync);
-  return !paths.length || spawnSync("git", ["check-ignore", ...paths], { cwd: source }).status === 1;
+  return !paths.length || spawnSync("git", ["check-ignore", ...paths], { cwd: root }).status === 1;
+};
+
+const folders = (path: string) =>
+  readdirSync(path, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => join(path, d.name));
+
+/** Every directory a route may live in, absolute: each folder of `ts/apps/web/src`, then each
+ * product's `web` (ADR 0046). The producer, the host build and this receipt discover from this one list. */
+export const routeFolderCandidates = (root: string) => {
+  const products = resolve(root, "ts/products");
+  return [
+    ...folders(resolve(root, "ts/apps/web/src")),
+    ...(existsSync(products) ? folders(products).map((product) => join(product, "web")) : []),
+  ];
 };
 
 /** The stored receipt while it is still current, else undefined: the producer remains authority. */
