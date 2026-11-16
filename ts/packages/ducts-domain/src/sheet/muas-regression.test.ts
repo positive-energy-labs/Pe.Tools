@@ -78,3 +78,13 @@ it("silencer and heater are always editable Parts, including before a drop is ty
     "fan",
   );
 });
+it("Q4: the family's connector direction sets MUAS-1's roles, and the network's other reading is a mismatch fact", () => {
+  // Unit 14577391 states c2 out and c1 in; its ends (the louver plenum, FC-23's return) read the other way.
+  const sheet = replay(true);
+  expect(sheet.fan).toMatchObject({
+    dischargePortIndex: 2,
+    inletPortIndex: 1,
+    directionMismatch: { discharge: 2, networkDischarge: 1 },
+  });
+  expect(sheet.notes.find((n) => n.kind === "direction")!.text).toContain("family connector direction");
+});

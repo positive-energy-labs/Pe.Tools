@@ -1,5 +1,5 @@
 import { expect, it } from "vite-plus/test";
-import { resolveInputs, resolveCriteria } from "./inputs.ts";
+import { encounterRulings, resolveInputs, resolveCriteria, stagedEsp } from "./inputs.ts";
 import { TEST_FIRM } from "./test-inputs.ts";
 import type { SheetSnapshot } from "./build.ts";
 import { flowsOf } from "./flow.ts";
@@ -106,4 +106,32 @@ it("unknown inflow creates a missing leg and cannot certify worksheet totals", (
   const w = worksheet(sheet, { maxFpm: { supply: 900, return: 700 } }).supply;
   expect(w.runs[0]).toMatchObject({ complete: false, critical: false, residualInWg: null });
   expect(w.sections[0]).toMatchObject({ complete: false, unpricedLegs: 1 });
+});
+
+it("Q2: rated ESP reads the model alone and ignores staged ESP; staged is its own value with its author", () => {
+  const key = "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000002";
+  const fan = {
+    nodes: [
+      {
+        uniqueId: key.slice(9),
+        id: 2,
+        kind: "equipment",
+        family: "AHU",
+        type: "a",
+        facts: [{ key: "externalStatic", value: 0.5 }],
+        connectors: [],
+      },
+    ],
+    segments: [],
+  } as unknown as SheetSnapshot;
+  const layers = { snapshot: fan, firm: TEST_FIRM, work: { esp: { [key]: { inWg: 0.9 } } } };
+  expect(resolveInputs(layers).units["2"]!.esp).toMatchObject({ value: 0.5, source: "model" });
+  expect(stagedEsp(layers)["2"]).toMatchObject({ status: "valid", value: 0.9, source: "Work", author: "unknown" });
+  expect(
+    stagedEsp({ ...layers, run: { esp: { [key]: { inWg: 1.1, by: "pea" as const } } } })["2"],
+  ).toMatchObject({ value: 1.1, source: "run", author: "pea" });
+  expect(stagedEsp({ snapshot: fan })).toEqual({});
+  expect(
+    encounterRulings({ work: { assumptions: { "encounter:20:2": { kind: "verdict", verdict: "accept" } } } }),
+  ).toEqual([{ at: { elementId: 20, connector: 2 }, verdict: "accepted" }]);
 });

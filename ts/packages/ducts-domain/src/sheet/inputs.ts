@@ -12,7 +12,7 @@ import type {
 } from "@pe/agent-contracts";
 import type { Author } from "@pe/agent-contracts";
 import { catalogLinkKey, catalogLoss, type Catalogs } from "../catalog.ts";
-import type { SourcedValue } from "./contract-pending.ts";
+import type { SourcedValue } from "@pe/agent-contracts";
 import { ENCOUNTER_KEY, type EncounterRuling } from "./encounters.ts";
 import { slotFlowOf } from "../kernel/terminal-flow.ts";
 import { suggestKind, suggestRole } from "../roster.ts";

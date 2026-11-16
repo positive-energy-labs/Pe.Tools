@@ -11,7 +11,7 @@ import type {
   FanEspValues,
   FanIssue,
   LegEvidence,
-} from "./contract-pending.ts";
+} from "@pe/agent-contracts";
 
 export const SHEET_ENGINE_VERSION = "sheet/4";
 

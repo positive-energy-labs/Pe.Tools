@@ -77,7 +77,7 @@ import type {
   FanIssue,
   LegEvidence,
   SourcedValue,
-} from "./contract-pending.ts";
+} from "@pe/agent-contracts";
 import {
   backflowId,
   claimOf,
@@ -90,7 +90,7 @@ import { REVIT_FLOW_SLOT, slotFlowOf } from "../kernel/terminal-flow.ts";
 
 /** Issues and tolerances are C#'s model health (ducts LEDGER 2026-10-29); absent, no open end has a measured neighbourhood. */
 export type SheetSnapshot = Pick<DuctSnapshot, "nodes" | "segments" | "document"> &
-  Partial<Pick<DuctSnapshot, "slots" | "issues" | "tolerances" | "walk">>;
+  Partial<Pick<DuctSnapshot, "slots" | "issues" | "tolerances" | "walk" | "reach">>;
 
 export interface PricingInput {
   snapshot: SheetSnapshot;
@@ -1921,6 +1921,17 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
     ...(input.snapshot.walk?.truncated
       ? [{ kind: "budget", elementId: null, ref: "the native walk was truncated" } as const]
       : []),
+    // The document reach (FANS-DOCREACH-SWALLOW): its unread peers, and an incomplete reach that names none.
+    ...(input.snapshot.reach?.unreadPeers ?? []).map(
+      (p): CoverageGap => ({
+        kind: "native-peer",
+        elementId: p.elementId,
+        ref: `${p.elementId}:${p.connector}`,
+      }),
+    ),
+    ...(input.snapshot.reach?.complete === false && !input.snapshot.reach.unreadPeers.length
+      ? [{ kind: "native-peer", elementId: null, ref: "the document reach is incomplete" } as const]
+      : []),
   ];
   for (const m of met) {
     if (m.policy.static !== "host-calc" || m.encounter.verdict !== "accepted") continue;
@@ -1939,7 +1950,8 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
     if (m.policy.backflow && !pricer.blockers.has(backflowId(m.encounter)))
       pricer.blockers.set(backflowId(m.encounter), {
         id: backflowId(m.encounter),
-        kind: "backflow",
+        // OWED(writer A): `backflow` is not in the native FanBlockerKind vocabulary yet (DuctFanVocabulary.cs); the cast goes when it is.
+        kind: "backflow" as Blocker["kind"],
         elementId: m.encounter.elementId,
         connector: m.encounter.connector,
         owner: m.encounter.host,

@@ -423,7 +423,7 @@ it("an open end blocks its side; a vacant opposed port within the default gap au
     // Slice 5: a blocker names its element by the codec's UniqueId SubjectRef, minted here.
     subject: `UniqueId:6d52156a-3876-4d76-b641-341454252f26-${(51).toString(16).padStart(8, "0")}`,
   });
-  expect(sheet.totals.supply).toMatchObject({ complete: false, worstPath: null });
+  expect(sheet.totals.supply).toMatchObject({ worstPath: null });
   // The supply's one end carries nothing, so it carries what the return delivers.
   expect(sheet.legs["51:0>1"]).toMatchObject({
     flowCfm: 100,
@@ -808,7 +808,33 @@ it("end terminals decide direction despite reversed metadata; an outdoor louver 
     ["return", 10],
   ]);
   expect(sheet.notes.find((i) => i.kind === "direction")!.text).toContain("ends:");
+  // Both connectors read `out`: the family states no direction, so none is manufactured and no mismatch is claimed.
+  expect(sheet.fan.directionMismatch).toBeNull();
   expect(sheet.blockers).toEqual([]);
+  // Q4: one `out` facing one `in` is the family's word; it sets the roles and the network's reading is a mismatch fact.
+  const stated = snapshot(
+    [
+      node(100, "equipment", {
+        connectors: [conn(0, [10, 0], round(8)), { ...conn(1, [20, 0], round(8)), direction: "in" }],
+      }),
+      louver,
+      supply,
+    ],
+    [],
+  );
+  const ruled = buildSheet({
+    snapshot: stated,
+    fan: { unitId: 100, portIndex: 0 },
+    roster: [fanPort(100, 0, 1)],
+    grids,
+    inputs: inputsFor(stated, { endCfm: { 10: 100, 20: 100 } }),
+  });
+  expect(ruled.fan).toMatchObject({
+    dischargePortIndex: 0,
+    inletPortIndex: 1,
+    directionMismatch: { discharge: 0, networkDischarge: 1 },
+  });
+  expect(ruled.notes.find((i) => i.kind === "direction")!.text).toContain("family connector direction");
 });
 
 it("a Greenheck ESD louver classified Supply Air is still an outdoor inlet end (Chadds 14088043)", () => {
@@ -1372,5 +1398,50 @@ it("model fan flow conflict names its slot and the terminal sum", () => {
     text: expect.stringContaining(
       "1200 cfm (model:PE_M_Fan_AirFlow) conflicts with 942 cfm (walked end sum)",
     ),
+  });
+});
+
+it("lost native coverage never reads complete, and typed evidence reproduces each leg's loss without its text", () => {
+  const input = {
+    fan: { unitId: 100, portIndex: 0 },
+    roster: [fanPort(100, 0, 1)],
+    grids,
+    inputs: inputsFor(network, {
+      endCfm: { 6: 200, 8: 100, 10: 300 },
+      drops: { 6: 0.05, 8: 0.08, 10: 0.03 },
+    }),
+  };
+  const walk = { startId: 100, hops: 1, elementsReached: 1, openEnds: 0, candidates: [], truncated: false, elapsedMs: 0, unreadPeers: [] };
+  const whole = buildSheet({ ...input, snapshot: { ...network, walk } });
+  expect(whole.claim.kind).toBe("complete");
+  const unread = buildSheet({
+    ...input,
+    snapshot: { ...network, walk: { ...walk, unreadPeers: [{ elementId: 3, connector: 1 }] } },
+  });
+  expect(unread.claim).toMatchObject({
+    kind: "incomplete",
+    coverage: [{ kind: "native-peer", elementId: 3, ref: "3:1" }],
+  });
+  expect(unread.totals.requiredEspInWg).toBeNull();
+  expect(
+    buildSheet({ ...input, snapshot: { ...network, walk: { ...walk, truncated: true } } }).claim,
+  ).toMatchObject({ kind: "incomplete", coverage: [{ kind: "budget" }] });
+  expect(
+    buildSheet({ ...input, snapshot: { ...network, reach: { unreadPeers: [], complete: false } } }).claim,
+  ).toMatchObject({ kind: "incomplete", coverage: [{ kind: "native-peer", elementId: null }] });
+  const kinds = new Set<string>();
+  for (const leg of Object.values(whole.legs)) {
+    const e = leg.evidence;
+    kinds.add(e.kind);
+    if (e.kind === "coefficient")
+      expect(e.coefficient * e.velocityPressureInWg).toBeCloseTo(leg.lossInWg!, 4);
+    if (e.kind === "drop") expect(e.value).toMatchObject({ status: "valid", value: leg.lossInWg });
+  }
+  expect([...kinds].sort()).toEqual(["coefficient", "drop", "friction"]);
+  expect(whole.legs["9:0>1"]!.evidence).toMatchObject({
+    kind: "friction",
+    lengthFt: 20,
+    roughnessFt: 0.0003,
+    hydraulicDiameterFt: expect.closeTo(8 / 12, 6),
   });
 });

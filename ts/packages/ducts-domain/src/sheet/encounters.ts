@@ -2,7 +2,7 @@
  * Where one fan's air meets another's (MAP invariant 5, rulings Q3 and H5), and the claim that
  * follows from it (invariant 1). Pure over a priced sheet: no walk, no pricing, no solver.
  */
-import type { CoverageGap, Encounter, FanClaim } from "./contract-pending.ts";
+import type { CoverageGap, Encounter, FanClaim } from "@pe/agent-contracts";
 import type { FanPortRef, Leg, SheetPath, Side } from "./types.ts";
 
 type Reached = NonNullable<SheetPath["end"]["reached"]> | "unknown";
