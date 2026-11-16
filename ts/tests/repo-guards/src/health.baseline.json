@@ -639,7 +639,6 @@
     "ts/apps/web/src/navigation/state.tsx": 1,
     "ts/apps/web/src/ops/route.ts": 1,
     "ts/apps/web/src/pages-bind/route.ts": 1,
-    "ts/apps/web/src/product-map/diagram.tsx": 1,
     "ts/apps/web/src/rooms/card.tsx": 2,
     "ts/apps/web/src/rooms/cards.ts": 7,
     "ts/apps/web/src/rooms/layers.tsx": 2,
