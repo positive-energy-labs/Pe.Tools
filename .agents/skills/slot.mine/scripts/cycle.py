@@ -1,4 +1,4 @@
-"""Write a mechanical cycle report; leave interpretation to the implementor."""
+"""Write the run's cycle report from git, T3 and the run directory. The root reads it and nothing else."""
 import argparse
 import collections
 import datetime as dt
@@ -12,7 +12,9 @@ import sys
 from retro import ts
 
 DB = Path('C:/Users/kaitp/.t3/userdata/statev2.sqlite')
-ROLES = re.compile(r'\b(driver|purger|integrator|lead)\b', re.I)
+ROLES = re.compile(r'\b(implementor|driver|purger|integrator)\b', re.I)
+STATES = ('open', 'fixing', 'fixed', 'owed?', 'owed')
+STAMPS = ('PROVEN', 'FALSIFIED', 'UNPROVEN')
 
 
 def git(*args):
@@ -62,6 +64,33 @@ def three_counts(estimates, refs, branches, partners):
     )
 
 
+def backlog_counts(text):
+    """`- [state] ...` lines, as `delegate` defines a backlog line."""
+    found = collections.Counter(m.lower() for m in re.findall(r'^\s*-\s*\[([a-z?]+)\]', text, re.M | re.I))
+    return {s: found[s] for s in STATES}
+
+
+def row_counts(text):
+    """One stamp per table row: the first stamp word on a line that starts with `|`."""
+    found = collections.Counter()
+    for line in text.splitlines():
+        m = line.lstrip().startswith('|') and re.search(r'\b(%s)\b' % '|'.join(STAMPS), line)
+        if m: found[m[1]] += 1
+    return {s: found[s] for s in STAMPS}
+
+
+def wave_rows(map_text, merged_subjects, refs):
+    """`Wave: <n> <branches>` lines: a wave is closed when every branch has a merge that names it."""
+    rows = []
+    for n, rest in re.findall(r'^\W*Wave:\s*(\S+)[ \t]+(.+)$', map_text, re.M):
+        branches = re.findall(r'[\w.-]+/[\w./-]+', rest)
+        merged = [b for b in branches if re.search(re.escape(b) + r'(?![\w-])', merged_subjects)]
+        started = [b for b in branches if b in refs or b in merged]
+        rows.append(dict(n=n, total=len(branches), merged=len(merged), started=len(started),
+                         closed=bool(branches) and len(merged) == len(branches)))
+    return rows
+
+
 def thread_snapshot(root, now):
     # retro's descendant helper excludes manual forks; a cycle needs every descendant.
     with sqlite3.connect(DB.as_uri() + '?mode=ro', uri=True) as db:
@@ -101,6 +130,9 @@ def partner_rows(threads, run_dir, tip):
         if not thread['role']:
             continue
         row = dict(thread, behind=None)
+        if row['role'] == 'implementor':  # it trails no tip: it ends with its wave
+            rows.append(dict(row, read=row['title']))
+            continue
         path = run_dir / 'last-read' / (row['role'] + '.sha')
         if not path.exists():
             row['read'] = 'no file'
@@ -138,6 +170,8 @@ def branch_rows(tip, base, threads):
         if not name.startswith(prefix):
             continue
         owners = [t for t in threads if t['branch'] == name]
+        if not owners and prefix == 't3/':  # the harness's shared prefix: only the run's own threads mark a run branch
+            continue
         running = any(t['running'] for t in owners) if owners else None
         rows.append(dict(name=name, has_commits=True, merged=False, running=running))
     return rows
@@ -182,6 +216,26 @@ def main(argv=None):
              'Branch: ' + args.branch, 'Tip: `%s` (%s) %s' % (tip, tip[:8], subject),
              'Previous tip: ' + previous, '', '## Merged since the last cycle', '']
     lines.append(optional(lambda: git('log', '--first-parent', '--merges', '--reverse', '--format=%h %s', previous + '..' + tip)) or 'none')
+    whole = optional(lambda: git('rev-parse', args.base + '^{commit}') if args.base else git('merge-base', args.branch, 'main'))
+    def run_so_far():
+        import pulse as pulse_module
+        add, dele = pulse_module.prod_lines(whole, tip)
+        hours = (pulse_module.when(tip) - pulse_module.when(whole)).total_seconds() / 3600
+        return 'production +%d -%d, moved %d (net %+d) in %.1f h since %s' % (add, dele, add + dele, add - dele, hours, whole[:8])
+    lines += ['', '## Run so far', '', optional(run_so_far)]
+    map_text = optional(lambda: args.map.read_text(encoding='utf-8')) if args.map else ''
+    def waves():
+        subjects = git('log', '--first-parent', '--merges', '--format=%s', whole + '..' + tip) if whole != tip else ''
+        rows = wave_rows(map_text, subjects, git('for-each-ref', '--format=%(refname:short)', 'refs/heads').splitlines())
+        if not rows: return 'unknown: the map has no `Wave: <n> <branches>` line'
+        return '\n'.join(['%d of %d closed' % (sum(r['closed'] for r in rows), len(rows))] + [
+            '- wave %s: %d of %d merged, %d started%s' % (r['n'], r['merged'], r['total'], r['started'], ' (closed)' if r['closed'] else '') for r in rows])
+    lines += ['', '## Waves', '', optional(waves) if args.map else 'no map']
+    for title, name, count, order in (('Rows', 'ROWS.md', row_counts, STAMPS), ('Backlog', 'BACKLOG.md', backlog_counts, STATES)):
+        def counted():
+            found = count((args.run_dir / name).read_text(encoding='utf-8'))
+            return ', '.join('%s %d' % (k, found[k]) for k in order)
+        lines += ['', '## ' + title, '', optional(counted)]
     lines += ['', '## Pulse', '', optional(lambda: pulse(previous, tip, args.map)), '', '## Partners', '']
     threads = optional(lambda: thread_snapshot(args.root, now))
     partners = partner_rows(threads, args.run_dir, tip) if isinstance(threads, list) else []
@@ -198,7 +252,7 @@ def main(argv=None):
     lines += ['', '## Children running', '']
     lines += (['- %s: %s min' % (t['title'], t['minutes_running']) for t in threads
                if t['running'] and not t['role']] or ['none']) if isinstance(threads, list) else [threads]
-    estimates = optional(lambda: re.findall(r'Estimate:\s*(\S+)\s+[\d.]+h', args.map.read_text(encoding='utf-8'))) if args.map else []
+    estimates = optional(lambda: re.findall(r'Estimate:\s*(\S+)\s+[\d.]+h', map_text)) if args.map and not map_text.startswith('unknown:') else map_text if args.map else []
     refs = optional(lambda: git('for-each-ref', '--format=%(refname:short)').splitlines())
     # Prefix inference needs the whole run, even when this cycle has no new merges.
     base = optional(lambda: git('rev-parse', args.base + '^{commit}') if args.base else git('merge-base', args.branch, 'main'))
@@ -217,8 +271,7 @@ def main(argv=None):
         else:
             lines.append(str(len(items)))
             lines += ['- ' + item for item in items] or ['no map' if title == 'Slices not started' and not args.map else 'none']
-    lines += ['', '## What changed (implementor)', '', 'Pending implementor judgment.',
-              '', '## Owed (implementor)', '', 'Pending implementor judgment.', '']
+    lines.append('')
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / ('%d.md' % n)
     with path.open('x', encoding='utf-8', newline='\n') as out:

@@ -52,6 +52,11 @@ db.executemany("insert into orchestration_v2_projection_runs values ('t', ?, ?)"
 for h, p in [(2, dict(createdBy="agent", senderThreadId="x")), (5, dict(createdBy="user", creationSource="web")),
              (8, dict(notification=dict(source=dict(kind="background_command"), summary='Command "build it" finished')))]:
     db.execute("insert into orchestration_v2_projection_messages values ('t', 'user', ?, ?)", (T % h, json.dumps(p)))
+# a run still open when the thread is measured ends at the thread's last native record: 4 completed hours plus 10:00 to 11:30
+db.execute("create table orchestration_v2_projection_threads (thread_id, title, payload_json)")
+db.execute("insert into orchestration_v2_projection_runs values ('t', '2026-01-01T10:00:00.000Z', NULL)")
+assert retro.owner_turns_and_hours(db, "t")[1:3] == (9.0, 4.0) and retro.owner_turns_and_hours(db, "t", retro.ts("2026-01-01T11:30:00.000Z"))[1:3] == (11.5, 5.5)
+db.execute("delete from orchestration_v2_projection_runs where completed_at is null")
 g = retro.gaps(db, "t", {"x": "implementor"})
 assert [(x["cause"], x["hours"], x["detail"]) for x in g] == [("message from implementor", 1.0, ""), ("owner", 2.0, ""), ("own command", 2.0, "build it")], g
 assert retro.waits(g) == {"owner": 2.0, "own command": 2.0, "message from implementor": 1.0}
@@ -106,6 +111,10 @@ assert retro.trough([])["h"] == 0 and retro.trough([dict(t=I(0), threads=4), dic
 # slice by thread title: numbered, lettered, none; the lettered label sorts after its number
 assert [retro.slice_key(t) for t in ["Slice 4 owner 3: Ducts", "s5 wave2: kit", "s2b writer B", "Scaffold: slice 5a one", "slice 10 x", "Crusade implementor: slices 1-10 on crusade/kernel", "Pod doors A", "s2bc x", None]] == ["4", "5", "2b", "5a", "10", None, None, None, None]
 assert sorted(["3", "2b", "10", "2", "5a", "5"], key=retro.skey) == ["2", "2b", "3", "5", "5a", "10"]
+# letter-led slice ids after at most one run word; a bare letter needs its colon; a role's child or a check names no slice of its own
+assert [retro.slice_key(t) for t in ["Converge C1 contract: freeze", "Converge H: implement", "G0 implement guards", "Converge E0: spike", "Converge S1: freeze", "Converge implementor: plan", "Converge plan check: routes",
+                                     "Driver W1 isolation", "Independent S3 kernel", "Purger S1 cold diff", "Cold C/B admission", "G D0/P0 cold guard read", "A new look"]] == ["C1", "H", "G0", "E0", "1", None, None, None, None, None, None, None, None]
+assert sorted(["H", "2", "C1", "10"], key=retro.skey) == ["2", "10", "C1", "H"]
 
 # git log reading: trailer thread, churn without .json/generated, parts by kind
 log = "@aaa|2026-01-01T01:00:00+00:00|thr-1\n\n1\t2\tx/a.ts\n5\t0\tx/a.test.ts\n9\t9\tx/data.json\n3\t0\tx/generated/g.ts\n@bbb|2026-01-01T02:00:00+00:00|\n\n-\t-\tbin.png\n4\t1\tdocs/n.md\n"

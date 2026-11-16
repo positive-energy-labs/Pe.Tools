@@ -198,18 +198,21 @@ def idle_gaps(db, tid):
 
 
 # TODO: Report the union of overlapping run durations rather than their sum as active_hours.
-def owner_turns_and_hours(db, tid):
+def owner_turns_and_hours(db, tid, open_end=None):
     # span = first request to last completion (includes idle); active = sum of run durations (includes queue/wait, an upper bound)
+    # A run with no completion is still running when the thread is measured mid-run: it ends at `open_end`, the thread's last native record, never at now, so a run that died open adds nothing past its last record.
     n = 0
     for (p,) in db.execute("select payload_json from orchestration_v2_projection_messages where thread_id=? and role='user'", (tid,)):
         p = json.loads(p)
         n += p.get("createdBy") == "user" and p.get("creationSource") in ("web", "mobile")  # server rows = child->parent agent text
-    a, b = db.execute("select min(requested_at), max(completed_at) from orchestration_v2_projection_runs where thread_id=?", (tid,)).fetchone()
-    active = 0.0
-    for ra, co in db.execute("select requested_at, completed_at from orchestration_v2_projection_runs where thread_id=? and completed_at is not null", (tid,)):
-        active += (ts(co) - ts(ra)).total_seconds() / 3600
+    active = 0.0; a = b = None
+    for ra, co in db.execute("select requested_at, completed_at from orchestration_v2_projection_runs where thread_id=? order by requested_at", (tid,)):
+        s = ts(ra); e = ts(co) if co else open_end
+        a = min(a, s) if a else s
+        if not e or e < s: continue
+        active += (e - s).total_seconds() / 3600; b = max(b, e) if b else e
     descendants = sum(1 for _ in descendants_of(db, tid))
-    span = (ts(b) - ts(a)).total_seconds() / 3600 if a and b else None
+    span = (b - a).total_seconds() / 3600 if a and b else None
     return n, span, round(active, 1), descendants
 
 
@@ -558,7 +561,7 @@ def measure(db, rates, tid, label, title, files):
     m["records_since"] = first if since else None
     for driver, f in files:
         m["sessions"].append(os.path.splitext(os.path.basename(f))[0]); (claude if driver == "claudeAgent" else codex)(f, m, since)
-    m["owner_turns"], m["hours"], m["active_hours"], m["descendant_threads_unpriced"] = owner_turns_and_hours(db, tid)
+    m["owner_turns"], m["hours"], m["active_hours"], m["descendant_threads_unpriced"] = owner_turns_and_hours(db, tid, max((ts(c[0]) for c in m["curve"] if c[0]), default=None))
     m["idle_gaps"] = idle_gaps(db, tid); m["gaps"] = gaps(db, tid, thread_names(db)); m["waits"] = waits(m["gaps"])
     m["model"], m["cost"] = cost(m, rates)
     m["cost_is_floor"] = m["descendant_threads_unpriced"] > 0
@@ -610,15 +613,24 @@ def covers(s):
     return n
 
 
+NOT_A_WRITER = {"independent", "driver", "purger", "integrator", "lead", "implementor", "root", "cold", "final", "review"}
+
+
 def slice_key(title):
     """The slice a thread title names, as a label: `Slice 5`, `s5` -> "5"; `slice 5a`, `s2b` -> "5a", "2b"; None when it names none. The one parser the lanes and the landmark share."""
-    m = re.search(r"\b[Ss](?:lice )?(\d+)([a-z])?(?![a-z0-9])", title or "")
+    title = title or ""
+    if title.split(" ")[0].lower().rstrip(":") in NOT_A_WRITER: return None  # a role's child names the slice it checks, and wrote none of it
+    m = re.search(r"\b[Ss](?:lice )?(\d+)([a-z])?(?![a-z0-9])", title)
+    if m: return m[1] + (m[2] or "")
+    # A map may name slices by letter: `Converge C1 contract: ...`, `G0 implement ...`, `Converge H: ...`. The id leads the title after at most one run word, and a bare letter needs its colon, so `Pod doors A` and `A new look` name none. `S<n>` stays the numbered form above.
+    m = re.match(r"(?:[A-Z][a-z]+ )?([A-RT-Z])(?:(\d{1,2}[a-z]?)(?=[: ])|(?=:))", title)
     return m[1] + (m[2] or "") if m else None
 
 
 def skey(n):
     """Sort key of a slice label: 2 < 2b < 3."""
-    return int(re.match(r"\d+", n)[0]), n.lstrip("0123456789")
+    m = re.match(r"\d+", n)
+    return (int(m[0]), n.lstrip("0123456789")) if m else (10 ** 6, n)  # letter-led labels sort after the numbered ones, by name
 
 
 def bucket(path):

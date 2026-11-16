@@ -3,14 +3,14 @@
 # so a new model is one edit here.
 # Observations live in the skills ledger. This file keeps only the rates agents use.
 
-updated = "2026-11-14"
+updated = "2026-11-15"
 
 # ---------------------------------------------------------------- tiers
 # A tier is a kind of work. `model` is a key under [models].
 # `effort` is the range to start in, low end first. Go above it one thread at a time, and say why in the brief.
 
 [tiers.partner]
-does = "a standing role that is woken many times over a run: implementor, purger, driver, integrator"
+does = "a role that holds judgment over a run or a wave: root, implementor, purger"
 model = "opus"
 effort = ["default"]
 
@@ -39,11 +39,11 @@ effort = ["medium"]
 # Each standing role runs on a tier.
 
 [roles]
-implementor = "partner"
+root = "partner"
+implementor = "partner" # one per wave
 purger = "partner"
-driver = "partner"
-integrator = "partner" # its work is mechanical; a cheaper tier passed a cold read and no run
-lead = "slog-writer" # untried: it reads reports and launches fix threads, and writes no code
+driver = "slog-writer" # owner, 2026-11-15: below the pricing line; its drive children already ran on this tier
+integrator = "slog-writer" # owner, 2026-11-15: below the pricing line; it ran on this model in kernel2 for the same cost as the partner tier in pod-pages
 
 # Jobs that a role hands to children.
 [jobs]
@@ -51,7 +51,6 @@ plan-check-reader = "taste"
 tip-reviewer = "slog-writer"
 mutant-runner = "slog-writer"
 drive-child = "slog-writer" # the owner said this model drives as well
-wave-lead = "heady-writer" # untried: it writes no code, and it needs the judgment to send a report back
 scour-reader = "taste" # untried on this tier
 
 # ---------------------------------------------------------------- rates
@@ -61,6 +60,7 @@ scour-reader = "taste" # untried on this tier
 [rates]
 estimate_ratio = "actual ran at a median near 0.25 of estimate, from branch start to first merge, over 31 estimates [kernel2]"
 estimate_ratio_2 = "actual ran at a median near 0.2 of estimate, 0.1 to 0.4, over 7 wave-one estimates [pod-pages]"
+estimate_lines = "a run planned as a convergence moved 48,430 production lines in 3.8 hours and grew by 15,396, with no line estimate to stop it [converge]"
 estimate_unit = "all 8 estimates ran high, by 1.1 to 6 times in hours and 4 to 16 times in days, so estimate in hours [homes]"
 heady_writer_slice = "0.6 to 5.2 active hours, median 1.6; about 400 added lines per writer-hour [homes]"
 slog_writer_fix_round = "6 to 12 active minutes [homes]"

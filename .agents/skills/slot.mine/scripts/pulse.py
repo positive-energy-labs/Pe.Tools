@@ -8,7 +8,9 @@ changed, the four health counts that changed (escape casts, suppressions, TODO m
 merge conflicts, each slice whose actual time left its estimate, and the slices not started. A
 figure inside its band is not printed unless --all, so a quiet run prints the pace line and nothing
 else. Exit 1 when a ratchet or a health count rose. `--map` names the file whose
-`Estimate: <branch> <hours>h` lines it scores; a slice whose branch does not exist is "not started".
+`Estimate: <branch> <hours>h [<lines>L [<sign>]]` lines it scores; a slice whose branch does not exist
+is "not started". A slice at twice its lines, or whose net runs against its sign (`-` shrinks, `+`
+grows, `0` holds), prints a `lines` row whether or not it has merged.
 
 Hours are the time between the two commits, so pace is comparable only between ranges that each
 start where a run started.
@@ -23,6 +25,8 @@ CONFLICT_BAND = 2.0        # percent of merged lines; the owner's ceiling is 12.
 # TODO: Add a tip/last-read watcher that wakes idle partners once per unread integration tip.
 # TODO: Arm child time boxes and checkpoint wakes rather than relying on the driver's age checks.
 ESTIMATE_BAND = (0.5, 2.0)  # actual over estimate
+LINES_BAND = 2.0           # production lines moved over lines planned
+ESTIMATE = r'Estimate:\s*(\S+)\s+([\d.]+)h(?:[ \t]+(\d+)L)?(?:[ \t]+([+0-])(?!\S))?'
 
 
 def git(*a, ok=(0,)):
@@ -39,6 +43,25 @@ def when(ref):
 def is_prod(p):
     return p.endswith(('.ts', '.tsx', '.cs')) and not re.search(
         r'\.d\.ts$|\.(test|spec|guard|journey|gen|generated)\.|(^|/)(tests?|__tests__|fixtures?|generated)/|Tests?/', p)
+
+
+def prod_lines(a, b):
+    add = dele = 0
+    for l in git('diff', '--numstat', a, b).splitlines():
+        x, d, p = l.split('\t', 2)
+        if x != '-' and is_prod(p): add += int(x); dele += int(d)
+    return add, dele
+
+
+def line_verdict(planned, sign, add, dele):
+    """None inside the band; else why the diff is not the planned change."""
+    why = []
+    if planned and add + dele > LINES_BAND * planned: why.append('%.1fx its lines' % ((add + dele) / planned))
+    net = add - dele
+    if sign == '-' and net > 0 or sign == '+' and net < 0: why.append('AGAINST SIGN %s' % sign)
+    # ponytail: `0` allows a tenth of the plan either way; tune on data
+    if sign == '0' and planned and abs(net) > planned / 10: why.append('AGAINST SIGN 0')
+    return ', '.join(why) or None
 
 
 def leaves(x):
@@ -109,10 +132,7 @@ def main(argv):
     base, tip = refs
     red = False
 
-    add = dele = 0
-    for l in git('diff', '--numstat', base, tip).splitlines():
-        a, d, p = l.split('\t', 2)
-        if a != '-' and is_prod(p): add += int(a); dele += int(d)
+    add, dele = prod_lines(base, tip)
     hours = max((when(tip) - when(base)).total_seconds() / 3600, 0.01)
     print('pace: production +%d -%d, moved %d (net %+d) in %.1f h = %d moved per hour' % (add, dele, add + dele, add - dele, hours, (add + dele) / hours))
 
@@ -137,10 +157,22 @@ def main(argv):
             print('  %s %d lines: %s' % (m[0][:8], m[4], ', '.join(m[3][:4])))
 
     if map_path:
-        estimates = re.findall(r'Estimate:\s*(\S+)\s+([\d.]+)h', open(map_path, encoding='utf-8').read())
+        estimates = re.findall(ESTIMATE, open(map_path, encoding='utf-8').read())
         if not estimates: print('estimates: %s has no `Estimate: <branch> <hours>h` line, so none is scored' % map_path)
         idle = []
-        for branch, est in estimates:
+        for branch, est, planned, sign in estimates:
+            if planned or sign:
+                exists = not subprocess.run(['git', 'rev-parse', '-q', '--verify', branch], capture_output=True).returncode
+                done = [m for m in ms if re.search(re.escape(branch) + r'(?![\w-])', m[1])]
+                # every merge of the slice counts: fix rounds are part of what it moved
+                spans = [(git('merge-base', *m[2]).strip(), m[2][1]) for m in done]
+                if exists: spans.append((git('merge-base', tip, branch).strip(), branch))
+                a = d = 0
+                for x, y in spans:
+                    da, dd = prod_lines(x, y); a += da; d += dd
+                why = line_verdict(int(planned or 0), sign, a, d)
+                if why or show_all:
+                    print('lines %s: %sL %s planned, moved %d (+%d -%d, net %+d)%s' % (branch, planned or '?', sign or '?', a + d, a, d, a - d, ' = ' + why if why else ''))
             hits = [m for m in ms if re.search(re.escape(branch) + r'(?![\w-])', m[1])]  # k2/store must not match k2/store-sweeps
             m = min(hits, key=lambda m: when(m[0])) if hits else None  # the first merge is when the slice became drivable
             if not m:
