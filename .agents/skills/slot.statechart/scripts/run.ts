@@ -223,7 +223,11 @@ const tail = (r: FileResult) => {
   for (const chunk of plainText(messagesOf(r.output))) {
     kept.push(chunk);
     size += chunk.length;
-    while (size - kept[0].length >= 1 << 28) size -= kept.shift()!.length;
+    while (size - kept[0].length >= 1 << 28) {
+      const removed = kept.shift();
+      if (removed === undefined) break;
+      size -= removed.length;
+    }
   }
   return kept.join("").trim().split("\n").slice(-30).join("\n");
 };
@@ -402,7 +406,8 @@ export async function check(specFile: string, configFile: string): Promise<Check
           );
       }
       for (const rule of all) if (!verdicts.has(ruleKey(rule))) decide(rule, "not checked");
-      return { first: first!, stop, states };
+      if (first === undefined) throw new Error("No TLC check ran.");
+      return { first, stop, states };
     };
     fs.writeFileSync(path.join(dir, "ChartBound.tla"), boundRun(spec.module));
     const judged = await judge();
