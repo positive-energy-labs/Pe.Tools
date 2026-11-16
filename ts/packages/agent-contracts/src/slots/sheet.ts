@@ -152,12 +152,12 @@ export const SHEET_COMMANDS = { plan: "sheet.plan", apply: "sheet.apply" } as co
 export type DomainData = NumberDomain
   | { kind: "enum"; shape: Record<string, unknown> }
   | { kind: "options"; handle: "revit.catalog.field-options"; input?: Record<string, unknown>; persist: "value" | "label"; mode: "constraint" | "suggestion" }
-  | { kind: "object"; fields: Record<string, DomainData>; text?: string[] };
+  | { kind: "object"; fields: Record<string, DomainData>; text?: readonly string[] };
 export const domainDataSchema: z.ZodType<DomainData> = z.lazy(() => z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("number"), unit: z.string().optional(), min: z.number().optional(), exclusiveMin: z.number().optional(), max: z.number().optional(), digits: z.number().int().nonnegative().optional() }),
   z.strictObject({ kind: z.literal("enum"), shape: z.record(z.string(), z.unknown()) }),
   z.strictObject({ kind: z.literal("options"), handle: z.literal("revit.catalog.field-options"), input: z.record(z.string(), z.unknown()).optional(), persist: z.enum(["value", "label"]), mode: z.enum(["constraint", "suggestion"]) }),
-  z.strictObject({ kind: z.literal("object"), fields: z.record(z.string(), domainDataSchema), text: z.array(z.string().min(1)).optional() }),
+  z.strictObject({ kind: z.literal("object"), fields: z.record(z.string(), domainDataSchema), text: z.array(z.string().min(1)).readonly().optional() }),
 ]));
 export const homeSchema = z.discriminatedUnion("at", [
   z.strictObject({ at: z.literal("parameter"), parameter: z.string().min(1) }),

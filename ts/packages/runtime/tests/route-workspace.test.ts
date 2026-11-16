@@ -1,7 +1,7 @@
 import { observeResources, resourceResponse, updateResourceSubscriptions } from "../src/resource-stream.ts";
 import { expect, test, vi } from "vite-plus/test";
 import { z } from "zod";
-import { address, routeBindingsSchema } from "@pe/agent-contracts";
+import { address, draftCellSchema, routeBindingsSchema, workKey } from "@pe/agent-contracts";
 import type { WorkAuthor, RouteStatePatch, RouteStateSpec, WorkKey } from "@pe/agent-contracts";
 import { RouteWorkspace } from "../src/route-workspace.ts";
 import type {
@@ -538,4 +538,32 @@ test("metadata without an admitted schema is refused before creating Work", asyn
     }),
   ).toMatchObject({ ok: false, kind: "refused", code: "invalid_meta" });
   expect(await module.read(documentA, "test-route")).toBeNull();
+});
+
+const cellSpec = {
+  route: "test-route", title: "Cells", description: "Staged cells.",
+  schema: z.object({ esp: z.record(z.string(), draftCellSchema(z.object({ inWg: z.number(), source: z.string().optional() }))).default({}) }),
+} satisfies RouteStateSpec<z.ZodType>;
+
+test("a publish seed cannot name its own author: every seeded cell is stamped with the caller", async () => {
+  const routes = workspace(memoryStore().store, { registration: { spec: cellSpec } });
+  const started = await routes.start(documentA, { esp: { a: { edit: { value: { inWg: 1 }, by: "human" } }, b: { edit: { value: { inWg: 2 } } } } }, "pea");
+  expect(started).toMatchObject({ ok: true, doc: { esp: { a: { edit: { by: "pea", base: 0 } }, b: { edit: { by: "pea" } } } } });
+});
+
+test("refused stored Work is set aside with one reason that lists each staged row once, unstamped rows without invented provenance", async () => {
+  const { store } = memoryStore(), reasons: (string | undefined)[] = [];
+  const recording: RouteDocumentStore = { ...store, setState: async (input) => { if (input.value == null) reasons.push(input.reason); return store.setState(input); } };
+  const routes = workspace(recording, { registration: { spec: cellSpec } });
+  await store.setState({ targetKey: workKey(documentA), route: "test-route", value: { version: 1, schemaVersion: 99, revision: 3, doc: {
+    esp: { legacy: { edit: { value: { inWg: 0.4 } } }, cited: { edit: { value: { inWg: 1, source: "submittal p3" }, by: "pea" } }, torn: { edit: { value: "not a drop" } }, bare: {} },
+    writeIntent: { edit: { value: { walk: 1 } } },
+  } } });
+  expect(await routes.readUncaptured(documentA, "test-route")).toBeNull();
+  expect(reasons).toHaveLength(1);
+  const reason = reasons[0]!;
+  expect(reason).toContain("Set aside 4 staged rows");
+  for (const row of ["test-route/esp/legacy (source unstated, ref none)", "test-route/esp/cited (source submittal p3, ref none)", "test-route/esp/torn (source unstated", "test-route/writeIntent (source unstated"])
+    expect(reason.split(row)).toHaveLength(2);
+  expect(reason).not.toContain("bare");
 });

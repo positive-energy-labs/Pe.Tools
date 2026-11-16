@@ -1199,8 +1199,7 @@ export class RouteWorkspace {
         reason: [error instanceof Error ? error.message : String(error),
           ...(rows.length ? [`Set aside ${rows.length} staged row${rows.length === 1 ? "" : "s"}: ${rows.map(row =>
             `${row.work}/${row.segment}${row.row === row.segment ? "" : `/${row.row}`} (source ${row.source ?? "unstated"}, ref ${row.ref ?? "none"})`).join("; ")}`] : []),
-        ].join("
-") });
+        ].join(" ") });
       return null;
     }
   }
