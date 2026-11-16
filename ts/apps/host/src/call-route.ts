@@ -746,6 +746,9 @@ function callRoutes(
               return Response.jsonUnsafe(await owner().cancel(body.id), { status: 202 });
             if (choice === "recover") return Response.jsonUnsafe(await owner().recover(body.id));
             if (choice !== "resume") throw Error(`Action control '${choice}' has no handler`);
+            if (controlled.target.kind === "unavailable-original")
+              throw new CommandRejected({ kind: "domain", code: "target.original-unavailable",
+                message: "Original execution target is unavailable; inspect or recover its original action ID" });
             const crossing = {
               caller,
               basis: admitCrossing(
