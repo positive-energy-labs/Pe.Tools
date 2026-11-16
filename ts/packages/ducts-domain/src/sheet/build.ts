@@ -1839,7 +1839,7 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
           const fan = w.ends[d.sibling]!.end.fan!;
           return note(
             "sibling",
-            `sibling ${tagOf(fan.unitId) || g.name(fan.unitId)} draws ${d.cfm == null ? "an unknown flow" : `${round(d.cfm)} cfm`} from shared terminal ${g.name(w.ends[d.terminal]!.end.elementId)}: ${d.source ?? "no design flow"}`,
+            `sibling ${tagOf(fan.unitId) || g.name(fan.unitId)} ${w === supply.w ? "feeds" : "draws"} ${d.cfm == null ? "an unknown flow" : `${round(d.cfm)} cfm`} ${w === supply.w ? "into" : "from"} shared terminal ${g.name(w.ends[d.terminal]!.end.elementId)}: ${d.source ?? "no design flow"}`,
             d.cfm == null ? null : round(d.cfm),
           );
         }),
@@ -1968,8 +1968,7 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
   if (directionMismatch)
     pricer.blockers.set(`direction-mismatch:${unit.id}`, {
       id: `direction-mismatch:${unit.id}`,
-      // OWED(writer A): `direction-mismatch` is not in the native FanBlockerKind vocabulary yet; the cast goes when it is.
-      kind: "direction-mismatch" as Blocker["kind"],
+      kind: "direction-mismatch",
       elementId: unit.id,
       effectInWg: null,
       detail: `the family says ${g.name(unit.id)} discharges by connector ${directionMismatch.discharge}; its network's ends read connector ${directionMismatch.networkDischarge} (${directionMismatch.evidence})`,
