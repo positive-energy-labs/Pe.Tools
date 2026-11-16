@@ -170,6 +170,7 @@ import { HostNativeRead } from "../../../../packages/host-internal/src/native-re
 import { HOST_RUNTIME_SERVICE_HEADER } from "@pe/host-contracts/contracts";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import rosterCapture from "../../../../packages/host-contracts/src/fixtures/k2-roster.json";
+import { VOCABULARY } from "@pe/ducts-domain/sheet/scoped-snapshot";
 import walkCapture from "../../../../packages/ducts-domain/src/sheet/fixtures/muas-local-20261102.json";
 import { hostOwnership } from "../../../host/src/host-ownership";
 import { HostDocumentMarks } from "../../../host/src/document-marks";
@@ -203,8 +204,8 @@ test("JZ Fans Revert removes A from Plan before staging B",async()=>{
  const originalFetch=globalThis.fetch;
  const requests:any[]=[];
  let bridge:any;
- const roster=nativeResponseSchema("ducts.snapshot.roster").parse(rosterCapture);
- const walk=nativeResponseSchema("ducts.snapshot.walk").parse(walkCapture);
+ const roster=nativeResponseSchema("ducts.snapshot.roster").parse({ ...rosterCapture, vocabulary: VOCABULARY });
+ const walk=nativeResponseSchema("ducts.snapshot.walk").parse({ ...walkCapture, vocabulary: VOCABULARY, walk: { ...walkCapture.walk, unreadPeers: [] } });
  const tables=nativeResponseSchema("ducts.tables").parse({folder:"fixture",tables:{},missing:[],unsupported:{}});
  const native=Layer.effect(HostNativeRead,Effect.gen(function*(){
    bridge=yield* connectTestBridge(); trace.target=bridge.target;
