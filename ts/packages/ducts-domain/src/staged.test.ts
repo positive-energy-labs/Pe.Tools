@@ -33,7 +33,7 @@ test("an incomplete, stale or misowned cohort refuses and stages nothing", () =>
   expect(stageEspCohort({ ...cohort, owner: { kind: "instance", id: 1 }, members: [onWalk!] }, "b1", { inWg: 1 })).toHaveProperty("esp");
 });
 
-test("stagedDucts hands the resolver { value, by, ref } cells: airflow a plain number, a cited ref kept, else the cell's location", () => {
+test("stagedDucts hands the resolver { value, by, ref } cells: airflow a plain number, a cited ref kept, else the cell's location, and no unstamped cell", () => {
   const key = elementSubject(onWalk!), other = elementSubject(peer!);
   const fans = fansDocumentSchema.parse({
     flows: { [key]: { edit: { value: 250, by: "pea", ref: "balancing report p2" } }, [other]: { edit: { value: 90 } } },
@@ -42,7 +42,6 @@ test("stagedDucts hands the resolver { value, by, ref } cells: airflow a plain n
   const staged = stagedDucts(null, fans);
   expect(staged.flows).toEqual({
     [key]: { value: 250, by: "pea", ref: "balancing report p2" },
-    [other]: { value: 90, by: "unknown", ref: `work:fans/flows/${other}` },
   });
   expect(staged.esp).toEqual({ [key]: { value: { inWg: 0.5 }, by: "human", ref: `work:fans/esp/${key}` } });
 });

@@ -375,15 +375,16 @@ export const ductsDesign = (ducts: DuctsRouteDocument | null, fans: FansDocument
 /**
  * One staged cell as the resolver reads it (wave 2 amendment 2): the value, the caller the host
  * stamped (`by`), and the evidence the caller cited, else the cell's own location, which says where
- * the evidence lives and claims nothing more. A cell with no stamp reads `unknown`: the resolver
- * holds it invalid, and the runtime sets such stored Work aside before it is read.
+ * the evidence lives and claims nothing more. A cell with no human or Pea stamp is not handed over
+ * at all: the runtime sets such stored Work aside before it is read, and no author is ever invented.
  */
-export type StagedCell<V> = { value: V; by: Author; ref: string };
+export type StagedCell<V> = { value: V; by: "human" | "pea"; ref: string };
 const stagedOf = <V>(work: "fans" | "ducts", segment: string, cells: Record<string, { edit?: { value?: V; by?: Author; ref?: string } | null } | undefined>) =>
   Object.fromEntries<StagedCell<V>>(
     Object.entries(cells).flatMap(([key, cell]) => {
       const edit = cell?.edit;
-      return edit?.value === undefined ? [] : [[key, { value: edit.value, by: edit.by ?? "unknown", ref: edit.ref?.trim() ? edit.ref : `work:${work}/${segment}/${key}` }]];
+      return edit?.value === undefined || (edit.by !== "human" && edit.by !== "pea") ? []
+        : [[key, { value: edit.value, by: edit.by, ref: edit.ref?.trim() ? edit.ref : `work:${work}/${segment}/${key}` }]];
     }),
   );
 

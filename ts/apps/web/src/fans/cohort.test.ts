@@ -23,7 +23,7 @@ test("a cohort ESP staged by Pea keeps one caller and one value on every member 
   expect(fanWriteCells(fans, { nodes: [{ uniqueId: uid(1) }], segments: [] } as never, [cohort]).map(([, key]) => key)).toEqual(members.map(m => elementSubject(m)));
 });
 
-test("a taken default keeps its original source and ref beside the caller; an unstamped legacy cell stays unknown", () => {
+test("a taken default keeps its cited ref beside the caller; an unstamped legacy cell is not handed to the resolver", () => {
   const key = elementSubject({ uniqueId: uid(1) }), old = elementSubject({ uniqueId: uid(2) });
   // The caller cites the default's evidence on the cell's own `ref`; the host stamps `by` and keeps the citation.
   const human = landed({ terminalDrops: cells({ [key]: { inWg: 0.03 } }, "firm ducts.json#terminalDrop") }, "human");
@@ -33,8 +33,8 @@ test("a taken default keeps its original source and ref beside the caller; an un
   const design = ductsDesign(null, { ...human, flows: legacy.flows });
   const { terminalDrops, flows } = stagedDucts(design, design);
   expect(terminalDrops[key]).toEqual({ value: { inWg: 0.03 }, by: "human", ref: "firm ducts.json#terminalDrop" });
-  // No stamp, no caller: handed over as `unknown`, which the resolver holds invalid; never a guessed human or Pea.
-  expect(flows[old]).toEqual({ value: 100, by: "unknown", ref: `work:fans/flows/${old}` });
+  // No stamp, no caller: the cell is not handed over, and nobody is named as its author.
+  expect(flows[old]).toBeUndefined();
 });
 
 const blocker = (kind: SheetBlocker["kind"], detail: string): SheetBlocker =>
@@ -42,7 +42,7 @@ const blocker = (kind: SheetBlocker["kind"], detail: string): SheetBlocker =>
 const context = { terminalDrop: null, nameOf: () => "part", wait: null, fan: { unitId: 5, name: "EF-1" } };
 
 test("typed closers choose the cell and carry the offer's provenance; the blocker's prose decides nothing", () => {
-  const offer = { value: 0.03, author: "unknown" as const, source: "firm" as const, ref: "ducts.json#terminalDrop", version: 3 };
+  const offer = { value: 0.03, author: "human" as const, source: "firm" as const, ref: "ducts.json#terminalDrop", version: 3 };
   // The prose says "component"; the typed target says terminal, and wins.
   const drop = describeCloser(blocker("unknown-drop", "component 9 has no drop"), null, { ...context,
     fix: () => ({ kind: "cell", target: { work: "fans", segment: "terminalDrops", row: "r" }, offers: [offer] }) });
