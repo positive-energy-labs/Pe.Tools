@@ -3,7 +3,7 @@
  * every leg through the kernel, rank paths worst first, and claim required ESP only when both
  * sides are complete. An implausible or unpriced leg is a blocker and stays out of totals.
  */
-import type { FanPort } from "../roster.ts";
+import { familyDischarge, type FanPort } from "../roster.ts";
 import type { Grids } from "../loss-grid.ts";
 import type { DuctSnapshot } from "../types.ts";
 import {
@@ -69,12 +69,28 @@ import {
 } from "./walk.ts";
 import { assumedFanFlows, type AssumedFlow } from "./assumed-flow.ts";
 import type { DuctsInputs, Resolved } from "@pe/agent-contracts";
-import { PROPOSED_KEY, terminalCfmOf } from "./inputs.ts";
+import { EDIT_SEGMENTS, PROPOSED_KEY, sourced, terminalCfmOf } from "./inputs.ts";
+import { sectionOf } from "../loss-physics.ts";
+import type {
+  CoverageGap,
+  Encounter,
+  FanIssue,
+  LegEvidence,
+  SourcedValue,
+} from "./contract-pending.ts";
+import {
+  backflowId,
+  claimOf,
+  encountersOf,
+  hostStatic,
+  type EncounterRuling,
+  type HostCalc,
+} from "./encounters.ts";
 import { REVIT_FLOW_SLOT, slotFlowOf } from "../kernel/terminal-flow.ts";
 
 /** Issues and tolerances are C#'s model health (ducts LEDGER 2026-10-29); absent, no open end has a measured neighbourhood. */
 export type SheetSnapshot = Pick<DuctSnapshot, "nodes" | "segments" | "document"> &
-  Partial<Pick<DuctSnapshot, "slots" | "issues" | "tolerances">>;
+  Partial<Pick<DuctSnapshot, "slots" | "issues" | "tolerances" | "walk">>;
 
 export interface PricingInput {
   snapshot: SheetSnapshot;
@@ -88,6 +104,14 @@ export interface BuildSheetInput extends PricingInput {
   fan: FanPortRef;
   /** Proof switch: compare topology assumptions with/without derived fan flow. Known is unaffected. */
   assumeServedFlow?: boolean;
+  /** A person's verdicts on this read's encounters (`encounterRulings`). */
+  encounterRulings?: readonly EncounterRuling[];
+  /** Staged required ESP by unit element id (`stagedEsp`); never read as rated or as pressure authority. */
+  stagedEsp?: Readonly<Record<string, SourcedValue<number>>>;
+  /** Host calcs already built for this read, by `unitId:portIndex`; one at another basis is stale. */
+  hosts?: ReadonlyMap<string, HostCalc>;
+  /** The fans whose calcs are waiting on this one (cycle guard); callers leave it unset. */
+  dependents?: readonly string[];
 }
 
 export interface BuildChainInput extends PricingInput {
@@ -103,6 +127,9 @@ const fnv = (text: string) => {
   for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 0x01000193) >>> 0;
   return h.toString(16).padStart(8, "0");
 };
+const fanKey = (f: FanPortRef) => `${f.unitId}:${f.portIndex}`;
+/** Set where a leg is created; `Pricer.evidence` replaces it once the leg is priced. */
+const PENDING: LegEvidence = { kind: "unpriced", issueId: "" };
 const basisOf = (snapshot: SheetSnapshot, rest: object) =>
   `${SHEET_ENGINE_VERSION}:${fnv(JSON.stringify([snapshot.document.title, snapshot.document.readAt, SHEET_ENGINE_VERSION, rest]))}`;
 const round = (n: number) => +n.toFixed(6);
@@ -342,6 +369,7 @@ class Pricer {
       lossInWg: null,
       lossSource: { kind: "default", ref: "unpriced" },
       equivalentFt: null,
+      evidence: PENDING,
     };
     this.legs[id] = leg;
     const ids = [...(f?.missing ?? [])];
@@ -868,14 +896,67 @@ class Pricer {
       return {
         side,
         legIds,
-        end: e.end,
+        end: e.reached ? { ...e.end, reached: e.reached } : e.end,
         knownInWg,
-        complete:
-          blockerIds.size === 0 &&
-          legIds.every((id) => this.legs[id]!.lossInWg != null && this.legs[id]!.flowCfm != null),
         blockerIds: [...blockerIds],
       };
     });
+  }
+
+  /**
+   * Every leg's typed evidence (L2-1), from the kernel's own result before any text is formatted:
+   * a coefficient and its velocity pressure reproduce the loss; a drop names the resolved value.
+   */
+  evidence() {
+    const { inputs } = this.input;
+    for (const leg of Object.values(this.legs)) {
+      const done = this.priced.get(leg.id);
+      const src = done?.p?.source;
+      const el = this.g.byId.get(leg.elementId);
+      const section =
+        el && isSegment(el) ? sectionOf(el.shape, el.diameterIn, el.widthIn, el.heightIn) : null;
+      const stated =
+        inputs.components[String(leg.elementId)]?.drop ??
+        inputs.terminals[String(leg.elementId)]?.drop;
+      leg.evidence =
+        leg.lossInWg == null
+          ? { kind: "unpriced", issueId: done?.blockerIds[0] ?? `pricing:${leg.id}` }
+          : src?.kind === "friction"
+            ? {
+                kind: "friction",
+                roughnessFt: src.roughnessFt,
+                lengthFt: done!.p!.lengthFt ?? 0,
+                hydraulicDiameterFt: (section?.dhIn ?? 0) / 12,
+                ref: "Altshul-Tsal",
+              }
+            : src?.kind === "rule"
+              ? {
+                  kind: "coefficient",
+                  coefficient: src.coefficient,
+                  velocityPressureInWg: src.pv,
+                  basisElementId: leg.elementId,
+                  rule: src.rule,
+                  table: src.table,
+                  lookup: src.inputs,
+                  ref: `${src.rule} ${src.table}`,
+                }
+              : {
+                  kind: "drop",
+                  value:
+                    src?.kind === "drop" && stated?.value === leg.lossInWg
+                      ? sourced(stated)
+                      : // No resolved input states this number: the engine set it (a leg carrying none of this fan's flow, a proposed path).
+                        {
+                          status: "valid",
+                          value: leg.lossInWg,
+                          source: "default",
+                          author: null,
+                          ref: leg.lossSource.ref || "engine",
+                          version: null,
+                          units: "in-wg",
+                        },
+                };
+    }
   }
 
   private heal(
@@ -920,6 +1001,7 @@ class Pricer {
         ref: `assumed extension, source section, ${proposal.gapIn.toFixed(3)} in; ${note}`,
       },
       equivalentFt: proposal.gapIn / 12,
+      evidence: PENDING,
     };
     this.legs[extension.id] = extension;
     this.priced.set(extension.id, { p, blockerIds: ids });
@@ -1029,6 +1111,7 @@ class Pricer {
       lossInWg: null,
       lossSource: { kind: "drop", ref: "" },
       equivalentFt: null,
+      evidence: PENDING,
     };
     this.legs[leg.id] = leg;
     this.onLeg(leg.id, key);
@@ -1269,6 +1352,7 @@ class Pricer {
               ref: `proposed tee ${site.pair.join(" to ")} straight run: its branch carries none of this fan's flow, so no Cs (as a real takeoff passed)`,
             },
         equivalentFt: null,
+        evidence: PENDING,
       };
       this.priced.set(id, { p: null, blockerIds: [] });
       this.onLeg(id, key);
@@ -1362,7 +1446,15 @@ function proposedTransition(side: Side, source: Port, landing: Port, gapIn: numb
 }
 
 function totals(pricer: Pricer, paths: SheetPath[], allowanceInWg: number): SideTotals {
-  const complete = paths.length > 0 && paths.every((p) => p.complete);
+  const complete =
+    paths.length > 0 &&
+    paths.every(
+      (p) =>
+        p.blockerIds.length === 0 &&
+        p.legIds.every(
+          (id) => pricer.legs[id]!.lossInWg != null && pricer.legs[id]!.flowCfm != null,
+        ),
+    );
   const worst = paths[0];
   const legs = worst ? worst.legIds.map((id) => pricer.legs[id]!) : [];
   const telFt = round(legs.reduce((a, l) => a + (l.equivalentFt ?? 0), 0));
@@ -1376,7 +1468,6 @@ function totals(pricer: Pricer, paths: SheetPath[], allowanceInWg: number): Side
     knownInWg: worst?.knownInWg ?? 0,
     assumedInWg: worstPath,
     allowanceInWg,
-    complete,
     telFt,
     frictionRatePer100:
       worstPath != null && telFt > 0 ? round(((worstPath - drops) * 100) / telFt) : null,
@@ -1501,25 +1592,28 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
   if (b) terminateMerges(b);
   const aRule = endDirection(a, g, input.roster),
     bRule = b ? endDirection(b, g, input.roster) : null;
-  const swap = !!bRule && bRule.score > aRule.score;
+  // Q4 (kaitpw 2026-11-16): the family's connector direction sets the roles; the ends decide only
+  // where the family states none (unknown or bidirectional metadata manufactures no direction).
+  const family =
+    pairedInlet == null ? null : familyDischarge(unit, input.fan.portIndex, pairedInlet);
+  const networkSwap = !!bRule && bRule.score > aRule.score;
+  const swap = family == null ? networkSwap : family !== input.fan.portIndex;
   const discharge = swap ? pairedInlet! : input.fan.portIndex;
   const inlet = swap ? input.fan.portIndex : (pairedInlet ?? null);
   const directionSource =
-    bRule && aRule.score !== bRule.score
-      ? `ends: discharge ${swap ? bRule.source : aRule.source}; paired side is inlet`
-      : "port metadata tie-break: ends do not distinguish the paired sides";
-  const metadata = unit.connectors.filter((c) => c.index === discharge || c.index === inlet);
-  const overridesDirection =
-    bRule &&
-    aRule.score !== bRule.score &&
-    metadata.some(
-      (c) =>
-        (c.index === discharge && c.direction === "in") ||
-        (c.index === inlet && c.direction === "out"),
-    );
-  const directionOverride = overridesDirection
-    ? `connector metadata says ${metadata.map((c) => `c${c.index} ${c.direction}`).join(" / ")}; the network disagrees: inlet c${inlet}, discharge c${discharge}. Evidence: c${input.fan.portIndex} ${aRule.source} (score ${aRule.score}); c${pairedInlet} ${bRule?.source} (score ${bRule?.score})`
-    : null;
+    family != null
+      ? "family connector direction"
+      : bRule && aRule.score !== bRule.score
+        ? `ends: discharge ${swap ? bRule.source : aRule.source}; paired side is inlet`
+        : "port metadata tie-break: ends do not distinguish the paired sides";
+  const directionMismatch =
+    family != null && bRule && aRule.score !== bRule.score && networkSwap !== swap
+      ? {
+          discharge,
+          networkDischarge: inlet!,
+          evidence: `c${input.fan.portIndex} ${aRule.source} (score ${aRule.score}); c${pairedInlet} ${bRule.source} (score ${bRule.score})`,
+        }
+      : null;
   // The unit's own flow: typed is the side-stream exception's asserted flow, a Revit or stored value
   // its design parameter; absent both, an ordinary fan's flow is the sum of its ends (never an input).
   const unitCfm = input.inputs.units[String(unit.id)]?.cfm;
@@ -1658,14 +1752,10 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
         assumedInWg: null,
         knownInWg: 0,
         allowanceInWg: allowance.return,
-        complete: false,
         telFt: 0,
         frictionRatePer100: null,
       };
-  const required =
-    sT.worstPath != null && rT.worstPath != null && sT.complete && rT.complete
-      ? round(sT.worstPath + rT.worstPath + sT.allowanceInWg + rT.allowanceInWg)
-      : null;
+  pricer.evidence();
   const flowCfm = retFirst ? sideSum(returnFlows!, ret!.w) : sideSum(supplyFlows, supply.w);
   const walkedFlow = supply.w.ends.some((e) => e.end.kind === "terminal")
     ? sideSum(
@@ -1689,7 +1779,7 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
   const notes: SheetNote[] = [
     note(
       "direction",
-      `inlet ${inlet ?? "none"}, discharge ${discharge}: ${directionOverride ? `${directionOverride}; ` : ""}${directionSource}`,
+      `inlet ${inlet ?? "none"}, discharge ${discharge}: ${directionMismatch ? `the network's ends read discharge c${directionMismatch.networkDischarge} (${directionMismatch.evidence}); ` : ""}${directionSource}`,
     ),
     // Compare the shared resolver's authored/model value with the independently walked sum.
     // Open ends make the sum partial; never allocate their unknown flow to erase a conflict.
@@ -1805,39 +1895,166 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
       .filter((l) => l.lossSource.ref.startsWith("merge boundary"))
       .map((l) => note("merge", `merge ${g.name(l.elementId)} branch loss: ${l.lossSource.ref}`)),
   ];
-  // R3 (kaitpw 2026-10-28): `externalStatic` is PE_M_Fan_ExternalStaticPressure, the required ESP slot Pe writes; the page labels it "required (written)".
-  const ratedEsp = input.inputs.units[String(unit.id)]?.esp.value ?? null;
-  const cited = new Set([...supplyPaths, ...returnPaths].flatMap((p) => p.blockerIds));
+  const paths = [...supplyPaths, ...returnPaths];
+  const basis = basisOf(input.snapshot, [input.fan, inlet, input.inputs, input.assumeServedFlow]);
+  const network = basisOf(input.snapshot, [input.inputs, input.roster]);
+  // ENCOUNTERS: every other fan this fan's air meets; a tie-in's static is the host's own calc (H5).
+  const self = fanKey(input.fan);
+  const hostOf = (host: FanPortRef): HostCalc | "absent" | "cycle" =>
+    host.unitId === unit.id || input.dependents?.includes(fanKey(host))
+      ? "cycle"
+      : (input.hosts?.get(fanKey(host)) ??
+        (g.byId.has(host.unitId) && input.roster.some((p) => fanKey(p) === fanKey(host))
+          ? // ponytail: one host build per tie-in per pass, no memo; pass `hosts` when a read builds every fan.
+            buildSheet({ ...input, fan: host, dependents: [...(input.dependents ?? []), self] })
+          : "absent"));
+  const met = encountersOf(input.fan, paths, pricer.legs, input.encounterRulings);
+  const coverage: CoverageGap[] = [
+    // ponytail: an unread peer anywhere in the read withholds every fan's claim; scope it to the fan's walked set when the native walk reports per start.
+    ...(input.snapshot.walk?.unreadPeers ?? []).map(
+      (p): CoverageGap => ({
+        kind: "native-peer",
+        elementId: p.elementId,
+        ref: `${p.elementId}:${p.connector}`,
+      }),
+    ),
+    ...(input.snapshot.walk?.truncated
+      ? [{ kind: "budget", elementId: null, ref: "the native walk was truncated" } as const]
+      : []),
+  ];
+  for (const m of met) {
+    if (m.policy.static !== "host-calc" || m.encounter.verdict !== "accepted") continue;
+    const read = hostStatic(hostOf(m.encounter.host), m.encounter, network);
+    if ("kind" in read) coverage.push(read);
+    else
+      m.encounter.static = {
+        kind: "host-calc",
+        basis: read.basis,
+        inWg: round(read.inWg),
+        source: `cumulative loss from fan ${fanKey(m.encounter.host)} to ${g.name(m.encounter.elementId)}`,
+      };
+  }
+  // Q3: backflow is an error on the calc and the picture whatever a person ruled.
+  for (const m of met)
+    if (m.policy.backflow && !pricer.blockers.has(backflowId(m.encounter)))
+      pricer.blockers.set(backflowId(m.encounter), {
+        id: backflowId(m.encounter),
+        kind: "backflow",
+        elementId: m.encounter.elementId,
+        connector: m.encounter.connector,
+        owner: m.encounter.host,
+        detail: `${g.name(unit.id)} discharges into the positive-pressure duct of fan ${tagOf(m.encounter.host.unitId) || g.name(m.encounter.host.unitId)} at ${g.name(m.encounter.elementId)}`,
+        effectInWg: m.encounter.static.kind === "host-calc" ? m.encounter.static.inWg : null,
+        closer: { kind: "ruling", note: "rule this tie-in accepted or refused" },
+      });
+  const cited = new Set(paths.flatMap((p) => p.blockerIds));
+  const backflow = new Set(
+    met.filter((m) => m.policy.backflow).map((m) => backflowId(m.encounter)),
+  );
+  const blockers = [...pricer.blockers.values()].filter(
+    (b) => cited.has(b.id) || b.elementId === unit.id || backflow.has(b.id),
+  );
+  const claim = claimOf({
+    basis,
+    paths,
+    legs: pricer.legs,
+    blockingIds: blockers.filter((b) => !backflow.has(b.id)).map((b) => b.id),
+    coverage,
+    met,
+    allowanceInWg: allowance,
+  });
+  const required = claim.kind === "complete" ? claim.requiredEspInWg : null;
+  const blocking = new Set(claim.blockingIds);
+  const unitId = String(unit.id);
   return {
     engineVersion: SHEET_ENGINE_VERSION,
-    basis: basisOf(input.snapshot, [input.fan, inlet, input.inputs, input.assumeServedFlow]),
+    basis,
+    network,
+    claim,
+    // Q2: rated reads the model alone; a staged required ESP is a third value and never either's source.
+    esp: {
+      rated: sourced(input.inputs.units[unitId]?.esp),
+      required: claim,
+      staged: input.stagedEsp?.[unitId] ?? sourced(undefined),
+    },
+    encounters: met.map((m) => m.encounter),
+    issues: blockers.map((b) =>
+      issueOf(
+        b,
+        g,
+        input.inputs,
+        met.map((m) => m.encounter),
+        blocking,
+      ),
+    ),
     fan: {
       unitId: unit.id,
       portIndex: input.fan.portIndex,
       mark: entry?.tag || unit.facts.find((f) => f.key === "mark")?.text || "",
-      ratedEspInWg: ratedEsp,
       inletPortIndex: inlet,
       dischargePortIndex: discharge,
-      directionOverride,
+      directionMismatch,
       flowCfm,
     },
     legs: pricer.legs,
-    paths: [...supplyPaths, ...returnPaths],
+    paths,
     totals: { supply: sT, return: rT, requiredEspInWg: required, requiredEspAssumedInWg: required },
-    assumed: {
-      paths: [...supplyPaths, ...returnPaths],
-      legs: pricer.legs,
-      blockers: [...pricer.blockers.values()].filter(
-        (b) => cited.has(b.id) || b.elementId === unit.id,
-      ),
-    },
+    assumed: { paths, legs: pricer.legs, blockers },
     // Only what a path or the fan carries; a branch cut to another fan keeps its blockers off this sheet.
-    blockers: [...pricer.blockers.values()].filter(
-      (b) => cited.has(b.id) || b.elementId === unit.id,
-    ),
+    blockers,
     notes,
-    fittings: pricer.fittingsOn([...supplyPaths, ...returnPaths]),
+    fittings: pricer.fittingsOn(paths),
     walkedElementIds: [...walked].sort((a, b) => a - b),
+  };
+}
+
+/** A blocker's typed row: where its closer writes and what it offers, as data (L1-3). */
+function issueOf(
+  b: Blocker,
+  g: Graph,
+  inputs: DuctsInputs,
+  encounters: readonly Encounter[],
+  blocking: ReadonlySet<string>,
+): FanIssue {
+  const el = g.byId.get(b.elementId);
+  const kind = el && !isSegment(el) ? el.kind : "duct";
+  const cell = (
+    segment: string,
+    offers: Extract<FanIssue["closer"], { kind: "cell" }>["offers"] = [],
+  ): FanIssue["closer"] =>
+    b.subject
+      ? { kind: "cell", target: { work: "ducts", segment, row: b.subject }, offers }
+      : { kind: "none", reason: b.closer.note };
+  const firm = inputs.criteria.terminalDropInWg;
+  const encounter = encounters.find((e) => backflowId(e) === b.id);
+  const closer: FanIssue["closer"] = encounter
+    ? { kind: "encounter", encounter }
+    : b.closer.candidate
+      ? { kind: "heal", pair: b.closer.candidate.pair }
+      : b.kind === "unknown-drop" && kind === "terminal" && firm.source !== "none"
+        ? // The firm's terminal drop is the one default any part has; the caller that takes it stamps the author.
+          cell(EDIT_SEGMENTS.terminalDrops, [
+            {
+              value: firm.value,
+              author: "unknown",
+              source: firm.source,
+              ref: firm.ref ?? "criteria.terminalDropInWg",
+              version: firm.version,
+            },
+          ])
+        : b.kind === "unknown-drop" || b.kind === "not-priced" || b.kind === "implausible-loss"
+          ? cell(EDIT_SEGMENTS.componentDrops)
+          : b.kind === "no-flow" && kind === "terminal"
+            ? cell(EDIT_SEGMENTS.flows)
+            : b.kind === "no-flow" && kind === "equipment"
+              ? cell(EDIT_SEGMENTS.equipmentFlows)
+              : { kind: "none", reason: b.closer.note };
+  return {
+    id: b.id,
+    kind: b.kind,
+    elementId: b.elementId,
+    severity: blocking.has(b.id) ? "blocking" : "warning",
+    closer,
   };
 }
 

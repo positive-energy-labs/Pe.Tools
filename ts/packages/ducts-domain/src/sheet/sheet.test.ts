@@ -187,10 +187,9 @@ it("a complete sheet: required ESP = worst supply + worst return + allowances", 
   expect(supply[0]!.knownInWg).toBeCloseTo(T8, 6);
   expect(supply[1]!.knownInWg).toBeCloseTo(T6, 6);
   expect(sheet.paths.find((p) => p.side === "return")!.knownInWg).toBeCloseTo(R, 6);
-  expect(sheet.paths.every((p) => p.complete)).toBe(true);
+  expect(sheet.claim.kind).toBe("complete");
   expect(sheet.blockers).toEqual([]);
   expect(sheet.totals.supply).toMatchObject({
-    complete: true,
     worstPath: expect.closeTo(T8, 6),
     allowanceInWg: 0.1,
   });
@@ -243,7 +242,7 @@ it("a complete sheet: required ESP = worst supply + worst return + allowances", 
   expect(missing.basis).not.toBe(sheet.basis);
   // A terminal with no flow withholds every leg it shares, and the total.
   expect(missing.blockers.map((b) => b.id)).toContain("no-flow:8:0");
-  expect(missing.paths.find((p) => p.end.elementId === 6)!.complete).toBe(false);
+  expect(missing.claim.kind).toBe("incomplete");
   expect(missing.totals.requiredEspInWg).toBeNull();
 });
 
@@ -439,7 +438,7 @@ it("an open end blocks its side; a vacant opposed port within the default gap au
     ),
   ).toBe(true);
   expect(sheet.legs["53:0>1"]!.lossSource.ref).toContain("auto-joined");
-  expect(ret.complete).toBe(true);
+  expect(ret.blockerIds).toEqual([]);
   expect(sheet.totals.requiredEspInWg).toBeNull();
   // A person's accept closes the join; the open supply end still withholds ESP.
   const ruled = buildSheet({
@@ -450,7 +449,7 @@ it("an open end blocks its side; a vacant opposed port within the default gap au
       rulings: [{ pair: ["52:1", "53:0"], verdict: "accept" }],
     }),
   });
-  expect(ruled.paths.find((p) => p.side === "return")!.complete).toBe(true);
+  expect(ruled.paths.find((p) => p.side === "return")!.blockerIds).toEqual([]);
   expect(ruled.totals.return.worstPath).toBeCloseTo(
     friction(roundSection(6), 100, 10 + 10, 0.0003).dp + 0.02,
     5,
@@ -943,7 +942,7 @@ it("a branch-entry tap onto this fan's own network is a split (R-Q4): the walk c
   expect(
     sheet.notes.some((i) => i.kind === "merge" && i.text.startsWith("merge 2 branch loss:")),
   ).toBe(false);
-  expect(sheet.paths.every((p) => p.complete)).toBe(true);
+  expect(sheet.paths.flatMap((p) => p.blockerIds)).toEqual([]);
   const beyond = buildChain({
     ...input,
     start: { elementId: 100, connector: 0 },
@@ -1330,8 +1329,8 @@ it("a missing terminal flow withholds path completeness and required ESP", () =>
     grids,
     inputs,
   });
-  expect(sheet.paths.find((p) => p.end.elementId === 6)?.complete).toBe(false);
-  expect(sheet.totals.supply.complete).toBe(false);
+  expect(sheet.claim.kind).toBe("incomplete");
+  expect(sheet.totals.supply.worstPath).toBeNull();
   expect(sheet.totals.requiredEspInWg).toBeNull();
   expect(sheet.blockers.some((b) => b.kind === "no-flow")).toBe(true);
 });

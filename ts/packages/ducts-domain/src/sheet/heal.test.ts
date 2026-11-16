@@ -368,7 +368,7 @@ it("a capped mouth 2.6 in from an open end proposes replacing the cap with a tra
   expect(rows[0]!.elementId).toBeNull();
   expect(fittingPricingSchema.array().safeParse(sheet.fittings).error?.issues ?? []).toEqual([]);
   const path = sheet.assumed.paths.find((x) => x.end.elementId === 200)!;
-  expect(path.complete).toBe(true);
+  expect(path.blockerIds).toEqual([]);
   const fittingLegs = path.legIds.filter(
     (id) => id.startsWith("heal:") && id.includes(":fitting>"),
   );

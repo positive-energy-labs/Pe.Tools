@@ -19,9 +19,21 @@ export {
   FITTING_DROP_CELL,
   EDIT_SEGMENTS,
   editCells,
+  encounterRulings,
+  sourced,
+  stagedEsp,
   type InputLayers,
   type WorkLayer,
   type StoreLayer,
 } from "./inputs.ts";
 
+export {
+  ENCOUNTERS,
+  ENCOUNTER_KEY,
+  claimOf,
+  encountersOf,
+  hostStatic,
+  type EncounterRuling,
+  type HostCalc,
+} from "./encounters.ts";
 export { editPatches } from "./edits.ts";

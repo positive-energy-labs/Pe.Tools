@@ -12,6 +12,7 @@ const leg = (id: string, flowCfm: number, lossInWg: number | null, velocityFpm: 
   lossInWg,
   lossSource: { kind: "friction", ref: "test" },
   equivalentFt: 10,
+  evidence: { kind: "unpriced", issueId: "" },
 });
 const path = (
   legIds: string[],
@@ -23,7 +24,6 @@ const path = (
   legIds,
   end: { kind, elementId },
   knownInWg,
-  complete: true,
   blockerIds: [],
 });
 

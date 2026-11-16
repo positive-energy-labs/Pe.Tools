@@ -4,7 +4,16 @@
  * The wire contract (W1-F) mirrors this file; change it there in the same commit.
  */
 
-export const SHEET_ENGINE_VERSION = "sheet/3";
+import type {
+  Encounter,
+  FanBlockerKind,
+  FanClaim,
+  FanEspValues,
+  FanIssue,
+  LegEvidence,
+} from "./contract-pending.ts";
+
+export const SHEET_ENGINE_VERSION = "sheet/4";
 
 /** A roster entry's identity. Reached ends decide the physical discharge/inlet in the sheet. */
 export interface FanPortRef {
@@ -31,6 +40,8 @@ export interface Leg {
   lossSource: { kind: "friction" | "rule" | "drop" | "default"; ref: string };
   /** At this leg's own rate (duct and fitting legs only); typed drops stay in in-wg. */
   equivalentFt: number | null;
+  /** What the loss was computed from, typed (L2-1); `lossSource.ref` is display text only. */
+  evidence: LegEvidence;
 }
 
 export interface PathEnd {
@@ -44,6 +55,8 @@ export interface PathEnd {
   connector?: number;
   /** The other fan, for roster-fan-port, joins-other-fan and sibling-fan. */
   fan?: FanPortRef | null;
+  /** Which port of that fan the walk arrived at; `ENCOUNTERS` reads it. Absent when neither. */
+  reached?: "inlet" | "discharge";
 }
 
 /** A person's ruling on one open end (R-CAP, kaitpw 2026-10-28): capped, so neither an end nor a blocker. */
@@ -60,22 +73,11 @@ export interface SheetPath {
   end: PathEnd;
   /** Sum of the priced legs on the path. */
   knownInWg: number;
-  /** No blocker on any leg or the end of this path. */
-  complete: boolean;
   blockerIds: string[];
 }
 
-export type BlockerKind =
-  | "open-end"
-  | "inferred-join"
-  | "unknown-drop"
-  | "no-flow"
-  | "flow-mismatch"
-  | "shared-leg"
-  | "class-change"
-  | "not-priced"
-  | "implausible-loss"
-  | "equipment-pairing";
+/** The native-owned blocker vocabulary (generated from C#); never a TS literal copy. */
+export type BlockerKind = FanBlockerKind;
 
 export interface Blocker {
   /** `${kind}:${elementId}` plus `:${connector}` when one is named. */
@@ -141,14 +143,13 @@ export interface HealProposal {
 }
 
 export interface SideTotals {
-  /** Worst complete path, in-wg; null when any path on the side is incomplete. */
+  /** Worst path, in-wg; null when any path on the side has a blocker or an unpriced leg. A pricing subtotal: `Sheet.claim` alone says whether the calc is complete. */
   worstPath: number | null;
   /** Worst known subtotal across the side's paths, complete or not. */
   knownInWg: number;
   /** Worst path on the continued heal walk; null while flow or pricing remains blocked. */
   assumedInWg: number | null;
   allowanceInWg: number;
-  complete: boolean;
   /** Total equivalent length of the worst path, ft. */
   telFt: number;
   /** ASP x 100 / TEL on the worst path; null without a worst path. */
@@ -164,23 +165,35 @@ export interface Sheet {
   basis: string;
   fan: FanPortRef & {
     mark: string;
-    ratedEspInWg: number | null;
     /** The return-side start; null when the roster names none. */
     inletPortIndex: number | null;
     /** Physical discharge after the ends decide direction; portIndex remains the roster identity. */
     dischargePortIndex: number;
-    /** Network roles contradict native Direction; includes the scorer evidence. */
-    directionOverride?: string | null;
-    /** Displayed as the sum of the flows its ends carry; never an input. */
+    /**
+     * Q4: the family's connector direction set the roles and the network's ends read the other way.
+     * A warning for the picture; null when they agree or the family states no direction.
+     */
+    directionMismatch: { discharge: number; networkDischarge: number; evidence: string } | null;
+    /** A stated flow when one is authored; otherwise the sum its ends carry, a result (Q1 B). */
     flowCfm: number | null;
   };
   legs: Record<string, Leg>;
   /** Ranked worst first per side, supply first. */
   paths: SheetPath[];
+  /** The one authority on completeness and required ESP (invariant 1). */
+  claim: FanClaim;
+  /** Q2: rated, required and staged ESP are three values with three sources. */
+  esp: FanEspValues;
+  /** Every other fan this fan's air meets, each under its `ENCOUNTERS` row. */
+  encounters: Encounter[];
+  /** One typed row per blocker and warning, by the blocker's id; closers are data, never prose. */
+  issues: FanIssue[];
+  /** Hash of the snapshot and inputs every fan's sheet of one read shares; a host calc at another is stale. */
+  network: string;
   totals: {
     supply: SideTotals;
     return: SideTotals;
-    /** Worst supply + worst return + allowances, only when both sides are complete. */
+    /** `claim.requiredEspInWg` when the claim is complete, else null. */
     requiredEspInWg: number | null;
     requiredEspAssumedInWg: number | null;
   };

@@ -277,7 +277,7 @@ it.skipIf(!existsSync(CHADDS))(
     expect(ids(blindPriced.blockers)).toEqual(missing);
     expect(ids(blindPriced.assumed.blockers)).toEqual(missing);
     expect(blindPriced.blockers.every((b) => b.kind === "no-flow")).toBe(true);
-    expect(blindPriced.totals.return.complete).toBe(false);
+    expect(blindPriced.totals.return.worstPath).toBeNull();
     expect(blindPriced.totals.requiredEspInWg).toBeNull();
 
     // The per-plenum closure: accept each stub's own grille first (the pair each inferred-join
@@ -308,7 +308,7 @@ it.skipIf(!existsSync(CHADDS))(
     });
     expect(ids(seededPriced.blockers)).toEqual(missing);
     expect(seededPriced.blockers.every((b) => b.kind === "no-flow")).toBe(true);
-    expect(seededPriced.totals.return.complete).toBe(false);
+    expect(seededPriced.totals.return.worstPath).toBeNull();
     expect(seededPriced.totals.requiredEspInWg).toBeNull();
   },
   240_000,

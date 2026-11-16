@@ -10,7 +10,10 @@ import type {
   SheetEdits,
   Resolved,
 } from "@pe/agent-contracts";
+import type { Author } from "@pe/agent-contracts";
 import { catalogLinkKey, catalogLoss, type Catalogs } from "../catalog.ts";
+import type { SourcedValue } from "./contract-pending.ts";
+import { ENCOUNTER_KEY, type EncounterRuling } from "./encounters.ts";
 import { slotFlowOf } from "../kernel/terminal-flow.ts";
 import { suggestKind, suggestRole } from "../roster.ts";
 import type { SheetSnapshot } from "./build.ts";
@@ -22,7 +25,8 @@ export interface WorkLayer {
   flows?: Readonly<Record<string, { cfm: number }>>;
   terminalDrops?: Readonly<Record<string, { inWg: number }>>;
   componentDrops?: Readonly<Record<string, { inWg: number }>>;
-  esp?: Readonly<Record<string, { inWg: number }>>;
+  /** Staged required ESP. `by` is the caller who staged it; absent on a legacy cell, which reads `unknown`. */
+  esp?: Readonly<Record<string, { inWg: number; by?: Author; ref?: string }>>;
   equipmentFlows?: Readonly<Record<string, { cfm: number }>>;
   roles?: Readonly<Record<string, { role: "fan" | "passive" }>>;
   kinds?: Readonly<Record<string, { kind: DuctUnitKind }>>;
@@ -315,10 +319,10 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
         },
         "cfm",
       );
+      // Q2 (kaitpw 2026-11-16): rated ESP reads the model alone. A staged required ESP is another
+      // value with another source (`stagedEsp`) and never demotes or replaces this one.
       const esp = pick(
         {
-          run: { value: run.esp?.[key]?.inWg },
-          Work: { value: work.esp?.[key]?.inWg },
           model: {
             value: positive(factOf(n, "externalStatic")),
             ref: slots.fanStatic ?? "fanStatic",
@@ -470,6 +474,52 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
     assignments,
     fittingDrops,
   };
+}
+
+/** A resolved number as the contract's sourced value: a valid one always carries a ref, and an author only where a caller staged it. */
+export function sourced(
+  r: Resolved<number | null> | undefined,
+  author: Author | null = null,
+  ref?: string,
+): SourcedValue<number> {
+  if (!r || r.source === "none" || r.status === "missing")
+    return { status: "missing", value: null, source: "none", author: null, ref: null, version: null, units: r?.units ?? null };
+  const rest = { source: r.source, author, ref: ref ?? r.ref ?? r.source, version: r.version, units: r.units };
+  return r.status === "valid" && r.value != null
+    ? { status: "valid", value: r.value, ...rest }
+    : { status: "invalid", value: null, ...rest };
+}
+
+/** Staged required ESP by unit element id (Q2): the run and Work layers only, with who staged it. An author nobody recorded is `unknown`, never a guess. */
+export function stagedEsp(
+  layers: Pick<InputLayers, "snapshot" | "run" | "work">,
+): Record<string, SourcedValue<number>> {
+  return Object.fromEntries(
+    layers.snapshot.nodes.flatMap((n) => {
+      const key = elementSubject(n);
+      const cell = layers.run?.esp?.[key] ?? layers.work?.esp?.[key];
+      if (!cell) return [];
+      const r = resolveValue(
+        { [layers.run?.esp?.[key] ? "run" : "Work"]: { value: cell.inWg } },
+        "in-wg",
+        (v: number) => Number.isFinite(v) && v >= 0,
+      );
+      return [[String(n.id), sourced(r, cell.by ?? "unknown", cell.ref ?? `esp/${key}`)] as const];
+    }),
+  );
+}
+
+/** A person's encounter verdicts: `encounter:<element>:<connector>` assumption cells, `accept` or `refuse`. */
+export function encounterRulings(layers: Pick<InputLayers, "run" | "work">): EncounterRuling[] {
+  const cells = { ...layers.work?.assumptions, ...layers.run?.assumptions };
+  return Object.entries(cells).flatMap(([key, cell]): EncounterRuling[] => {
+    const [elementId, connector] = key.startsWith("encounter:") ? key.slice(10).split(":").map(Number) : [];
+    const verdict = cell.verdict === "accept" ? "accepted" : cell.verdict === "refuse" ? "refused" : null;
+    const at = { elementId: elementId!, connector: connector! };
+    return verdict && Number.isInteger(elementId) && Number.isInteger(connector) && ENCOUNTER_KEY(at) === key
+      ? [{ at, verdict }]
+      : [];
+  });
 }
 
 const KINDS: readonly string[] = [
