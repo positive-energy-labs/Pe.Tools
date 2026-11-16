@@ -19,6 +19,7 @@ import type { SheetBlocker } from "./tiers";
 
 const GLYPH: Record<SheetBlocker["kind"], string> = {
   "open-end": "◌",
+  backflow: "⇄",
   "inferred-join": "⟷",
   "unknown-drop": "Δp?",
   "no-flow": "cfm?",

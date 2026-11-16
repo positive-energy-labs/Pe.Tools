@@ -24,8 +24,8 @@ import { closerKind, healPair } from "./tiers";
 export type CloserAction =
   | { kind: "rule"; pair: readonly [string, string] }
   | { kind: "cap"; end: { elementId: number; connector: number } }
-  /** `source` is where an offered default came from (its tier and ref); a typed number states none. */
-  | { kind: "drop"; elementId: number; value: number; terminal: boolean; source?: string }
+  /** `ref` is the evidence an offered default cites (its tier and ref), for the cell's own `ref`; a typed number cites none. */
+  | { kind: "drop"; elementId: number; value: number; terminal: boolean; ref?: string }
   | { kind: "cfm"; elementId: number; value: number }
   | { kind: "unitCfm"; unitId: number; value: number }
   /** Price every fitting of `family` no rule matches with `rule`; `table` swaps that rule's table too. */
@@ -280,8 +280,8 @@ function describeBase(blocker: SheetBlocker, typed: number | null, context: Clos
         ? { ...refuse("set drop", "Type the drop in in-wg"), input }
         : live(
             `set drop ${fallback.value} in-wg (${fallback.source}${fallback.ref ? ` ${fallback.ref}` : ""})`,
-            // The staged cell keeps where the default came from; the host stamps who took it.
-            { kind: "drop", elementId: blocker.elementId, value: fallback.value, terminal, source: [fallback.source, fallback.ref].filter(Boolean).join(" ") },
+            // The staged cell cites where the default came from; the host stamps who took it.
+            { kind: "drop", elementId: blocker.elementId, value: fallback.value, terminal, ref: [fallback.source, fallback.ref].filter(Boolean).join(" ") },
             input,
           );
     }
@@ -301,9 +301,9 @@ function describeBase(blocker: SheetBlocker, typed: number | null, context: Clos
             )
           : { ...refuse(`set ${receiving.name} design flow`, "Type the unit's design cfm"), input };
       // A side-stream unit's own flow splits across its receiving ends (A2): one design cfm for the
-      // unit closes every such row, split by the policy, instead of a typed share per end. Only a
-      // terminal reads `flows`, so every other end of the open fan is the unit's own flow.
-      if (context.fan && (cell ? cell.target.segment === "equipmentFlows" : !terminal))
+      // unit closes every such row, split by the policy, instead of a typed share per end. Only the
+      // engine's typed target says so; without one the row writes its own element, never another's.
+      if (context.fan && cell?.target.segment === "equipmentFlows")
         return typed != null
           ? live(
               `set ${context.fan.name} design flow ${typed} cfm`,

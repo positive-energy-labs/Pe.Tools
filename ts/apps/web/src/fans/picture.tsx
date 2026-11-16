@@ -42,11 +42,11 @@ function FanWalk({ ctx, snapshot, picture }: Pick<Props, "ctx" | "picture"> & { 
   const { authored, value, sheet, roster, nameOf, issue, state, fanKey } = useSheetData(ctx, snapshot);
   const picked = authored.fan.kind === "all" ? "all" : authored.fan.ids;
   const jump = useRef<((key: SubjectKey) => void) | null>(null);
-  const esp = sheet?.overview.espValues;
+  const esp = sheet?.overview.espValues, direction = sheet?.overview.fan?.directionOverride;
   return (
     <SheetFrame ctx={ctx} snapshot={snapshot} nameOf={nameOf} jump={jump}>
-      {/* Served once the engine's claim rides the overview; until then there is nothing to warn from. */}
-      {esp && espWarnings(esp).map((warning) => <p key={warning} role="alert">{warning}</p>)}
+      {[...(direction ? [`Family direction differs from the network: ${direction}`] : []), ...(esp ? espWarnings(esp) : [])]
+        .map((warning) => <p key={warning} role="alert">{warning}</p>)}
       <SheetPicture
         props={{
           page: { layers: authored.layers, context: authored.context, encoding: authored.encoding, issue },

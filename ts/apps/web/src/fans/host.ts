@@ -43,7 +43,8 @@ const openFan = read("fans.open", {
     };
     const overview = await ctx.read(fanOverview, request);
     const worst = (["supply", "return"] as const).flatMap((side) =>
-      overview.totals?.[side].complete && overview.paths[side].paths[0]
+      // A side with a priced worst path has legs worth reading; whether the calc is complete is the claim's alone.
+      overview.totals?.[side].worstPath != null && overview.paths[side].paths[0]
         ? [overview.paths[side].paths[0]!.pathId]
         : [],
     );

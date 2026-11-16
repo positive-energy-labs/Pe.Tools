@@ -45,7 +45,7 @@ test("typed closers choose the cell and carry the offer's provenance; the blocke
   // The prose says "component"; the typed target says terminal, and wins.
   const drop = describeCloser(blocker("unknown-drop", "component 9 has no drop"), null, { ...context,
     fix: () => ({ kind: "cell", target: { work: "fans", segment: "terminalDrops", row: "r" }, offers: [offer] }) });
-  expect(drop.action).toEqual({ kind: "drop", elementId: 9, value: 0.03, terminal: true, source: "firm ducts.json#terminalDrop" });
+  expect(drop.action).toEqual({ kind: "drop", elementId: 9, value: 0.03, terminal: true, ref: "firm ducts.json#terminalDrop" });
   // The prose says "the fan's own flow"; the typed target is a terminal's flow.
   const flow = describeCloser(blocker("no-flow", "the fan's own flow into this end has no typed share"), 250, { ...context,
     fix: () => ({ kind: "cell", target: { work: "fans", segment: "flows", row: "r" }, offers: [] }) });
@@ -53,8 +53,9 @@ test("typed closers choose the cell and carry the offer's provenance; the blocke
   const own = describeCloser(blocker("no-flow", "this terminal has no design flow"), 250, { ...context,
     fix: () => ({ kind: "cell", target: { work: "fans", segment: "equipmentFlows", row: "r" }, offers: [] }) });
   expect(own.action).toEqual({ kind: "unitCfm", unitId: 5, value: 250 });
-  // With no typed closer the walk's own terminals decide, still not the prose.
-  expect(describeCloser(blocker("no-flow", "the fan's own flow"), 250, { ...context, terminal: () => true }).action).toMatchObject({ kind: "cfm" });
+  // With no typed closer a flow row writes its own element, whatever the prose says and whatever the element is.
+  for (const terminal of [true, false])
+    expect(describeCloser(blocker("no-flow", "the fan's own flow"), 250, { ...context, terminal: () => terminal }).action).toEqual({ kind: "cfm", elementId: 9, value: 250 });
   expect(describeCloser(blocker("unknown-drop", "terminal 9"), 0.1, { ...context, terminal: () => false }).action).toMatchObject({ terminal: false });
 });
 

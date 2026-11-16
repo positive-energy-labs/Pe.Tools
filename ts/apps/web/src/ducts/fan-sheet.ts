@@ -12,6 +12,7 @@ import {
   type DuctsInputs,
   type DuctsSheetOverview,
   type DuctsSheetRequest,
+  fanClaimSchema, fanCloserSchema, fanEspValuesSchema, encounterSchema, fanIssueSchema, stagedDucts,
 } from "@pe/agent-contracts";
 import { elementLabeler } from "@pe/ducts-domain/element-label";
 import { slotCoverage } from "@pe/ducts-domain/kernel/terminal-flow";
@@ -25,6 +26,7 @@ import {
   resolveCriteria,
   resolveInputs,
   scopeInputs,
+  stagedEsp, encounterRulings,
 } from "@pe/ducts-domain/sheet/index";
 import type { Chain, Sheet, SheetPath } from "@pe/ducts-domain/sheet/types";
 import { worksheet } from "@pe/ducts-domain/sheet/worksheet";
@@ -72,9 +74,10 @@ const enginePath = z.object({
   legIds: z.array(z.string()),
   end: details[4].shape.ends.element,
   knownInWg: z.number(),
-  complete: z.boolean(),
   blockerIds: z.array(z.string()),
 });
+const wireTotals = ductsSheetOverviewSchema.shape.totals.unwrap();
+const engineSide = wireTotals.shape.supply.omit({ complete: true });
 const engineBase = {
   engineVersion: z.string(),
   basis: z.string(),
@@ -84,11 +87,24 @@ const engineBase = {
   fittings: details[4].shape.fittings,
   walkedElementIds: details[2].shape.walkedElementIds,
 };
+/*
+ * The engine's own output, kept whole between reads: the claim, the three ESP values, encounters,
+ * typed issues and the network hash ride with the numbers, and no completeness boolean exists.
+ * Built from the wire parts where they agree. The wire still marks a leg's `evidence` optional and
+ * the engine always states it, so the parsed type is named as the engine's (`Sheet | Chain`) once, here.
+ */
 const engineValue = z.union([
   z.object({
     ...engineBase,
-    fan: ductsSheetOverviewSchema.shape.fan.unwrap(),
-    totals: ductsSheetOverviewSchema.shape.totals.unwrap(),
+    fan: ductsSheetOverviewSchema.shape.fan.unwrap().omit({ ratedEspInWg: true, directionOverride: true }).extend({
+      directionMismatch: z.object({ discharge: z.number(), networkDischarge: z.number(), evidence: z.string() }).nullable(),
+    }),
+    totals: wireTotals.extend({ supply: engineSide, return: engineSide }),
+    claim: fanClaimSchema,
+    esp: fanEspValuesSchema,
+    encounters: z.array(encounterSchema),
+    issues: z.array(fanIssueSchema),
+    network: z.string(),
     paths: z.array(enginePath),
     assumed: z.object({
       paths: z.array(enginePath),
@@ -102,7 +118,7 @@ const engineValue = z.union([
     direction: z.enum(["supply", "return"]),
     path: enginePath.nullable(),
   }),
-]);
+]) as unknown as z.ZodType<Sheet | Chain>;
 const modelSchema = z.object({
   target: ductsRosterRequestSchema.shape.target,
   mode: z.enum(["fan", "chain"]),
@@ -158,7 +174,11 @@ const sheetModel = read("fans.calculation", {
   async run(ctx, request) {
     const saved = await ctx.read(designLayers, request.target);
     const design = ductsDesign(saved.ducts, saved.fans),
-      work = workLayer(design);
+      base = workLayer(design),
+      staged = stagedDucts(design, design).authored.esp;
+    // The engine's staged ESP names who staged it: the caller the host stamped on the Work cell, and its evidence.
+    const work = { ...base, esp: Object.fromEntries(Object.entries(base.esp ?? {}).map(([key, cell]) =>
+      [key, { ...cell, ...(staged[key] ? { by: staged[key].author, ref: staged[key].ref } : {}) }])) };
     const criteria = resolveCriteria(work, null, firmLayer(saved.firm, saved.settings));
     const tolerances = {
       autoJoinGapIn: criteria.autoJoinGapIn.value,
@@ -234,6 +254,9 @@ const sheetModel = read("fans.calculation", {
             inputs,
             roster: ports,
             fan: { unitId: request.unitId, portIndex: request.portIndex },
+            stagedEsp: stagedEsp({ snapshot, work }),
+            encounterRulings: encounterRulings({ work }),
+            // `hosts` stays unpassed: one read prices one fan, and the engine builds a host's calc where it meets one.
           })
         : buildChain({
             snapshot,
@@ -303,8 +326,12 @@ const rosterInputs = (inputs: DuctsInputs) => ({
 });
 const pathsOf = (value: Sheet | Chain): SheetPath[] =>
   "paths" in value ? value.paths : value.path ? [value.path] : [];
-const compact = (value: Sheet["blockers"][number]) => ({
+/** The typed closer the engine issued for a blocker, by id: data the page acts on, never the prose. */
+const typedClosers = (value: Sheet | Chain) =>
+  new Map(("issues" in value ? value.issues : []).map((issue) => [issue.id, fanCloserSchema.parse(issue.closer)]));
+const compact = (closers: ReturnType<typeof typedClosers>) => (value: Sheet["blockers"][number]) => ({
   id: value.id,
+  ...(closers.has(value.id) ? { typedCloser: closers.get(value.id)! } : {}),
   kind: value.kind,
   elementId: value.elementId,
   ...(value.subject ? { subject: value.subject } : {}),
@@ -320,7 +347,8 @@ const compact = (value: Sheet["blockers"][number]) => ({
 const allBlockers = (value: Sheet | Chain) => {
   const known = new Map(value.blockers.map((b) => [b.id, b]));
   const assumed = "assumed" in value ? value.assumed.blockers.filter((b) => !known.has(b.id)) : [];
-  return [...known.values(), ...assumed];
+  const closers = typedClosers(value);
+  return [...known.values(), ...assumed].map((b) => (closers.has(b.id) ? { ...b, typedCloser: closers.get(b.id)! } : b));
 };
 
 /**
@@ -342,6 +370,8 @@ export function sheetReach(value: Sheet | Chain): Set<number> {
 
 function overview(entry: SheetModel): DuctsSheetOverview {
   const paths = pathsOf(entry.value);
+  const sheet = "claim" in entry.value ? entry.value : null, claim = sheet?.claim;
+  const closers = compact(typedClosers(entry.value));
   const side = (name: "supply" | "return") => {
     const ranked = paths
       .map((path, index) => ({ path, index }))
@@ -351,7 +381,8 @@ function overview(entry: SheetModel): DuctsSheetOverview {
         pathId: String(index),
         end: path.end,
         knownInWg: path.knownInWg,
-        complete: path.complete,
+        // The wire still asks each path for a boolean; it repeats the claim, the one authority, and decides nothing.
+        complete: claim?.kind === "complete",
         legCount: path.legIds.length,
         blockerIds: path.blockerIds,
       })),
@@ -365,11 +396,14 @@ function overview(entry: SheetModel): DuctsSheetOverview {
     mode: entry.mode,
     target: entry.target,
     basis: entry.value.basis,
-    fan: "fan" in entry.value ? entry.value.fan : null,
-    totals: "totals" in entry.value ? entry.value.totals : null,
+    // Parsed through the wire schemas: the engine's readonly shapes become the wire's, and a malformed claim never leaves.
+    ...(sheet ? { claim: fanClaimSchema.parse(sheet.claim), espValues: fanEspValuesSchema.parse(sheet.esp) } : {}),
+    // Rated ESP is the engine's rated value alone. The wire's one direction field carries the family-direction mismatch's evidence.
+    fan: sheet ? { ...sheet.fan, ratedEspInWg: sheet.esp.rated.value, directionOverride: sheet.fan.directionMismatch?.evidence ?? null } : null,
+    totals: sheet ? { ...sheet.totals, supply: { ...sheet.totals.supply, complete: claim?.kind === "complete" }, return: { ...sheet.totals.return, complete: claim?.kind === "complete" } } : null,
     paths: { supply, return: ret },
-    blockers: entry.value.blockers.map(compact),
-    assumedBlockers: "assumed" in entry.value ? entry.value.assumed.blockers.map(compact) : [],
+    blockers: entry.value.blockers.map(closers),
+    assumedBlockers: "assumed" in entry.value ? entry.value.assumed.blockers.map(closers) : [],
     next: {
       hint: "Repeat this request with basis and detail. legs needs pathId; elements returns walkedElementIds and, as context only (never priced), a short stub from every port of each unit this fan stops at; inputs returns provenance and full blocker closers; worksheet returns every run and section with its legs. Other paths use their zero-based engine path index.",
       legs: [...supply.paths, ...ret.paths].map(({ pathId }) => ({ kind: "legs", pathId })),
@@ -414,7 +448,7 @@ export const fanInputs = read("fans.inputs", {
     const entry = await current(ctx, request);
     return {
       kind: "inputs" as const,
-      directionOverride: "fan" in entry.value ? (entry.value.fan.directionOverride ?? null) : null,
+      directionOverride: "fan" in entry.value ? (entry.value.fan.directionMismatch?.evidence ?? null) : null,
       target: entry.target,
       basis: entry.value.basis,
       inputs: scopeInputs(entry.inputs, sheetReach(entry.value)),

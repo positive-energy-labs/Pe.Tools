@@ -28,6 +28,7 @@ const DAMAGE: ReadonlySet<Kind> = new Set([
   "not-priced",
   "implausible-loss",
   "equipment-pairing",
+  "backflow",
 ]);
 /** Kinds whose door is the leg's centreline; dashed ones read as MISSING pricing. */
 const CENTRELINE: ReadonlyMap<Kind, { dashed: boolean }> = new Map([

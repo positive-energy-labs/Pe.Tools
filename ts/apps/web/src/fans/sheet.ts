@@ -69,8 +69,7 @@ const scopeChoices = (read: Read): readonly EnumChoice[] => {
 };
 /**
  * One writable fan input as a sheet binding: its slot and domain come from the one inputs table
- * (`FAN_INPUTS`); only how many digits a unit draws is decided here. `source` is the stated
- * evidence Fans Work admits beside a drop or a flow (`fansDocumentSchema`); ESP has none.
+ * (`FAN_INPUTS`); only how many digits a unit draws is decided here.
  */
 const DIGITS: Readonly<Record<string, number>> = { "in-wg": 4, cfm: 0 };
 const input = (name: string, draw: BindingDraw) => {
@@ -78,7 +77,7 @@ const input = (name: string, draw: BindingDraw) => {
   if (!row?.parameter || row.domain.kind !== "object") throw Error(`${name} is not a writable fan input`);
   const fields = Object.fromEntries(Object.entries(row.domain.fields).map(([key, field]) =>
     [key, field.kind === "number" && field.unit && field.unit in DIGITS ? { ...field, digits: DIGITS[field.unit] } : field]));
-  return parameter(row.parameter, { kind: "object", fields, ...(name === "esp" ? {} : { text: ["source"] }) }, draw);
+  return parameter(row.parameter, { kind: "object", fields }, draw);
 };
 
 export const fansSheet = {
