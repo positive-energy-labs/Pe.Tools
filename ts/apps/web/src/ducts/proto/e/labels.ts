@@ -6,7 +6,7 @@
  */
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
-import { typeName } from "../../claims";
+import { typeName } from "../../element-names";
 import type { TreeNode } from "../b/model";
 
 export function grilleLabels(

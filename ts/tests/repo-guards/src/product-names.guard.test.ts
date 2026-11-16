@@ -47,7 +47,7 @@ test("report only: generic files that name a product", () => {
     [
       `product names (report only): ${rows.length} generic files, ${rows.reduce((sum, [, n]) => sum + n, 0)} mentions`,
       ...GENERIC.map((root) => `  ${root}: ${by(root).length} files, ${by(root).reduce((sum, [, n]) => sum + n, 0)} mentions`),
-      ...rows.slice(0, 10).map(([path, n]) => `  ${n}\t${path}`),
+      ...rows.map(([path, n]) => `  ${n}\t${path}`),
     ].join("\n"),
   );
 });

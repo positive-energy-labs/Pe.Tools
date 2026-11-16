@@ -28,7 +28,7 @@ import type { Layer3D } from "#/scene/types";
 import type { NoRunBranch } from "@pe/ducts-domain/no-runs";
 import { issueAt, type StageIssue } from "./inbox-rows";
 
-/** The illustrations' inks (the duct cases page): inferred red, open end orange, cap and heal amber. */
+/** The picture's inks: inferred red, open end orange, cap and heal amber. */
 const INK = {
   inferred: 0xd32f2f,
   overhang: 0xff1744,
@@ -373,26 +373,3 @@ export function noRunLayers(
   });
 }
 
-/** A review draws only its admitted repairs; preview geometry remains a ghost. */
-export function healReviewLayers(
-  snapshot: DuctSnapshot,
-  work: DuctsDesign | null,
-  review: import("./reviews").HealReview | null,
-): Layer3D[] {
-  if (!review) return [];
-  const targets = review.targets.filter(
-    (target) => target.outcome === "planned" || target.outcome === "healed",
-  );
-  const repairs = targets.map((target) => ({ ...target, covers: [target.key] }));
-  const findings = new Set(repairs.flatMap((target) => target.covers));
-  const shapes = findingShapes(snapshot, findings, work, undefined, repairs);
-  for (const box of shapes.boxes) box.ghost = review.mode === "preview";
-  return findingLayers(shapes, [
-    {
-      key: `heal:${review.group}`,
-      ids: targets.flatMap((t) => t.ids),
-      findings: [...findings],
-      damage: null,
-    },
-  ]);
-}

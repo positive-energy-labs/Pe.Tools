@@ -13,7 +13,7 @@ import { groupTree, runsOf } from "@pe/ducts-domain/topology";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
 import { splitOf, type Split } from "../../loss-split";
-import { elementNamer } from "../../claims";
+import { elementNamer } from "../../element-names";
 import { groupLabels } from "@pe/ducts-domain/words";
 import { labelOfNode, legsOf } from "../../legs";
 

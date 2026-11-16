@@ -1,5 +1,4 @@
 import { createContext, useContext, type ReactNode } from "react";
-import type { CellTransition } from "@pe/kit/lang/cell";
 import type { SceneMeshes } from "#/scene/types";
 import type { FanPort } from "./sheet/model";
 export const DuctsOwner = createContext<{
@@ -14,13 +13,3 @@ export function PaneCommands({ row }: { row?: unknown }) {
   return useContext(DuctsOwner)?.commands?.(row) ?? null;
 }
 export const commands = (row?: unknown): ReactNode => <PaneCommands row={row} />;
-export function useCellTransitions(segment: string, key: string): readonly CellTransition[] {
-  const owner = useContext(DuctsOwner);
-  if (!owner) return [];
-  return (["clear"] as const).map((kind) => ({
-    kind,
-    run: async () => {
-      return owner.cells.at([segment, key]).clear();
-    },
-  }));
-}
