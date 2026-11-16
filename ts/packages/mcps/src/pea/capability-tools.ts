@@ -1386,8 +1386,8 @@ async function timelineStep(
   const read =
     place && target.session && target.openId
       ? z.array(workKeySchema).safeParse(
-          (await valueOnce(place, { target: { session: target.session, openId: target.openId } }))
-            .value?.works,
+          (await valueOnce(place, { target: { session: target.session, openId: target.openId } })
+            .catch(() => null))?.value?.works,
         ).data ?? []
       : [];
   // The owner first: a duplicate read key must not replace it.
