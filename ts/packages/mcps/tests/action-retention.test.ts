@@ -3,12 +3,13 @@ import {
   actionReceiptSchema,
   canonicalRouteInput,
   type ActionAdmission,
+  type ActionReceipt,
 } from "@pe/agent-contracts";
 import { bodyText } from "./body-text.ts";
 
 const target = { session: "S", openId: "open-1" };
 const receipt = (
-  admission: ActionAdmission,
+  admission: Pick<ActionReceipt, "id" | "key" | "target" | "input">,
   state: "running" | "succeeded" | "cancelled" = "succeeded",
 ) =>
   actionReceiptSchema.parse({
@@ -335,6 +336,24 @@ test("a fresh receipt observer cannot substitute another admitted target", async
   } finally {
     unbind();
   }
+});
+
+test.each(["same","target","input"] as const)("INT-RECEIPT observer compares %s retained identity without live input reinterpretation",async(change)=>{
+  const api=await client(),release=vi.fn();
+  const original=actionReceiptSchema.parse({...receipt({id:crypto.randomUUID(),key:"pod.export",target:{kind:"host"},input:{}},"running"),
+    key:"families.apply",input:{originalWorkKey:"families/open:private-original/original-open"},
+    target:{kind:"unavailable-original",original:{kind:"document",ref:{session:"private-original",openId:"original-open"}}}});
+  const next=actionReceiptSchema.parse({...original,state:"succeeded",result:{original:true},
+    ...(change==="target"?{target:{kind:"unavailable-original",original:{kind:"document",ref:{session:"other-original",openId:"original-open"}}}}:{}),
+    ...(change==="input"?{input:{originalWorkKey:"changed"}}:{}),
+  });
+  const unbind=api.bindActionObserver((_id,_base,accept)=>{accept(next);return release;});
+  try{
+    const waiting=api.waitForAction(original.id,base(),1000,undefined,original);
+    if(change==="same") expect(await waiting).toEqual(next);
+    else await expect(waiting).rejects.toThrow("different intent or target");
+    expect(release).toHaveBeenCalledOnce();
+  }finally{unbind();}
 });
 
 test("an authoritative no-dispatch refusal releases the slot for a new explicit press", async () => {
