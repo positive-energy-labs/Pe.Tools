@@ -290,3 +290,10 @@ test("copy-only wire guard refuses before any dispatch", async () => {
     assert.equal(h.state().proposal, null);
   }
 });
+
+test("empty panel names refuse before census", async () => {
+  const route = await module();
+  const h = harness(route.initial, route.reducer);
+  await button(route.create(h.api)(), "Read circuits").props.onClick();
+  assert.deepEqual(h.calls, []);
+});
