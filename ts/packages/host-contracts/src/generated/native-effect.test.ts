@@ -26,6 +26,37 @@ async function generatedModule(input: Record<string, any>, definitions = false, 
 async function generated(input: Record<string, any>) { return (await generatedModule(input)).decoder; }
 
 describe("C# native Effect projection", () => {
+  it.each([
+    { name: "Wire", root: false }, { name: "Value", root: false },
+    { name: "Wire", root: true }, { name: "Value", root: true },
+  ])("compiles public aliases beside upstream $name references with root=$root", async ({ name, root }) => {
+    const other = name === "Wire" ? "Value" : "Wire";
+    const definitions = {
+      [name]: { type: "object", additionalProperties: false, properties: { count: { $ref: `#/$defs/${other}` }, next: { $ref: `#/$defs/${name}` } } },
+      [other]: { type: "integer", default: 7 },
+      Root: { $ref: "#/$defs/Root_" }, Root_: { type: "integer", default: 8 },
+      WireTypes: { $ref: "#/$defs/Root" }, Decoded: { type: "string", enum: ["local"] },
+    };
+    const made = await generatedModule({ $schema: "https://json-schema.org/draft/2020-12/schema", $defs: definitions,
+      ...(root ? { $ref: `#/$defs/${name}` } : { title: other, type: "object", additionalProperties: false,
+        properties: { node: { $ref: `#/$defs/${name}` }, alias: { $ref: "#/$defs/WireTypes" }, label: { $ref: "#/$defs/Decoded" } } }),
+    }, true, `
+const wire: Test.Wire = ${root ? "{ next: {} }" : "{ node: { next: {} } }"};
+const value: Test.Value = ${root ? "{ count: 7, next: { count: 7 } }" : "{ alias: 8, node: { count: 7, next: { count: 7 } } }"};
+// @ts-expect-error populated decoded defaults cannot be omitted
+const missing: Test.Value = ${root ? "{ next: {} }" : "{ alias: 8, node: { next: {} } }"};
+function privateAndOpaque() {
+  // @ts-expect-error decoded structural scope is private
+  Test.Decoded;
+  // @ts-expect-error public root remains one-way
+  Schema.encodeSync(Test.decoder);
+}
+`);
+    const input = root ? { next: {} } : { node: { next: {} } };
+    expect(Schema.decodeUnknownSync(made.decoder)(input)).toEqual(root ? { count: 7, next: { count: 7 } } : { alias: 8, node: { count: 7, next: { count: 7 } } });
+    expect(Schema.decodeUnknownSync(made.definitions[other])(7)).toBe(7);
+    expect(Schema.decodeUnknownSync(made.definitions.WireTypes)(8)).toBe(8);
+  });
   it("separates recursive alias/default/nullable Wire authoring from populated Value", async () => {
     expect(Schema.decodeUnknownSync(nativeEffectSchemas["revit.resolve.family-instances"].request)({ familyId: 1, familyUniqueId: "family" })).toEqual({ familyId: 1, familyUniqueId: "family", maxResults: 500 });
     const made = await generatedModule({ $schema: "https://json-schema.org/draft/2020-12/schema", type: "object", additionalProperties: false,

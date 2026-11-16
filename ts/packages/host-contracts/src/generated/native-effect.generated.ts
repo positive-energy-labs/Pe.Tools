@@ -15,6 +15,7 @@ function validDateTime(value: string): boolean {
 }
 
 export namespace Op0request {
+namespace Decoded {
 
 const DataTableColumnKind = Schema.Literals(["Text", "Number"]).annotate({ "description": "Contracts for synthetic data tables: key schedules on a dummy category whose rows are\nabstract key elements populated from a fixed shared-parameter column pool. Rows carry a\nstable key (the Revit key name) and real element handles, so cells stay addressable by\nparameter-links and external UIs while remaining freely editable in Revit's schedule editor.\n            ", "identifier": "DataTableColumnKind" });
 const DataTableRowSpec = Schema.Struct({ "key": Schema.String, "values": Schema.optionalKey(Schema.Array(Schema.Union([Schema.Null, Schema.String])).annotate({ "description": "Cell values aligned to the table's column order. Numbers are invariant-culture strings.\nNull clears the cell; a shorter list leaves trailing cells untouched.\n            " })) }).annotate({ "identifier": "DataTableRowSpec" });
@@ -22,6 +23,9 @@ const ScheduleSheetPlacementSpec = Schema.Struct({ "sheet": Schema.String, "orig
 const DataTableColumnSpec = Schema.Struct({ "heading": Schema.String, "kind": Schema.optionalKey(DataTableColumnKind), "columnWidth": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "description": "Sheet column width in feet. Null keeps the Revit default.", "format": "double" })) }).annotate({ "identifier": "DataTableColumnSpec" });
 const DataTableSpec = Schema.Struct({ "name": Schema.String, "columns": Schema.optionalKey(Schema.Array(DataTableColumnSpec)), "rows": Schema.optionalKey(Schema.Array(DataTableRowSpec)), "showKeyColumn": Schema.optionalKey(Schema.Boolean.annotate({ "description": "Show the key column in the rendered table. Hidden by default." })), "pruneMissingRows": Schema.optionalKey(Schema.Boolean.annotate({ "description": "Delete existing rows whose key is absent from Rows." })) }).annotate({ "identifier": "DataTableSpec" });
 const codec = Schema.Struct({ "table": Schema.optionalKey(DataTableSpec), "placement": Schema.optionalKey(Schema.Union([Schema.Null, ScheduleSheetPlacementSpec], { mode: "oneOf" }).annotate({ "description": "Optionally place the resulting schedule on a sheet." })), "dryRun": Schema.optionalKey(Schema.Boolean.annotate({ "description": "Run every step in a transaction that is rolled back. Returned handles are discarded ids." })) }).annotate({ "title": "ScheduleApplyRequest", "description": "Upsert one synthetic data table. Authored element schedules apply through `schedule.apply`." });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 type DataTableColumnKind = "Text" | "Number";
 type DataTableRowSpec = { readonly "key": string, readonly "values"?: ReadonlyArray<null | string> };
@@ -31,11 +35,11 @@ type DataTableSpec = { readonly "name": string, readonly "columns"?: ReadonlyArr
 export type Root = { readonly "table"?: DataTableSpec, readonly "placement"?: null | ScheduleSheetPlacementSpec, readonly "dryRun"?: boolean };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op0response {
+namespace Decoded {
 
 const DataTableColumnKind = Schema.Literals(["Text", "Number"]).annotate({ "description": "Contracts for synthetic data tables: key schedules on a dummy category whose rows are\nabstract key elements populated from a fixed shared-parameter column pool. Rows carry a\nstable key (the Revit key name) and real element handles, so cells stay addressable by\nparameter-links and external UIs while remaining freely editable in Revit's schedule editor.\n            ", "identifier": "DataTableColumnKind" });
 const DataTableRowHandle = Schema.Struct({ "key": Schema.String, "elementId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "uniqueId": Schema.String, "values": Schema.Array(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "identifier": "DataTableRowHandle" });
@@ -43,16 +47,6 @@ const DataTablePlacementHandle = Schema.Struct({ "sheetId": Schema.Number.annota
 const DataTableColumnHandle = Schema.Struct({ "heading": Schema.String, "kind": DataTableColumnKind, "parameterName": Schema.String, "sharedParameterGuid": Schema.String, "slot": Schema.Number.annotate({ "description": "The column's pool slot within its kind: apply binds the n-th spec column of a kind to slot n, so a column\nkeeps its parameter (and values) only when re-sent at the same ordinal.\n            ", "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })) }).annotate({ "identifier": "DataTableColumnHandle" });
 const DataTableHandle = Schema.Struct({ "name": Schema.String, "scheduleId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "scheduleUniqueId": Schema.String, "columns": Schema.Array(DataTableColumnHandle), "rows": Schema.Array(DataTableRowHandle), "placements": Schema.Array(DataTablePlacementHandle) }).annotate({ "identifier": "DataTableHandle" });
 const codec = Schema.Struct({ "dryRun": Schema.Boolean, "table": Schema.optionalKey(Schema.Union([Schema.Null, DataTableHandle], { mode: "oneOf" })), "placement": Schema.optionalKey(Schema.Union([Schema.Null, DataTablePlacementHandle], { mode: "oneOf" })), "warnings": Schema.Array(Schema.String) }).annotate({ "title": "ScheduleApplyData" });
-namespace WireTypes {
-type DataTableColumnKind = "Text" | "Number";
-type DataTableRowHandle = { readonly "key": string, readonly "elementId": number, readonly "uniqueId": string, readonly "values": ReadonlyArray<null | string> };
-type DataTablePlacementHandle = { readonly "sheetId": number, readonly "sheetNumber": string, readonly "sheetName": string };
-type DataTableColumnHandle = { readonly "heading": string, readonly "kind": DataTableColumnKind, readonly "parameterName": string, readonly "sharedParameterGuid": string, readonly "slot": number };
-type DataTableHandle = { readonly "name": string, readonly "scheduleId": number, readonly "scheduleUniqueId": string, readonly "columns": ReadonlyArray<DataTableColumnHandle>, readonly "rows": ReadonlyArray<DataTableRowHandle>, readonly "placements": ReadonlyArray<DataTablePlacementHandle> };
-export type Root = { readonly "dryRun": boolean, readonly "table"?: null | DataTableHandle, readonly "placement"?: null | DataTablePlacementHandle, readonly "warnings": ReadonlyArray<string> };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["DataTableColumnHandle"]: strictDecoder(DataTableColumnHandle),
@@ -62,66 +56,94 @@ export const definitions = {
   ["DataTableRowHandle"]: strictDecoder(DataTableRowHandle),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type DataTableColumnKind = "Text" | "Number";
+type DataTableRowHandle = { readonly "key": string, readonly "elementId": number, readonly "uniqueId": string, readonly "values": ReadonlyArray<null | string> };
+type DataTablePlacementHandle = { readonly "sheetId": number, readonly "sheetNumber": string, readonly "sheetName": string };
+type DataTableColumnHandle = { readonly "heading": string, readonly "kind": DataTableColumnKind, readonly "parameterName": string, readonly "sharedParameterGuid": string, readonly "slot": number };
+type DataTableHandle = { readonly "name": string, readonly "scheduleId": number, readonly "scheduleUniqueId": string, readonly "columns": ReadonlyArray<DataTableColumnHandle>, readonly "rows": ReadonlyArray<DataTableRowHandle>, readonly "placements": ReadonlyArray<DataTablePlacementHandle> };
+export type Root = { readonly "dryRun": boolean, readonly "table"?: null | DataTableHandle, readonly "placement"?: null | DataTablePlacementHandle, readonly "warnings": ReadonlyArray<string> };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op1request {
+namespace Decoded {
 
 
 const codec = Schema.Struct({ "acquisitionId": Schema.String, "releaseId": Schema.String, "expectedOpenId": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "discard": Schema.optionalKey(Schema.Boolean) }).annotate({ "title": "TemporaryDocumentReleaseRequest", "description": "Unchanged is the automatic cleanup policy. Discard requires an explicit decision." });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 
 export type Root = { readonly "acquisitionId": string, readonly "releaseId": string, readonly "expectedOpenId"?: null | string, readonly "discard"?: boolean };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op1response {
+namespace Decoded {
 
 const TemporaryDocumentRef = Schema.Struct({ "session": Schema.String, "openId": Schema.String }).annotate({ "identifier": "TemporaryDocumentRef" });
 const codec = Schema.Struct({ "acquisitionId": Schema.String, "status": Schema.String, "document": Schema.optionalKey(Schema.Union([Schema.Null, TemporaryDocumentRef], { mode: "oneOf" })), "recoveryId": Schema.String, "detail": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "recordedOpenId": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "recordedStatus": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "title": "TemporaryDocumentData" });
-namespace WireTypes {
-type TemporaryDocumentRef = { readonly "session": string, readonly "openId": string };
-export type Root = { readonly "acquisitionId": string, readonly "status": string, readonly "document"?: null | TemporaryDocumentRef, readonly "recoveryId": string, readonly "detail"?: null | string, readonly "recordedOpenId"?: null | string, readonly "recordedStatus"?: null | string };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["TemporaryDocumentRef"]: strictDecoder(TemporaryDocumentRef),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type TemporaryDocumentRef = { readonly "session": string, readonly "openId": string };
+export type Root = { readonly "acquisitionId": string, readonly "status": string, readonly "document"?: null | TemporaryDocumentRef, readonly "recoveryId": string, readonly "detail"?: null | string, readonly "recordedOpenId"?: null | string, readonly "recordedStatus"?: null | string };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op2request {
+namespace Decoded {
 
 
 const codec = Schema.Struct({ "acquisitionId": Schema.String }).annotate({ "title": "TemporaryDocumentStatusRequest" });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 
 export type Root = { readonly "acquisitionId": string };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op2response {
+namespace Decoded {
 
 const TemporaryDocumentRef = Schema.Struct({ "session": Schema.String, "openId": Schema.String }).annotate({ "identifier": "TemporaryDocumentRef" });
 const codec = Schema.Struct({ "acquisitionId": Schema.String, "status": Schema.String, "document": Schema.optionalKey(Schema.Union([Schema.Null, TemporaryDocumentRef], { mode: "oneOf" })), "recoveryId": Schema.String, "detail": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "recordedOpenId": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "recordedStatus": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "title": "TemporaryDocumentData" });
-namespace WireTypes {
-type TemporaryDocumentRef = { readonly "session": string, readonly "openId": string };
-export type Root = { readonly "acquisitionId": string, readonly "status": string, readonly "document"?: null | TemporaryDocumentRef, readonly "recoveryId": string, readonly "detail"?: null | string, readonly "recordedOpenId"?: null | string, readonly "recordedStatus"?: null | string };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["TemporaryDocumentRef"]: strictDecoder(TemporaryDocumentRef),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type TemporaryDocumentRef = { readonly "session": string, readonly "openId": string };
+export type Root = { readonly "acquisitionId": string, readonly "status": string, readonly "document"?: null | TemporaryDocumentRef, readonly "recoveryId": string, readonly "detail"?: null | string, readonly "recordedOpenId"?: null | string, readonly "recordedStatus"?: null | string };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op3request {
+namespace Decoded {
 
 const DuctParameterSlotOverrides = Schema.Struct({ "fanStatic": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "fanFlow": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "componentDrop": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "terminalDrop": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "fittingCoefficient": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "terminalFlow": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "description": "Parameter names the census reads, instance first and then type. FanStatic (in-wg) and FanFlow (CFM) on HVAC\nequipment, ComponentDrop (in-wg) on accessories, TerminalDrop (in-wg) and TerminalFlow (CFM) on terminals,\nFittingCoefficient (a number) on fittings: the family's own loss coefficient, which the Pe loss server reads\nlive (the configurable door, kaitpw 2026-10-08).\n            ", "identifier": "DuctParameterSlotOverrides" });
 const DuctFittingMethod = Schema.Literals(["pe-server", "specific-coefficient"]).annotate({ "description": "Consume host results in Pe's server, or freeze one coefficient for export.", "identifier": "DuctFittingMethod" });
@@ -139,6 +161,9 @@ const DuctStoreDeletes = Schema.Struct({ "rules": Schema.optionalKey(Schema.Arra
 const DuctFittingWrite = Schema.Struct({ "id": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "method": DuctFittingMethod, "coefficient": Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })), "table": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "inputs": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "ruleKey": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "results": Schema.optionalKey(Schema.Union([Schema.Array(DuctLossResult), Schema.Null])) }).annotate({ "description": "Results are the host engine's priced legs, including their velocity-pressure basis. Table and Inputs are provenance only.", "identifier": "DuctFittingWrite" });
 const DuctLossStore = Schema.StructWithRest(Schema.Struct({ "version": Schema.optionalKey(Schema.Number.annotate({ "description": "On the wire only. In the model the version is the envelope's, so the stored data holds none.", "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" }))), "rules": Schema.optionalKey(Schema.Record(Schema.String, DuctRuleChoice)), "instances": Schema.optionalKey(Schema.Record(Schema.String, DuctInstanceRecord)), "terminals": Schema.optionalKey(Schema.Record(Schema.String, DuctDropRecord)), "terminalFlows": Schema.optionalKey(Schema.Record(Schema.String, DuctFlowRecord)), "equipmentFlows": Schema.optionalKey(Schema.Record(Schema.String, DuctFlowRecord)), "verdicts": Schema.optionalKey(Schema.Record(Schema.String, DuctVerdictRecord)), "roles": Schema.optionalKey(Schema.Record(Schema.String, DuctRoleRecord)), "slots": Schema.optionalKey(Schema.Union([Schema.Null, DuctParameterSlotOverrides], { mode: "oneOf" })), "workRevision": Schema.optionalKey(Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" }))), "appliedAt": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String]).annotate({ "format": "date-time" }).check(Schema.makeFilter((value) => typeof value !== "string" || validDateTime(value)))) }), [Schema.Record(Schema.String, Schema.Json.annotate({ "expected": "JSON value" }))]).annotate({ "description": "Pe's provenance for duct losses: one owner blob in the hidden Project Information text parameter\n`_PE_DuctLosses` (pressure-drop ledger: never extensible storage). WorkRevision counts applies; a request\ncarrying an older revision than the model holds is stale. Unknown keys survive read-modify-write.\nv2 adds the rulings that remain after healing (pressure-drop ledger, 2026-10-20): Verdicts keyed by issue or\nfinding id, Roles keyed by unit id. They live here, not on elements and not in Pe Work; Work holds only pending\nedits. An envelope at any other version is refused and kept; an old un-enveloped store reads as absent.\n            ", "identifier": "DuctLossStore" });
 const codec = Schema.Struct({ "slots": Schema.optionalKey(Schema.Union([Schema.Null, DuctParameterSlotOverrides], { mode: "oneOf" })), "fittings": Schema.Array(DuctFittingWrite), "terminals": Schema.Array(DuctDropWrite), "components": Schema.Array(DuctDropWrite), "equipment": Schema.Array(DuctEquipmentWrite), "terminalFlows": Schema.Array(DuctFlowWrite), "equipmentFlows": Schema.Array(DuctFlowWrite), "store": DuctLossStore, "storeDeletes": Schema.optionalKey(Schema.Union([Schema.Null, DuctStoreDeletes], { mode: "oneOf" })) }).annotate({ "title": "DuctApplyRequest", "description": "Host-priced losses, drops in in-wg and design flows in cfm. The plan opens no transaction." });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 type DuctParameterSlotOverrides = { readonly "fanStatic"?: null | string, readonly "fanFlow"?: null | string, readonly "componentDrop"?: null | string, readonly "terminalDrop"?: null | string, readonly "fittingCoefficient"?: null | string, readonly "terminalFlow"?: null | string };
 type DuctFittingMethod = "pe-server" | "specific-coefficient";
@@ -158,11 +183,11 @@ type DuctLossStore = { readonly "version"?: number, readonly "rules"?: { readonl
 export type Root = { readonly "slots"?: null | DuctParameterSlotOverrides, readonly "fittings": ReadonlyArray<DuctFittingWrite>, readonly "terminals": ReadonlyArray<DuctDropWrite>, readonly "components": ReadonlyArray<DuctDropWrite>, readonly "equipment": ReadonlyArray<DuctEquipmentWrite>, readonly "terminalFlows": ReadonlyArray<DuctFlowWrite>, readonly "equipmentFlows": ReadonlyArray<DuctFlowWrite>, readonly "store": DuctLossStore, readonly "storeDeletes"?: null | DuctStoreDeletes };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op3response {
+namespace Decoded {
 
 const DuctParameterChange = Schema.Struct({ "parameter": Schema.String, "before": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "after": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "description": "One parameter's native setting before and intended setting after. Unset is not zero. Method states have no units.", "identifier": "DuctParameterChange" });
 const DuctApplyCounts = Schema.Struct({ "planned": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "written": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "refused": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "unchanged": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })) }).annotate({ "identifier": "DuctApplyCounts" });
@@ -172,18 +197,6 @@ const DuctWrite = Schema.Struct({ "id": Schema.optionalKey(Schema.Union([Schema.
 const DuctSystem = Schema.Struct({ "id": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "name": Schema.String, "classification": Schema.String, "isWellConnected": Schema.optionalKey(Schema.Union([Schema.Boolean, Schema.Null])), "baseEquipmentId": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })), Schema.Null]).annotate({ "format": "int64" })), "baseEquipmentConnector": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), Schema.Null]).annotate({ "format": "int32" })), "criticalPathLossInWg": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "criticalPath": Schema.Array(Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" }))), "sections": Schema.Array(DuctSection) }).annotate({ "description": "One supply, return or exhaust MechanicalSystem as Revit reports it: the check beside Pe's own solve.\nCriticalPath is GetCriticalPathSectionNumbers(); empty when Revit found none.\n            ", "identifier": "DuctSystem" });
 const WorksharingDisclosure = Schema.Struct({ "cloud": Schema.Boolean, "elements": Schema.Array(WorksharedElement), "creates": Schema.Array(Schema.String) }).annotate({ "description": "What a model write will borrow on a workshared central. Present only on workshared documents. A commit borrows\nevery element it changes that the user does not already own, and they stay borrowed until the user syncs with\ncentral or relinquishes; a write never syncs. Creates names model-wide definitions the write adds (new elements\nthe user owns until sync).\n            ", "identifier": "WorksharingDisclosure" });
 const codec = Schema.Struct({ "previewOnly": Schema.Boolean, "writes": Schema.Array(DuctWrite), "counts": DuctApplyCounts, "systemsAfter": Schema.optionalKey(Schema.Union([Schema.Array(DuctSystem), Schema.Null])), "storeRevision": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "worksharing": Schema.optionalKey(Schema.Union([Schema.Null, WorksharingDisclosure], { mode: "oneOf" })) }).annotate({ "title": "DuctApplyResult", "description": "StoreRevision is the store's WorkRevision after this call (unchanged on preview). Worksharing is set on a preview of a\nworkshared document: what the commit will borrow.\n            " });
-namespace WireTypes {
-type DuctParameterChange = { readonly "parameter": string, readonly "before"?: null | string, readonly "after"?: null | string };
-type DuctApplyCounts = { readonly "planned": number, readonly "written": number, readonly "refused": number, readonly "unchanged": number };
-type DuctSection = { readonly "number": number, readonly "flowCfm"?: null | number, readonly "totalPressureLossInWg"?: null | number, readonly "elementIds": ReadonlyArray<number> };
-type WorksharedElement = { readonly "id": number, readonly "name": string, readonly "status": string, readonly "owner"?: null | string };
-type DuctWrite = { readonly "id"?: number | null, readonly "kind": string, readonly "outcome": string, readonly "reason"?: null | string, readonly "before"?: null | string, readonly "after"?: null | string, readonly "key"?: null | string, readonly "elementLabel"?: null | string, readonly "uniqueId"?: null | string, readonly "parameter"?: null | string, readonly "scope"?: null | string, readonly "changes"?: ReadonlyArray<DuctParameterChange> | null, readonly "reportedPressureDropInWg"?: null | number };
-type DuctSystem = { readonly "id": number, readonly "name": string, readonly "classification": string, readonly "isWellConnected"?: boolean | null, readonly "baseEquipmentId"?: number | null, readonly "baseEquipmentConnector"?: number | null, readonly "criticalPathLossInWg"?: null | number, readonly "criticalPath": ReadonlyArray<number>, readonly "sections": ReadonlyArray<DuctSection> };
-type WorksharingDisclosure = { readonly "cloud": boolean, readonly "elements": ReadonlyArray<WorksharedElement>, readonly "creates": ReadonlyArray<string> };
-export type Root = { readonly "previewOnly": boolean, readonly "writes": ReadonlyArray<DuctWrite>, readonly "counts": DuctApplyCounts, readonly "systemsAfter"?: ReadonlyArray<DuctSystem> | null, readonly "storeRevision": number, readonly "worksharing"?: null | WorksharingDisclosure };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["DuctApplyCounts"]: strictDecoder(DuctApplyCounts),
@@ -195,8 +208,24 @@ export const definitions = {
   ["WorksharingDisclosure"]: strictDecoder(WorksharingDisclosure),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type DuctParameterChange = { readonly "parameter": string, readonly "before"?: null | string, readonly "after"?: null | string };
+type DuctApplyCounts = { readonly "planned": number, readonly "written": number, readonly "refused": number, readonly "unchanged": number };
+type DuctSection = { readonly "number": number, readonly "flowCfm"?: null | number, readonly "totalPressureLossInWg"?: null | number, readonly "elementIds": ReadonlyArray<number> };
+type WorksharedElement = { readonly "id": number, readonly "name": string, readonly "status": string, readonly "owner"?: null | string };
+type DuctWrite = { readonly "id"?: number | null, readonly "kind": string, readonly "outcome": string, readonly "reason"?: null | string, readonly "before"?: null | string, readonly "after"?: null | string, readonly "key"?: null | string, readonly "elementLabel"?: null | string, readonly "uniqueId"?: null | string, readonly "parameter"?: null | string, readonly "scope"?: null | string, readonly "changes"?: ReadonlyArray<DuctParameterChange> | null, readonly "reportedPressureDropInWg"?: null | number };
+type DuctSystem = { readonly "id": number, readonly "name": string, readonly "classification": string, readonly "isWellConnected"?: boolean | null, readonly "baseEquipmentId"?: number | null, readonly "baseEquipmentConnector"?: number | null, readonly "criticalPathLossInWg"?: null | number, readonly "criticalPath": ReadonlyArray<number>, readonly "sections": ReadonlyArray<DuctSection> };
+type WorksharingDisclosure = { readonly "cloud": boolean, readonly "elements": ReadonlyArray<WorksharedElement>, readonly "creates": ReadonlyArray<string> };
+export type Root = { readonly "previewOnly": boolean, readonly "writes": ReadonlyArray<DuctWrite>, readonly "counts": DuctApplyCounts, readonly "systemsAfter"?: ReadonlyArray<DuctSystem> | null, readonly "storeRevision": number, readonly "worksharing"?: null | WorksharingDisclosure };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op4request {
+namespace Decoded {
 
 const DuctParameterSlotOverrides = Schema.Struct({ "fanStatic": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "fanFlow": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "componentDrop": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "terminalDrop": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "fittingCoefficient": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "terminalFlow": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "description": "Parameter names the census reads, instance first and then type. FanStatic (in-wg) and FanFlow (CFM) on HVAC\nequipment, ComponentDrop (in-wg) on accessories, TerminalDrop (in-wg) and TerminalFlow (CFM) on terminals,\nFittingCoefficient (a number) on fittings: the family's own loss coefficient, which the Pe loss server reads\nlive (the configurable door, kaitpw 2026-10-08).\n            ", "identifier": "DuctParameterSlotOverrides" });
 const DuctFittingMethod = Schema.Literals(["pe-server", "specific-coefficient"]).annotate({ "description": "Consume host results in Pe's server, or freeze one coefficient for export.", "identifier": "DuctFittingMethod" });
@@ -214,6 +243,9 @@ const DuctStoreDeletes = Schema.Struct({ "rules": Schema.optionalKey(Schema.Arra
 const DuctFittingWrite = Schema.Struct({ "id": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "method": DuctFittingMethod, "coefficient": Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })), "table": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "inputs": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "ruleKey": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "results": Schema.optionalKey(Schema.Union([Schema.Array(DuctLossResult), Schema.Null])) }).annotate({ "description": "Results are the host engine's priced legs, including their velocity-pressure basis. Table and Inputs are provenance only.", "identifier": "DuctFittingWrite" });
 const DuctLossStore = Schema.StructWithRest(Schema.Struct({ "version": Schema.optionalKey(Schema.Number.annotate({ "description": "On the wire only. In the model the version is the envelope's, so the stored data holds none.", "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" }))), "rules": Schema.optionalKey(Schema.Record(Schema.String, DuctRuleChoice)), "instances": Schema.optionalKey(Schema.Record(Schema.String, DuctInstanceRecord)), "terminals": Schema.optionalKey(Schema.Record(Schema.String, DuctDropRecord)), "terminalFlows": Schema.optionalKey(Schema.Record(Schema.String, DuctFlowRecord)), "equipmentFlows": Schema.optionalKey(Schema.Record(Schema.String, DuctFlowRecord)), "verdicts": Schema.optionalKey(Schema.Record(Schema.String, DuctVerdictRecord)), "roles": Schema.optionalKey(Schema.Record(Schema.String, DuctRoleRecord)), "slots": Schema.optionalKey(Schema.Union([Schema.Null, DuctParameterSlotOverrides], { mode: "oneOf" })), "workRevision": Schema.optionalKey(Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" }))), "appliedAt": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String]).annotate({ "format": "date-time" }).check(Schema.makeFilter((value) => typeof value !== "string" || validDateTime(value)))) }), [Schema.Record(Schema.String, Schema.Json.annotate({ "expected": "JSON value" }))]).annotate({ "description": "Pe's provenance for duct losses: one owner blob in the hidden Project Information text parameter\n`_PE_DuctLosses` (pressure-drop ledger: never extensible storage). WorkRevision counts applies; a request\ncarrying an older revision than the model holds is stale. Unknown keys survive read-modify-write.\nv2 adds the rulings that remain after healing (pressure-drop ledger, 2026-10-20): Verdicts keyed by issue or\nfinding id, Roles keyed by unit id. They live here, not on elements and not in Pe Work; Work holds only pending\nedits. An envelope at any other version is refused and kept; an old un-enveloped store reads as absent.\n            ", "identifier": "DuctLossStore" });
 const codec = Schema.Struct({ "slots": Schema.optionalKey(Schema.Union([Schema.Null, DuctParameterSlotOverrides], { mode: "oneOf" })), "fittings": Schema.Array(DuctFittingWrite), "terminals": Schema.Array(DuctDropWrite), "components": Schema.Array(DuctDropWrite), "equipment": Schema.Array(DuctEquipmentWrite), "terminalFlows": Schema.Array(DuctFlowWrite), "equipmentFlows": Schema.Array(DuctFlowWrite), "store": DuctLossStore, "storeDeletes": Schema.optionalKey(Schema.Union([Schema.Null, DuctStoreDeletes], { mode: "oneOf" })) }).annotate({ "title": "DuctApplyRequest", "description": "Host-priced losses, drops in in-wg and design flows in cfm. The plan opens no transaction." });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 type DuctParameterSlotOverrides = { readonly "fanStatic"?: null | string, readonly "fanFlow"?: null | string, readonly "componentDrop"?: null | string, readonly "terminalDrop"?: null | string, readonly "fittingCoefficient"?: null | string, readonly "terminalFlow"?: null | string };
 type DuctFittingMethod = "pe-server" | "specific-coefficient";
@@ -233,11 +265,11 @@ type DuctLossStore = { readonly "version"?: number, readonly "rules"?: { readonl
 export type Root = { readonly "slots"?: null | DuctParameterSlotOverrides, readonly "fittings": ReadonlyArray<DuctFittingWrite>, readonly "terminals": ReadonlyArray<DuctDropWrite>, readonly "components": ReadonlyArray<DuctDropWrite>, readonly "equipment": ReadonlyArray<DuctEquipmentWrite>, readonly "terminalFlows": ReadonlyArray<DuctFlowWrite>, readonly "equipmentFlows": ReadonlyArray<DuctFlowWrite>, readonly "store": DuctLossStore, readonly "storeDeletes"?: null | DuctStoreDeletes };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op4response {
+namespace Decoded {
 
 const DuctParameterChange = Schema.Struct({ "parameter": Schema.String, "before": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "after": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "description": "One parameter's native setting before and intended setting after. Unset is not zero. Method states have no units.", "identifier": "DuctParameterChange" });
 const DuctApplyCounts = Schema.Struct({ "planned": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "written": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "refused": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "unchanged": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })) }).annotate({ "identifier": "DuctApplyCounts" });
@@ -247,18 +279,6 @@ const DuctWrite = Schema.Struct({ "id": Schema.optionalKey(Schema.Union([Schema.
 const DuctSystem = Schema.Struct({ "id": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "name": Schema.String, "classification": Schema.String, "isWellConnected": Schema.optionalKey(Schema.Union([Schema.Boolean, Schema.Null])), "baseEquipmentId": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })), Schema.Null]).annotate({ "format": "int64" })), "baseEquipmentConnector": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), Schema.Null]).annotate({ "format": "int32" })), "criticalPathLossInWg": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "criticalPath": Schema.Array(Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" }))), "sections": Schema.Array(DuctSection) }).annotate({ "description": "One supply, return or exhaust MechanicalSystem as Revit reports it: the check beside Pe's own solve.\nCriticalPath is GetCriticalPathSectionNumbers(); empty when Revit found none.\n            ", "identifier": "DuctSystem" });
 const WorksharingDisclosure = Schema.Struct({ "cloud": Schema.Boolean, "elements": Schema.Array(WorksharedElement), "creates": Schema.Array(Schema.String) }).annotate({ "description": "What a model write will borrow on a workshared central. Present only on workshared documents. A commit borrows\nevery element it changes that the user does not already own, and they stay borrowed until the user syncs with\ncentral or relinquishes; a write never syncs. Creates names model-wide definitions the write adds (new elements\nthe user owns until sync).\n            ", "identifier": "WorksharingDisclosure" });
 const codec = Schema.Struct({ "previewOnly": Schema.Boolean, "writes": Schema.Array(DuctWrite), "counts": DuctApplyCounts, "systemsAfter": Schema.optionalKey(Schema.Union([Schema.Array(DuctSystem), Schema.Null])), "storeRevision": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "worksharing": Schema.optionalKey(Schema.Union([Schema.Null, WorksharingDisclosure], { mode: "oneOf" })) }).annotate({ "title": "DuctApplyResult", "description": "StoreRevision is the store's WorkRevision after this call (unchanged on preview). Worksharing is set on a preview of a\nworkshared document: what the commit will borrow.\n            " });
-namespace WireTypes {
-type DuctParameterChange = { readonly "parameter": string, readonly "before"?: null | string, readonly "after"?: null | string };
-type DuctApplyCounts = { readonly "planned": number, readonly "written": number, readonly "refused": number, readonly "unchanged": number };
-type DuctSection = { readonly "number": number, readonly "flowCfm"?: null | number, readonly "totalPressureLossInWg"?: null | number, readonly "elementIds": ReadonlyArray<number> };
-type WorksharedElement = { readonly "id": number, readonly "name": string, readonly "status": string, readonly "owner"?: null | string };
-type DuctWrite = { readonly "id"?: number | null, readonly "kind": string, readonly "outcome": string, readonly "reason"?: null | string, readonly "before"?: null | string, readonly "after"?: null | string, readonly "key"?: null | string, readonly "elementLabel"?: null | string, readonly "uniqueId"?: null | string, readonly "parameter"?: null | string, readonly "scope"?: null | string, readonly "changes"?: ReadonlyArray<DuctParameterChange> | null, readonly "reportedPressureDropInWg"?: null | number };
-type DuctSystem = { readonly "id": number, readonly "name": string, readonly "classification": string, readonly "isWellConnected"?: boolean | null, readonly "baseEquipmentId"?: number | null, readonly "baseEquipmentConnector"?: number | null, readonly "criticalPathLossInWg"?: null | number, readonly "criticalPath": ReadonlyArray<number>, readonly "sections": ReadonlyArray<DuctSection> };
-type WorksharingDisclosure = { readonly "cloud": boolean, readonly "elements": ReadonlyArray<WorksharedElement>, readonly "creates": ReadonlyArray<string> };
-export type Root = { readonly "previewOnly": boolean, readonly "writes": ReadonlyArray<DuctWrite>, readonly "counts": DuctApplyCounts, readonly "systemsAfter"?: ReadonlyArray<DuctSystem> | null, readonly "storeRevision": number, readonly "worksharing"?: null | WorksharingDisclosure };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["DuctApplyCounts"]: strictDecoder(DuctApplyCounts),
@@ -270,106 +290,146 @@ export const definitions = {
   ["WorksharingDisclosure"]: strictDecoder(WorksharingDisclosure),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type DuctParameterChange = { readonly "parameter": string, readonly "before"?: null | string, readonly "after"?: null | string };
+type DuctApplyCounts = { readonly "planned": number, readonly "written": number, readonly "refused": number, readonly "unchanged": number };
+type DuctSection = { readonly "number": number, readonly "flowCfm"?: null | number, readonly "totalPressureLossInWg"?: null | number, readonly "elementIds": ReadonlyArray<number> };
+type WorksharedElement = { readonly "id": number, readonly "name": string, readonly "status": string, readonly "owner"?: null | string };
+type DuctWrite = { readonly "id"?: number | null, readonly "kind": string, readonly "outcome": string, readonly "reason"?: null | string, readonly "before"?: null | string, readonly "after"?: null | string, readonly "key"?: null | string, readonly "elementLabel"?: null | string, readonly "uniqueId"?: null | string, readonly "parameter"?: null | string, readonly "scope"?: null | string, readonly "changes"?: ReadonlyArray<DuctParameterChange> | null, readonly "reportedPressureDropInWg"?: null | number };
+type DuctSystem = { readonly "id": number, readonly "name": string, readonly "classification": string, readonly "isWellConnected"?: boolean | null, readonly "baseEquipmentId"?: number | null, readonly "baseEquipmentConnector"?: number | null, readonly "criticalPathLossInWg"?: null | number, readonly "criticalPath": ReadonlyArray<number>, readonly "sections": ReadonlyArray<DuctSection> };
+type WorksharingDisclosure = { readonly "cloud": boolean, readonly "elements": ReadonlyArray<WorksharedElement>, readonly "creates": ReadonlyArray<string> };
+export type Root = { readonly "previewOnly": boolean, readonly "writes": ReadonlyArray<DuctWrite>, readonly "counts": DuctApplyCounts, readonly "systemsAfter"?: ReadonlyArray<DuctSystem> | null, readonly "storeRevision": number, readonly "worksharing"?: null | WorksharingDisclosure };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op5request {
+namespace Decoded {
 
 
 const codec = Schema.Struct({ "systemId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "unitId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })) }).annotate({ "title": "DuctAssignFanRequest", "description": "SystemId is the MechanicalSystem; UnitId the mechanical equipment to make its base equipment." });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 
 export type Root = { readonly "systemId": number, readonly "unitId": number };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op5response {
+namespace Decoded {
 
 const DuctSection = Schema.Struct({ "number": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "flowCfm": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "totalPressureLossInWg": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "elementIds": Schema.Array(Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" }))) }).annotate({ "description": "One MEPSection: Revit's run of elements carrying one flow.", "identifier": "DuctSection" });
 const DuctSystem = Schema.Struct({ "id": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "name": Schema.String, "classification": Schema.String, "isWellConnected": Schema.optionalKey(Schema.Union([Schema.Boolean, Schema.Null])), "baseEquipmentId": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })), Schema.Null]).annotate({ "format": "int64" })), "baseEquipmentConnector": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), Schema.Null]).annotate({ "format": "int32" })), "criticalPathLossInWg": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "criticalPath": Schema.Array(Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" }))), "sections": Schema.Array(DuctSection) }).annotate({ "description": "One supply, return or exhaust MechanicalSystem as Revit reports it: the check beside Pe's own solve.\nCriticalPath is GetCriticalPathSectionNumbers(); empty when Revit found none.\n            ", "identifier": "DuctSystem" });
 const codec = Schema.Struct({ "previewOnly": Schema.Boolean, "systemId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "unitId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "outcome": Schema.String, "reason": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "connector": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), Schema.Null]).annotate({ "format": "int32" })), "check": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "before": Schema.optionalKey(Schema.Union([Schema.Null, DuctSystem], { mode: "oneOf" })), "after": Schema.optionalKey(Schema.Union([Schema.Null, DuctSystem], { mode: "oneOf" })) }).annotate({ "title": "DuctAssignFanResult", "description": "Outcome: planned (preview), assigned, refused (Reason says why; nothing changed). Connector is the\nunit's connector index made the base. Check is the read back's words. Before and After are the system as\nRevit reports it (After inside the rolled-back run on preview; null when refused).\n            " });
-namespace WireTypes {
-type DuctSection = { readonly "number": number, readonly "flowCfm"?: null | number, readonly "totalPressureLossInWg"?: null | number, readonly "elementIds": ReadonlyArray<number> };
-type DuctSystem = { readonly "id": number, readonly "name": string, readonly "classification": string, readonly "isWellConnected"?: boolean | null, readonly "baseEquipmentId"?: number | null, readonly "baseEquipmentConnector"?: number | null, readonly "criticalPathLossInWg"?: null | number, readonly "criticalPath": ReadonlyArray<number>, readonly "sections": ReadonlyArray<DuctSection> };
-export type Root = { readonly "previewOnly": boolean, readonly "systemId": number, readonly "unitId": number, readonly "outcome": string, readonly "reason"?: null | string, readonly "connector"?: number | null, readonly "check"?: null | string, readonly "before"?: null | DuctSystem, readonly "after"?: null | DuctSystem };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["DuctSection"]: strictDecoder(DuctSection),
   ["DuctSystem"]: strictDecoder(DuctSystem),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type DuctSection = { readonly "number": number, readonly "flowCfm"?: null | number, readonly "totalPressureLossInWg"?: null | number, readonly "elementIds": ReadonlyArray<number> };
+type DuctSystem = { readonly "id": number, readonly "name": string, readonly "classification": string, readonly "isWellConnected"?: boolean | null, readonly "baseEquipmentId"?: number | null, readonly "baseEquipmentConnector"?: number | null, readonly "criticalPathLossInWg"?: null | number, readonly "criticalPath": ReadonlyArray<number>, readonly "sections": ReadonlyArray<DuctSection> };
+export type Root = { readonly "previewOnly": boolean, readonly "systemId": number, readonly "unitId": number, readonly "outcome": string, readonly "reason"?: null | string, readonly "connector"?: number | null, readonly "check"?: null | string, readonly "before"?: null | DuctSystem, readonly "after"?: null | DuctSystem };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op6request {
+namespace Decoded {
 
 
 const codec = Schema.Struct({ "systemId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "unitId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })) }).annotate({ "title": "DuctAssignFanRequest", "description": "SystemId is the MechanicalSystem; UnitId the mechanical equipment to make its base equipment." });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 
 export type Root = { readonly "systemId": number, readonly "unitId": number };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op6response {
+namespace Decoded {
 
 const DuctSection = Schema.Struct({ "number": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "flowCfm": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "totalPressureLossInWg": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "elementIds": Schema.Array(Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" }))) }).annotate({ "description": "One MEPSection: Revit's run of elements carrying one flow.", "identifier": "DuctSection" });
 const DuctSystem = Schema.Struct({ "id": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "name": Schema.String, "classification": Schema.String, "isWellConnected": Schema.optionalKey(Schema.Union([Schema.Boolean, Schema.Null])), "baseEquipmentId": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })), Schema.Null]).annotate({ "format": "int64" })), "baseEquipmentConnector": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), Schema.Null]).annotate({ "format": "int32" })), "criticalPathLossInWg": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "criticalPath": Schema.Array(Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" }))), "sections": Schema.Array(DuctSection) }).annotate({ "description": "One supply, return or exhaust MechanicalSystem as Revit reports it: the check beside Pe's own solve.\nCriticalPath is GetCriticalPathSectionNumbers(); empty when Revit found none.\n            ", "identifier": "DuctSystem" });
 const codec = Schema.Struct({ "previewOnly": Schema.Boolean, "systemId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "unitId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "outcome": Schema.String, "reason": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "connector": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), Schema.Null]).annotate({ "format": "int32" })), "check": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "before": Schema.optionalKey(Schema.Union([Schema.Null, DuctSystem], { mode: "oneOf" })), "after": Schema.optionalKey(Schema.Union([Schema.Null, DuctSystem], { mode: "oneOf" })) }).annotate({ "title": "DuctAssignFanResult", "description": "Outcome: planned (preview), assigned, refused (Reason says why; nothing changed). Connector is the\nunit's connector index made the base. Check is the read back's words. Before and After are the system as\nRevit reports it (After inside the rolled-back run on preview; null when refused).\n            " });
-namespace WireTypes {
-type DuctSection = { readonly "number": number, readonly "flowCfm"?: null | number, readonly "totalPressureLossInWg"?: null | number, readonly "elementIds": ReadonlyArray<number> };
-type DuctSystem = { readonly "id": number, readonly "name": string, readonly "classification": string, readonly "isWellConnected"?: boolean | null, readonly "baseEquipmentId"?: number | null, readonly "baseEquipmentConnector"?: number | null, readonly "criticalPathLossInWg"?: null | number, readonly "criticalPath": ReadonlyArray<number>, readonly "sections": ReadonlyArray<DuctSection> };
-export type Root = { readonly "previewOnly": boolean, readonly "systemId": number, readonly "unitId": number, readonly "outcome": string, readonly "reason"?: null | string, readonly "connector"?: number | null, readonly "check"?: null | string, readonly "before"?: null | DuctSystem, readonly "after"?: null | DuctSystem };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["DuctSection"]: strictDecoder(DuctSection),
   ["DuctSystem"]: strictDecoder(DuctSystem),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type DuctSection = { readonly "number": number, readonly "flowCfm"?: null | number, readonly "totalPressureLossInWg"?: null | number, readonly "elementIds": ReadonlyArray<number> };
+type DuctSystem = { readonly "id": number, readonly "name": string, readonly "classification": string, readonly "isWellConnected"?: boolean | null, readonly "baseEquipmentId"?: number | null, readonly "baseEquipmentConnector"?: number | null, readonly "criticalPathLossInWg"?: null | number, readonly "criticalPath": ReadonlyArray<number>, readonly "sections": ReadonlyArray<DuctSection> };
+export type Root = { readonly "previewOnly": boolean, readonly "systemId": number, readonly "unitId": number, readonly "outcome": string, readonly "reason"?: null | string, readonly "connector"?: number | null, readonly "check"?: null | string, readonly "before"?: null | DuctSystem, readonly "after"?: null | DuctSystem };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op7request {
+namespace Decoded {
 
 const DuctFamilyKind = Schema.Literal("round-elbow").annotate({ "description": "", "identifier": "DuctFamilyKind" });
 const codec = Schema.Struct({ "family": Schema.String, "kind": Schema.optionalKey(DuctFamilyKind), "parameter": Schema.optionalKey(Schema.String) }).annotate({ "title": "DuctFamilyPatchRequest", "description": "Family is the loaded family name to select; Parameter is the coefficient parameter the formula fills (the FittingCoefficient slot)." });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 type DuctFamilyKind = "round-elbow";
 export type Root = { readonly "family": string, readonly "kind"?: DuctFamilyKind, readonly "parameter"?: string };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op7response {
+namespace Decoded {
 
 
 const codec = Schema.Struct({ "patch": Schema.Json.annotate({ "expected": "JSON value" }), "table": Schema.String, "rows": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "sources": Schema.Array(Schema.String), "formula": Schema.String }).annotate({ "title": "DuctFamilyPatchData", "description": "Patch is the FamilyPatch JSON as `families.plan` reads it; Rows counts the table; Sources names the ASHRAE grids behind it." });
+export const decoder = strictDecoder(codec);
+export const definitions = {
+
+} as const;
+}
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
 namespace WireTypes {
 
 export type Root = { readonly "patch": Schema.Json, readonly "table": string, readonly "rows": number, readonly "sources": ReadonlyArray<string>, readonly "formula": string };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
-export const definitions = {
-
-} as const;
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op8request {
+namespace Decoded {
 
 const DuctHealKind = Schema.Literals(["cap", "join"]).annotate({ "description": "", "identifier": "DuctHealKind" });
 const DuctHealItem = Schema.Struct({ "key": Schema.String, "kind": DuctHealKind, "end": Schema.String, "other": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "description": "One repair. End and Other are connector keys `elementId:connectorIndex` as `ducts.snapshot` names them.\nA cap closes End with the Caps routing rule of its duct type. A join meets End and Other: coincident ends\nare connected, a small gap between two ducts gets a union fitting, a small gap from a duct to a part\nextends the duct; the op picks which from the geometry and refuses anything outside its limits.\n            ", "identifier": "DuctHealItem" });
 const DuctHealGroup = Schema.Struct({ "group": Schema.String, "items": Schema.Array(DuctHealItem) }).annotate({ "description": "Group is the route's group id (`g<lowest element id>`), a label only: the items name the geometry.", "identifier": "DuctHealGroup" });
 const codec = Schema.Struct({ "groups": Schema.Array(DuctHealGroup) }).annotate({ "title": "DuctHealRequest", "description": "Groups are the approved systems; each group is one transaction on apply." });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 type DuctHealKind = "cap" | "join";
 type DuctHealItem = { readonly "key": string, readonly "kind": DuctHealKind, readonly "end": string, readonly "other"?: null | string };
@@ -377,11 +437,11 @@ type DuctHealGroup = { readonly "group": string, readonly "items": ReadonlyArray
 export type Root = { readonly "groups": ReadonlyArray<DuctHealGroup> };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op8response {
+namespace Decoded {
 
 const DuctHealOutcome = Schema.Struct({ "key": Schema.String, "kind": Schema.String, "how": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "outcome": Schema.String, "reason": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "created": Schema.Array(Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" }))), "replaced": Schema.Array(Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" }))), "check": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "description": "One item. How: cap, connect, union, extend (null when refused before choosing). Outcome: planned (preview),\nhealed, refused. Created: new element ids (the cap, the union); Replaced: ids Revit deleted while healing (a\nduct it split or rebuilt), each replaced by an id in Created. Check is the post-check's words.\nOn preview the ids are those of the rolled-back run and do not exist.\n            ", "identifier": "DuctHealOutcome" });
 const DuctSection = Schema.Struct({ "number": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "flowCfm": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "totalPressureLossInWg": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "elementIds": Schema.Array(Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" }))) }).annotate({ "description": "One MEPSection: Revit's run of elements carrying one flow.", "identifier": "DuctSection" });
@@ -389,16 +449,6 @@ const DuctHealCounts = Schema.Struct({ "planned": Schema.Number.annotate({ "form
 const DuctSystem = Schema.Struct({ "id": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "name": Schema.String, "classification": Schema.String, "isWellConnected": Schema.optionalKey(Schema.Union([Schema.Boolean, Schema.Null])), "baseEquipmentId": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })), Schema.Null]).annotate({ "format": "int64" })), "baseEquipmentConnector": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), Schema.Null]).annotate({ "format": "int32" })), "criticalPathLossInWg": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "criticalPath": Schema.Array(Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" }))), "sections": Schema.Array(DuctSection) }).annotate({ "description": "One supply, return or exhaust MechanicalSystem as Revit reports it: the check beside Pe's own solve.\nCriticalPath is GetCriticalPathSectionNumbers(); empty when Revit found none.\n            ", "identifier": "DuctSystem" });
 const DuctHealGroupOutcome = Schema.Struct({ "group": Schema.String, "outcome": Schema.String, "reason": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "items": Schema.Array(DuctHealOutcome), "systemsBefore": Schema.Array(DuctSystem), "systemsAfter": Schema.Array(DuctSystem) }).annotate({ "description": "One group's run. Outcome: planned (preview), healed, refused (Reason says why: the group's transaction\nfailed and rolled back), empty (nothing healed). SystemsBefore and SystemsAfter are Revit's touched systems\nwith their critical path, read before the first item and after the last (inside the rolled-back run on\npreview).\n            ", "identifier": "DuctHealGroupOutcome" });
 const codec = Schema.Struct({ "previewOnly": Schema.Boolean, "groups": Schema.Array(DuctHealGroupOutcome), "counts": DuctHealCounts }).annotate({ "title": "DuctHealResult" });
-namespace WireTypes {
-type DuctHealOutcome = { readonly "key": string, readonly "kind": string, readonly "how"?: null | string, readonly "outcome": string, readonly "reason"?: null | string, readonly "created": ReadonlyArray<number>, readonly "replaced": ReadonlyArray<number>, readonly "check"?: null | string };
-type DuctSection = { readonly "number": number, readonly "flowCfm"?: null | number, readonly "totalPressureLossInWg"?: null | number, readonly "elementIds": ReadonlyArray<number> };
-type DuctHealCounts = { readonly "planned": number, readonly "healed": number, readonly "refused": number };
-type DuctSystem = { readonly "id": number, readonly "name": string, readonly "classification": string, readonly "isWellConnected"?: boolean | null, readonly "baseEquipmentId"?: number | null, readonly "baseEquipmentConnector"?: number | null, readonly "criticalPathLossInWg"?: null | number, readonly "criticalPath": ReadonlyArray<number>, readonly "sections": ReadonlyArray<DuctSection> };
-type DuctHealGroupOutcome = { readonly "group": string, readonly "outcome": string, readonly "reason"?: null | string, readonly "items": ReadonlyArray<DuctHealOutcome>, readonly "systemsBefore": ReadonlyArray<DuctSystem>, readonly "systemsAfter": ReadonlyArray<DuctSystem> };
-export type Root = { readonly "previewOnly": boolean, readonly "groups": ReadonlyArray<DuctHealGroupOutcome>, readonly "counts": DuctHealCounts };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["DuctHealCounts"]: strictDecoder(DuctHealCounts),
@@ -408,13 +458,30 @@ export const definitions = {
   ["DuctSystem"]: strictDecoder(DuctSystem),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type DuctHealOutcome = { readonly "key": string, readonly "kind": string, readonly "how"?: null | string, readonly "outcome": string, readonly "reason"?: null | string, readonly "created": ReadonlyArray<number>, readonly "replaced": ReadonlyArray<number>, readonly "check"?: null | string };
+type DuctSection = { readonly "number": number, readonly "flowCfm"?: null | number, readonly "totalPressureLossInWg"?: null | number, readonly "elementIds": ReadonlyArray<number> };
+type DuctHealCounts = { readonly "planned": number, readonly "healed": number, readonly "refused": number };
+type DuctSystem = { readonly "id": number, readonly "name": string, readonly "classification": string, readonly "isWellConnected"?: boolean | null, readonly "baseEquipmentId"?: number | null, readonly "baseEquipmentConnector"?: number | null, readonly "criticalPathLossInWg"?: null | number, readonly "criticalPath": ReadonlyArray<number>, readonly "sections": ReadonlyArray<DuctSection> };
+type DuctHealGroupOutcome = { readonly "group": string, readonly "outcome": string, readonly "reason"?: null | string, readonly "items": ReadonlyArray<DuctHealOutcome>, readonly "systemsBefore": ReadonlyArray<DuctSystem>, readonly "systemsAfter": ReadonlyArray<DuctSystem> };
+export type Root = { readonly "previewOnly": boolean, readonly "groups": ReadonlyArray<DuctHealGroupOutcome>, readonly "counts": DuctHealCounts };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op9request {
+namespace Decoded {
 
 const DuctHealKind = Schema.Literals(["cap", "join"]).annotate({ "description": "", "identifier": "DuctHealKind" });
 const DuctHealItem = Schema.Struct({ "key": Schema.String, "kind": DuctHealKind, "end": Schema.String, "other": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "description": "One repair. End and Other are connector keys `elementId:connectorIndex` as `ducts.snapshot` names them.\nA cap closes End with the Caps routing rule of its duct type. A join meets End and Other: coincident ends\nare connected, a small gap between two ducts gets a union fitting, a small gap from a duct to a part\nextends the duct; the op picks which from the geometry and refuses anything outside its limits.\n            ", "identifier": "DuctHealItem" });
 const DuctHealGroup = Schema.Struct({ "group": Schema.String, "items": Schema.Array(DuctHealItem) }).annotate({ "description": "Group is the route's group id (`g<lowest element id>`), a label only: the items name the geometry.", "identifier": "DuctHealGroup" });
 const codec = Schema.Struct({ "groups": Schema.Array(DuctHealGroup) }).annotate({ "title": "DuctHealRequest", "description": "Groups are the approved systems; each group is one transaction on apply." });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 type DuctHealKind = "cap" | "join";
 type DuctHealItem = { readonly "key": string, readonly "kind": DuctHealKind, readonly "end": string, readonly "other"?: null | string };
@@ -422,11 +489,11 @@ type DuctHealGroup = { readonly "group": string, readonly "items": ReadonlyArray
 export type Root = { readonly "groups": ReadonlyArray<DuctHealGroup> };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op9response {
+namespace Decoded {
 
 const DuctHealOutcome = Schema.Struct({ "key": Schema.String, "kind": Schema.String, "how": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "outcome": Schema.String, "reason": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "created": Schema.Array(Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" }))), "replaced": Schema.Array(Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" }))), "check": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "description": "One item. How: cap, connect, union, extend (null when refused before choosing). Outcome: planned (preview),\nhealed, refused. Created: new element ids (the cap, the union); Replaced: ids Revit deleted while healing (a\nduct it split or rebuilt), each replaced by an id in Created. Check is the post-check's words.\nOn preview the ids are those of the rolled-back run and do not exist.\n            ", "identifier": "DuctHealOutcome" });
 const DuctSection = Schema.Struct({ "number": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "flowCfm": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "totalPressureLossInWg": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "elementIds": Schema.Array(Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" }))) }).annotate({ "description": "One MEPSection: Revit's run of elements carrying one flow.", "identifier": "DuctSection" });
@@ -434,16 +501,6 @@ const DuctHealCounts = Schema.Struct({ "planned": Schema.Number.annotate({ "form
 const DuctSystem = Schema.Struct({ "id": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "name": Schema.String, "classification": Schema.String, "isWellConnected": Schema.optionalKey(Schema.Union([Schema.Boolean, Schema.Null])), "baseEquipmentId": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })), Schema.Null]).annotate({ "format": "int64" })), "baseEquipmentConnector": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), Schema.Null]).annotate({ "format": "int32" })), "criticalPathLossInWg": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "criticalPath": Schema.Array(Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" }))), "sections": Schema.Array(DuctSection) }).annotate({ "description": "One supply, return or exhaust MechanicalSystem as Revit reports it: the check beside Pe's own solve.\nCriticalPath is GetCriticalPathSectionNumbers(); empty when Revit found none.\n            ", "identifier": "DuctSystem" });
 const DuctHealGroupOutcome = Schema.Struct({ "group": Schema.String, "outcome": Schema.String, "reason": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "items": Schema.Array(DuctHealOutcome), "systemsBefore": Schema.Array(DuctSystem), "systemsAfter": Schema.Array(DuctSystem) }).annotate({ "description": "One group's run. Outcome: planned (preview), healed, refused (Reason says why: the group's transaction\nfailed and rolled back), empty (nothing healed). SystemsBefore and SystemsAfter are Revit's touched systems\nwith their critical path, read before the first item and after the last (inside the rolled-back run on\npreview).\n            ", "identifier": "DuctHealGroupOutcome" });
 const codec = Schema.Struct({ "previewOnly": Schema.Boolean, "groups": Schema.Array(DuctHealGroupOutcome), "counts": DuctHealCounts }).annotate({ "title": "DuctHealResult" });
-namespace WireTypes {
-type DuctHealOutcome = { readonly "key": string, readonly "kind": string, readonly "how"?: null | string, readonly "outcome": string, readonly "reason"?: null | string, readonly "created": ReadonlyArray<number>, readonly "replaced": ReadonlyArray<number>, readonly "check"?: null | string };
-type DuctSection = { readonly "number": number, readonly "flowCfm"?: null | number, readonly "totalPressureLossInWg"?: null | number, readonly "elementIds": ReadonlyArray<number> };
-type DuctHealCounts = { readonly "planned": number, readonly "healed": number, readonly "refused": number };
-type DuctSystem = { readonly "id": number, readonly "name": string, readonly "classification": string, readonly "isWellConnected"?: boolean | null, readonly "baseEquipmentId"?: number | null, readonly "baseEquipmentConnector"?: number | null, readonly "criticalPathLossInWg"?: null | number, readonly "criticalPath": ReadonlyArray<number>, readonly "sections": ReadonlyArray<DuctSection> };
-type DuctHealGroupOutcome = { readonly "group": string, readonly "outcome": string, readonly "reason"?: null | string, readonly "items": ReadonlyArray<DuctHealOutcome>, readonly "systemsBefore": ReadonlyArray<DuctSystem>, readonly "systemsAfter": ReadonlyArray<DuctSystem> };
-export type Root = { readonly "previewOnly": boolean, readonly "groups": ReadonlyArray<DuctHealGroupOutcome>, readonly "counts": DuctHealCounts };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["DuctHealCounts"]: strictDecoder(DuctHealCounts),
@@ -453,21 +510,38 @@ export const definitions = {
   ["DuctSystem"]: strictDecoder(DuctSystem),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type DuctHealOutcome = { readonly "key": string, readonly "kind": string, readonly "how"?: null | string, readonly "outcome": string, readonly "reason"?: null | string, readonly "created": ReadonlyArray<number>, readonly "replaced": ReadonlyArray<number>, readonly "check"?: null | string };
+type DuctSection = { readonly "number": number, readonly "flowCfm"?: null | number, readonly "totalPressureLossInWg"?: null | number, readonly "elementIds": ReadonlyArray<number> };
+type DuctHealCounts = { readonly "planned": number, readonly "healed": number, readonly "refused": number };
+type DuctSystem = { readonly "id": number, readonly "name": string, readonly "classification": string, readonly "isWellConnected"?: boolean | null, readonly "baseEquipmentId"?: number | null, readonly "baseEquipmentConnector"?: number | null, readonly "criticalPathLossInWg"?: null | number, readonly "criticalPath": ReadonlyArray<number>, readonly "sections": ReadonlyArray<DuctSection> };
+type DuctHealGroupOutcome = { readonly "group": string, readonly "outcome": string, readonly "reason"?: null | string, readonly "items": ReadonlyArray<DuctHealOutcome>, readonly "systemsBefore": ReadonlyArray<DuctSystem>, readonly "systemsAfter": ReadonlyArray<DuctSystem> };
+export type Root = { readonly "previewOnly": boolean, readonly "groups": ReadonlyArray<DuctHealGroupOutcome>, readonly "counts": DuctHealCounts };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op10request {
+namespace Decoded {
 
 
 const codec = Schema.Struct({ "elementIds": Schema.Array(Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" }))) }).annotate({ "title": "DuctPortsRequest", "description": "Inspect only these known project elements. IDs belong to the current exact open document." });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 
 export type Root = { readonly "elementIds": ReadonlyArray<number> };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op10response {
+namespace Decoded {
 
 const DuctReadState = Schema.Literals(["value", "absent", "error"]).annotate({ "description": "How one optional port fact read went. Only `value` carries data; a failed fact never fails its port row.", "identifier": "DuctReadState" });
 const DuctShape = Schema.Literals(["round", "rectangular", "oval", "other"]).annotate({ "description": "", "identifier": "DuctShape" });
@@ -480,21 +554,6 @@ const DuctFlowParameter = Schema.Struct({ "state": DuctReadState, "id": Schema.o
 const DuctPhysicalPort = Schema.Struct({ "connectorId": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "kind": Schema.String, "originFt": Schema.Array(Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" }))), "basisX": Schema.Array(Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" }))), "basisY": Schema.Array(Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" }))), "basisZ": Schema.Array(Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" }))), "shape": DuctShape, "diameterIn": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "widthIn": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "heightIn": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "isConnected": Schema.Boolean, "physicalPeers": Schema.Array(DuctRef), "system": DuctPortSystem, "direction": DuctPortDirection, "revitFlow": DuctPortFlow, "assignedFlow": DuctPortFlow, "flowParameter": DuctFlowParameter }).annotate({ "description": "One physical HVAC End/Curve port. Raw connector axes; BasisZ is approach orientation, not airflow direction.", "identifier": "DuctPhysicalPort" });
 const DuctPortElement = Schema.Struct({ "elementId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "level": DuctElementLevel, "ports": Schema.Array(DuctPhysicalPort) }).annotate({ "identifier": "DuctPortElement" });
 const codec = Schema.Struct({ "documentTitle": Schema.String, "readAtUtc": Schema.String.annotate({ "format": "date-time" }).check(Schema.makeFilter((value) => typeof value !== "string" || validDateTime(value))), "networkBasedCalculations": Schema.Boolean, "elements": Schema.Array(DuctPortElement) }).annotate({ "title": "DuctPortsData", "description": "Exact live port geometry in host-model internal feet; read connector IDs again after regeneration." });
-namespace WireTypes {
-type DuctReadState = "value" | "absent" | "error";
-type DuctShape = "round" | "rectangular" | "oval" | "other";
-type DuctRef = { readonly "elementId": number, readonly "connector": number };
-type DuctElementLevel = { readonly "state": DuctReadState, readonly "id"?: number | null, readonly "name"?: null | string, readonly "error"?: null | string };
-type DuctPortSystem = { readonly "state": DuctReadState, readonly "id"?: number | null, readonly "name"?: null | string, readonly "typeId"?: number | null, readonly "classification"?: null | string, readonly "error"?: null | string };
-type DuctPortDirection = { readonly "state": DuctReadState, readonly "value"?: null | string, readonly "error"?: null | string };
-type DuctPortFlow = { readonly "state": DuctReadState, readonly "cfm"?: null | number, readonly "error"?: null | string };
-type DuctFlowParameter = { readonly "state": DuctReadState, readonly "id"?: number | null, readonly "name"?: null | string, readonly "guid"?: null | string, readonly "writable"?: boolean | null, readonly "hasValue"?: boolean | null, readonly "cfm"?: null | number, readonly "provenance"?: null | string, readonly "error"?: null | string };
-type DuctPhysicalPort = { readonly "connectorId": number, readonly "kind": string, readonly "originFt": ReadonlyArray<number>, readonly "basisX": ReadonlyArray<number>, readonly "basisY": ReadonlyArray<number>, readonly "basisZ": ReadonlyArray<number>, readonly "shape": DuctShape, readonly "diameterIn"?: null | number, readonly "widthIn"?: null | number, readonly "heightIn"?: null | number, readonly "isConnected": boolean, readonly "physicalPeers": ReadonlyArray<DuctRef>, readonly "system": DuctPortSystem, readonly "direction": DuctPortDirection, readonly "revitFlow": DuctPortFlow, readonly "assignedFlow": DuctPortFlow, readonly "flowParameter": DuctFlowParameter };
-type DuctPortElement = { readonly "elementId": number, readonly "level": DuctElementLevel, readonly "ports": ReadonlyArray<DuctPhysicalPort> };
-export type Root = { readonly "documentTitle": string, readonly "readAtUtc": string, readonly "networkBasedCalculations": boolean, readonly "elements": ReadonlyArray<DuctPortElement> };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["DuctElementLevel"]: strictDecoder(DuctElementLevel),
@@ -509,13 +568,35 @@ export const definitions = {
   ["DuctShape"]: strictDecoder(DuctShape),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type DuctReadState = "value" | "absent" | "error";
+type DuctShape = "round" | "rectangular" | "oval" | "other";
+type DuctRef = { readonly "elementId": number, readonly "connector": number };
+type DuctElementLevel = { readonly "state": DuctReadState, readonly "id"?: number | null, readonly "name"?: null | string, readonly "error"?: null | string };
+type DuctPortSystem = { readonly "state": DuctReadState, readonly "id"?: number | null, readonly "name"?: null | string, readonly "typeId"?: number | null, readonly "classification"?: null | string, readonly "error"?: null | string };
+type DuctPortDirection = { readonly "state": DuctReadState, readonly "value"?: null | string, readonly "error"?: null | string };
+type DuctPortFlow = { readonly "state": DuctReadState, readonly "cfm"?: null | number, readonly "error"?: null | string };
+type DuctFlowParameter = { readonly "state": DuctReadState, readonly "id"?: number | null, readonly "name"?: null | string, readonly "guid"?: null | string, readonly "writable"?: boolean | null, readonly "hasValue"?: boolean | null, readonly "cfm"?: null | number, readonly "provenance"?: null | string, readonly "error"?: null | string };
+type DuctPhysicalPort = { readonly "connectorId": number, readonly "kind": string, readonly "originFt": ReadonlyArray<number>, readonly "basisX": ReadonlyArray<number>, readonly "basisY": ReadonlyArray<number>, readonly "basisZ": ReadonlyArray<number>, readonly "shape": DuctShape, readonly "diameterIn"?: null | number, readonly "widthIn"?: null | number, readonly "heightIn"?: null | number, readonly "isConnected": boolean, readonly "physicalPeers": ReadonlyArray<DuctRef>, readonly "system": DuctPortSystem, readonly "direction": DuctPortDirection, readonly "revitFlow": DuctPortFlow, readonly "assignedFlow": DuctPortFlow, readonly "flowParameter": DuctFlowParameter };
+type DuctPortElement = { readonly "elementId": number, readonly "level": DuctElementLevel, readonly "ports": ReadonlyArray<DuctPhysicalPort> };
+export type Root = { readonly "documentTitle": string, readonly "readAtUtc": string, readonly "networkBasedCalculations": boolean, readonly "elements": ReadonlyArray<DuctPortElement> };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op11request {
+namespace Decoded {
 
 const DuctParameterSlotOverrides = Schema.Struct({ "fanStatic": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "fanFlow": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "componentDrop": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "terminalDrop": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "fittingCoefficient": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "terminalFlow": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "description": "Parameter names the census reads, instance first and then type. FanStatic (in-wg) and FanFlow (CFM) on HVAC\nequipment, ComponentDrop (in-wg) on accessories, TerminalDrop (in-wg) and TerminalFlow (CFM) on terminals,\nFittingCoefficient (a number) on fittings: the family's own loss coefficient, which the Pe loss server reads\nlive (the configurable door, kaitpw 2026-10-08).\n            ", "identifier": "DuctParameterSlotOverrides" });
 const DuctSelectorKind = Schema.Literals(["document", "ids", "from", "roster", "systems"]).annotate({ "description": "", "identifier": "DuctSelectorKind" });
 const DuctSnapshotSelector = Schema.Struct({ "kind": Schema.optionalKey(DuctSelectorKind), "ids": Schema.optionalKey(Schema.Union([Schema.Array(Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" }))), Schema.Null])), "unitId": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })), Schema.Null]).annotate({ "format": "int64" })), "portIndex": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), Schema.Null]).annotate({ "format": "int32" })), "maxHops": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), Schema.Null]).annotate({ "format": "int32" })), "candidateBoxIn": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "systemIds": Schema.optionalKey(Schema.Union([Schema.Array(Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" }))), Schema.Null])), "autoJoinGapIn": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })) }).annotate({ "description": "Which elements the snapshot reads. Kind `document` is the default and the shape every existing caller gets. Kind\n`ids` reads Ids. Kind `from` walks Revit connectors outward from UnitId's HVAC ports (PortIndex names one\nconnector id; absent walks every port) through ducts, flex, fittings, accessories and equipment (equipment is a\nleg, never a cut: the roster decides stops later), stopping at an air terminal, an open end, or MaxHops elements\ndeep (default 2000). At every open end a box CandidateBoxIn inches on a side (default 36) around the connector is\nsearched for MEP elements, which join the output marked `open-end-candidate` so a join can be inferred. Every kind\nreports model health (Issues) under CandidateBoxIn and AutoJoinGapIn (DuctHealthTolerances). Kind\n`systems` reads SystemIds (MechanicalSystem ids): each system's DuctNetwork, Elements and base equipment, grown\nalong connectors to whole groups (a group is a connected component, so one the systems touch is never cut), and\nanswers in the `document` shape with Systems holding only the named systems.\n            ", "identifier": "DuctSnapshotSelector" });
 const codec = Schema.Struct({ "slots": Schema.optionalKey(Schema.Union([Schema.Null, DuctParameterSlotOverrides], { mode: "oneOf" })), "labelParameter": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "selector": Schema.optionalKey(Schema.Union([Schema.Null, DuctSnapshotSelector], { mode: "oneOf" })) }).annotate({ "title": "DuctSnapshotRequest", "description": "Optional: which parameters carry the designer-stated values (absent reads the defaults), and LabelParameter, the\ninstance parameter whose string value names equipment for people (absent reads the firm tag, PE_G___TagInstance:\nPE's alternative to the built-in Mark, never the Mark itself).\n            " });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 type DuctParameterSlotOverrides = { readonly "fanStatic"?: null | string, readonly "fanFlow"?: null | string, readonly "componentDrop"?: null | string, readonly "terminalDrop"?: null | string, readonly "fittingCoefficient"?: null | string, readonly "terminalFlow"?: null | string };
 type DuctSelectorKind = "document" | "ids" | "from" | "roster" | "systems";
@@ -523,11 +604,11 @@ type DuctSnapshotSelector = { readonly "kind"?: DuctSelectorKind, readonly "ids"
 export type Root = { readonly "slots"?: null | DuctParameterSlotOverrides, readonly "labelParameter"?: null | string, readonly "selector"?: null | DuctSnapshotSelector };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op11response {
+namespace Decoded {
 
 const DuctDocument = Schema.Struct({ "title": Schema.String, "readAt": Schema.String.annotate({ "format": "date-time" }).check(Schema.makeFilter((value) => typeof value !== "string" || validDateTime(value))), "elapsedMs": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "networkBasedCalculations": Schema.Boolean }).annotate({ "description": "The document read, when, and how long the read took. NetworkBasedCalculations is DuctSettings' engine switch:\nread only: the snapshot guards an access violation on it, and apply never sets it (pressure-drop ledger).\n            ", "identifier": "DuctDocument" });
 const DuctCoordinateEncoding = Schema.Literal("native-double").annotate({ "description": "Physical XYZ and segment LengthFt preserve native model-foot binary64 values; other facts retain their stated units/rounding.", "identifier": "DuctCoordinateEncoding" });
@@ -577,58 +658,6 @@ const DuctSegment = Schema.Struct({ "id": Schema.Number.annotate({ "format": "in
 const DuctNode = Schema.Struct({ "id": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "kind": DuctNodeKind, "category": Schema.String, "family": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "type": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "partType": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "levelId": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })), Schema.Null]).annotate({ "format": "int64" })), "point": Schema.optionalKey(Schema.Union([Schema.Array(Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" }))), Schema.Null])), "groupId": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "systemName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "classification": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "connectors": Schema.Array(DuctConnector), "facts": Schema.Array(DuctFact), "uniqueId": Schema.String, "loss": Schema.optionalKey(Schema.Union([Schema.Null, DuctLoss], { mode: "oneOf" })), "terminalDrop": Schema.optionalKey(Schema.Union([Schema.Null, DuctTerminalDrop], { mode: "oneOf" })), "label": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "phaseCreated": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "phaseDemolished": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "flowParameter": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "reason": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "description": "PhaseCreated and PhaseDemolished name the element's phases (null when it has none, or none demolished it).\nFlowParameter, on a terminal, is the TerminalFlow slot that supplied its terminalFlow fact; on equipment, the\nFanFlow slot that supplied its fanFlow fact; null when none did.\n            ", "identifier": "DuctNode" });
 const DuctIssue = Schema.Struct({ "id": Schema.String, "kind": DuctIssueKind, "elementId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "connector": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), Schema.Null]).annotate({ "format": "int32" })), "point": Schema.optionalKey(Schema.Union([Schema.Array(Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" }))), Schema.Null])), "note": Schema.String, "near": Schema.optionalKey(Schema.Union([Schema.Null, DuctNear], { mode: "oneOf" })), "inline": Schema.optionalKey(Schema.Union([Schema.Null, DuctInline], { mode: "oneOf" })) }).annotate({ "description": "One model-health finding. Id is \"kind:elementId\" plus \":connector\" when Connector is set; an assumption verdict\nkeys on it. Near is set on an open end: what lies within the candidate box of it. A `roster` or `ids` read does not\nmeasure it (null there) and so reports no near miss.\n            ", "identifier": "DuctIssue" });
 const codec = Schema.Struct({ "document": DuctDocument, "coordinateEncoding": DuctCoordinateEncoding, "levels": Schema.Array(DuctLevel), "groups": Schema.Array(DuctGroup), "nodes": Schema.Array(DuctNode), "segments": Schema.Array(DuctSegment), "flows": Schema.Array(DuctFlow), "issues": Schema.Array(DuctIssue), "layers": Schema.Array(DuctLayer), "systems": Schema.Array(DuctSystem), "slots": DuctParameterSlots, "store": Schema.optionalKey(Schema.Union([Schema.Null, DuctLossStore], { mode: "oneOf" })), "storeError": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "phases": Schema.optionalKey(Schema.Union([Schema.Null, DuctPhases], { mode: "oneOf" })), "airflowCandidates": Schema.optionalKey(Schema.Union([Schema.Array(DuctAirflowCandidate), Schema.Null])), "fanFlowCandidates": Schema.optionalKey(Schema.Union([Schema.Array(DuctAirflowCandidate), Schema.Null])), "walk": Schema.optionalKey(Schema.Union([Schema.Null, DuctWalk], { mode: "oneOf" })), "tolerances": Schema.optionalKey(Schema.Union([Schema.Null, DuctHealthTolerances], { mode: "oneOf" })) }).annotate({ "title": "DuctSnapshotData", "description": "Store is Pe's `_PE_DuctLosses` provenance blob, absent when the model has none. StoreError is set instead when\nthe blob is unreadable or another version (fail-closed: ducts.apply refuses to overwrite it).\nAirflowCandidates are the air flow parameters the terminals carry, the picker for the TerminalFlow slot;\nFanFlowCandidates the same over HVAC equipment, the picker for the FanFlow slot (coverage per group the unit roots).\n            " });
-namespace WireTypes {
-type DuctDocument = { readonly "title": string, readonly "readAt": string, readonly "elapsedMs": number, readonly "networkBasedCalculations": boolean };
-type DuctCoordinateEncoding = "native-double";
-type DuctLevel = { readonly "id": number, readonly "name": string, readonly "elevationFt": number };
-type DuctGroup = { readonly "id": string, readonly "rootIds": ReadonlyArray<number>, readonly "classifications": ReadonlyArray<string>, readonly "systemNames": ReadonlyArray<string>, readonly "terminalCount": number, readonly "elementCount": number, readonly "loops": number, readonly "issueIds": ReadonlyArray<string> };
-type DuctNodeKind = "equipment" | "terminal" | "fitting" | "accessory" | "cap";
-type DuctShape = "round" | "rectangular" | "oval" | "other";
-type DuctRef = { readonly "elementId": number, readonly "connector": number };
-type DuctProvenance = "geometry" | "revit-reported" | "revit-default" | "designer-stated" | "derived";
-type DuctLossMethod = "not-defined" | "ashrae-table" | "specific-coefficient" | "specific-loss" | "pe-server" | "other";
-type DuctTerminalDrop = { readonly "assignedPressureDropInWg"?: null | number, readonly "connectorLossMethod"?: null | string, readonly "writable": boolean, readonly "catalogDropInWg"?: null | number };
-type DuctSegmentKind = "duct" | "flex";
-type DuctCurveKind = "line" | "arc" | "flex-polyline" | "other";
-type DuctRevitValues = { readonly "flowCfm"?: null | number, readonly "velocityFpm"?: null | number, readonly "frictionInWgPer100Ft"?: null | number, readonly "pressureDropInWg"?: null | number };
-type DuctIssueKind = "open-end" | "near-miss" | "inline" | "loop" | "stub" | "air-type-change" | "implausible-size" | "default-flex-roughness" | "no-component-drop" | "no-terminal-flow" | "high-velocity";
-type DuctNearPort = { readonly "elementId": number, readonly "connector": number, readonly "gapIn": number, readonly "facingDot"?: null | number, readonly "opposed": boolean, readonly "aligned": boolean, readonly "autoJoin": boolean, readonly "cappedBy"?: number | null };
-type DuctNearFace = { readonly "kind": string, readonly "elementId": number, readonly "connector"?: number | null, readonly "gapIn": number, readonly "facingDot"?: null | number, readonly "opposed": boolean, readonly "atFt"?: null | number, readonly "point"?: ReadonlyArray<number> | null };
-type DuctNearBody = { readonly "segmentId": number, readonly "gapIn": number, readonly "tapGapIn"?: null | number, readonly "tapPoint"?: ReadonlyArray<number> | null };
-type DuctInline = { readonly "segmentId": number, readonly "atFt": number, readonly "ports": ReadonlyArray<number> };
-type DuctCoverage = { readonly "have": number, readonly "of": number };
-type DuctSection = { readonly "number": number, readonly "flowCfm"?: null | number, readonly "totalPressureLossInWg"?: null | number, readonly "elementIds": ReadonlyArray<number> };
-type DuctParameterSlots = { readonly "fanStatic": string, readonly "fanFlow": string, readonly "componentDrop": string, readonly "terminalDrop": string, readonly "fittingCoefficient": string, readonly "terminalFlow": string };
-type DuctRuleChoice = { readonly "table"?: null | string };
-type DuctInstanceRecord = { readonly "table"?: null | string, readonly "inputs"?: null | string, readonly "coefficient": number, readonly "appliedAt": string };
-type DuctDropRecord = { readonly "inWg": number, readonly "source"?: null | string, readonly "appliedAt": string };
-type DuctFlowRecord = { readonly "cfm": number, readonly "source"?: null | string, readonly "appliedAt": string };
-type DuctVerdictRecord = { readonly "verdict": string, readonly "ruledAt": string };
-type DuctRoleRecord = { readonly "role": string, readonly "ruledAt": string };
-type DuctParameterSlotOverrides = { readonly "fanStatic"?: null | string, readonly "fanFlow"?: null | string, readonly "componentDrop"?: null | string, readonly "terminalDrop"?: null | string, readonly "fittingCoefficient"?: null | string, readonly "terminalFlow"?: null | string };
-type DuctPhaseViews = { readonly "phase"?: null | string, readonly "filter"?: null | string, readonly "count": number };
-type DuctGroupCoverage = { readonly "groupId": string, readonly "have": number, readonly "of": number };
-type DuctOpenEnd = { readonly "elementId": number, readonly "connector": number, readonly "point": ReadonlyArray<number>, readonly "candidateCount": number, readonly "candidateIds": ReadonlyArray<number> };
-type DuctHealthTolerances = { readonly "candidateBoxIn": number, readonly "autoJoinGapIn": number };
-type DuctConnector = { readonly "index": number, readonly "kind": string, readonly "point": ReadonlyArray<number>, readonly "shape": DuctShape, readonly "size": string, readonly "diameterIn"?: null | number, readonly "widthIn"?: null | number, readonly "heightIn"?: null | number, readonly "flowCfm"?: null | number, readonly "direction": string, readonly "classification"?: null | string, readonly "connectedTo"?: null | DuctRef, readonly "areaFt2"?: null | number, readonly "facing"?: ReadonlyArray<number> | null, readonly "widthAxis"?: ReadonlyArray<number> | null, readonly "isPrimary"?: boolean | null, readonly "isSecondary"?: boolean | null };
-type DuctFact = { readonly "key": string, readonly "value"?: null | number, readonly "text"?: null | string, readonly "unit": string, readonly "provenance": DuctProvenance };
-type DuctRoughness = { readonly "valueFt": number, readonly "provenance": DuctProvenance };
-type DuctFlow = { readonly "segmentId": number, readonly "cfm": number, readonly "provenance": DuctProvenance };
-type DuctLoss = { readonly "method": DuctLossMethod, readonly "serverId"?: null | string, readonly "table"?: null | string, readonly "coefficient"?: null | number, readonly "specificLossInWg"?: null | number, readonly "revitPressureDropInWg"?: null | number, readonly "fields": { readonly [x: string]: string } };
-type DuctNear = { readonly "ports": ReadonlyArray<DuctNearPort>, readonly "faces": ReadonlyArray<DuctNearFace>, readonly "bodies": ReadonlyArray<DuctNearBody> };
-type DuctLayer = { readonly "key": string, readonly "title": string, readonly "query": string, readonly "coverage": DuctCoverage, readonly "provenance": DuctProvenance };
-type DuctSystem = { readonly "id": number, readonly "name": string, readonly "classification": string, readonly "isWellConnected"?: boolean | null, readonly "baseEquipmentId"?: number | null, readonly "baseEquipmentConnector"?: number | null, readonly "criticalPathLossInWg"?: null | number, readonly "criticalPath": ReadonlyArray<number>, readonly "sections": ReadonlyArray<DuctSection> };
-type DuctLossStore = { readonly "version": number, readonly "rules": { readonly [x: string]: DuctRuleChoice }, readonly "instances": { readonly [x: string]: DuctInstanceRecord }, readonly "terminals": { readonly [x: string]: DuctDropRecord }, readonly "terminalFlows": { readonly [x: string]: DuctFlowRecord }, readonly "equipmentFlows": { readonly [x: string]: DuctFlowRecord }, readonly "verdicts": { readonly [x: string]: DuctVerdictRecord }, readonly "roles": { readonly [x: string]: DuctRoleRecord }, readonly "slots"?: null | DuctParameterSlotOverrides, readonly "workRevision": number, readonly "appliedAt"?: null | string } & { readonly [x: string]: Schema.Json };
-type DuctPhases = { readonly "order": ReadonlyArray<string>, readonly "views": ReadonlyArray<DuctPhaseViews> };
-type DuctAirflowCandidate = { readonly "slot": string, readonly "where": string, readonly "shared": boolean, readonly "have": number, readonly "of": number, readonly "groups": ReadonlyArray<DuctGroupCoverage> };
-type DuctWalk = { readonly "startId": number, readonly "hops": number, readonly "elementsReached": number, readonly "openEnds": number, readonly "candidates": ReadonlyArray<DuctOpenEnd>, readonly "truncated": boolean, readonly "elapsedMs": number };
-type DuctSegment = { readonly "id": number, readonly "kind": DuctSegmentKind, readonly "curveKind": DuctCurveKind, readonly "type"?: null | string, readonly "shape": DuctShape, readonly "size": string, readonly "diameterIn"?: null | number, readonly "widthIn"?: null | number, readonly "heightIn"?: null | number, readonly "lengthFt": number, readonly "polyline": ReadonlyArray<ReadonlyArray<number>>, readonly "levelId"?: number | null, readonly "groupId"?: null | string, readonly "systemName"?: null | string, readonly "classification"?: null | string, readonly "roughness": DuctRoughness, readonly "revit": DuctRevitValues, readonly "connectors": ReadonlyArray<DuctConnector>, readonly "uniqueId": string, readonly "phaseCreated"?: null | string, readonly "phaseDemolished"?: null | string, readonly "reason"?: null | string, readonly "insulationIn"?: null | number };
-type DuctNode = { readonly "id": number, readonly "kind": DuctNodeKind, readonly "category": string, readonly "family"?: null | string, readonly "type"?: null | string, readonly "partType"?: null | string, readonly "levelId"?: number | null, readonly "point"?: ReadonlyArray<number> | null, readonly "groupId"?: null | string, readonly "systemName"?: null | string, readonly "classification"?: null | string, readonly "connectors": ReadonlyArray<DuctConnector>, readonly "facts": ReadonlyArray<DuctFact>, readonly "uniqueId": string, readonly "loss"?: null | DuctLoss, readonly "terminalDrop"?: null | DuctTerminalDrop, readonly "label"?: null | string, readonly "phaseCreated"?: null | string, readonly "phaseDemolished"?: null | string, readonly "flowParameter"?: null | string, readonly "reason"?: null | string };
-type DuctIssue = { readonly "id": string, readonly "kind": DuctIssueKind, readonly "elementId": number, readonly "connector"?: number | null, readonly "point"?: ReadonlyArray<number> | null, readonly "note": string, readonly "near"?: null | DuctNear, readonly "inline"?: null | DuctInline };
-export type Root = { readonly "document": DuctDocument, readonly "coordinateEncoding": DuctCoordinateEncoding, readonly "levels": ReadonlyArray<DuctLevel>, readonly "groups": ReadonlyArray<DuctGroup>, readonly "nodes": ReadonlyArray<DuctNode>, readonly "segments": ReadonlyArray<DuctSegment>, readonly "flows": ReadonlyArray<DuctFlow>, readonly "issues": ReadonlyArray<DuctIssue>, readonly "layers": ReadonlyArray<DuctLayer>, readonly "systems": ReadonlyArray<DuctSystem>, readonly "slots": DuctParameterSlots, readonly "store"?: null | DuctLossStore, readonly "storeError"?: null | string, readonly "phases"?: null | DuctPhases, readonly "airflowCandidates"?: ReadonlyArray<DuctAirflowCandidate> | null, readonly "fanFlowCandidates"?: ReadonlyArray<DuctAirflowCandidate> | null, readonly "walk"?: null | DuctWalk, readonly "tolerances"?: null | DuctHealthTolerances };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["DuctAirflowCandidate"]: strictDecoder(DuctAirflowCandidate),
@@ -680,13 +709,72 @@ export const definitions = {
   ["DuctWalk"]: strictDecoder(DuctWalk),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type DuctDocument = { readonly "title": string, readonly "readAt": string, readonly "elapsedMs": number, readonly "networkBasedCalculations": boolean };
+type DuctCoordinateEncoding = "native-double";
+type DuctLevel = { readonly "id": number, readonly "name": string, readonly "elevationFt": number };
+type DuctGroup = { readonly "id": string, readonly "rootIds": ReadonlyArray<number>, readonly "classifications": ReadonlyArray<string>, readonly "systemNames": ReadonlyArray<string>, readonly "terminalCount": number, readonly "elementCount": number, readonly "loops": number, readonly "issueIds": ReadonlyArray<string> };
+type DuctNodeKind = "equipment" | "terminal" | "fitting" | "accessory" | "cap";
+type DuctShape = "round" | "rectangular" | "oval" | "other";
+type DuctRef = { readonly "elementId": number, readonly "connector": number };
+type DuctProvenance = "geometry" | "revit-reported" | "revit-default" | "designer-stated" | "derived";
+type DuctLossMethod = "not-defined" | "ashrae-table" | "specific-coefficient" | "specific-loss" | "pe-server" | "other";
+type DuctTerminalDrop = { readonly "assignedPressureDropInWg"?: null | number, readonly "connectorLossMethod"?: null | string, readonly "writable": boolean, readonly "catalogDropInWg"?: null | number };
+type DuctSegmentKind = "duct" | "flex";
+type DuctCurveKind = "line" | "arc" | "flex-polyline" | "other";
+type DuctRevitValues = { readonly "flowCfm"?: null | number, readonly "velocityFpm"?: null | number, readonly "frictionInWgPer100Ft"?: null | number, readonly "pressureDropInWg"?: null | number };
+type DuctIssueKind = "open-end" | "near-miss" | "inline" | "loop" | "stub" | "air-type-change" | "implausible-size" | "default-flex-roughness" | "no-component-drop" | "no-terminal-flow" | "high-velocity";
+type DuctNearPort = { readonly "elementId": number, readonly "connector": number, readonly "gapIn": number, readonly "facingDot"?: null | number, readonly "opposed": boolean, readonly "aligned": boolean, readonly "autoJoin": boolean, readonly "cappedBy"?: number | null };
+type DuctNearFace = { readonly "kind": string, readonly "elementId": number, readonly "connector"?: number | null, readonly "gapIn": number, readonly "facingDot"?: null | number, readonly "opposed": boolean, readonly "atFt"?: null | number, readonly "point"?: ReadonlyArray<number> | null };
+type DuctNearBody = { readonly "segmentId": number, readonly "gapIn": number, readonly "tapGapIn"?: null | number, readonly "tapPoint"?: ReadonlyArray<number> | null };
+type DuctInline = { readonly "segmentId": number, readonly "atFt": number, readonly "ports": ReadonlyArray<number> };
+type DuctCoverage = { readonly "have": number, readonly "of": number };
+type DuctSection = { readonly "number": number, readonly "flowCfm"?: null | number, readonly "totalPressureLossInWg"?: null | number, readonly "elementIds": ReadonlyArray<number> };
+type DuctParameterSlots = { readonly "fanStatic": string, readonly "fanFlow": string, readonly "componentDrop": string, readonly "terminalDrop": string, readonly "fittingCoefficient": string, readonly "terminalFlow": string };
+type DuctRuleChoice = { readonly "table"?: null | string };
+type DuctInstanceRecord = { readonly "table"?: null | string, readonly "inputs"?: null | string, readonly "coefficient": number, readonly "appliedAt": string };
+type DuctDropRecord = { readonly "inWg": number, readonly "source"?: null | string, readonly "appliedAt": string };
+type DuctFlowRecord = { readonly "cfm": number, readonly "source"?: null | string, readonly "appliedAt": string };
+type DuctVerdictRecord = { readonly "verdict": string, readonly "ruledAt": string };
+type DuctRoleRecord = { readonly "role": string, readonly "ruledAt": string };
+type DuctParameterSlotOverrides = { readonly "fanStatic"?: null | string, readonly "fanFlow"?: null | string, readonly "componentDrop"?: null | string, readonly "terminalDrop"?: null | string, readonly "fittingCoefficient"?: null | string, readonly "terminalFlow"?: null | string };
+type DuctPhaseViews = { readonly "phase"?: null | string, readonly "filter"?: null | string, readonly "count": number };
+type DuctGroupCoverage = { readonly "groupId": string, readonly "have": number, readonly "of": number };
+type DuctOpenEnd = { readonly "elementId": number, readonly "connector": number, readonly "point": ReadonlyArray<number>, readonly "candidateCount": number, readonly "candidateIds": ReadonlyArray<number> };
+type DuctHealthTolerances = { readonly "candidateBoxIn": number, readonly "autoJoinGapIn": number };
+type DuctConnector = { readonly "index": number, readonly "kind": string, readonly "point": ReadonlyArray<number>, readonly "shape": DuctShape, readonly "size": string, readonly "diameterIn"?: null | number, readonly "widthIn"?: null | number, readonly "heightIn"?: null | number, readonly "flowCfm"?: null | number, readonly "direction": string, readonly "classification"?: null | string, readonly "connectedTo"?: null | DuctRef, readonly "areaFt2"?: null | number, readonly "facing"?: ReadonlyArray<number> | null, readonly "widthAxis"?: ReadonlyArray<number> | null, readonly "isPrimary"?: boolean | null, readonly "isSecondary"?: boolean | null };
+type DuctFact = { readonly "key": string, readonly "value"?: null | number, readonly "text"?: null | string, readonly "unit": string, readonly "provenance": DuctProvenance };
+type DuctRoughness = { readonly "valueFt": number, readonly "provenance": DuctProvenance };
+type DuctFlow = { readonly "segmentId": number, readonly "cfm": number, readonly "provenance": DuctProvenance };
+type DuctLoss = { readonly "method": DuctLossMethod, readonly "serverId"?: null | string, readonly "table"?: null | string, readonly "coefficient"?: null | number, readonly "specificLossInWg"?: null | number, readonly "revitPressureDropInWg"?: null | number, readonly "fields": { readonly [x: string]: string } };
+type DuctNear = { readonly "ports": ReadonlyArray<DuctNearPort>, readonly "faces": ReadonlyArray<DuctNearFace>, readonly "bodies": ReadonlyArray<DuctNearBody> };
+type DuctLayer = { readonly "key": string, readonly "title": string, readonly "query": string, readonly "coverage": DuctCoverage, readonly "provenance": DuctProvenance };
+type DuctSystem = { readonly "id": number, readonly "name": string, readonly "classification": string, readonly "isWellConnected"?: boolean | null, readonly "baseEquipmentId"?: number | null, readonly "baseEquipmentConnector"?: number | null, readonly "criticalPathLossInWg"?: null | number, readonly "criticalPath": ReadonlyArray<number>, readonly "sections": ReadonlyArray<DuctSection> };
+type DuctLossStore = { readonly "version": number, readonly "rules": { readonly [x: string]: DuctRuleChoice }, readonly "instances": { readonly [x: string]: DuctInstanceRecord }, readonly "terminals": { readonly [x: string]: DuctDropRecord }, readonly "terminalFlows": { readonly [x: string]: DuctFlowRecord }, readonly "equipmentFlows": { readonly [x: string]: DuctFlowRecord }, readonly "verdicts": { readonly [x: string]: DuctVerdictRecord }, readonly "roles": { readonly [x: string]: DuctRoleRecord }, readonly "slots"?: null | DuctParameterSlotOverrides, readonly "workRevision": number, readonly "appliedAt"?: null | string } & { readonly [x: string]: Schema.Json };
+type DuctPhases = { readonly "order": ReadonlyArray<string>, readonly "views": ReadonlyArray<DuctPhaseViews> };
+type DuctAirflowCandidate = { readonly "slot": string, readonly "where": string, readonly "shared": boolean, readonly "have": number, readonly "of": number, readonly "groups": ReadonlyArray<DuctGroupCoverage> };
+type DuctWalk = { readonly "startId": number, readonly "hops": number, readonly "elementsReached": number, readonly "openEnds": number, readonly "candidates": ReadonlyArray<DuctOpenEnd>, readonly "truncated": boolean, readonly "elapsedMs": number };
+type DuctSegment = { readonly "id": number, readonly "kind": DuctSegmentKind, readonly "curveKind": DuctCurveKind, readonly "type"?: null | string, readonly "shape": DuctShape, readonly "size": string, readonly "diameterIn"?: null | number, readonly "widthIn"?: null | number, readonly "heightIn"?: null | number, readonly "lengthFt": number, readonly "polyline": ReadonlyArray<ReadonlyArray<number>>, readonly "levelId"?: number | null, readonly "groupId"?: null | string, readonly "systemName"?: null | string, readonly "classification"?: null | string, readonly "roughness": DuctRoughness, readonly "revit": DuctRevitValues, readonly "connectors": ReadonlyArray<DuctConnector>, readonly "uniqueId": string, readonly "phaseCreated"?: null | string, readonly "phaseDemolished"?: null | string, readonly "reason"?: null | string, readonly "insulationIn"?: null | number };
+type DuctNode = { readonly "id": number, readonly "kind": DuctNodeKind, readonly "category": string, readonly "family"?: null | string, readonly "type"?: null | string, readonly "partType"?: null | string, readonly "levelId"?: number | null, readonly "point"?: ReadonlyArray<number> | null, readonly "groupId"?: null | string, readonly "systemName"?: null | string, readonly "classification"?: null | string, readonly "connectors": ReadonlyArray<DuctConnector>, readonly "facts": ReadonlyArray<DuctFact>, readonly "uniqueId": string, readonly "loss"?: null | DuctLoss, readonly "terminalDrop"?: null | DuctTerminalDrop, readonly "label"?: null | string, readonly "phaseCreated"?: null | string, readonly "phaseDemolished"?: null | string, readonly "flowParameter"?: null | string, readonly "reason"?: null | string };
+type DuctIssue = { readonly "id": string, readonly "kind": DuctIssueKind, readonly "elementId": number, readonly "connector"?: number | null, readonly "point"?: ReadonlyArray<number> | null, readonly "note": string, readonly "near"?: null | DuctNear, readonly "inline"?: null | DuctInline };
+export type Root = { readonly "document": DuctDocument, readonly "coordinateEncoding": DuctCoordinateEncoding, readonly "levels": ReadonlyArray<DuctLevel>, readonly "groups": ReadonlyArray<DuctGroup>, readonly "nodes": ReadonlyArray<DuctNode>, readonly "segments": ReadonlyArray<DuctSegment>, readonly "flows": ReadonlyArray<DuctFlow>, readonly "issues": ReadonlyArray<DuctIssue>, readonly "layers": ReadonlyArray<DuctLayer>, readonly "systems": ReadonlyArray<DuctSystem>, readonly "slots": DuctParameterSlots, readonly "store"?: null | DuctLossStore, readonly "storeError"?: null | string, readonly "phases"?: null | DuctPhases, readonly "airflowCandidates"?: ReadonlyArray<DuctAirflowCandidate> | null, readonly "fanFlowCandidates"?: ReadonlyArray<DuctAirflowCandidate> | null, readonly "walk"?: null | DuctWalk, readonly "tolerances"?: null | DuctHealthTolerances };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op12request {
+namespace Decoded {
 
 const DuctParameterSlotOverrides = Schema.Struct({ "fanStatic": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "fanFlow": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "componentDrop": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "terminalDrop": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "fittingCoefficient": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "terminalFlow": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "description": "Parameter names the census reads, instance first and then type. FanStatic (in-wg) and FanFlow (CFM) on HVAC\nequipment, ComponentDrop (in-wg) on accessories, TerminalDrop (in-wg) and TerminalFlow (CFM) on terminals,\nFittingCoefficient (a number) on fittings: the family's own loss coefficient, which the Pe loss server reads\nlive (the configurable door, kaitpw 2026-10-08).\n            ", "identifier": "DuctParameterSlotOverrides" });
 const DuctSelectorKind = Schema.Literals(["document", "ids", "from", "roster", "systems"]).annotate({ "description": "", "identifier": "DuctSelectorKind" });
 const DuctSnapshotSelector = Schema.Struct({ "kind": Schema.optionalKey(DuctSelectorKind), "ids": Schema.optionalKey(Schema.Union([Schema.Array(Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" }))), Schema.Null])), "unitId": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })), Schema.Null]).annotate({ "format": "int64" })), "portIndex": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), Schema.Null]).annotate({ "format": "int32" })), "maxHops": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), Schema.Null]).annotate({ "format": "int32" })), "candidateBoxIn": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "systemIds": Schema.optionalKey(Schema.Union([Schema.Array(Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" }))), Schema.Null])), "autoJoinGapIn": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })) }).annotate({ "description": "Which elements the snapshot reads. Kind `document` is the default and the shape every existing caller gets. Kind\n`ids` reads Ids. Kind `from` walks Revit connectors outward from UnitId's HVAC ports (PortIndex names one\nconnector id; absent walks every port) through ducts, flex, fittings, accessories and equipment (equipment is a\nleg, never a cut: the roster decides stops later), stopping at an air terminal, an open end, or MaxHops elements\ndeep (default 2000). At every open end a box CandidateBoxIn inches on a side (default 36) around the connector is\nsearched for MEP elements, which join the output marked `open-end-candidate` so a join can be inferred. Every kind\nreports model health (Issues) under CandidateBoxIn and AutoJoinGapIn (DuctHealthTolerances). Kind\n`systems` reads SystemIds (MechanicalSystem ids): each system's DuctNetwork, Elements and base equipment, grown\nalong connectors to whole groups (a group is a connected component, so one the systems touch is never cut), and\nanswers in the `document` shape with Systems holding only the named systems.\n            ", "identifier": "DuctSnapshotSelector" });
 const codec = Schema.Struct({ "slots": Schema.optionalKey(Schema.Union([Schema.Null, DuctParameterSlotOverrides], { mode: "oneOf" })), "labelParameter": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "selector": Schema.optionalKey(Schema.Union([Schema.Null, DuctSnapshotSelector], { mode: "oneOf" })) }).annotate({ "title": "DuctSnapshotRequest", "description": "Optional: which parameters carry the designer-stated values (absent reads the defaults), and LabelParameter, the\ninstance parameter whose string value names equipment for people (absent reads the firm tag, PE_G___TagInstance:\nPE's alternative to the built-in Mark, never the Mark itself).\n            " });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 type DuctParameterSlotOverrides = { readonly "fanStatic"?: null | string, readonly "fanFlow"?: null | string, readonly "componentDrop"?: null | string, readonly "terminalDrop"?: null | string, readonly "fittingCoefficient"?: null | string, readonly "terminalFlow"?: null | string };
 type DuctSelectorKind = "document" | "ids" | "from" | "roster" | "systems";
@@ -694,11 +782,11 @@ type DuctSnapshotSelector = { readonly "kind"?: DuctSelectorKind, readonly "ids"
 export type Root = { readonly "slots"?: null | DuctParameterSlotOverrides, readonly "labelParameter"?: null | string, readonly "selector"?: null | DuctSnapshotSelector };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op12response {
+namespace Decoded {
 
 const DuctDocument = Schema.Struct({ "title": Schema.String, "readAt": Schema.String.annotate({ "format": "date-time" }).check(Schema.makeFilter((value) => typeof value !== "string" || validDateTime(value))), "elapsedMs": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "networkBasedCalculations": Schema.Boolean }).annotate({ "description": "The document read, when, and how long the read took. NetworkBasedCalculations is DuctSettings' engine switch:\nread only: the snapshot guards an access violation on it, and apply never sets it (pressure-drop ledger).\n            ", "identifier": "DuctDocument" });
 const DuctCoordinateEncoding = Schema.Literal("native-double").annotate({ "description": "Physical XYZ and segment LengthFt preserve native model-foot binary64 values; other facts retain their stated units/rounding.", "identifier": "DuctCoordinateEncoding" });
@@ -748,58 +836,6 @@ const DuctSegment = Schema.Struct({ "id": Schema.Number.annotate({ "format": "in
 const DuctNode = Schema.Struct({ "id": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "kind": DuctNodeKind, "category": Schema.String, "family": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "type": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "partType": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "levelId": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })), Schema.Null]).annotate({ "format": "int64" })), "point": Schema.optionalKey(Schema.Union([Schema.Array(Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" }))), Schema.Null])), "groupId": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "systemName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "classification": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "connectors": Schema.Array(DuctConnector), "facts": Schema.Array(DuctFact), "uniqueId": Schema.String, "loss": Schema.optionalKey(Schema.Union([Schema.Null, DuctLoss], { mode: "oneOf" })), "terminalDrop": Schema.optionalKey(Schema.Union([Schema.Null, DuctTerminalDrop], { mode: "oneOf" })), "label": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "phaseCreated": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "phaseDemolished": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "flowParameter": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "reason": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "description": "PhaseCreated and PhaseDemolished name the element's phases (null when it has none, or none demolished it).\nFlowParameter, on a terminal, is the TerminalFlow slot that supplied its terminalFlow fact; on equipment, the\nFanFlow slot that supplied its fanFlow fact; null when none did.\n            ", "identifier": "DuctNode" });
 const DuctIssue = Schema.Struct({ "id": Schema.String, "kind": DuctIssueKind, "elementId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "connector": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), Schema.Null]).annotate({ "format": "int32" })), "point": Schema.optionalKey(Schema.Union([Schema.Array(Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" }))), Schema.Null])), "note": Schema.String, "near": Schema.optionalKey(Schema.Union([Schema.Null, DuctNear], { mode: "oneOf" })), "inline": Schema.optionalKey(Schema.Union([Schema.Null, DuctInline], { mode: "oneOf" })) }).annotate({ "description": "One model-health finding. Id is \"kind:elementId\" plus \":connector\" when Connector is set; an assumption verdict\nkeys on it. Near is set on an open end: what lies within the candidate box of it. A `roster` or `ids` read does not\nmeasure it (null there) and so reports no near miss.\n            ", "identifier": "DuctIssue" });
 const codec = Schema.Struct({ "document": DuctDocument, "coordinateEncoding": DuctCoordinateEncoding, "levels": Schema.Array(DuctLevel), "groups": Schema.Array(DuctGroup), "nodes": Schema.Array(DuctNode), "segments": Schema.Array(DuctSegment), "flows": Schema.Array(DuctFlow), "issues": Schema.Array(DuctIssue), "layers": Schema.Array(DuctLayer), "systems": Schema.Array(DuctSystem), "slots": DuctParameterSlots, "store": Schema.optionalKey(Schema.Union([Schema.Null, DuctLossStore], { mode: "oneOf" })), "storeError": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "phases": Schema.optionalKey(Schema.Union([Schema.Null, DuctPhases], { mode: "oneOf" })), "airflowCandidates": Schema.optionalKey(Schema.Union([Schema.Array(DuctAirflowCandidate), Schema.Null])), "fanFlowCandidates": Schema.optionalKey(Schema.Union([Schema.Array(DuctAirflowCandidate), Schema.Null])), "walk": Schema.optionalKey(Schema.Union([Schema.Null, DuctWalk], { mode: "oneOf" })), "tolerances": Schema.optionalKey(Schema.Union([Schema.Null, DuctHealthTolerances], { mode: "oneOf" })) }).annotate({ "title": "DuctSnapshotData", "description": "Store is Pe's `_PE_DuctLosses` provenance blob, absent when the model has none. StoreError is set instead when\nthe blob is unreadable or another version (fail-closed: ducts.apply refuses to overwrite it).\nAirflowCandidates are the air flow parameters the terminals carry, the picker for the TerminalFlow slot;\nFanFlowCandidates the same over HVAC equipment, the picker for the FanFlow slot (coverage per group the unit roots).\n            " });
-namespace WireTypes {
-type DuctDocument = { readonly "title": string, readonly "readAt": string, readonly "elapsedMs": number, readonly "networkBasedCalculations": boolean };
-type DuctCoordinateEncoding = "native-double";
-type DuctLevel = { readonly "id": number, readonly "name": string, readonly "elevationFt": number };
-type DuctGroup = { readonly "id": string, readonly "rootIds": ReadonlyArray<number>, readonly "classifications": ReadonlyArray<string>, readonly "systemNames": ReadonlyArray<string>, readonly "terminalCount": number, readonly "elementCount": number, readonly "loops": number, readonly "issueIds": ReadonlyArray<string> };
-type DuctNodeKind = "equipment" | "terminal" | "fitting" | "accessory" | "cap";
-type DuctShape = "round" | "rectangular" | "oval" | "other";
-type DuctRef = { readonly "elementId": number, readonly "connector": number };
-type DuctProvenance = "geometry" | "revit-reported" | "revit-default" | "designer-stated" | "derived";
-type DuctLossMethod = "not-defined" | "ashrae-table" | "specific-coefficient" | "specific-loss" | "pe-server" | "other";
-type DuctTerminalDrop = { readonly "assignedPressureDropInWg"?: null | number, readonly "connectorLossMethod"?: null | string, readonly "writable": boolean, readonly "catalogDropInWg"?: null | number };
-type DuctSegmentKind = "duct" | "flex";
-type DuctCurveKind = "line" | "arc" | "flex-polyline" | "other";
-type DuctRevitValues = { readonly "flowCfm"?: null | number, readonly "velocityFpm"?: null | number, readonly "frictionInWgPer100Ft"?: null | number, readonly "pressureDropInWg"?: null | number };
-type DuctIssueKind = "open-end" | "near-miss" | "inline" | "loop" | "stub" | "air-type-change" | "implausible-size" | "default-flex-roughness" | "no-component-drop" | "no-terminal-flow" | "high-velocity";
-type DuctNearPort = { readonly "elementId": number, readonly "connector": number, readonly "gapIn": number, readonly "facingDot"?: null | number, readonly "opposed": boolean, readonly "aligned": boolean, readonly "autoJoin": boolean, readonly "cappedBy"?: number | null };
-type DuctNearFace = { readonly "kind": string, readonly "elementId": number, readonly "connector"?: number | null, readonly "gapIn": number, readonly "facingDot"?: null | number, readonly "opposed": boolean, readonly "atFt"?: null | number, readonly "point"?: ReadonlyArray<number> | null };
-type DuctNearBody = { readonly "segmentId": number, readonly "gapIn": number, readonly "tapGapIn"?: null | number, readonly "tapPoint"?: ReadonlyArray<number> | null };
-type DuctInline = { readonly "segmentId": number, readonly "atFt": number, readonly "ports": ReadonlyArray<number> };
-type DuctCoverage = { readonly "have": number, readonly "of": number };
-type DuctSection = { readonly "number": number, readonly "flowCfm"?: null | number, readonly "totalPressureLossInWg"?: null | number, readonly "elementIds": ReadonlyArray<number> };
-type DuctParameterSlots = { readonly "fanStatic": string, readonly "fanFlow": string, readonly "componentDrop": string, readonly "terminalDrop": string, readonly "fittingCoefficient": string, readonly "terminalFlow": string };
-type DuctRuleChoice = { readonly "table"?: null | string };
-type DuctInstanceRecord = { readonly "table"?: null | string, readonly "inputs"?: null | string, readonly "coefficient": number, readonly "appliedAt": string };
-type DuctDropRecord = { readonly "inWg": number, readonly "source"?: null | string, readonly "appliedAt": string };
-type DuctFlowRecord = { readonly "cfm": number, readonly "source"?: null | string, readonly "appliedAt": string };
-type DuctVerdictRecord = { readonly "verdict": string, readonly "ruledAt": string };
-type DuctRoleRecord = { readonly "role": string, readonly "ruledAt": string };
-type DuctParameterSlotOverrides = { readonly "fanStatic"?: null | string, readonly "fanFlow"?: null | string, readonly "componentDrop"?: null | string, readonly "terminalDrop"?: null | string, readonly "fittingCoefficient"?: null | string, readonly "terminalFlow"?: null | string };
-type DuctPhaseViews = { readonly "phase"?: null | string, readonly "filter"?: null | string, readonly "count": number };
-type DuctGroupCoverage = { readonly "groupId": string, readonly "have": number, readonly "of": number };
-type DuctOpenEnd = { readonly "elementId": number, readonly "connector": number, readonly "point": ReadonlyArray<number>, readonly "candidateCount": number, readonly "candidateIds": ReadonlyArray<number> };
-type DuctHealthTolerances = { readonly "candidateBoxIn": number, readonly "autoJoinGapIn": number };
-type DuctConnector = { readonly "index": number, readonly "kind": string, readonly "point": ReadonlyArray<number>, readonly "shape": DuctShape, readonly "size": string, readonly "diameterIn"?: null | number, readonly "widthIn"?: null | number, readonly "heightIn"?: null | number, readonly "flowCfm"?: null | number, readonly "direction": string, readonly "classification"?: null | string, readonly "connectedTo"?: null | DuctRef, readonly "areaFt2"?: null | number, readonly "facing"?: ReadonlyArray<number> | null, readonly "widthAxis"?: ReadonlyArray<number> | null, readonly "isPrimary"?: boolean | null, readonly "isSecondary"?: boolean | null };
-type DuctFact = { readonly "key": string, readonly "value"?: null | number, readonly "text"?: null | string, readonly "unit": string, readonly "provenance": DuctProvenance };
-type DuctRoughness = { readonly "valueFt": number, readonly "provenance": DuctProvenance };
-type DuctFlow = { readonly "segmentId": number, readonly "cfm": number, readonly "provenance": DuctProvenance };
-type DuctLoss = { readonly "method": DuctLossMethod, readonly "serverId"?: null | string, readonly "table"?: null | string, readonly "coefficient"?: null | number, readonly "specificLossInWg"?: null | number, readonly "revitPressureDropInWg"?: null | number, readonly "fields": { readonly [x: string]: string } };
-type DuctNear = { readonly "ports": ReadonlyArray<DuctNearPort>, readonly "faces": ReadonlyArray<DuctNearFace>, readonly "bodies": ReadonlyArray<DuctNearBody> };
-type DuctLayer = { readonly "key": string, readonly "title": string, readonly "query": string, readonly "coverage": DuctCoverage, readonly "provenance": DuctProvenance };
-type DuctSystem = { readonly "id": number, readonly "name": string, readonly "classification": string, readonly "isWellConnected"?: boolean | null, readonly "baseEquipmentId"?: number | null, readonly "baseEquipmentConnector"?: number | null, readonly "criticalPathLossInWg"?: null | number, readonly "criticalPath": ReadonlyArray<number>, readonly "sections": ReadonlyArray<DuctSection> };
-type DuctLossStore = { readonly "version": number, readonly "rules": { readonly [x: string]: DuctRuleChoice }, readonly "instances": { readonly [x: string]: DuctInstanceRecord }, readonly "terminals": { readonly [x: string]: DuctDropRecord }, readonly "terminalFlows": { readonly [x: string]: DuctFlowRecord }, readonly "equipmentFlows": { readonly [x: string]: DuctFlowRecord }, readonly "verdicts": { readonly [x: string]: DuctVerdictRecord }, readonly "roles": { readonly [x: string]: DuctRoleRecord }, readonly "slots"?: null | DuctParameterSlotOverrides, readonly "workRevision": number, readonly "appliedAt"?: null | string } & { readonly [x: string]: Schema.Json };
-type DuctPhases = { readonly "order": ReadonlyArray<string>, readonly "views": ReadonlyArray<DuctPhaseViews> };
-type DuctAirflowCandidate = { readonly "slot": string, readonly "where": string, readonly "shared": boolean, readonly "have": number, readonly "of": number, readonly "groups": ReadonlyArray<DuctGroupCoverage> };
-type DuctWalk = { readonly "startId": number, readonly "hops": number, readonly "elementsReached": number, readonly "openEnds": number, readonly "candidates": ReadonlyArray<DuctOpenEnd>, readonly "truncated": boolean, readonly "elapsedMs": number };
-type DuctSegment = { readonly "id": number, readonly "kind": DuctSegmentKind, readonly "curveKind": DuctCurveKind, readonly "type"?: null | string, readonly "shape": DuctShape, readonly "size": string, readonly "diameterIn"?: null | number, readonly "widthIn"?: null | number, readonly "heightIn"?: null | number, readonly "lengthFt": number, readonly "polyline": ReadonlyArray<ReadonlyArray<number>>, readonly "levelId"?: number | null, readonly "groupId"?: null | string, readonly "systemName"?: null | string, readonly "classification"?: null | string, readonly "roughness": DuctRoughness, readonly "revit": DuctRevitValues, readonly "connectors": ReadonlyArray<DuctConnector>, readonly "uniqueId": string, readonly "phaseCreated"?: null | string, readonly "phaseDemolished"?: null | string, readonly "reason"?: null | string, readonly "insulationIn"?: null | number };
-type DuctNode = { readonly "id": number, readonly "kind": DuctNodeKind, readonly "category": string, readonly "family"?: null | string, readonly "type"?: null | string, readonly "partType"?: null | string, readonly "levelId"?: number | null, readonly "point"?: ReadonlyArray<number> | null, readonly "groupId"?: null | string, readonly "systemName"?: null | string, readonly "classification"?: null | string, readonly "connectors": ReadonlyArray<DuctConnector>, readonly "facts": ReadonlyArray<DuctFact>, readonly "uniqueId": string, readonly "loss"?: null | DuctLoss, readonly "terminalDrop"?: null | DuctTerminalDrop, readonly "label"?: null | string, readonly "phaseCreated"?: null | string, readonly "phaseDemolished"?: null | string, readonly "flowParameter"?: null | string, readonly "reason"?: null | string };
-type DuctIssue = { readonly "id": string, readonly "kind": DuctIssueKind, readonly "elementId": number, readonly "connector"?: number | null, readonly "point"?: ReadonlyArray<number> | null, readonly "note": string, readonly "near"?: null | DuctNear, readonly "inline"?: null | DuctInline };
-export type Root = { readonly "document": DuctDocument, readonly "coordinateEncoding": DuctCoordinateEncoding, readonly "levels": ReadonlyArray<DuctLevel>, readonly "groups": ReadonlyArray<DuctGroup>, readonly "nodes": ReadonlyArray<DuctNode>, readonly "segments": ReadonlyArray<DuctSegment>, readonly "flows": ReadonlyArray<DuctFlow>, readonly "issues": ReadonlyArray<DuctIssue>, readonly "layers": ReadonlyArray<DuctLayer>, readonly "systems": ReadonlyArray<DuctSystem>, readonly "slots": DuctParameterSlots, readonly "store"?: null | DuctLossStore, readonly "storeError"?: null | string, readonly "phases"?: null | DuctPhases, readonly "airflowCandidates"?: ReadonlyArray<DuctAirflowCandidate> | null, readonly "fanFlowCandidates"?: ReadonlyArray<DuctAirflowCandidate> | null, readonly "walk"?: null | DuctWalk, readonly "tolerances"?: null | DuctHealthTolerances };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["DuctAirflowCandidate"]: strictDecoder(DuctAirflowCandidate),
@@ -851,37 +887,100 @@ export const definitions = {
   ["DuctWalk"]: strictDecoder(DuctWalk),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type DuctDocument = { readonly "title": string, readonly "readAt": string, readonly "elapsedMs": number, readonly "networkBasedCalculations": boolean };
+type DuctCoordinateEncoding = "native-double";
+type DuctLevel = { readonly "id": number, readonly "name": string, readonly "elevationFt": number };
+type DuctGroup = { readonly "id": string, readonly "rootIds": ReadonlyArray<number>, readonly "classifications": ReadonlyArray<string>, readonly "systemNames": ReadonlyArray<string>, readonly "terminalCount": number, readonly "elementCount": number, readonly "loops": number, readonly "issueIds": ReadonlyArray<string> };
+type DuctNodeKind = "equipment" | "terminal" | "fitting" | "accessory" | "cap";
+type DuctShape = "round" | "rectangular" | "oval" | "other";
+type DuctRef = { readonly "elementId": number, readonly "connector": number };
+type DuctProvenance = "geometry" | "revit-reported" | "revit-default" | "designer-stated" | "derived";
+type DuctLossMethod = "not-defined" | "ashrae-table" | "specific-coefficient" | "specific-loss" | "pe-server" | "other";
+type DuctTerminalDrop = { readonly "assignedPressureDropInWg"?: null | number, readonly "connectorLossMethod"?: null | string, readonly "writable": boolean, readonly "catalogDropInWg"?: null | number };
+type DuctSegmentKind = "duct" | "flex";
+type DuctCurveKind = "line" | "arc" | "flex-polyline" | "other";
+type DuctRevitValues = { readonly "flowCfm"?: null | number, readonly "velocityFpm"?: null | number, readonly "frictionInWgPer100Ft"?: null | number, readonly "pressureDropInWg"?: null | number };
+type DuctIssueKind = "open-end" | "near-miss" | "inline" | "loop" | "stub" | "air-type-change" | "implausible-size" | "default-flex-roughness" | "no-component-drop" | "no-terminal-flow" | "high-velocity";
+type DuctNearPort = { readonly "elementId": number, readonly "connector": number, readonly "gapIn": number, readonly "facingDot"?: null | number, readonly "opposed": boolean, readonly "aligned": boolean, readonly "autoJoin": boolean, readonly "cappedBy"?: number | null };
+type DuctNearFace = { readonly "kind": string, readonly "elementId": number, readonly "connector"?: number | null, readonly "gapIn": number, readonly "facingDot"?: null | number, readonly "opposed": boolean, readonly "atFt"?: null | number, readonly "point"?: ReadonlyArray<number> | null };
+type DuctNearBody = { readonly "segmentId": number, readonly "gapIn": number, readonly "tapGapIn"?: null | number, readonly "tapPoint"?: ReadonlyArray<number> | null };
+type DuctInline = { readonly "segmentId": number, readonly "atFt": number, readonly "ports": ReadonlyArray<number> };
+type DuctCoverage = { readonly "have": number, readonly "of": number };
+type DuctSection = { readonly "number": number, readonly "flowCfm"?: null | number, readonly "totalPressureLossInWg"?: null | number, readonly "elementIds": ReadonlyArray<number> };
+type DuctParameterSlots = { readonly "fanStatic": string, readonly "fanFlow": string, readonly "componentDrop": string, readonly "terminalDrop": string, readonly "fittingCoefficient": string, readonly "terminalFlow": string };
+type DuctRuleChoice = { readonly "table"?: null | string };
+type DuctInstanceRecord = { readonly "table"?: null | string, readonly "inputs"?: null | string, readonly "coefficient": number, readonly "appliedAt": string };
+type DuctDropRecord = { readonly "inWg": number, readonly "source"?: null | string, readonly "appliedAt": string };
+type DuctFlowRecord = { readonly "cfm": number, readonly "source"?: null | string, readonly "appliedAt": string };
+type DuctVerdictRecord = { readonly "verdict": string, readonly "ruledAt": string };
+type DuctRoleRecord = { readonly "role": string, readonly "ruledAt": string };
+type DuctParameterSlotOverrides = { readonly "fanStatic"?: null | string, readonly "fanFlow"?: null | string, readonly "componentDrop"?: null | string, readonly "terminalDrop"?: null | string, readonly "fittingCoefficient"?: null | string, readonly "terminalFlow"?: null | string };
+type DuctPhaseViews = { readonly "phase"?: null | string, readonly "filter"?: null | string, readonly "count": number };
+type DuctGroupCoverage = { readonly "groupId": string, readonly "have": number, readonly "of": number };
+type DuctOpenEnd = { readonly "elementId": number, readonly "connector": number, readonly "point": ReadonlyArray<number>, readonly "candidateCount": number, readonly "candidateIds": ReadonlyArray<number> };
+type DuctHealthTolerances = { readonly "candidateBoxIn": number, readonly "autoJoinGapIn": number };
+type DuctConnector = { readonly "index": number, readonly "kind": string, readonly "point": ReadonlyArray<number>, readonly "shape": DuctShape, readonly "size": string, readonly "diameterIn"?: null | number, readonly "widthIn"?: null | number, readonly "heightIn"?: null | number, readonly "flowCfm"?: null | number, readonly "direction": string, readonly "classification"?: null | string, readonly "connectedTo"?: null | DuctRef, readonly "areaFt2"?: null | number, readonly "facing"?: ReadonlyArray<number> | null, readonly "widthAxis"?: ReadonlyArray<number> | null, readonly "isPrimary"?: boolean | null, readonly "isSecondary"?: boolean | null };
+type DuctFact = { readonly "key": string, readonly "value"?: null | number, readonly "text"?: null | string, readonly "unit": string, readonly "provenance": DuctProvenance };
+type DuctRoughness = { readonly "valueFt": number, readonly "provenance": DuctProvenance };
+type DuctFlow = { readonly "segmentId": number, readonly "cfm": number, readonly "provenance": DuctProvenance };
+type DuctLoss = { readonly "method": DuctLossMethod, readonly "serverId"?: null | string, readonly "table"?: null | string, readonly "coefficient"?: null | number, readonly "specificLossInWg"?: null | number, readonly "revitPressureDropInWg"?: null | number, readonly "fields": { readonly [x: string]: string } };
+type DuctNear = { readonly "ports": ReadonlyArray<DuctNearPort>, readonly "faces": ReadonlyArray<DuctNearFace>, readonly "bodies": ReadonlyArray<DuctNearBody> };
+type DuctLayer = { readonly "key": string, readonly "title": string, readonly "query": string, readonly "coverage": DuctCoverage, readonly "provenance": DuctProvenance };
+type DuctSystem = { readonly "id": number, readonly "name": string, readonly "classification": string, readonly "isWellConnected"?: boolean | null, readonly "baseEquipmentId"?: number | null, readonly "baseEquipmentConnector"?: number | null, readonly "criticalPathLossInWg"?: null | number, readonly "criticalPath": ReadonlyArray<number>, readonly "sections": ReadonlyArray<DuctSection> };
+type DuctLossStore = { readonly "version": number, readonly "rules": { readonly [x: string]: DuctRuleChoice }, readonly "instances": { readonly [x: string]: DuctInstanceRecord }, readonly "terminals": { readonly [x: string]: DuctDropRecord }, readonly "terminalFlows": { readonly [x: string]: DuctFlowRecord }, readonly "equipmentFlows": { readonly [x: string]: DuctFlowRecord }, readonly "verdicts": { readonly [x: string]: DuctVerdictRecord }, readonly "roles": { readonly [x: string]: DuctRoleRecord }, readonly "slots"?: null | DuctParameterSlotOverrides, readonly "workRevision": number, readonly "appliedAt"?: null | string } & { readonly [x: string]: Schema.Json };
+type DuctPhases = { readonly "order": ReadonlyArray<string>, readonly "views": ReadonlyArray<DuctPhaseViews> };
+type DuctAirflowCandidate = { readonly "slot": string, readonly "where": string, readonly "shared": boolean, readonly "have": number, readonly "of": number, readonly "groups": ReadonlyArray<DuctGroupCoverage> };
+type DuctWalk = { readonly "startId": number, readonly "hops": number, readonly "elementsReached": number, readonly "openEnds": number, readonly "candidates": ReadonlyArray<DuctOpenEnd>, readonly "truncated": boolean, readonly "elapsedMs": number };
+type DuctSegment = { readonly "id": number, readonly "kind": DuctSegmentKind, readonly "curveKind": DuctCurveKind, readonly "type"?: null | string, readonly "shape": DuctShape, readonly "size": string, readonly "diameterIn"?: null | number, readonly "widthIn"?: null | number, readonly "heightIn"?: null | number, readonly "lengthFt": number, readonly "polyline": ReadonlyArray<ReadonlyArray<number>>, readonly "levelId"?: number | null, readonly "groupId"?: null | string, readonly "systemName"?: null | string, readonly "classification"?: null | string, readonly "roughness": DuctRoughness, readonly "revit": DuctRevitValues, readonly "connectors": ReadonlyArray<DuctConnector>, readonly "uniqueId": string, readonly "phaseCreated"?: null | string, readonly "phaseDemolished"?: null | string, readonly "reason"?: null | string, readonly "insulationIn"?: null | number };
+type DuctNode = { readonly "id": number, readonly "kind": DuctNodeKind, readonly "category": string, readonly "family"?: null | string, readonly "type"?: null | string, readonly "partType"?: null | string, readonly "levelId"?: number | null, readonly "point"?: ReadonlyArray<number> | null, readonly "groupId"?: null | string, readonly "systemName"?: null | string, readonly "classification"?: null | string, readonly "connectors": ReadonlyArray<DuctConnector>, readonly "facts": ReadonlyArray<DuctFact>, readonly "uniqueId": string, readonly "loss"?: null | DuctLoss, readonly "terminalDrop"?: null | DuctTerminalDrop, readonly "label"?: null | string, readonly "phaseCreated"?: null | string, readonly "phaseDemolished"?: null | string, readonly "flowParameter"?: null | string, readonly "reason"?: null | string };
+type DuctIssue = { readonly "id": string, readonly "kind": DuctIssueKind, readonly "elementId": number, readonly "connector"?: number | null, readonly "point"?: ReadonlyArray<number> | null, readonly "note": string, readonly "near"?: null | DuctNear, readonly "inline"?: null | DuctInline };
+export type Root = { readonly "document": DuctDocument, readonly "coordinateEncoding": DuctCoordinateEncoding, readonly "levels": ReadonlyArray<DuctLevel>, readonly "groups": ReadonlyArray<DuctGroup>, readonly "nodes": ReadonlyArray<DuctNode>, readonly "segments": ReadonlyArray<DuctSegment>, readonly "flows": ReadonlyArray<DuctFlow>, readonly "issues": ReadonlyArray<DuctIssue>, readonly "layers": ReadonlyArray<DuctLayer>, readonly "systems": ReadonlyArray<DuctSystem>, readonly "slots": DuctParameterSlots, readonly "store"?: null | DuctLossStore, readonly "storeError"?: null | string, readonly "phases"?: null | DuctPhases, readonly "airflowCandidates"?: ReadonlyArray<DuctAirflowCandidate> | null, readonly "fanFlowCandidates"?: ReadonlyArray<DuctAirflowCandidate> | null, readonly "walk"?: null | DuctWalk, readonly "tolerances"?: null | DuctHealthTolerances };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op13request {
+namespace Decoded {
 
 
 const codec = Schema.Struct({ "ids": Schema.Array(Schema.String) }).annotate({ "title": "DuctTablesRequest", "description": "The table ids to read, as ASHRAE names them (\"CD3-2\", \"SD5-9\"); case does not matter." });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 
 export type Root = { readonly "ids": ReadonlyArray<string> };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op13response {
+namespace Decoded {
 
 const AshraeGrid = Schema.Struct({ "title": Schema.String, "xLabel": Schema.String, "x": Schema.Array(Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" }))), "yLabel": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "y": Schema.optionalKey(Schema.Union([Schema.Array(Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" }))), Schema.Null])), "grid": Schema.Json.annotate({ "expected": "JSON value" }), "zLabel": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "z": Schema.optionalKey(Schema.Union([Schema.Array(Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" }))), Schema.Null])) }).annotate({ "description": "One coefficient grid; the wire shape the web's loss-grid.ts reads. With Z present (a three-axis table such as\nER5-1's As/Ac by Ab/Ac by Qb/Qc), Grid is (number[] | null)[][]: one slice per Z, in it one row per Y, one column\nper X. Y is every inner value any slice prints, and a row is null where its slice prints none (ER5-1 has no\nAb/Ac 0.25 row at As/Ac 0.5; ED5-4 states Ab2/Ac only up to Ab1/Ac). Z is the table's first (outer) column, Y\nits second. With Y present and Z absent, Grid is number[][]: one row per Y, one column per X. With Y absent, Grid\nis number[] over X; a constant (\"Co= 0.12\") is one value with X empty. Grid is typed object because the wire is\na union; Slices, Rows and Values build it.\n            ", "identifier": "AshraeGrid" });
 const codec = Schema.Struct({ "folder": Schema.String, "tables": Schema.Record(Schema.String, Schema.Record(Schema.String, AshraeGrid)), "missing": Schema.Array(Schema.String), "unsupported": Schema.Record(Schema.String, Schema.String) }).annotate({ "title": "DuctTablesData", "description": "Tables keyed by upper-case id, then by result key (Co, Cb, Cs; a block printed twice gets \"#2\").\nA table Revit ships as \"No table\" has no results. Missing names ids with no file in Folder. Unsupported maps\nan id to why it was not parsed: a row whose value count does not match its axes (a triangular two-axis table,\na value Revit's file prints past its row); a wrong grid is worse than none.\n            " });
-namespace WireTypes {
-type AshraeGrid = { readonly "title": string, readonly "xLabel": string, readonly "x": ReadonlyArray<number>, readonly "yLabel"?: null | string, readonly "y"?: ReadonlyArray<number> | null, readonly "grid": Schema.Json, readonly "zLabel"?: null | string, readonly "z"?: ReadonlyArray<number> | null };
-export type Root = { readonly "folder": string, readonly "tables": { readonly [x: string]: { readonly [x: string]: AshraeGrid } }, readonly "missing": ReadonlyArray<string>, readonly "unsupported": { readonly [x: string]: string } };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["AshraeGrid"]: strictDecoder(AshraeGrid),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type AshraeGrid = { readonly "title": string, readonly "xLabel": string, readonly "x": ReadonlyArray<number>, readonly "yLabel"?: null | string, readonly "y"?: ReadonlyArray<number> | null, readonly "grid": Schema.Json, readonly "zLabel"?: null | string, readonly "z"?: ReadonlyArray<number> | null };
+export type Root = { readonly "folder": string, readonly "tables": { readonly [x: string]: { readonly [x: string]: AshraeGrid } }, readonly "missing": ReadonlyArray<string>, readonly "unsupported": { readonly [x: string]: string } };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op14request {
+namespace Decoded {
 
 const PodRunOrigin = Schema.Literals(["SavedMember", "SuppliedDraft", "Operation"]).annotate({ "description": "What a run's source was: a saved member's bytes, a supplied draft, or operation input with no member.", "identifier": "PodRunOrigin" });
 const PodConsumedSourceData = Schema.Struct({ "id": Schema.String, "path": Schema.String, "sha256": Schema.String, "bytesBase64": Schema.String }).annotate({ "identifier": "PodConsumedSourceData" });
@@ -889,6 +988,9 @@ const ExecutionOptions = Schema.Struct({ "singleTransaction": Schema.optionalKey
 const PodCapturedSourceData = Schema.Struct({ "id": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "path": Schema.String, "sha256": Schema.String, "bytesBase64": Schema.String, "origin": PodRunOrigin }).annotate({ "identifier": "PodCapturedSourceData" });
 const PodComposedSource = Schema.Struct({ "root": PodCapturedSourceData, "dependencies": Schema.Array(PodConsumedSourceData) }).annotate({ "description": "The exact bytes one composition consumed, captured at its one read: the root (a saved member or a supplied\ndraft, with a pod id only when composition has actual pod context) and its ordered dependencies. A run stores these bytes; it never rereads them.\n            ", "identifier": "PodComposedSource" });
 const codec = Schema.Struct({ "specJson": Schema.String, "expectedPlanHashes": Schema.Record(Schema.String, Schema.String), "familyNames": Schema.Record(Schema.String, Schema.String), "source": PodComposedSource, "executionOptions": Schema.optionalKey(Schema.Union([Schema.Null, ExecutionOptions], { mode: "oneOf" })), "plan": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "title": "FamiliesApplyRequest", "description": "Apply a saved spec to explicit loaded families; each family's `expectedPlanHash` from families.plan gates drift. Both maps are\nkeyed by the id resolved at plan; `familyNames` holds each one's plan name, re-resolved at apply: a family whose name now\nresolves to another id was reloaded since the plan and is refused by name.\n            " });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 type PodRunOrigin = "SavedMember" | "SuppliedDraft" | "Operation";
 type PodConsumedSourceData = { readonly "id": string, readonly "path": string, readonly "sha256": string, readonly "bytesBase64": string };
@@ -898,24 +1000,16 @@ type PodComposedSource = { readonly "root": PodCapturedSourceData, readonly "dep
 export type Root = { readonly "specJson": string, readonly "expectedPlanHashes": { readonly [x: string]: string }, readonly "familyNames": { readonly [x: string]: string }, readonly "source": PodComposedSource, readonly "executionOptions"?: null | ExecutionOptions, readonly "plan"?: null | string };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op14response {
+namespace Decoded {
 
 const FamilyFoundryChangeData = Schema.Struct({ "section": Schema.String, "key": Schema.String, "kind": Schema.String, "mappedFrom": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "before": Schema.Union([Schema.Json.annotate({ "expected": "JSON value" }), Schema.Null], { mode: "oneOf" }), "after": Schema.Union([Schema.Json.annotate({ "expected": "JSON value" }), Schema.Null], { mode: "oneOf" }) }).annotate({ "description": "One change the reconciler would make: section + key is the address, kind is the verb.", "identifier": "FamilyFoundryChangeData" });
 const FamilyFoundryDiagnostic = Schema.Struct({ "code": Schema.String, "path": Schema.String, "message": Schema.String, "suggestion": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "description": "Diagnostic for the Family Foundry host operations: a closed code, a JSON path, a message, an optional fix.", "identifier": "FamilyFoundryDiagnostic" });
 const FamilyFoundryApplyReceipt = Schema.Struct({ "familyId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "familyName": Schema.String, "success": Schema.Boolean, "converged": Schema.Boolean, "error": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "planHash": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "residue": Schema.Array(FamilyFoundryChangeData), "errors": Schema.Array(Schema.String), "artifactDirectory": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "observedParametersDigest": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "loadedFamilyId": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })), Schema.Null]).annotate({ "format": "int64" })) }).annotate({ "description": "The receipt: outcomes per change, residue after re-capture, converged = residue 0 and no errors. `familyId` is the\nid the apply was asked for (its `expectedPlanHashes` key). A reload gives the family a new element id, so\n`loadedFamilyId` is the id it has now, null when nothing reloaded; an element id names one load, and only\n`familyName` (as re-resolved at apply) is stable across applies.\n            ", "identifier": "FamilyFoundryApplyReceipt" });
 const codec = Schema.Struct({ "receipts": Schema.Array(FamilyFoundryApplyReceipt), "diagnostics": Schema.Array(FamilyFoundryDiagnostic), "receiptPath": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "reason": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "title": "FamilyFoundryApplyData", "description": "`receiptPath` is the run's receipt.json; null when the request was refused before running. `reason` is the\nreceipt's: one sentence naming the first failure, null when none failed; the full text is the run's `failures.json`.\n            " });
-namespace WireTypes {
-type FamilyFoundryChangeData = { readonly "section": string, readonly "key": string, readonly "kind": string, readonly "mappedFrom"?: null | string, readonly "before": Schema.Json | null, readonly "after": Schema.Json | null };
-type FamilyFoundryDiagnostic = { readonly "code": string, readonly "path": string, readonly "message": string, readonly "suggestion"?: null | string };
-type FamilyFoundryApplyReceipt = { readonly "familyId": number, readonly "familyName": string, readonly "success": boolean, readonly "converged": boolean, readonly "error"?: null | string, readonly "planHash"?: null | string, readonly "residue": ReadonlyArray<FamilyFoundryChangeData>, readonly "errors": ReadonlyArray<string>, readonly "artifactDirectory"?: null | string, readonly "observedParametersDigest"?: null | string, readonly "loadedFamilyId"?: number | null };
-export type Root = { readonly "receipts": ReadonlyArray<FamilyFoundryApplyReceipt>, readonly "diagnostics": ReadonlyArray<FamilyFoundryDiagnostic>, readonly "receiptPath"?: null | string, readonly "reason"?: null | string };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["FamilyFoundryApplyReceipt"]: strictDecoder(FamilyFoundryApplyReceipt),
@@ -923,36 +1017,42 @@ export const definitions = {
   ["FamilyFoundryDiagnostic"]: strictDecoder(FamilyFoundryDiagnostic),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type FamilyFoundryChangeData = { readonly "section": string, readonly "key": string, readonly "kind": string, readonly "mappedFrom"?: null | string, readonly "before": Schema.Json | null, readonly "after": Schema.Json | null };
+type FamilyFoundryDiagnostic = { readonly "code": string, readonly "path": string, readonly "message": string, readonly "suggestion"?: null | string };
+type FamilyFoundryApplyReceipt = { readonly "familyId": number, readonly "familyName": string, readonly "success": boolean, readonly "converged": boolean, readonly "error"?: null | string, readonly "planHash"?: null | string, readonly "residue": ReadonlyArray<FamilyFoundryChangeData>, readonly "errors": ReadonlyArray<string>, readonly "artifactDirectory"?: null | string, readonly "observedParametersDigest"?: null | string, readonly "loadedFamilyId"?: number | null };
+export type Root = { readonly "receipts": ReadonlyArray<FamilyFoundryApplyReceipt>, readonly "diagnostics": ReadonlyArray<FamilyFoundryDiagnostic>, readonly "receiptPath"?: null | string, readonly "reason"?: null | string };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op15request {
+namespace Decoded {
 
 
 const codec = Schema.Struct({ "familyIds": Schema.Array(Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" }))) }).annotate({ "title": "FamiliesCaptureRequest", "description": "Capture loaded families read-only as family.json." });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 
 export type Root = { readonly "familyIds": ReadonlyArray<number> };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op15response {
+namespace Decoded {
 
 const RevitDataIssueSeverity = Schema.Literals(["Info", "Warning", "Error"]).annotate({ "description": "", "identifier": "RevitDataIssueSeverity" });
 const FamilyFoundryDiagnostic = Schema.Struct({ "code": Schema.String, "path": Schema.String, "message": Schema.String, "suggestion": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "description": "Diagnostic for the Family Foundry host operations: a closed code, a JSON path, a message, an optional fix.", "identifier": "FamilyFoundryDiagnostic" });
 const RevitDataIssue = Schema.Struct({ "code": Schema.String, "severity": RevitDataIssueSeverity, "message": Schema.String, "familyName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "typeName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "parameterName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "identifier": "RevitDataIssue" });
 const FamilyFoundryFamilyModelData = Schema.Struct({ "familyId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "familyName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "success": Schema.Boolean, "modelJson": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "coverage": Schema.Record(Schema.String, Schema.String), "unmodeledCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "issues": Schema.Array(RevitDataIssue), "error": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "identifier": "FamilyFoundryFamilyModelData" });
 const codec = Schema.Struct({ "families": Schema.Array(FamilyFoundryFamilyModelData), "diagnostics": Schema.Array(FamilyFoundryDiagnostic) }).annotate({ "title": "FamiliesCaptureData" });
-namespace WireTypes {
-type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
-type FamilyFoundryDiagnostic = { readonly "code": string, readonly "path": string, readonly "message": string, readonly "suggestion"?: null | string };
-type RevitDataIssue = { readonly "code": string, readonly "severity": RevitDataIssueSeverity, readonly "message": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "parameterName"?: null | string };
-type FamilyFoundryFamilyModelData = { readonly "familyId": number, readonly "familyName"?: null | string, readonly "success": boolean, readonly "modelJson"?: null | string, readonly "coverage": { readonly [x: string]: string }, readonly "unmodeledCount": number, readonly "issues": ReadonlyArray<RevitDataIssue>, readonly "error"?: null | string };
-export type Root = { readonly "families": ReadonlyArray<FamilyFoundryFamilyModelData>, readonly "diagnostics": ReadonlyArray<FamilyFoundryDiagnostic> };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["FamilyFoundryDiagnostic"]: strictDecoder(FamilyFoundryDiagnostic),
@@ -961,21 +1061,37 @@ export const definitions = {
   ["RevitDataIssueSeverity"]: strictDecoder(RevitDataIssueSeverity),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
+type FamilyFoundryDiagnostic = { readonly "code": string, readonly "path": string, readonly "message": string, readonly "suggestion"?: null | string };
+type RevitDataIssue = { readonly "code": string, readonly "severity": RevitDataIssueSeverity, readonly "message": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "parameterName"?: null | string };
+type FamilyFoundryFamilyModelData = { readonly "familyId": number, readonly "familyName"?: null | string, readonly "success": boolean, readonly "modelJson"?: null | string, readonly "coverage": { readonly [x: string]: string }, readonly "unmodeledCount": number, readonly "issues": ReadonlyArray<RevitDataIssue>, readonly "error"?: null | string };
+export type Root = { readonly "families": ReadonlyArray<FamilyFoundryFamilyModelData>, readonly "diagnostics": ReadonlyArray<FamilyFoundryDiagnostic> };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op16request {
+namespace Decoded {
 
 const ExecutionOptions = Schema.Struct({ "singleTransaction": Schema.optionalKey(Schema.Boolean.annotate({ "description": "Bundle lowered native operations into one edit transaction inside the whole-family rollback group." })), "optimizeTypeOperations": Schema.optionalKey(Schema.Boolean.annotate({ "description": "Batch consecutive type operations." })), "enableCollectors": Schema.optionalKey(Schema.Boolean.annotate({ "description": "Enable an optional processor snapshot pipeline when the caller supplies one." })), "suppressWarnings": Schema.optionalKey(Schema.Boolean.annotate({ "description": "Suppress non-fatal Revit warnings while retaining commit diagnostics." })), "captureDependencyGraph": Schema.optionalKey(Schema.Boolean.annotate({ "description": "Capture the parameter dependency graph per family before the operations run and emit it as a diagnostic (up to ~1 s on a large family). Off by default." })) }).annotate({ "description": "Serializable execution behavior authored beside a Family Foundry profile.", "identifier": "ExecutionOptions" });
 const codec = Schema.Struct({ "specJson": Schema.String, "familyNames": Schema.optionalKey(Schema.Union([Schema.Array(Schema.String), Schema.Null])), "executionOptions": Schema.optionalKey(Schema.Union([Schema.Null, ExecutionOptions], { mode: "oneOf" })) }).annotate({ "title": "FamiliesPlanRequest", "description": "Plan a spec against exactly the named loaded families (exact, case-sensitive, no duplicates); the spec's `select` is the\ndefault scope only when none are passed. A name is the stable identity: an id names one load only.\n            " });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 type ExecutionOptions = { readonly "singleTransaction"?: boolean, readonly "optimizeTypeOperations"?: boolean, readonly "enableCollectors"?: boolean, readonly "suppressWarnings"?: boolean, readonly "captureDependencyGraph"?: boolean };
 export type Root = { readonly "specJson": string, readonly "familyNames"?: ReadonlyArray<string> | null, readonly "executionOptions"?: null | ExecutionOptions };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op16response {
+namespace Decoded {
 
 const FamilyFoundryChangeData = Schema.Struct({ "section": Schema.String, "key": Schema.String, "kind": Schema.String, "mappedFrom": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "before": Schema.Union([Schema.Json.annotate({ "expected": "JSON value" }), Schema.Null], { mode: "oneOf" }), "after": Schema.Union([Schema.Json.annotate({ "expected": "JSON value" }), Schema.Null], { mode: "oneOf" }) }).annotate({ "description": "One change the reconciler would make: section + key is the address, kind is the verb.", "identifier": "FamilyFoundryChangeData" });
 const FamilyFoundryDiagnostic = Schema.Struct({ "code": Schema.String, "path": Schema.String, "message": Schema.String, "suggestion": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "description": "Diagnostic for the Family Foundry host operations: a closed code, a JSON path, a message, an optional fix.", "identifier": "FamilyFoundryDiagnostic" });
@@ -983,16 +1099,6 @@ const RevitDataIssueSeverity = Schema.Literals(["Info", "Warning", "Error"]).ann
 const RevitDataIssue = Schema.Struct({ "code": Schema.String, "severity": RevitDataIssueSeverity, "message": Schema.String, "familyName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "typeName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "parameterName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "identifier": "RevitDataIssue" });
 const FamilyFoundryFamilyPlanData = Schema.Struct({ "familyId": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })), Schema.Null]).annotate({ "format": "int64" })), "familyName": Schema.String, "planHash": Schema.String, "changes": Schema.Array(FamilyFoundryChangeData), "runEffects": Schema.Array(Schema.String), "refusals": Schema.Array(FamilyFoundryDiagnostic), "warnings": Schema.Array(RevitDataIssue) }).annotate({ "description": "One planned family. `familyName` is the requested name byte-exact; `familyId` is the id it resolved to at plan, null when\nthe name refused (`family-not-found`, `family-name-ambiguous`, `family-not-editable` in `refusals`).\n            ", "identifier": "FamilyFoundryFamilyPlanData" });
 const codec = Schema.Struct({ "families": Schema.Array(FamilyFoundryFamilyPlanData), "diagnostics": Schema.Array(FamilyFoundryDiagnostic) }).annotate({ "title": "FamilyFoundryPlanData" });
-namespace WireTypes {
-type FamilyFoundryChangeData = { readonly "section": string, readonly "key": string, readonly "kind": string, readonly "mappedFrom"?: null | string, readonly "before": Schema.Json | null, readonly "after": Schema.Json | null };
-type FamilyFoundryDiagnostic = { readonly "code": string, readonly "path": string, readonly "message": string, readonly "suggestion"?: null | string };
-type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
-type RevitDataIssue = { readonly "code": string, readonly "severity": RevitDataIssueSeverity, readonly "message": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "parameterName"?: null | string };
-type FamilyFoundryFamilyPlanData = { readonly "familyId"?: number | null, readonly "familyName": string, readonly "planHash": string, readonly "changes": ReadonlyArray<FamilyFoundryChangeData>, readonly "runEffects": ReadonlyArray<string>, readonly "refusals": ReadonlyArray<FamilyFoundryDiagnostic>, readonly "warnings": ReadonlyArray<RevitDataIssue> };
-export type Root = { readonly "families": ReadonlyArray<FamilyFoundryFamilyPlanData>, readonly "diagnostics": ReadonlyArray<FamilyFoundryDiagnostic> };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["FamilyFoundryChangeData"]: strictDecoder(FamilyFoundryChangeData),
@@ -1002,8 +1108,22 @@ export const definitions = {
   ["RevitDataIssueSeverity"]: strictDecoder(RevitDataIssueSeverity),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type FamilyFoundryChangeData = { readonly "section": string, readonly "key": string, readonly "kind": string, readonly "mappedFrom"?: null | string, readonly "before": Schema.Json | null, readonly "after": Schema.Json | null };
+type FamilyFoundryDiagnostic = { readonly "code": string, readonly "path": string, readonly "message": string, readonly "suggestion"?: null | string };
+type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
+type RevitDataIssue = { readonly "code": string, readonly "severity": RevitDataIssueSeverity, readonly "message": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "parameterName"?: null | string };
+type FamilyFoundryFamilyPlanData = { readonly "familyId"?: number | null, readonly "familyName": string, readonly "planHash": string, readonly "changes": ReadonlyArray<FamilyFoundryChangeData>, readonly "runEffects": ReadonlyArray<string>, readonly "refusals": ReadonlyArray<FamilyFoundryDiagnostic>, readonly "warnings": ReadonlyArray<RevitDataIssue> };
+export type Root = { readonly "families": ReadonlyArray<FamilyFoundryFamilyPlanData>, readonly "diagnostics": ReadonlyArray<FamilyFoundryDiagnostic> };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op17request {
+namespace Decoded {
 
 const PodRunOrigin = Schema.Literals(["SavedMember", "SuppliedDraft", "Operation"]).annotate({ "description": "What a run's source was: a saved member's bytes, a supplied draft, or operation input with no member.", "identifier": "PodRunOrigin" });
 const PodConsumedSourceData = Schema.Struct({ "id": Schema.String, "path": Schema.String, "sha256": Schema.String, "bytesBase64": Schema.String }).annotate({ "identifier": "PodConsumedSourceData" });
@@ -1011,6 +1131,9 @@ const ExecutionOptions = Schema.Struct({ "singleTransaction": Schema.optionalKey
 const PodCapturedSourceData = Schema.Struct({ "id": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "path": Schema.String, "sha256": Schema.String, "bytesBase64": Schema.String, "origin": PodRunOrigin }).annotate({ "identifier": "PodCapturedSourceData" });
 const PodComposedSource = Schema.Struct({ "root": PodCapturedSourceData, "dependencies": Schema.Array(PodConsumedSourceData) }).annotate({ "description": "The exact bytes one composition consumed, captured at its one read: the root (a saved member or a supplied\ndraft, with a pod id only when composition has actual pod context) and its ordered dependencies. A run stores these bytes; it never rereads them.\n            ", "identifier": "PodComposedSource" });
 const codec = Schema.Struct({ "specJson": Schema.String, "expectedPlanHashes": Schema.Record(Schema.String, Schema.String), "source": PodComposedSource, "executionOptions": Schema.optionalKey(Schema.Union([Schema.Null, ExecutionOptions], { mode: "oneOf" })), "plan": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "title": "FamilyApplyRequest", "description": "Apply a saved spec to the active family document; the family's `expectedPlanHash` from family.plan\ngates drift. One key, the active document's owner family — the same shape `families.apply` takes, so\none apply grammar serves both routes. The document is not saved.\n            " });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 type PodRunOrigin = "SavedMember" | "SuppliedDraft" | "Operation";
 type PodConsumedSourceData = { readonly "id": string, readonly "path": string, readonly "sha256": string, readonly "bytesBase64": string };
@@ -1020,24 +1143,16 @@ type PodComposedSource = { readonly "root": PodCapturedSourceData, readonly "dep
 export type Root = { readonly "specJson": string, readonly "expectedPlanHashes": { readonly [x: string]: string }, readonly "source": PodComposedSource, readonly "executionOptions"?: null | ExecutionOptions, readonly "plan"?: null | string };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op17response {
+namespace Decoded {
 
 const FamilyFoundryChangeData = Schema.Struct({ "section": Schema.String, "key": Schema.String, "kind": Schema.String, "mappedFrom": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "before": Schema.Union([Schema.Json.annotate({ "expected": "JSON value" }), Schema.Null], { mode: "oneOf" }), "after": Schema.Union([Schema.Json.annotate({ "expected": "JSON value" }), Schema.Null], { mode: "oneOf" }) }).annotate({ "description": "One change the reconciler would make: section + key is the address, kind is the verb.", "identifier": "FamilyFoundryChangeData" });
 const FamilyFoundryDiagnostic = Schema.Struct({ "code": Schema.String, "path": Schema.String, "message": Schema.String, "suggestion": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "description": "Diagnostic for the Family Foundry host operations: a closed code, a JSON path, a message, an optional fix.", "identifier": "FamilyFoundryDiagnostic" });
 const FamilyFoundryApplyReceipt = Schema.Struct({ "familyId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "familyName": Schema.String, "success": Schema.Boolean, "converged": Schema.Boolean, "error": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "planHash": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "residue": Schema.Array(FamilyFoundryChangeData), "errors": Schema.Array(Schema.String), "artifactDirectory": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "observedParametersDigest": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "loadedFamilyId": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })), Schema.Null]).annotate({ "format": "int64" })) }).annotate({ "description": "The receipt: outcomes per change, residue after re-capture, converged = residue 0 and no errors. `familyId` is the\nid the apply was asked for (its `expectedPlanHashes` key). A reload gives the family a new element id, so\n`loadedFamilyId` is the id it has now, null when nothing reloaded; an element id names one load, and only\n`familyName` (as re-resolved at apply) is stable across applies.\n            ", "identifier": "FamilyFoundryApplyReceipt" });
 const codec = Schema.Struct({ "receipts": Schema.Array(FamilyFoundryApplyReceipt), "diagnostics": Schema.Array(FamilyFoundryDiagnostic), "receiptPath": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "reason": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "title": "FamilyFoundryApplyData", "description": "`receiptPath` is the run's receipt.json; null when the request was refused before running. `reason` is the\nreceipt's: one sentence naming the first failure, null when none failed; the full text is the run's `failures.json`.\n            " });
-namespace WireTypes {
-type FamilyFoundryChangeData = { readonly "section": string, readonly "key": string, readonly "kind": string, readonly "mappedFrom"?: null | string, readonly "before": Schema.Json | null, readonly "after": Schema.Json | null };
-type FamilyFoundryDiagnostic = { readonly "code": string, readonly "path": string, readonly "message": string, readonly "suggestion"?: null | string };
-type FamilyFoundryApplyReceipt = { readonly "familyId": number, readonly "familyName": string, readonly "success": boolean, readonly "converged": boolean, readonly "error"?: null | string, readonly "planHash"?: null | string, readonly "residue": ReadonlyArray<FamilyFoundryChangeData>, readonly "errors": ReadonlyArray<string>, readonly "artifactDirectory"?: null | string, readonly "observedParametersDigest"?: null | string, readonly "loadedFamilyId"?: number | null };
-export type Root = { readonly "receipts": ReadonlyArray<FamilyFoundryApplyReceipt>, readonly "diagnostics": ReadonlyArray<FamilyFoundryDiagnostic>, readonly "receiptPath"?: null | string, readonly "reason"?: null | string };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["FamilyFoundryApplyReceipt"]: strictDecoder(FamilyFoundryApplyReceipt),
@@ -1045,14 +1160,29 @@ export const definitions = {
   ["FamilyFoundryDiagnostic"]: strictDecoder(FamilyFoundryDiagnostic),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type FamilyFoundryChangeData = { readonly "section": string, readonly "key": string, readonly "kind": string, readonly "mappedFrom"?: null | string, readonly "before": Schema.Json | null, readonly "after": Schema.Json | null };
+type FamilyFoundryDiagnostic = { readonly "code": string, readonly "path": string, readonly "message": string, readonly "suggestion"?: null | string };
+type FamilyFoundryApplyReceipt = { readonly "familyId": number, readonly "familyName": string, readonly "success": boolean, readonly "converged": boolean, readonly "error"?: null | string, readonly "planHash"?: null | string, readonly "residue": ReadonlyArray<FamilyFoundryChangeData>, readonly "errors": ReadonlyArray<string>, readonly "artifactDirectory"?: null | string, readonly "observedParametersDigest"?: null | string, readonly "loadedFamilyId"?: number | null };
+export type Root = { readonly "receipts": ReadonlyArray<FamilyFoundryApplyReceipt>, readonly "diagnostics": ReadonlyArray<FamilyFoundryDiagnostic>, readonly "receiptPath"?: null | string, readonly "reason"?: null | string };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op18request {
+namespace Decoded {
 
 const PodRunOrigin = Schema.Literals(["SavedMember", "SuppliedDraft", "Operation"]).annotate({ "description": "What a run's source was: a saved member's bytes, a supplied draft, or operation input with no member.", "identifier": "PodRunOrigin" });
 const PodConsumedSourceData = Schema.Struct({ "id": Schema.String, "path": Schema.String, "sha256": Schema.String, "bytesBase64": Schema.String }).annotate({ "identifier": "PodConsumedSourceData" });
 const PodCapturedSourceData = Schema.Struct({ "id": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "path": Schema.String, "sha256": Schema.String, "bytesBase64": Schema.String, "origin": PodRunOrigin }).annotate({ "identifier": "PodCapturedSourceData" });
 const PodComposedSource = Schema.Struct({ "root": PodCapturedSourceData, "dependencies": Schema.Array(PodConsumedSourceData) }).annotate({ "description": "The exact bytes one composition consumed, captured at its one read: the root (a saved member or a supplied\ndraft, with a pod id only when composition has actual pod context) and its ordered dependencies. A run stores these bytes; it never rereads them.\n            ", "identifier": "PodComposedSource" });
 const codec = Schema.Struct({ "specJson": Schema.String, "source": PodComposedSource, "modelDirectory": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "title": "FamilyBuildRequest", "description": "Build a new family from a saved family model spec on its header's template; nested models resolve\nfrom `modelDirectory`. There is no output path: every build lands in a fresh run folder in the source\npod beside its receipt (user verdict, 2026-09-17), so nothing overwrites and nothing escapes the pod.\n            " });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 type PodRunOrigin = "SavedMember" | "SuppliedDraft" | "Operation";
 type PodConsumedSourceData = { readonly "id": string, readonly "path": string, readonly "sha256": string, readonly "bytesBase64": string };
@@ -1061,53 +1191,52 @@ type PodComposedSource = { readonly "root": PodCapturedSourceData, readonly "dep
 export type Root = { readonly "specJson": string, readonly "source": PodComposedSource, readonly "modelDirectory"?: null | string };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op18response {
+namespace Decoded {
 
 const Reading = Schema.Struct({ "at": Schema.String, "version": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "observedAt": Schema.String }).annotate({ "identifier": "Reading" });
 const codec = Schema.Struct({ "reading": Reading, "familyName": Schema.String, "outputPath": Schema.String, "templatePath": Schema.String, "converged": Schema.Boolean, "residueCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "receiptPath": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "outputError": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "title": "FamilyBuildData" });
-namespace WireTypes {
-type Reading = { readonly "at": string, readonly "version"?: null | string, readonly "observedAt": string };
-export type Root = { readonly "reading": Reading, readonly "familyName": string, readonly "outputPath": string, readonly "templatePath": string, readonly "converged": boolean, readonly "residueCount": number, readonly "receiptPath"?: null | string, readonly "outputError"?: null | string };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["Reading"]: strictDecoder(Reading),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type Reading = { readonly "at": string, readonly "version"?: null | string, readonly "observedAt": string };
+export type Root = { readonly "reading": Reading, readonly "familyName": string, readonly "outputPath": string, readonly "templatePath": string, readonly "converged": boolean, readonly "residueCount": number, readonly "receiptPath"?: null | string, readonly "outputError"?: null | string };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op19request {
+namespace Decoded {
 
 
 const codec = Schema.Record(Schema.String, Schema.Never).annotate({ "title": "FamilyCaptureRequest" });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 
 export type Root = { readonly [x: string]: never };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op19response {
+namespace Decoded {
 
 const RevitDataIssueSeverity = Schema.Literals(["Info", "Warning", "Error"]).annotate({ "description": "", "identifier": "RevitDataIssueSeverity" });
 const MeasuredDisplayUnit = Schema.Struct({ "specTypeId": Schema.String, "typeId": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "label": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "symbol": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "refusal": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "description": "That a surface measures this value, and the unit it renders it in, read from the Reading's own\ndocument (a schedule field's effective format options, else that document's units for the\nspec). Every spelling is one the parameter unit door accepts, so a human surface can stage a\nbare number with it. Null where nothing is measurable at all; TypeId null where it measures\nbut this document shows no unit — the surface asks for one instead of letting a push refuse a\nbare number later. Refusal where Revit failed to answer, never read as not-measured. Evidence only: no write path fills a unit from it.\n            ", "identifier": "MeasuredDisplayUnit" });
 const RevitDataIssue = Schema.Struct({ "code": Schema.String, "severity": RevitDataIssueSeverity, "message": Schema.String, "familyName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "typeName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "parameterName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "identifier": "RevitDataIssue" });
 const codec = Schema.Struct({ "observedAt": Schema.String, "familyName": Schema.String, "modelJson": Schema.String, "unmodeledCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "coverage": Schema.Record(Schema.String, Schema.String), "issues": Schema.Array(RevitDataIssue), "parameterUnits": Schema.Record(Schema.String, MeasuredDisplayUnit) }).annotate({ "title": "FamilyCaptureData" });
-namespace WireTypes {
-type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
-type MeasuredDisplayUnit = { readonly "specTypeId": string, readonly "typeId"?: null | string, readonly "label"?: null | string, readonly "symbol"?: null | string, readonly "refusal"?: null | string };
-type RevitDataIssue = { readonly "code": string, readonly "severity": RevitDataIssueSeverity, readonly "message": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "parameterName"?: null | string };
-export type Root = { readonly "observedAt": string, readonly "familyName": string, readonly "modelJson": string, readonly "unmodeledCount": number, readonly "coverage": { readonly [x: string]: string }, readonly "issues": ReadonlyArray<RevitDataIssue>, readonly "parameterUnits": { readonly [x: string]: MeasuredDisplayUnit } };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["MeasuredDisplayUnit"]: strictDecoder(MeasuredDisplayUnit),
@@ -1115,21 +1244,36 @@ export const definitions = {
   ["RevitDataIssueSeverity"]: strictDecoder(RevitDataIssueSeverity),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
+type MeasuredDisplayUnit = { readonly "specTypeId": string, readonly "typeId"?: null | string, readonly "label"?: null | string, readonly "symbol"?: null | string, readonly "refusal"?: null | string };
+type RevitDataIssue = { readonly "code": string, readonly "severity": RevitDataIssueSeverity, readonly "message": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "parameterName"?: null | string };
+export type Root = { readonly "observedAt": string, readonly "familyName": string, readonly "modelJson": string, readonly "unmodeledCount": number, readonly "coverage": { readonly [x: string]: string }, readonly "issues": ReadonlyArray<RevitDataIssue>, readonly "parameterUnits": { readonly [x: string]: MeasuredDisplayUnit } };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op20request {
+namespace Decoded {
 
 
 const codec = Schema.Struct({ "outDir": Schema.String, "types": Schema.optionalKey(Schema.Union([Schema.Array(Schema.String), Schema.Null])), "template": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "title": "FamilyLoadTestRequest" });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 
 export type Root = { readonly "outDir": string, readonly "types"?: ReadonlyArray<string> | null, readonly "template"?: null | string };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op20response {
+namespace Decoded {
 
 const FamilyLoadDecision = Schema.Struct({ "family": Schema.String, "shared": Schema.Boolean, "inUse": Schema.Boolean, "overwrite": Schema.Boolean }).annotate({ "identifier": "FamilyLoadDecision" });
 const FamilyLoadNested = Schema.Struct({ "name": Schema.String, "sourceCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "loadedIds": Schema.Array(Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" }))), "embeddedCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })) }).annotate({ "description": "LoadedIds belong to the scratch project; EmbeddedCount includes non-shared definitions inside the loaded family.", "identifier": "FamilyLoadNested" });
@@ -1140,19 +1284,6 @@ const FamilyVerifyImage = Schema.Struct({ "view": Schema.String, "path": Schema.
 const FamilyVerifyConnector = Schema.Struct({ "domain": Schema.String, "system": Schema.String, "origin": FamilyVerifyPoint, "normal": FamilyVerifyPoint, "shape": Schema.String, "diameter": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "width": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "height": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "direction": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "drives": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Record(Schema.String, Schema.String)])) }).annotate({ "description": "Positions and sizes are inches; normals are unit vectors. Direction is In, Out, Bidirectional, or null when the domain has none.\n            Drives maps a connector parameter (Flow, Width, Voltage...) to the family parameter associated with it; family documents only.", "identifier": "FamilyVerifyConnector" });
 const FamilyLoadInstance = Schema.Struct({ "type": Schema.String, "id": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })), Schema.Null]).annotate({ "format": "int64" })), "connectors": Schema.Array(FamilyVerifyConnector), "error": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "identifier": "FamilyLoadInstance" });
 const codec = Schema.Struct({ "familyName": Schema.String, "sameNameAlreadyExisted": Schema.Boolean, "loadDecisions": Schema.Array(FamilyLoadDecision), "nestedFamilies": Schema.Array(FamilyLoadNested), "duplicateNames": Schema.Array(Schema.String), "rows": Schema.Array(FamilyLoadInstance), "warnings": Schema.Array(RevitWarningRow), "failures": Schema.Array(FamilyLoadFailure), "images": Schema.Array(FamilyVerifyImage) }).annotate({ "title": "FamilyLoadTestData" });
-namespace WireTypes {
-type FamilyLoadDecision = { readonly "family": string, readonly "shared": boolean, readonly "inUse": boolean, readonly "overwrite": boolean };
-type FamilyLoadNested = { readonly "name": string, readonly "sourceCount": number, readonly "loadedIds": ReadonlyArray<number>, readonly "embeddedCount": number };
-type FamilyVerifyPoint = { readonly "x": number, readonly "y": number, readonly "z": number };
-type RevitWarningRow = { readonly "severity": string, readonly "description": string, readonly "elementIds": ReadonlyArray<number>, readonly "additionalElementIds": ReadonlyArray<number> };
-type FamilyLoadFailure = { readonly "severity": string, readonly "description": string, readonly "failingElementIds": ReadonlyArray<number>, readonly "additionalElementIds": ReadonlyArray<number>, readonly "resolution": string };
-type FamilyVerifyImage = { readonly "view": string, readonly "path": string };
-type FamilyVerifyConnector = { readonly "domain": string, readonly "system": string, readonly "origin": FamilyVerifyPoint, readonly "normal": FamilyVerifyPoint, readonly "shape": string, readonly "diameter"?: null | number, readonly "width"?: null | number, readonly "height"?: null | number, readonly "direction"?: null | string, readonly "drives"?: null | { readonly [x: string]: string } };
-type FamilyLoadInstance = { readonly "type": string, readonly "id"?: number | null, readonly "connectors": ReadonlyArray<FamilyVerifyConnector>, readonly "error"?: null | string };
-export type Root = { readonly "familyName": string, readonly "sameNameAlreadyExisted": boolean, readonly "loadDecisions": ReadonlyArray<FamilyLoadDecision>, readonly "nestedFamilies": ReadonlyArray<FamilyLoadNested>, readonly "duplicateNames": ReadonlyArray<string>, readonly "rows": ReadonlyArray<FamilyLoadInstance>, readonly "warnings": ReadonlyArray<RevitWarningRow>, readonly "failures": ReadonlyArray<FamilyLoadFailure>, readonly "images": ReadonlyArray<FamilyVerifyImage> };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["FamilyLoadDecision"]: strictDecoder(FamilyLoadDecision),
@@ -1165,21 +1296,41 @@ export const definitions = {
   ["RevitWarningRow"]: strictDecoder(RevitWarningRow),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type FamilyLoadDecision = { readonly "family": string, readonly "shared": boolean, readonly "inUse": boolean, readonly "overwrite": boolean };
+type FamilyLoadNested = { readonly "name": string, readonly "sourceCount": number, readonly "loadedIds": ReadonlyArray<number>, readonly "embeddedCount": number };
+type FamilyVerifyPoint = { readonly "x": number, readonly "y": number, readonly "z": number };
+type RevitWarningRow = { readonly "severity": string, readonly "description": string, readonly "elementIds": ReadonlyArray<number>, readonly "additionalElementIds": ReadonlyArray<number> };
+type FamilyLoadFailure = { readonly "severity": string, readonly "description": string, readonly "failingElementIds": ReadonlyArray<number>, readonly "additionalElementIds": ReadonlyArray<number>, readonly "resolution": string };
+type FamilyVerifyImage = { readonly "view": string, readonly "path": string };
+type FamilyVerifyConnector = { readonly "domain": string, readonly "system": string, readonly "origin": FamilyVerifyPoint, readonly "normal": FamilyVerifyPoint, readonly "shape": string, readonly "diameter"?: null | number, readonly "width"?: null | number, readonly "height"?: null | number, readonly "direction"?: null | string, readonly "drives"?: null | { readonly [x: string]: string } };
+type FamilyLoadInstance = { readonly "type": string, readonly "id"?: number | null, readonly "connectors": ReadonlyArray<FamilyVerifyConnector>, readonly "error"?: null | string };
+export type Root = { readonly "familyName": string, readonly "sameNameAlreadyExisted": boolean, readonly "loadDecisions": ReadonlyArray<FamilyLoadDecision>, readonly "nestedFamilies": ReadonlyArray<FamilyLoadNested>, readonly "duplicateNames": ReadonlyArray<string>, readonly "rows": ReadonlyArray<FamilyLoadInstance>, readonly "warnings": ReadonlyArray<RevitWarningRow>, readonly "failures": ReadonlyArray<FamilyLoadFailure>, readonly "images": ReadonlyArray<FamilyVerifyImage> };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op21request {
+namespace Decoded {
 
 
 const codec = Schema.Struct({ "outDir": Schema.String, "types": Schema.optionalKey(Schema.Union([Schema.Array(Schema.String), Schema.Null])), "toggles": Schema.optionalKey(Schema.Union([Schema.Array(Schema.String), Schema.Null])) }).annotate({ "title": "FamilyLookRequest" });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 
 export type Root = { readonly "outDir": string, readonly "types"?: ReadonlyArray<string> | null, readonly "toggles"?: ReadonlyArray<string> | null };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op21response {
+namespace Decoded {
 
 const FamilyVerifyPoint = Schema.Struct({ "x": Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })), "y": Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })), "z": Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })) }).annotate({ "identifier": "FamilyVerifyPoint" });
 const FamilyVerifyImage = Schema.Struct({ "view": Schema.String, "path": Schema.String }).annotate({ "identifier": "FamilyVerifyImage" });
@@ -1188,17 +1339,6 @@ const FamilyVerifyConnector = Schema.Struct({ "domain": Schema.String, "system":
 const FamilyLookElement = Schema.Struct({ "id": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "kind": Schema.String, "name": Schema.String, "visible": Schema.Boolean, "bounds": Schema.optionalKey(Schema.Union([Schema.Null, FamilyVerifyBounds], { mode: "oneOf" })), "connector": Schema.optionalKey(Schema.Union([Schema.Null, FamilyVerifyConnector], { mode: "oneOf" })) }).annotate({ "identifier": "FamilyLookElement" });
 const FamilyLookRow = Schema.Struct({ "type": Schema.String, "state": Schema.String, "elements": Schema.Array(FamilyLookElement), "images": Schema.Array(FamilyVerifyImage) }).annotate({ "identifier": "FamilyLookRow" });
 const codec = Schema.Struct({ "rows": Schema.Array(FamilyLookRow) }).annotate({ "title": "FamilyLookData" });
-namespace WireTypes {
-type FamilyVerifyPoint = { readonly "x": number, readonly "y": number, readonly "z": number };
-type FamilyVerifyImage = { readonly "view": string, readonly "path": string };
-type FamilyVerifyBounds = { readonly "min": FamilyVerifyPoint, readonly "max": FamilyVerifyPoint };
-type FamilyVerifyConnector = { readonly "domain": string, readonly "system": string, readonly "origin": FamilyVerifyPoint, readonly "normal": FamilyVerifyPoint, readonly "shape": string, readonly "diameter"?: null | number, readonly "width"?: null | number, readonly "height"?: null | number, readonly "direction"?: null | string, readonly "drives"?: null | { readonly [x: string]: string } };
-type FamilyLookElement = { readonly "id": number, readonly "kind": string, readonly "name": string, readonly "visible": boolean, readonly "bounds"?: null | FamilyVerifyBounds, readonly "connector"?: null | FamilyVerifyConnector };
-type FamilyLookRow = { readonly "type": string, readonly "state": string, readonly "elements": ReadonlyArray<FamilyLookElement>, readonly "images": ReadonlyArray<FamilyVerifyImage> };
-export type Root = { readonly "rows": ReadonlyArray<FamilyLookRow> };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["FamilyLookElement"]: strictDecoder(FamilyLookElement),
@@ -1209,50 +1349,75 @@ export const definitions = {
   ["FamilyVerifyPoint"]: strictDecoder(FamilyVerifyPoint),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type FamilyVerifyPoint = { readonly "x": number, readonly "y": number, readonly "z": number };
+type FamilyVerifyImage = { readonly "view": string, readonly "path": string };
+type FamilyVerifyBounds = { readonly "min": FamilyVerifyPoint, readonly "max": FamilyVerifyPoint };
+type FamilyVerifyConnector = { readonly "domain": string, readonly "system": string, readonly "origin": FamilyVerifyPoint, readonly "normal": FamilyVerifyPoint, readonly "shape": string, readonly "diameter"?: null | number, readonly "width"?: null | number, readonly "height"?: null | number, readonly "direction"?: null | string, readonly "drives"?: null | { readonly [x: string]: string } };
+type FamilyLookElement = { readonly "id": number, readonly "kind": string, readonly "name": string, readonly "visible": boolean, readonly "bounds"?: null | FamilyVerifyBounds, readonly "connector"?: null | FamilyVerifyConnector };
+type FamilyLookRow = { readonly "type": string, readonly "state": string, readonly "elements": ReadonlyArray<FamilyLookElement>, readonly "images": ReadonlyArray<FamilyVerifyImage> };
+export type Root = { readonly "rows": ReadonlyArray<FamilyLookRow> };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op22request {
+namespace Decoded {
 
 
 const codec = Schema.Struct({ "familyId": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })), Schema.Null]).annotate({ "format": "int64" })), "familyName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "title": "FamilyOpenRequest", "description": "Open a loaded family from the active project in the family editor and activate it.\nEditFamily documents have no path and cannot be activated directly, so the family is\nsaved to a scratch .rfa and reopened by path (the proven activation workaround).\n            " });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 
 export type Root = { readonly "familyId"?: number | null, readonly "familyName"?: null | string };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op22response {
+namespace Decoded {
 
 
 const codec = Schema.Struct({ "familyName": Schema.String, "documentTitle": Schema.String, "savedPath": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "title": "FamilyOpenData" });
-namespace WireTypes {
-
-export type Root = { readonly "familyName": string, readonly "documentTitle": string, readonly "savedPath"?: null | string };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
 
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+
+export type Root = { readonly "familyName": string, readonly "documentTitle": string, readonly "savedPath"?: null | string };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op23request {
+namespace Decoded {
 
 const ExecutionOptions = Schema.Struct({ "singleTransaction": Schema.optionalKey(Schema.Boolean.annotate({ "description": "Bundle lowered native operations into one edit transaction inside the whole-family rollback group." })), "optimizeTypeOperations": Schema.optionalKey(Schema.Boolean.annotate({ "description": "Batch consecutive type operations." })), "enableCollectors": Schema.optionalKey(Schema.Boolean.annotate({ "description": "Enable an optional processor snapshot pipeline when the caller supplies one." })), "suppressWarnings": Schema.optionalKey(Schema.Boolean.annotate({ "description": "Suppress non-fatal Revit warnings while retaining commit diagnostics." })), "captureDependencyGraph": Schema.optionalKey(Schema.Boolean.annotate({ "description": "Capture the parameter dependency graph per family before the operations run and emit it as a diagnostic (up to ~1 s on a large family). Off by default." })) }).annotate({ "description": "Serializable execution behavior authored beside a Family Foundry profile.", "identifier": "ExecutionOptions" });
 const codec = Schema.Struct({ "specJson": Schema.String, "executionOptions": Schema.optionalKey(Schema.Union([Schema.Null, ExecutionOptions], { mode: "oneOf" })) }).annotate({ "title": "FamilyPlanRequest", "description": "Plan a spec (`{ select, patch, run }` JSON) against the active family document." });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 type ExecutionOptions = { readonly "singleTransaction"?: boolean, readonly "optimizeTypeOperations"?: boolean, readonly "enableCollectors"?: boolean, readonly "suppressWarnings"?: boolean, readonly "captureDependencyGraph"?: boolean };
 export type Root = { readonly "specJson": string, readonly "executionOptions"?: null | ExecutionOptions };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op23response {
+namespace Decoded {
 
 const FamilyFoundryChangeData = Schema.Struct({ "section": Schema.String, "key": Schema.String, "kind": Schema.String, "mappedFrom": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "before": Schema.Union([Schema.Json.annotate({ "expected": "JSON value" }), Schema.Null], { mode: "oneOf" }), "after": Schema.Union([Schema.Json.annotate({ "expected": "JSON value" }), Schema.Null], { mode: "oneOf" }) }).annotate({ "description": "One change the reconciler would make: section + key is the address, kind is the verb.", "identifier": "FamilyFoundryChangeData" });
 const FamilyFoundryDiagnostic = Schema.Struct({ "code": Schema.String, "path": Schema.String, "message": Schema.String, "suggestion": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "description": "Diagnostic for the Family Foundry host operations: a closed code, a JSON path, a message, an optional fix.", "identifier": "FamilyFoundryDiagnostic" });
@@ -1260,16 +1425,6 @@ const RevitDataIssueSeverity = Schema.Literals(["Info", "Warning", "Error"]).ann
 const RevitDataIssue = Schema.Struct({ "code": Schema.String, "severity": RevitDataIssueSeverity, "message": Schema.String, "familyName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "typeName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "parameterName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "identifier": "RevitDataIssue" });
 const FamilyFoundryFamilyPlanData = Schema.Struct({ "familyId": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })), Schema.Null]).annotate({ "format": "int64" })), "familyName": Schema.String, "planHash": Schema.String, "changes": Schema.Array(FamilyFoundryChangeData), "runEffects": Schema.Array(Schema.String), "refusals": Schema.Array(FamilyFoundryDiagnostic), "warnings": Schema.Array(RevitDataIssue) }).annotate({ "description": "One planned family. `familyName` is the requested name byte-exact; `familyId` is the id it resolved to at plan, null when\nthe name refused (`family-not-found`, `family-name-ambiguous`, `family-not-editable` in `refusals`).\n            ", "identifier": "FamilyFoundryFamilyPlanData" });
 const codec = Schema.Struct({ "families": Schema.Array(FamilyFoundryFamilyPlanData), "diagnostics": Schema.Array(FamilyFoundryDiagnostic) }).annotate({ "title": "FamilyFoundryPlanData" });
-namespace WireTypes {
-type FamilyFoundryChangeData = { readonly "section": string, readonly "key": string, readonly "kind": string, readonly "mappedFrom"?: null | string, readonly "before": Schema.Json | null, readonly "after": Schema.Json | null };
-type FamilyFoundryDiagnostic = { readonly "code": string, readonly "path": string, readonly "message": string, readonly "suggestion"?: null | string };
-type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
-type RevitDataIssue = { readonly "code": string, readonly "severity": RevitDataIssueSeverity, readonly "message": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "parameterName"?: null | string };
-type FamilyFoundryFamilyPlanData = { readonly "familyId"?: number | null, readonly "familyName": string, readonly "planHash": string, readonly "changes": ReadonlyArray<FamilyFoundryChangeData>, readonly "runEffects": ReadonlyArray<string>, readonly "refusals": ReadonlyArray<FamilyFoundryDiagnostic>, readonly "warnings": ReadonlyArray<RevitDataIssue> };
-export type Root = { readonly "families": ReadonlyArray<FamilyFoundryFamilyPlanData>, readonly "diagnostics": ReadonlyArray<FamilyFoundryDiagnostic> };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["FamilyFoundryChangeData"]: strictDecoder(FamilyFoundryChangeData),
@@ -1279,114 +1434,152 @@ export const definitions = {
   ["RevitDataIssueSeverity"]: strictDecoder(RevitDataIssueSeverity),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type FamilyFoundryChangeData = { readonly "section": string, readonly "key": string, readonly "kind": string, readonly "mappedFrom"?: null | string, readonly "before": Schema.Json | null, readonly "after": Schema.Json | null };
+type FamilyFoundryDiagnostic = { readonly "code": string, readonly "path": string, readonly "message": string, readonly "suggestion"?: null | string };
+type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
+type RevitDataIssue = { readonly "code": string, readonly "severity": RevitDataIssueSeverity, readonly "message": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "parameterName"?: null | string };
+type FamilyFoundryFamilyPlanData = { readonly "familyId"?: number | null, readonly "familyName": string, readonly "planHash": string, readonly "changes": ReadonlyArray<FamilyFoundryChangeData>, readonly "runEffects": ReadonlyArray<string>, readonly "refusals": ReadonlyArray<FamilyFoundryDiagnostic>, readonly "warnings": ReadonlyArray<RevitDataIssue> };
+export type Root = { readonly "families": ReadonlyArray<FamilyFoundryFamilyPlanData>, readonly "diagnostics": ReadonlyArray<FamilyFoundryDiagnostic> };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op24request {
+namespace Decoded {
 
 
 const codec = Schema.Struct({ "acquisitionId": Schema.String, "familyId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })) }).annotate({ "title": "TemporaryFamilyAcquireRequest", "description": "Caller retains this UUID before submission; reuse it to recover, never open twice." });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 
 export type Root = { readonly "acquisitionId": string, readonly "familyId": number };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op24response {
+namespace Decoded {
 
 const TemporaryDocumentRef = Schema.Struct({ "session": Schema.String, "openId": Schema.String }).annotate({ "identifier": "TemporaryDocumentRef" });
 const codec = Schema.Struct({ "acquisitionId": Schema.String, "status": Schema.String, "document": Schema.optionalKey(Schema.Union([Schema.Null, TemporaryDocumentRef], { mode: "oneOf" })), "recoveryId": Schema.String, "detail": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "recordedOpenId": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "recordedStatus": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "title": "TemporaryDocumentData" });
-namespace WireTypes {
-type TemporaryDocumentRef = { readonly "session": string, readonly "openId": string };
-export type Root = { readonly "acquisitionId": string, readonly "status": string, readonly "document"?: null | TemporaryDocumentRef, readonly "recoveryId": string, readonly "detail"?: null | string, readonly "recordedOpenId"?: null | string, readonly "recordedStatus"?: null | string };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["TemporaryDocumentRef"]: strictDecoder(TemporaryDocumentRef),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type TemporaryDocumentRef = { readonly "session": string, readonly "openId": string };
+export type Root = { readonly "acquisitionId": string, readonly "status": string, readonly "document"?: null | TemporaryDocumentRef, readonly "recoveryId": string, readonly "detail"?: null | string, readonly "recordedOpenId"?: null | string, readonly "recordedStatus"?: null | string };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op25request {
+namespace Decoded {
 
 
 const codec = Schema.Record(Schema.String, Schema.Never).annotate({ "title": "NoRequest" });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 
 export type Root = { readonly [x: string]: never };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op25response {
+namespace Decoded {
 
 const HostOperationRequestExample = Schema.Struct({ "name": Schema.String, "description": Schema.String, "json": Schema.String }).annotate({ "identifier": "HostOperationRequestExample" });
 const HostOpsCatalogEntry = Schema.Struct({ "key": Schema.String, "displayName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "intent": Schema.String, "costTier": Schema.String, "visibility": Schema.String, "needs": Schema.String, "description": Schema.String, "searchTerms": Schema.Array(Schema.String), "requestExamples": Schema.Array(HostOperationRequestExample), "safeDefaultRequestJson": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "callGuidance": Schema.Array(Schema.String), "requestSchemaJson": Schema.String, "responseSchemaJson": Schema.String, "actor": Schema.String, "usesTransactions": Schema.Boolean, "artifactSchemaJson": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "subject": Schema.String, "touches": Schema.String, "effect": Schema.String, "cardinality": Schema.String, "internal": Schema.Boolean, "rollsBack": Schema.Boolean }).annotate({ "identifier": "HostOpsCatalogEntry" });
 const codec = Schema.Struct({ "operations": Schema.Array(HostOpsCatalogEntry), "constants": Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Json.annotate({ "expected": "JSON value" }))) }).annotate({ "title": "HostOpsCatalogData", "description": "The op catalog plus the contract constants typegen emits as `export const`s." });
-namespace WireTypes {
-type HostOperationRequestExample = { readonly "name": string, readonly "description": string, readonly "json": string };
-type HostOpsCatalogEntry = { readonly "key": string, readonly "displayName"?: null | string, readonly "intent": string, readonly "costTier": string, readonly "visibility": string, readonly "needs": string, readonly "description": string, readonly "searchTerms": ReadonlyArray<string>, readonly "requestExamples": ReadonlyArray<HostOperationRequestExample>, readonly "safeDefaultRequestJson"?: null | string, readonly "callGuidance": ReadonlyArray<string>, readonly "requestSchemaJson": string, readonly "responseSchemaJson": string, readonly "actor": string, readonly "usesTransactions": boolean, readonly "artifactSchemaJson"?: null | string, readonly "subject": string, readonly "touches": string, readonly "effect": string, readonly "cardinality": string, readonly "internal": boolean, readonly "rollsBack": boolean };
-export type Root = { readonly "operations": ReadonlyArray<HostOpsCatalogEntry>, readonly "constants": { readonly [x: string]: { readonly [x: string]: Schema.Json } } };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["HostOperationRequestExample"]: strictDecoder(HostOperationRequestExample),
   ["HostOpsCatalogEntry"]: strictDecoder(HostOpsCatalogEntry),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type HostOperationRequestExample = { readonly "name": string, readonly "description": string, readonly "json": string };
+type HostOpsCatalogEntry = { readonly "key": string, readonly "displayName"?: null | string, readonly "intent": string, readonly "costTier": string, readonly "visibility": string, readonly "needs": string, readonly "description": string, readonly "searchTerms": ReadonlyArray<string>, readonly "requestExamples": ReadonlyArray<HostOperationRequestExample>, readonly "safeDefaultRequestJson"?: null | string, readonly "callGuidance": ReadonlyArray<string>, readonly "requestSchemaJson": string, readonly "responseSchemaJson": string, readonly "actor": string, readonly "usesTransactions": boolean, readonly "artifactSchemaJson"?: null | string, readonly "subject": string, readonly "touches": string, readonly "effect": string, readonly "cardinality": string, readonly "internal": boolean, readonly "rollsBack": boolean };
+export type Root = { readonly "operations": ReadonlyArray<HostOpsCatalogEntry>, readonly "constants": { readonly [x: string]: { readonly [x: string]: Schema.Json } } };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op26request {
+namespace Decoded {
 
 
 const codec = Schema.Struct({ "maxSegments": Schema.optionalKey(Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" }))), "maxSizesPerSegment": Schema.optionalKey(Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" }))) }).annotate({ "title": "MepSegmentSizesRequest" });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 
 export type Root = { readonly "maxSegments"?: number, readonly "maxSizesPerSegment"?: number };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op26response {
+namespace Decoded {
 
 const MepSizeRow = Schema.Struct({ "nominalDiameterFt": Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })), "innerDiameterFt": Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })), "outerDiameterFt": Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })) }).annotate({ "identifier": "MepSizeRow" });
 const MepSegmentRow = Schema.Struct({ "uniqueId": Schema.String, "elementId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "name": Schema.String, "domain": Schema.String, "kind": Schema.String, "sizes": Schema.Array(MepSizeRow) }).annotate({ "identifier": "MepSegmentRow" });
 const codec = Schema.Struct({ "segments": Schema.Array(MepSegmentRow) }).annotate({ "title": "MepSegmentSizesData" });
-namespace WireTypes {
-type MepSizeRow = { readonly "nominalDiameterFt": number, readonly "innerDiameterFt": number, readonly "outerDiameterFt": number };
-type MepSegmentRow = { readonly "uniqueId": string, readonly "elementId": number, readonly "name": string, readonly "domain": string, readonly "kind": string, readonly "sizes": ReadonlyArray<MepSizeRow> };
-export type Root = { readonly "segments": ReadonlyArray<MepSegmentRow> };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["MepSegmentRow"]: strictDecoder(MepSegmentRow),
   ["MepSizeRow"]: strictDecoder(MepSizeRow),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type MepSizeRow = { readonly "nominalDiameterFt": number, readonly "innerDiameterFt": number, readonly "outerDiameterFt": number };
+type MepSegmentRow = { readonly "uniqueId": string, readonly "elementId": number, readonly "name": string, readonly "domain": string, readonly "kind": string, readonly "sizes": ReadonlyArray<MepSizeRow> };
+export type Root = { readonly "segments": ReadonlyArray<MepSegmentRow> };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op27request {
+namespace Decoded {
 
 
 const codec = Schema.Struct({ "systemUniqueId": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "maxSystems": Schema.optionalKey(Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" }))), "maxElements": Schema.optionalKey(Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" }))), "domain": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "title": "MepSystemMembersRequest", "description": "Domain narrows before the roster bound: piping or duct. A system id reads only that system." });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 
 export type Root = { readonly "systemUniqueId"?: null | string, readonly "maxSystems"?: number, readonly "maxElements"?: number, readonly "domain"?: null | string };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op27response {
+namespace Decoded {
 
 const MepReadState = Schema.Literals(["Value", "Absent", "Error"]).annotate({ "description": "One optional fact: a value, absent (Revit has none), or the error raised reading it. Never a silent zero.", "identifier": "MepReadState" });
 const MepElementRef = Schema.Struct({ "uniqueId": Schema.String, "elementId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "name": Schema.String }).annotate({ "identifier": "MepElementRef" });
@@ -1400,22 +1593,6 @@ const MepMember = Schema.Struct({ "uniqueId": Schema.String, "elementId": Schema
 const MepFactOfMepSource = Schema.Struct({ "state": MepReadState, "value": Schema.Union([MepSource, Schema.Null], { mode: "oneOf" }), "error": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "identifier": "MepFactOfMepSource" });
 const MepSystemRow = Schema.Struct({ "uniqueId": Schema.String, "elementId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "name": Schema.String, "domain": Schema.String, "systemType": MepFactOfMepElementRef, "classification": Schema.String, "flowCubicFeetPerSecond": MepFactOfNullableDouble, "source": MepFactOfMepSource }).annotate({ "description": "Domain is a field value (\"piping\", \"duct\"), never part of the contract's shape. Flow is Revit internal cubic feet per second.", "identifier": "MepSystemRow" });
 const codec = Schema.Struct({ "systems": Schema.Array(MepSystemRow), "systemUniqueId": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "elements": Schema.Array(MepMember) }).annotate({ "title": "MepSystemMembersData" });
-namespace WireTypes {
-type MepReadState = "Value" | "Absent" | "Error";
-type MepElementRef = { readonly "uniqueId": string, readonly "elementId": number, readonly "name": string };
-type MepPeer = { readonly "uniqueId": string, readonly "elementId": number, readonly "connectorId": number };
-type MepFactOfNullableDouble = { readonly "state": MepReadState, readonly "value": null | number, readonly "error"?: null | string };
-type MepFactOfString = { readonly "state": MepReadState, readonly "value": null | string, readonly "error"?: null | string };
-type MepFactOfMepElementRef = { readonly "state": MepReadState, readonly "value": MepElementRef | null, readonly "error"?: null | string };
-type MepPort = { readonly "connectorId": number, readonly "direction": MepFactOfString, readonly "peers": ReadonlyArray<MepPeer> };
-type MepSource = { readonly "equipment": MepElementRef, readonly "baseConnectorId"?: number | null, readonly "outConnectorIds": ReadonlyArray<number>, readonly "connectors": ReadonlyArray<MepPort> };
-type MepMember = { readonly "uniqueId": string, readonly "elementId": number, readonly "name": string, readonly "kind": string, readonly "flowCubicFeetPerSecond": MepFactOfNullableDouble, readonly "nominalDiameterFt": MepFactOfNullableDouble, readonly "innerDiameterFt": MepFactOfNullableDouble, readonly "widthFt": MepFactOfNullableDouble, readonly "heightFt": MepFactOfNullableDouble, readonly "lengthFt": MepFactOfNullableDouble, readonly "segment": MepFactOfMepElementRef, readonly "type": MepFactOfMepElementRef, readonly "connectors": ReadonlyArray<MepPort> };
-type MepFactOfMepSource = { readonly "state": MepReadState, readonly "value": MepSource | null, readonly "error"?: null | string };
-type MepSystemRow = { readonly "uniqueId": string, readonly "elementId": number, readonly "name": string, readonly "domain": string, readonly "systemType": MepFactOfMepElementRef, readonly "classification": string, readonly "flowCubicFeetPerSecond": MepFactOfNullableDouble, readonly "source": MepFactOfMepSource };
-export type Root = { readonly "systems": ReadonlyArray<MepSystemRow>, readonly "systemUniqueId"?: null | string, readonly "elements": ReadonlyArray<MepMember> };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["MepElementRef"]: strictDecoder(MepElementRef),
@@ -1431,52 +1608,82 @@ export const definitions = {
   ["MepSystemRow"]: strictDecoder(MepSystemRow),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type MepReadState = "Value" | "Absent" | "Error";
+type MepElementRef = { readonly "uniqueId": string, readonly "elementId": number, readonly "name": string };
+type MepPeer = { readonly "uniqueId": string, readonly "elementId": number, readonly "connectorId": number };
+type MepFactOfNullableDouble = { readonly "state": MepReadState, readonly "value": null | number, readonly "error"?: null | string };
+type MepFactOfString = { readonly "state": MepReadState, readonly "value": null | string, readonly "error"?: null | string };
+type MepFactOfMepElementRef = { readonly "state": MepReadState, readonly "value": MepElementRef | null, readonly "error"?: null | string };
+type MepPort = { readonly "connectorId": number, readonly "direction": MepFactOfString, readonly "peers": ReadonlyArray<MepPeer> };
+type MepSource = { readonly "equipment": MepElementRef, readonly "baseConnectorId"?: number | null, readonly "outConnectorIds": ReadonlyArray<number>, readonly "connectors": ReadonlyArray<MepPort> };
+type MepMember = { readonly "uniqueId": string, readonly "elementId": number, readonly "name": string, readonly "kind": string, readonly "flowCubicFeetPerSecond": MepFactOfNullableDouble, readonly "nominalDiameterFt": MepFactOfNullableDouble, readonly "innerDiameterFt": MepFactOfNullableDouble, readonly "widthFt": MepFactOfNullableDouble, readonly "heightFt": MepFactOfNullableDouble, readonly "lengthFt": MepFactOfNullableDouble, readonly "segment": MepFactOfMepElementRef, readonly "type": MepFactOfMepElementRef, readonly "connectors": ReadonlyArray<MepPort> };
+type MepFactOfMepSource = { readonly "state": MepReadState, readonly "value": MepSource | null, readonly "error"?: null | string };
+type MepSystemRow = { readonly "uniqueId": string, readonly "elementId": number, readonly "name": string, readonly "domain": string, readonly "systemType": MepFactOfMepElementRef, readonly "classification": string, readonly "flowCubicFeetPerSecond": MepFactOfNullableDouble, readonly "source": MepFactOfMepSource };
+export type Root = { readonly "systems": ReadonlyArray<MepSystemRow>, readonly "systemUniqueId"?: null | string, readonly "elements": ReadonlyArray<MepMember> };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op28request {
+namespace Decoded {
 
 
 const codec = Schema.Struct({ "requestId": Schema.String }).annotate({ "title": "OpCancelRequest", "description": "Cancel one in-flight bridge request by the id the caller sent it under." });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 
 export type Root = { readonly "requestId": string };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op28response {
+namespace Decoded {
 
 
 const codec = Schema.Struct({ "cancelled": Schema.Boolean, "requestId": Schema.String, "message": Schema.String }).annotate({ "title": "OpCancelData" });
-namespace WireTypes {
-
-export type Root = { readonly "cancelled": boolean, readonly "requestId": string, readonly "message": string };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
 
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+
+export type Root = { readonly "cancelled": boolean, readonly "requestId": string, readonly "message": string };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op29request {
+namespace Decoded {
 
 const PodRunOrigin = Schema.Literals(["SavedMember", "SuppliedDraft", "Operation"]).annotate({ "description": "What a run's source was: a saved member's bytes, a supplied draft, or operation input with no member.", "identifier": "PodRunOrigin" });
 const PodCapturedSourceData = Schema.Struct({ "id": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "path": Schema.String, "sha256": Schema.String, "bytesBase64": Schema.String, "origin": PodRunOrigin }).annotate({ "identifier": "PodCapturedSourceData" });
 const codec = Schema.Struct({ "pod": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "path": Schema.String, "content": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "source": Schema.optionalKey(Schema.Union([Schema.Null, PodCapturedSourceData], { mode: "oneOf" })) }).annotate({ "title": "PodMemberComposeRequest" });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 type PodRunOrigin = "SavedMember" | "SuppliedDraft" | "Operation";
 type PodCapturedSourceData = { readonly "id"?: null | string, readonly "path": string, readonly "sha256": string, readonly "bytesBase64": string, readonly "origin": PodRunOrigin };
 export type Root = { readonly "pod"?: null | string, readonly "path": string, readonly "content"?: null | string, readonly "source"?: null | PodCapturedSourceData };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op29response {
+namespace Decoded {
 
 const PodRunOrigin = Schema.Literals(["SavedMember", "SuppliedDraft", "Operation"]).annotate({ "description": "What a run's source was: a saved member's bytes, a supplied draft, or operation input with no member.", "identifier": "PodRunOrigin" });
 const ScriptDiagnosticSeverity = Schema.Literals(["Info", "Warning", "Error"]).annotate({ "description": "", "identifier": "ScriptDiagnosticSeverity" });
@@ -1484,16 +1691,6 @@ const PodConsumedSourceData = Schema.Struct({ "id": Schema.String, "path": Schem
 const PodCapturedSourceData = Schema.Struct({ "id": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "path": Schema.String, "sha256": Schema.String, "bytesBase64": Schema.String, "origin": PodRunOrigin }).annotate({ "identifier": "PodCapturedSourceData" });
 const ScriptDiagnostic = Schema.Struct({ "stage": Schema.String, "severity": ScriptDiagnosticSeverity, "message": Schema.String, "source": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "identifier": "ScriptDiagnostic" });
 const codec = Schema.Struct({ "composed": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "source": PodCapturedSourceData, "diagnostics": Schema.Array(ScriptDiagnostic), "dependencies": Schema.Array(PodConsumedSourceData) }).annotate({ "title": "PodMemberComposeData" });
-namespace WireTypes {
-type PodRunOrigin = "SavedMember" | "SuppliedDraft" | "Operation";
-type ScriptDiagnosticSeverity = "Info" | "Warning" | "Error";
-type PodConsumedSourceData = { readonly "id": string, readonly "path": string, readonly "sha256": string, readonly "bytesBase64": string };
-type PodCapturedSourceData = { readonly "id"?: null | string, readonly "path": string, readonly "sha256": string, readonly "bytesBase64": string, readonly "origin": PodRunOrigin };
-type ScriptDiagnostic = { readonly "stage": string, readonly "severity": ScriptDiagnosticSeverity, readonly "message": string, readonly "source"?: null | string };
-export type Root = { readonly "composed"?: null | string, readonly "source": PodCapturedSourceData, readonly "diagnostics": ReadonlyArray<ScriptDiagnostic>, readonly "dependencies": ReadonlyArray<PodConsumedSourceData> };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["PodCapturedSourceData"]: strictDecoder(PodCapturedSourceData),
@@ -1503,37 +1700,58 @@ export const definitions = {
   ["ScriptDiagnosticSeverity"]: strictDecoder(ScriptDiagnosticSeverity),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type PodRunOrigin = "SavedMember" | "SuppliedDraft" | "Operation";
+type ScriptDiagnosticSeverity = "Info" | "Warning" | "Error";
+type PodConsumedSourceData = { readonly "id": string, readonly "path": string, readonly "sha256": string, readonly "bytesBase64": string };
+type PodCapturedSourceData = { readonly "id"?: null | string, readonly "path": string, readonly "sha256": string, readonly "bytesBase64": string, readonly "origin": PodRunOrigin };
+type ScriptDiagnostic = { readonly "stage": string, readonly "severity": ScriptDiagnosticSeverity, readonly "message": string, readonly "source"?: null | string };
+export type Root = { readonly "composed"?: null | string, readonly "source": PodCapturedSourceData, readonly "diagnostics": ReadonlyArray<ScriptDiagnostic>, readonly "dependencies": ReadonlyArray<PodConsumedSourceData> };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op30request {
+namespace Decoded {
 
 
 const codec = Schema.Struct({ "commandId": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "searchText": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "maxMatches": Schema.optionalKey(Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" }))) }).annotate({ "title": "RibbonCommandExecuteRequest", "description": "Request for revit.apply.command.execute. Provide SearchText to discover commands\n(no execution), or CommandId to post a command — the same discovery and PostCommand\nmachinery as the command palette.\n            " });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 
 export type Root = { readonly "commandId"?: null | string, readonly "searchText"?: null | string, readonly "maxMatches"?: number };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op30response {
+namespace Decoded {
 
 const RibbonCommandInfo = Schema.Struct({ "id": Schema.String, "name": Schema.String, "paths": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "shortcut": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "canExecute": Schema.Boolean }).annotate({ "identifier": "RibbonCommandInfo" });
 const codec = Schema.Struct({ "posted": Schema.Boolean, "executed": Schema.optionalKey(Schema.Union([Schema.Null, RibbonCommandInfo], { mode: "oneOf" })), "matches": Schema.Array(RibbonCommandInfo), "message": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "title": "RibbonCommandExecuteData" });
-namespace WireTypes {
-type RibbonCommandInfo = { readonly "id": string, readonly "name": string, readonly "paths"?: null | string, readonly "shortcut"?: null | string, readonly "canExecute": boolean };
-export type Root = { readonly "posted": boolean, readonly "executed"?: null | RibbonCommandInfo, readonly "matches": ReadonlyArray<RibbonCommandInfo>, readonly "message"?: null | string };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["RibbonCommandInfo"]: strictDecoder(RibbonCommandInfo),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type RibbonCommandInfo = { readonly "id": string, readonly "name": string, readonly "paths"?: null | string, readonly "shortcut"?: null | string, readonly "canExecute": boolean };
+export type Root = { readonly "posted": boolean, readonly "executed"?: null | RibbonCommandInfo, readonly "matches": ReadonlyArray<RibbonCommandInfo>, readonly "message"?: null | string };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op31request {
+namespace Decoded {
 
 const ParameterIdentityKind = Schema.Literals(["SharedGuid", "BuiltInParameter", "ParameterElement", "NameFallback"]).annotate({ "description": "", "identifier": "ParameterIdentityKind" });
 const ParameterLinkSourceScope = Schema.Literals(["instance", "type", "instanceThenType"]).annotate({ "description": "", "identifier": "ParameterLinkSourceScope" });
@@ -1546,6 +1764,9 @@ const ParameterLinkTargetOverride = Schema.Struct({ "enabledParameter": Paramete
 const ParameterLinkDefinition = Schema.Struct({ "id": Schema.String, "sourceCategoryId": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "sourceParameter": ParameterReference, "sourceScope": Schema.optionalKey(ParameterLinkSourceScope), "relationship": ParameterLinkRelationship, "targetParameter": ParameterReference, "targetOverride": Schema.optionalKey(Schema.Union([Schema.Null, ParameterLinkTargetOverride], { mode: "oneOf" })), "reducer": Schema.optionalKey(ParameterLinkReducer) }).annotate({ "identifier": "ParameterLinkDefinition" });
 const ParameterLinkProfile = Schema.Struct({ "formatVersion": Schema.optionalKey(Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" }))), "definitions": Schema.Array(ParameterLinkDefinition), "assignments": Schema.Array(ParameterLinkAssignment) }).annotate({ "identifier": "ParameterLinkProfile" });
 const codec = Schema.Struct({ "profile": Schema.optionalKey(Schema.Union([Schema.Null, ParameterLinkProfile], { mode: "oneOf" })), "reconcile": Schema.optionalKey(Schema.Boolean) }).annotate({ "title": "ParameterLinksApplyRequest" });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 type ParameterIdentityKind = "SharedGuid" | "BuiltInParameter" | "ParameterElement" | "NameFallback";
 type ParameterLinkSourceScope = "instance" | "type" | "instanceThenType";
@@ -1560,11 +1781,11 @@ type ParameterLinkProfile = { readonly "formatVersion"?: number, readonly "defin
 export type Root = { readonly "profile"?: null | ParameterLinkProfile, readonly "reconcile"?: boolean };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op31response {
+namespace Decoded {
 
 const ParameterIdentityKind = Schema.Literals(["SharedGuid", "BuiltInParameter", "ParameterElement", "NameFallback"]).annotate({ "description": "", "identifier": "ParameterIdentityKind" });
 const ParameterLinkSourceScope = Schema.Literals(["instance", "type", "instanceThenType"]).annotate({ "description": "", "identifier": "ParameterLinkSourceScope" });
@@ -1583,27 +1804,6 @@ const ParameterLinkEvaluation = Schema.Struct({ "writes": Schema.Array(Parameter
 const ParameterLinkDefinition = Schema.Struct({ "id": Schema.String, "sourceCategoryId": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "sourceParameter": ParameterReference, "sourceScope": ParameterLinkSourceScope, "relationship": ParameterLinkRelationship, "targetParameter": ParameterReference, "targetOverride": Schema.optionalKey(Schema.Union([Schema.Null, ParameterLinkTargetOverride], { mode: "oneOf" })), "reducer": ParameterLinkReducer }).annotate({ "identifier": "ParameterLinkDefinition" });
 const ParameterLinkProfile = Schema.Struct({ "formatVersion": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "definitions": Schema.Array(ParameterLinkDefinition), "assignments": Schema.Array(ParameterLinkAssignment) }).annotate({ "identifier": "ParameterLinkProfile" });
 const codec = Schema.Struct({ "profile": Schema.optionalKey(Schema.Union([Schema.Null, ParameterLinkProfile], { mode: "oneOf" })), "evaluation": Schema.optionalKey(Schema.Union([Schema.Null, ParameterLinkEvaluation], { mode: "oneOf" })), "status": ParameterLinksRuntimeStatus, "profileChanged": Schema.Boolean, "appliedWriteCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })) }).annotate({ "title": "ParameterLinksData" });
-namespace WireTypes {
-type ParameterIdentityKind = "SharedGuid" | "BuiltInParameter" | "ParameterElement" | "NameFallback";
-type ParameterLinkSourceScope = "instance" | "type" | "instanceThenType";
-type ParameterLinkRelationship = "sameElement" | "electricalEquipmentCircuits";
-type ParameterLinkReducer = "first" | "min" | "max";
-type ParameterLinkAssignment = { readonly "id": string, readonly "definitionId": string, readonly "enabled": boolean, readonly "sourceElementUniqueIds": ReadonlyArray<string> };
-type ParameterLinkValue = { readonly "storageType": string, readonly "specTypeId"?: null | string, readonly "doubleValue"?: null | number, readonly "integerValue"?: number | null, readonly "stringValue"?: null | string, readonly "elementIdValue"?: number | null, readonly "displayValue"?: null | string };
-type ParameterLinkIssueSeverity = "warning" | "error";
-type ParameterLinksRuntimeStatus = { readonly "hasStoredProfile": boolean, readonly "updaterRegistered": boolean, readonly "activeDefinitionCount": number, readonly "activeAssignmentCount": number };
-type ParameterIdentity = { readonly "key": string, readonly "kind": ParameterIdentityKind, readonly "name": string, readonly "builtInParameterId"?: number | null, readonly "sharedGuid"?: null | string, readonly "parameterElementId"?: number | null };
-type ParameterLinkIssue = { readonly "code": string, readonly "severity": ParameterLinkIssueSeverity, readonly "message": string, readonly "definitionId"?: null | string, readonly "assignmentId"?: null | string, readonly "sourceElementUniqueId"?: null | string, readonly "targetElementUniqueId"?: null | string };
-type ParameterReference = { readonly "identity"?: null | ParameterIdentity, readonly "name"?: null | string, readonly "sharedGuid"?: null | string };
-type ParameterLinkWrite = { readonly "definitionId": string, readonly "assignmentId": string, readonly "targetElementId": number, readonly "targetElementUniqueId": string, readonly "targetElementName"?: null | string, readonly "targetParameter": ParameterIdentity, readonly "currentValue": ParameterLinkValue, readonly "linkedValue": ParameterLinkValue, readonly "overrideValue"?: null | ParameterLinkValue, readonly "overrideApplied": boolean, readonly "proposedValue": ParameterLinkValue, readonly "changed": boolean };
-type ParameterLinkTargetOverride = { readonly "enabledParameter": ParameterReference, readonly "valueParameter": ParameterReference };
-type ParameterLinkEvaluation = { readonly "writes": ReadonlyArray<ParameterLinkWrite>, readonly "issues": ReadonlyArray<ParameterLinkIssue>, readonly "sourceElementCount": number, readonly "targetElementCount": number, readonly "changedWriteCount": number };
-type ParameterLinkDefinition = { readonly "id": string, readonly "sourceCategoryId": number, readonly "sourceParameter": ParameterReference, readonly "sourceScope": ParameterLinkSourceScope, readonly "relationship": ParameterLinkRelationship, readonly "targetParameter": ParameterReference, readonly "targetOverride"?: null | ParameterLinkTargetOverride, readonly "reducer": ParameterLinkReducer };
-type ParameterLinkProfile = { readonly "formatVersion": number, readonly "definitions": ReadonlyArray<ParameterLinkDefinition>, readonly "assignments": ReadonlyArray<ParameterLinkAssignment> };
-export type Root = { readonly "profile"?: null | ParameterLinkProfile, readonly "evaluation"?: null | ParameterLinkEvaluation, readonly "status": ParameterLinksRuntimeStatus, readonly "profileChanged": boolean, readonly "appliedWriteCount": number };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["ParameterIdentity"]: strictDecoder(ParameterIdentity),
@@ -1624,8 +1824,33 @@ export const definitions = {
   ["ParameterReference"]: strictDecoder(ParameterReference),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type ParameterIdentityKind = "SharedGuid" | "BuiltInParameter" | "ParameterElement" | "NameFallback";
+type ParameterLinkSourceScope = "instance" | "type" | "instanceThenType";
+type ParameterLinkRelationship = "sameElement" | "electricalEquipmentCircuits";
+type ParameterLinkReducer = "first" | "min" | "max";
+type ParameterLinkAssignment = { readonly "id": string, readonly "definitionId": string, readonly "enabled": boolean, readonly "sourceElementUniqueIds": ReadonlyArray<string> };
+type ParameterLinkValue = { readonly "storageType": string, readonly "specTypeId"?: null | string, readonly "doubleValue"?: null | number, readonly "integerValue"?: number | null, readonly "stringValue"?: null | string, readonly "elementIdValue"?: number | null, readonly "displayValue"?: null | string };
+type ParameterLinkIssueSeverity = "warning" | "error";
+type ParameterLinksRuntimeStatus = { readonly "hasStoredProfile": boolean, readonly "updaterRegistered": boolean, readonly "activeDefinitionCount": number, readonly "activeAssignmentCount": number };
+type ParameterIdentity = { readonly "key": string, readonly "kind": ParameterIdentityKind, readonly "name": string, readonly "builtInParameterId"?: number | null, readonly "sharedGuid"?: null | string, readonly "parameterElementId"?: number | null };
+type ParameterLinkIssue = { readonly "code": string, readonly "severity": ParameterLinkIssueSeverity, readonly "message": string, readonly "definitionId"?: null | string, readonly "assignmentId"?: null | string, readonly "sourceElementUniqueId"?: null | string, readonly "targetElementUniqueId"?: null | string };
+type ParameterReference = { readonly "identity"?: null | ParameterIdentity, readonly "name"?: null | string, readonly "sharedGuid"?: null | string };
+type ParameterLinkWrite = { readonly "definitionId": string, readonly "assignmentId": string, readonly "targetElementId": number, readonly "targetElementUniqueId": string, readonly "targetElementName"?: null | string, readonly "targetParameter": ParameterIdentity, readonly "currentValue": ParameterLinkValue, readonly "linkedValue": ParameterLinkValue, readonly "overrideValue"?: null | ParameterLinkValue, readonly "overrideApplied": boolean, readonly "proposedValue": ParameterLinkValue, readonly "changed": boolean };
+type ParameterLinkTargetOverride = { readonly "enabledParameter": ParameterReference, readonly "valueParameter": ParameterReference };
+type ParameterLinkEvaluation = { readonly "writes": ReadonlyArray<ParameterLinkWrite>, readonly "issues": ReadonlyArray<ParameterLinkIssue>, readonly "sourceElementCount": number, readonly "targetElementCount": number, readonly "changedWriteCount": number };
+type ParameterLinkDefinition = { readonly "id": string, readonly "sourceCategoryId": number, readonly "sourceParameter": ParameterReference, readonly "sourceScope": ParameterLinkSourceScope, readonly "relationship": ParameterLinkRelationship, readonly "targetParameter": ParameterReference, readonly "targetOverride"?: null | ParameterLinkTargetOverride, readonly "reducer": ParameterLinkReducer };
+type ParameterLinkProfile = { readonly "formatVersion": number, readonly "definitions": ReadonlyArray<ParameterLinkDefinition>, readonly "assignments": ReadonlyArray<ParameterLinkAssignment> };
+export type Root = { readonly "profile"?: null | ParameterLinkProfile, readonly "evaluation"?: null | ParameterLinkEvaluation, readonly "status": ParameterLinksRuntimeStatus, readonly "profileChanged": boolean, readonly "appliedWriteCount": number };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op32request {
+namespace Decoded {
 
 const ParameterIdentityKind = Schema.Literals(["SharedGuid", "BuiltInParameter", "ParameterElement", "NameFallback"]).annotate({ "description": "", "identifier": "ParameterIdentityKind" });
 const ParameterLinkSourceScope = Schema.Literals(["instance", "type", "instanceThenType"]).annotate({ "description": "", "identifier": "ParameterLinkSourceScope" });
@@ -1638,6 +1863,9 @@ const ParameterLinkTargetOverride = Schema.Struct({ "enabledParameter": Paramete
 const ParameterLinkDefinition = Schema.Struct({ "id": Schema.String, "sourceCategoryId": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "sourceParameter": ParameterReference, "sourceScope": Schema.optionalKey(ParameterLinkSourceScope), "relationship": ParameterLinkRelationship, "targetParameter": ParameterReference, "targetOverride": Schema.optionalKey(Schema.Union([Schema.Null, ParameterLinkTargetOverride], { mode: "oneOf" })), "reducer": Schema.optionalKey(ParameterLinkReducer) }).annotate({ "identifier": "ParameterLinkDefinition" });
 const ParameterLinkProfile = Schema.Struct({ "formatVersion": Schema.optionalKey(Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" }))), "definitions": Schema.Array(ParameterLinkDefinition), "assignments": Schema.Array(ParameterLinkAssignment) }).annotate({ "identifier": "ParameterLinkProfile" });
 const codec = Schema.Struct({ "profile": Schema.optionalKey(Schema.Union([Schema.Null, ParameterLinkProfile], { mode: "oneOf" })), "reconcile": Schema.optionalKey(Schema.Boolean) }).annotate({ "title": "ParameterLinksApplyRequest" });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 type ParameterIdentityKind = "SharedGuid" | "BuiltInParameter" | "ParameterElement" | "NameFallback";
 type ParameterLinkSourceScope = "instance" | "type" | "instanceThenType";
@@ -1652,11 +1880,11 @@ type ParameterLinkProfile = { readonly "formatVersion"?: number, readonly "defin
 export type Root = { readonly "profile"?: null | ParameterLinkProfile, readonly "reconcile"?: boolean };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op32response {
+namespace Decoded {
 
 const ParameterIdentityKind = Schema.Literals(["SharedGuid", "BuiltInParameter", "ParameterElement", "NameFallback"]).annotate({ "description": "", "identifier": "ParameterIdentityKind" });
 const ParameterLinkSourceScope = Schema.Literals(["instance", "type", "instanceThenType"]).annotate({ "description": "", "identifier": "ParameterLinkSourceScope" });
@@ -1675,27 +1903,6 @@ const ParameterLinkEvaluation = Schema.Struct({ "writes": Schema.Array(Parameter
 const ParameterLinkDefinition = Schema.Struct({ "id": Schema.String, "sourceCategoryId": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "sourceParameter": ParameterReference, "sourceScope": ParameterLinkSourceScope, "relationship": ParameterLinkRelationship, "targetParameter": ParameterReference, "targetOverride": Schema.optionalKey(Schema.Union([Schema.Null, ParameterLinkTargetOverride], { mode: "oneOf" })), "reducer": ParameterLinkReducer }).annotate({ "identifier": "ParameterLinkDefinition" });
 const ParameterLinkProfile = Schema.Struct({ "formatVersion": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "definitions": Schema.Array(ParameterLinkDefinition), "assignments": Schema.Array(ParameterLinkAssignment) }).annotate({ "identifier": "ParameterLinkProfile" });
 const codec = Schema.Struct({ "profile": Schema.optionalKey(Schema.Union([Schema.Null, ParameterLinkProfile], { mode: "oneOf" })), "evaluation": Schema.optionalKey(Schema.Union([Schema.Null, ParameterLinkEvaluation], { mode: "oneOf" })), "status": ParameterLinksRuntimeStatus, "profileChanged": Schema.Boolean, "appliedWriteCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })) }).annotate({ "title": "ParameterLinksData" });
-namespace WireTypes {
-type ParameterIdentityKind = "SharedGuid" | "BuiltInParameter" | "ParameterElement" | "NameFallback";
-type ParameterLinkSourceScope = "instance" | "type" | "instanceThenType";
-type ParameterLinkRelationship = "sameElement" | "electricalEquipmentCircuits";
-type ParameterLinkReducer = "first" | "min" | "max";
-type ParameterLinkAssignment = { readonly "id": string, readonly "definitionId": string, readonly "enabled": boolean, readonly "sourceElementUniqueIds": ReadonlyArray<string> };
-type ParameterLinkValue = { readonly "storageType": string, readonly "specTypeId"?: null | string, readonly "doubleValue"?: null | number, readonly "integerValue"?: number | null, readonly "stringValue"?: null | string, readonly "elementIdValue"?: number | null, readonly "displayValue"?: null | string };
-type ParameterLinkIssueSeverity = "warning" | "error";
-type ParameterLinksRuntimeStatus = { readonly "hasStoredProfile": boolean, readonly "updaterRegistered": boolean, readonly "activeDefinitionCount": number, readonly "activeAssignmentCount": number };
-type ParameterIdentity = { readonly "key": string, readonly "kind": ParameterIdentityKind, readonly "name": string, readonly "builtInParameterId"?: number | null, readonly "sharedGuid"?: null | string, readonly "parameterElementId"?: number | null };
-type ParameterLinkIssue = { readonly "code": string, readonly "severity": ParameterLinkIssueSeverity, readonly "message": string, readonly "definitionId"?: null | string, readonly "assignmentId"?: null | string, readonly "sourceElementUniqueId"?: null | string, readonly "targetElementUniqueId"?: null | string };
-type ParameterReference = { readonly "identity"?: null | ParameterIdentity, readonly "name"?: null | string, readonly "sharedGuid"?: null | string };
-type ParameterLinkWrite = { readonly "definitionId": string, readonly "assignmentId": string, readonly "targetElementId": number, readonly "targetElementUniqueId": string, readonly "targetElementName"?: null | string, readonly "targetParameter": ParameterIdentity, readonly "currentValue": ParameterLinkValue, readonly "linkedValue": ParameterLinkValue, readonly "overrideValue"?: null | ParameterLinkValue, readonly "overrideApplied": boolean, readonly "proposedValue": ParameterLinkValue, readonly "changed": boolean };
-type ParameterLinkTargetOverride = { readonly "enabledParameter": ParameterReference, readonly "valueParameter": ParameterReference };
-type ParameterLinkEvaluation = { readonly "writes": ReadonlyArray<ParameterLinkWrite>, readonly "issues": ReadonlyArray<ParameterLinkIssue>, readonly "sourceElementCount": number, readonly "targetElementCount": number, readonly "changedWriteCount": number };
-type ParameterLinkDefinition = { readonly "id": string, readonly "sourceCategoryId": number, readonly "sourceParameter": ParameterReference, readonly "sourceScope": ParameterLinkSourceScope, readonly "relationship": ParameterLinkRelationship, readonly "targetParameter": ParameterReference, readonly "targetOverride"?: null | ParameterLinkTargetOverride, readonly "reducer": ParameterLinkReducer };
-type ParameterLinkProfile = { readonly "formatVersion": number, readonly "definitions": ReadonlyArray<ParameterLinkDefinition>, readonly "assignments": ReadonlyArray<ParameterLinkAssignment> };
-export type Root = { readonly "profile"?: null | ParameterLinkProfile, readonly "evaluation"?: null | ParameterLinkEvaluation, readonly "status": ParameterLinksRuntimeStatus, readonly "profileChanged": boolean, readonly "appliedWriteCount": number };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["ParameterIdentity"]: strictDecoder(ParameterIdentity),
@@ -1716,13 +1923,41 @@ export const definitions = {
   ["ParameterReference"]: strictDecoder(ParameterReference),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type ParameterIdentityKind = "SharedGuid" | "BuiltInParameter" | "ParameterElement" | "NameFallback";
+type ParameterLinkSourceScope = "instance" | "type" | "instanceThenType";
+type ParameterLinkRelationship = "sameElement" | "electricalEquipmentCircuits";
+type ParameterLinkReducer = "first" | "min" | "max";
+type ParameterLinkAssignment = { readonly "id": string, readonly "definitionId": string, readonly "enabled": boolean, readonly "sourceElementUniqueIds": ReadonlyArray<string> };
+type ParameterLinkValue = { readonly "storageType": string, readonly "specTypeId"?: null | string, readonly "doubleValue"?: null | number, readonly "integerValue"?: number | null, readonly "stringValue"?: null | string, readonly "elementIdValue"?: number | null, readonly "displayValue"?: null | string };
+type ParameterLinkIssueSeverity = "warning" | "error";
+type ParameterLinksRuntimeStatus = { readonly "hasStoredProfile": boolean, readonly "updaterRegistered": boolean, readonly "activeDefinitionCount": number, readonly "activeAssignmentCount": number };
+type ParameterIdentity = { readonly "key": string, readonly "kind": ParameterIdentityKind, readonly "name": string, readonly "builtInParameterId"?: number | null, readonly "sharedGuid"?: null | string, readonly "parameterElementId"?: number | null };
+type ParameterLinkIssue = { readonly "code": string, readonly "severity": ParameterLinkIssueSeverity, readonly "message": string, readonly "definitionId"?: null | string, readonly "assignmentId"?: null | string, readonly "sourceElementUniqueId"?: null | string, readonly "targetElementUniqueId"?: null | string };
+type ParameterReference = { readonly "identity"?: null | ParameterIdentity, readonly "name"?: null | string, readonly "sharedGuid"?: null | string };
+type ParameterLinkWrite = { readonly "definitionId": string, readonly "assignmentId": string, readonly "targetElementId": number, readonly "targetElementUniqueId": string, readonly "targetElementName"?: null | string, readonly "targetParameter": ParameterIdentity, readonly "currentValue": ParameterLinkValue, readonly "linkedValue": ParameterLinkValue, readonly "overrideValue"?: null | ParameterLinkValue, readonly "overrideApplied": boolean, readonly "proposedValue": ParameterLinkValue, readonly "changed": boolean };
+type ParameterLinkTargetOverride = { readonly "enabledParameter": ParameterReference, readonly "valueParameter": ParameterReference };
+type ParameterLinkEvaluation = { readonly "writes": ReadonlyArray<ParameterLinkWrite>, readonly "issues": ReadonlyArray<ParameterLinkIssue>, readonly "sourceElementCount": number, readonly "targetElementCount": number, readonly "changedWriteCount": number };
+type ParameterLinkDefinition = { readonly "id": string, readonly "sourceCategoryId": number, readonly "sourceParameter": ParameterReference, readonly "sourceScope": ParameterLinkSourceScope, readonly "relationship": ParameterLinkRelationship, readonly "targetParameter": ParameterReference, readonly "targetOverride"?: null | ParameterLinkTargetOverride, readonly "reducer": ParameterLinkReducer };
+type ParameterLinkProfile = { readonly "formatVersion": number, readonly "definitions": ReadonlyArray<ParameterLinkDefinition>, readonly "assignments": ReadonlyArray<ParameterLinkAssignment> };
+export type Root = { readonly "profile"?: null | ParameterLinkProfile, readonly "evaluation"?: null | ParameterLinkEvaluation, readonly "status": ParameterLinksRuntimeStatus, readonly "profileChanged": boolean, readonly "appliedWriteCount": number };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op33request {
+namespace Decoded {
 
 const RequestedParameterStorageType = Schema.Literals(["None", "String", "Integer", "Double", "ElementId"]).annotate({ "description": "", "identifier": "RequestedParameterStorageType" });
 const ParameterTarget = Schema.Struct({ "elementId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "parameterId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "parameterName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "storageType": RequestedParameterStorageType, "isReadOnly": Schema.Boolean, "hasValue": Schema.Boolean, "rawValue": Schema.Union([Schema.Null, Schema.String]), "elementLabel": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "uniqueId": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "scope": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "displayValue": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "description": "Mutation evidence for one native parameter: what a reviewer saw, and what a writer compares against a fresh\nread before writing. Schedule cells carry one per target; parameter edits carry one as Expected.\n            ", "identifier": "ParameterTarget" });
 const ParameterValueEdit = Schema.Struct({ "elementId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "parameterId": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })), Schema.Null]).annotate({ "format": "int64" })), "parameterName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "value": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "unit": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "rawInternal": Schema.optionalKey(Schema.Boolean), "expected": Schema.optionalKey(Schema.Union([Schema.Null, ParameterTarget], { mode: "oneOf" })), "uniqueId": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "identifier": "ParameterValueEdit" });
 const codec = Schema.Struct({ "edits": Schema.Array(ParameterValueEdit), "dryRun": Schema.optionalKey(Schema.Boolean), "transactionName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "title": "ParameterValueApplyRequest", "description": "Bounded project-document parameter mutation contracts. A wet edit names its exact target (element id +\nparameter id) and carries the ParameterTarget evidence it was reviewed against; a stale or\nmissing Expected refuses. A dry run is the evidence read: it returns Current per edit, and is the only place\nParameterName resolves (discovery for callers that do not yet know the parameter id).\n            " });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 type RequestedParameterStorageType = "None" | "String" | "Integer" | "Double" | "ElementId";
 type ParameterTarget = { readonly "elementId": number, readonly "parameterId": number, readonly "parameterName"?: null | string, readonly "storageType": RequestedParameterStorageType, readonly "isReadOnly": boolean, readonly "hasValue": boolean, readonly "rawValue": null | string, readonly "elementLabel"?: null | string, readonly "uniqueId"?: null | string, readonly "scope"?: null | string, readonly "displayValue"?: null | string };
@@ -1730,26 +1965,17 @@ type ParameterValueEdit = { readonly "elementId": number, readonly "parameterId"
 export type Root = { readonly "edits": ReadonlyArray<ParameterValueEdit>, readonly "dryRun"?: boolean, readonly "transactionName"?: null | string };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op33response {
+namespace Decoded {
 
 const RequestedParameterStorageType = Schema.Literals(["None", "String", "Integer", "Double", "ElementId"]).annotate({ "description": "", "identifier": "RequestedParameterStorageType" });
 const EditRefusalCode = Schema.Literals(["target-evidence-stale", "target-evidence-missing", "target-unresolved", "admission-group-refused", "alias-conflict"]).annotate({ "description": "The closed set of reasons ParameterEditPlan refuses an edit; the prose stays the refusal's message.", "identifier": "EditRefusalCode" });
 const ParameterTarget = Schema.Struct({ "elementId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "parameterId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "parameterName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "storageType": RequestedParameterStorageType, "isReadOnly": Schema.Boolean, "hasValue": Schema.Boolean, "rawValue": Schema.Union([Schema.Null, Schema.String]), "elementLabel": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "uniqueId": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "scope": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "displayValue": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "description": "Mutation evidence for one native parameter: what a reviewer saw, and what a writer compares against a fresh\nread before writing. Schedule cells carry one per target; parameter edits carry one as Expected.\n            ", "identifier": "ParameterTarget" });
 const ParameterValueEditResult = Schema.Struct({ "index": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "ok": Schema.Boolean, "error": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "parsedRaw": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "parsedDisplay": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "current": Schema.optionalKey(Schema.Union([Schema.Null, ParameterTarget], { mode: "oneOf" })), "code": Schema.optionalKey(Schema.Union([Schema.Null, EditRefusalCode], { mode: "oneOf" })), "causeCode": Schema.optionalKey(Schema.Union([Schema.Null, EditRefusalCode], { mode: "oneOf" })) }).annotate({ "identifier": "ParameterValueEditResult" });
 const codec = Schema.Struct({ "applied": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "dryRun": Schema.Boolean, "results": Schema.Array(ParameterValueEditResult) }).annotate({ "title": "ParameterValueApplyData" });
-namespace WireTypes {
-type RequestedParameterStorageType = "None" | "String" | "Integer" | "Double" | "ElementId";
-type EditRefusalCode = "target-evidence-stale" | "target-evidence-missing" | "target-unresolved" | "admission-group-refused" | "alias-conflict";
-type ParameterTarget = { readonly "elementId": number, readonly "parameterId": number, readonly "parameterName"?: null | string, readonly "storageType": RequestedParameterStorageType, readonly "isReadOnly": boolean, readonly "hasValue": boolean, readonly "rawValue": null | string, readonly "elementLabel"?: null | string, readonly "uniqueId"?: null | string, readonly "scope"?: null | string, readonly "displayValue"?: null | string };
-type ParameterValueEditResult = { readonly "index": number, readonly "ok": boolean, readonly "error"?: null | string, readonly "parsedRaw"?: null | string, readonly "parsedDisplay"?: null | string, readonly "current"?: null | ParameterTarget, readonly "code"?: null | EditRefusalCode, readonly "causeCode"?: null | EditRefusalCode };
-export type Root = { readonly "applied": number, readonly "dryRun": boolean, readonly "results": ReadonlyArray<ParameterValueEditResult> };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["EditRefusalCode"]: strictDecoder(EditRefusalCode),
@@ -1758,50 +1984,73 @@ export const definitions = {
   ["RequestedParameterStorageType"]: strictDecoder(RequestedParameterStorageType),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type RequestedParameterStorageType = "None" | "String" | "Integer" | "Double" | "ElementId";
+type EditRefusalCode = "target-evidence-stale" | "target-evidence-missing" | "target-unresolved" | "admission-group-refused" | "alias-conflict";
+type ParameterTarget = { readonly "elementId": number, readonly "parameterId": number, readonly "parameterName"?: null | string, readonly "storageType": RequestedParameterStorageType, readonly "isReadOnly": boolean, readonly "hasValue": boolean, readonly "rawValue": null | string, readonly "elementLabel"?: null | string, readonly "uniqueId"?: null | string, readonly "scope"?: null | string, readonly "displayValue"?: null | string };
+type ParameterValueEditResult = { readonly "index": number, readonly "ok": boolean, readonly "error"?: null | string, readonly "parsedRaw"?: null | string, readonly "parsedDisplay"?: null | string, readonly "current"?: null | ParameterTarget, readonly "code"?: null | EditRefusalCode, readonly "causeCode"?: null | EditRefusalCode };
+export type Root = { readonly "applied": number, readonly "dryRun": boolean, readonly "results": ReadonlyArray<ParameterValueEditResult> };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op34request {
+namespace Decoded {
 
 
 const codec = Schema.Record(Schema.String, Schema.Never).annotate({ "title": "NoRequest" });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 
 export type Root = { readonly [x: string]: never };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op34response {
+namespace Decoded {
 
 
 const codec = Schema.Struct({ "parameterCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "jsonPath": Schema.String, "additionalFormatPaths": Schema.Array(Schema.String) }).annotate({ "title": "ParametersServiceCacheData" });
-namespace WireTypes {
-
-export type Root = { readonly "parameterCount": number, readonly "jsonPath": string, readonly "additionalFormatPaths": ReadonlyArray<string> };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
 
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+
+export type Root = { readonly "parameterCount": number, readonly "jsonPath": string, readonly "additionalFormatPaths": ReadonlyArray<string> };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op35request {
+namespace Decoded {
 
 const RevitDataOutputBudget = Schema.Struct({ "maxEntries": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(1).annotate({ "expected": "a value greater than or equal to 1" })).check(Schema.isLessThanOrEqualTo(100000).annotate({ "expected": "a value less than or equal to 100000" })), Schema.Null]).annotate({ "format": "int32" })), "maxRowsPerEntry": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(1).annotate({ "expected": "a value greater than or equal to 1" })).check(Schema.isLessThanOrEqualTo(10000).annotate({ "expected": "a value less than or equal to 10000" })), Schema.Null]).annotate({ "format": "int32" })), "maxSamplesPerEntry": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(1).annotate({ "expected": "a value greater than or equal to 1" })).check(Schema.isLessThanOrEqualTo(10000).annotate({ "expected": "a value less than or equal to 10000" })), Schema.Null]).annotate({ "format": "int32" })), "includeDiagnostics": Schema.optionalKey(Schema.Boolean) }).annotate({ "identifier": "RevitDataOutputBudget" });
 const codec = Schema.Struct({ "query": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "conceptHints": Schema.optionalKey(Schema.Array(Schema.String)), "subjectHints": Schema.optionalKey(Schema.Array(Schema.String)), "includeBindings": Schema.optionalKey(Schema.Boolean), "includeSchedules": Schema.optionalKey(Schema.Boolean), "budget": Schema.optionalKey(Schema.Union([Schema.Null, RevitDataOutputBudget], { mode: "oneOf" })) }).annotate({ "title": "ConceptEvidenceRequest" });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 type RevitDataOutputBudget = { readonly "maxEntries"?: number | null, readonly "maxRowsPerEntry"?: number | null, readonly "maxSamplesPerEntry"?: number | null, readonly "includeDiagnostics"?: boolean };
 export type Root = { readonly "query"?: null | string, readonly "conceptHints"?: ReadonlyArray<string>, readonly "subjectHints"?: ReadonlyArray<string>, readonly "includeBindings"?: boolean, readonly "includeSchedules"?: boolean, readonly "budget"?: null | RevitDataOutputBudget };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op35response {
+namespace Decoded {
 
 const ParameterIdentityKind = Schema.Literals(["SharedGuid", "BuiltInParameter", "ParameterElement", "NameFallback"]).annotate({ "description": "", "identifier": "ParameterIdentityKind" });
 const ConceptEvidenceConfidence = Schema.Literals(["Low", "Medium", "High"]).annotate({ "description": "", "identifier": "ConceptEvidenceConfidence" });
@@ -1814,21 +2063,6 @@ const ParameterDefinitionDescriptor = Schema.Struct({ "identity": ParameterIdent
 const ConceptEvidenceCandidate = Schema.Struct({ "definition": ParameterDefinitionDescriptor, "score": Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })), "confidence": ConceptEvidenceConfidence, "reasons": Schema.Array(Schema.String), "facts": ConceptEvidenceFacts, "identity": ParameterIdentity }).annotate({ "identifier": "ConceptEvidenceCandidate" });
 const ConceptEvidenceCard = Schema.Struct({ "concept": Schema.String, "candidates": Schema.Array(ConceptEvidenceCandidate), "evidenceNotes": Schema.Array(Schema.String) }).annotate({ "identifier": "ConceptEvidenceCard" });
 const codec = Schema.Struct({ "concepts": Schema.Array(ConceptEvidenceCard), "issues": Schema.Array(RevitDataIssue), "page": Schema.optionalKey(Schema.Union([Schema.Null, RevitDataResultPage], { mode: "oneOf" })), "evidenceCollectedAtUtc": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "primitiveCacheHit": Schema.optionalKey(Schema.Union([Schema.Boolean, Schema.Null])) }).annotate({ "title": "ConceptEvidenceData" });
-namespace WireTypes {
-type ParameterIdentityKind = "SharedGuid" | "BuiltInParameter" | "ParameterElement" | "NameFallback";
-type ConceptEvidenceConfidence = "Low" | "Medium" | "High";
-type ConceptEvidenceFacts = { readonly "bindingCount": number, readonly "bindingCategories": ReadonlyArray<string>, readonly "scheduleFieldCount": number, readonly "scheduleFilterCount": number, readonly "averageFieldIndex"?: null | number, readonly "placedScheduleFieldCount": number, readonly "sampleSchedules": ReadonlyArray<string> };
-type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
-type RevitDataResultPage = { readonly "totalCount": number, readonly "returnedCount": number, readonly "isTruncated": boolean };
-type ParameterIdentity = { readonly "key": string, readonly "kind": ParameterIdentityKind, readonly "name": string, readonly "builtInParameterId"?: number | null, readonly "sharedGuid"?: null | string, readonly "parameterElementId"?: number | null };
-type RevitDataIssue = { readonly "code": string, readonly "severity": RevitDataIssueSeverity, readonly "message": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "parameterName"?: null | string };
-type ParameterDefinitionDescriptor = { readonly "identity": ParameterIdentity, readonly "isInstance"?: boolean | null, readonly "dataTypeId"?: null | string, readonly "dataTypeLabel"?: null | string, readonly "groupTypeId"?: null | string, readonly "groupTypeLabel"?: null | string, readonly "visible"?: boolean | null, readonly "userModifiable"?: boolean | null, readonly "description"?: null | string };
-type ConceptEvidenceCandidate = { readonly "definition": ParameterDefinitionDescriptor, readonly "score": number, readonly "confidence": ConceptEvidenceConfidence, readonly "reasons": ReadonlyArray<string>, readonly "facts": ConceptEvidenceFacts, readonly "identity": ParameterIdentity };
-type ConceptEvidenceCard = { readonly "concept": string, readonly "candidates": ReadonlyArray<ConceptEvidenceCandidate>, readonly "evidenceNotes": ReadonlyArray<string> };
-export type Root = { readonly "concepts": ReadonlyArray<ConceptEvidenceCard>, readonly "issues": ReadonlyArray<RevitDataIssue>, readonly "page"?: null | RevitDataResultPage, readonly "evidenceCollectedAtUtc"?: null | string, readonly "primitiveCacheHit"?: boolean | null };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["ConceptEvidenceCandidate"]: strictDecoder(ConceptEvidenceCandidate),
@@ -1843,8 +2077,27 @@ export const definitions = {
   ["RevitDataResultPage"]: strictDecoder(RevitDataResultPage),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type ParameterIdentityKind = "SharedGuid" | "BuiltInParameter" | "ParameterElement" | "NameFallback";
+type ConceptEvidenceConfidence = "Low" | "Medium" | "High";
+type ConceptEvidenceFacts = { readonly "bindingCount": number, readonly "bindingCategories": ReadonlyArray<string>, readonly "scheduleFieldCount": number, readonly "scheduleFilterCount": number, readonly "averageFieldIndex"?: null | number, readonly "placedScheduleFieldCount": number, readonly "sampleSchedules": ReadonlyArray<string> };
+type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
+type RevitDataResultPage = { readonly "totalCount": number, readonly "returnedCount": number, readonly "isTruncated": boolean };
+type ParameterIdentity = { readonly "key": string, readonly "kind": ParameterIdentityKind, readonly "name": string, readonly "builtInParameterId"?: number | null, readonly "sharedGuid"?: null | string, readonly "parameterElementId"?: number | null };
+type RevitDataIssue = { readonly "code": string, readonly "severity": RevitDataIssueSeverity, readonly "message": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "parameterName"?: null | string };
+type ParameterDefinitionDescriptor = { readonly "identity": ParameterIdentity, readonly "isInstance"?: boolean | null, readonly "dataTypeId"?: null | string, readonly "dataTypeLabel"?: null | string, readonly "groupTypeId"?: null | string, readonly "groupTypeLabel"?: null | string, readonly "visible"?: boolean | null, readonly "userModifiable"?: boolean | null, readonly "description"?: null | string };
+type ConceptEvidenceCandidate = { readonly "definition": ParameterDefinitionDescriptor, readonly "score": number, readonly "confidence": ConceptEvidenceConfidence, readonly "reasons": ReadonlyArray<string>, readonly "facts": ConceptEvidenceFacts, readonly "identity": ParameterIdentity };
+type ConceptEvidenceCard = { readonly "concept": string, readonly "candidates": ReadonlyArray<ConceptEvidenceCandidate>, readonly "evidenceNotes": ReadonlyArray<string> };
+export type Root = { readonly "concepts": ReadonlyArray<ConceptEvidenceCard>, readonly "issues": ReadonlyArray<RevitDataIssue>, readonly "page"?: null | RevitDataResultPage, readonly "evidenceCollectedAtUtc"?: null | string, readonly "primitiveCacheHit"?: boolean | null };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op36request {
+namespace Decoded {
 
 const ElectricalCircuitFilter = Schema.Struct({ "panelNames": Schema.optionalKey(Schema.Array(Schema.String)), "circuitNumbers": Schema.optionalKey(Schema.Array(Schema.String)), "loadNames": Schema.optionalKey(Schema.Array(Schema.String)) }).annotate({ "identifier": "ElectricalCircuitFilter" });
 const ParameterIdentityKind = Schema.Literals(["SharedGuid", "BuiltInParameter", "ParameterElement", "NameFallback"]).annotate({ "description": "", "identifier": "ParameterIdentityKind" });
@@ -1853,6 +2106,9 @@ const ParameterReference = Schema.Struct({ "identity": Schema.optionalKey(Schema
 const RequestedParameterQuery = Schema.Struct({ "parameters": Schema.optionalKey(Schema.Array(ParameterReference)) }).annotate({ "identifier": "RequestedParameterQuery" });
 const ElectricalCircuitsCatalogOptions = Schema.Struct({ "parameterQuery": Schema.optionalKey(Schema.Union([Schema.Null, RequestedParameterQuery], { mode: "oneOf" })), "includeNearbyProxyContext": Schema.optionalKey(Schema.Boolean), "nearbyRadiusFeet": Schema.optionalKey(Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" }))), "maxNearbyCandidatesPerElement": Schema.optionalKey(Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" }))), "maxNearbyCandidatesPerCircuit": Schema.optionalKey(Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" }))) }).annotate({ "identifier": "ElectricalCircuitsCatalogOptions" });
 const codec = Schema.Struct({ "filter": Schema.optionalKey(Schema.Union([Schema.Null, ElectricalCircuitFilter], { mode: "oneOf" })), "options": Schema.optionalKey(Schema.Union([Schema.Null, ElectricalCircuitsCatalogOptions], { mode: "oneOf" })) }).annotate({ "title": "ElectricalCircuitsCatalogRequest" });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 type ElectricalCircuitFilter = { readonly "panelNames"?: ReadonlyArray<string>, readonly "circuitNumbers"?: ReadonlyArray<string>, readonly "loadNames"?: ReadonlyArray<string> };
 type ParameterIdentityKind = "SharedGuid" | "BuiltInParameter" | "ParameterElement" | "NameFallback";
@@ -1863,11 +2119,11 @@ type ElectricalCircuitsCatalogOptions = { readonly "parameterQuery"?: null | Req
 export type Root = { readonly "filter"?: null | ElectricalCircuitFilter, readonly "options"?: null | ElectricalCircuitsCatalogOptions };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op36response {
+namespace Decoded {
 
 const ElectricalInsightRole = Schema.Literals(["Panel", "DownstreamPanel", "LoadFamilyInstance", "ProxyFixture", "InlineElectricalEquipment", "Circuit", "Wire", "LoadClassification", "Element"]).annotate({ "description": "", "identifier": "ElectricalInsightRole" });
 const ElementIdentitySource = Schema.Literals(["None", "RequestedParameter", "Mark"]).annotate({ "description": "", "identifier": "ElementIdentitySource" });
@@ -1886,27 +2142,6 @@ const ElectricalCircuitConnectedElementEntry = Schema.Struct({ "elementId": Sche
 const ElectricalNearbyProxyCandidateEntry = Schema.Struct({ "elementId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "elementUniqueId": Schema.String, "className": Schema.String, "categoryName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "name": Schema.String, "familyName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "typeName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "mark": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "effectiveIdentity": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "effectiveIdentitySource": ElementIdentitySource, "role": ElectricalInsightRole, "distanceFeet": Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })), "matchReason": ElectricalNearbyProxyCandidateMatchReason, "requestedParameters": Schema.optionalKey(Schema.Union([Schema.Array(RequestedElementParameterValue), Schema.Null])) }).annotate({ "identifier": "ElectricalNearbyProxyCandidateEntry" });
 const ElectricalCircuitCatalogEntry = Schema.Struct({ "circuitId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "circuitUniqueId": Schema.String, "circuitNumber": Schema.String, "loadName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "panelId": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })), Schema.Null]).annotate({ "format": "int64" })), "panelUniqueId": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "panelName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "slotIndex": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "ways": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "polesNumber": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "voltage": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "apparentLoad": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "apparentCurrent": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "trueLoad": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "trueCurrent": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "rating": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "frame": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "ratingOverride": Schema.Boolean, "ratingOverrideValueDisplay": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "wireSize": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "wireTypeName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "isEmpty": Schema.Boolean, "isMultipleNetwork": Schema.Boolean, "hasCustomCircuitPath": Schema.Boolean, "hasPathOffset": Schema.Boolean, "hasProxyLikeConnectedElements": Schema.Boolean, "proxyLikeConnectedElementCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "proxyInferenceRecommended": Schema.Boolean, "primaryConnectedRole": Schema.optionalKey(Schema.Union([Schema.Null, ElectricalInsightRole], { mode: "oneOf" })), "connectedRoles": Schema.Array(ElectricalInsightRole), "connectedElements": Schema.Array(ElectricalCircuitConnectedElementEntry), "wires": Schema.Array(ElectricalCircuitWireEntry), "nearbyProxyCandidates": Schema.optionalKey(Schema.Union([Schema.Array(ElectricalNearbyProxyCandidateEntry), Schema.Null])) }).annotate({ "identifier": "ElectricalCircuitCatalogEntry" });
 const codec = Schema.Struct({ "entries": Schema.Array(ElectricalCircuitCatalogEntry), "issues": Schema.Array(RevitDataIssue), "filterReport": Schema.optionalKey(Schema.Union([Schema.Null, ElectricalCatalogFilterReport], { mode: "oneOf" })) }).annotate({ "title": "ElectricalCircuitsCatalogData" });
-namespace WireTypes {
-type ElectricalInsightRole = "Panel" | "DownstreamPanel" | "LoadFamilyInstance" | "ProxyFixture" | "InlineElectricalEquipment" | "Circuit" | "Wire" | "LoadClassification" | "Element";
-type ElementIdentitySource = "None" | "RequestedParameter" | "Mark";
-type ParameterIdentityKind = "SharedGuid" | "BuiltInParameter" | "ParameterElement" | "NameFallback";
-type RequestedParameterStorageType = "None" | "String" | "Integer" | "Double" | "ElementId";
-type RequestedParameterValueSource = "None" | "Instance" | "Type";
-type ElectricalCircuitWireEntry = { readonly "wireId": number, readonly "wireUniqueId": string, readonly "wireTypeName"?: null | string, readonly "wiringType": string, readonly "hotConductorCount": number, readonly "neutralConductorCount": number, readonly "groundConductorCount": number };
-type ElectricalNearbyProxyCandidateMatchReason = "NearbyIdentityCandidate" | "RequestedParameterIdentityMatch" | "MarkIdentityMatch";
-type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
-type ElectricalCatalogFilterReport = { readonly "appliedPanelNames": ReadonlyArray<string>, readonly "appliedCircuitNumbers": ReadonlyArray<string>, readonly "appliedLoadNames": ReadonlyArray<string>, readonly "appliedMarks": ReadonlyArray<string>, readonly "ignoredBlankFilterValues": ReadonlyArray<string>, readonly "candidateCountBeforeFilter": number, readonly "matchedCount": number };
-type ParameterIdentity = { readonly "key": string, readonly "kind": ParameterIdentityKind, readonly "name": string, readonly "builtInParameterId"?: number | null, readonly "sharedGuid"?: null | string, readonly "parameterElementId"?: number | null };
-type RevitDataIssue = { readonly "code": string, readonly "severity": RevitDataIssueSeverity, readonly "message": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "parameterName"?: null | string };
-type ParameterDefinitionDescriptor = { readonly "identity": ParameterIdentity, readonly "isInstance"?: boolean | null, readonly "dataTypeId"?: null | string, readonly "dataTypeLabel"?: null | string, readonly "groupTypeId"?: null | string, readonly "groupTypeLabel"?: null | string, readonly "visible"?: boolean | null, readonly "userModifiable"?: boolean | null, readonly "description"?: null | string };
-type RequestedElementParameterValue = { readonly "definition": ParameterDefinitionDescriptor, readonly "found": boolean, readonly "isBlank": boolean, readonly "value"?: null | string, readonly "displayValue"?: null | string, readonly "storageType": RequestedParameterStorageType, readonly "source": RequestedParameterValueSource, readonly "parameterId"?: number | null, readonly "rawValue"?: null | string, readonly "isReadOnly"?: boolean | null, readonly "name": string, readonly "identity": ParameterIdentity };
-type ElectricalCircuitConnectedElementEntry = { readonly "elementId": number, readonly "elementUniqueId": string, readonly "className": string, readonly "categoryName"?: null | string, readonly "name": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "mark"?: null | string, readonly "effectiveIdentity"?: null | string, readonly "effectiveIdentitySource": ElementIdentitySource, readonly "role": ElectricalInsightRole, readonly "hasElectricalConnector": boolean, readonly "electricalSystemCount": number, readonly "requestedParameters"?: ReadonlyArray<RequestedElementParameterValue> | null };
-type ElectricalNearbyProxyCandidateEntry = { readonly "elementId": number, readonly "elementUniqueId": string, readonly "className": string, readonly "categoryName"?: null | string, readonly "name": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "mark"?: null | string, readonly "effectiveIdentity"?: null | string, readonly "effectiveIdentitySource": ElementIdentitySource, readonly "role": ElectricalInsightRole, readonly "distanceFeet": number, readonly "matchReason": ElectricalNearbyProxyCandidateMatchReason, readonly "requestedParameters"?: ReadonlyArray<RequestedElementParameterValue> | null };
-type ElectricalCircuitCatalogEntry = { readonly "circuitId": number, readonly "circuitUniqueId": string, readonly "circuitNumber": string, readonly "loadName"?: null | string, readonly "panelId"?: number | null, readonly "panelUniqueId"?: null | string, readonly "panelName"?: null | string, readonly "slotIndex"?: null | string, readonly "ways"?: null | string, readonly "polesNumber": number, readonly "voltage"?: null | string, readonly "apparentLoad"?: null | string, readonly "apparentCurrent"?: null | string, readonly "trueLoad"?: null | string, readonly "trueCurrent"?: null | string, readonly "rating"?: null | string, readonly "frame"?: null | string, readonly "ratingOverride": boolean, readonly "ratingOverrideValueDisplay"?: null | string, readonly "wireSize"?: null | string, readonly "wireTypeName"?: null | string, readonly "isEmpty": boolean, readonly "isMultipleNetwork": boolean, readonly "hasCustomCircuitPath": boolean, readonly "hasPathOffset": boolean, readonly "hasProxyLikeConnectedElements": boolean, readonly "proxyLikeConnectedElementCount": number, readonly "proxyInferenceRecommended": boolean, readonly "primaryConnectedRole"?: null | ElectricalInsightRole, readonly "connectedRoles": ReadonlyArray<ElectricalInsightRole>, readonly "connectedElements": ReadonlyArray<ElectricalCircuitConnectedElementEntry>, readonly "wires": ReadonlyArray<ElectricalCircuitWireEntry>, readonly "nearbyProxyCandidates"?: ReadonlyArray<ElectricalNearbyProxyCandidateEntry> | null };
-export type Root = { readonly "entries": ReadonlyArray<ElectricalCircuitCatalogEntry>, readonly "issues": ReadonlyArray<RevitDataIssue>, readonly "filterReport"?: null | ElectricalCatalogFilterReport };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["ElectricalCatalogFilterReport"]: strictDecoder(ElectricalCatalogFilterReport),
@@ -1927,36 +2162,55 @@ export const definitions = {
   ["RevitDataIssueSeverity"]: strictDecoder(RevitDataIssueSeverity),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type ElectricalInsightRole = "Panel" | "DownstreamPanel" | "LoadFamilyInstance" | "ProxyFixture" | "InlineElectricalEquipment" | "Circuit" | "Wire" | "LoadClassification" | "Element";
+type ElementIdentitySource = "None" | "RequestedParameter" | "Mark";
+type ParameterIdentityKind = "SharedGuid" | "BuiltInParameter" | "ParameterElement" | "NameFallback";
+type RequestedParameterStorageType = "None" | "String" | "Integer" | "Double" | "ElementId";
+type RequestedParameterValueSource = "None" | "Instance" | "Type";
+type ElectricalCircuitWireEntry = { readonly "wireId": number, readonly "wireUniqueId": string, readonly "wireTypeName"?: null | string, readonly "wiringType": string, readonly "hotConductorCount": number, readonly "neutralConductorCount": number, readonly "groundConductorCount": number };
+type ElectricalNearbyProxyCandidateMatchReason = "NearbyIdentityCandidate" | "RequestedParameterIdentityMatch" | "MarkIdentityMatch";
+type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
+type ElectricalCatalogFilterReport = { readonly "appliedPanelNames": ReadonlyArray<string>, readonly "appliedCircuitNumbers": ReadonlyArray<string>, readonly "appliedLoadNames": ReadonlyArray<string>, readonly "appliedMarks": ReadonlyArray<string>, readonly "ignoredBlankFilterValues": ReadonlyArray<string>, readonly "candidateCountBeforeFilter": number, readonly "matchedCount": number };
+type ParameterIdentity = { readonly "key": string, readonly "kind": ParameterIdentityKind, readonly "name": string, readonly "builtInParameterId"?: number | null, readonly "sharedGuid"?: null | string, readonly "parameterElementId"?: number | null };
+type RevitDataIssue = { readonly "code": string, readonly "severity": RevitDataIssueSeverity, readonly "message": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "parameterName"?: null | string };
+type ParameterDefinitionDescriptor = { readonly "identity": ParameterIdentity, readonly "isInstance"?: boolean | null, readonly "dataTypeId"?: null | string, readonly "dataTypeLabel"?: null | string, readonly "groupTypeId"?: null | string, readonly "groupTypeLabel"?: null | string, readonly "visible"?: boolean | null, readonly "userModifiable"?: boolean | null, readonly "description"?: null | string };
+type RequestedElementParameterValue = { readonly "definition": ParameterDefinitionDescriptor, readonly "found": boolean, readonly "isBlank": boolean, readonly "value"?: null | string, readonly "displayValue"?: null | string, readonly "storageType": RequestedParameterStorageType, readonly "source": RequestedParameterValueSource, readonly "parameterId"?: number | null, readonly "rawValue"?: null | string, readonly "isReadOnly"?: boolean | null, readonly "name": string, readonly "identity": ParameterIdentity };
+type ElectricalCircuitConnectedElementEntry = { readonly "elementId": number, readonly "elementUniqueId": string, readonly "className": string, readonly "categoryName"?: null | string, readonly "name": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "mark"?: null | string, readonly "effectiveIdentity"?: null | string, readonly "effectiveIdentitySource": ElementIdentitySource, readonly "role": ElectricalInsightRole, readonly "hasElectricalConnector": boolean, readonly "electricalSystemCount": number, readonly "requestedParameters"?: ReadonlyArray<RequestedElementParameterValue> | null };
+type ElectricalNearbyProxyCandidateEntry = { readonly "elementId": number, readonly "elementUniqueId": string, readonly "className": string, readonly "categoryName"?: null | string, readonly "name": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "mark"?: null | string, readonly "effectiveIdentity"?: null | string, readonly "effectiveIdentitySource": ElementIdentitySource, readonly "role": ElectricalInsightRole, readonly "distanceFeet": number, readonly "matchReason": ElectricalNearbyProxyCandidateMatchReason, readonly "requestedParameters"?: ReadonlyArray<RequestedElementParameterValue> | null };
+type ElectricalCircuitCatalogEntry = { readonly "circuitId": number, readonly "circuitUniqueId": string, readonly "circuitNumber": string, readonly "loadName"?: null | string, readonly "panelId"?: number | null, readonly "panelUniqueId"?: null | string, readonly "panelName"?: null | string, readonly "slotIndex"?: null | string, readonly "ways"?: null | string, readonly "polesNumber": number, readonly "voltage"?: null | string, readonly "apparentLoad"?: null | string, readonly "apparentCurrent"?: null | string, readonly "trueLoad"?: null | string, readonly "trueCurrent"?: null | string, readonly "rating"?: null | string, readonly "frame"?: null | string, readonly "ratingOverride": boolean, readonly "ratingOverrideValueDisplay"?: null | string, readonly "wireSize"?: null | string, readonly "wireTypeName"?: null | string, readonly "isEmpty": boolean, readonly "isMultipleNetwork": boolean, readonly "hasCustomCircuitPath": boolean, readonly "hasPathOffset": boolean, readonly "hasProxyLikeConnectedElements": boolean, readonly "proxyLikeConnectedElementCount": number, readonly "proxyInferenceRecommended": boolean, readonly "primaryConnectedRole"?: null | ElectricalInsightRole, readonly "connectedRoles": ReadonlyArray<ElectricalInsightRole>, readonly "connectedElements": ReadonlyArray<ElectricalCircuitConnectedElementEntry>, readonly "wires": ReadonlyArray<ElectricalCircuitWireEntry>, readonly "nearbyProxyCandidates"?: ReadonlyArray<ElectricalNearbyProxyCandidateEntry> | null };
+export type Root = { readonly "entries": ReadonlyArray<ElectricalCircuitCatalogEntry>, readonly "issues": ReadonlyArray<RevitDataIssue>, readonly "filterReport"?: null | ElectricalCatalogFilterReport };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op37request {
+namespace Decoded {
 
 const ElectricalLoadClassificationFilter = Schema.Struct({ "names": Schema.optionalKey(Schema.Array(Schema.String)), "abbreviations": Schema.optionalKey(Schema.Array(Schema.String)) }).annotate({ "identifier": "ElectricalLoadClassificationFilter" });
 const codec = Schema.Struct({ "filter": Schema.optionalKey(Schema.Union([Schema.Null, ElectricalLoadClassificationFilter], { mode: "oneOf" })) }).annotate({ "title": "ElectricalLoadClassificationsCatalogRequest" });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 type ElectricalLoadClassificationFilter = { readonly "names"?: ReadonlyArray<string>, readonly "abbreviations"?: ReadonlyArray<string> };
 export type Root = { readonly "filter"?: null | ElectricalLoadClassificationFilter };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op37response {
+namespace Decoded {
 
 const ElectricalDemandFactorDefinitionEntry = Schema.Struct({ "demandFactorId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "demandFactorUniqueId": Schema.String, "name": Schema.String, "ruleType": Schema.String, "includeAdditionalLoad": Schema.Boolean, "additionalLoad": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "valuesCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })) }).annotate({ "identifier": "ElectricalDemandFactorDefinitionEntry" });
 const RevitDataIssueSeverity = Schema.Literals(["Info", "Warning", "Error"]).annotate({ "description": "", "identifier": "RevitDataIssueSeverity" });
 const ElectricalLoadClassificationCatalogEntry = Schema.Struct({ "classificationId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "classificationUniqueId": Schema.String, "name": Schema.String, "abbreviation": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "motor": Schema.Boolean, "other": Schema.Boolean, "spaceLoadClass": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "demandFactor": Schema.optionalKey(Schema.Union([Schema.Null, ElectricalDemandFactorDefinitionEntry], { mode: "oneOf" })) }).annotate({ "identifier": "ElectricalLoadClassificationCatalogEntry" });
 const RevitDataIssue = Schema.Struct({ "code": Schema.String, "severity": RevitDataIssueSeverity, "message": Schema.String, "familyName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "typeName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "parameterName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "identifier": "RevitDataIssue" });
 const codec = Schema.Struct({ "entries": Schema.Array(ElectricalLoadClassificationCatalogEntry), "issues": Schema.Array(RevitDataIssue) }).annotate({ "title": "ElectricalLoadClassificationsCatalogData" });
-namespace WireTypes {
-type ElectricalDemandFactorDefinitionEntry = { readonly "demandFactorId": number, readonly "demandFactorUniqueId": string, readonly "name": string, readonly "ruleType": string, readonly "includeAdditionalLoad": boolean, readonly "additionalLoad"?: null | string, readonly "valuesCount": number };
-type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
-type ElectricalLoadClassificationCatalogEntry = { readonly "classificationId": number, readonly "classificationUniqueId": string, readonly "name": string, readonly "abbreviation"?: null | string, readonly "motor": boolean, readonly "other": boolean, readonly "spaceLoadClass"?: null | string, readonly "demandFactor"?: null | ElectricalDemandFactorDefinitionEntry };
-type RevitDataIssue = { readonly "code": string, readonly "severity": RevitDataIssueSeverity, readonly "message": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "parameterName"?: null | string };
-export type Root = { readonly "entries": ReadonlyArray<ElectricalLoadClassificationCatalogEntry>, readonly "issues": ReadonlyArray<RevitDataIssue> };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["ElectricalDemandFactorDefinitionEntry"]: strictDecoder(ElectricalDemandFactorDefinitionEntry),
@@ -1965,21 +2219,37 @@ export const definitions = {
   ["RevitDataIssueSeverity"]: strictDecoder(RevitDataIssueSeverity),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type ElectricalDemandFactorDefinitionEntry = { readonly "demandFactorId": number, readonly "demandFactorUniqueId": string, readonly "name": string, readonly "ruleType": string, readonly "includeAdditionalLoad": boolean, readonly "additionalLoad"?: null | string, readonly "valuesCount": number };
+type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
+type ElectricalLoadClassificationCatalogEntry = { readonly "classificationId": number, readonly "classificationUniqueId": string, readonly "name": string, readonly "abbreviation"?: null | string, readonly "motor": boolean, readonly "other": boolean, readonly "spaceLoadClass"?: null | string, readonly "demandFactor"?: null | ElectricalDemandFactorDefinitionEntry };
+type RevitDataIssue = { readonly "code": string, readonly "severity": RevitDataIssueSeverity, readonly "message": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "parameterName"?: null | string };
+export type Root = { readonly "entries": ReadonlyArray<ElectricalLoadClassificationCatalogEntry>, readonly "issues": ReadonlyArray<RevitDataIssue> };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op38request {
+namespace Decoded {
 
 const ElectricalPanelFilter = Schema.Struct({ "panelNames": Schema.optionalKey(Schema.Array(Schema.String)), "marks": Schema.optionalKey(Schema.Array(Schema.String)) }).annotate({ "identifier": "ElectricalPanelFilter" });
 const codec = Schema.Struct({ "filter": Schema.optionalKey(Schema.Union([Schema.Null, ElectricalPanelFilter], { mode: "oneOf" })) }).annotate({ "title": "ElectricalPanelsCatalogRequest" });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 type ElectricalPanelFilter = { readonly "panelNames"?: ReadonlyArray<string>, readonly "marks"?: ReadonlyArray<string> };
 export type Root = { readonly "filter"?: null | ElectricalPanelFilter };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op38response {
+namespace Decoded {
 
 const ElectricalInsightRole = Schema.Literals(["Panel", "DownstreamPanel", "LoadFamilyInstance", "ProxyFixture", "InlineElectricalEquipment", "Circuit", "Wire", "LoadClassification", "Element"]).annotate({ "description": "", "identifier": "ElectricalInsightRole" });
 const ElectricalPanelCapacitySource = Schema.Literals(["None", "PanelScheduleData"]).annotate({ "description": "", "identifier": "ElectricalPanelCapacitySource" });
@@ -1988,17 +2258,6 @@ const ElectricalCatalogFilterReport = Schema.Struct({ "appliedPanelNames": Schem
 const ElectricalPanelCatalogEntry = Schema.Struct({ "panelId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "panelUniqueId": Schema.String, "panelName": Schema.String, "mark": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "categoryName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "familyName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "typeName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "role": ElectricalInsightRole, "isOperationalPanel": Schema.Boolean, "distributionSystemName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "maxCircuitCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "configuredSlotCount": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), Schema.Null]).annotate({ "format": "int32" })), "occupiedSlotCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "availableSlotCount": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), Schema.Null]).annotate({ "format": "int32" })), "capacitySource": ElectricalPanelCapacitySource, "assignedCircuitCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "panelScheduleCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "connectedLoadCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })) }).annotate({ "identifier": "ElectricalPanelCatalogEntry" });
 const RevitDataIssue = Schema.Struct({ "code": Schema.String, "severity": RevitDataIssueSeverity, "message": Schema.String, "familyName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "typeName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "parameterName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "identifier": "RevitDataIssue" });
 const codec = Schema.Struct({ "entries": Schema.Array(ElectricalPanelCatalogEntry), "issues": Schema.Array(RevitDataIssue), "filterReport": Schema.optionalKey(Schema.Union([Schema.Null, ElectricalCatalogFilterReport], { mode: "oneOf" })) }).annotate({ "title": "ElectricalPanelsCatalogData" });
-namespace WireTypes {
-type ElectricalInsightRole = "Panel" | "DownstreamPanel" | "LoadFamilyInstance" | "ProxyFixture" | "InlineElectricalEquipment" | "Circuit" | "Wire" | "LoadClassification" | "Element";
-type ElectricalPanelCapacitySource = "None" | "PanelScheduleData";
-type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
-type ElectricalCatalogFilterReport = { readonly "appliedPanelNames": ReadonlyArray<string>, readonly "appliedCircuitNumbers": ReadonlyArray<string>, readonly "appliedLoadNames": ReadonlyArray<string>, readonly "appliedMarks": ReadonlyArray<string>, readonly "ignoredBlankFilterValues": ReadonlyArray<string>, readonly "candidateCountBeforeFilter": number, readonly "matchedCount": number };
-type ElectricalPanelCatalogEntry = { readonly "panelId": number, readonly "panelUniqueId": string, readonly "panelName": string, readonly "mark"?: null | string, readonly "categoryName"?: null | string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "role": ElectricalInsightRole, readonly "isOperationalPanel": boolean, readonly "distributionSystemName"?: null | string, readonly "maxCircuitCount": number, readonly "configuredSlotCount"?: number | null, readonly "occupiedSlotCount": number, readonly "availableSlotCount"?: number | null, readonly "capacitySource": ElectricalPanelCapacitySource, readonly "assignedCircuitCount": number, readonly "panelScheduleCount": number, readonly "connectedLoadCount": number };
-type RevitDataIssue = { readonly "code": string, readonly "severity": RevitDataIssueSeverity, readonly "message": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "parameterName"?: null | string };
-export type Root = { readonly "entries": ReadonlyArray<ElectricalPanelCatalogEntry>, readonly "issues": ReadonlyArray<RevitDataIssue>, readonly "filterReport"?: null | ElectricalCatalogFilterReport };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["ElectricalCatalogFilterReport"]: strictDecoder(ElectricalCatalogFilterReport),
@@ -2009,21 +2268,39 @@ export const definitions = {
   ["RevitDataIssueSeverity"]: strictDecoder(RevitDataIssueSeverity),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type ElectricalInsightRole = "Panel" | "DownstreamPanel" | "LoadFamilyInstance" | "ProxyFixture" | "InlineElectricalEquipment" | "Circuit" | "Wire" | "LoadClassification" | "Element";
+type ElectricalPanelCapacitySource = "None" | "PanelScheduleData";
+type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
+type ElectricalCatalogFilterReport = { readonly "appliedPanelNames": ReadonlyArray<string>, readonly "appliedCircuitNumbers": ReadonlyArray<string>, readonly "appliedLoadNames": ReadonlyArray<string>, readonly "appliedMarks": ReadonlyArray<string>, readonly "ignoredBlankFilterValues": ReadonlyArray<string>, readonly "candidateCountBeforeFilter": number, readonly "matchedCount": number };
+type ElectricalPanelCatalogEntry = { readonly "panelId": number, readonly "panelUniqueId": string, readonly "panelName": string, readonly "mark"?: null | string, readonly "categoryName"?: null | string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "role": ElectricalInsightRole, readonly "isOperationalPanel": boolean, readonly "distributionSystemName"?: null | string, readonly "maxCircuitCount": number, readonly "configuredSlotCount"?: number | null, readonly "occupiedSlotCount": number, readonly "availableSlotCount"?: number | null, readonly "capacitySource": ElectricalPanelCapacitySource, readonly "assignedCircuitCount": number, readonly "panelScheduleCount": number, readonly "connectedLoadCount": number };
+type RevitDataIssue = { readonly "code": string, readonly "severity": RevitDataIssueSeverity, readonly "message": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "parameterName"?: null | string };
+export type Root = { readonly "entries": ReadonlyArray<ElectricalPanelCatalogEntry>, readonly "issues": ReadonlyArray<RevitDataIssue>, readonly "filterReport"?: null | ElectricalCatalogFilterReport };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op39request {
+namespace Decoded {
 
 
 const codec = Schema.Struct({ "key": Schema.String, "context": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Record(Schema.String, Schema.String)])) }).annotate({ "title": "FieldOptionsRequest", "description": "The one field-options read: a value-domain key (an x-options.key) and the context\nvalues its dependsOn names.\n            " });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 
 export type Root = { readonly "key": string, readonly "context"?: null | { readonly [x: string]: string } };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op39response {
+namespace Decoded {
 
 const SettingsOptionsMode = Schema.Literals(["Suggestion", "Constraint"]).annotate({ "description": "", "identifier": "SettingsOptionsMode" });
 const SettingsOptionsDependencyScope = Schema.Literals(["Sibling", "Context"]).annotate({ "description": "", "identifier": "SettingsOptionsDependencyScope" });
@@ -2034,19 +2311,6 @@ const SettingsOptionsDependency = Schema.Struct({ "key": Schema.String, "scope":
 const FieldOptionsResult = Schema.Struct({ "kind": FieldOptionsResultKind, "message": Schema.String }).annotate({ "identifier": "FieldOptionsResult" });
 const SettingsValueDomainDescriptor = Schema.Struct({ "key": Schema.String, "mode": SettingsOptionsMode, "allowsCustomValue": Schema.Boolean, "dependsOn": Schema.Array(SettingsOptionsDependency), "requiredRuntimeMode": SettingsRuntimeMode }).annotate({ "identifier": "SettingsValueDomainDescriptor" });
 const codec = Schema.Struct({ "descriptor": SettingsValueDomainDescriptor, "items": Schema.Array(FieldOptionItem), "result": FieldOptionsResult }).annotate({ "title": "FieldOptionsData" });
-namespace WireTypes {
-type SettingsOptionsMode = "Suggestion" | "Constraint";
-type SettingsOptionsDependencyScope = "Sibling" | "Context";
-type SettingsRuntimeMode = "HostOnly" | "LiveDocument";
-type FieldOptionItem = { readonly "value": string, readonly "label": string, readonly "description"?: null | string, readonly "metadata"?: null | { readonly [x: string]: string } };
-type FieldOptionsResultKind = "Success" | "Unsupported" | "Failure";
-type SettingsOptionsDependency = { readonly "key": string, readonly "scope": SettingsOptionsDependencyScope };
-type FieldOptionsResult = { readonly "kind": FieldOptionsResultKind, readonly "message": string };
-type SettingsValueDomainDescriptor = { readonly "key": string, readonly "mode": SettingsOptionsMode, readonly "allowsCustomValue": boolean, readonly "dependsOn": ReadonlyArray<SettingsOptionsDependency>, readonly "requiredRuntimeMode": SettingsRuntimeMode };
-export type Root = { readonly "descriptor": SettingsValueDomainDescriptor, readonly "items": ReadonlyArray<FieldOptionItem>, readonly "result": FieldOptionsResult };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["FieldOptionItem"]: strictDecoder(FieldOptionItem),
@@ -2059,8 +2323,25 @@ export const definitions = {
   ["SettingsValueDomainDescriptor"]: strictDecoder(SettingsValueDomainDescriptor),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type SettingsOptionsMode = "Suggestion" | "Constraint";
+type SettingsOptionsDependencyScope = "Sibling" | "Context";
+type SettingsRuntimeMode = "HostOnly" | "LiveDocument";
+type FieldOptionItem = { readonly "value": string, readonly "label": string, readonly "description"?: null | string, readonly "metadata"?: null | { readonly [x: string]: string } };
+type FieldOptionsResultKind = "Success" | "Unsupported" | "Failure";
+type SettingsOptionsDependency = { readonly "key": string, readonly "scope": SettingsOptionsDependencyScope };
+type FieldOptionsResult = { readonly "kind": FieldOptionsResultKind, readonly "message": string };
+type SettingsValueDomainDescriptor = { readonly "key": string, readonly "mode": SettingsOptionsMode, readonly "allowsCustomValue": boolean, readonly "dependsOn": ReadonlyArray<SettingsOptionsDependency>, readonly "requiredRuntimeMode": SettingsRuntimeMode };
+export type Root = { readonly "descriptor": SettingsValueDomainDescriptor, readonly "items": ReadonlyArray<FieldOptionItem>, readonly "result": FieldOptionsResult };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op40request {
+namespace Decoded {
 
 const LoadedFamilyPlacementScope = Schema.Literals(["AllLoaded", "PlacedOnly", "UnplacedOnly"]).annotate({ "description": "", "identifier": "LoadedFamilyPlacementScope" });
 const RevitDataResultView = Schema.Literals(["Summary", "Handles", "Rows", "Full"]).annotate({ "description": "", "identifier": "RevitDataResultView" });
@@ -2068,6 +2349,9 @@ const RevitDataOutputBudget = Schema.Struct({ "maxEntries": Schema.optionalKey(S
 const LoadedFamiliesFilter = Schema.Struct({ "familyNames": Schema.optionalKey(Schema.Array(Schema.String).annotate({ "description": "Exact family names to include; empty means all families." })), "familyNameContains": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String]).annotate({ "description": "Case-insensitive substring match against family names." })), "categoryNames": Schema.optionalKey(Schema.Array(Schema.String).annotate({ "description": "Exact category names to include; empty means all categories." })), "categoryNameContains": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String]).annotate({ "description": "Case-insensitive substring match against category names." })), "placementScope": Schema.optionalKey(Schema.Union([LoadedFamilyPlacementScope], { mode: "oneOf" }).annotate({ "description": "Restrict to families with (or without) placed instances in the document." })) }).annotate({ "identifier": "LoadedFamiliesFilter" });
 const RevitDataProjectionRequest = Schema.Struct({ "view": Schema.optionalKey(RevitDataResultView), "budget": Schema.optionalKey(Schema.Union([Schema.Null, RevitDataOutputBudget], { mode: "oneOf" })) }).annotate({ "identifier": "RevitDataProjectionRequest" });
 const codec = Schema.Struct({ "filter": Schema.optionalKey(Schema.Union([Schema.Null, LoadedFamiliesFilter], { mode: "oneOf" })), "projection": Schema.optionalKey(Schema.Union([Schema.Null, RevitDataProjectionRequest], { mode: "oneOf" })), "budget": Schema.optionalKey(Schema.Union([Schema.Null, RevitDataOutputBudget], { mode: "oneOf" })) }).annotate({ "title": "LoadedFamiliesCatalogRequest" });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 type LoadedFamilyPlacementScope = "AllLoaded" | "PlacedOnly" | "UnplacedOnly";
 type RevitDataResultView = "Summary" | "Handles" | "Rows" | "Full";
@@ -2077,11 +2361,11 @@ type RevitDataProjectionRequest = { readonly "view"?: RevitDataResultView, reado
 export type Root = { readonly "filter"?: null | LoadedFamiliesFilter, readonly "projection"?: null | RevitDataProjectionRequest, readonly "budget"?: null | RevitDataOutputBudget };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op40response {
+namespace Decoded {
 
 const LoadedFamiliesCatalogSummary = Schema.Struct({ "totalFamilies": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "placedFamilies": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "unplacedFamilies": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "totalTypes": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "totalPlacedInstances": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "truncated": Schema.Boolean }).annotate({ "identifier": "LoadedFamiliesCatalogSummary" });
 const LoadedFamilyTypeEntry = Schema.Struct({ "typeName": Schema.String }).annotate({ "identifier": "LoadedFamilyTypeEntry" });
@@ -2090,17 +2374,6 @@ const RevitDataResultPage = Schema.Struct({ "totalCount": Schema.Number.annotate
 const LoadedFamilyCatalogEntry = Schema.Struct({ "familyId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "familyUniqueId": Schema.String, "familyName": Schema.String, "categoryName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "typeCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "placedInstanceCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "types": Schema.Array(LoadedFamilyTypeEntry) }).annotate({ "identifier": "LoadedFamilyCatalogEntry" });
 const RevitDataIssue = Schema.Struct({ "code": Schema.String, "severity": RevitDataIssueSeverity, "message": Schema.String, "familyName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "typeName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "parameterName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "identifier": "RevitDataIssue" });
 const codec = Schema.Struct({ "summary": LoadedFamiliesCatalogSummary, "families": Schema.Array(LoadedFamilyCatalogEntry), "issues": Schema.Array(RevitDataIssue), "page": Schema.optionalKey(Schema.Union([Schema.Null, RevitDataResultPage], { mode: "oneOf" })) }).annotate({ "title": "LoadedFamiliesCatalogData" });
-namespace WireTypes {
-type LoadedFamiliesCatalogSummary = { readonly "totalFamilies": number, readonly "placedFamilies": number, readonly "unplacedFamilies": number, readonly "totalTypes": number, readonly "totalPlacedInstances": number, readonly "truncated": boolean };
-type LoadedFamilyTypeEntry = { readonly "typeName": string };
-type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
-type RevitDataResultPage = { readonly "totalCount": number, readonly "returnedCount": number, readonly "isTruncated": boolean };
-type LoadedFamilyCatalogEntry = { readonly "familyId": number, readonly "familyUniqueId": string, readonly "familyName": string, readonly "categoryName"?: null | string, readonly "typeCount": number, readonly "placedInstanceCount": number, readonly "types": ReadonlyArray<LoadedFamilyTypeEntry> };
-type RevitDataIssue = { readonly "code": string, readonly "severity": RevitDataIssueSeverity, readonly "message": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "parameterName"?: null | string };
-export type Root = { readonly "summary": LoadedFamiliesCatalogSummary, readonly "families": ReadonlyArray<LoadedFamilyCatalogEntry>, readonly "issues": ReadonlyArray<RevitDataIssue>, readonly "page"?: null | RevitDataResultPage };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["LoadedFamiliesCatalogSummary"]: strictDecoder(LoadedFamiliesCatalogSummary),
@@ -2111,8 +2384,23 @@ export const definitions = {
   ["RevitDataResultPage"]: strictDecoder(RevitDataResultPage),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type LoadedFamiliesCatalogSummary = { readonly "totalFamilies": number, readonly "placedFamilies": number, readonly "unplacedFamilies": number, readonly "totalTypes": number, readonly "totalPlacedInstances": number, readonly "truncated": boolean };
+type LoadedFamilyTypeEntry = { readonly "typeName": string };
+type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
+type RevitDataResultPage = { readonly "totalCount": number, readonly "returnedCount": number, readonly "isTruncated": boolean };
+type LoadedFamilyCatalogEntry = { readonly "familyId": number, readonly "familyUniqueId": string, readonly "familyName": string, readonly "categoryName"?: null | string, readonly "typeCount": number, readonly "placedInstanceCount": number, readonly "types": ReadonlyArray<LoadedFamilyTypeEntry> };
+type RevitDataIssue = { readonly "code": string, readonly "severity": RevitDataIssueSeverity, readonly "message": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "parameterName"?: null | string };
+export type Root = { readonly "summary": LoadedFamiliesCatalogSummary, readonly "families": ReadonlyArray<LoadedFamilyCatalogEntry>, readonly "issues": ReadonlyArray<RevitDataIssue>, readonly "page"?: null | RevitDataResultPage };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op41request {
+namespace Decoded {
 
 const LoadedFamilyPlacementScope = Schema.Literals(["AllLoaded", "PlacedOnly", "UnplacedOnly"]).annotate({ "description": "", "identifier": "LoadedFamilyPlacementScope" });
 const ParameterIdentityKind = Schema.Literals(["SharedGuid", "BuiltInParameter", "ParameterElement", "NameFallback"]).annotate({ "description": "", "identifier": "ParameterIdentityKind" });
@@ -2125,6 +2413,9 @@ const RevitDataProjectionRequest = Schema.Struct({ "view": Schema.optionalKey(Re
 const ParameterReference = Schema.Struct({ "identity": Schema.optionalKey(Schema.Union([Schema.Null, ParameterIdentity], { mode: "oneOf" })), "name": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "sharedGuid": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "identifier": "ParameterReference" });
 const ProjectParameterBindingsFilter = Schema.Struct({ "parameters": Schema.optionalKey(Schema.Array(ParameterReference)), "parameterNameContains": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "categoryNames": Schema.optionalKey(Schema.Array(Schema.String)), "bindingKind": Schema.optionalKey(Schema.Union([Schema.Null, ProjectParameterBindingKind], { mode: "oneOf" })) }).annotate({ "identifier": "ProjectParameterBindingsFilter" });
 const codec = Schema.Struct({ "filter": Schema.optionalKey(Schema.Union([Schema.Null, LoadedFamiliesFilter], { mode: "oneOf" })), "bindingFilter": Schema.optionalKey(Schema.Union([Schema.Null, ProjectParameterBindingsFilter], { mode: "oneOf" })), "projection": Schema.optionalKey(Schema.Union([Schema.Null, RevitDataProjectionRequest], { mode: "oneOf" })), "budget": Schema.optionalKey(Schema.Union([Schema.Null, RevitDataOutputBudget], { mode: "oneOf" })) }).annotate({ "title": "ProjectParameterBindingsRequest" });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 type LoadedFamilyPlacementScope = "AllLoaded" | "PlacedOnly" | "UnplacedOnly";
 type ParameterIdentityKind = "SharedGuid" | "BuiltInParameter" | "ParameterElement" | "NameFallback";
@@ -2139,11 +2430,11 @@ type ProjectParameterBindingsFilter = { readonly "parameters"?: ReadonlyArray<Pa
 export type Root = { readonly "filter"?: null | LoadedFamiliesFilter, readonly "bindingFilter"?: null | ProjectParameterBindingsFilter, readonly "projection"?: null | RevitDataProjectionRequest, readonly "budget"?: null | RevitDataOutputBudget };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op41response {
+namespace Decoded {
 
 const ProjectParameterBindingsSummary = Schema.Struct({ "totalBindings": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "instanceBindings": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "typeBindings": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "bindingsByCategory": Schema.Record(Schema.String, Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" }))), "truncated": Schema.Boolean }).annotate({ "identifier": "ProjectParameterBindingsSummary" });
 const ParameterIdentityKind = Schema.Literals(["SharedGuid", "BuiltInParameter", "ParameterElement", "NameFallback"]).annotate({ "description": "", "identifier": "ParameterIdentityKind" });
@@ -2155,20 +2446,6 @@ const RevitDataIssue = Schema.Struct({ "code": Schema.String, "severity": RevitD
 const ParameterDefinitionDescriptor = Schema.Struct({ "identity": ParameterIdentity, "isInstance": Schema.optionalKey(Schema.Union([Schema.Boolean, Schema.Null])), "dataTypeId": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "dataTypeLabel": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "groupTypeId": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "groupTypeLabel": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "visible": Schema.optionalKey(Schema.Union([Schema.Boolean, Schema.Null])), "userModifiable": Schema.optionalKey(Schema.Union([Schema.Boolean, Schema.Null])), "description": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "identifier": "ParameterDefinitionDescriptor" });
 const ProjectParameterBindingEntry = Schema.Struct({ "definition": ParameterDefinitionDescriptor, "bindingKind": ProjectParameterBindingKind, "categoryNames": Schema.Array(Schema.String) }).annotate({ "identifier": "ProjectParameterBindingEntry" });
 const codec = Schema.Struct({ "summary": ProjectParameterBindingsSummary, "entries": Schema.Array(ProjectParameterBindingEntry), "issues": Schema.Array(RevitDataIssue), "page": Schema.optionalKey(Schema.Union([Schema.Null, RevitDataResultPage], { mode: "oneOf" })) }).annotate({ "title": "ProjectParameterBindingsData" });
-namespace WireTypes {
-type ProjectParameterBindingsSummary = { readonly "totalBindings": number, readonly "instanceBindings": number, readonly "typeBindings": number, readonly "bindingsByCategory": { readonly [x: string]: number }, readonly "truncated": boolean };
-type ParameterIdentityKind = "SharedGuid" | "BuiltInParameter" | "ParameterElement" | "NameFallback";
-type ProjectParameterBindingKind = "Instance" | "Type";
-type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
-type RevitDataResultPage = { readonly "totalCount": number, readonly "returnedCount": number, readonly "isTruncated": boolean };
-type ParameterIdentity = { readonly "key": string, readonly "kind": ParameterIdentityKind, readonly "name": string, readonly "builtInParameterId"?: number | null, readonly "sharedGuid"?: null | string, readonly "parameterElementId"?: number | null };
-type RevitDataIssue = { readonly "code": string, readonly "severity": RevitDataIssueSeverity, readonly "message": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "parameterName"?: null | string };
-type ParameterDefinitionDescriptor = { readonly "identity": ParameterIdentity, readonly "isInstance"?: boolean | null, readonly "dataTypeId"?: null | string, readonly "dataTypeLabel"?: null | string, readonly "groupTypeId"?: null | string, readonly "groupTypeLabel"?: null | string, readonly "visible"?: boolean | null, readonly "userModifiable"?: boolean | null, readonly "description"?: null | string };
-type ProjectParameterBindingEntry = { readonly "definition": ParameterDefinitionDescriptor, readonly "bindingKind": ProjectParameterBindingKind, readonly "categoryNames": ReadonlyArray<string> };
-export type Root = { readonly "summary": ProjectParameterBindingsSummary, readonly "entries": ReadonlyArray<ProjectParameterBindingEntry>, readonly "issues": ReadonlyArray<RevitDataIssue>, readonly "page"?: null | RevitDataResultPage };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["ParameterDefinitionDescriptor"]: strictDecoder(ParameterDefinitionDescriptor),
@@ -2182,8 +2459,26 @@ export const definitions = {
   ["RevitDataResultPage"]: strictDecoder(RevitDataResultPage),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type ProjectParameterBindingsSummary = { readonly "totalBindings": number, readonly "instanceBindings": number, readonly "typeBindings": number, readonly "bindingsByCategory": { readonly [x: string]: number }, readonly "truncated": boolean };
+type ParameterIdentityKind = "SharedGuid" | "BuiltInParameter" | "ParameterElement" | "NameFallback";
+type ProjectParameterBindingKind = "Instance" | "Type";
+type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
+type RevitDataResultPage = { readonly "totalCount": number, readonly "returnedCount": number, readonly "isTruncated": boolean };
+type ParameterIdentity = { readonly "key": string, readonly "kind": ParameterIdentityKind, readonly "name": string, readonly "builtInParameterId"?: number | null, readonly "sharedGuid"?: null | string, readonly "parameterElementId"?: number | null };
+type RevitDataIssue = { readonly "code": string, readonly "severity": RevitDataIssueSeverity, readonly "message": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "parameterName"?: null | string };
+type ParameterDefinitionDescriptor = { readonly "identity": ParameterIdentity, readonly "isInstance"?: boolean | null, readonly "dataTypeId"?: null | string, readonly "dataTypeLabel"?: null | string, readonly "groupTypeId"?: null | string, readonly "groupTypeLabel"?: null | string, readonly "visible"?: boolean | null, readonly "userModifiable"?: boolean | null, readonly "description"?: null | string };
+type ProjectParameterBindingEntry = { readonly "definition": ParameterDefinitionDescriptor, readonly "bindingKind": ProjectParameterBindingKind, readonly "categoryNames": ReadonlyArray<string> };
+export type Root = { readonly "summary": ProjectParameterBindingsSummary, readonly "entries": ReadonlyArray<ProjectParameterBindingEntry>, readonly "issues": ReadonlyArray<RevitDataIssue>, readonly "page"?: null | RevitDataResultPage };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op42request {
+namespace Decoded {
 
 const ParameterEvidenceRankingMode = Schema.Literals(["General", "Tagging", "ScheduleJoin", "ElectricalJoin"]).annotate({ "description": "", "identifier": "ParameterEvidenceRankingMode" });
 const RevitElementScope = Schema.Literals(["All", "ActiveViewVisible", "ViewReferences", "CurrentSelection", "ExplicitHandles"]).annotate({ "description": "", "identifier": "RevitElementScope" });
@@ -2192,6 +2487,9 @@ const RevitDataOutputBudget = Schema.Struct({ "maxEntries": Schema.optionalKey(S
 const ParameterIdentity = Schema.Struct({ "key": Schema.String, "kind": ParameterIdentityKind, "name": Schema.String, "builtInParameterId": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), Schema.Null]).annotate({ "format": "int32" })), "sharedGuid": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "parameterElementId": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })), Schema.Null]).annotate({ "format": "int64" })) }).annotate({ "identifier": "ParameterIdentity" });
 const ParameterReference = Schema.Struct({ "identity": Schema.optionalKey(Schema.Union([Schema.Null, ParameterIdentity], { mode: "oneOf" })), "name": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "sharedGuid": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "identifier": "ParameterReference" });
 const codec = Schema.Struct({ "taskText": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "rankingMode": Schema.optionalKey(ParameterEvidenceRankingMode), "categoryNames": Schema.optionalKey(Schema.Array(Schema.String)), "scope": Schema.optionalKey(RevitElementScope), "elementIds": Schema.optionalKey(Schema.Array(Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })))), "elementUniqueIds": Schema.optionalKey(Schema.Array(Schema.String)), "scheduleIds": Schema.optionalKey(Schema.Array(Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })))), "scheduleUniqueIds": Schema.optionalKey(Schema.Array(Schema.String)), "scheduleNames": Schema.optionalKey(Schema.Array(Schema.String)), "candidateParameters": Schema.optionalKey(Schema.Array(ParameterReference)), "budget": Schema.optionalKey(Schema.Union([Schema.Null, RevitDataOutputBudget], { mode: "oneOf" })), "useCache": Schema.optionalKey(Schema.Boolean) }).annotate({ "title": "ParameterEvidenceRequest" });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 type ParameterEvidenceRankingMode = "General" | "Tagging" | "ScheduleJoin" | "ElectricalJoin";
 type RevitElementScope = "All" | "ActiveViewVisible" | "ViewReferences" | "CurrentSelection" | "ExplicitHandles";
@@ -2202,11 +2500,11 @@ type ParameterReference = { readonly "identity"?: null | ParameterIdentity, read
 export type Root = { readonly "taskText"?: null | string, readonly "rankingMode"?: ParameterEvidenceRankingMode, readonly "categoryNames"?: ReadonlyArray<string>, readonly "scope"?: RevitElementScope, readonly "elementIds"?: ReadonlyArray<number>, readonly "elementUniqueIds"?: ReadonlyArray<string>, readonly "scheduleIds"?: ReadonlyArray<number>, readonly "scheduleUniqueIds"?: ReadonlyArray<string>, readonly "scheduleNames"?: ReadonlyArray<string>, readonly "candidateParameters"?: ReadonlyArray<ParameterReference>, readonly "budget"?: null | RevitDataOutputBudget, readonly "useCache"?: boolean };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op42response {
+namespace Decoded {
 
 const ParameterIdentityKind = Schema.Literals(["SharedGuid", "BuiltInParameter", "ParameterElement", "NameFallback"]).annotate({ "description": "", "identifier": "ParameterIdentityKind" });
 const ParameterEvidenceSource = Schema.Literals(["ProjectBinding", "ScheduleField", "ScheduleFilter", "ScopedElement"]).annotate({ "description": "", "identifier": "ParameterEvidenceSource" });
@@ -2222,24 +2520,6 @@ const RevitDataIssue = Schema.Struct({ "code": Schema.String, "severity": RevitD
 const ParameterDefinitionDescriptor = Schema.Struct({ "identity": ParameterIdentity, "isInstance": Schema.optionalKey(Schema.Union([Schema.Boolean, Schema.Null])), "dataTypeId": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "dataTypeLabel": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "groupTypeId": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "groupTypeLabel": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "visible": Schema.optionalKey(Schema.Union([Schema.Boolean, Schema.Null])), "userModifiable": Schema.optionalKey(Schema.Union([Schema.Boolean, Schema.Null])), "description": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "identifier": "ParameterDefinitionDescriptor" });
 const ParameterEvidenceCandidate = Schema.Struct({ "definition": ParameterDefinitionDescriptor, "score": Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })), "reasons": Schema.Array(Schema.String), "evidenceCounts": Schema.Array(ParameterEvidenceCount), "samples": Schema.Array(ParameterEvidenceSample), "identity": ParameterIdentity }).annotate({ "identifier": "ParameterEvidenceCandidate" });
 const codec = Schema.Struct({ "candidates": Schema.Array(ParameterEvidenceCandidate), "issues": Schema.Array(RevitDataIssue), "page": Schema.optionalKey(Schema.Union([Schema.Null, RevitDataResultPage], { mode: "oneOf" })), "evidenceCollectedAtUtc": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "primitiveCacheHit": Schema.optionalKey(Schema.Union([Schema.Boolean, Schema.Null])) }).annotate({ "title": "ParameterEvidenceData" });
-namespace WireTypes {
-type ParameterIdentityKind = "SharedGuid" | "BuiltInParameter" | "ParameterElement" | "NameFallback";
-type ParameterEvidenceSource = "ProjectBinding" | "ScheduleField" | "ScheduleFilter" | "ScopedElement";
-type ParameterEvidenceScope = "Document" | "Category" | "Schedule" | "PrintedSchedule" | "ActiveViewVisible" | "CurrentSelection" | "ExplicitHandles";
-type ParameterEvidenceStrength = "Weak" | "Medium" | "Strong";
-type RevitElementHandle = { readonly "elementId": number, readonly "uniqueId": string, readonly "displayName": string, readonly "categoryName"?: null | string, readonly "familyName"?: null | string, readonly "typeName"?: null | string };
-type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
-type RevitDataResultPage = { readonly "totalCount": number, readonly "returnedCount": number, readonly "isTruncated": boolean };
-type ParameterIdentity = { readonly "key": string, readonly "kind": ParameterIdentityKind, readonly "name": string, readonly "builtInParameterId"?: number | null, readonly "sharedGuid"?: null | string, readonly "parameterElementId"?: number | null };
-type ParameterEvidenceCount = { readonly "source": ParameterEvidenceSource, readonly "scope": ParameterEvidenceScope, readonly "strength": ParameterEvidenceStrength, readonly "count": number };
-type ParameterEvidenceSample = { readonly "source": ParameterEvidenceSource, readonly "scope": ParameterEvidenceScope, readonly "strength": ParameterEvidenceStrength, readonly "reason": string, readonly "categoryName"?: null | string, readonly "scheduleName"?: null | string, readonly "elementName"?: null | string, readonly "element"?: null | RevitElementHandle };
-type RevitDataIssue = { readonly "code": string, readonly "severity": RevitDataIssueSeverity, readonly "message": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "parameterName"?: null | string };
-type ParameterDefinitionDescriptor = { readonly "identity": ParameterIdentity, readonly "isInstance"?: boolean | null, readonly "dataTypeId"?: null | string, readonly "dataTypeLabel"?: null | string, readonly "groupTypeId"?: null | string, readonly "groupTypeLabel"?: null | string, readonly "visible"?: boolean | null, readonly "userModifiable"?: boolean | null, readonly "description"?: null | string };
-type ParameterEvidenceCandidate = { readonly "definition": ParameterDefinitionDescriptor, readonly "score": number, readonly "reasons": ReadonlyArray<string>, readonly "evidenceCounts": ReadonlyArray<ParameterEvidenceCount>, readonly "samples": ReadonlyArray<ParameterEvidenceSample>, readonly "identity": ParameterIdentity };
-export type Root = { readonly "candidates": ReadonlyArray<ParameterEvidenceCandidate>, readonly "issues": ReadonlyArray<RevitDataIssue>, readonly "page"?: null | RevitDataResultPage, readonly "evidenceCollectedAtUtc"?: null | string, readonly "primitiveCacheHit"?: boolean | null };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["ParameterDefinitionDescriptor"]: strictDecoder(ParameterDefinitionDescriptor),
@@ -2257,8 +2537,30 @@ export const definitions = {
   ["RevitElementHandle"]: strictDecoder(RevitElementHandle),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type ParameterIdentityKind = "SharedGuid" | "BuiltInParameter" | "ParameterElement" | "NameFallback";
+type ParameterEvidenceSource = "ProjectBinding" | "ScheduleField" | "ScheduleFilter" | "ScopedElement";
+type ParameterEvidenceScope = "Document" | "Category" | "Schedule" | "PrintedSchedule" | "ActiveViewVisible" | "CurrentSelection" | "ExplicitHandles";
+type ParameterEvidenceStrength = "Weak" | "Medium" | "Strong";
+type RevitElementHandle = { readonly "elementId": number, readonly "uniqueId": string, readonly "displayName": string, readonly "categoryName"?: null | string, readonly "familyName"?: null | string, readonly "typeName"?: null | string };
+type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
+type RevitDataResultPage = { readonly "totalCount": number, readonly "returnedCount": number, readonly "isTruncated": boolean };
+type ParameterIdentity = { readonly "key": string, readonly "kind": ParameterIdentityKind, readonly "name": string, readonly "builtInParameterId"?: number | null, readonly "sharedGuid"?: null | string, readonly "parameterElementId"?: number | null };
+type ParameterEvidenceCount = { readonly "source": ParameterEvidenceSource, readonly "scope": ParameterEvidenceScope, readonly "strength": ParameterEvidenceStrength, readonly "count": number };
+type ParameterEvidenceSample = { readonly "source": ParameterEvidenceSource, readonly "scope": ParameterEvidenceScope, readonly "strength": ParameterEvidenceStrength, readonly "reason": string, readonly "categoryName"?: null | string, readonly "scheduleName"?: null | string, readonly "elementName"?: null | string, readonly "element"?: null | RevitElementHandle };
+type RevitDataIssue = { readonly "code": string, readonly "severity": RevitDataIssueSeverity, readonly "message": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "parameterName"?: null | string };
+type ParameterDefinitionDescriptor = { readonly "identity": ParameterIdentity, readonly "isInstance"?: boolean | null, readonly "dataTypeId"?: null | string, readonly "dataTypeLabel"?: null | string, readonly "groupTypeId"?: null | string, readonly "groupTypeLabel"?: null | string, readonly "visible"?: boolean | null, readonly "userModifiable"?: boolean | null, readonly "description"?: null | string };
+type ParameterEvidenceCandidate = { readonly "definition": ParameterDefinitionDescriptor, readonly "score": number, readonly "reasons": ReadonlyArray<string>, readonly "evidenceCounts": ReadonlyArray<ParameterEvidenceCount>, readonly "samples": ReadonlyArray<ParameterEvidenceSample>, readonly "identity": ParameterIdentity };
+export type Root = { readonly "candidates": ReadonlyArray<ParameterEvidenceCandidate>, readonly "issues": ReadonlyArray<RevitDataIssue>, readonly "page"?: null | RevitDataResultPage, readonly "evidenceCollectedAtUtc"?: null | string, readonly "primitiveCacheHit"?: boolean | null };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op43request {
+namespace Decoded {
 
 const ProjectBrowserSection = Schema.Literals(["Views", "Sheets", "Schedules"]).annotate({ "description": "", "identifier": "ProjectBrowserSection" });
 const ProjectBrowserResultView = Schema.Literals(["Summary", "Folders", "Items"]).annotate({ "description": "", "identifier": "ProjectBrowserResultView" });
@@ -2266,6 +2568,9 @@ const ProjectBrowserMatchMode = Schema.Literals(["Exact", "Prefix"]).annotate({ 
 const RevitDataOutputBudget = Schema.Struct({ "maxEntries": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(1).annotate({ "expected": "a value greater than or equal to 1" })).check(Schema.isLessThanOrEqualTo(100000).annotate({ "expected": "a value less than or equal to 100000" })), Schema.Null]).annotate({ "format": "int32" })), "maxRowsPerEntry": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(1).annotate({ "expected": "a value greater than or equal to 1" })).check(Schema.isLessThanOrEqualTo(10000).annotate({ "expected": "a value less than or equal to 10000" })), Schema.Null]).annotate({ "format": "int32" })), "maxSamplesPerEntry": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(1).annotate({ "expected": "a value greater than or equal to 1" })).check(Schema.isLessThanOrEqualTo(10000).annotate({ "expected": "a value less than or equal to 10000" })), Schema.Null]).annotate({ "format": "int32" })), "includeDiagnostics": Schema.optionalKey(Schema.Boolean) }).annotate({ "identifier": "RevitDataOutputBudget" });
 const ProjectBrowserFilter = Schema.Struct({ "section": Schema.optionalKey(Schema.Union([Schema.Null, ProjectBrowserSection], { mode: "oneOf" })), "path": Schema.optionalKey(Schema.Array(Schema.String)), "fields": Schema.optionalKey(Schema.Record(Schema.String, Schema.String)), "matchMode": Schema.optionalKey(ProjectBrowserMatchMode) }).annotate({ "identifier": "ProjectBrowserFilter" });
 const codec = Schema.Struct({ "sections": Schema.optionalKey(Schema.Array(ProjectBrowserSection)), "view": Schema.optionalKey(ProjectBrowserResultView), "filter": Schema.optionalKey(Schema.Union([Schema.Null, ProjectBrowserFilter], { mode: "oneOf" })), "browserSnapshotId": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "budget": Schema.optionalKey(Schema.Union([Schema.Null, RevitDataOutputBudget], { mode: "oneOf" })) }).annotate({ "title": "ProjectBrowserRequest" });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 type ProjectBrowserSection = "Views" | "Sheets" | "Schedules";
 type ProjectBrowserResultView = "Summary" | "Folders" | "Items";
@@ -2275,11 +2580,11 @@ type ProjectBrowserFilter = { readonly "section"?: null | ProjectBrowserSection,
 export type Root = { readonly "sections"?: ReadonlyArray<ProjectBrowserSection>, readonly "view"?: ProjectBrowserResultView, readonly "filter"?: null | ProjectBrowserFilter, readonly "browserSnapshotId"?: null | string, readonly "budget"?: null | RevitDataOutputBudget };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op43response {
+namespace Decoded {
 
 const ProjectBrowserResultView = Schema.Literals(["Summary", "Folders", "Items"]).annotate({ "description": "", "identifier": "ProjectBrowserResultView" });
 const ProjectBrowserSection = Schema.Literals(["Views", "Sheets", "Schedules"]).annotate({ "description": "", "identifier": "ProjectBrowserSection" });
@@ -2298,27 +2603,6 @@ const ProjectBrowserFolderSummary = Schema.Struct({ "section": ProjectBrowserSec
 const ProjectBrowserItem = Schema.Struct({ "handle": RevitAgentContextHandle, "browserPath": ProjectBrowserPath, "provenance": Schema.Array(RevitAgentContextProvenance) }).annotate({ "identifier": "ProjectBrowserItem" });
 const ProjectBrowserOrganizationSummary = Schema.Struct({ "section": ProjectBrowserSection, "organizationName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "sortingParameterId": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })), Schema.Null]).annotate({ "format": "int64" })), "sortingParameterName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "sortingOrder": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "indexedElementCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "folderCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "pathLevels": Schema.Array(ProjectBrowserPathLevel), "folders": Schema.Array(ProjectBrowserFolderSummary) }).annotate({ "identifier": "ProjectBrowserOrganizationSummary" });
 const codec = Schema.Struct({ "browserSnapshotId": Schema.String, "view": ProjectBrowserResultView, "organizations": Schema.Array(ProjectBrowserOrganizationSummary), "items": Schema.Array(ProjectBrowserItem), "nearestMatches": Schema.Array(ProjectBrowserNearestMatch), "issues": Schema.Array(RevitDataIssue), "page": Schema.optionalKey(Schema.Union([Schema.Null, RevitDataResultPage], { mode: "oneOf" })) }).annotate({ "title": "ProjectBrowserData" });
-namespace WireTypes {
-type ProjectBrowserResultView = "Summary" | "Folders" | "Items";
-type ProjectBrowserSection = "Views" | "Sheets" | "Schedules";
-type ProjectBrowserPathLevel = { readonly "index": number, readonly "parameterName"?: null | string, readonly "parameterId"?: number | null, readonly "values": ReadonlyArray<string> };
-type RevitAgentContextHandleKind = "Document" | "View" | "Sheet" | "Element" | "Schedule" | "Category" | "Family";
-type ProjectBrowserPathSegment = { readonly "parameterId"?: number | null, readonly "parameterName"?: null | string, readonly "folderName": string };
-type RevitAgentContextProvenanceKind = "ActiveDocument" | "OpenDocument" | "ActiveView" | "CurrentSelection" | "ExplicitReference" | "SheetPlacement" | "BrowserIndex" | "VisibleInActiveView" | "VisibleInReferencedView" | "PrintedContext" | "SearchMatch";
-type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
-type RevitDataResultPage = { readonly "totalCount": number, readonly "returnedCount": number, readonly "isTruncated": boolean };
-type ProjectBrowserNearestMatch = { readonly "section": ProjectBrowserSection, readonly "pathLabel": string, readonly "path": ReadonlyArray<string>, readonly "score": number };
-type RevitAgentContextHandle = { readonly "kind": RevitAgentContextHandleKind, readonly "documentKey": string, readonly "elementId"?: number | null, readonly "uniqueId"?: null | string, readonly "label": string, readonly "categoryName"?: null | string };
-type ProjectBrowserPath = { readonly "section": ProjectBrowserSection, readonly "organizationName"?: null | string, readonly "pathLabel": string, readonly "segments": ReadonlyArray<ProjectBrowserPathSegment> };
-type RevitAgentContextProvenance = { readonly "kind": RevitAgentContextProvenanceKind, readonly "description": string };
-type RevitDataIssue = { readonly "code": string, readonly "severity": RevitDataIssueSeverity, readonly "message": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "parameterName"?: null | string };
-type ProjectBrowserFolderSummary = { readonly "section": ProjectBrowserSection, readonly "organizationName"?: null | string, readonly "pathLabel": string, readonly "elementCount": number, readonly "sampleHandles": ReadonlyArray<RevitAgentContextHandle> };
-type ProjectBrowserItem = { readonly "handle": RevitAgentContextHandle, readonly "browserPath": ProjectBrowserPath, readonly "provenance": ReadonlyArray<RevitAgentContextProvenance> };
-type ProjectBrowserOrganizationSummary = { readonly "section": ProjectBrowserSection, readonly "organizationName"?: null | string, readonly "sortingParameterId"?: number | null, readonly "sortingParameterName"?: null | string, readonly "sortingOrder"?: null | string, readonly "indexedElementCount": number, readonly "folderCount": number, readonly "pathLevels": ReadonlyArray<ProjectBrowserPathLevel>, readonly "folders": ReadonlyArray<ProjectBrowserFolderSummary> };
-export type Root = { readonly "browserSnapshotId": string, readonly "view": ProjectBrowserResultView, readonly "organizations": ReadonlyArray<ProjectBrowserOrganizationSummary>, readonly "items": ReadonlyArray<ProjectBrowserItem>, readonly "nearestMatches": ReadonlyArray<ProjectBrowserNearestMatch>, readonly "issues": ReadonlyArray<RevitDataIssue>, readonly "page"?: null | RevitDataResultPage };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["ProjectBrowserFolderSummary"]: strictDecoder(ProjectBrowserFolderSummary),
@@ -2339,8 +2623,33 @@ export const definitions = {
   ["RevitDataResultPage"]: strictDecoder(RevitDataResultPage),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type ProjectBrowserResultView = "Summary" | "Folders" | "Items";
+type ProjectBrowserSection = "Views" | "Sheets" | "Schedules";
+type ProjectBrowserPathLevel = { readonly "index": number, readonly "parameterName"?: null | string, readonly "parameterId"?: number | null, readonly "values": ReadonlyArray<string> };
+type RevitAgentContextHandleKind = "Document" | "View" | "Sheet" | "Element" | "Schedule" | "Category" | "Family";
+type ProjectBrowserPathSegment = { readonly "parameterId"?: number | null, readonly "parameterName"?: null | string, readonly "folderName": string };
+type RevitAgentContextProvenanceKind = "ActiveDocument" | "OpenDocument" | "ActiveView" | "CurrentSelection" | "ExplicitReference" | "SheetPlacement" | "BrowserIndex" | "VisibleInActiveView" | "VisibleInReferencedView" | "PrintedContext" | "SearchMatch";
+type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
+type RevitDataResultPage = { readonly "totalCount": number, readonly "returnedCount": number, readonly "isTruncated": boolean };
+type ProjectBrowserNearestMatch = { readonly "section": ProjectBrowserSection, readonly "pathLabel": string, readonly "path": ReadonlyArray<string>, readonly "score": number };
+type RevitAgentContextHandle = { readonly "kind": RevitAgentContextHandleKind, readonly "documentKey": string, readonly "elementId"?: number | null, readonly "uniqueId"?: null | string, readonly "label": string, readonly "categoryName"?: null | string };
+type ProjectBrowserPath = { readonly "section": ProjectBrowserSection, readonly "organizationName"?: null | string, readonly "pathLabel": string, readonly "segments": ReadonlyArray<ProjectBrowserPathSegment> };
+type RevitAgentContextProvenance = { readonly "kind": RevitAgentContextProvenanceKind, readonly "description": string };
+type RevitDataIssue = { readonly "code": string, readonly "severity": RevitDataIssueSeverity, readonly "message": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "parameterName"?: null | string };
+type ProjectBrowserFolderSummary = { readonly "section": ProjectBrowserSection, readonly "organizationName"?: null | string, readonly "pathLabel": string, readonly "elementCount": number, readonly "sampleHandles": ReadonlyArray<RevitAgentContextHandle> };
+type ProjectBrowserItem = { readonly "handle": RevitAgentContextHandle, readonly "browserPath": ProjectBrowserPath, readonly "provenance": ReadonlyArray<RevitAgentContextProvenance> };
+type ProjectBrowserOrganizationSummary = { readonly "section": ProjectBrowserSection, readonly "organizationName"?: null | string, readonly "sortingParameterId"?: number | null, readonly "sortingParameterName"?: null | string, readonly "sortingOrder"?: null | string, readonly "indexedElementCount": number, readonly "folderCount": number, readonly "pathLevels": ReadonlyArray<ProjectBrowserPathLevel>, readonly "folders": ReadonlyArray<ProjectBrowserFolderSummary> };
+export type Root = { readonly "browserSnapshotId": string, readonly "view": ProjectBrowserResultView, readonly "organizations": ReadonlyArray<ProjectBrowserOrganizationSummary>, readonly "items": ReadonlyArray<ProjectBrowserItem>, readonly "nearestMatches": ReadonlyArray<ProjectBrowserNearestMatch>, readonly "issues": ReadonlyArray<RevitDataIssue>, readonly "page"?: null | RevitDataResultPage };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op44request {
+namespace Decoded {
 
 const ProjectIndexSection = Schema.Literals(["Levels", "Sheets", "Views", "Schedules", "Categories", "Families"]).annotate({ "description": "", "identifier": "ProjectIndexSection" });
 const ProjectBrowserSection = Schema.Literals(["Views", "Sheets", "Schedules"]).annotate({ "description": "", "identifier": "ProjectBrowserSection" });
@@ -2350,6 +2659,9 @@ const RevitDataOutputBudget = Schema.Struct({ "maxEntries": Schema.optionalKey(S
 const ProjectBrowserFilter = Schema.Struct({ "section": Schema.optionalKey(Schema.Union([Schema.Null, ProjectBrowserSection], { mode: "oneOf" })), "path": Schema.optionalKey(Schema.Array(Schema.String)), "fields": Schema.optionalKey(Schema.Record(Schema.String, Schema.String)), "matchMode": Schema.optionalKey(ProjectBrowserMatchMode) }).annotate({ "identifier": "ProjectBrowserFilter" });
 const RevitDataProjectionRequest = Schema.Struct({ "view": Schema.optionalKey(RevitDataResultView), "budget": Schema.optionalKey(Schema.Union([Schema.Null, RevitDataOutputBudget], { mode: "oneOf" })) }).annotate({ "identifier": "RevitDataProjectionRequest" });
 const codec = Schema.Struct({ "sections": Schema.optionalKey(Schema.Array(ProjectIndexSection)), "searchText": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "levelNames": Schema.optionalKey(Schema.Array(Schema.String)), "sheetNumberContains": Schema.optionalKey(Schema.Array(Schema.String)), "sheetNameContains": Schema.optionalKey(Schema.Array(Schema.String)), "categoryNames": Schema.optionalKey(Schema.Array(Schema.String)), "familyNameContains": Schema.optionalKey(Schema.Array(Schema.String)), "scheduleNameContains": Schema.optionalKey(Schema.Array(Schema.String)), "includeUnplacedViews": Schema.optionalKey(Schema.Boolean), "includeUnplacedSchedules": Schema.optionalKey(Schema.Boolean), "includeBrowserProvenance": Schema.optionalKey(Schema.Boolean), "includeModelContext": Schema.optionalKey(Schema.Boolean), "browserFilter": Schema.optionalKey(Schema.Union([Schema.Null, ProjectBrowserFilter], { mode: "oneOf" })), "browserSections": Schema.optionalKey(Schema.Array(ProjectBrowserSection)), "projection": Schema.optionalKey(Schema.Union([Schema.Null, RevitDataProjectionRequest], { mode: "oneOf" })), "budget": Schema.optionalKey(Schema.Union([Schema.Null, RevitDataOutputBudget], { mode: "oneOf" })) }).annotate({ "title": "ProjectIndexRequest" });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 type ProjectIndexSection = "Levels" | "Sheets" | "Views" | "Schedules" | "Categories" | "Families";
 type ProjectBrowserSection = "Views" | "Sheets" | "Schedules";
@@ -2361,11 +2673,11 @@ type RevitDataProjectionRequest = { readonly "view"?: RevitDataResultView, reado
 export type Root = { readonly "sections"?: ReadonlyArray<ProjectIndexSection>, readonly "searchText"?: null | string, readonly "levelNames"?: ReadonlyArray<string>, readonly "sheetNumberContains"?: ReadonlyArray<string>, readonly "sheetNameContains"?: ReadonlyArray<string>, readonly "categoryNames"?: ReadonlyArray<string>, readonly "familyNameContains"?: ReadonlyArray<string>, readonly "scheduleNameContains"?: ReadonlyArray<string>, readonly "includeUnplacedViews"?: boolean, readonly "includeUnplacedSchedules"?: boolean, readonly "includeBrowserProvenance"?: boolean, readonly "includeModelContext"?: boolean, readonly "browserFilter"?: null | ProjectBrowserFilter, readonly "browserSections"?: ReadonlyArray<ProjectBrowserSection>, readonly "projection"?: null | RevitDataProjectionRequest, readonly "budget"?: null | RevitDataOutputBudget };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op44response {
+namespace Decoded {
 
 const RevitAgentBrowserSummary = Schema.Struct({ "viewCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "sheetCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "scheduleCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "familyCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })) }).annotate({ "identifier": "RevitAgentBrowserSummary" });
 const RevitAgentContextHandleKind = Schema.Literals(["Document", "View", "Sheet", "Element", "Schedule", "Category", "Family"]).annotate({ "description": "", "identifier": "RevitAgentContextHandleKind" });
@@ -2391,34 +2703,6 @@ const ProjectIndexViewEntry = Schema.Struct({ "handle": RevitAgentContextHandle,
 const ProjectIndexScheduleEntry = Schema.Struct({ "handle": RevitAgentContextHandle, "name": Schema.String, "categoryName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "isTemplate": Schema.Boolean, "isPlacedOnSheet": Schema.Boolean, "filterBySheet": Schema.Boolean, "visibleBodyRowCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "visibleFamilyCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "visibleInstanceCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "sheetHandles": Schema.Array(RevitAgentContextHandle), "fieldNames": Schema.Array(Schema.String), "browserPaths": Schema.Array(ProjectBrowserPath), "provenance": Schema.Array(RevitAgentContextProvenance) }).annotate({ "identifier": "ProjectIndexScheduleEntry" });
 const ProjectBrowserOrganizationSummary = Schema.Struct({ "section": ProjectBrowserSection, "organizationName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "sortingParameterId": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })), Schema.Null]).annotate({ "format": "int64" })), "sortingParameterName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "sortingOrder": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "indexedElementCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "folderCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "pathLevels": Schema.Array(ProjectBrowserPathLevel), "folders": Schema.Array(ProjectBrowserFolderSummary) }).annotate({ "identifier": "ProjectBrowserOrganizationSummary" });
 const codec = Schema.Struct({ "summary": ProjectIndexSummary, "levels": Schema.Array(ProjectIndexLevelEntry), "sheets": Schema.Array(ProjectIndexSheetEntry), "views": Schema.Array(ProjectIndexViewEntry), "schedules": Schema.Array(ProjectIndexScheduleEntry), "categories": Schema.Array(ProjectIndexCategoryEntry), "families": Schema.Array(ProjectIndexFamilyEntry), "browserOrganizations": Schema.Array(ProjectBrowserOrganizationSummary), "modelContext": Schema.optionalKey(Schema.Union([Schema.Null, ProjectIndexModelContext], { mode: "oneOf" })), "issues": Schema.Array(RevitDataIssue), "page": Schema.optionalKey(Schema.Union([Schema.Null, RevitDataResultPage], { mode: "oneOf" })) }).annotate({ "title": "ProjectIndexData" });
-namespace WireTypes {
-type RevitAgentBrowserSummary = { readonly "viewCount": number, readonly "sheetCount": number, readonly "scheduleCount": number, readonly "familyCount": number };
-type RevitAgentContextHandleKind = "Document" | "View" | "Sheet" | "Element" | "Schedule" | "Category" | "Family";
-type RevitAgentContextProvenanceKind = "ActiveDocument" | "OpenDocument" | "ActiveView" | "CurrentSelection" | "ExplicitReference" | "SheetPlacement" | "BrowserIndex" | "VisibleInActiveView" | "VisibleInReferencedView" | "PrintedContext" | "SearchMatch";
-type ProjectBrowserSection = "Views" | "Sheets" | "Schedules";
-type ProjectBrowserPathSegment = { readonly "parameterId"?: number | null, readonly "parameterName"?: null | string, readonly "folderName": string };
-type ProjectBrowserPathLevel = { readonly "index": number, readonly "parameterName"?: null | string, readonly "parameterId"?: number | null, readonly "values": ReadonlyArray<string> };
-type ProjectIndexModelCategoryCount = { readonly "categoryName": string, readonly "elementCount": number };
-type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
-type RevitDataResultPage = { readonly "totalCount": number, readonly "returnedCount": number, readonly "isTruncated": boolean };
-type ProjectIndexSummary = { readonly "levelCount": number, readonly "sheetCount": number, readonly "viewCount": number, readonly "scheduleCount": number, readonly "categoryCount": number, readonly "familyCount": number, readonly "truncated": boolean, readonly "projectTotals"?: null | RevitAgentBrowserSummary };
-type RevitAgentContextHandle = { readonly "kind": RevitAgentContextHandleKind, readonly "documentKey": string, readonly "elementId"?: number | null, readonly "uniqueId"?: null | string, readonly "label": string, readonly "categoryName"?: null | string };
-type RevitAgentContextProvenance = { readonly "kind": RevitAgentContextProvenanceKind, readonly "description": string };
-type ProjectBrowserPath = { readonly "section": ProjectBrowserSection, readonly "organizationName"?: null | string, readonly "pathLabel": string, readonly "segments": ReadonlyArray<ProjectBrowserPathSegment> };
-type ProjectIndexModelContext = { readonly "linkCount": number, readonly "roomCount": number, readonly "spaceCount": number, readonly "areaCount": number, readonly "majorCategoryCounts": ReadonlyArray<ProjectIndexModelCategoryCount> };
-type RevitDataIssue = { readonly "code": string, readonly "severity": RevitDataIssueSeverity, readonly "message": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "parameterName"?: null | string };
-type ProjectBrowserFolderSummary = { readonly "section": ProjectBrowserSection, readonly "organizationName"?: null | string, readonly "pathLabel": string, readonly "elementCount": number, readonly "sampleHandles": ReadonlyArray<RevitAgentContextHandle> };
-type ProjectIndexLevelEntry = { readonly "handle": RevitAgentContextHandle, readonly "name": string, readonly "elevation": number, readonly "viewCount": number, readonly "placedViewCount": number, readonly "scheduleCount": number, readonly "placedScheduleCount": number, readonly "familyInstanceCount": number, readonly "sheetHandles": ReadonlyArray<RevitAgentContextHandle>, readonly "provenance": ReadonlyArray<RevitAgentContextProvenance> };
-type ProjectIndexCategoryEntry = { readonly "handle": RevitAgentContextHandle, readonly "categoryName": string, readonly "familyCount": number, readonly "placedInstanceCount": number, readonly "scheduleCount": number, readonly "scheduleHandles": ReadonlyArray<RevitAgentContextHandle>, readonly "provenance": ReadonlyArray<RevitAgentContextProvenance> };
-type ProjectIndexFamilyEntry = { readonly "handle": RevitAgentContextHandle, readonly "familyName": string, readonly "categoryName"?: null | string, readonly "typeCount": number, readonly "placedInstanceCount": number, readonly "scheduleCount": number, readonly "scheduleHandles": ReadonlyArray<RevitAgentContextHandle>, readonly "provenance": ReadonlyArray<RevitAgentContextProvenance> };
-type ProjectIndexSheetEntry = { readonly "handle": RevitAgentContextHandle, readonly "sheetNumber": string, readonly "sheetName": string, readonly "placedViewCount": number, readonly "placedScheduleCount": number, readonly "placedViews": ReadonlyArray<RevitAgentContextHandle>, readonly "placedSchedules": ReadonlyArray<RevitAgentContextHandle>, readonly "levelNames": ReadonlyArray<string>, readonly "browserPaths": ReadonlyArray<ProjectBrowserPath>, readonly "provenance": ReadonlyArray<RevitAgentContextProvenance> };
-type ProjectIndexViewEntry = { readonly "handle": RevitAgentContextHandle, readonly "name": string, readonly "viewType": string, readonly "levelName"?: null | string, readonly "isTemplate": boolean, readonly "canBePrinted": boolean, readonly "isPlacedOnSheet": boolean, readonly "sheetHandles": ReadonlyArray<RevitAgentContextHandle>, readonly "browserPaths": ReadonlyArray<ProjectBrowserPath>, readonly "provenance": ReadonlyArray<RevitAgentContextProvenance> };
-type ProjectIndexScheduleEntry = { readonly "handle": RevitAgentContextHandle, readonly "name": string, readonly "categoryName"?: null | string, readonly "isTemplate": boolean, readonly "isPlacedOnSheet": boolean, readonly "filterBySheet": boolean, readonly "visibleBodyRowCount": number, readonly "visibleFamilyCount": number, readonly "visibleInstanceCount": number, readonly "sheetHandles": ReadonlyArray<RevitAgentContextHandle>, readonly "fieldNames": ReadonlyArray<string>, readonly "browserPaths": ReadonlyArray<ProjectBrowserPath>, readonly "provenance": ReadonlyArray<RevitAgentContextProvenance> };
-type ProjectBrowserOrganizationSummary = { readonly "section": ProjectBrowserSection, readonly "organizationName"?: null | string, readonly "sortingParameterId"?: number | null, readonly "sortingParameterName"?: null | string, readonly "sortingOrder"?: null | string, readonly "indexedElementCount": number, readonly "folderCount": number, readonly "pathLevels": ReadonlyArray<ProjectBrowserPathLevel>, readonly "folders": ReadonlyArray<ProjectBrowserFolderSummary> };
-export type Root = { readonly "summary": ProjectIndexSummary, readonly "levels": ReadonlyArray<ProjectIndexLevelEntry>, readonly "sheets": ReadonlyArray<ProjectIndexSheetEntry>, readonly "views": ReadonlyArray<ProjectIndexViewEntry>, readonly "schedules": ReadonlyArray<ProjectIndexScheduleEntry>, readonly "categories": ReadonlyArray<ProjectIndexCategoryEntry>, readonly "families": ReadonlyArray<ProjectIndexFamilyEntry>, readonly "browserOrganizations": ReadonlyArray<ProjectBrowserOrganizationSummary>, readonly "modelContext"?: null | ProjectIndexModelContext, readonly "issues": ReadonlyArray<RevitDataIssue>, readonly "page"?: null | RevitDataResultPage };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["ProjectBrowserFolderSummary"]: strictDecoder(ProjectBrowserFolderSummary),
@@ -2446,8 +2730,40 @@ export const definitions = {
   ["RevitDataResultPage"]: strictDecoder(RevitDataResultPage),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type RevitAgentBrowserSummary = { readonly "viewCount": number, readonly "sheetCount": number, readonly "scheduleCount": number, readonly "familyCount": number };
+type RevitAgentContextHandleKind = "Document" | "View" | "Sheet" | "Element" | "Schedule" | "Category" | "Family";
+type RevitAgentContextProvenanceKind = "ActiveDocument" | "OpenDocument" | "ActiveView" | "CurrentSelection" | "ExplicitReference" | "SheetPlacement" | "BrowserIndex" | "VisibleInActiveView" | "VisibleInReferencedView" | "PrintedContext" | "SearchMatch";
+type ProjectBrowserSection = "Views" | "Sheets" | "Schedules";
+type ProjectBrowserPathSegment = { readonly "parameterId"?: number | null, readonly "parameterName"?: null | string, readonly "folderName": string };
+type ProjectBrowserPathLevel = { readonly "index": number, readonly "parameterName"?: null | string, readonly "parameterId"?: number | null, readonly "values": ReadonlyArray<string> };
+type ProjectIndexModelCategoryCount = { readonly "categoryName": string, readonly "elementCount": number };
+type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
+type RevitDataResultPage = { readonly "totalCount": number, readonly "returnedCount": number, readonly "isTruncated": boolean };
+type ProjectIndexSummary = { readonly "levelCount": number, readonly "sheetCount": number, readonly "viewCount": number, readonly "scheduleCount": number, readonly "categoryCount": number, readonly "familyCount": number, readonly "truncated": boolean, readonly "projectTotals"?: null | RevitAgentBrowserSummary };
+type RevitAgentContextHandle = { readonly "kind": RevitAgentContextHandleKind, readonly "documentKey": string, readonly "elementId"?: number | null, readonly "uniqueId"?: null | string, readonly "label": string, readonly "categoryName"?: null | string };
+type RevitAgentContextProvenance = { readonly "kind": RevitAgentContextProvenanceKind, readonly "description": string };
+type ProjectBrowserPath = { readonly "section": ProjectBrowserSection, readonly "organizationName"?: null | string, readonly "pathLabel": string, readonly "segments": ReadonlyArray<ProjectBrowserPathSegment> };
+type ProjectIndexModelContext = { readonly "linkCount": number, readonly "roomCount": number, readonly "spaceCount": number, readonly "areaCount": number, readonly "majorCategoryCounts": ReadonlyArray<ProjectIndexModelCategoryCount> };
+type RevitDataIssue = { readonly "code": string, readonly "severity": RevitDataIssueSeverity, readonly "message": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "parameterName"?: null | string };
+type ProjectBrowserFolderSummary = { readonly "section": ProjectBrowserSection, readonly "organizationName"?: null | string, readonly "pathLabel": string, readonly "elementCount": number, readonly "sampleHandles": ReadonlyArray<RevitAgentContextHandle> };
+type ProjectIndexLevelEntry = { readonly "handle": RevitAgentContextHandle, readonly "name": string, readonly "elevation": number, readonly "viewCount": number, readonly "placedViewCount": number, readonly "scheduleCount": number, readonly "placedScheduleCount": number, readonly "familyInstanceCount": number, readonly "sheetHandles": ReadonlyArray<RevitAgentContextHandle>, readonly "provenance": ReadonlyArray<RevitAgentContextProvenance> };
+type ProjectIndexCategoryEntry = { readonly "handle": RevitAgentContextHandle, readonly "categoryName": string, readonly "familyCount": number, readonly "placedInstanceCount": number, readonly "scheduleCount": number, readonly "scheduleHandles": ReadonlyArray<RevitAgentContextHandle>, readonly "provenance": ReadonlyArray<RevitAgentContextProvenance> };
+type ProjectIndexFamilyEntry = { readonly "handle": RevitAgentContextHandle, readonly "familyName": string, readonly "categoryName"?: null | string, readonly "typeCount": number, readonly "placedInstanceCount": number, readonly "scheduleCount": number, readonly "scheduleHandles": ReadonlyArray<RevitAgentContextHandle>, readonly "provenance": ReadonlyArray<RevitAgentContextProvenance> };
+type ProjectIndexSheetEntry = { readonly "handle": RevitAgentContextHandle, readonly "sheetNumber": string, readonly "sheetName": string, readonly "placedViewCount": number, readonly "placedScheduleCount": number, readonly "placedViews": ReadonlyArray<RevitAgentContextHandle>, readonly "placedSchedules": ReadonlyArray<RevitAgentContextHandle>, readonly "levelNames": ReadonlyArray<string>, readonly "browserPaths": ReadonlyArray<ProjectBrowserPath>, readonly "provenance": ReadonlyArray<RevitAgentContextProvenance> };
+type ProjectIndexViewEntry = { readonly "handle": RevitAgentContextHandle, readonly "name": string, readonly "viewType": string, readonly "levelName"?: null | string, readonly "isTemplate": boolean, readonly "canBePrinted": boolean, readonly "isPlacedOnSheet": boolean, readonly "sheetHandles": ReadonlyArray<RevitAgentContextHandle>, readonly "browserPaths": ReadonlyArray<ProjectBrowserPath>, readonly "provenance": ReadonlyArray<RevitAgentContextProvenance> };
+type ProjectIndexScheduleEntry = { readonly "handle": RevitAgentContextHandle, readonly "name": string, readonly "categoryName"?: null | string, readonly "isTemplate": boolean, readonly "isPlacedOnSheet": boolean, readonly "filterBySheet": boolean, readonly "visibleBodyRowCount": number, readonly "visibleFamilyCount": number, readonly "visibleInstanceCount": number, readonly "sheetHandles": ReadonlyArray<RevitAgentContextHandle>, readonly "fieldNames": ReadonlyArray<string>, readonly "browserPaths": ReadonlyArray<ProjectBrowserPath>, readonly "provenance": ReadonlyArray<RevitAgentContextProvenance> };
+type ProjectBrowserOrganizationSummary = { readonly "section": ProjectBrowserSection, readonly "organizationName"?: null | string, readonly "sortingParameterId"?: number | null, readonly "sortingParameterName"?: null | string, readonly "sortingOrder"?: null | string, readonly "indexedElementCount": number, readonly "folderCount": number, readonly "pathLevels": ReadonlyArray<ProjectBrowserPathLevel>, readonly "folders": ReadonlyArray<ProjectBrowserFolderSummary> };
+export type Root = { readonly "summary": ProjectIndexSummary, readonly "levels": ReadonlyArray<ProjectIndexLevelEntry>, readonly "sheets": ReadonlyArray<ProjectIndexSheetEntry>, readonly "views": ReadonlyArray<ProjectIndexViewEntry>, readonly "schedules": ReadonlyArray<ProjectIndexScheduleEntry>, readonly "categories": ReadonlyArray<ProjectIndexCategoryEntry>, readonly "families": ReadonlyArray<ProjectIndexFamilyEntry>, readonly "browserOrganizations": ReadonlyArray<ProjectBrowserOrganizationSummary>, readonly "modelContext"?: null | ProjectIndexModelContext, readonly "issues": ReadonlyArray<RevitDataIssue>, readonly "page"?: null | RevitDataResultPage };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op45request {
+namespace Decoded {
 
 const SchedulePlacementScope = Schema.Literals(["All", "PlacedOnly", "UnplacedOnly"]).annotate({ "description": "", "identifier": "SchedulePlacementScope" });
 const ParameterIdentityKind = Schema.Literals(["SharedGuid", "BuiltInParameter", "ParameterElement", "NameFallback"]).annotate({ "description": "", "identifier": "ParameterIdentityKind" });
@@ -2462,6 +2778,9 @@ const ScheduleCatalogProjection = Schema.Struct({ "view": Schema.optionalKey(Rev
 const ParameterReference = Schema.Struct({ "identity": Schema.optionalKey(Schema.Union([Schema.Null, ParameterIdentity], { mode: "oneOf" })), "name": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "sharedGuid": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "identifier": "ParameterReference" });
 const ScheduleCustomParameterFilter = Schema.Struct({ "parameter": ParameterReference, "expectedValue": Schema.String, "matchKind": ScheduleCustomParameterMatchKind }).annotate({ "identifier": "ScheduleCustomParameterFilter" });
 const codec = Schema.Struct({ "categoryNames": Schema.optionalKey(Schema.Array(Schema.String)), "scheduleNames": Schema.optionalKey(Schema.Array(Schema.String)), "scheduleNameContains": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "scheduleNamePrefix": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "placementScope": Schema.optionalKey(SchedulePlacementScope), "sheetNumberContains": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "sheetNameContains": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "isEmpty": Schema.optionalKey(Schema.Union([Schema.Boolean, Schema.Null])), "customParameterFilters": Schema.optionalKey(Schema.Array(ScheduleCustomParameterFilter)), "browserFilter": Schema.optionalKey(Schema.Union([Schema.Null, ProjectBrowserFilter], { mode: "oneOf" })), "includeTemplates": Schema.optionalKey(Schema.Boolean), "projection": Schema.optionalKey(Schema.Union([Schema.Null, ScheduleCatalogProjection], { mode: "oneOf" })), "budget": Schema.optionalKey(Schema.Union([Schema.Null, RevitDataOutputBudget], { mode: "oneOf" })) }).annotate({ "title": "ScheduleCatalogRequest" });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 type SchedulePlacementScope = "All" | "PlacedOnly" | "UnplacedOnly";
 type ParameterIdentityKind = "SharedGuid" | "BuiltInParameter" | "ParameterElement" | "NameFallback";
@@ -2478,11 +2797,11 @@ type ScheduleCustomParameterFilter = { readonly "parameter": ParameterReference,
 export type Root = { readonly "categoryNames"?: ReadonlyArray<string>, readonly "scheduleNames"?: ReadonlyArray<string>, readonly "scheduleNameContains"?: null | string, readonly "scheduleNamePrefix"?: null | string, readonly "placementScope"?: SchedulePlacementScope, readonly "sheetNumberContains"?: null | string, readonly "sheetNameContains"?: null | string, readonly "isEmpty"?: boolean | null, readonly "customParameterFilters"?: ReadonlyArray<ScheduleCustomParameterFilter>, readonly "browserFilter"?: null | ProjectBrowserFilter, readonly "includeTemplates"?: boolean, readonly "projection"?: null | ScheduleCatalogProjection, readonly "budget"?: null | RevitDataOutputBudget };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op45response {
+namespace Decoded {
 
 const ScheduleCatalogSheetPlacement = Schema.Struct({ "sheetNumber": Schema.String, "sheetName": Schema.String, "isIssuedLikeSheet": Schema.Boolean, "isWorkingLikeSheet": Schema.Boolean, "sheetRole": Schema.String }).annotate({ "identifier": "ScheduleCatalogSheetPlacement" });
 const ScheduleAuthoredFilterType = Schema.Literals(["HasParameter", "Equal", "NotEqual", "GreaterThan", "GreaterThanOrEqual", "LessThan", "LessThanOrEqual", "Contains", "NotContains", "BeginsWith", "NotBeginsWith", "EndsWith", "NotEndsWith", "IsAssociatedWithGlobalParameter", "IsNotAssociatedWithGlobalParameter", "HasValue", "HasNoValue"]).annotate({ "description": "", "identifier": "ScheduleAuthoredFilterType" });
@@ -2508,34 +2827,6 @@ const ScheduleCatalogCustomParameterValue = Schema.Struct({ "definition": Parame
 const ScheduleParameterUsageEntry = Schema.Struct({ "fieldName": Schema.String, "columnHeading": Schema.String, "key": Schema.String, "parameter": Schema.optionalKey(Schema.Union([Schema.Null, ScheduleFieldParameterDescriptor], { mode: "oneOf" })), "fieldIndex": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "isHidden": Schema.Boolean, "isCalculated": Schema.Boolean, "isCombinedParameter": Schema.Boolean }).annotate({ "identifier": "ScheduleParameterUsageEntry" });
 const ScheduleCatalogEntry = Schema.Struct({ "scheduleId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "scheduleUniqueId": Schema.String, "name": Schema.String, "categoryName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "isTemplate": Schema.Boolean, "viewTemplateName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "isItemized": Schema.Boolean, "filterBySheet": Schema.Boolean, "isPlacedOnSheet": Schema.Boolean, "sheetPlacements": Schema.Array(ScheduleCatalogSheetPlacement), "filters": Schema.Array(ScheduleFilterSpec), "parameterUsages": Schema.Array(ScheduleParameterUsageEntry), "customParameters": Schema.Array(ScheduleCatalogCustomParameterValue), "visibleBodyRowCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "visibleFamilyCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "visibleInstanceCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "visibleFamilies": Schema.Array(ScheduleVisibleFamilyEntry), "browserPaths": Schema.Array(ProjectBrowserPath) }).annotate({ "identifier": "ScheduleCatalogEntry" });
 const codec = Schema.Struct({ "entries": Schema.Array(ScheduleCatalogEntry), "issues": Schema.Array(RevitDataIssue), "page": Schema.optionalKey(Schema.Union([Schema.Null, RevitDataResultPage], { mode: "oneOf" })), "summary": Schema.optionalKey(Schema.Union([Schema.Null, ScheduleCatalogSummary], { mode: "oneOf" })) }).annotate({ "title": "ScheduleCatalogData" });
-namespace WireTypes {
-type ScheduleCatalogSheetPlacement = { readonly "sheetNumber": string, readonly "sheetName": string, readonly "isIssuedLikeSheet": boolean, readonly "isWorkingLikeSheet": boolean, readonly "sheetRole": string };
-type ScheduleAuthoredFilterType = "HasParameter" | "Equal" | "NotEqual" | "GreaterThan" | "GreaterThanOrEqual" | "LessThan" | "LessThanOrEqual" | "Contains" | "NotContains" | "BeginsWith" | "NotBeginsWith" | "EndsWith" | "NotEndsWith" | "IsAssociatedWithGlobalParameter" | "IsNotAssociatedWithGlobalParameter" | "HasValue" | "HasNoValue";
-type ParameterIdentityKind = "SharedGuid" | "BuiltInParameter" | "ParameterElement" | "NameFallback";
-type RequestedParameterStorageType = "None" | "String" | "Integer" | "Double" | "ElementId";
-type ScheduleVisibleFamilyEntry = { readonly "familyId": number, readonly "familyName": string, readonly "categoryName"?: null | string, readonly "visibleInstanceCount": number };
-type ProjectBrowserSection = "Views" | "Sheets" | "Schedules";
-type ProjectBrowserPathSegment = { readonly "parameterId"?: number | null, readonly "parameterName"?: null | string, readonly "folderName": string };
-type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
-type RevitDataResultPage = { readonly "totalCount": number, readonly "returnedCount": number, readonly "isTruncated": boolean };
-type ScheduleCatalogNameGroup = { readonly "normalizedName": string, readonly "count": number, readonly "names": ReadonlyArray<string> };
-type ScheduleCatalogNameTokenCount = { readonly "token": string, readonly "count": number };
-type ScheduleCatalogFieldUsageSummary = { readonly "fieldName": string, readonly "scheduleCount": number, readonly "averageFieldIndex": number };
-type ScheduleCatalogFieldFingerprint = { readonly "scheduleId": number, readonly "scheduleName": string, readonly "normalizedScheduleName": string, readonly "fieldSequence": ReadonlyArray<string>, readonly "fieldSetHash": string, readonly "orderedFieldHash": string, readonly "prefixDistribution": { readonly [x: string]: number } };
-type ScheduleFilterSpec = { readonly "fieldName": string, readonly "filterType": ScheduleAuthoredFilterType, readonly "value"?: null | string };
-type ParameterIdentity = { readonly "key": string, readonly "kind": ParameterIdentityKind, readonly "name": string, readonly "builtInParameterId"?: number | null, readonly "sharedGuid"?: null | string, readonly "parameterElementId"?: number | null };
-type ProjectBrowserPath = { readonly "section": ProjectBrowserSection, readonly "organizationName"?: null | string, readonly "pathLabel": string, readonly "segments": ReadonlyArray<ProjectBrowserPathSegment> };
-type RevitDataIssue = { readonly "code": string, readonly "severity": RevitDataIssueSeverity, readonly "message": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "parameterName"?: null | string };
-type ScheduleCatalogSummary = { readonly "totalSchedules": number, readonly "duplicateNormalizedNameGroups": ReadonlyArray<ScheduleCatalogNameGroup>, readonly "prefixCounts": ReadonlyArray<ScheduleCatalogNameTokenCount>, readonly "suffixCounts": ReadonlyArray<ScheduleCatalogNameTokenCount>, readonly "topScheduledFields": ReadonlyArray<ScheduleCatalogFieldUsageSummary>, readonly "fieldFingerprints": ReadonlyArray<ScheduleCatalogFieldFingerprint> };
-type ParameterDefinitionDescriptor = { readonly "identity": ParameterIdentity, readonly "isInstance"?: boolean | null, readonly "dataTypeId"?: null | string, readonly "dataTypeLabel"?: null | string, readonly "groupTypeId"?: null | string, readonly "groupTypeLabel"?: null | string, readonly "visible"?: boolean | null, readonly "userModifiable"?: boolean | null, readonly "description"?: null | string };
-type ScheduleFieldParameterDescriptor = { readonly "definition"?: null | ParameterDefinitionDescriptor, readonly "fieldType"?: null | string, readonly "identity"?: null | ParameterIdentity, readonly "specTypeId"?: null | string };
-type ScheduleCatalogCustomParameterValue = { readonly "definition": ParameterDefinitionDescriptor, readonly "value"?: null | string, readonly "displayValue"?: null | string, readonly "storageType": RequestedParameterStorageType, readonly "name": string };
-type ScheduleParameterUsageEntry = { readonly "fieldName": string, readonly "columnHeading": string, readonly "key": string, readonly "parameter"?: null | ScheduleFieldParameterDescriptor, readonly "fieldIndex": number, readonly "isHidden": boolean, readonly "isCalculated": boolean, readonly "isCombinedParameter": boolean };
-type ScheduleCatalogEntry = { readonly "scheduleId": number, readonly "scheduleUniqueId": string, readonly "name": string, readonly "categoryName"?: null | string, readonly "isTemplate": boolean, readonly "viewTemplateName"?: null | string, readonly "isItemized": boolean, readonly "filterBySheet": boolean, readonly "isPlacedOnSheet": boolean, readonly "sheetPlacements": ReadonlyArray<ScheduleCatalogSheetPlacement>, readonly "filters": ReadonlyArray<ScheduleFilterSpec>, readonly "parameterUsages": ReadonlyArray<ScheduleParameterUsageEntry>, readonly "customParameters": ReadonlyArray<ScheduleCatalogCustomParameterValue>, readonly "visibleBodyRowCount": number, readonly "visibleFamilyCount": number, readonly "visibleInstanceCount": number, readonly "visibleFamilies": ReadonlyArray<ScheduleVisibleFamilyEntry>, readonly "browserPaths": ReadonlyArray<ProjectBrowserPath> };
-export type Root = { readonly "entries": ReadonlyArray<ScheduleCatalogEntry>, readonly "issues": ReadonlyArray<RevitDataIssue>, readonly "page"?: null | RevitDataResultPage, readonly "summary"?: null | ScheduleCatalogSummary };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["ParameterDefinitionDescriptor"]: strictDecoder(ParameterDefinitionDescriptor),
@@ -2563,108 +2854,164 @@ export const definitions = {
   ["ScheduleVisibleFamilyEntry"]: strictDecoder(ScheduleVisibleFamilyEntry),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type ScheduleCatalogSheetPlacement = { readonly "sheetNumber": string, readonly "sheetName": string, readonly "isIssuedLikeSheet": boolean, readonly "isWorkingLikeSheet": boolean, readonly "sheetRole": string };
+type ScheduleAuthoredFilterType = "HasParameter" | "Equal" | "NotEqual" | "GreaterThan" | "GreaterThanOrEqual" | "LessThan" | "LessThanOrEqual" | "Contains" | "NotContains" | "BeginsWith" | "NotBeginsWith" | "EndsWith" | "NotEndsWith" | "IsAssociatedWithGlobalParameter" | "IsNotAssociatedWithGlobalParameter" | "HasValue" | "HasNoValue";
+type ParameterIdentityKind = "SharedGuid" | "BuiltInParameter" | "ParameterElement" | "NameFallback";
+type RequestedParameterStorageType = "None" | "String" | "Integer" | "Double" | "ElementId";
+type ScheduleVisibleFamilyEntry = { readonly "familyId": number, readonly "familyName": string, readonly "categoryName"?: null | string, readonly "visibleInstanceCount": number };
+type ProjectBrowserSection = "Views" | "Sheets" | "Schedules";
+type ProjectBrowserPathSegment = { readonly "parameterId"?: number | null, readonly "parameterName"?: null | string, readonly "folderName": string };
+type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
+type RevitDataResultPage = { readonly "totalCount": number, readonly "returnedCount": number, readonly "isTruncated": boolean };
+type ScheduleCatalogNameGroup = { readonly "normalizedName": string, readonly "count": number, readonly "names": ReadonlyArray<string> };
+type ScheduleCatalogNameTokenCount = { readonly "token": string, readonly "count": number };
+type ScheduleCatalogFieldUsageSummary = { readonly "fieldName": string, readonly "scheduleCount": number, readonly "averageFieldIndex": number };
+type ScheduleCatalogFieldFingerprint = { readonly "scheduleId": number, readonly "scheduleName": string, readonly "normalizedScheduleName": string, readonly "fieldSequence": ReadonlyArray<string>, readonly "fieldSetHash": string, readonly "orderedFieldHash": string, readonly "prefixDistribution": { readonly [x: string]: number } };
+type ScheduleFilterSpec = { readonly "fieldName": string, readonly "filterType": ScheduleAuthoredFilterType, readonly "value"?: null | string };
+type ParameterIdentity = { readonly "key": string, readonly "kind": ParameterIdentityKind, readonly "name": string, readonly "builtInParameterId"?: number | null, readonly "sharedGuid"?: null | string, readonly "parameterElementId"?: number | null };
+type ProjectBrowserPath = { readonly "section": ProjectBrowserSection, readonly "organizationName"?: null | string, readonly "pathLabel": string, readonly "segments": ReadonlyArray<ProjectBrowserPathSegment> };
+type RevitDataIssue = { readonly "code": string, readonly "severity": RevitDataIssueSeverity, readonly "message": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "parameterName"?: null | string };
+type ScheduleCatalogSummary = { readonly "totalSchedules": number, readonly "duplicateNormalizedNameGroups": ReadonlyArray<ScheduleCatalogNameGroup>, readonly "prefixCounts": ReadonlyArray<ScheduleCatalogNameTokenCount>, readonly "suffixCounts": ReadonlyArray<ScheduleCatalogNameTokenCount>, readonly "topScheduledFields": ReadonlyArray<ScheduleCatalogFieldUsageSummary>, readonly "fieldFingerprints": ReadonlyArray<ScheduleCatalogFieldFingerprint> };
+type ParameterDefinitionDescriptor = { readonly "identity": ParameterIdentity, readonly "isInstance"?: boolean | null, readonly "dataTypeId"?: null | string, readonly "dataTypeLabel"?: null | string, readonly "groupTypeId"?: null | string, readonly "groupTypeLabel"?: null | string, readonly "visible"?: boolean | null, readonly "userModifiable"?: boolean | null, readonly "description"?: null | string };
+type ScheduleFieldParameterDescriptor = { readonly "definition"?: null | ParameterDefinitionDescriptor, readonly "fieldType"?: null | string, readonly "identity"?: null | ParameterIdentity, readonly "specTypeId"?: null | string };
+type ScheduleCatalogCustomParameterValue = { readonly "definition": ParameterDefinitionDescriptor, readonly "value"?: null | string, readonly "displayValue"?: null | string, readonly "storageType": RequestedParameterStorageType, readonly "name": string };
+type ScheduleParameterUsageEntry = { readonly "fieldName": string, readonly "columnHeading": string, readonly "key": string, readonly "parameter"?: null | ScheduleFieldParameterDescriptor, readonly "fieldIndex": number, readonly "isHidden": boolean, readonly "isCalculated": boolean, readonly "isCombinedParameter": boolean };
+type ScheduleCatalogEntry = { readonly "scheduleId": number, readonly "scheduleUniqueId": string, readonly "name": string, readonly "categoryName"?: null | string, readonly "isTemplate": boolean, readonly "viewTemplateName"?: null | string, readonly "isItemized": boolean, readonly "filterBySheet": boolean, readonly "isPlacedOnSheet": boolean, readonly "sheetPlacements": ReadonlyArray<ScheduleCatalogSheetPlacement>, readonly "filters": ReadonlyArray<ScheduleFilterSpec>, readonly "parameterUsages": ReadonlyArray<ScheduleParameterUsageEntry>, readonly "customParameters": ReadonlyArray<ScheduleCatalogCustomParameterValue>, readonly "visibleBodyRowCount": number, readonly "visibleFamilyCount": number, readonly "visibleInstanceCount": number, readonly "visibleFamilies": ReadonlyArray<ScheduleVisibleFamilyEntry>, readonly "browserPaths": ReadonlyArray<ProjectBrowserPath> };
+export type Root = { readonly "entries": ReadonlyArray<ScheduleCatalogEntry>, readonly "issues": ReadonlyArray<RevitDataIssue>, readonly "page"?: null | RevitDataResultPage, readonly "summary"?: null | ScheduleCatalogSummary };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op46request {
+namespace Decoded {
 
 
 const codec = Schema.Record(Schema.String, Schema.Never).annotate({ "title": "NoRequest" });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 
 export type Root = { readonly [x: string]: never };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op46response {
+namespace Decoded {
 
 const RevitWarningRow = Schema.Struct({ "severity": Schema.String.annotate({ "description": "Revit's severity name: Warning, Error, or DocumentCorruption." }), "description": Schema.String.annotate({ "description": "The warning text." }), "elementIds": Schema.Array(Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" }))).annotate({ "description": "Ids of the elements the warning is about." }), "additionalElementIds": Schema.Array(Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" }))).annotate({ "description": "Ids of elements Revit lists alongside, such as the other side of a join or overlap." }) }).annotate({ "description": "One warning the document holds, as Revit's Review Warnings dialog lists it.", "identifier": "RevitWarningRow" });
 const codec = Schema.Struct({ "count": Schema.Number.annotate({ "description": "How many warnings the document holds.", "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "rows": Schema.Array(RevitWarningRow).annotate({ "description": "Every warning, in the order Revit reports them." }) }).annotate({ "title": "RevitWarningsListData", "description": "What revit.catalog.warnings read." });
-namespace WireTypes {
-type RevitWarningRow = { readonly "severity": string, readonly "description": string, readonly "elementIds": ReadonlyArray<number>, readonly "additionalElementIds": ReadonlyArray<number> };
-export type Root = { readonly "count": number, readonly "rows": ReadonlyArray<RevitWarningRow> };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["RevitWarningRow"]: strictDecoder(RevitWarningRow),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type RevitWarningRow = { readonly "severity": string, readonly "description": string, readonly "elementIds": ReadonlyArray<number>, readonly "additionalElementIds": ReadonlyArray<number> };
+export type Root = { readonly "count": number, readonly "rows": ReadonlyArray<RevitWarningRow> };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op47request {
+namespace Decoded {
 
 
 const codec = Schema.Record(Schema.String, Schema.Never).annotate({ "title": "NoRequest" });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 
 export type Root = { readonly [x: string]: never };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op47response {
+namespace Decoded {
 
 const RevitDocumentSummary = Schema.Struct({ "documentKey": Schema.String, "title": Schema.String, "path": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "isFamilyDocument": Schema.Boolean, "isWorkshared": Schema.Boolean, "isActive": Schema.Boolean, "isHeadless": Schema.Boolean.annotate({ "description": "Open with no window: no active view or selection, and Revit cannot activate it. Ops that read UI state refuse it; document-owned ops answer." }), "isModifiable": Schema.Boolean, "isReadOnly": Schema.Boolean, "isModelInCloud": Schema.Boolean, "cloudProjectGuid": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "cloudModelGuid": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "cloudModelUrn": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "identifier": "RevitDocumentSummary" });
 const codec = Schema.Struct({ "hasActiveDocument": Schema.Boolean, "activeDocument": Schema.optionalKey(Schema.Union([Schema.Null, RevitDocumentSummary], { mode: "oneOf" })), "openDocumentCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "openDocuments": Schema.Array(RevitDocumentSummary) }).annotate({ "title": "RevitDocumentSessionContextData" });
-namespace WireTypes {
-type RevitDocumentSummary = { readonly "documentKey": string, readonly "title": string, readonly "path"?: null | string, readonly "isFamilyDocument": boolean, readonly "isWorkshared": boolean, readonly "isActive": boolean, readonly "isHeadless": boolean, readonly "isModifiable": boolean, readonly "isReadOnly": boolean, readonly "isModelInCloud": boolean, readonly "cloudProjectGuid"?: null | string, readonly "cloudModelGuid"?: null | string, readonly "cloudModelUrn"?: null | string };
-export type Root = { readonly "hasActiveDocument": boolean, readonly "activeDocument"?: null | RevitDocumentSummary, readonly "openDocumentCount": number, readonly "openDocuments": ReadonlyArray<RevitDocumentSummary> };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["RevitDocumentSummary"]: strictDecoder(RevitDocumentSummary),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type RevitDocumentSummary = { readonly "documentKey": string, readonly "title": string, readonly "path"?: null | string, readonly "isFamilyDocument": boolean, readonly "isWorkshared": boolean, readonly "isActive": boolean, readonly "isHeadless": boolean, readonly "isModifiable": boolean, readonly "isReadOnly": boolean, readonly "isModelInCloud": boolean, readonly "cloudProjectGuid"?: null | string, readonly "cloudModelGuid"?: null | string, readonly "cloudModelUrn"?: null | string };
+export type Root = { readonly "hasActiveDocument": boolean, readonly "activeDocument"?: null | RevitDocumentSummary, readonly "openDocumentCount": number, readonly "openDocuments": ReadonlyArray<RevitDocumentSummary> };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op48request {
+namespace Decoded {
 
 
 const codec = Schema.Struct({ "maxLines": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), Schema.Null]).annotate({ "description": "Most rows to answer. Default 200, capped at 2000.", "format": "int32" })), "afterLine": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), Schema.Null]).annotate({ "description": "0-based index of the last line already seen; answers the rows after it, oldest first, so a page can poll. Omit for the newest rows.", "format": "int32" })), "kinds": Schema.optionalKey(Schema.Union([Schema.Array(Schema.String), Schema.Null]).annotate({ "description": "Keep only these kinds: command, dialog, error, transaction, other. Omit for every kind." })) }).annotate({ "title": "RevitJournalTailRequest", "description": "Request for revit.context.journal: read the tail of the journal Revit is recording for this session." });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 
 export type Root = { readonly "maxLines"?: number | null, readonly "afterLine"?: number | null, readonly "kinds"?: ReadonlyArray<string> | null };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op48response {
+namespace Decoded {
 
 const RevitJournalRow = Schema.Struct({ "line": Schema.Number.annotate({ "description": "0-based index of the line in the journal file; pass as afterLine to read past it.", "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "at": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String]).annotate({ "description": "The journal timestamp on this line (its `dd-MMM-yyyy HH:mm:ss.fff` text) when it has one, else null." })), "kind": Schema.String.annotate({ "description": "command, dialog, error, transaction, or other, by the line's prefix." }), "text": Schema.String.annotate({ "description": "The line, trimmed." }) }).annotate({ "description": "One journal line Revit wrote.", "identifier": "RevitJournalRow" });
 const codec = Schema.Struct({ "path": Schema.String.annotate({ "description": "The journal file Revit is recording to." }), "totalLines": Schema.Number.annotate({ "description": "Lines in the file at read time; the newest index is TotalLines - 1.", "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "rows": Schema.Array(RevitJournalRow).annotate({ "description": "The matching lines, oldest first, blank lines dropped." }) }).annotate({ "title": "RevitJournalTailData", "description": "What revit.context.journal read." });
-namespace WireTypes {
-type RevitJournalRow = { readonly "line": number, readonly "at"?: null | string, readonly "kind": string, readonly "text": string };
-export type Root = { readonly "path": string, readonly "totalLines": number, readonly "rows": ReadonlyArray<RevitJournalRow> };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["RevitJournalRow"]: strictDecoder(RevitJournalRow),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type RevitJournalRow = { readonly "line": number, readonly "at"?: null | string, readonly "kind": string, readonly "text": string };
+export type Root = { readonly "path": string, readonly "totalLines": number, readonly "rows": ReadonlyArray<RevitJournalRow> };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op49request {
+namespace Decoded {
 
 
 const codec = Schema.Struct({ "elementIds": Schema.Array(Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" }))).annotate({ "description": "Model element ids to box, from any handle-returning op." }), "name": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String]).annotate({ "description": "The 3D view's name; made when missing, refreshed when present. Default \"Pe lens\"." })), "paddingFeet": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "description": "Room around the elements' union box, in feet. Default 4.", "format": "double" })) }).annotate({ "title": "RevitLensRequest", "description": "Request for revit.context.lens: box a 3D view around elements so a window or a capture can look at them." });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 
 export type Root = { readonly "elementIds": ReadonlyArray<number>, readonly "name"?: null | string, readonly "paddingFeet"?: null | number };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op49response {
+namespace Decoded {
 
 const LensBasis = Schema.Literals(["UserView", "PeDefault"]).annotate({ "description": "", "identifier": "LensBasis" });
 const HiddenKind = Schema.Literals(["Links", "ScopeBoxes", "Levels", "Grids", "ReferencePlanes", "Spaces", "Zones", "Rooms", "Areas"]).annotate({ "description": "", "identifier": "HiddenKind" });
@@ -2674,18 +3021,6 @@ const Lens = Schema.Struct({ "basis": LensBasis, "viewId": Schema.Number.annotat
 const Hidden = Schema.Struct({ "what": HiddenKind, "count": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "why": HiddenWhy }).annotate({ "description": "Host-document instance count for a category whose visibility switch is off, not a visible/occluded count.\n            Does not evaluate filters, phases, worksets, individual hiding, or linked-document contents.", "identifier": "Hidden" });
 const RevitViewImageNotDrawn = Schema.Struct({ "elementId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "reasons": Schema.Array(RevitViewImageNotDrawnReason) }).annotate({ "identifier": "RevitViewImageNotDrawn" });
 const codec = Schema.Struct({ "viewId": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })), Schema.Null]).annotate({ "description": "The lens view's id, for revit.context.show-elements or revit.context.view-image.", "format": "int64" })), "viewName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String]).annotate({ "description": "That view's name." })), "created": Schema.Boolean.annotate({ "description": "True when the view was made by this call; false when an existing one was refreshed." }), "boxed": Schema.Number.annotate({ "description": "How many of the elements had geometry and sit inside the box.", "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "note": Schema.String.annotate({ "description": "One line on what happened." }), "lens": Schema.optionalKey(Schema.Union([Schema.Null, Lens], { mode: "oneOf" })), "hidden": Schema.Array(Hidden), "refused": Schema.Boolean.annotate({ "description": "No lens was made because none of the requested elements has model bounds." }), "notDrawn": Schema.Array(RevitViewImageNotDrawn) }).annotate({ "title": "RevitLensData", "description": "What revit.context.lens made or refreshed." });
-namespace WireTypes {
-type LensBasis = "UserView" | "PeDefault";
-type HiddenKind = "Links" | "ScopeBoxes" | "Levels" | "Grids" | "ReferencePlanes" | "Spaces" | "Zones" | "Rooms" | "Areas";
-type HiddenWhy = "PeDefault" | "NotEvaluated";
-type RevitViewImageNotDrawnReason = "ElementMissing" | "PhaseHidden" | "ElementHidden" | "CategoryHidden" | "NoBoundingBox" | "OutsideCrop" | "OutsideSectionBox";
-type Lens = { readonly "basis": LensBasis, readonly "viewId": number };
-type Hidden = { readonly "what": HiddenKind, readonly "count": number, readonly "why": HiddenWhy };
-type RevitViewImageNotDrawn = { readonly "elementId": number, readonly "reasons": ReadonlyArray<RevitViewImageNotDrawnReason> };
-export type Root = { readonly "viewId"?: number | null, readonly "viewName"?: null | string, readonly "created": boolean, readonly "boxed": number, readonly "note": string, readonly "lens"?: null | Lens, readonly "hidden": ReadonlyArray<Hidden>, readonly "refused": boolean, readonly "notDrawn": ReadonlyArray<RevitViewImageNotDrawn> };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["Hidden"]: strictDecoder(Hidden),
@@ -2697,21 +3032,40 @@ export const definitions = {
   ["RevitViewImageNotDrawnReason"]: strictDecoder(RevitViewImageNotDrawnReason),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type LensBasis = "UserView" | "PeDefault";
+type HiddenKind = "Links" | "ScopeBoxes" | "Levels" | "Grids" | "ReferencePlanes" | "Spaces" | "Zones" | "Rooms" | "Areas";
+type HiddenWhy = "PeDefault" | "NotEvaluated";
+type RevitViewImageNotDrawnReason = "ElementMissing" | "PhaseHidden" | "ElementHidden" | "CategoryHidden" | "NoBoundingBox" | "OutsideCrop" | "OutsideSectionBox";
+type Lens = { readonly "basis": LensBasis, readonly "viewId": number };
+type Hidden = { readonly "what": HiddenKind, readonly "count": number, readonly "why": HiddenWhy };
+type RevitViewImageNotDrawn = { readonly "elementId": number, readonly "reasons": ReadonlyArray<RevitViewImageNotDrawnReason> };
+export type Root = { readonly "viewId"?: number | null, readonly "viewName"?: null | string, readonly "created": boolean, readonly "boxed": number, readonly "note": string, readonly "lens"?: null | Lens, readonly "hidden": ReadonlyArray<Hidden>, readonly "refused": boolean, readonly "notDrawn": ReadonlyArray<RevitViewImageNotDrawn> };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op50request {
+namespace Decoded {
 
 
 const codec = Schema.Struct({ "elementIds": Schema.Array(Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" }))).annotate({ "description": "Element ids to select, from any handle-returning op." }), "viewId": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })), Schema.Null]).annotate({ "description": "Graphical view to activate and zoom instead of boxing the {3D} view; edits nothing.", "format": "int64" })), "selectOnly": Schema.optionalKey(Schema.Boolean.annotate({ "description": "Select and nothing else: the view, its zoom and its section box stay as they are." })), "expectedUniqueIds": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Record(Schema.String, Schema.String)]).annotate({ "description": "Expected identities paired with local IDs. A mismatch refuses that ID; never resolve the UniqueId as another target. Omitted identities are ID-only within the exact open document lifetime." })) }).annotate({ "title": "RevitShowElementsRequest", "description": "Request for revit.context.show-elements: select elements and show them, for the person at the window." });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 
 export type Root = { readonly "elementIds": ReadonlyArray<number>, readonly "viewId"?: number | null, readonly "selectOnly"?: boolean, readonly "expectedUniqueIds"?: null | { readonly [x: string]: string } };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op50response {
+namespace Decoded {
 
 const RevitShowElementsIssue = Schema.Struct({ "elementId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "code": Schema.String, "message": Schema.String }).annotate({ "identifier": "RevitShowElementsIssue" });
 const LensBasis = Schema.Literals(["UserView", "PeDefault"]).annotate({ "description": "", "identifier": "LensBasis" });
@@ -2720,17 +3074,6 @@ const HiddenWhy = Schema.Literals(["PeDefault", "NotEvaluated"]).annotate({ "des
 const Lens = Schema.Struct({ "basis": LensBasis, "viewId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })) }).annotate({ "description": "The view used, without inferring who configured a referenced view.", "identifier": "Lens" });
 const Hidden = Schema.Struct({ "what": HiddenKind, "count": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "why": HiddenWhy }).annotate({ "description": "Host-document instance count for a category whose visibility switch is off, not a visible/occluded count.\n            Does not evaluate filters, phases, worksets, individual hiding, or linked-document contents.", "identifier": "Hidden" });
 const codec = Schema.Struct({ "shown": Schema.Array(Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" }))).annotate({ "description": "Ids now selected." }), "missing": Schema.Array(Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" }))).annotate({ "description": "Requested ids with no element in this document." }), "viewId": Schema.Number.annotate({ "description": "The view that now shows them.", "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "viewName": Schema.String.annotate({ "description": "That view's name." }), "note": Schema.String.annotate({ "description": "One line on what happened." }), "boxed": Schema.Array(Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" }))).annotate({ "description": "Targets with model geometry included in the committed 3D section box. This does not guarantee visibility." }), "hiddenElementIds": Schema.Array(Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" }))).annotate({ "description": "Boxed targets absent from that view's visible-element collection." }), "identityVerified": Schema.Array(Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" }))).annotate({ "description": "Targets whose supplied expected UniqueId matched the local ID. ID-only targets never appear here." }), "issues": Schema.Array(RevitShowElementsIssue).annotate({ "description": "Per-target refusals and partial failures." }), "lens": Lens, "hidden": Schema.Array(Hidden) }).annotate({ "title": "RevitShowElementsData", "description": "What revit.context.show-elements selected, what it could not find, and the view it zoomed." });
-namespace WireTypes {
-type RevitShowElementsIssue = { readonly "elementId": number, readonly "code": string, readonly "message": string };
-type LensBasis = "UserView" | "PeDefault";
-type HiddenKind = "Links" | "ScopeBoxes" | "Levels" | "Grids" | "ReferencePlanes" | "Spaces" | "Zones" | "Rooms" | "Areas";
-type HiddenWhy = "PeDefault" | "NotEvaluated";
-type Lens = { readonly "basis": LensBasis, readonly "viewId": number };
-type Hidden = { readonly "what": HiddenKind, readonly "count": number, readonly "why": HiddenWhy };
-export type Root = { readonly "shown": ReadonlyArray<number>, readonly "missing": ReadonlyArray<number>, readonly "viewId": number, readonly "viewName": string, readonly "note": string, readonly "boxed": ReadonlyArray<number>, readonly "hiddenElementIds": ReadonlyArray<number>, readonly "identityVerified": ReadonlyArray<number>, readonly "issues": ReadonlyArray<RevitShowElementsIssue>, readonly "lens": Lens, readonly "hidden": ReadonlyArray<Hidden> };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["Hidden"]: strictDecoder(Hidden),
@@ -2741,21 +3084,39 @@ export const definitions = {
   ["RevitShowElementsIssue"]: strictDecoder(RevitShowElementsIssue),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type RevitShowElementsIssue = { readonly "elementId": number, readonly "code": string, readonly "message": string };
+type LensBasis = "UserView" | "PeDefault";
+type HiddenKind = "Links" | "ScopeBoxes" | "Levels" | "Grids" | "ReferencePlanes" | "Spaces" | "Zones" | "Rooms" | "Areas";
+type HiddenWhy = "PeDefault" | "NotEvaluated";
+type Lens = { readonly "basis": LensBasis, readonly "viewId": number };
+type Hidden = { readonly "what": HiddenKind, readonly "count": number, readonly "why": HiddenWhy };
+export type Root = { readonly "shown": ReadonlyArray<number>, readonly "missing": ReadonlyArray<number>, readonly "viewId": number, readonly "viewName": string, readonly "note": string, readonly "boxed": ReadonlyArray<number>, readonly "hiddenElementIds": ReadonlyArray<number>, readonly "identityVerified": ReadonlyArray<number>, readonly "issues": ReadonlyArray<RevitShowElementsIssue>, readonly "lens": Lens, readonly "hidden": ReadonlyArray<Hidden> };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op51request {
+namespace Decoded {
 
 
 const codec = Schema.Record(Schema.String, Schema.Never).annotate({ "title": "NoRequest" });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 
 export type Root = { readonly [x: string]: never };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op51response {
+namespace Decoded {
 
 const RevitDocumentSummary = Schema.Struct({ "documentKey": Schema.String, "title": Schema.String, "path": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "isFamilyDocument": Schema.Boolean, "isWorkshared": Schema.Boolean, "isActive": Schema.Boolean, "isHeadless": Schema.Boolean.annotate({ "description": "Open with no window: no active view or selection, and Revit cannot activate it. Ops that read UI state refuse it; document-owned ops answer." }), "isModifiable": Schema.Boolean, "isReadOnly": Schema.Boolean, "isModelInCloud": Schema.Boolean, "cloudProjectGuid": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "cloudModelGuid": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "cloudModelUrn": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "identifier": "RevitDocumentSummary" });
 const RevitAgentContextHandleKind = Schema.Literals(["Document", "View", "Sheet", "Element", "Schedule", "Category", "Family"]).annotate({ "description": "", "identifier": "RevitAgentContextHandleKind" });
@@ -2772,25 +3133,6 @@ const RevitAgentActiveViewContext = Schema.Struct({ "handle": RevitAgentContextH
 const RevitAgentSelectionContext = Schema.Struct({ "selectedElementCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "returnedElementCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "entries": Schema.Array(RevitAgentSelectionEntry) }).annotate({ "identifier": "RevitAgentSelectionContext" });
 const RevitAgentVisibleCategorySummary = Schema.Struct({ "handle": RevitAgentContextHandle, "elementCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "sampleElements": Schema.Array(RevitAgentVisibleElementSample), "provenance": Schema.Array(RevitAgentContextProvenance), "returnedElementCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "isReturnedElementSetComplete": Schema.Boolean, "elementHandles": Schema.optionalKey(Schema.Union([Schema.Array(RevitAgentVisibleElementHandle), Schema.Null])) }).annotate({ "identifier": "RevitAgentVisibleCategorySummary" });
 const codec = Schema.Struct({ "document": Schema.Union([RevitDocumentSummary], { mode: "oneOf" }).annotate({ "description": "The document this summary reads. A headless one (isHeadless) has no active view, selection, or visible categories, so those come back empty." }), "documents": RevitDocumentSessionContextData, "activeView": Schema.optionalKey(Schema.Union([Schema.Null, RevitAgentActiveViewContext], { mode: "oneOf" })), "selection": RevitAgentSelectionContext, "browser": RevitAgentBrowserSummary, "visibleCategories": Schema.Array(RevitAgentVisibleCategorySummary) }).annotate({ "title": "RevitAgentContextSummaryData" });
-namespace WireTypes {
-type RevitDocumentSummary = { readonly "documentKey": string, readonly "title": string, readonly "path"?: null | string, readonly "isFamilyDocument": boolean, readonly "isWorkshared": boolean, readonly "isActive": boolean, readonly "isHeadless": boolean, readonly "isModifiable": boolean, readonly "isReadOnly": boolean, readonly "isModelInCloud": boolean, readonly "cloudProjectGuid"?: null | string, readonly "cloudModelGuid"?: null | string, readonly "cloudModelUrn"?: null | string };
-type RevitAgentContextHandleKind = "Document" | "View" | "Sheet" | "Element" | "Schedule" | "Category" | "Family";
-type RevitAgentContextProvenanceKind = "ActiveDocument" | "OpenDocument" | "ActiveView" | "CurrentSelection" | "ExplicitReference" | "SheetPlacement" | "BrowserIndex" | "VisibleInActiveView" | "VisibleInReferencedView" | "PrintedContext" | "SearchMatch";
-type RevitAgentBrowserSummary = { readonly "viewCount": number, readonly "sheetCount": number, readonly "scheduleCount": number, readonly "familyCount": number };
-type RevitDocumentSessionContextData = { readonly "hasActiveDocument": boolean, readonly "activeDocument"?: null | RevitDocumentSummary, readonly "openDocumentCount": number, readonly "openDocuments": ReadonlyArray<RevitDocumentSummary> };
-type RevitAgentContextHandle = { readonly "kind": RevitAgentContextHandleKind, readonly "documentKey": string, readonly "elementId"?: number | null, readonly "uniqueId"?: null | string, readonly "label": string, readonly "categoryName"?: null | string };
-type RevitAgentContextProvenance = { readonly "kind": RevitAgentContextProvenanceKind, readonly "description": string };
-type RevitAgentViewSheetPlacement = { readonly "sheet": RevitAgentContextHandle, readonly "sheetNumber": string, readonly "sheetName": string, readonly "isActiveSheet": boolean };
-type RevitAgentSelectionEntry = { readonly "handle": RevitAgentContextHandle, readonly "className": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "mark"?: null | string, readonly "levelName"?: null | string, readonly "provenance": ReadonlyArray<RevitAgentContextProvenance> };
-type RevitAgentVisibleElementSample = { readonly "handle": RevitAgentContextHandle, readonly "className": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "levelName"?: null | string, readonly "provenance"?: ReadonlyArray<RevitAgentContextProvenance> | null, readonly "visibleInViews"?: ReadonlyArray<RevitAgentContextHandle> | null };
-type RevitAgentVisibleElementHandle = { readonly "handle": RevitAgentContextHandle, readonly "provenance"?: ReadonlyArray<RevitAgentContextProvenance> | null, readonly "visibleInViews"?: ReadonlyArray<RevitAgentContextHandle> | null };
-type RevitAgentActiveViewContext = { readonly "handle": RevitAgentContextHandle, readonly "viewType": string, readonly "title": string, readonly "scale": number, readonly "levelName"?: null | string, readonly "discipline"?: null | string, readonly "phaseName"?: null | string, readonly "viewTemplateName"?: null | string, readonly "isTemplate": boolean, readonly "canBePrinted": boolean, readonly "isSheet": boolean, readonly "isSchedule": boolean, readonly "sheetPlacements": ReadonlyArray<RevitAgentViewSheetPlacement>, readonly "provenance": ReadonlyArray<RevitAgentContextProvenance> };
-type RevitAgentSelectionContext = { readonly "selectedElementCount": number, readonly "returnedElementCount": number, readonly "entries": ReadonlyArray<RevitAgentSelectionEntry> };
-type RevitAgentVisibleCategorySummary = { readonly "handle": RevitAgentContextHandle, readonly "elementCount": number, readonly "sampleElements": ReadonlyArray<RevitAgentVisibleElementSample>, readonly "provenance": ReadonlyArray<RevitAgentContextProvenance>, readonly "returnedElementCount": number, readonly "isReturnedElementSetComplete": boolean, readonly "elementHandles"?: ReadonlyArray<RevitAgentVisibleElementHandle> | null };
-export type Root = { readonly "document": RevitDocumentSummary, readonly "documents": RevitDocumentSessionContextData, readonly "activeView"?: null | RevitAgentActiveViewContext, readonly "selection": RevitAgentSelectionContext, readonly "browser": RevitAgentBrowserSummary, readonly "visibleCategories": ReadonlyArray<RevitAgentVisibleCategorySummary> };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["RevitAgentActiveViewContext"]: strictDecoder(RevitAgentActiveViewContext),
@@ -2809,23 +3151,49 @@ export const definitions = {
   ["RevitDocumentSummary"]: strictDecoder(RevitDocumentSummary),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type RevitDocumentSummary = { readonly "documentKey": string, readonly "title": string, readonly "path"?: null | string, readonly "isFamilyDocument": boolean, readonly "isWorkshared": boolean, readonly "isActive": boolean, readonly "isHeadless": boolean, readonly "isModifiable": boolean, readonly "isReadOnly": boolean, readonly "isModelInCloud": boolean, readonly "cloudProjectGuid"?: null | string, readonly "cloudModelGuid"?: null | string, readonly "cloudModelUrn"?: null | string };
+type RevitAgentContextHandleKind = "Document" | "View" | "Sheet" | "Element" | "Schedule" | "Category" | "Family";
+type RevitAgentContextProvenanceKind = "ActiveDocument" | "OpenDocument" | "ActiveView" | "CurrentSelection" | "ExplicitReference" | "SheetPlacement" | "BrowserIndex" | "VisibleInActiveView" | "VisibleInReferencedView" | "PrintedContext" | "SearchMatch";
+type RevitAgentBrowserSummary = { readonly "viewCount": number, readonly "sheetCount": number, readonly "scheduleCount": number, readonly "familyCount": number };
+type RevitDocumentSessionContextData = { readonly "hasActiveDocument": boolean, readonly "activeDocument"?: null | RevitDocumentSummary, readonly "openDocumentCount": number, readonly "openDocuments": ReadonlyArray<RevitDocumentSummary> };
+type RevitAgentContextHandle = { readonly "kind": RevitAgentContextHandleKind, readonly "documentKey": string, readonly "elementId"?: number | null, readonly "uniqueId"?: null | string, readonly "label": string, readonly "categoryName"?: null | string };
+type RevitAgentContextProvenance = { readonly "kind": RevitAgentContextProvenanceKind, readonly "description": string };
+type RevitAgentViewSheetPlacement = { readonly "sheet": RevitAgentContextHandle, readonly "sheetNumber": string, readonly "sheetName": string, readonly "isActiveSheet": boolean };
+type RevitAgentSelectionEntry = { readonly "handle": RevitAgentContextHandle, readonly "className": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "mark"?: null | string, readonly "levelName"?: null | string, readonly "provenance": ReadonlyArray<RevitAgentContextProvenance> };
+type RevitAgentVisibleElementSample = { readonly "handle": RevitAgentContextHandle, readonly "className": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "levelName"?: null | string, readonly "provenance"?: ReadonlyArray<RevitAgentContextProvenance> | null, readonly "visibleInViews"?: ReadonlyArray<RevitAgentContextHandle> | null };
+type RevitAgentVisibleElementHandle = { readonly "handle": RevitAgentContextHandle, readonly "provenance"?: ReadonlyArray<RevitAgentContextProvenance> | null, readonly "visibleInViews"?: ReadonlyArray<RevitAgentContextHandle> | null };
+type RevitAgentActiveViewContext = { readonly "handle": RevitAgentContextHandle, readonly "viewType": string, readonly "title": string, readonly "scale": number, readonly "levelName"?: null | string, readonly "discipline"?: null | string, readonly "phaseName"?: null | string, readonly "viewTemplateName"?: null | string, readonly "isTemplate": boolean, readonly "canBePrinted": boolean, readonly "isSheet": boolean, readonly "isSchedule": boolean, readonly "sheetPlacements": ReadonlyArray<RevitAgentViewSheetPlacement>, readonly "provenance": ReadonlyArray<RevitAgentContextProvenance> };
+type RevitAgentSelectionContext = { readonly "selectedElementCount": number, readonly "returnedElementCount": number, readonly "entries": ReadonlyArray<RevitAgentSelectionEntry> };
+type RevitAgentVisibleCategorySummary = { readonly "handle": RevitAgentContextHandle, readonly "elementCount": number, readonly "sampleElements": ReadonlyArray<RevitAgentVisibleElementSample>, readonly "provenance": ReadonlyArray<RevitAgentContextProvenance>, readonly "returnedElementCount": number, readonly "isReturnedElementSetComplete": boolean, readonly "elementHandles"?: ReadonlyArray<RevitAgentVisibleElementHandle> | null };
+export type Root = { readonly "document": RevitDocumentSummary, readonly "documents": RevitDocumentSessionContextData, readonly "activeView"?: null | RevitAgentActiveViewContext, readonly "selection": RevitAgentSelectionContext, readonly "browser": RevitAgentBrowserSummary, readonly "visibleCategories": ReadonlyArray<RevitAgentVisibleCategorySummary> };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op52request {
+namespace Decoded {
 
 const RevitViewImageTarget = Schema.Struct({ "id": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })), Schema.Null]).annotate({ "format": "int64" })), "uniqueId": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "name": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "onSheet": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "description": "What to capture. Omit entirely to capture the active view. Id/UniqueId accept a view,\nsheet, viewport (dereferenced to its view), or schedule (must be placed on a sheet).\nName matches view name, sheet name, sheet number, or schedule name — exact first, then\nunique substring. OnSheet (sheet number or name) disambiguates names that appear on\nmultiple sheets and selects which placement of a schedule to capture.\n            ", "identifier": "RevitViewImageTarget" });
 const RevitViewImageFocus = Schema.Struct({ "elementIds": Schema.optionalKey(Schema.Union([Schema.Array(Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" }))), Schema.Null])), "selection": Schema.optionalKey(Schema.Boolean), "scopeBox": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "description": "Optional crop: exactly one of ElementIds, Selection, or ScopeBox. The view is exported\nwith a temporary crop around the focus and, for requested elements, the later of their latest creation phase\nand the view's phase, with a filter showing New and Existing. Committed view state is restored afterwards. Requires an editable document;\nnot supported on sheets.\n            ", "identifier": "RevitViewImageFocus" });
 const codec = Schema.Struct({ "target": Schema.optionalKey(Schema.Union([Schema.Null, RevitViewImageTarget], { mode: "oneOf" })), "focus": Schema.optionalKey(Schema.Union([Schema.Null, RevitViewImageFocus], { mode: "oneOf" })), "marginPercent": Schema.optionalKey(Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" }))), "pixelSize": Schema.optionalKey(Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" }))) }).annotate({ "title": "RevitViewImageRequest" });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 type RevitViewImageTarget = { readonly "id"?: number | null, readonly "uniqueId"?: null | string, readonly "name"?: null | string, readonly "onSheet"?: null | string };
 type RevitViewImageFocus = { readonly "elementIds"?: ReadonlyArray<number> | null, readonly "selection"?: boolean, readonly "scopeBox"?: null | string };
 export type Root = { readonly "target"?: null | RevitViewImageTarget, readonly "focus"?: null | RevitViewImageFocus, readonly "marginPercent"?: number, readonly "pixelSize"?: number };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op52response {
+namespace Decoded {
 
 const RevitAgentContextHandleKind = Schema.Literals(["Document", "View", "Sheet", "Element", "Schedule", "Category", "Family"]).annotate({ "description": "", "identifier": "RevitAgentContextHandleKind" });
 const LensBasis = Schema.Literals(["UserView", "PeDefault"]).annotate({ "description": "", "identifier": "LensBasis" });
@@ -2842,25 +3210,6 @@ const Lens = Schema.Struct({ "basis": LensBasis, "viewId": Schema.Number.annotat
 const Hidden = Schema.Struct({ "what": HiddenKind, "count": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "why": HiddenWhy }).annotate({ "description": "Host-document instance count for a category whose visibility switch is off, not a visible/occluded count.\n            Does not evaluate filters, phases, worksets, individual hiding, or linked-document contents.", "identifier": "Hidden" });
 const RevitViewImageNotDrawn = Schema.Struct({ "elementId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "reasons": Schema.Array(RevitViewImageNotDrawnReason) }).annotate({ "identifier": "RevitViewImageNotDrawn" });
 const codec = Schema.Struct({ "view": RevitAgentContextHandle, "filePath": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String]).annotate({ "description": "Exported PNG, or null on refusal. A refusal has zero byte size and dimensions." })), "byteSize": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "width": Schema.Number.annotate({ "description": "Delivered PNG width in pixels, read from the final file (not the export width it was cut from).", "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "height": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "lens": Lens, "hidden": Schema.Array(Hidden), "warning": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String]).annotate({ "description": "Why the image is far smaller than asked, in words; null when it is not." })), "viewScale": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), Schema.Null]).annotate({ "format": "int32" })), "modelRect": Schema.optionalKey(Schema.Union([Schema.Null, RevitViewImageModelRect], { mode: "oneOf" })), "sheetNumber": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "registration": Schema.optionalKey(Schema.Union([Schema.Null, RevitViewImageRegistration], { mode: "oneOf" })), "registrationRefusal": Schema.optionalKey(Schema.Union([Schema.Null, RevitViewImageRegistrationRefusal], { mode: "oneOf" })), "restore": Schema.optionalKey(Schema.Union([Schema.Null, RevitViewImageRestore], { mode: "oneOf" })), "imageUrl": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String]).annotate({ "description": "Host captures route for exactly the registered PNG (the host keeps every taking), keyed by ImageSha256;\nnull exactly when Registration is. FilePath stays the host-side record.\n            " })), "marks": Schema.Array(RevitViewImageMark).annotate({ "description": "Focus elements' bounding boxes in delivered pixels (origin top-left, Y down).\n                Clipped to the image; missing geometry and boxes outside the crop are omitted. Bounds do not certify visibility." }), "refused": Schema.Boolean.annotate({ "description": "No PNG was exported because every requested element was excluded. NotDrawn gives the reasons." }), "notDrawn": Schema.Array(RevitViewImageNotDrawn).annotate({ "description": "Requested elements excluded by phase/filter, hiding, or bounds. Empty does not certify pixels or occlusion." }) }).annotate({ "title": "RevitViewImageData" });
-namespace WireTypes {
-type RevitAgentContextHandleKind = "Document" | "View" | "Sheet" | "Element" | "Schedule" | "Category" | "Family";
-type LensBasis = "UserView" | "PeDefault";
-type HiddenKind = "Links" | "ScopeBoxes" | "Levels" | "Grids" | "ReferencePlanes" | "Spaces" | "Zones" | "Rooms" | "Areas";
-type HiddenWhy = "PeDefault" | "NotEvaluated";
-type RevitViewImageModelRect = { readonly "minX": number, readonly "minY": number, readonly "maxX": number, readonly "maxY": number };
-type RevitViewImageRegistration = { readonly "width": number, readonly "height": number, readonly "imageSha256": string, readonly "topLeft": ReadonlyArray<number>, readonly "topRight": ReadonlyArray<number>, readonly "bottomLeft": ReadonlyArray<number> };
-type RevitViewImageRegistrationRefusal = "NoCrop" | "NoImage" | "DegenerateCrop" | "AspectDisagrees" | "CropOutsideImage";
-type RevitViewImageRestore = { readonly "held": boolean, readonly "left": ReadonlyArray<string> };
-type RevitViewImageMark = { readonly "elementId": number, readonly "left": number, readonly "top": number, readonly "width": number, readonly "height": number };
-type RevitViewImageNotDrawnReason = "ElementMissing" | "PhaseHidden" | "ElementHidden" | "CategoryHidden" | "NoBoundingBox" | "OutsideCrop" | "OutsideSectionBox";
-type RevitAgentContextHandle = { readonly "kind": RevitAgentContextHandleKind, readonly "documentKey": string, readonly "elementId"?: number | null, readonly "uniqueId"?: null | string, readonly "label": string, readonly "categoryName"?: null | string };
-type Lens = { readonly "basis": LensBasis, readonly "viewId": number };
-type Hidden = { readonly "what": HiddenKind, readonly "count": number, readonly "why": HiddenWhy };
-type RevitViewImageNotDrawn = { readonly "elementId": number, readonly "reasons": ReadonlyArray<RevitViewImageNotDrawnReason> };
-export type Root = { readonly "view": RevitAgentContextHandle, readonly "filePath"?: null | string, readonly "byteSize": number, readonly "width": number, readonly "height": number, readonly "lens": Lens, readonly "hidden": ReadonlyArray<Hidden>, readonly "warning"?: null | string, readonly "viewScale"?: number | null, readonly "modelRect"?: null | RevitViewImageModelRect, readonly "sheetNumber"?: null | string, readonly "registration"?: null | RevitViewImageRegistration, readonly "registrationRefusal"?: null | RevitViewImageRegistrationRefusal, readonly "restore"?: null | RevitViewImageRestore, readonly "imageUrl"?: null | string, readonly "marks": ReadonlyArray<RevitViewImageMark>, readonly "refused": boolean, readonly "notDrawn": ReadonlyArray<RevitViewImageNotDrawn> };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export function delivery<S extends Schema.ConstraintDecoder<unknown, never>>(receipt: S) {
 return strictDecoder(codec.mapFields(fields => ({ ...Struct.omit(fields, ["filePath", "imageUrl"]), capture: Schema.NullOr(receipt), imageUrl: Schema.NullOr(Schema.String) })));
@@ -2882,23 +3231,50 @@ export const definitions = {
   ["RevitViewImageRestore"]: strictDecoder(RevitViewImageRestore),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+export const delivery = Decoded.delivery;
+namespace WireTypes {
+type RevitAgentContextHandleKind = "Document" | "View" | "Sheet" | "Element" | "Schedule" | "Category" | "Family";
+type LensBasis = "UserView" | "PeDefault";
+type HiddenKind = "Links" | "ScopeBoxes" | "Levels" | "Grids" | "ReferencePlanes" | "Spaces" | "Zones" | "Rooms" | "Areas";
+type HiddenWhy = "PeDefault" | "NotEvaluated";
+type RevitViewImageModelRect = { readonly "minX": number, readonly "minY": number, readonly "maxX": number, readonly "maxY": number };
+type RevitViewImageRegistration = { readonly "width": number, readonly "height": number, readonly "imageSha256": string, readonly "topLeft": ReadonlyArray<number>, readonly "topRight": ReadonlyArray<number>, readonly "bottomLeft": ReadonlyArray<number> };
+type RevitViewImageRegistrationRefusal = "NoCrop" | "NoImage" | "DegenerateCrop" | "AspectDisagrees" | "CropOutsideImage";
+type RevitViewImageRestore = { readonly "held": boolean, readonly "left": ReadonlyArray<string> };
+type RevitViewImageMark = { readonly "elementId": number, readonly "left": number, readonly "top": number, readonly "width": number, readonly "height": number };
+type RevitViewImageNotDrawnReason = "ElementMissing" | "PhaseHidden" | "ElementHidden" | "CategoryHidden" | "NoBoundingBox" | "OutsideCrop" | "OutsideSectionBox";
+type RevitAgentContextHandle = { readonly "kind": RevitAgentContextHandleKind, readonly "documentKey": string, readonly "elementId"?: number | null, readonly "uniqueId"?: null | string, readonly "label": string, readonly "categoryName"?: null | string };
+type Lens = { readonly "basis": LensBasis, readonly "viewId": number };
+type Hidden = { readonly "what": HiddenKind, readonly "count": number, readonly "why": HiddenWhy };
+type RevitViewImageNotDrawn = { readonly "elementId": number, readonly "reasons": ReadonlyArray<RevitViewImageNotDrawnReason> };
+export type Root = { readonly "view": RevitAgentContextHandle, readonly "filePath"?: null | string, readonly "byteSize": number, readonly "width": number, readonly "height": number, readonly "lens": Lens, readonly "hidden": ReadonlyArray<Hidden>, readonly "warning"?: null | string, readonly "viewScale"?: number | null, readonly "modelRect"?: null | RevitViewImageModelRect, readonly "sheetNumber"?: null | string, readonly "registration"?: null | RevitViewImageRegistration, readonly "registrationRefusal"?: null | RevitViewImageRegistrationRefusal, readonly "restore"?: null | RevitViewImageRestore, readonly "imageUrl"?: null | string, readonly "marks": ReadonlyArray<RevitViewImageMark>, readonly "refused": boolean, readonly "notDrawn": ReadonlyArray<RevitViewImageNotDrawn> };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op53request {
+namespace Decoded {
 
 const RevitViewImageTarget = Schema.Struct({ "id": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })), Schema.Null]).annotate({ "format": "int64" })), "uniqueId": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "name": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "onSheet": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "description": "What to capture. Omit entirely to capture the active view. Id/UniqueId accept a view,\nsheet, viewport (dereferenced to its view), or schedule (must be placed on a sheet).\nName matches view name, sheet name, sheet number, or schedule name — exact first, then\nunique substring. OnSheet (sheet number or name) disambiguates names that appear on\nmultiple sheets and selects which placement of a schedule to capture.\n            ", "identifier": "RevitViewImageTarget" });
 const RevitViewImageFocus = Schema.Struct({ "elementIds": Schema.optionalKey(Schema.Union([Schema.Array(Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" }))), Schema.Null])), "selection": Schema.optionalKey(Schema.Boolean), "scopeBox": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "description": "Optional crop: exactly one of ElementIds, Selection, or ScopeBox. The view is exported\nwith a temporary crop around the focus and, for requested elements, the later of their latest creation phase\nand the view's phase, with a filter showing New and Existing. Committed view state is restored afterwards. Requires an editable document;\nnot supported on sheets.\n            ", "identifier": "RevitViewImageFocus" });
 const codec = Schema.Struct({ "target": Schema.optionalKey(Schema.Union([Schema.Null, RevitViewImageTarget], { mode: "oneOf" })), "focus": Schema.optionalKey(Schema.Union([Schema.Null, RevitViewImageFocus], { mode: "oneOf" })), "marginPercent": Schema.optionalKey(Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" }))), "pixelSize": Schema.optionalKey(Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" }))) }).annotate({ "title": "RevitViewImageRequest" });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 type RevitViewImageTarget = { readonly "id"?: number | null, readonly "uniqueId"?: null | string, readonly "name"?: null | string, readonly "onSheet"?: null | string };
 type RevitViewImageFocus = { readonly "elementIds"?: ReadonlyArray<number> | null, readonly "selection"?: boolean, readonly "scopeBox"?: null | string };
 export type Root = { readonly "target"?: null | RevitViewImageTarget, readonly "focus"?: null | RevitViewImageFocus, readonly "marginPercent"?: number, readonly "pixelSize"?: number };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op53response {
+namespace Decoded {
 
 const RevitAgentContextHandleKind = Schema.Literals(["Document", "View", "Sheet", "Element", "Schedule", "Category", "Family"]).annotate({ "description": "", "identifier": "RevitAgentContextHandleKind" });
 const LensBasis = Schema.Literals(["UserView", "PeDefault"]).annotate({ "description": "", "identifier": "LensBasis" });
@@ -2915,25 +3291,6 @@ const Lens = Schema.Struct({ "basis": LensBasis, "viewId": Schema.Number.annotat
 const Hidden = Schema.Struct({ "what": HiddenKind, "count": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "why": HiddenWhy }).annotate({ "description": "Host-document instance count for a category whose visibility switch is off, not a visible/occluded count.\n            Does not evaluate filters, phases, worksets, individual hiding, or linked-document contents.", "identifier": "Hidden" });
 const RevitViewImageNotDrawn = Schema.Struct({ "elementId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "reasons": Schema.Array(RevitViewImageNotDrawnReason) }).annotate({ "identifier": "RevitViewImageNotDrawn" });
 const codec = Schema.Struct({ "view": RevitAgentContextHandle, "filePath": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String]).annotate({ "description": "Exported PNG, or null on refusal. A refusal has zero byte size and dimensions." })), "byteSize": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "width": Schema.Number.annotate({ "description": "Delivered PNG width in pixels, read from the final file (not the export width it was cut from).", "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "height": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "lens": Lens, "hidden": Schema.Array(Hidden), "warning": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String]).annotate({ "description": "Why the image is far smaller than asked, in words; null when it is not." })), "viewScale": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), Schema.Null]).annotate({ "format": "int32" })), "modelRect": Schema.optionalKey(Schema.Union([Schema.Null, RevitViewImageModelRect], { mode: "oneOf" })), "sheetNumber": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "registration": Schema.optionalKey(Schema.Union([Schema.Null, RevitViewImageRegistration], { mode: "oneOf" })), "registrationRefusal": Schema.optionalKey(Schema.Union([Schema.Null, RevitViewImageRegistrationRefusal], { mode: "oneOf" })), "restore": Schema.optionalKey(Schema.Union([Schema.Null, RevitViewImageRestore], { mode: "oneOf" })), "imageUrl": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String]).annotate({ "description": "Host captures route for exactly the registered PNG (the host keeps every taking), keyed by ImageSha256;\nnull exactly when Registration is. FilePath stays the host-side record.\n            " })), "marks": Schema.Array(RevitViewImageMark).annotate({ "description": "Focus elements' bounding boxes in delivered pixels (origin top-left, Y down).\n                Clipped to the image; missing geometry and boxes outside the crop are omitted. Bounds do not certify visibility." }), "refused": Schema.Boolean.annotate({ "description": "No PNG was exported because every requested element was excluded. NotDrawn gives the reasons." }), "notDrawn": Schema.Array(RevitViewImageNotDrawn).annotate({ "description": "Requested elements excluded by phase/filter, hiding, or bounds. Empty does not certify pixels or occlusion." }) }).annotate({ "title": "RevitViewImageData" });
-namespace WireTypes {
-type RevitAgentContextHandleKind = "Document" | "View" | "Sheet" | "Element" | "Schedule" | "Category" | "Family";
-type LensBasis = "UserView" | "PeDefault";
-type HiddenKind = "Links" | "ScopeBoxes" | "Levels" | "Grids" | "ReferencePlanes" | "Spaces" | "Zones" | "Rooms" | "Areas";
-type HiddenWhy = "PeDefault" | "NotEvaluated";
-type RevitViewImageModelRect = { readonly "minX": number, readonly "minY": number, readonly "maxX": number, readonly "maxY": number };
-type RevitViewImageRegistration = { readonly "width": number, readonly "height": number, readonly "imageSha256": string, readonly "topLeft": ReadonlyArray<number>, readonly "topRight": ReadonlyArray<number>, readonly "bottomLeft": ReadonlyArray<number> };
-type RevitViewImageRegistrationRefusal = "NoCrop" | "NoImage" | "DegenerateCrop" | "AspectDisagrees" | "CropOutsideImage";
-type RevitViewImageRestore = { readonly "held": boolean, readonly "left": ReadonlyArray<string> };
-type RevitViewImageMark = { readonly "elementId": number, readonly "left": number, readonly "top": number, readonly "width": number, readonly "height": number };
-type RevitViewImageNotDrawnReason = "ElementMissing" | "PhaseHidden" | "ElementHidden" | "CategoryHidden" | "NoBoundingBox" | "OutsideCrop" | "OutsideSectionBox";
-type RevitAgentContextHandle = { readonly "kind": RevitAgentContextHandleKind, readonly "documentKey": string, readonly "elementId"?: number | null, readonly "uniqueId"?: null | string, readonly "label": string, readonly "categoryName"?: null | string };
-type Lens = { readonly "basis": LensBasis, readonly "viewId": number };
-type Hidden = { readonly "what": HiddenKind, readonly "count": number, readonly "why": HiddenWhy };
-type RevitViewImageNotDrawn = { readonly "elementId": number, readonly "reasons": ReadonlyArray<RevitViewImageNotDrawnReason> };
-export type Root = { readonly "view": RevitAgentContextHandle, readonly "filePath"?: null | string, readonly "byteSize": number, readonly "width": number, readonly "height": number, readonly "lens": Lens, readonly "hidden": ReadonlyArray<Hidden>, readonly "warning"?: null | string, readonly "viewScale"?: number | null, readonly "modelRect"?: null | RevitViewImageModelRect, readonly "sheetNumber"?: null | string, readonly "registration"?: null | RevitViewImageRegistration, readonly "registrationRefusal"?: null | RevitViewImageRegistrationRefusal, readonly "restore"?: null | RevitViewImageRestore, readonly "imageUrl"?: null | string, readonly "marks": ReadonlyArray<RevitViewImageMark>, readonly "refused": boolean, readonly "notDrawn": ReadonlyArray<RevitViewImageNotDrawn> };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export function delivery<S extends Schema.ConstraintDecoder<unknown, never>>(receipt: S) {
 return strictDecoder(codec.mapFields(fields => ({ ...Struct.omit(fields, ["filePath", "imageUrl"]), capture: Schema.NullOr(receipt), imageUrl: Schema.NullOr(Schema.String) })));
@@ -2955,21 +3312,48 @@ export const definitions = {
   ["RevitViewImageRestore"]: strictDecoder(RevitViewImageRestore),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+export const delivery = Decoded.delivery;
+namespace WireTypes {
+type RevitAgentContextHandleKind = "Document" | "View" | "Sheet" | "Element" | "Schedule" | "Category" | "Family";
+type LensBasis = "UserView" | "PeDefault";
+type HiddenKind = "Links" | "ScopeBoxes" | "Levels" | "Grids" | "ReferencePlanes" | "Spaces" | "Zones" | "Rooms" | "Areas";
+type HiddenWhy = "PeDefault" | "NotEvaluated";
+type RevitViewImageModelRect = { readonly "minX": number, readonly "minY": number, readonly "maxX": number, readonly "maxY": number };
+type RevitViewImageRegistration = { readonly "width": number, readonly "height": number, readonly "imageSha256": string, readonly "topLeft": ReadonlyArray<number>, readonly "topRight": ReadonlyArray<number>, readonly "bottomLeft": ReadonlyArray<number> };
+type RevitViewImageRegistrationRefusal = "NoCrop" | "NoImage" | "DegenerateCrop" | "AspectDisagrees" | "CropOutsideImage";
+type RevitViewImageRestore = { readonly "held": boolean, readonly "left": ReadonlyArray<string> };
+type RevitViewImageMark = { readonly "elementId": number, readonly "left": number, readonly "top": number, readonly "width": number, readonly "height": number };
+type RevitViewImageNotDrawnReason = "ElementMissing" | "PhaseHidden" | "ElementHidden" | "CategoryHidden" | "NoBoundingBox" | "OutsideCrop" | "OutsideSectionBox";
+type RevitAgentContextHandle = { readonly "kind": RevitAgentContextHandleKind, readonly "documentKey": string, readonly "elementId"?: number | null, readonly "uniqueId"?: null | string, readonly "label": string, readonly "categoryName"?: null | string };
+type Lens = { readonly "basis": LensBasis, readonly "viewId": number };
+type Hidden = { readonly "what": HiddenKind, readonly "count": number, readonly "why": HiddenWhy };
+type RevitViewImageNotDrawn = { readonly "elementId": number, readonly "reasons": ReadonlyArray<RevitViewImageNotDrawnReason> };
+export type Root = { readonly "view": RevitAgentContextHandle, readonly "filePath"?: null | string, readonly "byteSize": number, readonly "width": number, readonly "height": number, readonly "lens": Lens, readonly "hidden": ReadonlyArray<Hidden>, readonly "warning"?: null | string, readonly "viewScale"?: number | null, readonly "modelRect"?: null | RevitViewImageModelRect, readonly "sheetNumber"?: null | string, readonly "registration"?: null | RevitViewImageRegistration, readonly "registrationRefusal"?: null | RevitViewImageRegistrationRefusal, readonly "restore"?: null | RevitViewImageRestore, readonly "imageUrl"?: null | string, readonly "marks": ReadonlyArray<RevitViewImageMark>, readonly "refused": boolean, readonly "notDrawn": ReadonlyArray<RevitViewImageNotDrawn> };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op54request {
+namespace Decoded {
 
 const RevitAgentViewRenderingScope = Schema.Literals(["ActiveView", "ViewReferences"]).annotate({ "description": "", "identifier": "RevitAgentViewRenderingScope" });
 const codec = Schema.Struct({ "scope": Schema.optionalKey(RevitAgentViewRenderingScope), "viewIds": Schema.optionalKey(Schema.Union([Schema.Array(Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" }))), Schema.Null])), "viewUniqueIds": Schema.optionalKey(Schema.Union([Schema.Array(Schema.String), Schema.Null])), "maxViews": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), Schema.Null]).annotate({ "format": "int32" })), "maxFiltersPerView": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), Schema.Null]).annotate({ "format": "int32" })), "maxHiddenCategoriesPerView": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), Schema.Null]).annotate({ "format": "int32" })), "maxLinksPerView": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), Schema.Null]).annotate({ "format": "int32" })), "maxWorksetsPerView": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), Schema.Null]).annotate({ "format": "int32" })) }).annotate({ "title": "RevitAgentViewRenderingStateRequest" });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 type RevitAgentViewRenderingScope = "ActiveView" | "ViewReferences";
 export type Root = { readonly "scope"?: RevitAgentViewRenderingScope, readonly "viewIds"?: ReadonlyArray<number> | null, readonly "viewUniqueIds"?: ReadonlyArray<string> | null, readonly "maxViews"?: number | null, readonly "maxFiltersPerView"?: number | null, readonly "maxHiddenCategoriesPerView"?: number | null, readonly "maxLinksPerView"?: number | null, readonly "maxWorksetsPerView"?: number | null };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op54response {
+namespace Decoded {
 
 const RevitAgentContextHandleKind = Schema.Literals(["Document", "View", "Sheet", "Element", "Schedule", "Category", "Family"]).annotate({ "description": "", "identifier": "RevitAgentContextHandleKind" });
 const RevitAgentPlanViewRangeState = Schema.Struct({ "topLevelName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "topOffset": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "cutLevelName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "cutOffset": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "bottomLevelName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "bottomOffset": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "viewDepthLevelName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "viewDepthOffset": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })) }).annotate({ "identifier": "RevitAgentPlanViewRangeState" });
@@ -2985,24 +3369,6 @@ const RevitAgentHiddenCategoryState = Schema.Struct({ "handle": RevitAgentContex
 const RevitAgentLinkRenderingState = Schema.Struct({ "handle": RevitAgentContextHandle, "isHiddenInView": Schema.optionalKey(Schema.Union([Schema.Boolean, Schema.Null])), "isLoaded": Schema.optionalKey(Schema.Union([Schema.Boolean, Schema.Null])), "linkVisibilityType": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "linkedViewName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "objectStyles": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "viewFilterType": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "viewRange": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "nestedLinks": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "phaseName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "phaseFilterName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "detailLevel": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "discipline": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "identifier": "RevitAgentLinkRenderingState" });
 const RevitAgentObservedViewState = Schema.Struct({ "handle": RevitAgentContextHandle, "viewType": Schema.String, "title": Schema.String, "scale": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "levelName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "discipline": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "detailLevel": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "displayStyle": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "phaseName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "phaseFilterName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "viewTemplateName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "isTemplate": Schema.Boolean, "canBePrinted": Schema.Boolean, "areGraphicsOverridesAllowed": Schema.Boolean, "cropBoxActive": Schema.optionalKey(Schema.Union([Schema.Boolean, Schema.Null])), "cropBoxVisible": Schema.optionalKey(Schema.Union([Schema.Boolean, Schema.Null])), "scopeBoxName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "temporaryHideIsolateActive": Schema.optionalKey(Schema.Union([Schema.Boolean, Schema.Null])), "partsVisibilityShowOriginalOnly": Schema.optionalKey(Schema.Union([Schema.Boolean, Schema.Null])), "planViewRange": Schema.optionalKey(Schema.Union([Schema.Null, RevitAgentPlanViewRangeState], { mode: "oneOf" })), "view3D": Schema.optionalKey(Schema.Union([Schema.Null, RevitAgentView3DState], { mode: "oneOf" })), "candidateVisibleElementCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "viewOwnedElementCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "filters": Schema.Array(RevitAgentViewFilterState), "hiddenCategories": Schema.Array(RevitAgentHiddenCategoryState), "links": Schema.Array(RevitAgentLinkRenderingState), "worksets": Schema.Array(RevitAgentWorksetVisibilityState), "provenance": Schema.Array(RevitAgentContextProvenance) }).annotate({ "identifier": "RevitAgentObservedViewState" });
 const codec = Schema.Struct({ "activeView": Schema.optionalKey(Schema.Union([Schema.Null, RevitAgentContextHandle], { mode: "oneOf" })), "observedState": Schema.Array(RevitAgentObservedViewState), "notInspected": Schema.Array(Schema.String), "apiLimitations": Schema.Array(Schema.String), "confidenceWarnings": Schema.Array(Schema.String), "likelyInspectionNextSteps": Schema.Array(Schema.String), "issues": Schema.Array(RevitDataIssue) }).annotate({ "title": "RevitAgentViewRenderingStateData" });
-namespace WireTypes {
-type RevitAgentContextHandleKind = "Document" | "View" | "Sheet" | "Element" | "Schedule" | "Category" | "Family";
-type RevitAgentPlanViewRangeState = { readonly "topLevelName"?: null | string, readonly "topOffset"?: null | number, readonly "cutLevelName"?: null | string, readonly "cutOffset"?: null | number, readonly "bottomLevelName"?: null | string, readonly "bottomOffset"?: null | number, readonly "viewDepthLevelName"?: null | string, readonly "viewDepthOffset"?: null | number };
-type RevitAgentView3DState = { readonly "isPerspective": boolean, readonly "isSectionBoxActive"?: boolean | null, readonly "isLocked"?: boolean | null, readonly "hasSavedOrientation"?: boolean | null };
-type RevitAgentWorksetVisibilityState = { readonly "name": string, readonly "id": number, readonly "visibility": string };
-type RevitAgentContextProvenanceKind = "ActiveDocument" | "OpenDocument" | "ActiveView" | "CurrentSelection" | "ExplicitReference" | "SheetPlacement" | "BrowserIndex" | "VisibleInActiveView" | "VisibleInReferencedView" | "PrintedContext" | "SearchMatch";
-type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
-type RevitAgentContextHandle = { readonly "kind": RevitAgentContextHandleKind, readonly "documentKey": string, readonly "elementId"?: number | null, readonly "uniqueId"?: null | string, readonly "label": string, readonly "categoryName"?: null | string };
-type RevitAgentContextProvenance = { readonly "kind": RevitAgentContextProvenanceKind, readonly "description": string };
-type RevitDataIssue = { readonly "code": string, readonly "severity": RevitDataIssueSeverity, readonly "message": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "parameterName"?: null | string };
-type RevitAgentViewFilterState = { readonly "handle": RevitAgentContextHandle, readonly "isVisible"?: boolean | null, readonly "categoryCount"?: number | null, readonly "elementFilterType"?: null | string };
-type RevitAgentHiddenCategoryState = { readonly "handle": RevitAgentContextHandle, readonly "categoryType"?: null | string };
-type RevitAgentLinkRenderingState = { readonly "handle": RevitAgentContextHandle, readonly "isHiddenInView"?: boolean | null, readonly "isLoaded"?: boolean | null, readonly "linkVisibilityType"?: null | string, readonly "linkedViewName"?: null | string, readonly "objectStyles"?: null | string, readonly "viewFilterType"?: null | string, readonly "viewRange"?: null | string, readonly "nestedLinks"?: null | string, readonly "phaseName"?: null | string, readonly "phaseFilterName"?: null | string, readonly "detailLevel"?: null | string, readonly "discipline"?: null | string };
-type RevitAgentObservedViewState = { readonly "handle": RevitAgentContextHandle, readonly "viewType": string, readonly "title": string, readonly "scale": number, readonly "levelName"?: null | string, readonly "discipline"?: null | string, readonly "detailLevel"?: null | string, readonly "displayStyle"?: null | string, readonly "phaseName"?: null | string, readonly "phaseFilterName"?: null | string, readonly "viewTemplateName"?: null | string, readonly "isTemplate": boolean, readonly "canBePrinted": boolean, readonly "areGraphicsOverridesAllowed": boolean, readonly "cropBoxActive"?: boolean | null, readonly "cropBoxVisible"?: boolean | null, readonly "scopeBoxName"?: null | string, readonly "temporaryHideIsolateActive"?: boolean | null, readonly "partsVisibilityShowOriginalOnly"?: boolean | null, readonly "planViewRange"?: null | RevitAgentPlanViewRangeState, readonly "view3D"?: null | RevitAgentView3DState, readonly "candidateVisibleElementCount": number, readonly "viewOwnedElementCount": number, readonly "filters": ReadonlyArray<RevitAgentViewFilterState>, readonly "hiddenCategories": ReadonlyArray<RevitAgentHiddenCategoryState>, readonly "links": ReadonlyArray<RevitAgentLinkRenderingState>, readonly "worksets": ReadonlyArray<RevitAgentWorksetVisibilityState>, readonly "provenance": ReadonlyArray<RevitAgentContextProvenance> };
-export type Root = { readonly "activeView"?: null | RevitAgentContextHandle, readonly "observedState": ReadonlyArray<RevitAgentObservedViewState>, readonly "notInspected": ReadonlyArray<string>, readonly "apiLimitations": ReadonlyArray<string>, readonly "confidenceWarnings": ReadonlyArray<string>, readonly "likelyInspectionNextSteps": ReadonlyArray<string>, readonly "issues": ReadonlyArray<RevitDataIssue> };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["RevitAgentContextHandle"]: strictDecoder(RevitAgentContextHandle),
@@ -3020,23 +3386,48 @@ export const definitions = {
   ["RevitDataIssueSeverity"]: strictDecoder(RevitDataIssueSeverity),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type RevitAgentContextHandleKind = "Document" | "View" | "Sheet" | "Element" | "Schedule" | "Category" | "Family";
+type RevitAgentPlanViewRangeState = { readonly "topLevelName"?: null | string, readonly "topOffset"?: null | number, readonly "cutLevelName"?: null | string, readonly "cutOffset"?: null | number, readonly "bottomLevelName"?: null | string, readonly "bottomOffset"?: null | number, readonly "viewDepthLevelName"?: null | string, readonly "viewDepthOffset"?: null | number };
+type RevitAgentView3DState = { readonly "isPerspective": boolean, readonly "isSectionBoxActive"?: boolean | null, readonly "isLocked"?: boolean | null, readonly "hasSavedOrientation"?: boolean | null };
+type RevitAgentWorksetVisibilityState = { readonly "name": string, readonly "id": number, readonly "visibility": string };
+type RevitAgentContextProvenanceKind = "ActiveDocument" | "OpenDocument" | "ActiveView" | "CurrentSelection" | "ExplicitReference" | "SheetPlacement" | "BrowserIndex" | "VisibleInActiveView" | "VisibleInReferencedView" | "PrintedContext" | "SearchMatch";
+type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
+type RevitAgentContextHandle = { readonly "kind": RevitAgentContextHandleKind, readonly "documentKey": string, readonly "elementId"?: number | null, readonly "uniqueId"?: null | string, readonly "label": string, readonly "categoryName"?: null | string };
+type RevitAgentContextProvenance = { readonly "kind": RevitAgentContextProvenanceKind, readonly "description": string };
+type RevitDataIssue = { readonly "code": string, readonly "severity": RevitDataIssueSeverity, readonly "message": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "parameterName"?: null | string };
+type RevitAgentViewFilterState = { readonly "handle": RevitAgentContextHandle, readonly "isVisible"?: boolean | null, readonly "categoryCount"?: number | null, readonly "elementFilterType"?: null | string };
+type RevitAgentHiddenCategoryState = { readonly "handle": RevitAgentContextHandle, readonly "categoryType"?: null | string };
+type RevitAgentLinkRenderingState = { readonly "handle": RevitAgentContextHandle, readonly "isHiddenInView"?: boolean | null, readonly "isLoaded"?: boolean | null, readonly "linkVisibilityType"?: null | string, readonly "linkedViewName"?: null | string, readonly "objectStyles"?: null | string, readonly "viewFilterType"?: null | string, readonly "viewRange"?: null | string, readonly "nestedLinks"?: null | string, readonly "phaseName"?: null | string, readonly "phaseFilterName"?: null | string, readonly "detailLevel"?: null | string, readonly "discipline"?: null | string };
+type RevitAgentObservedViewState = { readonly "handle": RevitAgentContextHandle, readonly "viewType": string, readonly "title": string, readonly "scale": number, readonly "levelName"?: null | string, readonly "discipline"?: null | string, readonly "detailLevel"?: null | string, readonly "displayStyle"?: null | string, readonly "phaseName"?: null | string, readonly "phaseFilterName"?: null | string, readonly "viewTemplateName"?: null | string, readonly "isTemplate": boolean, readonly "canBePrinted": boolean, readonly "areGraphicsOverridesAllowed": boolean, readonly "cropBoxActive"?: boolean | null, readonly "cropBoxVisible"?: boolean | null, readonly "scopeBoxName"?: null | string, readonly "temporaryHideIsolateActive"?: boolean | null, readonly "partsVisibilityShowOriginalOnly"?: boolean | null, readonly "planViewRange"?: null | RevitAgentPlanViewRangeState, readonly "view3D"?: null | RevitAgentView3DState, readonly "candidateVisibleElementCount": number, readonly "viewOwnedElementCount": number, readonly "filters": ReadonlyArray<RevitAgentViewFilterState>, readonly "hiddenCategories": ReadonlyArray<RevitAgentHiddenCategoryState>, readonly "links": ReadonlyArray<RevitAgentLinkRenderingState>, readonly "worksets": ReadonlyArray<RevitAgentWorksetVisibilityState>, readonly "provenance": ReadonlyArray<RevitAgentContextProvenance> };
+export type Root = { readonly "activeView"?: null | RevitAgentContextHandle, readonly "observedState": ReadonlyArray<RevitAgentObservedViewState>, readonly "notInspected": ReadonlyArray<string>, readonly "apiLimitations": ReadonlyArray<string>, readonly "confidenceWarnings": ReadonlyArray<string>, readonly "likelyInspectionNextSteps": ReadonlyArray<string>, readonly "issues": ReadonlyArray<RevitDataIssue> };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op55request {
+namespace Decoded {
 
 const RevitAgentVisibleContextScope = Schema.Literals(["ActiveViewVisible", "ViewReferences"]).annotate({ "description": "", "identifier": "RevitAgentVisibleContextScope" });
 const RevitAgentVisibleProjection = Schema.Literals(["Counts", "Handles", "Samples"]).annotate({ "description": "", "identifier": "RevitAgentVisibleProjection" });
 const codec = Schema.Struct({ "maxCategories": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), Schema.Null]).annotate({ "format": "int32" })), "categoryNames": Schema.optionalKey(Schema.Union([Schema.Array(Schema.String), Schema.Null])), "maxSampleElementsPerCategory": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), Schema.Null]).annotate({ "format": "int32" })), "scope": Schema.optionalKey(RevitAgentVisibleContextScope), "viewIds": Schema.optionalKey(Schema.Union([Schema.Array(Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" }))), Schema.Null])), "viewUniqueIds": Schema.optionalKey(Schema.Union([Schema.Array(Schema.String), Schema.Null])), "maxViews": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), Schema.Null]).annotate({ "format": "int32" })), "maxElementHandlesPerCategory": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), Schema.Null]).annotate({ "format": "int32" })), "returnElementHandlesOnly": Schema.optionalKey(Schema.Boolean), "projection": Schema.optionalKey(RevitAgentVisibleProjection) }).annotate({ "title": "RevitAgentVisibleContextRequest" });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 type RevitAgentVisibleContextScope = "ActiveViewVisible" | "ViewReferences";
 type RevitAgentVisibleProjection = "Counts" | "Handles" | "Samples";
 export type Root = { readonly "maxCategories"?: number | null, readonly "categoryNames"?: ReadonlyArray<string> | null, readonly "maxSampleElementsPerCategory"?: number | null, readonly "scope"?: RevitAgentVisibleContextScope, readonly "viewIds"?: ReadonlyArray<number> | null, readonly "viewUniqueIds"?: ReadonlyArray<string> | null, readonly "maxViews"?: number | null, readonly "maxElementHandlesPerCategory"?: number | null, readonly "returnElementHandlesOnly"?: boolean, readonly "projection"?: RevitAgentVisibleProjection };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op55response {
+namespace Decoded {
 
 const RevitAgentContextHandleKind = Schema.Literals(["Document", "View", "Sheet", "Element", "Schedule", "Category", "Family"]).annotate({ "description": "", "identifier": "RevitAgentContextHandleKind" });
 const RevitAgentContextProvenanceKind = Schema.Literals(["ActiveDocument", "OpenDocument", "ActiveView", "CurrentSelection", "ExplicitReference", "SheetPlacement", "BrowserIndex", "VisibleInActiveView", "VisibleInReferencedView", "PrintedContext", "SearchMatch"]).annotate({ "description": "", "identifier": "RevitAgentContextProvenanceKind" });
@@ -3049,21 +3440,6 @@ const RevitAgentVisibleElementHandle = Schema.Struct({ "handle": RevitAgentConte
 const RevitAgentVisibleViewSummary = Schema.Struct({ "handle": RevitAgentContextHandle, "viewType": Schema.String, "title": Schema.String, "elementCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "provenance": Schema.Array(RevitAgentContextProvenance) }).annotate({ "identifier": "RevitAgentVisibleViewSummary" });
 const RevitAgentVisibleCategorySummary = Schema.Struct({ "handle": RevitAgentContextHandle, "elementCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "sampleElements": Schema.Array(RevitAgentVisibleElementSample), "provenance": Schema.Array(RevitAgentContextProvenance), "returnedElementCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "isReturnedElementSetComplete": Schema.Boolean, "elementHandles": Schema.optionalKey(Schema.Union([Schema.Array(RevitAgentVisibleElementHandle), Schema.Null])) }).annotate({ "identifier": "RevitAgentVisibleCategorySummary" });
 const codec = Schema.Struct({ "activeView": Schema.optionalKey(Schema.Union([Schema.Null, RevitAgentContextHandle], { mode: "oneOf" })), "totalVisibleElementCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "categories": Schema.Array(RevitAgentVisibleCategorySummary), "issues": Schema.Array(RevitDataIssue), "views": Schema.optionalKey(Schema.Union([Schema.Array(RevitAgentVisibleViewSummary), Schema.Null])) }).annotate({ "title": "RevitAgentVisibleContextData" });
-namespace WireTypes {
-type RevitAgentContextHandleKind = "Document" | "View" | "Sheet" | "Element" | "Schedule" | "Category" | "Family";
-type RevitAgentContextProvenanceKind = "ActiveDocument" | "OpenDocument" | "ActiveView" | "CurrentSelection" | "ExplicitReference" | "SheetPlacement" | "BrowserIndex" | "VisibleInActiveView" | "VisibleInReferencedView" | "PrintedContext" | "SearchMatch";
-type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
-type RevitAgentContextHandle = { readonly "kind": RevitAgentContextHandleKind, readonly "documentKey": string, readonly "elementId"?: number | null, readonly "uniqueId"?: null | string, readonly "label": string, readonly "categoryName"?: null | string };
-type RevitAgentContextProvenance = { readonly "kind": RevitAgentContextProvenanceKind, readonly "description": string };
-type RevitDataIssue = { readonly "code": string, readonly "severity": RevitDataIssueSeverity, readonly "message": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "parameterName"?: null | string };
-type RevitAgentVisibleElementSample = { readonly "handle": RevitAgentContextHandle, readonly "className": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "levelName"?: null | string, readonly "provenance"?: ReadonlyArray<RevitAgentContextProvenance> | null, readonly "visibleInViews"?: ReadonlyArray<RevitAgentContextHandle> | null };
-type RevitAgentVisibleElementHandle = { readonly "handle": RevitAgentContextHandle, readonly "provenance"?: ReadonlyArray<RevitAgentContextProvenance> | null, readonly "visibleInViews"?: ReadonlyArray<RevitAgentContextHandle> | null };
-type RevitAgentVisibleViewSummary = { readonly "handle": RevitAgentContextHandle, readonly "viewType": string, readonly "title": string, readonly "elementCount": number, readonly "provenance": ReadonlyArray<RevitAgentContextProvenance> };
-type RevitAgentVisibleCategorySummary = { readonly "handle": RevitAgentContextHandle, readonly "elementCount": number, readonly "sampleElements": ReadonlyArray<RevitAgentVisibleElementSample>, readonly "provenance": ReadonlyArray<RevitAgentContextProvenance>, readonly "returnedElementCount": number, readonly "isReturnedElementSetComplete": boolean, readonly "elementHandles"?: ReadonlyArray<RevitAgentVisibleElementHandle> | null };
-export type Root = { readonly "activeView"?: null | RevitAgentContextHandle, readonly "totalVisibleElementCount": number, readonly "categories": ReadonlyArray<RevitAgentVisibleCategorySummary>, readonly "issues": ReadonlyArray<RevitDataIssue>, readonly "views"?: ReadonlyArray<RevitAgentVisibleViewSummary> | null };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["RevitAgentContextHandle"]: strictDecoder(RevitAgentContextHandle),
@@ -3078,21 +3454,43 @@ export const definitions = {
   ["RevitDataIssueSeverity"]: strictDecoder(RevitDataIssueSeverity),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type RevitAgentContextHandleKind = "Document" | "View" | "Sheet" | "Element" | "Schedule" | "Category" | "Family";
+type RevitAgentContextProvenanceKind = "ActiveDocument" | "OpenDocument" | "ActiveView" | "CurrentSelection" | "ExplicitReference" | "SheetPlacement" | "BrowserIndex" | "VisibleInActiveView" | "VisibleInReferencedView" | "PrintedContext" | "SearchMatch";
+type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
+type RevitAgentContextHandle = { readonly "kind": RevitAgentContextHandleKind, readonly "documentKey": string, readonly "elementId"?: number | null, readonly "uniqueId"?: null | string, readonly "label": string, readonly "categoryName"?: null | string };
+type RevitAgentContextProvenance = { readonly "kind": RevitAgentContextProvenanceKind, readonly "description": string };
+type RevitDataIssue = { readonly "code": string, readonly "severity": RevitDataIssueSeverity, readonly "message": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "parameterName"?: null | string };
+type RevitAgentVisibleElementSample = { readonly "handle": RevitAgentContextHandle, readonly "className": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "levelName"?: null | string, readonly "provenance"?: ReadonlyArray<RevitAgentContextProvenance> | null, readonly "visibleInViews"?: ReadonlyArray<RevitAgentContextHandle> | null };
+type RevitAgentVisibleElementHandle = { readonly "handle": RevitAgentContextHandle, readonly "provenance"?: ReadonlyArray<RevitAgentContextProvenance> | null, readonly "visibleInViews"?: ReadonlyArray<RevitAgentContextHandle> | null };
+type RevitAgentVisibleViewSummary = { readonly "handle": RevitAgentContextHandle, readonly "viewType": string, readonly "title": string, readonly "elementCount": number, readonly "provenance": ReadonlyArray<RevitAgentContextProvenance> };
+type RevitAgentVisibleCategorySummary = { readonly "handle": RevitAgentContextHandle, readonly "elementCount": number, readonly "sampleElements": ReadonlyArray<RevitAgentVisibleElementSample>, readonly "provenance": ReadonlyArray<RevitAgentContextProvenance>, readonly "returnedElementCount": number, readonly "isReturnedElementSetComplete": boolean, readonly "elementHandles"?: ReadonlyArray<RevitAgentVisibleElementHandle> | null };
+export type Root = { readonly "activeView"?: null | RevitAgentContextHandle, readonly "totalVisibleElementCount": number, readonly "categories": ReadonlyArray<RevitAgentVisibleCategorySummary>, readonly "issues": ReadonlyArray<RevitDataIssue>, readonly "views"?: ReadonlyArray<RevitAgentVisibleViewSummary> | null };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op56request {
+namespace Decoded {
 
 
 const codec = Schema.Struct({ "names": Schema.optionalKey(Schema.Array(Schema.String).annotate({ "description": "Exact table (schedule) names to read. Empty reads every data table in the document." })) }).annotate({ "title": "DataTableDetailRequest" });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 
 export type Root = { readonly "names"?: ReadonlyArray<string> };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op56response {
+namespace Decoded {
 
 const DataTableColumnKind = Schema.Literals(["Text", "Number"]).annotate({ "description": "Contracts for synthetic data tables: key schedules on a dummy category whose rows are\nabstract key elements populated from a fixed shared-parameter column pool. Rows carry a\nstable key (the Revit key name) and real element handles, so cells stay addressable by\nparameter-links and external UIs while remaining freely editable in Revit's schedule editor.\n            ", "identifier": "DataTableColumnKind" });
 const DataTableRowHandle = Schema.Struct({ "key": Schema.String, "elementId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "uniqueId": Schema.String, "values": Schema.Array(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "identifier": "DataTableRowHandle" });
@@ -3102,18 +3500,6 @@ const DataTableColumnHandle = Schema.Struct({ "heading": Schema.String, "kind": 
 const RevitDataIssue = Schema.Struct({ "code": Schema.String, "severity": RevitDataIssueSeverity, "message": Schema.String, "familyName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "typeName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "parameterName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "identifier": "RevitDataIssue" });
 const DataTableHandle = Schema.Struct({ "name": Schema.String, "scheduleId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "scheduleUniqueId": Schema.String, "columns": Schema.Array(DataTableColumnHandle), "rows": Schema.Array(DataTableRowHandle), "placements": Schema.Array(DataTablePlacementHandle) }).annotate({ "identifier": "DataTableHandle" });
 const codec = Schema.Struct({ "tables": Schema.Array(DataTableHandle), "issues": Schema.Array(RevitDataIssue) }).annotate({ "title": "DataTableDetailData" });
-namespace WireTypes {
-type DataTableColumnKind = "Text" | "Number";
-type DataTableRowHandle = { readonly "key": string, readonly "elementId": number, readonly "uniqueId": string, readonly "values": ReadonlyArray<null | string> };
-type DataTablePlacementHandle = { readonly "sheetId": number, readonly "sheetNumber": string, readonly "sheetName": string };
-type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
-type DataTableColumnHandle = { readonly "heading": string, readonly "kind": DataTableColumnKind, readonly "parameterName": string, readonly "sharedParameterGuid": string, readonly "slot": number };
-type RevitDataIssue = { readonly "code": string, readonly "severity": RevitDataIssueSeverity, readonly "message": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "parameterName"?: null | string };
-type DataTableHandle = { readonly "name": string, readonly "scheduleId": number, readonly "scheduleUniqueId": string, readonly "columns": ReadonlyArray<DataTableColumnHandle>, readonly "rows": ReadonlyArray<DataTableRowHandle>, readonly "placements": ReadonlyArray<DataTablePlacementHandle> };
-export type Root = { readonly "tables": ReadonlyArray<DataTableHandle>, readonly "issues": ReadonlyArray<RevitDataIssue> };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["DataTableColumnHandle"]: strictDecoder(DataTableColumnHandle),
@@ -3125,8 +3511,24 @@ export const definitions = {
   ["RevitDataIssueSeverity"]: strictDecoder(RevitDataIssueSeverity),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type DataTableColumnKind = "Text" | "Number";
+type DataTableRowHandle = { readonly "key": string, readonly "elementId": number, readonly "uniqueId": string, readonly "values": ReadonlyArray<null | string> };
+type DataTablePlacementHandle = { readonly "sheetId": number, readonly "sheetNumber": string, readonly "sheetName": string };
+type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
+type DataTableColumnHandle = { readonly "heading": string, readonly "kind": DataTableColumnKind, readonly "parameterName": string, readonly "sharedParameterGuid": string, readonly "slot": number };
+type RevitDataIssue = { readonly "code": string, readonly "severity": RevitDataIssueSeverity, readonly "message": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "parameterName"?: null | string };
+type DataTableHandle = { readonly "name": string, readonly "scheduleId": number, readonly "scheduleUniqueId": string, readonly "columns": ReadonlyArray<DataTableColumnHandle>, readonly "rows": ReadonlyArray<DataTableRowHandle>, readonly "placements": ReadonlyArray<DataTablePlacementHandle> };
+export type Root = { readonly "tables": ReadonlyArray<DataTableHandle>, readonly "issues": ReadonlyArray<RevitDataIssue> };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op57request {
+namespace Decoded {
 
 const ElectricalCircuitFilter = Schema.Struct({ "panelNames": Schema.optionalKey(Schema.Array(Schema.String)), "circuitNumbers": Schema.optionalKey(Schema.Array(Schema.String)), "loadNames": Schema.optionalKey(Schema.Array(Schema.String)) }).annotate({ "identifier": "ElectricalCircuitFilter" });
 const ParameterIdentityKind = Schema.Literals(["SharedGuid", "BuiltInParameter", "ParameterElement", "NameFallback"]).annotate({ "description": "", "identifier": "ParameterIdentityKind" });
@@ -3135,6 +3537,9 @@ const ParameterReference = Schema.Struct({ "identity": Schema.optionalKey(Schema
 const RequestedParameterQuery = Schema.Struct({ "parameters": Schema.optionalKey(Schema.Array(ParameterReference)) }).annotate({ "identifier": "RequestedParameterQuery" });
 const ElectricalCircuitsCatalogOptions = Schema.Struct({ "parameterQuery": Schema.optionalKey(Schema.Union([Schema.Null, RequestedParameterQuery], { mode: "oneOf" })), "includeNearbyProxyContext": Schema.optionalKey(Schema.Boolean), "nearbyRadiusFeet": Schema.optionalKey(Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" }))), "maxNearbyCandidatesPerElement": Schema.optionalKey(Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" }))), "maxNearbyCandidatesPerCircuit": Schema.optionalKey(Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" }))) }).annotate({ "identifier": "ElectricalCircuitsCatalogOptions" });
 const codec = Schema.Struct({ "filter": Schema.optionalKey(Schema.Union([Schema.Null, ElectricalCircuitFilter], { mode: "oneOf" })), "options": Schema.optionalKey(Schema.Union([Schema.Null, ElectricalCircuitsCatalogOptions], { mode: "oneOf" })) }).annotate({ "title": "ElectricalCircuitsCatalogRequest" });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 type ElectricalCircuitFilter = { readonly "panelNames"?: ReadonlyArray<string>, readonly "circuitNumbers"?: ReadonlyArray<string>, readonly "loadNames"?: ReadonlyArray<string> };
 type ParameterIdentityKind = "SharedGuid" | "BuiltInParameter" | "ParameterElement" | "NameFallback";
@@ -3145,11 +3550,11 @@ type ElectricalCircuitsCatalogOptions = { readonly "parameterQuery"?: null | Req
 export type Root = { readonly "filter"?: null | ElectricalCircuitFilter, readonly "options"?: null | ElectricalCircuitsCatalogOptions };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op57response {
+namespace Decoded {
 
 const ElectricalInsightRole = Schema.Literals(["Panel", "DownstreamPanel", "LoadFamilyInstance", "ProxyFixture", "InlineElectricalEquipment", "Circuit", "Wire", "LoadClassification", "Element"]).annotate({ "description": "", "identifier": "ElectricalInsightRole" });
 const ElementIdentitySource = Schema.Literals(["None", "RequestedParameter", "Mark"]).annotate({ "description": "", "identifier": "ElementIdentitySource" });
@@ -3168,27 +3573,6 @@ const ElectricalCircuitConnectedElementEntry = Schema.Struct({ "elementId": Sche
 const ElectricalNearbyProxyCandidateEntry = Schema.Struct({ "elementId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "elementUniqueId": Schema.String, "className": Schema.String, "categoryName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "name": Schema.String, "familyName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "typeName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "mark": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "effectiveIdentity": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "effectiveIdentitySource": ElementIdentitySource, "role": ElectricalInsightRole, "distanceFeet": Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })), "matchReason": ElectricalNearbyProxyCandidateMatchReason, "requestedParameters": Schema.optionalKey(Schema.Union([Schema.Array(RequestedElementParameterValue), Schema.Null])) }).annotate({ "identifier": "ElectricalNearbyProxyCandidateEntry" });
 const ElectricalCircuitCatalogEntry = Schema.Struct({ "circuitId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "circuitUniqueId": Schema.String, "circuitNumber": Schema.String, "loadName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "panelId": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })), Schema.Null]).annotate({ "format": "int64" })), "panelUniqueId": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "panelName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "slotIndex": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "ways": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "polesNumber": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "voltage": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "apparentLoad": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "apparentCurrent": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "trueLoad": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "trueCurrent": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "rating": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "frame": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "ratingOverride": Schema.Boolean, "ratingOverrideValueDisplay": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "wireSize": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "wireTypeName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "isEmpty": Schema.Boolean, "isMultipleNetwork": Schema.Boolean, "hasCustomCircuitPath": Schema.Boolean, "hasPathOffset": Schema.Boolean, "hasProxyLikeConnectedElements": Schema.Boolean, "proxyLikeConnectedElementCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "proxyInferenceRecommended": Schema.Boolean, "primaryConnectedRole": Schema.optionalKey(Schema.Union([Schema.Null, ElectricalInsightRole], { mode: "oneOf" })), "connectedRoles": Schema.Array(ElectricalInsightRole), "connectedElements": Schema.Array(ElectricalCircuitConnectedElementEntry), "wires": Schema.Array(ElectricalCircuitWireEntry), "nearbyProxyCandidates": Schema.optionalKey(Schema.Union([Schema.Array(ElectricalNearbyProxyCandidateEntry), Schema.Null])) }).annotate({ "identifier": "ElectricalCircuitCatalogEntry" });
 const codec = Schema.Struct({ "entries": Schema.Array(ElectricalCircuitCatalogEntry), "issues": Schema.Array(RevitDataIssue), "filterReport": Schema.optionalKey(Schema.Union([Schema.Null, ElectricalCatalogFilterReport], { mode: "oneOf" })) }).annotate({ "title": "ElectricalCircuitsCatalogData" });
-namespace WireTypes {
-type ElectricalInsightRole = "Panel" | "DownstreamPanel" | "LoadFamilyInstance" | "ProxyFixture" | "InlineElectricalEquipment" | "Circuit" | "Wire" | "LoadClassification" | "Element";
-type ElementIdentitySource = "None" | "RequestedParameter" | "Mark";
-type ParameterIdentityKind = "SharedGuid" | "BuiltInParameter" | "ParameterElement" | "NameFallback";
-type RequestedParameterStorageType = "None" | "String" | "Integer" | "Double" | "ElementId";
-type RequestedParameterValueSource = "None" | "Instance" | "Type";
-type ElectricalCircuitWireEntry = { readonly "wireId": number, readonly "wireUniqueId": string, readonly "wireTypeName"?: null | string, readonly "wiringType": string, readonly "hotConductorCount": number, readonly "neutralConductorCount": number, readonly "groundConductorCount": number };
-type ElectricalNearbyProxyCandidateMatchReason = "NearbyIdentityCandidate" | "RequestedParameterIdentityMatch" | "MarkIdentityMatch";
-type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
-type ElectricalCatalogFilterReport = { readonly "appliedPanelNames": ReadonlyArray<string>, readonly "appliedCircuitNumbers": ReadonlyArray<string>, readonly "appliedLoadNames": ReadonlyArray<string>, readonly "appliedMarks": ReadonlyArray<string>, readonly "ignoredBlankFilterValues": ReadonlyArray<string>, readonly "candidateCountBeforeFilter": number, readonly "matchedCount": number };
-type ParameterIdentity = { readonly "key": string, readonly "kind": ParameterIdentityKind, readonly "name": string, readonly "builtInParameterId"?: number | null, readonly "sharedGuid"?: null | string, readonly "parameterElementId"?: number | null };
-type RevitDataIssue = { readonly "code": string, readonly "severity": RevitDataIssueSeverity, readonly "message": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "parameterName"?: null | string };
-type ParameterDefinitionDescriptor = { readonly "identity": ParameterIdentity, readonly "isInstance"?: boolean | null, readonly "dataTypeId"?: null | string, readonly "dataTypeLabel"?: null | string, readonly "groupTypeId"?: null | string, readonly "groupTypeLabel"?: null | string, readonly "visible"?: boolean | null, readonly "userModifiable"?: boolean | null, readonly "description"?: null | string };
-type RequestedElementParameterValue = { readonly "definition": ParameterDefinitionDescriptor, readonly "found": boolean, readonly "isBlank": boolean, readonly "value"?: null | string, readonly "displayValue"?: null | string, readonly "storageType": RequestedParameterStorageType, readonly "source": RequestedParameterValueSource, readonly "parameterId"?: number | null, readonly "rawValue"?: null | string, readonly "isReadOnly"?: boolean | null, readonly "name": string, readonly "identity": ParameterIdentity };
-type ElectricalCircuitConnectedElementEntry = { readonly "elementId": number, readonly "elementUniqueId": string, readonly "className": string, readonly "categoryName"?: null | string, readonly "name": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "mark"?: null | string, readonly "effectiveIdentity"?: null | string, readonly "effectiveIdentitySource": ElementIdentitySource, readonly "role": ElectricalInsightRole, readonly "hasElectricalConnector": boolean, readonly "electricalSystemCount": number, readonly "requestedParameters"?: ReadonlyArray<RequestedElementParameterValue> | null };
-type ElectricalNearbyProxyCandidateEntry = { readonly "elementId": number, readonly "elementUniqueId": string, readonly "className": string, readonly "categoryName"?: null | string, readonly "name": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "mark"?: null | string, readonly "effectiveIdentity"?: null | string, readonly "effectiveIdentitySource": ElementIdentitySource, readonly "role": ElectricalInsightRole, readonly "distanceFeet": number, readonly "matchReason": ElectricalNearbyProxyCandidateMatchReason, readonly "requestedParameters"?: ReadonlyArray<RequestedElementParameterValue> | null };
-type ElectricalCircuitCatalogEntry = { readonly "circuitId": number, readonly "circuitUniqueId": string, readonly "circuitNumber": string, readonly "loadName"?: null | string, readonly "panelId"?: number | null, readonly "panelUniqueId"?: null | string, readonly "panelName"?: null | string, readonly "slotIndex"?: null | string, readonly "ways"?: null | string, readonly "polesNumber": number, readonly "voltage"?: null | string, readonly "apparentLoad"?: null | string, readonly "apparentCurrent"?: null | string, readonly "trueLoad"?: null | string, readonly "trueCurrent"?: null | string, readonly "rating"?: null | string, readonly "frame"?: null | string, readonly "ratingOverride": boolean, readonly "ratingOverrideValueDisplay"?: null | string, readonly "wireSize"?: null | string, readonly "wireTypeName"?: null | string, readonly "isEmpty": boolean, readonly "isMultipleNetwork": boolean, readonly "hasCustomCircuitPath": boolean, readonly "hasPathOffset": boolean, readonly "hasProxyLikeConnectedElements": boolean, readonly "proxyLikeConnectedElementCount": number, readonly "proxyInferenceRecommended": boolean, readonly "primaryConnectedRole"?: null | ElectricalInsightRole, readonly "connectedRoles": ReadonlyArray<ElectricalInsightRole>, readonly "connectedElements": ReadonlyArray<ElectricalCircuitConnectedElementEntry>, readonly "wires": ReadonlyArray<ElectricalCircuitWireEntry>, readonly "nearbyProxyCandidates"?: ReadonlyArray<ElectricalNearbyProxyCandidateEntry> | null };
-export type Root = { readonly "entries": ReadonlyArray<ElectricalCircuitCatalogEntry>, readonly "issues": ReadonlyArray<RevitDataIssue>, readonly "filterReport"?: null | ElectricalCatalogFilterReport };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["ElectricalCatalogFilterReport"]: strictDecoder(ElectricalCatalogFilterReport),
@@ -3209,14 +3593,42 @@ export const definitions = {
   ["RevitDataIssueSeverity"]: strictDecoder(RevitDataIssueSeverity),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type ElectricalInsightRole = "Panel" | "DownstreamPanel" | "LoadFamilyInstance" | "ProxyFixture" | "InlineElectricalEquipment" | "Circuit" | "Wire" | "LoadClassification" | "Element";
+type ElementIdentitySource = "None" | "RequestedParameter" | "Mark";
+type ParameterIdentityKind = "SharedGuid" | "BuiltInParameter" | "ParameterElement" | "NameFallback";
+type RequestedParameterStorageType = "None" | "String" | "Integer" | "Double" | "ElementId";
+type RequestedParameterValueSource = "None" | "Instance" | "Type";
+type ElectricalCircuitWireEntry = { readonly "wireId": number, readonly "wireUniqueId": string, readonly "wireTypeName"?: null | string, readonly "wiringType": string, readonly "hotConductorCount": number, readonly "neutralConductorCount": number, readonly "groundConductorCount": number };
+type ElectricalNearbyProxyCandidateMatchReason = "NearbyIdentityCandidate" | "RequestedParameterIdentityMatch" | "MarkIdentityMatch";
+type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
+type ElectricalCatalogFilterReport = { readonly "appliedPanelNames": ReadonlyArray<string>, readonly "appliedCircuitNumbers": ReadonlyArray<string>, readonly "appliedLoadNames": ReadonlyArray<string>, readonly "appliedMarks": ReadonlyArray<string>, readonly "ignoredBlankFilterValues": ReadonlyArray<string>, readonly "candidateCountBeforeFilter": number, readonly "matchedCount": number };
+type ParameterIdentity = { readonly "key": string, readonly "kind": ParameterIdentityKind, readonly "name": string, readonly "builtInParameterId"?: number | null, readonly "sharedGuid"?: null | string, readonly "parameterElementId"?: number | null };
+type RevitDataIssue = { readonly "code": string, readonly "severity": RevitDataIssueSeverity, readonly "message": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "parameterName"?: null | string };
+type ParameterDefinitionDescriptor = { readonly "identity": ParameterIdentity, readonly "isInstance"?: boolean | null, readonly "dataTypeId"?: null | string, readonly "dataTypeLabel"?: null | string, readonly "groupTypeId"?: null | string, readonly "groupTypeLabel"?: null | string, readonly "visible"?: boolean | null, readonly "userModifiable"?: boolean | null, readonly "description"?: null | string };
+type RequestedElementParameterValue = { readonly "definition": ParameterDefinitionDescriptor, readonly "found": boolean, readonly "isBlank": boolean, readonly "value"?: null | string, readonly "displayValue"?: null | string, readonly "storageType": RequestedParameterStorageType, readonly "source": RequestedParameterValueSource, readonly "parameterId"?: number | null, readonly "rawValue"?: null | string, readonly "isReadOnly"?: boolean | null, readonly "name": string, readonly "identity": ParameterIdentity };
+type ElectricalCircuitConnectedElementEntry = { readonly "elementId": number, readonly "elementUniqueId": string, readonly "className": string, readonly "categoryName"?: null | string, readonly "name": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "mark"?: null | string, readonly "effectiveIdentity"?: null | string, readonly "effectiveIdentitySource": ElementIdentitySource, readonly "role": ElectricalInsightRole, readonly "hasElectricalConnector": boolean, readonly "electricalSystemCount": number, readonly "requestedParameters"?: ReadonlyArray<RequestedElementParameterValue> | null };
+type ElectricalNearbyProxyCandidateEntry = { readonly "elementId": number, readonly "elementUniqueId": string, readonly "className": string, readonly "categoryName"?: null | string, readonly "name": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "mark"?: null | string, readonly "effectiveIdentity"?: null | string, readonly "effectiveIdentitySource": ElementIdentitySource, readonly "role": ElectricalInsightRole, readonly "distanceFeet": number, readonly "matchReason": ElectricalNearbyProxyCandidateMatchReason, readonly "requestedParameters"?: ReadonlyArray<RequestedElementParameterValue> | null };
+type ElectricalCircuitCatalogEntry = { readonly "circuitId": number, readonly "circuitUniqueId": string, readonly "circuitNumber": string, readonly "loadName"?: null | string, readonly "panelId"?: number | null, readonly "panelUniqueId"?: null | string, readonly "panelName"?: null | string, readonly "slotIndex"?: null | string, readonly "ways"?: null | string, readonly "polesNumber": number, readonly "voltage"?: null | string, readonly "apparentLoad"?: null | string, readonly "apparentCurrent"?: null | string, readonly "trueLoad"?: null | string, readonly "trueCurrent"?: null | string, readonly "rating"?: null | string, readonly "frame"?: null | string, readonly "ratingOverride": boolean, readonly "ratingOverrideValueDisplay"?: null | string, readonly "wireSize"?: null | string, readonly "wireTypeName"?: null | string, readonly "isEmpty": boolean, readonly "isMultipleNetwork": boolean, readonly "hasCustomCircuitPath": boolean, readonly "hasPathOffset": boolean, readonly "hasProxyLikeConnectedElements": boolean, readonly "proxyLikeConnectedElementCount": number, readonly "proxyInferenceRecommended": boolean, readonly "primaryConnectedRole"?: null | ElectricalInsightRole, readonly "connectedRoles": ReadonlyArray<ElectricalInsightRole>, readonly "connectedElements": ReadonlyArray<ElectricalCircuitConnectedElementEntry>, readonly "wires": ReadonlyArray<ElectricalCircuitWireEntry>, readonly "nearbyProxyCandidates"?: ReadonlyArray<ElectricalNearbyProxyCandidateEntry> | null };
+export type Root = { readonly "entries": ReadonlyArray<ElectricalCircuitCatalogEntry>, readonly "issues": ReadonlyArray<RevitDataIssue>, readonly "filterReport"?: null | ElectricalCatalogFilterReport };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op58request {
+namespace Decoded {
 
 const ElectricalPanelSchedulesQueryKind = Schema.Literals(["CurrentActiveView", "ScheduleReferences", "PanelReferences"]).annotate({ "description": "", "identifier": "ElectricalPanelSchedulesQueryKind" });
 const ElectricalPanelScheduleProjectionView = Schema.Literals(["FullSections", "RowsOnly"]).annotate({ "description": "", "identifier": "ElectricalPanelScheduleProjectionView" });
 const ElectricalPanelScheduleProjectionOptions = Schema.Struct({ "view": Schema.optionalKey(ElectricalPanelScheduleProjectionView), "circuitNumbers": Schema.optionalKey(Schema.Array(Schema.String)), "loadNameContains": Schema.optionalKey(Schema.Array(Schema.String)), "maxRows": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), Schema.Null]).annotate({ "format": "int32" })) }).annotate({ "identifier": "ElectricalPanelScheduleProjectionOptions" });
 const ElectricalPanelSchedulesQuery = Schema.Struct({ "kind": Schema.optionalKey(ElectricalPanelSchedulesQueryKind), "scheduleIds": Schema.optionalKey(Schema.Union([Schema.Array(Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" }))), Schema.Null])), "scheduleUniqueIds": Schema.optionalKey(Schema.Union([Schema.Array(Schema.String), Schema.Null])), "panelIds": Schema.optionalKey(Schema.Union([Schema.Array(Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" }))), Schema.Null])), "panelUniqueIds": Schema.optionalKey(Schema.Union([Schema.Array(Schema.String), Schema.Null])), "panelNames": Schema.optionalKey(Schema.Union([Schema.Array(Schema.String), Schema.Null])), "projection": Schema.optionalKey(Schema.Union([Schema.Null, ElectricalPanelScheduleProjectionOptions], { mode: "oneOf" })) }).annotate({ "identifier": "ElectricalPanelSchedulesQuery" });
 const codec = Schema.Struct({ "query": Schema.optionalKey(Schema.Union([Schema.Null, ElectricalPanelSchedulesQuery], { mode: "oneOf" })) }).annotate({ "title": "ElectricalPanelSchedulesQueryRequest" });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 type ElectricalPanelSchedulesQueryKind = "CurrentActiveView" | "ScheduleReferences" | "PanelReferences";
 type ElectricalPanelScheduleProjectionView = "FullSections" | "RowsOnly";
@@ -3225,11 +3637,11 @@ type ElectricalPanelSchedulesQuery = { readonly "kind"?: ElectricalPanelSchedule
 export type Root = { readonly "query"?: null | ElectricalPanelSchedulesQuery };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op58response {
+namespace Decoded {
 
 const ElectricalPanelSchedulesQueryKind = Schema.Literals(["CurrentActiveView", "ScheduleReferences", "PanelReferences"]).annotate({ "description": "", "identifier": "ElectricalPanelSchedulesQueryKind" });
 const ElectricalPanelScheduleSectionType = Schema.Literals(["Header", "Body", "Summary", "Footer"]).annotate({ "description": "", "identifier": "ElectricalPanelScheduleSectionType" });
@@ -3242,21 +3654,6 @@ const ElectricalPanelScheduleRowProjection = Schema.Struct({ "rowNumber": Schema
 const ElectricalPanelScheduleSectionProjection = Schema.Struct({ "sectionType": ElectricalPanelScheduleSectionType, "isValid": Schema.Boolean, "firstRowNumber": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "lastRowNumber": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "firstColumnNumber": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "lastColumnNumber": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "numberOfRows": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "numberOfColumns": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "rows": Schema.Array(ElectricalPanelScheduleRowProjection) }).annotate({ "identifier": "ElectricalPanelScheduleSectionProjection" });
 const ElectricalPanelScheduleProjection = Schema.Struct({ "scheduleId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "scheduleUniqueId": Schema.String, "scheduleName": Schema.String, "panelId": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })), Schema.Null]).annotate({ "format": "int64" })), "panelUniqueId": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "panelName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "templateId": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })), Schema.Null]).annotate({ "format": "int64" })), "templateUniqueId": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "templateName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "panelScheduleType": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "sections": Schema.Array(ElectricalPanelScheduleSectionProjection) }).annotate({ "identifier": "ElectricalPanelScheduleProjection" });
 const codec = Schema.Struct({ "documentTitle": Schema.String, "queryKind": ElectricalPanelSchedulesQueryKind, "requestedScheduleCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "resolvedScheduleCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "entries": Schema.Array(ElectricalPanelScheduleProjection), "issues": Schema.Array(RevitDataIssue) }).annotate({ "title": "ElectricalPanelSchedulesQueryData" });
-namespace WireTypes {
-type ElectricalPanelSchedulesQueryKind = "CurrentActiveView" | "ScheduleReferences" | "PanelReferences";
-type ElectricalPanelScheduleSectionType = "Header" | "Body" | "Summary" | "Footer";
-type ElectricalPanelScheduleCellSourceKind = "Unknown" | "TextOnly" | "Parameter" | "Combined" | "Calculated";
-type ElectricalPanelScheduleMergedRegion = { readonly "topRowNumber": number, readonly "leftColumnNumber": number, readonly "bottomRowNumber": number, readonly "rightColumnNumber": number };
-type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
-type ElectricalPanelScheduleCellProjection = { readonly "columnNumber": number, readonly "displayText": string, readonly "columnHeaderText"?: null | string, readonly "isBlank": boolean, readonly "circuitId"?: number | null, readonly "circuitUniqueId"?: null | string, readonly "sourceKind": ElectricalPanelScheduleCellSourceKind, readonly "parameterText"?: null | string, readonly "combinedText"?: null | string, readonly "calculatedValueName"?: null | string, readonly "calculatedValueText"?: null | string, readonly "mergedRegion"?: null | ElectricalPanelScheduleMergedRegion };
-type RevitDataIssue = { readonly "code": string, readonly "severity": RevitDataIssueSeverity, readonly "message": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "parameterName"?: null | string };
-type ElectricalPanelScheduleRowProjection = { readonly "rowNumber": number, readonly "isCircuitTableRow": boolean, readonly "cells": ReadonlyArray<ElectricalPanelScheduleCellProjection> };
-type ElectricalPanelScheduleSectionProjection = { readonly "sectionType": ElectricalPanelScheduleSectionType, readonly "isValid": boolean, readonly "firstRowNumber": number, readonly "lastRowNumber": number, readonly "firstColumnNumber": number, readonly "lastColumnNumber": number, readonly "numberOfRows": number, readonly "numberOfColumns": number, readonly "rows": ReadonlyArray<ElectricalPanelScheduleRowProjection> };
-type ElectricalPanelScheduleProjection = { readonly "scheduleId": number, readonly "scheduleUniqueId": string, readonly "scheduleName": string, readonly "panelId"?: number | null, readonly "panelUniqueId"?: null | string, readonly "panelName"?: null | string, readonly "templateId"?: number | null, readonly "templateUniqueId"?: null | string, readonly "templateName"?: null | string, readonly "panelScheduleType"?: null | string, readonly "sections": ReadonlyArray<ElectricalPanelScheduleSectionProjection> };
-export type Root = { readonly "documentTitle": string, readonly "queryKind": ElectricalPanelSchedulesQueryKind, readonly "requestedScheduleCount": number, readonly "resolvedScheduleCount": number, readonly "entries": ReadonlyArray<ElectricalPanelScheduleProjection>, readonly "issues": ReadonlyArray<RevitDataIssue> };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["ElectricalPanelScheduleCellProjection"]: strictDecoder(ElectricalPanelScheduleCellProjection),
@@ -3271,8 +3668,27 @@ export const definitions = {
   ["RevitDataIssueSeverity"]: strictDecoder(RevitDataIssueSeverity),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type ElectricalPanelSchedulesQueryKind = "CurrentActiveView" | "ScheduleReferences" | "PanelReferences";
+type ElectricalPanelScheduleSectionType = "Header" | "Body" | "Summary" | "Footer";
+type ElectricalPanelScheduleCellSourceKind = "Unknown" | "TextOnly" | "Parameter" | "Combined" | "Calculated";
+type ElectricalPanelScheduleMergedRegion = { readonly "topRowNumber": number, readonly "leftColumnNumber": number, readonly "bottomRowNumber": number, readonly "rightColumnNumber": number };
+type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
+type ElectricalPanelScheduleCellProjection = { readonly "columnNumber": number, readonly "displayText": string, readonly "columnHeaderText"?: null | string, readonly "isBlank": boolean, readonly "circuitId"?: number | null, readonly "circuitUniqueId"?: null | string, readonly "sourceKind": ElectricalPanelScheduleCellSourceKind, readonly "parameterText"?: null | string, readonly "combinedText"?: null | string, readonly "calculatedValueName"?: null | string, readonly "calculatedValueText"?: null | string, readonly "mergedRegion"?: null | ElectricalPanelScheduleMergedRegion };
+type RevitDataIssue = { readonly "code": string, readonly "severity": RevitDataIssueSeverity, readonly "message": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "parameterName"?: null | string };
+type ElectricalPanelScheduleRowProjection = { readonly "rowNumber": number, readonly "isCircuitTableRow": boolean, readonly "cells": ReadonlyArray<ElectricalPanelScheduleCellProjection> };
+type ElectricalPanelScheduleSectionProjection = { readonly "sectionType": ElectricalPanelScheduleSectionType, readonly "isValid": boolean, readonly "firstRowNumber": number, readonly "lastRowNumber": number, readonly "firstColumnNumber": number, readonly "lastColumnNumber": number, readonly "numberOfRows": number, readonly "numberOfColumns": number, readonly "rows": ReadonlyArray<ElectricalPanelScheduleRowProjection> };
+type ElectricalPanelScheduleProjection = { readonly "scheduleId": number, readonly "scheduleUniqueId": string, readonly "scheduleName": string, readonly "panelId"?: number | null, readonly "panelUniqueId"?: null | string, readonly "panelName"?: null | string, readonly "templateId"?: number | null, readonly "templateUniqueId"?: null | string, readonly "templateName"?: null | string, readonly "panelScheduleType"?: null | string, readonly "sections": ReadonlyArray<ElectricalPanelScheduleSectionProjection> };
+export type Root = { readonly "documentTitle": string, readonly "queryKind": ElectricalPanelSchedulesQueryKind, readonly "requestedScheduleCount": number, readonly "resolvedScheduleCount": number, readonly "entries": ReadonlyArray<ElectricalPanelScheduleProjection>, readonly "issues": ReadonlyArray<RevitDataIssue> };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op59request {
+namespace Decoded {
 
 const ElementContextQueryKind = Schema.Literals(["CurrentSelection", "ElementReferences"]).annotate({ "description": "", "identifier": "ElementContextQueryKind" });
 const ParameterIdentityKind = Schema.Literals(["SharedGuid", "BuiltInParameter", "ParameterElement", "NameFallback"]).annotate({ "description": "", "identifier": "ParameterIdentityKind" });
@@ -3281,6 +3697,9 @@ const ParameterReference = Schema.Struct({ "identity": Schema.optionalKey(Schema
 const RequestedParameterQuery = Schema.Struct({ "parameters": Schema.optionalKey(Schema.Array(ParameterReference)) }).annotate({ "identifier": "RequestedParameterQuery" });
 const ElementContextQuery = Schema.Struct({ "kind": Schema.optionalKey(ElementContextQueryKind), "elementIds": Schema.optionalKey(Schema.Union([Schema.Array(Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" }))), Schema.Null])), "elementUniqueIds": Schema.optionalKey(Schema.Union([Schema.Array(Schema.String), Schema.Null])), "parameterQuery": Schema.optionalKey(Schema.Union([Schema.Null, RequestedParameterQuery], { mode: "oneOf" })) }).annotate({ "identifier": "ElementContextQuery" });
 const codec = Schema.Struct({ "query": Schema.optionalKey(Schema.Union([Schema.Null, ElementContextQuery], { mode: "oneOf" })) }).annotate({ "title": "ElementContextQueryRequest" });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 type ElementContextQueryKind = "CurrentSelection" | "ElementReferences";
 type ParameterIdentityKind = "SharedGuid" | "BuiltInParameter" | "ParameterElement" | "NameFallback";
@@ -3291,11 +3710,11 @@ type ElementContextQuery = { readonly "kind"?: ElementContextQueryKind, readonly
 export type Root = { readonly "query"?: null | ElementContextQuery };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op59response {
+namespace Decoded {
 
 const ElementContextQueryKind = Schema.Literals(["CurrentSelection", "ElementReferences"]).annotate({ "description": "", "identifier": "ElementContextQueryKind" });
 const ElementIdentitySource = Schema.Literals(["None", "RequestedParameter", "Mark"]).annotate({ "description": "", "identifier": "ElementIdentitySource" });
@@ -3319,32 +3738,6 @@ const ParameterDefinitionDescriptor = Schema.Struct({ "identity": ParameterIdent
 const RequestedElementParameterValue = Schema.Struct({ "definition": ParameterDefinitionDescriptor, "found": Schema.Boolean, "isBlank": Schema.Boolean, "value": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "displayValue": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "storageType": RequestedParameterStorageType, "source": RequestedParameterValueSource, "parameterId": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })), Schema.Null]).annotate({ "format": "int64" })), "rawValue": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "isReadOnly": Schema.optionalKey(Schema.Union([Schema.Boolean, Schema.Null])), "name": Schema.String, "identity": ParameterIdentity }).annotate({ "description": "A requested parameter read plus its write surface (all write-surface fields null when the\nparameter was not found):\nParameterId — raw parameter handle (Parameter.Id) usable as the write target for\nparameter-apply operations; type-ness of the resolved value is already carried by Source\n(Instance vs Type).\nRawValue — invariant raw value: String as-is, Integer invariant, Double G17 in internal\nunits, ElementId as long.\nIsReadOnly — from Parameter.IsReadOnly ONLY; deliberately not derived from\nParameter.UserModifiable, which reports false for writable built-ins (Mark, Type Comments)\nwhose Set() succeeds — proven in ScheduleCellBindingProofTests.\n            ", "identifier": "RequestedElementParameterValue" });
 const ElementContextEntry = Schema.Struct({ "elementId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "elementUniqueId": Schema.String, "className": Schema.String, "categoryName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "name": Schema.String, "familyName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "typeName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "mark": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "effectiveIdentity": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "effectiveIdentitySource": ElementIdentitySource, "requestedParameters": Schema.optionalKey(Schema.Union([Schema.Array(RequestedElementParameterValue), Schema.Null])), "levelName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "electrical": Schema.optionalKey(Schema.Union([Schema.Null, ElementContextElectricalData], { mode: "oneOf" })), "connectors": Schema.optionalKey(Schema.Union([Schema.Null, ElementContextConnectorSummary], { mode: "oneOf" })), "circuit": Schema.optionalKey(Schema.Union([Schema.Null, ElementContextCircuitData], { mode: "oneOf" })), "panelContext": Schema.optionalKey(Schema.Union([Schema.Null, ElementContextPanelData], { mode: "oneOf" })), "wire": Schema.optionalKey(Schema.Union([Schema.Null, ElementContextWireData], { mode: "oneOf" })), "panelSchedule": Schema.optionalKey(Schema.Union([Schema.Null, ElementContextPanelScheduleData], { mode: "oneOf" })), "loadClassification": Schema.optionalKey(Schema.Union([Schema.Null, ElementContextLoadClassificationData], { mode: "oneOf" })) }).annotate({ "identifier": "ElementContextEntry" });
 const codec = Schema.Struct({ "documentTitle": Schema.String, "isFamilyDocument": Schema.Boolean, "queryKind": ElementContextQueryKind, "requestedElementCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "resolvedElementCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "entries": Schema.Array(ElementContextEntry), "issues": Schema.Array(RevitDataIssue) }).annotate({ "title": "ElementContextQueryData" });
-namespace WireTypes {
-type ElementContextQueryKind = "CurrentSelection" | "ElementReferences";
-type ElementIdentitySource = "None" | "RequestedParameter" | "Mark";
-type ParameterIdentityKind = "SharedGuid" | "BuiltInParameter" | "ParameterElement" | "NameFallback";
-type RequestedParameterStorageType = "None" | "String" | "Integer" | "Double" | "ElementId";
-type RequestedParameterValueSource = "None" | "Instance" | "Type";
-type ElectricalInsightRole = "Panel" | "DownstreamPanel" | "LoadFamilyInstance" | "ProxyFixture" | "InlineElectricalEquipment" | "Circuit" | "Wire" | "LoadClassification" | "Element";
-type ElementContextSystemRef = { readonly "systemId": number, readonly "systemUniqueId": string, readonly "systemKind": string, readonly "name"?: null | string, readonly "circuitNumber"?: null | string, readonly "panelName"?: null | string, readonly "loadName"?: null | string };
-type ElementContextElementRef = { readonly "elementId": number, readonly "elementUniqueId": string, readonly "className": string, readonly "categoryName"?: null | string, readonly "name": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "mark"?: null | string };
-type ElementContextConnectorSummary = { readonly "connectorCount": number, readonly "electricalConnectorCount": number };
-type ElementContextPanelData = { readonly "panelId": number, readonly "panelUniqueId": string, readonly "panelName": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "distributionSystem"?: null | string, readonly "assignedCircuitCount": number };
-type ElementContextPanelScheduleData = { readonly "scheduleId": number, readonly "scheduleUniqueId": string, readonly "scheduleName": string, readonly "panelName"?: null | string, readonly "templateName"?: null | string };
-type ElementContextLoadClassificationData = { readonly "classificationId": number, readonly "classificationUniqueId": string, readonly "name": string, readonly "abbreviation"?: null | string, readonly "demandFactorName"?: null | string };
-type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
-type ParameterIdentity = { readonly "key": string, readonly "kind": ParameterIdentityKind, readonly "name": string, readonly "builtInParameterId"?: number | null, readonly "sharedGuid"?: null | string, readonly "parameterElementId"?: number | null };
-type ElementContextElectricalData = { readonly "role": ElectricalInsightRole, readonly "systems": ReadonlyArray<ElementContextSystemRef>, readonly "primarySystem"?: null | ElementContextSystemRef, readonly "baseEquipment"?: null | ElementContextElementRef };
-type ElementContextCircuitData = { readonly "circuitId": number, readonly "circuitUniqueId": string, readonly "circuitNumber": string, readonly "loadName"?: null | string, readonly "panelName"?: null | string, readonly "voltage"?: null | string, readonly "apparentLoad"?: null | string, readonly "apparentCurrent"?: null | string, readonly "rating"?: null | string, readonly "frame"?: null | string, readonly "connectedElements": ReadonlyArray<ElementContextElementRef> };
-type ElementContextWireData = { readonly "wireId": number, readonly "wireUniqueId": string, readonly "wireTypeName"?: null | string, readonly "wiringType": string, readonly "hotConductorNum": number, readonly "neutralConductorNum": number, readonly "groundConductorNum": number, readonly "systems": ReadonlyArray<ElementContextSystemRef>, readonly "connectedOwners": ReadonlyArray<ElementContextElementRef> };
-type RevitDataIssue = { readonly "code": string, readonly "severity": RevitDataIssueSeverity, readonly "message": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "parameterName"?: null | string };
-type ParameterDefinitionDescriptor = { readonly "identity": ParameterIdentity, readonly "isInstance"?: boolean | null, readonly "dataTypeId"?: null | string, readonly "dataTypeLabel"?: null | string, readonly "groupTypeId"?: null | string, readonly "groupTypeLabel"?: null | string, readonly "visible"?: boolean | null, readonly "userModifiable"?: boolean | null, readonly "description"?: null | string };
-type RequestedElementParameterValue = { readonly "definition": ParameterDefinitionDescriptor, readonly "found": boolean, readonly "isBlank": boolean, readonly "value"?: null | string, readonly "displayValue"?: null | string, readonly "storageType": RequestedParameterStorageType, readonly "source": RequestedParameterValueSource, readonly "parameterId"?: number | null, readonly "rawValue"?: null | string, readonly "isReadOnly"?: boolean | null, readonly "name": string, readonly "identity": ParameterIdentity };
-type ElementContextEntry = { readonly "elementId": number, readonly "elementUniqueId": string, readonly "className": string, readonly "categoryName"?: null | string, readonly "name": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "mark"?: null | string, readonly "effectiveIdentity"?: null | string, readonly "effectiveIdentitySource": ElementIdentitySource, readonly "requestedParameters"?: ReadonlyArray<RequestedElementParameterValue> | null, readonly "levelName"?: null | string, readonly "electrical"?: null | ElementContextElectricalData, readonly "connectors"?: null | ElementContextConnectorSummary, readonly "circuit"?: null | ElementContextCircuitData, readonly "panelContext"?: null | ElementContextPanelData, readonly "wire"?: null | ElementContextWireData, readonly "panelSchedule"?: null | ElementContextPanelScheduleData, readonly "loadClassification"?: null | ElementContextLoadClassificationData };
-export type Root = { readonly "documentTitle": string, readonly "isFamilyDocument": boolean, readonly "queryKind": ElementContextQueryKind, readonly "requestedElementCount": number, readonly "resolvedElementCount": number, readonly "entries": ReadonlyArray<ElementContextEntry>, readonly "issues": ReadonlyArray<RevitDataIssue> };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["ElectricalInsightRole"]: strictDecoder(ElectricalInsightRole),
@@ -3370,21 +3763,54 @@ export const definitions = {
   ["RevitDataIssueSeverity"]: strictDecoder(RevitDataIssueSeverity),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type ElementContextQueryKind = "CurrentSelection" | "ElementReferences";
+type ElementIdentitySource = "None" | "RequestedParameter" | "Mark";
+type ParameterIdentityKind = "SharedGuid" | "BuiltInParameter" | "ParameterElement" | "NameFallback";
+type RequestedParameterStorageType = "None" | "String" | "Integer" | "Double" | "ElementId";
+type RequestedParameterValueSource = "None" | "Instance" | "Type";
+type ElectricalInsightRole = "Panel" | "DownstreamPanel" | "LoadFamilyInstance" | "ProxyFixture" | "InlineElectricalEquipment" | "Circuit" | "Wire" | "LoadClassification" | "Element";
+type ElementContextSystemRef = { readonly "systemId": number, readonly "systemUniqueId": string, readonly "systemKind": string, readonly "name"?: null | string, readonly "circuitNumber"?: null | string, readonly "panelName"?: null | string, readonly "loadName"?: null | string };
+type ElementContextElementRef = { readonly "elementId": number, readonly "elementUniqueId": string, readonly "className": string, readonly "categoryName"?: null | string, readonly "name": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "mark"?: null | string };
+type ElementContextConnectorSummary = { readonly "connectorCount": number, readonly "electricalConnectorCount": number };
+type ElementContextPanelData = { readonly "panelId": number, readonly "panelUniqueId": string, readonly "panelName": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "distributionSystem"?: null | string, readonly "assignedCircuitCount": number };
+type ElementContextPanelScheduleData = { readonly "scheduleId": number, readonly "scheduleUniqueId": string, readonly "scheduleName": string, readonly "panelName"?: null | string, readonly "templateName"?: null | string };
+type ElementContextLoadClassificationData = { readonly "classificationId": number, readonly "classificationUniqueId": string, readonly "name": string, readonly "abbreviation"?: null | string, readonly "demandFactorName"?: null | string };
+type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
+type ParameterIdentity = { readonly "key": string, readonly "kind": ParameterIdentityKind, readonly "name": string, readonly "builtInParameterId"?: number | null, readonly "sharedGuid"?: null | string, readonly "parameterElementId"?: number | null };
+type ElementContextElectricalData = { readonly "role": ElectricalInsightRole, readonly "systems": ReadonlyArray<ElementContextSystemRef>, readonly "primarySystem"?: null | ElementContextSystemRef, readonly "baseEquipment"?: null | ElementContextElementRef };
+type ElementContextCircuitData = { readonly "circuitId": number, readonly "circuitUniqueId": string, readonly "circuitNumber": string, readonly "loadName"?: null | string, readonly "panelName"?: null | string, readonly "voltage"?: null | string, readonly "apparentLoad"?: null | string, readonly "apparentCurrent"?: null | string, readonly "rating"?: null | string, readonly "frame"?: null | string, readonly "connectedElements": ReadonlyArray<ElementContextElementRef> };
+type ElementContextWireData = { readonly "wireId": number, readonly "wireUniqueId": string, readonly "wireTypeName"?: null | string, readonly "wiringType": string, readonly "hotConductorNum": number, readonly "neutralConductorNum": number, readonly "groundConductorNum": number, readonly "systems": ReadonlyArray<ElementContextSystemRef>, readonly "connectedOwners": ReadonlyArray<ElementContextElementRef> };
+type RevitDataIssue = { readonly "code": string, readonly "severity": RevitDataIssueSeverity, readonly "message": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "parameterName"?: null | string };
+type ParameterDefinitionDescriptor = { readonly "identity": ParameterIdentity, readonly "isInstance"?: boolean | null, readonly "dataTypeId"?: null | string, readonly "dataTypeLabel"?: null | string, readonly "groupTypeId"?: null | string, readonly "groupTypeLabel"?: null | string, readonly "visible"?: boolean | null, readonly "userModifiable"?: boolean | null, readonly "description"?: null | string };
+type RequestedElementParameterValue = { readonly "definition": ParameterDefinitionDescriptor, readonly "found": boolean, readonly "isBlank": boolean, readonly "value"?: null | string, readonly "displayValue"?: null | string, readonly "storageType": RequestedParameterStorageType, readonly "source": RequestedParameterValueSource, readonly "parameterId"?: number | null, readonly "rawValue"?: null | string, readonly "isReadOnly"?: boolean | null, readonly "name": string, readonly "identity": ParameterIdentity };
+type ElementContextEntry = { readonly "elementId": number, readonly "elementUniqueId": string, readonly "className": string, readonly "categoryName"?: null | string, readonly "name": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "mark"?: null | string, readonly "effectiveIdentity"?: null | string, readonly "effectiveIdentitySource": ElementIdentitySource, readonly "requestedParameters"?: ReadonlyArray<RequestedElementParameterValue> | null, readonly "levelName"?: null | string, readonly "electrical"?: null | ElementContextElectricalData, readonly "connectors"?: null | ElementContextConnectorSummary, readonly "circuit"?: null | ElementContextCircuitData, readonly "panelContext"?: null | ElementContextPanelData, readonly "wire"?: null | ElementContextWireData, readonly "panelSchedule"?: null | ElementContextPanelScheduleData, readonly "loadClassification"?: null | ElementContextLoadClassificationData };
+export type Root = { readonly "documentTitle": string, readonly "isFamilyDocument": boolean, readonly "queryKind": ElementContextQueryKind, readonly "requestedElementCount": number, readonly "resolvedElementCount": number, readonly "entries": ReadonlyArray<ElementContextEntry>, readonly "issues": ReadonlyArray<RevitDataIssue> };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op60request {
+namespace Decoded {
 
 
 const codec = Schema.Struct({ "includeEvaluation": Schema.optionalKey(Schema.Boolean) }).annotate({ "title": "ParameterLinksDetailRequest" });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 
 export type Root = { readonly "includeEvaluation"?: boolean };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op60response {
+namespace Decoded {
 
 const ParameterIdentityKind = Schema.Literals(["SharedGuid", "BuiltInParameter", "ParameterElement", "NameFallback"]).annotate({ "description": "", "identifier": "ParameterIdentityKind" });
 const ParameterLinkSourceScope = Schema.Literals(["instance", "type", "instanceThenType"]).annotate({ "description": "", "identifier": "ParameterLinkSourceScope" });
@@ -3403,27 +3829,6 @@ const ParameterLinkEvaluation = Schema.Struct({ "writes": Schema.Array(Parameter
 const ParameterLinkDefinition = Schema.Struct({ "id": Schema.String, "sourceCategoryId": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "sourceParameter": ParameterReference, "sourceScope": ParameterLinkSourceScope, "relationship": ParameterLinkRelationship, "targetParameter": ParameterReference, "targetOverride": Schema.optionalKey(Schema.Union([Schema.Null, ParameterLinkTargetOverride], { mode: "oneOf" })), "reducer": ParameterLinkReducer }).annotate({ "identifier": "ParameterLinkDefinition" });
 const ParameterLinkProfile = Schema.Struct({ "formatVersion": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "definitions": Schema.Array(ParameterLinkDefinition), "assignments": Schema.Array(ParameterLinkAssignment) }).annotate({ "identifier": "ParameterLinkProfile" });
 const codec = Schema.Struct({ "profile": Schema.optionalKey(Schema.Union([Schema.Null, ParameterLinkProfile], { mode: "oneOf" })), "evaluation": Schema.optionalKey(Schema.Union([Schema.Null, ParameterLinkEvaluation], { mode: "oneOf" })), "status": ParameterLinksRuntimeStatus, "profileChanged": Schema.Boolean, "appliedWriteCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })) }).annotate({ "title": "ParameterLinksData" });
-namespace WireTypes {
-type ParameterIdentityKind = "SharedGuid" | "BuiltInParameter" | "ParameterElement" | "NameFallback";
-type ParameterLinkSourceScope = "instance" | "type" | "instanceThenType";
-type ParameterLinkRelationship = "sameElement" | "electricalEquipmentCircuits";
-type ParameterLinkReducer = "first" | "min" | "max";
-type ParameterLinkAssignment = { readonly "id": string, readonly "definitionId": string, readonly "enabled": boolean, readonly "sourceElementUniqueIds": ReadonlyArray<string> };
-type ParameterLinkValue = { readonly "storageType": string, readonly "specTypeId"?: null | string, readonly "doubleValue"?: null | number, readonly "integerValue"?: number | null, readonly "stringValue"?: null | string, readonly "elementIdValue"?: number | null, readonly "displayValue"?: null | string };
-type ParameterLinkIssueSeverity = "warning" | "error";
-type ParameterLinksRuntimeStatus = { readonly "hasStoredProfile": boolean, readonly "updaterRegistered": boolean, readonly "activeDefinitionCount": number, readonly "activeAssignmentCount": number };
-type ParameterIdentity = { readonly "key": string, readonly "kind": ParameterIdentityKind, readonly "name": string, readonly "builtInParameterId"?: number | null, readonly "sharedGuid"?: null | string, readonly "parameterElementId"?: number | null };
-type ParameterLinkIssue = { readonly "code": string, readonly "severity": ParameterLinkIssueSeverity, readonly "message": string, readonly "definitionId"?: null | string, readonly "assignmentId"?: null | string, readonly "sourceElementUniqueId"?: null | string, readonly "targetElementUniqueId"?: null | string };
-type ParameterReference = { readonly "identity"?: null | ParameterIdentity, readonly "name"?: null | string, readonly "sharedGuid"?: null | string };
-type ParameterLinkWrite = { readonly "definitionId": string, readonly "assignmentId": string, readonly "targetElementId": number, readonly "targetElementUniqueId": string, readonly "targetElementName"?: null | string, readonly "targetParameter": ParameterIdentity, readonly "currentValue": ParameterLinkValue, readonly "linkedValue": ParameterLinkValue, readonly "overrideValue"?: null | ParameterLinkValue, readonly "overrideApplied": boolean, readonly "proposedValue": ParameterLinkValue, readonly "changed": boolean };
-type ParameterLinkTargetOverride = { readonly "enabledParameter": ParameterReference, readonly "valueParameter": ParameterReference };
-type ParameterLinkEvaluation = { readonly "writes": ReadonlyArray<ParameterLinkWrite>, readonly "issues": ReadonlyArray<ParameterLinkIssue>, readonly "sourceElementCount": number, readonly "targetElementCount": number, readonly "changedWriteCount": number };
-type ParameterLinkDefinition = { readonly "id": string, readonly "sourceCategoryId": number, readonly "sourceParameter": ParameterReference, readonly "sourceScope": ParameterLinkSourceScope, readonly "relationship": ParameterLinkRelationship, readonly "targetParameter": ParameterReference, readonly "targetOverride"?: null | ParameterLinkTargetOverride, readonly "reducer": ParameterLinkReducer };
-type ParameterLinkProfile = { readonly "formatVersion": number, readonly "definitions": ReadonlyArray<ParameterLinkDefinition>, readonly "assignments": ReadonlyArray<ParameterLinkAssignment> };
-export type Root = { readonly "profile"?: null | ParameterLinkProfile, readonly "evaluation"?: null | ParameterLinkEvaluation, readonly "status": ParameterLinksRuntimeStatus, readonly "profileChanged": boolean, readonly "appliedWriteCount": number };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["ParameterIdentity"]: strictDecoder(ParameterIdentity),
@@ -3444,13 +3849,41 @@ export const definitions = {
   ["ParameterReference"]: strictDecoder(ParameterReference),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type ParameterIdentityKind = "SharedGuid" | "BuiltInParameter" | "ParameterElement" | "NameFallback";
+type ParameterLinkSourceScope = "instance" | "type" | "instanceThenType";
+type ParameterLinkRelationship = "sameElement" | "electricalEquipmentCircuits";
+type ParameterLinkReducer = "first" | "min" | "max";
+type ParameterLinkAssignment = { readonly "id": string, readonly "definitionId": string, readonly "enabled": boolean, readonly "sourceElementUniqueIds": ReadonlyArray<string> };
+type ParameterLinkValue = { readonly "storageType": string, readonly "specTypeId"?: null | string, readonly "doubleValue"?: null | number, readonly "integerValue"?: number | null, readonly "stringValue"?: null | string, readonly "elementIdValue"?: number | null, readonly "displayValue"?: null | string };
+type ParameterLinkIssueSeverity = "warning" | "error";
+type ParameterLinksRuntimeStatus = { readonly "hasStoredProfile": boolean, readonly "updaterRegistered": boolean, readonly "activeDefinitionCount": number, readonly "activeAssignmentCount": number };
+type ParameterIdentity = { readonly "key": string, readonly "kind": ParameterIdentityKind, readonly "name": string, readonly "builtInParameterId"?: number | null, readonly "sharedGuid"?: null | string, readonly "parameterElementId"?: number | null };
+type ParameterLinkIssue = { readonly "code": string, readonly "severity": ParameterLinkIssueSeverity, readonly "message": string, readonly "definitionId"?: null | string, readonly "assignmentId"?: null | string, readonly "sourceElementUniqueId"?: null | string, readonly "targetElementUniqueId"?: null | string };
+type ParameterReference = { readonly "identity"?: null | ParameterIdentity, readonly "name"?: null | string, readonly "sharedGuid"?: null | string };
+type ParameterLinkWrite = { readonly "definitionId": string, readonly "assignmentId": string, readonly "targetElementId": number, readonly "targetElementUniqueId": string, readonly "targetElementName"?: null | string, readonly "targetParameter": ParameterIdentity, readonly "currentValue": ParameterLinkValue, readonly "linkedValue": ParameterLinkValue, readonly "overrideValue"?: null | ParameterLinkValue, readonly "overrideApplied": boolean, readonly "proposedValue": ParameterLinkValue, readonly "changed": boolean };
+type ParameterLinkTargetOverride = { readonly "enabledParameter": ParameterReference, readonly "valueParameter": ParameterReference };
+type ParameterLinkEvaluation = { readonly "writes": ReadonlyArray<ParameterLinkWrite>, readonly "issues": ReadonlyArray<ParameterLinkIssue>, readonly "sourceElementCount": number, readonly "targetElementCount": number, readonly "changedWriteCount": number };
+type ParameterLinkDefinition = { readonly "id": string, readonly "sourceCategoryId": number, readonly "sourceParameter": ParameterReference, readonly "sourceScope": ParameterLinkSourceScope, readonly "relationship": ParameterLinkRelationship, readonly "targetParameter": ParameterReference, readonly "targetOverride"?: null | ParameterLinkTargetOverride, readonly "reducer": ParameterLinkReducer };
+type ParameterLinkProfile = { readonly "formatVersion": number, readonly "definitions": ReadonlyArray<ParameterLinkDefinition>, readonly "assignments": ReadonlyArray<ParameterLinkAssignment> };
+export type Root = { readonly "profile"?: null | ParameterLinkProfile, readonly "evaluation"?: null | ParameterLinkEvaluation, readonly "status": ParameterLinksRuntimeStatus, readonly "profileChanged": boolean, readonly "appliedWriteCount": number };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op61request {
+namespace Decoded {
 
 const RequestedParameterStorageType = Schema.Literals(["None", "String", "Integer", "Double", "ElementId"]).annotate({ "description": "", "identifier": "RequestedParameterStorageType" });
 const ParameterTarget = Schema.Struct({ "elementId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "parameterId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "parameterName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "storageType": RequestedParameterStorageType, "isReadOnly": Schema.Boolean, "hasValue": Schema.Boolean, "rawValue": Schema.Union([Schema.Null, Schema.String]), "elementLabel": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "uniqueId": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "scope": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "displayValue": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "description": "Mutation evidence for one native parameter: what a reviewer saw, and what a writer compares against a fresh\nread before writing. Schedule cells carry one per target; parameter edits carry one as Expected.\n            ", "identifier": "ParameterTarget" });
 const ParameterValueEdit = Schema.Struct({ "elementId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "parameterId": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })), Schema.Null]).annotate({ "format": "int64" })), "parameterName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "value": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "unit": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "rawInternal": Schema.optionalKey(Schema.Boolean), "expected": Schema.optionalKey(Schema.Union([Schema.Null, ParameterTarget], { mode: "oneOf" })), "uniqueId": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "identifier": "ParameterValueEdit" });
 const codec = Schema.Struct({ "edits": Schema.Array(ParameterValueEdit), "dryRun": Schema.optionalKey(Schema.Boolean), "transactionName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "title": "ParameterValueApplyRequest", "description": "Bounded project-document parameter mutation contracts. A wet edit names its exact target (element id +\nparameter id) and carries the ParameterTarget evidence it was reviewed against; a stale or\nmissing Expected refuses. A dry run is the evidence read: it returns Current per edit, and is the only place\nParameterName resolves (discovery for callers that do not yet know the parameter id).\n            " });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 type RequestedParameterStorageType = "None" | "String" | "Integer" | "Double" | "ElementId";
 type ParameterTarget = { readonly "elementId": number, readonly "parameterId": number, readonly "parameterName"?: null | string, readonly "storageType": RequestedParameterStorageType, readonly "isReadOnly": boolean, readonly "hasValue": boolean, readonly "rawValue": null | string, readonly "elementLabel"?: null | string, readonly "uniqueId"?: null | string, readonly "scope"?: null | string, readonly "displayValue"?: null | string };
@@ -3458,26 +3891,17 @@ type ParameterValueEdit = { readonly "elementId": number, readonly "parameterId"
 export type Root = { readonly "edits": ReadonlyArray<ParameterValueEdit>, readonly "dryRun"?: boolean, readonly "transactionName"?: null | string };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op61response {
+namespace Decoded {
 
 const RequestedParameterStorageType = Schema.Literals(["None", "String", "Integer", "Double", "ElementId"]).annotate({ "description": "", "identifier": "RequestedParameterStorageType" });
 const EditRefusalCode = Schema.Literals(["target-evidence-stale", "target-evidence-missing", "target-unresolved", "admission-group-refused", "alias-conflict"]).annotate({ "description": "The closed set of reasons ParameterEditPlan refuses an edit; the prose stays the refusal's message.", "identifier": "EditRefusalCode" });
 const ParameterTarget = Schema.Struct({ "elementId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "parameterId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "parameterName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "storageType": RequestedParameterStorageType, "isReadOnly": Schema.Boolean, "hasValue": Schema.Boolean, "rawValue": Schema.Union([Schema.Null, Schema.String]), "elementLabel": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "uniqueId": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "scope": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "displayValue": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "description": "Mutation evidence for one native parameter: what a reviewer saw, and what a writer compares against a fresh\nread before writing. Schedule cells carry one per target; parameter edits carry one as Expected.\n            ", "identifier": "ParameterTarget" });
 const ParameterValueEditResult = Schema.Struct({ "index": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "ok": Schema.Boolean, "error": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "parsedRaw": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "parsedDisplay": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "current": Schema.optionalKey(Schema.Union([Schema.Null, ParameterTarget], { mode: "oneOf" })), "code": Schema.optionalKey(Schema.Union([Schema.Null, EditRefusalCode], { mode: "oneOf" })), "causeCode": Schema.optionalKey(Schema.Union([Schema.Null, EditRefusalCode], { mode: "oneOf" })) }).annotate({ "identifier": "ParameterValueEditResult" });
 const codec = Schema.Struct({ "applied": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "dryRun": Schema.Boolean, "results": Schema.Array(ParameterValueEditResult) }).annotate({ "title": "ParameterValueApplyData" });
-namespace WireTypes {
-type RequestedParameterStorageType = "None" | "String" | "Integer" | "Double" | "ElementId";
-type EditRefusalCode = "target-evidence-stale" | "target-evidence-missing" | "target-unresolved" | "admission-group-refused" | "alias-conflict";
-type ParameterTarget = { readonly "elementId": number, readonly "parameterId": number, readonly "parameterName"?: null | string, readonly "storageType": RequestedParameterStorageType, readonly "isReadOnly": boolean, readonly "hasValue": boolean, readonly "rawValue": null | string, readonly "elementLabel"?: null | string, readonly "uniqueId"?: null | string, readonly "scope"?: null | string, readonly "displayValue"?: null | string };
-type ParameterValueEditResult = { readonly "index": number, readonly "ok": boolean, readonly "error"?: null | string, readonly "parsedRaw"?: null | string, readonly "parsedDisplay"?: null | string, readonly "current"?: null | ParameterTarget, readonly "code"?: null | EditRefusalCode, readonly "causeCode"?: null | EditRefusalCode };
-export type Root = { readonly "applied": number, readonly "dryRun": boolean, readonly "results": ReadonlyArray<ParameterValueEditResult> };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["EditRefusalCode"]: strictDecoder(EditRefusalCode),
@@ -3486,8 +3910,21 @@ export const definitions = {
   ["RequestedParameterStorageType"]: strictDecoder(RequestedParameterStorageType),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type RequestedParameterStorageType = "None" | "String" | "Integer" | "Double" | "ElementId";
+type EditRefusalCode = "target-evidence-stale" | "target-evidence-missing" | "target-unresolved" | "admission-group-refused" | "alias-conflict";
+type ParameterTarget = { readonly "elementId": number, readonly "parameterId": number, readonly "parameterName"?: null | string, readonly "storageType": RequestedParameterStorageType, readonly "isReadOnly": boolean, readonly "hasValue": boolean, readonly "rawValue": null | string, readonly "elementLabel"?: null | string, readonly "uniqueId"?: null | string, readonly "scope"?: null | string, readonly "displayValue"?: null | string };
+type ParameterValueEditResult = { readonly "index": number, readonly "ok": boolean, readonly "error"?: null | string, readonly "parsedRaw"?: null | string, readonly "parsedDisplay"?: null | string, readonly "current"?: null | ParameterTarget, readonly "code"?: null | EditRefusalCode, readonly "causeCode"?: null | EditRefusalCode };
+export type Root = { readonly "applied": number, readonly "dryRun": boolean, readonly "results": ReadonlyArray<ParameterValueEditResult> };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op62request {
+namespace Decoded {
 
 const ScheduleQueryKind = Schema.Literals(["CurrentActiveView", "ScheduleReferences", "ScheduleNames"]).annotate({ "description": "", "identifier": "ScheduleQueryKind" });
 const RevitDataResultView = Schema.Literals(["Summary", "Handles", "Rows", "Full"]).annotate({ "description": "", "identifier": "RevitDataResultView" });
@@ -3496,6 +3933,9 @@ const RevitDataOutputBudget = Schema.Struct({ "maxEntries": Schema.optionalKey(S
 const ScheduleQueryProjection = Schema.Struct({ "view": Schema.optionalKey(RevitDataResultView), "includeColumns": Schema.optionalKey(Schema.Boolean), "includeSubjects": Schema.optionalKey(Schema.Boolean), "includeCellValues": Schema.optionalKey(Schema.Boolean), "includeRows": Schema.optionalKey(Schema.Boolean), "includeOnlyRowsWithIssues": Schema.optionalKey(Schema.Boolean), "includeBindings": Schema.optionalKey(Schema.Boolean), "requiredFieldAudit": Schema.optionalKey(Schema.Union([Schema.Null, ScheduleRequiredFieldAudit], { mode: "oneOf" })) }).annotate({ "identifier": "ScheduleQueryProjection" });
 const ScheduleQuery = Schema.Struct({ "kind": Schema.optionalKey(ScheduleQueryKind), "scheduleIds": Schema.optionalKey(Schema.Union([Schema.Array(Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" }))), Schema.Null])), "scheduleUniqueIds": Schema.optionalKey(Schema.Union([Schema.Array(Schema.String), Schema.Null])), "scheduleNames": Schema.optionalKey(Schema.Union([Schema.Array(Schema.String), Schema.Null])), "projection": Schema.optionalKey(Schema.Union([Schema.Null, ScheduleQueryProjection], { mode: "oneOf" })), "budget": Schema.optionalKey(Schema.Union([Schema.Null, RevitDataOutputBudget], { mode: "oneOf" })) }).annotate({ "identifier": "ScheduleQuery" });
 const codec = Schema.Struct({ "query": Schema.optionalKey(Schema.Union([Schema.Null, ScheduleQuery], { mode: "oneOf" })) }).annotate({ "title": "ScheduleQueryRequest" });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 type ScheduleQueryKind = "CurrentActiveView" | "ScheduleReferences" | "ScheduleNames";
 type RevitDataResultView = "Summary" | "Handles" | "Rows" | "Full";
@@ -3506,11 +3946,11 @@ type ScheduleQuery = { readonly "kind"?: ScheduleQueryKind, readonly "scheduleId
 export type Root = { readonly "query"?: null | ScheduleQuery };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op62response {
+namespace Decoded {
 
 const ScheduleQueryKind = Schema.Literals(["CurrentActiveView", "ScheduleReferences", "ScheduleNames"]).annotate({ "description": "", "identifier": "ScheduleQueryKind" });
 const ScheduleCatalogSheetPlacement = Schema.Struct({ "sheetNumber": Schema.String, "sheetName": Schema.String, "isIssuedLikeSheet": Schema.Boolean, "isWorkingLikeSheet": Schema.Boolean, "sheetRole": Schema.String }).annotate({ "identifier": "ScheduleCatalogSheetPlacement" });
@@ -3537,35 +3977,6 @@ const ScheduleRenderedRow = Schema.Struct({ "rowNumber": Schema.Number.annotate(
 const ScheduleRenderedColumn = Schema.Struct({ "columnNumber": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "headerText": Schema.String, "key": Schema.String, "fieldName": Schema.String, "profileFieldIndex": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "parameter": Schema.optionalKey(Schema.Union([Schema.Null, ScheduleFieldParameterDescriptor], { mode: "oneOf" })), "isCalculated": Schema.Boolean, "isCombinedParameter": Schema.Boolean }).annotate({ "identifier": "ScheduleRenderedColumn" });
 const ScheduleRenderedScheduleEntry = Schema.Struct({ "scheduleId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "scheduleUniqueId": Schema.String, "scheduleName": Schema.String, "categoryName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "isTemplate": Schema.Boolean, "isPlacedOnSheet": Schema.Boolean, "sheetPlacements": Schema.Array(ScheduleCatalogSheetPlacement), "isEmpty": Schema.Boolean, "bindingStatus": ScheduleRenderedBindingStatus, "notApplicableRowCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "nonBindableRowCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "bindableRowCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "boundRowCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "unboundRowCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "visibleBodyRowCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "subjectCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "subjects": Schema.Array(ScheduleRenderedSubject), "columns": Schema.Array(ScheduleRenderedColumn), "rows": Schema.Array(ScheduleRenderedRow), "rowIssues": Schema.optionalKey(Schema.Union([Schema.Array(ScheduleRenderedCellIssue), Schema.Null])) }).annotate({ "identifier": "ScheduleRenderedScheduleEntry" });
 const codec = Schema.Struct({ "documentTitle": Schema.String, "queryKind": ScheduleQueryKind, "requestedScheduleCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "resolvedScheduleCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "entries": Schema.Array(ScheduleRenderedScheduleEntry), "issues": Schema.Array(RevitDataIssue), "page": Schema.optionalKey(Schema.Union([Schema.Null, RevitDataResultPage], { mode: "oneOf" })) }).annotate({ "title": "ScheduleQueryData" });
-namespace WireTypes {
-type ScheduleQueryKind = "CurrentActiveView" | "ScheduleReferences" | "ScheduleNames";
-type ScheduleCatalogSheetPlacement = { readonly "sheetNumber": string, readonly "sheetName": string, readonly "isIssuedLikeSheet": boolean, readonly "isWorkingLikeSheet": boolean, readonly "sheetRole": string };
-type ScheduleRenderedBindingStatus = "None" | "Partial" | "Complete";
-type ScheduleRenderedSubject = { readonly "subjectId": number, readonly "subjectUniqueId": string, readonly "kind": string, readonly "categoryName"?: null | string, readonly "displayName": string, readonly "familyId"?: number | null, readonly "familyName"?: null | string, readonly "familyTypeName"?: null | string };
-type ParameterIdentityKind = "SharedGuid" | "BuiltInParameter" | "ParameterElement" | "NameFallback";
-type ScheduleRenderedRowKind = "Data" | "GroupFooter";
-type ScheduleRenderedRowBindingKind = "None" | "SingleSubject" | "MultipleSubjects";
-type ScheduleRenderedRowSubjectResolutionStatus = "NotApplicable" | "NonBindable" | "Unbound" | "Bound";
-type ScheduleRenderedRowSubjectResolutionReason = "None" | "NonDataRow" | "NoVisibleSubjects" | "NoComparableValues" | "HeuristicMismatch";
-type ScheduleRenderedCellIssue = { readonly "rowNumber": number, readonly "columnNumber": number, readonly "fieldName": string, readonly "headerText": string, readonly "code": string, readonly "message": string };
-type RequestedParameterStorageType = "None" | "String" | "Integer" | "Double" | "ElementId";
-type ScheduleCellBindingBlocker = "None" | "CalculatedField" | "CombinedParameterField" | "NonStandardDisplay" | "ParameterNotFound" | "ReadOnlyParameter";
-type MeasuredDisplayUnit = { readonly "specTypeId": string, readonly "typeId"?: null | string, readonly "label"?: null | string, readonly "symbol"?: null | string, readonly "refusal"?: null | string };
-type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
-type RevitDataResultPage = { readonly "totalCount": number, readonly "returnedCount": number, readonly "isTruncated": boolean };
-type ParameterIdentity = { readonly "key": string, readonly "kind": ParameterIdentityKind, readonly "name": string, readonly "builtInParameterId"?: number | null, readonly "sharedGuid"?: null | string, readonly "parameterElementId"?: number | null };
-type ParameterTarget = { readonly "elementId": number, readonly "parameterId": number, readonly "parameterName"?: null | string, readonly "storageType": RequestedParameterStorageType, readonly "isReadOnly": boolean, readonly "hasValue": boolean, readonly "rawValue": null | string, readonly "elementLabel"?: null | string, readonly "uniqueId"?: null | string, readonly "scope"?: null | string, readonly "displayValue"?: null | string };
-type RevitDataIssue = { readonly "code": string, readonly "severity": RevitDataIssueSeverity, readonly "message": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "parameterName"?: null | string };
-type ParameterDefinitionDescriptor = { readonly "identity": ParameterIdentity, readonly "isInstance"?: boolean | null, readonly "dataTypeId"?: null | string, readonly "dataTypeLabel"?: null | string, readonly "groupTypeId"?: null | string, readonly "groupTypeLabel"?: null | string, readonly "visible"?: boolean | null, readonly "userModifiable"?: boolean | null, readonly "description"?: null | string };
-type ScheduleCellBinding = { readonly "columnNumber": number, readonly "targetElementIds": ReadonlyArray<number>, readonly "parameterName"?: null | string, readonly "parameterId"?: number | null, readonly "storageType": RequestedParameterStorageType, readonly "rawValue"?: null | string, readonly "displayValue"?: null | string, readonly "isTypeParameter": boolean, readonly "isEditable": boolean, readonly "targets": ReadonlyArray<ParameterTarget>, readonly "blocker": ScheduleCellBindingBlocker, readonly "hasMixedValues": boolean, readonly "displayUnit"?: null | MeasuredDisplayUnit };
-type ScheduleFieldParameterDescriptor = { readonly "definition"?: null | ParameterDefinitionDescriptor, readonly "fieldType"?: null | string, readonly "identity"?: null | ParameterIdentity, readonly "specTypeId"?: null | string };
-type ScheduleRenderedRow = { readonly "rowNumber": number, readonly "kind": ScheduleRenderedRowKind, readonly "values": ReadonlyArray<string>, readonly "bindingKind": ScheduleRenderedRowBindingKind, readonly "resolutionStatus": ScheduleRenderedRowSubjectResolutionStatus, readonly "resolutionReason": ScheduleRenderedRowSubjectResolutionReason, readonly "subjectIds": ReadonlyArray<number>, readonly "issues"?: ReadonlyArray<ScheduleRenderedCellIssue> | null, readonly "bindings"?: ReadonlyArray<ScheduleCellBinding> | null };
-type ScheduleRenderedColumn = { readonly "columnNumber": number, readonly "headerText": string, readonly "key": string, readonly "fieldName": string, readonly "profileFieldIndex": number, readonly "parameter"?: null | ScheduleFieldParameterDescriptor, readonly "isCalculated": boolean, readonly "isCombinedParameter": boolean };
-type ScheduleRenderedScheduleEntry = { readonly "scheduleId": number, readonly "scheduleUniqueId": string, readonly "scheduleName": string, readonly "categoryName"?: null | string, readonly "isTemplate": boolean, readonly "isPlacedOnSheet": boolean, readonly "sheetPlacements": ReadonlyArray<ScheduleCatalogSheetPlacement>, readonly "isEmpty": boolean, readonly "bindingStatus": ScheduleRenderedBindingStatus, readonly "notApplicableRowCount": number, readonly "nonBindableRowCount": number, readonly "bindableRowCount": number, readonly "boundRowCount": number, readonly "unboundRowCount": number, readonly "visibleBodyRowCount": number, readonly "subjectCount": number, readonly "subjects": ReadonlyArray<ScheduleRenderedSubject>, readonly "columns": ReadonlyArray<ScheduleRenderedColumn>, readonly "rows": ReadonlyArray<ScheduleRenderedRow>, readonly "rowIssues"?: ReadonlyArray<ScheduleRenderedCellIssue> | null };
-export type Root = { readonly "documentTitle": string, readonly "queryKind": ScheduleQueryKind, readonly "requestedScheduleCount": number, readonly "resolvedScheduleCount": number, readonly "entries": ReadonlyArray<ScheduleRenderedScheduleEntry>, readonly "issues": ReadonlyArray<RevitDataIssue>, readonly "page"?: null | RevitDataResultPage };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["MeasuredDisplayUnit"]: strictDecoder(MeasuredDisplayUnit),
@@ -3594,14 +4005,50 @@ export const definitions = {
   ["ScheduleRenderedSubject"]: strictDecoder(ScheduleRenderedSubject),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type ScheduleQueryKind = "CurrentActiveView" | "ScheduleReferences" | "ScheduleNames";
+type ScheduleCatalogSheetPlacement = { readonly "sheetNumber": string, readonly "sheetName": string, readonly "isIssuedLikeSheet": boolean, readonly "isWorkingLikeSheet": boolean, readonly "sheetRole": string };
+type ScheduleRenderedBindingStatus = "None" | "Partial" | "Complete";
+type ScheduleRenderedSubject = { readonly "subjectId": number, readonly "subjectUniqueId": string, readonly "kind": string, readonly "categoryName"?: null | string, readonly "displayName": string, readonly "familyId"?: number | null, readonly "familyName"?: null | string, readonly "familyTypeName"?: null | string };
+type ParameterIdentityKind = "SharedGuid" | "BuiltInParameter" | "ParameterElement" | "NameFallback";
+type ScheduleRenderedRowKind = "Data" | "GroupFooter";
+type ScheduleRenderedRowBindingKind = "None" | "SingleSubject" | "MultipleSubjects";
+type ScheduleRenderedRowSubjectResolutionStatus = "NotApplicable" | "NonBindable" | "Unbound" | "Bound";
+type ScheduleRenderedRowSubjectResolutionReason = "None" | "NonDataRow" | "NoVisibleSubjects" | "NoComparableValues" | "HeuristicMismatch";
+type ScheduleRenderedCellIssue = { readonly "rowNumber": number, readonly "columnNumber": number, readonly "fieldName": string, readonly "headerText": string, readonly "code": string, readonly "message": string };
+type RequestedParameterStorageType = "None" | "String" | "Integer" | "Double" | "ElementId";
+type ScheduleCellBindingBlocker = "None" | "CalculatedField" | "CombinedParameterField" | "NonStandardDisplay" | "ParameterNotFound" | "ReadOnlyParameter";
+type MeasuredDisplayUnit = { readonly "specTypeId": string, readonly "typeId"?: null | string, readonly "label"?: null | string, readonly "symbol"?: null | string, readonly "refusal"?: null | string };
+type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
+type RevitDataResultPage = { readonly "totalCount": number, readonly "returnedCount": number, readonly "isTruncated": boolean };
+type ParameterIdentity = { readonly "key": string, readonly "kind": ParameterIdentityKind, readonly "name": string, readonly "builtInParameterId"?: number | null, readonly "sharedGuid"?: null | string, readonly "parameterElementId"?: number | null };
+type ParameterTarget = { readonly "elementId": number, readonly "parameterId": number, readonly "parameterName"?: null | string, readonly "storageType": RequestedParameterStorageType, readonly "isReadOnly": boolean, readonly "hasValue": boolean, readonly "rawValue": null | string, readonly "elementLabel"?: null | string, readonly "uniqueId"?: null | string, readonly "scope"?: null | string, readonly "displayValue"?: null | string };
+type RevitDataIssue = { readonly "code": string, readonly "severity": RevitDataIssueSeverity, readonly "message": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "parameterName"?: null | string };
+type ParameterDefinitionDescriptor = { readonly "identity": ParameterIdentity, readonly "isInstance"?: boolean | null, readonly "dataTypeId"?: null | string, readonly "dataTypeLabel"?: null | string, readonly "groupTypeId"?: null | string, readonly "groupTypeLabel"?: null | string, readonly "visible"?: boolean | null, readonly "userModifiable"?: boolean | null, readonly "description"?: null | string };
+type ScheduleCellBinding = { readonly "columnNumber": number, readonly "targetElementIds": ReadonlyArray<number>, readonly "parameterName"?: null | string, readonly "parameterId"?: number | null, readonly "storageType": RequestedParameterStorageType, readonly "rawValue"?: null | string, readonly "displayValue"?: null | string, readonly "isTypeParameter": boolean, readonly "isEditable": boolean, readonly "targets": ReadonlyArray<ParameterTarget>, readonly "blocker": ScheduleCellBindingBlocker, readonly "hasMixedValues": boolean, readonly "displayUnit"?: null | MeasuredDisplayUnit };
+type ScheduleFieldParameterDescriptor = { readonly "definition"?: null | ParameterDefinitionDescriptor, readonly "fieldType"?: null | string, readonly "identity"?: null | ParameterIdentity, readonly "specTypeId"?: null | string };
+type ScheduleRenderedRow = { readonly "rowNumber": number, readonly "kind": ScheduleRenderedRowKind, readonly "values": ReadonlyArray<string>, readonly "bindingKind": ScheduleRenderedRowBindingKind, readonly "resolutionStatus": ScheduleRenderedRowSubjectResolutionStatus, readonly "resolutionReason": ScheduleRenderedRowSubjectResolutionReason, readonly "subjectIds": ReadonlyArray<number>, readonly "issues"?: ReadonlyArray<ScheduleRenderedCellIssue> | null, readonly "bindings"?: ReadonlyArray<ScheduleCellBinding> | null };
+type ScheduleRenderedColumn = { readonly "columnNumber": number, readonly "headerText": string, readonly "key": string, readonly "fieldName": string, readonly "profileFieldIndex": number, readonly "parameter"?: null | ScheduleFieldParameterDescriptor, readonly "isCalculated": boolean, readonly "isCombinedParameter": boolean };
+type ScheduleRenderedScheduleEntry = { readonly "scheduleId": number, readonly "scheduleUniqueId": string, readonly "scheduleName": string, readonly "categoryName"?: null | string, readonly "isTemplate": boolean, readonly "isPlacedOnSheet": boolean, readonly "sheetPlacements": ReadonlyArray<ScheduleCatalogSheetPlacement>, readonly "isEmpty": boolean, readonly "bindingStatus": ScheduleRenderedBindingStatus, readonly "notApplicableRowCount": number, readonly "nonBindableRowCount": number, readonly "bindableRowCount": number, readonly "boundRowCount": number, readonly "unboundRowCount": number, readonly "visibleBodyRowCount": number, readonly "subjectCount": number, readonly "subjects": ReadonlyArray<ScheduleRenderedSubject>, readonly "columns": ReadonlyArray<ScheduleRenderedColumn>, readonly "rows": ReadonlyArray<ScheduleRenderedRow>, readonly "rowIssues"?: ReadonlyArray<ScheduleRenderedCellIssue> | null };
+export type Root = { readonly "documentTitle": string, readonly "queryKind": ScheduleQueryKind, readonly "requestedScheduleCount": number, readonly "resolvedScheduleCount": number, readonly "entries": ReadonlyArray<ScheduleRenderedScheduleEntry>, readonly "issues": ReadonlyArray<RevitDataIssue>, readonly "page"?: null | RevitDataResultPage };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op63request {
+namespace Decoded {
 
 const SheetReferenceRequest = Schema.Struct({ "sheetNumbers": Schema.optionalKey(Schema.Array(Schema.String)), "sheetNumberContains": Schema.optionalKey(Schema.Array(Schema.String)), "sheetIds": Schema.optionalKey(Schema.Array(Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })))), "sheetUniqueIds": Schema.optionalKey(Schema.Array(Schema.String)), "currentActiveSheet": Schema.optionalKey(Schema.Boolean) }).annotate({ "identifier": "SheetReferenceRequest" });
 const SheetDetailView = Schema.Literals(["Summary", "Anchors", "Text"]).annotate({ "description": "", "identifier": "SheetDetailView" });
 const RevitDataOutputBudget = Schema.Struct({ "maxEntries": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(1).annotate({ "expected": "a value greater than or equal to 1" })).check(Schema.isLessThanOrEqualTo(100000).annotate({ "expected": "a value less than or equal to 100000" })), Schema.Null]).annotate({ "format": "int32" })), "maxRowsPerEntry": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(1).annotate({ "expected": "a value greater than or equal to 1" })).check(Schema.isLessThanOrEqualTo(10000).annotate({ "expected": "a value less than or equal to 10000" })), Schema.Null]).annotate({ "format": "int32" })), "maxSamplesPerEntry": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(1).annotate({ "expected": "a value greater than or equal to 1" })).check(Schema.isLessThanOrEqualTo(10000).annotate({ "expected": "a value less than or equal to 10000" })), Schema.Null]).annotate({ "format": "int32" })), "includeDiagnostics": Schema.optionalKey(Schema.Boolean) }).annotate({ "identifier": "RevitDataOutputBudget" });
 const SheetDetailProjection = Schema.Struct({ "view": Schema.optionalKey(SheetDetailView), "includeTitleBlocks": Schema.optionalKey(Schema.Boolean), "includeViewports": Schema.optionalKey(Schema.Boolean), "includeScheduleInstances": Schema.optionalKey(Schema.Boolean), "includeTextNotes": Schema.optionalKey(Schema.Boolean), "includeAnnotations": Schema.optionalKey(Schema.Boolean), "includeBoundingBoxes": Schema.optionalKey(Schema.Boolean), "includeTitleBlockParameters": Schema.optionalKey(Schema.Boolean) }).annotate({ "identifier": "SheetDetailProjection" });
 const codec = Schema.Struct({ "references": Schema.optionalKey(Schema.Union([Schema.Null, SheetReferenceRequest], { mode: "oneOf" })), "projection": Schema.optionalKey(Schema.Union([Schema.Null, SheetDetailProjection], { mode: "oneOf" })), "budget": Schema.optionalKey(Schema.Union([Schema.Null, RevitDataOutputBudget], { mode: "oneOf" })) }).annotate({ "title": "SheetDetailRequest" });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 type SheetReferenceRequest = { readonly "sheetNumbers"?: ReadonlyArray<string>, readonly "sheetNumberContains"?: ReadonlyArray<string>, readonly "sheetIds"?: ReadonlyArray<number>, readonly "sheetUniqueIds"?: ReadonlyArray<string>, readonly "currentActiveSheet"?: boolean };
 type SheetDetailView = "Summary" | "Anchors" | "Text";
@@ -3610,11 +4057,11 @@ type SheetDetailProjection = { readonly "view"?: SheetDetailView, readonly "incl
 export type Root = { readonly "references"?: null | SheetReferenceRequest, readonly "projection"?: null | SheetDetailProjection, readonly "budget"?: null | RevitDataOutputBudget };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op63response {
+namespace Decoded {
 
 const RevitAgentContextHandleKind = Schema.Literals(["Document", "View", "Sheet", "Element", "Schedule", "Category", "Family"]).annotate({ "description": "", "identifier": "RevitAgentContextHandleKind" });
 const ProjectBrowserSection = Schema.Literals(["Views", "Sheets", "Schedules"]).annotate({ "description": "", "identifier": "ProjectBrowserSection" });
@@ -3632,26 +4079,6 @@ const SheetSummary = Schema.Struct({ "handle": RevitAgentContextHandle, "sheetNu
 const SheetAnchor = Schema.Struct({ "kind": SheetAnchorKind, "handle": RevitAgentContextHandle, "label": Schema.String, "bounds": Schema.optionalKey(Schema.Union([Schema.Null, SheetBounds], { mode: "oneOf" })), "targetHandle": Schema.optionalKey(Schema.Union([Schema.Null, RevitAgentContextHandle], { mode: "oneOf" })), "text": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "parameters": Schema.Record(Schema.String, Schema.String), "provenance": Schema.Array(RevitAgentContextProvenance) }).annotate({ "identifier": "SheetAnchor" });
 const SheetDetailEntry = Schema.Struct({ "summary": SheetSummary, "anchors": Schema.Array(SheetAnchor), "issues": Schema.Array(RevitDataIssue) }).annotate({ "identifier": "SheetDetailEntry" });
 const codec = Schema.Struct({ "sheets": Schema.Array(SheetDetailEntry), "page": RevitDataResultPage, "issues": Schema.Array(RevitDataIssue) }).annotate({ "title": "SheetDetailData" });
-namespace WireTypes {
-type RevitAgentContextHandleKind = "Document" | "View" | "Sheet" | "Element" | "Schedule" | "Category" | "Family";
-type ProjectBrowserSection = "Views" | "Sheets" | "Schedules";
-type ProjectBrowserPathSegment = { readonly "parameterId"?: number | null, readonly "parameterName"?: null | string, readonly "folderName": string };
-type SheetAnchorKind = "TitleBlock" | "Viewport" | "ScheduleInstance" | "TextNote" | "GenericAnnotation" | "RasterImage" | "ImportInstance";
-type SheetBounds = { readonly "minX": number, readonly "minY": number, readonly "maxX": number, readonly "maxY": number };
-type RevitAgentContextProvenanceKind = "ActiveDocument" | "OpenDocument" | "ActiveView" | "CurrentSelection" | "ExplicitReference" | "SheetPlacement" | "BrowserIndex" | "VisibleInActiveView" | "VisibleInReferencedView" | "PrintedContext" | "SearchMatch";
-type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
-type RevitDataResultPage = { readonly "totalCount": number, readonly "returnedCount": number, readonly "isTruncated": boolean };
-type RevitAgentContextHandle = { readonly "kind": RevitAgentContextHandleKind, readonly "documentKey": string, readonly "elementId"?: number | null, readonly "uniqueId"?: null | string, readonly "label": string, readonly "categoryName"?: null | string };
-type ProjectBrowserPath = { readonly "section": ProjectBrowserSection, readonly "organizationName"?: null | string, readonly "pathLabel": string, readonly "segments": ReadonlyArray<ProjectBrowserPathSegment> };
-type RevitAgentContextProvenance = { readonly "kind": RevitAgentContextProvenanceKind, readonly "description": string };
-type RevitDataIssue = { readonly "code": string, readonly "severity": RevitDataIssueSeverity, readonly "message": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "parameterName"?: null | string };
-type SheetSummary = { readonly "handle": RevitAgentContextHandle, readonly "sheetNumber": string, readonly "sheetName": string, readonly "titleBlockCount": number, readonly "viewportCount": number, readonly "scheduleInstanceCount": number, readonly "textNoteCount": number, readonly "genericAnnotationCount": number, readonly "rasterImageCount": number, readonly "importInstanceCount": number, readonly "browserPaths": ReadonlyArray<ProjectBrowserPath> };
-type SheetAnchor = { readonly "kind": SheetAnchorKind, readonly "handle": RevitAgentContextHandle, readonly "label": string, readonly "bounds"?: null | SheetBounds, readonly "targetHandle"?: null | RevitAgentContextHandle, readonly "text"?: null | string, readonly "parameters": { readonly [x: string]: string }, readonly "provenance": ReadonlyArray<RevitAgentContextProvenance> };
-type SheetDetailEntry = { readonly "summary": SheetSummary, readonly "anchors": ReadonlyArray<SheetAnchor>, readonly "issues": ReadonlyArray<RevitDataIssue> };
-export type Root = { readonly "sheets": ReadonlyArray<SheetDetailEntry>, readonly "page": RevitDataResultPage, readonly "issues": ReadonlyArray<RevitDataIssue> };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["ProjectBrowserPath"]: strictDecoder(ProjectBrowserPath),
@@ -3671,13 +4098,40 @@ export const definitions = {
   ["SheetSummary"]: strictDecoder(SheetSummary),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type RevitAgentContextHandleKind = "Document" | "View" | "Sheet" | "Element" | "Schedule" | "Category" | "Family";
+type ProjectBrowserSection = "Views" | "Sheets" | "Schedules";
+type ProjectBrowserPathSegment = { readonly "parameterId"?: number | null, readonly "parameterName"?: null | string, readonly "folderName": string };
+type SheetAnchorKind = "TitleBlock" | "Viewport" | "ScheduleInstance" | "TextNote" | "GenericAnnotation" | "RasterImage" | "ImportInstance";
+type SheetBounds = { readonly "minX": number, readonly "minY": number, readonly "maxX": number, readonly "maxY": number };
+type RevitAgentContextProvenanceKind = "ActiveDocument" | "OpenDocument" | "ActiveView" | "CurrentSelection" | "ExplicitReference" | "SheetPlacement" | "BrowserIndex" | "VisibleInActiveView" | "VisibleInReferencedView" | "PrintedContext" | "SearchMatch";
+type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
+type RevitDataResultPage = { readonly "totalCount": number, readonly "returnedCount": number, readonly "isTruncated": boolean };
+type RevitAgentContextHandle = { readonly "kind": RevitAgentContextHandleKind, readonly "documentKey": string, readonly "elementId"?: number | null, readonly "uniqueId"?: null | string, readonly "label": string, readonly "categoryName"?: null | string };
+type ProjectBrowserPath = { readonly "section": ProjectBrowserSection, readonly "organizationName"?: null | string, readonly "pathLabel": string, readonly "segments": ReadonlyArray<ProjectBrowserPathSegment> };
+type RevitAgentContextProvenance = { readonly "kind": RevitAgentContextProvenanceKind, readonly "description": string };
+type RevitDataIssue = { readonly "code": string, readonly "severity": RevitDataIssueSeverity, readonly "message": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "parameterName"?: null | string };
+type SheetSummary = { readonly "handle": RevitAgentContextHandle, readonly "sheetNumber": string, readonly "sheetName": string, readonly "titleBlockCount": number, readonly "viewportCount": number, readonly "scheduleInstanceCount": number, readonly "textNoteCount": number, readonly "genericAnnotationCount": number, readonly "rasterImageCount": number, readonly "importInstanceCount": number, readonly "browserPaths": ReadonlyArray<ProjectBrowserPath> };
+type SheetAnchor = { readonly "kind": SheetAnchorKind, readonly "handle": RevitAgentContextHandle, readonly "label": string, readonly "bounds"?: null | SheetBounds, readonly "targetHandle"?: null | RevitAgentContextHandle, readonly "text"?: null | string, readonly "parameters": { readonly [x: string]: string }, readonly "provenance": ReadonlyArray<RevitAgentContextProvenance> };
+type SheetDetailEntry = { readonly "summary": SheetSummary, readonly "anchors": ReadonlyArray<SheetAnchor>, readonly "issues": ReadonlyArray<RevitDataIssue> };
+export type Root = { readonly "sheets": ReadonlyArray<SheetDetailEntry>, readonly "page": RevitDataResultPage, readonly "issues": ReadonlyArray<RevitDataIssue> };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op64request {
+namespace Decoded {
 
 const Placement = Schema.Struct({ "hostDocumentKey": Schema.String, "linkUniqueId": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "description": "Stable source placement. Numeric Revit ids are payload, never exclusion identity.", "identifier": "Placement" });
 const SubjectExclusion = Schema.Struct({ "documentKey": Schema.String, "placement": Placement, "subjectUniqueId": Schema.String }).annotate({ "identifier": "SubjectExclusion" });
 const FilterRequest = Schema.Struct({ "sources": Schema.optionalKey(Schema.Union([Schema.Array(Schema.String), Schema.Null])), "categories": Schema.optionalKey(Schema.Union([Schema.Array(Schema.String), Schema.Null])), "kinds": Schema.optionalKey(Schema.Union([Schema.Array(Schema.String), Schema.Null])), "layers": Schema.optionalKey(Schema.Union([Schema.Array(Schema.String), Schema.Null])), "exclusions": Schema.optionalKey(Schema.Union([Schema.Array(SubjectExclusion), Schema.Null])) }).annotate({ "description": "The filter as the wire spells it: enum names as strings, every axis optional.", "identifier": "FilterRequest" });
 const codec = Schema.Struct({ "box": Schema.Array(Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" }))), "filter": Schema.optionalKey(Schema.Union([Schema.Null, FilterRequest], { mode: "oneOf" })) }).annotate({ "title": "CensusRequest", "description": "Count rows overlapping Box, six ordered host-internal-feet bounds, under Filter." });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 type Placement = { readonly "hostDocumentKey": string, readonly "linkUniqueId"?: null | string };
 type SubjectExclusion = { readonly "documentKey": string, readonly "placement": Placement, readonly "subjectUniqueId": string };
@@ -3685,11 +4139,11 @@ type FilterRequest = { readonly "sources"?: ReadonlyArray<string> | null, readon
 export type Root = { readonly "box": ReadonlyArray<number>, readonly "filter"?: null | FilterRequest };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op64response {
+namespace Decoded {
 
 const SourceKind = Schema.Literals(["Host", "RevitLink", "IfcLink"]).annotate({ "description": "Which document a partition reads. One partition per source.", "identifier": "SourceKind" });
 const PrimKind = Schema.Literals(["Solid", "Mesh", "Curve2D", "Element"]).annotate({ "description": "What a triangle came from. Curve2D is a DWG 2D layer raised into a vertical\nribbon; it is never an obstructor unless a filter names it.\n            ", "identifier": "PrimKind" });
@@ -3717,36 +4171,6 @@ const SourceObservation = Schema.Struct({ "placement": Placement, "documentKey":
 const CensusTop = Schema.Struct({ "handle": Handle, "triangles": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })) }).annotate({ "identifier": "CensusTop" });
 const SpatialEvidence = Schema.Struct({ "documentKey": Schema.String, "revision": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })), Schema.Null]).annotate({ "format": "int64" })), "observedAt": Schema.String.annotate({ "format": "date-time" }).check(Schema.makeFilter((value) => typeof value !== "string" || validDateTime(value))), "frame": Schema.String, "resolved": Resolved, "sources": Schema.Array(SourceObservation), "acquisition": Schema.Array(Acquisition), "coverage": Schema.Array(CoverageGap), "geometryCost": Schema.optionalKey(Schema.Union([Schema.Null, GeometryCost], { mode: "oneOf" })) }).annotate({ "description": "Observed basis and acquisition, never a claim that a retained answer is current.", "identifier": "SpatialEvidence" });
 const codec = Schema.Struct({ "evidence": SpatialEvidence, "searched": Searched, "buckets": Schema.Array(CensusBucket), "top": Schema.Array(CensusTop), "ms": Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })) }).annotate({ "title": "CensusAnswer", "description": "Stamped counts of matching rows by source kind, category, primitive kind and layer, plus the ten largest rows." });
-namespace WireTypes {
-type SourceKind = "Host" | "RevitLink" | "IfcLink";
-type PrimKind = "Solid" | "Mesh" | "Curve2D" | "Element";
-type Placement = { readonly "hostDocumentKey": string, readonly "linkUniqueId"?: null | string };
-type Aabb = { readonly "minX": number, readonly "minY": number, readonly "minZ": number, readonly "maxX": number, readonly "maxY": number, readonly "maxZ": number };
-type RevisionKind = "observed" | "unavailable";
-type RevisionUnavailableReason = "not-recorded" | "source-unread";
-type SceneSourceState = "loaded" | "unloaded" | "unavailable";
-type AcquisitionOutcome = "acquired" | "empty" | "partial" | "failed" | "deferred" | "approximate" | "outside-scope";
-type AcquisitionReason = "none" | "geometry-read" | "triangulate" | "budget" | "unsupported";
-type CoverageReason = "source-unread" | "partial-geometry" | "failed-geometry" | "deferred" | "approximate";
-type GeometrySourceCost = { readonly "source": string, readonly "linkInstanceId"?: number | null, readonly "count": number, readonly "loadOnlyCount": number, readonly "cost": number };
-type Searched = { readonly "docs": number, readonly "categories": number, readonly "candidates": number, readonly "examined": number, readonly "skipped": number };
-type Extrusion = { readonly "maxHeightFt": number, readonly "reasons": ReadonlyArray<string> };
-type HeightRole = "None" | "Floor" | "Overhead" | "ByGeometry";
-type CensusBucket = { readonly "source": SourceKind, readonly "category": string, readonly "kind": PrimKind, readonly "elements": number, readonly "triangles": number, readonly "layer"?: null | string };
-type SubjectExclusion = { readonly "documentKey": string, readonly "placement": Placement, readonly "subjectUniqueId": string };
-type SourceRevision = { readonly "kind": RevisionKind, readonly "epoch"?: number | null, readonly "version"?: null | string, readonly "reason"?: null | RevisionUnavailableReason };
-type Acquisition = { readonly "placement": Placement, readonly "subjectUniqueId": string, readonly "outcome": AcquisitionOutcome, readonly "reason": AcquisitionReason };
-type CoverageGap = { readonly "placement": Placement, readonly "subjectUniqueId"?: null | string, readonly "reason": CoverageReason, readonly "count": number };
-type GeometryCost = { readonly "plannedCount": number, readonly "plannedCost": number, readonly "perSource": ReadonlyArray<GeometrySourceCost>, readonly "newlyTessellatedCount": number, readonly "cumulativeTessellatedCount": number };
-type Handle = { readonly "documentKey": string, readonly "elementId": number, readonly "uniqueId": string, readonly "linkInstanceId"?: number | null, readonly "category": string, readonly "kind": PrimKind, readonly "layer"?: null | string, readonly "extrusion"?: null | Extrusion, readonly "heightRole": HeightRole, readonly "linkInstanceUniqueId"?: null | string };
-type Resolved = { readonly "sources": ReadonlyArray<SourceKind>, readonly "categories": ReadonlyArray<string>, readonly "kinds": ReadonlyArray<PrimKind>, readonly "layers": ReadonlyArray<string>, readonly "exclusions": ReadonlyArray<SubjectExclusion>, readonly "scope"?: null | Aabb, readonly "reach"?: ReadonlyArray<ReadonlyArray<number>> | null, readonly "representation": string, readonly "acquisitionRequested": boolean };
-type SourceObservation = { readonly "placement": Placement, readonly "documentKey"?: null | string, readonly "revision": SourceRevision, readonly "toHost": ReadonlyArray<number>, readonly "availability": SceneSourceState };
-type CensusTop = { readonly "handle": Handle, readonly "triangles": number };
-type SpatialEvidence = { readonly "documentKey": string, readonly "revision"?: number | null, readonly "observedAt": string, readonly "frame": string, readonly "resolved": Resolved, readonly "sources": ReadonlyArray<SourceObservation>, readonly "acquisition": ReadonlyArray<Acquisition>, readonly "coverage": ReadonlyArray<CoverageGap>, readonly "geometryCost"?: null | GeometryCost };
-export type Root = { readonly "evidence": SpatialEvidence, readonly "searched": Searched, readonly "buckets": ReadonlyArray<CensusBucket>, readonly "top": ReadonlyArray<CensusTop>, readonly "ms": number };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["Aabb"]: strictDecoder(Aabb),
@@ -3776,8 +4200,42 @@ export const definitions = {
   ["SubjectExclusion"]: strictDecoder(SubjectExclusion),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type SourceKind = "Host" | "RevitLink" | "IfcLink";
+type PrimKind = "Solid" | "Mesh" | "Curve2D" | "Element";
+type Placement = { readonly "hostDocumentKey": string, readonly "linkUniqueId"?: null | string };
+type Aabb = { readonly "minX": number, readonly "minY": number, readonly "minZ": number, readonly "maxX": number, readonly "maxY": number, readonly "maxZ": number };
+type RevisionKind = "observed" | "unavailable";
+type RevisionUnavailableReason = "not-recorded" | "source-unread";
+type SceneSourceState = "loaded" | "unloaded" | "unavailable";
+type AcquisitionOutcome = "acquired" | "empty" | "partial" | "failed" | "deferred" | "approximate" | "outside-scope";
+type AcquisitionReason = "none" | "geometry-read" | "triangulate" | "budget" | "unsupported";
+type CoverageReason = "source-unread" | "partial-geometry" | "failed-geometry" | "deferred" | "approximate";
+type GeometrySourceCost = { readonly "source": string, readonly "linkInstanceId"?: number | null, readonly "count": number, readonly "loadOnlyCount": number, readonly "cost": number };
+type Searched = { readonly "docs": number, readonly "categories": number, readonly "candidates": number, readonly "examined": number, readonly "skipped": number };
+type Extrusion = { readonly "maxHeightFt": number, readonly "reasons": ReadonlyArray<string> };
+type HeightRole = "None" | "Floor" | "Overhead" | "ByGeometry";
+type CensusBucket = { readonly "source": SourceKind, readonly "category": string, readonly "kind": PrimKind, readonly "elements": number, readonly "triangles": number, readonly "layer"?: null | string };
+type SubjectExclusion = { readonly "documentKey": string, readonly "placement": Placement, readonly "subjectUniqueId": string };
+type SourceRevision = { readonly "kind": RevisionKind, readonly "epoch"?: number | null, readonly "version"?: null | string, readonly "reason"?: null | RevisionUnavailableReason };
+type Acquisition = { readonly "placement": Placement, readonly "subjectUniqueId": string, readonly "outcome": AcquisitionOutcome, readonly "reason": AcquisitionReason };
+type CoverageGap = { readonly "placement": Placement, readonly "subjectUniqueId"?: null | string, readonly "reason": CoverageReason, readonly "count": number };
+type GeometryCost = { readonly "plannedCount": number, readonly "plannedCost": number, readonly "perSource": ReadonlyArray<GeometrySourceCost>, readonly "newlyTessellatedCount": number, readonly "cumulativeTessellatedCount": number };
+type Handle = { readonly "documentKey": string, readonly "elementId": number, readonly "uniqueId": string, readonly "linkInstanceId"?: number | null, readonly "category": string, readonly "kind": PrimKind, readonly "layer"?: null | string, readonly "extrusion"?: null | Extrusion, readonly "heightRole": HeightRole, readonly "linkInstanceUniqueId"?: null | string };
+type Resolved = { readonly "sources": ReadonlyArray<SourceKind>, readonly "categories": ReadonlyArray<string>, readonly "kinds": ReadonlyArray<PrimKind>, readonly "layers": ReadonlyArray<string>, readonly "exclusions": ReadonlyArray<SubjectExclusion>, readonly "scope"?: null | Aabb, readonly "reach"?: ReadonlyArray<ReadonlyArray<number>> | null, readonly "representation": string, readonly "acquisitionRequested": boolean };
+type SourceObservation = { readonly "placement": Placement, readonly "documentKey"?: null | string, readonly "revision": SourceRevision, readonly "toHost": ReadonlyArray<number>, readonly "availability": SceneSourceState };
+type CensusTop = { readonly "handle": Handle, readonly "triangles": number };
+type SpatialEvidence = { readonly "documentKey": string, readonly "revision"?: number | null, readonly "observedAt": string, readonly "frame": string, readonly "resolved": Resolved, readonly "sources": ReadonlyArray<SourceObservation>, readonly "acquisition": ReadonlyArray<Acquisition>, readonly "coverage": ReadonlyArray<CoverageGap>, readonly "geometryCost"?: null | GeometryCost };
+export type Root = { readonly "evidence": SpatialEvidence, readonly "searched": Searched, readonly "buckets": ReadonlyArray<CensusBucket>, readonly "top": ReadonlyArray<CensusTop>, readonly "ms": number };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op65request {
+namespace Decoded {
 
 const Region = Schema.Struct({ "kind": Schema.String, "uniqueId": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "box": Schema.optionalKey(Schema.Union([Schema.Array(Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" }))), Schema.Null])) }).annotate({ "description": "A room or space UniqueId, or a box in host internal feet.", "identifier": "Region" });
 const Placement = Schema.Struct({ "hostDocumentKey": Schema.String, "linkUniqueId": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "description": "Stable source placement. Numeric Revit ids are payload, never exclusion identity.", "identifier": "Placement" });
@@ -3785,6 +4243,9 @@ const ProbePurpose = Schema.Literals(["Obstructions", "RoomHeights"]).annotate({
 const SubjectExclusion = Schema.Struct({ "documentKey": Schema.String, "placement": Placement, "subjectUniqueId": Schema.String }).annotate({ "identifier": "SubjectExclusion" });
 const FilterRequest = Schema.Struct({ "sources": Schema.optionalKey(Schema.Union([Schema.Array(Schema.String), Schema.Null])), "categories": Schema.optionalKey(Schema.Union([Schema.Array(Schema.String), Schema.Null])), "kinds": Schema.optionalKey(Schema.Union([Schema.Array(Schema.String), Schema.Null])), "layers": Schema.optionalKey(Schema.Union([Schema.Array(Schema.String), Schema.Null])), "exclusions": Schema.optionalKey(Schema.Union([Schema.Array(SubjectExclusion), Schema.Null])) }).annotate({ "description": "The filter as the wire spells it: enum names as strings, every axis optional.", "identifier": "FilterRequest" });
 const codec = Schema.Struct({ "region": Region, "at": Schema.Array(Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" }))), "filter": Schema.optionalKey(Schema.Union([Schema.Null, FilterRequest], { mode: "oneOf" })), "maxDistanceFt": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "purpose": Schema.optionalKey(Schema.Union([Schema.Null, ProbePurpose], { mode: "oneOf" })) }).annotate({ "title": "ProbeRequest", "description": "Probe At (three host-internal-feet coordinates). MaxDistanceFt defaults to 200.\nPurpose defaults to Obstructions; RoomHeights applies architectural height-role predicates." });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 type Region = { readonly "kind": string, readonly "uniqueId"?: null | string, readonly "box"?: ReadonlyArray<number> | null };
 type Placement = { readonly "hostDocumentKey": string, readonly "linkUniqueId"?: null | string };
@@ -3794,11 +4255,11 @@ type FilterRequest = { readonly "sources"?: ReadonlyArray<string> | null, readon
 export type Root = { readonly "region": Region, readonly "at": ReadonlyArray<number>, readonly "filter"?: null | FilterRequest, readonly "maxDistanceFt"?: null | number, readonly "purpose"?: null | ProbePurpose };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op65response {
+namespace Decoded {
 
 const SourceKind = Schema.Literals(["Host", "RevitLink", "IfcLink"]).annotate({ "description": "Which document a partition reads. One partition per source.", "identifier": "SourceKind" });
 const PrimKind = Schema.Literals(["Solid", "Mesh", "Curve2D", "Element"]).annotate({ "description": "What a triangle came from. Curve2D is a DWG 2D layer raised into a vertical\nribbon; it is never an obstructor unless a filter names it.\n            ", "identifier": "PrimKind" });
@@ -3826,36 +4287,6 @@ const SourceObservation = Schema.Struct({ "placement": Placement, "documentKey":
 const ProbeHit = Schema.Struct({ "handle": Handle, "distanceFt": Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })), "z": Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })) }).annotate({ "description": "What a vertical probe met, and how far away it was.", "identifier": "ProbeHit" });
 const SpatialEvidence = Schema.Struct({ "documentKey": Schema.String, "revision": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })), Schema.Null]).annotate({ "format": "int64" })), "observedAt": Schema.String.annotate({ "format": "date-time" }).check(Schema.makeFilter((value) => typeof value !== "string" || validDateTime(value))), "frame": Schema.String, "resolved": Resolved, "sources": Schema.Array(SourceObservation), "acquisition": Schema.Array(Acquisition), "coverage": Schema.Array(CoverageGap), "geometryCost": Schema.optionalKey(Schema.Union([Schema.Null, GeometryCost], { mode: "oneOf" })) }).annotate({ "description": "Observed basis and acquisition, never a claim that a retained answer is current.", "identifier": "SpatialEvidence" });
 const codec = Schema.Struct({ "evidence": SpatialEvidence, "searched": Searched, "floor": Schema.optionalKey(Schema.Union([Schema.Null, ProbeHit], { mode: "oneOf" })), "ceiling": Schema.optionalKey(Schema.Union([Schema.Null, ProbeHit], { mode: "oneOf" })), "maxDistanceFt": Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })), "ms": Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })), "purpose": ProbePurpose }).annotate({ "title": "ProbeAnswer", "description": "What is under and over one point. Floor and Ceiling are null when\nnothing was hit inside the search distance, which is the honest answer for a point outside the\nbuilding rather than a fabricated elevation.\n            " });
-namespace WireTypes {
-type SourceKind = "Host" | "RevitLink" | "IfcLink";
-type PrimKind = "Solid" | "Mesh" | "Curve2D" | "Element";
-type Placement = { readonly "hostDocumentKey": string, readonly "linkUniqueId"?: null | string };
-type Aabb = { readonly "minX": number, readonly "minY": number, readonly "minZ": number, readonly "maxX": number, readonly "maxY": number, readonly "maxZ": number };
-type RevisionKind = "observed" | "unavailable";
-type RevisionUnavailableReason = "not-recorded" | "source-unread";
-type SceneSourceState = "loaded" | "unloaded" | "unavailable";
-type AcquisitionOutcome = "acquired" | "empty" | "partial" | "failed" | "deferred" | "approximate" | "outside-scope";
-type AcquisitionReason = "none" | "geometry-read" | "triangulate" | "budget" | "unsupported";
-type CoverageReason = "source-unread" | "partial-geometry" | "failed-geometry" | "deferred" | "approximate";
-type GeometrySourceCost = { readonly "source": string, readonly "linkInstanceId"?: number | null, readonly "count": number, readonly "loadOnlyCount": number, readonly "cost": number };
-type Searched = { readonly "docs": number, readonly "categories": number, readonly "candidates": number, readonly "examined": number, readonly "skipped": number };
-type Extrusion = { readonly "maxHeightFt": number, readonly "reasons": ReadonlyArray<string> };
-type HeightRole = "None" | "Floor" | "Overhead" | "ByGeometry";
-type ProbePurpose = "Obstructions" | "RoomHeights";
-type SubjectExclusion = { readonly "documentKey": string, readonly "placement": Placement, readonly "subjectUniqueId": string };
-type SourceRevision = { readonly "kind": RevisionKind, readonly "epoch"?: number | null, readonly "version"?: null | string, readonly "reason"?: null | RevisionUnavailableReason };
-type Acquisition = { readonly "placement": Placement, readonly "subjectUniqueId": string, readonly "outcome": AcquisitionOutcome, readonly "reason": AcquisitionReason };
-type CoverageGap = { readonly "placement": Placement, readonly "subjectUniqueId"?: null | string, readonly "reason": CoverageReason, readonly "count": number };
-type GeometryCost = { readonly "plannedCount": number, readonly "plannedCost": number, readonly "perSource": ReadonlyArray<GeometrySourceCost>, readonly "newlyTessellatedCount": number, readonly "cumulativeTessellatedCount": number };
-type Handle = { readonly "documentKey": string, readonly "elementId": number, readonly "uniqueId": string, readonly "linkInstanceId"?: number | null, readonly "category": string, readonly "kind": PrimKind, readonly "layer"?: null | string, readonly "extrusion"?: null | Extrusion, readonly "heightRole": HeightRole, readonly "linkInstanceUniqueId"?: null | string };
-type Resolved = { readonly "sources": ReadonlyArray<SourceKind>, readonly "categories": ReadonlyArray<string>, readonly "kinds": ReadonlyArray<PrimKind>, readonly "layers": ReadonlyArray<string>, readonly "exclusions": ReadonlyArray<SubjectExclusion>, readonly "scope"?: null | Aabb, readonly "reach"?: ReadonlyArray<ReadonlyArray<number>> | null, readonly "representation": string, readonly "acquisitionRequested": boolean };
-type SourceObservation = { readonly "placement": Placement, readonly "documentKey"?: null | string, readonly "revision": SourceRevision, readonly "toHost": ReadonlyArray<number>, readonly "availability": SceneSourceState };
-type ProbeHit = { readonly "handle": Handle, readonly "distanceFt": number, readonly "z": number };
-type SpatialEvidence = { readonly "documentKey": string, readonly "revision"?: number | null, readonly "observedAt": string, readonly "frame": string, readonly "resolved": Resolved, readonly "sources": ReadonlyArray<SourceObservation>, readonly "acquisition": ReadonlyArray<Acquisition>, readonly "coverage": ReadonlyArray<CoverageGap>, readonly "geometryCost"?: null | GeometryCost };
-export type Root = { readonly "evidence": SpatialEvidence, readonly "searched": Searched, readonly "floor"?: null | ProbeHit, readonly "ceiling"?: null | ProbeHit, readonly "maxDistanceFt": number, readonly "ms": number, readonly "purpose": ProbePurpose };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["Aabb"]: strictDecoder(Aabb),
@@ -3885,14 +4316,51 @@ export const definitions = {
   ["SubjectExclusion"]: strictDecoder(SubjectExclusion),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type SourceKind = "Host" | "RevitLink" | "IfcLink";
+type PrimKind = "Solid" | "Mesh" | "Curve2D" | "Element";
+type Placement = { readonly "hostDocumentKey": string, readonly "linkUniqueId"?: null | string };
+type Aabb = { readonly "minX": number, readonly "minY": number, readonly "minZ": number, readonly "maxX": number, readonly "maxY": number, readonly "maxZ": number };
+type RevisionKind = "observed" | "unavailable";
+type RevisionUnavailableReason = "not-recorded" | "source-unread";
+type SceneSourceState = "loaded" | "unloaded" | "unavailable";
+type AcquisitionOutcome = "acquired" | "empty" | "partial" | "failed" | "deferred" | "approximate" | "outside-scope";
+type AcquisitionReason = "none" | "geometry-read" | "triangulate" | "budget" | "unsupported";
+type CoverageReason = "source-unread" | "partial-geometry" | "failed-geometry" | "deferred" | "approximate";
+type GeometrySourceCost = { readonly "source": string, readonly "linkInstanceId"?: number | null, readonly "count": number, readonly "loadOnlyCount": number, readonly "cost": number };
+type Searched = { readonly "docs": number, readonly "categories": number, readonly "candidates": number, readonly "examined": number, readonly "skipped": number };
+type Extrusion = { readonly "maxHeightFt": number, readonly "reasons": ReadonlyArray<string> };
+type HeightRole = "None" | "Floor" | "Overhead" | "ByGeometry";
+type ProbePurpose = "Obstructions" | "RoomHeights";
+type SubjectExclusion = { readonly "documentKey": string, readonly "placement": Placement, readonly "subjectUniqueId": string };
+type SourceRevision = { readonly "kind": RevisionKind, readonly "epoch"?: number | null, readonly "version"?: null | string, readonly "reason"?: null | RevisionUnavailableReason };
+type Acquisition = { readonly "placement": Placement, readonly "subjectUniqueId": string, readonly "outcome": AcquisitionOutcome, readonly "reason": AcquisitionReason };
+type CoverageGap = { readonly "placement": Placement, readonly "subjectUniqueId"?: null | string, readonly "reason": CoverageReason, readonly "count": number };
+type GeometryCost = { readonly "plannedCount": number, readonly "plannedCost": number, readonly "perSource": ReadonlyArray<GeometrySourceCost>, readonly "newlyTessellatedCount": number, readonly "cumulativeTessellatedCount": number };
+type Handle = { readonly "documentKey": string, readonly "elementId": number, readonly "uniqueId": string, readonly "linkInstanceId"?: number | null, readonly "category": string, readonly "kind": PrimKind, readonly "layer"?: null | string, readonly "extrusion"?: null | Extrusion, readonly "heightRole": HeightRole, readonly "linkInstanceUniqueId"?: null | string };
+type Resolved = { readonly "sources": ReadonlyArray<SourceKind>, readonly "categories": ReadonlyArray<string>, readonly "kinds": ReadonlyArray<PrimKind>, readonly "layers": ReadonlyArray<string>, readonly "exclusions": ReadonlyArray<SubjectExclusion>, readonly "scope"?: null | Aabb, readonly "reach"?: ReadonlyArray<ReadonlyArray<number>> | null, readonly "representation": string, readonly "acquisitionRequested": boolean };
+type SourceObservation = { readonly "placement": Placement, readonly "documentKey"?: null | string, readonly "revision": SourceRevision, readonly "toHost": ReadonlyArray<number>, readonly "availability": SceneSourceState };
+type ProbeHit = { readonly "handle": Handle, readonly "distanceFt": number, readonly "z": number };
+type SpatialEvidence = { readonly "documentKey": string, readonly "revision"?: number | null, readonly "observedAt": string, readonly "frame": string, readonly "resolved": Resolved, readonly "sources": ReadonlyArray<SourceObservation>, readonly "acquisition": ReadonlyArray<Acquisition>, readonly "coverage": ReadonlyArray<CoverageGap>, readonly "geometryCost"?: null | GeometryCost };
+export type Root = { readonly "evidence": SpatialEvidence, readonly "searched": Searched, readonly "floor"?: null | ProbeHit, readonly "ceiling"?: null | ProbeHit, readonly "maxDistanceFt": number, readonly "ms": number, readonly "purpose": ProbePurpose };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op66request {
+namespace Decoded {
 
 const Region = Schema.Struct({ "kind": Schema.String, "uniqueId": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "box": Schema.optionalKey(Schema.Union([Schema.Array(Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" }))), Schema.Null])) }).annotate({ "description": "A room or space UniqueId, or a box in host internal feet.", "identifier": "Region" });
 const Placement = Schema.Struct({ "hostDocumentKey": Schema.String, "linkUniqueId": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "description": "Stable source placement. Numeric Revit ids are payload, never exclusion identity.", "identifier": "Placement" });
 const SubjectExclusion = Schema.Struct({ "documentKey": Schema.String, "placement": Placement, "subjectUniqueId": Schema.String }).annotate({ "identifier": "SubjectExclusion" });
 const FilterRequest = Schema.Struct({ "sources": Schema.optionalKey(Schema.Union([Schema.Array(Schema.String), Schema.Null])), "categories": Schema.optionalKey(Schema.Union([Schema.Array(Schema.String), Schema.Null])), "kinds": Schema.optionalKey(Schema.Union([Schema.Array(Schema.String), Schema.Null])), "layers": Schema.optionalKey(Schema.Union([Schema.Array(Schema.String), Schema.Null])), "exclusions": Schema.optionalKey(Schema.Union([Schema.Array(SubjectExclusion), Schema.Null])) }).annotate({ "description": "The filter as the wire spells it: enum names as strings, every axis optional.", "identifier": "FilterRequest" });
 const codec = Schema.Struct({ "region": Region, "filter": Schema.optionalKey(Schema.Union([Schema.Null, FilterRequest], { mode: "oneOf" })) }).annotate({ "title": "RowsRequest", "description": "Read rows passing Filter; omitted axes use the resolved defaults in the answer stamp." });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 type Region = { readonly "kind": string, readonly "uniqueId"?: null | string, readonly "box"?: ReadonlyArray<number> | null };
 type Placement = { readonly "hostDocumentKey": string, readonly "linkUniqueId"?: null | string };
@@ -3901,11 +4369,11 @@ type FilterRequest = { readonly "sources"?: ReadonlyArray<string> | null, readon
 export type Root = { readonly "region": Region, readonly "filter"?: null | FilterRequest };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op66response {
+namespace Decoded {
 
 const SourceKind = Schema.Literals(["Host", "RevitLink", "IfcLink"]).annotate({ "description": "Which document a partition reads. One partition per source.", "identifier": "SourceKind" });
 const PrimKind = Schema.Literals(["Solid", "Mesh", "Curve2D", "Element"]).annotate({ "description": "What a triangle came from. Curve2D is a DWG 2D layer raised into a vertical\nribbon; it is never an obstructor unless a filter names it.\n            ", "identifier": "PrimKind" });
@@ -3928,31 +4396,6 @@ const Resolved = Schema.Struct({ "sources": Schema.Array(SourceKind), "categorie
 const SourceObservation = Schema.Struct({ "placement": Placement, "documentKey": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "revision": SourceRevision, "toHost": Schema.Array(Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" }))), "availability": SceneSourceState }).annotate({ "identifier": "SourceObservation" });
 const SpatialEvidence = Schema.Struct({ "documentKey": Schema.String, "revision": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })), Schema.Null]).annotate({ "format": "int64" })), "observedAt": Schema.String.annotate({ "format": "date-time" }).check(Schema.makeFilter((value) => typeof value !== "string" || validDateTime(value))), "frame": Schema.String, "resolved": Resolved, "sources": Schema.Array(SourceObservation), "acquisition": Schema.Array(Acquisition), "coverage": Schema.Array(CoverageGap), "geometryCost": Schema.optionalKey(Schema.Union([Schema.Null, GeometryCost], { mode: "oneOf" })) }).annotate({ "description": "Observed basis and acquisition, never a claim that a retained answer is current.", "identifier": "SpatialEvidence" });
 const codec = Schema.Struct({ "evidence": SpatialEvidence, "searched": Searched, "categories": Schema.Array(Schema.String), "kinds": Schema.Array(Schema.String), "layers": Schema.Array(Schema.String), "heightRoles": Schema.Array(Schema.String), "source": Schema.Array(Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" }))), "elementId": Schema.Array(Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" }))), "category": Schema.Array(Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" }))), "kind": Schema.Array(Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" }))), "layer": Schema.Array(Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" }))), "heightRole": Schema.Array(Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" }))), "triangles": Schema.Array(Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" }))), "extrusionFt": Schema.Array(Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" }))), "box": Schema.Array(Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" }))), "ms": Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })) }).annotate({ "title": "RowsAnswer", "description": "Every row that passes the filter, as parallel arrays: index i across every array is one\nPrimRow. Category, kind, layer and height role are indexes into the legend\nlists, so a category name travels once. Box is six doubles per row; -1 means no layer.\n            " });
-namespace WireTypes {
-type SourceKind = "Host" | "RevitLink" | "IfcLink";
-type PrimKind = "Solid" | "Mesh" | "Curve2D" | "Element";
-type Placement = { readonly "hostDocumentKey": string, readonly "linkUniqueId"?: null | string };
-type Aabb = { readonly "minX": number, readonly "minY": number, readonly "minZ": number, readonly "maxX": number, readonly "maxY": number, readonly "maxZ": number };
-type RevisionKind = "observed" | "unavailable";
-type RevisionUnavailableReason = "not-recorded" | "source-unread";
-type SceneSourceState = "loaded" | "unloaded" | "unavailable";
-type AcquisitionOutcome = "acquired" | "empty" | "partial" | "failed" | "deferred" | "approximate" | "outside-scope";
-type AcquisitionReason = "none" | "geometry-read" | "triangulate" | "budget" | "unsupported";
-type CoverageReason = "source-unread" | "partial-geometry" | "failed-geometry" | "deferred" | "approximate";
-type GeometrySourceCost = { readonly "source": string, readonly "linkInstanceId"?: number | null, readonly "count": number, readonly "loadOnlyCount": number, readonly "cost": number };
-type Searched = { readonly "docs": number, readonly "categories": number, readonly "candidates": number, readonly "examined": number, readonly "skipped": number };
-type SubjectExclusion = { readonly "documentKey": string, readonly "placement": Placement, readonly "subjectUniqueId": string };
-type SourceRevision = { readonly "kind": RevisionKind, readonly "epoch"?: number | null, readonly "version"?: null | string, readonly "reason"?: null | RevisionUnavailableReason };
-type Acquisition = { readonly "placement": Placement, readonly "subjectUniqueId": string, readonly "outcome": AcquisitionOutcome, readonly "reason": AcquisitionReason };
-type CoverageGap = { readonly "placement": Placement, readonly "subjectUniqueId"?: null | string, readonly "reason": CoverageReason, readonly "count": number };
-type GeometryCost = { readonly "plannedCount": number, readonly "plannedCost": number, readonly "perSource": ReadonlyArray<GeometrySourceCost>, readonly "newlyTessellatedCount": number, readonly "cumulativeTessellatedCount": number };
-type Resolved = { readonly "sources": ReadonlyArray<SourceKind>, readonly "categories": ReadonlyArray<string>, readonly "kinds": ReadonlyArray<PrimKind>, readonly "layers": ReadonlyArray<string>, readonly "exclusions": ReadonlyArray<SubjectExclusion>, readonly "scope"?: null | Aabb, readonly "reach"?: ReadonlyArray<ReadonlyArray<number>> | null, readonly "representation": string, readonly "acquisitionRequested": boolean };
-type SourceObservation = { readonly "placement": Placement, readonly "documentKey"?: null | string, readonly "revision": SourceRevision, readonly "toHost": ReadonlyArray<number>, readonly "availability": SceneSourceState };
-type SpatialEvidence = { readonly "documentKey": string, readonly "revision"?: number | null, readonly "observedAt": string, readonly "frame": string, readonly "resolved": Resolved, readonly "sources": ReadonlyArray<SourceObservation>, readonly "acquisition": ReadonlyArray<Acquisition>, readonly "coverage": ReadonlyArray<CoverageGap>, readonly "geometryCost"?: null | GeometryCost };
-export type Root = { readonly "evidence": SpatialEvidence, readonly "searched": Searched, readonly "categories": ReadonlyArray<string>, readonly "kinds": ReadonlyArray<string>, readonly "layers": ReadonlyArray<string>, readonly "heightRoles": ReadonlyArray<string>, readonly "source": ReadonlyArray<number>, readonly "elementId": ReadonlyArray<number>, readonly "category": ReadonlyArray<number>, readonly "kind": ReadonlyArray<number>, readonly "layer": ReadonlyArray<number>, readonly "heightRole": ReadonlyArray<number>, readonly "triangles": ReadonlyArray<number>, readonly "extrusionFt": ReadonlyArray<number>, readonly "box": ReadonlyArray<number>, readonly "ms": number };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["Aabb"]: strictDecoder(Aabb),
@@ -3977,13 +4420,45 @@ export const definitions = {
   ["SubjectExclusion"]: strictDecoder(SubjectExclusion),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type SourceKind = "Host" | "RevitLink" | "IfcLink";
+type PrimKind = "Solid" | "Mesh" | "Curve2D" | "Element";
+type Placement = { readonly "hostDocumentKey": string, readonly "linkUniqueId"?: null | string };
+type Aabb = { readonly "minX": number, readonly "minY": number, readonly "minZ": number, readonly "maxX": number, readonly "maxY": number, readonly "maxZ": number };
+type RevisionKind = "observed" | "unavailable";
+type RevisionUnavailableReason = "not-recorded" | "source-unread";
+type SceneSourceState = "loaded" | "unloaded" | "unavailable";
+type AcquisitionOutcome = "acquired" | "empty" | "partial" | "failed" | "deferred" | "approximate" | "outside-scope";
+type AcquisitionReason = "none" | "geometry-read" | "triangulate" | "budget" | "unsupported";
+type CoverageReason = "source-unread" | "partial-geometry" | "failed-geometry" | "deferred" | "approximate";
+type GeometrySourceCost = { readonly "source": string, readonly "linkInstanceId"?: number | null, readonly "count": number, readonly "loadOnlyCount": number, readonly "cost": number };
+type Searched = { readonly "docs": number, readonly "categories": number, readonly "candidates": number, readonly "examined": number, readonly "skipped": number };
+type SubjectExclusion = { readonly "documentKey": string, readonly "placement": Placement, readonly "subjectUniqueId": string };
+type SourceRevision = { readonly "kind": RevisionKind, readonly "epoch"?: number | null, readonly "version"?: null | string, readonly "reason"?: null | RevisionUnavailableReason };
+type Acquisition = { readonly "placement": Placement, readonly "subjectUniqueId": string, readonly "outcome": AcquisitionOutcome, readonly "reason": AcquisitionReason };
+type CoverageGap = { readonly "placement": Placement, readonly "subjectUniqueId"?: null | string, readonly "reason": CoverageReason, readonly "count": number };
+type GeometryCost = { readonly "plannedCount": number, readonly "plannedCost": number, readonly "perSource": ReadonlyArray<GeometrySourceCost>, readonly "newlyTessellatedCount": number, readonly "cumulativeTessellatedCount": number };
+type Resolved = { readonly "sources": ReadonlyArray<SourceKind>, readonly "categories": ReadonlyArray<string>, readonly "kinds": ReadonlyArray<PrimKind>, readonly "layers": ReadonlyArray<string>, readonly "exclusions": ReadonlyArray<SubjectExclusion>, readonly "scope"?: null | Aabb, readonly "reach"?: ReadonlyArray<ReadonlyArray<number>> | null, readonly "representation": string, readonly "acquisitionRequested": boolean };
+type SourceObservation = { readonly "placement": Placement, readonly "documentKey"?: null | string, readonly "revision": SourceRevision, readonly "toHost": ReadonlyArray<number>, readonly "availability": SceneSourceState };
+type SpatialEvidence = { readonly "documentKey": string, readonly "revision"?: number | null, readonly "observedAt": string, readonly "frame": string, readonly "resolved": Resolved, readonly "sources": ReadonlyArray<SourceObservation>, readonly "acquisition": ReadonlyArray<Acquisition>, readonly "coverage": ReadonlyArray<CoverageGap>, readonly "geometryCost"?: null | GeometryCost };
+export type Root = { readonly "evidence": SpatialEvidence, readonly "searched": Searched, readonly "categories": ReadonlyArray<string>, readonly "kinds": ReadonlyArray<string>, readonly "layers": ReadonlyArray<string>, readonly "heightRoles": ReadonlyArray<string>, readonly "source": ReadonlyArray<number>, readonly "elementId": ReadonlyArray<number>, readonly "category": ReadonlyArray<number>, readonly "kind": ReadonlyArray<number>, readonly "layer": ReadonlyArray<number>, readonly "heightRole": ReadonlyArray<number>, readonly "triangles": ReadonlyArray<number>, readonly "extrusionFt": ReadonlyArray<number>, readonly "box": ReadonlyArray<number>, readonly "ms": number };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op67request {
+namespace Decoded {
 
 const Aabb = Schema.Struct({ "minX": Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })), "minY": Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })), "minZ": Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })), "maxX": Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })), "maxY": Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })), "maxZ": Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })) }).annotate({ "description": "Axis-aligned bounds in host internal feet.", "identifier": "Aabb" });
 const SceneContextRepresentation = Schema.Literals(["overview", "none", "oriented", "triangle-boxes", "link-boxes", "meshes"]).annotate({ "description": "Overview acquires no native geometry. Every other choice is detailed and may retain substantial native memory.", "identifier": "SceneContextRepresentation" });
 const Region = Schema.Struct({ "kind": Schema.String, "uniqueId": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "box": Schema.optionalKey(Schema.Union([Schema.Array(Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" }))), Schema.Null])) }).annotate({ "description": "A room or space UniqueId, or a box in host internal feet.", "identifier": "Region" });
 const codec = Schema.Struct({ "elementIds": Schema.optionalKey(Schema.Union([Schema.Array(Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" }))), Schema.Null])), "contextPaddingFt": Schema.optionalKey(Schema.Number.annotate({ "description": "Reach: context is what lies within this distance of each focus element's own box, never a crop around the whole focus.", "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" }))), "maxTriangles": Schema.optionalKey(Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" }))), "bounds": Schema.optionalKey(Schema.Union([Schema.Null, Aabb], { mode: "oneOf" })), "focusOnly": Schema.optionalKey(Schema.Boolean), "contextRepresentation": Schema.optionalKey(SceneContextRepresentation), "region": Schema.optionalKey(Schema.Union([Schema.Null, Region], { mode: "oneOf" })) }).annotate({ "title": "SceneRequest" });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 type Aabb = { readonly "minX": number, readonly "minY": number, readonly "minZ": number, readonly "maxX": number, readonly "maxY": number, readonly "maxZ": number };
 type SceneContextRepresentation = "overview" | "none" | "oriented" | "triangle-boxes" | "link-boxes" | "meshes";
@@ -3991,11 +4466,11 @@ type Region = { readonly "kind": string, readonly "uniqueId"?: null | string, re
 export type Root = { readonly "elementIds"?: ReadonlyArray<number> | null, readonly "contextPaddingFt"?: number, readonly "maxTriangles"?: number, readonly "bounds"?: null | Aabb, readonly "focusOnly"?: boolean, readonly "contextRepresentation"?: SceneContextRepresentation, readonly "region"?: null | Region };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op67response {
+namespace Decoded {
 
 const Aabb = Schema.Struct({ "minX": Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })), "minY": Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })), "minZ": Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })), "maxX": Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })), "maxY": Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })), "maxZ": Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })) }).annotate({ "description": "Axis-aligned bounds in host internal feet.", "identifier": "Aabb" });
 const SceneMemory = Schema.Struct({ "startPrivateBytes": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "endPrivateBytes": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "peakPrivateBytes": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "managedBytes": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })) }).annotate({ "identifier": "SceneMemory" });
@@ -4011,24 +4486,6 @@ const SceneEvidenceSummary = Schema.Struct({ "acquisitionRequested": Schema.Bool
 const SceneReceipt = Schema.Struct({ "format": Schema.String, "frame": Schema.String, "hostDocumentKey": Schema.String, "revision": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })), Schema.Null]).annotate({ "format": "int64" })), "observedAt": Schema.String.annotate({ "format": "date-time" }).check(Schema.makeFilter((value) => typeof value !== "string" || validDateTime(value))), "bounds": Aabb, "triangles": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "elements": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "focusElements": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "contextElements": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "requestedElements": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "omittedElements": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "unavailableElements": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "sources": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "unreadSources": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "detachedElements": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "phase": Schema.String, "work": SceneWork, "completeness": SceneCompleteness, "levels": SceneLevelReceipt }).annotate({ "description": "Bounded RPC receipt. Full membership, source transforms and unavailable identities live in PSC1.", "identifier": "SceneReceipt" });
 const SceneEvidence = Schema.Struct({ "documentKey": Schema.String, "revision": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })), Schema.Null]).annotate({ "format": "int64" })), "observedAt": Schema.String.annotate({ "format": "date-time" }).check(Schema.makeFilter((value) => typeof value !== "string" || validDateTime(value))), "frame": Schema.String, "summary": SceneEvidenceSummary, "artifact": SceneArtifactReference }).annotate({ "description": "Full scene evidence lives in PSC1. Both RPC evidence projections carry only these fixed counts and its reference.", "identifier": "SceneEvidence" });
 const codec = Schema.Struct({ "scene": SceneReceipt, "evidence": SceneEvidence, "id": Schema.String, "url": Schema.String, "bytes": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })) }).annotate({ "title": "SceneArtifact" });
-namespace WireTypes {
-type Aabb = { readonly "minX": number, readonly "minY": number, readonly "minZ": number, readonly "maxX": number, readonly "maxY": number, readonly "maxZ": number };
-type SceneMemory = { readonly "startPrivateBytes": number, readonly "endPrivateBytes": number, readonly "peakPrivateBytes": number, readonly "managedBytes": number };
-type SceneCompleteness = { readonly "complete": boolean, readonly "deferredCandidates"?: number | null, readonly "acquisitionLimitedElements": number, readonly "limitReason"?: null | string };
-type SceneLevelWork = { readonly "nativeMilliseconds": number, readonly "startPrivateBytes": number, readonly "endPrivateBytes": number };
-type SceneSourceCounts = { readonly "loaded": number, readonly "unloaded": number, readonly "unavailable": number };
-type SceneAcquisitionCounts = { readonly "acquired": number, readonly "empty": number, readonly "partial": number, readonly "failed": number, readonly "deferred": number, readonly "approximate": number, readonly "outsideScope": number };
-type SceneCoverageCounts = { readonly "sourceUnread": number, readonly "partialGeometry": number, readonly "failedGeometry": number, readonly "deferred": number, readonly "approximate": number };
-type SceneArtifactReference = { readonly "id": string, readonly "url": string, readonly "bytes": number };
-type SceneWork = { readonly "broadCandidates": number, readonly "extractedElements": number, readonly "extractedTriangles": number, readonly "nativeMilliseconds": number, readonly "peakRetainedTriangles": number, readonly "nativeGeometryCalls": number, readonly "memory"?: null | SceneMemory, readonly "acquiredTriangles": number, readonly "contextGeometryCalls": number, readonly "phaseMilliseconds"?: null | { readonly [x: string]: number } };
-type SceneLevelReceipt = { readonly "levels": number, readonly "planes": number, readonly "coincidentGroups": number, readonly "unavailableSources": number, readonly "work": SceneLevelWork };
-type SceneEvidenceSummary = { readonly "acquisitionRequested": boolean, readonly "representation": string, readonly "sources": SceneSourceCounts, readonly "acquisition": SceneAcquisitionCounts, readonly "coverage": SceneCoverageCounts };
-type SceneReceipt = { readonly "format": string, readonly "frame": string, readonly "hostDocumentKey": string, readonly "revision"?: number | null, readonly "observedAt": string, readonly "bounds": Aabb, readonly "triangles": number, readonly "elements": number, readonly "focusElements": number, readonly "contextElements": number, readonly "requestedElements": number, readonly "omittedElements": number, readonly "unavailableElements": number, readonly "sources": number, readonly "unreadSources": number, readonly "detachedElements": number, readonly "phase": string, readonly "work": SceneWork, readonly "completeness": SceneCompleteness, readonly "levels": SceneLevelReceipt };
-type SceneEvidence = { readonly "documentKey": string, readonly "revision"?: number | null, readonly "observedAt": string, readonly "frame": string, readonly "summary": SceneEvidenceSummary, readonly "artifact": SceneArtifactReference };
-export type Root = { readonly "scene": SceneReceipt, readonly "evidence": SceneEvidence, readonly "id": string, readonly "url": string, readonly "bytes": number };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["Aabb"]: strictDecoder(Aabb),
@@ -4046,8 +4503,30 @@ export const definitions = {
   ["SceneWork"]: strictDecoder(SceneWork),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type Aabb = { readonly "minX": number, readonly "minY": number, readonly "minZ": number, readonly "maxX": number, readonly "maxY": number, readonly "maxZ": number };
+type SceneMemory = { readonly "startPrivateBytes": number, readonly "endPrivateBytes": number, readonly "peakPrivateBytes": number, readonly "managedBytes": number };
+type SceneCompleteness = { readonly "complete": boolean, readonly "deferredCandidates"?: number | null, readonly "acquisitionLimitedElements": number, readonly "limitReason"?: null | string };
+type SceneLevelWork = { readonly "nativeMilliseconds": number, readonly "startPrivateBytes": number, readonly "endPrivateBytes": number };
+type SceneSourceCounts = { readonly "loaded": number, readonly "unloaded": number, readonly "unavailable": number };
+type SceneAcquisitionCounts = { readonly "acquired": number, readonly "empty": number, readonly "partial": number, readonly "failed": number, readonly "deferred": number, readonly "approximate": number, readonly "outsideScope": number };
+type SceneCoverageCounts = { readonly "sourceUnread": number, readonly "partialGeometry": number, readonly "failedGeometry": number, readonly "deferred": number, readonly "approximate": number };
+type SceneArtifactReference = { readonly "id": string, readonly "url": string, readonly "bytes": number };
+type SceneWork = { readonly "broadCandidates": number, readonly "extractedElements": number, readonly "extractedTriangles": number, readonly "nativeMilliseconds": number, readonly "peakRetainedTriangles": number, readonly "nativeGeometryCalls": number, readonly "memory"?: null | SceneMemory, readonly "acquiredTriangles": number, readonly "contextGeometryCalls": number, readonly "phaseMilliseconds"?: null | { readonly [x: string]: number } };
+type SceneLevelReceipt = { readonly "levels": number, readonly "planes": number, readonly "coincidentGroups": number, readonly "unavailableSources": number, readonly "work": SceneLevelWork };
+type SceneEvidenceSummary = { readonly "acquisitionRequested": boolean, readonly "representation": string, readonly "sources": SceneSourceCounts, readonly "acquisition": SceneAcquisitionCounts, readonly "coverage": SceneCoverageCounts };
+type SceneReceipt = { readonly "format": string, readonly "frame": string, readonly "hostDocumentKey": string, readonly "revision"?: number | null, readonly "observedAt": string, readonly "bounds": Aabb, readonly "triangles": number, readonly "elements": number, readonly "focusElements": number, readonly "contextElements": number, readonly "requestedElements": number, readonly "omittedElements": number, readonly "unavailableElements": number, readonly "sources": number, readonly "unreadSources": number, readonly "detachedElements": number, readonly "phase": string, readonly "work": SceneWork, readonly "completeness": SceneCompleteness, readonly "levels": SceneLevelReceipt };
+type SceneEvidence = { readonly "documentKey": string, readonly "revision"?: number | null, readonly "observedAt": string, readonly "frame": string, readonly "summary": SceneEvidenceSummary, readonly "artifact": SceneArtifactReference };
+export type Root = { readonly "scene": SceneReceipt, readonly "evidence": SceneEvidence, readonly "id": string, readonly "url": string, readonly "bytes": number };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op67artifact {
+namespace Decoded {
 
 const SourceKind = Schema.Literals(["Host", "RevitLink", "IfcLink"]).annotate({ "description": "Which document a partition reads. One partition per source.", "identifier": "SourceKind" });
 const PrimKind = Schema.Literals(["Solid", "Mesh", "Curve2D", "Element"]).annotate({ "description": "What a triangle came from. Curve2D is a DWG 2D layer raised into a vertical\nribbon; it is never an obstructor unless a filter names it.\n            ", "identifier": "PrimKind" });
@@ -4091,6 +4570,9 @@ const SceneLevelPlane = Schema.Struct({ "point": Schema.Array(Schema.Number.anno
 const SpatialEvidence = Schema.Struct({ "documentKey": Schema.String, "revision": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })), Schema.Null]).annotate({ "format": "int64" })), "observedAt": Schema.String.annotate({ "format": "date-time" }).check(Schema.makeFilter((value) => typeof value !== "string" || validDateTime(value))), "frame": Schema.String, "resolved": Resolved, "sources": Schema.Array(SourceObservation), "acquisition": Schema.Array(Acquisition), "coverage": Schema.Array(CoverageGap), "geometryCost": Schema.optionalKey(Schema.Union([Schema.Null, GeometryCost], { mode: "oneOf" })) }).annotate({ "description": "Observed basis and acquisition, never a claim that a retained answer is current.", "identifier": "SpatialEvidence" });
 const SceneLevels = Schema.Struct({ "sources": Schema.Array(SceneLevelSource), "planes": Schema.Array(SceneLevelPlane), "work": SceneLevelWork }).annotate({ "identifier": "SceneLevels" });
 const codec = Schema.Struct({ "format": Schema.String, "evidence": SpatialEvidence, "bounds": Aabb, "triangles": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "elements": Schema.Array(SceneElement), "requestedElementIds": Schema.Array(Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" }))), "omittedElements": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "sources": Schema.Array(SceneSource), "phase": Schema.String, "unavailableElements": Schema.Array(SceneUnavailableElement), "work": SceneWork, "completeness": SceneCompleteness, "detachedElementIds": Schema.Array(Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" }))), "levels": SceneLevels, "requestedContextPaddingFt": Schema.Number.annotate({ "description": "Detailed requests below 5 ft are raised; overview keeps the requested reach.", "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })), "effectiveContextPaddingFt": Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })), "linkEnvelopes": Schema.Record(Schema.String, SceneLinkEnvelopeCount).annotate({ "description": "Counts by link placement. Bounding boxes alone cannot identify geometry rotated inside the source frame." }) }).annotate({ "title": "SceneMetadata" });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 type SourceKind = "Host" | "RevitLink" | "IfcLink";
 type PrimKind = "Solid" | "Mesh" | "Curve2D" | "Element";
@@ -4136,17 +4618,20 @@ type SceneLevels = { readonly "sources": ReadonlyArray<SceneLevelSource>, readon
 export type Root = { readonly "format": string, readonly "evidence": SpatialEvidence, readonly "bounds": Aabb, readonly "triangles": number, readonly "elements": ReadonlyArray<SceneElement>, readonly "requestedElementIds": ReadonlyArray<number>, readonly "omittedElements": number, readonly "sources": ReadonlyArray<SceneSource>, readonly "phase": string, readonly "unavailableElements": ReadonlyArray<SceneUnavailableElement>, readonly "work": SceneWork, readonly "completeness": SceneCompleteness, readonly "detachedElementIds": ReadonlyArray<number>, readonly "levels": SceneLevels, readonly "requestedContextPaddingFt": number, readonly "effectiveContextPaddingFt": number, readonly "linkEnvelopes": { readonly [x: string]: SceneLinkEnvelopeCount } };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op68request {
+namespace Decoded {
 
 const Region = Schema.Struct({ "kind": Schema.String, "uniqueId": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "box": Schema.optionalKey(Schema.Union([Schema.Array(Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" }))), Schema.Null])) }).annotate({ "description": "A room or space UniqueId, or a box in host internal feet.", "identifier": "Region" });
 const Placement = Schema.Struct({ "hostDocumentKey": Schema.String, "linkUniqueId": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "description": "Stable source placement. Numeric Revit ids are payload, never exclusion identity.", "identifier": "Placement" });
 const SubjectExclusion = Schema.Struct({ "documentKey": Schema.String, "placement": Placement, "subjectUniqueId": Schema.String }).annotate({ "identifier": "SubjectExclusion" });
 const FilterRequest = Schema.Struct({ "sources": Schema.optionalKey(Schema.Union([Schema.Array(Schema.String), Schema.Null])), "categories": Schema.optionalKey(Schema.Union([Schema.Array(Schema.String), Schema.Null])), "kinds": Schema.optionalKey(Schema.Union([Schema.Array(Schema.String), Schema.Null])), "layers": Schema.optionalKey(Schema.Union([Schema.Array(Schema.String), Schema.Null])), "exclusions": Schema.optionalKey(Schema.Union([Schema.Array(SubjectExclusion), Schema.Null])) }).annotate({ "description": "The filter as the wire spells it: enum names as strings, every axis optional.", "identifier": "FilterRequest" });
 const codec = Schema.Struct({ "region": Region, "z0": Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })), "z1": Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })), "filter": Schema.optionalKey(Schema.Union([Schema.Null, FilterRequest], { mode: "oneOf" })), "maxPieces": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), Schema.Null]).annotate({ "format": "int32" })) }).annotate({ "title": "SliceRequest", "description": "Slice z0..z1 inside the declared Region in host internal feet.\nMaxPieces defaults to 50000 and retains whole elements in source order; zero emits none." });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 type Region = { readonly "kind": string, readonly "uniqueId"?: null | string, readonly "box"?: ReadonlyArray<number> | null };
 type Placement = { readonly "hostDocumentKey": string, readonly "linkUniqueId"?: null | string };
@@ -4155,11 +4640,11 @@ type FilterRequest = { readonly "sources"?: ReadonlyArray<string> | null, readon
 export type Root = { readonly "region": Region, readonly "z0": number, readonly "z1": number, readonly "filter"?: null | FilterRequest, readonly "maxPieces"?: number | null };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op68response {
+namespace Decoded {
 
 const SourceKind = Schema.Literals(["Host", "RevitLink", "IfcLink"]).annotate({ "description": "Which document a partition reads. One partition per source.", "identifier": "SourceKind" });
 const PrimKind = Schema.Literals(["Solid", "Mesh", "Curve2D", "Element"]).annotate({ "description": "What a triangle came from. Curve2D is a DWG 2D layer raised into a vertical\nribbon; it is never an obstructor unless a filter names it.\n            ", "identifier": "PrimKind" });
@@ -4186,35 +4671,6 @@ const SourceObservation = Schema.Struct({ "placement": Placement, "documentKey":
 const SliceElement = Schema.Struct({ "handle": Handle, "pieces": Schema.Array(Schema.Array(Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })))) }).annotate({ "description": "One census row. Layer is the DWG layer on a Curve2D bucket, null otherwise.", "identifier": "SliceElement" });
 const SpatialEvidence = Schema.Struct({ "documentKey": Schema.String, "revision": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })), Schema.Null]).annotate({ "format": "int64" })), "observedAt": Schema.String.annotate({ "format": "date-time" }).check(Schema.makeFilter((value) => typeof value !== "string" || validDateTime(value))), "frame": Schema.String, "resolved": Resolved, "sources": Schema.Array(SourceObservation), "acquisition": Schema.Array(Acquisition), "coverage": Schema.Array(CoverageGap), "geometryCost": Schema.optionalKey(Schema.Union([Schema.Null, GeometryCost], { mode: "oneOf" })) }).annotate({ "description": "Observed basis and acquisition, never a claim that a retained answer is current.", "identifier": "SpatialEvidence" });
 const codec = Schema.Struct({ "evidence": SpatialEvidence, "searched": Searched, "elements": Schema.Array(SliceElement), "pieces": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "total": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "truncated": Schema.Boolean, "ms": Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })) }).annotate({ "title": "SliceCapped", "description": "A SliceAnswer cut to a piece budget, whole elements or nothing, for the\nbrowser frame budget: a knee band across a whole storey is 164 k pieces. Total is what the slice found regardless.\n            " });
-namespace WireTypes {
-type SourceKind = "Host" | "RevitLink" | "IfcLink";
-type PrimKind = "Solid" | "Mesh" | "Curve2D" | "Element";
-type Placement = { readonly "hostDocumentKey": string, readonly "linkUniqueId"?: null | string };
-type Aabb = { readonly "minX": number, readonly "minY": number, readonly "minZ": number, readonly "maxX": number, readonly "maxY": number, readonly "maxZ": number };
-type RevisionKind = "observed" | "unavailable";
-type RevisionUnavailableReason = "not-recorded" | "source-unread";
-type SceneSourceState = "loaded" | "unloaded" | "unavailable";
-type AcquisitionOutcome = "acquired" | "empty" | "partial" | "failed" | "deferred" | "approximate" | "outside-scope";
-type AcquisitionReason = "none" | "geometry-read" | "triangulate" | "budget" | "unsupported";
-type CoverageReason = "source-unread" | "partial-geometry" | "failed-geometry" | "deferred" | "approximate";
-type GeometrySourceCost = { readonly "source": string, readonly "linkInstanceId"?: number | null, readonly "count": number, readonly "loadOnlyCount": number, readonly "cost": number };
-type Searched = { readonly "docs": number, readonly "categories": number, readonly "candidates": number, readonly "examined": number, readonly "skipped": number };
-type Extrusion = { readonly "maxHeightFt": number, readonly "reasons": ReadonlyArray<string> };
-type HeightRole = "None" | "Floor" | "Overhead" | "ByGeometry";
-type SubjectExclusion = { readonly "documentKey": string, readonly "placement": Placement, readonly "subjectUniqueId": string };
-type SourceRevision = { readonly "kind": RevisionKind, readonly "epoch"?: number | null, readonly "version"?: null | string, readonly "reason"?: null | RevisionUnavailableReason };
-type Acquisition = { readonly "placement": Placement, readonly "subjectUniqueId": string, readonly "outcome": AcquisitionOutcome, readonly "reason": AcquisitionReason };
-type CoverageGap = { readonly "placement": Placement, readonly "subjectUniqueId"?: null | string, readonly "reason": CoverageReason, readonly "count": number };
-type GeometryCost = { readonly "plannedCount": number, readonly "plannedCost": number, readonly "perSource": ReadonlyArray<GeometrySourceCost>, readonly "newlyTessellatedCount": number, readonly "cumulativeTessellatedCount": number };
-type Handle = { readonly "documentKey": string, readonly "elementId": number, readonly "uniqueId": string, readonly "linkInstanceId"?: number | null, readonly "category": string, readonly "kind": PrimKind, readonly "layer"?: null | string, readonly "extrusion"?: null | Extrusion, readonly "heightRole": HeightRole, readonly "linkInstanceUniqueId"?: null | string };
-type Resolved = { readonly "sources": ReadonlyArray<SourceKind>, readonly "categories": ReadonlyArray<string>, readonly "kinds": ReadonlyArray<PrimKind>, readonly "layers": ReadonlyArray<string>, readonly "exclusions": ReadonlyArray<SubjectExclusion>, readonly "scope"?: null | Aabb, readonly "reach"?: ReadonlyArray<ReadonlyArray<number>> | null, readonly "representation": string, readonly "acquisitionRequested": boolean };
-type SourceObservation = { readonly "placement": Placement, readonly "documentKey"?: null | string, readonly "revision": SourceRevision, readonly "toHost": ReadonlyArray<number>, readonly "availability": SceneSourceState };
-type SliceElement = { readonly "handle": Handle, readonly "pieces": ReadonlyArray<ReadonlyArray<number>> };
-type SpatialEvidence = { readonly "documentKey": string, readonly "revision"?: number | null, readonly "observedAt": string, readonly "frame": string, readonly "resolved": Resolved, readonly "sources": ReadonlyArray<SourceObservation>, readonly "acquisition": ReadonlyArray<Acquisition>, readonly "coverage": ReadonlyArray<CoverageGap>, readonly "geometryCost"?: null | GeometryCost };
-export type Root = { readonly "evidence": SpatialEvidence, readonly "searched": Searched, readonly "elements": ReadonlyArray<SliceElement>, readonly "pieces": number, readonly "total": number, readonly "truncated": boolean, readonly "ms": number };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["Aabb"]: strictDecoder(Aabb),
@@ -4243,21 +4699,57 @@ export const definitions = {
   ["SubjectExclusion"]: strictDecoder(SubjectExclusion),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type SourceKind = "Host" | "RevitLink" | "IfcLink";
+type PrimKind = "Solid" | "Mesh" | "Curve2D" | "Element";
+type Placement = { readonly "hostDocumentKey": string, readonly "linkUniqueId"?: null | string };
+type Aabb = { readonly "minX": number, readonly "minY": number, readonly "minZ": number, readonly "maxX": number, readonly "maxY": number, readonly "maxZ": number };
+type RevisionKind = "observed" | "unavailable";
+type RevisionUnavailableReason = "not-recorded" | "source-unread";
+type SceneSourceState = "loaded" | "unloaded" | "unavailable";
+type AcquisitionOutcome = "acquired" | "empty" | "partial" | "failed" | "deferred" | "approximate" | "outside-scope";
+type AcquisitionReason = "none" | "geometry-read" | "triangulate" | "budget" | "unsupported";
+type CoverageReason = "source-unread" | "partial-geometry" | "failed-geometry" | "deferred" | "approximate";
+type GeometrySourceCost = { readonly "source": string, readonly "linkInstanceId"?: number | null, readonly "count": number, readonly "loadOnlyCount": number, readonly "cost": number };
+type Searched = { readonly "docs": number, readonly "categories": number, readonly "candidates": number, readonly "examined": number, readonly "skipped": number };
+type Extrusion = { readonly "maxHeightFt": number, readonly "reasons": ReadonlyArray<string> };
+type HeightRole = "None" | "Floor" | "Overhead" | "ByGeometry";
+type SubjectExclusion = { readonly "documentKey": string, readonly "placement": Placement, readonly "subjectUniqueId": string };
+type SourceRevision = { readonly "kind": RevisionKind, readonly "epoch"?: number | null, readonly "version"?: null | string, readonly "reason"?: null | RevisionUnavailableReason };
+type Acquisition = { readonly "placement": Placement, readonly "subjectUniqueId": string, readonly "outcome": AcquisitionOutcome, readonly "reason": AcquisitionReason };
+type CoverageGap = { readonly "placement": Placement, readonly "subjectUniqueId"?: null | string, readonly "reason": CoverageReason, readonly "count": number };
+type GeometryCost = { readonly "plannedCount": number, readonly "plannedCost": number, readonly "perSource": ReadonlyArray<GeometrySourceCost>, readonly "newlyTessellatedCount": number, readonly "cumulativeTessellatedCount": number };
+type Handle = { readonly "documentKey": string, readonly "elementId": number, readonly "uniqueId": string, readonly "linkInstanceId"?: number | null, readonly "category": string, readonly "kind": PrimKind, readonly "layer"?: null | string, readonly "extrusion"?: null | Extrusion, readonly "heightRole": HeightRole, readonly "linkInstanceUniqueId"?: null | string };
+type Resolved = { readonly "sources": ReadonlyArray<SourceKind>, readonly "categories": ReadonlyArray<string>, readonly "kinds": ReadonlyArray<PrimKind>, readonly "layers": ReadonlyArray<string>, readonly "exclusions": ReadonlyArray<SubjectExclusion>, readonly "scope"?: null | Aabb, readonly "reach"?: ReadonlyArray<ReadonlyArray<number>> | null, readonly "representation": string, readonly "acquisitionRequested": boolean };
+type SourceObservation = { readonly "placement": Placement, readonly "documentKey"?: null | string, readonly "revision": SourceRevision, readonly "toHost": ReadonlyArray<number>, readonly "availability": SceneSourceState };
+type SliceElement = { readonly "handle": Handle, readonly "pieces": ReadonlyArray<ReadonlyArray<number>> };
+type SpatialEvidence = { readonly "documentKey": string, readonly "revision"?: number | null, readonly "observedAt": string, readonly "frame": string, readonly "resolved": Resolved, readonly "sources": ReadonlyArray<SourceObservation>, readonly "acquisition": ReadonlyArray<Acquisition>, readonly "coverage": ReadonlyArray<CoverageGap>, readonly "geometryCost"?: null | GeometryCost };
+export type Root = { readonly "evidence": SpatialEvidence, readonly "searched": Searched, readonly "elements": ReadonlyArray<SliceElement>, readonly "pieces": number, readonly "total": number, readonly "truncated": boolean, readonly "ms": number };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op69request {
+namespace Decoded {
 
 
 const codec = Schema.Record(Schema.String, Schema.Never).annotate({ "title": "NoRequest" });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 
 export type Root = { readonly [x: string]: never };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op69response {
+namespace Decoded {
 
 const SourceKind = Schema.Literals(["Host", "RevitLink", "IfcLink"]).annotate({ "description": "Which document a partition reads. One partition per source.", "identifier": "SourceKind" });
 const PrimKind = Schema.Literals(["Solid", "Mesh", "Curve2D", "Element"]).annotate({ "description": "What a triangle came from. Curve2D is a DWG 2D layer raised into a vertical\nribbon; it is never an obstructor unless a filter names it.\n            ", "identifier": "PrimKind" });
@@ -4281,32 +4773,6 @@ const Resolved = Schema.Struct({ "sources": Schema.Array(SourceKind), "categorie
 const SourceObservation = Schema.Struct({ "placement": Placement, "documentKey": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "revision": SourceRevision, "toHost": Schema.Array(Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" }))), "availability": SceneSourceState }).annotate({ "identifier": "SourceObservation" });
 const SpatialEvidence = Schema.Struct({ "documentKey": Schema.String, "revision": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })), Schema.Null]).annotate({ "format": "int64" })), "observedAt": Schema.String.annotate({ "format": "date-time" }).check(Schema.makeFilter((value) => typeof value !== "string" || validDateTime(value))), "frame": Schema.String, "resolved": Resolved, "sources": Schema.Array(SourceObservation), "acquisition": Schema.Array(Acquisition), "coverage": Schema.Array(CoverageGap), "geometryCost": Schema.optionalKey(Schema.Union([Schema.Null, GeometryCost], { mode: "oneOf" })) }).annotate({ "description": "Observed basis and acquisition, never a claim that a retained answer is current.", "identifier": "SpatialEvidence" });
 const codec = Schema.Struct({ "evidence": SpatialEvidence, "built": Schema.Boolean, "pendingIds": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "categories": Schema.Array(SourceCategories), "levels": Schema.Array(LevelRow), "bounds": Schema.optionalKey(Schema.Union([Schema.Null, Aabb], { mode: "oneOf" })), "ms": Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })) }).annotate({ "title": "StatusAnswer", "description": "Summary of the operation's capture. Status alone reports Built false because it does not\ncapture geometry. Other query operations prepare their own World. Bounds union captured row boxes.\n            " });
-namespace WireTypes {
-type SourceKind = "Host" | "RevitLink" | "IfcLink";
-type PrimKind = "Solid" | "Mesh" | "Curve2D" | "Element";
-type Placement = { readonly "hostDocumentKey": string, readonly "linkUniqueId"?: null | string };
-type Aabb = { readonly "minX": number, readonly "minY": number, readonly "minZ": number, readonly "maxX": number, readonly "maxY": number, readonly "maxZ": number };
-type RevisionKind = "observed" | "unavailable";
-type RevisionUnavailableReason = "not-recorded" | "source-unread";
-type SceneSourceState = "loaded" | "unloaded" | "unavailable";
-type AcquisitionOutcome = "acquired" | "empty" | "partial" | "failed" | "deferred" | "approximate" | "outside-scope";
-type AcquisitionReason = "none" | "geometry-read" | "triangulate" | "budget" | "unsupported";
-type CoverageReason = "source-unread" | "partial-geometry" | "failed-geometry" | "deferred" | "approximate";
-type GeometrySourceCost = { readonly "source": string, readonly "linkInstanceId"?: number | null, readonly "count": number, readonly "loadOnlyCount": number, readonly "cost": number };
-type SourceCategories = { readonly "source": number, readonly "categories": ReadonlyArray<string> };
-type LevelRow = { readonly "name": string, readonly "elevationFt": number };
-type SubjectExclusion = { readonly "documentKey": string, readonly "placement": Placement, readonly "subjectUniqueId": string };
-type SourceRevision = { readonly "kind": RevisionKind, readonly "epoch"?: number | null, readonly "version"?: null | string, readonly "reason"?: null | RevisionUnavailableReason };
-type Acquisition = { readonly "placement": Placement, readonly "subjectUniqueId": string, readonly "outcome": AcquisitionOutcome, readonly "reason": AcquisitionReason };
-type CoverageGap = { readonly "placement": Placement, readonly "subjectUniqueId"?: null | string, readonly "reason": CoverageReason, readonly "count": number };
-type GeometryCost = { readonly "plannedCount": number, readonly "plannedCost": number, readonly "perSource": ReadonlyArray<GeometrySourceCost>, readonly "newlyTessellatedCount": number, readonly "cumulativeTessellatedCount": number };
-type Resolved = { readonly "sources": ReadonlyArray<SourceKind>, readonly "categories": ReadonlyArray<string>, readonly "kinds": ReadonlyArray<PrimKind>, readonly "layers": ReadonlyArray<string>, readonly "exclusions": ReadonlyArray<SubjectExclusion>, readonly "scope"?: null | Aabb, readonly "reach"?: ReadonlyArray<ReadonlyArray<number>> | null, readonly "representation": string, readonly "acquisitionRequested": boolean };
-type SourceObservation = { readonly "placement": Placement, readonly "documentKey"?: null | string, readonly "revision": SourceRevision, readonly "toHost": ReadonlyArray<number>, readonly "availability": SceneSourceState };
-type SpatialEvidence = { readonly "documentKey": string, readonly "revision"?: number | null, readonly "observedAt": string, readonly "frame": string, readonly "resolved": Resolved, readonly "sources": ReadonlyArray<SourceObservation>, readonly "acquisition": ReadonlyArray<Acquisition>, readonly "coverage": ReadonlyArray<CoverageGap>, readonly "geometryCost"?: null | GeometryCost };
-export type Root = { readonly "evidence": SpatialEvidence, readonly "built": boolean, readonly "pendingIds": number, readonly "categories": ReadonlyArray<SourceCategories>, readonly "levels": ReadonlyArray<LevelRow>, readonly "bounds"?: null | Aabb, readonly "ms": number };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["Aabb"]: strictDecoder(Aabb),
@@ -4332,14 +4798,47 @@ export const definitions = {
   ["SubjectExclusion"]: strictDecoder(SubjectExclusion),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type SourceKind = "Host" | "RevitLink" | "IfcLink";
+type PrimKind = "Solid" | "Mesh" | "Curve2D" | "Element";
+type Placement = { readonly "hostDocumentKey": string, readonly "linkUniqueId"?: null | string };
+type Aabb = { readonly "minX": number, readonly "minY": number, readonly "minZ": number, readonly "maxX": number, readonly "maxY": number, readonly "maxZ": number };
+type RevisionKind = "observed" | "unavailable";
+type RevisionUnavailableReason = "not-recorded" | "source-unread";
+type SceneSourceState = "loaded" | "unloaded" | "unavailable";
+type AcquisitionOutcome = "acquired" | "empty" | "partial" | "failed" | "deferred" | "approximate" | "outside-scope";
+type AcquisitionReason = "none" | "geometry-read" | "triangulate" | "budget" | "unsupported";
+type CoverageReason = "source-unread" | "partial-geometry" | "failed-geometry" | "deferred" | "approximate";
+type GeometrySourceCost = { readonly "source": string, readonly "linkInstanceId"?: number | null, readonly "count": number, readonly "loadOnlyCount": number, readonly "cost": number };
+type SourceCategories = { readonly "source": number, readonly "categories": ReadonlyArray<string> };
+type LevelRow = { readonly "name": string, readonly "elevationFt": number };
+type SubjectExclusion = { readonly "documentKey": string, readonly "placement": Placement, readonly "subjectUniqueId": string };
+type SourceRevision = { readonly "kind": RevisionKind, readonly "epoch"?: number | null, readonly "version"?: null | string, readonly "reason"?: null | RevisionUnavailableReason };
+type Acquisition = { readonly "placement": Placement, readonly "subjectUniqueId": string, readonly "outcome": AcquisitionOutcome, readonly "reason": AcquisitionReason };
+type CoverageGap = { readonly "placement": Placement, readonly "subjectUniqueId"?: null | string, readonly "reason": CoverageReason, readonly "count": number };
+type GeometryCost = { readonly "plannedCount": number, readonly "plannedCost": number, readonly "perSource": ReadonlyArray<GeometrySourceCost>, readonly "newlyTessellatedCount": number, readonly "cumulativeTessellatedCount": number };
+type Resolved = { readonly "sources": ReadonlyArray<SourceKind>, readonly "categories": ReadonlyArray<string>, readonly "kinds": ReadonlyArray<PrimKind>, readonly "layers": ReadonlyArray<string>, readonly "exclusions": ReadonlyArray<SubjectExclusion>, readonly "scope"?: null | Aabb, readonly "reach"?: ReadonlyArray<ReadonlyArray<number>> | null, readonly "representation": string, readonly "acquisitionRequested": boolean };
+type SourceObservation = { readonly "placement": Placement, readonly "documentKey"?: null | string, readonly "revision": SourceRevision, readonly "toHost": ReadonlyArray<number>, readonly "availability": SceneSourceState };
+type SpatialEvidence = { readonly "documentKey": string, readonly "revision"?: number | null, readonly "observedAt": string, readonly "frame": string, readonly "resolved": Resolved, readonly "sources": ReadonlyArray<SourceObservation>, readonly "acquisition": ReadonlyArray<Acquisition>, readonly "coverage": ReadonlyArray<CoverageGap>, readonly "geometryCost"?: null | GeometryCost };
+export type Root = { readonly "evidence": SpatialEvidence, readonly "built": boolean, readonly "pendingIds": number, readonly "categories": ReadonlyArray<SourceCategories>, readonly "levels": ReadonlyArray<LevelRow>, readonly "bounds"?: null | Aabb, readonly "ms": number };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op70request {
+namespace Decoded {
 
 const Region = Schema.Struct({ "kind": Schema.String, "uniqueId": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "box": Schema.optionalKey(Schema.Union([Schema.Array(Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" }))), Schema.Null])) }).annotate({ "description": "A room or space UniqueId, or a box in host internal feet.", "identifier": "Region" });
 const Placement = Schema.Struct({ "hostDocumentKey": Schema.String, "linkUniqueId": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "description": "Stable source placement. Numeric Revit ids are payload, never exclusion identity.", "identifier": "Placement" });
 const SubjectExclusion = Schema.Struct({ "documentKey": Schema.String, "placement": Placement, "subjectUniqueId": Schema.String }).annotate({ "identifier": "SubjectExclusion" });
 const FilterRequest = Schema.Struct({ "sources": Schema.optionalKey(Schema.Union([Schema.Array(Schema.String), Schema.Null])), "categories": Schema.optionalKey(Schema.Union([Schema.Array(Schema.String), Schema.Null])), "kinds": Schema.optionalKey(Schema.Union([Schema.Array(Schema.String), Schema.Null])), "layers": Schema.optionalKey(Schema.Union([Schema.Array(Schema.String), Schema.Null])), "exclusions": Schema.optionalKey(Schema.Union([Schema.Array(SubjectExclusion), Schema.Null])) }).annotate({ "description": "The filter as the wire spells it: enum names as strings, every axis optional.", "identifier": "FilterRequest" });
 const codec = Schema.Struct({ "region": Region, "polyline": Schema.Array(Schema.Array(Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })))), "widthFt": Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })), "heightFt": Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })), "clearanceFt": Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })), "filter": Schema.optionalKey(Schema.Union([Schema.Null, FilterRequest], { mode: "oneOf" })) }).annotate({ "title": "SweepRequest", "description": "Sweep a positive width/height profile in feet along at least two host-coordinate triples, with nonnegative clearance." });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 type Region = { readonly "kind": string, readonly "uniqueId"?: null | string, readonly "box"?: ReadonlyArray<number> | null };
 type Placement = { readonly "hostDocumentKey": string, readonly "linkUniqueId"?: null | string };
@@ -4348,11 +4847,11 @@ type FilterRequest = { readonly "sources"?: ReadonlyArray<string> | null, readon
 export type Root = { readonly "region": Region, readonly "polyline": ReadonlyArray<ReadonlyArray<number>>, readonly "widthFt": number, readonly "heightFt": number, readonly "clearanceFt": number, readonly "filter"?: null | FilterRequest };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op70response {
+namespace Decoded {
 
 const SourceKind = Schema.Literals(["Host", "RevitLink", "IfcLink"]).annotate({ "description": "Which document a partition reads. One partition per source.", "identifier": "SourceKind" });
 const PrimKind = Schema.Literals(["Solid", "Mesh", "Curve2D", "Element"]).annotate({ "description": "What a triangle came from. Curve2D is a DWG 2D layer raised into a vertical\nribbon; it is never an obstructor unless a filter names it.\n            ", "identifier": "PrimKind" });
@@ -4379,35 +4878,6 @@ const SourceObservation = Schema.Struct({ "placement": Placement, "documentKey":
 const SweepSegment = Schema.Struct({ "index": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "verdict": Schema.String, "minGapFt": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "nearest": Schema.optionalKey(Schema.Union([Schema.Null, Handle], { mode: "oneOf" })), "closestPoint": Schema.optionalKey(Schema.Union([Schema.Array(Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" }))), Schema.Null])), "surfaceObservation": Schema.String, "clearanceReason": Schema.String }).annotate({ "description": "One segment of a swept profile and what it found.", "identifier": "SweepSegment" });
 const SpatialEvidence = Schema.Struct({ "documentKey": Schema.String, "revision": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })), Schema.Null]).annotate({ "format": "int64" })), "observedAt": Schema.String.annotate({ "format": "date-time" }).check(Schema.makeFilter((value) => typeof value !== "string" || validDateTime(value))), "frame": Schema.String, "resolved": Resolved, "sources": Schema.Array(SourceObservation), "acquisition": Schema.Array(Acquisition), "coverage": Schema.Array(CoverageGap), "geometryCost": Schema.optionalKey(Schema.Union([Schema.Null, GeometryCost], { mode: "oneOf" })) }).annotate({ "description": "Observed basis and acquisition, never a claim that a retained answer is current.", "identifier": "SpatialEvidence" });
 const codec = Schema.Struct({ "evidence": SpatialEvidence, "searched": Searched, "segments": Schema.Array(SweepSegment), "ms": Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })) }).annotate({ "title": "SweepAnswer", "description": "Stamped clearance verdicts for each consecutive polyline segment, with search accounting and elapsed milliseconds." });
-namespace WireTypes {
-type SourceKind = "Host" | "RevitLink" | "IfcLink";
-type PrimKind = "Solid" | "Mesh" | "Curve2D" | "Element";
-type Placement = { readonly "hostDocumentKey": string, readonly "linkUniqueId"?: null | string };
-type Aabb = { readonly "minX": number, readonly "minY": number, readonly "minZ": number, readonly "maxX": number, readonly "maxY": number, readonly "maxZ": number };
-type RevisionKind = "observed" | "unavailable";
-type RevisionUnavailableReason = "not-recorded" | "source-unread";
-type SceneSourceState = "loaded" | "unloaded" | "unavailable";
-type AcquisitionOutcome = "acquired" | "empty" | "partial" | "failed" | "deferred" | "approximate" | "outside-scope";
-type AcquisitionReason = "none" | "geometry-read" | "triangulate" | "budget" | "unsupported";
-type CoverageReason = "source-unread" | "partial-geometry" | "failed-geometry" | "deferred" | "approximate";
-type GeometrySourceCost = { readonly "source": string, readonly "linkInstanceId"?: number | null, readonly "count": number, readonly "loadOnlyCount": number, readonly "cost": number };
-type Searched = { readonly "docs": number, readonly "categories": number, readonly "candidates": number, readonly "examined": number, readonly "skipped": number };
-type Extrusion = { readonly "maxHeightFt": number, readonly "reasons": ReadonlyArray<string> };
-type HeightRole = "None" | "Floor" | "Overhead" | "ByGeometry";
-type SubjectExclusion = { readonly "documentKey": string, readonly "placement": Placement, readonly "subjectUniqueId": string };
-type SourceRevision = { readonly "kind": RevisionKind, readonly "epoch"?: number | null, readonly "version"?: null | string, readonly "reason"?: null | RevisionUnavailableReason };
-type Acquisition = { readonly "placement": Placement, readonly "subjectUniqueId": string, readonly "outcome": AcquisitionOutcome, readonly "reason": AcquisitionReason };
-type CoverageGap = { readonly "placement": Placement, readonly "subjectUniqueId"?: null | string, readonly "reason": CoverageReason, readonly "count": number };
-type GeometryCost = { readonly "plannedCount": number, readonly "plannedCost": number, readonly "perSource": ReadonlyArray<GeometrySourceCost>, readonly "newlyTessellatedCount": number, readonly "cumulativeTessellatedCount": number };
-type Handle = { readonly "documentKey": string, readonly "elementId": number, readonly "uniqueId": string, readonly "linkInstanceId"?: number | null, readonly "category": string, readonly "kind": PrimKind, readonly "layer"?: null | string, readonly "extrusion"?: null | Extrusion, readonly "heightRole": HeightRole, readonly "linkInstanceUniqueId"?: null | string };
-type Resolved = { readonly "sources": ReadonlyArray<SourceKind>, readonly "categories": ReadonlyArray<string>, readonly "kinds": ReadonlyArray<PrimKind>, readonly "layers": ReadonlyArray<string>, readonly "exclusions": ReadonlyArray<SubjectExclusion>, readonly "scope"?: null | Aabb, readonly "reach"?: ReadonlyArray<ReadonlyArray<number>> | null, readonly "representation": string, readonly "acquisitionRequested": boolean };
-type SourceObservation = { readonly "placement": Placement, readonly "documentKey"?: null | string, readonly "revision": SourceRevision, readonly "toHost": ReadonlyArray<number>, readonly "availability": SceneSourceState };
-type SweepSegment = { readonly "index": number, readonly "verdict": string, readonly "minGapFt"?: null | number, readonly "nearest"?: null | Handle, readonly "closestPoint"?: ReadonlyArray<number> | null, readonly "surfaceObservation": string, readonly "clearanceReason": string };
-type SpatialEvidence = { readonly "documentKey": string, readonly "revision"?: number | null, readonly "observedAt": string, readonly "frame": string, readonly "resolved": Resolved, readonly "sources": ReadonlyArray<SourceObservation>, readonly "acquisition": ReadonlyArray<Acquisition>, readonly "coverage": ReadonlyArray<CoverageGap>, readonly "geometryCost"?: null | GeometryCost };
-export type Root = { readonly "evidence": SpatialEvidence, readonly "searched": Searched, readonly "segments": ReadonlyArray<SweepSegment>, readonly "ms": number };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["Aabb"]: strictDecoder(Aabb),
@@ -4436,21 +4906,57 @@ export const definitions = {
   ["SweepSegment"]: strictDecoder(SweepSegment),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type SourceKind = "Host" | "RevitLink" | "IfcLink";
+type PrimKind = "Solid" | "Mesh" | "Curve2D" | "Element";
+type Placement = { readonly "hostDocumentKey": string, readonly "linkUniqueId"?: null | string };
+type Aabb = { readonly "minX": number, readonly "minY": number, readonly "minZ": number, readonly "maxX": number, readonly "maxY": number, readonly "maxZ": number };
+type RevisionKind = "observed" | "unavailable";
+type RevisionUnavailableReason = "not-recorded" | "source-unread";
+type SceneSourceState = "loaded" | "unloaded" | "unavailable";
+type AcquisitionOutcome = "acquired" | "empty" | "partial" | "failed" | "deferred" | "approximate" | "outside-scope";
+type AcquisitionReason = "none" | "geometry-read" | "triangulate" | "budget" | "unsupported";
+type CoverageReason = "source-unread" | "partial-geometry" | "failed-geometry" | "deferred" | "approximate";
+type GeometrySourceCost = { readonly "source": string, readonly "linkInstanceId"?: number | null, readonly "count": number, readonly "loadOnlyCount": number, readonly "cost": number };
+type Searched = { readonly "docs": number, readonly "categories": number, readonly "candidates": number, readonly "examined": number, readonly "skipped": number };
+type Extrusion = { readonly "maxHeightFt": number, readonly "reasons": ReadonlyArray<string> };
+type HeightRole = "None" | "Floor" | "Overhead" | "ByGeometry";
+type SubjectExclusion = { readonly "documentKey": string, readonly "placement": Placement, readonly "subjectUniqueId": string };
+type SourceRevision = { readonly "kind": RevisionKind, readonly "epoch"?: number | null, readonly "version"?: null | string, readonly "reason"?: null | RevisionUnavailableReason };
+type Acquisition = { readonly "placement": Placement, readonly "subjectUniqueId": string, readonly "outcome": AcquisitionOutcome, readonly "reason": AcquisitionReason };
+type CoverageGap = { readonly "placement": Placement, readonly "subjectUniqueId"?: null | string, readonly "reason": CoverageReason, readonly "count": number };
+type GeometryCost = { readonly "plannedCount": number, readonly "plannedCost": number, readonly "perSource": ReadonlyArray<GeometrySourceCost>, readonly "newlyTessellatedCount": number, readonly "cumulativeTessellatedCount": number };
+type Handle = { readonly "documentKey": string, readonly "elementId": number, readonly "uniqueId": string, readonly "linkInstanceId"?: number | null, readonly "category": string, readonly "kind": PrimKind, readonly "layer"?: null | string, readonly "extrusion"?: null | Extrusion, readonly "heightRole": HeightRole, readonly "linkInstanceUniqueId"?: null | string };
+type Resolved = { readonly "sources": ReadonlyArray<SourceKind>, readonly "categories": ReadonlyArray<string>, readonly "kinds": ReadonlyArray<PrimKind>, readonly "layers": ReadonlyArray<string>, readonly "exclusions": ReadonlyArray<SubjectExclusion>, readonly "scope"?: null | Aabb, readonly "reach"?: ReadonlyArray<ReadonlyArray<number>> | null, readonly "representation": string, readonly "acquisitionRequested": boolean };
+type SourceObservation = { readonly "placement": Placement, readonly "documentKey"?: null | string, readonly "revision": SourceRevision, readonly "toHost": ReadonlyArray<number>, readonly "availability": SceneSourceState };
+type SweepSegment = { readonly "index": number, readonly "verdict": string, readonly "minGapFt"?: null | number, readonly "nearest"?: null | Handle, readonly "closestPoint"?: ReadonlyArray<number> | null, readonly "surfaceObservation": string, readonly "clearanceReason": string };
+type SpatialEvidence = { readonly "documentKey": string, readonly "revision"?: number | null, readonly "observedAt": string, readonly "frame": string, readonly "resolved": Resolved, readonly "sources": ReadonlyArray<SourceObservation>, readonly "acquisition": ReadonlyArray<Acquisition>, readonly "coverage": ReadonlyArray<CoverageGap>, readonly "geometryCost"?: null | GeometryCost };
+export type Root = { readonly "evidence": SpatialEvidence, readonly "searched": Searched, readonly "segments": ReadonlyArray<SweepSegment>, readonly "ms": number };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op71request {
+namespace Decoded {
 
 const Region = Schema.Struct({ "kind": Schema.String, "uniqueId": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "box": Schema.optionalKey(Schema.Union([Schema.Array(Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" }))), Schema.Null])) }).annotate({ "description": "A room or space UniqueId, or a box in host internal feet.", "identifier": "Region" });
 const codec = Schema.Struct({ "region": Region, "source": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), Schema.Null]).annotate({ "format": "int32" })), "maxDepth": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), Schema.Null]).annotate({ "format": "int32" })) }).annotate({ "title": "TreeRequest", "description": "Read Source's BVH through MaxDepth inclusive. Source defaults to host (0), depth to 8." });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 type Region = { readonly "kind": string, readonly "uniqueId"?: null | string, readonly "box"?: ReadonlyArray<number> | null };
 export type Root = { readonly "region": Region, readonly "source"?: number | null, readonly "maxDepth"?: number | null };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op71response {
+namespace Decoded {
 
 const SourceKind = Schema.Literals(["Host", "RevitLink", "IfcLink"]).annotate({ "description": "Which document a partition reads. One partition per source.", "identifier": "SourceKind" });
 const PrimKind = Schema.Literals(["Solid", "Mesh", "Curve2D", "Element"]).annotate({ "description": "What a triangle came from. Curve2D is a DWG 2D layer raised into a vertical\nribbon; it is never an obstructor unless a filter names it.\n            ", "identifier": "PrimKind" });
@@ -4473,31 +4979,6 @@ const Resolved = Schema.Struct({ "sources": Schema.Array(SourceKind), "categorie
 const SourceObservation = Schema.Struct({ "placement": Placement, "documentKey": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "revision": SourceRevision, "toHost": Schema.Array(Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" }))), "availability": SceneSourceState }).annotate({ "identifier": "SourceObservation" });
 const SpatialEvidence = Schema.Struct({ "documentKey": Schema.String, "revision": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })), Schema.Null]).annotate({ "format": "int64" })), "observedAt": Schema.String.annotate({ "format": "date-time" }).check(Schema.makeFilter((value) => typeof value !== "string" || validDateTime(value))), "frame": Schema.String, "resolved": Resolved, "sources": Schema.Array(SourceObservation), "acquisition": Schema.Array(Acquisition), "coverage": Schema.Array(CoverageGap), "geometryCost": Schema.optionalKey(Schema.Union([Schema.Null, GeometryCost], { mode: "oneOf" })) }).annotate({ "description": "Observed basis and acquisition, never a claim that a retained answer is current.", "identifier": "SpatialEvidence" });
 const codec = Schema.Struct({ "evidence": SpatialEvidence, "source": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "maxDepth": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "nodes": Schema.Array(BvhNode), "ms": Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })) }).annotate({ "title": "TreeAnswer", "description": "One source BVH, through MaxDepth inclusive, in post-order with the root last." });
-namespace WireTypes {
-type SourceKind = "Host" | "RevitLink" | "IfcLink";
-type PrimKind = "Solid" | "Mesh" | "Curve2D" | "Element";
-type Placement = { readonly "hostDocumentKey": string, readonly "linkUniqueId"?: null | string };
-type Aabb = { readonly "minX": number, readonly "minY": number, readonly "minZ": number, readonly "maxX": number, readonly "maxY": number, readonly "maxZ": number };
-type RevisionKind = "observed" | "unavailable";
-type RevisionUnavailableReason = "not-recorded" | "source-unread";
-type SceneSourceState = "loaded" | "unloaded" | "unavailable";
-type AcquisitionOutcome = "acquired" | "empty" | "partial" | "failed" | "deferred" | "approximate" | "outside-scope";
-type AcquisitionReason = "none" | "geometry-read" | "triangulate" | "budget" | "unsupported";
-type CoverageReason = "source-unread" | "partial-geometry" | "failed-geometry" | "deferred" | "approximate";
-type GeometrySourceCost = { readonly "source": string, readonly "linkInstanceId"?: number | null, readonly "count": number, readonly "loadOnlyCount": number, readonly "cost": number };
-type BvhNode = { readonly "index": number, readonly "depth": number, readonly "leaf": boolean, readonly "triangles": number, readonly "box": ReadonlyArray<number> };
-type SubjectExclusion = { readonly "documentKey": string, readonly "placement": Placement, readonly "subjectUniqueId": string };
-type SourceRevision = { readonly "kind": RevisionKind, readonly "epoch"?: number | null, readonly "version"?: null | string, readonly "reason"?: null | RevisionUnavailableReason };
-type Acquisition = { readonly "placement": Placement, readonly "subjectUniqueId": string, readonly "outcome": AcquisitionOutcome, readonly "reason": AcquisitionReason };
-type CoverageGap = { readonly "placement": Placement, readonly "subjectUniqueId"?: null | string, readonly "reason": CoverageReason, readonly "count": number };
-type GeometryCost = { readonly "plannedCount": number, readonly "plannedCost": number, readonly "perSource": ReadonlyArray<GeometrySourceCost>, readonly "newlyTessellatedCount": number, readonly "cumulativeTessellatedCount": number };
-type Resolved = { readonly "sources": ReadonlyArray<SourceKind>, readonly "categories": ReadonlyArray<string>, readonly "kinds": ReadonlyArray<PrimKind>, readonly "layers": ReadonlyArray<string>, readonly "exclusions": ReadonlyArray<SubjectExclusion>, readonly "scope"?: null | Aabb, readonly "reach"?: ReadonlyArray<ReadonlyArray<number>> | null, readonly "representation": string, readonly "acquisitionRequested": boolean };
-type SourceObservation = { readonly "placement": Placement, readonly "documentKey"?: null | string, readonly "revision": SourceRevision, readonly "toHost": ReadonlyArray<number>, readonly "availability": SceneSourceState };
-type SpatialEvidence = { readonly "documentKey": string, readonly "revision"?: number | null, readonly "observedAt": string, readonly "frame": string, readonly "resolved": Resolved, readonly "sources": ReadonlyArray<SourceObservation>, readonly "acquisition": ReadonlyArray<Acquisition>, readonly "coverage": ReadonlyArray<CoverageGap>, readonly "geometryCost"?: null | GeometryCost };
-export type Root = { readonly "evidence": SpatialEvidence, readonly "source": number, readonly "maxDepth": number, readonly "nodes": ReadonlyArray<BvhNode>, readonly "ms": number };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["Aabb"]: strictDecoder(Aabb),
@@ -4522,21 +5003,53 @@ export const definitions = {
   ["SubjectExclusion"]: strictDecoder(SubjectExclusion),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type SourceKind = "Host" | "RevitLink" | "IfcLink";
+type PrimKind = "Solid" | "Mesh" | "Curve2D" | "Element";
+type Placement = { readonly "hostDocumentKey": string, readonly "linkUniqueId"?: null | string };
+type Aabb = { readonly "minX": number, readonly "minY": number, readonly "minZ": number, readonly "maxX": number, readonly "maxY": number, readonly "maxZ": number };
+type RevisionKind = "observed" | "unavailable";
+type RevisionUnavailableReason = "not-recorded" | "source-unread";
+type SceneSourceState = "loaded" | "unloaded" | "unavailable";
+type AcquisitionOutcome = "acquired" | "empty" | "partial" | "failed" | "deferred" | "approximate" | "outside-scope";
+type AcquisitionReason = "none" | "geometry-read" | "triangulate" | "budget" | "unsupported";
+type CoverageReason = "source-unread" | "partial-geometry" | "failed-geometry" | "deferred" | "approximate";
+type GeometrySourceCost = { readonly "source": string, readonly "linkInstanceId"?: number | null, readonly "count": number, readonly "loadOnlyCount": number, readonly "cost": number };
+type BvhNode = { readonly "index": number, readonly "depth": number, readonly "leaf": boolean, readonly "triangles": number, readonly "box": ReadonlyArray<number> };
+type SubjectExclusion = { readonly "documentKey": string, readonly "placement": Placement, readonly "subjectUniqueId": string };
+type SourceRevision = { readonly "kind": RevisionKind, readonly "epoch"?: number | null, readonly "version"?: null | string, readonly "reason"?: null | RevisionUnavailableReason };
+type Acquisition = { readonly "placement": Placement, readonly "subjectUniqueId": string, readonly "outcome": AcquisitionOutcome, readonly "reason": AcquisitionReason };
+type CoverageGap = { readonly "placement": Placement, readonly "subjectUniqueId"?: null | string, readonly "reason": CoverageReason, readonly "count": number };
+type GeometryCost = { readonly "plannedCount": number, readonly "plannedCost": number, readonly "perSource": ReadonlyArray<GeometrySourceCost>, readonly "newlyTessellatedCount": number, readonly "cumulativeTessellatedCount": number };
+type Resolved = { readonly "sources": ReadonlyArray<SourceKind>, readonly "categories": ReadonlyArray<string>, readonly "kinds": ReadonlyArray<PrimKind>, readonly "layers": ReadonlyArray<string>, readonly "exclusions": ReadonlyArray<SubjectExclusion>, readonly "scope"?: null | Aabb, readonly "reach"?: ReadonlyArray<ReadonlyArray<number>> | null, readonly "representation": string, readonly "acquisitionRequested": boolean };
+type SourceObservation = { readonly "placement": Placement, readonly "documentKey"?: null | string, readonly "revision": SourceRevision, readonly "toHost": ReadonlyArray<number>, readonly "availability": SceneSourceState };
+type SpatialEvidence = { readonly "documentKey": string, readonly "revision"?: number | null, readonly "observedAt": string, readonly "frame": string, readonly "resolved": Resolved, readonly "sources": ReadonlyArray<SourceObservation>, readonly "acquisition": ReadonlyArray<Acquisition>, readonly "coverage": ReadonlyArray<CoverageGap>, readonly "geometryCost"?: null | GeometryCost };
+export type Root = { readonly "evidence": SpatialEvidence, readonly "source": number, readonly "maxDepth": number, readonly "nodes": ReadonlyArray<BvhNode>, readonly "ms": number };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op72request {
+namespace Decoded {
 
 
 const codec = Schema.Record(Schema.String, Schema.Never).annotate({ "title": "NoRequest" });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 
 export type Root = { readonly [x: string]: never };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op72response {
+namespace Decoded {
 
 const RevitAgentContextHandleKind = Schema.Literals(["Document", "View", "Sheet", "Element", "Schedule", "Category", "Family"]).annotate({ "description": "", "identifier": "RevitAgentContextHandleKind" });
 const RevitAgentContextProvenanceKind = Schema.Literals(["ActiveDocument", "OpenDocument", "ActiveView", "CurrentSelection", "ExplicitReference", "SheetPlacement", "BrowserIndex", "VisibleInActiveView", "VisibleInReferencedView", "PrintedContext", "SearchMatch"]).annotate({ "description": "", "identifier": "RevitAgentContextProvenanceKind" });
@@ -4557,29 +5070,6 @@ const RevitAgentActiveViewContext = Schema.Struct({ "handle": RevitAgentContextH
 const RevitAgentObservedViewState = Schema.Struct({ "handle": RevitAgentContextHandle, "viewType": Schema.String, "title": Schema.String, "scale": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "levelName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "discipline": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "detailLevel": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "displayStyle": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "phaseName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "phaseFilterName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "viewTemplateName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "isTemplate": Schema.Boolean, "canBePrinted": Schema.Boolean, "areGraphicsOverridesAllowed": Schema.Boolean, "cropBoxActive": Schema.optionalKey(Schema.Union([Schema.Boolean, Schema.Null])), "cropBoxVisible": Schema.optionalKey(Schema.Union([Schema.Boolean, Schema.Null])), "scopeBoxName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "temporaryHideIsolateActive": Schema.optionalKey(Schema.Union([Schema.Boolean, Schema.Null])), "partsVisibilityShowOriginalOnly": Schema.optionalKey(Schema.Union([Schema.Boolean, Schema.Null])), "planViewRange": Schema.optionalKey(Schema.Union([Schema.Null, RevitAgentPlanViewRangeState], { mode: "oneOf" })), "view3D": Schema.optionalKey(Schema.Union([Schema.Null, RevitAgentView3DState], { mode: "oneOf" })), "candidateVisibleElementCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "viewOwnedElementCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "filters": Schema.Array(RevitAgentViewFilterState), "hiddenCategories": Schema.Array(RevitAgentHiddenCategoryState), "links": Schema.Array(RevitAgentLinkRenderingState), "worksets": Schema.Array(RevitAgentWorksetVisibilityState), "provenance": Schema.Array(RevitAgentContextProvenance) }).annotate({ "identifier": "RevitAgentObservedViewState" });
 const RevitAgentVisibleCategorySummary = Schema.Struct({ "handle": RevitAgentContextHandle, "elementCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "sampleElements": Schema.Array(RevitAgentVisibleElementSample), "provenance": Schema.Array(RevitAgentContextProvenance), "returnedElementCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "isReturnedElementSetComplete": Schema.Boolean, "elementHandles": Schema.optionalKey(Schema.Union([Schema.Array(RevitAgentVisibleElementHandle), Schema.Null])) }).annotate({ "identifier": "RevitAgentVisibleCategorySummary" });
 const codec = Schema.Struct({ "observedAtUtc": Schema.String, "activeView": Schema.optionalKey(Schema.Union([Schema.Null, RevitAgentActiveViewContext], { mode: "oneOf" })), "viewState": Schema.optionalKey(Schema.Union([Schema.Null, RevitAgentObservedViewState], { mode: "oneOf" })), "totalVisibleElementCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "visibleCategories": Schema.Array(RevitAgentVisibleCategorySummary), "confidenceWarnings": Schema.Array(Schema.String), "apiLimitations": Schema.Array(Schema.String), "notInspected": Schema.Array(Schema.String), "issues": Schema.Array(RevitDataIssue) }).annotate({ "title": "GlanceAttentionData", "description": "One bounded \"what is on the user's screen, and can pea trust it\" packet:\nactive-view identity, observed view state, visible composition (counts only),\nand the trust strip (confidence warnings / API limitations / not-inspected)\nquoted verbatim. Promoted from the client-side glance.attention prototype.\n            " });
-namespace WireTypes {
-type RevitAgentContextHandleKind = "Document" | "View" | "Sheet" | "Element" | "Schedule" | "Category" | "Family";
-type RevitAgentContextProvenanceKind = "ActiveDocument" | "OpenDocument" | "ActiveView" | "CurrentSelection" | "ExplicitReference" | "SheetPlacement" | "BrowserIndex" | "VisibleInActiveView" | "VisibleInReferencedView" | "PrintedContext" | "SearchMatch";
-type RevitAgentPlanViewRangeState = { readonly "topLevelName"?: null | string, readonly "topOffset"?: null | number, readonly "cutLevelName"?: null | string, readonly "cutOffset"?: null | number, readonly "bottomLevelName"?: null | string, readonly "bottomOffset"?: null | number, readonly "viewDepthLevelName"?: null | string, readonly "viewDepthOffset"?: null | number };
-type RevitAgentView3DState = { readonly "isPerspective": boolean, readonly "isSectionBoxActive"?: boolean | null, readonly "isLocked"?: boolean | null, readonly "hasSavedOrientation"?: boolean | null };
-type RevitAgentWorksetVisibilityState = { readonly "name": string, readonly "id": number, readonly "visibility": string };
-type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
-type RevitAgentContextHandle = { readonly "kind": RevitAgentContextHandleKind, readonly "documentKey": string, readonly "elementId"?: number | null, readonly "uniqueId"?: null | string, readonly "label": string, readonly "categoryName"?: null | string };
-type RevitAgentContextProvenance = { readonly "kind": RevitAgentContextProvenanceKind, readonly "description": string };
-type RevitDataIssue = { readonly "code": string, readonly "severity": RevitDataIssueSeverity, readonly "message": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "parameterName"?: null | string };
-type RevitAgentViewSheetPlacement = { readonly "sheet": RevitAgentContextHandle, readonly "sheetNumber": string, readonly "sheetName": string, readonly "isActiveSheet": boolean };
-type RevitAgentViewFilterState = { readonly "handle": RevitAgentContextHandle, readonly "isVisible"?: boolean | null, readonly "categoryCount"?: number | null, readonly "elementFilterType"?: null | string };
-type RevitAgentHiddenCategoryState = { readonly "handle": RevitAgentContextHandle, readonly "categoryType"?: null | string };
-type RevitAgentLinkRenderingState = { readonly "handle": RevitAgentContextHandle, readonly "isHiddenInView"?: boolean | null, readonly "isLoaded"?: boolean | null, readonly "linkVisibilityType"?: null | string, readonly "linkedViewName"?: null | string, readonly "objectStyles"?: null | string, readonly "viewFilterType"?: null | string, readonly "viewRange"?: null | string, readonly "nestedLinks"?: null | string, readonly "phaseName"?: null | string, readonly "phaseFilterName"?: null | string, readonly "detailLevel"?: null | string, readonly "discipline"?: null | string };
-type RevitAgentVisibleElementSample = { readonly "handle": RevitAgentContextHandle, readonly "className": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "levelName"?: null | string, readonly "provenance"?: ReadonlyArray<RevitAgentContextProvenance> | null, readonly "visibleInViews"?: ReadonlyArray<RevitAgentContextHandle> | null };
-type RevitAgentVisibleElementHandle = { readonly "handle": RevitAgentContextHandle, readonly "provenance"?: ReadonlyArray<RevitAgentContextProvenance> | null, readonly "visibleInViews"?: ReadonlyArray<RevitAgentContextHandle> | null };
-type RevitAgentActiveViewContext = { readonly "handle": RevitAgentContextHandle, readonly "viewType": string, readonly "title": string, readonly "scale": number, readonly "levelName"?: null | string, readonly "discipline"?: null | string, readonly "phaseName"?: null | string, readonly "viewTemplateName"?: null | string, readonly "isTemplate": boolean, readonly "canBePrinted": boolean, readonly "isSheet": boolean, readonly "isSchedule": boolean, readonly "sheetPlacements": ReadonlyArray<RevitAgentViewSheetPlacement>, readonly "provenance": ReadonlyArray<RevitAgentContextProvenance> };
-type RevitAgentObservedViewState = { readonly "handle": RevitAgentContextHandle, readonly "viewType": string, readonly "title": string, readonly "scale": number, readonly "levelName"?: null | string, readonly "discipline"?: null | string, readonly "detailLevel"?: null | string, readonly "displayStyle"?: null | string, readonly "phaseName"?: null | string, readonly "phaseFilterName"?: null | string, readonly "viewTemplateName"?: null | string, readonly "isTemplate": boolean, readonly "canBePrinted": boolean, readonly "areGraphicsOverridesAllowed": boolean, readonly "cropBoxActive"?: boolean | null, readonly "cropBoxVisible"?: boolean | null, readonly "scopeBoxName"?: null | string, readonly "temporaryHideIsolateActive"?: boolean | null, readonly "partsVisibilityShowOriginalOnly"?: boolean | null, readonly "planViewRange"?: null | RevitAgentPlanViewRangeState, readonly "view3D"?: null | RevitAgentView3DState, readonly "candidateVisibleElementCount": number, readonly "viewOwnedElementCount": number, readonly "filters": ReadonlyArray<RevitAgentViewFilterState>, readonly "hiddenCategories": ReadonlyArray<RevitAgentHiddenCategoryState>, readonly "links": ReadonlyArray<RevitAgentLinkRenderingState>, readonly "worksets": ReadonlyArray<RevitAgentWorksetVisibilityState>, readonly "provenance": ReadonlyArray<RevitAgentContextProvenance> };
-type RevitAgentVisibleCategorySummary = { readonly "handle": RevitAgentContextHandle, readonly "elementCount": number, readonly "sampleElements": ReadonlyArray<RevitAgentVisibleElementSample>, readonly "provenance": ReadonlyArray<RevitAgentContextProvenance>, readonly "returnedElementCount": number, readonly "isReturnedElementSetComplete": boolean, readonly "elementHandles"?: ReadonlyArray<RevitAgentVisibleElementHandle> | null };
-export type Root = { readonly "observedAtUtc": string, readonly "activeView"?: null | RevitAgentActiveViewContext, readonly "viewState"?: null | RevitAgentObservedViewState, readonly "totalVisibleElementCount": number, readonly "visibleCategories": ReadonlyArray<RevitAgentVisibleCategorySummary>, readonly "confidenceWarnings": ReadonlyArray<string>, readonly "apiLimitations": ReadonlyArray<string>, readonly "notInspected": ReadonlyArray<string>, readonly "issues": ReadonlyArray<RevitDataIssue> };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["RevitAgentActiveViewContext"]: strictDecoder(RevitAgentActiveViewContext),
@@ -4602,21 +5092,51 @@ export const definitions = {
   ["RevitDataIssueSeverity"]: strictDecoder(RevitDataIssueSeverity),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type RevitAgentContextHandleKind = "Document" | "View" | "Sheet" | "Element" | "Schedule" | "Category" | "Family";
+type RevitAgentContextProvenanceKind = "ActiveDocument" | "OpenDocument" | "ActiveView" | "CurrentSelection" | "ExplicitReference" | "SheetPlacement" | "BrowserIndex" | "VisibleInActiveView" | "VisibleInReferencedView" | "PrintedContext" | "SearchMatch";
+type RevitAgentPlanViewRangeState = { readonly "topLevelName"?: null | string, readonly "topOffset"?: null | number, readonly "cutLevelName"?: null | string, readonly "cutOffset"?: null | number, readonly "bottomLevelName"?: null | string, readonly "bottomOffset"?: null | number, readonly "viewDepthLevelName"?: null | string, readonly "viewDepthOffset"?: null | number };
+type RevitAgentView3DState = { readonly "isPerspective": boolean, readonly "isSectionBoxActive"?: boolean | null, readonly "isLocked"?: boolean | null, readonly "hasSavedOrientation"?: boolean | null };
+type RevitAgentWorksetVisibilityState = { readonly "name": string, readonly "id": number, readonly "visibility": string };
+type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
+type RevitAgentContextHandle = { readonly "kind": RevitAgentContextHandleKind, readonly "documentKey": string, readonly "elementId"?: number | null, readonly "uniqueId"?: null | string, readonly "label": string, readonly "categoryName"?: null | string };
+type RevitAgentContextProvenance = { readonly "kind": RevitAgentContextProvenanceKind, readonly "description": string };
+type RevitDataIssue = { readonly "code": string, readonly "severity": RevitDataIssueSeverity, readonly "message": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "parameterName"?: null | string };
+type RevitAgentViewSheetPlacement = { readonly "sheet": RevitAgentContextHandle, readonly "sheetNumber": string, readonly "sheetName": string, readonly "isActiveSheet": boolean };
+type RevitAgentViewFilterState = { readonly "handle": RevitAgentContextHandle, readonly "isVisible"?: boolean | null, readonly "categoryCount"?: number | null, readonly "elementFilterType"?: null | string };
+type RevitAgentHiddenCategoryState = { readonly "handle": RevitAgentContextHandle, readonly "categoryType"?: null | string };
+type RevitAgentLinkRenderingState = { readonly "handle": RevitAgentContextHandle, readonly "isHiddenInView"?: boolean | null, readonly "isLoaded"?: boolean | null, readonly "linkVisibilityType"?: null | string, readonly "linkedViewName"?: null | string, readonly "objectStyles"?: null | string, readonly "viewFilterType"?: null | string, readonly "viewRange"?: null | string, readonly "nestedLinks"?: null | string, readonly "phaseName"?: null | string, readonly "phaseFilterName"?: null | string, readonly "detailLevel"?: null | string, readonly "discipline"?: null | string };
+type RevitAgentVisibleElementSample = { readonly "handle": RevitAgentContextHandle, readonly "className": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "levelName"?: null | string, readonly "provenance"?: ReadonlyArray<RevitAgentContextProvenance> | null, readonly "visibleInViews"?: ReadonlyArray<RevitAgentContextHandle> | null };
+type RevitAgentVisibleElementHandle = { readonly "handle": RevitAgentContextHandle, readonly "provenance"?: ReadonlyArray<RevitAgentContextProvenance> | null, readonly "visibleInViews"?: ReadonlyArray<RevitAgentContextHandle> | null };
+type RevitAgentActiveViewContext = { readonly "handle": RevitAgentContextHandle, readonly "viewType": string, readonly "title": string, readonly "scale": number, readonly "levelName"?: null | string, readonly "discipline"?: null | string, readonly "phaseName"?: null | string, readonly "viewTemplateName"?: null | string, readonly "isTemplate": boolean, readonly "canBePrinted": boolean, readonly "isSheet": boolean, readonly "isSchedule": boolean, readonly "sheetPlacements": ReadonlyArray<RevitAgentViewSheetPlacement>, readonly "provenance": ReadonlyArray<RevitAgentContextProvenance> };
+type RevitAgentObservedViewState = { readonly "handle": RevitAgentContextHandle, readonly "viewType": string, readonly "title": string, readonly "scale": number, readonly "levelName"?: null | string, readonly "discipline"?: null | string, readonly "detailLevel"?: null | string, readonly "displayStyle"?: null | string, readonly "phaseName"?: null | string, readonly "phaseFilterName"?: null | string, readonly "viewTemplateName"?: null | string, readonly "isTemplate": boolean, readonly "canBePrinted": boolean, readonly "areGraphicsOverridesAllowed": boolean, readonly "cropBoxActive"?: boolean | null, readonly "cropBoxVisible"?: boolean | null, readonly "scopeBoxName"?: null | string, readonly "temporaryHideIsolateActive"?: boolean | null, readonly "partsVisibilityShowOriginalOnly"?: boolean | null, readonly "planViewRange"?: null | RevitAgentPlanViewRangeState, readonly "view3D"?: null | RevitAgentView3DState, readonly "candidateVisibleElementCount": number, readonly "viewOwnedElementCount": number, readonly "filters": ReadonlyArray<RevitAgentViewFilterState>, readonly "hiddenCategories": ReadonlyArray<RevitAgentHiddenCategoryState>, readonly "links": ReadonlyArray<RevitAgentLinkRenderingState>, readonly "worksets": ReadonlyArray<RevitAgentWorksetVisibilityState>, readonly "provenance": ReadonlyArray<RevitAgentContextProvenance> };
+type RevitAgentVisibleCategorySummary = { readonly "handle": RevitAgentContextHandle, readonly "elementCount": number, readonly "sampleElements": ReadonlyArray<RevitAgentVisibleElementSample>, readonly "provenance": ReadonlyArray<RevitAgentContextProvenance>, readonly "returnedElementCount": number, readonly "isReturnedElementSetComplete": boolean, readonly "elementHandles"?: ReadonlyArray<RevitAgentVisibleElementHandle> | null };
+export type Root = { readonly "observedAtUtc": string, readonly "activeView"?: null | RevitAgentActiveViewContext, readonly "viewState"?: null | RevitAgentObservedViewState, readonly "totalVisibleElementCount": number, readonly "visibleCategories": ReadonlyArray<RevitAgentVisibleCategorySummary>, readonly "confidenceWarnings": ReadonlyArray<string>, readonly "apiLimitations": ReadonlyArray<string>, readonly "notInspected": ReadonlyArray<string>, readonly "issues": ReadonlyArray<RevitDataIssue> };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op73request {
+namespace Decoded {
 
 
 const codec = Schema.Record(Schema.String, Schema.Never).annotate({ "title": "NoRequest" });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 
 export type Root = { readonly [x: string]: never };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op73response {
+namespace Decoded {
 
 const RevitDocumentSummary = Schema.Struct({ "documentKey": Schema.String, "title": Schema.String, "path": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "isFamilyDocument": Schema.Boolean, "isWorkshared": Schema.Boolean, "isActive": Schema.Boolean, "isHeadless": Schema.Boolean.annotate({ "description": "Open with no window: no active view or selection, and Revit cannot activate it. Ops that read UI state refuse it; document-owned ops answer." }), "isModifiable": Schema.Boolean, "isReadOnly": Schema.Boolean, "isModelInCloud": Schema.Boolean, "cloudProjectGuid": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "cloudModelGuid": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "cloudModelUrn": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "identifier": "RevitDocumentSummary" });
 const RevitAgentBrowserSummary = Schema.Struct({ "viewCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "sheetCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "scheduleCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "familyCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })) }).annotate({ "identifier": "RevitAgentBrowserSummary" });
@@ -4628,20 +5148,6 @@ const ProjectParameterBindingsSummary = Schema.Struct({ "totalBindings": Schema.
 const RevitDataIssueSeverity = Schema.Literals(["Info", "Warning", "Error"]).annotate({ "description": "", "identifier": "RevitDataIssueSeverity" });
 const RevitDataIssue = Schema.Struct({ "code": Schema.String, "severity": RevitDataIssueSeverity, "message": Schema.String, "familyName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "typeName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "parameterName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "identifier": "RevitDataIssue" });
 const codec = Schema.Struct({ "observedAtUtc": Schema.String, "document": RevitDocumentSummary, "projectTotals": RevitAgentBrowserSummary, "levels": Schema.Array(GlanceLevelEntry), "sheetNumberSeries": Schema.Array(GlanceSheetSeriesEntry), "families": LoadedFamiliesCatalogSummary, "familiesByCategory": Schema.Array(GlanceCategoryFamilyCount), "bindings": ProjectParameterBindingsSummary, "issues": Schema.Array(RevitDataIssue) }).annotate({ "title": "GlanceModelData" });
-namespace WireTypes {
-type RevitDocumentSummary = { readonly "documentKey": string, readonly "title": string, readonly "path"?: null | string, readonly "isFamilyDocument": boolean, readonly "isWorkshared": boolean, readonly "isActive": boolean, readonly "isHeadless": boolean, readonly "isModifiable": boolean, readonly "isReadOnly": boolean, readonly "isModelInCloud": boolean, readonly "cloudProjectGuid"?: null | string, readonly "cloudModelGuid"?: null | string, readonly "cloudModelUrn"?: null | string };
-type RevitAgentBrowserSummary = { readonly "viewCount": number, readonly "sheetCount": number, readonly "scheduleCount": number, readonly "familyCount": number };
-type GlanceLevelEntry = { readonly "name": string, readonly "elevationFeet": number };
-type GlanceSheetSeriesEntry = { readonly "prefix": string, readonly "sheetCount": number };
-type LoadedFamiliesCatalogSummary = { readonly "totalFamilies": number, readonly "placedFamilies": number, readonly "unplacedFamilies": number, readonly "totalTypes": number, readonly "totalPlacedInstances": number, readonly "truncated": boolean };
-type GlanceCategoryFamilyCount = { readonly "categoryName": string, readonly "familyCount": number };
-type ProjectParameterBindingsSummary = { readonly "totalBindings": number, readonly "instanceBindings": number, readonly "typeBindings": number, readonly "bindingsByCategory": { readonly [x: string]: number }, readonly "truncated": boolean };
-type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
-type RevitDataIssue = { readonly "code": string, readonly "severity": RevitDataIssueSeverity, readonly "message": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "parameterName"?: null | string };
-export type Root = { readonly "observedAtUtc": string, readonly "document": RevitDocumentSummary, readonly "projectTotals": RevitAgentBrowserSummary, readonly "levels": ReadonlyArray<GlanceLevelEntry>, readonly "sheetNumberSeries": ReadonlyArray<GlanceSheetSeriesEntry>, readonly "families": LoadedFamiliesCatalogSummary, readonly "familiesByCategory": ReadonlyArray<GlanceCategoryFamilyCount>, readonly "bindings": ProjectParameterBindingsSummary, readonly "issues": ReadonlyArray<RevitDataIssue> };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["GlanceCategoryFamilyCount"]: strictDecoder(GlanceCategoryFamilyCount),
@@ -4655,8 +5161,26 @@ export const definitions = {
   ["RevitDocumentSummary"]: strictDecoder(RevitDocumentSummary),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type RevitDocumentSummary = { readonly "documentKey": string, readonly "title": string, readonly "path"?: null | string, readonly "isFamilyDocument": boolean, readonly "isWorkshared": boolean, readonly "isActive": boolean, readonly "isHeadless": boolean, readonly "isModifiable": boolean, readonly "isReadOnly": boolean, readonly "isModelInCloud": boolean, readonly "cloudProjectGuid"?: null | string, readonly "cloudModelGuid"?: null | string, readonly "cloudModelUrn"?: null | string };
+type RevitAgentBrowserSummary = { readonly "viewCount": number, readonly "sheetCount": number, readonly "scheduleCount": number, readonly "familyCount": number };
+type GlanceLevelEntry = { readonly "name": string, readonly "elevationFeet": number };
+type GlanceSheetSeriesEntry = { readonly "prefix": string, readonly "sheetCount": number };
+type LoadedFamiliesCatalogSummary = { readonly "totalFamilies": number, readonly "placedFamilies": number, readonly "unplacedFamilies": number, readonly "totalTypes": number, readonly "totalPlacedInstances": number, readonly "truncated": boolean };
+type GlanceCategoryFamilyCount = { readonly "categoryName": string, readonly "familyCount": number };
+type ProjectParameterBindingsSummary = { readonly "totalBindings": number, readonly "instanceBindings": number, readonly "typeBindings": number, readonly "bindingsByCategory": { readonly [x: string]: number }, readonly "truncated": boolean };
+type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
+type RevitDataIssue = { readonly "code": string, readonly "severity": RevitDataIssueSeverity, readonly "message": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "parameterName"?: null | string };
+export type Root = { readonly "observedAtUtc": string, readonly "document": RevitDocumentSummary, readonly "projectTotals": RevitAgentBrowserSummary, readonly "levels": ReadonlyArray<GlanceLevelEntry>, readonly "sheetNumberSeries": ReadonlyArray<GlanceSheetSeriesEntry>, readonly "families": LoadedFamiliesCatalogSummary, readonly "familiesByCategory": ReadonlyArray<GlanceCategoryFamilyCount>, readonly "bindings": ProjectParameterBindingsSummary, readonly "issues": ReadonlyArray<RevitDataIssue> };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op74request {
+namespace Decoded {
 
 const LoadedFamilyPlacementScope = Schema.Literals(["AllLoaded", "PlacedOnly", "UnplacedOnly"]).annotate({ "description": "", "identifier": "LoadedFamilyPlacementScope" });
 const RevitDataOutputBudget = Schema.Struct({ "maxEntries": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(1).annotate({ "expected": "a value greater than or equal to 1" })).check(Schema.isLessThanOrEqualTo(100000).annotate({ "expected": "a value less than or equal to 100000" })), Schema.Null]).annotate({ "format": "int32" })), "maxRowsPerEntry": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(1).annotate({ "expected": "a value greater than or equal to 1" })).check(Schema.isLessThanOrEqualTo(10000).annotate({ "expected": "a value less than or equal to 10000" })), Schema.Null]).annotate({ "format": "int32" })), "maxSamplesPerEntry": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(1).annotate({ "expected": "a value greater than or equal to 1" })).check(Schema.isLessThanOrEqualTo(10000).annotate({ "expected": "a value less than or equal to 10000" })), Schema.Null]).annotate({ "format": "int32" })), "includeDiagnostics": Schema.optionalKey(Schema.Boolean) }).annotate({ "identifier": "RevitDataOutputBudget" });
@@ -4675,6 +5199,9 @@ const ParameterDefinitionDescriptor = Schema.Struct({ "identity": ParameterIdent
 const FamilyParameterSnapshot = Schema.Struct({ "definition": ParameterDefinitionDescriptor, "kind": LoadedFamilyParameterKind, "scope": LoadedFamilyParameterPresence, "storageType": Schema.String, "formulaState": FormulaState, "formula": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "valuesPerType": Schema.Record(Schema.String, Schema.Union([Schema.Null, Schema.String])), "excludedReason": Schema.optionalKey(Schema.Union([Schema.Null, ExcludedParameterReason], { mode: "oneOf" })), "displayUnit": Schema.optionalKey(Schema.Union([Schema.Null, MeasuredDisplayUnit], { mode: "oneOf" })) }).annotate({ "description": "Canonical family/parameter record language shared by DocumentData collection, FamilyFoundry\ncapture, and the matrix wire. Serialization-clean: built on\nParameterDefinitionDescriptor and plain values.\nValuesPerType preserves null (no value) vs \"\" (empty string value) — renderers coerce, the wire\ndoes not.\n            ", "identifier": "FamilyParameterSnapshot" });
 const FamilySnapshotRecord = Schema.Struct({ "familyId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "familyUniqueId": Schema.String, "familyName": Schema.String, "categoryName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "versionGuid": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "typeNames": Schema.Array(Schema.String), "parameters": Schema.Array(FamilyParameterSnapshot), "issues": Schema.Array(RevitDataIssue), "isPartial": Schema.Boolean, "placedInstanceCount": Schema.optionalKey(Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" }))), "scheduleNames": Schema.optionalKey(Schema.Union([Schema.Array(Schema.String), Schema.Null])) }).annotate({ "identifier": "FamilySnapshotRecord" });
 const codec = Schema.Struct({ "filter": Schema.optionalKey(Schema.Union([Schema.Null, LoadedFamiliesFilter], { mode: "oneOf" })), "budget": Schema.optionalKey(Schema.Union([Schema.Null, RevitDataOutputBudget], { mode: "oneOf" })), "includeTempPlacement": Schema.optionalKey(Schema.Boolean), "phase": Schema.optionalKey(LoadedFamiliesReadPhase), "familyId": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })), Schema.Null]).annotate({ "format": "int64" })), "snapshots": Schema.optionalKey(Schema.Union([Schema.Array(FamilySnapshotRecord), Schema.Null])) }).annotate({ "title": "LoadedFamiliesMatrixRequest" });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 type LoadedFamilyPlacementScope = "AllLoaded" | "PlacedOnly" | "UnplacedOnly";
 type RevitDataOutputBudget = { readonly "maxEntries"?: number | null, readonly "maxRowsPerEntry"?: number | null, readonly "maxSamplesPerEntry"?: number | null, readonly "includeDiagnostics"?: boolean };
@@ -4695,11 +5222,11 @@ type FamilySnapshotRecord = { readonly "familyId": number, readonly "familyUniqu
 export type Root = { readonly "filter"?: null | LoadedFamiliesFilter, readonly "budget"?: null | RevitDataOutputBudget, readonly "includeTempPlacement"?: boolean, readonly "phase"?: LoadedFamiliesReadPhase, readonly "familyId"?: number | null, readonly "snapshots"?: ReadonlyArray<FamilySnapshotRecord> | null };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op74response {
+namespace Decoded {
 
 const ParameterIdentityKind = Schema.Literals(["SharedGuid", "BuiltInParameter", "ParameterElement", "NameFallback"]).annotate({ "description": "", "identifier": "ParameterIdentityKind" });
 const LoadedFamilyParameterKind = Schema.Literals(["Unknown", "FamilyParameter", "SharedParameter", "ProjectParameter", "ProjectSharedParameter"]).annotate({ "description": "", "identifier": "LoadedFamilyParameterKind" });
@@ -4718,27 +5245,6 @@ const LoadedFamiliesReadSource = Schema.Struct({ "families": Schema.Array(Loaded
 const FamilyParameterSnapshot = Schema.Struct({ "definition": ParameterDefinitionDescriptor, "kind": LoadedFamilyParameterKind, "scope": LoadedFamilyParameterPresence, "storageType": Schema.String, "formulaState": FormulaState, "formula": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "valuesPerType": Schema.Record(Schema.String, Schema.Union([Schema.Null, Schema.String])), "excludedReason": Schema.optionalKey(Schema.Union([Schema.Null, ExcludedParameterReason], { mode: "oneOf" })), "displayUnit": Schema.optionalKey(Schema.Union([Schema.Null, MeasuredDisplayUnit], { mode: "oneOf" })) }).annotate({ "description": "Canonical family/parameter record language shared by DocumentData collection, FamilyFoundry\ncapture, and the matrix wire. Serialization-clean: built on\nParameterDefinitionDescriptor and plain values.\nValuesPerType preserves null (no value) vs \"\" (empty string value) — renderers coerce, the wire\ndoes not.\n            ", "identifier": "FamilyParameterSnapshot" });
 const FamilySnapshotRecord = Schema.Struct({ "familyId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "familyUniqueId": Schema.String, "familyName": Schema.String, "categoryName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "versionGuid": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "typeNames": Schema.Array(Schema.String), "parameters": Schema.Array(FamilyParameterSnapshot), "issues": Schema.Array(RevitDataIssue), "isPartial": Schema.Boolean, "placedInstanceCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "scheduleNames": Schema.optionalKey(Schema.Union([Schema.Array(Schema.String), Schema.Null])) }).annotate({ "identifier": "FamilySnapshotRecord" });
 const codec = Schema.Struct({ "families": Schema.Array(FamilySnapshotRecord), "issues": Schema.Array(RevitDataIssue), "page": Schema.optionalKey(Schema.Union([Schema.Null, RevitDataResultPage], { mode: "oneOf" })), "source": Schema.optionalKey(Schema.Union([Schema.Null, LoadedFamiliesReadSource], { mode: "oneOf" })), "elapsedMs": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "cacheHit": Schema.optionalKey(Schema.Union([Schema.Boolean, Schema.Null])) }).annotate({ "title": "LoadedFamiliesMatrixData" });
-namespace WireTypes {
-type ParameterIdentityKind = "SharedGuid" | "BuiltInParameter" | "ParameterElement" | "NameFallback";
-type LoadedFamilyParameterKind = "Unknown" | "FamilyParameter" | "SharedParameter" | "ProjectParameter" | "ProjectSharedParameter";
-type LoadedFamilyParameterPresence = "Unresolved" | "Family" | "FamilyAndProjectBinding" | "ProjectBindingOnly";
-type FormulaState = "None" | "Present" | "NotApplicable" | "Unknown";
-type ExcludedParameterReason = "UnresolvedClassification" | "ProjectObservedBuiltIn";
-type MeasuredDisplayUnit = { readonly "specTypeId": string, readonly "typeId"?: null | string, readonly "label"?: null | string, readonly "symbol"?: null | string, readonly "refusal"?: null | string };
-type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
-type RevitDataResultPage = { readonly "totalCount": number, readonly "returnedCount": number, readonly "isTruncated": boolean };
-type LoadedFamilyTypeEntry = { readonly "typeName": string };
-type ParameterIdentity = { readonly "key": string, readonly "kind": ParameterIdentityKind, readonly "name": string, readonly "builtInParameterId"?: number | null, readonly "sharedGuid"?: null | string, readonly "parameterElementId"?: number | null };
-type RevitDataIssue = { readonly "code": string, readonly "severity": RevitDataIssueSeverity, readonly "message": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "parameterName"?: null | string };
-type LoadedFamilyCatalogEntry = { readonly "familyId": number, readonly "familyUniqueId": string, readonly "familyName": string, readonly "categoryName"?: null | string, readonly "typeCount": number, readonly "placedInstanceCount": number, readonly "types": ReadonlyArray<LoadedFamilyTypeEntry> };
-type ParameterDefinitionDescriptor = { readonly "identity": ParameterIdentity, readonly "isInstance"?: boolean | null, readonly "dataTypeId"?: null | string, readonly "dataTypeLabel"?: null | string, readonly "groupTypeId"?: null | string, readonly "groupTypeLabel"?: null | string, readonly "visible"?: boolean | null, readonly "userModifiable"?: boolean | null, readonly "description"?: null | string };
-type LoadedFamiliesReadSource = { readonly "families": ReadonlyArray<LoadedFamilyCatalogEntry>, readonly "revitVersion": string, readonly "version": string, readonly "copyPath"?: null | string, readonly "copyRefusal"?: null | string };
-type FamilyParameterSnapshot = { readonly "definition": ParameterDefinitionDescriptor, readonly "kind": LoadedFamilyParameterKind, readonly "scope": LoadedFamilyParameterPresence, readonly "storageType": string, readonly "formulaState": FormulaState, readonly "formula"?: null | string, readonly "valuesPerType": { readonly [x: string]: null | string }, readonly "excludedReason"?: null | ExcludedParameterReason, readonly "displayUnit"?: null | MeasuredDisplayUnit };
-type FamilySnapshotRecord = { readonly "familyId": number, readonly "familyUniqueId": string, readonly "familyName": string, readonly "categoryName"?: null | string, readonly "versionGuid"?: null | string, readonly "typeNames": ReadonlyArray<string>, readonly "parameters": ReadonlyArray<FamilyParameterSnapshot>, readonly "issues": ReadonlyArray<RevitDataIssue>, readonly "isPartial": boolean, readonly "placedInstanceCount": number, readonly "scheduleNames"?: ReadonlyArray<string> | null };
-export type Root = { readonly "families": ReadonlyArray<FamilySnapshotRecord>, readonly "issues": ReadonlyArray<RevitDataIssue>, readonly "page"?: null | RevitDataResultPage, readonly "source"?: null | LoadedFamiliesReadSource, readonly "elapsedMs"?: null | number, readonly "cacheHit"?: boolean | null };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["ExcludedParameterReason"]: strictDecoder(ExcludedParameterReason),
@@ -4759,8 +5265,33 @@ export const definitions = {
   ["RevitDataResultPage"]: strictDecoder(RevitDataResultPage),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type ParameterIdentityKind = "SharedGuid" | "BuiltInParameter" | "ParameterElement" | "NameFallback";
+type LoadedFamilyParameterKind = "Unknown" | "FamilyParameter" | "SharedParameter" | "ProjectParameter" | "ProjectSharedParameter";
+type LoadedFamilyParameterPresence = "Unresolved" | "Family" | "FamilyAndProjectBinding" | "ProjectBindingOnly";
+type FormulaState = "None" | "Present" | "NotApplicable" | "Unknown";
+type ExcludedParameterReason = "UnresolvedClassification" | "ProjectObservedBuiltIn";
+type MeasuredDisplayUnit = { readonly "specTypeId": string, readonly "typeId"?: null | string, readonly "label"?: null | string, readonly "symbol"?: null | string, readonly "refusal"?: null | string };
+type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
+type RevitDataResultPage = { readonly "totalCount": number, readonly "returnedCount": number, readonly "isTruncated": boolean };
+type LoadedFamilyTypeEntry = { readonly "typeName": string };
+type ParameterIdentity = { readonly "key": string, readonly "kind": ParameterIdentityKind, readonly "name": string, readonly "builtInParameterId"?: number | null, readonly "sharedGuid"?: null | string, readonly "parameterElementId"?: number | null };
+type RevitDataIssue = { readonly "code": string, readonly "severity": RevitDataIssueSeverity, readonly "message": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "parameterName"?: null | string };
+type LoadedFamilyCatalogEntry = { readonly "familyId": number, readonly "familyUniqueId": string, readonly "familyName": string, readonly "categoryName"?: null | string, readonly "typeCount": number, readonly "placedInstanceCount": number, readonly "types": ReadonlyArray<LoadedFamilyTypeEntry> };
+type ParameterDefinitionDescriptor = { readonly "identity": ParameterIdentity, readonly "isInstance"?: boolean | null, readonly "dataTypeId"?: null | string, readonly "dataTypeLabel"?: null | string, readonly "groupTypeId"?: null | string, readonly "groupTypeLabel"?: null | string, readonly "visible"?: boolean | null, readonly "userModifiable"?: boolean | null, readonly "description"?: null | string };
+type LoadedFamiliesReadSource = { readonly "families": ReadonlyArray<LoadedFamilyCatalogEntry>, readonly "revitVersion": string, readonly "version": string, readonly "copyPath"?: null | string, readonly "copyRefusal"?: null | string };
+type FamilyParameterSnapshot = { readonly "definition": ParameterDefinitionDescriptor, readonly "kind": LoadedFamilyParameterKind, readonly "scope": LoadedFamilyParameterPresence, readonly "storageType": string, readonly "formulaState": FormulaState, readonly "formula"?: null | string, readonly "valuesPerType": { readonly [x: string]: null | string }, readonly "excludedReason"?: null | ExcludedParameterReason, readonly "displayUnit"?: null | MeasuredDisplayUnit };
+type FamilySnapshotRecord = { readonly "familyId": number, readonly "familyUniqueId": string, readonly "familyName": string, readonly "categoryName"?: null | string, readonly "versionGuid"?: null | string, readonly "typeNames": ReadonlyArray<string>, readonly "parameters": ReadonlyArray<FamilyParameterSnapshot>, readonly "issues": ReadonlyArray<RevitDataIssue>, readonly "isPartial": boolean, readonly "placedInstanceCount": number, readonly "scheduleNames"?: ReadonlyArray<string> | null };
+export type Root = { readonly "families": ReadonlyArray<FamilySnapshotRecord>, readonly "issues": ReadonlyArray<RevitDataIssue>, readonly "page"?: null | RevitDataResultPage, readonly "source"?: null | LoadedFamiliesReadSource, readonly "elapsedMs"?: null | number, readonly "cacheHit"?: boolean | null };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op75request {
+namespace Decoded {
 
 const RevitElementScope = Schema.Literals(["All", "ActiveViewVisible", "ViewReferences", "CurrentSelection", "ExplicitHandles"]).annotate({ "description": "", "identifier": "RevitElementScope" });
 const ParameterIdentityKind = Schema.Literals(["SharedGuid", "BuiltInParameter", "ParameterElement", "NameFallback"]).annotate({ "description": "", "identifier": "ParameterIdentityKind" });
@@ -4769,6 +5300,9 @@ const RevitDataOutputBudget = Schema.Struct({ "maxEntries": Schema.optionalKey(S
 const ParameterIdentity = Schema.Struct({ "key": Schema.String, "kind": ParameterIdentityKind, "name": Schema.String, "builtInParameterId": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), Schema.Null]).annotate({ "format": "int32" })), "sharedGuid": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "parameterElementId": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })), Schema.Null]).annotate({ "format": "int64" })) }).annotate({ "identifier": "ParameterIdentity" });
 const ParameterReference = Schema.Struct({ "identity": Schema.optionalKey(Schema.Union([Schema.Null, ParameterIdentity], { mode: "oneOf" })), "name": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "sharedGuid": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "identifier": "ParameterReference" });
 const codec = Schema.Struct({ "categoryNames": Schema.optionalKey(Schema.Array(Schema.String)), "scope": Schema.optionalKey(RevitElementScope), "elementIds": Schema.optionalKey(Schema.Array(Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })))), "elementUniqueIds": Schema.optionalKey(Schema.Array(Schema.String)), "parameters": Schema.optionalKey(Schema.Array(ParameterReference)), "lookupPreference": Schema.optionalKey(RevitParameterLookupPreference), "treatWhitespaceAsBlank": Schema.optionalKey(Schema.Boolean), "defaultValues": Schema.optionalKey(Schema.Array(Schema.String)), "budget": Schema.optionalKey(Schema.Union([Schema.Null, RevitDataOutputBudget], { mode: "oneOf" })) }).annotate({ "title": "ParameterCoverageRequest" });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 type RevitElementScope = "All" | "ActiveViewVisible" | "ViewReferences" | "CurrentSelection" | "ExplicitHandles";
 type ParameterIdentityKind = "SharedGuid" | "BuiltInParameter" | "ParameterElement" | "NameFallback";
@@ -4779,11 +5313,11 @@ type ParameterReference = { readonly "identity"?: null | ParameterIdentity, read
 export type Root = { readonly "categoryNames"?: ReadonlyArray<string>, readonly "scope"?: RevitElementScope, readonly "elementIds"?: ReadonlyArray<number>, readonly "elementUniqueIds"?: ReadonlyArray<string>, readonly "parameters"?: ReadonlyArray<ParameterReference>, readonly "lookupPreference"?: RevitParameterLookupPreference, readonly "treatWhitespaceAsBlank"?: boolean, readonly "defaultValues"?: ReadonlyArray<string>, readonly "budget"?: null | RevitDataOutputBudget };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op75response {
+namespace Decoded {
 
 const ParameterIdentityKind = Schema.Literals(["SharedGuid", "BuiltInParameter", "ParameterElement", "NameFallback"]).annotate({ "description": "", "identifier": "ParameterIdentityKind" });
 const RevitElementHandle = Schema.Struct({ "elementId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "uniqueId": Schema.String, "displayName": Schema.String, "categoryName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "familyName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "typeName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "identifier": "RevitElementHandle" });
@@ -4794,19 +5328,6 @@ const RevitDataIssue = Schema.Struct({ "code": Schema.String, "severity": RevitD
 const ParameterDefinitionDescriptor = Schema.Struct({ "identity": ParameterIdentity, "isInstance": Schema.optionalKey(Schema.Union([Schema.Boolean, Schema.Null])), "dataTypeId": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "dataTypeLabel": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "groupTypeId": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "groupTypeLabel": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "visible": Schema.optionalKey(Schema.Union([Schema.Boolean, Schema.Null])), "userModifiable": Schema.optionalKey(Schema.Union([Schema.Boolean, Schema.Null])), "description": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "identifier": "ParameterDefinitionDescriptor" });
 const ParameterCoverageParameterEntry = Schema.Struct({ "definition": ParameterDefinitionDescriptor, "categoryName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "elementCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "presentCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "missingCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "blankCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "defaultCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "samples": Schema.Array(RevitElementHandle), "identity": ParameterIdentity }).annotate({ "identifier": "ParameterCoverageParameterEntry" });
 const codec = Schema.Struct({ "totalElements": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "parameters": Schema.Array(ParameterCoverageParameterEntry), "issues": Schema.Array(RevitDataIssue), "page": Schema.optionalKey(Schema.Union([Schema.Null, RevitDataResultPage], { mode: "oneOf" })) }).annotate({ "title": "ParameterCoverageData" });
-namespace WireTypes {
-type ParameterIdentityKind = "SharedGuid" | "BuiltInParameter" | "ParameterElement" | "NameFallback";
-type RevitElementHandle = { readonly "elementId": number, readonly "uniqueId": string, readonly "displayName": string, readonly "categoryName"?: null | string, readonly "familyName"?: null | string, readonly "typeName"?: null | string };
-type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
-type RevitDataResultPage = { readonly "totalCount": number, readonly "returnedCount": number, readonly "isTruncated": boolean };
-type ParameterIdentity = { readonly "key": string, readonly "kind": ParameterIdentityKind, readonly "name": string, readonly "builtInParameterId"?: number | null, readonly "sharedGuid"?: null | string, readonly "parameterElementId"?: number | null };
-type RevitDataIssue = { readonly "code": string, readonly "severity": RevitDataIssueSeverity, readonly "message": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "parameterName"?: null | string };
-type ParameterDefinitionDescriptor = { readonly "identity": ParameterIdentity, readonly "isInstance"?: boolean | null, readonly "dataTypeId"?: null | string, readonly "dataTypeLabel"?: null | string, readonly "groupTypeId"?: null | string, readonly "groupTypeLabel"?: null | string, readonly "visible"?: boolean | null, readonly "userModifiable"?: boolean | null, readonly "description"?: null | string };
-type ParameterCoverageParameterEntry = { readonly "definition": ParameterDefinitionDescriptor, readonly "categoryName"?: null | string, readonly "elementCount": number, readonly "presentCount": number, readonly "missingCount": number, readonly "blankCount": number, readonly "defaultCount": number, readonly "samples": ReadonlyArray<RevitElementHandle>, readonly "identity": ParameterIdentity };
-export type Root = { readonly "totalElements": number, readonly "parameters": ReadonlyArray<ParameterCoverageParameterEntry>, readonly "issues": ReadonlyArray<RevitDataIssue>, readonly "page"?: null | RevitDataResultPage };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["ParameterCoverageParameterEntry"]: strictDecoder(ParameterCoverageParameterEntry),
@@ -4819,8 +5340,25 @@ export const definitions = {
   ["RevitElementHandle"]: strictDecoder(RevitElementHandle),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type ParameterIdentityKind = "SharedGuid" | "BuiltInParameter" | "ParameterElement" | "NameFallback";
+type RevitElementHandle = { readonly "elementId": number, readonly "uniqueId": string, readonly "displayName": string, readonly "categoryName"?: null | string, readonly "familyName"?: null | string, readonly "typeName"?: null | string };
+type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
+type RevitDataResultPage = { readonly "totalCount": number, readonly "returnedCount": number, readonly "isTruncated": boolean };
+type ParameterIdentity = { readonly "key": string, readonly "kind": ParameterIdentityKind, readonly "name": string, readonly "builtInParameterId"?: number | null, readonly "sharedGuid"?: null | string, readonly "parameterElementId"?: number | null };
+type RevitDataIssue = { readonly "code": string, readonly "severity": RevitDataIssueSeverity, readonly "message": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "parameterName"?: null | string };
+type ParameterDefinitionDescriptor = { readonly "identity": ParameterIdentity, readonly "isInstance"?: boolean | null, readonly "dataTypeId"?: null | string, readonly "dataTypeLabel"?: null | string, readonly "groupTypeId"?: null | string, readonly "groupTypeLabel"?: null | string, readonly "visible"?: boolean | null, readonly "userModifiable"?: boolean | null, readonly "description"?: null | string };
+type ParameterCoverageParameterEntry = { readonly "definition": ParameterDefinitionDescriptor, readonly "categoryName"?: null | string, readonly "elementCount": number, readonly "presentCount": number, readonly "missingCount": number, readonly "blankCount": number, readonly "defaultCount": number, readonly "samples": ReadonlyArray<RevitElementHandle>, readonly "identity": ParameterIdentity };
+export type Root = { readonly "totalElements": number, readonly "parameters": ReadonlyArray<ParameterCoverageParameterEntry>, readonly "issues": ReadonlyArray<RevitDataIssue>, readonly "page"?: null | RevitDataResultPage };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op76request {
+namespace Decoded {
 
 const RevitElementScope = Schema.Literals(["All", "ActiveViewVisible", "ViewReferences", "CurrentSelection", "ExplicitHandles"]).annotate({ "description": "", "identifier": "RevitElementScope" });
 const SchedulePlacementScope = Schema.Literals(["All", "PlacedOnly", "UnplacedOnly"]).annotate({ "description": "", "identifier": "SchedulePlacementScope" });
@@ -4838,6 +5376,9 @@ const ParameterReference = Schema.Struct({ "identity": Schema.optionalKey(Schema
 const ScheduleCustomParameterFilter = Schema.Struct({ "parameter": ParameterReference, "expectedValue": Schema.String, "matchKind": ScheduleCustomParameterMatchKind }).annotate({ "identifier": "ScheduleCustomParameterFilter" });
 const ScheduleCatalogRequest = Schema.Struct({ "categoryNames": Schema.optionalKey(Schema.Array(Schema.String)), "scheduleNames": Schema.optionalKey(Schema.Array(Schema.String)), "scheduleNameContains": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "scheduleNamePrefix": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "placementScope": Schema.optionalKey(SchedulePlacementScope), "sheetNumberContains": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "sheetNameContains": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "isEmpty": Schema.optionalKey(Schema.Union([Schema.Boolean, Schema.Null])), "customParameterFilters": Schema.optionalKey(Schema.Array(ScheduleCustomParameterFilter)), "browserFilter": Schema.optionalKey(Schema.Union([Schema.Null, ProjectBrowserFilter], { mode: "oneOf" })), "includeTemplates": Schema.optionalKey(Schema.Boolean), "projection": Schema.optionalKey(Schema.Union([Schema.Null, ScheduleCatalogProjection], { mode: "oneOf" })), "budget": Schema.optionalKey(Schema.Union([Schema.Null, RevitDataOutputBudget], { mode: "oneOf" })) }).annotate({ "identifier": "ScheduleCatalogRequest" });
 const codec = Schema.Struct({ "categoryNames": Schema.optionalKey(Schema.Array(Schema.String)), "scope": Schema.optionalKey(RevitElementScope), "elementIds": Schema.optionalKey(Schema.Array(Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })))), "elementUniqueIds": Schema.optionalKey(Schema.Array(Schema.String)), "viewIds": Schema.optionalKey(Schema.Array(Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })))), "viewUniqueIds": Schema.optionalKey(Schema.Array(Schema.String)), "scheduleFilter": Schema.optionalKey(Schema.Union([Schema.Null, ScheduleCatalogRequest], { mode: "oneOf" })), "scheduleRoleScope": Schema.optionalKey(ScheduleRoleScope), "budget": Schema.optionalKey(Schema.Union([Schema.Null, RevitDataOutputBudget], { mode: "oneOf" })), "includeElementSamples": Schema.optionalKey(Schema.Boolean), "includeMissingElementHandles": Schema.optionalKey(Schema.Boolean), "includeMatchedScheduleNames": Schema.optionalKey(Schema.Boolean) }).annotate({ "title": "ScheduleCoverageRequest" });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 type RevitElementScope = "All" | "ActiveViewVisible" | "ViewReferences" | "CurrentSelection" | "ExplicitHandles";
 type SchedulePlacementScope = "All" | "PlacedOnly" | "UnplacedOnly";
@@ -4857,11 +5398,11 @@ type ScheduleCatalogRequest = { readonly "categoryNames"?: ReadonlyArray<string>
 export type Root = { readonly "categoryNames"?: ReadonlyArray<string>, readonly "scope"?: RevitElementScope, readonly "elementIds"?: ReadonlyArray<number>, readonly "elementUniqueIds"?: ReadonlyArray<string>, readonly "viewIds"?: ReadonlyArray<number>, readonly "viewUniqueIds"?: ReadonlyArray<string>, readonly "scheduleFilter"?: null | ScheduleCatalogRequest, readonly "scheduleRoleScope"?: ScheduleRoleScope, readonly "budget"?: null | RevitDataOutputBudget, readonly "includeElementSamples"?: boolean, readonly "includeMissingElementHandles"?: boolean, readonly "includeMatchedScheduleNames"?: boolean };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op76response {
+namespace Decoded {
 
 const RevitElementHandle = Schema.Struct({ "elementId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "uniqueId": Schema.String, "displayName": Schema.String, "categoryName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "familyName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "typeName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "identifier": "RevitElementHandle" });
 const ScheduleCatalogSheetPlacement = Schema.Struct({ "sheetNumber": Schema.String, "sheetName": Schema.String, "isIssuedLikeSheet": Schema.Boolean, "isWorkingLikeSheet": Schema.Boolean, "sheetRole": Schema.String }).annotate({ "identifier": "ScheduleCatalogSheetPlacement" });
@@ -4872,19 +5413,6 @@ const ScheduleCoverageScheduleHit = Schema.Struct({ "scheduleId": Schema.Number.
 const RevitDataIssue = Schema.Struct({ "code": Schema.String, "severity": RevitDataIssueSeverity, "message": Schema.String, "familyName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "typeName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "parameterName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "identifier": "RevitDataIssue" });
 const ScheduleCoverageElementEntry = Schema.Struct({ "element": RevitElementHandle, "matchingSchedules": Schema.Array(ScheduleCoverageScheduleHit) }).annotate({ "identifier": "ScheduleCoverageElementEntry" });
 const codec = Schema.Struct({ "totalElements": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "coveredElements": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "missingElements": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "scheduleCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "elements": Schema.Array(ScheduleCoverageElementEntry), "issues": Schema.Array(RevitDataIssue), "page": Schema.optionalKey(Schema.Union([Schema.Null, RevitDataResultPage], { mode: "oneOf" })), "missingHandles": Schema.optionalKey(Schema.Union([Schema.Array(RevitElementHandle), Schema.Null])), "matchedScheduleNames": Schema.optionalKey(Schema.Union([Schema.Array(Schema.String), Schema.Null])), "roleSummaries": Schema.optionalKey(Schema.Union([Schema.Array(ScheduleCoverageRoleSummary), Schema.Null])) }).annotate({ "title": "ScheduleCoverageData" });
-namespace WireTypes {
-type RevitElementHandle = { readonly "elementId": number, readonly "uniqueId": string, readonly "displayName": string, readonly "categoryName"?: null | string, readonly "familyName"?: null | string, readonly "typeName"?: null | string };
-type ScheduleCatalogSheetPlacement = { readonly "sheetNumber": string, readonly "sheetName": string, readonly "isIssuedLikeSheet": boolean, readonly "isWorkingLikeSheet": boolean, readonly "sheetRole": string };
-type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
-type RevitDataResultPage = { readonly "totalCount": number, readonly "returnedCount": number, readonly "isTruncated": boolean };
-type ScheduleCoverageRoleSummary = { readonly "role": string, readonly "scheduleCount": number, readonly "coveredElementCount": number, readonly "scheduleNames": ReadonlyArray<string> };
-type ScheduleCoverageScheduleHit = { readonly "scheduleId": number, readonly "scheduleUniqueId": string, readonly "scheduleName": string, readonly "isPlacedOnSheet": boolean, readonly "sheetPlacements": ReadonlyArray<ScheduleCatalogSheetPlacement> };
-type RevitDataIssue = { readonly "code": string, readonly "severity": RevitDataIssueSeverity, readonly "message": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "parameterName"?: null | string };
-type ScheduleCoverageElementEntry = { readonly "element": RevitElementHandle, readonly "matchingSchedules": ReadonlyArray<ScheduleCoverageScheduleHit> };
-export type Root = { readonly "totalElements": number, readonly "coveredElements": number, readonly "missingElements": number, readonly "scheduleCount": number, readonly "elements": ReadonlyArray<ScheduleCoverageElementEntry>, readonly "issues": ReadonlyArray<RevitDataIssue>, readonly "page"?: null | RevitDataResultPage, readonly "missingHandles"?: ReadonlyArray<RevitElementHandle> | null, readonly "matchedScheduleNames"?: ReadonlyArray<string> | null, readonly "roleSummaries"?: ReadonlyArray<ScheduleCoverageRoleSummary> | null };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["RevitDataIssue"]: strictDecoder(RevitDataIssue),
@@ -4897,23 +5425,43 @@ export const definitions = {
   ["ScheduleCoverageScheduleHit"]: strictDecoder(ScheduleCoverageScheduleHit),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type RevitElementHandle = { readonly "elementId": number, readonly "uniqueId": string, readonly "displayName": string, readonly "categoryName"?: null | string, readonly "familyName"?: null | string, readonly "typeName"?: null | string };
+type ScheduleCatalogSheetPlacement = { readonly "sheetNumber": string, readonly "sheetName": string, readonly "isIssuedLikeSheet": boolean, readonly "isWorkingLikeSheet": boolean, readonly "sheetRole": string };
+type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
+type RevitDataResultPage = { readonly "totalCount": number, readonly "returnedCount": number, readonly "isTruncated": boolean };
+type ScheduleCoverageRoleSummary = { readonly "role": string, readonly "scheduleCount": number, readonly "coveredElementCount": number, readonly "scheduleNames": ReadonlyArray<string> };
+type ScheduleCoverageScheduleHit = { readonly "scheduleId": number, readonly "scheduleUniqueId": string, readonly "scheduleName": string, readonly "isPlacedOnSheet": boolean, readonly "sheetPlacements": ReadonlyArray<ScheduleCatalogSheetPlacement> };
+type RevitDataIssue = { readonly "code": string, readonly "severity": RevitDataIssueSeverity, readonly "message": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "parameterName"?: null | string };
+type ScheduleCoverageElementEntry = { readonly "element": RevitElementHandle, readonly "matchingSchedules": ReadonlyArray<ScheduleCoverageScheduleHit> };
+export type Root = { readonly "totalElements": number, readonly "coveredElements": number, readonly "missingElements": number, readonly "scheduleCount": number, readonly "elements": ReadonlyArray<ScheduleCoverageElementEntry>, readonly "issues": ReadonlyArray<RevitDataIssue>, readonly "page"?: null | RevitDataResultPage, readonly "missingHandles"?: ReadonlyArray<RevitElementHandle> | null, readonly "matchedScheduleNames"?: ReadonlyArray<string> | null, readonly "roleSummaries"?: ReadonlyArray<ScheduleCoverageRoleSummary> | null };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op77request {
+namespace Decoded {
 
 const ScheduleProfilesQueryKind = Schema.Literals(["CurrentActiveView", "ScheduleReferences", "ScheduleNames"]).annotate({ "description": "", "identifier": "ScheduleProfilesQueryKind" });
 const ScheduleProfilesQuery = Schema.Struct({ "kind": Schema.optionalKey(ScheduleProfilesQueryKind), "scheduleIds": Schema.optionalKey(Schema.Union([Schema.Array(Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" }))), Schema.Null])), "scheduleUniqueIds": Schema.optionalKey(Schema.Union([Schema.Array(Schema.String), Schema.Null])), "scheduleNames": Schema.optionalKey(Schema.Union([Schema.Array(Schema.String), Schema.Null])), "includeTemplates": Schema.optionalKey(Schema.Boolean) }).annotate({ "identifier": "ScheduleProfilesQuery" });
 const codec = Schema.Struct({ "query": Schema.optionalKey(Schema.Union([Schema.Null, ScheduleProfilesQuery], { mode: "oneOf" })) }).annotate({ "title": "ScheduleProfilesQueryRequest" });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 type ScheduleProfilesQueryKind = "CurrentActiveView" | "ScheduleReferences" | "ScheduleNames";
 type ScheduleProfilesQuery = { readonly "kind"?: ScheduleProfilesQueryKind, readonly "scheduleIds"?: ReadonlyArray<number> | null, readonly "scheduleUniqueIds"?: ReadonlyArray<string> | null, readonly "scheduleNames"?: ReadonlyArray<string> | null, readonly "includeTemplates"?: boolean };
 export type Root = { readonly "query"?: null | ScheduleProfilesQuery };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op77response {
+namespace Decoded {
 
 const ScheduleProfilesQueryKind = Schema.Literals(["CurrentActiveView", "ScheduleReferences", "ScheduleNames"]).annotate({ "description": "", "identifier": "ScheduleProfilesQueryKind" });
 const ScheduleTitleHorizontalAlignment = Schema.Literals(["Left", "Center", "Right"]).annotate({ "description": "", "identifier": "ScheduleTitleHorizontalAlignment" });
@@ -4944,39 +5492,6 @@ const ScheduleParameterUsageEntry = Schema.Struct({ "fieldName": Schema.String, 
 const ScheduleProfile = Schema.Struct({ "name": Schema.String, "categoryName": Schema.String, "viewTemplateName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "titleStyle": ScheduleTitleStyleSpec, "isItemized": Schema.Boolean, "filterBySheet": Schema.Boolean, "columnHeaderVerticalAlignment": ScheduleColumnHeaderVerticalAlignment, "fields": Schema.Array(ScheduleFieldSpec), "sortGroup": Schema.Array(ScheduleSortGroupSpec), "filters": Schema.Array(ScheduleFilterSpec), "onFinishSettings": Schema.optionalKey(Schema.Union([Schema.Null, ScheduleOnFinishSettings], { mode: "oneOf" })) }).annotate({ "identifier": "ScheduleProfile" });
 const ScheduleProfileQueryEntry = Schema.Struct({ "scheduleId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "scheduleUniqueId": Schema.String, "name": Schema.String, "categoryName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "isTemplate": Schema.Boolean, "profile": ScheduleProfile, "parameterUsages": Schema.Array(ScheduleParameterUsageEntry), "customParameters": Schema.Array(ScheduleCatalogCustomParameterValue) }).annotate({ "identifier": "ScheduleProfileQueryEntry" });
 const codec = Schema.Struct({ "documentTitle": Schema.String, "queryKind": ScheduleProfilesQueryKind, "requestedScheduleCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "resolvedScheduleCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "entries": Schema.Array(ScheduleProfileQueryEntry), "issues": Schema.Array(RevitDataIssue) }).annotate({ "title": "ScheduleProfilesQueryData" });
-namespace WireTypes {
-type ScheduleProfilesQueryKind = "CurrentActiveView" | "ScheduleReferences" | "ScheduleNames";
-type ScheduleTitleHorizontalAlignment = "Left" | "Center" | "Right";
-type ScheduleTitleBorderSpec = { readonly "topLineStyleName"?: null | string, readonly "bottomLineStyleName"?: null | string, readonly "leftLineStyleName"?: null | string, readonly "rightLineStyleName"?: null | string };
-type ScheduleColumnHeaderVerticalAlignment = "Center" | "Top" | "Bottom";
-type ParameterIdentityKind = "SharedGuid" | "BuiltInParameter" | "ParameterElement" | "NameFallback";
-type ScheduleAuthoredFieldDisplayType = "Standard" | "Totals" | "MinMax" | "Max" | "Min";
-type ScheduleFieldHorizontalAlignment = "Left" | "Center" | "Right";
-type ScheduleAuthoredCalculatedFieldType = "Formula" | "Percentage";
-type ScheduleFieldFormatSpec = { readonly "unitTypeId"?: null | string, readonly "symbolTypeId"?: null | string, readonly "accuracy"?: null | number, readonly "suppressTrailingZeros": boolean, readonly "suppressLeadingZeros": boolean, readonly "usePlusPrefix": boolean, readonly "useDigitGrouping": boolean, readonly "suppressSpaces": boolean };
-type ScheduleAuthoredSortOrder = "Ascending" | "Descending";
-type ScheduleAuthoredFilterType = "HasParameter" | "Equal" | "NotEqual" | "GreaterThan" | "GreaterThanOrEqual" | "LessThan" | "LessThanOrEqual" | "Contains" | "NotContains" | "BeginsWith" | "NotBeginsWith" | "EndsWith" | "NotEndsWith" | "IsAssociatedWithGlobalParameter" | "IsNotAssociatedWithGlobalParameter" | "HasValue" | "HasNoValue";
-type ScheduleOnFinishSettings = { readonly "openScheduleOnFinish": boolean };
-type RequestedParameterStorageType = "None" | "String" | "Integer" | "Double" | "ElementId";
-type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
-type ScheduleTitleStyleSpec = { readonly "horizontalAlignment": ScheduleTitleHorizontalAlignment, readonly "borderStyle"?: null | ScheduleTitleBorderSpec };
-type ParameterIdentity = { readonly "key": string, readonly "kind": ParameterIdentityKind, readonly "name": string, readonly "builtInParameterId"?: number | null, readonly "sharedGuid"?: null | string, readonly "parameterElementId"?: number | null };
-type ScheduleSortGroupSpec = { readonly "fieldName": string, readonly "sortOrder": ScheduleAuthoredSortOrder, readonly "showHeader": boolean, readonly "showFooter": boolean, readonly "showBlankLine": boolean };
-type ScheduleFilterSpec = { readonly "fieldName": string, readonly "filterType": ScheduleAuthoredFilterType, readonly "value"?: null | string };
-type RevitDataIssue = { readonly "code": string, readonly "severity": RevitDataIssueSeverity, readonly "message": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "parameterName"?: null | string };
-type ParameterReference = { readonly "identity"?: null | ParameterIdentity, readonly "name"?: null | string, readonly "sharedGuid"?: null | string };
-type ParameterDefinitionDescriptor = { readonly "identity": ParameterIdentity, readonly "isInstance"?: boolean | null, readonly "dataTypeId"?: null | string, readonly "dataTypeLabel"?: null | string, readonly "groupTypeId"?: null | string, readonly "groupTypeLabel"?: null | string, readonly "visible"?: boolean | null, readonly "userModifiable"?: boolean | null, readonly "description"?: null | string };
-type CombinedParameterSpec = { readonly "parameter": ParameterReference, readonly "parameterName"?: null | string, readonly "prefix"?: null | string, readonly "suffix"?: null | string, readonly "separator"?: null | string };
-type ScheduleFieldParameterDescriptor = { readonly "definition"?: null | ParameterDefinitionDescriptor, readonly "fieldType"?: null | string, readonly "identity"?: null | ParameterIdentity, readonly "specTypeId"?: null | string };
-type ScheduleCatalogCustomParameterValue = { readonly "definition": ParameterDefinitionDescriptor, readonly "value"?: null | string, readonly "displayValue"?: null | string, readonly "storageType": RequestedParameterStorageType, readonly "name": string };
-type ScheduleFieldSpec = { readonly "parameter": ParameterReference, readonly "parameterName"?: null | string, readonly "columnHeaderOverride"?: null | string, readonly "headerGroup"?: null | string, readonly "isHidden": boolean, readonly "displayType": ScheduleAuthoredFieldDisplayType, readonly "columnWidth"?: null | number, readonly "horizontalAlignment": ScheduleFieldHorizontalAlignment, readonly "calculatedType"?: null | ScheduleAuthoredCalculatedFieldType, readonly "percentageOfField"?: null | string, readonly "formatOptions"?: null | ScheduleFieldFormatSpec, readonly "combinedParameters": ReadonlyArray<CombinedParameterSpec> };
-type ScheduleParameterUsageEntry = { readonly "fieldName": string, readonly "columnHeading": string, readonly "key": string, readonly "parameter"?: null | ScheduleFieldParameterDescriptor, readonly "fieldIndex": number, readonly "isHidden": boolean, readonly "isCalculated": boolean, readonly "isCombinedParameter": boolean };
-type ScheduleProfile = { readonly "name": string, readonly "categoryName": string, readonly "viewTemplateName"?: null | string, readonly "titleStyle": ScheduleTitleStyleSpec, readonly "isItemized": boolean, readonly "filterBySheet": boolean, readonly "columnHeaderVerticalAlignment": ScheduleColumnHeaderVerticalAlignment, readonly "fields": ReadonlyArray<ScheduleFieldSpec>, readonly "sortGroup": ReadonlyArray<ScheduleSortGroupSpec>, readonly "filters": ReadonlyArray<ScheduleFilterSpec>, readonly "onFinishSettings"?: null | ScheduleOnFinishSettings };
-type ScheduleProfileQueryEntry = { readonly "scheduleId": number, readonly "scheduleUniqueId": string, readonly "name": string, readonly "categoryName"?: null | string, readonly "isTemplate": boolean, readonly "profile": ScheduleProfile, readonly "parameterUsages": ReadonlyArray<ScheduleParameterUsageEntry>, readonly "customParameters": ReadonlyArray<ScheduleCatalogCustomParameterValue> };
-export type Root = { readonly "documentTitle": string, readonly "queryKind": ScheduleProfilesQueryKind, readonly "requestedScheduleCount": number, readonly "resolvedScheduleCount": number, readonly "entries": ReadonlyArray<ScheduleProfileQueryEntry>, readonly "issues": ReadonlyArray<RevitDataIssue> };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["CombinedParameterSpec"]: strictDecoder(CombinedParameterSpec),
@@ -5009,36 +5524,67 @@ export const definitions = {
   ["ScheduleTitleStyleSpec"]: strictDecoder(ScheduleTitleStyleSpec),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type ScheduleProfilesQueryKind = "CurrentActiveView" | "ScheduleReferences" | "ScheduleNames";
+type ScheduleTitleHorizontalAlignment = "Left" | "Center" | "Right";
+type ScheduleTitleBorderSpec = { readonly "topLineStyleName"?: null | string, readonly "bottomLineStyleName"?: null | string, readonly "leftLineStyleName"?: null | string, readonly "rightLineStyleName"?: null | string };
+type ScheduleColumnHeaderVerticalAlignment = "Center" | "Top" | "Bottom";
+type ParameterIdentityKind = "SharedGuid" | "BuiltInParameter" | "ParameterElement" | "NameFallback";
+type ScheduleAuthoredFieldDisplayType = "Standard" | "Totals" | "MinMax" | "Max" | "Min";
+type ScheduleFieldHorizontalAlignment = "Left" | "Center" | "Right";
+type ScheduleAuthoredCalculatedFieldType = "Formula" | "Percentage";
+type ScheduleFieldFormatSpec = { readonly "unitTypeId"?: null | string, readonly "symbolTypeId"?: null | string, readonly "accuracy"?: null | number, readonly "suppressTrailingZeros": boolean, readonly "suppressLeadingZeros": boolean, readonly "usePlusPrefix": boolean, readonly "useDigitGrouping": boolean, readonly "suppressSpaces": boolean };
+type ScheduleAuthoredSortOrder = "Ascending" | "Descending";
+type ScheduleAuthoredFilterType = "HasParameter" | "Equal" | "NotEqual" | "GreaterThan" | "GreaterThanOrEqual" | "LessThan" | "LessThanOrEqual" | "Contains" | "NotContains" | "BeginsWith" | "NotBeginsWith" | "EndsWith" | "NotEndsWith" | "IsAssociatedWithGlobalParameter" | "IsNotAssociatedWithGlobalParameter" | "HasValue" | "HasNoValue";
+type ScheduleOnFinishSettings = { readonly "openScheduleOnFinish": boolean };
+type RequestedParameterStorageType = "None" | "String" | "Integer" | "Double" | "ElementId";
+type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
+type ScheduleTitleStyleSpec = { readonly "horizontalAlignment": ScheduleTitleHorizontalAlignment, readonly "borderStyle"?: null | ScheduleTitleBorderSpec };
+type ParameterIdentity = { readonly "key": string, readonly "kind": ParameterIdentityKind, readonly "name": string, readonly "builtInParameterId"?: number | null, readonly "sharedGuid"?: null | string, readonly "parameterElementId"?: number | null };
+type ScheduleSortGroupSpec = { readonly "fieldName": string, readonly "sortOrder": ScheduleAuthoredSortOrder, readonly "showHeader": boolean, readonly "showFooter": boolean, readonly "showBlankLine": boolean };
+type ScheduleFilterSpec = { readonly "fieldName": string, readonly "filterType": ScheduleAuthoredFilterType, readonly "value"?: null | string };
+type RevitDataIssue = { readonly "code": string, readonly "severity": RevitDataIssueSeverity, readonly "message": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "parameterName"?: null | string };
+type ParameterReference = { readonly "identity"?: null | ParameterIdentity, readonly "name"?: null | string, readonly "sharedGuid"?: null | string };
+type ParameterDefinitionDescriptor = { readonly "identity": ParameterIdentity, readonly "isInstance"?: boolean | null, readonly "dataTypeId"?: null | string, readonly "dataTypeLabel"?: null | string, readonly "groupTypeId"?: null | string, readonly "groupTypeLabel"?: null | string, readonly "visible"?: boolean | null, readonly "userModifiable"?: boolean | null, readonly "description"?: null | string };
+type CombinedParameterSpec = { readonly "parameter": ParameterReference, readonly "parameterName"?: null | string, readonly "prefix"?: null | string, readonly "suffix"?: null | string, readonly "separator"?: null | string };
+type ScheduleFieldParameterDescriptor = { readonly "definition"?: null | ParameterDefinitionDescriptor, readonly "fieldType"?: null | string, readonly "identity"?: null | ParameterIdentity, readonly "specTypeId"?: null | string };
+type ScheduleCatalogCustomParameterValue = { readonly "definition": ParameterDefinitionDescriptor, readonly "value"?: null | string, readonly "displayValue"?: null | string, readonly "storageType": RequestedParameterStorageType, readonly "name": string };
+type ScheduleFieldSpec = { readonly "parameter": ParameterReference, readonly "parameterName"?: null | string, readonly "columnHeaderOverride"?: null | string, readonly "headerGroup"?: null | string, readonly "isHidden": boolean, readonly "displayType": ScheduleAuthoredFieldDisplayType, readonly "columnWidth"?: null | number, readonly "horizontalAlignment": ScheduleFieldHorizontalAlignment, readonly "calculatedType"?: null | ScheduleAuthoredCalculatedFieldType, readonly "percentageOfField"?: null | string, readonly "formatOptions"?: null | ScheduleFieldFormatSpec, readonly "combinedParameters": ReadonlyArray<CombinedParameterSpec> };
+type ScheduleParameterUsageEntry = { readonly "fieldName": string, readonly "columnHeading": string, readonly "key": string, readonly "parameter"?: null | ScheduleFieldParameterDescriptor, readonly "fieldIndex": number, readonly "isHidden": boolean, readonly "isCalculated": boolean, readonly "isCombinedParameter": boolean };
+type ScheduleProfile = { readonly "name": string, readonly "categoryName": string, readonly "viewTemplateName"?: null | string, readonly "titleStyle": ScheduleTitleStyleSpec, readonly "isItemized": boolean, readonly "filterBySheet": boolean, readonly "columnHeaderVerticalAlignment": ScheduleColumnHeaderVerticalAlignment, readonly "fields": ReadonlyArray<ScheduleFieldSpec>, readonly "sortGroup": ReadonlyArray<ScheduleSortGroupSpec>, readonly "filters": ReadonlyArray<ScheduleFilterSpec>, readonly "onFinishSettings"?: null | ScheduleOnFinishSettings };
+type ScheduleProfileQueryEntry = { readonly "scheduleId": number, readonly "scheduleUniqueId": string, readonly "name": string, readonly "categoryName"?: null | string, readonly "isTemplate": boolean, readonly "profile": ScheduleProfile, readonly "parameterUsages": ReadonlyArray<ScheduleParameterUsageEntry>, readonly "customParameters": ReadonlyArray<ScheduleCatalogCustomParameterValue> };
+export type Root = { readonly "documentTitle": string, readonly "queryKind": ScheduleProfilesQueryKind, readonly "requestedScheduleCount": number, readonly "resolvedScheduleCount": number, readonly "entries": ReadonlyArray<ScheduleProfileQueryEntry>, readonly "issues": ReadonlyArray<RevitDataIssue> };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op78request {
+namespace Decoded {
 
 
 const codec = Schema.Struct({ "familyId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(1).annotate({ "expected": "a value greater than or equal to 1" })).check(Schema.isLessThanOrEqualTo(9007199254740991).annotate({ "expected": "a value less than or equal to 9007199254740991" })), "familyUniqueId": Schema.String.check(Schema.isMinLength(1).annotate({ "expected": "a value with a length of at least 1" })).check(Schema.isPattern(new RegExp(".*\\S.*", "u")).annotate({ "expected": "a string matching the RegExp .*\\S.*" })), "maxResults": Schema.Number.annotate({ "default": 500, "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(1).annotate({ "expected": "a value greater than or equal to 1" })).check(Schema.isLessThanOrEqualTo(1000).annotate({ "expected": "a value less than or equal to 1000" })).pipe(Schema.withDecodingDefaultKey(Effect.succeed(500))) }).annotate({ "title": "FamilyInstanceReferencesRequest", "description": "Resolve current placements across every type of one exactly identified loaded family." });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 
 export type Root = { readonly "familyId": number, readonly "familyUniqueId": string, readonly "maxResults"?: number };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op78response {
+namespace Decoded {
 
 const ElementContextElementRef = Schema.Struct({ "elementId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "elementUniqueId": Schema.String, "className": Schema.String, "categoryName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "name": Schema.String, "familyName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "typeName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "mark": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "identifier": "ElementContextElementRef" });
 const RevitDataResultPage = Schema.Struct({ "totalCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "returnedCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "isTruncated": Schema.Boolean }).annotate({ "identifier": "RevitDataResultPage" });
 const RevitDataIssueSeverity = Schema.Literals(["Info", "Warning", "Error"]).annotate({ "description": "", "identifier": "RevitDataIssueSeverity" });
 const RevitDataIssue = Schema.Struct({ "code": Schema.String, "severity": RevitDataIssueSeverity, "message": Schema.String, "familyName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "typeName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "parameterName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "identifier": "RevitDataIssue" });
 const codec = Schema.Struct({ "familyId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "familyUniqueId": Schema.String, "instances": Schema.Array(ElementContextElementRef), "page": RevitDataResultPage, "issues": Schema.Array(RevitDataIssue) }).annotate({ "title": "FamilyInstanceReferencesData", "description": "Echoes the requested family identity; error issues mean it was not resolved.\nEmpty or truncated placements must not authorize Select or Selection Box.\n            " });
-namespace WireTypes {
-type ElementContextElementRef = { readonly "elementId": number, readonly "elementUniqueId": string, readonly "className": string, readonly "categoryName"?: null | string, readonly "name": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "mark"?: null | string };
-type RevitDataResultPage = { readonly "totalCount": number, readonly "returnedCount": number, readonly "isTruncated": boolean };
-type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
-type RevitDataIssue = { readonly "code": string, readonly "severity": RevitDataIssueSeverity, readonly "message": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "parameterName"?: null | string };
-export type Root = { readonly "familyId": number, readonly "familyUniqueId": string, readonly "instances": ReadonlyArray<ElementContextElementRef>, readonly "page": RevitDataResultPage, readonly "issues": ReadonlyArray<RevitDataIssue> };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["ElementContextElementRef"]: strictDecoder(ElementContextElementRef),
@@ -5047,21 +5593,37 @@ export const definitions = {
   ["RevitDataResultPage"]: strictDecoder(RevitDataResultPage),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type ElementContextElementRef = { readonly "elementId": number, readonly "elementUniqueId": string, readonly "className": string, readonly "categoryName"?: null | string, readonly "name": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "mark"?: null | string };
+type RevitDataResultPage = { readonly "totalCount": number, readonly "returnedCount": number, readonly "isTruncated": boolean };
+type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
+type RevitDataIssue = { readonly "code": string, readonly "severity": RevitDataIssueSeverity, readonly "message": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "parameterName"?: null | string };
+export type Root = { readonly "familyId": number, readonly "familyUniqueId": string, readonly "instances": ReadonlyArray<ElementContextElementRef>, readonly "page": RevitDataResultPage, readonly "issues": ReadonlyArray<RevitDataIssue> };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op79request {
+namespace Decoded {
 
 const RevitAgentContextHandleKind = Schema.Literals(["Document", "View", "Sheet", "Element", "Schedule", "Category", "Family"]).annotate({ "description": "", "identifier": "RevitAgentContextHandleKind" });
 const codec = Schema.Struct({ "referenceText": Schema.String, "maxResults": Schema.optionalKey(Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" }))), "handleKinds": Schema.optionalKey(Schema.Union([Schema.Array(RevitAgentContextHandleKind), Schema.Null])), "requirePrintedContext": Schema.optionalKey(Schema.Boolean), "maxPerHandleKind": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), Schema.Null]).annotate({ "format": "int32" })), "compact": Schema.optionalKey(Schema.Boolean) }).annotate({ "title": "RevitAgentContextResolveRequest" });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 type RevitAgentContextHandleKind = "Document" | "View" | "Sheet" | "Element" | "Schedule" | "Category" | "Family";
 export type Root = { readonly "referenceText": string, readonly "maxResults"?: number, readonly "handleKinds"?: ReadonlyArray<RevitAgentContextHandleKind> | null, readonly "requirePrintedContext"?: boolean, readonly "maxPerHandleKind"?: number | null, readonly "compact"?: boolean };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op79response {
+namespace Decoded {
 
 const RevitAgentContextHandleKind = Schema.Literals(["Document", "View", "Sheet", "Element", "Schedule", "Category", "Family"]).annotate({ "description": "", "identifier": "RevitAgentContextHandleKind" });
 const RevitAgentContextProvenanceKind = Schema.Literals(["ActiveDocument", "OpenDocument", "ActiveView", "CurrentSelection", "ExplicitReference", "SheetPlacement", "BrowserIndex", "VisibleInActiveView", "VisibleInReferencedView", "PrintedContext", "SearchMatch"]).annotate({ "description": "", "identifier": "RevitAgentContextProvenanceKind" });
@@ -5071,18 +5633,6 @@ const RevitAgentContextProvenance = Schema.Struct({ "kind": RevitAgentContextPro
 const RevitDataIssue = Schema.Struct({ "code": Schema.String, "severity": RevitDataIssueSeverity, "message": Schema.String, "familyName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "typeName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "parameterName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "identifier": "RevitDataIssue" });
 const RevitAgentContextCandidate = Schema.Struct({ "handle": RevitAgentContextHandle, "label": Schema.String, "score": Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })), "provenance": Schema.Array(RevitAgentContextProvenance), "relatedHandles": Schema.Array(RevitAgentContextHandle) }).annotate({ "identifier": "RevitAgentContextCandidate" });
 const codec = Schema.Struct({ "referenceText": Schema.String, "candidateCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "candidates": Schema.Array(RevitAgentContextCandidate), "issues": Schema.Array(RevitDataIssue) }).annotate({ "title": "RevitAgentContextResolveData" });
-namespace WireTypes {
-type RevitAgentContextHandleKind = "Document" | "View" | "Sheet" | "Element" | "Schedule" | "Category" | "Family";
-type RevitAgentContextProvenanceKind = "ActiveDocument" | "OpenDocument" | "ActiveView" | "CurrentSelection" | "ExplicitReference" | "SheetPlacement" | "BrowserIndex" | "VisibleInActiveView" | "VisibleInReferencedView" | "PrintedContext" | "SearchMatch";
-type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
-type RevitAgentContextHandle = { readonly "kind": RevitAgentContextHandleKind, readonly "documentKey": string, readonly "elementId"?: number | null, readonly "uniqueId"?: null | string, readonly "label": string, readonly "categoryName"?: null | string };
-type RevitAgentContextProvenance = { readonly "kind": RevitAgentContextProvenanceKind, readonly "description": string };
-type RevitDataIssue = { readonly "code": string, readonly "severity": RevitDataIssueSeverity, readonly "message": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "parameterName"?: null | string };
-type RevitAgentContextCandidate = { readonly "handle": RevitAgentContextHandle, readonly "label": string, readonly "score": number, readonly "provenance": ReadonlyArray<RevitAgentContextProvenance>, readonly "relatedHandles": ReadonlyArray<RevitAgentContextHandle> };
-export type Root = { readonly "referenceText": string, readonly "candidateCount": number, readonly "candidates": ReadonlyArray<RevitAgentContextCandidate>, readonly "issues": ReadonlyArray<RevitDataIssue> };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["RevitAgentContextCandidate"]: strictDecoder(RevitAgentContextCandidate),
@@ -5094,150 +5644,189 @@ export const definitions = {
   ["RevitDataIssueSeverity"]: strictDecoder(RevitDataIssueSeverity),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type RevitAgentContextHandleKind = "Document" | "View" | "Sheet" | "Element" | "Schedule" | "Category" | "Family";
+type RevitAgentContextProvenanceKind = "ActiveDocument" | "OpenDocument" | "ActiveView" | "CurrentSelection" | "ExplicitReference" | "SheetPlacement" | "BrowserIndex" | "VisibleInActiveView" | "VisibleInReferencedView" | "PrintedContext" | "SearchMatch";
+type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
+type RevitAgentContextHandle = { readonly "kind": RevitAgentContextHandleKind, readonly "documentKey": string, readonly "elementId"?: number | null, readonly "uniqueId"?: null | string, readonly "label": string, readonly "categoryName"?: null | string };
+type RevitAgentContextProvenance = { readonly "kind": RevitAgentContextProvenanceKind, readonly "description": string };
+type RevitDataIssue = { readonly "code": string, readonly "severity": RevitDataIssueSeverity, readonly "message": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "parameterName"?: null | string };
+type RevitAgentContextCandidate = { readonly "handle": RevitAgentContextHandle, readonly "label": string, readonly "score": number, readonly "provenance": ReadonlyArray<RevitAgentContextProvenance>, readonly "relatedHandles": ReadonlyArray<RevitAgentContextHandle> };
+export type Root = { readonly "referenceText": string, readonly "candidateCount": number, readonly "candidates": ReadonlyArray<RevitAgentContextCandidate>, readonly "issues": ReadonlyArray<RevitDataIssue> };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op80request {
+namespace Decoded {
 
 
 const codec = Schema.Struct({ "spec": Schema.String, "unit": Schema.String, "text": Schema.String }).annotate({ "title": "UnitValueResolveRequest", "description": "Read-only: hand Revit the text a person typed into a measured cell and let Revit say what it\nmeans. The document is the op's target; no transaction, nothing written.\n            " });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 
 export type Root = { readonly "spec": string, readonly "unit": string, readonly "text": string };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op80response {
+namespace Decoded {
 
 
 const codec = Schema.Struct({ "ok": Schema.Boolean, "value": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "text": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "refusal": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "title": "UnitValueResolveData", "description": "What Revit made of the text. Value is converted into the requested display unit\nand Text is Revit's own rendering of it in that unit WITHOUT the symbol, so the\nsurface renders \"Text Unit\" and stages { Text, Unit } — one rendering rule, and\nnothing kept that Revit did not say. A refusal carries Revit's reason and stages nothing.\n            " });
+export const decoder = strictDecoder(codec);
+export const definitions = {
+
+} as const;
+}
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
 namespace WireTypes {
 
 export type Root = { readonly "ok": boolean, readonly "value"?: null | number, readonly "text"?: null | string, readonly "refusal"?: null | string };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
-export const definitions = {
-
-} as const;
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op81request {
+namespace Decoded {
 
 
 const codec = Schema.Struct({ "view": Schema.String, "loops": Schema.Array(Schema.Array(Schema.Array(Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" }))))), "name": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "role": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "title": "RoomsDrawRequest" });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 
 export type Root = { readonly "view": string, readonly "loops": ReadonlyArray<ReadonlyArray<ReadonlyArray<number>>>, readonly "name"?: null | string, readonly "role"?: null | string };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op81response {
+namespace Decoded {
 
 
 const codec = Schema.Struct({ "elementId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "guid": Schema.String.annotate({ "format": "guid" }).check(Schema.makeFilter((value) => typeof value !== "string" || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value))) }).annotate({ "title": "RoomsDrawResult" });
+export const decoder = strictDecoder(codec);
+export const definitions = {
+
+} as const;
+}
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
 namespace WireTypes {
 
 export type Root = { readonly "elementId": number, readonly "guid": string };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
-export const definitions = {
-
-} as const;
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op82request {
+namespace Decoded {
 
 
 const codec = Schema.Struct({ "view": Schema.String, "guids": Schema.Array(Schema.String.annotate({ "format": "guid" }).check(Schema.makeFilter((value) => typeof value !== "string" || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)))), "name": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "title": "RoomsMergeRequest" });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 
 export type Root = { readonly "view": string, readonly "guids": ReadonlyArray<string>, readonly "name"?: null | string };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op82response {
+namespace Decoded {
 
 
 const codec = Schema.Struct({ "elementId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "guid": Schema.String.annotate({ "format": "guid" }).check(Schema.makeFilter((value) => typeof value !== "string" || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value))), "merged": Schema.Array(Schema.String.annotate({ "format": "guid" }).check(Schema.makeFilter((value) => typeof value !== "string" || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)))), "sqft": Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })) }).annotate({ "title": "RoomsMergeResult" });
+export const decoder = strictDecoder(codec);
+export const definitions = {
+
+} as const;
+}
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
 namespace WireTypes {
 
 export type Root = { readonly "elementId": number, readonly "guid": string, readonly "merged": ReadonlyArray<string>, readonly "sqft": number };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
-export const definitions = {
-
-} as const;
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op83request {
+namespace Decoded {
 
 
 const codec = Schema.Struct({ "view": Schema.String, "runId": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "rejected": Schema.optionalKey(Schema.Union([Schema.Array(Schema.Array(Schema.Array(Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" }))))), Schema.Null])) }).annotate({ "title": "RoomsPartitionRequest" });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 
 export type Root = { readonly "view": string, readonly "runId"?: null | string, readonly "rejected"?: ReadonlyArray<ReadonlyArray<ReadonlyArray<number>>> | null };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op83response {
+namespace Decoded {
 
 
 const codec = Schema.Struct({ "level": Schema.String, "runId": Schema.String, "zones": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "created": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "kept": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "locked": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "deleted": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "held": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "failures": Schema.Array(Schema.String), "hold": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "ms": Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })) }).annotate({ "title": "RoomsPartitionResult" });
+export const decoder = strictDecoder(codec);
+export const definitions = {
+
+} as const;
+}
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
 namespace WireTypes {
 
 export type Root = { readonly "level": string, readonly "runId": string, readonly "zones": number, readonly "created": number, readonly "kept": number, readonly "locked": number, readonly "deleted": number, readonly "held": number, readonly "failures": ReadonlyArray<string>, readonly "hold"?: null | string, readonly "ms": number };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
-export const definitions = {
-
-} as const;
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op84request {
+namespace Decoded {
 
 
 const codec = Schema.Record(Schema.String, Schema.Never).annotate({ "title": "NoRequest" });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 
 export type Root = { readonly [x: string]: never };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op84response {
+namespace Decoded {
 
 const RoomsLevel = Schema.Struct({ "name": Schema.String, "elevation": Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })), "views": Schema.Array(Schema.String) }).annotate({ "identifier": "RoomsLevel" });
 const RoomsRegion = Schema.Struct({ "elementId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "uniqueId": Schema.String, "guid": Schema.String.annotate({ "format": "guid" }).check(Schema.makeFilter((value) => typeof value !== "string" || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value))), "view": Schema.String, "level": Schema.String, "role": Schema.String, "zone": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String]).annotate({ "format": "guid" }).check(Schema.makeFilter((value) => typeof value !== "string" || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)))), "designation": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "name": Schema.String, "type": Schema.String, "ceilingFt": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "people": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "lightingW": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "equipSensible": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "equipLatent": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "ventilationCfm": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "sqft": Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })), "outer": Schema.Array(Schema.Array(Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })))), "holes": Schema.Array(Schema.Array(Schema.Array(Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" }))))), "label": Schema.Array(Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" }))), "runId": Schema.String, "reason": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "touched": Schema.Boolean, "locked": Schema.Boolean, "stale": Schema.Boolean }).annotate({ "identifier": "RoomsRegion" });
 const TakeoffUnreadableBlob = Schema.Struct({ "elementId": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })), Schema.Null]).annotate({ "format": "int64" })), "parameter": Schema.String, "reason": Schema.String }).annotate({ "description": "A stored takeoff blob this build can't read; it is kept as it is (ADR 0039 keep). ElementId is the region that\nholds it, or null for the System registry on Project Information. A listing reports these and goes on: the\nregion is left out of what it lists, and no write goes over the blob.\n            ", "identifier": "TakeoffUnreadableBlob" });
 const codec = Schema.Struct({ "levels": Schema.Array(RoomsLevel), "regions": Schema.Array(RoomsRegion), "unreadable": Schema.optionalKey(Schema.Union([Schema.Array(TakeoffUnreadableBlob), Schema.Null])) }).annotate({ "title": "RoomsSnapshotData" });
-namespace WireTypes {
-type RoomsLevel = { readonly "name": string, readonly "elevation": number, readonly "views": ReadonlyArray<string> };
-type RoomsRegion = { readonly "elementId": number, readonly "uniqueId": string, readonly "guid": string, readonly "view": string, readonly "level": string, readonly "role": string, readonly "zone"?: null | string, readonly "designation"?: null | string, readonly "name": string, readonly "type": string, readonly "ceilingFt"?: null | number, readonly "people"?: null | number, readonly "lightingW"?: null | number, readonly "equipSensible"?: null | number, readonly "equipLatent"?: null | number, readonly "ventilationCfm"?: null | number, readonly "sqft": number, readonly "outer": ReadonlyArray<ReadonlyArray<number>>, readonly "holes": ReadonlyArray<ReadonlyArray<ReadonlyArray<number>>>, readonly "label": ReadonlyArray<number>, readonly "runId": string, readonly "reason"?: null | string, readonly "touched": boolean, readonly "locked": boolean, readonly "stale": boolean };
-type TakeoffUnreadableBlob = { readonly "elementId"?: number | null, readonly "parameter": string, readonly "reason": string };
-export type Root = { readonly "levels": ReadonlyArray<RoomsLevel>, readonly "regions": ReadonlyArray<RoomsRegion>, readonly "unreadable"?: ReadonlyArray<TakeoffUnreadableBlob> | null };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["RoomsLevel"]: strictDecoder(RoomsLevel),
@@ -5245,34 +5834,41 @@ export const definitions = {
   ["TakeoffUnreadableBlob"]: strictDecoder(TakeoffUnreadableBlob),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type RoomsLevel = { readonly "name": string, readonly "elevation": number, readonly "views": ReadonlyArray<string> };
+type RoomsRegion = { readonly "elementId": number, readonly "uniqueId": string, readonly "guid": string, readonly "view": string, readonly "level": string, readonly "role": string, readonly "zone"?: null | string, readonly "designation"?: null | string, readonly "name": string, readonly "type": string, readonly "ceilingFt"?: null | number, readonly "people"?: null | number, readonly "lightingW"?: null | number, readonly "equipSensible"?: null | number, readonly "equipLatent"?: null | number, readonly "ventilationCfm"?: null | number, readonly "sqft": number, readonly "outer": ReadonlyArray<ReadonlyArray<number>>, readonly "holes": ReadonlyArray<ReadonlyArray<ReadonlyArray<number>>>, readonly "label": ReadonlyArray<number>, readonly "runId": string, readonly "reason"?: null | string, readonly "touched": boolean, readonly "locked": boolean, readonly "stale": boolean };
+type TakeoffUnreadableBlob = { readonly "elementId"?: number | null, readonly "parameter": string, readonly "reason": string };
+export type Root = { readonly "levels": ReadonlyArray<RoomsLevel>, readonly "regions": ReadonlyArray<RoomsRegion>, readonly "unreadable"?: ReadonlyArray<TakeoffUnreadableBlob> | null };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op85request {
+namespace Decoded {
 
 
 const codec = Schema.Struct({ "view": Schema.String }).annotate({ "title": "RoomsReadRequest" });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 
 export type Root = { readonly "view": string };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op85response {
+namespace Decoded {
 
 const RoomsLevel = Schema.Struct({ "name": Schema.String, "elevation": Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })), "views": Schema.Array(Schema.String) }).annotate({ "identifier": "RoomsLevel" });
 const RoomsRegion = Schema.Struct({ "elementId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "uniqueId": Schema.String, "guid": Schema.String.annotate({ "format": "guid" }).check(Schema.makeFilter((value) => typeof value !== "string" || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value))), "view": Schema.String, "level": Schema.String, "role": Schema.String, "zone": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String]).annotate({ "format": "guid" }).check(Schema.makeFilter((value) => typeof value !== "string" || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)))), "designation": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "name": Schema.String, "type": Schema.String, "ceilingFt": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "people": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "lightingW": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "equipSensible": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "equipLatent": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "ventilationCfm": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "sqft": Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })), "outer": Schema.Array(Schema.Array(Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })))), "holes": Schema.Array(Schema.Array(Schema.Array(Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" }))))), "label": Schema.Array(Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" }))), "runId": Schema.String, "reason": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "touched": Schema.Boolean, "locked": Schema.Boolean, "stale": Schema.Boolean }).annotate({ "identifier": "RoomsRegion" });
 const TakeoffUnreadableBlob = Schema.Struct({ "elementId": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })), Schema.Null]).annotate({ "format": "int64" })), "parameter": Schema.String, "reason": Schema.String }).annotate({ "description": "A stored takeoff blob this build can't read; it is kept as it is (ADR 0039 keep). ElementId is the region that\nholds it, or null for the System registry on Project Information. A listing reports these and goes on: the\nregion is left out of what it lists, and no write goes over the blob.\n            ", "identifier": "TakeoffUnreadableBlob" });
 const codec = Schema.Struct({ "levels": Schema.Array(RoomsLevel), "regions": Schema.Array(RoomsRegion), "unreadable": Schema.optionalKey(Schema.Union([Schema.Array(TakeoffUnreadableBlob), Schema.Null])) }).annotate({ "title": "RoomsSnapshotData" });
-namespace WireTypes {
-type RoomsLevel = { readonly "name": string, readonly "elevation": number, readonly "views": ReadonlyArray<string> };
-type RoomsRegion = { readonly "elementId": number, readonly "uniqueId": string, readonly "guid": string, readonly "view": string, readonly "level": string, readonly "role": string, readonly "zone"?: null | string, readonly "designation"?: null | string, readonly "name": string, readonly "type": string, readonly "ceilingFt"?: null | number, readonly "people"?: null | number, readonly "lightingW"?: null | number, readonly "equipSensible"?: null | number, readonly "equipLatent"?: null | number, readonly "ventilationCfm"?: null | number, readonly "sqft": number, readonly "outer": ReadonlyArray<ReadonlyArray<number>>, readonly "holes": ReadonlyArray<ReadonlyArray<ReadonlyArray<number>>>, readonly "label": ReadonlyArray<number>, readonly "runId": string, readonly "reason"?: null | string, readonly "touched": boolean, readonly "locked": boolean, readonly "stale": boolean };
-type TakeoffUnreadableBlob = { readonly "elementId"?: number | null, readonly "parameter": string, readonly "reason": string };
-export type Root = { readonly "levels": ReadonlyArray<RoomsLevel>, readonly "regions": ReadonlyArray<RoomsRegion>, readonly "unreadable"?: ReadonlyArray<TakeoffUnreadableBlob> | null };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["RoomsLevel"]: strictDecoder(RoomsLevel),
@@ -5280,21 +5876,36 @@ export const definitions = {
   ["TakeoffUnreadableBlob"]: strictDecoder(TakeoffUnreadableBlob),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type RoomsLevel = { readonly "name": string, readonly "elevation": number, readonly "views": ReadonlyArray<string> };
+type RoomsRegion = { readonly "elementId": number, readonly "uniqueId": string, readonly "guid": string, readonly "view": string, readonly "level": string, readonly "role": string, readonly "zone"?: null | string, readonly "designation"?: null | string, readonly "name": string, readonly "type": string, readonly "ceilingFt"?: null | number, readonly "people"?: null | number, readonly "lightingW"?: null | number, readonly "equipSensible"?: null | number, readonly "equipLatent"?: null | number, readonly "ventilationCfm"?: null | number, readonly "sqft": number, readonly "outer": ReadonlyArray<ReadonlyArray<number>>, readonly "holes": ReadonlyArray<ReadonlyArray<ReadonlyArray<number>>>, readonly "label": ReadonlyArray<number>, readonly "runId": string, readonly "reason"?: null | string, readonly "touched": boolean, readonly "locked": boolean, readonly "stale": boolean };
+type TakeoffUnreadableBlob = { readonly "elementId"?: number | null, readonly "parameter": string, readonly "reason": string };
+export type Root = { readonly "levels": ReadonlyArray<RoomsLevel>, readonly "regions": ReadonlyArray<RoomsRegion>, readonly "unreadable"?: ReadonlyArray<TakeoffUnreadableBlob> | null };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op86request {
+namespace Decoded {
 
 
 const codec = Schema.Struct({ "view": Schema.String, "runId": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "title": "RoomsTraceRequest" });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 
 export type Root = { readonly "view": string, readonly "runId"?: null | string };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op86response {
+namespace Decoded {
 
 const RoomsTraceRail = Schema.Struct({ "a": Schema.Array(Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" }))), "b": Schema.Array(Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" }))), "thicknessFt": Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })), "source": Schema.String, "elementId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "category": Schema.String, "layer": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "identifier": "RoomsTraceRail" });
 const RoomsSegKind = Schema.Literals(["Wall", "Zone", "Closed", "Door", "Headed", "Cased"]).annotate({ "description": "", "identifier": "RoomsSegKind" });
@@ -5306,20 +5917,6 @@ const RoomsTraceFace = Schema.Struct({ "index": Schema.Number.annotate({ "format
 const RoomsTrace = Schema.Struct({ "rails": Schema.Array(RoomsTraceRail), "segments": Schema.Array(RoomsTraceSegment), "openings": Schema.Array(RoomsTraceOpening), "faces": Schema.Array(RoomsTraceFace) }).annotate({ "identifier": "RoomsTrace" });
 const RoomsZoneTrace = Schema.Struct({ "zoneGuid": Schema.String.annotate({ "format": "guid" }).check(Schema.makeFilter((value) => typeof value !== "string" || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value))), "label": Schema.String, "trace": RoomsTrace, "accounting": RoomsTraceAccounting }).annotate({ "identifier": "RoomsZoneTrace" });
 const codec = Schema.Struct({ "runId": Schema.String, "zones": Schema.Array(RoomsZoneTrace) }).annotate({ "title": "RoomsTraceData" });
-namespace WireTypes {
-type RoomsTraceRail = { readonly "a": ReadonlyArray<number>, readonly "b": ReadonlyArray<number>, readonly "thicknessFt": number, readonly "source": string, readonly "elementId": number, readonly "category": string, readonly "layer"?: null | string };
-type RoomsSegKind = "Wall" | "Zone" | "Closed" | "Door" | "Headed" | "Cased";
-type RoomsFaceKind = "Room" | "Contested" | "Band";
-type RoomsTraceAccounting = { readonly "zoneSqft": number, readonly "accepted": number, readonly "held": number, readonly "void": number, readonly "excluded": number };
-type RoomsTraceSegment = { readonly "a": ReadonlyArray<number>, readonly "b": ReadonlyArray<number>, readonly "kind": RoomsSegKind };
-type RoomsTraceOpening = { readonly "a": ReadonlyArray<number>, readonly "b": ReadonlyArray<number>, readonly "widthFt": number, readonly "kind": RoomsSegKind, readonly "doorPieces": number, readonly "headerFraction": number, readonly "wallFraction": number };
-type RoomsTraceFace = { readonly "index": number, readonly "kind": RoomsFaceKind, readonly "bandWidthFt"?: null | number, readonly "ownEdgeEmpty": boolean, readonly "floatingFt"?: null | number, readonly "narrow": boolean, readonly "backed": number };
-type RoomsTrace = { readonly "rails": ReadonlyArray<RoomsTraceRail>, readonly "segments": ReadonlyArray<RoomsTraceSegment>, readonly "openings": ReadonlyArray<RoomsTraceOpening>, readonly "faces": ReadonlyArray<RoomsTraceFace> };
-type RoomsZoneTrace = { readonly "zoneGuid": string, readonly "label": string, readonly "trace": RoomsTrace, readonly "accounting": RoomsTraceAccounting };
-export type Root = { readonly "runId": string, readonly "zones": ReadonlyArray<RoomsZoneTrace> };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["RoomsFaceKind"]: strictDecoder(RoomsFaceKind),
@@ -5333,43 +5930,71 @@ export const definitions = {
   ["RoomsZoneTrace"]: strictDecoder(RoomsZoneTrace),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type RoomsTraceRail = { readonly "a": ReadonlyArray<number>, readonly "b": ReadonlyArray<number>, readonly "thicknessFt": number, readonly "source": string, readonly "elementId": number, readonly "category": string, readonly "layer"?: null | string };
+type RoomsSegKind = "Wall" | "Zone" | "Closed" | "Door" | "Headed" | "Cased";
+type RoomsFaceKind = "Room" | "Contested" | "Band";
+type RoomsTraceAccounting = { readonly "zoneSqft": number, readonly "accepted": number, readonly "held": number, readonly "void": number, readonly "excluded": number };
+type RoomsTraceSegment = { readonly "a": ReadonlyArray<number>, readonly "b": ReadonlyArray<number>, readonly "kind": RoomsSegKind };
+type RoomsTraceOpening = { readonly "a": ReadonlyArray<number>, readonly "b": ReadonlyArray<number>, readonly "widthFt": number, readonly "kind": RoomsSegKind, readonly "doorPieces": number, readonly "headerFraction": number, readonly "wallFraction": number };
+type RoomsTraceFace = { readonly "index": number, readonly "kind": RoomsFaceKind, readonly "bandWidthFt"?: null | number, readonly "ownEdgeEmpty": boolean, readonly "floatingFt"?: null | number, readonly "narrow": boolean, readonly "backed": number };
+type RoomsTrace = { readonly "rails": ReadonlyArray<RoomsTraceRail>, readonly "segments": ReadonlyArray<RoomsTraceSegment>, readonly "openings": ReadonlyArray<RoomsTraceOpening>, readonly "faces": ReadonlyArray<RoomsTraceFace> };
+type RoomsZoneTrace = { readonly "zoneGuid": string, readonly "label": string, readonly "trace": RoomsTrace, readonly "accounting": RoomsTraceAccounting };
+export type Root = { readonly "runId": string, readonly "zones": ReadonlyArray<RoomsZoneTrace> };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op87request {
+namespace Decoded {
 
 const RoomsWriteRegion = Schema.Struct({ "guid": Schema.String.annotate({ "format": "guid" }).check(Schema.makeFilter((value) => typeof value !== "string" || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value))), "name": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "type": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "ceilingFt": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "people": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "lightingW": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "equipSensible": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "equipLatent": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "ventilationCfm": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "role": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "identifier": "RoomsWriteRegion" });
 const codec = Schema.Struct({ "regions": Schema.Array(RoomsWriteRegion) }).annotate({ "title": "RoomsWriteRequest" });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 type RoomsWriteRegion = { readonly "guid": string, readonly "name"?: null | string, readonly "type"?: null | string, readonly "ceilingFt"?: null | number, readonly "people"?: null | number, readonly "lightingW"?: null | number, readonly "equipSensible"?: null | number, readonly "equipLatent"?: null | number, readonly "ventilationCfm"?: null | number, readonly "role"?: null | string };
 export type Root = { readonly "regions": ReadonlyArray<RoomsWriteRegion> };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op87response {
+namespace Decoded {
 
 
 const codec = Schema.Struct({ "written": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })) }).annotate({ "title": "RoomsWriteResult" });
-namespace WireTypes {
-
-export type Root = { readonly "written": number };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
 
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+
+export type Root = { readonly "written": number };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op88request {
+namespace Decoded {
 
 const PodRunOrigin = Schema.Literals(["SavedMember", "SuppliedDraft", "Operation"]).annotate({ "description": "What a run's source was: a saved member's bytes, a supplied draft, or operation input with no member.", "identifier": "PodRunOrigin" });
 const PodConsumedSourceData = Schema.Struct({ "id": Schema.String, "path": Schema.String, "sha256": Schema.String, "bytesBase64": Schema.String }).annotate({ "identifier": "PodConsumedSourceData" });
 const PodCapturedSourceData = Schema.Struct({ "id": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "path": Schema.String, "sha256": Schema.String, "bytesBase64": Schema.String, "origin": PodRunOrigin }).annotate({ "identifier": "PodCapturedSourceData" });
 const PodComposedSource = Schema.Struct({ "root": PodCapturedSourceData, "dependencies": Schema.Array(PodConsumedSourceData) }).annotate({ "description": "The exact bytes one composition consumed, captured at its one read: the root (a saved member or a supplied\ndraft, with a pod id only when composition has actual pod context) and its ordered dependencies. A run stores these bytes; it never rereads them.\n            ", "identifier": "PodComposedSource" });
 const codec = Schema.Struct({ "specJson": Schema.String, "source": PodComposedSource }).annotate({ "title": "ScheduleSpecApplyRequest", "description": "Create a new schedule from a saved spec. Apply never edits an existing schedule." });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 type PodRunOrigin = "SavedMember" | "SuppliedDraft" | "Operation";
 type PodConsumedSourceData = { readonly "id": string, readonly "path": string, readonly "sha256": string, readonly "bytesBase64": string };
@@ -5378,56 +6003,67 @@ type PodComposedSource = { readonly "root": PodCapturedSourceData, readonly "dep
 export type Root = { readonly "specJson": string, readonly "source": PodComposedSource };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op88response {
+namespace Decoded {
 
 
 const codec = Schema.Struct({ "scheduleId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "scheduleName": Schema.String, "appliedFieldCount": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "skipped": Schema.Array(Schema.String), "warnings": Schema.Array(Schema.String), "receiptPath": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "title": "ScheduleSpecApplyData" });
+export const decoder = strictDecoder(codec);
+export const definitions = {
+
+} as const;
+}
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
 namespace WireTypes {
 
 export type Root = { readonly "scheduleId": number, readonly "scheduleName": string, readonly "appliedFieldCount": number, readonly "skipped": ReadonlyArray<string>, readonly "warnings": ReadonlyArray<string>, readonly "receiptPath"?: null | string };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
-export const definitions = {
-
-} as const;
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op89request {
+namespace Decoded {
 
 
 const codec = Schema.Struct({ "scheduleId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })) }).annotate({ "title": "ScheduleSpecCaptureRequest", "description": "Capture one schedule's definition (never its cell values) as a spec." });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 
 export type Root = { readonly "scheduleId": number };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op89response {
+namespace Decoded {
 
 
 const codec = Schema.Struct({ "scheduleName": Schema.String, "specJson": Schema.String }).annotate({ "title": "ScheduleSpecCaptureData" });
-namespace WireTypes {
-
-export type Root = { readonly "scheduleName": string, readonly "specJson": string };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
 
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+
+export type Root = { readonly "scheduleName": string, readonly "specJson": string };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op90request {
+namespace Decoded {
 
 const RequestedParameterStorageType = Schema.Literals(["None", "String", "Integer", "Double", "ElementId"]).annotate({ "description": "", "identifier": "RequestedParameterStorageType" });
 const ScheduleCellBindingBlocker = Schema.Literals(["None", "CalculatedField", "CombinedParameterField", "NonStandardDisplay", "ParameterNotFound", "ReadOnlyParameter"]).annotate({ "description": "Why a schedule cell has no writable parameter behind it.", "identifier": "ScheduleCellBindingBlocker" });
@@ -5436,6 +6072,9 @@ const ParameterTarget = Schema.Struct({ "elementId": Schema.Number.annotate({ "f
 const ScheduleCellBinding = Schema.Struct({ "columnNumber": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "targetElementIds": Schema.Array(Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" }))), "parameterName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "parameterId": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })), Schema.Null]).annotate({ "format": "int64" })), "storageType": RequestedParameterStorageType, "rawValue": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "displayValue": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "isTypeParameter": Schema.Boolean, "isEditable": Schema.Boolean, "targets": Schema.Array(ParameterTarget), "blocker": Schema.optionalKey(ScheduleCellBindingBlocker), "hasMixedValues": Schema.optionalKey(Schema.Boolean), "displayUnit": Schema.optionalKey(Schema.Union([Schema.Null, MeasuredDisplayUnit], { mode: "oneOf" })) }).annotate({ "description": "The write surface behind one rendered schedule cell: which element(s) a cell edit would\nwrite to, and through which parameter. A type-parameter column resolves to the shared type\nelement, so TargetElementIds makes write fan-out explicit — one id shared by\nevery row of that type — instead of a per-instance surprise.\n            ", "identifier": "ScheduleCellBinding" });
 const ScheduleCellEdit = Schema.Struct({ "rowNumber": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "columnNumber": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "expectedBinding": ScheduleCellBinding, "value": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "unit": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "rawInternal": Schema.optionalKey(Schema.Boolean) }).annotate({ "identifier": "ScheduleCellEdit" });
 const codec = Schema.Struct({ "scheduleId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "scheduleUniqueId": Schema.String, "edits": Schema.Array(ScheduleCellEdit), "dryRun": Schema.optionalKey(Schema.Boolean), "transactionName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "title": "ScheduleCellApplyRequest" });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 type RequestedParameterStorageType = "None" | "String" | "Integer" | "Double" | "ElementId";
 type ScheduleCellBindingBlocker = "None" | "CalculatedField" | "CombinedParameterField" | "NonStandardDisplay" | "ParameterNotFound" | "ReadOnlyParameter";
@@ -5446,11 +6085,11 @@ type ScheduleCellEdit = { readonly "rowNumber": number, readonly "columnNumber":
 export type Root = { readonly "scheduleId": number, readonly "scheduleUniqueId": string, readonly "edits": ReadonlyArray<ScheduleCellEdit>, readonly "dryRun"?: boolean, readonly "transactionName"?: null | string };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op90response {
+namespace Decoded {
 
 const RequestedParameterStorageType = Schema.Literals(["None", "String", "Integer", "Double", "ElementId"]).annotate({ "description": "", "identifier": "RequestedParameterStorageType" });
 const ScheduleCellBindingBlocker = Schema.Literals(["None", "CalculatedField", "CombinedParameterField", "NonStandardDisplay", "ParameterNotFound", "ReadOnlyParameter"]).annotate({ "description": "Why a schedule cell has no writable parameter behind it.", "identifier": "ScheduleCellBindingBlocker" });
@@ -5463,21 +6102,6 @@ const ScheduleCellBinding = Schema.Struct({ "columnNumber": Schema.Number.annota
 const ParameterValueEditResult = Schema.Struct({ "index": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "ok": Schema.Boolean, "error": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "parsedRaw": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "parsedDisplay": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "current": Schema.optionalKey(Schema.Union([Schema.Null, ParameterTarget], { mode: "oneOf" })), "code": Schema.optionalKey(Schema.Union([Schema.Null, EditRefusalCode], { mode: "oneOf" })), "causeCode": Schema.optionalKey(Schema.Union([Schema.Null, EditRefusalCode], { mode: "oneOf" })) }).annotate({ "identifier": "ParameterValueEditResult" });
 const ScheduleCellEditResult = Schema.Struct({ "index": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "rowNumber": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "columnNumber": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "ok": Schema.Boolean, "error": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "currentBinding": Schema.optionalKey(Schema.Union([Schema.Null, ScheduleCellBinding], { mode: "oneOf" })), "parameterResults": Schema.Array(ParameterValueEditResult), "code": Schema.optionalKey(Schema.Union([Schema.Null, EditRefusalCode], { mode: "oneOf" })), "causeCode": Schema.optionalKey(Schema.Union([Schema.Null, EditRefusalCode], { mode: "oneOf" })) }).annotate({ "identifier": "ScheduleCellEditResult" });
 const codec = Schema.Struct({ "appliedCells": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "appliedParameterWrites": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "dryRun": Schema.Boolean, "results": Schema.Array(ScheduleCellEditResult), "diagnostics": Schema.Array(RevitDataIssue) }).annotate({ "title": "ScheduleCellApplyData" });
-namespace WireTypes {
-type RequestedParameterStorageType = "None" | "String" | "Integer" | "Double" | "ElementId";
-type ScheduleCellBindingBlocker = "None" | "CalculatedField" | "CombinedParameterField" | "NonStandardDisplay" | "ParameterNotFound" | "ReadOnlyParameter";
-type MeasuredDisplayUnit = { readonly "specTypeId": string, readonly "typeId"?: null | string, readonly "label"?: null | string, readonly "symbol"?: null | string, readonly "refusal"?: null | string };
-type EditRefusalCode = "target-evidence-stale" | "target-evidence-missing" | "target-unresolved" | "admission-group-refused" | "alias-conflict";
-type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
-type ParameterTarget = { readonly "elementId": number, readonly "parameterId": number, readonly "parameterName"?: null | string, readonly "storageType": RequestedParameterStorageType, readonly "isReadOnly": boolean, readonly "hasValue": boolean, readonly "rawValue": null | string, readonly "elementLabel"?: null | string, readonly "uniqueId"?: null | string, readonly "scope"?: null | string, readonly "displayValue"?: null | string };
-type RevitDataIssue = { readonly "code": string, readonly "severity": RevitDataIssueSeverity, readonly "message": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "parameterName"?: null | string };
-type ScheduleCellBinding = { readonly "columnNumber": number, readonly "targetElementIds": ReadonlyArray<number>, readonly "parameterName"?: null | string, readonly "parameterId"?: number | null, readonly "storageType": RequestedParameterStorageType, readonly "rawValue"?: null | string, readonly "displayValue"?: null | string, readonly "isTypeParameter": boolean, readonly "isEditable": boolean, readonly "targets": ReadonlyArray<ParameterTarget>, readonly "blocker": ScheduleCellBindingBlocker, readonly "hasMixedValues": boolean, readonly "displayUnit"?: null | MeasuredDisplayUnit };
-type ParameterValueEditResult = { readonly "index": number, readonly "ok": boolean, readonly "error"?: null | string, readonly "parsedRaw"?: null | string, readonly "parsedDisplay"?: null | string, readonly "current"?: null | ParameterTarget, readonly "code"?: null | EditRefusalCode, readonly "causeCode"?: null | EditRefusalCode };
-type ScheduleCellEditResult = { readonly "index": number, readonly "rowNumber": number, readonly "columnNumber": number, readonly "ok": boolean, readonly "error"?: null | string, readonly "currentBinding"?: null | ScheduleCellBinding, readonly "parameterResults": ReadonlyArray<ParameterValueEditResult>, readonly "code"?: null | EditRefusalCode, readonly "causeCode"?: null | EditRefusalCode };
-export type Root = { readonly "appliedCells": number, readonly "appliedParameterWrites": number, readonly "dryRun": boolean, readonly "results": ReadonlyArray<ScheduleCellEditResult>, readonly "diagnostics": ReadonlyArray<RevitDataIssue> };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["EditRefusalCode"]: strictDecoder(EditRefusalCode),
@@ -5492,14 +6116,36 @@ export const definitions = {
   ["ScheduleCellEditResult"]: strictDecoder(ScheduleCellEditResult),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type RequestedParameterStorageType = "None" | "String" | "Integer" | "Double" | "ElementId";
+type ScheduleCellBindingBlocker = "None" | "CalculatedField" | "CombinedParameterField" | "NonStandardDisplay" | "ParameterNotFound" | "ReadOnlyParameter";
+type MeasuredDisplayUnit = { readonly "specTypeId": string, readonly "typeId"?: null | string, readonly "label"?: null | string, readonly "symbol"?: null | string, readonly "refusal"?: null | string };
+type EditRefusalCode = "target-evidence-stale" | "target-evidence-missing" | "target-unresolved" | "admission-group-refused" | "alias-conflict";
+type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
+type ParameterTarget = { readonly "elementId": number, readonly "parameterId": number, readonly "parameterName"?: null | string, readonly "storageType": RequestedParameterStorageType, readonly "isReadOnly": boolean, readonly "hasValue": boolean, readonly "rawValue": null | string, readonly "elementLabel"?: null | string, readonly "uniqueId"?: null | string, readonly "scope"?: null | string, readonly "displayValue"?: null | string };
+type RevitDataIssue = { readonly "code": string, readonly "severity": RevitDataIssueSeverity, readonly "message": string, readonly "familyName"?: null | string, readonly "typeName"?: null | string, readonly "parameterName"?: null | string };
+type ScheduleCellBinding = { readonly "columnNumber": number, readonly "targetElementIds": ReadonlyArray<number>, readonly "parameterName"?: null | string, readonly "parameterId"?: number | null, readonly "storageType": RequestedParameterStorageType, readonly "rawValue"?: null | string, readonly "displayValue"?: null | string, readonly "isTypeParameter": boolean, readonly "isEditable": boolean, readonly "targets": ReadonlyArray<ParameterTarget>, readonly "blocker": ScheduleCellBindingBlocker, readonly "hasMixedValues": boolean, readonly "displayUnit"?: null | MeasuredDisplayUnit };
+type ParameterValueEditResult = { readonly "index": number, readonly "ok": boolean, readonly "error"?: null | string, readonly "parsedRaw"?: null | string, readonly "parsedDisplay"?: null | string, readonly "current"?: null | ParameterTarget, readonly "code"?: null | EditRefusalCode, readonly "causeCode"?: null | EditRefusalCode };
+type ScheduleCellEditResult = { readonly "index": number, readonly "rowNumber": number, readonly "columnNumber": number, readonly "ok": boolean, readonly "error"?: null | string, readonly "currentBinding"?: null | ScheduleCellBinding, readonly "parameterResults": ReadonlyArray<ParameterValueEditResult>, readonly "code"?: null | EditRefusalCode, readonly "causeCode"?: null | EditRefusalCode };
+export type Root = { readonly "appliedCells": number, readonly "appliedParameterWrites": number, readonly "dryRun": boolean, readonly "results": ReadonlyArray<ScheduleCellEditResult>, readonly "diagnostics": ReadonlyArray<RevitDataIssue> };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op91request {
+namespace Decoded {
 
 const ScriptPermissionMode = Schema.Literals(["ReadOnly", "WriteTransaction", "NoTransaction"]).annotate({ "description": "", "identifier": "ScriptPermissionMode" });
 const ScriptPodSourceFile = Schema.Struct({ "path": Schema.String, "bytesBase64": Schema.String }).annotate({ "identifier": "ScriptPodSourceFile" });
 const ScriptCaller = Schema.Literals(["Agent", "Person"]).annotate({ "description": "Who started a script run. Only a Person's run may save or synchronize a project document.", "identifier": "ScriptCaller" });
 const ScriptPodSourceBundle = Schema.Struct({ "files": Schema.Array(ScriptPodSourceFile) }).annotate({ "identifier": "ScriptPodSourceBundle" });
 const codec = Schema.Struct({ "scriptContent": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "sourcePath": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "workspaceKey": Schema.optionalKey(Schema.String), "sourceName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "permissionMode": Schema.optionalKey(Schema.Union([Schema.Null, ScriptPermissionMode], { mode: "oneOf" })), "timeoutSeconds": Schema.optionalKey(Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" }))), "sourceBundle": Schema.optionalKey(Schema.Union([Schema.Null, ScriptPodSourceBundle], { mode: "oneOf" })), "caller": Schema.optionalKey(ScriptCaller), "input": Schema.optionalKey(Schema.Union([Schema.Json.annotate({ "expected": "JSON value" }), Schema.Null], { mode: "oneOf" })) }).annotate({ "title": "ExecuteRevitScriptRequest", "description": "`WorkspaceKey` is the host's pod selector when no `SourceBundle` is supplied. Native execution never\nresolves it to a path: the captured manifest's id names the pod, and the host says which folder holds it.\n            " });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 type ScriptPermissionMode = "ReadOnly" | "WriteTransaction" | "NoTransaction";
 type ScriptPodSourceFile = { readonly "path": string, readonly "bytesBase64": string };
@@ -5508,11 +6154,11 @@ type ScriptPodSourceBundle = { readonly "files": ReadonlyArray<ScriptPodSourceFi
 export type Root = { readonly "scriptContent"?: null | string, readonly "sourcePath"?: null | string, readonly "workspaceKey"?: string, readonly "sourceName"?: null | string, readonly "permissionMode"?: null | ScriptPermissionMode, readonly "timeoutSeconds"?: number, readonly "sourceBundle"?: null | ScriptPodSourceBundle, readonly "caller"?: ScriptCaller, readonly "input"?: Schema.Json | null };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op91response {
+namespace Decoded {
 
 const ScriptExecutionStatus = Schema.Literals(["Succeeded", "ReferenceResolutionFailed", "CompilationFailed", "RuntimeFailed", "Rejected", "PolicyRejected", "Cancelled", "TimedOut"]).annotate({ "description": "", "identifier": "ScriptExecutionStatus" });
 const ScriptDiagnosticSeverity = Schema.Literals(["Info", "Warning", "Error"]).annotate({ "description": "", "identifier": "ScriptDiagnosticSeverity" });
@@ -5526,22 +6172,6 @@ const PodReceipt = Schema.Struct({ "podId": Schema.optionalKey(Schema.Union([Sch
 const ScriptChanges = Schema.Struct({ "added": ScriptChangedIds, "modified": ScriptChangedIds, "deleted": ScriptChangedIds, "transactions": Schema.Array(Schema.String), "kept": Schema.Boolean, "summary": Schema.String, "undo": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "ungrouped": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "overlapped": Schema.Boolean }).annotate({ "description": "What a script run changed in the document it ran on, as Revit reported each commit. An element added and\nthen modified is added; one added and then deleted is in no list. `Kept` is false for a ReadOnly run: the\nlists are what it would have changed, and Revit rolled it back. `Transactions` names each commit in order.\n`Summary` says the same in one sentence, and says so when Revit rolled back what the run tried to commit.\n`Undo` names the single entry Ctrl+Z in Revit undoes; when it is null on a run that kept changes,\n`Ungrouped` says why the run's transactions are separate undo entries. `Overlapped` is true when another\ncall ran at the same time: the lists may then include that call's changes. A script changes only the\ndocument it runs on: what it commits in another document that was already open is rolled back, and\n`Summary` says so.\n            ", "identifier": "ScriptChanges" });
 const ScriptFailure = Schema.Struct({ "message": Schema.String, "severity": Schema.String, "definitionId": Schema.String, "elementIds": Schema.Array(Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" }))), "transaction": Schema.String, "outcome": ScriptFailureOutcome }).annotate({ "description": "One failure in Revit's words. `DefinitionId` is Revit's failure definition GUID; `Severity` is Warning, Error or DocumentCorruption.\nA commit the run made in another open document, which was rolled back, is one row in the host's words with an empty `DefinitionId`.\n            ", "identifier": "ScriptFailure" });
 const codec = Schema.Struct({ "status": ScriptExecutionStatus, "output": Schema.String, "diagnostics": Schema.Array(ScriptDiagnostic), "revitVersion": Schema.String, "targetFramework": Schema.String, "containerTypeName": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "executionId": Schema.String, "artifacts": Schema.optionalKey(Schema.Union([Schema.Array(ScriptArtifactData), Schema.Null])), "data": Schema.optionalKey(Schema.Union([Schema.Json.annotate({ "expected": "JSON value" }), Schema.Null], { mode: "oneOf" })), "attribution": Schema.optionalKey(Schema.Union([Schema.Null, PodReceipt], { mode: "oneOf" })), "held": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "changes": Schema.optionalKey(Schema.Union([Schema.Null, ScriptChanges], { mode: "oneOf" })), "failures": Schema.optionalKey(Schema.Union([Schema.Array(ScriptFailure), Schema.Null])) }).annotate({ "title": "ExecuteRevitScriptData" });
-namespace WireTypes {
-type ScriptExecutionStatus = "Succeeded" | "ReferenceResolutionFailed" | "CompilationFailed" | "RuntimeFailed" | "Rejected" | "PolicyRejected" | "Cancelled" | "TimedOut";
-type ScriptDiagnosticSeverity = "Info" | "Warning" | "Error";
-type ScriptArtifactData = { readonly "name": string, readonly "relativePath": string, readonly "fullPath": string, readonly "contentType": string, readonly "sizeBytes": number };
-type PodRunOrigin = "SavedMember" | "SuppliedDraft" | "Operation";
-type PodRunOutcome = "Succeeded" | "Failed" | "Cancelled";
-type ScriptChangedIds = { readonly "ids": ReadonlyArray<number>, readonly "total": number };
-type ScriptFailureOutcome = "RolledBack" | "Dismissed" | "Committed";
-type ScriptDiagnostic = { readonly "stage": string, readonly "severity": ScriptDiagnosticSeverity, readonly "message": string, readonly "source"?: null | string };
-type PodReceipt = { readonly "podId"?: null | string, readonly "memberPath"?: null | string, readonly "memberSha256"?: null | string, readonly "origin": PodRunOrigin, readonly "operation": string, readonly "planHash"?: null | string, readonly "outcome": PodRunOutcome, readonly "outputs": ReadonlyArray<string>, readonly "reason"?: null | string };
-type ScriptChanges = { readonly "added": ScriptChangedIds, readonly "modified": ScriptChangedIds, readonly "deleted": ScriptChangedIds, readonly "transactions": ReadonlyArray<string>, readonly "kept": boolean, readonly "summary": string, readonly "undo"?: null | string, readonly "ungrouped"?: null | string, readonly "overlapped": boolean };
-type ScriptFailure = { readonly "message": string, readonly "severity": string, readonly "definitionId": string, readonly "elementIds": ReadonlyArray<number>, readonly "transaction": string, readonly "outcome": ScriptFailureOutcome };
-export type Root = { readonly "status": ScriptExecutionStatus, readonly "output": string, readonly "diagnostics": ReadonlyArray<ScriptDiagnostic>, readonly "revitVersion": string, readonly "targetFramework": string, readonly "containerTypeName"?: null | string, readonly "executionId": string, readonly "artifacts"?: ReadonlyArray<ScriptArtifactData> | null, readonly "data"?: Schema.Json | null, readonly "attribution"?: null | PodReceipt, readonly "held"?: null | string, readonly "changes"?: null | ScriptChanges, readonly "failures"?: ReadonlyArray<ScriptFailure> | null };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["PodReceipt"]: strictDecoder(PodReceipt),
@@ -5557,201 +6187,266 @@ export const definitions = {
   ["ScriptFailureOutcome"]: strictDecoder(ScriptFailureOutcome),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type ScriptExecutionStatus = "Succeeded" | "ReferenceResolutionFailed" | "CompilationFailed" | "RuntimeFailed" | "Rejected" | "PolicyRejected" | "Cancelled" | "TimedOut";
+type ScriptDiagnosticSeverity = "Info" | "Warning" | "Error";
+type ScriptArtifactData = { readonly "name": string, readonly "relativePath": string, readonly "fullPath": string, readonly "contentType": string, readonly "sizeBytes": number };
+type PodRunOrigin = "SavedMember" | "SuppliedDraft" | "Operation";
+type PodRunOutcome = "Succeeded" | "Failed" | "Cancelled";
+type ScriptChangedIds = { readonly "ids": ReadonlyArray<number>, readonly "total": number };
+type ScriptFailureOutcome = "RolledBack" | "Dismissed" | "Committed";
+type ScriptDiagnostic = { readonly "stage": string, readonly "severity": ScriptDiagnosticSeverity, readonly "message": string, readonly "source"?: null | string };
+type PodReceipt = { readonly "podId"?: null | string, readonly "memberPath"?: null | string, readonly "memberSha256"?: null | string, readonly "origin": PodRunOrigin, readonly "operation": string, readonly "planHash"?: null | string, readonly "outcome": PodRunOutcome, readonly "outputs": ReadonlyArray<string>, readonly "reason"?: null | string };
+type ScriptChanges = { readonly "added": ScriptChangedIds, readonly "modified": ScriptChangedIds, readonly "deleted": ScriptChangedIds, readonly "transactions": ReadonlyArray<string>, readonly "kept": boolean, readonly "summary": string, readonly "undo"?: null | string, readonly "ungrouped"?: null | string, readonly "overlapped": boolean };
+type ScriptFailure = { readonly "message": string, readonly "severity": string, readonly "definitionId": string, readonly "elementIds": ReadonlyArray<number>, readonly "transaction": string, readonly "outcome": ScriptFailureOutcome };
+export type Root = { readonly "status": ScriptExecutionStatus, readonly "output": string, readonly "diagnostics": ReadonlyArray<ScriptDiagnostic>, readonly "revitVersion": string, readonly "targetFramework": string, readonly "containerTypeName"?: null | string, readonly "executionId": string, readonly "artifacts"?: ReadonlyArray<ScriptArtifactData> | null, readonly "data"?: Schema.Json | null, readonly "attribution"?: null | PodReceipt, readonly "held"?: null | string, readonly "changes"?: null | ScriptChanges, readonly "failures"?: ReadonlyArray<ScriptFailure> | null };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op92request {
+namespace Decoded {
 
 
 const codec = Schema.Struct({ "workspaceKey": Schema.optionalKey(Schema.String) }).annotate({ "title": "ScriptWorkspaceBootstrapRequest" });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 
 export type Root = { readonly "workspaceKey"?: string };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op92response {
+namespace Decoded {
 
 
 const codec = Schema.Struct({ "workspaceKey": Schema.String, "productHomePath": Schema.String, "productAgentsPath": Schema.String, "workspaceRootPath": Schema.String, "workspaceAgentsPath": Schema.String, "workspaceReadmePath": Schema.String, "projectFilePath": Schema.String, "podManifestPath": Schema.String, "machinePropsPath": Schema.String, "revitVersion": Schema.String, "targetFramework": Schema.String, "runtimeAssemblyPath": Schema.String, "generatedFiles": Schema.Array(Schema.String) }).annotate({ "title": "ScriptWorkspaceBootstrapData", "description": "What bootstrap seeded. `ProductAgentsPath` is the agent's guide in the agent's working directory and\n`MachinePropsPath` the per-machine props file the pod's project imports; both are machine state, outside\nevery home. The workspace paths are the pod's own folder, in whichever home holds it.\n            " });
+export const decoder = strictDecoder(codec);
+export const definitions = {
+
+} as const;
+}
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
 namespace WireTypes {
 
 export type Root = { readonly "workspaceKey": string, readonly "productHomePath": string, readonly "productAgentsPath": string, readonly "workspaceRootPath": string, readonly "workspaceAgentsPath": string, readonly "workspaceReadmePath": string, readonly "projectFilePath": string, readonly "podManifestPath": string, readonly "machinePropsPath": string, readonly "revitVersion": string, readonly "targetFramework": string, readonly "runtimeAssemblyPath": string, readonly "generatedFiles": ReadonlyArray<string> };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
-export const definitions = {
-
-} as const;
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op93request {
+namespace Decoded {
 
 
 const codec = Schema.Struct({ "schemaUrl": Schema.String }).annotate({ "title": "SchemaRequest", "description": "A settings library addressed by the `$schema` URL its specs carry." });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 
 export type Root = { readonly "schemaUrl": string };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op93response {
+namespace Decoded {
 
 
 const codec = Schema.Struct({ "schemaJson": Schema.String, "fragmentSchemaJson": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "title": "SchemaData" });
+export const decoder = strictDecoder(codec);
+export const definitions = {
+
+} as const;
+}
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
 namespace WireTypes {
 
 export type Root = { readonly "schemaJson": string, readonly "fragmentSchemaJson"?: null | string };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
-export const definitions = {
-
-} as const;
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op94request {
+namespace Decoded {
 
 
 const codec = Schema.Struct({ "schemaUrl": Schema.String, "rawContent": Schema.String, "composedContent": Schema.String }).annotate({ "title": "SettingsValidateRequest", "description": "Semantic validation of one spec by the library its `$schema` names; structural validation stays in the host." });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 
 export type Root = { readonly "schemaUrl": string, readonly "rawContent": string, readonly "composedContent": string };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op94response {
+namespace Decoded {
 
 const ValidationIssue = Schema.Struct({ "instancePath": Schema.String, "schemaPath": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "code": Schema.String, "severity": Schema.String, "message": Schema.String, "suggestion": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "identifier": "ValidationIssue" });
 const codec = Schema.Struct({ "isConfigured": Schema.Boolean, "issues": Schema.Array(ValidationIssue) }).annotate({ "title": "SettingsValidateData" });
-namespace WireTypes {
-type ValidationIssue = { readonly "instancePath": string, readonly "schemaPath"?: null | string, readonly "code": string, readonly "severity": string, readonly "message": string, readonly "suggestion"?: null | string };
-export type Root = { readonly "isConfigured": boolean, readonly "issues": ReadonlyArray<ValidationIssue> };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["ValidationIssue"]: strictDecoder(ValidationIssue),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type ValidationIssue = { readonly "instancePath": string, readonly "schemaPath"?: null | string, readonly "code": string, readonly "severity": string, readonly "message": string, readonly "suggestion"?: null | string };
+export type Root = { readonly "isConfigured": boolean, readonly "issues": ReadonlyArray<ValidationIssue> };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op95request {
+namespace Decoded {
 
 const TakeoffAdoptItem = Schema.Struct({ "elementId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "name": Schema.String, "systemTag": Schema.String }).annotate({ "identifier": "TakeoffAdoptItem" });
 const codec = Schema.Struct({ "view": Schema.String, "items": Schema.Array(TakeoffAdoptItem) }).annotate({ "title": "TakeoffAdoptRequest" });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 type TakeoffAdoptItem = { readonly "elementId": number, readonly "name": string, readonly "systemTag": string };
 export type Root = { readonly "view": string, readonly "items": ReadonlyArray<TakeoffAdoptItem> };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op95response {
+namespace Decoded {
 
 const RevitCropCoverage = Schema.Literals(["Inside", "Crossing", "Outside"]).annotate({ "description": "Where a set of model points sits against a view's model crop. Outside means it can never draw under that view's image.", "identifier": "RevitCropCoverage" });
 const TakeoffAdopted = Schema.Struct({ "elementId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "guid": Schema.String.annotate({ "format": "guid" }).check(Schema.makeFilter((value) => typeof value !== "string" || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value))), "ownerCrop": Schema.optionalKey(Schema.Union([Schema.Null, RevitCropCoverage], { mode: "oneOf" })) }).annotate({ "identifier": "TakeoffAdopted" });
 const codec = Schema.Struct({ "adopted": Schema.Array(TakeoffAdopted) }).annotate({ "title": "TakeoffAdoptResult" });
-namespace WireTypes {
-type RevitCropCoverage = "Inside" | "Crossing" | "Outside";
-type TakeoffAdopted = { readonly "elementId": number, readonly "guid": string, readonly "ownerCrop"?: null | RevitCropCoverage };
-export type Root = { readonly "adopted": ReadonlyArray<TakeoffAdopted> };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["RevitCropCoverage"]: strictDecoder(RevitCropCoverage),
   ["TakeoffAdopted"]: strictDecoder(TakeoffAdopted),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type RevitCropCoverage = "Inside" | "Crossing" | "Outside";
+type TakeoffAdopted = { readonly "elementId": number, readonly "guid": string, readonly "ownerCrop"?: null | RevitCropCoverage };
+export type Root = { readonly "adopted": ReadonlyArray<TakeoffAdopted> };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op96request {
+namespace Decoded {
 
 
 const codec = Schema.Struct({ "view": Schema.String }).annotate({ "title": "TakeoffCandidatesRequest" });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 
 export type Root = { readonly "view": string };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op96response {
+namespace Decoded {
 
 const RevitCropCoverage = Schema.Literals(["Inside", "Crossing", "Outside"]).annotate({ "description": "Where a set of model points sits against a view's model crop. Outside means it can never draw under that view's image.", "identifier": "RevitCropCoverage" });
 const TakeoffRegionFacts = Schema.Struct({ "elementId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "typeName": Schema.String, "view": Schema.String, "color": Schema.String, "sqft": Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })), "role": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "guid": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String]).annotate({ "format": "guid" }).check(Schema.makeFilter((value) => typeof value !== "string" || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)))), "blob": Schema.String, "loops": Schema.Array(Schema.Array(Schema.Array(Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" }))))), "ownerCrop": Schema.optionalKey(Schema.Union([Schema.Null, RevitCropCoverage], { mode: "oneOf" })), "unreadable": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "identifier": "TakeoffRegionFacts" });
 const codec = Schema.Struct({ "regions": Schema.Array(TakeoffRegionFacts) }).annotate({ "title": "TakeoffCandidatesData" });
-namespace WireTypes {
-type RevitCropCoverage = "Inside" | "Crossing" | "Outside";
-type TakeoffRegionFacts = { readonly "elementId": number, readonly "typeName": string, readonly "view": string, readonly "color": string, readonly "sqft": number, readonly "role"?: null | string, readonly "guid"?: null | string, readonly "blob": string, readonly "loops": ReadonlyArray<ReadonlyArray<ReadonlyArray<number>>>, readonly "ownerCrop"?: null | RevitCropCoverage, readonly "unreadable"?: null | string };
-export type Root = { readonly "regions": ReadonlyArray<TakeoffRegionFacts> };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["RevitCropCoverage"]: strictDecoder(RevitCropCoverage),
   ["TakeoffRegionFacts"]: strictDecoder(TakeoffRegionFacts),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type RevitCropCoverage = "Inside" | "Crossing" | "Outside";
+type TakeoffRegionFacts = { readonly "elementId": number, readonly "typeName": string, readonly "view": string, readonly "color": string, readonly "sqft": number, readonly "role"?: null | string, readonly "guid"?: null | string, readonly "blob": string, readonly "loops": ReadonlyArray<ReadonlyArray<ReadonlyArray<number>>>, readonly "ownerCrop"?: null | RevitCropCoverage, readonly "unreadable"?: null | string };
+export type Root = { readonly "regions": ReadonlyArray<TakeoffRegionFacts> };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op97request {
+namespace Decoded {
 
 const TakeoffCarrierStage = Schema.Literals(["Adoption", "Materialization", "Rooms"]).annotate({ "description": "", "identifier": "TakeoffCarrierStage" });
 const codec = Schema.Struct({ "stage": Schema.optionalKey(TakeoffCarrierStage) }).annotate({ "title": "TakeoffCarrierInitializationRequest" });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 type TakeoffCarrierStage = "Adoption" | "Materialization" | "Rooms";
 export type Root = { readonly "stage"?: TakeoffCarrierStage };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op97response {
+namespace Decoded {
 
 
 const codec = Schema.Struct({ "status": Schema.String, "bound": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String]).annotate({ "format": "guid" }).check(Schema.makeFilter((value) => typeof value !== "string" || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)))), "remaining": Schema.Array(Schema.String.annotate({ "format": "guid" }).check(Schema.makeFilter((value) => typeof value !== "string" || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)))) }).annotate({ "title": "TakeoffCarrierInitializationData" });
-namespace WireTypes {
-
-export type Root = { readonly "status": string, readonly "bound"?: null | string, readonly "remaining": ReadonlyArray<string> };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
 
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+
+export type Root = { readonly "status": string, readonly "bound"?: null | string, readonly "remaining": ReadonlyArray<string> };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op98request {
+namespace Decoded {
 
 
 const codec = Schema.Struct({ "zoneRegion": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "view": Schema.String, "zoneName": Schema.String, "zoneGuid": Schema.String.annotate({ "format": "guid" }).check(Schema.makeFilter((value) => typeof value !== "string" || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value))), "runId": Schema.String }).annotate({ "title": "TakeoffPartitionRequest" });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 
 export type Root = { readonly "zoneRegion": number, readonly "view": string, readonly "zoneName": string, readonly "zoneGuid": string, readonly "runId": string };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op98response {
+namespace Decoded {
 
 const TakeoffPromotionFacts = Schema.Struct({ "accepted": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "held": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "strict": Schema.Boolean }).annotate({ "identifier": "TakeoffPromotionFacts" });
 const TakeoffDetectedRoom = Schema.Struct({ "id": Schema.String, "rawSqft": Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })), "perimeterFt": Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })), "meanCeilingFt": Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })), "label": Schema.Array(Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" }))), "flags": Schema.Array(Schema.String), "outer": Schema.Array(Schema.Array(Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })))) }).annotate({ "identifier": "TakeoffDetectedRoom" });
@@ -5763,20 +6458,6 @@ const TakeoffReviewShape = Schema.Struct({ "id": Schema.String, "kind": Schema.S
 const TakeoffLiveRegion = Schema.Struct({ "elementId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "role": Schema.String, "guid": Schema.String.annotate({ "format": "guid" }).check(Schema.makeFilter((value) => typeof value !== "string" || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value))), "sqft": Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })), "roomType": Schema.String, "blob": Schema.String, "outer": Schema.Array(Schema.Array(Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })))), "holes": Schema.Array(Schema.Array(Schema.Array(Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" }))))), "analysis": Schema.optionalKey(Schema.Union([Schema.Null, TakeoffRegionAnalysis], { mode: "oneOf" })) }).annotate({ "identifier": "TakeoffLiveRegion" });
 const TakeoffPartitionReview = Schema.Struct({ "source": TakeoffReviewSource, "zone": TakeoffReviewZone, "shapes": Schema.Array(TakeoffReviewShape) }).annotate({ "identifier": "TakeoffPartitionReview" });
 const codec = Schema.Struct({ "levelName": Schema.String, "elevation": Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })), "created": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "held": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "rebound": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "orphaned": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "promotion": TakeoffPromotionFacts, "domainSqft": Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })), "excludedSqft": Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })), "voidSqft": Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })), "totalSqft": Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })), "enclosureSource": Schema.String, "hold": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "failures": Schema.Array(Schema.String), "rooms": Schema.Array(TakeoffDetectedRoom), "residues": Schema.Array(TakeoffDetectedResidue), "regions": Schema.Array(TakeoffLiveRegion), "review": Schema.optionalKey(Schema.Union([Schema.Null, TakeoffPartitionReview], { mode: "oneOf" })) }).annotate({ "title": "TakeoffPartitionResult" });
-namespace WireTypes {
-type TakeoffPromotionFacts = { readonly "accepted": number, readonly "held": number, readonly "strict": boolean };
-type TakeoffDetectedRoom = { readonly "id": string, readonly "rawSqft": number, readonly "perimeterFt": number, readonly "meanCeilingFt": number, readonly "label": ReadonlyArray<number>, readonly "flags": ReadonlyArray<string>, readonly "outer": ReadonlyArray<ReadonlyArray<number>> };
-type TakeoffDetectedResidue = { readonly "id": string, readonly "reason": string, readonly "rawSqft": number, readonly "label": ReadonlyArray<number>, readonly "outer": ReadonlyArray<ReadonlyArray<number>> };
-type TakeoffRegionAnalysis = { readonly "state": string, readonly "runId"?: null | string, readonly "floorZ"?: null | number, readonly "ceilingZ"?: null | number, readonly "hold"?: null | string };
-type TakeoffReviewSource = { readonly "runId": string, readonly "documentKey": string, readonly "scopeKey": string };
-type TakeoffReviewZone = { readonly "key": string, readonly "name": string, readonly "loops": ReadonlyArray<ReadonlyArray<ReadonlyArray<number>>> };
-type TakeoffReviewShape = { readonly "id": string, readonly "kind": string, readonly "disposition"?: null | string, readonly "reason"?: null | string, readonly "sqft"?: null | number, readonly "label"?: ReadonlyArray<number> | null, readonly "loops": ReadonlyArray<ReadonlyArray<ReadonlyArray<number>>> };
-type TakeoffLiveRegion = { readonly "elementId": number, readonly "role": string, readonly "guid": string, readonly "sqft": number, readonly "roomType": string, readonly "blob": string, readonly "outer": ReadonlyArray<ReadonlyArray<number>>, readonly "holes": ReadonlyArray<ReadonlyArray<ReadonlyArray<number>>>, readonly "analysis"?: null | TakeoffRegionAnalysis };
-type TakeoffPartitionReview = { readonly "source": TakeoffReviewSource, readonly "zone": TakeoffReviewZone, readonly "shapes": ReadonlyArray<TakeoffReviewShape> };
-export type Root = { readonly "levelName": string, readonly "elevation": number, readonly "created": number, readonly "held": number, readonly "rebound": number, readonly "orphaned": number, readonly "promotion": TakeoffPromotionFacts, readonly "domainSqft": number, readonly "excludedSqft": number, readonly "voidSqft": number, readonly "totalSqft": number, readonly "enclosureSource": string, readonly "hold"?: null | string, readonly "failures": ReadonlyArray<string>, readonly "rooms": ReadonlyArray<TakeoffDetectedRoom>, readonly "residues": ReadonlyArray<TakeoffDetectedResidue>, readonly "regions": ReadonlyArray<TakeoffLiveRegion>, readonly "review"?: null | TakeoffPartitionReview };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["TakeoffDetectedResidue"]: strictDecoder(TakeoffDetectedResidue),
@@ -5790,52 +6471,80 @@ export const definitions = {
   ["TakeoffReviewZone"]: strictDecoder(TakeoffReviewZone),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type TakeoffPromotionFacts = { readonly "accepted": number, readonly "held": number, readonly "strict": boolean };
+type TakeoffDetectedRoom = { readonly "id": string, readonly "rawSqft": number, readonly "perimeterFt": number, readonly "meanCeilingFt": number, readonly "label": ReadonlyArray<number>, readonly "flags": ReadonlyArray<string>, readonly "outer": ReadonlyArray<ReadonlyArray<number>> };
+type TakeoffDetectedResidue = { readonly "id": string, readonly "reason": string, readonly "rawSqft": number, readonly "label": ReadonlyArray<number>, readonly "outer": ReadonlyArray<ReadonlyArray<number>> };
+type TakeoffRegionAnalysis = { readonly "state": string, readonly "runId"?: null | string, readonly "floorZ"?: null | number, readonly "ceilingZ"?: null | number, readonly "hold"?: null | string };
+type TakeoffReviewSource = { readonly "runId": string, readonly "documentKey": string, readonly "scopeKey": string };
+type TakeoffReviewZone = { readonly "key": string, readonly "name": string, readonly "loops": ReadonlyArray<ReadonlyArray<ReadonlyArray<number>>> };
+type TakeoffReviewShape = { readonly "id": string, readonly "kind": string, readonly "disposition"?: null | string, readonly "reason"?: null | string, readonly "sqft"?: null | number, readonly "label"?: ReadonlyArray<number> | null, readonly "loops": ReadonlyArray<ReadonlyArray<ReadonlyArray<number>>> };
+type TakeoffLiveRegion = { readonly "elementId": number, readonly "role": string, readonly "guid": string, readonly "sqft": number, readonly "roomType": string, readonly "blob": string, readonly "outer": ReadonlyArray<ReadonlyArray<number>>, readonly "holes": ReadonlyArray<ReadonlyArray<ReadonlyArray<number>>>, readonly "analysis"?: null | TakeoffRegionAnalysis };
+type TakeoffPartitionReview = { readonly "source": TakeoffReviewSource, readonly "zone": TakeoffReviewZone, readonly "shapes": ReadonlyArray<TakeoffReviewShape> };
+export type Root = { readonly "levelName": string, readonly "elevation": number, readonly "created": number, readonly "held": number, readonly "rebound": number, readonly "orphaned": number, readonly "promotion": TakeoffPromotionFacts, readonly "domainSqft": number, readonly "excludedSqft": number, readonly "voidSqft": number, readonly "totalSqft": number, readonly "enclosureSource": string, readonly "hold"?: null | string, readonly "failures": ReadonlyArray<string>, readonly "rooms": ReadonlyArray<TakeoffDetectedRoom>, readonly "residues": ReadonlyArray<TakeoffDetectedResidue>, readonly "regions": ReadonlyArray<TakeoffLiveRegion>, readonly "review"?: null | TakeoffPartitionReview };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op99request {
+namespace Decoded {
 
 const TakeoffRhvacLink = Schema.Struct({ "identifier": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "fileIdentity": Schema.String, "syncedAt": Schema.String, "lastSyncedSqft": Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })) }).annotate({ "identifier": "TakeoffRhvacLink" });
 const TakeoffRhvacLinkWrite = Schema.Struct({ "elementId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "link": TakeoffRhvacLink }).annotate({ "identifier": "TakeoffRhvacLinkWrite" });
 const codec = Schema.Struct({ "writes": Schema.Array(TakeoffRhvacLinkWrite) }).annotate({ "title": "TakeoffRhvacLinksRequest" });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 type TakeoffRhvacLink = { readonly "identifier": number, readonly "fileIdentity": string, readonly "syncedAt": string, readonly "lastSyncedSqft": number };
 type TakeoffRhvacLinkWrite = { readonly "elementId": number, readonly "link": TakeoffRhvacLink };
 export type Root = { readonly "writes": ReadonlyArray<TakeoffRhvacLinkWrite> };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op99response {
+namespace Decoded {
 
 const TakeoffWriteResult = Schema.Struct({ "elementId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "zoneGuid": Schema.String.annotate({ "format": "guid" }).check(Schema.makeFilter((value) => typeof value !== "string" || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value))), "bytes": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "blob": Schema.String }).annotate({ "identifier": "TakeoffWriteResult" });
 const codec = Schema.Struct({ "writes": Schema.Array(TakeoffWriteResult) }).annotate({ "title": "TakeoffRhvacLinksData" });
-namespace WireTypes {
-type TakeoffWriteResult = { readonly "elementId": number, readonly "zoneGuid": string, readonly "bytes": number, readonly "blob": string };
-export type Root = { readonly "writes": ReadonlyArray<TakeoffWriteResult> };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["TakeoffWriteResult"]: strictDecoder(TakeoffWriteResult),
 } as const;
 }
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type TakeoffWriteResult = { readonly "elementId": number, readonly "zoneGuid": string, readonly "bytes": number, readonly "blob": string };
+export type Root = { readonly "writes": ReadonlyArray<TakeoffWriteResult> };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
 
 export namespace Op100request {
+namespace Decoded {
 
 
 const codec = Schema.Struct({ "views": Schema.optionalKey(Schema.Union([Schema.Array(Schema.String), Schema.Null])), "zoneGuids": Schema.optionalKey(Schema.Union([Schema.Array(Schema.String.annotate({ "format": "guid" }).check(Schema.makeFilter((value) => typeof value !== "string" || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)))), Schema.Null])) }).annotate({ "title": "TakeoffReadRequest", "description": "Geometry scope. Empty scope reads only the geometry-free roster." });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
 namespace WireTypes {
 
 export type Root = { readonly "views"?: ReadonlyArray<string> | null, readonly "zoneGuids"?: ReadonlyArray<string> | null };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
+export type Value = typeof decoder.Type;
 }
 
 export namespace Op100response {
+namespace Decoded {
 
 const Reading = Schema.Struct({ "at": Schema.String, "version": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "observedAt": Schema.String }).annotate({ "identifier": "Reading" });
 const TakeoffRegistrySystem = Schema.Struct({ "guid": Schema.String.annotate({ "format": "guid" }).check(Schema.makeFilter((value) => typeof value !== "string" || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value))), "tag": Schema.String }).annotate({ "identifier": "TakeoffRegistrySystem" });
@@ -5849,6 +6558,23 @@ const TakeoffLiveRegion = Schema.Struct({ "elementId": Schema.Number.annotate({ 
 const TakeoffModelStatus = Schema.Struct({ "systems": Schema.Array(TakeoffRegistrySystem), "carriers": TakeoffCarrierPreflight }).annotate({ "identifier": "TakeoffModelStatus" });
 const TakeoffSnapshotData = Schema.Struct({ "status": TakeoffModelStatus, "zoneFrs": Schema.Array(TakeoffRegionFacts), "regionsByZone": Schema.Record(Schema.String, Schema.Array(TakeoffLiveRegion)), "unreadable": Schema.optionalKey(Schema.Union([Schema.Array(TakeoffUnreadableBlob), Schema.Null])) }).annotate({ "identifier": "TakeoffSnapshotData" });
 const codec = Schema.Struct({ "reading": Reading, "snapshot": TakeoffSnapshotData }).annotate({ "title": "TakeoffSnapshotResponse" });
+export const decoder = strictDecoder(codec);
+export const definitions = {
+  ["Reading"]: strictDecoder(Reading),
+  ["RevitCropCoverage"]: strictDecoder(RevitCropCoverage),
+  ["TakeoffCarrierPreflight"]: strictDecoder(TakeoffCarrierPreflight),
+  ["TakeoffCarrierStage"]: strictDecoder(TakeoffCarrierStage),
+  ["TakeoffLiveRegion"]: strictDecoder(TakeoffLiveRegion),
+  ["TakeoffModelStatus"]: strictDecoder(TakeoffModelStatus),
+  ["TakeoffRegionAnalysis"]: strictDecoder(TakeoffRegionAnalysis),
+  ["TakeoffRegionFacts"]: strictDecoder(TakeoffRegionFacts),
+  ["TakeoffRegistrySystem"]: strictDecoder(TakeoffRegistrySystem),
+  ["TakeoffSnapshotData"]: strictDecoder(TakeoffSnapshotData),
+  ["TakeoffUnreadableBlob"]: strictDecoder(TakeoffUnreadableBlob),
+} as const;
+}
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
 namespace WireTypes {
 type Reading = { readonly "at": string, readonly "version"?: null | string, readonly "observedAt": string };
 type TakeoffRegistrySystem = { readonly "guid": string, readonly "tag": string };
@@ -5864,21 +6590,7 @@ type TakeoffSnapshotData = { readonly "status": TakeoffModelStatus, readonly "zo
 export type Root = { readonly "reading": Reading, readonly "snapshot": TakeoffSnapshotData };
 }
 export type Wire = WireTypes.Root;
-export type Value = typeof codec.Type;
-export const decoder = strictDecoder(codec);
-export const definitions = {
-  ["Reading"]: strictDecoder(Reading),
-  ["RevitCropCoverage"]: strictDecoder(RevitCropCoverage),
-  ["TakeoffCarrierPreflight"]: strictDecoder(TakeoffCarrierPreflight),
-  ["TakeoffCarrierStage"]: strictDecoder(TakeoffCarrierStage),
-  ["TakeoffLiveRegion"]: strictDecoder(TakeoffLiveRegion),
-  ["TakeoffModelStatus"]: strictDecoder(TakeoffModelStatus),
-  ["TakeoffRegionAnalysis"]: strictDecoder(TakeoffRegionAnalysis),
-  ["TakeoffRegionFacts"]: strictDecoder(TakeoffRegionFacts),
-  ["TakeoffRegistrySystem"]: strictDecoder(TakeoffRegistrySystem),
-  ["TakeoffSnapshotData"]: strictDecoder(TakeoffSnapshotData),
-  ["TakeoffUnreadableBlob"]: strictDecoder(TakeoffUnreadableBlob),
-} as const;
+export type Value = typeof decoder.Type;
 }
 
 export const nativeEffectSchemas = {
