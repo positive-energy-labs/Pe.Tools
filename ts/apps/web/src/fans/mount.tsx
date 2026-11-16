@@ -135,6 +135,7 @@ function LedgerContent({ ctx, snapshot }: { ctx: SheetContext; snapshot: DuctSna
       terminalDrop: state.inputs?.criteria.terminalDropInWg ?? null,
       // A terminal of this walk is a row of the resolved inputs; the blocker's prose is never read.
       terminal: (id) => Object.hasOwn(state.inputs?.terminals ?? {}, String(id)),
+      fix: (blocker) => blocker.typedCloser ?? null,
       nameOf,
       wait: busy
         ? "Wait for the current read"

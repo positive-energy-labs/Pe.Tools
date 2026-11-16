@@ -15,8 +15,7 @@ import type { SheetFitting } from "./model";
  * through a proposed tee or tap takes a typed drop for that path only (`edits.fittingDrops`), with
  * no default. Everything else is ruled in Revit and the row says so.
  */
-import type { Resolved } from "@pe/agent-contracts";
-import type { FanCloser } from "./fan-contract.local.ts";
+import type { FanCloser, Resolved } from "@pe/agent-contracts";
 import { ruleByKey, ruleWords } from "@pe/ducts-domain/loss-rules";
 import { tableMeaning } from "./fitting-groups";
 import type { SheetBlocker } from "./tiers";

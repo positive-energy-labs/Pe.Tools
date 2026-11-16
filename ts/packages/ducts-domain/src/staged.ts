@@ -1,15 +1,16 @@
 /** What the Work has edit for a write, counted from the document alone. */
 import { elementSubject, workElementId } from "./work-subject.ts";
-import { decode } from "@pe/agent-contracts";
-import type { DuctsApplyInput, DuctsDesign, WorkPath, FansDocument } from "@pe/agent-contracts";
+import { decode, fanBindingRows } from "@pe/agent-contracts";
+import type { FanParameterCohort, DuctsApplyInput, DuctsDesign, WorkPath, FansDocument } from "@pe/agent-contracts";
 import type { DuctsApply } from "@pe/host-contracts/generated";
 
 import { pendingRulings } from "./rulings.ts";
 import type { DuctSnapshot } from "./types.ts";
 
-/** A native parameter cohort as the contract names it (`FanParameterCohort`), read structurally. */
-type Cohort = { owner: { kind: "instance" | "type"; id: number }; members: readonly { elementId: number; uniqueId: string }[]; basis: string; complete: boolean };
-const SEGMENTS = ["terminalDrops", "componentDrops", "esp", "flows", "equipmentFlows", "roles"] as const;
+type Cohort = Pick<FanParameterCohort, "owner" | "members" | "basis" | "complete">;
+type Segment = "terminalDrops" | "componentDrops" | "esp" | "flows" | "equipmentFlows" | "roles";
+/** The Fans Work segments, from the one inputs table. */
+const SEGMENTS = fanBindingRows().flatMap(row => (row.owner === "fans" && row.segment ? [row.segment as Segment] : []));
 
 /**
  * Fan targets are a projection of current edits, never a list frozen when scope was chosen. The walk
@@ -30,7 +31,7 @@ export function fanWriteCells(doc: FansDocument | null, snapshot: Pick<DuctSnaps
 /**
  * One staged ESP for every member of a cohort, off-walk members included: the same value on each
  * key, so one Work write stamps them with one caller. Refuses, staging nothing, unless native
- * reported the whole membership at the basis being read. The native guard rechecks at apply.
+ * reported the whole membership at the basis being read (the snapshot's read time). The native guard rechecks at apply.
  */
 export function stageEspCohort(cohort: Cohort, basis: string, value: { inWg: number }): { esp: Record<string, { inWg: number }> } | { refused: string } {
   if (!cohort.complete) return { refused: "The model has not reported every element that shares this value" };

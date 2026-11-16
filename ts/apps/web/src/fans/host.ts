@@ -16,7 +16,6 @@ import {
 import { sheetSnapshot } from "@pe/ducts-domain/sheet/scoped-snapshot";
 import { sheetState } from "@pe/ducts-domain/sheet/state";
 import { z } from "zod";
-import type { FanEspValues } from "../ducts/sheet/fan-contract.local.ts";
 import { designLayers } from "../ducts/ducts-design.ts";
 
 import { read } from "@pe/host/read-graph";
@@ -123,7 +122,7 @@ export const fansSheet = body(contracts.sheet, async function(ctx, args) {
             requiredEspInWg: overview.totals?.requiredEspInWg ?? null,
             requiredEspAssumedInWg: overview.totals?.requiredEspAssumedInWg ?? null,
             // The engine's claim is the only completeness (invariant 1); with none served, the row is not complete.
-            complete: (overview as { esp?: FanEspValues }).esp?.required.kind === "complete",
+            complete: overview.claim?.kind === "complete",
           }
         : row;
     });

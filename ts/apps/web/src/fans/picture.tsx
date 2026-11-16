@@ -12,7 +12,7 @@ import { SheetPicture } from "../ducts/sheet/picture.tsx";
 import type { PictureOverlayProps } from "../route/slots/picture/overlay.tsx";
 import { SheetEmpty, SheetFrame, sheetSnapshot, useSheetData } from "./mount.tsx";
 import type { FansDrawContext } from "./route.ts";
-import type { FanEspValues } from "../ducts/sheet/fan-contract.local.ts";
+import type { FanEspValues, Immutable } from "@pe/agent-contracts";
 
 type Props = PictureOverlayProps<FansDrawContext>;
 
@@ -22,7 +22,7 @@ const inWg = (value: number) => `${value.toFixed(2)} in-wg`;
  * engine's claim, staged is what Work would write. They are three facts and never stand in for one
  * another, so a required value that is not a complete claim is named as partial, with its reach.
  */
-export function espWarnings({ rated, required, staged }: FanEspValues): string[] {
+export function espWarnings({ rated, required, staged }: Immutable<FanEspValues>): string[] {
   if (required.kind !== "complete")
     return [`Required ESP is not known: ${required.kind === "to-boundary" ? `priced to ${required.boundaries.length} unruled boundar${required.boundaries.length === 1 ? "y" : "ies"}` : `${required.coverage.length} coverage gap${required.coverage.length === 1 ? "" : "s"}, ${required.blockingIds.length} blocking`}; ${inWg(required.knownInWg)} so far`];
   const need = required.requiredEspInWg;
@@ -42,7 +42,7 @@ function FanWalk({ ctx, snapshot, picture }: Pick<Props, "ctx" | "picture"> & { 
   const { authored, value, sheet, roster, nameOf, issue, state, fanKey } = useSheetData(ctx, snapshot);
   const picked = authored.fan.kind === "all" ? "all" : authored.fan.ids;
   const jump = useRef<((key: SubjectKey) => void) | null>(null);
-  const esp = (sheet?.overview as { esp?: FanEspValues } | undefined)?.esp;
+  const esp = sheet?.overview.espValues;
   return (
     <SheetFrame ctx={ctx} snapshot={snapshot} nameOf={nameOf} jump={jump}>
       {/* Served once the engine's claim rides the overview; until then there is nothing to warn from. */}
