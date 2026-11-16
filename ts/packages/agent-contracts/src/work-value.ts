@@ -4,15 +4,18 @@
  * (`_PE_DuctLosses` for ducts). Then observed `model`, the `project` home, the `firm` home, `default` (ADR 0037 rule 8). Null/undefined mean absent;
  * invalid wins and blocks fallback, so a bad stored value never demotes under the raw model or firm.
  */
+import type { Author } from "./draft.ts";
 export const VALUE_SOURCES = ["run", "Work", "model-store", "model", "project", "firm", "default"] as const;
 export type ValueSource = (typeof VALUE_SOURCES)[number];
 export interface ValueCell<T> {
   value: T | null | undefined;
   version?: string | number | null;
   ref?: string;
+  author?: Author | null;
 }
 export type ValueLayers<T> = Partial<Record<ValueSource, ValueCell<T>>>;
 export interface ValueResolution<T> {
+  author?: Author | null;
   value: T | null;
   units: string | null;
   source: ValueSource | "none";
@@ -36,6 +39,7 @@ export function resolveValue<T>(
       version: cell.version ?? null,
       status: accepted ? "valid" : "invalid",
       ...(cell.ref == null ? {} : { ref: cell.ref }),
+      ...(cell.author === undefined ? {} : { author: cell.author }),
     };
   }
   return { value: null, units, source: "none", version: null, status: "missing" };

@@ -174,6 +174,17 @@ const banner = [
 const chunks: string[] = [...banner];
 const mapEntries: string[] = [];
 
+// The native snapshot catalog owns fan words. Export both decoder values and aliases from it.
+const snapshot = operations.find(op => op.key === "ducts.snapshot.walk");
+if (!snapshot) throw new Error("Missing native duct snapshot vocabulary");
+const vocabularySchema = JSON.parse(snapshot.responseSchemaJson);
+for (const [name, valuesName] of [["DuctUnitKind", "DUCT_UNIT_KINDS"], ["FanBlockerKind", "FAN_BLOCKER_KINDS"]]) {
+  const definition = vocabularySchema.definitions?.[name] ?? vocabularySchema.$defs?.[name];
+  if (!definition?.enum?.length) throw new Error(`Missing native vocabulary ${name}`);
+  chunks.push(`export const ${valuesName} = ${JSON.stringify(definition.enum)} as const;`,
+    `export type ${name} = (typeof ${valuesName})[number];`, "");
+}
+
 for (const op of operations) {
   const ns = pascalCase(op.key);
   const requestTs = await compile(parseUntitled(op.requestSchemaJson), "Request", {

@@ -501,8 +501,29 @@ public static class DuctApplier {
     private static string Unit(Element e) =>
         e.get_Parameter(BuiltInParameter.ALL_MODEL_MARK)?.AsString() is { Length: > 0 } mark ? $"{mark} ({e.Id.Value()})" : $"{e.Id.Value()}";
 
+    /// <summary>The same instance-first native ownership as apply, with every document instance of a type.</summary>
+    public static DuctFanParameterCohort? ParameterCohort(Document doc, long elementId, string name, string basis) {
+        var e = doc.GetElement(elementId.ToElementId());
+        if (e is null) return null;
+        var p = ResolveFanParameter(e, name);
+        if (p is null) return null;
+        var owner = p.Element;
+        var instance = owner.Id == e.Id;
+        var members = instance ? new List<Element> { e }
+            : owner is FamilySymbol type
+                ? new FilteredElementCollector(doc).WherePasses(new FamilyInstanceFilter(doc, type.Id)).ToElements().ToList()
+                : new List<Element>();
+        return new DuctFanParameterCohort(p.Definition.Name,
+            new DuctParameterOwner(instance ? DuctParameterOwnerKind.Instance : DuctParameterOwnerKind.Type, owner.Id.Value()),
+            members.OrderBy(m => m.Id.Value()).Select(m => new DuctParameterMember(m.Id.Value(), m.UniqueId)).ToList(),
+            basis, members.Count > 0 && members.Any(m => m.Id == e.Id));
+    }
+
     private static Item Equipment(Document doc, DuctEquipmentWrite w, DuctParameterSlots slots) =>
         FanParameter(doc, "equipment", w.Id, w.ExternalStaticInWg, slots.FanStatic, nameof(DuctParameterSlots.FanStatic), SpecTypeId.HvacPressure, InWg, "in-wg", "static");
+
+    private static Parameter? ResolveFanParameter(Element e, string name) =>
+        e.LookupParameter(name) ?? (e as FamilyInstance)?.Symbol?.LookupParameter(name);
 
     /// <summary>The unit's design flow, written to the FanFlow slot: instance first, then type, the rules of the fan static.</summary>
     private static Item EquipmentFlow(Document doc, DuctFlowWrite w, DuctParameterSlots slots) =>
@@ -511,7 +532,7 @@ public static class DuctApplier {
     private static Item FanParameter(Document doc, string kind, long id, double value, string name, string slot, ForgeTypeId spec, ForgeTypeId unit, string unitText, string noun) {
         var e = doc.GetElement(id.ToElementId());
         if (e is null) return new Item(id, kind, null).Refuse($"element {id} is not in the document");
-        var p = e.LookupParameter(name) ?? (e as FamilyInstance)?.Symbol?.LookupParameter(name);
+        var p = ResolveFanParameter(e, name);
         // The owner is the parameter's element, never the wrapper it was looked up through.
         var where = p is null || p.Element.Id == e.Id ? "instance" : "type";
         var item = new Item(id, kind, p is { HasValue: true, StorageType: StorageType.Double } ? $"{Shown(p, unit):0.####} {unitText}" : p is null ? null : "unset") { Element = e, Owner = p?.Element.Id, Parameter = p?.Definition.Name ?? name, Scope = where };
