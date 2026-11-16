@@ -22,6 +22,7 @@ const ONE_WRITE = { error: "a rung sets a value or deletes the property: exactly
 export const authorSchema = z.enum(["human", "pea", "unknown"]);
 const CHANGE_META = {
   by: authorSchema.optional(),
+  ref: z.string().min(1).refine(value => value.trim().length > 0, "cite a nonempty evidence ref").optional(),
   at: z.string().nullable().optional(),
   base: z.number().int().nonnegative().nullable().optional(),
   note: z.string().nullish(),
@@ -75,6 +76,7 @@ export interface Rung {
 export type Author = z.infer<typeof authorSchema>;
 export type Change = Rung & {
   by?: Author;
+  ref?: string;
   at?: string | null;
   base?: number | null;
   note?: string | null;

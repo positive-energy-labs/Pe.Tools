@@ -1,6 +1,7 @@
-import type { Author } from "./draft.ts";
-import { authorSchema } from "./draft.ts";
-import type { ValueSource } from "./work-value.ts";
+import { sourcedValueSchema, authoredValueSchema } from "./work-value.ts";
+export { sourcedValueSchema, authoredValueSchema } from "./work-value.ts";
+import type { ValueSource, SourcedValue, AuthoredValue } from "./work-value.ts";
+export type { SourcedValue, AuthoredValue } from "./work-value.ts";
 import type { Domain } from "./slots/sheet.ts";
 import type { FanBlockerKind } from "@pe/host-contracts/generated";
 import { DUCT_UNIT_KINDS, FAN_BLOCKER_KINDS } from "@pe/host-contracts/generated";
@@ -10,19 +11,6 @@ import { schemaOf } from "./slots/sheet.ts";
 import type { DuctsCriteriaLayer } from "./ducts-sheet.ts";
 
 export type FanRef = { unitId: number; portIndex: number };
-export type SourcedValue<T> =
-  | { status: "valid"; value: T; source: ValueSource;
-      author: Author | null; ref: string; version: string | number | null;
-      units: string | null }
-  | { status: "missing"; value: null; source: "none";
-      author: null; ref: null; version: null; units: string | null }
-  | { status: "invalid"; value: null; source: ValueSource;
-      author: Author | null; ref: string; version: string | number | null;
-      units: string | null };
-export type AuthoredValue<T> = {
-  value: T; author: Author; source: ValueSource; ref: string;
-  version: string | number | null;
-};
 export type FanInputRow<T> = {
   name: string;
   role: "input" | "result";
@@ -99,18 +87,6 @@ export type { DuctUnitKind, FanBlockerKind } from "@pe/host-contracts/generated"
 const ref = z.string().min(1).refine(value => value.trim().length > 0, "evidence identity must be nonempty");
 const pressure = z.number().finite().nonnegative();
 const id = z.number().int().positive();
-const version = z.union([z.string(), z.number().finite()]).nullable();
-const author = authorSchema;
-const provenance = { source: z.enum(VALUE_SOURCES), author: author.nullable(), ref, version };
-/** Acquisition tier and caller identity remain separate; legacy unknown is never promoted. */
-export const sourcedValueSchema = <T extends z.ZodType>(value: T) => z.discriminatedUnion("status", [
-  z.strictObject({ status: z.literal("valid"), value, ...provenance, units: z.string().nullable() }),
-  z.strictObject({ status: z.literal("invalid"), value: z.null(), ...provenance, units: z.string().nullable() }),
-  z.strictObject({ status: z.literal("missing"), value: z.null(), source: z.literal("none"), author: z.null(), ref: z.null(), version: z.null(), units: z.string().nullable() }),
-]).refine(v => v.status !== "valid" || (v.source !== "Work" && v.source !== "run") || v.author === "human" || v.author === "pea", "valid Work/run values require a known caller");
-export const authoredValueSchema = <T extends z.ZodType>(value: T) => z.strictObject({
-  value, source: z.enum(VALUE_SOURCES), author, ref, version,
-}).refine(v => (v.source !== "Work" && v.source !== "run") || v.author !== "unknown", "Work/run offers require a known caller");
 export const fanRefSchema = z.strictObject({ unitId: id, portIndex: z.number().int().nonnegative() });
 export const coverageGapSchema = z.strictObject({ kind: z.enum(["native-peer", "budget", "pricing", "host-calc", "cycle"]), elementId: id.nullable(), ref });
 export const encounterSchema = z.strictObject({
@@ -169,8 +145,8 @@ const input = <const D extends Domain>(name: string, on: FanInputRow<unknown>["o
 /** Phase 2 keeps metadata beside its existing consumer; phase 4 moves this single table to fans/contract. */
 export const FAN_INPUTS = [
   input("esp", "fan", "esp", "fanStatic", objectDomain("inWg", "in-wg")),
-  input("equipmentFlows", "fan", "equipmentFlows", "fanFlow", objectDomain("cfm", "cfm")),
-  input("flows", "terminal", "flows", "terminalFlow", objectDomain("cfm", "cfm")),
+  input("equipmentFlows", "fan", "equipmentFlows", "fanFlow", numberDomain("cfm")),
+  input("flows", "terminal", "flows", "terminalFlow", numberDomain("cfm")),
   input("terminalDrops", "terminal", "terminalDrops", "terminalDrop", objectDomain("inWg", "in-wg")),
   input("componentDrops", "component", "componentDrops", "componentDrop", objectDomain("inWg", "in-wg")),
   row({ name: "fittingCoefficient", role: "input", on: "fitting", domain: numberDomain(""), home: "model", owner: "ducts", segment: null, parameter: "fittingCoefficient", write: "never" }),

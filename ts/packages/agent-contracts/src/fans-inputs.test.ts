@@ -4,6 +4,21 @@ import { FAN_INPUTS, authoredValueSchema, fanBindingRows, fanClaimSchema, fanInp
 import { VALUE_SOURCES, resolveValue } from "./work-value.ts";
 import { DUCT_UNIT_KINDS, FAN_BLOCKER_KINDS } from "@pe/host-contracts/generated";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
+import { draftCellSchema } from "./draft.ts";
+import { fansDocumentSchema } from "./fans.ts";
+import { subjectCode, uniqueIdSchema } from "./subject-ref.ts";
+
+it("airflow is a plain number with caller-cited cell evidence, and legacy objects are refused", () => {
+  const key = subjectCode({ keyKind: "UniqueId", key: uniqueIdSchema.parse("fixture:1") });
+  for (const segment of ["flows", "equipmentFlows"]) {
+    const doc = { [segment]: { [key]: { edit: { value: 250, ref: "submittal:page-2", by: "pea" } } } };
+    expect(fansDocumentSchema.parse(doc)).toMatchObject(doc);
+    expect(fansDocumentSchema.safeParse({ [segment]: { [key]: { edit: { value: { cfm: 250, source: "legacy" } } } } }).success).toBe(false);
+  }
+  const cell = draftCellSchema(z.number());
+  expect(cell.parse({ edit: { value: 250, ref: "submittal:page-2" } })).toEqual({ edit: { value: 250, ref: "submittal:page-2" } });
+  for (const ref of ["", " "]) expect(cell.safeParse({ edit: { value: 250, ref } }).success).toBe(false);
+});
 
 it("decoder words are exactly the native snapshot catalog vocabulary", () => {
   const definitions = JSON.parse(hostOpCatalog.find(op => op.key === "ducts.snapshot.walk")!.responseSchemaJson).definitions;
@@ -15,6 +30,7 @@ const value = { status: "valid", value: 1, source: "Work", author: "human", ref:
 it("accepts a backflow blocker on the wire", () => {
   const blocker = { id: "backflow:1", kind: "backflow", elementId: 1, severity: "blocking", closer: { kind: "none", reason: "Reverse flow requires a ruling" } };
   expect(fanIssueSchema.parse(blocker)).toEqual(blocker);
+  expect(fanIssueSchema.parse({ ...blocker, kind: "direction-mismatch", severity: "warning" }).kind).toBe("direction-mismatch");
 });
 it("requires evidence and authentic caller identity for valid staged values", () => {
   const schema = sourcedValueSchema(z.number().nonnegative());
@@ -26,7 +42,7 @@ it("requires evidence and authentic caller identity for valid staged values", ()
   expect(schema.safeParse({ ...value, status: "invalid", value: null, author: null }).success).toBe(true);
   expect(schema.safeParse({ ...value, status: "missing", source: "none", value: null, author: null, ref: null, version: null }).success).toBe(true);
   expect(authoredValueSchema(z.number()).safeParse({ value: 1, source: "run", author: "unknown", ref: "run:1", version: null }).success).toBe(false);
-  expect(resolveValue({ Work: { value: -1, author: "pea", ref: "Work:1" }, model: { value: 2 } }, null, n => n >= 0))
+  expect(resolveValue({ Work: { value: -1, author: "pea", ref: "Work:1" }, model: { value: 2, author: null, ref: "model:1" } }, null, n => n >= 0))
     .toMatchObject({ value: null, status: "invalid", source: "Work", author: "pea", ref: "Work:1" });
 });
 it("a complete claim refuses pressure, coverage or blocking damage", () => {
