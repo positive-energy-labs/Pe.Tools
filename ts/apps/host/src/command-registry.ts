@@ -31,11 +31,27 @@ import { catalogWorkSpecs, commands, type WriteBoundaryBinding } from "@pe/agent
 import { SHEET_COMMANDS } from "@pe/agent-contracts/slots";
 import { hostProcessIdentity } from "@pe/host-contracts/contracts";
 
+type CommandDependencies = FamilyActionDependencies & InstancesActionDependencies & { nativeRead?: HostNativeRead["Service"] };
+type CommandExecutorGroup = (
+  bridge: RevitBridge["Service"],
+  captures: TakeoffCaptures,
+  deps: CommandDependencies,
+) => Record<string, CommandExecutor>;
+const registeredGroups: CommandExecutorGroup[] = [];
+/**
+ * A product's `host/` registers its own executors here instead of this file importing them
+ * (ADR 0046). A registered group passes the same duplicate-key and seal checks as the hand list
+ * below, which only shrinks. Register at module load: `commandRegistry` reads the list once.
+ */
+export const registerCommandExecutors = (group: CommandExecutorGroup): void => {
+  registeredGroups.push(group);
+};
+
 /** Composed once for this exact runtime. Invocation-local facts live only in bind/prepare. */
 export function commandRegistry(
   bridge: RevitBridge["Service"],
   captures: TakeoffCaptures,
-  deps: FamilyActionDependencies & InstancesActionDependencies & { nativeRead?: HostNativeRead["Service"] },
+  deps: CommandDependencies,
   local: GatewayLocal,
   origin?: () => string,
 ): CommandRegistry {
@@ -69,6 +85,7 @@ export function commandRegistry(
     sheetExecutors(bridge, deps, ducts),
     catalogWorkExecutors(bridge, deps),
     findingsExecutors(deps.workspace, bridge),
+    ...registeredGroups.map((group) => group(bridge, captures, deps)),
   ]) {
     for (const [key, factory] of Object.entries(group)) {
       if (implementations[key]) throw Error(`Command '${key}' has two executors`);

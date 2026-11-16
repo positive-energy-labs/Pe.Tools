@@ -46,6 +46,23 @@ test("the census goes red on each planted offender and passes the clean shapes",
   }, routes)).toEqual([]);
 });
 
+test("a product's web folder is a route folder, closed against web routes and other products", () => {
+  const routes = new Set(["chat", "products/fans/web", "products/duct-systems/web"]);
+  expect(closureCensus({
+    "products/fans/web/a.ts": `import { x } from "../../duct-systems/web/x"; import { c } from "../../../apps/web/src/chat/c";`,
+    "products/fans/web/b.ts": `import { a } from "./a"; import { d } from "../domain/d"; import { s } from "#/shell/owner";`,
+    "navigation/planted.tsx": `import { r } from "../../../../products/fans/web/route";`,
+    "chat/planted.ts": `export const l = () => callOp("x");`,
+    "products/fans/web/load.ts": `export const l = () => fetch("/api");`,
+  }, routes)).toEqual([
+    "chat/planted.ts uses callOp",
+    "navigation/planted.tsx -> products/fans/web/route",
+    "products/fans/web/a.ts -> chat/c",
+    "products/fans/web/a.ts -> products/duct-systems/web/x",
+    "products/fans/web/load.ts uses fetch",
+  ]);
+});
+
 test("the census sees every route folder and exempts only the design-system window", () => {
   const routes = routeFolders();
   for (const name of ["chat", "fans", "ducts", "open", "sessions", "settings"]) expect(routes).toContain(name);
