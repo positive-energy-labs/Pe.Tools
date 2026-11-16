@@ -23,7 +23,7 @@ const row = {
   typed: null,
 };
 
-it("retains source text on closer drop and flow edits, while ESP stays strict", () => {
+it("refuses withdrawn source text on drop, flow and ESP edit values", () => {
   const key = subjectCode({ keyKind: "UniqueId", key: uniqueIdSchema.parse("fixture:1") });
   const edits = {
     flows: { [key]: { cfm: 100, source: "balancing report" } },
@@ -32,7 +32,8 @@ it("retains source text on closer drop and flow edits, while ESP stays strict", 
     componentDrops: { [key]: { inWg: 0.2, source: "catalog page" } },
     fittingDrops: { "proposed:pair>straight": { inWg: 0.3, source: "fitting submittal" } },
   };
-  expect(sheetEditsSchema.parse(edits)).toEqual(edits);
+  for (const [segment, values] of Object.entries(edits))
+    expect(sheetEditsSchema.safeParse({ [segment]: values }).success).toBe(false);
   expect(sheetEditsSchema.safeParse({ esp: { [key]: { inWg: 1, source: "unsupported" } } }).success).toBe(false);
 });
 const key = "proposed:14106988:1|14122436:1>straight";
