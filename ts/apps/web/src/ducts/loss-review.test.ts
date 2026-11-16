@@ -63,17 +63,20 @@ test("review rows speak Revit's words: no loss-method tokens, no store machine w
   expect(review.rows[1]).toBe("Pe loss record (Project Information): none yet → created · planned");
 });
 
-test("each write is a cell: before from the plan, the Work cell's author, unknown when no source names it", () => {
+test.each(["human", "pea"])("each write keeps the Work cell's author when %s previews it", (caller) => {
   const review = presentLosses(
     {
       response: {
-        counts: { planned: 2, written: 0, refused: 0, unchanged: 0 },
+        counts: { planned: 4, written: 0, refused: 0, unchanged: 0 },
         writes: [
           { id: 7, kind: "equipment-flow", outcome: "planned", before: "880 cfm", after: "925 cfm" },
           { id: 8, kind: "terminal", outcome: "planned" },
+          { id: null, kind: "slot", key: "fanFlow", outcome: "planned" },
+          { id: null, kind: "store", outcome: "planned", before: "absent" },
         ],
       },
       derivedRequest: { terminals: [{ id: 8, inWg: 0.05, source: "Work" }] },
+      seal: { caller: { kind: caller } },
     },
     {
       readings: {
@@ -87,6 +90,8 @@ test("each write is a cell: before from the plan, the Work cell's author, unknow
   expect(review.cells).toEqual([
     expect.objectContaining({ key: "equipment-flow:7", before: "880 cfm", author: "pea" }),
     expect.objectContaining({ key: "terminal:8", before: null, author: "unknown" }),
+    expect.objectContaining({ key: "slot:fanFlow", author: "unknown" }),
+    expect.objectContaining({ key: "store:", author: "unknown" }),
   ]);
   expect(review.cells[0]!.after).toContain("925 cfm");
   expect(review.cells[1]!.after).toContain("0.05 in-wg");

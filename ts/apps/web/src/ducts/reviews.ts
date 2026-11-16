@@ -169,12 +169,9 @@ const spoken = (value: string | null | undefined) =>
 export function presentLosses(result: unknown, scope: ReviewEvidence) {
   const response = responseOf<DuctsApply.Res.Response>(result);
   const envelope = result as {
-    seal?: { caller?: { kind?: string } };
     derivedRequest?: import("@pe/agent-contracts").DuctsApplyInput;
     receipt?: { result?: { derivedRequest?: import("@pe/agent-contracts").DuctsApplyInput } };
   };
-  const caller = envelope.seal?.caller?.kind;
-  const author: "human" | "pea" | null = caller === "human" || caller === "pea" ? caller : null;
   const request = envelope.derivedRequest ?? envelope.receipt?.result?.derivedRequest;
   const snapshot =
     snapshotOf(scope) ?? (scope.readings.sheetSnapshot?.value as DuctSnapshot | undefined);
@@ -232,6 +229,7 @@ export function presentLosses(result: unknown, scope: ReviewEvidence) {
     const before = spoken(write.before) ?? null;
     const key = `${write.kind}:${write.id ?? write.key ?? ""}`;
     // The store row is Pe's provenance record in Project Information; its "absent"/"revision n" are machine words.
+    // Store and slot rows have no source cell: their staging author stays unknown, regardless of caller.
     if (write.id == null && write.kind === "slot") {
       const label = `Pe loss record (Project Information): ${SLOT_WORDS[write.key ?? ""] ?? write.key} slot`;
       return {
@@ -242,7 +240,7 @@ export function presentLosses(result: unknown, scope: ReviewEvidence) {
           group: "Pe loss record",
           before,
           after: `${spoken(write.after) ?? "none"} · ${tail}`,
-          author: author ?? ("unknown" as const),
+          author: "unknown" as const,
         },
       };
     }
@@ -256,7 +254,7 @@ export function presentLosses(result: unknown, scope: ReviewEvidence) {
           group: "Pe loss record",
           before: write.before === "absent" ? "none yet" : before,
           after: `${write.before === "absent" ? "created" : "updated"} · ${tail}`,
-          author: author ?? ("unknown" as const),
+          author: "unknown" as const,
         },
       };
     }
@@ -282,7 +280,7 @@ export function presentLosses(result: unknown, scope: ReviewEvidence) {
           key: changes.length === 1 ? key : `${key}:${index}`,
           label, group, before,
           after: `${after} · ${source} · ${tail}${remedy}`,
-          author: author ?? fanAuthor(scope, write.kind, write.id!),
+          author: fanAuthor(scope, write.kind, write.id!),
         },
       };
     });

@@ -1,7 +1,8 @@
 /**
  * Flow on a walk (MAP, Flow on a path): a terminal's flow from the confirmed slot (missing is a
  * `no-flow` blocker); a leg carries the sum of the ends this fan reaches through it; a fan's own
- * flow is the sum of its ends, never an input. A side-stream unit (MUAS into a return) carries
+ * stated flow is an input; otherwise its terminal sum is a result, never written
+ * (docs/features/ducts/LEDGER.md, Q1 B). A side-stream unit (MUAS into a return) carries
  * its design parameter flow, split across receiving fan ports by the asserted policy.
  * A-INFLOW (counsel 2026-10-28, reversible): on an ordinary fan (no side-stream design flow) an
  * end at another fan's port or merge is a source joining this stream, not an outlet: it demands
