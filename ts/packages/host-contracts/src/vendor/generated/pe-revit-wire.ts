@@ -12,7 +12,7 @@ export interface SelectedSdkTypes {
   readonly UpdatePlan: SDK.UpdatePlan;
   readonly UpdateReceipt: SDK.UpdateReceipt;
 }
-export const contractSha256 = "9ac6e5f41b4e9c234cc053f68c2b6116786a6ce7c8ad4bae47ae2a5851aaba7f";
+export const contractSha256 = "25e4b912dca3424339f23efee88f2c1429081de3c0564a9b70fc4fb7e208e25d";
 export const wire = {
   "Envelope": {"fields":{"binary":"Binary","command":"CommandContext","diagnostics":{"array":"Diagnostic"},"exitCode":"number","guide":"string","nextSteps":{"array":"string"},"related":{"array":"string"},"resolved":{"union":["null","Resolved"]},"result":"unknown"}},
   "Binary": {"fields":{"assembly":{"union":["null","string"]},"hostExecutable":{"union":["null","string"]},"informationalVersion":{"union":["null","string"]},"origin":{"union":[{"literal":"checkout"},{"literal":"dev-installed"},{"literal":"installed-global"},{"literal":"unknown"}]},"sha256":{"union":["null","string"]}}},

@@ -66,6 +66,18 @@ public sealed class DuctTypeFootprintTests {
             Assert.That(DuctApplier.Apply(project, Ask(null, new(one.Id.Value(), 1), new(two.Id.Value(), 2)), true)
                 .Writes.Where(w => w.Kind == "equipment").Select(w => w.Outcome), Is.All.EqualTo("refused"));
 
+            // A refused member still belongs to the shared type's requested value cohort.
+            foreach (var preview in new[] { true, false }) {
+                var refusedPeer = DuctApplier.Apply(project, Ask(null, new(one.Id.Value(), 1), new(two.Id.Value(), -1)), preview);
+                Assert.Multiple(() => {
+                    Assert.That(refusedPeer.Writes.Where(w => w.Kind == "equipment").Select(w => w.Outcome), Is.All.EqualTo("refused"));
+                    Assert.That(refusedPeer.Writes.Single(w => w.Kind == "equipment" && w.Id == one.Id.Value()).Reason,
+                        Does.Contain("different").And.Contain(two.Id.Value().ToString()));
+                    Assert.That(two.Symbol.LookupParameter(TypeStatic).AsDouble(), Is.EqualTo(before), "B's shared static must not move when B=-1 refuses");
+                    Assert.That(DuctApplier.ReadStore(project).Store, Is.Null);
+                });
+            }
+
             // Control: an instance-owned static writes one unit and leaves its peer alone.
             var control = DuctApplier.Apply(project, Ask(new DuctParameterSlotOverrides(FanStatic: InstanceStatic), new DuctEquipmentWrite(one.Id.Value(), 1.5)), false);
             Assert.Multiple(() => {

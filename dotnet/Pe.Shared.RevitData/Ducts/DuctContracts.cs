@@ -138,7 +138,8 @@ public static class DuctWalkReason {
 /// <summary>
 ///     The `from` walk's summary. Hops is the deepest element depth reached from the start; ElementsReached counts walked
 ///     elements (the start included, candidates excluded); Truncated is true when MaxHops cut the walk or an open end's
-///     box held more than the candidate cap and was counted, not listed.
+///     box held more than the candidate cap and was counted, not listed, or a peer read failed.
+///     UnreadPeers names the element and connector whose physical peers could not be read, never an open end.
 /// </summary>
 public sealed record DuctWalk(
     long StartId,
@@ -147,7 +148,8 @@ public sealed record DuctWalk(
     int OpenEnds,
     IReadOnlyList<DuctOpenEnd> Candidates,
     bool Truncated,
-    long ElapsedMs);
+    long ElapsedMs,
+    IReadOnlyList<DuctRef> UnreadPeers);
 
 /// <summary>One open end the walk stopped at and what the candidate box around it held (CandidateCount first, cheap; CandidateIds only under the cap).</summary>
 public sealed record DuctOpenEnd(long ElementId, int Connector, double[] Point, int CandidateCount, IReadOnlyList<long> CandidateIds);
