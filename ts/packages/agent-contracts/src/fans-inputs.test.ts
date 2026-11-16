@@ -4,7 +4,7 @@ import { FAN_INPUTS, authoredValueSchema, fanBindingRows, fanClaimSchema, fanInp
 import { VALUE_SOURCES, resolveValue } from "./work-value.ts";
 import { DUCT_UNIT_KINDS, FAN_BLOCKER_KINDS } from "@pe/host-contracts/generated";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
-import { draftCellSchema } from "./draft.ts";
+import { draftEditSchema } from "./draft.ts";
 import { fansDocumentSchema } from "./fans.ts";
 import { subjectCode, uniqueIdSchema } from "./subject-ref.ts";
 
@@ -15,7 +15,7 @@ it("airflow is a plain number with caller-cited cell evidence, and legacy object
     expect(fansDocumentSchema.parse(doc)).toMatchObject(doc);
     expect(fansDocumentSchema.safeParse({ [segment]: { [key]: { edit: { value: { cfm: 250, source: "legacy" } } } } }).success).toBe(false);
   }
-  const cell = draftCellSchema(z.number());
+  const cell = z.strictObject({ edit: draftEditSchema(z.number()) });
   expect(cell.parse({ edit: { value: 250, ref: "submittal:page-2" } })).toEqual({ edit: { value: 250, ref: "submittal:page-2" } });
   for (const ref of ["", " "]) expect(cell.safeParse({ edit: { value: 250, ref } }).success).toBe(false);
 });

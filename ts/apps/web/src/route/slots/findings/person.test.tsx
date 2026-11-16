@@ -70,7 +70,7 @@ test("a person writes a finding from the /fans roster row; the host's findings.s
     await waitFor(async () => {
       const { findings } = findingsWorkSchema.parse((await host.view(key, "findings"))?.doc ?? {});
       expect(Object.values(findings)).toEqual([
-        expect.objectContaining({ said: expect.objectContaining({ by: "person" }), kind: "check", verdict: expect.objectContaining({ by: "person", value: "fail" }),
+        expect.objectContaining({ said: expect.objectContaining({ by: "human" }), kind: "check", verdict: expect.objectContaining({ by: "human", value: "fail" }),
           text: "port 1 static reads low", subject: expect.stringMatching(/^name:/) }),
       ]);
     }, { timeout: 20_000 });
@@ -143,7 +143,7 @@ test("the person undoes their own finding through the host Timeline; Pea's newer
     const key = { ...submitted[0]!.input.work!.key, route: "findings" } as WorkKey;
     const findings = async () => Object.values(findingsWorkSchema.parse((await host.view(key, "findings"))?.doc ?? {}).findings);
     const authors = async () => (await findings()).map((x) => [x.text, x.said.by]);
-    await waitFor(async () => expect(await authors()).toEqual([["person note", "person"]]), { timeout: 20_000 });
+    await waitFor(async () => expect(await authors()).toEqual([["person note", "human"]]), { timeout: 20_000 });
     // Pea writes after the person, through the findings Work handle.
     const pea = await post({ id: "pea-write", key: "findings.say", target: { kind: "document", ref: socket.target },
       input: { work: workHandle(key, (await host.view(key, "findings"))!.revision),
@@ -151,7 +151,7 @@ test("the person undoes their own finding through the host Timeline; Pea's newer
       approvedPea("findings-undo"));
     expect(pea.status, await pea.clone().text()).toBeLessThan(400);
     expect(await native.journal.wait("pea-write")).toMatchObject({ state: "succeeded" });
-    await waitFor(async () => expect(await authors()).toEqual([["person note", "person"], ["pea note", "pea"]]));
+    await waitFor(async () => expect(await authors()).toEqual([["person note", "human"], ["pea note", "pea"]]));
     await waitFor(() => expect(f.typed.timeline()?.undo).toBeTruthy());
     const label = f.typed.timeline()!.undo!.label;
     render(<><TimelineButtons owner={f.typed} /><GraphHistory owner={f.typed} /></>);

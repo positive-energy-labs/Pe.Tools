@@ -9,7 +9,7 @@ import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import type { WorkHandle, WorkPath } from "./command.ts";
 import type { ActionReadingKey } from "./reading.ts";
 import { draftCellSchema } from "./draft.ts";
-import type { Author } from "./draft.ts";
+import { authorSchema, type Author } from "./author.ts";
 import {
   parameterLinkProfileSchema,
   parameterLinksDocumentSchema,
@@ -84,7 +84,7 @@ const slotOrder = (key: string) => [key.startsWith("text") ? 0 : 1, Number(key.s
 function deriveDataTable(doc: DataTablesWork, base: DataTableBase) {
   const name = tableName(doc);
   const touched: CatalogTouch[] = [];
-  const by = (edit: { by?: Author } | null | undefined) => edit?.by ?? "unknown";
+  const by = (edit: { by?: Author } | null | undefined) => authorSchema.parse(edit?.by);
   if (doc.name.edit) touched.push({ path: ["name"], before: base?.name ?? null, after: name, by: by(doc.name.edit as StagedEdit) });
   const columns: Record<string, string> = { ...base?.columns };
   for (const [key, cell] of Object.entries(doc.columns)) {
@@ -158,7 +158,7 @@ export function mergeParameterProfile(doc: ParameterLinksDocument, stored: Param
       const after = edit.delete ? null : { ...(edit.value as object), id };
       if (after) byId.set(id, after);
       else byId.delete(id);
-      touched.push({ path: [kind, id], before, after, by: edit.by ?? "unknown" });
+      touched.push({ path: [kind, id], before, after, by: authorSchema.parse(edit.by) });
     }
     return [kind, [...byId.values()]] as const;
   });

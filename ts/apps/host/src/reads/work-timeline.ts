@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { authorSchema } from "@pe/agent-contracts";
 import {
   actionStatusSchema,
   refuse,
@@ -88,7 +88,7 @@ export function hostTimeline(workspace: RouteWorkspace, source: Pick<ActionJourn
 }
 export type HostTimeline = ReturnType<typeof hostTimeline>;
 
-const timelineInput = workTimelineArgsSchema.extend({ by: z.enum(["human", "pea"]) });
+const timelineInput = workTimelineArgsSchema.extend({ by: authorSchema });
 /** Tracked input: it moves with any Work write and any action receipt (`reads/invalidations.ts`). */
 export const workTimelineInput = leaf("work-timeline", timelineInput, workTimelineSchema, false);
 /**

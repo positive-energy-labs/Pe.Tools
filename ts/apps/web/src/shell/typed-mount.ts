@@ -770,13 +770,11 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
           for (const p of patches) { const id=ownerOf(p.path.map(String),preferred); groups.set(id,[...(groups.get(id)??[]),p]); }
           await Promise.all([...groups].map(async ([id, patches]) => {
             const record=drawnOwners.get(id)!, handle=handles.get(id)!;
-            const applied=applyPatches(record.config.state,{version:1,revision:handle.revision,doc:docs.get(id)},"human",patches,handle.revision,false,true);
+            const applied=applyPatches(record.config.state,{version:1,revision:handle.revision,doc:docs.get(id)},"human",patches,handle.revision);
             if (!applied.ok) throw Error(applied.error);
-            // Scalar cells travel whole; record cells keep their narrow keys (host inverse authority).
-            const normalized=[...new Set(patches.map(p=>String(p.path[0])))].flatMap(key => bare(record.config.state.schema.shape[key]!) instanceof z.ZodRecord
-              ? patches.filter(p=>String(p.path[0])===key) : [{path:[key],value:(applied.envelope.doc as any)[key]}]);
+            // Validate a stamped projection, but send only the original caller patches to the host.
             const label=id===own ? detail.label : `${detail.label} · from /${id}`;
-            const write:WorkWrite={kind:"apply",expectedRevision:handle.revision,press:crypto.randomUUID(),patches:normalized,...z.object({label:z.string(),meta:z.json().optional()}).parse(edits!.describe({...detail,label}))};
+            const write:WorkWrite={kind:"apply",expectedRevision:handle.revision,press:crypto.randomUUID(),patches:patches,...z.object({label:z.string(),meta:z.json().optional()}).parse(edits!.describe({...detail,label}))};
             const admission=record.lease.entry, intent=admission.retain(write,label);
             notify();
             try {

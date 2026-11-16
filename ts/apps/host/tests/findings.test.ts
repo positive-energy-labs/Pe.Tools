@@ -117,7 +117,7 @@ test("Pea says a claim, a person rules it, and findings.list still shows said.by
     expect(said).toMatchObject({ id, kind: "claim", said: { by: "pea" } });
     expect(said).not.toHaveProperty("verdict");
     await d.rule(id, "no", human);
-    expect(await d.list()).toEqual([{ ...said, verdict: { by: "person", at: expect.any(String), value: "no" } }]);
+    expect(await d.list()).toEqual([{ ...said, verdict: { by: "human", at: expect.any(String), value: "no" } }]);
     // A value the kind does not admit is refused; so is any ruling on a note.
     expect(await d.refusedCall("findings.rule", { id, value: "pass" }, human)).toMatch(/yes, no, not-this/);
     const note = await d.say(input("seen on site", row, "note"), human);
@@ -144,7 +144,7 @@ test("a note with a verdict fails to parse, at the door and in the record; the g
     expect(findingSchema.safeParse({ ...note, kind: "check", verdict: { ...said, value: "yes" } }).success).toBe(false);
     expect(findingSchema.safeParse({ ...note, place: {} }).success).toBe(false);
     const before = await d.revision();
-    const refused = await d.door("apply", { patches: [{ path: ["findings", "n"], value: { ...note, said: { ...said, by: "person" } } }], expectedRevision: before, press: "forge" });
+    const refused = await d.door("apply", { patches: [{ path: ["findings", "n"], value: { ...note, said: { ...said, by: "human" } } }], expectedRevision: before, press: "forge" });
     expect(refused.status).toBe(403);
     expect(await refused.json()).toMatchObject({ ok: false, error: expect.stringContaining("findings.say") });
     expect(await d.revision()).toBe(before);
@@ -217,8 +217,8 @@ test("findings.say twice mints two ids from ids.mint() and two times from clock.
   expect(minted).toEqual(["minted-1", "minted-2", "minted-3", "minted-4", "minted-5", "minted-6", "minted-7"]);
   expect(await run("findings.list", {})).toEqual({ findings: [{
     id: "minted-1", kind: "claim", subject: port, text: "first",
-    said: { by: "person", at: "2026-11-12T12:00:00.000Z" },
-    verdict: { by: "person", at: "2026-11-12T12:00:05.000Z", value: "yes" },
+    said: { by: "human", at: "2026-11-12T12:00:00.000Z" },
+    verdict: { by: "human", at: "2026-11-12T12:00:05.000Z", value: "yes" },
   }] });
   // K-A4 line 3: no two writes of the findings Work share a press.
   expect(written.mock.calls.map(([, , , write]) => write.press)).toEqual(["finding:minted-2", "finding:minted-4", "finding:minted-5", "finding:minted-6", "finding:minted-7"]);
@@ -228,7 +228,7 @@ test("findings.say twice mints two ids from ids.mint() and two times from clock.
 test("a generic work.start with a findings seed is refused, for Pea and a person alike, and writes no doc", async () => {
   const d = await doors();
   try {
-    const forged = { id: "f1", kind: "note", subject: port, text: "f1", said: { by: "person", at: new Date().toISOString() } };
+    const forged = { id: "f1", kind: "note", subject: port, text: "f1", said: { by: "human", at: new Date().toISOString() } };
     for (const [id, caller] of [["forge-pea", d.peaCaller], ["forge-human", human]] as const) {
       await d.start(id, { findings: { f1: forged } }, caller);
       const settled = await d.settled(id);
@@ -246,7 +246,7 @@ test("Pea's undo through the Work history door reverts Pea's own finding; the pe
     await d.say(input("h1", row, "claim", "yes"), human);
     const undone = await d.undo(d.peaCaller, "pea");
     expect(await undone.json()).toMatchObject({ ok: true });
-    expect(await d.authors()).toEqual([["h1", "person"]]);
+    expect(await d.authors()).toEqual([["h1", "human"]]);
   } finally { await d.close(); }
 });
 
@@ -267,8 +267,8 @@ test("a row verb's own route handle (Fans, Families) addresses the same document
     await d.say(input("p1", port, "note"), d.peaCaller);
     await d.say(input("h1", port, "check", "fail"), human, "fans");
     await d.say(input("h2", row, "note"), human, "families");
-    expect(await d.authors()).toEqual([["p1", "pea"], ["h1", "person"], ["h2", "person"]]);
-    expect(await d.authors(port), "findings.list narrowed to one subject").toEqual([["p1", "pea"], ["h1", "person"]]);
+    expect(await d.authors()).toEqual([["p1", "pea"], ["h1", "human"], ["h2", "human"]]);
+    expect(await d.authors(port), "findings.list narrowed to one subject").toEqual([["p1", "pea"], ["h1", "human"]]);
   } finally { await d.close(); }
 });
 
@@ -279,7 +279,7 @@ test("findings.say handed another document's handle lands in the admitted docume
     const other = bindWork("findings", address("C:/other.rvt"));
     await d.say(input("x1", port, "note"), human, workHandle(other, 0));
     expect(await d.held(other), "the other document's findings Work").toEqual([]);
-    expect(await d.authors()).toEqual([["x1", "person"]]);
+    expect(await d.authors()).toEqual([["x1", "human"]]);
     expect(d.stored()).toHaveLength(1);
   } finally { await d.close(); }
 });
@@ -290,5 +290,20 @@ test("Pea's first findings.say and findings.list, with no handle, succeed on the
   try {
     const id = await d.say(input("p1", port, "note"), d.peaCaller, null);
     expect(await d.list(undefined, d.peaCaller)).toEqual([expect.objectContaining({ id, said: expect.objectContaining({ by: "pea" }) })]);
+  } finally { await d.close(); }
+});
+
+
+test("findings reject legacy and missing stamps and caller-supplied by", async () => {
+  for (const by of ["unknown", "person", undefined])
+    expect(findingSchema.safeParse({ id: "n", kind: "note", subject: port, text: "note", said: { by, at: new Date().toISOString() } }).success).toBe(false);
+  const d = await doors();
+  try {
+    await expect(d.say({ ...input("forged", port, "note"), by: "human" } as FindingInput, d.peaCaller)).rejects.toThrow();
+    expect(await d.list()).toEqual([]);
+    for (const caller of [human, d.peaCaller]) {
+      await d.say(input(caller.kind, port, "note"), caller);
+      expect((await d.list()).at(-1)?.said.by).toBe(caller.kind);
+    }
   } finally { await d.close(); }
 });

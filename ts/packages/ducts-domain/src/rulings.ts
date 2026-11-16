@@ -61,17 +61,17 @@ export function withStoredRulings(
       cell.edit?.delete ? { ...cell, edit: null } : cell,
     ]),
   );
-  for (const [key, { verdict }] of verdicts)
-    if (keeps(verdict) && !base.assumptions[key]?.edit)
-      assumptions[key] = {
-        ...base.assumptions[key],
-        edit: { value: { kind: "verdict", verdict: verdict as "ignore" } },
-      };
-  const rolesOut = { ...base.roles };
-  for (const [id, { role }] of roles)
-    if (isRole(role) && !base.roles[id]?.edit)
-      rolesOut[id] = { ...base.roles[id], edit: { value: { role } } };
-  const effective = { ...base, assumptions, roles: rolesOut } as DuctsDesign;
+  // Model-store rulings are calculation inputs, never persisted Work edits. They have no caller
+  // stamp: retain that absence rather than inventing an author for evidence read from the model.
+  const storedAssumptions = Object.fromEntries(verdicts.filter(([key, { verdict }]) =>
+    keeps(verdict) && !base.assumptions[key]?.edit).map(([key, { verdict }]) => [key, {
+      ...base.assumptions[key], edit: { value: { kind: "verdict", verdict: verdict as "ignore" } },
+    }]));
+  const storedRoles = Object.fromEntries(roles.filter(([id, { role }]) =>
+    isRole(role) && !base.roles[id]?.edit).map(([id, { role }]) => [id, {
+      ...base.roles[id], edit: { value: { role } },
+    }]));
+  const effective = { ...base, assumptions: { ...assumptions, ...storedAssumptions }, roles: { ...base.roles, ...storedRoles } } as DuctsDesign;
   byStore.set(store ?? NO_STORE, effective);
   return effective;
 }

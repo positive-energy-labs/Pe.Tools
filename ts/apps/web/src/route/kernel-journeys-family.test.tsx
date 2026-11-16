@@ -117,7 +117,7 @@ const typeInto = async (scope: HTMLElement, text: string) => {
 };
 
 test("Family History is inspection only: staged cells lose their verbs and an edit is refused before Work", async () => {
-  const f = await mounted({ "/types/Wide/Width": { edit: { value: "40in" } } });
+  const f = await mounted({ "/types/Wide/Width": { edit: { by: "human" as const, value: "40in" } } });
   // Positive control: in the audit stage the same surfaces offer a verb and an edit reaches the Work write door.
   expect(clearButtons(cell("Width", "type:Wide"))).toHaveLength(1);
   await typeInto(cell("Height", "type:Standard"), "10in");
@@ -144,7 +144,7 @@ test.each([
   ["propertiesGroup", "Dimensions", "propertiesGroup Dimensions"],
 ] as const)("%s belongs to the parameter identity column, not a type's value", async (property, value, words) => {
   const pointer = `/parameters/Width/${property}`;
-  const f = await mounted({ [pointer]: { edit: { value } } });
+  const f = await mounted({ [pointer]: { edit: { by: "human" as const, value } } });
   const identity = cell("Width", "param");
   expect(identity.textContent).toContain(words);
   for (const type of ["Standard", "Wide"]) expect(clearButtons(cell("Width", `type:${type}`))).toHaveLength(0);
@@ -156,15 +156,15 @@ test.each([
 test("clearing a proposed type value keeps the proposed parameter definition", async () => {
   const definition = { dataType: "Number", value: "2" };
   const f = await mounted({
-    "/parameters/PE_Pressure": { edit: { value: definition } },
-    "/types/Standard/PE_Pressure": { edit: { value: "4" } },
+    "/parameters/PE_Pressure": { edit: { by: "human" as const, value: definition } },
+    "/types/Standard/PE_Pressure": { edit: { by: "human" as const, value: "4" } },
   });
   const typeCell = cell("PE_Pressure", "type:Standard");
   // The staged value is the cell's proposal (its tooltip names it), not the input's typed text.
   expect(typeCell.querySelector("[aria-description]")!.getAttribute("aria-description")).toContain("staged 4 here");
   await click(clearButtons(typeCell)[0]!);
   await waitFor(() => expect(f.doc().cells["/types/Standard/PE_Pressure"]?.edit).toBeNull());
-  expect(f.doc().cells["/parameters/PE_Pressure"]).toEqual({ edit: { value: definition } });
+  expect(f.doc().cells["/parameters/PE_Pressure"]).toEqual({ edit: { by: "human" as const, value: definition } });
 });
 
 test("a held connector property is drawn once and Keep writes its own property address", async () => {

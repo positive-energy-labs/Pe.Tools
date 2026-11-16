@@ -1,3 +1,4 @@
+import { authorSchema } from "./author.ts";
 import { z } from "zod";
 import type { CatalogAxes } from "./catalog.ts";
 import type { Immutable, RouteGraphJson } from "./route-kernel-data.ts";
@@ -21,7 +22,7 @@ import type { JournalSubmission, Observation, WorkWriteOutcome } from "./work-jo
 /**
  * One consumed value a write changes (ADR 0030 rules 6 and 8). `before` is what the model holds
  * now, null when no source names it (drawn as unknown, never guessed); `after` is the sealed plan's
- * value; `author` is the Work cell's stamped author, "unknown" when Work does not carry the value.
+ * value; `author` is the Work cell's host-stamped caller identity.
  */
 export const presentCellSchema = z.strictObject({
   key: z.string(),
@@ -29,7 +30,7 @@ export const presentCellSchema = z.strictObject({
   label: z.string(),
   before: z.string().nullable(),
   after: z.string(),
-  author: z.enum(["pea", "human", "unknown"]),
+  author: authorSchema,
 });
 export type PresentCell = z.output<typeof presentCellSchema>;
 export const presentationSchema = z.union([

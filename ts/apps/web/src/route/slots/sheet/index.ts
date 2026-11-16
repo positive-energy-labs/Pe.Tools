@@ -63,7 +63,7 @@ export function sheetCells(slot: SheetSlot, input: SheetInput): readonly SheetCe
       const value = staged ?? model ?? b.default ?? null;
       return {
         binding, ...(row === undefined ? {} : { row }), home, domain: b.domain,
-        value, model, pending: edit && staged !== undefined ? { by: edit.by === "pea" ? "pea" as const : "person" as const, value: staged, at: edit.at ?? "" } : null,
+        value, model, pending: edit && staged !== undefined ? { by: edit.by, value: staged, at: edit.at ?? "" } : null,
         drift: home.at !== "local" && home.at !== "setting" && JSON.stringify(value) !== JSON.stringify(model),
         freshness: home.at === "setting" ? tiers ? "fresh" : "never" : layer && "freshness" in layer ? layer.freshness ?? "fresh" : layer || home.at === "local" ? "fresh" : "never",
         source: staged !== undefined ? "work" : layer && layer.value != null ? ("source" in layer && layer.source) || "model" : b.default !== undefined ? "default" : "model",

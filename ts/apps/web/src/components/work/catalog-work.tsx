@@ -60,7 +60,7 @@ export function catalogWorkCells(owner: Owner, doc: unknown) {
           : typeof edit.value === "string"
             ? edit.value
             : JSON.stringify(edit.value ?? null),
-        author: edit.by ?? "unknown",
+        author: edit.by,
         path,
         staged: cell,
       };
