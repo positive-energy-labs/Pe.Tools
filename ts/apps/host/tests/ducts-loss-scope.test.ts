@@ -10,7 +10,7 @@ import { mergeSnapshots } from "../src/ducts-walk.ts";
 import { ductWriteEvidence } from "@pe/ducts-domain/write-evidence";
 import { writeSeal } from "../src/work-write-boundary.ts";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
-import { ductsDesign, fansDocumentSchema, stagedDucts } from "@pe/agent-contracts";
+import { ductsDesign, fansDocumentSchema, stagedValues } from "@pe/agent-contracts";
 import { price, applyRequest } from "@pe/ducts-domain/pricing";
 import { EMPTY_CATALOGS } from "@pe/ducts-domain/catalog";
 
@@ -156,7 +156,7 @@ test("an authored terminal flow inside a fan walk with no network groups reaches
     const nodes = snapshot.nodes.map((n) => (n.id === authored!.id ? { ...n, flowParameter: "Flow" } : n));
     const s = { ...snapshot, nodes, walk: walk ? { startId: 14577391, hops: 1, elementsReached: snapshot.nodes.length, openEnds: 0, candidates: [], truncated: false, elapsedMs: 1, unreadPeers: [] } : undefined };
     const work = ductsDesign(null, fansDocumentSchema.parse({
-      flows: { [elementSubject(authored!)]: { edit: { value: { cfm: 123, source: "controlled sample proof" } } } },
+      flows: { [elementSubject(authored!)]: { edit: { value: 123, ref: "controlled sample proof" } } },
     }));
     return scopeApplyRequest(applyRequest(s, price(s, {}, work, work ?? neutralFansWork, EMPTY_CATALOGS), "", []), s.store, [["flows", elementSubject(authored!)]], s);
   };
@@ -179,7 +179,7 @@ test("an unwritten cell names why: an empty or consumed Work cell is not a stage
   const fans = fansDocumentSchema.parse({
     esp: { "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00de6eef": { edit: null }, "UniqueId:6d52156a-3876-4d76-b641-341454252f26-0098d62d": { edit: { value: { inWg: 2.7 } } } },
   });
-  const staged = stagedDucts(null, fans);
+  const staged = stagedValues(null, fans);
   expect(unwrittenReason(staged, ["esp", "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00de6eef"])).toMatch(/no staged edit/);
   // A staged cell that still derives nothing is a different case; it is never called empty.
   expect(unwrittenReason(staged, ["esp", "UniqueId:6d52156a-3876-4d76-b641-341454252f26-0098d62d"])).toMatch(/^staged/);
