@@ -2,7 +2,7 @@
 
 Read 2026-11-04 at `main` f734953f. Pin: `effect` 4.0.2 exact, with `@effect/platform-node` 4.0.2 and `@effect/atom-react` 4.0.2.
 
-Your training is mostly Effect v3, and v4 written from those reflexes compiles wrong or does not compile. This doc lists what changed and the shapes this repo uses. [ADR 0029](../../adr/0029-effect-is-the-standard-library-one-fiber-per-request.md) is the law: Effect is the standard library, and each request runs on one fiber. When this doc and the ADR disagree, the ADR wins, so fix this doc.
+Your training is mostly Effect v3, and v4 written from those reflexes compiles wrong or does not compile. This doc lists what changed and the shapes this repo uses. [ADR 0029](../../adr/0029-effect-is-the-standard-library-one-fiber-per-request.md) is the law: Effect is the standard library, and each request runs on one fiber. When this doc and the ADR disagree, the ADR wins, so fix this doc. Current amendments are [ADR 0046](../../adr/0046-effect-identity-belongs-to-the-effect-owner.md), [ADR 0047](../../adr/0047-workflow-owns-durable-commands.md) and [ADR 0048](../../adr/0048-csharp-generates-effect-schema.md); they govern the target replacement. Existing journal examples below describe code pending cutover, not a second target owner.
 
 ## 0. References, in order of trust
 
@@ -195,11 +195,12 @@ export class ReadBusy extends Schema.TaggedError<ReadBusy>()("ReadBusy", fields)
 - Expected failures are `Schema.TaggedError` classes, and they belong to the closed `DoorFailure` union (`@pe/host-internal/request-contracts`). `http-problems.ts` maps that union once, as `HttpRouter.middleware<{ handles: DoorFailure }>()((h) => h.pipe(Effect.catchTags(handlers))).layer`, and the `satisfies DoorFailureMapper` makes a new failure need a mapper entry.
 - A handler returns the typed failure. It never builds a problem response, picks a status, or classifies an error by its message or shape (COMMON 16).
 - A `throw` inside an Effect, or a regex on a message, is a finding. Plain `readonly _tag = "X"` classes survive only until their file converts. Three remain at f734953f: `local-error.ts`, `call-route.ts:1228` and `takeoff-captures.ts:191`.
-- Wrap a Promise that can reject in `Effect.tryPromise({ try, catch: (e) => new Tagged(...) })`. Use `Effect.promise` only for a Promise that provably cannot reject, because a rejection inside it becomes a defect that bypasses `catchTags` and every finalizer (COMMON 12).
+- Wrap a Promise that can reject in `Effect.tryPromise({ try, catch: (e) => new Tagged(...) })`. Use `Effect.promise` only for a Promise guaranteed not to reject, and state why at the site. The pinned 4.0.2 `src/Effect.ts` promise contract and `src/internal/effect.ts` implementation turn rejection into `die`, not a typed failure. Typed `catchTags` does not catch it. `ensuring` and `onExit` still run: the latter owns the former in the pinned implementation. A defect does not skip finalizers.
+- The retained root probe `.artifacts/runs/converge-20261115/critical-effect-semantics.mjs` and its adjacent JSON report `defect:true`, `caughtTyped:0`, `ensured:1`, `observedExit:1`. This is separate from `muse-d0/`, one directory above it. S0 rechecks the semantics without touching the root evidence. `Effect.succeed` and `Effect.gen` do not start fibers; only a fork or runtime entry does. A finalizer running does not prove a foreign side effect stopped or rolled back.
 
 ### 2d. Name the steps (rule 6)
 
-A reusable effectful function is `Effect.fn("Owner.step")(function* (...) { ... })`, so every step is a span and a stack frame. Reserve `Effect.fnUntraced` for hot inner loops. Use `Effect.gen` inline, and never write a function whose only body is an `Effect.gen` wrapper. Never put Effect around a pure value: a `gen` with one yield, or `Effect.succeed` around a projection, only adds a fiber (COMMON 21).
+A reusable effectful function is `Effect.fn("Owner.step")(function* (...) { ... })`, so every step is a span and a stack frame. Reserve `Effect.fnUntraced` for hot inner loops. Use `Effect.gen` inline, and never write a function whose only body is an `Effect.gen` wrapper. Prefer `map` for a pure projection and avoid wrappers that add no useful sequencing or span. `Effect.succeed` and `Effect.gen` run in the current fiber; they do not create one. Forking and runtime entry are separate operations.
 
 ### 2e. Nothing ambient (rule 4)
 
@@ -213,7 +214,7 @@ A reusable effectful function is `Effect.fn("Owner.step")(function* (...) { ... 
 
 Fork every fiber (a consent window, a poll, a probe, a dispatch worker) into a service's scope with `Effect.forkScoped`, or with `Effect.forkIn(scope)` after `const scope = yield* Effect.scope`. A detached `runFork` is a finding. The host has one `Effect.forkDetach`, in `host-lifecycle.ts:415`: it trips the shutdown latch after the response flushes. Do not copy it.
 
-Durable work captures causal identity and journal ownership explicitly when it is forked. It never inherits the request's cancellation lifetime (rule 2, rule 14).
+Durable work captures causal identity and its durable owner's authority explicitly. It never inherits the request's cancellation lifetime (rule 2, rule 14). ADR 0047 transfers that owner from the journal to workflow at admission; observer fibers do not own the command.
 
 ### 2g. Settle inside the Exit (COMMON 11)
 
@@ -239,7 +240,7 @@ Inside a marked Promise island, use the island's own idiom: `try { persist() } f
 
 - Every route declares one of three lifetimes:
   - **Request-owned read:** the work lives on the request fiber.
-  - **Durable command:** the journal owns the work from submission.
+  - **Durable command:** the admitted workflow owns the work from submission (ADR 0047 target; journal until cutover).
   - **Subscription:** the route observes, and losing the observer never stops the work.
 - A native read is a `NativeReads.join(prepared, session)`. It shares one dispatch per canonical descriptor and refcounts its joiners. When the last joiner is interrupted it sends one `op.cancel`, and it forgets the entry only on terminal settlement. The join runs under `Effect.uninterruptibleMask((restore) => …)`, so a join never leaks a refcount.
 - The serial slot is one worker per Revit process incarnation. It is fed by a bounded FIFO `Queue` and forked into the bridge scope (`dispatch.ts`). Cancel bypasses the worker. A timer never releases the slot.
@@ -271,8 +272,8 @@ Unit tests are not something to preserve. A deterministic test stays only when i
 
 - `ducts-domain` is pure values in and values out, so leave it plain.
 - React render code stays React plus atoms; `Effect.gen` in a component is a finding.
-- `eventlog`, `workflow`, `cluster`, `KeyValueStore` and `TxRef` are rejected, because each would be a second owner of state beside the journal.
-- `Schedule` owns in-process backoff only (`machine.ts:649`, `Effect.repeat(Schedule.spaced(...))`). The journal owns retry across restarts.
+- ADR 0047 adopts `workflow`, `cluster` and Effect `sql` over SQLite as the replacement durable command owner, not a second owner beside the journal. `eventlog`, `KeyValueStore` and `TxRef` remain unadopted as parallel owners.
+- `Schedule` owns in-process backoff only (`machine.ts:649`, `Effect.repeat(Schedule.spaced(...))`). Target restart recovery belongs to workflow Activities and owner evidence. In-flight Activities may re-run, changed payloads can silently join an engine key, and `Workflow.interrupt` is insufficient for Stop during an Activity. ADR 0047 therefore requires create-only admission, effect-owner identity and a durable Stop signal plus native cancellation. Product lifecycle proof remains UNPROVEN.
 - Use `Path` where a scope is needed, not for every `join`.
 
 ---

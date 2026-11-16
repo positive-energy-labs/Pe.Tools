@@ -8,6 +8,8 @@ Date: 2026-11-02. Status: accepted. [ADR 0031](0031-recording-at-host-input-serv
 
 ## Context
 
+Current amendments: [ADR 0046](0046-effect-identity-belongs-to-the-effect-owner.md) names effect owners; [ADR 0047](0047-workflow-owns-durable-commands.md) replaces the journal owner and amends rules 3, 9, 10, 14 and 15; [ADR 0048](0048-csharp-generates-effect-schema.md) amends rules 7 and 8. The accepted historical decision below is unchanged.
+
 The host uses Effect as a library for the bridge, not as the standard library. At c510da4b: 3 `Context.Service` declarations, 0 `Effect.fn`, 71 `Effect.run*` calls of which 4 are at a process edge and 60 are inside the host between Promise code. Each mid-program `runPromise` ends the fiber: the scope closes, interruption stops, services are re-provided per call (`NodeServices.layer` rebuilt at 16 sites), and a typed failure becomes a thrown `Error` whose only identity is its message (`bridge.ts:622` picks cancelled or failed by regex). Lifetimes are ambient: `ActionJournal` and `HostLog` are module `let` singletons, `RunConsents` runs the ADR 0027 consent window on `setTimeout` against `Date.now`, harness children die by `taskkill /T`, and `Date.now` is read at 240 sites. kaitpw does not trust any cancellation the product attempts today, and cannot try undo of Pea writes or a different permission model across threads and tabs, because no owner of lifetime exists.
 
 Effect at the edges only (a decoded frame, a typed bridge client) is better than none. Effect in the middle, with Promises on both sides, is worse than none: every boundary pays the cost of both worlds. The cost is per boundary, so the number of fiber ends, not the fraction of Effect code, is what makes adoption all-or-nothing.
