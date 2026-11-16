@@ -69,7 +69,10 @@ function commandInput(key: string, input: Record<string, unknown>) {
   return Object.hasOwn(commands, key) ? commands[key as SemanticActionKey].input.parse(input) : input;
 }
 
-async function assertIdentity(admission: ActionAdmission | ActionReceipt, row: ActionReceipt) {
+async function assertIdentity(
+  admission: ActionAdmission | ActionReceipt,
+  row: Pick<ActionReceipt, "id" | "key" | "target" | "input">,
+) {
   // A receipt already owns frozen input. Current admission schemas cannot reinterpret its old Work.
   const retained = "state" in admission;
   if (
@@ -173,14 +176,7 @@ export async function recoverAction(
   }
   const script = retainedScriptIntent(key, input, original.input);
   if (script) ({ key, input } = script);
-  if (
-    original.key !== key ||
-    canonicalRouteInput(await commandInput(key, input)) !==
-      canonicalRouteInput(await commandInput(key, original.input))
-  )
-    throw Error(`Action '${id}' conflicts with its original intent`);
-  if (target && canonicalRouteInput(target) !== canonicalRouteInput(original.target))
-    throw Error(`Action '${id}' conflicts with its original target`);
+  await assertIdentity(original, { id, key, input, target: target ?? original.target });
   if (row) {
     retain(slot, { id });
     const result = await waitForAction(id, base, waitMs, undefined, row);

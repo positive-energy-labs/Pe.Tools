@@ -521,3 +521,62 @@ test("a receipt poll that outlives its slice is asked again, so the run's own ti
     vi.restoreAllMocks();
   }
 });
+
+
+test.each(["succeeded", "running"] as const)(
+  "explicit-ID reconnect reads %s historical input without fresh admission or POST",
+  async (state) => {
+    const api = await client(), endpoint = base();
+    const original = receipt({
+      id: crypto.randomUUID(), key: "families.apply",
+      input: { originalWorkKey: "families/open:private-original/original-open" },
+      target: { kind: "unavailable-original", original: { kind: "document", ref: target } },
+    }, state);
+    const requests = vi.fn(async (_input: unknown, init?: RequestInit) => {
+      expect(init?.method).not.toBe("POST");
+      return Response.json([original]);
+    });
+    vi.stubGlobal("fetch", requests);
+    const result = await api.recoverAction(original.id, original.key, original.input, undefined, endpoint, 0);
+    expect(result).toEqual(state === "running"
+      ? { state: "detached", id: original.id, key: original.key, acceptance: "admitted" }
+      : original);
+    expect(requests).toHaveBeenCalledOnce();
+  },
+);
+
+test.each(["id", "key", "input", "target"] as const)(
+  "explicit-ID historical reconnect refuses mismatched %s without POST",
+  async (change) => {
+    const api = await client(), endpoint = base();
+    const original = receipt({
+      id: crypto.randomUUID(), key: "families.apply",
+      input: { originalWorkKey: "families/open:private-original/original-open" },
+      target: { kind: "unavailable-original", original: { kind: "document", ref: target } },
+    });
+    const requests = vi.fn(async (_input: unknown, init?: RequestInit) => {
+      expect(init?.method).not.toBe("POST");
+      return Response.json([original]);
+    });
+    vi.stubGlobal("fetch", requests);
+    await expect(api.recoverAction(
+      change === "id" ? "another-id" : original.id,
+      change === "key" ? "families.plan" : original.key,
+      change === "input" ? { ...original.input, changed: true } : original.input,
+      change === "target" ? { kind: "document", ref: target } : undefined,
+      endpoint, 100,
+    )).rejects.toThrow(change === "id" ? "different receipt id" : "different intent or target");
+    expect(requests).toHaveBeenCalledOnce();
+  },
+);
+
+test("fresh admission still rejects historical command input before any POST", async () => {
+  const api = await client(), requests = vi.fn();
+  vi.stubGlobal("fetch", requests);
+  await expect(api.submitAction({
+    id: crypto.randomUUID(), key: "families.apply",
+    target: { kind: "document", ref: target },
+    input: { originalWorkKey: "families/open:private-original/original-open" },
+  }, base(), 100)).rejects.toThrow();
+  expect(requests).not.toHaveBeenCalled();
+});
