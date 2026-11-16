@@ -7,6 +7,20 @@ export const sdkSessionSelectionSchema = z.union([
 ]);
 export type SdkSessionSelection = z.infer<typeof sdkSessionSelectionSchema>;
 
+/** An admitted SDK session is an exact process, not a reusable SDK selection label. */
+export const sdkSessionReferenceSchema = z.strictObject({
+  session: z.string().min(1),
+  processIncarnation: z.strictObject({
+    pid: z.number().int().positive(),
+    startedAt: z.number().int().positive(),
+  }),
+});
+export type SdkSessionReference = z.infer<typeof sdkSessionReferenceSchema>;
+export const sdkSessionTargetSchema = z.union([
+  sdkSessionSelectionSchema,
+  sdkSessionReferenceSchema,
+]);
+
 /** SDK document ids and product DocumentRef.openId belong to different registries. */
 export const sdkDocumentRefSchema = z.strictObject({
   source: z.literal("sdk"),
