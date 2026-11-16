@@ -1,5 +1,5 @@
 /**
- * The picture's findings in 3D, the way the tutorial illustrations draw them (docs-cases): an
+ * The picture's findings in 3D: an
  * orange ring on an open end, an amber outline on a capped end, a red dashed bar across the gap of
  * a join Pe infers with both end faces outlined and the overhung edges bright red, a bar from each
  * tapping end to its landing, and an amber translucent box where a heal adds a piece or a cap.

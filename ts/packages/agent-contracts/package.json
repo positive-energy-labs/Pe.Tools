@@ -51,10 +51,6 @@
     },
     "./work-value": "./src/work-value.ts",
     "./space-view": "./src/space-view.ts",
-    "./ducts-guide": {
-      "types": "./src/ducts-guide.ts",
-      "import": "./src/ducts-guide.ts"
-    },
     "./value": "./src/value.ts",
     "./takeoff-adoption": "./src/takeoff-adoption.ts",
     "./takeoff-read": "./src/takeoff-read.ts",
