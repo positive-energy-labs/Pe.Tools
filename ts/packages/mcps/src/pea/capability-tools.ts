@@ -1286,7 +1286,11 @@ async function operationTarget(
       ]),
     ),
   };
-  const resolution = resolveCallTarget({ needs: row.needs, target: override }, targets, inventory);
+  // pe_do skips bridgeTarget, so an SDK session id (as op results print it) maps here, as in routeWorkScope.
+  const named = override && "kind" in override
+    ? { ...override, ref: { ...override.ref, session: bridgeSessionFor(override.ref.session, sessions) } }
+    : override;
+  const resolution = resolveCallTarget({ needs: row.needs, target: named }, targets, inventory);
   if (resolution.kind === "choose" && resolution.reason === "several-targets")
     throw Error(
       "Target choose: several-targets. This thread targets several documents; name one with an exact per-call target {kind: open, ref: {session, openId}}.",
