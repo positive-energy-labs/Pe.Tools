@@ -47,7 +47,13 @@ public static class DuctSnapshots {
         string? LabelParameter,
         IReadOnlyDictionary<long, string> PhaseNames);
 
-    public static DuctSnapshotData Snapshot(Document doc, DuctParameterSlotOverrides? overrides = null, string? labelParameter = null, DuctSnapshotSelector? selector = null, bool metadataOnly = false) {
+    public static DuctSnapshotData Snapshot(Document doc, DuctParameterSlotOverrides? overrides = null, string? labelParameter = null, DuctSnapshotSelector? selector = null, bool metadataOnly = false) =>
+        SnapshotCore(doc, overrides, labelParameter, selector, metadataOnly, Peers);
+
+    internal static DuctSnapshotData SnapshotWithPeers(Document doc, DuctSnapshotSelector selector, Func<Connector, IEnumerable<Connector>> peers) =>
+        SnapshotCore(doc, null, null, selector, false, peers);
+
+    private static DuctSnapshotData SnapshotCore(Document doc, DuctParameterSlotOverrides? overrides, string? labelParameter, DuctSnapshotSelector? selector, bool metadataOnly, Func<Connector, IEnumerable<Connector>> peers) {
         // The names the person staged win, then the names the last apply recorded in the store, then the defaults.
         var (store, storeError) = DuctApplier.ReadStore(doc);
         var slots = (overrides ?? new DuctParameterSlotOverrides()).Resolve(store?.Slots);
@@ -84,7 +90,7 @@ public static class DuctSnapshots {
             DuctWalk? walk = null;
             List<DuctSystem> rawSystems = [];
             if (selector.Kind == DuctSelectorKind.From) {
-                (rawNodes, rawSegments, walk) = Walk(reader, selector);
+                (rawNodes, rawSegments, walk) = Walk(reader, selector, peers);
                 // A damper dropped inside a walked duct touches nothing, so the connector walk never reaches it; it is on
                 // the path all the same (its drop is priced in series), so it joins the read as walked.
                 rawNodes.AddRange(InlineParts(reader, rawNodes, rawSegments, DuctWalkReason.Walked));
@@ -301,7 +307,7 @@ public static class DuctSnapshots {
     ///     CandidateBoxIn around its origin is counted and, under the cap, listed, the unreached hits joining the output as
     ///     `open-end-candidate`. MaxHops caps depth and sets Truncated. Nothing here reads Connector.Flow.
     /// </summary>
-    private static (List<DuctNode> Nodes, List<DuctSegment> Segments, DuctWalk Walk) Walk(Reader r, DuctSnapshotSelector s) {
+    private static (List<DuctNode> Nodes, List<DuctSegment> Segments, DuctWalk Walk) Walk(Reader r, DuctSnapshotSelector s, Func<Connector, IEnumerable<Connector>> readPeers) {
         var clock = Stopwatch.StartNew();
         var startId = s.UnitId ?? throw new ArgumentException("selector.unitId is required for kind from");
         var start = r.Doc.GetElement(startId.ToElementId()) ?? throw new ArgumentException($"Element {startId} does not exist in this document.");
@@ -314,6 +320,7 @@ public static class DuctSnapshots {
         var reached = new Dictionary<long, Element> { [startId] = start };
         var candidates = new Dictionary<long, Element>();
         var openEnds = new List<DuctOpenEnd>();
+        var unreadPeers = new List<DuctRef>();
         var queue = new Queue<(Element Element, IReadOnlyList<Connector> Ports, int Hop)>();
         queue.Enqueue((start, startPorts, 0));
         var hops = 0;
@@ -322,7 +329,12 @@ public static class DuctSnapshots {
             var (e, ports, hop) = queue.Dequeue();
             hops = Math.Max(hops, hop);
             foreach (var port in ports) {
-                var peers = Try(() => Peers(port).ToList()) ?? [];
+                var peers = Try(() => readPeers(port).ToList());
+                if (peers is null) {
+                    truncated = true;
+                    unreadPeers.Add(new DuctRef(e.Id.Value(), port.Id));
+                    continue;
+                }
                 if (peers.Count == 0) {
                     openEnds.Add(OpenEnd(r, port, boxFt, reached, candidates, ref truncated));
                     continue;
@@ -352,7 +364,7 @@ public static class DuctSnapshots {
         var segments = new List<DuctSegment>();
         foreach (var e in reached.Values) Build(r, e, DuctWalkReason.Walked, nodes, segments);
         foreach (var e in candidates.Values.Where(c => !reached.ContainsKey(c.Id.Value()))) Build(r, e, DuctWalkReason.OpenEndCandidate, nodes, segments);
-        return (nodes, segments, new DuctWalk(startId, hops, reached.Count, openEnds.Count, openEnds, truncated, clock.ElapsedMilliseconds));
+        return (nodes, segments, new DuctWalk(startId, hops, reached.Count, openEnds.Count, openEnds, truncated, clock.ElapsedMilliseconds, unreadPeers));
     }
 
     /// <summary>The physical connectors this one touches on other elements (never the system's logical connector).</summary>

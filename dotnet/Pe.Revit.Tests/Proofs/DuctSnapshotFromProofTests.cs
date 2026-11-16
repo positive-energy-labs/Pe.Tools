@@ -33,6 +33,7 @@ public sealed class DuctSnapshotFromProofTests {
                 Assert.That(walk!.ElementsReached, Is.EqualTo(9), "five ducts and four elbows");
                 Assert.That(walk.OpenEnds, Is.EqualTo(2), "one end of each duct at the gap");
                 Assert.That(walk.Truncated, Is.False);
+                Assert.That(walk.UnreadPeers, Is.Empty);
                 Assert.That(snapshot.Groups, Is.Empty);
                 Assert.That(snapshot.Systems, Is.Empty);
                 Assert.That(snapshot.Segments.Count(s => s.Reason == DuctWalkReason.Walked), Is.EqualTo(5));
@@ -56,6 +57,31 @@ public sealed class DuctSnapshotFromProofTests {
             Assert.Multiple(() => {
                 Assert.That(GapEnd(tight, left).Near, Is.Not.Null);
                 Assert.That(tight.Issues.Where(i => i.Kind == DuctIssueKind.NearMiss), Is.Empty);
+            });
+        } finally {
+            _ = doc.Close(false);
+        }
+    }
+
+    [Test]
+    public void From_reports_a_failed_peer_read_as_lost_coverage(UIApplication uiapp) {
+        var app = uiapp.Application;
+        RevitTestFailureGuard.EnsureInstalled(app);
+        var doc = app.NewProjectDocument(Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+            $"Autodesk\\RVT {app.VersionNumber}\\Templates\\English-Imperial\\Mechanical-Default.rte"));
+        try {
+            var (left, _) = Ring(doc);
+            var port = DuctSnapshots.HvacConnectors(left).Single(c => c.IsConnected);
+            var walk = DuctSnapshots.SnapshotWithPeers(doc,
+                new DuctSnapshotSelector(DuctSelectorKind.From, UnitId: left.Id.Value(), PortIndex: port.Id),
+                _ => throw new InvalidOperationException("forced native peer read failure")).Walk!;
+            Assert.Multiple(() => {
+                Assert.That(walk.Truncated, Is.True);
+                Assert.That(walk.UnreadPeers, Is.EqualTo(new[] { new DuctRef(left.Id.Value(), port.Id) }));
+                Assert.That(walk.OpenEnds, Is.Zero, "an unread peer is not an open end");
+                Assert.That(walk.Candidates, Is.Empty, "no open-end candidate search ran");
+                Assert.That(walk.ElementsReached, Is.EqualTo(1));
             });
         } finally {
             _ = doc.Close(false);

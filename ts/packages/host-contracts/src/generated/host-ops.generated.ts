@@ -1781,7 +1781,8 @@ export namespace DuctsSnapshotRoster {
     /**
      * The `from` walk's summary. Hops is the deepest element depth reached from the start; ElementsReached counts walked
      * elements (the start included, candidates excluded); Truncated is true when MaxHops cut the walk or an open end's
-     * box held more than the candidate cap and was counted, not listed.
+     * box held more than the candidate cap and was counted, not listed, or a peer read failed.
+     * UnreadPeers names the element and connector whose physical peers could not be read, never an open end.
      *
      */
     export interface DuctWalk {
@@ -1792,6 +1793,7 @@ export namespace DuctsSnapshotRoster {
       candidates: DuctOpenEnd[];
       truncated: boolean;
       elapsedMs: number;
+      unreadPeers: DuctRef[];
     }
     /**
      * One open end the walk stopped at and what the candidate box around it held (CandidateCount first, cheap; CandidateIds only under the cap).
@@ -2410,7 +2412,8 @@ export namespace DuctsSnapshotWalk {
     /**
      * The `from` walk's summary. Hops is the deepest element depth reached from the start; ElementsReached counts walked
      * elements (the start included, candidates excluded); Truncated is true when MaxHops cut the walk or an open end's
-     * box held more than the candidate cap and was counted, not listed.
+     * box held more than the candidate cap and was counted, not listed, or a peer read failed.
+     * UnreadPeers names the element and connector whose physical peers could not be read, never an open end.
      *
      */
     export interface DuctWalk {
@@ -2421,6 +2424,7 @@ export namespace DuctsSnapshotWalk {
       candidates: DuctOpenEnd[];
       truncated: boolean;
       elapsedMs: number;
+      unreadPeers: DuctRef[];
     }
     /**
      * One open end the walk stopped at and what the candidate box around it held (CandidateCount first, cheap; CandidateIds only under the cap).

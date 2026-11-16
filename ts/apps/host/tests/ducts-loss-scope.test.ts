@@ -57,6 +57,7 @@ test("fan preview survives identical re-pricing but rejects changed model inputs
     openEnds: 0,
     candidates: [],
     truncated: false,
+    unreadPeers: [],
     elapsedMs: 12,
   };
   // Every set-valued collection may be enumerated differently by a fresh native read.
@@ -111,7 +112,7 @@ test("fan loss preparation reads both sides and carries authored drops into prev
   expect(read).toHaveBeenCalledExactlyOnceWith({ kind: "from", unitId: 14577391 });
   const truncated = mergeSnapshots(snapshot, {
     ...snapshot,
-    walk: { startId: 1, hops: 1, elementsReached: 1, openEnds: 0, candidates: [], elapsedMs: 1, truncated: true },
+    walk: { startId: 1, hops: 1, elementsReached: 1, openEnds: 0, candidates: [], elapsedMs: 1, truncated: true, unreadPeers: [] },
   });
   await expect(lossSnapshot({ walk: { unitId: 14577391, portIndex: 2 } }, async () => truncated))
     .rejects.toThrow("truncated");
@@ -149,7 +150,7 @@ test("an authored terminal flow inside a fan walk with no network groups reaches
   const request = (walk: boolean) => {
     // As the plan reads it: the staged terminalFlow slot is the observed one on the authored terminal.
     const nodes = snapshot.nodes.map((n) => (n.id === authored!.id ? { ...n, flowParameter: "Flow" } : n));
-    const s = { ...snapshot, nodes, walk: walk ? { startId: 14577391, hops: 1, elementsReached: snapshot.nodes.length, openEnds: 0, candidates: [], truncated: false, elapsedMs: 1 } : undefined };
+    const s = { ...snapshot, nodes, walk: walk ? { startId: 14577391, hops: 1, elementsReached: snapshot.nodes.length, openEnds: 0, candidates: [], truncated: false, elapsedMs: 1, unreadPeers: [] } : undefined };
     const work = ductsDesign(null, fansDocumentSchema.parse({
       flows: { [elementSubject(authored!)]: { edit: { value: { cfm: 123, source: "controlled sample proof" } } } },
     }));

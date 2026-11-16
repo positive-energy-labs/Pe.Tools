@@ -488,8 +488,8 @@ public static class DuctApplier {
                 var unnamed = members.Where(m => !value.ContainsKey(m.Id.Value())).ToList();
                 if (unnamed.Count > 0)
                     reason = $"type '{type.FamilyName}: {type.Name}' holds this parameter for {members.Count} units; the request names {set.Count()} and would also move {string.Join(", ", unnamed.Select(Unit))}. Stage every unit of the type with one value, or give the family an instance parameter";
-                else if (set.Select(i => value[i.Id!.Value]).Distinct().Count() > 1)
-                    reason = $"units of one type ({type.Name}) ask for different {what} ({string.Join(", ", set.Select(i => $"{i.Id} asks {value[i.Id!.Value]:0.####}"))}); a type holds one value, so give the family an instance parameter or stage one value";
+                else if (members.Select(m => value[m.Id.Value()]).Distinct().Count() > 1)
+                    reason = $"units of one type ({type.Name}) ask for different {what} ({string.Join(", ", members.Select(m => $"{m.Id.Value()} asks {value[m.Id.Value()]:0.####}"))}); a type holds one value, so give the family an instance parameter or stage one value";
             }
             if (reason is null) continue;
             refused = true;
