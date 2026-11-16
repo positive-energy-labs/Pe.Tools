@@ -4,21 +4,21 @@
  */
 import { expect, it } from "vite-plus/test";
 import { resolveCriteria } from "./index.ts";
-import { TEST_FIRM } from "./test-inputs.ts";
+import { stamped, TEST_FIRM } from "./test-inputs.ts";
 
 it("resolves each side of a sided criterion through its own layers", () => {
   const c = resolveCriteria(
-    { criteria: { velocityLimitFpm: { supply: 850 }, allowanceInWg: { return: 0.1 } } },
+    stamped({ velocityLimitFpm: { supply: 850 }, allowanceInWg: { return: 0.1 } }),
     { criteria: { velocityLimitFpm: { return: 650 } } },
     TEST_FIRM,
   );
   // ba4fd56c: criteria use the shared resolver and retain units, status and version.
   expect(c.velocityLimitFpm).toEqual({
-    supply: { value: 850, source: "Work", units: "fpm", status: "valid", version: null },
-    return: { value: 650, source: "model-store", ref: "_PE_DuctLosses", units: "fpm", status: "valid", version: null },
+    supply: { value: 850, source: "Work", author: "human", ref: "work:test", units: "fpm", status: "valid", version: null },
+    return: { value: 650, source: "model-store", author: null, ref: expect.stringMatching(/^model-store:criteria\..+\/_PE_DuctLosses$/), units: "fpm", status: "valid", version: null },
   });
   expect(c.allowanceInWg).toEqual({
-    supply: { value: 0, source: "firm", units: "in-wg", status: "valid", version: "test" },
-    return: { value: 0.1, source: "Work", units: "in-wg", status: "valid", version: null },
+    supply: { value: 0, source: "firm", author: null, ref: expect.stringMatching(/^firm:/), units: "in-wg", status: "valid", version: "test" },
+    return: { value: 0.1, source: "Work", author: "human", ref: "work:test", units: "in-wg", status: "valid", version: null },
   });
 });

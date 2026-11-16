@@ -513,6 +513,7 @@ it.skipIf(!existsSync(CHADDS))(
           units: "in-wg",
           status: "missing",
           version: null,
+          author: null,
           ref: `family placeholder 1 on ${n}`,
         })),
       );

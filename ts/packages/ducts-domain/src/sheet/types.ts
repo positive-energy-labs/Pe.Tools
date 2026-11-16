@@ -171,7 +171,7 @@ export interface Sheet {
     dischargePortIndex: number;
     /**
      * Q4: the family's connector direction set the roles and the network's ends read the other way.
-     * A warning for the picture; null when they agree or the family states no direction.
+     * Raised as the blocking issue `direction-mismatch:<unit>`; null when they agree or the family states none.
      */
     directionMismatch: { discharge: number; networkDischarge: number; evidence: string } | null;
     /** A stated flow when one is authored; otherwise the sum its ends carry, a result (Q1 B). */

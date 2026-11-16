@@ -135,8 +135,11 @@ const basisOf = (snapshot: SheetSnapshot, rest: object) =>
 const round = (n: number) => +n.toFixed(6);
 
 /** A resolved value's provenance as a leg's `lossSource.ref` reads it. */
-const provenance = (v: Resolved<unknown>) =>
-  `${v.source}${v.ref || v.version != null ? `:${v.ref ?? v.version}` : ""}`;
+// A staged value names its tier (and revision); an observed one its tier and the parameter or key its ref ends in.
+const provenance = (v: Resolved<unknown>) => {
+  const what = v.source === "Work" || v.source === "run" ? v.version : (v.version ?? v.ref?.split("/").pop());
+  return `${v.source}${what == null ? "" : `:${what}`}`;
+};
 const positive = (v: number | null | undefined) => (v != null && v > 0 ? v : null);
 
 /**
@@ -1499,6 +1502,10 @@ function endDirection(
   for (const e of w.ends) {
     const el = g.byId.get(e.end.elementId);
     if (!el) continue;
+    // An end at another fan is an encounter, and `ENCOUNTERS` explains it on either side (a discharge
+    // met on the supply is backflow, on the return an inflow), so it is no evidence of this fan's
+    // direction and does not vote (FANS-W2-COSUPPLY).
+    if (e.end.fan && e.end.fan.unitId !== w.states[0]!.el.id) continue;
     if (e.directionHint) {
       score += e.directionHint === "supply" ? 1 : -1;
       reasons.add(
@@ -1714,7 +1721,8 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
           },
         }
       : onSide(w);
-  const retFirst = !!ret && single(supply.w);
+  // Both sides lone and shared (a co-supplied grille and a shared intake): the supply states its share first.
+  const retFirst = !!ret && single(supply.w) && !single(ret.w);
   const retFlows = ret && retFirst ? flowsOf(ret.w, onSide(ret.w), pricer.block) : null;
   const supplyFlows = flowsOf(
     supply.w,
@@ -1834,7 +1842,7 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
           const fan = w.ends[d.sibling]!.end.fan!;
           return note(
             "sibling",
-            `sibling ${tagOf(fan.unitId) || g.name(fan.unitId)} draws ${d.cfm == null ? "an unknown flow" : `${round(d.cfm)} cfm`} from shared terminal ${g.name(w.ends[d.terminal]!.end.elementId)}: ${d.source ?? "no design flow"}`,
+            `sibling ${tagOf(fan.unitId) || g.name(fan.unitId)} ${w === supply.w ? "feeds" : "draws"} ${d.cfm == null ? "an unknown flow" : `${round(d.cfm)} cfm`} ${w === supply.w ? "into" : "from"} shared terminal ${g.name(w.ends[d.terminal]!.end.elementId)}: ${d.source ?? "no design flow"}`,
             d.cfm == null ? null : round(d.cfm),
           );
         }),
@@ -1855,6 +1863,7 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
                 ? {
                     value: revit,
                     source: "model",
+                    author: null,
                     ref: "connector Flow",
                     units: "cfm",
                     version: null,
@@ -1958,6 +1967,20 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
         effectInWg: m.encounter.static.kind === "host-calc" ? m.encounter.static.inWg : null,
         closer: { kind: "ruling", note: "rule this tie-in accepted or refused" },
       });
+  // Q4 (implementor default 2026-11-16, queued to the owner): a family direction the network reads the
+  // other way is an error, and an unruled error is never a warning, so it withholds `complete`.
+  if (directionMismatch)
+    pricer.blockers.set(`direction-mismatch:${unit.id}`, {
+      id: `direction-mismatch:${unit.id}`,
+      kind: "direction-mismatch",
+      elementId: unit.id,
+      effectInWg: null,
+      detail: `the family says ${g.name(unit.id)} discharges by connector ${directionMismatch.discharge}; its network's ends read connector ${directionMismatch.networkDischarge} (${directionMismatch.evidence})`,
+      closer: {
+        kind: "ruling",
+        note: "correct the family's connector direction, or have the mismatch ruled",
+      },
+    });
   const cited = new Set(paths.flatMap((p) => p.blockerIds));
   const backflow = new Set(
     met.filter((m) => m.policy.backflow).map((m) => backflowId(m.encounter)),
@@ -1993,7 +2016,6 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
       issueOf(
         b,
         g,
-        input.inputs,
         met.map((m) => m.encounter),
         blocking,
       ),
@@ -2023,7 +2045,6 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
 function issueOf(
   b: Blocker,
   g: Graph,
-  inputs: DuctsInputs,
   encounters: readonly Encounter[],
   blocking: ReadonlySet<string>,
 ): FanIssue {
@@ -2039,23 +2060,15 @@ function issueOf(
       ? { kind: "cell", target: { work: row.owner, segment: row.segment, row: b.subject }, offers }
       : { kind: "none", reason: b.closer.note };
   };
-  const firm = inputs.criteria.terminalDropInWg;
   const encounter = encounters.find((e) => backflowId(e) === b.id);
   const closer: FanIssue["closer"] = encounter
     ? { kind: "encounter", encounter }
     : b.closer.candidate
       ? { kind: "heal", pair: b.closer.candidate.pair }
-      : b.kind === "unknown-drop" && kind === "terminal" && firm.source !== "none"
-        ? // The firm's terminal drop is the one default any part has; the caller that takes it stamps the author.
-          cell("terminalDrop", [
-            {
-              value: firm.value,
-              author: "unknown",
-              source: firm.source,
-              ref: firm.ref ?? "criteria.terminalDropInWg",
-              version: firm.version,
-            },
-          ])
+      : b.kind === "unknown-drop" && kind === "terminal"
+        ? // No offer rides here: an offer names its caller, and the engine has none. The firm's terminal
+          // drop a caller may take is `inputs.criteria.terminalDropInWg`, with its own source and ref.
+          cell("terminalDrop")
         : b.kind === "unknown-drop" || b.kind === "not-priced" || b.kind === "implausible-loss"
           ? cell("componentDrop")
           : b.kind === "no-flow" && kind === "terminal"

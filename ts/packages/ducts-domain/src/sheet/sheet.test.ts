@@ -615,11 +615,14 @@ it.skipIf(!existsSync(CHADDS))(
       side: "return",
       end: { kind: "sibling-fan" },
     });
-    // Q4: was { inletPortIndex: 2, dischargePortIndex: 1 } with no mismatch.
+    // Q4: was { inletPortIndex: 2, dischargePortIndex: 1 }. FANS-W2-COSUPPLY: the only evidence for c1 here
+    // was three other-fan ends, which are encounters and no longer vote, and c2 reaches no classified end
+    // before the plenum join is accepted. So this read states no network direction and no mismatch
+    // (it was { discharge: 2, networkDischarge: 1 }); muas-regression holds the mismatch with the louver reached.
     expect(sheet.fan).toMatchObject({
       inletPortIndex: 1,
       dischargePortIndex: 2,
-      directionMismatch: { discharge: 2, networkDischarge: 1 },
+      directionMismatch: null,
     });
     // Q4: was "ends:".
     expect(sheet.notes.find((i) => i.kind === "direction")!.text).toContain(
@@ -851,6 +854,16 @@ it("end terminals decide direction despite reversed metadata; an outdoor louver 
     directionMismatch: { discharge: 0, networkDischarge: 1 },
   });
   expect(ruled.notes.find((i) => i.kind === "direction")!.text).toContain("family connector direction");
+  // The mismatch is the only thing wrong with this calc, and it alone withholds `complete`.
+  expect(ruled.claim).toMatchObject({
+    kind: "incomplete",
+    coverage: [],
+    blockingIds: ["direction-mismatch:100"],
+  });
+  expect(ruled.issues).toEqual([
+    expect.objectContaining({ id: "direction-mismatch:100", severity: "blocking", closer: expect.objectContaining({ kind: "none" }) }),
+  ]);
+  expect(ruled.totals.requiredEspInWg).toBeNull();
 });
 
 it("a Greenheck ESD louver classified Supply Air is still an outdoor inlet end (Chadds 14088043)", () => {
@@ -1291,7 +1304,10 @@ it("R-SHARE + C3: a proposed transition in front of a shared plenum carries this
     roster: [fanPort(100, 1, 0), fanPort(200, 1, 0)],
     grids,
     inputs: inputsFor(snap, {
-      endCfm: { 100: 150, 20: 150 },
+      // FANS-W2-COSUPPLY: grille 20 was 150, when a co-supplier's air was not counted at the terminal.
+      // It is fed by unit 100 (150) and the ERV through tap 42 (50), so it states their sum; unit 100's
+      // share, and every flow asserted below, is unchanged.
+      endCfm: { 100: 150, 20: 200 },
       rulings: [{ pair: ["11:1", "12:0"], verdict: "accept" }],
     }),
   });
@@ -1374,6 +1390,8 @@ it("a missing terminal flow withholds path completeness and required ESP", () =>
   inputs.terminals["6"]!.cfm = {
     value: null,
     source: "none",
+    author: null,
+    ref: null,
     units: "cfm",
     version: null,
     status: "missing",
@@ -1489,14 +1507,16 @@ it("H5 through two real calcs: a guest discharging into a host's supply trunk is
     partType: "Tee",
     connectors: [conn(0, [20, 1], round(8)), conn(1, [41, 0], round(8)), conn(2, [30, 1], round(8))],
   });
-  const grille = (id: number, from: number) =>
-    node(id, "terminal", { connectors: [conn(0, [from, 1], round(8))] });
-  const snap = snapshot(
-    [two(200, 20, 22), two(300, 30, 32), tee40, grille(42, 41), grille(23, 22), grille(33, 32)],
+  const grille = (id: number, from: number, cls?: string) =>
+    node(id, "terminal", { connectors: [conn(0, [from, 1], round(8), "end", [0, 0, 0], cls)] });
+  const network = (supply?: string, back?: string) => snapshot(
+    [two(200, 20, 22), two(300, 30, 32), tee40, grille(42, 41, supply), grille(23, 22, back), grille(33, 32, back)],
     [run(20, [200, 0], [40, 0]), run(30, [300, 0], [40, 2]), run(41, [40, 1], [42, 0]), run(22, [200, 1], [23, 0]), run(32, [300, 1], [33, 0])],
   );
+  const snap = network("SupplyAir", "ReturnAir");
   const roster = [fanPort(200, 0, 1), fanPort(300, 0, 1)];
   const inputs = inputsFor(snap, {
+    roles: { 200: "fan", 300: "fan" },
     endCfm: { 42: 300, 23: 200, 33: 100, 200: 200, 300: 100 },
     drops: { 40: 0.04, 42: 0.03, 23: 0.03, 33: 0.03 },
   });
@@ -1528,7 +1548,27 @@ it("H5 through two real calcs: a guest discharging into a host's supply trunk is
     severity: "blocking",
     closer: { kind: "encounter" },
   });
+  // FANS-W2-COSUPPLY: grille 42's stated 300 is both suppliers' air. The guest's own run carries its
+  // 100 (300 less the host's 200); from the tee out, the shared trunk carries the physical 300.
+  expect(guest.legs["30:0>1"]!.flowCfm).toBe(100);
   expect(guest.legs["41:0>1"]!.flowCfm).toBe(300);
+  // Unclassified grilles: the only thing the supply side meets is the host's discharge, which is the
+  // encounter and no vote on direction. The guest gets the backflow and no direction mismatch.
+  const bare = network();
+  const plain = buildSheet({
+    snapshot: bare,
+    fan: { unitId: 300, portIndex: 0 },
+    roster,
+    grids,
+    inputs: inputsFor(bare, {
+      roles: { 200: "fan", 300: "fan" },
+      endCfm: { 42: 300, 23: 200, 33: 100, 200: 200, 300: 100 },
+      drops: { 40: 0.04, 42: 0.03, 23: 0.03, 33: 0.03 },
+    }),
+  });
+  expect(plain.fan.directionMismatch).toBeNull();
+  expect(plain.encounters).toHaveLength(1);
+  expect(plain.claim).toMatchObject({ kind: "to-boundary", blockingIds: ["backflow:40:0"] });
   const mine = { elementId: 40, connector: 0 };
   const theirs = { elementId: 40, connector: 2 };
   // Accepted here, but the host's own calc is unruled at the same tee: no number, never complete.
