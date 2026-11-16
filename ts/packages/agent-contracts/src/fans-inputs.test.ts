@@ -1,6 +1,6 @@
 import { expect, it } from "vite-plus/test";
 import { z } from "zod";
-import { FAN_INPUTS, authoredValueSchema, fanBindingRows, fanClaimSchema, fanInputShape, fanParameterCohortSchema, fanWriteRows, sourcedValueSchema } from "./fans-inputs.ts";
+import { FAN_INPUTS, authoredValueSchema, fanBindingRows, fanClaimSchema, fanInputShape, fanIssueSchema, fanParameterCohortSchema, fanWriteRows, sourcedValueSchema } from "./fans-inputs.ts";
 import { VALUE_SOURCES, resolveValue } from "./work-value.ts";
 import { DUCT_UNIT_KINDS, FAN_BLOCKER_KINDS } from "@pe/host-contracts/generated";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
@@ -12,6 +12,10 @@ it("decoder words are exactly the native snapshot catalog vocabulary", () => {
 });
 
 const value = { status: "valid", value: 1, source: "Work", author: "human", ref: "submittal:fan-1", version: 2, units: "in-wg" };
+it("accepts a backflow blocker on the wire", () => {
+  const blocker = { id: "backflow:1", kind: "backflow", elementId: 1, severity: "blocking", closer: { kind: "none", reason: "Reverse flow requires a ruling" } };
+  expect(fanIssueSchema.parse(blocker)).toEqual(blocker);
+});
 it("requires evidence and authentic caller identity for valid staged values", () => {
   const schema = sourcedValueSchema(z.number().nonnegative());
   expect(schema.parse(value)).toEqual(value);

@@ -7,7 +7,7 @@
 export const DUCT_UNIT_KINDS = ["fan-coil","air-handler","erv","muas","dehumidifier","other"] as const;
 export type DuctUnitKind = (typeof DUCT_UNIT_KINDS)[number];
 
-export const FAN_BLOCKER_KINDS = ["open-end","inferred-join","unknown-drop","no-flow","flow-mismatch","shared-leg","class-change","not-priced","implausible-loss","equipment-pairing"] as const;
+export const FAN_BLOCKER_KINDS = ["open-end","inferred-join","unknown-drop","no-flow","flow-mismatch","shared-leg","class-change","not-priced","implausible-loss","equipment-pairing","backflow"] as const;
 export type FanBlockerKind = (typeof FAN_BLOCKER_KINDS)[number];
 
 /** Upsert a synthetic data table in one host-owned transaction: a key schedule whose rows are freely user-editable and whose cells are shared parameters on stable row elements — ideal for arbitrary agent-authored tables like design conditions or install notes. Can also place the table on a sheet. Authored element schedules apply through schedule.apply. */
@@ -1302,7 +1302,8 @@ export namespace DuctsSnapshotRoster {
       | "class-change"
       | "not-priced"
       | "implausible-loss"
-      | "equipment-pairing";
+      | "equipment-pairing"
+      | "backflow";
 
     /**
      * Store is Pe's `_PE_DuctLosses` provenance blob, absent when the model has none. StoreError is set instead when
@@ -1981,7 +1982,8 @@ export namespace DuctsSnapshotWalk {
       | "class-change"
       | "not-priced"
       | "implausible-loss"
-      | "equipment-pairing";
+      | "equipment-pairing"
+      | "backflow";
 
     /**
      * Store is Pe's `_PE_DuctLosses` provenance blob, absent when the model has none. StoreError is set instead when
