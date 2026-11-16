@@ -68,8 +68,8 @@ import {
   type Walk,
 } from "./walk.ts";
 import { assumedFanFlows, type AssumedFlow } from "./assumed-flow.ts";
-import type { DuctsInputs, Resolved } from "@pe/agent-contracts";
-import { EDIT_SEGMENTS, PROPOSED_KEY, sourced, terminalCfmOf } from "./inputs.ts";
+import { FAN_INPUTS, type DuctsInputs, type Resolved } from "@pe/agent-contracts";
+import { PROPOSED_KEY, sourced, terminalCfmOf } from "./inputs.ts";
 import { sectionOf } from "../loss-physics.ts";
 import type {
   CoverageGap,
@@ -1910,8 +1910,8 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
           : "absent"));
   const met = encountersOf(input.fan, paths, pricer.legs, input.encounterRulings);
   const coverage: CoverageGap[] = [
-    // ponytail: an unread peer anywhere in the read withholds every fan's claim; scope it to the fan's walked set when the native walk reports per start.
-    ...(input.snapshot.walk?.unreadPeers ?? []).map(
+    // Only a peer unread on an element this fan walked can hide part of this fan's network.
+    ...(input.snapshot.walk?.unreadPeers ?? []).filter((p) => walked.has(p.elementId)).map(
       (p): CoverageGap => ({
         kind: "native-peer",
         elementId: p.elementId,
@@ -1922,7 +1922,7 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
       ? [{ kind: "budget", elementId: null, ref: "the native walk was truncated" } as const]
       : []),
     // The document reach (FANS-DOCREACH-SWALLOW): its unread peers, and an incomplete reach that names none.
-    ...(input.snapshot.reach?.unreadPeers ?? []).map(
+    ...(input.snapshot.reach?.unreadPeers ?? []).filter((p) => walked.has(p.elementId)).map(
       (p): CoverageGap => ({
         kind: "native-peer",
         elementId: p.elementId,
@@ -2030,13 +2030,16 @@ function issueOf(
 ): FanIssue {
   const el = g.byId.get(b.elementId);
   const kind = el && !isSegment(el) ? el.kind : "duct";
+  // The one inputs table says which Work and segment a parameter's cell lives in (L1-1).
   const cell = (
-    segment: string,
+    parameter: NonNullable<(typeof FAN_INPUTS)[number]["parameter"]>,
     offers: Extract<FanIssue["closer"], { kind: "cell" }>["offers"] = [],
-  ): FanIssue["closer"] =>
-    b.subject
-      ? { kind: "cell", target: { work: "ducts", segment, row: b.subject }, offers }
+  ): FanIssue["closer"] => {
+    const row = FAN_INPUTS.find((r) => r.parameter === parameter && r.segment != null);
+    return b.subject && row?.segment
+      ? { kind: "cell", target: { work: row.owner, segment: row.segment, row: b.subject }, offers }
       : { kind: "none", reason: b.closer.note };
+  };
   const firm = inputs.criteria.terminalDropInWg;
   const encounter = encounters.find((e) => backflowId(e) === b.id);
   const closer: FanIssue["closer"] = encounter
@@ -2045,7 +2048,7 @@ function issueOf(
       ? { kind: "heal", pair: b.closer.candidate.pair }
       : b.kind === "unknown-drop" && kind === "terminal" && firm.source !== "none"
         ? // The firm's terminal drop is the one default any part has; the caller that takes it stamps the author.
-          cell(EDIT_SEGMENTS.terminalDrops, [
+          cell("terminalDrop", [
             {
               value: firm.value,
               author: "unknown",
@@ -2055,11 +2058,11 @@ function issueOf(
             },
           ])
         : b.kind === "unknown-drop" || b.kind === "not-priced" || b.kind === "implausible-loss"
-          ? cell(EDIT_SEGMENTS.componentDrops)
+          ? cell("componentDrop")
           : b.kind === "no-flow" && kind === "terminal"
-            ? cell(EDIT_SEGMENTS.flows)
+            ? cell("terminalFlow")
             : b.kind === "no-flow" && kind === "equipment"
-              ? cell(EDIT_SEGMENTS.equipmentFlows)
+              ? cell("fanFlow")
               : { kind: "none", reason: b.closer.note };
   return {
     id: b.id,
