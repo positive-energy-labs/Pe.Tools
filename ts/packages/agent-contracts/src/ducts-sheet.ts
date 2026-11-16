@@ -1,11 +1,11 @@
-import { schemaOf, type Domain } from "./slots/sheet.ts";
 import { z } from "zod";
 import { decode, uniqueIdSchema, subjectRefCodeSchema } from "./subject-ref.ts";
 import { documentRefSchema } from "./target.ts";
 import { VALUE_SOURCES } from "./work-value.ts";
+import { authorSchema } from "./draft.ts";
 import { settingWrittenSchema } from "./tiered-setting.ts";
 import { DUCT_UNIT_KINDS, FAN_BLOCKER_KINDS } from "@pe/host-contracts/generated";
-import { FAN_PARAMETER_KEYS, fanClaimSchema, fanCloserSchema, legEvidenceSchema, fanParameterCohortSchema, fanEspValuesSchema } from "./fans-inputs.ts";
+import { FAN_PARAMETER_KEYS, FAN_CRITERIA_CELLS, fanClaimSchema, fanCloserSchema, legEvidenceSchema, fanParameterCohortSchema, fanEspValuesSchema } from "./fans-inputs.ts";
 export { DUCT_UNIT_KINDS } from "@pe/host-contracts/generated";
 export type { DuctUnitKind } from "@pe/host-contracts/generated";
 /** The parameter slots `ducts.snapshot` reads and `ducts.apply` writes through. */
@@ -31,6 +31,7 @@ const resolved = <T extends z.ZodType>(value: T) =>
   z.strictObject({
     value,
     source: z.enum(DUCT_INPUT_SOURCES),
+    author: authorSchema.nullable().optional(),
     ref: z.string().optional(),
     units: z.string().nullable(),
     version: z.union([z.string(), z.number()]).nullable(),
@@ -87,18 +88,7 @@ export type DuctsCriteriaLayer = z.infer<typeof ductsCriteriaLayerSchema>;
  * design sheet draws one row per cell). A sided criterion is a cell per side; `layer` is where the
  * cell's value sits in the criteria layer the engine resolves over the store and the firm file.
  */
-const criterion = <const L extends readonly [keyof DuctsCriteriaLayer, ("supply" | "return")?], const D extends Domain>(layer: L, domain: D) =>
-  ({ layer, domain, value: schemaOf(domain), unit: domain.kind === "number" ? domain.unit : undefined });
-export const DUCTS_CRITERIA_CELLS = {
-  velocitySupplyFpm: criterion(["velocityLimitFpm", "supply"], { kind: "number", exclusiveMin: 0, unit: "fpm" }),
-  velocityReturnFpm: criterion(["velocityLimitFpm", "return"], { kind: "number", exclusiveMin: 0, unit: "fpm" }),
-  terminalDropInWg: criterion(["terminalDropInWg"], { kind: "number", min: 0, unit: "in-wg" }),
-  autoJoinGapIn: criterion(["autoJoinGapIn"], { kind: "number", min: 0, unit: "in" }),
-  healBoxIn: criterion(["healBoxIn"], { kind: "number", min: 0, unit: "in" }),
-  splitPolicy: criterion(["splitPolicy"], { kind: "enum", shape: splitPolicy, choices: ["even", "proportional"].map(value => ({ value, label: value })) }),
-  allowanceSupplyInWg: criterion(["allowanceInWg", "supply"], { kind: "number", min: 0, unit: "in-wg" }),
-  allowanceReturnInWg: criterion(["allowanceInWg", "return"], { kind: "number", min: 0, unit: "in-wg" }),
-};
+export const DUCTS_CRITERIA_CELLS = FAN_CRITERIA_CELLS;
 export type DuctsCriteriaCell = keyof typeof DUCTS_CRITERIA_CELLS;
 /** The criteria layer the cells' staged values make; an unstaged cell leaves its criterion (or side) out. */
 export function criteriaLayer(cells: Readonly<Partial<Record<DuctsCriteriaCell, { readonly edit?: { readonly value?: unknown } | null }>>>): DuctsCriteriaLayer {

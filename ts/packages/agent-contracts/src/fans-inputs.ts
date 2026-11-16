@@ -1,4 +1,5 @@
 import type { Author } from "./draft.ts";
+import { authorSchema } from "./draft.ts";
 import type { ValueSource } from "./work-value.ts";
 import type { Domain } from "./slots/sheet.ts";
 import type { FanBlockerKind } from "@pe/host-contracts/generated";
@@ -6,6 +7,7 @@ import { DUCT_UNIT_KINDS, FAN_BLOCKER_KINDS } from "@pe/host-contracts/generated
 import { z } from "zod";
 import { VALUE_SOURCES } from "./work-value.ts";
 import { schemaOf } from "./slots/sheet.ts";
+import type { DuctsCriteriaLayer } from "./ducts-sheet.ts";
 
 export type FanRef = { unitId: number; portIndex: number };
 export type SourcedValue<T> =
@@ -94,11 +96,11 @@ export type SetAsideRow = {
 
 export type { DuctUnitKind, FanBlockerKind } from "@pe/host-contracts/generated";
 
-const ref = z.string().trim().min(1);
+const ref = z.string().min(1).refine(value => value.trim().length > 0, "evidence identity must be nonempty");
 const pressure = z.number().finite().nonnegative();
 const id = z.number().int().positive();
 const version = z.union([z.string(), z.number().finite()]).nullable();
-const author = z.enum(["human", "pea", "unknown"]);
+const author = authorSchema;
 const provenance = { source: z.enum(VALUE_SOURCES), author: author.nullable(), ref, version };
 /** Acquisition tier and caller identity remain separate; legacy unknown is never promoted. */
 export const sourcedValueSchema = <T extends z.ZodType>(value: T) => z.discriminatedUnion("status", [
@@ -144,6 +146,20 @@ export const setAsideRowSchema = z.strictObject({ work: z.enum(["fans", "ducts"]
 
 const numberDomain = (unit: string) => ({ kind: "number", min: 0, unit } as const);
 const objectDomain = <const F extends string>(field: F, unit: string) => ({ kind: "object", fields: { [field]: numberDomain(unit) } as Record<F, ReturnType<typeof numberDomain>> } as const);
+const criterion = <const L extends readonly [keyof DuctsCriteriaLayer, ("supply" | "return")?], const D extends Domain>(layer: L, domain: D) =>
+  ({ layer, domain, value: schemaOf(domain), unit: domain.kind === "number" ? domain.unit : undefined });
+const splitPolicy = z.enum(["even", "proportional"]);
+/** Criteria cell locators and domains feed the same input table as the fan cells. */
+export const FAN_CRITERIA_CELLS = {
+  velocitySupplyFpm: criterion(["velocityLimitFpm", "supply"], { kind: "number", exclusiveMin: 0, unit: "fpm" }),
+  velocityReturnFpm: criterion(["velocityLimitFpm", "return"], { kind: "number", exclusiveMin: 0, unit: "fpm" }),
+  terminalDropInWg: criterion(["terminalDropInWg"], { kind: "number", min: 0, unit: "in-wg" }),
+  autoJoinGapIn: criterion(["autoJoinGapIn"], { kind: "number", min: 0, unit: "in" }),
+  healBoxIn: criterion(["healBoxIn"], { kind: "number", min: 0, unit: "in" }),
+  splitPolicy: criterion(["splitPolicy"], { kind: "enum", shape: splitPolicy, choices: ["even", "proportional"].map(value => ({ value, label: value })) }),
+  allowanceSupplyInWg: criterion(["allowanceInWg", "supply"], { kind: "number", min: 0, unit: "in-wg" }),
+  allowanceReturnInWg: criterion(["allowanceInWg", "return"], { kind: "number", min: 0, unit: "in-wg" }),
+};
 const row = <const R extends Omit<FanInputRow<unknown>, "accepts" | "layers">>(definition: R) => ({
   ...definition, layers: VALUE_SOURCES,
   accepts: (value: unknown): value is unknown => schemaOf(definition.domain).safeParse(value).success,
@@ -162,9 +178,10 @@ export const FAN_INPUTS = [
   row({ name: "kinds", role: "input", on: "fan", domain: { kind: "enum", shape: z.enum(DUCT_UNIT_KINDS), choices: DUCT_UNIT_KINDS.map(value => ({ value, label: value })) }, home: "Work", owner: "ducts", segment: "kinds", parameter: null, write: "never" }),
   row({ name: "derivedFlow", role: "result", on: "fan", domain: numberDomain("cfm"), home: "derived", owner: "fans", segment: null, parameter: null, write: "never" }),
   row({ name: "requiredEsp", role: "result", on: "fan", domain: numberDomain("in-wg"), home: "derived", owner: "fans", segment: null, parameter: null, write: "never" }),
+  ...Object.entries(FAN_CRITERIA_CELLS).map(([name, cell]) => row({ name, role: "input", on: "criteria", domain: cell.domain, home: "project", owner: "ducts", segment: "criteria", parameter: null, write: "never" })),
 ] as const satisfies readonly FanInputRow<unknown>[];
 export const fanInputRows = (rows: readonly FanInputRow<unknown>[] = FAN_INPUTS) => rows.filter(r => r.role === "input");
 export const fanWriteRows = (rows: readonly FanInputRow<unknown>[] = FAN_INPUTS) => rows.filter(r => r.write === "stated-only" && r.segment !== null);
 export const fanBindingRows = (rows: readonly FanInputRow<unknown>[] = FAN_INPUTS) => rows.filter(r => r.segment !== null);
-export const fanInputShape = (rows: readonly FanInputRow<unknown>[] = FAN_INPUTS) => Object.fromEntries(fanBindingRows(rows).map(r => [r.segment!, schemaOf(r.domain)]));
+export const fanInputShape = (rows: readonly FanInputRow<unknown>[] = FAN_INPUTS) => Object.fromEntries(fanBindingRows(rows).map(r => [r.name, schemaOf(r.domain)]));
 export const FAN_PARAMETER_KEYS = [...new Set(FAN_INPUTS.flatMap(r => r.parameter === null ? [] : [r.parameter]))];
