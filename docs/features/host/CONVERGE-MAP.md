@@ -159,13 +159,15 @@ Root foundation holds override compile cleanup. These gates must pass on their o
 
 Staffing: Sol or Terra can run every role from these briefs. Each brief carries its slice row, its exact file set from a fresh census, and its falsifier.
 
-Wave: 0 t3/converge-s4-wave0-shared-foundation fix/fnd01-document-observation
+Wave: 0 t3/converge-s4-wave0-shared-foundation t3/s2-identity-root-fix t3/s3-native-effect-generator
 
 Estimate: t3/converge-s4-wave0-shared-foundation 1.5h 700L +
 
-Estimate: fix/fnd01-document-observation 0.6h 350L +
+Estimate: t3/s2-identity-root-fix 1.0h 400L 0
 
-The shared-foundation declaration is the next coupled basis and settlement checkpoint. The SDK declaration is the precise native save probe. S3 writer `00c342de` has an estimate of 1.0h / 600L+ and a 120min box; its branch awaits assignment and is unknown. Add that branch to the Wave declaration when assigned.
+Estimate: t3/s3-native-effect-generator 1.0h 600L +
+
+The shared-foundation declaration is the next coupled basis and settlement checkpoint. S2 and S3 each have a 120min box; S3 writer is `00c342de`. External SDK repository: `fix/fnd01-document-observation` is the continuing precise native save probe, estimated 0.6h / 350L+, with a 72min box. It is not a Pe.Tools wave branch.
 
 Shared foundation initial estimate was 1.5 writer-hours; full C1-C6 and producer wiring is estimated at 6-10 writer-hours and 1,800-3,000 production lines. Actual labor is unknown. Current PUR correction is 0.4h / 48min / 250 production lines, with a 500 moved lines checkpoint. Admitted basis and settlement has a 180min box and a 1,400 moved lines checkpoint. The SDK probe has a 72min box and a 700 moved lines checkpoint. S2 resolver proposal 0.5-1h / 30-80 lines is not accepted as a complete cutover. These are estimates, not measured labor or caps. The accepted integration branch is `crusade/converge-wave0`.
 
