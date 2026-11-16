@@ -26,7 +26,8 @@ public enum FanBlockerKind {
     [EnumMember(Value = "not-priced")] NotPriced,
     [EnumMember(Value = "implausible-loss")] ImplausibleLoss,
     [EnumMember(Value = "equipment-pairing")] EquipmentPairing,
-    [EnumMember(Value = "backflow")] Backflow
+    [EnumMember(Value = "backflow")] Backflow,
+    [EnumMember(Value = "direction-mismatch")] DirectionMismatch
 }
 
 /// <summary>Native words published in the snapshot catalog, projected by host-typegen.</summary>
