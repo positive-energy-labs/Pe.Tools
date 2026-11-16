@@ -13,13 +13,9 @@ import { QueryBox } from "@pe/kit/table/query";
 import { HelpOwner, HelpWorld, RouteHelpButton } from "#/route/help";
 import { Deferred } from "@pe/kit/lang/section";
 import { Table } from "@pe/kit/table/table";
-import { Mermaid } from "#/product-map/diagram";
 import { LeaderDiagram } from "@pe/kit/lang/leader-diagram";
-const diagram = vi.hoisted(() => vi.fn(() => null));
-vi.mock("#/product-map/diagram", async (original) => ({
-  ...(await original<typeof import("#/product-map/diagram")>()),
-  Mermaid: diagram,
-}));
+const diagram = vi.fn(() => null);
+function LocalDiagram() { return diagram(); }
 vi.mock("@tanstack/react-router", async (original) => ({
   ...(await original<typeof import("@tanstack/react-router")>()),
   Link: ({ children }: { children: React.ReactNode }) => <a>{children}</a>,
@@ -60,7 +56,7 @@ const helpDocs = (
     </Deferred>
     <Deferred>
       <article id="case-local">Local help case</article>
-      <Mermaid chart="graph LR; A-->B" />
+      <LocalDiagram />
       <Table
         rows={[{ key: "local", name: "Local row" }]}
         columns={[{ key: "name", label: "Name", cell: (row) => row.name }]}
