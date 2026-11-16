@@ -4,6 +4,8 @@
 
 ### Status and authority
 
+Owner service ruling, 2026-11-16: "I do not want Sol on fast! thats a waste of my limits. terra is cheap enough that it doesn't matter." All Sol work uses standard service; Terra may use priority. Standing integrator, driver and purger cover the full crusade. Root owns direction and owner rulings. Initial shared-foundation checkpoint `60f08cc2` is partial C1-C6, disconnected from normal host startup and actual doors. It is not S4 acceptance or S6 deletion authority. Main remains at `5209e50c`; no move or push is authorized. Current peer ids, holds and receipts are in root `.artifacts/runs/converge-20261116-wave0/RULES.md` and `STATE.md`.
+
 The owner accepted this plan and explicitly authorized S0. This does not resume the old crusade or authorize this implementor beyond S0. A blocking gate remains before S4: the responsibility-transfer table (`muse-d0/responsibility-transfer.md`) must assign every journal responsibility, its consumers and a failure-boundary falsifier, with no unowned row. OD8 supplies the conservative policy for E6-E8, not implementation proof. The non-author review findings below remain in force. Cutover starts from the main tip at its start, not the held `6ebcd784`; harvest old branches only through a census-named slice.
 
 Evidence home: root checkout `.artifacts/runs/converge-20261115/muse-d0/`. Run state: `muse-d0/STATE.md`. The earlier discovery map is in Git at `0fa80cde`.
