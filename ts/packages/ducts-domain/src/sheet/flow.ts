@@ -327,15 +327,17 @@ export function flowsOf(
 }
 
 /**
- * R-SHARE: a sibling consumer is reached at its own inlet port (the stream is ducted to it; one
- * known only beyond a class change or merge, as FC-23 meets RV-7 past takeoff 13926753, is fed by
- * another stream), cut back to a junction past this fan.
+ * R-SHARE: a sibling sharing this side's terminals is reached at its own port (the stream is ducted
+ * to it; one known only beyond a class change or merge, as FC-23 meets RV-7 past takeoff 13926753,
+ * is fed by another stream), cut back to a junction past this fan. At its inlet it is a co-consumer
+ * of an intake; at its discharge a co-supplier (FANS-W2-COSUPPLY): either way its design flow is its
+ * part of the shared terminal's stated flow, and rides only the legs from the junction out.
  */
 const consumer = (e: Walk["ends"][number]) =>
   e.end.kind === "sibling-fan" &&
   !!e.end.fan &&
   e.end.elementId === e.end.fan.unitId &&
-  e.reached === "inlet" &&
+  e.reached != null &&
   e.state !== 0;
 
 /** R-SHARE: end `i` is a terminal some sibling consumer's junction lies on the way to. */

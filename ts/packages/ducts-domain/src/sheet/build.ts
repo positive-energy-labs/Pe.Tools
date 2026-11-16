@@ -1499,6 +1499,10 @@ function endDirection(
   for (const e of w.ends) {
     const el = g.byId.get(e.end.elementId);
     if (!el) continue;
+    // An end at another fan is an encounter, and `ENCOUNTERS` explains it on either side (a discharge
+    // met on the supply is backflow, on the return an inflow), so it is no evidence of this fan's
+    // direction and does not vote (FANS-W2-COSUPPLY).
+    if (e.end.fan && e.end.fan.unitId !== w.states[0]!.el.id) continue;
     if (e.directionHint) {
       score += e.directionHint === "supply" ? 1 : -1;
       reasons.add(
@@ -1714,7 +1718,8 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
           },
         }
       : onSide(w);
-  const retFirst = !!ret && single(supply.w);
+  // Both sides lone and shared (a co-supplied grille and a shared intake): the supply states its share first.
+  const retFirst = !!ret && single(supply.w) && !single(ret.w);
   const retFlows = ret && retFirst ? flowsOf(ret.w, onSide(ret.w), pricer.block) : null;
   const supplyFlows = flowsOf(
     supply.w,
