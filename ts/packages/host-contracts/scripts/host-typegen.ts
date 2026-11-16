@@ -23,6 +23,7 @@ import { dirname, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { HOST_RPC_BRIDGE_SESSION_HEADER } from "../src/contracts/bridge-protocol.ts";
+import { generateNativeEffect } from "./native-effect-generator.ts";
 
 type CatalogEntry = {
   key: string;
@@ -248,6 +249,7 @@ const catalogOutput = [
 const outputs = [
   [outPath, output],
   [catalogOutPath, catalogOutput],
+  [resolve(dirname(outPath), "native-effect.generated.ts"), generateNativeEffect(operations)],
 ] as const;
 
 if (checkMode) {
