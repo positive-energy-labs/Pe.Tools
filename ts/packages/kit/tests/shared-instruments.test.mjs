@@ -29,10 +29,16 @@ function harness(initial, reducer, options = {}) {
   const effects = [];
   const calls = [];
   const themes = [];
+  const hooks = [];
+  let hook = 0;
   const React = {
     Fragment: "fragment",
     createElement: (type, props, ...children) => ({ type, props: props || {}, children }),
-    useState: (value) => [value, () => {}],
+    useState: (value) => {
+      const index = hook++;
+      if (!(index in hooks)) hooks[index] = value;
+      return [hooks[index], (next) => { hooks[index] = next; }];
+    },
     useEffect: (fn) => effects.push(fn),
   };
   const kit = Object.fromEntries(
@@ -65,7 +71,10 @@ function harness(initial, reducer, options = {}) {
     exportSnapshot: async (snapshot) => calls.push({ export: snapshot }),
     ...options,
   };
-  return { api, calls, effects, themes, state: () => state };
+  return { api, calls, effects, themes, state: () => state, render: (component) => {
+    hook = 0;
+    return component();
+  } };
 }
 function all(node) {
   if (!node || typeof node !== "object") return [];
@@ -78,7 +87,11 @@ function button(tree, label) {
 test("circuit census consumes the script Result value directly", async () => {
   const route = await module();
   const h = harness(route.initial, route.reducer);
-  await button(route.create(h.api)(), "Read circuits").props.onClick();
+  const component = route.create(h.api);
+  const tree = h.render(component);
+  const panels = all(tree).find((node) => node.props["aria-label"] === "Panel names");
+  panels.props.onChange({ target: { value: "LP-1" } });
+  await button(h.render(component), "Read circuits").props.onClick();
   assert.equal(h.state().reading.total, 0);
   assert.equal(h.state().reading.copyOnly, true);
   assert.deepEqual(h.state().reading.rows, []);

@@ -129,7 +129,7 @@ try {
       worker.on("exit", (code) => resolve(code ?? 2)),
     );
     await Promise.race([stopped, exited]);
-    await killGroup(worker.pid as number);
+    if (worker.pid !== undefined) await killGroup(worker.pid);
     const verdict = await exited;
     if (stop) {
       console.error(`${stop} stopped the check, so the command wrote nothing.`);
