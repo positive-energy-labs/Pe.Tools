@@ -193,11 +193,11 @@ export type DuctsFirm = z.infer<typeof ductsBaseSchema>;
  */
 const edits = <T extends z.ZodType>(value: T) => z.record(elementSubjectSchema, value.nullable());
 export const sheetEditsSchema = z.strictObject({
-  flows: edits(z.strictObject({ cfm: nonneg })).optional(),
-  terminalDrops: edits(z.strictObject({ inWg: nonneg })).optional(),
-  componentDrops: edits(z.strictObject({ inWg: nonneg })).optional(),
+  flows: edits(z.strictObject({ cfm: nonneg, source: z.string().optional() })).optional(),
+  terminalDrops: edits(z.strictObject({ inWg: nonneg, source: z.string().optional() })).optional(),
+  componentDrops: edits(z.strictObject({ inWg: nonneg, source: z.string().optional() })).optional(),
   esp: edits(z.strictObject({ inWg: nonneg })).optional(),
-  equipmentFlows: edits(z.strictObject({ cfm: nonneg })).optional(),
+  equipmentFlows: edits(z.strictObject({ cfm: nonneg, source: z.string().optional() })).optional(),
   roles: edits(z.strictObject({ role: unitRole })).optional(),
   /** Keyed by JSON.stringify([family, type]); one ruling fixes every instance of the type. */
   kinds: z
@@ -211,7 +211,7 @@ export const sheetEditsSchema = z.strictObject({
     .optional(),
   /** Keyed like `inputs.fittingDrops`; written to Work `assumptions` as `component-drop:<key>`. */
   fittingDrops: z
-    .record(z.string().regex(/^proposed:/), z.strictObject({ inWg: nonneg }).nullable())
+    .record(z.string().regex(/^proposed:/), z.strictObject({ inWg: nonneg, source: z.string().optional() }).nullable())
     .optional(),
   joins: z
     .array(

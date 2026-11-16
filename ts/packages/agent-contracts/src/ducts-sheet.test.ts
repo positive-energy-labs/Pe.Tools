@@ -1,10 +1,12 @@
 import { expect, it } from "vite-plus/test";
+import { subjectCode, uniqueIdSchema } from "./subject-ref.ts";
 
 import {
   ductsCriteriaLayerSchema,
   ductsBaseSchema,
   ductsFirmSchema,
   ductsSheetEditsSchema,
+  sheetEditsSchema,
   fittingPricingSchema,
 } from "./ducts-sheet.ts";
 
@@ -20,6 +22,19 @@ const row = {
   unpriced: null,
   typed: null,
 };
+
+it("retains source text on closer drop and flow edits, while ESP stays strict", () => {
+  const key = subjectCode({ keyKind: "UniqueId", key: uniqueIdSchema.parse("fixture:1") });
+  const edits = {
+    flows: { [key]: { cfm: 100, source: "balancing report" } },
+    equipmentFlows: { [key]: { cfm: 200, source: "submittal" } },
+    terminalDrops: { [key]: { inWg: 0.1, source: "catalog page" } },
+    componentDrops: { [key]: { inWg: 0.2, source: "catalog page" } },
+    fittingDrops: { "proposed:pair>straight": { inWg: 0.3, source: "fitting submittal" } },
+  };
+  expect(sheetEditsSchema.parse(edits)).toEqual(edits);
+  expect(sheetEditsSchema.safeParse({ esp: { [key]: { inWg: 1, source: "unsupported" } } }).success).toBe(false);
+});
 const key = "proposed:14106988:1|14122436:1>straight";
 const proposed = {
   pair: ["14122436:1", "14106988:1"],
