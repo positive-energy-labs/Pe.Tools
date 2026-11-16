@@ -1,11 +1,13 @@
 import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
-import { Cause, Context, Deferred, Effect, Exit, Layer, Schema } from "effect";
+import { Cause, Context, Deferred, Effect, Exit, Layer, Option, Schema } from "effect";
 import { describe, expect, test } from "vite-plus/test";
 import {
   CommandFailure,
   CommandId,
+  OwnerOutcome,
+  type CommandRef,
   type InvocationRecord,
 } from "../../../packages/agent-contracts/src/command-authority.ts";
 import {
@@ -34,8 +36,15 @@ import {
 const run = <A, E>(effect: Effect.Effect<A, E>) => Effect.runPromise(effect);
 const ref = { id: CommandId.make("host-ticket") };
 const intent = { key: "test", input: "{}" };
-const ticket = { _tag: "InertTicket" as const, ref, intent };
-const observed = { ref, state: "accepted" as const, stop: false, result: null, problem: null };
+const ticket = { _tag: "InertTicket" as const, ref, authored: intent, intent };
+const observed = {
+  ref,
+  state: "accepted" as const,
+  stop: false,
+  result: null,
+  problem: null,
+  ownerSteps: [],
+};
 const binding: Binding = {
   principal: "person",
   authority: "connection-1",
@@ -71,6 +80,17 @@ const closureAt = (dir: string) => {
   writeFileSync(file, "actual-code-v1");
   return CommandClosure.seal([file], { frozen: "config-v1" });
 };
+const requireActivityResult = Effect.fn("test.requireActivityResult")(function* <A>(
+  service: CommandService["Service"],
+  command: CommandRef,
+  occurrence: number,
+  schema: Schema.Codec<A>,
+) {
+  const reply = yield* service.activityResult(command, occurrence, schema);
+  if (Option.isNone(reply.result))
+    return yield* Effect.die(new Error("Persisted Activity reply missing"));
+  return { identity: reply.identity, exit: reply.result.value };
+});
 
 describe("inert invocation authority", () => {
   const fixture = () => {
@@ -130,6 +150,223 @@ describe("inert invocation authority", () => {
     await expect(commandInvocation(f.slot, f.transport).retry()).rejects.toThrow();
     expect(f.counts()).toEqual({ allocation: 0, submits: 0 });
   });
+  test.each(["Accepted", "Terminal"] as const)(
+    "PUR-C1-03 retained %s refuses a mismatched original-ref join",
+    async (tag) => {
+      const f = fixture();
+      const other = { ...observed, ref: { id: CommandId.make("another-command") } };
+      f.slot.read = async () => ({ _tag: tag, ticket, observation: other });
+      await expect(commandInvocation(f.slot, f.transport).retry()).rejects.toMatchObject({
+        problem: "conflict",
+        ref,
+      });
+      expect(f.counts()).toEqual({ allocation: 0, submits: 0 });
+    },
+  );
+  test("PUR-C1-03 observe and submit both refuse another command's response", async () => {
+    const f = fixture();
+    const other = { ...observed, ref: { id: CommandId.make("another-command") } };
+    f.transport.read = async () => other;
+    await expect(commandInvocation(f.slot, f.transport).observe(ref)).rejects.toMatchObject({
+      problem: "conflict",
+      ref,
+    });
+    expect(f.counts()).toEqual({ allocation: 0, submits: 0 });
+    f.transport.submit = async () => other;
+    await expect(commandInvocation(f.slot, f.transport).new(intent)).rejects.toMatchObject({
+      problem: "conflict",
+      ref,
+    });
+    expect(f.record()).toEqual({ _tag: "SubmissionPending", ticket });
+  });
+  test("PUR-C1-01 changed authored correlation and operation key still refuse before submit", async () => {
+    for (const changed of [
+      { ...ticket, authored: { ...intent, input: '{"changed":true}' } },
+      { ...ticket, intent: { ...intent, key: "other-operation" } },
+    ]) {
+      const f = fixture();
+      f.transport.allocate = async () => changed;
+      await expect(commandInvocation(f.slot, f.transport).new(intent)).rejects.toMatchObject({
+        problem: "conflict",
+        ref,
+      });
+      expect(f.counts().submits).toBe(0);
+      expect(f.record()?._tag).toBe("Allocating");
+    }
+  });
+});
+
+test.each([
+  { input: '{ "b": 2, "a": 1 }', canonical: '{"a":1,"b":2}', defaults: false },
+  { input: "{ }", canonical: '{"mode":"default"}', defaults: true },
+])(
+  "PUR-C1-01 real helper/service compose across normalization $canonical",
+  ({ input, canonical, defaults }) =>
+    run(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const dir = directory();
+          const closure = yield* closureAt(dir);
+          const normalizer: CommandAdapter = {
+            ...adapter,
+            normalize: (input) =>
+              Effect.succeed(
+                json(defaults ? { mode: "default", ...JSON.parse(input) } : JSON.parse(input)),
+              ),
+          };
+          const context = yield* Layer.build(
+            commandFoundationLayer(
+              join(dir, "engine"),
+              { closure, authority, adapters: new Map([["test", normalizer]]) },
+              () => Effect.succeed("done"),
+              "provision",
+            ),
+          );
+          const service = Context.get(context, CommandService);
+          let record: InvocationRecord | undefined;
+          let allocations = 0,
+            submits = 0;
+          const helper = commandInvocation(
+            {
+              exclusive: (body) => body(),
+              read: async () => record,
+              write: async (value) => {
+                record = structuredClone(value);
+              },
+            },
+            {
+              allocate: async (authored) => {
+                allocations++;
+                return run(service.allocate(authored, binding));
+              },
+              submit: async (ref) => {
+                submits++;
+                return run(service.submit(ref, binding).pipe(Effect.provideContext(context)));
+              },
+              read: (ref) => run(service.read(ref, binding)),
+            },
+          );
+          const authored = { key: "test", input };
+          const observation = yield* Effect.tryPromise({
+            try: () => helper.new(authored),
+            catch: (cause) => new CommandFailure({ problem: "invalid", ref: null, cause }),
+          });
+          expect(record).toMatchObject({
+            _tag: "Accepted",
+            ticket: { authored, intent: { key: "test", input: canonical }, ref: observation.ref },
+          });
+          expect(allocations).toBe(1);
+          expect(submits).toBe(1);
+          const [row] = yield* service.sql<{
+            n: number;
+          }>`SELECT count(*) AS n FROM command_authority`;
+          expect(row.n).toBe(1);
+        }),
+      ),
+    ),
+);
+
+describe.each(["native", "outside"] as const)("PUR-C4-02 %s owner-result preservation", (kind) => {
+  test.each([
+    { outcome: "refused", dispatch: "not-dispatched", value: null, evidence: "departure-refusal" },
+    { outcome: "failed", dispatch: "dispatched", value: null, evidence: "dispatched-failure" },
+    { outcome: "cancelled", dispatch: "dispatched", value: null, evidence: "owner-cancelled" },
+    { outcome: "unknown", dispatch: "unknown", value: null, evidence: "lost-reply" },
+  ] as const)("$outcome survives constructor failure and canonical observation", (outcome) =>
+    run(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const dir = directory();
+          const started = performance.now();
+          const mark = (phase: string) =>
+            appendFileSync(
+              join(dir, "phases.jsonl"),
+              `${JSON.stringify({ kind, outcome: outcome.outcome, phase, ms: performance.now() - started })}\n`,
+            );
+          mark("scope-start");
+          yield* Effect.addFinalizer(() => Effect.sync(() => mark("scope-released")));
+          const closure = yield* closureAt(dir);
+          mark("closure-sealed");
+          const settled = yield* Deferred.make<Exit.Exit<string, CommandFailure>>();
+          let invoked = 0;
+          const completed = {
+            outcome: "completed" as const,
+            dispatch: "dispatched" as const,
+            value: json({ elementId: 42, guid: "00000000-0000-4000-8000-000000000002" }),
+            evidence: "completed-prefix",
+          };
+          const answer = () => Effect.sync(() => (invoked++ === 0 ? completed : outcome));
+          const owners = Layer.mergeAll(
+            Layer.succeed(NativeCommandOwner, { depart: answer }),
+            Layer.succeed(OutsideCommandOwner, { invoke: answer }),
+          );
+          const context = yield* Layer.build(
+            commandFoundationLayer(
+              join(dir, "engine"),
+              { closure, authority, adapters: new Map([["test", adapter]]) },
+              (row) =>
+                Effect.gen(function* () {
+                  const program = yield* commandProgram(row);
+                  for (let i = 0; i < 2; i++) {
+                    if (kind === "native")
+                      yield* program.native("rooms.draw", { view: "view", loops: [] });
+                    else yield* program.outside("shell.open", "{}");
+                  }
+                  return "must not succeed";
+                }).pipe(
+                  Effect.onExit((exit) => Deferred.succeed(settled, exit)),
+                  Effect.provide(owners),
+                ),
+              "provision",
+            ),
+          );
+          const service = Context.get(context, CommandService);
+          mark("graph-built");
+          yield* Effect.gen(function* () {
+            const ticket = yield* service.allocate(intent, binding);
+            mark("allocated");
+            yield* service.submit(ticket.ref, binding);
+            mark("accepted");
+            const exit = yield* Deferred.await(settled);
+            mark("feature-settled");
+            expect(Exit.isFailure(exit)).toBe(true);
+            if (Exit.isSuccess(exit)) return yield* Effect.die(new Error("Expected owner failure"));
+            const error = Option.getOrThrow(Cause.findErrorOption(exit.cause));
+            const steps = yield* service.sql<{
+              occurrence: number;
+              request_id: string;
+            }>`SELECT occurrence,request_id FROM command_steps WHERE command_id=${ticket.ref.id} ORDER BY occurrence`;
+            const expected = {
+              _tag: "Recorded",
+              occurrence: 1,
+              requestId: steps[1].request_id,
+              attempt: 1,
+              outcome,
+            };
+            expect(error.ref).toEqual(ticket.ref);
+            expect(error.ownerStep).toEqual(expected);
+            const observed = yield* service.read(ticket.ref, binding);
+            mark("observed");
+            expect(observed.ownerSteps).toEqual([
+              {
+                _tag: "Recorded",
+                occurrence: 0,
+                requestId: steps[0].request_id,
+                attempt: 1,
+                outcome: completed,
+              },
+              expected,
+            ]);
+            expect((yield* service.submit(ticket.ref, binding)).ownerSteps).toEqual(
+              observed.ownerSteps,
+            );
+            expect(invoked).toBe(2);
+            mark("assertions-complete");
+          }).pipe(Effect.provideContext(context));
+        }),
+      ),
+    ),
+  );
 });
 
 test("F03/F04 actual graph atomic acceptance, duplicate joins, claim conflict and inert Stop", () =>
@@ -448,6 +685,7 @@ test("F09 same-DB typed decode failure rolls back the body while the engine reta
         const dir = directory();
         const closure = yield* closureAt(dir);
         const settled = yield* Deferred.make<void>();
+        const domainResult = Schema.Array(Schema.Struct({ n: Schema.Number }));
         const layer = commandFoundationLayer(
           join(dir, "engine"),
           { closure, authority, adapters: new Map([["test", adapter]]) },
@@ -459,7 +697,7 @@ test("F09 same-DB typed decode failure rolls back the body while the engine reta
                 SameDatabaseOperation.make(store, {
                   key: "domain-state",
                   input: Schema.String,
-                  result: Schema.Array(Schema.Struct({ n: Schema.Number })),
+                  result: domainResult,
                   // Wrong result is a typed domain decode failure AFTER a real body mutation.
                   statement: (sql) =>
                     sql`INSERT INTO domain_state(n) VALUES(1) RETURNING 'invalid' AS n`,
@@ -481,6 +719,15 @@ test("F09 same-DB typed decode failure rolls back the body while the engine reta
           expect(rows).toHaveLength(0);
           const claims = yield* service.sql`SELECT claim FROM command_claims`;
           expect(claims).toHaveLength(1);
+          const reply = yield* requireActivityResult(service, allocated.ref, 0, domainResult);
+          expect(reply.identity.occurrence).toBe(0);
+          expect(Exit.isFailure(reply.exit)).toBe(true);
+          if (Exit.isSuccess(reply.exit))
+            return yield* Effect.die(new Error("Expected retained typed failure"));
+          expect(Option.getOrThrow(Cause.findErrorOption(reply.exit.cause))).toMatchObject({
+            problem: "invalid",
+            ref: allocated.ref,
+          });
         }).pipe(Effect.provideContext(context));
       }),
     ),
@@ -609,6 +856,59 @@ test("F14 completion write failure retains the completed owner prefix and claims
           expect(invoked).toBe(1);
           expect(yield* service.sql`SELECT * FROM command_claims`).toHaveLength(1);
           expect((yield* service.read(allocated.ref, binding)).result).toBeNull();
+          const persisted = yield* requireActivityResult(service, allocated.ref, 0, OwnerOutcome);
+          expect(persisted.identity.occurrence).toBe(0);
+          expect(persisted.exit).toEqual(
+            Exit.succeed({
+              outcome: "completed",
+              dispatch: "dispatched",
+              value: "receipt",
+              evidence: "owner-evidence",
+            }),
+          );
+          const row = yield* service.load(allocated.ref);
+          const replies = yield* service.sql<{ request_id: string; payload: string }>`
+            SELECT CAST(m.request_id AS TEXT) AS request_id,r.payload FROM cluster_messages m
+            JOIN cluster_replies r ON r.id=m.last_reply_id
+            WHERE m.entity_type=${`Workflow/${row.tag}`} AND m.entity_id=${row.execution} AND m.tag='activity'
+              AND json_extract(m.payload,'$.name')='step-0' AND json_extract(m.payload,'$.attempt')=1`;
+          expect(replies).toHaveLength(1);
+          yield* Effect.gen(function* () {
+            yield* service.sql`UPDATE cluster_replies SET payload='{bad-json' WHERE request_id=${replies[0].request_id}`;
+            expect(
+              Exit.isFailure(
+                yield* Effect.exit(requireActivityResult(service, allocated.ref, 0, OwnerOutcome)),
+              ),
+            ).toBe(true);
+            expect(Exit.isFailure(yield* Effect.exit(service.read(allocated.ref, binding)))).toBe(
+              true,
+            );
+          }).pipe(
+            Effect.ensuring(
+              service.sql`UPDATE cluster_replies SET payload=${replies[0].payload} WHERE request_id=${replies[0].request_id}`.pipe(
+                Effect.orDie,
+              ),
+            ),
+          );
+          yield* service.sql`CREATE TEMP TABLE held_activity_reply AS SELECT * FROM cluster_replies WHERE request_id=${replies[0].request_id}`;
+          yield* Effect.gen(function* () {
+            yield* service.sql`DELETE FROM cluster_replies WHERE request_id=${replies[0].request_id}`;
+            expect(
+              Exit.isFailure(
+                yield* Effect.exit(requireActivityResult(service, allocated.ref, 0, OwnerOutcome)),
+              ),
+            ).toBe(true);
+            expect((yield* service.read(allocated.ref, binding)).ownerSteps).toEqual([
+              { _tag: "Unresolved", ...persisted.identity, reason: "pending" },
+            ]);
+          }).pipe(
+            Effect.ensuring(
+              service.sql`INSERT INTO cluster_replies SELECT * FROM held_activity_reply`.pipe(
+                Effect.orDie,
+              ),
+            ),
+          );
+          yield* service.sql`DROP TABLE held_activity_reply`;
           yield* service.submit(allocated.ref, binding);
           expect(invoked).toBe(1);
         }).pipe(Effect.provideContext(context));

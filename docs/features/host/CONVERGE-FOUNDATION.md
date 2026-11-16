@@ -29,6 +29,10 @@ P4 retains literal indefinite queryability of compact authority in the active ge
 
 One immutable descriptor and canonical SQL state/result columns produce observations. Engine messages own Activity results. There is no mirrored History journal, custom outbox scheduler, token service, compatibility migration or recovery callback per feature. Claims remain held until an evidence-aware release operation exists.
 
+Tickets distinguish the exact echoed authored request from canonical execution intent, so server normalization does not require a producer-side normalizer. Shared reference checks reject mismatched retained and transport observations. Native/OD8 noncompleted failures carry their original occurrence, request and producer outcome. Command reads project recorded owner steps through Effect MessageStorage's exact execution/Activity key and decode its canonical reply, while missing results remain unresolved and corrupt replies refuse. No owner outcome is copied into the command row. The narrow F09/F14 tests inspect the exact stored Activity result and include reply corruption/removal controls.
+
+The next coupled checkpoint is an admitted dependency basis plus evidence-bound conditional Work settlement. Fresh effect authorization and settlement of already proven consumed edits remain separate obligations. The current generic store gate must not be adopted for post-Stop settlement; no skipStop callback or per-feature recovery substitutes for that owner. SMELL-01/02 adoption holds remain until independent falsification, and the completed-prefix projection above is only part of SMELL-03's evidence-reference contract.
+
 `proving-programs.ts` exercises the concrete generated-schema API shape: repeated carrier initialization before `rooms.draw`, and multiple frozen `families.apply` leaves with a separate conditional-retirement owner operation. The generic program has no feature branches. These programs are not yet wired into the existing feature admission/seal/readback/publication seams.
 
 ## Limits candidate

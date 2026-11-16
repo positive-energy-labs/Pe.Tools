@@ -46,7 +46,7 @@ export const commandFoundationLayer = <R>(
         }),
       ).pipe(Layer.provideMerge(client));
       const engine = ClusterWorkflowEngine.layer.pipe(
-        Layer.provide(
+        Layer.provideMerge(
           SingleRunner.layer({
             runnerStorage: "sql",
             shardingConfig: {

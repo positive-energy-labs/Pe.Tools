@@ -14,6 +14,8 @@ export const NewCommand = Schema.Struct({ key: Schema.String, input: Schema.Stri
 export type NewCommand = typeof NewCommand.Type;
 export const InertTicket = Schema.TaggedStruct("InertTicket", {
   ref: CommandRef,
+  /** Exact authored request echoed for correlation; intent carries the host-normalized meaning. */
+  authored: NewCommand,
   intent: NewCommand,
 });
 export type InertTicket = typeof InertTicket.Type;
@@ -25,6 +27,20 @@ export const OwnerOutcome = Schema.Struct({
   evidence: Schema.String,
 });
 export type OwnerOutcome = typeof OwnerOutcome.Type;
+const OwnerStepIdentity = { occurrence: Schema.Int, requestId: StepRequestId, attempt: Schema.Int };
+export const RecordedOwnerStep = Schema.TaggedStruct("Recorded", {
+  ...OwnerStepIdentity,
+  outcome: OwnerOutcome,
+});
+export type RecordedOwnerStep = typeof RecordedOwnerStep.Type;
+export const OwnerStepObservation = Schema.Union([
+  RecordedOwnerStep,
+  Schema.TaggedStruct("Unresolved", {
+    ...OwnerStepIdentity,
+    reason: Schema.Literals(["pending", "activity-failed"]),
+  }),
+]);
+export type OwnerStepObservation = typeof OwnerStepObservation.Type;
 
 export const CommandProblem = Schema.Literals([
   "unavailable",
@@ -45,12 +61,14 @@ export const CommandObservation = Schema.Struct({
   /** An inspectable result never grants fresh effect authority. */
   result: Schema.NullOr(Schema.String),
   problem: Schema.NullOr(CommandProblem),
+  ownerSteps: Schema.Array(OwnerStepObservation),
 });
 export type CommandObservation = typeof CommandObservation.Type;
 
 export class CommandFailure extends Schema.TaggedError<CommandFailure>()("CommandFailure", {
   problem: CommandProblem,
   ref: Schema.NullOr(CommandRef),
+  ownerStep: Schema.optional(RecordedOwnerStep),
   cause: Schema.optional(Schema.Defect()),
 }) {
   override get message() {
