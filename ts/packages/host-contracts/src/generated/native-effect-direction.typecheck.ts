@@ -48,3 +48,5 @@ for (const factory of [nativeEffectSchemas["revit.context.view-image"].delivery,
 }
 // @ts-expect-error private structural source is not public
 Op52response.codec;
+// @ts-expect-error structural decoded scope cannot escape through the public namespace
+Op52response.Decoded;
