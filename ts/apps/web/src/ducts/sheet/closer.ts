@@ -268,7 +268,7 @@ function describeBase(blocker: SheetBlocker, typed: number | null, context: Clos
     }
     case "unknown-drop": {
       // The engine's first offer; without one, the firm's terminal drop seeds terminals only (no default suits another part).
-      const fallback = cell ? (cell.offers[0] ?? null) : terminal ? context.terminalDrop : null;
+      const fallback = cell?.offers[0] ?? (terminal ? context.terminalDrop : null);
       const input: CloserInput = { unit: "in-wg", placeholder: fallback?.value ?? null };
       if (typed != null)
         return live(

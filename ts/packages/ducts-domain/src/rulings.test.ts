@@ -7,7 +7,7 @@ import { neutralFansWork } from "@pe/agent-contracts";
  */
 import { designOf } from "./test-design.ts";
 import { expect, it } from "vite-plus/test";
-import { stagedDucts } from "@pe/agent-contracts";
+import { stagedValues } from "@pe/agent-contracts";
 
 import { pendingRulings, storeRulings, withStoredRulings } from "./rulings.ts";
 import type { DuctSnapshot } from "./types.ts";
@@ -30,7 +30,7 @@ const doc = designOf;
 it("reads the stored rulings as edit cells, and Work's own over them", () => {
   const work = doc({ roles: { "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000385": { edit: { value: { role: "passive" } } } } });
   const seen = withStoredRulings(work, store, snapshot)!;
-  const edit = stagedDucts(seen, (seen) ?? neutralFansWork);
+  const edit = stagedValues(seen, (seen) ?? neutralFansWork);
 
   expect(edit.assumptions["open-end:101:1"]).toEqual({ kind: "verdict", verdict: "ignore" });
   expect(edit.roles).toEqual({ "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000384": { role: "passive" }, "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000385": { role: "passive" } });
@@ -46,7 +46,7 @@ it("takes a stored verdict back with a edit delete, and a stored passive is rule
     roles: { "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000384": { edit: { value: { role: "fan" } } } },
   });
   const seen = withStoredRulings(work, store, snapshot);
-  const edit = stagedDucts(seen, seen ?? neutralFansWork);
+  const edit = stagedValues(seen, seen ?? neutralFansWork);
 
   expect(edit.assumptions).toEqual({});
   expect(edit.roles).toEqual({ "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000384": { role: "fan" } });
@@ -68,7 +68,7 @@ it("writes the stored rulings with their own time and new ones with the write's"
     },
   });
   const seen = withStoredRulings(work, store, snapshot);
-  const edit = stagedDucts(seen, seen ?? neutralFansWork);
+  const edit = stagedValues(seen, seen ?? neutralFansWork);
 
   expect(storeRulings(edit, store, "later", snapshot)).toEqual({
     verdicts: {

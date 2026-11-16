@@ -126,7 +126,7 @@ function Sides({ props }: { props: LedgerProps }) {
       <h3 className="t-head">
         {fan.mark} · port {fan.portIndex}
       </h3>
-      {fan.directionOverride && <p data-tone="caution">{fan.directionOverride}</p>}
+      {fan.directionMismatch && <p data-tone="caution">{fan.directionMismatch.evidence}</p>}
       <div className="t-small grid grid-cols-[auto_minmax(0,1fr)] gap-x-3">
         <span className="text-ink-2">required ESP</span>
         <span className="face-mono truncate">
@@ -156,8 +156,8 @@ function Sides({ props }: { props: LedgerProps }) {
           <span key={side} className="contents" data-side={side}>
             <span>{side}</span>
             {/* F1: a side counts its known branches and names a worst only over complete ones. */}
-            <span className={totals[side].complete ? "" : "text-ink-2"}>
-              {ws ? branchesKnown(ws[side].runs) : totals[side].complete ? "complete" : "incomplete"}
+            <span className={totals[side].worstPath != null ? "" : "text-ink-2"}>
+              {ws ? branchesKnown(ws[side].runs) : totals[side].worstPath != null ? "priced" : "incomplete"}
             </span>
             <span className="face-mono text-right">
               {pressure(totals[side].worstPath ?? ws?.[side].worstKnownInWg)}

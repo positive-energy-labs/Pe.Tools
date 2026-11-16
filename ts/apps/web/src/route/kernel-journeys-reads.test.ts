@@ -353,8 +353,7 @@ test("JX1 compare named Fans and shared-fan Duct systems, clear scope, then clos
         "H23: published pressure belongs to that fan's overview",
       ).toMatchObject({
         requiredEspInWg: open.overview.totals?.requiredEspInWg ?? null,
-        complete:
-          !!open.overview.totals?.supply.complete && !!open.overview.totals?.return.complete,
+        complete: open.overview.claim?.kind === "complete",
       });
       expect(open.overview.basis, "H23: engineering answer retains its provenance").toBeTruthy();
     }

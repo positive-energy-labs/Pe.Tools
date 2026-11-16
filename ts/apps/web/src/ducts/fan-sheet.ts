@@ -76,8 +76,6 @@ const enginePath = z.object({
   knownInWg: z.number(),
   blockerIds: z.array(z.string()),
 });
-const wireTotals = ductsSheetOverviewSchema.shape.totals.unwrap();
-const engineSide = wireTotals.shape.supply.omit({ complete: true });
 const engineBase = {
   engineVersion: z.string(),
   basis: z.string(),
@@ -90,16 +88,15 @@ const engineBase = {
 /*
  * The engine's own output, kept whole between reads: the claim, the three ESP values, encounters,
  * typed issues and the network hash ride with the numbers, and no completeness boolean exists.
- * Built from the wire parts where they agree. The wire still marks a leg's `evidence` optional and
- * the engine always states it, so the parsed type is named as the engine's (`Sheet | Chain`) once, here.
+ * Built from the wire parts, which agree except that the wire's fan also carries the rated ESP.
+ * The contract types the engine returns hold readonly tuples where the schema's output is mutable,
+ * so the parsed type is named as the engine's (`Sheet | Chain`) once, here.
  */
 const engineValue = z.union([
   z.object({
     ...engineBase,
-    fan: ductsSheetOverviewSchema.shape.fan.unwrap().omit({ ratedEspInWg: true, directionOverride: true }).extend({
-      directionMismatch: z.object({ discharge: z.number(), networkDischarge: z.number(), evidence: z.string() }).nullable(),
-    }),
-    totals: wireTotals.extend({ supply: engineSide, return: engineSide }),
+    fan: ductsSheetOverviewSchema.shape.fan.unwrap().omit({ ratedEspInWg: true }),
+    totals: ductsSheetOverviewSchema.shape.totals.unwrap(),
     claim: fanClaimSchema,
     esp: fanEspValuesSchema,
     encounters: z.array(encounterSchema),
@@ -366,7 +363,7 @@ export function sheetReach(value: Sheet | Chain): Set<number> {
 
 function overview(entry: SheetModel): DuctsSheetOverview {
   const paths = pathsOf(entry.value);
-  const sheet = "claim" in entry.value ? entry.value : null, claim = sheet?.claim;
+  const sheet = "claim" in entry.value ? entry.value : null;
   const closers = compact(typedClosers(entry.value));
   const side = (name: "supply" | "return") => {
     const ranked = paths
@@ -377,8 +374,6 @@ function overview(entry: SheetModel): DuctsSheetOverview {
         pathId: String(index),
         end: path.end,
         knownInWg: path.knownInWg,
-        // The wire still asks each path for a boolean; it repeats the claim, the one authority, and decides nothing.
-        complete: claim?.kind === "complete",
         legCount: path.legIds.length,
         blockerIds: path.blockerIds,
       })),
@@ -394,9 +389,9 @@ function overview(entry: SheetModel): DuctsSheetOverview {
     basis: entry.value.basis,
     // Parsed through the wire schemas: the engine's readonly shapes become the wire's, and a malformed claim never leaves.
     ...(sheet ? { claim: fanClaimSchema.parse(sheet.claim), espValues: fanEspValuesSchema.parse(sheet.esp) } : {}),
-    // Rated ESP is the engine's rated value alone. The wire's one direction field carries the family-direction mismatch's evidence.
-    fan: sheet ? { ...sheet.fan, ratedEspInWg: sheet.esp.rated.value, directionOverride: sheet.fan.directionMismatch?.evidence ?? null } : null,
-    totals: sheet ? { ...sheet.totals, supply: { ...sheet.totals.supply, complete: claim?.kind === "complete" }, return: { ...sheet.totals.return, complete: claim?.kind === "complete" } } : null,
+    // Rated ESP is the engine's rated value alone.
+    fan: sheet ? { ...sheet.fan, ratedEspInWg: sheet.esp.rated.value } : null,
+    totals: sheet?.totals ?? null,
     paths: { supply, return: ret },
     blockers: entry.value.blockers.map(closers),
     assumedBlockers: "assumed" in entry.value ? entry.value.assumed.blockers.map(closers) : [],
@@ -444,7 +439,6 @@ export const fanInputs = read("fans.inputs", {
     const entry = await current(ctx, request);
     return {
       kind: "inputs" as const,
-      directionOverride: "fan" in entry.value ? (entry.value.fan.directionMismatch?.evidence ?? null) : null,
       target: entry.target,
       basis: entry.value.basis,
       inputs: scopeInputs(entry.inputs, sheetReach(entry.value)),

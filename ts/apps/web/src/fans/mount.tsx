@@ -207,28 +207,18 @@ function LedgerContent({ ctx, snapshot }: { ctx: SheetContext; snapshot: DuctSna
       if (closer.refusal || !closer.action) return edits;
       const action = closer.action;
       switch (action.kind) {
-        case "drop":
-          return action.terminal
-            ? {
-                ...edits,
-                terminalDrops: {
-                  ...edits.terminalDrops,
-                  [elementSubject(nativeElement(action.elementId))]: { inWg: action.value },
-                },
-              }
-            : {
-                ...edits,
-                componentDrops: {
-                  ...edits.componentDrops,
-                  [elementSubject(nativeElement(action.elementId))]: { inWg: action.value },
-                },
-              };
+        case "drop": {
+          const segment = action.terminal ? "terminalDrops" : "componentDrops", key = elementSubject(nativeElement(action.elementId));
+          return { ...edits, [segment]: { ...edits[segment], [key]: { inWg: action.value } },
+            // An offered default cites where it came from on the cell's own ref; the host stamps who took it.
+            ...(action.ref ? { refs: { ...edits.refs, [segment]: { ...edits.refs?.[segment], [key]: action.ref } } } : {}) };
+        }
         case "cfm":
-          return { ...edits, flows: { ...edits.flows, [elementSubject(nativeElement(action.elementId))]: { cfm: action.value } } };
+          return { ...edits, flows: { ...edits.flows, [elementSubject(nativeElement(action.elementId))]: action.value } };
         case "unitCfm":
           return {
             ...edits,
-            equipmentFlows: { ...edits.equipmentFlows, [elementSubject(nativeElement(action.unitId))]: { cfm: action.value } },
+            equipmentFlows: { ...edits.equipmentFlows, [elementSubject(nativeElement(action.unitId))]: action.value },
           };
         // /ducts' fixes never reach here: `closerOf` made each a link (DUCTS_FIXES).
         default:

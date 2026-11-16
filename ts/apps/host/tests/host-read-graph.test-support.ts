@@ -1,3 +1,4 @@
+import { DUCT_UNIT_KINDS, FAN_BLOCKER_KINDS } from "@pe/host-contracts/generated";
 import { stateFixture } from "../../../tests/isolated-home/storage.ts";
 import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { actAs } from "./callers.ts";
@@ -53,8 +54,10 @@ export const gate = () => ({
 });
 export const identity = { build: "host-read-spike", catalog: nativeCatalogIdentity() };
 export const bounds = { maxBytes: 256 * 1024 * 1024, maxTakings: 2000 };
-export const roster = nativeResponseSchema("ducts.snapshot.walk").parse(rosterCapture);
-export const snapshot = nativeResponseSchema("ducts.snapshot.walk").parse(fanCapture);
+// The captures predate the native vocabulary; it is the generated one, added whole.
+const vocabulary = { unitKinds: [...DUCT_UNIT_KINDS], blockerKinds: [...FAN_BLOCKER_KINDS] };
+export const roster = nativeResponseSchema("ducts.snapshot.walk").parse({ ...rosterCapture, vocabulary });
+export const snapshot = nativeResponseSchema("ducts.snapshot.walk").parse({ ...fanCapture, vocabulary });
 export async function fixture(
   capture = false,
   recorded: {

@@ -42,7 +42,7 @@ function FanWalk({ ctx, snapshot, picture }: Pick<Props, "ctx" | "picture"> & { 
   const { authored, value, sheet, roster, nameOf, issue, state, fanKey } = useSheetData(ctx, snapshot);
   const picked = authored.fan.kind === "all" ? "all" : authored.fan.ids;
   const jump = useRef<((key: SubjectKey) => void) | null>(null);
-  const esp = sheet?.overview.espValues, direction = sheet?.overview.fan?.directionOverride;
+  const esp = sheet?.overview.espValues, direction = sheet?.overview.fan?.directionMismatch?.evidence;
   return (
     <SheetFrame ctx={ctx} snapshot={snapshot} nameOf={nameOf} jump={jump}>
       {[...(direction ? [`Family direction differs from the network: ${direction}`] : []), ...(esp ? espWarnings(esp) : [])]
