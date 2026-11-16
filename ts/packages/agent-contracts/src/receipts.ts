@@ -1,7 +1,13 @@
 import { z } from "zod";
-import { actionReceiptSchema, nativeProcessSchema } from "./action-receipts.ts";
+import {
+  actionReceiptSchema,
+  nativeProcessSchema,
+  persistedActionReceiptSchema,
+  projectActionReceipt,
+  persistActionReceipt,
+} from "./action-receipts.ts";
 import { identityRefusalCodes, refusalCodes } from "./caller.ts";
-import { documentRefSchema } from "./target.ts";
+import { retainedDocumentRefSchema } from "./receipt-evidence.ts";
 
 const uuid = z.uuid();
 const token = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9._+-]{0,127}$/);
@@ -67,13 +73,13 @@ export const receiptReasonCodeSchema = z.enum([
 export type ReceiptReasonCode = z.infer<typeof receiptReasonCodeSchema>;
 export const receiptEvidenceRefSchema = z.strictObject({
   path: z.string().min(1),
-  target: documentRefSchema.optional(),
+  target: retainedDocumentRefSchema.optional(),
 });
 export const exactSdkReceiptRefSchema = z.strictObject({
   requestId: uuid,
   key: z.string().min(1),
   process: nativeProcessSchema,
-  target: documentRefSchema.optional(),
+  target: retainedDocumentRefSchema.optional(),
 });
 export const nativeVerdictSchema = z.enum([
   "missing",
@@ -234,24 +240,56 @@ export const receiptProducerSchema = z.strictObject({
   }),
 });
 export type ReceiptProducer = z.infer<typeof receiptProducerSchema>;
-export const receiptSchema = z
-  .strictObject({
-    schema: z.literal(1),
-    id: uuid,
-    revision: z.number().int().positive(),
-    at: z.iso.datetime(),
-    // Historical/local-only evidence has no admitted emitter identity. Never backfill it with
-    // the current host's build. Export requires a non-null stamp.
-    stamp: receiptStampSchema.nullable(),
-    join: receiptJoinSchema,
-    body: receiptBodySchema,
-  })
+const receiptEnvelope = z.strictObject({
+  schema: z.literal(1),
+  id: uuid,
+  revision: z.number().int().positive(),
+  at: z.iso.datetime(),
+  // Historical/local-only evidence has no admitted emitter identity. Never backfill it with
+  // the current host's build. Export requires a non-null stamp.
+  stamp: receiptStampSchema.nullable(),
+  join: receiptJoinSchema,
+  body: receiptBodySchema,
+});
+export const receiptSchema = receiptEnvelope
   .refine(
     (r) => r.body.kind !== "native" || r.body.localRef.requestId === r.join.requestId,
     "Native receipt joins must retain the exact SDK request UUID",
   )
   .readonly();
 export type Receipt = z.infer<typeof receiptSchema>;
+const [actionBody, ...otherBodies] = receiptBodySchema.options;
+export const persistedReceiptSchema = receiptEnvelope
+  .extend({
+    body: z.discriminatedUnion("kind", [
+      actionBody.extend({ value: persistedActionReceiptSchema }),
+      ...otherBodies,
+    ]),
+  })
+  .refine(
+    (r) => r.body.kind !== "native" || r.body.localRef.requestId === r.join.requestId,
+    "Native receipt joins must retain the exact SDK request UUID",
+  )
+  .readonly();
+export type PersistedReceipt = z.infer<typeof persistedReceiptSchema>;
+export function projectReceipt(receipt: PersistedReceipt): Receipt {
+  return {
+    ...receipt,
+    body:
+      receipt.body.kind === "action"
+        ? { ...receipt.body, value: projectActionReceipt(receipt.body.value) }
+        : receipt.body,
+  };
+}
+export function persistReceipt(receipt: Receipt): PersistedReceipt {
+  return {
+    ...receipt,
+    body:
+      receipt.body.kind === "action"
+        ? { ...receipt.body, value: persistActionReceipt(receipt.body.value) }
+        : receipt.body,
+  };
+}
 export const receiptQuerySchema = z.strictObject({
   kinds: z.array(z.enum(receiptBodySchema.options.map((s) => s.shape.kind.value))).optional(),
   actionId: uuid.optional(),

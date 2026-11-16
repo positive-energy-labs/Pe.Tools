@@ -37,6 +37,9 @@ import {
   canonicalRouteInput,
   sameCaller,
   actionReceiptSchema,
+  executableActionReceiptSchema,
+  persistActionReceipt,
+  persistReceipt,
   actionStepSchema,
   touchedSchema,
   observedSchema,
@@ -62,6 +65,7 @@ import {
   type Caller,
   type DocumentRef,
   type ActionReceipt,
+  type ExecutableActionReceipt,
   receiptSchema,
   receiptBodySchema,
   receiptJoinSchema,
@@ -188,7 +192,7 @@ const pathInside = (root: string, path: string) => {
     (relative !== ".." && !relative.startsWith("..\\") && !win32.isAbsolute(relative))
   );
 };
-const effectsOverlap = (a: Footprint, b: Footprint) =>
+const effectsOverlap = (a: ActionReceipt["effects"], b: ActionReceipt["effects"]) =>
   a.some((x) =>
     b.some((y) => {
       if (x.kind === "document" && y.kind === "session") return x.ref.session === y.session;
@@ -734,8 +738,12 @@ export class ActionJournal implements ReceiptReader {
   }
   async dispatchRefusal(requestId: string): Promise<DispatchRefusal | null> {
     const action = this.stepAction.get(requestId);
-    const row = action ? this.rows.get(action) : undefined;
-    if (!row) return null;
+    const retained = action ? this.rows.get(action) : undefined;
+    if (!retained) return null;
+    const executable = executableActionReceiptSchema.safeParse(retained);
+    if (!executable.success)
+      return {kind:"refused",message:"Original execution identity is unavailable"};
+    const row = executable.data;
     const inputRefusal = this.inputContext?.check({ kind: "command", key: row.key });
     if (inputRefusal) return { kind: "refused", message: inputRefusal.message };
     if (row.cancellationRequested)
@@ -949,7 +957,10 @@ export class ActionJournal implements ReceiptReader {
       });
     return visible;
   }
-  private workReads(admission: ActionAdmission) {
+  private workReads(row: Pick<ActionReceipt, "id" | "key" | "target" | "input">) {
+    const admission = actionAdmissionSchema.parse({
+      id: row.id, key: row.key, target: row.target, input: row.input,
+    });
     const owner = this.environment?.work;
     // Standalone inspection compositions use uncaptured reads. Production supplies workReads.
     return this.environment?.workReads?.(admission) ?? (owner && {
@@ -1053,10 +1064,11 @@ export class ActionJournal implements ReceiptReader {
 
   /** One predicate at every async boundary; domain executors declare only the facts it reads. */
   private async gate(
-    row: ActionReceipt,
+    retained: ActionReceipt,
     moment: "admit" | "authorize" | "turn" | "prepared" | "step" | "dispatch",
     postcondition = false,
   ): Promise<void> {
+    const row = executableActionReceiptSchema.parse(retained);
     const inputRefusal = this.inputContext?.check({ kind: "command", key: row.key });
     if (inputRefusal) throw inputRefusal;
     if (row.cancellationRequested)
@@ -1183,7 +1195,13 @@ export class ActionJournal implements ReceiptReader {
   /** Identity, binding, reservations and execution have one owner and one durable row. */
   async resume(id: string, crossing: Crossing): Promise<ActionReceipt> {
     const row = (await this.readFor(crossing.caller, undefined, id))[0];
-    if (!row || !this.environment) throw Error("Original command or its executor is unavailable");
+    if (!row) throw Error("Original command is unavailable");
+    if (row.target.kind === "unavailable-original") {
+      if (row.state === "unknown") return this.recover(id);
+      if (row.state !== "incomplete" && row.state !== "running") return row;
+      throw refused("Original execution identity is unavailable", "target.original-unavailable");
+    }
+    if (!this.environment) throw Error("Original executor is unavailable");
     if (row.state === "unknown") return this.recover(id);
     return this.invoke(
       { id: row.id, key: row.key, target: row.target, input: row.input },
@@ -1193,20 +1211,33 @@ export class ActionJournal implements ReceiptReader {
   }
 
   async invoke(
-    raw: ActionAdmission,
+    raw: unknown,
     crossing: Crossing,
     resume = false,
     retirementOnly = false,
   ): Promise<ActionReceipt> {
-    const inputRefusal = this.inputContext?.check({ kind: "command", key: raw.key });
+    const request = z.object({ id: z.string().min(1), key: z.string().min(1) }).parse(raw);
+    const inputRefusal = this.inputContext?.check({ kind: "command", key: request.key });
     if (inputRefusal) throw inputRefusal;
+    await this.loadOnce();
+    const retained = this.rows.get(request.id);
+    if (retained?.target.kind === "unavailable-original") {
+      if (!sameCaller(retained.caller, crossing.caller))
+        throw refused("Original command belongs to another caller", "context.foreign-caller");
+      const original = persistActionReceipt(retained);
+      const identity = { id: original.id, key: original.key, target: original.target, input: original.input };
+      if (canonicalRouteInput(identity) !== canonicalRouteInput(raw))
+        throw refused("Request conflicts with its original retained intent", "id-conflict");
+      if (resume)
+        throw refused("Original execution identity is unavailable", "target.original-unavailable");
+      return structuredClone(retained);
+    }
     const attempts = this.owners?.attempts;
     if (!attempts) throw Error("This journal has no attempt owner; it admits nothing");
     const admission = actionAdmissionSchema.parse(structuredClone(raw));
     const portable = commands[admission.key as keyof typeof commands];
     if (portable)
       admission.input = portable.input.parse(admission.input) as Record<string, unknown>;
-    await this.loadOnce();
     const prior = this.rows.get(admission.id);
     // A retry predating the discard may already have run. Missing or malformed first-send times
     // cannot establish that it is new, so they refuse on the safe side; so does a discard time that does not parse (NaN).
@@ -1261,20 +1292,21 @@ export class ActionJournal implements ReceiptReader {
     // Keep only this action's in-memory authority across the HTTP request's retirement.
     // Receipt callers remain portable data; every continuation still checks live trust.
     crossing = { ...crossing, caller: retainActionCaller(crossing.caller) };
-    const context = this.context(admission, crossing, prior?.consumes ?? []);
+    const activePrior = prior ? executableActionReceiptSchema.parse(prior) : undefined;
+    const context = this.context(admission, crossing, activePrior?.consumes ?? []);
     let executor!: CommandExecutor;
     let definition!: Command;
     let binding: CommandBinding | undefined;
-    let row: ActionReceipt = {
+    let row: ExecutableActionReceipt = {
       id: admission.id,
       key: admission.key,
       caller: crossing.caller,
       basis: crossing.basis,
       target: structuredClone(admission.target),
       input: structuredClone(admission.input),
-      consumes: prior?.consumes ?? [],
+      consumes: activePrior?.consumes ?? [],
       claims: prior?.claims ?? [],
-      effects: prior?.effects ?? [],
+      effects: activePrior?.effects ?? [],
       steps: prior?.steps ?? [],
       prepared: prior?.prepared ?? { state: "unprepared" },
       recovery: prior?.recovery ?? [],
@@ -1446,10 +1478,10 @@ export class ActionJournal implements ReceiptReader {
         this.notify();
         return structuredClone(failed);
       }
-      row = actionReceiptSchema.parse({
+      row = executableActionReceiptSchema.parse(actionReceiptSchema.parse({
         ...row,
         state: "running",
-      });
+      }));
       try {
         await this.commit([row]);
       } catch (error) {
@@ -1457,10 +1489,10 @@ export class ActionJournal implements ReceiptReader {
         throw error;
       }
       this.notify();
-      const save = (update: (current: ActionReceipt) => ActionReceipt) =>
+      const save = (update: (current: ExecutableActionReceipt) => ExecutableActionReceipt) =>
         this.serial(async () => {
-          row = this.rows.get(row.id) ?? row;
-          const next = actionReceiptSchema.parse(update(row));
+          row = executableActionReceiptSchema.parse(this.rows.get(row.id) ?? row);
+          const next = executableActionReceiptSchema.parse(actionReceiptSchema.parse(update(row)));
           await this.commit([next]);
           this.notify();
           row = next;
@@ -1722,7 +1754,7 @@ export class ActionJournal implements ReceiptReader {
                   await journal.export(row.id, `steps/${step.id}.json`, step).catch((error) => {
                     throw refused(`Step input export failed: ${String(error)}`, "step.export");
                   });
-                  row = journal.rows.get(row.id) ?? row;
+                  row = executableActionReceiptSchema.parse(journal.rows.get(row.id) ?? row);
                   const postcondition =
                     kind === "publication" &&
                     key === "work.retire" &&
@@ -2072,11 +2104,14 @@ export class ActionJournal implements ReceiptReader {
     if (
       (recovered.state === "unknown" || recovered.state === "incomplete") &&
       recovered.steps.length > 0 &&
+      recovered.target.kind !== "unavailable-original" &&
       recovered.steps.every((step) => step.state === "succeeded")
     ) {
+      const executable = executableActionReceiptSchema.safeParse(recovered);
+      if (!executable.success) return recovered;
       await this.invoke(
         { id: recovered.id, key: recovered.key, target: recovered.target, input: recovered.input },
-        { caller: recovered.caller, basis: recovered.basis },
+        { caller: recovered.caller, basis: executable.data.basis },
         true,
         true,
       );
@@ -2273,7 +2308,7 @@ export class ActionJournal implements ReceiptReader {
     receipts.push(...facts);
     const lines = [
       ...this.fresh.map((key) => ({ mapping: [key, this.mappings.get(key)] })),
-      ...receipts.map((receipt) => ({ receipt })),
+      ...receipts.map((receipt) => ({ receipt:persistReceipt(receipt) })),
     ];
     if (lines.length) {
       if (!this.header) await mkdir(dirname(this.path), { recursive: true });
@@ -2330,7 +2365,7 @@ export class ActionJournal implements ReceiptReader {
       if (!named.has(id) && !this.minted.has(key)) this.mappings.delete(key);
     const lines = [
       ...[...this.mappings].map((mapping) => ({ mapping })),
-      ...[...this.receipts.values()].map((receipt) => ({ receipt })),
+      ...[...this.receipts.values()].map((receipt) => ({ receipt:persistReceipt(receipt) })),
     ];
     writeState(
       this.file,

@@ -1,11 +1,83 @@
 import { basisSchema, callerSchema } from "./caller.ts";
 import { z } from "zod";
-import { workKeySchema } from "./route-state.ts";
+import { workKeySchema, workKey, type WorkKey } from "./route-state.ts";
 import { footprintSchema } from "./run-registry.ts";
-import { executionTargetSchema } from "./target.ts";
+import { executionTargetSchema, sameAddress, type ExecutionTarget } from "./target.ts";
 import { consumedSchema, claimSchema, commandRefusalSchema } from "./command.ts";
 import { nativeProcessSchema } from "./native-process.ts";
 export { nativeProcessSchema, type NativeProcess } from "./native-process.ts";
+import {
+  retainedDocumentRefSchema,
+  retainedOriginalTargetSchema,
+  retainedWorkKeySchema,
+  retainedBasisSchema,
+  retainedConsumedSchema,
+  retainedRefusalSchema,
+  retainedFootprintSchema,
+  type RetainedOriginalTarget,
+  type RetainedWorkKey,
+} from "./receipt-evidence.ts";
+export {
+  retainedDocumentRefSchema,
+  type RetainedDocumentRef,
+  retainedOriginalTargetSchema,
+  type RetainedOriginalTarget,
+  retainedWorkKeySchema,
+  type RetainedWorkKey,
+} from "./receipt-evidence.ts";
+
+/** Observation only: an original whose public execution identity cannot be established. */
+export const unavailableOriginalTargetSchema = z.strictObject({
+  kind: z.literal("unavailable-original"),
+  original: retainedOriginalTargetSchema,
+});
+export const receiptTargetSchema = z.union([
+  executionTargetSchema,
+  unavailableOriginalTargetSchema,
+]);
+export type ReceiptTarget = ExecutionTarget | z.infer<typeof unavailableOriginalTargetSchema>;
+export const receiptDocumentTargetSchema = z.union([
+  executionTargetSchema.options[3],
+  z.strictObject({
+    kind: z.literal("unavailable-original"),
+    original: z.strictObject({
+      kind: z.literal("document"),
+      ref: retainedDocumentRefSchema,
+    }),
+  }),
+]);
+export type ReceiptDocumentTarget = z.infer<typeof receiptDocumentTargetSchema>;
+/** Captures and receipts share one read projection; neither resolves a label. */
+export function projectRetainedDocument(
+  ref: z.infer<typeof retainedDocumentRefSchema>,
+): ReceiptDocumentTarget {
+  const target = { kind: "document" as const, ref };
+  const fresh = executionTargetSchema.options[3].safeParse(target);
+  return fresh.success ? fresh.data : { kind: "unavailable-original", original: target };
+}
+export function projectReceiptTarget(original: RetainedOriginalTarget): ReceiptTarget {
+  if (original.kind === "document") return projectRetainedDocument(original.ref);
+  const fresh = executionTargetSchema.safeParse(original);
+  return fresh.success ? fresh.data : { kind: "unavailable-original", original };
+}
+export const receiptWorkBindingSchema = z.discriminatedUnion("kind", [
+  z.strictObject({ kind: z.literal("work"), key: workKeySchema }),
+  z.strictObject({ kind: z.literal("unavailable-original"), original: retainedWorkKeySchema }),
+]);
+export type ReceiptWorkBinding = z.infer<typeof receiptWorkBindingSchema>;
+export function projectRetainedWork(original: RetainedWorkKey): ReceiptWorkBinding {
+  const fresh = workKeySchema.safeParse(original);
+  return fresh.success
+    ? { kind: "work", key: fresh.data }
+    : { kind: "unavailable-original", original };
+}
+/** Read association only. Address provenance is not identity; original open keys are never reinterpreted. */
+export function sameReceiptWork(original: RetainedWorkKey, current: WorkKey): boolean {
+  if (original.binding === "address" && current.binding === "address")
+    return original.route === current.route && sameAddress(original.target, current.target);
+  const projected = projectRetainedWork(original);
+  return projected.kind === "work" && workKey(projected.key) === workKey(current);
+}
 
 /** One public outcome vocabulary across host receipts, Pea and the shell Timeline. */
 export const invocationOutcomeSchema = z.strictObject({
@@ -136,46 +208,80 @@ const actionAttempt = z.object({
   recovery: z.array(z.strictObject({ stepId: z.string(), at: z.string(), evidence: z.unknown() })),
   startedAt: z.string(),
 });
-const actionReceiptDefinition = z.discriminatedUnion("state", [
-  actionAttempt.extend({ state: z.literal("running") }).strict(),
-  actionAttempt
-    .extend({ state: z.literal("succeeded"), result: z.unknown().refine((v) => v !== undefined) })
-    .strict(),
-  actionAttempt
-    .extend({
-      state: z.literal("failed"),
-      ...executionFailure,
-      notDispatched: z.literal(true).optional(),
-    })
-    .strict(),
-  actionAttempt.extend({ state: z.literal("unknown"), ...executionFailure }).strict(),
-  actionAttempt
-    .extend({
-      state: z.literal("incomplete"),
-      error: z.string(),
-      status: z.number(),
-      result: z.unknown(),
-    })
-    .strict(),
-  actionAttempt
-    .extend({
-      state: z.literal("cancelled"),
-      error: z.string(),
-      status: z.number(),
-      notDispatched: z.literal(true).optional(),
-    })
-    .strict(),
-]);
+function receiptStates<T extends z.ZodRawShape>(actionAttempt: z.ZodObject<T>) {
+  return z.discriminatedUnion("state", [
+    actionAttempt.extend({ state: z.literal("running") }).strict(),
+    actionAttempt
+      .extend({ state: z.literal("succeeded"), result: z.unknown().refine((v) => v !== undefined) })
+      .strict(),
+    actionAttempt
+      .extend({
+        state: z.literal("failed"),
+        ...executionFailure,
+        notDispatched: z.literal(true).optional(),
+      })
+      .strict(),
+    actionAttempt.extend({ state: z.literal("unknown"), ...executionFailure }).strict(),
+    actionAttempt
+      .extend({
+        state: z.literal("incomplete"),
+        error: z.string(),
+        status: z.number(),
+        result: z.unknown(),
+      })
+      .strict(),
+    actionAttempt
+      .extend({
+        state: z.literal("cancelled"),
+        error: z.string(),
+        status: z.number(),
+        notDispatched: z.literal(true).optional(),
+      })
+      .strict(),
+  ]);
+}
+const retainedAttempt = actionAttempt.extend({
+  snapshots: z.array(timelineSnapshotSchema.extend({ address: retainedWorkKeySchema })).optional(),
+  effects: retainedFootprintSchema.default([]),
+  consumes: z.array(retainedConsumedSchema).default([]),
+  refusal: retainedRefusalSchema.optional(),
+  basis: retainedBasisSchema.nullable(),
+  target: retainedOriginalTargetSchema,
+});
+export const executableActionReceiptSchema = receiptStates(actionAttempt);
+export type ExecutableActionReceipt = z.infer<typeof executableActionReceiptSchema>;
+const persistedDefinition = receiptStates(retainedAttempt);
+export type PersistedActionReceipt = z.infer<typeof persistedDefinition>;
+/** Storage owns this decoder. Live identity schema changes cannot discard retained evidence. */
+export const persistedActionReceiptSchema = persistedDefinition;
+const actionReceiptDefinition = receiptStates(
+  retainedAttempt.extend({ target: receiptTargetSchema }),
+);
 export type ActionReceipt = z.infer<typeof actionReceiptDefinition>;
 export const actionReceiptSchema: z.ZodType<ActionReceipt> = actionReceiptDefinition.overwrite(
   (row) => ({ ...row, outcome: invocationOutcome(row) }),
 );
+export function projectActionReceipt(row: PersistedActionReceipt): ActionReceipt {
+  return actionReceiptSchema.parse({
+    ...row,
+    target: projectReceiptTarget(row.target),
+  });
+}
+/** The public unavailable case is a projection. Disk keeps the exact original target. */
+export function persistActionReceipt(row: ActionReceipt): PersistedActionReceipt {
+  return persistedActionReceiptSchema.parse({
+    ...row,
+    target: row.target.kind === "unavailable-original" ? row.target.original : row.target,
+  });
+}
 /** The owner's decoder preserves defaults and derived outcomes that JSON Schema cannot execute. */
 export function actionReceiptListDecoder(): z.ZodType<ActionReceipt[]> {
   return actionReceiptSchema.array();
 }
 
-const statusAttempt = actionAttempt.omit({ steps: true, prepared: true, recovery: true });
+const statusAttempt = retainedAttempt
+  .extend({ target: receiptTargetSchema })
+  .omit({ steps: true, prepared: true, recovery: true });
 const actionStatusDefinition = z.discriminatedUnion("state", [
   statusAttempt.extend({ state: z.literal("running") }),
   statusAttempt.extend({ state: z.literal("succeeded") }),
@@ -234,18 +340,28 @@ export const touchedSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("restored"), views: z.array(viewRefSchema) }),
   z.strictObject({
     kind: z.literal("restoreFailed"),
-    views: z.array(
-      z.strictObject({
-        view: viewRefSchema,
-        left: z.array(z.enum(["crop", "scopeBox", "annotationCrop", "sheetFilter", "phase", "phaseFilter"])),
-      }),
-    ).min(1),
+    views: z
+      .array(
+        z.strictObject({
+          view: viewRefSchema,
+          left: z.array(
+            z.enum(["crop", "scopeBox", "annotationCrop", "sheetFilter", "phase", "phaseFilter"]),
+          ),
+        }),
+      )
+      .min(1),
   }),
   z.strictObject({ kind: z.literal("wrote"), ...changed }),
   z.strictObject({ kind: z.literal("unauthorized"), ...changed }),
   z.strictObject({
     kind: z.literal("unknown"),
-    reason: z.enum(["lost-response", "cancelled-mid-effect", "process-exit", "posted-command", "overlapped"]),
+    reason: z.enum([
+      "lost-response",
+      "cancelled-mid-effect",
+      "process-exit",
+      "posted-command",
+      "overlapped",
+    ]),
   }),
 ]);
 export type Touched = z.infer<typeof touchedSchema>;
@@ -265,7 +381,10 @@ export type Observed = z.infer<typeof observedSchema>;
 export const nativeReceiptResponseSchema = z.union([
   z.strictObject({
     payload: z.unknown().refine((value) => value !== undefined, "Success requires a payload key"),
-    touched: touchedSchema.refine((value) => value.kind !== "unauthorized", "Unauthorized changes cannot succeed"),
+    touched: touchedSchema.refine(
+      (value) => value.kind !== "unauthorized",
+      "Unauthorized changes cannot succeed",
+    ),
     evidence: observedSchema.optional(),
   }),
   z.strictObject({ ...nativeReceiptFailureSchema.shape, touched: touchedSchema }),
