@@ -73,14 +73,14 @@
       "ratedEspInWg": null,
       "inletPortIndex": 1,
       "flowCfm": null,
-      "dischargePortIndex": 2
+      "dischargePortIndex": 2,
+      "directionMismatch": null
     },
     "totals": {
       "supply": {
         "worstPath": null,
         "knownInWg": 0,
         "allowanceInWg": 0.15,
-        "complete": false,
         "telFt": 0,
         "frictionRatePer100": null,
         "assumedInWg": null
@@ -89,7 +89,6 @@
         "worstPath": null,
         "knownInWg": 0,
         "allowanceInWg": 0,
-        "complete": false,
         "telFt": 0,
         "frictionRatePer100": null,
         "assumedInWg": null
@@ -108,7 +107,6 @@
               "connector": 1
             },
             "knownInWg": 0,
-            "complete": false,
             "legCount": 15,
             "blockerIds": [
               "inferred-join:14122436:1"
@@ -175,7 +173,8 @@
             "ref": "test",
             "units": "fpm",
             "version": "fixture",
-            "status": "valid"
+            "status": "valid",
+            "author": null
           },
           "return": {
             "value": 700,
@@ -183,7 +182,8 @@
             "ref": "test",
             "units": "fpm",
             "version": "fixture",
-            "status": "valid"
+            "status": "valid",
+            "author": null
           }
         },
         "terminalDropInWg": {
@@ -192,7 +192,8 @@
           "ref": "test",
           "units": "in-wg",
           "version": "fixture",
-          "status": "valid"
+          "status": "valid",
+          "author": null
         },
         "autoJoinGapIn": {
           "value": 3,
@@ -200,7 +201,8 @@
           "ref": "test",
           "units": "in",
           "version": "fixture",
-          "status": "valid"
+          "status": "valid",
+          "author": null
         },
         "healBoxIn": {
           "value": 36,
@@ -208,7 +210,8 @@
           "ref": "test",
           "units": "in",
           "version": "fixture",
-          "status": "valid"
+          "status": "valid",
+          "author": null
         },
         "splitPolicy": {
           "value": "even",
@@ -216,7 +219,8 @@
           "ref": "test",
           "units": null,
           "version": "fixture",
-          "status": "valid"
+          "status": "valid",
+          "author": null
         },
         "allowanceInWg": {
           "supply": {
@@ -225,7 +229,8 @@
             "ref": "test",
             "units": "in-wg",
             "version": "fixture",
-            "status": "valid"
+            "status": "valid",
+            "author": "human"
           },
           "return": {
             "value": 0,
@@ -233,7 +238,8 @@
             "ref": "test",
             "units": "in-wg",
             "version": "fixture",
-            "status": "valid"
+            "status": "valid",
+            "author": null
           }
         }
       },
@@ -317,7 +323,19 @@
           "kind": "friction",
           "ref": "galvanized"
         },
-        "equivalentFt": 12
+        "equivalentFt": 12,
+        "evidence": {
+          "kind": "drop",
+          "value": {
+            "status": "valid",
+            "value": 0.012,
+            "source": "model",
+            "author": null,
+            "ref": "fixture:duct:14122436:0:1",
+            "version": null,
+            "units": "in-wg"
+          }
+        }
       }
     ]
   }
