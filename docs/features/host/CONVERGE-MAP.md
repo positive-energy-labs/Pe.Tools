@@ -151,13 +151,25 @@ Root foundation holds override compile cleanup. These gates must pass on their o
 
 | Role | Charter | Stops when |
 |---|---|---|
-| Implementor | One per wave. Owns one slice or one family. Lands it on its branch with its falsifier green and its deletions done. | Slice falsifier green and deletions landed |
+| Implementor partner | Manages wave writers, backlog, fix rounds, estimates and handoffs. Never codes, merges or certifies acceptance. Shared-foundation writer `bf54c770` and SDK writer `06b0950b` report operationally to partner `ff575729`. | Wave work and handoffs accounted for |
 | Purger | Trails the implementor on the same paths. Deletes what the conversion made dead; reports responsibilities removed and remaining callers. | Two waves in a row with nothing left to delete |
 | Smeller | Investigates foundation ownership and direct or transitive coupling without a wave-path or resource cap. Files ranked findings to the run `BACKLOG.md` and can redirect foundation work. Repeated defects become guard requests. Does not silently grant runtime proof or resume paused work. | Owner rules on conclusion or blocker; two dry rounds are a checkpoint, not an automatic retirement or foundation budget cap |
 | Reviewer | Non-author review of S1, S4 and S6 before their landing, because they carry admission, dispatch and durable state. | Review stamped |
 | Driver | Runs each slice's native or browser drive on its own controlled session and disposable copy. | Drive stamped |
 
 Staffing: Sol or Terra can run every role from these briefs. Each brief carries its slice row, its exact file set from a fresh census, and its falsifier.
+
+Wave: 0 t3/converge-s4-wave0-shared-foundation fix/fnd01-document-observation
+
+Estimate: t3/converge-s4-wave0-shared-foundation 1.5h 700L +
+
+Estimate: fix/fnd01-document-observation 0.6h 350L +
+
+The shared-foundation declaration is the next coupled basis and settlement checkpoint. The SDK declaration is the precise native save probe. S3 writer `00c342de` has an estimate of 1.0h / 600L+ and a 120min box; its branch awaits assignment and is unknown. Add that branch to the Wave declaration when assigned.
+
+Shared foundation initial estimate was 1.5 writer-hours; full C1-C6 and producer wiring is estimated at 6-10 writer-hours and 1,800-3,000 production lines. Actual labor is unknown. Current PUR correction is 0.4h / 48min / 250 production lines, with a 500 moved lines checkpoint. Admitted basis and settlement has a 180min box and a 1,400 moved lines checkpoint. The SDK probe has a 72min box and a 700 moved lines checkpoint. S2 resolver proposal 0.5-1h / 30-80 lines is not accepted as a complete cutover. These are estimates, not measured labor or caps. The accepted integration branch is `crusade/converge-wave0`.
+
+The next coupled foundation freezes admitted intent, seals and dependencies and adds evidence-bound conditional Work settlement before producer cutovers. Keep Workflow, Activity and SQL. Fresh effect permission is distinct from settlement of an already proven effect: Stop or revocation cannot permit a new effect, but must allow conditional settlement while preserving newer edits. SMELL-01/02 hold adoption of the incomplete contracts by proving consumers only. Inactive integration and independent S2, S3 and SDK work proceed. Non-author falsification precedes lifting the holds. S2 coordinates the public SDK identity and incarnation to private bridge resolver contract with S4. S3 generated artifact authorship proceeds in parallel; consumer schema switches follow coordination.
 
 ## Deletion criteria
 
@@ -228,5 +240,7 @@ Judge by responsibilities removed from callers, independent state owners deleted
 - Owner, 2026-11-16: "yes to ur defaults." OD1-OD9 accepted as written. The owner had not yet read the strategy pushbacks; they await a ruling. Commit of this map not yet authorized.
 - Owner, 2026-11-16: pushbacks accepted. Two consumers first is the crusade implementor's wave 0. The smeller is bounded as written, but re-invoked in the long tail after a substantial batch of drive-found fixes. Staffing stays Sol/Terra. Owed lines added to the rooms (B4, B5, B6, B8), family (`" "` type) and host (B9, B10) ledgers on main, uncommitted; the existing pods Owed line on Page logs already covers OD7's same-Pod values.
 - Owner, 2026-11-16, latest verdict: "foundations are the priority. the smeller should get infinite resources and have lots of authority over direction." This overrides the prior bounded smeller ruling above. Interpret infinite resources as no fixed foundation budget or wave-path cap, with authority to redirect root design; 30 minutes is a reporting checkpoint only. Root foundation holds override compile cleanup. Proof, custody and authorized slice boundaries still hold.
+- Owner, 2026-11-16: "This whole crusade is abt fixing smells, and i want them to be that voice in my stead". The smeller challenges the plan and deeper causes throughout consequential work. Neither dry rounds nor absence of a formal charter retire that voice. This supersedes the earlier dry-round retirement interpretation; product policy remains the owner's ruling.
+- Owner, 2026-11-16: "you can replace my installed sdk. im gonna make a new pe.toosl release later today or tomorrow anyways". Reviewed SDK bootstrap and runtime replacement is authorized with deployment, rollback and provenance owned by the integrator. This grants no Pe.Tools release, main movement or push.
 - Owner, 2026-11-16: S0 and this plan are authorized; the old crusade remains paused. Use Terra priority service for mechanical cutovers with scripts and strict ratchets, foundations first. Staffing remains Sol/Terra. S0 changes authorities only; runtime claims remain UNPROVEN.
 - Root correction, 2026-11-16: rebuild S0 directly on main base `5209e50c`, importing only this plan file from `d0b04b4f`. The plan branch's implementation history is excluded. FND-01/02/03 are explicit UNPROVEN foundation gates; no changed owner defaults or claimed runtime fixes. The prior `72d2c84d` branch remains preserved and is not a landing candidate.
