@@ -91,6 +91,14 @@ const requireActivityResult = Effect.fn("test.requireActivityResult")(function* 
     return yield* Effect.die(new Error("Persisted Activity reply missing"));
   return { identity: reply.identity, exit: reply.result.value };
 });
+const expectStorageFailure = <A, E>(exit: Exit.Exit<A, E>, ref: CommandRef) => {
+  expect(Exit.isFailure(exit)).toBe(true);
+  if (Exit.isFailure(exit))
+    expect(Option.getOrThrow(Cause.findErrorOption(exit.cause))).toMatchObject({
+      problem: "storage",
+      ref,
+    });
+};
 
 describe("inert invocation authority", () => {
   const fixture = () => {
@@ -368,6 +376,194 @@ describe.each(["native", "outside"] as const)("PUR-C4-02 %s owner-result preserv
     ),
   );
 });
+
+test("PUR-C4-02 persisted evidence identity rejects execution, tag and semantic request substitution", () =>
+  run(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const dir = directory();
+        const closure = yield* closureAt(dir);
+        const settled = yield* Deferred.make<void>();
+        let finished = 0,
+          invoked = 0;
+        const native = Layer.succeed(NativeCommandOwner, {
+          depart: (row) =>
+            Effect.sync(() => {
+              invoked++;
+              return row.input.includes('"A"')
+                ? {
+                    outcome: "completed" as const,
+                    dispatch: "dispatched" as const,
+                    value: json({ elementId: 42, guid: "00000000-0000-4000-8000-000000000002" }),
+                    evidence: "owner-A",
+                  }
+                : {
+                    outcome: "unknown" as const,
+                    dispatch: "unknown" as const,
+                    value: null,
+                    evidence: "owner-B",
+                  };
+            }),
+        });
+        const freeAdapter: CommandAdapter = {
+          ...adapter,
+          prepare: () => Effect.succeed({ plan: "{}", claims: [], version: "v1" }),
+        };
+        const context = yield* Layer.build(
+          commandFoundationLayer(
+            join(dir, "engine"),
+            { closure, authority, adapters: new Map([["test", freeAdapter]]) },
+            (row) =>
+              Effect.gen(function* () {
+                const program = yield* commandProgram(row);
+                yield* program.native("rooms.draw", { view: "view", loops: [] });
+                return "done";
+              }).pipe(
+                Effect.onExit(() =>
+                  Effect.gen(function* () {
+                    if (++finished === 2) yield* Deferred.succeed(settled, undefined);
+                  }),
+                ),
+                Effect.provide(native),
+              ),
+            "provision",
+          ),
+        );
+        const service = Context.get(context, CommandService);
+        yield* Effect.gen(function* () {
+          const a = yield* service.allocate({ key: "test", input: '{"name":"A"}' }, binding);
+          const b = yield* service.allocate({ key: "test", input: '{"name":"B"}' }, binding);
+          yield* service.submit(a.ref, binding);
+          yield* service.submit(b.ref, binding);
+          yield* Deferred.await(settled);
+          expect((yield* service.read(a.ref, binding)).ownerSteps[0]).toMatchObject({
+            _tag: "Recorded",
+            outcome: { evidence: "owner-A" },
+          });
+          expect((yield* service.read(b.ref, binding)).ownerSteps[0]).toMatchObject({
+            _tag: "Recorded",
+            outcome: { evidence: "owner-B" },
+          });
+          const [stored] = yield* service.sql<{
+            body: string;
+          }>`SELECT body FROM command_authority WHERE id=${a.ref.id}`;
+          const original = JSON.parse(stored.body);
+          const other = yield* service.load(b.ref);
+          for (const patch of [{ execution: other.execution }, { tag: "WrongWorkflow" }]) {
+            yield* Effect.gen(function* () {
+              yield* service.sql`UPDATE command_authority SET body=${json({ ...original, ...patch })} WHERE id=${a.ref.id}`;
+              expectStorageFailure(yield* Effect.exit(service.read(a.ref, binding)), a.ref);
+              expectStorageFailure(
+                yield* Effect.exit(service.activityResult(a.ref, 0, OwnerOutcome)),
+                a.ref,
+              );
+            }).pipe(
+              Effect.ensuring(
+                service.sql`UPDATE command_authority SET body=${stored.body} WHERE id=${a.ref.id}`.pipe(
+                  Effect.orDie,
+                ),
+              ),
+            );
+          }
+          const [step] = yield* service.sql<{
+            request_id: string;
+          }>`SELECT request_id FROM command_steps WHERE command_id=${a.ref.id} AND occurrence=0`;
+          yield* Effect.gen(function* () {
+            yield* service.sql`UPDATE command_steps SET request_id='false-semantic-request' WHERE command_id=${a.ref.id} AND occurrence=0`;
+            expectStorageFailure(yield* Effect.exit(service.read(a.ref, binding)), a.ref);
+            expectStorageFailure(
+              yield* Effect.exit(service.activityResult(a.ref, 0, OwnerOutcome)),
+              a.ref,
+            );
+          }).pipe(
+            Effect.ensuring(
+              service.sql`UPDATE command_steps SET request_id=${step.request_id} WHERE command_id=${a.ref.id} AND occurrence=0`.pipe(
+                Effect.orDie,
+              ),
+            ),
+          );
+          expect((yield* service.read(a.ref, binding)).ownerSteps[0]).toMatchObject({
+            _tag: "Recorded",
+            requestId: step.request_id,
+            outcome: { evidence: "owner-A" },
+          });
+          expect(invoked).toBe(2);
+        }).pipe(Effect.provideContext(context));
+      }),
+    ),
+  ));
+
+test("PUR-EVID-04 a real in-flight Activity stays pending under Stop and revoked effect permission", () =>
+  run(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const dir = directory();
+        const closure = yield* closureAt(dir);
+        const entered = yield* Deferred.make<void>(),
+          release = yield* Deferred.make<void>(),
+          settled = yield* Deferred.make<void>();
+        let revoked = false,
+          invoked = 0;
+        const owner = Layer.succeed(OutsideCommandOwner, {
+          invoke: () =>
+            Effect.gen(function* () {
+              invoked++;
+              yield* Deferred.succeed(entered, undefined);
+              yield* Deferred.await(release);
+              return {
+                outcome: "completed" as const,
+                dispatch: "dispatched" as const,
+                value: "done",
+                evidence: "in-flight-owner",
+              };
+            }),
+        });
+        const context = yield* Layer.build(
+          commandFoundationLayer(
+            join(dir, "engine"),
+            {
+              closure,
+              authority: { ...authority, current: () => !revoked },
+              adapters: new Map([["test", adapter]]),
+            },
+            (row) =>
+              Effect.gen(function* () {
+                const program = yield* commandProgram(row);
+                yield* program.outside("shell.open", "{}");
+                return "done";
+              }).pipe(
+                Effect.onExit(() => Deferred.succeed(settled, undefined)),
+                Effect.provide(owner),
+              ),
+            "provision",
+          ),
+        );
+        const service = Context.get(context, CommandService);
+        yield* Effect.gen(function* () {
+          const ticket = yield* service.allocate(intent, binding);
+          yield* service.submit(ticket.ref, binding);
+          yield* Deferred.await(entered);
+          revoked = true;
+          yield* service.stop(ticket.ref, binding);
+          expect((yield* service.read(ticket.ref, binding)).ownerSteps[0]).toMatchObject({
+            _tag: "Unresolved",
+            occurrence: 0,
+            reason: "pending",
+          });
+          expect(
+            Option.isNone((yield* service.activityResult(ticket.ref, 0, OwnerOutcome)).result),
+          ).toBe(true);
+          yield* Deferred.succeed(release, undefined);
+          yield* Deferred.await(settled);
+          expect((yield* service.read(ticket.ref, binding)).ownerSteps[0]).toMatchObject({
+            _tag: "Recorded",
+            outcome: { evidence: "in-flight-owner" },
+          });
+          expect(invoked).toBe(1);
+        }).pipe(Effect.provideContext(context));
+      }),
+    ),
+  ));
 
 test("F03/F04 actual graph atomic acceptance, duplicate joins, claim conflict and inert Stop", () =>
   run(
@@ -875,13 +1071,13 @@ test("F14 completion write failure retains the completed owner prefix and claims
           expect(replies).toHaveLength(1);
           yield* Effect.gen(function* () {
             yield* service.sql`UPDATE cluster_replies SET payload='{bad-json' WHERE request_id=${replies[0].request_id}`;
-            expect(
-              Exit.isFailure(
-                yield* Effect.exit(requireActivityResult(service, allocated.ref, 0, OwnerOutcome)),
-              ),
-            ).toBe(true);
-            expect(Exit.isFailure(yield* Effect.exit(service.read(allocated.ref, binding)))).toBe(
-              true,
+            expectStorageFailure(
+              yield* Effect.exit(requireActivityResult(service, allocated.ref, 0, OwnerOutcome)),
+              allocated.ref,
+            );
+            expectStorageFailure(
+              yield* Effect.exit(service.read(allocated.ref, binding)),
+              allocated.ref,
             );
           }).pipe(
             Effect.ensuring(
@@ -893,14 +1089,14 @@ test("F14 completion write failure retains the completed owner prefix and claims
           yield* service.sql`CREATE TEMP TABLE held_activity_reply AS SELECT * FROM cluster_replies WHERE request_id=${replies[0].request_id}`;
           yield* Effect.gen(function* () {
             yield* service.sql`DELETE FROM cluster_replies WHERE request_id=${replies[0].request_id}`;
-            expect(
-              Exit.isFailure(
-                yield* Effect.exit(requireActivityResult(service, allocated.ref, 0, OwnerOutcome)),
-              ),
-            ).toBe(true);
-            expect((yield* service.read(allocated.ref, binding)).ownerSteps).toEqual([
-              { _tag: "Unresolved", ...persisted.identity, reason: "pending" },
-            ]);
+            expectStorageFailure(
+              yield* Effect.exit(requireActivityResult(service, allocated.ref, 0, OwnerOutcome)),
+              allocated.ref,
+            );
+            expectStorageFailure(
+              yield* Effect.exit(service.read(allocated.ref, binding)),
+              allocated.ref,
+            );
           }).pipe(
             Effect.ensuring(
               service.sql`INSERT INTO cluster_replies SELECT * FROM held_activity_reply`.pipe(

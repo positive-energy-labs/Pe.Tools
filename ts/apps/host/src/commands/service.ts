@@ -113,6 +113,9 @@ export const makeService = (options: FoundationOptions) =>
       const row = yield* decodeDescriptor(raw).pipe(Effect.mapError(() => failure("storage", ref)));
       if (row.id !== ref.id || row.generation !== options.generation)
         return yield* failure("unavailable", ref);
+      // Historical observation validates identity without borrowing fresh effect/Stop permission.
+      if (row.tag !== root._tag || row.execution !== (yield* root.executionId(ref)))
+        return yield* failure("storage", ref);
       const digest = createHash("sha256")
         .update(
           json({
