@@ -5,6 +5,7 @@
  * side by side, keep the same count. Pure over a built Sheet; the picture and the table read the
  * same ids (`run.id`, `section.id`).
  */
+import { whole } from "./encounters.ts";
 import type { Leg, Sheet, SheetPath, Side } from "./types.ts";
 
 /** Velocity above which a leg is "over" (the one thing the picture paints); firm defaults. */
@@ -145,9 +146,10 @@ export function worksheet(sheet: Sheet, limits: WorksheetLimits): Worksheet {
     }
 
     const delivering = paths.filter((p) => delivers(p.end));
-    const complete = (p: SheetPath) =>
-      p.blockerIds.length === 0 && p.legIds.every((id) => leg(id).lossInWg != null && leg(id).flowCfm != null);
-    const certified = delivering.length > 0 && delivering.every(complete);
+    const complete = (p: SheetPath) => whole(p, sheet.legs);
+    // The claim is the one completeness signal (P-031): a calc it calls incomplete certifies no residual and no critical run.
+    const certified =
+      sheet.claim.kind !== "incomplete" && delivering.length > 0 && delivering.every(complete);
     // F1 (2026-11-10): the worst is over complete branches only; a partial sum is no known loss.
     const known = delivering.filter(complete);
     const worst = known.length ? Math.max(...known.map((p) => p.knownInWg)) : null;

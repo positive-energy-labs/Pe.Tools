@@ -2,7 +2,7 @@
  * Where one fan's air meets another's (MAP invariant 5, rulings Q3 and H5), and the claim that
  * follows from it (invariant 1). Pure over a priced sheet: no walk, no pricing, no solver.
  */
-import type { CoverageGap, Encounter, FanClaim } from "@pe/agent-contracts";
+import type { Author, CoverageGap, Encounter, FanClaim } from "@pe/agent-contracts";
 import type { FanPortRef, Leg, SheetPath, Side } from "./types.ts";
 
 type Reached = NonNullable<SheetPath["end"]["reached"]> | "unknown";
@@ -37,6 +37,9 @@ export const ENCOUNTERS: Readonly<Record<`${Side}>${Reached}`, Policy>> = {
 export interface EncounterRuling {
   at: { elementId: number; connector: number };
   verdict: "accepted" | "refused";
+  /** Who staged the ruling and where (P-029): a ruling no known caller stamped never reaches here. */
+  by: Author;
+  ref: string;
 }
 export const ENCOUNTER_KEY = (at: EncounterRuling["at"]) =>
   `encounter:${at.elementId}:${at.connector}`;
@@ -127,6 +130,11 @@ export function hostStatic(
   return gap("host-calc", "calc does not reach the tie-in");
 }
 
+/** The one "priced with flow and no blockers" predicate: the totals, the claim and the worksheet all read it. */
+export const whole = (p: SheetPath, legs: Readonly<Record<string, Leg>>) =>
+  p.blockerIds.length === 0 &&
+  p.legIds.every((id) => legs[id]!.lossInWg != null && legs[id]!.flowCfm != null);
+
 export interface ClaimFacts {
   basis: string;
   paths: readonly SheetPath[];
@@ -163,11 +171,9 @@ export function claimOf(f: ClaimFacts): FanClaim {
     )
       coverage.push({ kind: "host-calc", elementId: e.elementId, ref: "tie-in static unresolved" });
   }
-  const whole = (p: SheetPath) =>
-    p.legIds.every((id) => f.legs[id]!.lossInWg != null && f.legs[id]!.flowCfm != null);
   f.paths.forEach((p) => {
     if (p.blockerIds.length) p.blockerIds.forEach((id) => blocking.add(id));
-    else if (!whole(p))
+    else if (!whole(p, f.legs))
       for (const id of p.legIds)
         if (f.legs[id]!.lossInWg == null || f.legs[id]!.flowCfm == null)
           coverage.push({ kind: "pricing", elementId: f.legs[id]!.elementId, ref: `leg ${id}` });

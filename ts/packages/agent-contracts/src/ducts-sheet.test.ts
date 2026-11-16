@@ -2,6 +2,7 @@ import { expect, it } from "vite-plus/test";
 import { subjectCode, uniqueIdSchema } from "./subject-ref.ts";
 
 import {
+  criteriaMeta,
   ductsCriteriaLayerSchema,
   ductsBaseSchema,
   ductsFirmSchema,
@@ -88,4 +89,17 @@ it("lets a layer or a tier file hold one side of a sided criterion; the engine b
   // Slice 6b: a home tier's file states any subset (the write door saves one value); the base the engine runs on states both sides.
   expect(ductsFirmSchema.safeParse(firm).success).toBe(true);
   expect(ductsBaseSchema.safeParse(firm).success).toBe(false);
+});
+
+it("criteriaMeta keeps who staged each criterion, and a cell with no `by` has no entry (P-032)", () => {
+  expect(
+    criteriaMeta({
+      terminalDropInWg: { edit: { by: "pea", ref: "work:ducts/criteria/x" } },
+      allowanceSupplyInWg: { edit: { by: "human" } },
+      allowanceReturnInWg: { edit: {} },
+    } as never),
+  ).toEqual({
+    terminalDropInWg: { by: "pea", ref: "work:ducts/criteria/x" },
+    allowanceSupplyInWg: { by: "human", ref: "work:ducts/criteria/allowanceSupplyInWg" },
+  });
 });

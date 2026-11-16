@@ -68,8 +68,8 @@ import {
   type Walk,
 } from "./walk.ts";
 import { assumedFanFlows, type AssumedFlow } from "./assumed-flow.ts";
-import { FAN_INPUTS, type DuctsInputs, type Resolved } from "@pe/agent-contracts";
-import { PROPOSED_KEY, sourced, terminalCfmOf } from "./inputs.ts";
+import { FAN_INPUTS, resolveValue, type DuctsInputs, type Resolved } from "@pe/agent-contracts";
+import { observed, PROPOSED_KEY, sourced, terminalCfmOf } from "./inputs.ts";
 import { sectionOf } from "../loss-physics.ts";
 import type {
   CoverageGap,
@@ -85,6 +85,7 @@ import {
   hostStatic,
   type EncounterRuling,
   type HostCalc,
+  whole,
 } from "./encounters.ts";
 import { REVIT_FLOW_SLOT, slotFlowOf } from "../kernel/terminal-flow.ts";
 
@@ -195,6 +196,8 @@ class Pricer {
    * fan's (MUAS-1 listed FC-23's assumed tee 13771256|13771267, 2026-10-29).
    */
   private censusOf = new Map<string, Set<string>>();
+  /** The typed drop a proposed fitting's leg was priced from, kept so its evidence carries the author and ref (P-031). */
+  private typedOn = new Map<string, Resolved<number>>();
   private pricingLeg: string | undefined;
   private onLeg(legId: string, key: string) {
     this.censusOf.set(legId, (this.censusOf.get(legId) ?? new Set()).add(key));
@@ -918,6 +921,7 @@ class Pricer {
       const el = this.g.byId.get(leg.elementId);
       const section =
         el && isSegment(el) ? sectionOf(el.shape, el.diameterIn, el.widthIn, el.heightIn) : null;
+      const typed = this.typedOn.get(leg.id);
       const stated =
         inputs.components[String(leg.elementId)]?.drop ??
         inputs.terminals[String(leg.elementId)]?.drop;
@@ -945,19 +949,12 @@ class Pricer {
                 }
               : {
                   kind: "drop",
-                  value:
-                    src?.kind === "drop" && stated?.value === leg.lossInWg
+                  value: typed
+                    ? sourced(typed)
+                    : src?.kind === "drop" && stated?.value === leg.lossInWg
                       ? sourced(stated)
-                      : // No resolved input states this number: the engine set it (a leg carrying none of this fan's flow, a proposed path).
-                        {
-                          status: "valid",
-                          value: leg.lossInWg,
-                          source: "default",
-                          author: null,
-                          ref: leg.lossSource.ref || "engine",
-                          version: null,
-                          units: "in-wg",
-                        },
+                      : // No resolved input states this number: the engine set it (a leg carrying none of this fan's flow, an untyped proposed path).
+                        resolveValue({ default: observed("default", leg.lossSource.ref || "engine", leg.lossInWg) }, "in-wg"),
                 };
     }
   }
@@ -1141,6 +1138,7 @@ class Pricer {
       this.priced.set(leg.id, { p, blockerIds });
     const typed = this.input.inputs.fittingDrops[key];
     if (typed) {
+      this.typedOn.set(leg.id, typed);
       leg.lossInWg = typed.value;
       leg.lossSource = { kind: "drop", ref: `typed ${key}` };
       census({ lossInWg: typed.value, typed: typed.value });
@@ -1340,6 +1338,7 @@ class Pricer {
       const cfm = flows.leg.get(legKey(chain[k - 1]!, kid.via))?.cfm ?? null;
       const typed = this.input.inputs.fittingDrops[key];
       const loss = typed ? typed.value : cfm == null ? null : 0;
+      if (typed) this.typedOn.set(id, typed);
       this.legs[id] = {
         id,
         elementId: kid.el.id,
@@ -1449,15 +1448,7 @@ function proposedTransition(side: Side, source: Port, landing: Port, gapIn: numb
 }
 
 function totals(pricer: Pricer, paths: SheetPath[], allowanceInWg: number): SideTotals {
-  const complete =
-    paths.length > 0 &&
-    paths.every(
-      (p) =>
-        p.blockerIds.length === 0 &&
-        p.legIds.every(
-          (id) => pricer.legs[id]!.lossInWg != null && pricer.legs[id]!.flowCfm != null,
-        ),
-    );
+  const complete = paths.length > 0 && paths.every((p) => whole(p, pricer.legs));
   const worst = paths[0];
   const legs = worst ? worst.legIds.map((id) => pricer.legs[id]!) : [];
   const telFt = round(legs.reduce((a, l) => a + (l.equivalentFt ?? 0), 0));
@@ -1860,15 +1851,7 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
             resolved?.value != null
               ? resolved
               : revit != null
-                ? {
-                    value: revit,
-                    source: "model",
-                    author: null,
-                    ref: "connector Flow",
-                    units: "cfm",
-                    version: null,
-                    status: "valid",
-                  }
+                ? resolveValue({ model: observed("model", `${id}/connector Flow`, revit) }, "cfm")
                 : null;
           if (own == null || drawn.some((d) => d.cfm == null) || stated?.value == null) return [];
           const sum = round(own + drawn.reduce((a, d) => a + d.cfm!, 0));
@@ -1919,6 +1902,10 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
           : "absent"));
   const met = encountersOf(input.fan, paths, pricer.legs, input.encounterRulings);
   const coverage: CoverageGap[] = [
+    // P-028: a snapshot carrying neither a walk nor a reach never read its coverage. Absent evidence is a gap, never a pass.
+    ...(!input.snapshot.walk && !input.snapshot.reach
+      ? [{ kind: "native-peer", elementId: null, ref: "coverage unread: the snapshot carries no walk and no reach" } as const]
+      : []),
     // Only a peer unread on an element this fan walked can hide part of this fan's network.
     ...(input.snapshot.walk?.unreadPeers ?? []).filter((p) => walked.has(p.elementId)).map(
       (p): CoverageGap => ({
@@ -2165,6 +2152,7 @@ export function buildChain(input: BuildChainInput): Chain {
     );
     path = pricer.paths(w, flows, input.direction, [w.ends[at]!])[0]!;
   }
+  pricer.evidence();
   const legs: Record<string, Leg> = {};
   for (const id of path?.legIds ?? []) legs[id] = pricer.legs[id]!;
   return {

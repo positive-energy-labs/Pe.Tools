@@ -102,13 +102,14 @@ it("unknown inflow creates a missing leg and cannot certify worksheet totals", (
         blockerIds: [],
       },
     ],
+    claim: { kind: "complete" },
   } as unknown as Sheet;
   const w = worksheet(sheet, { maxFpm: { supply: 900, return: 700 } }).supply;
   expect(w.runs[0]).toMatchObject({ complete: false, critical: false, residualInWg: null });
   expect(w.sections[0]).toMatchObject({ complete: false, unpricedLegs: 1 });
 });
 
-it("Q2: rated ESP reads the model alone and ignores staged ESP; staged is its own value with its author", () => {
+it("Q2: rated ESP is a stated value only, never the parameter Pe writes; staged required is its own value with its author", () => {
   const key = "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000002";
   const fan = {
     nodes: [
@@ -125,7 +126,25 @@ it("Q2: rated ESP reads the model alone and ignores staged ESP; staged is its ow
     segments: [],
   } as unknown as SheetSnapshot;
   const layers = { snapshot: fan, firm: TEST_FIRM, work: { esp: { [key]: cell(0.9, "human", "work:fans/esp/2") } } };
-  expect(resolveInputs(layers).units["2"]!.esp).toMatchObject({ value: 0.5, source: "model" });
+  // P-030: the `externalStatic` fact is what a Pe write of required ESP leaves in `fanStatic`. Rated stays
+  // unknown over it, and a stated rated value is the stated one, never the written 0.5.
+  expect(resolveInputs(layers).units["2"]!.esp).toMatchObject({ status: "missing", value: null, source: "none" });
+  const rated = (ratedEsp: unknown) =>
+    resolveInputs({ ...layers, work: { ...layers.work, ratedEsp: { [key]: ratedEsp as never } } }).units["2"]!.esp;
+  expect(rated(cell(0.75, "human", "work:fans/ratedEsp/2"))).toMatchObject({
+    status: "valid",
+    value: 0.75,
+    source: "Work",
+    author: "human",
+  });
+  // P-032: a Work cell with no `by` resolves invalid through the engine's inputs, never as a person's.
+  expect(rated({ value: 0.75, ref: "work:test" })).toMatchObject({ status: "invalid", value: null, author: null });
+  // P-029: a ruling no known caller stamped is invalid and rules nothing.
+  expect(
+    encounterRulings({
+      work: { assumptions: { "encounter:20:2": { value: { kind: "verdict", verdict: "accept" }, ref: "work:test" } as never } },
+    }),
+  ).toEqual([]);
   expect(stagedEsp(layers)["2"]).toMatchObject({ status: "valid", value: 0.9, source: "Work", author: "human", ref: "work:fans/esp/2" });
   expect(stagedEsp({ ...layers, run: { esp: { [key]: cell(1.1, "pea") } } })["2"]).toMatchObject({
     value: 1.1,
@@ -135,5 +154,5 @@ it("Q2: rated ESP reads the model alone and ignores staged ESP; staged is its ow
   expect(stagedEsp({ snapshot: fan })).toEqual({});
   expect(
     encounterRulings({ work: { assumptions: { "encounter:20:2": cell({ kind: "verdict", verdict: "accept" }) } } }),
-  ).toEqual([{ at: { elementId: 20, connector: 2 }, verdict: "accepted" }]);
+  ).toEqual([{ at: { elementId: 20, connector: 2 }, verdict: "accepted", by: "human", ref: "work:test" }]);
 });

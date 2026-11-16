@@ -1,3 +1,4 @@
+import type { DuctUnitKind } from "@pe/host-contracts/generated";
 import type { DuctSnapshot } from "./types.ts";
 
 export interface FanPort {
@@ -5,7 +6,7 @@ export interface FanPort {
   portIndex: number;
   tag: string;
   side: "supply" | "return" | "exhaust" | "outdoor";
-  kind: "fan-coil" | "air-handler" | "erv" | "muas" | "dehumidifier" | "other";
+  kind: DuctUnitKind;
   source: "base-equipment" | "ruling" | "heuristic";
   /** Return-side walk starts here; absent means the inlet is missing or ambiguous. */
   inletPortIndex?: number;

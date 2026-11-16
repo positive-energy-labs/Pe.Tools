@@ -1,3 +1,4 @@
+import { mergeCoverage } from "@pe/ducts-domain/system-reads";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
 /** Union two `from` reads of one document by element id (a walked copy wins over a candidate copy), and their health by id. */
@@ -16,7 +17,8 @@ export function mergeSnapshots(a: DuctSnapshot, b: DuctSnapshot): DuctSnapshot {
   };
   return {
     ...a,
-    walk: a.walk ? { ...a.walk, truncated: a.walk.truncated || !!b.walk?.truncated } : b.walk,
+    // The first read's walk stands; both reads' coverage counts (P-012).
+    ...mergeCoverage([b, a]),
     nodes: union(a.nodes as never[], b.nodes as never[]) as DuctSnapshot["nodes"],
     segments: union(a.segments as never[], b.segments as never[]) as DuctSnapshot["segments"],
     // Health is model truth, measured the same way in either read; the first copy of an id stands.

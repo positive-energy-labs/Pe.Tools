@@ -11,6 +11,7 @@ import type {
   Resolved,
 } from "@pe/agent-contracts";
 import type { Author } from "@pe/agent-contracts";
+import { DUCT_UNIT_KINDS } from "@pe/host-contracts/generated";
 import { catalogLinkKey, catalogLoss, type Catalogs } from "../catalog.ts";
 import type { SourcedValue } from "@pe/agent-contracts";
 import { ENCOUNTER_KEY, type EncounterRuling } from "./encounters.ts";
@@ -37,6 +38,8 @@ export interface WorkLayer {
   componentDrops?: Cells<number>;
   /** Staged required ESP (Q2): never rated, never pressure authority. */
   esp?: Cells<number>;
+  /** A fan's stated rated ESP (Q2): the only place a rated value comes from. */
+  ratedEsp?: Cells<number>;
   equipmentFlows?: Cells<number>;
   roles?: Cells<"fan" | "passive">;
   kinds?: Cells<DuctUnitKind>;
@@ -71,7 +74,7 @@ const authored = <T>(
   ref: layer?.criteriaMeta?.[cell]?.ref ?? `work:ducts/criteria/${cell}`,
 });
 /** Every model, store, project, firm and default layer cell: no author, and a ref of its tier and location. */
-const observed = <T>(
+export const observed = <T>(
   tier: string,
   at: string | number,
   value: T | null | undefined,
@@ -365,14 +368,8 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
         },
         "cfm",
       );
-      // Q2 (kaitpw 2026-11-16): rated ESP reads the model alone. A staged required ESP is another
-      // value with another source (`stagedEsp`) and never demotes or replaces this one.
-      const esp = pick(
-        {
-          model: observed("model", `${id}/${slots.fanStatic ?? "fanStatic"}`, positive(factOf(n, "externalStatic"))),
-        },
-        "in-wg",
-      );
+      // Q2 (P-030): rated ESP is only ever a stated value (a run or Work `ratedEsp` cell) and never the `fanStatic` parameter, because Pe writes required ESP into that parameter.
+      const esp = pick({ run: staged(run.ratedEsp?.[key]), Work: staged(work.ratedEsp?.[key]) }, "in-wg");
       units[id] = { kind, role, cfm, esp };
       if (work.componentDrops?.[key] || run.componentDrops?.[key])
         components[id] = {
@@ -543,26 +540,21 @@ export function stagedEsp(
 
 /** A person's encounter verdicts: `encounter:<element>:<connector>` assumption cells, `accept` or `refuse`. */
 export function encounterRulings(layers: Pick<InputLayers, "run" | "work">): EncounterRuling[] {
-  const cells = { ...layers.work?.assumptions, ...layers.run?.assumptions };
-  return Object.entries(cells).flatMap(([key, cell]): EncounterRuling[] => {
+  const [run, work] = [layers.run?.assumptions, layers.work?.assumptions];
+  const verdict = (v: { verdict?: string }): EncounterRuling["verdict"] | null =>
+    v.verdict === "accept" ? "accepted" : v.verdict === "refuse" ? "refused" : null;
+  return Object.keys({ ...work, ...run }).flatMap((key): EncounterRuling[] => {
     const [elementId, connector] = key.startsWith("encounter:") ? key.slice(10).split(":").map(Number) : [];
-    const verdict = cell.value.verdict === "accept" ? "accepted" : cell.value.verdict === "refuse" ? "refused" : null;
     const at = { elementId: elementId!, connector: connector! };
-    return verdict && Number.isInteger(elementId) && Number.isInteger(connector) && ENCOUNTER_KEY(at) === key
-      ? [{ at, verdict }]
-      : [];
+    if (!Number.isInteger(elementId) || !Number.isInteger(connector) || ENCOUNTER_KEY(at) !== key) return [];
+    // P-029: a ruling is a staged value like any other, so one no known caller stamped is invalid and rules nothing.
+    const r = resolveValue({ run: staged(run?.[key], verdict), Work: staged(work?.[key], verdict) });
+    return r.status === "valid" && r.author && r.ref ? [{ at, verdict: r.value, by: r.author, ref: r.ref }] : [];
   });
 }
 
-const KINDS: readonly string[] = [
-  "fan-coil",
-  "air-handler",
-  "erv",
-  "muas",
-  "dehumidifier",
-  "other",
-];
-const isKind = (v: string | undefined): v is DuctUnitKind => v != null && KINDS.includes(v);
+const isKind = (v: string | undefined): v is DuctUnitKind =>
+  v != null && (DUCT_UNIT_KINDS as readonly string[]).includes(v);
 const isRole = (v: string | undefined): v is "fan" | "passive" => v === "fan" || v === "passive";
 
 /** The resolved cfm of a terminal, for the engine's flow and for assumed fan flows. */

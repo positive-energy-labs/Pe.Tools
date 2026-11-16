@@ -16,7 +16,7 @@ import {
 } from "../test-snapshot.ts";
 import { buildSheet, resolveInputs, type SheetSnapshot } from "./index.ts";
 import { grids } from "./tables.fixture.ts";
-import { inputsFor, TEST_FIRM , cell } from "./test-inputs.ts";
+import { inputsFor, TEST_FIRM, TEST_WALK, cell } from "./test-inputs.ts";
 
 // The size string is the bare diameter here, not the shared `round`'s `8"ø`.
 const round = (d: number) => ({ shape: "round" as const, size: `${d}`, diameterIn: d });
@@ -67,6 +67,7 @@ const network: SheetSnapshot = {
     duct(5, [4, 1], [6, 0]),
     duct(9, [100, 1], [10, 0]),
   ],
+  walk: TEST_WALK,
   document: {
     title: "elbows",
     readAt: "2026-10-29",
