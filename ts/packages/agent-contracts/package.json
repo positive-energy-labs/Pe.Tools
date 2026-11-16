@@ -8,6 +8,7 @@
   ],
   "type": "module",
   "exports": {
+    "./command-authority": "./src/command-authority.ts",
     ".": {
       "types": "./src/index.ts",
       "import": "./src/index.ts"

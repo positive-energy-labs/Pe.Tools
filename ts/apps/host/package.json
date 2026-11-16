@@ -23,6 +23,7 @@
     "@agentclientprotocol/codex-acp": "catalog:",
     "@agentclientprotocol/sdk": "catalog:",
     "@effect/platform-node": "4.0.2",
+    "@effect/sql-sqlite-node": "catalog:",
     "@pe/agent-contracts": "workspace:*",
     "@pe/browser": "workspace:*",
     "@pe/ducts-domain": "workspace:*",

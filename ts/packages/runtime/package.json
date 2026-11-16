@@ -25,6 +25,7 @@
       "browser": "./src/invocation-context.browser.ts",
       "default": "./src/invocation-context.ts"
     },
+    "./command-invocation": "./src/command-invocation.ts",
     "./route-scope-gate": "./src/route-scope-gate.ts",
     "./work-journal": "./src/work-journal.ts",
     "./resource-stream": "./src/resource-stream.ts",
@@ -43,6 +44,7 @@
   "dependencies": {
     "@pe/agent-contracts": "workspace:*",
     "@pe/host-contracts": "workspace:*",
+    "effect": "catalog:",
     "zod": "4.3.6"
   },
   "devDependencies": {
