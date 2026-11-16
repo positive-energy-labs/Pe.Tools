@@ -93,8 +93,16 @@ function effectiveDefault(node: Rep.Representation, references: Rep.References, 
   return node._tag === "Suspend" ? effectiveDefault(node.thunk, references, seen) : undefined;
 }
 
-function augment(node: Rep.Representation, references: Rep.References): Rep.Representation {
-  const recur = (node: Rep.Representation) => augment(node, references);
+function augment(node: Rep.Representation, references: Rep.References, decoderReferences = false): Rep.Representation {
+  const recur = (node: Rep.Representation) => augment(node, references, decoderReferences);
+  // Upstream recursive code assumes Codec<T,T>; decoding defaults change Encoded.
+  // A Reference's emitted Type is its emitter-owned identifier, also the value name.
+  if (decoderReferences && node._tag === "Reference") return {
+    _tag: "Declaration", typeParameters: [node], checks: [],
+    annotations: { toCode: ({ typeParameters: [ref] }: Rep.Generation.DeclarationInput) => ({
+      runtime: `Schema.suspend((): Schema.Decoder<${ref.Type}> => ${ref.Type})`, Type: ref.Type,
+    }) },
+  };
   let result = node;
   switch (node._tag) {
     case "Objects": result = { ...node,
@@ -111,7 +119,13 @@ function augment(node: Rep.Representation, references: Rep.References): Rep.Repr
     }; break;
     case "Arrays": result = { ...node, elements: node.elements.map(e => ({ ...e, type: recur(e.type) })), rest: node.rest.map(recur) }; break;
     case "Union": result = { ...node, types: node.types.map(recur) }; break;
-    case "Suspend": result = { ...node, thunk: recur(node.thunk) }; break;
+    case "Suspend": result = decoderReferences ? {
+      _tag: "Declaration", typeParameters: [recur(node.thunk)], checks: [], annotations: {
+        toCode: ({ typeParameters: [thunk] }: Rep.Generation.DeclarationInput) => ({
+          runtime: `Schema.suspend((): Schema.Decoder<${thunk.Type}> => ${thunk.runtime})`, Type: thunk.Type,
+        }),
+      },
+    } : { ...node, thunk: recur(node.thunk) }; break;
   }
   const format = "annotations" in node ? node.annotations?.format : undefined;
   if (format === "date-time")
@@ -121,7 +135,7 @@ function augment(node: Rep.Representation, references: Rep.References): Rep.Repr
   return result;
 }
 
-export function schemaCode(input: Node): Rep.CodeDocument {
+function compileSchemas(input: Node, includeDefinitions: boolean) {
   const dialect = input.$schema;
   if (dialect !== undefined && dialect !== "http://json-schema.org/draft-04/schema#" &&
     dialect !== "https://json-schema.org/draft/2020-12/schema") throw Error(`Unsupported dialect ${dialect}`);
@@ -130,30 +144,48 @@ export function schemaCode(input: Node): Rep.CodeDocument {
   const document = dialect === "https://json-schema.org/draft/2020-12/schema" || dialect === undefined
     ? JsonSchema.fromSchemaDraft2020_12(normalized)
     : JsonSchema.fromSchemaDraft07(normalized);
-  const schema = Rep.fromJsonSchemaDocument(document, { patterns: "apply" });
-  // Importer visits reachable definitions only. Refuse unsupported source even
-  // when today's root does not reach it, so catalog churn cannot hide drift.
-  for (const key of Object.keys(document.definitions))
-    Rep.fromJsonSchemaDocument({ ...document, schema: { $ref: `#/$defs/${key.replaceAll("~", "~0").replaceAll("/", "~1")}` } }, { patterns: "apply" });
-  const representation = Rep.toRepresentations([schema.ast]);
-  return Rep.toCodeDocument({
+  const keys = Object.keys(document.definitions).sort();
+  // Positions, not emitted identifier names, join source definitions to roots.
+  const roots = Rep.fromJsonSchemaMultiDocument({
+    ...document,
+    schemas: [document.schema, ...keys.map(key => ({ $ref: `#/$defs/${key.replaceAll("~", "~0").replaceAll("/", "~1")}` }))],
+  }, { patterns: "apply" });
+  const representation = Rep.toRepresentations([
+    roots[0].ast, ...(includeDefinitions ? roots.slice(1).map(schema => schema.ast) : []),
+  ]);
+  const project = (decoderReferences: boolean): Rep.MultiDocument => ({
     ...representation,
-    representations: representation.representations.map(node => augment(node, representation.references)) as [Rep.Representation, ...Rep.Representation[]],
-    references: Object.fromEntries(Object.entries(representation.references).map(([key, value]) => [key, augment(value, representation.references)])),
+    representations: representation.representations.map(node => augment(node, representation.references, decoderReferences)) as [Rep.Representation, ...Rep.Representation[]],
+    references: Object.fromEntries(Object.entries(representation.references).map(([key, value]) => [key, augment(value, representation.references, decoderReferences)])),
   });
+  let code = Rep.toCodeDocument(project(false));
+  // Use the upstream recursive partition, not a second dependency graph or name match.
+  if (Object.keys(code.references.recursives).length) code = Rep.toCodeDocument(project(true));
+  return { code, definitionKeys: includeDefinitions ? keys : [] };
 }
 
-export function emitSchema(input: Node, name: string): string {
-  const doc = schemaCode(input);
-  const declarations = doc.references.nonRecursives.map(ref => `const ${ref.$ref} = ${ref.code.runtime};`);
+export function schemaCode(input: Node): Rep.CodeDocument {
+  return compileSchemas(input, false).code;
+}
+
+export function emitSchema(input: Node, name: string, includeDefinitions = false): string {
+  const { code: doc, definitionKeys } = compileSchemas(input, includeDefinitions);
+  const recursive = Object.keys(doc.references.recursives).length > 0;
+  const declarations = doc.references.nonRecursives.map(ref => `${recursive ? `type ${ref.$ref} = ${ref.code.Type};\n` : ""}const ${ref.$ref}${recursive ? `: Schema.Decoder<${ref.$ref}>` : ""} = ${ref.code.runtime};`);
   for (const [name, code] of Object.entries(doc.references.recursives))
-    declarations.push(`type ${name} = ${code.Type};\nconst ${name}: Schema.Codec<${name}> = ${code.runtime};`);
+    declarations.push(`type ${name} = ${code.Type};\nconst ${name}: Schema.Decoder<${name}> = ${code.runtime};`);
   if (doc.artifacts.length) throw Error("Catalog projection does not support imported code artifacts");
-  return `export namespace ${name} {\n${doc.artifacts.map(a => a._tag === "Import" ? a.importDeclaration : "").join("\n")}\n${declarations.join("\n")}\nconst codec = ${doc.codes[0].runtime};\nexport const decoder: Schema.Decoder<typeof codec.Type> = Schema.declareConstructor<typeof codec.Type>()([], () => (input, _ast, options) => SchemaParser.decodeUnknownEffect(codec)(input, { ...options, onExcessProperty: "error" }));\n}\n`;
+  const definitions = includeDefinitions
+    ? `export const definitions = {\n${definitionKeys.map((key, i) => `  [${JSON.stringify(key)}]: strictDecoder(${doc.codes[i + 1].runtime}),`).join("\n")}\n} as const;\n`
+    : "";
+  return `export namespace ${name} {\n${doc.artifacts.map(a => a._tag === "Import" ? a.importDeclaration : "").join("\n")}\n${declarations.join("\n")}\nconst codec = ${doc.codes[0].runtime};\nexport const decoder: Schema.Decoder<typeof codec.Type> = Schema.declareConstructor<typeof codec.Type>()([], () => (input, _ast, options) => SchemaParser.decodeUnknownEffect(codec)(input, { ...options, onExcessProperty: "error" }));\n${definitions}}\n`;
 }
 
 export const nativeEffectPrelude = `// Generated by host-typegen from C# JSON Schema. Do not edit.
 import { Effect, Schema, SchemaParser } from "effect";
+function strictDecoder<S extends Schema.ConstraintDecoder<unknown, never>>(codec: S): Schema.Decoder<S["Type"]> {
+  return Schema.declareConstructor<S["Type"]>()([], () => (input, _ast, options) => SchemaParser.decodeUnknownEffect(codec)(input, { ...options, onExcessProperty: "error" }));
+}
 // RFC3339 calendar and offset validation; Date.parse alone normalizes bad days.
 function validDateTime(value: string): boolean {
   const match = /^(\\d{4})-(\\d{2})-(\\d{2})[tT](\\d{2}):(\\d{2}):(\\d{2})(?:\\.\\d+)?(?:[zZ]|([+-])(\\d{2}):(\\d{2}))$/.exec(value);
@@ -175,12 +207,13 @@ export function generateNativeEffect(operations: readonly Operation[]): string {
       const json = op[`${direction}SchemaJson`];
       if (!json) continue;
       const name = `Op${index}${direction}`;
-      try { chunks.push(emitSchema(JSON.parse(json), name)); }
+      try { chunks.push(emitSchema(JSON.parse(json), name, direction === "response")); }
       catch (cause) { throw Error(`${op.key}/${direction}: ${String(cause)}`, { cause }); }
       fields.push(`${direction}: ${name}.decoder`);
     }
     rows.push(`${JSON.stringify(op.key)}: { ${fields.join(", ")} }`);
   });
   chunks.push(`export const nativeEffectSchemas = {\n${rows.join(",\n")}\n} as const;\n`);
+  chunks.push(`export const nativeEffectResponseDefinitions = {\n${operations.map((op, i) => `  [${JSON.stringify(op.key)}]: Op${i}response.definitions,`).join("\n")}\n} as const;\n`);
   return chunks.join("\n");
 }

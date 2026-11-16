@@ -3,24 +3,85 @@ import { Schema } from "effect";
 import { createJiti } from "jiti";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
+import ts from "typescript";
 import { emitSchema, generateNativeEffect, nativeEffectPrelude, schemaCode } from "../../scripts/native-effect-generator.ts";
 import { hostOpCatalog } from "./host-catalog.generated.ts";
-import { nativeEffectSchemas } from "./native-effect.generated.ts";
+import { nativeEffectSchemas, nativeEffectResponseDefinitions } from "./native-effect.generated.ts";
 import { nativeRecordings, nativeRecordingRequest } from "../../../../apps/host/tests/native-recordings.ts";
 
 const jiti = createJiti(import.meta.url);
-async function generated(input: Record<string, any>) {
+async function generatedModule(input: Record<string, any>, definitions = false) {
   const dir = mkdtempSync(resolve(import.meta.dirname, ".native-effect-test-"));
   const file = resolve(dir, "generated.ts");
-  writeFileSync(file, nativeEffectPrelude + emitSchema(input, "Test"));
-  try { return (await jiti.import<{ Test: { decoder: Schema.Decoder<unknown> } }>(file)).Test.decoder; }
+  writeFileSync(file, nativeEffectPrelude + emitSchema(input, "Test", definitions));
+  try {
+    if (definitions) {
+      const program = ts.createProgram([file], { noEmit: true, strict: true, skipLibCheck: true, types: ["node"], module: ts.ModuleKind.NodeNext, moduleResolution: ts.ModuleResolutionKind.NodeNext, target: ts.ScriptTarget.ESNext });
+      expect(ts.getPreEmitDiagnostics(program).map(d => ts.flattenDiagnosticMessageText(d.messageText, "\n"))).toEqual([]);
+    }
+    return (await jiti.import<{ Test: { decoder: Schema.Decoder<unknown>; definitions: Record<string, Schema.Decoder<unknown>> } }>(file)).Test;
+  }
   finally { rmSync(dir, { recursive: true, force: true }); }
 }
+async function generated(input: Record<string, any>) { return (await generatedModule(input)).decoder; }
 
 describe("C# native Effect projection", () => {
+  it("emits definition roots with recursion, defaults, false and escaped source keys", async () => {
+    const definitions = Object.fromEntries([
+      ["Node", { type: "object", additionalProperties: false, properties: { value: { type: "integer" }, count: { $ref: "#/$defs/Count" }, next: { $ref: "#/$defs/Node" } }, required: ["value"] }],
+      ["Count", { type: "integer", default: 8 }], ["Alias", { $ref: "#/$defs/Count" }], ["Blocked", false],
+      ["A/B~C", { type: "string", enum: ["escaped"] }], ["A-B", { type: "integer", minimum: 10 }],
+      ["A_B", { type: "string", enum: ["distinct"] }], ["__proto__", { type: "boolean" }],
+    ]);
+    const made = await generatedModule({ $schema: "https://json-schema.org/draft/2020-12/schema", type: "object", properties: { node: { $ref: "#/$defs/Node" } }, additionalProperties: false, $defs: definitions }, true);
+    expect(Object.keys(made.definitions)).toEqual(Object.keys(definitions).sort());
+    const decode = (key: string, value: unknown) => Schema.decodeUnknownSync(made.definitions[key])(value);
+    expect(decode("Node", { value: 1, next: { value: 2 } })).toEqual({ value: 1, count: 8, next: { value: 2, count: 8 } });
+    expect(decode("Alias", 8)).toBe(8);
+    expect(() => decode("Blocked", 1)).toThrow();
+    expect(decode("A/B~C", "escaped")).toBe("escaped");
+    expect(decode("A-B", 10)).toBe(10);
+    expect(() => decode("A-B", "distinct")).toThrow();
+    expect(decode("A_B", "distinct")).toBe("distinct");
+    expect(decode("__proto__", true)).toBe(true);
+    expect(Object.hasOwn(made.definitions, "__proto__")).toBe(true);
+    const composed = Schema.Struct({ optional: Schema.optionalKey(made.definitions.Node), rows: Schema.Array(made.definitions.Node) });
+    expect(Schema.decodeUnknownSync(composed)({ rows: [{ value: 3 }] })).toEqual({ rows: [{ value: 3, count: 8 }] });
+    expect(() => Schema.decodeUnknownSync(composed)({ rows: [{ value: 3, extra: true }] }, { onExcessProperty: "ignore" })).toThrow();
+  });
+  it("keeps same-named definition contracts in separate operation documents", async () => {
+    const dir = mkdtempSync(resolve(import.meta.dirname, ".native-effect-test-"));
+    const file = resolve(dir, "operations.ts");
+    const operations = [1, 10].map(minimum => ({ key: `op${minimum}`, requestSchemaJson: JSON.stringify({ $schema: "https://json-schema.org/draft/2020-12/schema", $ref: "#/$defs/Same", $defs: { Same: { type: "integer", maximum: 0 } } }), responseSchemaJson: JSON.stringify({ $schema: "https://json-schema.org/draft/2020-12/schema", $ref: "#/$defs/Same", $defs: { Same: { type: "integer", minimum } } }) }));
+    writeFileSync(file, generateNativeEffect(operations));
+    try {
+      const module = await jiti.import<{ nativeEffectResponseDefinitions: Record<string, Record<string, Schema.Decoder<unknown>>>; nativeEffectSchemas: Record<string, { request: Schema.Decoder<unknown>; response: Schema.Decoder<unknown> }> }>(file);
+      expect(Schema.decodeUnknownSync(module.nativeEffectResponseDefinitions.op1.Same)(5)).toBe(5);
+      expect(() => Schema.decodeUnknownSync(module.nativeEffectResponseDefinitions.op10.Same)(5)).toThrow();
+      expect(Schema.decodeUnknownSync(module.nativeEffectSchemas.op1.request)(-1)).toBe(-1);
+      expect(() => Schema.decodeUnknownSync(module.nativeEffectSchemas.op1.request)(5)).toThrow();
+      expect(() => Schema.decodeUnknownSync(module.nativeEffectSchemas.op1.response)(-1)).toThrow();
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+  it("refuses missing and cyclic definition references with their source", () => {
+    for (const $defs of [{ Broken: { $ref: "#/$defs/Missing" } }, { A: { $ref: "#/$defs/B" }, B: { $ref: "#/$defs/A" } }])
+      expect(() => emitSchema({ $schema: "https://json-schema.org/draft/2020-12/schema", type: "object", properties: { value: { $ref: `#/$defs/${Object.keys($defs)[0]}` } }, $defs }, "Bad", true)).toThrow();
+    expect(() => generateNativeEffect([{ key: "origin", requestSchemaJson: "{}", responseSchemaJson: JSON.stringify({ type: "object", $defs: { Broken: { unsupportedConstraint: true } } }) }])).toThrow(/origin\/response:.*Broken/s);
+  });
   it("covers every catalog direction and regenerates identical bytes", () => {
     expect(Object.keys(nativeEffectSchemas)).toEqual(hostOpCatalog.map(op => op.key));
     expect(generateNativeEffect(hostOpCatalog)).toBe(readFileSync(resolve(import.meta.dirname, "native-effect.generated.ts"), "utf8").replaceAll("\r\n", "\n"));
+    let definitions = 0;
+    for (const operation of hostOpCatalog) {
+      const root = JSON.parse(operation.responseSchemaJson);
+      const keys = Object.keys(root.definitions ?? root.$defs ?? {}).sort();
+      expect(Object.keys(nativeEffectResponseDefinitions[operation.key]), operation.key).toEqual(keys);
+      definitions += keys.length;
+    }
+    expect(definitions).toBe(896);
+    const mark = nativeEffectResponseDefinitions["revit.context.view-image"].RevitViewImageMark;
+    expect(Schema.decodeUnknownSync(mark)({ elementId: 1, left: 0, top: 0, width: 1, height: 1 })).toEqual({ elementId: 1, left: 0, top: 0, width: 1, height: 1 });
+    expect(() => Schema.decodeUnknownSync(mark)({ elementId: 9007199254740992, left: 0, top: 0, width: 1, height: 1 })).toThrow();
   });
   it("rejects unknown keywords and unsupported dialects, including unused definitions", () => {
     for (const input of [
