@@ -77,7 +77,7 @@ Extreme: an overlay opens on the side away from what you look at, its nearest ro
 
 **I6. Bind short words to marks; send explanation to the tutorial.**
 "its an incomprehensible wall of text with not clear relation to anything. and it takes so much space." (2026-10-23, on the eq ft legend). "prose like this should live in tutorial." (2026-10-21). "i want to feel and use the ux" (2026-10-21)
-Explains: legends are keys of mark plus word; the why lives in `route:ducts.guide` and the tutorial.
+Explains: legends are keys of mark plus word; the why lives in [Pea's ducts skill text](../../ts/packages/agent-contracts/src/ducts-sheet.ts).
 Extreme: the working surface carries no sentences. Each word sits next to the mark it names, and the why is one keypress away.
 
 ### Layout and ground
