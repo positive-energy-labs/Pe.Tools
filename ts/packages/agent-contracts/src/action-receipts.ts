@@ -1,8 +1,8 @@
 import { basisSchema, callerSchema } from "./caller.ts";
 import { z } from "zod";
-import { workKeySchema, workKey, type WorkKey } from "./route-state.ts";
+import { workKeySchema } from "./route-state.ts";
 import { footprintSchema } from "./run-registry.ts";
-import { executionTargetSchema, sameAddress, type ExecutionTarget } from "./target.ts";
+import { executionTargetSchema, type ExecutionTarget } from "./target.ts";
 import { consumedSchema, claimSchema, commandRefusalSchema } from "./command.ts";
 import { nativeProcessSchema } from "./native-process.ts";
 export { nativeProcessSchema, type NativeProcess } from "./native-process.ts";
@@ -36,6 +36,7 @@ export const receiptTargetSchema = z.union([
   unavailableOriginalTargetSchema,
 ]);
 export type ReceiptTarget = ExecutionTarget | z.infer<typeof unavailableOriginalTargetSchema>;
+export { sameReceiptWork } from "./receipt-work.ts";
 export const receiptDocumentTargetSchema = z.union([
   executionTargetSchema.options[3],
   z.strictObject({
@@ -71,14 +72,6 @@ export function projectRetainedWork(original: RetainedWorkKey): ReceiptWorkBindi
     ? { kind: "work", key: fresh.data }
     : { kind: "unavailable-original", original };
 }
-/** Read association only. Address provenance is not identity; original open keys are never reinterpreted. */
-export function sameReceiptWork(original: RetainedWorkKey, current: WorkKey): boolean {
-  if (original.binding === "address" && current.binding === "address")
-    return original.route === current.route && sameAddress(original.target, current.target);
-  const projected = projectRetainedWork(original);
-  return projected.kind === "work" && workKey(projected.key) === workKey(current);
-}
-
 /** One public outcome vocabulary across host receipts, Pea and the shell Timeline. */
 export const invocationOutcomeSchema = z.strictObject({
   id: z.string(),
