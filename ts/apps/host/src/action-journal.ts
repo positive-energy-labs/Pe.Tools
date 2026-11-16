@@ -61,7 +61,6 @@ import {
   type WorkPath,
   type ActionStep,
   type Basis,
-  type Footprint,
   type Caller,
   type DocumentRef,
   type ActionReceipt,
