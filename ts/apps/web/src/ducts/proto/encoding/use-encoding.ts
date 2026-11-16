@@ -9,7 +9,7 @@ import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
 import { snapshotById } from "@pe/ducts-domain/readiness";
 
-import { elementNamer } from "../../claims";
+import { elementNamer } from "../../element-names";
 import { encodingFor, type Encoding } from "../../encoding";
 import { indexOf, sceneOf } from "../../scene";
 import { flowDirections } from "./flow";

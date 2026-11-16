@@ -416,7 +416,7 @@ export const ductsAnalysisResponseSchema = z.strictObject({
   /** Every finding counted, never budgeted: what the trimmed list cannot show. */
   findingCounts: z.strictObject({
     byKind: z.record(z.string(), z.number().int()),
-    /** The same counts keyed `kind:grade` for graded joins, `kind` otherwise; what the cases join on. */
+    /** The same counts keyed `kind:grade` for graded joins, `kind` otherwise. */
     byKindAndGrade: z.record(z.string(), z.number().int()),
     byClearer: z.strictObject({
       route: z.number().int(),

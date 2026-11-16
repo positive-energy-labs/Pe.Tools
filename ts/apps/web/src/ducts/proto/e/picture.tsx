@@ -33,7 +33,7 @@ import type { PricedView as Priced } from "@pe/ducts-domain/pricing-view";
 import type { DuctsDrawContext } from "../../route.ts";
 import { network } from "../../route.ts";
 import type { Ruling } from "../../annotations";
-import { elementNamer } from "../../claims";
+import { elementNamer } from "../../element-names";
 import { coloursOf } from "../../colours";
 import { NodeFactsView, SegmentFactsView } from "../../facts";
 import { findingLayers, findingShapes, noRunLayers } from "../../finding-layers";

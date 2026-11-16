@@ -28,7 +28,7 @@ import type { Layer3D } from "#/scene/types";
 import type { NoRunBranch } from "@pe/ducts-domain/no-runs";
 import { issueAt, type StageIssue } from "./inbox-rows";
 
-/** The illustrations' inks (the duct cases page): inferred red, open end orange, cap and heal amber. */
+/** The picture's inks: inferred red, open end orange, cap and heal amber. */
 const INK = {
   inferred: 0xd32f2f,
   overhang: 0xff1744,
