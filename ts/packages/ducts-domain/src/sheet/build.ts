@@ -135,8 +135,11 @@ const basisOf = (snapshot: SheetSnapshot, rest: object) =>
 const round = (n: number) => +n.toFixed(6);
 
 /** A resolved value's provenance as a leg's `lossSource.ref` reads it. */
-const provenance = (v: Resolved<unknown>) =>
-  `${v.source}${v.ref || v.version != null ? `:${v.ref ?? v.version}` : ""}`;
+// A staged value names its tier (and revision); an observed one its tier and the parameter or key its ref ends in.
+const provenance = (v: Resolved<unknown>) => {
+  const what = v.source === "Work" || v.source === "run" ? v.version : (v.version ?? v.ref?.split("/").pop());
+  return `${v.source}${what == null ? "" : `:${what}`}`;
+};
 const positive = (v: number | null | undefined) => (v != null && v > 0 ? v : null);
 
 /**
@@ -1860,6 +1863,7 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
                 ? {
                     value: revit,
                     source: "model",
+                    author: null,
                     ref: "connector Flow",
                     units: "cfm",
                     version: null,
@@ -2012,7 +2016,6 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
       issueOf(
         b,
         g,
-        input.inputs,
         met.map((m) => m.encounter),
         blocking,
       ),
@@ -2042,7 +2045,6 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
 function issueOf(
   b: Blocker,
   g: Graph,
-  inputs: DuctsInputs,
   encounters: readonly Encounter[],
   blocking: ReadonlySet<string>,
 ): FanIssue {
@@ -2058,23 +2060,15 @@ function issueOf(
       ? { kind: "cell", target: { work: row.owner, segment: row.segment, row: b.subject }, offers }
       : { kind: "none", reason: b.closer.note };
   };
-  const firm = inputs.criteria.terminalDropInWg;
   const encounter = encounters.find((e) => backflowId(e) === b.id);
   const closer: FanIssue["closer"] = encounter
     ? { kind: "encounter", encounter }
     : b.closer.candidate
       ? { kind: "heal", pair: b.closer.candidate.pair }
-      : b.kind === "unknown-drop" && kind === "terminal" && firm.source !== "none"
-        ? // The firm's terminal drop is the one default any part has; the caller that takes it stamps the author.
-          cell("terminalDrop", [
-            {
-              value: firm.value,
-              author: "unknown",
-              source: firm.source,
-              ref: firm.ref ?? "criteria.terminalDropInWg",
-              version: firm.version,
-            },
-          ])
+      : b.kind === "unknown-drop" && kind === "terminal"
+        ? // No offer rides here: an offer names its caller, and the engine has none. The firm's terminal
+          // drop a caller may take is `inputs.criteria.terminalDropInWg`, with its own source and ref.
+          cell("terminalDrop")
         : b.kind === "unknown-drop" || b.kind === "not-priced" || b.kind === "implausible-loss"
           ? cell("componentDrop")
           : b.kind === "no-flow" && kind === "terminal"

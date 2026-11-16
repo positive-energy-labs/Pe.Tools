@@ -2,7 +2,7 @@ import { z } from "zod";
 import { decode, uniqueIdSchema, subjectRefCodeSchema } from "./subject-ref.ts";
 import { documentRefSchema } from "./target.ts";
 import { VALUE_SOURCES } from "./work-value.ts";
-import { authorSchema } from "./draft.ts";
+import { authorSchema, type Author } from "./draft.ts";
 import { settingWrittenSchema } from "./tiered-setting.ts";
 import { DUCT_UNIT_KINDS, FAN_BLOCKER_KINDS } from "@pe/host-contracts/generated";
 import { FAN_PARAMETER_KEYS, FAN_CRITERIA_CELLS, fanClaimSchema, fanCloserSchema, legEvidenceSchema, fanParameterCohortSchema, fanEspValuesSchema } from "./fans-inputs.ts";
@@ -31,8 +31,8 @@ const resolved = <T extends z.ZodType>(value: T) =>
   z.strictObject({
     value,
     source: z.enum(DUCT_INPUT_SOURCES),
-    author: authorSchema.nullable().optional(),
-    ref: z.string().optional(),
+    author: authorSchema.nullable(),
+    ref: z.string().nullable(),
     units: z.string().nullable(),
     version: z.union([z.string(), z.number()]).nullable(),
     status: z.enum(["valid", "missing", "invalid"]),
@@ -100,6 +100,15 @@ export function criteriaLayer(cells: Readonly<Partial<Record<DuctsCriteriaCell, 
     else layer[key] = value;
   }
   return layer as DuctsCriteriaLayer;
+}
+/** Who staged each criterion cell and its ref (contract amendment 2): the host-stamped `by`, and the cited ref or the cell's location. A cell with no `by` has no entry, so its criterion resolves invalid. */
+export function criteriaMeta(cells: Readonly<Partial<Record<DuctsCriteriaCell, { readonly edit?: { readonly by?: Author; readonly ref?: string } | null }>>>, work = "ducts") {
+  const meta: Partial<Record<DuctsCriteriaCell, { by: Author; ref: string }>> = {};
+  for (const cell of Object.keys(DUCTS_CRITERIA_CELLS) as DuctsCriteriaCell[]) {
+    const edit = cells[cell]?.edit;
+    if (edit?.by) meta[cell] = { by: edit.by, ref: edit.ref ?? `work:${work}/criteria/${cell}` };
+  }
+  return meta;
 }
 /** The cell a criterion (and side) is staged in. */
 export const criteriaCellOf = (key: string, side?: string) =>

@@ -37,8 +37,8 @@ export function terminalFlows(
     const override = flowsStaged[elementSubject(node)];
     const revit = terminalCfm(node);
     const room = roomFlows?.get(node.id);
-    const flow: TerminalFlow = override
-      ? { cfm: override.cfm, source: "override" }
+    const flow: TerminalFlow = override != null
+      ? { cfm: override, source: "override" }
       : room
         ? { cfm: room.cfm, source: `rooms:${room.source}` }
         : revit != null && revit > 0
@@ -70,8 +70,8 @@ export function equipmentFlows(
       .map((node) => {
         const override = edit[elementSubject(node)];
         const revit = node.facts.find((f) => f.key === "fanFlow")?.value ?? null;
-        const flow: EquipmentFlow = override
-          ? { cfm: override.cfm, source: "override" }
+        const flow: EquipmentFlow = override != null
+          ? { cfm: override, source: "override" }
           : revit != null && revit > 0
             ? { cfm: revit, source: "revit" }
             : { cfm: null, source: null };

@@ -1,10 +1,28 @@
 /** Test-only: build a resolved `DuctsInputs` from the shorthand the sheet tests used to pass the engine directly (typed end cfm and drops by element id, join and end rulings, a unit's own flow), through the real resolver over a test firm. */
 import { elementSubject } from "../work-subject.ts";
-import type { DuctsFirm, DuctsInputs, DuctUnitKind } from "@pe/agent-contracts";
+import { DUCTS_CRITERIA_CELLS, type DuctsCriteriaCell, type DuctsFirm, type DuctsInputs, type DuctUnitKind } from "@pe/agent-contracts";
 import { catalogLinkKey } from "../catalog.ts";
 import type { DuctSnapshot } from "../types.ts";
 import type { SheetSnapshot } from "./build.ts";
-import { END_KEY, FITTING_DROP_CELL, JOIN_KEY, resolveInputs, type WorkLayer } from "./inputs.ts";
+import { END_KEY, FITTING_DROP_CELL, JOIN_KEY, resolveInputs, type WorkCell, type WorkLayer } from "./inputs.ts";
+
+/** Test-only: a staged cell as a person staged it (contract amendment 2). */
+export const cell = <T>(value: T, by: WorkCell<T>["by"] = "human", ref = "work:test"): WorkCell<T> => ({
+  value,
+  by,
+  ref,
+});
+/** Test-only: a person staged every criterion the layer states. */
+export const stamped = (criteria: NonNullable<WorkLayer["criteria"]>): Pick<WorkLayer, "criteria" | "criteriaMeta"> => ({
+  criteria,
+  criteriaMeta: Object.fromEntries(
+    Object.entries(DUCTS_CRITERIA_CELLS).flatMap(([name, { layer: [key, side] }]) => {
+      const at = (criteria as Record<string, unknown>)[key];
+      const value = side ? (at as Record<string, unknown> | undefined)?.[side] : at;
+      return value === undefined ? [] : [[name as DuctsCriteriaCell, { by: "human", ref: "work:test" }] as const];
+    }),
+  ),
+});
 
 export const TEST_SLOTS: DuctSnapshot["slots"] = {
   fanStatic: "",
@@ -60,11 +78,11 @@ export function inputsFor(snapshot: SheetSnapshot, s: InputsShorthand = {}): Duc
     roles: {},
     kinds: {},
     assumptions: {},
-    rules: Object.fromEntries(Object.entries(s.choices ?? {}).map(([k, table]) => [k, { table }])),
+    rules: Object.fromEntries(Object.entries(s.choices ?? {}).map(([k, table]) => [k, cell(table)])),
     ruleAssignments: Object.fromEntries(
-      Object.entries(s.assignments ?? {}).map(([family, rule]) => [family, { rule }]),
+      Object.entries(s.assignments ?? {}).map(([family, rule]) => [family, cell(rule)]),
     ),
-    criteria: {
+    ...stamped({
       ...(s.splitPolicy ? { splitPolicy: s.splitPolicy } : {}),
       ...(s.terminalDropInWg != null ? { terminalDropInWg: s.terminalDropInWg } : {}),
       ...(s.allowanceInWg
@@ -75,37 +93,33 @@ export function inputsFor(snapshot: SheetSnapshot, s: InputsShorthand = {}): Duc
             },
           }
         : {}),
-    },
+    }),
   };
-  const flows = work.flows as Record<string, { cfm: number }>;
-  const equipmentFlows = work.equipmentFlows as Record<string, { cfm: number }>;
-  const terminalDrops = work.terminalDrops as Record<string, { inWg: number }>;
-  const componentDrops = work.componentDrops as Record<string, { inWg: number }>;
-  const assumptions = work.assumptions as Record<
-    string,
-    { kind: string; verdict?: string; inWg?: number }
-  >;
+  type Cells<K extends Exclude<keyof WorkLayer, "criteria" | "criteriaMeta">> = Record<string, NonNullable<WorkLayer[K]>[string]>;
+  const flows = work.flows as Cells<"flows">;
+  const equipmentFlows = work.equipmentFlows as Cells<"equipmentFlows">;
+  const terminalDrops = work.terminalDrops as Cells<"terminalDrops">;
+  const componentDrops = work.componentDrops as Cells<"componentDrops">;
+  const assumptions = work.assumptions as Cells<"assumptions">;
   for (const [key, inWg] of Object.entries(s.fittingDrops ?? {}))
-    assumptions[FITTING_DROP_CELL(key)] = { kind: "component-drop", inWg };
+    assumptions[FITTING_DROP_CELL(key)] = cell({ kind: "component-drop", inWg });
   for (const [id, cfm] of Object.entries(s.endCfm ?? {}))
-    (byId.get(Number(id))?.kind === "equipment" ? equipmentFlows : flows)[elementSubject(byId.get(Number(id))!)] = { cfm };
+    (byId.get(Number(id))?.kind === "equipment" ? equipmentFlows : flows)[elementSubject(byId.get(Number(id))!)] = cell(cfm);
   for (const [id, inWg] of Object.entries(s.drops ?? {}))
-    (byId.get(Number(id))?.kind === "terminal" ? terminalDrops : componentDrops)[elementSubject([...snapshot.nodes, ...snapshot.segments].find(e => e.id === Number(id))!)] = { inWg };
+    (byId.get(Number(id))?.kind === "terminal" ? terminalDrops : componentDrops)[elementSubject([...snapshot.nodes, ...snapshot.segments].find(e => e.id === Number(id))!)] = cell(inWg);
   for (const r of s.rulings ?? [])
-    assumptions[JOIN_KEY(r.pair)] = {
+    assumptions[JOIN_KEY(r.pair)] = cell({
       kind: "verdict",
       verdict: r.verdict === "accept" ? "connect" : "ignore",
-    };
+    });
   for (const r of s.endRulings ?? [])
-    assumptions[END_KEY(r.end)] = { kind: "verdict", verdict: "capped" };
+    assumptions[END_KEY(r.end)] = cell({ kind: "verdict", verdict: "capped" });
   for (const [id, role] of Object.entries(s.roles ?? {}))
-    (work.roles as Record<string, { role: "fan" | "passive" }>)[elementSubject(byId.get(Number(id))!)] = { role };
+    (work.roles as Cells<"roles">)[elementSubject(byId.get(Number(id))!)] = cell(role);
   for (const [id, kind] of Object.entries(s.kinds ?? {})) {
     const n = byId.get(Number(id));
     if (n)
-      (work.kinds as Record<string, { kind: DuctUnitKind }>)[catalogLinkKey(n.family, n.type)] = {
-        kind,
-      };
+      (work.kinds as Cells<"kinds">)[catalogLinkKey(n.family, n.type)] = cell<DuctUnitKind>(kind);
   }
   const snap = s.slot
     ? { ...snapshot, slots: { ...(snapshot.slots ?? {}), terminalFlow: s.slot } }

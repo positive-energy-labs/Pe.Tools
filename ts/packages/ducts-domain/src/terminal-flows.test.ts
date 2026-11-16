@@ -127,7 +127,7 @@ describe("terminalFlows", () => {
   });
 
   it("takes an edit flow over Revit", () => {
-    expect(run({ "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000028": { cfm: 90 } }).flows[40]).toEqual({ cfm: 90, source: "override" });
+    expect(run({ "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000028": 90 }).flows[40]).toEqual({ cfm: 90, source: "override" });
   });
 
   it("takes a rooms flow after an edit one and before Revit", () => {
@@ -137,7 +137,7 @@ describe("terminalFlows", () => {
       [31, { cfm: 222, source: "room 102" }],
       [40, { cfm: 333, source: "room 103" }],
     ]);
-    const { flows } = terminalFlows(s, { "UniqueId:6d52156a-3876-4d76-b641-341454252f26-0000001f": { cfm: 150 } }, rooms);
+    const { flows } = terminalFlows(s, { "UniqueId:6d52156a-3876-4d76-b641-341454252f26-0000001f": 150 }, rooms);
     expect(flows.get(31)).toEqual({ cfm: 150, source: "override" });
     expect(flows.get(30)).toEqual({ cfm: 111, source: "rooms:room 101" });
     expect(flows.get(40)).toEqual({ cfm: 333, source: "rooms:room 103" });

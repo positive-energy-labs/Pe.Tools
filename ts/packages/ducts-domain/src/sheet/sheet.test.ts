@@ -1390,6 +1390,8 @@ it("a missing terminal flow withholds path completeness and required ESP", () =>
   inputs.terminals["6"]!.cfm = {
     value: null,
     source: "none",
+    author: null,
+    ref: null,
     units: "cfm",
     version: null,
     status: "missing",

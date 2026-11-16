@@ -1,6 +1,6 @@
 import { expect, it } from "vite-plus/test";
 import { encounterRulings, resolveInputs, resolveCriteria, stagedEsp } from "./inputs.ts";
-import { TEST_FIRM } from "./test-inputs.ts";
+import { cell, stamped, TEST_FIRM } from "./test-inputs.ts";
 import type { SheetSnapshot } from "./build.ts";
 import { flowsOf } from "./flow.ts";
 import type { Walk } from "./walk.ts";
@@ -14,8 +14,8 @@ it("duct readings expose run, Work, model and firm provenance with units", () =>
   const layers = {
     snapshot,
     firm: TEST_FIRM,
-    run: { flows: { "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000001": { cfm: 0 } } },
-    work: { flows: { "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000001": { cfm: 100 } } },
+    run: { flows: { "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000001": cell(0) } },
+    work: { flows: { "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000001": cell(100) } },
     store: { terminalFlows: { "1": { cfm: 200 } } },
     versions: { Work: 7 },
   };
@@ -31,7 +31,7 @@ it("duct readings expose run, Work, model and firm provenance with units", () =>
   });
   expect(
     resolveInputs({ ...layers, run: undefined, work: undefined }).terminals["1"]!.cfm,
-  ).toMatchObject({ value: 200, source: "model-store", ref: "_PE_DuctLosses" });
+  ).toMatchObject({ value: 200, source: "model-store", ref: "model-store:1/_PE_DuctLosses" });
   expect(resolveInputs({ snapshot, firm: TEST_FIRM }).terminals["1"]!.cfm.status).toBe("missing");
   expect(resolveInputs({ snapshot, firm: TEST_FIRM }).terminals["1"]!.drop).toMatchObject({
     source: "firm",
@@ -39,7 +39,7 @@ it("duct readings expose run, Work, model and firm provenance with units", () =>
     units: "in-wg",
   });
   expect(
-    resolveCriteria({ criteria: { allowanceInWg: { return: 0.2 } } }, null, TEST_FIRM)
+    resolveCriteria(stamped({ allowanceInWg: { return: 0.2 } }), null, TEST_FIRM)
       .allowanceInWg,
   ).toMatchObject({ supply: { source: "firm" }, return: { source: "Work", value: 0.2 } });
 });
@@ -51,13 +51,13 @@ it("a value retired into the model store keeps the authored tier over native and
   } as unknown as SheetSnapshot;
   const drop = (work: object | undefined, store: object | undefined) =>
     resolveInputs({ snapshot: native, firm: TEST_FIRM, work, store }).terminals["1"]!.drop;
-  expect(drop({ terminalDrops: { "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000001": { inWg: 0.2 } } }, undefined)).toMatchObject({ value: 0.2, source: "Work" });
+  expect(drop({ terminalDrops: { "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000001": cell(0.2) } }, undefined)).toMatchObject({ value: 0.2, source: "Work" });
   // The receipt retires the staged cell: Work is cleared and the store holds the same value.
   const retired = drop(undefined, { terminals: { "1": { inWg: 0.2 } } });
-  expect(retired).toMatchObject({ value: 0.2, source: "model-store", ref: "_PE_DuctLosses", units: "in-wg" });
+  expect(retired).toMatchObject({ value: 0.2, source: "model-store", ref: "model-store:1/_PE_DuctLosses", author: null, units: "in-wg" });
   expect(retired.version).toBeNull();
   // A pending Work edit wins over the older stored value.
-  expect(drop({ terminalDrops: { "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000001": { inWg: 0.3 } } }, { terminals: { "1": { inWg: 0.2 } } })).toMatchObject({
+  expect(drop({ terminalDrops: { "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000001": cell(0.3) } }, { terminals: { "1": { inWg: 0.2 } } })).toMatchObject({
     value: 0.3,
     source: "Work",
   });
@@ -124,14 +124,16 @@ it("Q2: rated ESP reads the model alone and ignores staged ESP; staged is its ow
     ],
     segments: [],
   } as unknown as SheetSnapshot;
-  const layers = { snapshot: fan, firm: TEST_FIRM, work: { esp: { [key]: { inWg: 0.9 } } } };
+  const layers = { snapshot: fan, firm: TEST_FIRM, work: { esp: { [key]: cell(0.9, "human", "work:fans/esp/2") } } };
   expect(resolveInputs(layers).units["2"]!.esp).toMatchObject({ value: 0.5, source: "model" });
-  expect(stagedEsp(layers)["2"]).toMatchObject({ status: "valid", value: 0.9, source: "Work", author: "unknown" });
-  expect(
-    stagedEsp({ ...layers, run: { esp: { [key]: { inWg: 1.1, by: "pea" as const } } } })["2"],
-  ).toMatchObject({ value: 1.1, source: "run", author: "pea" });
+  expect(stagedEsp(layers)["2"]).toMatchObject({ status: "valid", value: 0.9, source: "Work", author: "human", ref: "work:fans/esp/2" });
+  expect(stagedEsp({ ...layers, run: { esp: { [key]: cell(1.1, "pea") } } })["2"]).toMatchObject({
+    value: 1.1,
+    source: "run",
+    author: "pea",
+  });
   expect(stagedEsp({ snapshot: fan })).toEqual({});
   expect(
-    encounterRulings({ work: { assumptions: { "encounter:20:2": { kind: "verdict", verdict: "accept" } } } }),
+    encounterRulings({ work: { assumptions: { "encounter:20:2": cell({ kind: "verdict", verdict: "accept" }) } } }),
   ).toEqual([{ at: { elementId: 20, connector: 2 }, verdict: "accepted" }]);
 });
