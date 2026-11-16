@@ -419,12 +419,14 @@ export function stagedDucts(doc: DuctsRouteDocument | null, fans: FansDocument) 
  * resolver, and anything that names an author, reads `stagedDucts`.
  */
 export function stagedValues(doc: DuctsRouteDocument | null, fans: FansDocument) {
-  const cells = stagedDucts(doc, fans);
-  const bare = <V>(segment: Record<string, StagedCell<V>>) => Object.fromEntries(Object.entries(segment).map(([key, cell]) => [key, cell.value])) as Record<string, V>;
-  return { ...cells, calculation: bare(cells.calculation), rules: bare(cells.rules), kinds: bare(cells.kinds), assumptions: bare(cells.assumptions),
-    catalogs: bare(cells.catalogs), ruleAssignments: bare(cells.ruleAssignments), terminalDrops: bare(cells.terminalDrops),
-    componentDrops: bare(cells.componentDrops), esp: bare(cells.esp), equipmentFlows: bare(cells.equipmentFlows), roles: bare(cells.roles),
-    flows: bare(cells.flows), subject: bare(cells.subject) };
+  // Every staged value, stamped or not: the model's stored rulings are laid under Work as cells no
+  // caller wrote (`withStoredRulings`), and this reader prices them without naming anyone.
+  const bare = <V>(cells: Record<string, { edit?: { value?: V } | null } | undefined>) =>
+    Object.fromEntries(Object.entries(cells).flatMap(([key, cell]) => (cell?.edit?.value === undefined ? [] : [[key, cell.edit.value]]))) as Record<string, V>;
+  return { ...stagedDucts(doc, fans), calculation: bare(fans.calculation), rules: bare(doc?.rules ?? {}), kinds: bare(doc?.kinds ?? {}),
+    assumptions: bare(doc?.assumptions ?? {}), catalogs: bare(doc?.catalogs ?? {}), ruleAssignments: bare(doc?.ruleAssignments ?? {}),
+    terminalDrops: bare(fans.terminalDrops), componentDrops: bare(fans.componentDrops), esp: bare(fans.esp),
+    equipmentFlows: bare(fans.equipmentFlows), roles: bare(fans.roles), flows: bare(fans.flows), subject: bare(doc?.subject ?? {}) };
 }
 
 /**
