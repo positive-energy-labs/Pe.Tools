@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { receiptSchema, type Receipt } from "@pe/agent-contracts";
+import { persistedReceiptSchema, projectReceipt, type Receipt } from "@pe/agent-contracts";
 
 /**
  * Decode only the current epoch. Unsupported journals grant no retained or resumed authority.
@@ -20,7 +20,7 @@ export function readJournalSnapshot(bytes: Buffer) {
   const receipts: Receipt[] = [];
   const mappings: [string, string][] = [];
   let torn = false;
-  const parseReceipt = receiptSchema.parse;
+  const parseReceipt = (value:unknown) => projectReceipt(persistedReceiptSchema.parse(value));
   const entry = z.union([
     z.strictObject({ receipt: z.unknown() }),
     z.strictObject({ mapping: z.tuple([z.string(), z.uuid()]) }),

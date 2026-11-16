@@ -1,0 +1,5 @@
+{
+  "extends": "./tsconfig.json",
+  "include": ["src/action-journal.ts", "src/journal-snapshot.ts", "tests/retained-receipt.test.ts"],
+  "compilerOptions": { "incremental": false }
+}
