@@ -29,7 +29,7 @@ A *root* frames the set, a *loop* is a workflow, a *pass* is a one-time ask, a *
 | loop | `protoui` | two dry rounds |
 | loop | `teach` | transfer demonstrated |
 | loop | `tune` | before/after from one instrument, rule landed with its guard, purge done, open rulings listed |
-| slot | `debrief`, `docs`, `execute`, `mine`, `page`, `recon`, `show-me` | - |
+| slot | `debrief`, `docs`, `effect`, `execute`, `mine`, `page`, `recon`, `show-me`, `statechart` **user-only** | - |
 
 Suggest `/relay` when you and the user stay misaligned.
 

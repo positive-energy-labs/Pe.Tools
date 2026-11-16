@@ -34,11 +34,13 @@ Unless a brief or a charter gives you another role, you are the main agent: you 
 | tuned by ear: a constant fixed by hand where a rule should hold | `tune` |
 | the summary: a recording remembered as prose nobody can point at | `debrief` |
 | lost decisions: verdicts in chat, nowhere else | `docs` |
+| v3 by reflex: Effect written from memory, a blog, or existing code instead of the pinned source | `effect` |
 | the wrong reality: a claim proved on a lane that cannot falsify it | `execute` |
 | rumor: a finding without lineage | `mine` |
 | the painting: a page with no state behind it | `page` |
 | rumor about a rival: a claim about their product nobody traced to their bytes | `recon` |
 | the wall of text: a topic explained in prose that a diagram would settle | `show-me` |
+| the unwalked flow: a state machine argued in prose that no checker walked | `statechart` |
 <!-- routing:end -->
 
 `python .agents/skills/check.py --fix` projects this table from each skill's `prevents:`. Do not edit it by hand.
