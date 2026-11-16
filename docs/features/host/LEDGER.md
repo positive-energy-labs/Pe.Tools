@@ -5,6 +5,15 @@ control plane (`/open`, `/machine`, the tray, update, share), and `/settings`. D
 design-system ledger, not restated here.
 
 ## Decided
+
+- 2026-11-16, takeover owner ruling replaces earlier smeller limits.
+
+Owner: "I want them to carry my voice throughout this crusade whose purpose is fixing smells."
+
+Owner: "That voice must influence **what we build next**, including challenging the map and architecture. It does not need a reproduced runtime failure before an architectural objection deserves attention. Evidence and falsifiers sharpen its claims; they must not become a hurdle that protects the existing plan from criticism. they should not be economized, give them infinite resources, they have full delegation authority of their own"
+
+The smeller is a standing architectural partner with full delegation authority and no resource or wave-path cap. Architectural objections influence what gets built next before a runtime falsifier exists. Root and implementor record adoption or substantive disagreement before proceeding through a disputed design. Runtime safety claims still require their proper proof lane. No dry-round count retires the role. Checkpoints communicate findings and residual inquiry, never a cutoff. Product policy remains owner authority.
+
 - 2026-11-16, owner: "I do not want Sol on fast! thats a waste of my limits. terra is cheap enough that it doesn't matter." Sol uses standard service; Terra may use priority. Full Converge standing roles own integration, driving and purge across the run; root owns direction. Initial shared kernel `60f08cc2` is partial and disconnected, not S4 acceptance. No main move or push is authorized. Run rules and receipts live in `.artifacts/runs/converge-20261116-wave0/` of the root checkout.
 - 2026-11-16, repaired S0 starts directly at `5209e50c` with only [the plan file](CONVERGE-MAP.md) imported from `d0b04b4f`; no old implementation ancestry. [ADR 0046](../../adr/0046-effect-identity-belongs-to-the-effect-owner.md) holds definitive unsaved/re-stage claims on FND-01; [ADR 0047](../../adr/0047-workflow-owns-durable-commands.md) holds upgrade identity and discard provenance on FND-02/03. All three behavioral gates are UNPROVEN; OD1/OD8/OD9 and selected owners remain ruled. Evidence: root `.artifacts/runs/converge-20261116-wave0/foundation-smeller.md` and `BACKLOG.md`.
 - 2026-11-16, owner: "foundations are the priority. the smeller should get infinite resources and have lots of authority over direction." This overrides the bounded foundation review: no foundation resource or wave-path cap, authority to redirect root design, and root foundation holds override compile cleanup. Thirty minutes is a checkpoint, not a budget cap. Use Terra priority service for mechanical cutovers with scripts and strict ratchets, foundations first. Sol/Terra only; the old crusade remains paused.
