@@ -127,7 +127,7 @@ export interface StateCell<V = unknown> extends CellAddress {
   readonly value: V | null;
   /** What Revit or the store holds now; shown struck when it disagrees with `value`. */
   readonly model: V | null;
-  readonly pending: { readonly by: "person" | "pea"; readonly value: V; readonly at: string } | null;
+  readonly pending: { readonly by: "human" | "pea"; readonly value: V; readonly at: string } | null;
   readonly drift: boolean;
   readonly freshness: "fresh" | "stale" | "unverified" | "never";
   readonly source: CellSource;
