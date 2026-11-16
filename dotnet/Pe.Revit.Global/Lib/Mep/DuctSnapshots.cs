@@ -50,10 +50,10 @@ public static class DuctSnapshots {
     public static DuctSnapshotData Snapshot(Document doc, DuctParameterSlotOverrides? overrides = null, string? labelParameter = null, DuctSnapshotSelector? selector = null, bool metadataOnly = false) =>
         SnapshotCore(doc, overrides, labelParameter, selector, metadataOnly, Peers);
 
-    internal static DuctSnapshotData SnapshotWithPeers(Document doc, DuctSnapshotSelector selector, Func<Connector, IEnumerable<Connector>> peers) =>
-        SnapshotCore(doc, null, null, selector, false, peers);
+    internal static DuctSnapshotData SnapshotWithPeers(Document doc, DuctSnapshotSelector selector, Func<Connector, IEnumerable<Connector>> peers, Action<MechanicalSystem, string>? beforeSeedRead = null) =>
+        SnapshotCore(doc, null, null, selector, false, peers, beforeSeedRead);
 
-    private static DuctSnapshotData SnapshotCore(Document doc, DuctParameterSlotOverrides? overrides, string? labelParameter, DuctSnapshotSelector? selector, bool metadataOnly, Func<Connector, IEnumerable<Connector>> peers) {
+    private static DuctSnapshotData SnapshotCore(Document doc, DuctParameterSlotOverrides? overrides, string? labelParameter, DuctSnapshotSelector? selector, bool metadataOnly, Func<Connector, IEnumerable<Connector>> peers, Action<MechanicalSystem, string>? beforeSeedRead = null) {
         // The names the person staged win, then the names the last apply recorded in the store, then the defaults.
         var (store, storeError) = DuctApplier.ReadStore(doc);
         var slots = (overrides ?? new DuctParameterSlotOverrides()).Resolve(store?.Slots);
@@ -140,7 +140,7 @@ public static class DuctSnapshots {
         if (selector is { Kind: DuctSelectorKind.Systems }) {
             // The same elements the document read would give these systems' groups, so the analysis below answers them
             // the same; a group no named system touches is never read.
-            var (named, members, completeness) = SystemMembers(doc, selector, peers);
+            var (named, members, completeness) = SystemMembers(doc, selector, peers, beforeSeedRead);
             reach = completeness;
             segments = [];
             foreach (var e in members) Build(reader, e, null, nodes, segments);
@@ -264,7 +264,7 @@ public static class DuctSnapshots {
     ///     terminals and stops at equipment (reached, never expanded): DuctNetwork.Analyze cuts equipment out, so the
     ///     result holds every group the systems touch whole, with its roots, exactly as the document read holds it.
     /// </summary>
-    private static (List<MechanicalSystem> Systems, List<Element> Members, DuctReach Reach) SystemMembers(Document doc, DuctSnapshotSelector selector, Func<Connector, IEnumerable<Connector>> readPeers) {
+    private static (List<MechanicalSystem> Systems, List<Element> Members, DuctReach Reach) SystemMembers(Document doc, DuctSnapshotSelector selector, Func<Connector, IEnumerable<Connector>> readPeers, Action<MechanicalSystem, string>? beforeSeedRead) {
         var ids = selector.SystemIds ?? throw new ArgumentException("selector.systemIds is required for kind systems");
         if (ids.Count == 0) throw new ArgumentException("selector.systemIds names no system.");
         var systems = ids.Distinct().Select(id =>
@@ -282,10 +282,17 @@ public static class DuctSnapshots {
             members[e.Id.Value()] = e;
             if (!equipment) queue.Enqueue(e);
         }
+        void Seed(MechanicalSystem system, string member, Action read) {
+            try { beforeSeedRead?.Invoke(system, member); read(); }
+            catch (Exception ex) when (IsRevitFailure(ex)) {
+                // A seed has no port: connector -1 identifies lost system-level coverage, never an open end.
+                unreadPeers.Add(new DuctRef(system.Id.Value(), -1));
+            }
+        }
         foreach (var m in systems) {
-            foreach (Element e in Try(() => m.DuctNetwork) ?? new ElementSet()) Reach(e);
-            foreach (Element e in Try(() => m.Elements) ?? new ElementSet()) Reach(e);
-            Reach(Try(() => m.BaseEquipment));
+            Seed(m, nameof(m.DuctNetwork), () => { foreach (Element e in m.DuctNetwork ?? new ElementSet()) Reach(e); });
+            Seed(m, nameof(m.Elements), () => { foreach (Element e in m.Elements ?? new ElementSet()) Reach(e); });
+            Seed(m, nameof(m.BaseEquipment), () => Reach(m.BaseEquipment));
         }
         while (queue.Count > 0) {
             var element = queue.Dequeue();

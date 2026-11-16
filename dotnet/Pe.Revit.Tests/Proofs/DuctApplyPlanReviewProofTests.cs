@@ -50,6 +50,15 @@ public sealed class DuctApplyPlanReviewProofTests {
                 Assert.That(damaged.Reach.UnreadPeers, Is.EquivalentTo(expected));
                 Assert.That(damaged.Walk, Is.Null, "systems growth carries its own completeness, not a fabricated from walk");
             });
+            foreach (var seed in new[] { "DuctNetwork", "Elements", "BaseEquipment" }) {
+                var failedSeed = DuctSnapshots.SnapshotWithPeers(doc, selector, _ => [], (_, member) => {
+                    if (member == seed) throw new InvalidOperationException($"forced {seed} read failure");
+                });
+                Assert.Multiple(() => {
+                    Assert.That(failedSeed.Reach!.Complete, Is.False, seed);
+                    Assert.That(failedSeed.Reach.UnreadPeers, Is.EqualTo(new[] { new DuctRef(duct.MEPSystem!.Id.Value(), -1) }), seed);
+                });
+            }
         } finally { doc.Close(false); }
     }
 
