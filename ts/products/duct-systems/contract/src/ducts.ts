@@ -20,7 +20,7 @@
 import { decode, subjectOf, subjectRefCodeSchema } from "@pe/agent-contracts/subject-ref";
 import { z } from "zod";
 import { serveSetting, type SettingTierRead } from "@pe/agent-contracts/tiered-setting";
-import { DUCT_PARAMETER_KEYS, DUCT_UNIT_KINDS, DUCTS_CRITERIA_CELLS, criteriaLayer, criteriaMeta } from "@pe/ducts-contract/duct-inputs";
+import { DUCT_PARAMETER_KEYS, ductParameterNameSchema, DUCT_UNIT_KINDS, DUCTS_CRITERIA_CELLS, criteriaLayer, criteriaMeta } from "@pe/ducts-contract/duct-inputs";
 
 import { draftCellSchema, type Author } from "@pe/agent-contracts/draft";
 import type { FansDocument } from "@pe/fans-contract/fans";
@@ -449,6 +449,6 @@ export const ductsRouteState = {
 /** Snapshot requests keep their native shape; only the declared home tiers choose the names. */
 export const ductParameterSlots = (settings?: readonly SettingTierRead[]): Partial<Record<DuctParameterKey, string>> =>
   Object.fromEntries(DUCT_PARAMETER_KEYS.flatMap(key => {
-    const served = serveSetting(settings, ["project", "firm"], ["parameters", key], z.string().min(1));
+    const served = serveSetting(settings, ["project", "firm"], ["parameters", key], ductParameterNameSchema(key));
     return served.value == null ? [] : [[key, served.value]];
   }));

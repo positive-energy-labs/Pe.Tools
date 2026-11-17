@@ -102,7 +102,7 @@ function Cell({ ctx, cell }: { ctx: Ctx; cell: CalcCell }) {
             format: (v: unknown) => String((v as Record<string, unknown> | null)?.[field] ?? "—"),
             parse: (text: string) => ({ [field]: Number(text) }),
           } : cell.setting ? {
-            parse: (text: string) => text.trim() === "" ? null : cell.numeric ? Number(text) : text,
+            parse: (text: string) => text.trim() === "" ? (schema.safeParse("").success ? "" : null) : cell.numeric ? Number(text) : text,
           } : {})}
           {...(choices ? {
             options: choices,
