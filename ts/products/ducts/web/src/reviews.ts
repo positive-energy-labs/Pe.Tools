@@ -255,9 +255,9 @@ export function presentLosses(result: unknown, scope: ReviewEvidence) {
     });
   });
   return {
-    sentence: response.writes.length
+    sentence: (slots.requiredEsp === "" ? "Required ESP writes nowhere. " : "") + (response.writes.length
       ? `${response.writes.length} Revit target${response.writes.length === 1 ? "" : "s"}: ${outcomeWords(response)}`
-      : "Nothing to write: no native targets were derived from this Work in the selected scope.",
+      : "Nothing to write: no native targets were derived from this Work in the selected scope."),
     rows: lines.map((line) => line.row),
     cells: lines.map((line) => line.cell)
       .sort(

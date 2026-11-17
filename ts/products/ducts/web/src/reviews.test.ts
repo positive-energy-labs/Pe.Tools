@@ -4,6 +4,9 @@ import { presentHeal, presentFan, presentLosses } from "./reviews.ts";
 import { ra23Snapshot, twoHealNetworksSnapshot } from "./heal.fixture.ts";
 import { snapshot } from "@pe/ducts-domain/test-fixture";
 const scope = (ducts = structuredClone(snapshot)) => ({ heal: healPlan(ducts, null), readings: { ducts: { value: ducts } } });
+test("review discloses Required ESP writes nowhere", () => {
+  expect(presentLosses({ writes: [], derivedRequest: { slots: { requiredEsp: "" } } }, scope()).sentence).toContain("Required ESP writes nowhere");
+});
 test("fan review names targets from the Place sheet snapshot even when network scope is empty", () => {
   const review = presentLosses(
     {
