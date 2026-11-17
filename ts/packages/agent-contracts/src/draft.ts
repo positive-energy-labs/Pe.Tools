@@ -58,9 +58,13 @@ const deletableCell = <V extends z.ZodType, E extends z.ZodRawShape>(value: V, e
     .strict().refine(cell => !cell.invalid || cell.edit == null, "invalid cells cannot carry an edit");
 
 /** Caller edit input: attribution belongs only to the stored cell, never to the request. */
-export const draftEditSchema = <V extends z.ZodType, E extends z.ZodRawShape = {}>(
-  value: V, { deletable = false, extend = {} as E }: { deletable?: boolean; extend?: E } = {},
-) => deletable
+export function draftEditSchema<V extends z.ZodType, E extends z.ZodRawShape = {}>(
+  value: V, options?: { deletable?: boolean; extend?: E },
+): ReturnType<typeof callerEdit<V, E>>;
+export function draftEditSchema(
+  value: z.ZodType, { deletable = false, extend = {} }: { deletable?: boolean; extend?: z.ZodRawShape } = {},
+) { return callerEdit(value, { deletable, extend }); }
+const callerEdit = <V extends z.ZodType, E extends z.ZodRawShape>(value: V, { deletable, extend }: { deletable: boolean; extend: E }) => deletable
   ? deletableRung(value).extend(CALLER_META).extend(extend).strict().refine(oneWrite, ONE_WRITE)
   : valueRung(value).extend(CALLER_META).extend(extend).strict().refine(oneWrite, ONE_WRITE);
 

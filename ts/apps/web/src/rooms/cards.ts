@@ -216,13 +216,14 @@ export function inboxCards(doc: FeedbackWork, snapshot: Snapshot, view: string):
   };
   const cards: Card[] = [];
   for (const [id, cell] of Object.entries(doc.marks)) {
-    const mark = cell.edit?.value;
-    if (!mark || mark.anchor.view !== view) continue;
+    const edit = cell.edit;
+    const mark = edit?.value;
+    if (!edit || !mark || mark.anchor.view !== view) continue;
     const polygon = mark.anchor.polygon;
     cards.push({
       id,
       state: markState(cell, snapshot),
-      by: cell.edit!.by,
+      by: edit.by,
       kind: mark.kind,
       polygon,
       guids: concerns(polygon),
