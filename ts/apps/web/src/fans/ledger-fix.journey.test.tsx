@@ -6,6 +6,9 @@ import { afterEach, expect, test, vi } from "vite-plus/test";
 import { elementKey } from "@pe/kit/lang/attention";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
 import { snapshot } from "../ducts/test-fixture";
+import { ductsLink, namesOf } from "../ducts/identity";
+import { fields } from "../ducts/route";
+import { sheetSystems } from "../ducts/sheet/scoped-snapshot";
 import sheetFixture from "../ducts/sheet/sheet.fixture.json";
 import { makeAtomRegistry } from "../shell/owner";
 import { createWitness } from "./cutover.test-support";
@@ -76,4 +79,22 @@ test("a blocker with no UniqueId opens /ducts on its systems, never a raw Elemen
   expect(selected).toEqual([]);
   expect(href.searchParams.get("system")).toBeTruthy();
   expect(href.search).not.toContain("14122436");
+});
+
+test("the 369-system handoff stays short and resolves to the old roster scope", async () => {
+  const recorded = snapshot.systems;
+  snapshot.systems = Array.from({ length: 369 }, (_, id) => ({
+    ...recorded[0]!, id, name: `System ${id} with a long model-specific name`,
+  }));
+  closes.push(() => { snapshot.systems = recorded; });
+  const { href } = await ledgerLink();
+  expect(href.href.length).toBeLessThan(2048);
+  const scope = namesOf(fields.system.schema.parse(JSON.parse(href.searchParams.get("system")!)));
+  expect(scope).toBe("all");
+  // /ducts' network read resolves "all" against its canonical system roster.
+  const resolved = scope === "all" ? snapshot.systems.map(system => system.name) : scope;
+  expect(resolved).toEqual(sheetSystems(snapshot));
+  const named = new URL(ductsLink([snapshot.systems[0]!.name], {}), "http://pe.local");
+  expect(namesOf(fields.system.schema.parse(JSON.parse(named.searchParams.get("system")!))))
+    .toEqual([snapshot.systems[0]!.name]);
 });
