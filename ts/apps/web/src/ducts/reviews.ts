@@ -105,10 +105,10 @@ export function presentHeal(result: unknown, scope: ReviewEvidence) {
 }
 
 /** Who staged the write scope: the ducts Work writeIntent cell's stamped author. */
-function intentAuthor(scope: ReviewEvidence): "pea" | "human" | "unknown" {
+function intentAuthor(scope: ReviewEvidence): "pea" | "human" | null {
   const by = (scope.work as { writeIntent?: { edit?: { by?: string } } } | null | undefined)
     ?.writeIntent?.edit?.by;
-  return by === "pea" || by === "human" ? by : "unknown";
+  return by === "pea" || by === "human" ? by : null;
 }
 
 /** DuctApplier names loss methods by token; a review speaks Revit's words. */
@@ -198,7 +198,7 @@ export function presentLosses(result: unknown, scope: ReviewEvidence) {
     const before = spoken(write.before) ?? null;
     const key = `${write.kind}:${write.id ?? write.key ?? ""}`;
     // The store row is Pe's provenance record in Project Information; its "absent"/"revision n" are machine words.
-    // Store and slot rows have no source cell: their staging author stays unknown, regardless of caller.
+    // Store and slot rows have no source cell: they have no author, regardless of caller.
     if (write.id == null && write.kind === "slot") {
       const label = `Pe loss record (Project Information): ${SLOT_WORDS[write.key ?? ""] ?? write.key} slot`;
       return {
@@ -209,7 +209,7 @@ export function presentLosses(result: unknown, scope: ReviewEvidence) {
           group: "Pe loss record",
           before,
           after: `${spoken(write.after) ?? "none"} · ${tail}`,
-          author: "unknown" as const,
+          author: null,
         },
       };
     }
@@ -223,7 +223,7 @@ export function presentLosses(result: unknown, scope: ReviewEvidence) {
           group: "Pe loss record",
           before: write.before === "absent" ? "none yet" : before,
           after: `${write.before === "absent" ? "created" : "updated"} · ${tail}`,
-          author: "unknown" as const,
+          author: null,
         },
       };
     }
@@ -276,8 +276,8 @@ const FAN_SEGMENT = {
   "terminal-flow": "flows",
   equipment: "esp",
 } as const;
-/** The Work cell's stamped author; "unknown" when Work does not hold that value (derived or Revit's). */
-function fanAuthor(scope: ReviewEvidence, kind: string, id: number): "pea" | "human" | "unknown" {
+/** The Work cell's stamped author; null when Work does not hold that value (derived or Revit's). */
+function fanAuthor(scope: ReviewEvidence, kind: string, id: number): "pea" | "human" | null {
   const segment = FAN_SEGMENT[kind as keyof typeof FAN_SEGMENT];
   const work = scope.readings.fansWork?.value as
     | Readonly<Record<string, Readonly<Record<string, { edit?: { by?: string } }>> | undefined>>
@@ -285,7 +285,7 @@ function fanAuthor(scope: ReviewEvidence, kind: string, id: number): "pea" | "hu
     | undefined;
   const key = fanSubject(scope, id);
   const by = segment && key ? work?.[segment]?.[key]?.edit?.by : undefined;
-  return by === "pea" || by === "human" ? by : "unknown";
+  return by === "pea" || by === "human" ? by : null;
 }
 
 function fanSubject(scope: ReviewEvidence, id: number) {

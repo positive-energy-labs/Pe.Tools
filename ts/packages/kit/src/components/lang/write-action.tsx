@@ -29,7 +29,8 @@ export interface WriteCell {
   label: string;
   before: string | null;
   after: string;
-  author: "pea" | "human" | "unknown";
+  /** Null when no Work cell holds the row: nobody is named, never a guessed human or Pea. */
+  author: "pea" | "human" | null;
 }
 
 export interface WriteHeld {
@@ -43,7 +44,7 @@ export interface WriteHeld {
   rows?: readonly string[];
 }
 
-const AUTHOR = { pea: "Pea", human: "you", unknown: "unknown author" } as const;
+const AUTHOR = { pea: "Pea", human: "you" } as const;
 
 export interface PlanReview {
   preview?: unknown;
@@ -69,7 +70,7 @@ const reviewSchema = z.object({
   rows: z.array(z.string()),
   cells: z.array(z.object({
     key: z.string(), group: z.string().optional(), label: z.string(),
-    before: z.string().nullable(), after: z.string(), author: z.enum(["pea", "human", "unknown"]),
+    before: z.string().nullable(), after: z.string(), author: z.enum(["pea", "human"]).nullable(),
   })).optional(),
   stale: z.boolean(),
 });
@@ -237,9 +238,9 @@ export function WriteAction({
                   <p className="t-small">{cell.group}</p>
                 ) : null}
                 <span className="t-small text-ink-2">
-                  {cell.label} ·<span data-write-author={cell.author}>{AUTHOR[cell.author]}</span>
+                  {cell.label} ·<span data-write-author={cell.author ?? "none"}>{cell.author ? AUTHOR[cell.author] : "no author"}</span>
                 </span>
-                <StateCell value={cell.after} modelValue={cell.before ?? "unavailable"} agree="drift" author={cell.author} stage="edit" />
+                <StateCell value={cell.after} modelValue={cell.before ?? "unavailable"} agree="drift" author={cell.author ?? undefined} stage="edit" />
               </div>
             ))}
             {held.rows?.map((row, index) => (

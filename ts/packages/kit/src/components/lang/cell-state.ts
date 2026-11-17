@@ -367,7 +367,7 @@ export function cellStateLabel(p: StateCellProps): CellStateName {
  * ghost model value leading because drift is the one alarm.
  */
 export const stagedBy = (author: StateCellBase["author"]) =>
-  author === "pea" ? "Pea" : author === "human" ? "you" : "unknown author";
+  author === "pea" ? "Pea" : author === "human" ? "you" : "no author";
 export function cellFactsText(p: StateCellProps): string | null {
   const parts: string[] = [];
   if (p.damage) parts.push(p.damage);
