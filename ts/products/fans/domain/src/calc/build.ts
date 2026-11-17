@@ -383,6 +383,8 @@ class Pricer {
       leg.lossSource = { kind: "default", ref: "carries none of this fan's flow" };
     } else if (cfm != null) {
       const r = this.price(w, flows, side, s, out, cfm);
+      // Test-visible receipt: the wire evidence omits per-piece length, cfm and drop; keep this off the wire.
+      if (r.testVisiblePieceReceipt) Object.defineProperty(leg, "testVisiblePieceReceipt", { value: r.testVisiblePieceReceipt });
       p = r.p;
       ids.push(...r.ids);
       if (r.cfm != null && r.cfm !== cfm) {
@@ -459,7 +461,7 @@ class Pricer {
     s: number,
     out: number | undefined,
     cfm: number,
-  ): { p: PricedLeg | null; ids: string[]; note?: string; cfm?: number } {
+  ): { p: PricedLeg | null; ids: string[]; note?: string; cfm?: number; testVisiblePieceReceipt?: Leg["testVisiblePieceReceipt"] } {
     const { grids } = this.input;
     const st = w.states[s]!;
     const e = st.el;
@@ -708,6 +710,7 @@ class Pricer {
     return {
       p,
       ids,
+      testVisiblePieceReceipt: pieces.map((piece, i) => ({ lengthFt: piece.lengthFt, cfm: piece.cfm, lossInWg: priced[i]?.lossInWg ?? null })),
       note: `, ${round(length)} ft${cs.length ? `, ${cs.length} tap(s) passed (Cs: ${cs.map(p => p.elementId).join(", ")})` : ""}${cs.flatMap(p => p.source?.kind === "drop" ? [`; ${p.source.source}`] : []).join("")}`,
       // The flow the leg is priced at where it enters, the same piece its velocity is read from: a
       // duct left by a tap on its side carries the upstream flow up to that tap (RV-15's tap on
@@ -1915,7 +1918,8 @@ function buildCalcPass(input: BuildCalcInput, assumeHeals: boolean, hosts: Map<s
   const buildHost = (host: FanPortRef): HostCalc => {
     // H5 consumes the known claim only; a host's heal preview cannot supply required pressure.
     const calc = buildCalcPass({ ...input, fan: host, dependents: [...(input.dependents ?? []), self] }, false, hosts);
-    hosts.set(fanKey(host), calc);
+    // Accepted cycle gaps depend on the ancestor chain; unruled reads do not enter the claim.
+    if (!calc.claim.coverage.some(gap => gap.kind === "cycle")) hosts.set(fanKey(host), calc);
     return calc;
   };
   const hostOf = (host: FanPortRef): HostCalc | "absent" | "cycle" =>
