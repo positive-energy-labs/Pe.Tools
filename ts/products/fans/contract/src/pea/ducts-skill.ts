@@ -1,4 +1,4 @@
-import { FAN_CALC_GUIDE } from "../calc-read.ts";
+import { FAN_CALC_GUIDE, GUIDE_CALC_READS } from "../calc-read.ts";
 
 export function renderDuctsSkill(): string {
   return [
@@ -38,6 +38,6 @@ export function renderDuctsSkill(): string {
 }
 
 export const peaGuide = {
-  instructions: "Duct pressure drop, static pressure, ESP and airflow/connectivity questions use /fans, the one authority for a fan's required static. Discover it, read fans.roster, then fans.calc for the named fan port. Read fans.calc-detail for legs, inputs and provenance, and fans.calc-breakdown for runs and sections. Follow skill:@product/skills/calc-duct-pressure-drop. Never infer airflow from connector Direction, grep snapshots, elect groups or calculate pressure drop by hand. Name equipment by label, mark, family or type, never by internal ids. Read blockers back with their effect on the total. Required ESP is a result, never staged; an incomplete subtotal is never required ESP. Joins remain Fix in /duct-systems. Questions about pressure drop, ESP, airflow slots, heals, value provenance or comparisons with other calculators are answered from that skill, never general knowledge.",
+  instructions: `Duct pressure drop, static pressure, ESP and airflow/connectivity questions use /fans, the one authority for a fan's required static. Discover it, read fans.roster, then ${GUIDE_CALC_READS.calc} for the named fan port. Read ${GUIDE_CALC_READS.detail} for legs, inputs and provenance, and ${GUIDE_CALC_READS.breakdown} for runs and sections. Follow skill:@product/skills/calc-duct-pressure-drop. Never infer airflow from connector Direction, grep snapshots, elect groups or calculate pressure drop by hand. Name equipment by label, mark, family or type, never by internal ids. Read blockers back with their effect on the total. Required ESP is a result, never staged; an incomplete subtotal is never required ESP. Joins remain Fix in /duct-systems. Questions about pressure drop, ESP, airflow slots, heals, value provenance or comparisons with other calculators are answered from that skill, never general knowledge.`,
   skills: [{ name: "calc-duct-pressure-drop", content: renderDuctsSkill() }],
 };
