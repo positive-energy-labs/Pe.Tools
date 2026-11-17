@@ -16,8 +16,9 @@ export type Provisional = { worst: "near-miss" | "stretched" | "anomalous"; coun
 export interface CalcRun {
   /** `<unit>:<port>/<side>/p<index>`: the path's identity on its calc. */
   key: string;
-  /** The fan whose calc this path is on. */
+  /** The fan port whose calc this path is on: unit and port together, never the unit alone. */
   unit: number;
+  port: number;
   mark: string;
   side: "supply" | "return";
   end: Calc["paths"][number]["end"];
@@ -85,6 +86,7 @@ export function runsOf(calcs: readonly Calc[]): CalcRun[] {
       return {
         key: `${calc.fan.unitId}:${calc.fan.portIndex}/${path.side}/p${index}`,
         unit: calc.fan.unitId,
+        port: calc.fan.portIndex,
         mark: calc.fan.mark,
         side: path.side,
         end: path.end,
@@ -103,11 +105,19 @@ export function runsOf(calcs: readonly Calc[]): CalcRun[] {
   return runs;
 }
 
-/** The worst complete run ending at one of `terminals`, on `unit`'s calc when given; null when none is complete. */
+/** A system's own elements and grilles: what a run must touch to be one of its paths. */
+export type RunScope = { terminals: ReadonlySet<number>; prices: ReadonlySet<number> };
+/** Whether a run is one of the scope's paths: it ends at one of its grilles, or ends anywhere else (an open end, another fan) after passing one of its elements. */
+export const reaches = (run: CalcRun, scope: RunScope) =>
+  run.terminal != null
+    ? scope.terminals.has(run.terminal)
+    : run.path.some((id) => id !== run.unit && scope.prices.has(id));
+
+/** The worst complete run ending at one of `terminals`, on one fan port's calc when given; null when none is complete. */
 export function worstRun(
   calcs: readonly Calc[],
   terminals: ReadonlySet<number>,
-  unit?: number,
+  fan?: { unitId: number; portIndex: number },
 ): (CalcRun & { total: number; terminal: number }) | null {
   let worst: (CalcRun & { total: number; terminal: number }) | null = null;
   for (const run of runsOf(calcs))
@@ -115,7 +125,7 @@ export function worstRun(
       run.total != null &&
       run.terminal != null &&
       terminals.has(run.terminal) &&
-      (unit == null || run.unit === unit) &&
+      (!fan || (run.unit === fan.unitId && run.port === fan.portIndex)) &&
       run.total > (worst?.total ?? -Infinity)
     )
       worst = { ...run, total: run.total, terminal: run.terminal };

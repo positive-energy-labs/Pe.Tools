@@ -361,7 +361,7 @@ function Content({
   const worst = priced && activeScope ? worstRun(priced.calcs, activeScope.terminals) : null;
   // The system's fans, each on its own calc. One complete calc states the ESP; several never sum
   // and none owns the network (MAP invariant 6), so the readout sends the reader to each fan.
-  const fans = priced && activeScope ? fanFacts(priced, activeScope.terminals) : null;
+  const fans = priced && activeScope ? fanFacts(priced, activeScope) : null;
   const solved = fans && {
     fans,
     fan: fans.length === 1 && fans[0]?.complete ? fans[0].esp : null,
@@ -481,7 +481,7 @@ function Content({
           <span data-tone={solved.fans.length > 1 ? undefined : "alarm"} data-readout-missing="">
             {solved.fans.length > 1
               ? "Shared network; read pressure per fan"
-              : `no ESP: this fan's calc is ${solved.fans[0]?.claim}`}
+              : `no ESP: this ${solved.fans[0]?.role}`}
           </span>
         ) : flowless.length ? (
           // A terminal with no design flow is priced at 0 cfm, so the sum would read as a
