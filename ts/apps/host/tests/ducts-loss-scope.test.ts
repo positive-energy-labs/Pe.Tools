@@ -125,7 +125,11 @@ test("fan loss preparation reads both sides and refuses a truncated walk", async
 function manualD(accept: boolean, over: Partial<SheetSnapshot> = {}) {
   const fixture = (name: string) => JSON.parse(readFileSync(new URL(`../../../packages/ducts-domain/src/sheet/fixtures/${name}`, import.meta.url), "utf8"));
   const recorded = fixture("manual-d-20261102.json") as SheetSnapshot;
-  const snapshot = { ...withPeersRead(withFamilyFlipped(recorded, 14577391)), ...over };
+  const base = withPeersRead(withFamilyFlipped(recorded, 14577391));
+  // Fixture data, not recorded: the capture predates native ESP cohorts, so the fan's instance cohort is stated here.
+  const parameterCohorts = [{ parameter: base.slots!.requiredEsp!, owner: { kind: "instance" as const, id: 14577391 },
+    members: [{ elementId: 14577391, uniqueId: base.nodes.find((n) => n.id === 14577391)!.uniqueId }], complete: true, basis: base.document.readAt }];
+  const snapshot = { ...base, parameterCohorts, ...over };
   const roster = suggestRoster(recorded as never);
   const input: BuildSheetInput = {
     snapshot,

@@ -108,7 +108,7 @@ export function claimRefusal(claim: FanClaim): string | null {
  */
 export function fanWriteRequest(input: BuildSheetInput, context: FanWriteContext) {
   const sheet = buildSheet(input), claim = sheet.claim;
-  if (claim.kind !== "complete") throw refused(claimRefusal(claim)!, "ducts.claim-incomplete");
+  if (claim.kind !== "complete") throw refused(claimRefusal(claim) ?? "", "ducts.claim-incomplete");
   try {
     // P-061: CompleteClaim is a phantom brand. Mint only from the buildSheet above, in this process, never from a decoded sheet or claim.
     return { claim, request: mintWriteRequest(claim, sheet, input, context) };
@@ -301,7 +301,8 @@ export function ductsExecutors(
               throw refused("The fan walk or an accepted continuation is truncated; no writes can be previewed");
             // P-060: a type-owned ESP slot is one value for every unit of the type, so each peer's own calc is built here
             // (P-061: in this process, from its own walk) and the mint refuses unless all are complete and equal.
-            const peers = (input.snapshot as SheetSnapshot).parameterCohorts
+            const cohorts: SheetSnapshot["parameterCohorts"] = snapshot.parameterCohorts;
+            const peers = cohorts
               ?.find((c) => c.owner.kind === "type" && c.parameter === snapshot.slots.requiredEsp && c.members.some((m) => m.elementId === walk.unitId))
               ?.members.filter((m) => m.elementId !== walk.unitId) ?? [];
             const peerClaims = new Map<number, DomainClaim>();

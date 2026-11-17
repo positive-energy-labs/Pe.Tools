@@ -13,10 +13,10 @@ export function mergeFar(near: DuctSnapshot, far: DuctSnapshot): DuctSnapshot {
   const farWalked = new Set([...far.nodes, ...far.segments].filter(walked).map((e) => e.id));
   const keep = <T extends Walked>(items: readonly T[]) =>
     items.filter((e) => walked(e) || !farWalked.has(e.id));
-  const held = { ...near, nodes: keep(near.nodes), segments: keep(near.segments) } as DuctSnapshot;
+  const held: DuctSnapshot = { ...near, nodes: keep(near.nodes), segments: keep(near.segments) };
   // Later parts win in the list merge, so the near read goes last. The write mint checks a cohort's
   // basis against `document.readAt`, so the near read's document stands with its cohorts.
-  return { ...mergeSnapshots([far, held])!, document: near.document };
+  return { ...(mergeSnapshots([far, held]) ?? held), document: near.document };
 }
 
 /**
@@ -37,7 +37,7 @@ export async function followAcceptedJoins(
     const seeds = rulings
       .filter((r) => r.verdict === "accept")
       .flatMap((r) => {
-        const [a, b] = r.pair.map(elementOf) as [number, number];
+        const a = elementOf(r.pair[0] ?? ""), b = elementOf(r.pair[1] ?? "");
         return here.has(a) && !here.has(b) ? [b] : here.has(b) && !here.has(a) ? [a] : [];
       })
       .filter((id) => !seeded.has(id));
