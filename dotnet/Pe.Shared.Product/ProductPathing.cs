@@ -50,12 +50,42 @@ public static class ProductPathing {
         return root;
     }
 
-    /// <summary>The user home: an explicit path, else <see cref="ProductPathNames.ProductHomeVariable" />, else <see cref="DocumentsUserRoot" />.</summary>
+    /// <summary>
+    ///     The user home: an explicit path, else <see cref="ProductPathNames.ProductHomeVariable" />, else the
+    ///     <c>homes.json</c> choice, else <see cref="DocumentsUserRoot" />.
+    /// </summary>
     public static string UserRoot(string? productHome = null) {
-        var explicitHome = string.IsNullOrWhiteSpace(productHome)
-            ? Environment.GetEnvironmentVariable(ProductPathNames.ProductHomeVariable)
-            : productHome;
+        var explicitHome = string.IsNullOrWhiteSpace(productHome) ? ToldHome(ProductPathNames.ProductHomeVariable, ChosenHomes().User) : productHome;
         return string.IsNullOrWhiteSpace(explicitHome) ? DocumentsUserRoot : Path.GetFullPath(explicitHome!.Trim());
+    }
+
+    // The environment override beats the file because it is the dev and test isolation switch: an isolated run
+    // must never be redirected by the owner's real homes.json. TS toldHome reads the same order.
+    private static string? ToldHome(string variable, string? chosen) =>
+        Environment.GetEnvironmentVariable(variable) is { } told && !string.IsNullOrWhiteSpace(told) ? told : chosen;
+
+    /// <summary>
+    ///     This machine's <c>state\homes.json</c>, read only once the shell configured its runtime (an unconfigured
+    ///     process has no state root to read it from) and on every call, so a Settings write applies at the next read.
+    /// </summary>
+    private static (string? Firm, string? User) ChosenHomes() {
+        var path = ProductRuntimeLayout.Configured?.State.HomesConfigPath;
+        try { return path is not null && File.Exists(path) ? HomesConfig(File.ReadAllText(path)) : (null, null); }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) { return (null, null); }
+    }
+
+    private static readonly Regex HomesConfigField = new(@"""(firm|user)""\s*:\s*""((?:[^""\\]|\\.)*)""", RegexOptions.CultureInvariant);
+
+    /// <summary>
+    ///     The two paths of a <c>homes.json</c> text (<c>{"firm"?: path, "user"?: path}</c>, absolute). Pure BCL, so a
+    ///     field match rather than a JSON reader; a relative or empty value is no choice. The host validates on write.
+    /// </summary>
+    public static (string? Firm, string? User) HomesConfig(string? text) {
+        string? Field(string name) => HomesConfigField.Matches(text ?? string.Empty).Cast<Match>()
+            .Where(match => match.Groups[1].Value == name)
+            .Select(match => Regex.Unescape(match.Groups[2].Value).Trim())
+            .FirstOrDefault(value => value.Length > 0 && Path.IsPathRooted(value));
+        return (Field("firm"), Field("user"));
     }
 
     /// <summary><c>&lt;Documents&gt;\Pe.Tools</c> from the known folder (OneDrive when it redirects Documents), ignoring any override.</summary>
@@ -73,8 +103,9 @@ public static class ProductPathing {
 
     /// <summary>This machine's homes, read from disk. <paramref name="pointer" /> is the open model's project-home path.</summary>
     public static ProductHomes Homes(string? pointer = null) => Homes(
-        Environment.GetEnvironmentVariable(ProductPathNames.ProductHomeVariable),
-        Environment.GetEnvironmentVariable(ProductPathNames.SharedRootVariable),
+        ToldHome(ProductPathNames.ProductHomeVariable, ChosenHomes().User),
+        // A chosen firm folder replaces the probe and still needs its marker: unmarked is no firm home, never the probe.
+        ToldHome(ProductPathNames.SharedRootVariable, ChosenHomes().Firm),
         // ponytail: every drive is probed on every call, and a mapped drive whose server is gone blocks until Windows
         // gives up on it. Callers are rare (a firm id read). Cache per process, or probe off-thread, if that changes.
         Environment.GetLogicalDrives(), ChildFolders, MarkerText, pointer);

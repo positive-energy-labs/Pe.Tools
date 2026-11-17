@@ -259,6 +259,9 @@ public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) :
             .ShouldNotBeEmpty("Failed to publish the pea runtime for installer packaging.");
         peaPublishDirectory.GetFile(peaExecutableName).Exists
             .ShouldBeTrue("Failed to publish TS pea for installer packaging.");
+        foreach (var native in new[] { "liteparse.win32-x64-msvc.node", "pdfium.dll" })
+            peaPublishDirectory.GetFile(native).Exists
+                .ShouldBeTrue($"Installer pea publish should include {native}: an installed Pea thread's read_document runs in pea.exe's MCP server and loads it from beside that executable.");
 
         context.Logger.LogInformation("Finished publishing TS pea runtime for installer packaging.");
     }

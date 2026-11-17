@@ -13,6 +13,14 @@ function AssertTerminal($receipt) {
     if ($receipt.state -ne 'ok' -or @($receipt.legs | Where-Object { $_.status -in 'failed', 'refused', 'warning' }).Count -or !@($receipt.legs | Where-Object { $_.name -eq 'install' -and $_.status -eq 'ok' -and $_.exitCode -in 0, 3010 }).Count -or !@($receipt.legs | Where-Object { $_.name -eq 'done' -and $_.status -eq 'ok' }).Count) { throw 'Update has no successful terminal installation/restoration receipt.' }
 }
 
+function Assert-GateNoRevitCapabilityMap($map) {
+    # Current discovery owns sessions under machine.revit; the owner's ruling also permits the prior top-level field.
+    $nested = $map.machine.revit.PSObject.Properties.Name -contains 'sessions'
+    $legacy = $map.PSObject.Properties.Name -contains 'sessions'
+    $sessionCount = if ($nested) { @($map.machine.revit.sessions).Count } else { @($map.sessions).Count }
+    if (!$map.map -or !$map.sources -or (!$nested -and !$legacy) -or $sessionCount -ne 0) { throw 'Expected a real no-Revit capability map.' }
+}
+
 function Invoke-GateMcpRead([string]$BaseUrl, [string]$Output) {
     $headers = @{ 'x-pe-runtime-service' = 'host'; Accept = 'application/json, text/event-stream' }
     $sessionId = $null; $failure = $null; $cleanupFailed = $false
@@ -38,7 +46,7 @@ function Invoke-GateMcpRead([string]$BaseUrl, [string]$Output) {
         $content = @($answer.result.content | Where-Object type -eq 'text')
         if ($content.Count -ne 1) { throw 'One structured capability map required.' }
         $map = $content[0].text | ConvertFrom-Json
-        if (!$map.map -or !$map.sources -or !($map.PSObject.Properties.Name -contains 'sessions') -or @($map.sessions).Count -ne 0) { throw 'Expected a real no-Revit capability map.' }
+        Assert-GateNoRevitCapabilityMap $map
         $map | ConvertTo-Json -Depth 30 | Set-Content "$Output\capability-map.json"
     } catch { $failure = $_.Exception.Message } finally {
         if ($sessionId) {

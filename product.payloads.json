@@ -2,7 +2,7 @@
   "product": "Pe.Tools",
   "vendor": "Positive Energy",
   "releases": "positive-energy-labs/Pe.Tools",
-  "version": "0.7.30",
+  "version": "0.7.33",
   "sdk": {
     "feed": null,
     "clientDir": "ts/packages/host-contracts/src/vendor/generated"
@@ -26,7 +26,9 @@
       "app/bin/host/pods/snowdon-ducts.zip",
       "app/bin/host/src/Pe.Tools.slnx",
       "app/bin/host/src-manifest.json",
-      "app/bin/pea/pea.exe"
+      "app/bin/pea/pea.exe",
+      "app/bin/pea/liteparse.win32-x64-msvc.node",
+      "app/bin/pea/pdfium.dll"
     ]
   },
   "years": ["2023", "2024", "2025", "2026"],

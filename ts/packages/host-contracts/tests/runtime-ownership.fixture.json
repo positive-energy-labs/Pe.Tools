@@ -876,7 +876,8 @@
       "podlessRuns": "C:\\src\\Pe.Tools\\.artifacts\\pe-tools\\state\\Runs\\_no-pod",
       "blob": "C:\\src\\Pe.Tools\\.artifacts\\pe-tools\\state\\Blobs\\sha256\\9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
       "t3": "C:\\src\\Pe.Tools\\.artifacts\\pe-tools\\state\\T3",
-      "agent": "C:\\src\\Pe.Tools\\.artifacts\\pe-tools\\state\\Agent"
+      "agent": "C:\\src\\Pe.Tools\\.artifacts\\pe-tools\\state\\Agent",
+      "homesConfig": "C:\\src\\Pe.Tools\\.artifacts\\pe-tools\\state\\homes.json"
     },
     {
       "name": "an installed root, under the state folder an MSI upgrade keeps",
@@ -891,7 +892,8 @@
       "podlessRuns": "C:\\Users\\Alice\\AppData\\Local\\Positive Energy\\Pe.Tools\\state\\Runs\\_no-pod",
       "blob": "C:\\Users\\Alice\\AppData\\Local\\Positive Energy\\Pe.Tools\\state\\Blobs\\sha256\\9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
       "t3": "C:\\Users\\Alice\\AppData\\Local\\Positive Energy\\Pe.Tools\\state\\T3",
-      "agent": "C:\\Users\\Alice\\AppData\\Local\\Positive Energy\\Pe.Tools\\state\\Agent"
+      "agent": "C:\\Users\\Alice\\AppData\\Local\\Positive Energy\\Pe.Tools\\state\\Agent",
+      "homesConfig": "C:\\Users\\Alice\\AppData\\Local\\Positive Energy\\Pe.Tools\\state\\homes.json"
     },
     {
       "name": "an isolated home",
@@ -906,7 +908,8 @@
       "podlessRuns": "D:\\pe-home\\.local-state\\state\\Runs\\_no-pod",
       "blob": "D:\\pe-home\\.local-state\\state\\Blobs\\sha256\\9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
       "t3": "D:\\pe-home\\.local-state\\state\\T3",
-      "agent": "D:\\pe-home\\.local-state\\state\\Agent"
+      "agent": "D:\\pe-home\\.local-state\\state\\Agent",
+      "homesConfig": "D:\\pe-home\\.local-state\\state\\homes.json"
     }
   ],
   "trayLaunches": [

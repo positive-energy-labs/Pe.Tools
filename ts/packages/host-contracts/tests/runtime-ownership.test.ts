@@ -62,7 +62,7 @@ const fixture = JSON.parse(
     "name" | "stateRoot" | "podId" | "runId" | "pageSlug" | "blobSha256" | "work" | "pageState",
     string
   > &
-    Record<"run" | "podlessRuns" | "blob" | "t3" | "agent", string>)[];
+    Record<"run" | "podlessRuns" | "blob" | "t3" | "agent" | "homesConfig", string>)[];
   trayLaunches: { name: string; owner: RuntimeOwner; launch: string[]; argv: string[] }[];
 };
 
@@ -132,6 +132,7 @@ test.each(fixture.stateTree)("state tree: $name", (row) => {
     blob: join(tree.blobs, "sha256", row.blobSha256),
     t3: tree.t3,
     agent: tree.agent,
+    homesConfig: tree.homesConfig,
   }).toEqual({
     work: row.work,
     pageState: row.pageState,
@@ -140,6 +141,7 @@ test.each(fixture.stateTree)("state tree: $name", (row) => {
     blob: row.blob,
     t3: row.t3,
     agent: row.agent,
+    homesConfig: row.homesConfig,
   });
 });
 

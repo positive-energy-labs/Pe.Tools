@@ -10,6 +10,11 @@
  * the target document names. The firm home is found by probing every drive for
  * `04 PE Software Files\Pe.Tools`. Pods, Pages and Catalogs read all three; an id is unique across
  * them, and a write lands in the home the thing came from. A machine with no firm home runs.
+ *
+ * A person names the firm and user homes in Settings, which writes `state\homes.json` (`toldHome`).
+ * Per tier: the environment override, then that file, then the default (Documents, or the probe).
+ * The override wins because it is the dev and test isolation switch: an isolated run must never be
+ * redirected by the owner's real file. No shipped machine sets one.
  */
 import { execFile, execFileSync } from "node:child_process";
 import { access, readFile, readdir, realpath } from "node:fs/promises";
@@ -19,6 +24,8 @@ import { homedir, tmpdir } from "node:os";
 import { dirname, join, relative, resolve, isAbsolute } from "node:path";
 import { z } from "zod";
 import { productIdentity, productPathNames } from "./contracts/product.ts";
+import { homesConfigSchema, type HomesConfig } from "./homes-config.ts";
+export { homesConfigSchema, homesStatusSchema, type HomesConfig, type HomesStatus } from "./homes-config.ts";
 
 const userShellFolders =
   "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\User Shell Folders";
@@ -46,16 +53,57 @@ export function insideTestRoot(path: string): string {
   return path;
 }
 
+let homesConfigFile: string | undefined;
+
+/**
+ * Name this process's `state\homes.json`. `productRoot` calls it once it knows the state root, so
+ * every process that knows its owner reads the same file; before that, no file is read.
+ */
+export function useHomesConfig(path: string | undefined): void {
+  homesConfigFile = path;
+}
+export const homesConfigPath = (): string | undefined => homesConfigFile;
+
+/**
+ * The file's values, read on every call (a write from Settings applies at the next read). Absent is
+ * `{}`. A file that does not parse is not used, and `error` says why; Settings shows it and its write
+ * replaces it.
+ */
+export function readHomesConfig(): { config: HomesConfig; error: string | null } {
+  if (!homesConfigFile) return { config: {}, error: null };
+  let text: string;
+  try {
+    text = readFileSync(insideTestRoot(homesConfigFile), "utf8");
+  } catch (error) {
+    return missingHomePath(error) ? { config: {}, error: null } : { config: {}, error: String(error) };
+  }
+  try {
+    const parsed = homesConfigSchema.safeParse(JSON.parse(text.replace(/^\uFEFF/, "")));
+    return parsed.success
+      ? { config: parsed.data, error: null }
+      : { config: {}, error: `${homesConfigFile} is not {"firm"?: path, "user"?: path}: ${parsed.error.message}` };
+  } catch (error) {
+    return { config: {}, error: `${homesConfigFile} is not JSON: ${String(error)}` };
+  }
+}
+
+/** The path a dev run or a person named for a tier, and how: the override, then homes.json. Null: use the default. */
+export function toldHome(tier: "user" | "firm"): { path: string; found: "override" | "config" } | null {
+  const variable = tier === "user" ? productPathNames.productHomeVariable : productPathNames.sharedRootVariable;
+  const env = process.env[variable]?.trim();
+  if (env) return { path: resolve(env), found: "override" };
+  const chosen = readHomesConfig().config[tier];
+  return chosen ? { path: resolve(chosen), found: "config" } : null;
+}
+
 /** The user home: always present. The Documents lookup is cached per process. */
 export function userRoot(): string {
-  const override = process.env[productPathNames.productHomeVariable]?.trim();
-  return insideTestRoot(override ? resolve(override) : documentsUserRoot());
+  return insideTestRoot(toldHome("user")?.path ?? documentsUserRoot());
 }
 
 /** Cache-only user identity for a degraded async resolver; never guesses a Documents folder. */
 export function knownUserRoot(): string | undefined {
-  const override = process.env[productPathNames.productHomeVariable]?.trim();
-  const root = override ? resolve(override) : cached && join(cached, productIdentity.productName);
+  const root = toldHome("user")?.path ?? (cached && join(cached, productIdentity.productName));
   if (root && process.env[testHomeRootVariable]) {
     const away = relative(resolve(tmpdir()), root);
     if (away.startsWith("..") || isAbsolute(away)) throw Error(`Test isolation: '${root}' is outside the temp directory.`);
@@ -167,15 +215,17 @@ export function probeFirmHome(facts: HomeFacts): FirmHome {
 let probed: { firm: FirmHome; at: number; facts?: HomeFacts } | undefined;
 
 /**
- * The firm home. The dev override `PE_TOOLS_SHARED_ROOT` names it outright and replaces the probe;
- * it still needs the `firm` marker. A found home is cached but its marker is re-read on each call.
- * A miss is probed again after 30 s, so a drive that mounts late (Google Drive after sign-in) is
- * picked up. Injected facts use the same cache, scoped to that facts object.
+ * The firm home. A told path (the dev override `PE_TOOLS_SHARED_ROOT`, else `homes.json` `firm`)
+ * names it outright and replaces the probe; it still needs the `firm` marker. A told folder without
+ * one is no firm home, never a fall back to the probe: the person named that folder, and the notice
+ * names it. A probed home is cached but its marker is re-read on each call. A miss is probed again
+ * after 30 s, so a drive that mounts late (Google Drive after sign-in) is picked up. Injected facts
+ * use the same cache, scoped to that facts object.
  */
 export function firmHome(facts?: HomeFacts): FirmHome {
-  const override = process.env[productPathNames.sharedRootVariable]?.trim();
+  const override = toldHome("firm")?.path;
   if (override) {
-    const told = insideTestRoot(resolve(override));
+    const told = insideTestRoot(override);
     const proven = markerTier((facts ?? machineFacts([])).marker(told)) === "firm";
     return { root: proven ? told : null, looked: [told] };
   }
@@ -280,7 +330,7 @@ export function homes(input: HomesInput = {}): Home[] {
  * project home comes from the document's pointer, and the firm home from the drive probe or the
  * dev override. Every project and firm home is also proven by its marker.
  */
-export type HomeFound = "documents" | "override" | "pointer" | "probe";
+export type HomeFound = "documents" | "override" | "config" | "pointer" | "probe";
 export type FoundHome = Home & { readonly found: HomeFound };
 
 /** The home list with how each was found, and the firm home's absence in words when there is none. */
@@ -288,13 +338,8 @@ export function homesFound(input: HomesInput = {}): {
   homes: FoundHome[];
   firmNotice: string | null;
 } {
-  const told = (variable: string) => Boolean(process.env[variable]?.trim());
   const found = (tier: HomeTier): HomeFound =>
-    tier === "project"
-      ? "pointer"
-      : tier === "user"
-        ? told(productPathNames.productHomeVariable) ? "override" : "documents"
-        : told(productPathNames.sharedRootVariable) ? "override" : "probe";
+    tier === "project" ? "pointer" : toldHome(tier)?.found ?? (tier === "user" ? "documents" : "probe");
   const firm = firmHome(input.facts);
   return {
     homes: homes(input).map((home) => ({ ...home, found: found(home.tier) })),
@@ -352,17 +397,17 @@ export async function resolveHomes(pointers: readonly string[] = [], options: Re
     const path = join(await check(root), productPathNames.homeMarkerFileName);
     return optional(track(path, () => readFile(path, { encoding: "utf8", signal: options.signal })), null);
   };
-  const override = process.env[productPathNames.productHomeVariable]?.trim();
+  const override = toldHome("user")?.path;
   if (!override && !cached) {
     cached = process.platform === "win32"
       ? parseDocumentsKnownFolder((await track("Documents known folder (reg.exe)", () => promisify(execFile)("reg.exe", ["query", userShellFolders, "/v", "Personal"], { encoding: "utf8", windowsHide: true, signal: options.signal }))).stdout, process.env)
       : join(homedir(), "Documents");
   }
-  const userPath = override ? resolve(override) : cached && join(cached, productIdentity.productName);
+  const userPath = override ?? (cached && join(cached, productIdentity.productName));
   if (!userPath) throw Error("Documents known folder unreadable");
   const user = await check(userPath);
   options.onUser?.(user);
-  const told = process.env[productPathNames.sharedRootVariable]?.trim();
+  const told = toldHome("firm")?.path;
   let firm: string | null = null;
   let firmReport: FirmHome;
   if (options.knownFirm || told) {

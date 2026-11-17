@@ -20,6 +20,8 @@ public static class ProductPathNames {
     /// <summary>A home's <c>Settings\&lt;owner&gt;.json</c> folder. A pod's own members folder is <see cref="SettingsDirectoryName" />.</summary>
     public const string HomeSettingsDirectoryName = "Settings";
     public const string KeysFileName = "keys.json";
+    /// <summary>Under the machine state root's <c>state</c> folder: the firm and user homes a person chose in Settings.</summary>
+    public const string HomesConfigFileName = "homes.json";
     /// <summary>The firm home is <c>04 PE Software Files\Pe.Tools</c> on the shared drive, which Google Drive mounts under <c>Shared drives</c>.</summary>
     public const string FirmSoftwareDirectoryName = "04 PE Software Files";
     public const string SharedDrivesDirectoryName = "Shared drives";

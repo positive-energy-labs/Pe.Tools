@@ -16,6 +16,12 @@ public sealed record ProductRuntimeLayout(ProductLane Lane, string OwnerRoot, st
     public static ProductRuntimeLayout Current => _current ?? throw new InvalidOperationException(
         "The shell did not configure the product runtime. Pe.App (also in Revit test runs, where the SDK boots it), Pe.Host.Tray, Pe.Dev.Cli and Pe.Rhvac.Tool call ProductRuntimeLayout.Configure once at startup.");
 
+    /// <summary>
+    ///     The record, or null before <see cref="Configure" />. Only the home resolver reads it, because a home
+    ///     lookup must not throw in a process that never configured: there it reads no <c>homes.json</c>.
+    /// </summary>
+    internal static ProductRuntimeLayout? Configured => _current;
+
     /// <summary>Set once by the shell from the facts it was told; a second call is a startup bug.</summary>
     public static ProductRuntimeLayout Configure(ProductLane lane, string ownerRoot) {
         var layout = For(lane, ownerRoot, Environment.GetEnvironmentVariable(ProductPathNames.ProductHomeVariable));
@@ -79,6 +85,8 @@ public sealed record ProductRuntimeStateLayout(string RootPath) {
     /// <summary>The agent's working directory: its <c>AGENTS.md</c> and the harness projections.</summary>
     public string AgentPath => Path.Combine(this.RootPath, "Agent");
     public string AgentInstructionsPath => Path.Combine(this.AgentPath, ProductPathNames.AgentInstructionsFileName);
+    /// <summary>The firm and user homes a person chose in Settings; the host writes it, both sides read it.</summary>
+    public string HomesConfigPath => Path.Combine(this.RootPath, ProductPathNames.HomesConfigFileName);
     public string RunsPath => Path.Combine(this.RootPath, "Runs");
     /// <summary>Where a run with no pod writes. Every child is one run folder: <c>_no-pod\&lt;run-id&gt;</c>.</summary>
     public string PodlessRunsPath => Path.Combine(this.RunsPath, ProductPathNames.PodlessRunsDirectoryName);

@@ -34,8 +34,10 @@ export const productPathNames = {
   revitAppLogFileName: "revit.log.txt",
   /** The one override for the whole product home; host, Pea and Revit read it identically. */
   productHomeVariable: "PE_TOOLS_PRODUCT_HOME",
-  /** Dev override that names the firm home outright; a shipped machine finds it by probe (ADR 0037 rule 2). */
+  /** Dev override that names the firm home outright; a shipped machine reads `homes.json`, else probes (ADR 0037 rule 2). */
   sharedRootVariable: "PE_TOOLS_SHARED_ROOT",
+  /** Under the machine state root's `state` folder: the firm and user homes chosen in Settings. */
+  homesConfigFileName: "homes.json",
   /** A home proves itself with this file: `{"tier":"user"|"project"|"firm"}` and nothing else. */
   homeMarkerFileName: "pe-home.json",
   /** The firm home under a drive root or under one folder of `<drive>\Shared drives`. */

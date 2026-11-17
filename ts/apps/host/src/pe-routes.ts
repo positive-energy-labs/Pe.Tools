@@ -1,5 +1,5 @@
 import { stateScope } from "@pe/host-contracts/service-identity";
-import { acquireContentRoots, contentRootsReady, contentHomes, contentHomesFound, contentRootsUnavailable, observeContentRoots, ContentHomeUnavailable } from "./content-roots.ts";
+import { acquireContentRoots, contentRootsReady, contentHomes, contentHomesFound, contentRootsUnavailable, observeContentRoots, ContentHomeUnavailable, homesStatus, writeHomesConfig } from "./content-roots.ts";
 import { homeLogLines } from "@pe/host-contracts/product-paths";
 import { targetHomes } from "./call-route.ts";
 import { readPlaces, writePlaces } from "./places.ts";
@@ -435,6 +435,12 @@ export function createPeRoutes(options: PeRoutesOptions) {
     }
     if (declared.id === "places.get") return json(readPlaces());
     if (declared.id === "places.put") return json(writePlaces(await request.json()));
+    if (declared.id === "homes.get") return json(homesStatus());
+    if (declared.id === "homes.put") {
+      const body = await request.json();
+      try { return json(await writeHomesConfig(body)); }
+      catch (error) { return json({ error: { code: "homes.refused", message: error instanceof Error ? error.message : String(error) } }, 400); }
+    }
     if (declared.id === "features.get") return Response.json(hostDescriptor(resolveHostVersion()), {
       headers: options.inputs ? { "x-pe-source": JSON.stringify(options.inputs.source) } : undefined,
     });

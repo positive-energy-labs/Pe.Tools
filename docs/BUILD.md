@@ -283,6 +283,9 @@ Package outputs:
 
 Repo-owned Sandbox preparation is `tools/release-sandbox/Prepare.ps1 -Spec <json> -RunDirectory <new-directory>`.
 It stages explicit hashed files and creates `acceptance.wsb`; it never launches Sandbox or executes an installer.
+Preparation always adds the Microsoft VC++ x64 14.51.36247 installer from `%USERPROFILE%\WindowsSandbox\InstallerTests\Input\VcRuntime\vc_redist.x64.exe`.
+`VcRuntime.ps1` pins its SHA-256, and preparation refuses a missing or changed cache before staging. There is no VC++ flag or caller-supplied spec row.
+Every guest installs that pinned runtime before the previous MSI; this is Sandbox setup, not a product MSI prerequisite.
 The spec contains `previousVersion`, `candidateVersion`, and `files` rows with `role`, `name`, `path`, and `sha256`.
 Require `previousMsi`, `candidateMsi`, `previousReceipt`, and `candidateReceipt` roles.
 Each original SDK installer receipt binds `releaseVersion`, `productKind: Msi`, `sourceRevision` (full SHA), and `sha256` of the final MSI.
@@ -292,7 +295,7 @@ The guest installs the real previous MSI into its OS-known install root. It requ
 published GitHub feed to offer the exact expected candidate version, SHA256 and length before admitting an update.
 It then uses the previous host's `POST /host/update` consent path, reads the SDK terminal receipt, and checks the responsive
 successor against the installed claim's PID, process start, path, version and tray child. Direct MSI installation proves only admission.
-The historical beta.192 bootstrap recovery used `recoveryZip`, a hashed external SDK CLI ZIP with `Pe.Revit.Cli.exe` at its root, when the previous host was unavailable. That result proves recovery only and cannot pass the normal host self-update gate. SDK beta.193 requires actual installed product authority for `update apply`; an external ZIP or checkout CLI cannot acquire it through flags or a manifest path. The recovery option is not a supported beta.193 apply path. Optional `vcRuntime` and `dotnetRuntime` files install guest prerequisites.
+The historical beta.192 bootstrap recovery used `recoveryZip`, a hashed external SDK CLI ZIP with `Pe.Revit.Cli.exe` at its root, when the previous host was unavailable. That result proves recovery only and cannot pass the normal host self-update gate. SDK beta.193 requires actual installed product authority for `update apply`; an external ZIP or checkout CLI cannot acquire it through flags or a manifest path. The recovery option is not a supported beta.193 apply path. An optional `dotnetRuntime` file installs that guest prerequisite; VC++ installation is unconditional.
 The calibrated native console observer retains create/show events and refuses dropped events or visible product consoles.
 Tray child presence does not prove the tray icon or app-window interaction; those remain separate UI proof.
 An unpublished candidate cannot pass the GitHub-only predecessor check. Publishing and Sandbox launch are separate authorized steps.
