@@ -1,6 +1,6 @@
 import { expect, it } from "vite-plus/test";
 import { z } from "zod";
-import { FAN_INPUTS, authoredValueSchema, fanBindingRows, fanClaimSchema, fanInputShape, fanIssueSchema, fanParameterCohortSchema, fanWriteRows, sourcedValueSchema } from "./fans-inputs.ts";
+import { FAN_CELLS, FAN_INPUTS, authoredValueSchema, fanBindingRows, fanClaimSchema, fanInputShape, fanIssueSchema, fanParameterCohortSchema, fanWriteRows, sourcedValueSchema } from "./fans-inputs.ts";
 import { VALUE_SOURCES, resolveValue } from "./work-value.ts";
 import { DUCT_UNIT_KINDS, FAN_BLOCKER_KINDS } from "@pe/host-contracts/generated";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
@@ -54,11 +54,13 @@ it("a complete claim refuses pressure, coverage or blocking damage", () => {
   expect(fanClaimSchema.safeParse({ kind: "to-boundary", basis: "read:1", knownInWg: 1, boundaries: [], coverage: [], blockingIds: [] }).success).toBe(false);
 });
 it("one new metadata row is discovered by schema, bindings and write selectors", () => {
-  const extra = { ...FAN_INPUTS[0], name: "additional", segment: "additional" };
+  const extra = { ...FAN_CELLS.terminalDrops, name: "additional", segment: "additional" };
   const rows = [...FAN_INPUTS, extra];
   expect(z.strictObject(fanInputShape(rows)).partial().parse({ additional: { inWg: 1 } })).toEqual({ additional: { inWg: 1 } });
   expect(fanBindingRows(rows)).toContain(extra);
   expect(fanWriteRows(rows)).toContain(extra);
+  expect(fanBindingRows()).toContain(FAN_CELLS.ratedEsp);
+  expect(fanWriteRows()).not.toContain(FAN_CELLS.ratedEsp);
   for (const row of FAN_INPUTS) {
     expect(row.layers).toEqual(VALUE_SOURCES);
     if (row.role === "result") { expect(row.segment).toBeNull(); expect(row.write).toBe("never"); }

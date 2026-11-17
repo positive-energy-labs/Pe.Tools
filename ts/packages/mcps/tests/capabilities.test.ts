@@ -17,8 +17,8 @@ import { builtinPeaSkillSnapshots } from "../src/pea/skill-publication.ts";
 import type { PackageProjection } from "@pe/agent-contracts";
 import { peDo, peRead, peFind } from "../src/pea/capability-tools.ts";
 
-import { nativeFixture } from "../../../apps/host/tests/fans-native.fixture.ts";
-import capturedWalk from "../../../apps/host/tests/native-recordings/driver-ducts.snapshot.walk.json" with { type: "json" };
+import { nativeFixture as workFixture } from "../../../apps/host/tests/fans-work-fixture.ts";
+import { closedFan, recordedTables } from "../../../apps/host/tests/closed-fan.fixture.ts";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
 import { commands } from "@pe/agent-contracts";
 import { fakeRuntimeHost } from "./runtime-host-fixture.ts";
@@ -610,9 +610,11 @@ test("pe_read route graphs read the real host door before releasing their public
   }
 });
 
-test("Pea discovers the sheet plan, decodes any route's handle, and previews Ducts", async () => {
+test("Pea discovers the sheet plan, decodes any route's handle, and previews a complete fan", async () => {
   fakeRuntimeHost("http://127.0.0.1:19999");
-  const f = await nativeFixture();
+  const closed = closedFan(100), tables = recordedTables();
+  const f = await workFixture("real", (_key, input) => closedFan(100, { requiredEsp: input.slots?.requiredEsp }), null,
+    { native: key => key === "ducts.tables" ? tables : undefined });
   // Pea acts inside its turn's open run (ADR 0038): every Pea command needs one.
   const peaRun = { thread: "t1", turn: "discover" };
   f.runs.open(peaRun);
@@ -622,10 +624,12 @@ test("Pea discovers the sheet plan, decodes any route's handle, and previews Duc
       "fans",
       "human",
       [
+        { path: ["writeIntent", "edit"], value: { value: { walk: { unitId: 100, portIndex: 0 } } } },
+        { path: ["calculation", "terminalFlow", "edit"], value: { value: { kind: "balanced-design", source: "test" } } },
         {
           path: [
             "flows",
-            elementSubject(capturedWalk.nodes.find((node) => node.id === 8718801)!),
+            elementSubject(closed.nodes.find((node) => node.id === 3)!),
             "edit",
           ],
           value: { value: 250 },
@@ -635,16 +639,8 @@ test("Pea discovers the sheet plan, decodes any route's handle, and previews Duc
     );
     expect(staged.ok).toBe(true);
     expect((await f.saved.view({ ...f.key, route: "fans" }, "fans"))!.doc).toMatchObject({
-      flows: { [elementSubject(capturedWalk.nodes.find(node => node.id === 8718801)!)]: { edit: { value: 250, by: "human" } } },
+      flows: { [elementSubject(closed.nodes.find(node => node.id === 3)!)]: { edit: { value: 250, by: "human" } } },
     });
-    const ducts = await f.saved.apply(
-      f.key,
-      "ducts",
-      "human",
-      [{ path: ["writeIntent", "edit"], value: { value: { groups: ["group:g1"] } } }],
-      0,
-    );
-    expect(ducts.ok).toBe(true);
     const fans = (await f.saved.view({ ...f.key, route: "fans" }, "fans"))!.handle;
     const work = (await f.saved.view(f.key, "ducts"))!.handle;
     const source = catalog();
@@ -677,7 +673,8 @@ test("Pea discovers the sheet plan, decodes any route's handle, and previews Duc
     // Slice 7: the sheet pair is every route's door; the handle names the route, so a Fans handle decodes too.
     expect(row.description).toContain("Work handle");
     expect(commands["sheet.plan"].input.safeParse({ work: fans }).success).toBe(true);
-    const preview = await run(peDo, { key: row.key, input: { work }, timeoutSeconds: 5 }, head);
+    expect(commands["sheet.plan"].input.safeParse({ work }).success).toBe(true);
+    const preview = await run(peDo, { key: row.key, input: { work: fans }, timeoutSeconds: 5 }, head);
     expect(preview, JSON.stringify(preview)).toMatchObject({
       ok: true,
       result: { state: "succeeded", result: { previewOnly: true } },
