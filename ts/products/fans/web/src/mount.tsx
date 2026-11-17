@@ -173,7 +173,7 @@ function LedgerContent({ ctx, snapshot }: { ctx: CalcContext; snapshot: DuctSnap
         : action.kind === "price" ? `assignment ${action.family}` : action.kind === "table" ? `table ${action.rule}` : `fitting ${name}`;
       // Never a fallback to a write or an ElementId (slice 5): the blocker's producer stamps its
       // UniqueId SubjectRef; /ducts resolves the open fan's port walk, not the model's whole roster.
-      return { says: `Fix in /ducts: ${what} ›`, href: ductsLink(sheet?.overview.fan ?? null, search,
+      return { says: `Fix in /duct-systems: ${what} ›`, href: ductsLink(sheet?.overview.fan ?? null, search,
         // The contract admitted it as an element UniqueId code (`elementSubjectSchema`).
         blocker.subject ? { kind: "subject", code: blocker.subject as SubjectRefCode } : { kind: "route" }) };
     };
