@@ -79,7 +79,6 @@
     "./document-lifetime": "./src/document-lifetime.ts",
     "./tiered-settings": "./src/tiered-settings.ts",
     "./host-ownership": "./src/host-ownership.ts",
-    "./index": "./src/index.ts",
     "./input-occurrence": "./src/input-occurrence.ts",
     "./native-reads": "./src/native-reads.ts",
     "./native-recording": "./src/native-recording.ts",

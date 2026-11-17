@@ -46,7 +46,7 @@ async function readCatalogsFolder(
     },
   );
   for (const folder of entries.sort((a, b) => a.name.localeCompare(b.name))) {
-    if (!folder.isDirectory() || folder.name.startsWith("@pe/host/index")) continue;
+    if (!folder.isDirectory() || folder.name.startsWith(".")) continue;
     try {
       const dir = await realpath(join(root, folder.name));
       // Authored (ADR 0039): a catalog that does not decode is refused and kept, with its reason.
