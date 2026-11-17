@@ -40,7 +40,7 @@ internal static class FamilyFoundryBridgeOps {
 
     [Op("family.apply", OpSubject.FamilyDocument, OpTouches.Geometry, Internal = true, Does = "Reconcile the active family document to a saved spec or supplied draft, refusing plan drift, and write the run receipt beside its operation output.", Title = "Apply Family", Finds = ["family", "spec", "apply", "plan-hash", "receipt"], Cost = OpCost.Mutation, Actor = OpActor.Any)]
     private static Task<FamilyFoundryApplyData> ApplyFamily(FamilyApplyRequest request, FamilyDocument document, ModelWrite scope, CancellationToken cancellationToken) =>
-        PaletteThreading.RunRevitAsync(() => ApplyWithReceipt("family.apply", request.SpecJson, request.Source,
+        PaletteThreading.RunRevitEffectAsync(() => ApplyWithReceipt("family.apply", request.SpecJson, request.Source,
             request.ExpectedPlanHashes, document.Value, request.ExecutionOptions, plan: request.Plan, cancellationToken: cancellationToken), cancellationToken);
 
     [Op("families.capture", OpSubject.Elements, OpTouches.Geometry, Does = "Open selected loaded families read-only and capture each as a family.json spec with coverage.", Title = "Capture Loaded Families", Finds = ["families", "family-json", "capture", "spec", "coverage"], Cost = OpCost.Expensive, Actor = OpActor.Any)]
@@ -53,11 +53,11 @@ internal static class FamilyFoundryBridgeOps {
 
     [Op("families.apply", OpSubject.Document, OpTouches.Geometry, Internal = true, Does = "Reconcile explicit loaded families to a saved spec or supplied draft, refusing plan drift per family and any family reloaded since the plan (its name now resolves to another id), and write the run receipt beside its operation output.", Title = "Apply Loaded Families", Finds = ["families", "spec", "apply", "plan-hash", "receipt", "bulk"], Cost = OpCost.Mutation, Actor = OpActor.Any)]
     private static Task<FamilyFoundryApplyData> ApplyLoaded(FamiliesApplyRequest request, ProjectDocument document, ModelWrite scope, CancellationToken cancellationToken) =>
-        PaletteThreading.RunRevitAsync(() => ApplyWithReceipt("families.apply", request.SpecJson, request.Source, request.ExpectedPlanHashes, document.Value, request.ExecutionOptions, familyNames: request.FamilyNames, plan: request.Plan, cancellationToken: cancellationToken), cancellationToken);
+        PaletteThreading.RunRevitEffectAsync(() => ApplyWithReceipt("families.apply", request.SpecJson, request.Source, request.ExpectedPlanHashes, document.Value, request.ExecutionOptions, familyNames: request.FamilyNames, plan: request.Plan, cancellationToken: cancellationToken), cancellationToken);
 
     [Op("family.build", OpSubject.FamilyDocument, OpTouches.Geometry, Internal = true, Does = "Build a new Revit family from a saved family model spec by reconciling a fresh document from the spec's template. The .rfa lands in a fresh run folder in the source pod beside the run receipt; the operation returns both paths.", Title = "Build Family", Finds = ["family", "family-json", "build", "template", "spec", "receipt"], Cost = OpCost.Mutation, Actor = OpActor.Any)]
     private static Task<FamilyBuildData> BuildFamily(FamilyBuildRequest request, ModelWrite scope, CancellationToken cancellationToken) =>
-        PaletteThreading.RunRevitAsync(() => BuildWithReceipt(RevitUiSession.CurrentUIApplication.Application, request), cancellationToken);
+        PaletteThreading.RunRevitEffectAsync(() => BuildWithReceipt(RevitUiSession.CurrentUIApplication.Application, request), cancellationToken);
 
     /// <summary>A cancelled apply is its own outcome — finished families keep their receipts.</summary>
     private const string CancelledCode = "Cancelled";
