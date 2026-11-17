@@ -156,12 +156,12 @@ type EntryPatch<K extends string, Key extends string, V extends z.core.SomeType>
   | { readonly path: readonly [K, Key]; readonly op: "delete"; readonly value?: never }
   | (BareSchema<V> extends z.ZodObject<infer Shape>
       ? {
-          [L in keyof Shape & string]: {
+          [L in Exclude<keyof Shape & string, "invalid">]: {
             readonly path: readonly [K, Key, L];
             readonly value: import("./draft.ts").CallerWorkValue<{ [P in L]: z.output<Shape[L]> }>[L];
             readonly op?: never;
           };
-        }[keyof Shape & string]
+        }[Exclude<keyof Shape & string, "invalid">]
       : never);
 /** Eligibility comes from ZodRecord, never the structurally identical object output.
  * Paths stay bounded to a root, record entry, or object field within that entry. */
