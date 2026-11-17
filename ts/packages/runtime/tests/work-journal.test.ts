@@ -14,6 +14,7 @@ function fixture(limits?: { maxCount: number; maxBytes: number }) {
   const key = bindWork("history-proof", null, "one");
   let saved: unknown = null;
   const options = {
+    publicationAuthor: (): "human" => "human",
     workHistoryLimits: limits,
     registrations: [
       {
