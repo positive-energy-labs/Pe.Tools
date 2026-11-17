@@ -9,9 +9,8 @@ import { snapshot } from "@pe/ducts-web/test-fixture";
 import sheetFixture from "./calc/calc.fixture.json";
 import { makeAtomRegistry } from "../../../../apps/web/src/shell/owner.ts";
 import { createWitness } from "./cutover.test-support.ts";
-import { ductsLink, namesOf } from "@pe/ducts-web/identity";
+import { ductsLink, namesOf, fanSystems } from "@pe/ducts-web/identity";
 import { fields } from "@pe/duct-systems-web/route";
-import { calcSystems } from "@pe/ducts-web/calc/scoped-snapshot";
 
 /*
  * Ruling 2026-11-10, verdict 1: a Fans Ledger fix whose Work is /ducts' is a link, named by what it
@@ -39,7 +38,7 @@ async function ledgerLink() {
   if (!isValidElement(node)) throw Error("The Ledger did not draw");
   render(<RegistryContext value={registry}>{node}</RegistryContext>);
   // The fixture's inferred join has no candidate pair, so its fix is ruling the open end capped: /ducts' Work.
-  const link = await screen.findByRole("link", { name: /^Fix in \/ducts: end .+ ›$/ });
+  const link = await screen.findByRole("link", { name: /^Fix in \/ducts: end .+ â€º$/ });
   // The fix names the end and is no verb on /fans: no button stages it here.
   expect(screen.queryByRole("button", { name: /for inferred-join$/ })).toBeNull();
   const href = new URL(link.getAttribute("href")!, "http://pe.local");
@@ -77,11 +76,11 @@ test("a blocker with no UniqueId opens /ducts on its systems, never a raw Elemen
   pointBlocker({ elementId: 14122436 });
   const { href, selected } = await ledgerLink();
   expect(selected).toEqual([]);
-  expect(href.searchParams.get("system")).toBeTruthy();
+  expect(href.searchParams.get("fan")).toBeTruthy();
   expect(href.search).not.toContain("14122436");
 });
 
-test("the 369-system handoff stays short and resolves to the old roster scope", async () => {
+test("the 369-system handoff names the fan port and resolves only its systems", async () => {
   const recorded = snapshot.systems;
   snapshot.systems = Array.from({ length: 369 }, (_, id) => ({
     ...recorded[0]!, id, name: `System ${id} with a long model-specific name`,
@@ -89,12 +88,21 @@ test("the 369-system handoff stays short and resolves to the old roster scope", 
   closes.push(() => { snapshot.systems = recorded; });
   const { href } = await ledgerLink();
   expect(href.href.length).toBeLessThan(2048);
-  const scope = namesOf(fields.system.schema.parse(JSON.parse(href.searchParams.get("system")!)));
-  expect(scope).toBe("all");
-  // /ducts' network read resolves "all" against its canonical system roster.
-  const resolved = scope === "all" ? snapshot.systems.map(system => system.name) : scope;
-  expect(resolved).toEqual(calcSystems(snapshot));
+  const fan = fields.fan.schema.parse(JSON.parse(href.searchParams.get("fan")!));
+  expect(fan).toEqual({ unitId: sheetFixture.overview.fan!.unitId, portIndex: sheetFixture.overview.fan!.portIndex });
+  expect(href.searchParams.has("system")).toBe(false);
+  const walk = { segments: [
+    { systemName: snapshot.systems[7]!.name, reason: "walked" },
+    { systemName: snapshot.systems[8]!.name, reason: "open-end-candidate" },
+  ] };
+  expect(fanSystems(walk, snapshot.systems)).toEqual([snapshot.systems[7]!.name]);
   const named = new URL(ductsLink([snapshot.systems[0]!.name], {}), "http://pe.local");
   expect(namesOf(fields.system.schema.parse(JSON.parse(named.searchParams.get("system")!))))
     .toEqual([snapshot.systems[0]!.name]);
+});
+
+test("without an open fan the handoff retains the default scope", () => {
+  const href = new URL(ductsLink(null, {}), "http://pe.local");
+  expect(href.searchParams.has("fan")).toBe(false);
+  expect(href.searchParams.has("system")).toBe(false);
 });

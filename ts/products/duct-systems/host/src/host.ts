@@ -20,6 +20,7 @@ import { read } from "@pe/host/read-graph";
 import { systemList } from "@pe/duct-systems-domain/system-list";
 import { withStoredRulings } from "@pe/ducts-domain/rulings";
 import { fanRoster, espOptions, networkCalcs } from "@pe/fans-contract/fans-host-reads";
+import { fanSystems } from "@pe/ducts-contract/fan-scope.neutral";
 
 export const ductsRoster = body(contracts.roster, async function(ctx, { target }) {
     const saved = await ctx.read(designLayers, target),
@@ -68,8 +69,13 @@ const systems = read("ducts.systems", {
 });
 export const ductsNetwork = body(contracts.network, async function(ctx, args) {
     const roster = await ctx.read(ductsRoster, { target: args.target });
+    // Roster base equipment misses unassigned fans. Walk the named port before resolving system names.
+    const walk = args.fan ? await ctx.read(native("ducts.snapshot.walk"), {
+      role: "acquire", target: { kind: "document", ref: args.target },
+      request: { selector: { kind: "from", unitId: args.fan.unitId, portIndex: args.fan.portIndex } },
+    }) : null;
     const names =
-      args.system === "all"
+      walk ? fanSystems(walk.body, roster.systems) : args.system === "all"
         ? roster.systems.map((system) => system.name)
         : [...new Set(args.system)];
     if (names.length > DUCTS_SYSTEM_MAX)
@@ -110,7 +116,7 @@ export const ductsPricing = body(contracts.pricing, async function(ctx, args) {
     // Pricing requires the entire requested network; a refused batch remains visible on network Values.
     const roster = await ctx.read(ductsRoster, { target: args.target });
     const wanted = roster.systems.filter(
-      (system) => args.system === "all" || args.system.includes(system.name),
+      (system) => args.fan ? network.systemReads.completed.includes(system.id) : args.system === "all" || args.system.includes(system.name),
     );
     if (
       wanted.some((system) => !network.systemReads.completed.includes(system.id)) ||

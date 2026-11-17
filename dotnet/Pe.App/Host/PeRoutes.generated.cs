@@ -90,6 +90,7 @@ internal static class PeRoutes {
             public const string Layers = "layers";
             public const string Encoding = "encoding";
             public const string Picture = "picture";
+            public const string Fan = "fan";
             public const string System = "system";
             public const string Stage = "stage";
             public const string SystemSearch = "systemSearch";

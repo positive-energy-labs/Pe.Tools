@@ -830,6 +830,9 @@ importers:
       '@pe/duct-systems-domain':
         specifier: workspace:*
         version: link:../domain
+      '@pe/ducts-contract':
+        specifier: workspace:*
+        version: link:../../ducts/contract
       '@pe/ducts-domain':
         specifier: workspace:*
         version: link:../../ducts/domain
@@ -849,6 +852,9 @@ importers:
         specifier: 4.3.6
         version: 4.3.6
     devDependencies:
+      '@pe/ducts-web':
+        specifier: workspace:*
+        version: link:../../ducts/web
       '@types/node':
         specifier: ^25.6.2
         version: 25.9.2

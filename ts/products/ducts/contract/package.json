@@ -8,7 +8,8 @@
     "./duct-calculation": "./src/duct-calculation.ts",
     "./duct-catalog": "./src/duct-catalog.ts",
     "./duct-inputs": "./src/duct-inputs.ts",
-    "./duct-loss-read": "./src/duct-loss-read.ts"
+    "./duct-loss-read": "./src/duct-loss-read.ts",
+    "./fan-scope.neutral": "./src/fan-scope.neutral.ts"
   },
   "scripts": {
     "check": "vp exec tsc --noEmit",

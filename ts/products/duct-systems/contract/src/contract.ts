@@ -7,6 +7,8 @@ import {
   ductsRosterData,
 } from "@pe/agent-contracts";
 import { contract } from "@pe/agent-contracts/handle";
+import { fanScopeSchema } from "@pe/ducts-contract/fan-scope.neutral";
+const scopedNetworkArgs = ductsNetworkArgs.extend({ fan: fanScopeSchema.nullable().optional() });
 
 /**
  * The one declaration of each read this route serves: the pane and the host body both take it from
@@ -19,7 +21,7 @@ export const roster = contract("ducts.roster", {
   keyedBy: { rows: { kind: "system-name" } },
 });
 export const network = contract("ducts.network", {
-  input: ductsNetworkArgs,
+  input: scopedNetworkArgs,
   data: ductsNetworkData,
   uses: [roster, "ducts.snapshot.walk"],
   keyedBy: {
@@ -30,7 +32,7 @@ export const network = contract("ducts.network", {
   },
 });
 export const pricing = contract("ducts.pricing", {
-  input: ductsNetworkArgs,
+  input: scopedNetworkArgs,
   data: ductsPricingData,
   // The fan roster and its ESP options are host-only recipes with no contract; this names their natives.
   uses: [network, roster, fanRoster, espOptions, networkCalcs, "ducts.tables"],

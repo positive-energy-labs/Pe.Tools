@@ -2,6 +2,8 @@ import type { Many } from "../../../../packages/agent-contracts/src/route-kernel
 import { subjectCode, subjectOf, type SubjectRefCode } from "@pe/agent-contracts/subject-ref";
 import { elementIndex } from "../../../../apps/web/src/element-index.ts";
 import { openSet } from "../../../../apps/web/src/shell/open-set.neutral.ts";
+import type { FanScope } from "@pe/ducts-contract/fan-scope.neutral";
+export { fanScopeSchema, fanSystems, type FanScope } from "@pe/ducts-contract/fan-scope.neutral";
 export { namesOf } from "../../../../apps/web/src/route/typed-route.ts";
 /** A duct system is the SubjectRef `system-name:<name>` (ADR 0035 rule 2). */
 export const systemCode = (name: string) => subjectCode({ keyKind: "system-name", key: name });
@@ -11,15 +13,15 @@ export const activeName = (value: Many<SubjectRefCode>, roster: readonly string[
 };
 export type DuctsDestination = { kind: "route" } | { kind: "rule"; key: string } | { kind: "subject"; code: SubjectRefCode };
 export function ductsLink(
-  ids: readonly string[] | "all",
+  ids: readonly string[] | FanScope | null,
   search: Readonly<Record<string, unknown>>,
   destination: DuctsDestination = { kind: "route" },
 ) {
   const params = new URLSearchParams();
   for (const key of ["target", "fixture", "thread"])
     if (typeof search[key] === "string") params.set(key, search[key]);
-  if (ids === "all") params.set("system", JSON.stringify({ kind: "all" }));
-  else if (ids.length) params.set("system", JSON.stringify({ kind: "ids", ids: ids.map(systemCode) }));
+  if (ids && "unitId" in ids) params.set("fan", JSON.stringify({ unitId: ids.unitId, portIndex: ids.portIndex }));
+  else if (Array.isArray(ids) && ids.length) params.set("system", JSON.stringify({ kind: "ids", ids: ids.map(systemCode) }));
   // A rule is a route attention place, never a SubjectRef (ADR 0035 rule 9).
   if (destination.kind === "rule")
     params.set("selected", JSON.stringify([{ kind: "focus", id: `rule:${destination.key}` }]));

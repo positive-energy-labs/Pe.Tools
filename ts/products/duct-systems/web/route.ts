@@ -1,5 +1,6 @@
 import type { ContextOf } from "@pe/web/route";
 import { systemCode } from "@pe/ducts-web/identity";
+import { fanScopeSchema, type FanScope } from "@pe/ducts-contract/fan-scope.neutral";
 import { handle } from "@pe/agent-contracts/handle";
 import { bindings } from "./src/bindings.ts";
 import { read } from "@pe/web/route";
@@ -33,6 +34,7 @@ import { designCalc } from "./src/design-calc.ts";
 const system = subjectSchema(DUCTS_SYSTEM_MAX);
 export const fields = {
   ...picturePose,
+  fan: field(fanScopeSchema.nullable(), null, "query"),
   system: field(system, { kind: "ids", ids: [] }, "subject", "push"),
   stage: stageField(["network"]),
   systemSearch: field(listSearchSchema, { v: 1, keywords: "", pills: [] }, "query"),
@@ -43,10 +45,11 @@ export const fields = {
   rulingSort: field(z.enum(["", "name", "status"]), "", "query"),
 };
 const args = (page: {
+  fan?: FanScope | null;
   system:
     | z.output<typeof system>
     | import("@pe/agent-contracts").Immutable<z.output<typeof system>>;
-}) => ({ system: namesOf(page.system) });
+}) => ({ system: namesOf(page.system), fan: page.fan });
 export const roster = read(hostRead(reads.roster));
 export const network = read(hostRead(reads.network), args);
 export const pricing = read(hostRead(reads.pricing), args);
@@ -124,7 +127,7 @@ export const module = route({
       draw: draw("scroll", () => import("./src/screen/screen.tsx"), "AllRulesBody"),
     },
     "e-rules": {
-      title: "This system’s rules",
+      title: "This systemâ€™s rules",
       purpose: "Review fitting rules for the opened systems",
       bindings,
       body: "scroll",
