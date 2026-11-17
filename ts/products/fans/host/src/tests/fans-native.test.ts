@@ -239,6 +239,23 @@ test("a stale Fans revision refuses sealed apply before native dispatch", async 
   expect(f.dispatched.filter((row) => row.key === "ducts.apply")).toEqual([]);
 });
 
+test("P-096: a stale duct-systems sibling refuses sealed write before native dispatch", async () => {
+  const f = await fixture();
+  const work = await stage(f);
+  await command(f, "sibling-plan", "sheet.plan", work);
+  expect(await f.journal.wait("sibling-plan")).toMatchObject({ state: "succeeded" });
+  const sibling = (await f.saved.view(f.key, "duct-systems"))!;
+  const changed = await f.saved.apply(f.key, "duct-systems", "human", [
+    { path: ["workingPhase", "edit"], value: { value: "Existing" } },
+  ], sibling.revision);
+  expect(changed).toMatchObject({ ok: true, revision: sibling.revision + 1 });
+  await f.post("/actions", { id: "stale-sibling", key: "sheet.apply", target: f.target,
+    input: { work, readWorks: { [sibling.handle.key.route]: sibling.handle } } });
+  expect(await f.journal.wait("stale-sibling")).toMatchObject({ state: "failed", notDispatched: true,
+    refusal: { kind: "stale_revision" } });
+  expect(f.dispatched.filter(row => row.key === "ducts.apply")).toEqual([]);
+});
+
 test("H1: a canonical Fans handle beside an Address key carrying case and Save As from is the same document", async () => {
   const f = await nativeFixture("test", scenario, address("C:/model.rvt"));
   closes.push(() => f.close());
