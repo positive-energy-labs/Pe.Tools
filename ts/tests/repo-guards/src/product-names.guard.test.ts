@@ -25,6 +25,7 @@ const ALLOWED = new Set([
   "apps/host/src/command-registry.ts",
   "apps/host/src/routes.generated.ts",
   "apps/host/src/product-executors.generated.ts",
+  "packages/mcps/src/pea/guides.generated.ts",
   "packages/host-contracts/src/product-paths.ts",
   "packages/agent-contracts/src/routes/table.generated.ts",
   "packages/agent-contracts/src/generated/route-directory.ts",
@@ -100,6 +101,7 @@ test("the guard counts a planted product name and passes generic text and the al
     "tests/e2e/f1-fans.ts": "fans",
     "packages/host-contracts/src/fixtures/k2-four-fan-walk.json": "fans",
     "packages/host-contracts/src/product-paths.ts": "ducts",
+    "packages/mcps/src/pea/guides.generated.ts": 'import { admissionPreflight } from "@pe/fans-contract/admission";',
     "apps/web/src/duct-loss/host.ts": "ducts",
   })).toEqual({});
   expect(productNames({ "tests/e2e/other.ts": "fans" }))
