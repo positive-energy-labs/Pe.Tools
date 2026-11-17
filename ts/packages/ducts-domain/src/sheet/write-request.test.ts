@@ -10,6 +10,7 @@ import {
   round,
   slots,
   snapshotOf,
+  uniqueIdOf,
 } from "../test-snapshot.ts";
 import { suggestRoster } from "../roster.ts";
 import { toGrids } from "../loss-grid.ts";
@@ -54,6 +55,16 @@ function synthetic() {
       facts: [factOf("flow", 200)],
     });
   return snapshotOf({
+    // Fixture provenance: synthetic instance ownership/membership, not a retained native observation.
+    parameterCohorts: [
+      {
+        parameter: "ESP",
+        owner: { kind: "instance", id: 100 },
+        members: [{ elementId: 100, uniqueId: uniqueIdOf(100) }],
+        complete: true,
+        basis: at,
+      },
+    ],
     walk: TEST_WALK,
     document: {
       title: "closed synthetic",
@@ -175,6 +186,29 @@ it("refuses a truncated walk before it can mint any native preview", () => {
   const claim = sheet.claim;
   // @ts-expect-error An incomplete claim never satisfies the write capability.
   expect(() => mintWriteRequest(claim, sheet, p.input, p.context)).toThrow("complete claim");
+});
+
+it("refuses an absent required-ESP cohort with read again", () => {
+  const snapshot = synthetic();
+  delete snapshot.parameterCohorts;
+  const p = prepared(snapshot);
+  expect(p.sheet.claim.kind).toBe("complete");
+  expect(() => p.mint()).toThrow("read again");
+  expect(p.mint({ ...p.context, slots: { requiredEsp: null } }).equipment).toEqual([]);
+});
+
+it("refuses a cohort that does not hold this fan with read again", () => {
+  const snapshot = synthetic();
+  snapshot.parameterCohorts = [
+    {
+      parameter: "ESP",
+      owner: { kind: "instance", id: 999 },
+      members: [{ elementId: 999, uniqueId: uniqueIdOf(999) }],
+      complete: true,
+      basis: at,
+    },
+  ];
+  expect(() => prepared(snapshot).mint()).toThrow("read again");
 });
 function peerClaim(requiredEspInWg: number): DomainClaim {
   return claimOf({
@@ -428,6 +462,19 @@ it("compares the group and mint on the recorded Manual D fan before the engine i
     readFileSync(new URL("./fixtures/manual-d-20261102.json", import.meta.url), "utf8"),
   );
   const snapshot = withPeersRead(withFamilyFlipped(recorded as SheetSnapshot, 14577391));
+  const unit = snapshot.nodes.find((n) => n.id === 14577391)!;
+  const parameter = snapshot.slots?.requiredEsp;
+  if (!parameter) throw Error("Recorded fixture needs a required ESP slot");
+  // Replay provenance: fixture-only instance cohort adaptation. The old capture has no ownership evidence.
+  snapshot.parameterCohorts = [
+    {
+      parameter,
+      owner: { kind: "instance", id: unit.id },
+      members: [{ elementId: unit.id, uniqueId: unit.uniqueId }],
+      complete: true,
+      basis: snapshot.document.readAt,
+    },
+  ];
   const tableData = JSON.parse(
     readFileSync(new URL("./fixtures/manual-d-tables.json", import.meta.url), "utf8"),
   );
