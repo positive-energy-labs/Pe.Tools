@@ -155,12 +155,12 @@ internal static class FamilyFoundryBridgeOps {
                 Reason = Reason(data, failures),
                 Receipts = data.Receipts.Select(r => r with { ArtifactDirectory = r.ArtifactDirectory is { } dir ? RunPath(artifacts, dir) : null }).ToList()
             };
-            var outputs = (Directory.Exists(artifacts) ? Directory.EnumerateFiles(artifacts, "*", SearchOption.AllDirectories) : [])
+            var outputs = ArtifactFiles(artifacts)
                 .Select(file => (name: RunPath(artifacts, file), bytes: File.ReadAllBytes(file)))
                 .Append((name: "apply.json", bytes: System.Text.Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(relative, Formatting.Indented))))
                 .Concat(failures.Count == 0 ? [] : [(name: "failures.json", bytes: System.Text.Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(failures.Select(f => new { subject = f.Subject, message = f.Message }), Formatting.Indented)))])
                 .Concat(EngineEdge.WarningsOutput(handled));
-            // Lazy on purpose: the artifact reads run inside SettleReceiptIn, so an output failure after the effect
+            // Lazy on purpose: the artifact listing and reads run inside SettleReceiptIn, so an output failure after the effect
             // becomes `RunOutputUnsaved` beside the known outcome, never an exception in its place.
             // One family applied is a run that changed Revit, so it succeeded; its failed siblings are on the receipts.
             var (receiptPath, unsaved) = PodRuns.SettleReceiptIn(run, PodReceipt.ForSource(source, operation,
@@ -201,6 +201,15 @@ internal static class FamilyFoundryBridgeOps {
         var cause = line.LastIndexOf("Exception: ", StringComparison.Ordinal) is var at and >= 0 ? line[(at + "Exception: ".Length)..] : line;
         var failed = data.Receipts.Count(r => !r.Success);
         return failed == 0 ? $"{subject}: {cause}" : $"{failed} of {data.Receipts.Count} families failed; the first, {subject}: {cause}";
+    }
+
+    /// <summary>
+    ///     An iterator, so the directory is first opened when the outputs are enumerated. `Directory.EnumerateFiles`
+    ///     opens it at the call, which would throw after the effect and outside `SettleReceiptIn`.
+    /// </summary>
+    private static IEnumerable<string> ArtifactFiles(string artifacts) {
+        if (!Directory.Exists(artifacts)) yield break;
+        foreach (var file in Directory.EnumerateFiles(artifacts, "*", SearchOption.AllDirectories)) yield return file;
     }
 
     /// <summary>Run outputs are flat file names; an artifact's relative path becomes its `--`-joined name prefix.</summary>
