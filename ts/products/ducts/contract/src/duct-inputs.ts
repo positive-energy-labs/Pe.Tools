@@ -8,7 +8,8 @@ import { DUCT_UNIT_KINDS } from "@pe/host-contracts/generated";
 export { DUCT_UNIT_KINDS } from "@pe/host-contracts/generated";
 export type { DuctUnitKind } from "@pe/host-contracts/generated";
 export type DuctFlow = number;
-export const DUCT_PARAMETER_KEYS = ["ratedEsp", "fanFlow", "terminalFlow", "terminalDrop", "componentDrop", "fittingCoefficient"] as const;
+export const DUCT_PARAMETER_KEYS = ["requiredEsp", "ratedEsp", "fanFlow", "terminalFlow", "terminalDrop", "componentDrop", "fittingCoefficient"] as const;
+export const ductParameterNameSchema = (key: typeof DUCT_PARAMETER_KEYS[number]) => key === "requiredEsp" ? z.string().trim() : z.string().min(1);
 const elementId = z.number().int().positive();
 const portIndex = z.number().int().nonnegative();
 export const elementSubjectSchema: z.ZodType<string> = subjectRefCodeSchema.refine(code => {
@@ -187,7 +188,10 @@ export const ductsFirmSchema = z.strictObject({
   version: z.string().min(1).optional(),
   criteria: ductsCriteriaLayerSchema.optional(),
   designFriction: z.number().positive().optional(),
-  parameters: z.partialRecord(z.enum(DUCT_PARAMETER_KEYS), z.string().min(1)).optional(),
+  parameters: z.partialRecord(z.enum(DUCT_PARAMETER_KEYS), z.string()).superRefine((names, ctx) => {
+    for (const key of DUCT_PARAMETER_KEYS) if (names[key] !== undefined && !ductParameterNameSchema(key).safeParse(names[key]).success)
+      ctx.addIssue({ code: "custom", path: [key], message: "Parameter name must not be empty" });
+  }).optional(),
   written: settingWrittenSchema.optional(),
 });
 export type DuctsFirmFile = z.infer<typeof ductsFirmSchema>;
