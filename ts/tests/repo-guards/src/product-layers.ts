@@ -12,7 +12,7 @@ export const productPackages = readdirSync(join(root, "products")).flatMap(produ
     return [{ key, product, layer, ...pkg }];
   }));
 
-/** Owner ruling: shared ducts layer by layer via exports; peers through contract only. No baseline. */
+/** Shared ducts allows same-layer and downward imports via exports; peers expose contracts only. */
 export function productLayerViolations(sources: Record<string, string>): string[] {
   const found = new Set<string>();
   for (const [file, text] of Object.entries(sources)) {
@@ -25,9 +25,11 @@ export function productLayerViolations(sources: Record<string, string>): string[
       if (!to) return;
       const subpath = named ? spec === named.name ? "." : "." + spec.slice(named.name.length) : null;
       const declared = subpath !== null && Object.hasOwn(to.exports, subpath);
-      const forbidden = from.layer === "domain" && ["web", "host"].includes(to.layer);
+      const downward = to.layer === "contract" || to.layer === from.layer ||
+        (to.layer === "domain" && ["web", "host"].includes(from.layer));
+      const forbidden = !downward || (from.product === "ducts" && to.product !== "ducts");
       const crossProduct = from.product !== to.product;
-      const allowed = to.layer === "contract" || (to.product === "ducts" && to.layer === from.layer);
+      const allowed = to.layer === "contract" || (to.product === "ducts" && downward);
       if (forbidden || (named && !declared) || (crossProduct && (!allowed || !declared)))
         found.add(`${file} -> ${spec}`);
     };

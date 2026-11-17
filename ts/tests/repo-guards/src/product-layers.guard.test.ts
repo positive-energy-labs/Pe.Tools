@@ -13,7 +13,7 @@ for (const [from, spec, fails] of [
   ["fans/domain", "../../host/src/actions", true],
   ["fans/web", "../../../duct-systems/web/route", true],
   ["fans/domain", "@pe/ducts-web/design-calc", true],
-  ["fans/web", "@pe/ducts-domain/types", true],
+  ["fans/web", "@pe/ducts-domain/types", false],
   ["fans/web", "@pe/ducts-web/src/private", true],
   ["fans/web", "../../../ducts/web/src/design-calc", true],
 ] as const) {
@@ -26,3 +26,14 @@ for (const [from, spec, fails] of [
     expect(productLayerViolations({ [file]: statement })).toEqual(fails ? [`${file} -> ${spec}`] : []);
   });
 }
+
+test("web may import the shared base domain", () => {
+  expect(productLayerViolations({ "products/fans/web/src/planted.ts":
+    'import { x } from "@pe/ducts-domain/types";' })).toEqual([]);
+});
+
+test("the shared base domain may not import a product domain", () => {
+  const file = "products/ducts/domain/src/planted.ts";
+  const spec = "@pe/fans-domain/calc/network-calcs";
+  expect(productLayerViolations({ [file]: `import { x } from "${spec}";` })).toEqual([`${file} -> ${spec}`]);
+});
