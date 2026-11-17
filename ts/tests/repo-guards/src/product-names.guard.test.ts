@@ -1,11 +1,15 @@
 /**
  * ADR 0046: generic code names no product outside declared composition sites.
- * No offender baseline: a missed product rule must move to its owning product.
+ * FANS-P4-NAMES-25 freezes existing mentions; counts must fall to zero and never rise.
  */
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { expect, test } from "vite-plus/test";
 import { productionFiles, ROOT } from "./import-census.ts";
+
+const frozen: Record<string, number> = JSON.parse(
+  readFileSync(new URL("./product-names.baseline.json", import.meta.url), "utf8"),
+);
 
 const GENERIC = [
   "apps/host/src",
@@ -41,7 +45,12 @@ export const productNames = (sources: Record<string, string>): Record<string, nu
       .filter(([, count]) => count > 0),
   );
 
-test("generic files name no product outside composition", () => {
+const changes = (actual: Record<string, number>, baseline: Record<string, number>) => ({
+  added: Object.entries(actual).filter(([path, count]) => count > (baseline[path] ?? 0)),
+  reduced: Object.entries(baseline).filter(([path, count]) => (actual[path] ?? 0) < count),
+});
+
+test("generic product mentions never grow and the baseline shrinks with removals", () => {
   const found = productNames(
     Object.fromEntries(GENERIC.flatMap(productionFiles).map((path) => [path, readFileSync(resolve(ROOT, path), "utf8")])),
   );
@@ -54,7 +63,23 @@ test("generic files name no product outside composition", () => {
       ...rows.map(([path, n]) => `  ${n}\t${path}`),
     ].join("\n"),
   );
-  expect(found, "Move product rules to their product; fix stale text instead of adding exceptions").toEqual({});
+  const delta = changes(found, frozen);
+  expect(delta.added, "New or increased product mentions: move rules to their product, never raise the baseline").toEqual([]);
+  expect(delta.reduced, "Product mentions fell: lower these counts in product-names.baseline.json; remove zero-count files").toEqual([]);
+});
+
+test("the ratchet refuses a new file and one extra mention in an existing file", () => {
+  const path = "apps/host/src/builtin-inputs.ts";
+  const count = frozen[path] ?? 0;
+  expect(changes({ ...frozen, "apps/host/src/planted.ts": 1 }, frozen).added)
+    .toEqual([["apps/host/src/planted.ts", 1]]);
+  expect(changes({ ...frozen, [path]: count + 1 }, frozen).added)
+    .toEqual([[path, count + 1]]);
+  expect(changes({ ...frozen, [path]: count - 1 }, frozen).reduced)
+    .toEqual([[path, count]]);
+  const removed = { ...frozen };
+  delete removed[path];
+  expect(changes(removed, frozen).reduced).toEqual([[path, count]]);
 });
 
 test("the guard counts a planted product name and passes generic text and the allowlist", () => {
