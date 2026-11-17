@@ -211,7 +211,7 @@ test("JZ Plan route switch: Ducts reads preserve the Fans seal; changed Work sta
     expect(mounted.review("losses"), "return from a Ducts read preserves the sealed Plan").toMatchObject({ stale: false, preview: expect.anything() });
     expect(mounted.writeRefusal()).toBeNull();
     const changed = await j.host.workspace.apply(key, "fans", "human", [
-      { path: ["equipmentFlows", elementSubject(row), "edit"], value: { value: { cfm: 950, source: "test" } } },
+      { path: ["equipmentFlows", elementSubject(row), "edit"], value: { value: 950, ref: "test" } }, // amendment 1 item 4: airflow is a plain number, evidence rides on `ref`
     ], mounted.work()!.revision);
     expect(changed.ok).toBe(true);
     mounted.refresh();

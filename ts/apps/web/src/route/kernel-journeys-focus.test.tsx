@@ -795,7 +795,7 @@ test("D G07 Family renders named picker, member roster, Work and stage words wit
     types: { Standard: {}, Wide: { Width: "36in" } },
     connectors: { c1: { domain: "Duct", shape: "Round", diameter: "6in", on: "Front" } },
   });
-  const original = familyDraftRouteState.schema.parse({ reading, cells: { "/types/Wide/Width": { edit: { value: "40in" } } } });
+  const original = familyDraftRouteState.schema.parse({ reading, cells: { "/types/Wide/Width": { edit: { value: "40in", by: "human" } } } }); // amendment 2 item 1: a stored cell carries its host-stamped `by`
   const door = createFixtureWorkDoor(familyDraftRouteState, original);
   const ready = Promise.withResolvers<void>();
   let accepted: { key: any; revision: number; doc: unknown };
@@ -997,7 +997,10 @@ import { fansSheet } from "../fans/sheet.ts";
 
 // Plan reviews seal model inputs, never browser pane visibility or Page pose.
 import { useEffect, useReducer } from "react";
-import realMuas from "../../../../packages/ducts-domain/src/sheet/fixtures/muas-local-20261102.json";
+import rawMuas from "../../../../packages/ducts-domain/src/sheet/fixtures/muas-local-20261102.json";
+import { VOCABULARY } from "@pe/ducts-domain/sheet/scoped-snapshot";
+// The saved capture predates the required `vocabulary` and the P2-B coverage field `walk.unreadPeers`.
+const realMuas = { ...rawMuas, vocabulary: VOCABULARY, walk: { ...rawMuas.walk, unreadPeers: [] } };
 import { createWitness } from "../fans/cutover.test-support";
 import type { ReceiptFeedState } from "../../../../packages/agent-contracts/src/work-journal-door";
 import { TypedWrite } from "../shell/typed-shell";
@@ -1237,7 +1240,8 @@ test.each([false, true])(
     );
     expect(f.fans.review("losses")).toMatchObject({
       stale: false,
-      cells: [{ before: "880 cfm", author: "human" }],
+      // Amendment 2 item 1: the review author is the Work cell's host-stamped `by`, and Pea staged this cell.
+      cells: [{ before: "880 cfm", author: "pea" }],
     });
     expect(f.fans.review("losses")!.rows[0]).toContain("MUAS-1");
     expect(planned(f.typed.verb("losses")).read()?.preview).toBeTruthy();
@@ -1951,7 +1955,9 @@ test("JZ audit Schedules keyed edits preserve a sibling stale mark and narrow in
     await waitFor(() => expect(mount.timeline()?.undo?.label).toBe("Delete first cell"));
     expect(await mount.stepTimeline("undo")).toBeNull();
     await waitFor(() => expect(mount.owner()!.doc).toEqual(reviewed));
-    expect(await cells().patch([{ path: ["cells"], value: reviewed.cells }], { label: "Replace collection deliberately" })).toBeNull();
+    // Amendment 1 item 1: a caller never supplies `by`; the host stamps it, so the replayed cells drop the stamp.
+    const unstamped = Object.fromEntries(Object.entries(reviewed.cells as Record<string, { edit: { by?: unknown } }>).map(([key, { edit: { by: _by, ...edit } }]) => [key, { edit }]));
+    expect(await cells().patch([{ path: ["cells"], value: unstamped }], { label: "Replace collection deliberately" })).toBeNull();
     expect(mount.owner()!.doc.basis.stale ?? []).toEqual([]);
   } finally { mount.pendingEdits().forEach(intent => mount.discardIntent(intent.id)); mount.dispose(); }
 }, 60_000);
