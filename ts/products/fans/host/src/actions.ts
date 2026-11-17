@@ -2,7 +2,7 @@ import { catalogsFor } from "@pe/ducts-host/ducts-files";
 import { workElementId } from "@pe/ducts-domain/work-subject";
 import { elementLabeler } from "@pe/ducts-domain/element-label";
 import { ductWriteEvidence } from "@pe/ducts-domain/write-evidence";
-import { type DuctsApplyInput, type FanClaim } from "@pe/agent-contracts";
+import { ductsPricingData, type DuctsApplyInput, type FanClaim } from "@pe/agent-contracts";
 
 
 import { TABLE_IDS } from "@pe/ducts-domain/table-ids";
@@ -69,6 +69,7 @@ export function fanWriteRequest(input: BuildCalcInput, context: FanWriteContext)
   const sheet = buildCalc(input), claim = sheet.claim;
   if (claim.kind !== "complete") throw refused(claimRefusal(claim) ?? "", "ducts.claim-incomplete");
   try {
+    ductsPricingData.shape.calcs.element.parse(sheet);
     // P-061, P-067: a complete claim carries a runtime symbol that only buildSheet sets and the mint checks, so a decoded sheet
     // or claim cannot pass. Mint only from the buildSheet above, in this process.
     return { claim, request: mintWriteRequest(claim, sheet, input, context) };

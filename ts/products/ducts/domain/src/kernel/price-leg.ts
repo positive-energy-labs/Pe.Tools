@@ -75,6 +75,8 @@ export interface PricedLeg {
   implausible?: ImplausibleLoss;
   /** Friction legs: the straight length priced, ft. */
   lengthFt?: number;
+  /** Signed equivalent feet, including tap regain; distinct from physical straight length. */
+  equivalentFt?: number;
 }
 
 /** Table name per rule key, upper case; absent keys use the rule default. */
@@ -265,7 +267,7 @@ export function equivalentFeet(
   };
   return legs.map((l, i) => {
     if (l.lossInWg == null) return null;
-    if (l.kind === "duct") return l.lengthFt ?? 0;
+    if (l.kind === "duct") return l.equivalentFt ?? l.lengthFt ?? 0;
     if (l.source?.kind !== "rule") return null;
     return Math.max(0, (l.lossInWg / refRate(i)) * 100);
   });

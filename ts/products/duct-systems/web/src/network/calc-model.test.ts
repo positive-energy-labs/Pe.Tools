@@ -225,8 +225,15 @@ test("retained Manual D geometry: fan boundaries and a sibling's shared intake s
     }),
   );
   const trees = buildCalcTree(snapshot, sheets);
+  for (const [id, length] of [["13760945:0>4", 0.8408], ["13890846:1>0", 7.5165]] as const) {
+    const evidence = sheets[1]!.legs[id]!.evidence;
+    expect(evidence.kind).toBe("friction");
+    if (evidence.kind === "friction") expect(evidence.lengthFt).toBeCloseTo(length, 4);
+  }
   const fans = trees[0]!.children.filter((n) => n.fan != null);
-  expect(fans[0]!.total).toBeCloseTo(2.658079, 6);
+  // Out-of-table fittings leave a subtotal, never a complete ESP.
+  expect(fans[0]!.total).toBeNull();
+  expect(sheets[0]!.claim.kind).toBe("incomplete");
   expect(fans[1]!.total).toBeNull();
   expect(fans[1]!.blockerIds).toEqual(
     expect.arrayContaining(["open-end:13771256:0", "open-end:8734004:1"]),
