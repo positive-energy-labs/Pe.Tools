@@ -144,6 +144,19 @@ it("splits a tapped duct into Cs legs (passed) and a Cb leg (left by)", () => {
   ).toEqual(["friction", "friction"]);
 });
 
+it.each([0, 1])("signed branch flow changes only after the tap from end %s", end => {
+  for (const branchCfm of [-100, 100]) {
+    const split = splitTappedDuct({ duct: duct3, upstream: duct3.connectors[end],
+      upstreamCfm: 300, taps: [{ tap, branchCfm }] });
+    expect(split[0]).toMatchObject({ kind: "friction", lengthFt: end === 0 ? 5 : 7, cfm: 300 });
+    expect(split[2]).toMatchObject({ kind: "friction", lengthFt: end === 0 ? 7 : 5, cfm: 300 - branchCfm });
+    expect(split[1]).toMatchObject({ kind: "tap-straight", flows: {
+      branch: 100, upstreamMain: branchCfm > 0 ? 300 : 400,
+      downstreamMain: branchCfm > 0 ? 200 : 300,
+    } });
+  }
+});
+
 it("prices the synthetic network leg by leg to the independently computed totals", () => {
   const common = [
     priceLeg({ kind: "duct", segment: duct1, lengthFt: 10, cfm: 300 }, grids),

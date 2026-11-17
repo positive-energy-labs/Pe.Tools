@@ -160,6 +160,9 @@ function Sides({ props }: { props: LedgerProps }) {
             </span>
             <span className="face-mono text-right">
               {pressure(totals[side].worstPath ?? ws?.[side].worstKnownInWg)}
+              {totals[side].worstPath == null && ws?.[side].worstKnownInWg != null && (
+                <span data-tone="caution"> partial</span>
+              )}
             </span>
             <span className="face-mono text-right">{pressure(totals[side].allowanceInWg)}</span>
           </span>

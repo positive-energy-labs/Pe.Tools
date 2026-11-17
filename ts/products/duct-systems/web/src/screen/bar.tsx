@@ -781,6 +781,7 @@ export function MetaHeader() {
 }
 
 export function MetaBar({
+  partial = false,
   value,
   scale,
   ft,
@@ -790,6 +791,7 @@ export function MetaBar({
   unpriced = null,
   split = null,
 }: {
+  partial?: boolean;
   value: number | null;
   scale: number | null;
   ft: number | null;
@@ -832,6 +834,7 @@ export function MetaBar({
       <TooltipHint content="loss to here, in-wg">
         <span {...COL.wg} className="text-ink-2 t-small">
           {fmt(value, LOSS_PLACES)}
+          {partial && value != null && <span data-tone="caution"> partial</span>}
         </span>
       </TooltipHint>
       {self !== undefined ? (
@@ -849,6 +852,7 @@ export function MetaBar({
           <TooltipHint content="own loss, in-wg">
             <span {...COL.wg} className="text-ink-2 t-small">
               {unpriced || self === "" || self == null ? "" : `+${fmt(self, LOSS_PLACES)}`}
+              {partial && typeof self === "number" && !unpriced && <span data-tone="caution"> partial</span>}
             </span>
           </TooltipHint>
         </>

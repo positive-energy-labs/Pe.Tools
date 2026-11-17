@@ -5,6 +5,8 @@ import { useSyncExternalStore } from "react";
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from "@tanstack/react-router";
 import { workFingerprintSchema } from "@pe/agent-contracts";
 import { module as chat } from "../chat/route";
+// Load the lazy drawing before timing fixture readiness; this witness measures labels, not compilation.
+import "../chat/chat-drawing";
 import { mountTypedRoute } from "../shell/typed-mount";
 import { TypedChrome } from "../shell/typed-shell";
 import { StandaloneBand } from "../shell/band.test-support";
@@ -57,6 +59,9 @@ test.each([
         const label = page.getByText("pe-app-25-main");
         expect(label.parentElement?.textContent?.includes("Demo")).toBe(demo);
       });
+      fireEvent.click(page.getByText("pe-app-25-main"));
+      const crumb = await page.findByRole("button", { name: /^pe-app-25-main(?:\s*Demo)?$/ });
+      expect(crumb.textContent?.includes("Demo")).toBe(demo);
       const next = address.read();
       next.set("thread", "chosen");
       address.write(next, "replace");

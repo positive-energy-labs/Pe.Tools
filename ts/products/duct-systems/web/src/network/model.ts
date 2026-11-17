@@ -31,6 +31,7 @@ export interface TreeNode {
   split: Split | null;
   /** Bar scale: the required ESP of the fan calc the node is on; null while that calc is incomplete. */
   scale: number | null;
+  partial?: boolean;
   critical: "pe" | "longest" | null;
   provisional: Provisional;
   /** A run's level (where its grille is), else null. */

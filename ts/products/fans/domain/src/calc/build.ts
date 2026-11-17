@@ -519,6 +519,8 @@ class Pricer {
     proposed?: ProposedPath,
   ): PricedLeg {
     if (this.pricingLeg && !proposed) this.onLeg(this.pricingLeg, key);
+    const stated = !proposed && input.leg === "Cs"
+      ? this.input.inputs.components[String(input.fitting.id)]?.drop : undefined;
     const flows = ruleFlows(input.flows);
     const matched = input.facts.inputError
       ? undefined
@@ -530,6 +532,15 @@ class Pricer {
       this.input.grids,
       this.choices,
     );
+    // P-107: a typed branch drop substitutes only for a refused straight loss, never a rule price.
+    if (p.lossInWg == null && stated && (stated.value != null || (stated.status === "invalid" && stated.source !== "model")))
+      return priceLeg({
+        kind: "drop", element: input.fitting,
+        cfm: input.flows.through, inWg: stated.value,
+        source: `typed drop from ${input.fitting.id} (Cs refused: ${p.unpriced}); ${stated.value == null
+          ? `${stated.ref ?? provenance(stated)}; the stated drop is unreadable, retype it`
+          : provenance(stated)}`,
+      }, this.input.grids);
     const src = p.source?.kind === "rule" ? p.source : null;
     const rule = src ? ruleByKey(src.rule) : assigned ? ruleByKey(assigned.value) : matched;
     const chosen = rule ? this.input.inputs.tables[rule.key] : undefined;
@@ -591,7 +602,11 @@ class Pricer {
       if (!tap || !isTap(tap)) continue;
       const f = flows.leg.get(legKey(s, c.index));
       if (f && f.cfm == null) return null;
-      taps.push({ tap, branchCfm: f?.cfm ?? 0 });
+      const draws = flows.draws.filter(d => d.junction === s && w.ends[d.sibling]?.out === c.index);
+      if (draws.some(d => d.cfm == null)) return null;
+      const siblingCfm = draws.reduce((sum, d) => sum + (d.cfm ?? 0), 0);
+      // A sibling joins the walk at this station; splitTappedDuct subtracts in walk order.
+      taps.push({ tap, branchCfm: (f?.cfm ?? 0) - siblingCfm, siblingCfm });
     }
     return taps;
   }
@@ -612,8 +627,9 @@ class Pricer {
     let cs: PricedLeg[] = [];
     if (inC && inC.kind !== "curve") {
       const taps = this.tapsOn(w, flows, s);
-      const upstreamCfm = stateFlow(flows, s);
-      if (!taps || upstreamCfm == null) return { p: null, ids };
+      const total = stateFlow(flows, s);
+      if (!taps || total == null) return { p: null, ids };
+      const upstreamCfm = total - taps.reduce((sum, t) => sum + t.siblingCfm, 0);
       const leaveBy = outC?.kind === "curve" ? (outC.connectedTo?.elementId ?? null) : null;
       const split = splitTappedDuct({ duct, upstream: inC, upstreamCfm, taps, leaveBy });
       pieces = split.filter((x) => x.kind === "friction");
@@ -631,8 +647,7 @@ class Pricer {
                   inlet: x.tap.connectors.find((c) => c.connectedTo?.elementId === duct.id),
                   outlet: undefined,
                   main: duct,
-                  // On the return the walk runs against the air: a tap passed is a branch joining.
-                  converging: side === "return",
+                  converging: (side === "return") === taps.some(t => t.tap.id === x.tap.id && t.branchCfm > 0),
                 }),
               }),
             ],
@@ -693,7 +708,7 @@ class Pricer {
     return {
       p,
       ids,
-      note: `, ${round(length)} ft${cs.length ? `, ${cs.length} tap(s) passed (Cs)` : ""}`,
+      note: `, ${round(length)} ft${cs.length ? `, ${cs.length} tap(s) passed (Cs: ${cs.map(p => p.elementId).join(", ")})` : ""}${cs.flatMap(p => p.source?.kind === "drop" ? [`; ${p.source.source}`] : []).join("")}`,
       // The flow the leg is priced at where it enters, the same piece its velocity is read from: a
       // duct left by a tap on its side carries the upstream flow up to that tap (RV-15's tap on
       // 14682079 is fed 150 cfm through 4.93 ft of the 10 in main), never the branch's 35.
@@ -796,7 +811,8 @@ class Pricer {
     }
     const parentIn = main.connectors.find((c) => c.index === parent.in);
     const taps = parentIn && parentIn.kind !== "curve" ? this.tapsOn(w, flows, st.parent) : null;
-    const up = stateFlow(flows, st.parent);
+    const total = stateFlow(flows, st.parent);
+    const up = total == null ? null : total - (taps?.reduce((sum, t) => sum + t.siblingCfm, 0) ?? 0);
     const branch =
       taps && up != null
         ? splitTappedDuct({

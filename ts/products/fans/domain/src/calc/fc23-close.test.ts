@@ -467,7 +467,7 @@ it.skipIf(!existsSync(CHADDS))(
 );
 
 it.skipIf(!existsSync(CHADDS))(
-  "FC-23 on Chadds: return takeoffs price on ER5-2, and the volume dampers' 1.0 in-wg family default is demoted",
+  "FC-23 on Chadds: off-geometry return takeoffs refuse ER5-2, and volume damper defaults are demoted",
   () => {
     const { snap, roster } = load();
     const input: BuildCalcInput = {
@@ -480,16 +480,20 @@ it.skipIf(!existsSync(CHADDS))(
     const sheet = buildCalc(input);
 
     // D8: 13971115 feeds unresolved plenum openings as well as a terminal: the known demand
-    // cannot price that shared leg. A fully known branch still reads converging ER5-2 Cb.
+    // cannot price that shared leg. A known branch off ER5-2's stated geometry is also unpriced.
     const returnLegs = [
       ...new Set(sheet.paths.filter((p) => p.side === "return").flatMap((p) => p.legIds)),
     ].map((id) => sheet.legs[id]!);
     expect(returnLegs.filter((l) => /SD5-9/.test(l.lossSource.ref))).toEqual([]);
     expect(sheet.legs["13971115:0>1"]).toMatchObject({ flowCfm: null, lossInWg: null });
     expect(sheet.legs["14551976:0>1"]!.lossSource).toMatchObject({
-      kind: "rule",
-      ref: expect.stringMatching(/^tap-converging-rect ER5-2 Cb=/),
+      kind: "default",
+      ref: "unpriced",
     });
+    expect(sheet.legs["14551976:0>1"]!.lossInWg).toBeNull();
+    expect(sheet.blockers).toContainEqual(expect.objectContaining({
+      elementId: 14551976, detail: expect.stringContaining("ER5-2 is stated for Ab/Ac 0.5, As/Ac 1"),
+    }));
     expect(sheet.notes.some((i) => /diverging-table/.test(i.text))).toBe(false);
 
     // 3. The supply's round volume damper 13493795 is no longer the 1.0 in-wg "designer-stated" row:

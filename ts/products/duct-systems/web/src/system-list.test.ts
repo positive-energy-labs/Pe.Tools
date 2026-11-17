@@ -35,8 +35,8 @@ test("two systems sharing a fan retain their own worst run and breakdown termina
   const second = rows[1]!;
   expect(second.fanless).toBe(false);
   expect(second.total).toBeGreaterThan(0.35);
-  // SA 1's only path is unknown on this capture: unpriced, never a copy of SA 2's.
-  expect(rows[0]!.total).toBeNull();
+  // The typed tap drop now prices SA 1's own path, independently of SA 2's.
+  expect(rows[0]!.total).toBe(0.077804);
   // P-074: a grille of SA 2 that no fan's calc reaches makes SA 2 unpriced, never priced on grille 31 alone.
   const grille = snapshot.nodes.find((node) => node.id === 31);
   if (!grille) throw Error("The fixture has no grille 31");
@@ -61,7 +61,9 @@ test("a system with one unknown path is unpriced, never priced at its worst know
     endCfm: { 30: 300, 31: 100 },
     drops: { 21: 0.01, 22: 0.01, 30: 0.05, 31: 0.35 },
   });
-  // The fan's path to grille 31 is whole and its path to grille 30 is not: both are SA 1's.
+  // Explicitly withhold grille 30: the published fixture's typed tap now prices both paths.
+  const path = calcs[0]!.paths.find((p) => p.end.elementId === 30)!;
+  calcs[0]!.legs[path.legIds.at(-1)!]!.lossInWg = null;
   expect(runsOf(calcs).map((run) => [run.terminal, run.total == null])).toEqual([
     [31, false],
     [30, true],
