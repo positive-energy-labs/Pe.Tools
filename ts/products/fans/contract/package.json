@@ -14,7 +14,9 @@
     "./link": "./src/link.ts",
     "./pea/ducts-skill": "./src/pea/ducts-skill.ts"
   },
-  "pe": { "guide": "./pea/ducts-skill" },
+  "pe": {
+    "guide": "./pea/ducts-skill"
+  },
   "scripts": {
     "check": "vp exec tsc --noEmit",
     "test": "vp test"

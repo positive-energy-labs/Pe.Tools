@@ -2,7 +2,7 @@ import { afterEach, expect, test, vi } from "vite-plus/test";
 import type { WorkKey } from "@pe/agent-contracts";
 import { hostTimeline } from "../../../../apps/host/src/reads/work-timeline.ts";
 import type { TimelineClient } from "../../../../apps/web/src/shell/work-feed-client.ts";
-import { createWitness } from "../../../../apps/web/src/product-tests/fans/web/src/cutover.test-support.ts";
+import { createWitness } from "@pe/fans-web/cutover.test-support";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
 import { snapshot } from "@pe/ducts-domain/test-fixture";
 import { module as chat } from "../../../../apps/web/src/chat/route.ts";

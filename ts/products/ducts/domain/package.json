@@ -64,7 +64,10 @@
     "./test-inputs": "./src/test-inputs.ts",
     "./fixtures/synthetic-snapshot.json": "./src/fixtures/synthetic-snapshot.json",
     "./health.fixture": "./src/health.fixture.ts",
-    "./tables.fixture": "./src/tables.fixture.ts"
+    "./tables.fixture": "./src/tables.fixture.ts",
+    "./fixtures/manual-d-20261102.json": "./src/fixtures/manual-d-20261102.json",
+    "./fixtures/manual-d-tables.json": "./src/fixtures/manual-d-tables.json",
+    "./published-calcs.fixture": "./src/published-calcs.fixture.ts"
   },
   "scripts": {
     "check": "vp exec tsc --noEmit",
@@ -76,10 +79,12 @@
     "@pe/host-contracts": "workspace:*"
   },
   "devDependencies": {
+    "zod": "4.3.6",
     "@types/node": "^25.6.2",
     "typescript": "^6.0.3",
     "vite-plus": "catalog:",
     "@pe/ducts-web": "workspace:*",
-    "@pe/fans-domain": "workspace:*"
+    "@pe/fans-domain": "workspace:*",
+    "@pe/fans-contract": "workspace:*"
   }
 }

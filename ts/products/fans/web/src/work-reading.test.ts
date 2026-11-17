@@ -6,7 +6,7 @@ import type {
   Observation,
   WorkWriteOutcome,
 } from "../../../../packages/agent-contracts/src/work-journal-door.ts";
-import { createWitness } from "../../../../apps/web/src/product-tests/fans/web/src/cutover.test-support.ts";
+import { createWitness } from "@pe/fans-web/cutover.test-support";
 
 const closes: (() => void)[] = [];
 afterEach(() =>

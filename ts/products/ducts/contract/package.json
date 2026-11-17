@@ -12,7 +12,9 @@
     "./duct-loss-read": "./src/duct-loss-read.ts",
     "./fan-scope.neutral": "./src/fan-scope.neutral.ts"
   },
-  "pe": { "guide": "./pea-guide" },
+  "pe": {
+    "guide": "./pea-guide"
+  },
   "scripts": {
     "check": "vp exec tsc --noEmit",
     "test": "vp test"

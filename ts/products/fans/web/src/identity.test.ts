@@ -1,6 +1,6 @@
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { createWitness } from "../../../../apps/web/src/product-tests/fans/web/src/cutover.test-support.ts";
-import { admit } from "../../../../apps/web/src/product-tests/fans/web/src/admission.fixture.ts";
+import { createWitness } from "@pe/fans-web/cutover.test-support";
+import { admit } from "@pe/fans-web/admission.fixture";
 import { stableFanKey } from "@pe/ducts-web/calc/model";
 import { decode, uniqueIdSchema } from "@pe/agent-contracts/subject-ref";
 import { workFeedFailureMessage } from "../../../../packages/agent-contracts/src/work-journal-door.ts";

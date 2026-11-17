@@ -10,8 +10,6 @@
     "./calc/build": "./src/calc/build.ts",
     "./calc/calc-breakdown": "./src/calc/calc-breakdown.ts",
     "./calc/encounters": "./src/calc/encounters.ts",
-    "./calc/fixtures/manual-d-20261102.json": "./src/calc/fixtures/manual-d-20261102.json",
-    "./calc/fixtures/manual-d-tables.json": "./src/calc/fixtures/manual-d-tables.json",
     "./calc/fixtures/muas-local-20261102.json": "./src/calc/fixtures/muas-local-20261102.json",
     "./calc/fixtures/muas-real.json": "./src/calc/fixtures/muas-real.json",
     "./calc/flow": "./src/calc/flow.ts",

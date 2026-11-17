@@ -48,7 +48,12 @@
     "./subject-labels": "./src/subject-labels.tsx",
     "./subject-text": "./src/subject-text.ts",
     "./work": "./src/work.ts",
-    "./fixtures/fan-sheet.json": "./src/fixtures/fan-sheet.json"
+    "./fixtures/fan-sheet.json": "./src/fixtures/fan-sheet.json",
+    "./cutover.test-support": "./src/cutover.test-support.ts",
+    "./calcs.test-support": "./src/calcs.test-support.ts",
+    "./admission.test-support": "./src/admission.test-support.ts",
+    "./native.test-support": "./src/native.test-support.ts",
+    "./work-owner.test-support": "./src/work-owner.test-support.ts"
   },
   "scripts": {
     "check": "vp exec tsc --noEmit",
@@ -73,10 +78,9 @@
     "@types/react-dom": "^19.2.3",
     "@types/three": "catalog:",
     "@types/qrcode": "catalog:",
-    "@pe/duct-systems-domain": "workspace:*",
-    "@pe/duct-systems-web": "workspace:*",
-    "@pe/fans-domain": "workspace:*",
-    "@pe/fans-web": "workspace:*",
-    "@testing-library/react": "^16.3.0"
+    "@testing-library/react": "^16.3.0",
+    "@pe/runtime": "workspace:*",
+    "@pe/fans-contract": "workspace:*",
+    "@pe/duct-systems-contract": "workspace:*"
   }
 }
