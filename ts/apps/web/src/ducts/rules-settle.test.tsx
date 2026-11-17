@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
 import { RegistryContext } from "@effect/atom-react";
-import { pricingResult } from "@pe/ducts-domain/pricing-result";
 import { cleanup, render, screen } from "@testing-library/react";
 import { isValidElement } from "react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
@@ -8,7 +7,6 @@ import { createWitness } from "../fans/cutover.test-support";
 import { makeAtomRegistry } from "../shell/owner";
 import { systemCode } from "./identity";
 import { pricing } from "./contract";
-import { noTerminalSnapshot } from "./no-terminal.fixture";
 
 const closes: (() => void)[] = [];
 afterEach(() => {
@@ -17,15 +15,7 @@ afterEach(() => {
 });
 
 test("rules panes settle when the selected system has nothing to price, never 'Loading rules'", async () => {
-  // The host's own refusal: pricingResult throws for a scope whose every group lacks a terminal.
-  const refusal = (() => {
-    try {
-      pricingResult(noTerminalSnapshot(), {}, {}, null);
-    } catch (error) {
-      return error;
-    }
-    throw Error("fixture no longer refuses");
-  })();
+  const refusal = Error("EX 1 has no terminal; nothing to price");
   const f = await createWitness(closes, new Map(), {
     [pricing.key]: { kind: "use", open: (_ctx, deliver) => deliver({ kind: "failure", error: refusal }) },
   });

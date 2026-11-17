@@ -2,7 +2,7 @@
  * Tolerance over repair (pressure-drop ledger, 2026-10-16): a gap or a near-miss tap that a
  * person would otherwise heal in Revit becomes a recorded graph assumption. `inferJoints` finds
  * them; `tolerate` rewrites the snapshot as if they were real reciprocal joints, so
- * `physicalGraph`, `groupTree` and the loss walk need no notion of inference. Points are model
+ * `groupTree` and the fan walk need no notion of inference. Points are model
  * feet (DuctContracts.cs); `tolIn` is inches. A edit `ignore` verdict on a finding id withholds
  * that one inference. Nothing here is stored and nothing reaches Revit.
  * A duct landing on a duct's side and a duct landing on an end cap are one rule (kaitpw
