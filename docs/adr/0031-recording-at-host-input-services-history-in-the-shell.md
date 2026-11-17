@@ -4,7 +4,7 @@ Date: 2026-11-04. Status: accepted. Source: kaitpw's goal and rulings in the ker
 
 ## Context
 
-Current amendment: [ADR 0047](0047-workflow-owns-durable-commands.md) transfers journal and receipt input services to the workflow owner, preserving swappable recording and fail-closed replay. The accepted historical decision below is unchanged.
+Current amendment: [ADR 0050](0050-workflow-owns-durable-commands.md) transfers journal and receipt input services to the workflow owner, preserving swappable recording and fail-closed replay. The accepted historical decision below is unchanged.
 
 kaitpw: "I want desperately a generalized and standard way to page back in time through old snapshots/readings. This would open the door for before/after diffing capabilities, and would unintuitively relax a lot of friction around my development loop bc Id no longer need revit open for a huge variety of changes I want to test." Restated: one standard way for every route to show "as it was", a keyed before-and-after diff, a dev loop with no Revit across many worktrees, and cloud history later.
 

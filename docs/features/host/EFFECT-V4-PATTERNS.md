@@ -2,7 +2,7 @@
 
 Read 2026-11-04 at `main` f734953f. Pin: `effect` 4.0.2 exact, with `@effect/platform-node` 4.0.2 and `@effect/atom-react` 4.0.2.
 
-Your training is mostly Effect v3, and v4 written from those reflexes compiles wrong or does not compile. This doc lists what changed and the shapes this repo uses. [ADR 0029](../../adr/0029-effect-is-the-standard-library-one-fiber-per-request.md) is the law: Effect is the standard library, and each request runs on one fiber. When this doc and the ADR disagree, the ADR wins, so fix this doc. Current amendments are [ADR 0046](../../adr/0046-effect-identity-belongs-to-the-effect-owner.md), [ADR 0047](../../adr/0047-workflow-owns-durable-commands.md) and [ADR 0048](../../adr/0048-csharp-generates-effect-schema.md); they govern the target replacement. Existing journal examples below describe code pending cutover, not a second target owner.
+Your training is mostly Effect v3, and v4 written from those reflexes compiles wrong or does not compile. This doc lists what changed and the shapes this repo uses. [ADR 0029](../../adr/0029-effect-is-the-standard-library-one-fiber-per-request.md) is the law: Effect is the standard library, and each request runs on one fiber. When this doc and the ADR disagree, the ADR wins, so fix this doc. Current amendments are [ADR 0049](../../adr/0049-effect-identity-belongs-to-the-effect-owner.md), [ADR 0050](../../adr/0050-workflow-owns-durable-commands.md) and [ADR 0051](../../adr/0051-csharp-generates-effect-schema.md); they govern the target replacement. Existing journal examples below describe code pending cutover, not a second target owner.
 
 ## 0. References, in order of trust
 
@@ -214,7 +214,7 @@ A reusable effectful function is `Effect.fn("Owner.step")(function* (...) { ... 
 
 Fork every fiber (a consent window, a poll, a probe, a dispatch worker) into a service's scope with `Effect.forkScoped`, or with `Effect.forkIn(scope)` after `const scope = yield* Effect.scope`. A detached `runFork` is a finding. The host has one `Effect.forkDetach`, in `host-lifecycle.ts:415`: it trips the shutdown latch after the response flushes. Do not copy it.
 
-Durable work captures causal identity and its durable owner's authority explicitly. It never inherits the request's cancellation lifetime (rule 2, rule 14). ADR 0047 transfers that owner from the journal to workflow at admission; observer fibers do not own the command.
+Durable work captures causal identity and its durable owner's authority explicitly. It never inherits the request's cancellation lifetime (rule 2, rule 14). ADR 0050 transfers that owner from the journal to workflow at admission; observer fibers do not own the command.
 
 ### 2g. Settle inside the Exit (COMMON 11)
 
@@ -240,7 +240,7 @@ Inside a marked Promise island, use the island's own idiom: `try { persist() } f
 
 - Every route declares one of three lifetimes:
   - **Request-owned read:** the work lives on the request fiber.
-  - **Durable command:** the admitted workflow owns the work from submission (ADR 0047 target; journal until cutover).
+  - **Durable command:** the admitted workflow owns the work from submission (ADR 0050 target; journal until cutover).
   - **Subscription:** the route observes, and losing the observer never stops the work.
 - A native read is a `NativeReads.join(prepared, session)`. It shares one dispatch per canonical descriptor and refcounts its joiners. When the last joiner is interrupted it sends one `op.cancel`, and it forgets the entry only on terminal settlement. The join runs under `Effect.uninterruptibleMask((restore) => …)`, so a join never leaks a refcount.
 - The serial slot is one worker per Revit process incarnation. It is fed by a bounded FIFO `Queue` and forked into the bridge scope (`dispatch.ts`). Cancel bypasses the worker. A timer never releases the slot.
@@ -272,8 +272,8 @@ Unit tests are not something to preserve. A deterministic test stays only when i
 
 - `ducts-domain` is pure values in and values out, so leave it plain.
 - React render code stays React plus atoms; `Effect.gen` in a component is a finding.
-- ADR 0047 adopts `workflow`, `cluster` and Effect `sql` over SQLite as the replacement durable command owner, not a second owner beside the journal. `eventlog`, `KeyValueStore` and `TxRef` remain unadopted as parallel owners.
-- `Schedule` owns in-process backoff only (`machine.ts:649`, `Effect.repeat(Schedule.spaced(...))`). Target restart recovery belongs to workflow Activities and owner evidence. In-flight Activities may re-run, changed payloads can silently join an engine key, and `Workflow.interrupt` is insufficient for Stop during an Activity. ADR 0047 therefore requires create-only admission, effect-owner identity and a durable Stop signal plus native cancellation. Product lifecycle proof remains UNPROVEN.
+- ADR 0050 adopts `workflow`, `cluster` and Effect `sql` over SQLite as the replacement durable command owner, not a second owner beside the journal. `eventlog`, `KeyValueStore` and `TxRef` remain unadopted as parallel owners.
+- `Schedule` owns in-process backoff only (`machine.ts:649`, `Effect.repeat(Schedule.spaced(...))`). Target restart recovery belongs to workflow Activities and owner evidence. In-flight Activities may re-run, changed payloads can silently join an engine key, and `Workflow.interrupt` is insufficient for Stop during an Activity. ADR 0050 therefore requires create-only admission, effect-owner identity and a durable Stop signal plus native cancellation. Product lifecycle proof remains UNPROVEN.
 - Use `Path` where a scope is needed, not for every `join`.
 
 ---

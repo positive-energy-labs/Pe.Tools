@@ -1,256 +1,163 @@
-# Ducts: live frontier (muse, 2026-10-27, revised after critique)
+# Fans and duct-systems crusade map
 
-Sweeps the 2026-10-04 map. Revised the same day after three critics (engineering truth from the
-RHVAC files and MUAS-01 .r10; project history from the ledger and user turns; Astra on
-architecture, method and proof; the full report is `.artifacts/runs/deterministic-20261027-ducts-history/critique-astra.md`)
-and a consult with the Pe.Revit.Space thread. Each changed line names its source in brackets.
-Deleted when the path engine, the roster and the sheet are the shipped route. Rulings go to
-`LEDGER.md` Decided; this file holds the pillars, the priors being dropped, the target
-architecture, and the verdicts still owed.
+This map is the live frontier for the fans crusade. It is also the [ADR 0046](../../adr/0046-a-product-lives-in-one-folder.md) pilot. It replaces the 2026-10-27 path-first map, which git holds at 5209e50c. That map's verdicts are in [LEDGER.md](LEDGER.md) Decided (the 2026-10-27 to 2026-10-29 lines). Its open items are carried into the decision log below. Nothing here is built. Delete this file when the last slice lands, and promote what survives into the `duct-systems` and `fans` ledgers that slice R creates.
 
-## Why
+Evidence:
 
-The product is a static pressure calculator for Manual D work at residential scale, where one
-project (Chadds Ford) holds 360-plus systems and networks with ten-plus terminals threaded
-through dehumidifiers, ERVs, heaters, silencers and dampers. Wrightsoft computes the number
-fine; it cannot find the critical path on a network an engineer has not typed in by hand, and
-nobody will type 360 of them. Pe reads the network from Revit and does the typing.
+- `.artifacts/runs/mega-review-20261112/signed.md` (table 2, the signed shape);
+- `.artifacts/runs/fans-ready-20261116/` (readiness review: five sealed readers, the page `page/readiness.html`, breaks B1 to B8, rulings Q1 to Q7);
+- `.artifacts/runs/host-leak-20261116/` (four sealed readers on product code outside its home);
+- the spike branches `spike/fans-write-from-sheet` c7d788f1 and `spike/ducts-from-sheets` 36978a1e.
+- the 2026-11-03 Revit dev meetup with Hap (Manual D): `.artifacts/meetings/2026-11-03-revit-dev-meetup/REPORT.md` (action items A to E, checks C1 to C8), `CONVERGENCE.md` (the converged Manual D model M1 to M17, and kaitpw's rulings in section (i)), `corrections-explained.md`. Read these before landing 1, because they hold the engineering behind Q1 to Q4;
+- `.artifacts/runs/fans-map-check-20261116/P1-reply.md` (map check 1: anchors, the import-graph file assignment for slices X and M, sizes) and `.artifacts/runs/host-leak-20261116/B-reply.md` (host-leak reader B);
+- the reader threads in T3, readable with `t3_thread_read`: [host-leak A](t3-thread://v2/f14f112d-ddd1-45d1-9d3d-a1b59329e54d/thread:delegated-task:command%3Amcp%3A76929774-3fe8-4922-8f82-34837b6b1072%3Adelegate-task%3Afe8e07b4-d4b6-4b48-ac06-3704d518b8d7), [host-leak B](t3-thread://v2/f14f112d-ddd1-45d1-9d3d-a1b59329e54d/thread:delegated-task:command%3Amcp%3A76929774-3fe8-4922-8f82-34837b6b1072%3Adelegate-task%3Ab49be365-c763-40f4-9fe5-746e98f4ea19), [host-leak C](t3-thread://v2/f14f112d-ddd1-45d1-9d3d-a1b59329e54d/thread:delegated-task:command%3Amcp%3A76929774-3fe8-4922-8f82-34837b6b1072%3Adelegate-task%3A400d9387-05d2-4519-a0a3-1ade2de3745e), [host-leak D](t3-thread://v2/f14f112d-ddd1-45d1-9d3d-a1b59329e54d/thread:delegated-task:command%3Amcp%3A76929774-3fe8-4922-8f82-34837b6b1072%3Adelegate-task%3A1faab30d-5734-4612-a5f6-3f580cba51aa), [map check 1](t3-thread://v2/f14f112d-ddd1-45d1-9d3d-a1b59329e54d/thread:delegated-task:command%3Amcp%3A76929774-3fe8-4922-8f82-34837b6b1072%3Adelegate-task%3A19fad8f2-a8a2-4b48-8944-03e63e58ee66), [map check 2](t3-thread://v2/f14f112d-ddd1-45d1-9d3d-a1b59329e54d/thread:delegated-task:command%3Amcp%3A76929774-3fe8-4922-8f82-34837b6b1072%3Adelegate-task%3A1975bce8-a2c9-4f59-9012-364bba2861e2). Map check 2 holds the censuses behind D1, D2, D3 and D4.
 
-This was the stated goal on 2026-10-15 ("until pea can do a pdrop calc for each equipment and
-grill/room") and was lost on 2026-10-20 when the Fix/Set/Check/Write inbox became the control;
-the ledger records the consequence, "on Project A a Fix row always stood" [history].
+Keep these while this map exists. Everything under `.artifacts/` is gitignored and lives only in the main checkout, so read it there from a worktree.
 
-The prior shape lost that goal. The 2026-10-27 Pea thread on Chadds Ford ("what do we need to
-do to calc pdrop from MUAS-1 to FC-23") took 112 tool calls, 61 regex windows over a 14.5 MB
-document-wide snapshot and a 77 MB analysis artifact, and returned zero pressure numbers. The
-tutorial has 60 cases, 9 of them about pricing a run of duct and 28 about joins, grouping and
-fan election. `ducts-domain` is 9,940 lines, 908 of them physics.
+Stamp for the whole plan: UNPROVEN[nothing is built; each slice names the lane that proves it]. Every code `path:line` is at 5209e50c and is a locator to re-check, not a fact. Doc anchors (`LEDGER.md:N`, `../routes/LEDGER.md:N`) are at the commit that adds this map. Short paths expand from `ts/apps/` (`web/src`, `host/src`) and `ts/packages/` (`agent-contracts/src`, `mcps/src`, `ducts-domain/src`). Every size is a spike estimate or a `wc -l` count, not a measured writer rate.
 
-## Pillars
+The goal, in the owner's words: "it should be system and fans, both coming out of ducts. no more sheet or proto/e". D9 then named the network product `duct-systems`. Restated: `/fans` becomes the one authority for a fan's required static, and only a complete claim writes to Revit. `/ducts` becomes `duct-systems`, which keeps network health and heal and reads fan results for pressure. The group engine is deleted. Each product's TypeScript moves into one folder.
 
-1. **The path is the primitive.** A path is an ordered chain of connectors, with a side
-   (supply or return) and a flow direction the caller asserts. Every number the product shows
-   is a sum along a path. No number belongs to a group, a Revit system, or a document.
-2. **The fan sheet is the product.** Name a fan port; the engine walks outward from the
-   discharge and inward from the inlet, enumerates every end it reaches, prices every path,
-   ranks them per side, and reports worst supply plus worst return as that fan's required
-   external static [eng 1, Astra 8]. One sheet per fan, one roster per project, one click
-   recomputes all. The Manual D friction-rate worksheet, generated.
-3. **A sheet always exists; a certified number does not.** Every sheet carries a known
-   subtotal, an assumed estimate (defaults and cushion-type gaps), and a completeness state.
-   An open end, inferred join or unknown drop is a blocker line with its effect. Two gaps
-   block the total, as ruled on 2026-10-21 and 2026-10-22: no flow on a path, and an
-   implausible fitting loss. An incomplete total is never ranked as the critical path and
-   never written as required ESP [history 4, Astra 4].
-4. **Defaults with provenance close the last mile.** Firm defaults for equipment drops,
-   fitting rules and friction rate price everything nobody has ruled on. Every input on the
-   sheet names its source: typed, parameter, firm default (with version), inferred. One click
-   is honest when every assumption is on the page. The airflow slot is one confirmed choice
-   per project, never a per-terminal fallback [history 6].
-5. **Equipment is a leg, not a cut.** A dehumidifier, ERV core, heater, silencer or filter in
-   the path carries a drop and passes flow. The walk passes through non-roster equipment only;
-   an open equipment port is an open-end blocker [history 14]. The walk ends at a terminal,
-   an open end, or another roster fan's port.
-6. **One engine, one truth read, one picture read, one contract.** TypeScript prices; C#
-   collects raw truth through the snapshot op; the picture is a separate Space read keyed by
-   the sheet's element ids, never folded into the snapshot [Space]. The sheet is the contract
-   the page, Pea and the network surface all read. The native loss server is the one named
-   exception, see Write below [Astra 18].
-7. **Revit metadata is a hint, direction is asserted.** System classification, connector
-   direction and system names never choose a start, an end, or a fan. The caller asserts
-   direction at the start; after a tap or at an air-classification change the walk honours
-   the asserted flow and raises a `class-change` blocker if it would cross air types
-   [eng 5, history 7]. The Greenheck intake read as a supply grille proved the first half.
+## Start here (for the agent that runs this map)
 
-## Priors to drop, and why
+The author of this map does not run it. Read in this order: this file, ADR 0046, `LEDGER.md` Owed (the `FANS CRUSADE` lines), then map check 1's reply for the file manifests. Rulings gate waves, not the whole map:
 
-| Prior | Why it goes |
-|---|---|
-| Group, root, `g<min>` ids, loop and multi-root issues (`DuctNetwork.Analyze`, `topology.ts`, `readiness.ts`, `issues.ts`, `bins.ts`) | Existed to decide what to price before anyone named a start. A named fan port and a walk make them unnecessary. |
-| Fan election and roles (`unit-roles.ts`, `fan-assignment.ts`, `DuctFanAssigner.cs`, `roles` Work segment, `ducts.assign-fan` op) | Replaced by a roster the engineer confirms once per project. On 2026-10-21 kaitpw leaned to leave system split and assign-fan "to revit and/or adhoc pea work" [history 11]. |
-| Fan flow as a parameter input | Not what the engineer does: the MUAS-01 file has fan CFM zero and trunk flow as the sum of typed runouts, and kaitpw agreed on 2026-10-21 that "a fan's flow is the sum of its grilles by definition" (ledger line 62). The first draft of this map got it backwards [eng 4, history 1, Astra 3]. |
-| Circuits and hydraulic closure (`circuits.ts`, `component-flows.ts`, `hydraulic-closure.ts`, `physical-graph.ts`, `calculation` Work segment, the `circuits` projections) | A second engine reachable only by Pea, never on the page, 2,184 lines plus 2,164 of tests. Nobody asked for it. |
-| Revit system name as the unit (`system-scope.ts`, `system-search.ts`, the four-system window, "Name the system" step) | A system name spans networks and a network spans names. System name survives only as a search handle. |
-| Document-wide analyze and the 77 MB analysis artifact (`assessment.ts`, `ducts-analysis.ts`, `assessDucts`) | Whole-document work to answer a one-path question. Pea's four-minute loss was this artifact and the geometry-script ban, not election [history 11]. |
-| `ducts.ports`, `ducts.family-patch`, catalogs, loads split, `/duct-loss` math | No page caller, unscoped, or rejected in the ledger and still wired. |
-| The inbox as a workflow (Fix, Set, Check, Write stages) | Topology became the product. Blockers are lines on the sheet; the two heal buttons sit beside their line. |
-| Tutorial cases 12, 13, 25, 29 through 35, 51, 52 | Grouping and election cases with no subject after the pivot. |
+- Every gating ruling is in: Q1 to Q7, D1, D2, D3, D9 and H5. D4 to D8 have defaults and gate nothing until late.
+- Start with W0. The waves run W0, X, M, L1, L2, R.
 
-Kept unchanged: `loss-physics.ts`, `loss-grid.ts`, `loss-rules.ts`, `catalog.ts`,
-`geometry.ts`, `faces.ts`, `AshraeTables.cs`, `DuctHealer.cs`. Kept with a stated change:
-`equivalent-length.ts` already converts at each leg's own rate, which is the RHVAC convention
-this map now adopts; its straight-duct-at-physical-length rule stays [Astra 10].
-`DuctFittingPricing.cs` goes with the loss server's recompute branch (transport ruling below). Lifted before their shells go: the tap leg split
-and fitting facts in `losses.ts`, `applyRequest` in `pricing.ts`, inferred-joint geometry and
-connector-pair verdicts in `proximity.ts`, the per-terminal flow order in `terminal-flows.ts`.
+Ask the owner for an open ruling when its wave is next, with the plain-language question in the decision log. Do not decide one on a default unless the owner is away, and then mark it re-openable, as `index` says.
 
-Rulings taken 2026-10-27 (kaitpw): ASHRAE grids stay the fitting default; the snapshot op
-gains selectors rather than a second read op; Write sends required ESP and design flow to the
-unit; the roster lives in the model store (reverting the earlier same-day lean to a unit
-parameter, see Roster above). 2026-10-27 verdicts on the critique: terminal drops take a firm
-default by family, size and cfm, one rolled-up line per sheet (reverses the 2026-10-20 leads'
-zero, kaitpw); a path stops at the other roster fan's port and credits nothing from it; the
-halo stays a layer and will travel with the 3D primitive when it generalises to pipes and
-rooms; Manual D equivalent-length tables become a firm option beside ASHRAE grids; the loss
-server transports the sheet's critical-leg coefficient into `Pe_C` rather than recomputing.
+## Nouns and invariants
 
-## Target architecture
+**Products** (ADR 0046):
 
-### Data model
+- `ducts` is the shared base, with no route. It holds fitting physics, loss tables, the catalog, the network graph, the leg pricer (today's `ducts-domain/src/kernel/`), the inputs both products resolve, and the presentation both pictures draw with. Map check 1 counted today's coupling by whole file: 12,104 domain lines are reached by both products, 1,016 only by system, 122 only by fans. Slice X cuts that down before anything moves.
+- `duct-systems` (ruled D9) is today's `/ducts` route: network health, heal, system lists. It works with no fan.
+- `fans` is today's `/fans` route: the fan roster, each fan's path pricing, the claim, and the Revit write.
+- Each one is `ts/products/<product>/{domain,web,host,contract}`, with one package for each runtime.
 
-```
-Roster        one per project; every (unit, port) the engineer confirmed drives air
-  FanPort     unit id, port index, firm tag (PE_G___TagInstance), side served
-              an ERV yields two entries (supply fan, exhaust fan)        [history 7, Astra 2]
-              seeded by: Revit base equipment, then a person's ruling, then a kind heuristic
-              (fan coil, AHU, ERV, MUAS by family), never by parameter presence [history 1]
-              lives in the model store (_PE_DuctLosses), not a unit parameter: no slot
-              binding, type-bound or linked-unit failure modes; a schedulable mirror
-              parameter may be derived later (kaitpw 2026-10-27, counsel's pick) [Astra 5]
+**Invariants:**
 
-Sheet         one per fan port, recomputed on every read, never persisted as a result
-  basis       document lifetime + native observation + store revision + defaults version
-              + engine version; every detail, preview and write binds to it   [Astra 12]
-  fan         FanPort; rated ESP (from its own slot, never the written one)   [Astra 9]
-  legs{}      keyed once by element id + traversed port pair; flow cfm (+source), velocity,
-              loss in-wg (+rule or drop +source), equivalent ft at this leg's own rate
-              (duct and fitting legs only; typed drops stay in-wg)            [eng 2, 10]
-  paths[]     per side: ordered leg-id lists from the fan port to an end;
-              end kind: terminal | open-end | roster-fan-port | joins-other-fan-network
-              { fanId, atElementId }                                          [eng 5, history 8]
-  allowance   per side: { in-wg, note, source } a typed judgment number, its own line
-              (MUAS-01's 0.15 in-wg lump was 78% of the engineer's total)     [eng 3]
-  totals      per side: known subtotal, assumed estimate, completeness;
-              required ESP = worst supply + worst return, only when both are complete;
-              TEL and friction rate (ASP x 100 / TEL) shown as outputs        [eng 1, 2]
-  blockers[]  kind: open-end | inferred-join | unknown-drop | no-flow | flow-mismatch |
-              shared-leg { owner fan } | class-change | not-priced | implausible-loss;
-              exact element id + connector index; effect on total; closer
-              (default | heal candidate with preview handle | ruling)         [Astra 13]
-  inputs      every default and override the sheet used, each with its source and version
+1. A fan's required ESP is a result. Only a `complete` claim mints a write request. The claim is `complete`, `to-boundary` or `incomplete`. A branded request type makes any other source unrepresentable (spike A).
+2. The write request carries no derived flow.
+3. Every staged value carries who staged it and its source, from the Work cell to the write request.
+4. One table authors the fans inputs: name, role, on, domain, home, owner, layers. Bindings, edit schemas, ownership and write rows derive from it. The table lives in `fans/contract`, not in `agent-contracts`.
+5. An `ENCOUNTERS` rule table decides what happens where one fan's air meets another's. It has separate `verdict` and `static` columns.
+6. A duct that several fans price shows each fan's loss. There is no sum and no invented owner.
+7. No migration. One notice lists each value that was set aside, by row and source.
+8. The group engine is deleted only in the landing where `duct-systems` reads fan results for its tree, bars and encodings.
+9. Generic code names no product outside the registration allowlist (ADR 0046 guard).
+10. No path or name under `ducts`, `duct-systems` or `fans` contains `sheet`, `proto`, or a single-letter variant name. The generic kernel slot `sheet` keeps its name (`LEDGER.md:132`).
 
-Flow on a path                                                                [history 2, Astra 3]
-  terminal    the confirmed airflow slot; missing value = no-flow blocker whose closer
-              proposes the better-covered slot with its coverage
-  leg         on fan F's sheet: F's share = sum of terminals F reaches through this leg;
-              a side-stream unit's own flow when F is that unit; a leg carrying more of
-              another roster fan's flow than F's is a shared-leg blocker naming the owner
-  junction    branch, upstream-main and downstream-main flows from the same shares
-              (loss-rules.ts already asks for all three)
-  fan         displayed as the sum of its reached terminals; never an input
+## Ordered deletable slices
 
-Defaults      firm scope, one versioned file in firm config; pinned by hash on each sheet
-  drops       equipment drop by family and size, keyed by cfm or a curve, falling back to a
-              typed per-instance number; a constant only as a stamped placeholder   [eng 7]
-  rules       fitting family and type -> ASHRAE table (today's loss-rules + ruleAssignments)
-  airflow     which parameter holds terminal flow (the confirmed slot)
-  friction    sizing target only (RHVAC's 0.08); never a conversion rate
-  roughness   flex and sheet-metal
+Each slice is one writer's branch. A slice merges when its typecheck and touched tests pass. Proof rows trail the merged tip, as `delegate` defines.
 
-Store         the model's _PE_DuctLosses store, travels with the .rvt       [history 3, Astra 6, 7]
-  rulings     connector-pair accept/reject for inferred joins (stable identity + geometry
-              freshness), open-end verdicts, slot choice, path overrides (asserted end),
-              project overrides of firm defaults, the defaults version each ruling saw
-Work          pending deltas only, per machine, per document (today's rule, kept)
-  keep        rules, ruleAssignments, terminalDrops, componentDrops, flows, parameters,
-              labelParameter, workingPhase, claims, systemColours
-  add         roster suggestions awaiting confirmation
-  delete      calculation, roles, loads, subject-by-group, catalogs, esp, equipmentFlows,
-              designFriction-as-conversion
-```
+**Wave 0: kernel traps** (ruled Q6: run first)
 
-### Where the data comes from
+| Slice | Change | Falsifier | Observed paths |
+|---|---|---|---|
+| W0-1 | One Place membership for both clients (B6, D30): Pea's history sends the Works its publications read. | Deterministic: a Pea undo on `/fans` steps a Ducts edit the fans read used. | `ts/packages/mcps/src/pea/capability-tools.ts`, `ts/apps/web/src/shell/typed-mount.ts` |
+| W0-2 | Roster by mark, bounded, and a real `reads.value` input schema (B8, D45). | Deterministic: a lookup of MA-1 by mark returns one row under 4 KB. | `agent-contracts/src/ducts-sheet.ts:303`, `agent-contracts/src/value.ts`, `mcps/src/server.ts` |
+| W0-3 | Delete `proposal` and `edits` from the fan read request (`agent-contracts/src/ducts-sheet.ts:283`, `:285`), and fix the guide line that says they write a join ruling (`:314`, B5). | Deterministic: the guide has no claim the code does not perform. | `ts/packages/agent-contracts/src/ducts-sheet.ts`, `ts/apps/web/src/ducts/fan-sheet.ts:134` |
+| W0-4 | The cohort guard compares values over every asked unit (B4), with a fresh-rung falsifier. | `pe-revit test`, fresh rung: A=1 and B=-1 on one type, B refused, B does not move. | `dotnet/Pe.Revit.Global/Lib/Mep/DuctApplier.cs`, `ts/apps/host/src/ducts-actions.ts:53` |
+| W0-5 | A failed native peer read reports as lost coverage, not as an open end (B3). | `pe-revit test`: a forced `Try` failure sets `truncated` and names the peer. | `dotnet/Pe.Revit.Global/Lib/Mep/DuctSnapshots.cs` |
+| W0-6 | The review takes the author from the cell (D29). Cell authorship already exists (`agent-contracts/src/draft.ts:23`), so this needs no L1 work. | Deterministic: Pea's staged edit reads "staged by Pea". | `ts/apps/web/src/ducts/reviews.ts`, `ts/apps/web/src/ducts/loss-review.test.ts` |
+| W0-7 | Q1's record: `sheet/flow.ts:3-4` still says a fan's flow is "never an input". Rewrite it to Q1 B (a stated flow is an input; otherwise the terminal sum is a result, never written). | Deterministic: the existing flow tests stay green; the header cites `LEDGER.md` Q1 B. | `ts/packages/ducts-domain/src/sheet/flow.ts` |
 
-| Datum | Source | Read |
+**Slice X: boundary cuts** (each a behavior-preserving refactor; they make slice M a pure move; map check 1, `.artifacts/runs/fans-map-check-20261116/P1-reply.md`)
+
+| Slice | Change | Falsifier | Observed paths |
+|---|---|---|---|
+| X1 | Route discovery and closures learn the product layout before any route moves. The web registry globs declarations and closures (`web/src/route/registry.ts:11`, `:15`, `:31`). The route generator (`web/scripts/route-graphs.ts:125`) and registry renderer (`web/scripts/route-registry.ts:39`) hard-code `web/src`. Startup discovery (`host-contracts/src/route-startup.ts:74`) and the host build (`ts/apps/host/vite.config.ts:25`, `:33`) read closures from web folders. The route closure census root (`ts/tests/repo-guards/src/route-closure-census.ts:16`) extends to products, and its frozen edges are re-keyed. Add the host self-registration seam and the product guard in report-only mode. | Typecheck. Generated route files and closures are byte-identical before any move. The closure census reports the same 24 edges. | the files named in this row |
+| X2 | Contract cuts. Split `agent-contracts/src/ducts-sheet.ts` into shared criteria and parameter words (to `ducts`) and the fan request and result (to `fans`). Split `ducts.ts` into shared value and calculation types and duct-systems Work. Split `ducts-read.ts` into duct-systems and fans reads. Move `DuctFlow` down to the shared contract, so `terminal-flows.ts:4` and `ducts.ts:26` stop importing fans, and `fans.ts:5` imports from the shared contract. | Typecheck. No contract file imports both duct-systems and fans. | `ts/packages/agent-contracts/src/{ducts-sheet,ducts,ducts-read,fans,fans-read}.ts` |
+| X3 | Domain cuts. Split the fan engine's barrel: shared input types, resolution and `editPatches` (both route declarations import it) leave `sheet/inputs.ts`, `sheet/edits.ts` and `sheet/index.ts`. Break the `inputs:16` to `build` import. Extract the surviving group types (`losses.Row`, `HealView`) that `equivalent-length.ts:8`, `heal.ts:347`, `inbox-rows.ts:116` and `no-runs.ts:2` use, so that L2 can delete the engine. Split shared row types from system triage in `inbox-rows.ts`. Delete `kernel/apply-request.ts` and its export at `kernel/index.ts:5` (no production caller), and the dead `offeredFan` and `fansOwedBase` (`action-targets.ts:104`). | Typecheck and domain tests green at the same counts. No shared file imports a fans or duct-systems file. | `ts/packages/ducts-domain/src/` |
+| X4 | Web cuts. Extract `DUCTS_LAYER_OPTIONS` from the duct-systems picture and publish `fansLink` as a contract, which breaks the fans and duct-systems web cycle (`ducts/sheet/picture.tsx:33`, `proto/e/screen.tsx:8`, `proto/e/fan-sections.tsx:4`). Name the shared presentation closure that both pictures use: `picture-content`, `scene`, `selection`, `encoding`, `colours`, `finding-layers`, `reviews`, `cell-focus`, `identity`, `proto/e/go-to.tsx`, `proto/encoding/{flow,picker,scale-legend}`, `sheet/{model,scoped-snapshot,input-history.neutral}`. Split the mixed host adapters `ducts/fan-sheet.ts` and `ducts/ducts-design.ts`. | Typecheck. No web file in the duct-systems set imports the fans set, or the reverse. | `ts/apps/web/src/ducts/`, `ts/apps/web/src/fans/` |
+| X5 | Host cut. Split `ducts-actions.ts` executors into duct-systems (heal, assign fan) and fans (the write). `ducts-walk.ts` splits fan continuation from the common merge. | Typecheck and host tests green at the same counts. | `ts/apps/host/src/ducts-actions.ts`, `ts/apps/host/src/ducts-walk.ts` |
+
+**Slice M: the move** (ADR 0046 pilot; `git mv` and import rewrites only, after X; file manifests come from map check 1's table)
+
+| Slice | Change | Falsifier | Observed paths |
+|---|---|---|---|
+| M1 | Move the shared base to `ts/products/ducts/{domain,web,host,contract}`: physics, rules, catalog, kernel, network graph, the shared inputs, rulings, roster, staged values, write evidence, the shared presentation closure, and the shared host acquisition (`duct-catalogs.ts`, `ducts-files.ts`, `ducts-inputs.ts`, `ducts-readings.ts`, `ducts-body-basis.ts`). | Typecheck and the moved tests green at the same counts. | `ts/products/ducts/` and the source paths |
+| M2 | Move fans to `ts/products/fans/`: the fan engine (`ducts-domain/src/sheet/{build,walk,flow,assumed-flow,heal,types,beyond,worksheet,state,tiers,accessory-writes}.ts`), `web/src/fans/`, the fans part of `web/src/ducts/sheet/`, and the fans contracts from X2. Map check 1 counted 9,990 production and 8,016 test lines in the named files. Files and types take the new noun (D1). Read ids and recording kinds do not change here (see R2). | Typecheck, moved tests green at the same counts, one `/fans` browser drive on a fixture. | `ts/products/fans/` and the source paths |
+| M3 | Move duct-systems to `ts/products/duct-systems/`. `proto/e/` and `proto/b/model.ts` take plain names (no folding here). System health and heal domain, `fan-headroom.ts` (only the system bar uses it), and the duct-systems host files. The group engine and the circuits chain stay in `ts/packages/ducts-domain/` until L2. | Typecheck, moved tests green at the same counts, one `/ducts` browser drive. | `ts/products/duct-systems/` and the source paths |
+
+**Landing 1: the table, sourced values, the claim** (signed items 1, 2, 3, 4, 6, 7, 8; rulings Q1 and Q3)
+
+| Slice | Change | Falsifier | Observed paths |
+|---|---|---|---|
+| L1-1 | S1: one table in `fans/contract`. Six hand-kept files collapse into it. | Deterministic: bindings, edit schemas and write rows derive from the table, and a row added only to the table appears in all of them. | `ts/products/fans/contract/` |
+| L1-2 | S2: author and a required `ref` through the four producers and the resolver (B2). | Deterministic: a closer default reaches the write row with its source. | `fans/domain`, `fans/web`, `ts/packages/runtime/src/route-workspace.ts` |
+| L1-3 | S3: a typed closer (cell, row and offers, heal, or an encounter ruling). Stop parsing prose (today `web/src/ducts/sheet/closer.ts:259` and `:281`). | Deterministic: no closer string is parsed. | `fans/web` |
+| L1-4 | S4: the claim union replaces the booleans. It needs W0-5. | Deterministic: a lost peer read can never yield `complete`. | `fans/domain` |
+| L1-5 | S6: `ENCOUNTERS` with `verdict` and `static`, per Q3 (backflow) and H5. A roster unit that ends the walk gets an encounter row (`walk.ts:341` today). A small fan whose path ends inside another fan's positive-pressure duct raises a backflow error on the calc and on the picture (meetup REPORT C4, structural half; CONVERGENCE M13), and its required ESP adds the host duct's static at the tie-in (H5: "obvious yes"). That static is read from the host fan's calc as the cumulative loss from the host fan to the tie-in node, so the small fan is `complete` only when the host's calc is complete. A tie-in to a return (negative pressure) adds 0 and takes no credit (Hap SB-2). | Deterministic: DH-20 `13770619` on `13760945` and DH-31 `14640567` on `6530455` (REPORT C4) each raise the backflow error and carry the host static; an unruled encounter never reads `complete`. | `fans/domain`, `fans/contract` |
+| L1-6 | S7 and S8: one fan and blocker vocabulary, generated from C#. One notice lists set-aside values by row and source. | Deterministic, plus a native catalog regeneration check. | `fans/contract`, `dotnet/Pe.Shared.RevitData/Ducts/` |
+
+**Landing 2: the cutover** (rulings Q2, Q4, Q5, Q7; decision D2)
+
+| Slice | Change | Falsifier | Observed paths |
+|---|---|---|---|
+| L2-1 | Typed leg evidence on the fan result. Flow, velocity, loss and equivalent length are already typed (`sheet/types.ts:25`). Coefficient, velocity-pressure basis and lookup inputs are missing, and the loss source is a text `ref` (`:31`). | Deterministic: `duct-systems` bars render from typed fields only. | `fans/domain`, `fans/contract` |
+| L2-2 | Delete the circuits chain per D2: `circuits.ts`, `component-flows.ts`, `hydraulic-closure.ts`, `physical-graph.ts` (2,447 lines), `web/src/ducts/circuits.test.ts` (2,193 lines), the `circuits`, `circuit-path`, `components`, `flows` and `ports` projections of `ducts.analysis` (`agent-contracts/src/ducts-analysis.ts:26`, `host/src/ducts-analysis.ts:673-877`), the circuit reads in `assessment.ts:268` and `:330`, and the `design` field of the pricing read (`agent-contracts/src/ducts-read.ts:106`, `:192`). Retained analysis artifacts that carry `design` are set aside on read with a notice. | Typecheck. `rg "designCircuits|componentFlows|prescribedHydraulics|physicalGraph" ts` returns nothing. | the paths in this row |
+| L2-3 | S5: the write request is minted from a complete claim (spike A). The surviving write derivation in `host/src/ducts-actions.ts:268-335` moves to `fans/domain` in this slice, not later. Retire `LOSSES_ROUTES` (`host/src/slots/sheet.ts:23`) and `applyRequest` (`pricing.ts:431`). | Deterministic: an equivalence check against the group request on the recorded fixture, with the accepted differences named first. Exact parity is already FALSIFIED (`LEDGER.md:195`: tap representative, free-text provenance, port versus group scope, ESP). `pe-revit test`: the write lands the required ESP and no flow. | `fans/domain`, `fans/host`, `ts/apps/host/src/slots/sheet.ts` |
+| L2-4 | `duct-systems` reads fan results for tree, bars and encodings (spike B). Shared trunks follow ruling Q7. A system with no fan reads "Rule a fan to price this system". | Deterministic (spike B's three cases), then a browser drive on Chadds. | `duct-systems/web`, `duct-systems/domain` |
+| L2-5 | S9 and S10: delete the group engine (`pricing.ts`, `losses.ts`, `fan-sections.ts`, `pricing-result.ts`, `pricing-view.ts`, 1,948 lines), `flow-write-slot.ts` (only `pricing.ts:4` imports it), and the `ducts-domain` package. `duct-loss-math.ts` moves to `ducts` first, because the separate `/duct-loss` route imports it (`web/src/duct-loss/host.ts:6`). The deletion is not isolated (census: map check 2, linked under Evidence): `survey.ts:17` imports `byFlow` and `groupFans` from `fan-sections.ts`; `heal.ts:347` and `inbox-rows.ts:116` use the `HealView` type from `pricing-view.ts`; `assessment.ts:9`, `action-targets.ts:14` and the host's `ducts-actions.ts` and `ducts-analysis.ts` import `pricing`; `readiness.ts` keeps a host caller (`ducts-analysis.ts:108`). Each one moves to `duct-systems/domain` or is rewritten in this slice. | Typecheck. `rg "@pe/ducts-domain"` returns nothing. | `ts/packages/ducts-domain/`, `duct-systems/domain`, `duct-systems/host` |
+| L2-6 | O1, O2, Q2 and Q4. Q5: accept a join in place on `/fans`; if that is convoluted, fall back to the `duct-systems` verb with a link, and record the cut. O2: stage ESP for a whole fan-type cohort. Q2: rated ESP and required ESP become separate values with separate sources (B7: today both read `units[].esp`); a required ESP above rated is damage on the picture at the fan, like terminal damage (display to be confirmed with the owner on a drive). Q4: the family's connector direction sets a MUAS port's role, and a disagreement with the network is a warning on the picture (MUAS-1 `14577391`, REPORT E6). | Deterministic per item, plus `pe-revit test` for the cohort write. | `fans/*`, `DuctApplier.cs` |
+
+**Slice R: leaks, guard, records** (host-leak readers A, C and D)
+
+| Slice | Change | Falsifier | Observed paths |
+|---|---|---|---|
+| R1 | Remaining host meaning to domain: connector evidence (`host/src/ducts-analysis.ts:783-875`) and join continuation (`host/src/ducts-walk.ts:26-60`). Reuse `action-targets.ts:27` for the heal-target lookup. Write derivation already moved in L2-3. | Deterministic: the moved functions are tested in `domain` with no host import. | `duct-systems/host`, `fans/host`, `*/domain` |
+| R2 | `DUCTS_DEFAULT_CRITERIA` and `criterion-words.neutral.ts` go to `ducts/contract`. In `setting-owners.ts`, lines 1-26 are ducts declarations and move; lines 27-41 are a generic registry that `web/src/route/slots/sheet/index.ts:2` imports, and stay generic. Wire renames for D1 land here together: the read ids (`ducts.sheet`, `fans.sheet`, `fans.worksheet`), the recording kind (`host/src/input-occurrence.ts:151`, `:255`, `native-recording.ts:226`), the engine version and group id, each with a set-aside notice. | The guard counts zero `ducts`, `fans` or `duct-systems` names in generic host files. An old recording is set aside with a notice, not decoded wrongly. | `ts/apps/host/src/`, `ts/packages/agent-contracts/src/` |
+| R3 | Pea's ducts and ESP rules (`mcps/src/pea/instructions.ts:26`) and duct placement rules (`mcps/src/pea/skills.ts:376-486`) become guide text that the product supplies. Per D3, delete `ducts-guide.ts`, `ducts-cases.ts` and `ducts-compare.ts` (2,001 lines), their unmounted renderers (`web/src/ducts/{docs,docs-cases,introduction}.tsx`, `cases/draw.tsx`), their barrel export (`agent-contracts/src/api-schemas.ts:73`) and `ducts-guide.test.ts`. | Pea black-box replay of the MUAS-1 prompt: one call, one result, its blockers. | `ts/packages/mcps/`, `fans/contract` |
+| R4 | The guard enforces for `ducts`, `duct-systems` and `fans`. Split `docs/features/ducts/` into `duct-systems` and `fans` ledgers. Update `docs/ARCHITECTURE.md` to the product-folder layout. Delete this map. | `python .agents/skills/check.py`, the guard, and a cold read of the new ledgers. | `docs/`, `ts/tests/repo-guards/src/` |
+
+Order: W0 first, then X, then M, then L1, then L2, then R. X makes M a pure move; M runs before L1 so that each file moves once and the landings write in the final homes. Inside a wave, slices with disjoint paths run at the same time.
+
+## Deletion criteria
+
+- `ts/packages/ducts-domain/` does not exist, and nothing imports `@pe/ducts-domain`.
+- No path under `ts/products/{ducts,duct-systems,fans}` contains `sheet`, `proto` or a single-letter folder.
+- The write request type can be built only from a `complete` claim, and no write carries a derived flow.
+- The product guard enforces with zero `ducts`, `duct-systems` or `fans` names in generic code.
+- The `duct-systems` and `fans` ledgers exist, and every open line in this map has moved to one of them or to an ADR.
+
+## Risk tier per surface
+
+| Surface | Tier | Why |
 |---|---|---|
-| Elements, connectors, geometry, sizes, lengths, params | Revit, raw | `ducts.snapshot` with a selector: `from` (walk from a fan port through non-roster equipment; at every open end, count ids in a small box around the connector, MEP categories only, and include them so a join can be inferred [Space, Astra 1]), `ids`, `document` (paged, for the network surface). Output never carries groups, roots or issues. Exclusions written down: centreline helpers in the Model category, separate insulation elements (use the host's insulation thickness parameter instead), view-specific imports, unloaded links [Space]. |
-| Roster | Revit base equipment, store rulings, kind heuristic; confirmation written to the model store | Same snapshot |
-| Rated ESP | The unit's rating slot | Snapshot |
-| Terminal flow | The confirmed slot | Snapshot |
-| Equipment and terminal drop | Typed in Work, else unit parameter, else firm default by family, size and cfm | Work + snapshot + defaults |
-| Fitting coefficient | ASHRAE grid via rule; `Pe_C` if the family carries one | `ducts.tables` + snapshot |
-| Inferred joins | Proximity geometry on the walked elements plus the open-end candidates, filtered by connector-pair rulings | Computed in TS per walk |
-| Picture geometry | Space scene read keyed by the sheet's element ids; focus-only is about 1 s and 10 MiB on Chadds, boxes context 6 to 20 s cold, meshes opt-in [Space, measured on probe-25] | Separate read, cached by document version |
+| Revit write (`DuctApplier.cs`, the write request) | High | Wrong-document or wrong-value mutation. Proof is a `pe-revit test` fresh rung, never a deterministic test alone. |
+| Native snapshot (`DuctSnapshots.cs`) | High | A false `complete` claim follows from a silent coverage loss. |
+| Staged Work and provenance | High | Data loss of who staged a value. No migration is allowed, so set-aside must keep its bytes. |
+| `/fans` and `/ducts` (duct-systems) screens | Medium | Browser drive per landing. |
+| The move (slice M) | Medium | Mechanical, but about 45,000 lines. It must not change behavior. Proof is identical test counts. |
+| Guard and lint | Low | Report-only first. |
 
-### Where it writes, and where you see it
+## Decision log
 
-| Sink | What | Gate |
-|---|---|---|
-| Unit parameters | required ESP to a *required* slot distinct from the rating slot [Astra 9], design flow; failed-write and missing-slot states defined | Write review, old to new, host consent as today; only a complete total may be written |
-| Model store | roster, rulings, slot choice, overrides, defaults version | Same write |
-| Fitting `Pe_C` via `PeLossServer` | the named exception to one engine: the server transports the sheet's critical-leg coefficient from `Pe_C`; its C# recompute branch (`PeLossServer.cs:112`) is deleted with `DuctFittingPricing.cs`; a tap's second leg is noted on the sheet as not carried by Revit's report [Astra 18] | Same write; proof owed (ledger) |
-| `/ducts` page | Roster table (one row per fan port: required ESP or completeness state, TEL, blocker count, basis freshness), sorted by blockers; open a row for the sheet; 3D draws the open sheet's worst path and blocker marks as one more layer, existing layers and colours stay as ruled 2026-10-24; calc-derived encodings (size, flow, health, legs, provenance) become sheet columns [history 10, Space] | |
-| Pea | `route:reads.value (read ducts.sheet)` in two discriminated modes: fan-port (whole sheet) or start+end with asserted direction (one chain, no ESP claim) [Astra 14]; the response is a bounded overview (ranked paths, totals, blockers, basis) with detail handles for legs, provenance and the walked element set [Astra 11]; `route:reads.value (read fans.roster)`; the same heal and write verbs with basis-bound candidates. Instructions: name a start, read blockers back, propose a default or a previewed heal with its effect on the total. Never grep, never elect, never compute. | Skill rendered from the same guide object as the tutorial |
-| Network surface (kept, re-keyed) | Reads sheets and the `document` selector; colours by sheet, never by group | Behind the compile wall until re-keyed |
-| Export | The sheet as the firm's static calc sheet (RHVAC tree layout: sections with grouped fitting counts, cumulative loss, available SP) [eng 10] | Owed |
-
-### Order of work
-
-0. **Falsifying spike, read-only, before any deletion** [Astra 15]: on a retained raw Chadds
-   snapshot, walk from MUAS-1's discharge and inlet with connectors only, then again with the
-   open-end candidate box; pin the expected chain (louver, heater, silencer, MUAS-1, FA 12
-   takeoff, RA 37, FR-1, FC-23) against the red-route image and element ids; record missing
-   continuations, cross-airstream candidates and truncation. Price the chain with explicit
-   flows and drops; check an independent section sum. If the candidate box cannot recover the
-   louver inside the plenum, pillar 6's "one raw read" is falsified and the walk needs Space.
-1. Lift the kernels (tap split, fitting facts, applyRequest, joint geometry, connector-pair
-   verdicts, flow order) into files with no network import. Compile proof.
-2. `ducts.snapshot` `from` selector in C# with the open-end candidate box and the exclusion
-   list; raw output. Fresh proof on Chadds: the spike's chain in a bounded time, with its
-   inferred-join blockers named. Delete `Analyze`, groups, roots, issues and
-   `DuctFanAssigner` only after step 0's membership check passes on the new read.
-3. `path.ts`: walk per side, enumerate ends, flow shares, price, rank, completeness,
-   blockers. Deterministic proof on the saved walk. Acceptance: section-by-section
-   reconciliation against the MUAS-01 .r10 (eight sections, 0.193 total of which 0.15 is the
-   typed allowance), with duct friction matched per section, a bounded fitting delta with the
-   method named (Manual D codes there, ASHRAE grids here), the return side present, and the
-   allowance excluded from the comparison [eng 8, history 13, Astra 16].
-4. Roster: seeding order, (unit, port) identity, confirmation write, failed-write state.
-   Fresh proof: census of Chadds units by kind, 71 ERVs yielding 142 ports.
-5. Sheet contract with basis token, overview plus detail handles; `route:reads.value (read ducts.sheet)` in both
-   modes; Pea skill rewritten from the guide object; the black-box MUAS-1 prompt replayed as
-   the acceptance test (one call, a sheet, its blockers, no number claimed as ESP).
-6. Batch: recompute all roster fan ports on one document read with a shared acquisition;
-   budget time and memory; prove cold batch plus one changed-fan refresh [Astra 17].
-7. Roster table and sheet on `/ducts` (protoui round against the current E screen); network
-   surface re-keyed from compile errors; tutorial rebuilt from the surviving cases.
-
-## Verdicts taken 2026-10-27 (kaitpw, on the critique)
-
-- Terminal drop default: firm default by family, size and cfm; one rolled-up line per sheet.
-- Roster residency: model store (counsel's pick, kaitpw deferred).
-- Fan-stop: the path ends at the other roster fan's port; nothing credited from it.
-- Halo: stays a layer; travels with the 3D primitive when it generalises.
-- Manual D equivalent-length tables: a firm option beside ASHRAE grids.
-- Loss server: transport, not recompute.
-
-Open on this map: where Defaults live in firm config (Pod vs repo config); the sheet's export
-format; the Cleremont context numbers from the Space thread, still being measured.
-
-## Overnight questions and assumptions (orchestrator, 2026-10-27 night; for kaitpw's morning)
-
-Assumptions taken without a ruling; each is reversible. Questions need a verdict.
-
-**Assumptions**
-- A1 Terminal drop placeholder 0.03 in-wg for every terminal with no typed or catalog drop, marked `SHIM(ducts-terminal-drop)` / `SHIM_TERMINAL_DROP_IN_WG` (kaitpw: "louding comment it as a shim").
-- A2 Side-stream (ERV/MUAS) flow = the unit's design-flow parameter; split across the roster fan ports it reaches by `splitPolicy` even (default) or proportional to the receiving fans' design flow; a typed end cfm wins (kaitpw: "the most flexible").
-- A3 Revit's own terminal Flow is a confirmable project airflow slot (`revit:Flow`). On Chadds it covers 355 of 394 terminals versus 27 for `PE_M_Grd_AirFlow`. History 6 still holds: no silent per-terminal fallback; the project confirms one slot.
-- A4 Fan sheets acquire `from` every port of the unit (both sides); an ERV's read also carries its second fan (ponytail ceiling).
-- A5 The C# `from` walk stops at mechanical equipment with more than two ports; two-port inline equipment (silencer, heater, dehumidifier) passes with an unknown drop.
-- A6 Inputs (slot, split policy, end cfm, drops, join rulings) persist in per-document Work for now; the model store is the later home. Firm defaults (shim terminal drop, split policy default, slot) live in the /ducts route settings beside supply colours and slots, behind one `defaults` object the engine takes (kaitpw: interim home, clean seam).
-- A7 The new surface is a separate `/sheet` route; `/ducts` is untouched.
-- A8 When a unit has no design flow, the **assumed** level derives it as the sum of the terminal flows it serves on that side under the confirmed slot, else its connector flow; labelled "derived from served terminals (assumed)". It never makes a side complete. Evidence (retained Chadds): 0 of 165 units carry the design-flow parameter value and 23 have any connector flow, so after W2-J the no-flow blocker (418 occurrences) is the largest gap and no fan is complete.
-- A9 The roster reads `ducts.snapshot` with selector kind `roster` (HVAC equipment, air terminals, Revit systems without sections). The whole-document read exceeded the 16 MiB bridge frame on live Chadds (2026-10-28) and returned HTTP 500.
-- A10 Slot coverage always lists the active slot. On live Chadds the route default "Actual Supply Air Flow" was active, but no terminal held it, so it read 0/0 and was not listed; every terminal was then `no-flow` until the user picked `revit:Flow` (355/394).
-
-**Questions**
-- Q1 RULED (kaitpw): no ruling. The fan is where air starts and the terminal where it ends, so the ends assign the sides (supply terminals or another fan's inlet = discharge; return/exhaust terminals or an OA louver = inlet); port metadata only breaks ties. Utopia fix is flipping the family in Revit.
-- Q2 RULED for the interim: route settings (see A6); the firm table's owner and values are open, productionize later.
-- Q3 OPEN, parked by kaitpw: ASHRAE prices the paired elbow about 25% below Manual D 8-A2 (W1-D); is the Manual D option needed before engineers trust sheets?
-- Q4 RULED (kaitpw: likely a modelling defect, and not first-principles information to control): a tap entered from its branch, and an air-type change such as an ERV supply entering a fan-coil return, end the path as `joins-other-fan`, priced up to the merge; no blocker, no ruling.
-- Q5 RULED (kaitpw): auto-join a vacant, facing port within **3 in** with no click ("just like gaps are"); one line on the sheet says so.
-- Q6 RULED direction (kaitpw: "heal-first", with caveats): open ends get a proposed heal by kind (join/extend to a vacant port within 36 in; tap onto a duct side; tee at an occupied junction, riskiest, last). The sheet carries an **assumed** total priced as if healed beside the known total; **complete** needs the heals made in Revit (preview + consent) or accepted as rulings. Refuse heals that cross air types or land on occupied ports without a fitting change. Evidence (retained Chadds, 143 distinct open ends): 24 have a vacant connector within 36 in (13 within 6 in), 17 sit within 24 in of another duct's side, 118 sit within 36 in of an occupied connector at a junction, 1 has nothing within 36 in. The engine's "nothing within 36 in" message is wrong for 142 of 143 and must name the nearest candidate.
-- Q7 OPEN: Chadds units carry no design flow. Does the firm fill `PE_M_Fan_AirFlowDesign` (or another slot) on equipment before a sheet is trusted, or is a sum of served terminals acceptable as the fan's flow (A8) for a complete ESP?
-- Q8 OPEN: a path that ends at a merge into another fan's duct (Q4) is priced only up to the merge, and the static pressure in the receiving duct at that point is not counted. On live Chadds the only assumed ESPs are small ERVs ducted into such merges: RV-18 (9265279), RV-28 (12761252) and RV-10 (13692093), at 0.0006-0.002 in-wg. Should a sheet add the receiving duct's pressure at the merge (which needs the receiving fan's sheet), or refuse an ESP that ends at a merge?
-- Q9 OPEN (2026-10-29): fix B makes reads per system; the `/ducts` shell's document-wide panes (E-screen) have no plan. kaitpw: not a concern now, but important; no ruling yet.
-- Q10 OPEN (2026-10-29): velocity limits are Manual D rules of thumb (trunk 900 / branch 700 supply, 700 / 600 return, noise-driven); kaitpw wants them as a slot. Folded into the inputs muse.
+Append only. Each open line names its default and the slice that waits on it.
+- 2026-11-16, ruled (kaitpw): system and fans both come out of ducts. No `sheet` or `proto/e` in ducts paths (`LEDGER.md:132`).
+- 2026-11-16, ruled (kaitpw): one folder per product, a `domain` package for every product, the shared base is `ducts`, and the pilot is fans (ADR 0046; `../routes/LEDGER.md:71`).
+- 2026-11-16, ruled (kaitpw): the generic kernel slot `sheet` keeps its name. The rename covers only the ducts and fans paths (`LEDGER.md:132`).
+- 2026-11-16, ruled (kaitpw): carry the old map's still-open decisions into this one and drop the rest.
+- Q1 RULED 2026-11-16 (kaitpw: "B"): airflow is an input only where it is stated; otherwise the terminal sum is a result, never written. Supersedes the 2026-11-03 push-into-grilles direction. W0-7 fixes the stale header.
+- Q2 RULED 2026-11-16 (kaitpw: "on the logic side i feel like itd b a major issue if these werent separated"): rated and required ESP are separate values. Display open; lead is damage on the picture at the fan. L2-6.
+- Q3 RULED 2026-11-16 (kaitpw: "im pretty sure this is backflow which we need to handle and show errors for"): an encounter with another fan's duct is a backflow case and an error. The tie-in static is added per H5 (CONVERGENCE M5). L1-5.
+- Q4 RULED 2026-11-16 (kaitpw: "the family, but this mismatch should be shown as an error/warning, probably onn the picture"). L2-6.
+- Q5 RULED 2026-11-16 (kaitpw: "ideally on fans, but if this if its convoluted then it can b an occam cut and a is ok"). L2-6.
+- Q6 RULED 2026-11-16 (kaitpw: "sure to small fixes first"). W0 runs first.
+- Q7 RULED 2026-11-16 (kaitpw: "probably the chosen fans loss"). Under R-SHARE a shared duct carries its total flow on every fan's calc, so its loss is the same on each (spike B, `sheet-model.test.ts:111`); the chosen fan only selects which paths light up. L2-4.
+- D1 RULED 2026-11-16 (kaitpw: "calc is fine"): one fan's priced result is a `calc`. M2 renames files and types; R2 renames the wire names (`ducts.sheet`, `fans.sheet`, `fans.worksheet`, the recording kind, `sheet/3`, the `sheet` group id, the fans route state ids), each with a set-aside notice. Census: map check 2.
+- D2 RULED 2026-11-16 (kaitpw: "yes d2, delete"): delete the circuits chain and its five Pea projections (L2-2). It did a whole-network flow balance and a pressure at every port; the 2026-10-27 path-first ruling had already dropped it. The one readout this crusade needs, the static at a tie-in, comes from the host fan's calc (L1-5).
+- D3 RULED 2026-11-16 (kaitpw: "i need some version of the tutorial back, altho the old version is mostly certainly wrong ... i want it to b derived from the targeted doc"): R3 deletes the old guide, cases, comparison and their unmounted renderers. A new tutorial, with the visual cards and examples taken from the open document, is owed after this crusade (`LEDGER.md` Owed). No production page mounts the old one today (map check 2).
+- D4 OPEN, carried from the old map: the old drop list. The census (map check 2, linked under Evidence) found that none of `fan-assignment`, `unit-roles`, `topology`, `issues`, `bins`, `readiness`, `system-scope`, `system-search` or `assessment` becomes dead when the group engine goes. `fan-assignment.ts` and `DuctFanAssigner.cs` serve system repair (the `ducts.assign-fan` op, `ducts-actions.ts:350`, `:385`). Only `offeredFan` and `fansOwedBase` (`action-targets.ts:104`) have no production caller. The default is: they all go to `duct-systems/domain`, and R1 deletes `offeredFan` and `fansOwedBase`.
+- D5 OPEN, carried: the Manual D equivalent-length option. ASHRAE prices a paired elbow about 25% below Manual D 8-A2. The owner parked it. No slice waits on it.
+- D6 OPEN, carried: the export format for a fan's calc (the RHVAC tree layout). No slice waits on it.
+- D7 OPEN, carried: the owner and values of the firm defaults table. The code reads `<firm>/Settings/ducts.json` (`host/src/ducts-files.ts:33`, `host-contracts/src/product-paths.ts:405`); `LEDGER.md:7` still says `<shared>/Firm/ducts.json`, which is stale. R2 moves the code, not the values.
+- D8 OPEN, carried: the document-wide panes of today's `/ducts` screen when reads are per system (old Q9). M3 moves them unchanged, and L2-4 decides.
+- D9 RULED 2026-11-16 (kaitpw: "duct-systems"): the product, folder, route id and Work key are `duct-systems`. Staged Work keyed `"ducts"` is set aside with one notice. M3.
+- 2026-11-16, map check 1 (`.artifacts/runs/fans-map-check-20261116/P1-reply.md`): slice M as first written was not a pure move (FALSIFIED). Slice X now does the cuts first. M2 and M3's earlier file lists were wrong for `roster`, `rulings`, `staged`, `write-evidence`, `airflow`, `fan-assignment` (shared) and `fan-headroom` (system). Sizes confirmed: 1,948 group engine, 2,001 old guide, 2,447 circuits. The fans figure was 9,990 production and 8,016 test lines, not 13,000 and 9,000.
+- 2026-11-16, regrounded on the 2026-11-03 meetup notes (`.artifacts/meetings/2026-11-03-revit-dev-meetup/`). The design-rule checks C1 (ERV fresh air off a MUAS discharge), C2 (ERV supply downstream of an AHU) and C3 (exhaust before fresh air on a return trunk) are a separate producer (CONVERGENCE M13) and are not in this map, apart from C4's structural backflow half, which Q3 puts in L1-5. They stay owed in this ledger.
+- H5 RULED 2026-11-16 (kaitpw: "this seems like an obvious yes to me", asked whether a small fan tying into a supply duct has to overcome that duct's pressure): L1-5 adds the host static at a positive-pressure tie-in. Hap was not asked; the owner answered.

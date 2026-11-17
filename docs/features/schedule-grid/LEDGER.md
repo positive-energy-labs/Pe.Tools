@@ -19,6 +19,7 @@
 
 ## Owed
 
+- **ADR 0046: schedules code lives in the shared web kernel and in the host.** `ts/apps/web/src/route/schedules/` (`columns.tsx`, `stale-resolve.tsx`, `workspace.tsx`, 654 lines) is in the kernel folder. Schedule fixtures are at `route/seeds.ts` and `route/seed-schedule-*.ts`. `host/src/schedule-actions.ts:171-203` and `742-799` hold projection and push-outcome rules. `agent-contracts/src/schedule-actions.ts:26` and `schedule-grid-data.ts:196` hold staleness policy. The host special-cases schedules at `navigation.ts:148` and in the read envelope at `web/src/shell/work-feed-client.ts:117-124`. Evidence: `.artifacts/runs/host-leak-20261116/` (readers B, C and D).
 - Fix the two pre-existing effect-edge lint errors at `schedule-test-fixture.ts:81/:101`. Evidence: `.artifacts/runs/kernel-crusade-20261104/takeover/WAVE-5.md:533`.
 - Units at human surfaces: built 2026-09-22 (design-system ledger). Revit-backed proof owed: `pe-revit test --project dotnet/Pe.Revit.Tests --filter Schedule_cell_binding_display_unit_is_the_unit_the_column_renders` and `--filter Typed_text_is_read_by_the_document_and_answered_in_the_unit_the_surface_renders`, then one real schedule: type "300 L/s" in a CFM column and read back Revit's answer.
 - pin as test: an empty-string commit is REFUSED — blank is not zero and blank is not a stageable value (the old code refused it silently; the refusal is now spoken, and nothing asserts it).

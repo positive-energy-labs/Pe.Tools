@@ -4,7 +4,7 @@ Date: 2026-11-06. Status: accepted. Source: kaitpw's rulings in thread f20de09f 
 
 ## Context
 
-Current amendments: [ADR 0046](0046-effect-identity-belongs-to-the-effect-owner.md) and [ADR 0047](0047-workflow-owns-durable-commands.md) replace the ActionJournal survival clause with named effect and command owners. Host publication and History nonauthority remain. The accepted historical decision below is unchanged.
+Current amendments: [ADR 0049](0049-effect-identity-belongs-to-the-effect-owner.md) and [ADR 0050](0050-workflow-owns-durable-commands.md) replace the ActionJournal survival clause with named effect and command owners. Host publication and History nonauthority remain. The accepted historical decision below is unchanged.
 
 kaitpw's goal for the kernel: "give every hard thing to every route for free. I should be able to prototype any new product, of similar conceptual complexity to fans or ducts or families, easily, without having to worry about all the small features that make a UI trustable and predictable." And: "I want to boil every ocean we can see ... I want to never think about it again."
 

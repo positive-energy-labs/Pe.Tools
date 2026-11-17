@@ -1,6 +1,6 @@
-# 0048: C# contracts generate Effect Schema
+# 0051: C# contracts generate Effect Schema
 
-Date: 2026-11-16. Status: accepted target, runtime UNPROVEN. Source: accepted [Converge S3](../features/host/CONVERGE-MAP.md#ordered-deletable-slices). Amends [ADR 0029](0029-effect-is-the-standard-library-one-fiber-per-request.md) rules 7 and 8's operation-schema transition. Builds on [ADR 0046](0046-effect-identity-belongs-to-the-effect-owner.md).
+Date: 2026-11-16. Status: accepted target, runtime UNPROVEN. Source: accepted [Converge S3](../features/host/CONVERGE-MAP.md#ordered-deletable-slices). Amends [ADR 0029](0029-effect-is-the-standard-library-one-fiber-per-request.md) rules 7 and 8's operation-schema transition. Builds on [ADR 0049](0049-effect-identity-belongs-to-the-effect-owner.md).
 
 ## Context
 

@@ -1,6 +1,6 @@
-# 0046: Effect identity belongs to the effect owner
+# 0049: Effect identity belongs to the effect owner
 
-Date: 2026-11-16. Status: accepted target, runtime UNPROVEN. Source: owner acceptance of [Converge S0](../features/host/CONVERGE-MAP.md#ordered-deletable-slices). Amends [ADR 0029](0029-effect-is-the-standard-library-one-fiber-per-request.md) rules 3, 6 and 10 and [ADR 0033](0033-one-host-read-graph-history-is-host-publication.md)'s ActionJournal survival clause. [ADR 0047](0047-workflow-owns-durable-commands.md) names the replacement host owners.
+Date: 2026-11-16. Status: accepted target, runtime UNPROVEN. Source: owner acceptance of [Converge S0](../features/host/CONVERGE-MAP.md#ordered-deletable-slices). Amends [ADR 0029](0029-effect-is-the-standard-library-one-fiber-per-request.md) rules 3, 6 and 10 and [ADR 0033](0033-one-host-read-graph-history-is-host-publication.md)'s ActionJournal survival clause. [ADR 0050](0050-workflow-owns-durable-commands.md) names the replacement host owners.
 
 ## Context
 
