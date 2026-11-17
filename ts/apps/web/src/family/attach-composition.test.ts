@@ -118,7 +118,7 @@ test("Start publishes Family Work before immediate small attach and 7 MB refusal
     const receipt = (await journal.list()).find(row=>row.key === "family.attach-spec" && row.state === "failed")!;
     await expect(recoverAction(receipt.id, "family.attach-spec", {
       ...receipt.input, source: {...(receipt.input.source as object), fileName: "another.pdf"},
-    }, receipt.target)).rejects.toThrow("conflicts with its original intent");
+    }, receipt.target)).rejects.toThrow("returned a receipt for different intent or target");
     expect(JSON.stringify(receipt)).not.toMatch(/"(?:base64|bytesBase64)"/);
     expect(JSON.stringify(frames)).not.toMatch(/"(?:base64|bytesBase64)"/);
     expect(await readFile(join(dir, "journal.jsonl"), "utf8")).not.toMatch(/"(?:base64|bytesBase64)"/);
