@@ -519,28 +519,16 @@ class Pricer {
     proposed?: ProposedPath,
   ): PricedLeg {
     if (this.pricingLeg && !proposed) this.onLeg(this.pricingLeg, key);
-    // A stated junction drop replaces its passed straight leg as well as its branch leg.
-    const stated =
-      !proposed && input.leg === "Cs"
-        ? this.input.inputs.components[String(input.fitting.id)]?.drop
-        : undefined;
-    if (
-      stated &&
-      (stated.value != null || (stated.status === "invalid" && stated.source !== "model"))
-    )
-      return priceLeg(
-        {
-          kind: "drop",
-          element: input.fitting,
-          cfm: input.flows.through,
-          inWg: stated.value,
-          source:
-            stated.value == null
-              ? `${stated.ref ?? provenance(stated)}; the stated drop is unreadable, retype it`
-              : provenance(stated),
-        },
-        this.input.grids,
-      );
+    const stated = !proposed && input.leg === "Cs"
+      ? this.input.inputs.components[String(input.fitting.id)]?.drop : undefined;
+    if (stated && (stated.value != null || (stated.status === "invalid" && stated.source !== "model")))
+      return priceLeg({
+        kind: "drop", element: input.fitting,
+        cfm: input.flows.through, inWg: stated.value,
+        source: stated.value == null
+          ? `${stated.ref ?? provenance(stated)}; the stated drop is unreadable, retype it`
+          : provenance(stated),
+      }, this.input.grids);
     const flows = ruleFlows(input.flows);
     const matched = input.facts.inputError
       ? undefined
