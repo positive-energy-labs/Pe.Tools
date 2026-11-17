@@ -546,9 +546,23 @@ const cellSpec = {
 } satisfies RouteStateSpec<z.ZodType>;
 
 test("a publish seed cannot name its own author: every seeded cell is stamped with the caller", async () => {
-  const routes = workspace(memoryStore().store, { registration: { spec: cellSpec } });
-  const started = await routes.start(documentA, { esp: { a: { edit: { value: { inWg: 1 }, by: "human" } }, b: { edit: { value: { inWg: 2 } } } } }, "pea");
-  expect(started).toMatchObject({ ok: true, doc: { esp: { a: { edit: { by: "pea", base: 0 } }, b: { edit: { by: "pea" } } } } });
+  for (const { by, supplied } of [
+    { by: "human", supplied: false },
+    { by: "pea", supplied: true },
+    { by: "pea", supplied: false },
+  ] as const) {
+    const routes = workspace(memoryStore().store, { registration: { spec: cellSpec } });
+    const seed = { esp: { a: { edit: { value: { inWg: 1 }, ...(supplied ? { by: "human" } : {}) } } } };
+    if (supplied) {
+      await expect(routes.start(documentA, seed, by)).rejects.toThrow();
+      expect(await routes.readUncaptured(documentA, "test-route")).toBeNull();
+      continue;
+    }
+    // work.start preflights this same seed before publishing with its admitted caller.
+    routes.validateSeed(documentA, seed);
+    expect(await routes.start(documentA, seed, by)).toMatchObject({ ok: true, doc: { esp: { a: { edit: { by, base: 0 } } } } });
+    expect(await routes.readUncaptured(documentA, "test-route")).toMatchObject({ doc: { esp: { a: { edit: { by } } } } });
+  }
 });
 
 test("refused stored Work is set aside with one reason that lists each staged row once, unstamped rows without invented provenance", async () => {
@@ -578,7 +592,7 @@ test("stored Work that decodes but holds an unstamped cell is set aside once; a 
     doc: { esp: { stamped: { edit: { value: { inWg: 1 }, by: "human" } }, legacy: { edit: { value: { inWg: 0.4 } } } } } } });
   expect(await routes.readUncaptured(documentA, "test-route")).toBeNull();
   expect(reasons).toHaveLength(1);
-  expect(reasons[0]).toContain("1 staged row carries no caller stamp");
+  expect(reasons[0]).toContain("esp/legacy/edit/by");
   expect(reasons[0]!.split("esp/legacy by nobody")).toHaveLength(2);
   expect(reasons[0]).not.toContain("esp/stamped by nobody");
   const started = await routes.start(documentA, { esp: { a: { edit: { value: { inWg: 1 }, ref: "submittal p3" } } } }, "human");
