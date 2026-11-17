@@ -20,10 +20,10 @@ export function renderProductExecutors(checkout: string): string {
     'import type { HostNativeRead } from "@pe/host-internal/native-read";',
     'import type { CommandExecutor } from "./command-executor.ts";',
     ...groups.map((g, i) => `import { ${g.factory} as group${i} } from ${JSON.stringify(g.name + g.module.slice(1))};`),
-    'export function productExecutors(bridge: RevitBridge["Service"], deps: FamilyActionDependencies & { nativeRead?: HostNativeRead["Service"] } = {}): Record<string, CommandExecutor> {',
+    'export function productExecutors(bridge: RevitBridge["Service"], deps: FamilyActionDependencies & { nativeRead?: HostNativeRead["Service"] } = {}) {',
     "  const result: Record<string, CommandExecutor> = {};",
     ...groups.map((g, i) => `  for (const [key, executor] of Object.entries(group${i}(${g.arguments.join(", ")}))) { if (result[key]) throw Error(\`Duplicate product executor \${key}\`); result[key] = executor; }`),
-    "  return result;",
+    `  return { executors: result, sheetRoutes: ${JSON.stringify(Object.fromEntries(groups.flatMap(g => (g.sheet?.routes ?? []).map((route: string) => [route, g.sheet.via]))))} as Readonly<Record<string, string>> };`,
     "}", "",
   ].join("\n");
 }

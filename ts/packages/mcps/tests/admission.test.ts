@@ -419,6 +419,20 @@ test("a fans handle runs the losses preflight: it reads both Works at its docume
 });
 
 import { opWrites } from "../src/shared/admission.ts";
+test("an unregistered sheet route submits through the generic path without product Work reads", async () => {
+  const seen: string[] = [];
+  vi.stubGlobal("fetch", async (input: Request | string | URL, init?: RequestInit) => {
+    const path = new URL(input instanceof Request ? input.url : String(input)).pathname;
+    seen.push(path);
+    if (path === "/actions" && init?.method === "POST") return Response.json(receipt(JSON.parse(String(init.body))));
+    throw Error(`Unexpected ${path}`);
+  });
+  const work = { key: { route: "pod.other", binding: "host", target: null }, revision: 1 };
+  expect(await runCapability("sheet.plan", { work }, { hostBaseUrl: "http://preflight.test", receipt: true,
+    bridgeSessionId: "A", openDocumentId: "open-A" }, { door: "command", mutates: false, needs: "project-document" }))
+    .toMatchObject({ state: "succeeded" });
+  expect(seen).toEqual(["/actions"]);
+});
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import { tsOnlyOperationCatalog } from "@pe/host-contracts/operation-types";
 // Mutant: make opWrites read `intent` for a native op and the first two lines go red.
