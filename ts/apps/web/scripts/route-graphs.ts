@@ -1,4 +1,5 @@
 import { renderProductExecutors } from "./product-executors.ts";
+import { renderProductGuides } from "./product-guides.ts";
 import { spawnSync } from "node:child_process";
 import { registerHooks } from "node:module";
 import { icons } from "lucide-react";
@@ -247,6 +248,7 @@ await emit(
 );
 await emit(registryFile, renderRouteRegistry(registryRows));
 await emit(new URL("../../host/src/product-executors.generated.ts", import.meta.url), renderProductExecutors(checkout));
+await emit(new URL("../../../packages/mcps/src/pea/guides.generated.ts", import.meta.url), renderProductGuides(checkout));
 const closures = await buildBuiltinClosures(builtinOptions);
 const directory = [];
 for (const [key, closure] of closures) {

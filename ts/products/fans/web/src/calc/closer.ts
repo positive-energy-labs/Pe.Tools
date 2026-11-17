@@ -6,8 +6,8 @@ import type { CalcFitting } from "@pe/ducts-web/calc/model";
  * its tests read the same words.
  *
  * Doors today (ducts LEDGER 2026-10-29): every closer is an edit on Work's own key. A join or
- * heal pair is RULED as `edits.joins` (never a Revit write; `SHIM(ducts-sheet-write)`: the typed
- * Revit heal door does not exist yet), an open end is RULED capped as `edits.ends` (R-CAP), a
+ * heal pair is RULED as `edits.joins` (never a Revit write; the Fix in /duct-systems link owns
+ * this ruling because /fans cannot accept joins), an open end is RULED capped as `edits.ends` (R-CAP), a
  * typed drop lands in `edits.terminalDrops` or `edits.componentDrops`, a typed cfm in
  * `edits.flows` (a terminal) or `edits.equipmentFlows` (the open unit, or the unit an end lands
  * on). A fitting no table prices is priced with a table the person picks (`edits.assignments` for
@@ -35,7 +35,7 @@ export type CloserAction =
   /** A typed drop on one path through a proposed fitting (`inputs.fittingDrops` key). */
   | { kind: "pathDrop"; key: string; value: number };
 
-/** The fixes whose Work is /ducts' (joins, ends, assignments, tables, proposed-path drops): /fans links to them. */
+/** The fixes whose Work is /duct-systems' (joins, ends, assignments, tables, proposed-path drops): /fans links to them. */
 export const DUCTS_FIXES: ReadonlySet<CloserAction["kind"]> = new Set(["rule", "cap", "price", "table", "pathDrop"]);
 
 /** One table a fitting may be priced with: the verb names the table, `detail` the rule it reads under. */
@@ -48,7 +48,7 @@ export type CloserLink = { says: string; href: string };
 
 export type Closer = {
   blocker: CalcBlocker;
-  /** Present, the fix is /ducts' to make: the row draws this link in place of the verb. */
+  /** Present, the fix is /duct-systems' to make: the row draws this link in place of the verb. */
   link?: CloserLink | null;
   /** The action and the value it applies, e.g. "set drop 0.03 in-wg (firm shim)". */
   verb: string;
@@ -193,7 +193,7 @@ function describeBase(blocker: CalcBlocker, typed: number | null, context: Close
         blocker.connector == null
           ? null
           : { kind: "cap", end: { elementId: blocker.elementId, connector: blocker.connector } };
-      // SHIM(ducts-sheet-write): "heal" is a basis-bound ruling on the pair until the Revit door lands.
+      // The Fix in /duct-systems link owns the basis-bound join ruling.
       if (pair && toName)
         return {
           ...live(`heal → ${toName}`, { kind: "rule", pair }),
