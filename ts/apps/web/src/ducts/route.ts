@@ -1,5 +1,5 @@
 import type { ContextOf } from "../route/defaults";
-import { systemCode } from "./identity";
+import { systemCode, fanScopeSchema, type FanScope } from "./identity";
 import { handle } from "@pe/agent-contracts/handle";
 import { bindings } from "./bindings";
 import { read } from "../route/defaults";
@@ -33,6 +33,7 @@ import { designSheet } from "./design-sheet.ts";
 const system = subjectSchema(DUCTS_SYSTEM_MAX);
 export const fields = {
   ...picturePose,
+  fan: field(fanScopeSchema.nullable(), null, "query"),
   system: field(system, { kind: "ids", ids: [] }, "subject", "push"),
   stage: stageField(["network"]),
   systemSearch: field(listSearchSchema, { v: 1, keywords: "", pills: [] }, "query"),
@@ -43,10 +44,11 @@ export const fields = {
   rulingSort: field(z.enum(["", "name", "status"]), "", "query"),
 };
 const args = (page: {
+  fan?: FanScope | null;
   system:
     | z.output<typeof system>
     | import("@pe/agent-contracts").Immutable<z.output<typeof system>>;
-}) => ({ system: namesOf(page.system) });
+}) => ({ system: namesOf(page.system), fan: page.fan });
 export const roster = read(hostRead(reads.roster));
 export const network = read(hostRead(reads.network), args);
 export const pricing = read(hostRead(reads.pricing), args);
