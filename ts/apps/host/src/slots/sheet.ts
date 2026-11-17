@@ -169,7 +169,8 @@ function dispatch(key: (typeof SHEET_COMMANDS)[keyof typeof SHEET_COMMANDS], dep
       const sheet = deps.workspace?.sheet(work.key.route);
       if (!sheet) throw refused(`Route ${work.key.route} declares no sheet slot`, "sheet.undeclared");
       validateSheetValues(sheet, doc);
-      const name = Object.hasOwn(routes, work.key.route) ? routes[work.key.route]! : "parameters";
+      const name = Object.hasOwn(routes, work.key.route) ? routes[work.key.route] : "parameters";
+      if (name === undefined) throw refused("Missing sheet executor via", "sheet.executor-unknown");
       const bound = await executorFor(name).bind(ctx);
       return { ...bound, prepare: async () => ({ via: name, value: await bound.prepare?.() }) };
     },
