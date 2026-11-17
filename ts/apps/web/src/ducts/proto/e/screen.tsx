@@ -111,8 +111,8 @@ function useNetworkData(ctx: NetworkContext) {
   const pricingData = useValue(pricing);
   const priced = pricing.state === "ready" ? pricingData : undefined;
   // One identity per pricing Value: the panes memoize on it.
-  const calcView = useMemo(
-    () => (priced ? ({ ...priced.survey, calcs: priced.calcs } as Priced) : null),
+  const calcView = useMemo<Priced | null>(
+    () => (priced ? ({ ...priced.survey, calcs: priced.calcs }) : null),
     [priced],
   );
   const edit = useMemo(() => stagedValues(workDoc ?? null, workDoc ?? neutralFansWork), [workDoc]);

@@ -1,7 +1,8 @@
 import { expect, test } from "vite-plus/test";
 import { buildSheet } from "@pe/ducts-domain/sheet/index";
-import { inputsFor, TEST_WALK, withFamilyFlipped, withPeersRead } from "@pe/ducts-domain/sheet/test-inputs";
-import type { SheetSnapshot } from "@pe/ducts-domain/sheet/build";
+import { inputsFor, TEST_WALK, withFamilyFlipped } from "@pe/ducts-domain/sheet/test-inputs";
+import { nativeResponseSchema } from "@pe/host-contracts/decoders";
+import { VOCABULARY } from "@pe/ducts-domain/sheet/scoped-snapshot";
 import type { FanPort } from "@pe/ducts-domain/roster";
 import {
   connOf,
@@ -203,7 +204,9 @@ test("retained Manual D geometry: fan boundaries and a sibling's shared intake s
   // navigation group, while the legs, connectivity and native health remain captured evidence.
   // Q4 (2026-11-16): MUAS-1's family reads against its network, so the capture states the roles it was certified under (`manual-d.test.ts`).
   const snapshot = sheetSnapshot(
-    withPeersRead(withFamilyFlipped(retained as unknown as SheetSnapshot, 14577391)) as never,
+    withFamilyFlipped(nativeResponseSchema("ducts.snapshot.walk").parse({
+      ...retained, walk: { ...retained.walk, unreadPeers: [] }, vocabulary: VOCABULARY,
+    }), 14577391),
   );
   const suggested = suggestRoster(snapshot);
   const roster = [...suggested.fans, ...suggested.suggestions];

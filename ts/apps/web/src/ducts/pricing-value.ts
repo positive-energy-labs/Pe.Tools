@@ -50,7 +50,7 @@ export function pricingValue(
     snapshot,
     work,
     versions: { Work: revision },
-    store: snapshot.store as Parameters<typeof resolveInputs>[0]["store"],
+    store: snapshot.store,
     firm,
     catalogs,
   });
@@ -92,7 +92,7 @@ export function pricingValue(
           ["designFriction"],
           z.number().positive(),
           DEFAULT_DESIGN_FRICTION_RATE,
-        ).value!,
+        ).value ?? DEFAULT_DESIGN_FRICTION_RATE,
         parameters: ductParameterSlots(settings),
       },
     },

@@ -62,6 +62,6 @@ it("a run on any fan's calc clears its branch; no calc leaves the whole scope wi
   const scope = systemScope(snapshot, "SA 1");
   const none = noRunBranches(snapshot, [], scope, flows);
   expect([...none.keys()].sort()).toEqual([2, 3, 4, 5, 7, 8]);
-  const other = [{ terminal: 3, path: [9, 2, 3] }] as unknown as CalcRun[];
+  const other = solved.map((run) => ({ ...run, path: [9, 2, 3] }));
   expect([...noRunBranches(snapshot, other, scope, flows).keys()].sort()).toEqual([4, 5, 7, 8]);
 });

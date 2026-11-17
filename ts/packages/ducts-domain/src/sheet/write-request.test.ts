@@ -1,3 +1,5 @@
+import { nativeResponseSchema } from "@pe/host-contracts/decoders";
+import { VOCABULARY } from "./scoped-snapshot.ts";
 import { readFileSync } from "node:fs";
 import { expect, it } from "vite-plus/test";
 import { ductsApplyInputSchema, type FanClaim } from "@pe/agent-contracts";
@@ -15,14 +17,13 @@ import {
 import { suggestRoster } from "../roster.ts";
 import { toGrids } from "../loss-grid.ts";
 import { elementSubject } from "../work-subject.ts";
-import { buildSheet, type BuildSheetInput, type SheetSnapshot } from "./build.ts";
+import { buildSheet, type BuildSheetInput } from "./build.ts";
 import {
   TEST_FIRM,
   TEST_WALK,
   cell,
   inputsFor,
   withFamilyFlipped,
-  withPeersRead,
 } from "./test-inputs.ts";
 import { resolveInputs, type WorkLayer } from "./inputs.ts";
 import { mintWriteRequest, type FanWriteContext } from "./write-request.ts";
@@ -481,7 +482,9 @@ it("mints computed ESP and authored-only flows on the recorded Manual D fan", ()
   const recorded = JSON.parse(
     readFileSync(new URL("./fixtures/manual-d-20261102.json", import.meta.url), "utf8"),
   );
-  const snapshot = withPeersRead(withFamilyFlipped(recorded as SheetSnapshot, 14577391));
+  const snapshot = withFamilyFlipped(nativeResponseSchema("ducts.snapshot.walk").parse({
+    ...recorded, walk: { ...recorded.walk, unreadPeers: [] }, vocabulary: VOCABULARY,
+  }), 14577391);
   const unit = snapshot.nodes.find((n) => n.id === 14577391)!;
   const parameter = snapshot.slots?.requiredEsp;
   if (!parameter) throw Error("Recorded fixture needs a required ESP slot");

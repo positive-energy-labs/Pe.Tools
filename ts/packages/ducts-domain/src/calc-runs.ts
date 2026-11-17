@@ -76,7 +76,11 @@ export function runsOf(calcs: readonly Calc[]): CalcRun[] {
   const runs = calcs.flatMap((calc) => {
     const rows = new Map(Object.values(calc.legs).map((leg) => [leg.id, rowOf(leg, calc)]));
     return calc.paths.map((path, index): CalcRun => {
-      const own = path.legIds.map((id) => rows.get(id)!);
+      const own = path.legIds.map((id) => {
+        const row = rows.get(id);
+        if (!row) throw Error(`Fan calc path names missing leg ${id}`);
+        return row;
+      });
       const complete = !path.blockerIds.length && own.every((row) => row.dp != null);
       return {
         key: `${calc.fan.unitId}:${calc.fan.portIndex}/${path.side}/p${index}`,
@@ -105,7 +109,7 @@ export function worstRun(
   terminals: ReadonlySet<number>,
   unit?: number,
 ): (CalcRun & { total: number; terminal: number }) | null {
-  let worst: CalcRun | null = null;
+  let worst: (CalcRun & { total: number; terminal: number }) | null = null;
   for (const run of runsOf(calcs))
     if (
       run.total != null &&
@@ -114,8 +118,8 @@ export function worstRun(
       (unit == null || run.unit === unit) &&
       run.total > (worst?.total ?? -Infinity)
     )
-      worst = run;
-  return worst as (CalcRun & { total: number; terminal: number }) | null;
+      worst = { ...run, total: run.total, terminal: run.terminal };
+  return worst;
 }
 
 /** The first run, in calc order, that ends at this terminal. */
