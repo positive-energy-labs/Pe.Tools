@@ -1,6 +1,6 @@
 """Native acceptance harness: dev or installed runtime, one controlled Revit on model copies.
 
-    python tools/acceptance.py setup <run> [--installed] [--web] [--foreground] [--detach] [--model PATH[=NAME]]...
+    python tools/acceptance.py setup <run> [--installed] [--web] [--foreground] [--detach] [--model PATH[=NAME]]... [--wait-admission MINUTES]
     python tools/acceptance.py sdk <run> <name> <pe-revit args...>      envelope -> ev/<name>.json
     python tools/acceptance.py call <run> <who> <METHOD> <path> [body.json] [--out NAME]
     python tools/acceptance.py census <run> [label]
@@ -12,6 +12,9 @@ Without --model, setup copies the Chadds model from the main checkout's .artifac
 Dev copies the product home. Installed uses the actual MSI and product home; its writes are censused.
 `who` is cli (this host's human/cli context), anon, or ctx:<token>. Teardown stops only the
 session ids and host this run recorded; anything else it finds is printed as residue.
+--wait-admission re-reads the machine every 30 s until it admits or the minutes run out, so a
+drive starts when memory frees and not on some thread's next wake. Teardown prints and writes
+ev/teardown.json, the custody receipt a driver links instead of writing its own.
 """
 
 import hashlib, json, os, re, shutil, subprocess, sys, tempfile, time, urllib.error, urllib.request
@@ -297,8 +300,19 @@ def http(state: dict, who: str, method: str, path: str, body: bytes | None = Non
         return {"status": status, "body": text}
 
 
-def require_setup_admission() -> None:
+def require_setup_admission(wait_minutes: float = 0) -> None:
     # Point-in-time check only, not a reservation or memory cap over persistent SDK services.
+    deadline = time.time() + wait_minutes * 60
+    while True:
+        refused = admission_refusal()
+        if not refused:
+            return
+        if time.time() >= deadline:
+            sys.exit(refused)
+        time.sleep(30)
+
+
+def admission_refusal() -> str | None:
     try:
         reading = subprocess.run(
             [sys.executable, str(CHECKOUT / ".agents/skills/slot.execute/machine.py"),
@@ -307,15 +321,17 @@ def require_setup_admission() -> None:
         )
         verdict = json.loads(reading.stdout)
     except (OSError, subprocess.SubprocessError, ValueError) as error:
-        sys.exit(f"HOLD setup: machine admission failed: {error}")
+        return f"HOLD setup: machine admission failed: {error}"
     if (reading.returncode != 0 or not isinstance(verdict, dict)
             or verdict.get("verdict") != "ADMIT" or verdict.get("kind") != "revit-drive"
             or "error" in verdict):
-        sys.exit(f"HOLD setup: machine admission refused: {reading.stdout.strip()}")
+        return f"HOLD setup: machine admission refused: {reading.stdout.strip()}"
+    return None
 
 
 def setup(run: str, args: list[str]) -> None:
-    require_setup_admission()  # Includes the host-timeout resume path, before discovery or acquisition.
+    wait = value_list(args, "--wait-admission")
+    require_setup_admission(float(wait[0]) if wait else 0)  # Includes the host-timeout resume path, before discovery or acquisition.
     owner = owner_home()
     installed = "--installed" in args
     if installed and "--web" in args:
@@ -486,6 +502,16 @@ def teardown(run: str) -> None:
         residue = [p for p in processes() if str(CHECKOUT).lower() in (p.get("CommandLine") or "").lower()]
         revit = [p for p in revit_pids() if p not in state["revitBefore"]]
         log(run, f"teardown residue: {len(residue)} checkout processes {[p['ProcessId'] for p in residue]}, new Revit {revit}")
+        receipt = {"run": run, "lane": state.get("lane"), "commit": state.get("commit"),
+                   "sessionsStopped": state["sessions"], "hostPid": (state.get("host") or {}).get("pid"),
+                   "hostAlive": bool(svc) and pid_alive(svc["pid"]), "newRevit": revit,
+                   "residue": [p["ProcessId"] for p in residue],
+                   # the source model is re-read: a drive that wrote to it, not its copy, shows here
+                   "sourceModelsUnchanged": all(sha256_file(Path(m["source"])) == m["sourceSha256"]
+                                                for m in state.get("modelCopies", []))}
+        (run_dir(run) / "ev").mkdir(parents=True, exist_ok=True)
+        (run_dir(run) / "ev" / "teardown.json").write_text(json.dumps(receipt, indent=2), encoding="utf8")
+        print(json.dumps(receipt))
     finally:
         if state.get("lane") != "installed" and os.environ.get("PE_ACCEPT_KEEP_HOME") != "1":
             # Only remove the system-temp container created by setup, never an arbitrary saved home.

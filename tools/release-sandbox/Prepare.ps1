@@ -3,6 +3,7 @@ param(
     [Parameter(Mandatory)][string]$RunDirectory
 )
 $ErrorActionPreference = 'Stop'
+. "$PSScriptRoot\VcRuntime.ps1"
 # Preparation never launches Sandbox or executes an installer on the host.
 $specPath = (Resolve-Path -LiteralPath $Spec).Path
 $config = Get-Content -LiteralPath $specPath -Raw | ConvertFrom-Json
@@ -18,7 +19,7 @@ foreach ($role in 'previousMsi', 'candidateMsi', 'previousReceipt', 'candidateRe
 }
 $names = @{}
 foreach ($file in $files) {
-    if ($file.role -notin 'previousMsi', 'candidateMsi', 'previousReceipt', 'candidateReceipt', 'previousZip', 'previousZipReceipt', 'candidateZip', 'candidateZipReceipt', 'sdkPackage', 'previousIdentity', 'vcRuntime', 'dotnetRuntime', 'recoveryZip') { throw "Unsupported input role: $($file.role)" }
+    if ($file.role -notin 'previousMsi', 'candidateMsi', 'previousReceipt', 'candidateReceipt', 'previousZip', 'previousZipReceipt', 'candidateZip', 'candidateZipReceipt', 'sdkPackage', 'previousIdentity', 'dotnetRuntime', 'recoveryZip') { throw "Unsupported input role: $($file.role)" }
     if (@($files | Where-Object role -eq $file.role).Count -ne 1) { throw "Duplicate input role: $($file.role)" }
     if ($file.name -notmatch '^[a-zA-Z0-9][a-zA-Z0-9._-]*$' -or $names.ContainsKey($file.name)) { throw 'Invalid or duplicate staged filename.' }
     $names[$file.name] = $true
@@ -40,12 +41,16 @@ foreach ($release in 'previous', 'candidate') {
     if ($release -eq 'candidate') { $candidateSource = $receipt.sourceRevision }
 }
 if ($config.expectedSdkVersion -notmatch '^0\.1\.0-beta\.[0-9]+$') { throw 'Expected SDK package version required' }
+$vcRuntime = Get-GateVcRuntime
+if ($names.ContainsKey($vcRuntime.name)) { throw 'VC++ installer filename is reserved by preparation.' }
+$files += $vcRuntime
+$config.files = $files
 $config | Add-Member -NotePropertyName sourceRevision -NotePropertyValue $candidateSource -Force
 New-Item -ItemType Directory -Path "$run\input", "$run\evidence" | Out-Null
 Copy-Item -LiteralPath $specPath -Destination "$run\input\source-spec.json"
 foreach ($file in $files) { Copy-Item -LiteralPath $file.path -Destination "$run\input\$($file.name)" }
 $scripts = @()
-foreach ($name in 'Guest.ps1', 'Observe.ps1', 'Boundary.ps1', 'Evidence.ps1', 'AutomaticBoundary.ps1', 'Automatic.ps1', 'UpdateReceipt.ps1', 'CompareSdkClosure.ps1', 'InstalledClosure.ps1', 'ReadInstalledMcp.ps1', 'CaptureDesktop.ps1', 'Windows.cs') {
+foreach ($name in 'Guest.ps1', 'VcRuntime.ps1', 'Observe.ps1', 'Boundary.ps1', 'Evidence.ps1', 'AutomaticBoundary.ps1', 'Automatic.ps1', 'UpdateReceipt.ps1', 'CompareSdkClosure.ps1', 'InstalledClosure.ps1', 'ReadInstalledMcp.ps1', 'CaptureDesktop.ps1', 'Windows.cs') {
     Copy-Item -LiteralPath "$PSScriptRoot\$name" -Destination "$run\input\$name"
     $scripts += @{ name = $name; sha256 = (Get-FileHash -LiteralPath "$run\input\$name").Hash }
 }

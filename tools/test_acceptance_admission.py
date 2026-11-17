@@ -58,6 +58,20 @@ class AdmissionTests(unittest.TestCase):
                     self.assertEqual(command.call_args.args[0], [sys.executable,
                         str(a.CHECKOUT / ".agents/skills/slot.execute/machine.py"), "admit", "revit-drive", "--json"])
 
+    def test_wait_admission_rereads_until_admit_or_deadline(self):
+        with ExitStack() as stack:
+            sleep = stack.enter_context(patch.object(a.time, "sleep"))
+            reading = stack.enter_context(patch.object(a, "admission_refusal", side_effect=["HOLD 1", "HOLD 2", None]))
+            a.require_setup_admission(5)
+            self.assertEqual(reading.call_count, 3)
+            self.assertEqual(sleep.call_count, 2)
+            reading.side_effect = None
+            reading.return_value = "HOLD late"
+            stack.enter_context(patch.object(a.time, "time", side_effect=[0, 0, 400]))
+            with self.assertRaises(SystemExit) as stop:
+                a.require_setup_admission(5)
+            self.assertEqual(stop.exception.code, "HOLD late")
+
     def test_admit_zero_reaches_setup(self):
         for args in ([], ["--web"], ["--installed"]):
             with self.subTest(args=args), ExitStack() as stack:

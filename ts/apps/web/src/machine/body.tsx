@@ -16,7 +16,7 @@ import {
 } from "./model";
 import { RevitGroup } from "./revit";
 import { OpenControlScope } from "./context";
-import { HostGroup } from "./host";
+import { HomesSettings, HostGroup } from "./host";
 import { ProviderSetup } from "./pea";
 import { useProviders } from "#/workbench/provider/providers";
 import { SettingsProjection } from "../navigation/options";
@@ -142,6 +142,9 @@ export function SettingsBody({
           body: (
             <div className="flex flex-col gap-3">
               <HostGroup machine={machine} surface={shell} fixture={fixture} stale={gap} />
+              <HomesSettings
+                refusal={fixture ? SEED_REFUSAL : gap ? "The host is not answering." : null}
+              />
               <StartupSettings machine={machine} fixture={fixture} />
             </div>
           ),

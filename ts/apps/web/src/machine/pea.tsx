@@ -65,7 +65,8 @@ export function ProviderSetup({ providers }: { providers: ProvidersState }) {
                 >
                   {repairWord(provider)}
                 </Button>
-              ) : (
+              ) : provider.id.startsWith("firm-") ? null : (
+                // A firm-key provider comes from the firm home's keys.json; the host refuses its removal (409).
                 <Button label="Remove" onClick={() => void providers.remove(provider.id)}>
                   Remove
                 </Button>
@@ -89,7 +90,9 @@ export function ProviderSetup({ providers }: { providers: ProvidersState }) {
             {provider.harness} ·{" "}
             {provider.auth.kind === "subscription"
               ? "subscription"
-              : `${new URL(provider.auth.baseUrl).host} · …${provider.auth.keyLast4}`}{" "}
+              : provider.id.startsWith("firm-")
+                ? `${new URL(provider.auth.baseUrl).host} · firm keys.json · …${provider.auth.keyLast4}`
+                : `${new URL(provider.auth.baseUrl).host} · …${provider.auth.keyLast4}`}{" "}
             · probed {provider.probedAt ?? "never"}
           </span>
         </div>

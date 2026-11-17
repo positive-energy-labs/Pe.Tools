@@ -126,6 +126,7 @@ namespace Pe.Revit.Tests {
                 Assert.That(state.BlobPath(Text("blobSha256")), Is.EqualTo(Text("blob")), "blob");
                 Assert.That(state.T3Path, Is.EqualTo(Text("t3")), "t3");
                 Assert.That(state.AgentPath, Is.EqualTo(Text("agent")), "agent");
+                Assert.That(state.HomesConfigPath, Is.EqualTo(Text("homesConfig")), "homesConfig");
             });
         }
 

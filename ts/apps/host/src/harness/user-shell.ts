@@ -83,7 +83,11 @@ export const userCodexConfigPath = () =>
  * codex-acp replaces a CODEX_CONFIG `mcp_servers` table with the session's own servers (2026-10-04).
  */
 export async function userCodexMcpServers(configPath: string): Promise<string[]> {
-  const text = await readFile(configPath, "utf8").catch(() => "");
+  return codexMcpServerNames(await readFile(configPath, "utf8").catch(() => ""));
+}
+
+/** The `[mcp_servers.<name>]` names a Codex config text declares (pure half of userCodexMcpServers). */
+export function codexMcpServerNames(text: string): string[] {
   const names = new Set<string>();
   for (const line of text.split(/\r?\n/)) {
     const match = /^\s*\[mcp_servers\.([^\].\s"']+)(?:\.[^\]]*)?\]/.exec(line);

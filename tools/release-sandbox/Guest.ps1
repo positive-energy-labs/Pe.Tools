@@ -11,6 +11,7 @@ $run=$Output;New-Item -ItemType Directory $run -Force | Out-Null;Start-Transcrip
 . "$inputRoot\UpdateReceipt.ps1"
 . "$inputRoot\CompareSdkClosure.ps1"
 . "$inputRoot\InstalledClosure.ps1"
+. "$inputRoot\VcRuntime.ps1"
 $hookStarted=$false
 function Check($name,[bool]$passed,$detail) {@{name=$name;passed=$passed;detail=$detail;atUtc=[datetime]::UtcNow.ToString('o')} | ConvertTo-Json -Depth 20 -Compress | Add-Content "$run\checks.jsonl";if (!$passed){throw $name}}
 function NoRevit {Check 'No Revit' (@(Get-Process Revit -ErrorAction SilentlyContinue).Count -eq 0) ''}
@@ -34,8 +35,9 @@ try {
     $controlPid=[PeConsoleObserver]::PulseControl();Start-Sleep -Milliseconds 500;$control=@([PeConsoleObserver]::DrainEvents());$control | ConvertTo-Json -Depth 20 | Set-Content "$run\observer-control.json"
     Check 'Native observer calibrated' (@($control | Where-Object {$_.Window.Displayed -and ($_.Window.ControlSentinel -or @($_.Ancestry | Where-Object Pid -eq $controlPid).Count)}).Count -gt 0 -and [PeConsoleObserver]::DroppedEvents() -eq 0) $controlPid
     $retainedInputs=@($config.files|Where-Object role -eq 'previousIdentity')
+    Install-GateVcRuntime $inputRoot $run
     if(!$retainedInputs.Count) {
-        foreach($role in 'vcRuntime','dotnetRuntime') {
+        foreach($role in 'dotnetRuntime') {
             $prerequisite=@($config.files|Where-Object role -eq $role)
             if($prerequisite.Count) {Install (Join-Path $inputRoot $prerequisite[0].name) ('/install /quiet /norestart /log "'+$run+'\'+$role+'.log"') $role}
         }

@@ -130,6 +130,41 @@ public sealed class DeploymentRuntimeContractTests {
         }
     }
 
+    // homes.json (Settings' choice) under this assembly's configured state root: it names both homes, the
+    // environment override beats it, and a chosen firm folder with no marker is no firm home, not the probe.
+    // Mutant, run red once (2026-11-17): drop ToldHome's environment branch and the override assertion fails.
+    [Test, NonParallelizable]
+    public void Homes_json_names_the_homes_and_the_override_beats_it() {
+        const string sharedVariable = "PE_TOOLS_SHARED_ROOT";
+        var file = ProductRuntimeLayout.Current.State.HomesConfigPath;
+        var user = Path.Combine(Path.GetTempPath(), $"pe-chosen-user-{Guid.NewGuid():N}");
+        var firm = Path.Combine(Path.GetTempPath(), $"pe-chosen-firm-{Guid.NewGuid():N}", "Pe.Tools");
+        var isolated = Path.Combine(Path.GetTempPath(), $"pe-isolated-{Guid.NewGuid():N}");
+        var previousHome = Environment.GetEnvironmentVariable(ProductPathNames.ProductHomeVariable);
+        var previousShared = Environment.GetEnvironmentVariable(sharedVariable);
+        Environment.SetEnvironmentVariable(ProductPathNames.ProductHomeVariable, null);
+        Environment.SetEnvironmentVariable(sharedVariable, null);
+        try {
+            Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+            static string Json(string path) => path.Replace("\\", "\\\\");
+            File.WriteAllText(file, "{ \"firm\": \"" + Json(firm) + "\", \"user\": \"" + Json(user) + "\" }");
+            Assert.That(ProductPathing.HomesConfig(File.ReadAllText(file)), Is.EqualTo(((string?)firm, (string?)user)));
+            Assert.That(ProductPathing.UserRoot(), Is.EqualTo(user));
+            Assert.That(ProductPathing.Homes().List, Is.EqualTo(new[] { user }), "an unmarked chosen firm folder is no firm home");
+            Directory.CreateDirectory(firm);
+            File.WriteAllText(Path.Combine(firm, ProductPathNames.HomeMarkerFileName), "{\"tier\":\"firm\"}");
+            Assert.That(ProductPathing.Homes().List, Is.EqualTo(new[] { user, firm }));
+            Environment.SetEnvironmentVariable(ProductPathNames.ProductHomeVariable, isolated);
+            Assert.That(ProductPathing.Homes().User, Is.EqualTo(isolated), "the isolation override beats the file");
+            Assert.That(ProductPathing.HomesConfig("{\"firm\":\"relative\\\\x\", \"user\":\"\"}").Firm, Is.Null, "a relative path is no choice");
+        } finally {
+            Environment.SetEnvironmentVariable(ProductPathNames.ProductHomeVariable, previousHome);
+            Environment.SetEnvironmentVariable(sharedVariable, previousShared);
+            File.Delete(file);
+            if (Directory.Exists(Path.GetDirectoryName(firm)!)) Directory.Delete(Path.GetDirectoryName(firm)!, true);
+        }
+    }
+
     // ADV2-S4: acceptance hosts on worktrees shared the owner's %LOCALAPPDATA% state. The one
     // override roots machine-local state too, under <home>\.local-state, matching the host's productRoot.
     [Test]

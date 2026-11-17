@@ -6,6 +6,8 @@ Rebuilt 2026-11-15 as current truth at main 05f17a36, at the end of the pod-page
 
 ## Decided
 
+- 2026-11-16, kaitpw: "pls copy there". Copied Pod `295d5b2c` to `G:\Shared drives\PE Team Folder\04 PE Software Files\Pe.Tools\Pods\mep-edit`; all 33 mounted-drive files match the tested archive. PROVEN[artifact, `.artifacts/runs/mep-edit-port-20261115/shared-drive-copy.json`, `295d5b2c`, 2026-11-16]. Cloud synchronization and coworker installation remain UNPROVEN.
+
 - 2026-09-16: A pod is one folder of plain source: scripts with declared entrypoints, JSON members, assets. Typed JSON is reusable data. A library owns the operation and the domain validation; storage knows no domain rules.
 - 2026-09-16: Composition (`$include`, `$preset`) stays. The user's own standards use 271 directives across 76 files, and fragments are the only way to manage a standard. `$schema` is the only member-level selector; typed filename suffixes are removed because 142 of 150 real members have none.
 - 2026-09-16: Publish vendors, it does not precompose. Every consumed foreign fragment is copied under `settings/_vendor/<pod-id>/...` and the reference is rewritten to `@local/_vendor/...`. A published pod composes from its own bytes only, so it never needs a sibling pod. Vendored files are the inspection copies.
@@ -86,6 +88,10 @@ Rebuilt 2026-11-15 as current truth at main 05f17a36, at the end of the pod-page
 - 2026-11-14, pod-pages F-W44-4: a root-phase timeout so that a slow home cannot stall another home's Pages. It broke W26's kept late-publication tests. The adopted cross-home rule needs no timer (Owed "Cross-home root isolation").
 
 ## Owed
+
+- MEP edit shared-Pod field test: Pod-only port and feedback are complete at `pods/mep-edit-20261115` / `295d5b2c`; ten entrypoints compile and representative native reads pass. Owed: remaining successful operation/category cases and Undo, then installed shared-drive use and coworker changes with/without Pea. No host/kernel changes, ScriptTimings or shared-drive distribution retained. Findings and artifact identity: [MEP-EDIT-PHASE1.md](MEP-EDIT-PHASE1.md#authorized-pod-only-port-2026-11-15).
+- MEP-HOST-ROLLBACK: an arbitrary script-owned failure preprocessor can clear failures before the host observer sees them, so `Succeeded` with empty `failures` does not certify a commit. The Pod checks its own transaction status and captures Revit's words. Host coverage repair is deferred by kaitpw; evidence: `.artifacts/accept/mep-edit-phase1-20261115/ev/rollback-probe.json`.
+- MEP-PICK-TIMEOUT: the 300-second script timeout did not interrupt a blocking native pick; it completed after 552 seconds. The Pod shows static pick/Escape instructions, but reliable interruption remains owed in the host/runtime. Evidence: `.artifacts/accept/mep-edit-phase1-20261115/ev/human-pick-receipt.json`.
 
 - Page logs across Pages (owner queue 10, kaitpw: important). Today no `pe.js` door reads another Page's log, and the raw `page.state` route (`GET /pages/:slug/state`, `ts/packages/host-contracts/src/pe-api.ts:993`) checks no caller. Why it matters:
   - The need is real. Row 9's cold prompt asked a new document-profiler Page to show "the latest saved Profile reading", which the first Page had kept. Pea could only re-run the census and keep a second log (`<run>drive/f1/C1b/REPLY.md`). A Pod with a census Page and a report Page meets this every time, and two logs of one reading drift apart.

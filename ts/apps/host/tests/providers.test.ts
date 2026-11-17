@@ -121,6 +121,36 @@ const listen = async (server: Server) => {
 };
 const close = (server: Server) => new Promise<void>((resolve) => server.close(() => resolve()));
 
+test("a Codex endpoint home stubs the user's own MCP servers as disabled so the world-root merge loads", async () => {
+  // Owner's 0.7.31 install: the world root's bare `enabled = false` entries were the whole server under
+  // the Pea-owned endpoint home, and codex refused the config ("invalid transport").
+  const home = join(root, "subscription-home-mcp");
+  await mkdir(home, { recursive: true });
+  await writeFile(join(home, "config.toml"), '[mcp_servers.executor]\nurl = "http://x"\n\n[mcp_servers.node_repl.env]\nA = "1"\n');
+  vi.stubEnv("CODEX_HOME", home);
+  vi.stubEnv("PE_HARNESS_ADAPTER_CODEX", join(import.meta.dirname, "fake-acp-agent.mjs"));
+  const server = createServer((_req, res) =>
+    res.end(JSON.stringify({ data: [{ id: "gpt-6.1-sol" }], output: [{ type: "message", content: [{ type: "output_text", text: "OK" }] }] })),
+  );
+  const baseUrl = await listen(server);
+  const providers = createProviders({ spawner: testSpawner(), probeOnStart: false });
+  try {
+    const response = await providers.fetch(
+      request("providers", "POST", { ...add, harness: "codex", name: "Stubs", auth: { ...add.auth, baseUrl } }),
+    );
+    expect(response.status).toBe(200);
+    const env = await providers.env(providers.get((await response.json()).id)!);
+    const startup = await readFile(join(env.CODEX_HOME!, "config.toml"), "utf8");
+    for (const name of ["executor", "node_repl"])
+      expect(startup).toContain(`[mcp_servers."${name}"]\ncommand = "pea-disabled"\nenabled = false`);
+    expect(startup).not.toContain("http://x");
+  } finally {
+    await providers.close();
+    await close(server);
+    vi.unstubAllEnvs();
+  }
+});
+
 test("Codex endpoints publish startup config without keys and retain separate stable homes", async () => {
   vi.stubEnv("CODEX_HOME", join(root, "subscription-home"));
   vi.stubEnv("PE_HARNESS_ADAPTER_CODEX", join(import.meta.dirname, "fake-acp-agent.mjs"));
@@ -406,6 +436,34 @@ test("witness: a thread event and meta echoing a shared key are written redacted
     expect(events + (await readFile(join(threadsRoot, "thread", "meta.json"), "utf8"))).not.toContain("shared-firm-key");
   } finally {
     await threads.close();
+    vi.unstubAllEnvs();
+    await providers.close();
+  }
+});
+
+test("a firm key makes a synthesized provider per harness, never stored, and it vanishes with the key", async () => {
+  const shared = join(root, "shared");
+  await mkdir(shared, { recursive: true });
+  await writeFile(join(shared, "pe-home.json"), `{"tier":"firm"}`);
+  await writeFile(join(shared, "keys.json"), JSON.stringify({ "openai.api-key": "firm-openai-key" }));
+  vi.stubEnv("PE_TOOLS_SHARED_ROOT", shared);
+  const providers = createProviders({ spawner: testSpawner(), probeOnStart: false });
+  try {
+    const list = async () => (await providers.fetch(request("providers"))).json();
+    const firm = (await list()).find((p: { id: string }) => p.id === "firm-codex");
+    expect(firm).toMatchObject({
+      harness: "codex",
+      name: "Firm key (Codex)",
+      auth: { kind: "endpoint", baseUrl: "https://api.openai.com/v1", keyLast4: "-key" },
+    });
+    expect((await list()).some((p: { id: string }) => p.id === "firm-claude")).toBe(false);
+    expect(JSON.stringify(await list())).not.toContain("firm-openai-key");
+    expect((await providers.fetch(request("providers/firm-codex", "DELETE"))).status).toBe(409);
+    expect(providers.keys()).toContain("firm-openai-key");
+    await writeFile(join(shared, "keys.json"), "{}");
+    expect((await list()).some((p: { id: string }) => p.id.startsWith("firm-"))).toBe(false);
+    expect((await providers.fetch(request("providers/firm-codex"))).status).toBe(404);
+  } finally {
     vi.unstubAllEnvs();
     await providers.close();
   }

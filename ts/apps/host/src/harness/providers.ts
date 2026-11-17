@@ -25,7 +25,7 @@ import { z } from "zod";
 import { harnessKeyRole, keyRefusalText, resolveKey, sharedKeys } from "@pe/host-contracts/shared-keys";
 import { adapterCli, adapterLogin, adapters, openAdapter, stopChild } from "./adapter.ts";
 import { classifyEndpointFailure } from "./endpoint-failure.ts";
-import { mergePath } from "./user-shell.ts";
+import { codexMcpServerNames, mergePath, userCodexConfigPath } from "./user-shell.ts";
 
 /**
  * Providers: one harness with one auth source. A subscription provider (the harness's own login)
@@ -120,6 +120,8 @@ export function isAuthRefusal(error: unknown): boolean {
 /* ── Child env per provider ── */
 
 const CODEX_PROVIDER = "pea_endpoint";
+/** Ids of the synthesized firm-key providers; they exist only while keys.json holds the role. */
+const FIRM_PREFIX = "firm-";
 
 /** Known inference overrides only; CLI files, credential stores and endpoint billing remain outside this boundary. */
 function cleanHarnessEnv(source: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
@@ -166,10 +168,29 @@ function authEnv(record: ProviderRecord, modelId?: string): Record<string, strin
   );
   mkdirSync(codexHome, { recursive: true });
   const configPath = join(codexHome, "config.toml");
+  // The world root's project config turns the user's own MCP servers off by name with a bare
+  // `enabled = false` (user-shell.ts). Under the user's home that merges onto a real definition; under
+  // this Pea-owned home it is the whole entry, and codex refuses to load ("invalid transport"). A
+  // disabled stdio stub per name makes the merge valid and still runs nothing.
+  const disabled = codexMcpServerNames(
+    (() => {
+      try {
+        return readFileSync(userCodexConfigPath(), "utf8");
+      } catch {
+        return "";
+      }
+    })(),
+  );
   const config = [
     `model_provider = "${CODEX_PROVIDER}"`,
     `[model_providers.${CODEX_PROVIDER}]`,
     ...Object.entries(provider).map(([key, value]) => `${key} = ${JSON.stringify(value)}`),
+    ...disabled.flatMap((name) => [
+      "",
+      `[mcp_servers.${JSON.stringify(name)}]`,
+      `command = "pea-disabled"`,
+      "enabled = false",
+    ]),
     "",
   ].join("\n");
   // Atomic publication keeps a concurrent probe/session from reading a truncated config.
@@ -725,6 +746,26 @@ export function createProviders(options: ProvidersOptions) {
     if (providerReadError) throw Error(providerReadError);
     writeJson(hostState().providers, { providers: records });
   };
+  /**
+   * One synthesized, never-persisted endpoint per harness whose role the firm keys.json holds. Its
+   * empty key resolves the firm entry at every child spawn, so a rotated key is adopted without a poll.
+   */
+  const firmRecords = (): EndpointRecord[] => {
+    const shared = sharedKeys(hostState());
+    if ("refused" in shared) return [];
+    return harnessIds
+      .filter((harness) => Object.hasOwn(shared.keys, harnessKeyRole[harness]))
+      .map((harness) => ({
+        id: `${FIRM_PREFIX}${harness}`,
+        harness,
+        name: `Firm key (${adapters[harness].title})`,
+        auth: {
+          kind: "endpoint" as const,
+          baseUrl: harness === "claude" ? "https://api.anthropic.com" : "https://api.openai.com/v1",
+          apiKey: "",
+        },
+      }));
+  };
   const records = (): ProviderRecord[] => [
     ...harnessIds.map((harness) => ({
       id: harness,
@@ -733,6 +774,7 @@ export function createProviders(options: ProvidersOptions) {
       auth: { kind: "subscription" as const },
     })),
     ...stored(),
+    ...firmRecords(),
   ];
   const get = (id: string) => records().find((r) => r.id === id) ?? null;
 
@@ -1055,6 +1097,11 @@ export function createProviders(options: ProvidersOptions) {
         return json(view(record));
       case "provider.remove": {
         if (providerReadError) return json({ error: providerReadError }, 409);
+        if (record.id.startsWith(FIRM_PREFIX))
+          return json(
+            { error: "A firm key provider comes from the firm keys.json; remove the key there." },
+            409,
+          );
         if (record.auth.kind === "subscription")
           return json(
             { error: "A subscription provider is the harness's own login; it cannot be removed." },

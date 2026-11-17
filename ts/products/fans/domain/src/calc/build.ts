@@ -1581,7 +1581,7 @@ const sideSum = (f: Flows, w: Walk) => {
   return ends.some(([, v]) => v == null) ? null : ends.reduce((a, [, v]) => a + v!, 0);
 };
 
-function buildCalcPass(input: BuildCalcInput, assumeHeals: boolean): Calc {
+function buildCalcPass(input: BuildCalcInput, assumeHeals: boolean, hosts: Map<string, HostCalc>): Calc {
   const g = graphOf(input.snapshot);
   const pricer = new Pricer(input, g);
   const unit = g.byId.get(input.fan.unitId);
@@ -1912,13 +1912,18 @@ function buildCalcPass(input: BuildCalcInput, assumeHeals: boolean): Calc {
   const network = basisOf(input.snapshot, [input.inputs, input.roster]);
   // ENCOUNTERS: every other fan this fan's air meets; a tie-in's static is the host's own calc (H5).
   const self = fanKey(input.fan);
+  const buildHost = (host: FanPortRef): HostCalc => {
+    // H5 consumes the known claim only; a host's heal preview cannot supply required pressure.
+    const calc = buildCalcPass({ ...input, fan: host, dependents: [...(input.dependents ?? []), self] }, false, hosts);
+    hosts.set(fanKey(host), calc);
+    return calc;
+  };
   const hostOf = (host: FanPortRef): HostCalc | "absent" | "cycle" =>
     host.unitId === unit.id || input.dependents?.includes(fanKey(host))
       ? "cycle"
-      : (input.hosts?.get(fanKey(host)) ??
+      : (hosts.get(fanKey(host)) ??
         (g.byId.has(host.unitId) && input.roster.some((p) => fanKey(p) === fanKey(host))
-          ? // ponytail: one host build per tie-in per pass, no memo; pass `hosts` when a read builds every fan.
-            buildCalc({ ...input, fan: host, dependents: [...(input.dependents ?? []), self] })
+          ? buildHost(host)
           : "absent"));
   const met = encountersOf(input.fan, paths, pricer.legs, input.encounterRulings);
   const gaps: CoverageGap[] = [];
@@ -2081,8 +2086,10 @@ function issueOf(
 
 /** Reuse exactly the same flow/pricing rules for known and continued heal walks. */
 export function buildCalc(input: BuildCalcInput): Calc {
-  const known = buildCalcPass(input, false);
-  const assumed = buildCalcPass(input, true);
+  // Share known host claims across both passes; cycle checks precede reuse, and caller maps stay read-only.
+  const hosts = new Map(input.hosts);
+  const known = buildCalcPass(input, false, hosts);
+  const assumed = buildCalcPass(input, true, hosts);
   known.assumed = assumed.assumed;
   known.totals.supply.assumedInWg = assumed.totals.supply.worstPath;
   known.totals.return.assumedInWg = assumed.totals.return.worstPath;
