@@ -11,7 +11,7 @@ import type { SceneInstance } from "#/scene/types";
 test("the edit palette persists with Work, supplies the kinds table and never enters Revit apply", () => {
   const palette = { ...FIRM_COLOURS, supply: "#123456" };
   const saved = JSON.stringify(
-    designOf({ systemColours: { edit: { value: palette } } }),
+    designOf({ systemColours: { edit: { value: palette, by: "human" } } }),
   );
   const doc = designOf(JSON.parse(saved));
   expect(coloursOf(doc)).toEqual(palette);

@@ -56,9 +56,9 @@ test("the Goal is the partition inbox: failing and gone marks first, staged mark
     ({ kind, run, anchor: { view: DEMO_VIEW, level: "Fixture level", polygon: polygon as [number, number][] } });
   const work = roomsRouteState.schema.parse({
     marks: {
-      staged: { edit: { value: mark("merge", "fixture-run", room!.outer) } },
-      failing: { edit: { value: mark("wall", "older-run", room!.outer) } },
-      gone: { edit: { value: mark("reject", "older-run", [[900, 900], [910, 900], [910, 910]]) } },
+      staged: { edit: { by: "human", value: mark("merge", "fixture-run", room!.outer) } },
+      failing: { edit: { by: "human", value: mark("wall", "older-run", room!.outer) } },
+      gone: { edit: { by: "human", value: mark("reject", "older-run", [[900, 900], [910, 900], [910, 910]]) } },
     },
   });
   const goal = roomsGoal(work, DEMO_ROOMS, DEMO_VIEW);

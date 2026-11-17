@@ -312,7 +312,7 @@ test("a no-rule row stages a family-wide price-as choice through Work", async ()
 
 test("taking back a family assignment clears only its edit rung", async () => {
   const family = "Radius Elbow";
-  const suggestion = { value: { rule: "elbow-mitered-vaned" }, note: "check the vanes" };
+  const suggestion = { value: { rule: "elbow-mitered-vaned" }, by: "human", note: "check the vanes" };
   const doc = designOf({
     ruleAssignments: {
       [family]: { edit: suggestion },

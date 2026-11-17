@@ -26,7 +26,7 @@ test.each(
     version: 1,
     schemaVersion: 1,
     revision: 0,
-    doc: familiesRouteState.schema.parse({ scope: { edit: { value: filter } } }),
+    doc: familiesRouteState.schema.parse({ scope: { edit: { value: filter, by: "human" } } }),
     history: [],
   };
   function workspace() {

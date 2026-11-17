@@ -24,12 +24,12 @@ test("rooms attention decodes as a region with its stable carrier GUID", () => {
 test("stagedRoomWrites sends both authors staged values per guid", () => {
   const doc = roomsRouteState.schema.parse({
     edits: {
-      [roomEditKey("a", "name")]: { edit: { value: "Pantry" } },
-      [roomEditKey("a", "people")]: { edit: { value: 2 } },
-      [roomEditKey("b", "type")]: { edit: { value: "kitchen" } },
-      [roomEditKey("b", "role")]: { edit: { value: "zone" } },
-      [roomEditKey("b", "ceilingFt")]: { edit: { value: 9 } },
-      [roomEditKey("c", "name")]: { edit: { value: "Pea's idea" } },
+      [roomEditKey("a", "name")]: { edit: { by: "human", value: "Pantry" } },
+      [roomEditKey("a", "people")]: { edit: { by: "human", value: 2 } },
+      [roomEditKey("b", "type")]: { edit: { by: "human", value: "kitchen" } },
+      [roomEditKey("b", "role")]: { edit: { by: "human", value: "zone" } },
+      [roomEditKey("b", "ceilingFt")]: { edit: { by: "human", value: 9 } },
+      [roomEditKey("c", "name")]: { edit: { by: "pea", value: "Pea's idea" } },
     },
   });
   expect(stagedRoomWrites(doc)).toEqual([

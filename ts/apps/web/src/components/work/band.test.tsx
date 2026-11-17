@@ -17,8 +17,8 @@ test.each(["edits", null])(
   async (segment) => {
     const cells: Record<string, CellLike> = {
       edit: { edit: { value: 1, by: "pea" } },
-      contested: { edit: { value: 2 } },
-      locked: { edit: { value: 4 } },
+      contested: { edit: { value: 2, by: "human" } },
+      locked: { edit: { value: 4, by: "human" } },
     };
     const cellMap = z.record(z.string(), draftCellSchema(z.number()));
     const schema = segment === null ? cellMap : z.object({ [segment]: cellMap });
@@ -68,7 +68,7 @@ test.each(["edits", null])(
     const remaining = {
       edit: { edit: null },
       contested: { edit: null },
-      locked: { edit: { value: 4 } },
+      locked: { edit: { value: 4, by: "human" } },
     };
     expect(envelope.doc).toEqual(segment === null ? remaining : { [segment]: remaining });
   },
