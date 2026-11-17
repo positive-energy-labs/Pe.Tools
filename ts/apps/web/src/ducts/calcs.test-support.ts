@@ -64,3 +64,7 @@ export const withFan = (snapshot: DuctSnapshot): DuctSnapshot => ({
       : node,
   ),
 });
+
+/** The panes' view over hand-built calcs alone: no survey, an empty network. */
+export const pricedOf = (calcs: readonly Calc[]) =>
+  ({ calcs, snapshot: { segments: [] } }) as unknown as import("./priced").Priced;

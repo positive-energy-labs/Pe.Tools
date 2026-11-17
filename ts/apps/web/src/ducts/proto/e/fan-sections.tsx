@@ -12,7 +12,7 @@ import { useNativeObservation } from "#/revit/observation";
  * roster order, each with its own flow, TEL and required ESP. A calc that is not complete says so and
  * shows its known subtotal; no fan owns a shared trunk (MAP invariant 6).
  */
-import { runsOf, worstRun } from "@pe/ducts-domain/calc-runs";
+import { reaches, runsOf, worstRun, type RunScope } from "@pe/ducts-domain/calc-runs";
 
 import type { Priced } from "../../priced";
 import { fmtFt } from "./bar";
@@ -27,21 +27,26 @@ export interface FanFact {
   complete: boolean;
   /** The calc claim's kind: `complete`, `to-boundary` or `incomplete`. */
   claim: string;
+  /** How many blockers stand on the calc; 0 on a complete one. */
+  blockers: number;
   cfm: number | null;
   tel: number | null;
   says: string;
   end: string;
 }
 
-/** Every fan whose calc reaches one of `terminals`, in roster order. */
-export function fanFacts(priced: Priced | null, terminals: ReadonlySet<number>): FanFact[] {
-  if (!priced) return [];
+/** Every fan port whose calc reaches `scope` by any path (to a grille, an open end or another fan), in roster order. */
+export function fanFacts(priced: Priced | null, scope: RunScope | null): FanFact[] {
+  if (!priced || !scope) return [];
   const runs = runsOf(priced.calcs);
   return priced.calcs.flatMap((calc) => {
     const unit = calc.fan.unitId;
-    if (!runs.some((r) => r.unit === unit && r.terminal != null && terminals.has(r.terminal)))
+    // A unit's ports are separate calcs: port 1 never borrows port 0's paths.
+    if (!runs.some((r) => r.unit === unit && r.port === calc.fan.portIndex && reaches(r, scope)))
       return [];
-    const run = worstRun(priced.calcs, terminals, unit);
+    const run = worstRun(priced.calcs, scope.terminals, calc.fan);
+    const blockers = calc.blockers.length;
+    const held = blockers ? ` · ${blockers} blocker${blockers === 1 ? "" : "s"}` : "";
     const complete = calc.claim.kind === "complete";
     const esp = calc.claim.kind === "complete" ? calc.claim.requiredEspInWg : calc.claim.knownInWg;
     const tel = run?.tel ?? null;
@@ -55,7 +60,8 @@ export function fanFacts(priced: Priced | null, terminals: ReadonlySet<number>):
       claim: calc.claim.kind,
       cfm: calc.fan.flowCfm,
       tel,
-      role: complete ? "fan" : `fan · ${calc.claim.kind}`,
+      blockers,
+      role: complete ? "fan" : `fan · ${calc.claim.kind}${held}`,
       says: `${calc.fan.flowCfm ?? "no"} cfm · TEL ${fmtFt(tel)} ft · ${complete ? "ESP" : "known"} ${esp.toFixed(3)} in-wg${shared}`,
     };
   });

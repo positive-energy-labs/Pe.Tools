@@ -1,4 +1,4 @@
-import { calcsIn, worstRun, type Calc } from "./calc-runs.ts";
+import { calcsIn, reaches, runsOf, worstRun, type Calc } from "./calc-runs.ts";
 import { systemsOf, systemScope } from "@pe/ducts-domain/system-scope";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
@@ -7,8 +7,9 @@ import { markOf } from "@pe/ducts-domain/terminal-flows";
 
 /**
  * The system list: one childless row per Revit system (no run tree is built, so 350 systems stay
- * cheap), keyed by its name. Its total is the worst complete run to one of its terminals on any fan's
- * calc (a path's loss, never a fan pressure); `fanless` when no calc reaches it.
+ * cheap), keyed by its name. Its total is the worst run to one of its terminals on any fan's calc (a
+ * path's loss, never a fan pressure), and only when every one of its paths is whole: one unknown path
+ * makes the system unpriced, never priced at its worst known run. `fanless` when no calc reaches it.
  */
 export function systemList(snapshot: DuctSnapshot, calcs: readonly Calc[] | null): import("@pe/agent-contracts").DuctsPricingData["analysis"]["systems"] {
   const nodes = new Map(snapshot.nodes.map((n) => [n.id, n]));
@@ -38,7 +39,9 @@ export function systemList(snapshot: DuctSnapshot, calcs: readonly Calc[] | null
     const blocked = reached.some((calc) =>
       calc.blockers.some((b) => b.kind === "implausible-loss" && scope.prices.has(b.elementId)),
     );
-    const rows = worst?.rows;
+    // Unknown stays unknown: a path of this system with no whole loss may be the worst one.
+    const unknown = calcs ? runsOf(calcs).some((run) => run.total == null && reaches(run, scope)) : false;
+    const rows = blocked || unknown ? undefined : worst?.rows;
     const first = snapshot.groups.find((g) => g.id === system.groups[0]);
     const lead = worst?.unit;
     const rated =
@@ -64,7 +67,7 @@ export function systemList(snapshot: DuctSnapshot, calcs: readonly Calc[] | null
       fanless: !!calcs && system.groups.length > 0 && !reached.length,
       rating: rated ?? null,
       id: first?.rootIds[0] ?? null,
-      total: blocked ? null : (worst?.total ?? null),
+      total: rows && worst ? worst.total : null,
       self: null,
       ft: null,
       selfFt: null,

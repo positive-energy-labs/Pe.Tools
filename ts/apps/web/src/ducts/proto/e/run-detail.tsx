@@ -33,7 +33,7 @@ export interface RunData {
   lengthFt: number;
   /** The duct's own actual friction rate, in-wg per 100 ft. */
   rate: number | null;
-  frictionDp: number;
+  frictionDp: number | null;
   roughnessFt: number | null;
   roughness: string | null;
   size: string | null;
@@ -73,13 +73,14 @@ export function runOf(priced: Priced, selected: number): RunData | null {
       });
     }
     const lengthFt = own.reduce((a, r) => a + (r.lengthFt ?? 0), 0);
-    const frictionDp = own.reduce((a, r) => a + (r.dp ?? 0), 0);
+    // Unknown stays unknown: one unpriced interval makes the duct's friction unknown, never the priced ones' sum.
+    const frictionDp = own.reduce<number | null>((a, r) => (a == null || r.dp == null ? null : a + r.dp), 0);
     const segment = priced.snapshot.segments.find((s) => s.id === ductId);
     return {
       ductId,
       terminal,
       lengthFt,
-      rate: lengthFt > 1e-9 && frictionDp > 0 ? (frictionDp / lengthFt) * 100 : null,
+      rate: lengthFt > 1e-9 && frictionDp != null && frictionDp > 0 ? (frictionDp / lengthFt) * 100 : null,
       frictionDp,
       roughnessFt: own[0]!.roughnessFt ?? null,
       roughness: segment?.roughness.provenance ?? null,

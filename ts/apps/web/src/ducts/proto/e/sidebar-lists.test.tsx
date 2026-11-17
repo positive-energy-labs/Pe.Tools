@@ -12,11 +12,12 @@ import { TestAttention, eKey } from "#/test-attention";
 import { hovered } from "@pe/kit/lang/attention";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import type { Priced } from "../../priced";
-import { calcOf, legOf } from "../../calcs.test-support";
+import { calcOf, legOf, pricedOf } from "../../calcs.test-support";
 import { NativeObservationScope } from "#/revit/observation";
 import type { TreeNode } from "../b/model";
 import { SystemTree, type TreeCtx } from "./tree-sidebar";
 import { fanFacts } from "./fan-sections";
+import { runOf } from "./run-detail";
 import { Scroll } from "@pe/kit/lang/scroll";
 
 const derivations = vi.hoisted(() => ({ count: 0, all: null as unknown }));
@@ -245,7 +246,8 @@ test("fan facts list each reaching fan on its own calc, in roster order, and cla
   first.claim = { kind: "complete", basis: "test", requiredEspInWg: 0.125, coverage: [], blockingIds: [] };
   first.fan.flowCfm = 400;
   const priced = { calcs: [first, second] } as unknown as Priced;
-  const facts = fanFacts(priced, new Set([20]));
+  const scope = (...ids: number[]) => ({ terminals: new Set(ids), prices: new Set(ids) });
+  const facts = fanFacts(priced, scope(20));
   expect(facts.map((f) => [f.unit, f.role, f.complete])).toEqual([
     [1, "fan", true],
     [2, "fan \u00b7 incomplete", false],
@@ -253,6 +255,51 @@ test("fan facts list each reaching fan on its own calc, in roster order, and cla
   expect(facts[0]!.says).toBe("400 cfm \u00b7 TEL 0.0 ft \u00b7 ESP 0.125 in-wg");
   expect(facts[1]!.says).toMatch(/known 0\.000 in-wg$/);
   // A fan whose calc reaches none of the system's terminals is not one of its fans.
-  expect(fanFacts(priced, new Set([21])).map((f) => f.unit)).toEqual([2]);
-  expect(fanFacts(priced, new Set())).toEqual([]);
+  expect(fanFacts(priced, scope(21)).map((f) => f.unit)).toEqual([2]);
+  expect(fanFacts(priced, scope())).toEqual([]);
+  expect(fanFacts(priced, null)).toEqual([]);
+});
+
+test("a unit's ports are separate fans: a port with no path is not listed, and none borrows another's TEL (P-071)", () => {
+  const duct = legOf("10:1>2", 10, "duct", 0.2);
+  const zero = calcOf(1, [{ ...duct, equivalentFt: 40 }], [{ terminal: 20, legIds: ["10:1>2"] }]);
+  const one = calcOf(1, [], []);
+  one.fan.portIndex = 1;
+  const scope = { terminals: new Set([20]), prices: new Set([10, 20]) };
+  expect(fanFacts(pricedOf([zero, one]), scope).map((f) => [f.key, f.tel])).toEqual([["1:0", 40]]);
+  // Port 1 reaches the system only at an open end: it is listed, with no TEL of its own to claim.
+  const open = calcOf(1, [legOf("10:2>1", 10, "duct", null)], [{ terminal: 99, legIds: ["10:2>1"] }]);
+  open.fan.portIndex = 1;
+  open.paths[0]!.end = { kind: "open-end", elementId: 10 };
+  expect(fanFacts(pricedOf([zero, open]), scope).map((f) => [f.key, f.tel])).toEqual([
+    ["1:0", 40],
+    ["1:1", null],
+  ]);
+});
+
+test("a fan whose calc reaches the system but ends at an open boundary is one of its fans, with its claim and blockers (P-072)", () => {
+  const calc = calcOf(7, [legOf("10:1>2", 10, "duct", 0.2)], [{ terminal: 99, legIds: ["10:1>2"] }]);
+  calc.paths[0]!.end = { kind: "open-end", elementId: 10 };
+  calc.blockers = [
+    { id: "open-end:10:2", kind: "open-end", elementId: 10, detail: "open", effectInWg: null, closer: { kind: "heal", note: "" } },
+  ];
+  const priced = pricedOf([calc]);
+  const facts = fanFacts(priced, { terminals: new Set([20]), prices: new Set([10, 20]) });
+  expect(facts.map((f) => [f.unit, f.claim, f.blockers, f.role])).toEqual([
+    [7, "incomplete", 1, "fan \u00b7 incomplete \u00b7 1 blocker"],
+  ]);
+  // A scope no path of the calc touches still has no fan: "Rule a fan to price this system".
+  expect(fanFacts(priced, { terminals: new Set([20]), prices: new Set([11, 20]) })).toEqual([]);
+});
+
+test("a duct with an unpriced interval has no friction loss or rate, never the priced intervals' sum (P-073)", () => {
+  const interval = (id: string, dp: number | null) => ({
+    ...legOf(id, 10, "duct", dp),
+    evidence: { kind: "friction" as const, roughnessFt: 0.0003, lengthFt: 10, hydraulicDiameterFt: 1, ref: "test" },
+  });
+  const legs = [interval("10:1>2", 0.2), interval("10:2>3", null)];
+  const of = (calcs: Parameters<typeof pricedOf>[0]) => runOf(pricedOf(calcs), 10);
+  const run = of([calcOf(1, legs, [{ terminal: 20, legIds: ["10:1>2", "10:2>3"] }])]);
+  expect([run?.lengthFt, run?.frictionDp, run?.rate]).toEqual([20, null, null]);
+  expect(of([calcOf(1, legs, [{ terminal: 20, legIds: ["10:1>2"] }])])?.frictionDp).toBe(0.2);
 });

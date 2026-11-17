@@ -323,7 +323,7 @@ export function SystemsPane({ ctx }: { ctx: DuctsSystemsContext }) {
   const systemKeys = { version, system, active, systemSearch, systemSort };
   const fansOf = useCallback(
     (system: ReturnType<typeof systemList>[number]) =>
-      fanFacts(priced, drawn ? systemScope(drawn, system.name).terminals : NO_TERMINALS),
+      fanFacts(priced, drawn ? systemScope(drawn, system.name) : null),
     [priced, nameOf, drawn],
   );
   const systemsPane = (
@@ -616,7 +616,7 @@ export function NetworkPicture({ ctx, picture }: PictureOverlayProps<DuctsDrawCo
                       scale: activeCritical.total,
                       fans: () => (
                         <FanFacts
-                          facts={fanFacts(priced, activeScope?.terminals ?? NO_TERMINALS)}
+                          facts={fanFacts(priced, activeScope)}
                           nameOf={nameOf}
                         />
                       ),
@@ -934,7 +934,6 @@ export function AllRulesBody({ ctx }: { ctx: DuctsDrawContext }) {
     </>
   );
 }
-const NO_TERMINALS: ReadonlySet<number> = new Set();
 function useTreeProjection(
   snapshot: DuctSnapshot,
   priced: NetworkData["priced"],

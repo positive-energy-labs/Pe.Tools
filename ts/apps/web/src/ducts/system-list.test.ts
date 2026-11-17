@@ -5,6 +5,7 @@ import { systemList } from "./system-list";
 import { fanFacts } from "./proto/e/fan-sections";
 import { buildSheetTree, runNodesOf } from "./proto/b/sheet-model";
 import { calcsOf, withFan } from "./calcs.test-support";
+import { runsOf } from "@pe/ducts-domain/calc-runs";
 
 test("F16 metadata-only roster exposes system information before network pricing", () => {
   const snapshot = syntheticSnapshot();
@@ -33,13 +34,30 @@ test("two systems sharing a fan retain their own worst run and breakdown termina
   expect(rows.map((r) => r.key)).toEqual(["SA 1", "SA 2"]);
   const second = rows[1]!;
   expect(second.fanless).toBe(false);
+  expect(second.total).toBeGreaterThan(0.35);
+  // SA 1's only path is unknown on this capture: unpriced, never a copy of SA 2's.
+  expect(rows[0]!.total).toBeNull();
   const scope = systemScope(snapshot, "SA 2");
-  const facts = fanFacts({ calcs } as never, scope.terminals);
+  const facts = fanFacts({ calcs } as never, scope);
   // The fan's calc is not complete on this capture (it has no return path), so no ESP is claimed.
   expect(facts.map((f) => [f.unit, f.complete, f.claim])).toEqual([[1, false, "incomplete"]]);
   const tree = buildSheetTree(snapshot, calcs, scope.groups, scope.members);
   expect(runNodesOf(tree).map((r) => r.terminal)).toEqual([31, 30]);
   expect(tree[0]!.children[0]!.name).toContain("full fan sheet");
+});
+
+test("a system with one unknown path is unpriced, never priced at its worst known run (P-070)", () => {
+  const snapshot = withFan(syntheticSnapshot());
+  const calcs = calcsOf(snapshot, {
+    endCfm: { 30: 300, 31: 100 },
+    drops: { 21: 0.01, 22: 0.01, 30: 0.05, 31: 0.35 },
+  });
+  // The fan's path to grille 31 is whole and its path to grille 30 is not: both are SA 1's.
+  expect(runsOf(calcs).map((run) => [run.terminal, run.total == null])).toEqual([
+    [31, false],
+    [30, true],
+  ]);
+  expect(systemList(snapshot, calcs)[0]).toMatchObject({ fanless: false, total: null, split: null });
 });
 
 test("a system no fan calc reaches is fanless and its tree says to rule a fan (L2-4)", () => {
