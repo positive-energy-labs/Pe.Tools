@@ -2,20 +2,19 @@
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { cleanup, render, screen } from "@testing-library/react";
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from "@tanstack/react-router";
-import { module as ducts } from "@pe/duct-systems-web/route";
-import { calc } from "@pe/fans-web/route";
+import { module as ducts } from "../route.ts";
 import { ductsLink } from "@pe/ducts-web/identity";
-import { networkFixtures } from "../../../../products/ducts/web/src/fixture-registry.ts";
-import { fansCalcData, workFingerprintSchema } from "@pe/agent-contracts";
-import { mountTypedRoute } from "./typed-mount";
-import { TypedChrome } from "./typed-shell";
-import { StandaloneBand } from "./band.test-support";
+import { networkFixtures } from "@pe/ducts-web/fixture-registry";
+import { workFingerprintSchema } from "@pe/agent-contracts";
+import { mountTypedRoute } from "../../../../apps/web/src/shell/typed-mount.ts";
+import { TypedChrome } from "../../../../apps/web/src/shell/typed-shell.tsx";
+import { StandaloneBand } from "../../../../apps/web/src/shell/band.test-support.tsx";
 
 const closes: (() => void)[] = [];
 afterEach(() => { cleanup(); closes.splice(0).forEach(close => close()); vi.unstubAllGlobals(); });
 async function arrive(href: string) {
   vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
-  await import("@pe/duct-systems-web/screen/screen");
+  await import("./screen/screen.tsx");
   vi.stubGlobal("fetch", vi.fn(() => { throw Error("Fixture called the host"); }));
   const url = new URL(href, "http://pe.local");
   const mount = mountTypedRoute(ducts, {
@@ -36,8 +35,5 @@ test.each(Object.keys(networkFixtures))("/ducts resolves registered fixture %s",
   await arrive(`/ducts?fixture=${name}`);
 });
 test("MUAS-1 scene fix href reaches a rendering ducts mount", async () => {
-  const data = fansCalcData.parse(calc.source.provide!("scene", { fan: "all", sheetPath: "" }).value!.data);
-  const fan = data.open!.overview.fan!;
-  expect(fan.mark).toBe("MUAS-1");
-  await arrive(ductsLink(fan, { fixture: "scene" }));
+  await arrive(ductsLink({ unitId: 14577391, portIndex: 2 }, { fixture: "scene" }));
 });

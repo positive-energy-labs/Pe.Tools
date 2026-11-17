@@ -6,7 +6,7 @@ import {
   fansCalcData,
   openFanCalcSchema,
 } from "@pe/agent-contracts";
-import { networkFixtures } from "../../../../ducts/web/src/fixture-registry.ts";
+import { networkFixtures } from "@pe/ducts-web/fixture-registry";
 import fixture from "./calc.fixture.json";
 import { calcState } from "./state.ts";
 import { stableFanKey } from "@pe/ducts-web/calc/model";
