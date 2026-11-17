@@ -10,6 +10,8 @@ const COMPLETE = Symbol("complete claim");
 /** Only complete(), after WholeCoverage, constructs this capability; its hidden symbol never enters the wire claim. */
 export type CompleteClaim = Extract<FanClaim, { kind: "complete" }> & { readonly [COMPLETE]: true };
 export type DomainClaim = CompleteClaim | Exclude<FanClaim, { kind: "complete" }>;
+export const isCompleteClaim = (c: unknown): c is CompleteClaim =>
+  typeof c === "object" && c !== null && COMPLETE in c && c[COMPLETE] === true;
 
 type Reached = NonNullable<SheetPath["end"]["reached"]> | "unknown";
 interface Policy {
