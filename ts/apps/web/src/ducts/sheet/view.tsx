@@ -139,10 +139,9 @@ function Sides({ props }: { props: LedgerProps }) {
             ` · with assumptions ${pressure(totals.requiredEspAssumedInWg)}`}
         </span>
         {/* The resolver includes staged Work; a Read plan cannot claim a native write. */}
-        <span className="text-ink-2">required ({currentEsp?.source ?? "source unknown"})</span>
-        <span className="face-mono">
-          {pressure(currentEsp ? currentEsp.value : fan.ratedEspInWg)}
-        </span>
+        {/* Rated ESP is only ever a stated value (P-030, P-033c): unstated, the row says so and shows no number. */}
+        <span className="text-ink-2">{currentEsp?.value == null ? "rated unknown" : `rated (${currentEsp.source})`}</span>
+        <span className="face-mono">{pressure(currentEsp?.value ?? null)}</span>
       </div>
       {/* L3: one line per cell, ellipsized at the last second; heads never break mid-word. */}
       <div className="t-small grid grid-cols-[4rem_auto_repeat(2,minmax(0,6rem))] gap-x-3 [&_span]:truncate">
