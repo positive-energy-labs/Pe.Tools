@@ -1240,7 +1240,8 @@ test.each([false, true])(
     );
     expect(f.fans.review("losses")).toMatchObject({
       stale: false,
-      cells: [{ before: "880 cfm", author: "human" }],
+      // Amendment 2 item 1: the review author is the Work cell's host-stamped `by`, and Pea staged this cell.
+      cells: [{ before: "880 cfm", author: "pea" }],
     });
     expect(f.fans.review("losses")!.rows[0]).toContain("MUAS-1");
     expect(planned(f.typed.verb("losses")).read()?.preview).toBeTruthy();
