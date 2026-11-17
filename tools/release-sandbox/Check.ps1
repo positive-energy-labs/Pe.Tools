@@ -70,6 +70,7 @@ try {
         New-Item -ItemType Directory (Split-Path $original), (Split-Path $installed) -Force | Out-Null
         $name | Set-Content $original; Copy-Item $original $installed
     }
+    '<DotNetCliTool />' | Set-Content "$packageDirectory\tools\net8.0\any\DotnetToolSettings.xml"
     $package = Join-Path $scratch 'sdk-closure.nupkg'; $archive = [IO.Compression.ZipFile]::Open($package, [IO.Compression.ZipArchiveMode]::Create)
     try {
         foreach ($file in Get-ChildItem $packageDirectory -File -Recurse) {

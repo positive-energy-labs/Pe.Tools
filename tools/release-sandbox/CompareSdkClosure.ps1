@@ -9,7 +9,8 @@
         if ($version -ne $ExpectedVersion) {throw 'Original CLI package version mismatch'}
         foreach ($entry in $archive.Entries) {
             $prefix='tools/net8.0/any/'
-            if (!$entry.FullName.StartsWith($prefix,[StringComparison]::Ordinal) -or $entry.FullName.EndsWith('/') -or $entry.FullName.EndsWith('.pdb',[StringComparison]::OrdinalIgnoreCase)) {continue}
+            # NuGet tool metadata is absent from SDK installs; the required-runtime list below remains the runtime contract.
+            if (!$entry.FullName.StartsWith($prefix,[StringComparison]::Ordinal) -or $entry.FullName.EndsWith('/') -or $entry.FullName.EndsWith('.pdb',[StringComparison]::OrdinalIgnoreCase) -or $entry.FullName -ceq 'tools/net8.0/any/DotnetToolSettings.xml') {continue}
             $relative=$entry.FullName.Substring($prefix.Length)
             if ($relative -eq 'Pe.Revit.Cli.exe') {$relative='pe-revit.exe'}
             if ($relative.Split('/') -contains '..') {throw 'SDK archive path escape refused'}
