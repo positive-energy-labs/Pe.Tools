@@ -6,10 +6,12 @@ import type { Author, CoverageGap, Encounter, FanClaim } from "@pe/agent-contrac
 import { coverageGaps, wholeCoverage, type Coverage, type WholeCoverage } from "./coverage.ts";
 import type { FanPortRef, Leg, SheetPath, Side } from "./types.ts";
 
-declare const COMPLETE: unique symbol;
-/** Only complete(), after WholeCoverage, constructs this phantom capability; never the wire claim. */
+const COMPLETE = Symbol("complete claim");
+/** Only complete(), after WholeCoverage, constructs this capability; its hidden symbol never enters the wire claim. */
 export type CompleteClaim = Extract<FanClaim, { kind: "complete" }> & { readonly [COMPLETE]: true };
 export type DomainClaim = CompleteClaim | Exclude<FanClaim, { kind: "complete" }>;
+export const isCompleteClaim = (c: unknown): c is CompleteClaim =>
+  typeof c === "object" && c !== null && COMPLETE in c && c[COMPLETE] === true;
 
 type Reached = NonNullable<SheetPath["end"]["reached"]> | "unknown";
 interface Policy {
@@ -166,13 +168,17 @@ const complete = (
   _read: WholeCoverage,
   basis: string,
   requiredEspInWg: number,
-): CompleteClaim => ({
-  kind: "complete",
-  basis,
-  requiredEspInWg,
-  coverage: [],
-  blockingIds: [],
-}) as unknown as CompleteClaim;
+): CompleteClaim => {
+  const claim: CompleteClaim = {
+    [COMPLETE]: true,
+    kind: "complete",
+    basis,
+    requiredEspInWg,
+    coverage: [],
+    blockingIds: [],
+  };
+  return Object.defineProperty(claim, COMPLETE, { enumerable: false });
+};
 
 export function claimOf(f: ClaimFacts): DomainClaim {
   const coverage = [...coverageGaps(f.coverage), ...f.gaps];

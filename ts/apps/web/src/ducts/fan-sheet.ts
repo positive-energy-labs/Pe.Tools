@@ -33,7 +33,7 @@ import { worksheet } from "@pe/ducts-domain/sheet/worksheet";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import { z } from "zod";
 import { firmLayer, workLayer } from "@pe/host/ducts-inputs";
-import { followAcceptedJoins, mergeSnapshots } from "@pe/host/ducts-walk";
+import { followAcceptedJoins, mergeFar } from "@pe/ducts-domain/sheet/joins";
 import { designLayers } from "./ducts-design.ts";
 import { catalogs } from "@pe/host/builtin-read-handles";
 import { fingerprint, nativeRead, read } from "@pe/host/reads/evaluator";
@@ -284,7 +284,7 @@ const sheetModel = read("fans.calculation", {
       // The legacy elements contract cannot label an absent context stub, so refuse it rather than omit it.
       if (parts.length !== units.length) throw Error("Beyond context was refused");
       beyond = beyondOf(
-        parts.reduce((merged, part) => mergeSnapshots(merged, part.snapshot), snapshot),
+        parts.reduce((merged, part) => mergeFar(merged, part.snapshot), snapshot),
         value as Sheet,
         (unitId) =>
           ports.find((port) => port.unitId === unitId)?.tag || elementLabeler(snapshot)(unitId),

@@ -58,7 +58,6 @@
     "./builtin-read-handles": "./src/builtin-read-handles.ts",
     "./ducts-files": "./src/ducts-files.ts",
     "./ducts-inputs": "./src/ducts-inputs.ts",
-    "./ducts-walk": "./src/ducts-walk.ts",
     "./local-inputs": "./src/local-inputs.ts",
     "./reads/inputs": "./src/reads/inputs.ts"
   }

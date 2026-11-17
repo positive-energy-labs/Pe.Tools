@@ -27,7 +27,6 @@
     "ts/apps/host/src/ducts-actions.ts": 16,
     "ts/apps/host/src/ducts-files.ts": 1,
     "ts/apps/host/src/ducts-inputs.ts": 5,
-    "ts/apps/host/src/ducts-walk.ts": 8,
     "ts/apps/host/src/families-reader.ts": 1,
     "ts/apps/host/src/family-actions.ts": 28,
     "ts/apps/host/src/family-run-recovery.ts": 4,

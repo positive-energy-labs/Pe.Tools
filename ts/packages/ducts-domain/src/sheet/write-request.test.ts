@@ -10,6 +10,7 @@ import {
   round,
   slots,
   snapshotOf,
+  uniqueIdOf,
 } from "../test-snapshot.ts";
 import { suggestRoster } from "../roster.ts";
 import { toGrids } from "../loss-grid.ts";
@@ -28,6 +29,8 @@ import { mintWriteRequest, type FanWriteContext } from "./write-request.ts";
 import { accessoryWrites } from "./accessory-writes.ts";
 import { applyRequest, price } from "../pricing.ts";
 import { designOf } from "../test-design.ts";
+import { claimOf, type DomainClaim } from "./encounters.ts";
+import { TEST_COVERAGE } from "./test-inputs.ts";
 const at = "2026-11-16T00:00:00Z";
 const grids = toGrids(
   JSON.parse(
@@ -52,6 +55,16 @@ function synthetic() {
       facts: [factOf("flow", 200)],
     });
   return snapshotOf({
+    // Fixture provenance: synthetic instance ownership/membership, not a retained native observation.
+    parameterCohorts: [
+      {
+        parameter: "ESP",
+        owner: { kind: "instance", id: 100 },
+        members: [{ elementId: 100, uniqueId: uniqueIdOf(100) }],
+        complete: true,
+        basis: at,
+      },
+    ],
     walk: TEST_WALK,
     document: {
       title: "closed synthetic",
@@ -142,7 +155,7 @@ function prepared(snapshot = synthetic(), work: WorkLayer = {}, run: WorkLayer =
   const context: FanWriteContext = {
     appliedAt: at,
     slots: snapshot.slots,
-    cells: [],
+    peerClaims: new Map(),
     rulings: {},
     storeDeletes: { roles: [], verdicts: [] },
   };
@@ -159,7 +172,9 @@ it("requires this sheet's branded complete claim, never a wire FanClaim", () => 
   if (other.sheet.claim.kind !== "complete") throw Error("fixture must be complete");
   const claim = other.sheet.claim;
   expect(() => mintWriteRequest(claim, p.sheet, p.input, p.context)).toThrow("complete claim");
-  const wire: FanClaim = JSON.parse(JSON.stringify(other.sheet.claim));
+  const wire: FanClaim = JSON.parse(JSON.stringify(p.sheet.claim));
+  Object.assign(p.sheet, { claim: wire });
+  expect(p.sheet.claim).toBe(wire); // Identity matches: the missing runtime brand must refuse it.
   // @ts-expect-error The wire claim has no complete capability.
   expect(() => mintWriteRequest(wire, p.sheet, p.input, p.context)).toThrow("complete claim");
 });
@@ -174,7 +189,65 @@ it("refuses a truncated walk before it can mint any native preview", () => {
   // @ts-expect-error An incomplete claim never satisfies the write capability.
   expect(() => mintWriteRequest(claim, sheet, p.input, p.context)).toThrow("complete claim");
 });
-it("writes the claim's required ESP to only the fan and its complete fresh native cohort", () => {
+
+it("refuses an absent required-ESP cohort with read again", () => {
+  const snapshot = synthetic();
+  delete snapshot.parameterCohorts;
+  const p = prepared(snapshot);
+  expect(p.sheet.claim.kind).toBe("complete");
+  expect(() => p.mint()).toThrow("read again");
+  expect(p.mint({ ...p.context, slots: { requiredEsp: null } }).equipment).toEqual([]);
+});
+
+it.each([
+  ["2026-11-02T12:06:41.5008350+00:00", true],
+  ["2026-11-02T06:06:41.5008350-06:00", true],
+  ["2026-11-02T12:06:41.5008351Z", false],
+  ["invalid", false],
+] as const)("compares cohort instant %s without losing ticks", (basis, equal) => {
+  const snapshot = synthetic();
+  snapshot.document.readAt = "2026-11-02T12:06:41.500835+00:00";
+  const cohort = snapshot.parameterCohorts?.[0];
+  if (!cohort) throw Error("instance cohort fixture");
+  cohort.basis = basis;
+  const p = prepared(snapshot);
+  if (equal) expect(p.mint().equipment.map((row) => row.id)).toEqual([100]);
+  else expect(() => p.mint()).toThrow("read again");
+});
+
+it("refuses a cohort that does not hold this fan with read again", () => {
+  const snapshot = synthetic();
+  snapshot.parameterCohorts = [
+    {
+      parameter: "ESP",
+      owner: { kind: "instance", id: 999 },
+      members: [{ elementId: 999, uniqueId: uniqueIdOf(999) }],
+      complete: true,
+      basis: at,
+    },
+  ];
+  expect(() => prepared(snapshot).mint()).toThrow("read again");
+});
+function peerClaim(requiredEspInWg: number): DomainClaim {
+  return claimOf({
+    basis: "peer-test",
+    coverage: TEST_COVERAGE,
+    legs: {},
+    gaps: [],
+    blockingIds: [],
+    met: [],
+    allowanceInWg: { supply: 0, return: 0 },
+    paths: ["supply", "return"].map((side) => ({
+      side: side as "supply" | "return",
+      legIds: [],
+      blockerIds: [],
+      knownInWg: side === "supply" ? requiredEspInWg : 0,
+      end: { kind: "terminal", elementId: 999 },
+    })),
+  });
+}
+
+it("writes the claim's required ESP only when every type-cohort peer has an equal complete claim", () => {
   const snapshot = synthetic();
   snapshot.parameterCohorts = [
     {
@@ -187,17 +260,114 @@ it("writes the claim's required ESP to only the fan and its complete fresh nativ
   ];
   const p = prepared(snapshot);
   if (p.sheet.claim.kind !== "complete") throw Error("complete");
+  p.context.peerClaims = new Map([[999, peerClaim(p.sheet.claim.requiredEspInWg)]]);
   expect(p.mint().equipment).toEqual(
     [100, 999].map((id) => ({
       id,
       externalStaticInWg: p.sheet.claim.kind === "complete" ? p.sheet.claim.requiredEspInWg : -1,
     })),
   );
+  const peer = p.context.peerClaims.get(999);
+  if (!peer || peer.kind !== "complete") throw Error("complete peer fixture");
+  p.context.peerClaims = new Map([[999, { ...peer }]]);
+  expect(() => p.mint()).toThrow(`999: ${peer.requiredEspInWg} in-wg (unbranded)`);
   snapshot.parameterCohorts[0]!.complete = false;
   expect(() => p.mint()).toThrow("incomplete or stale");
   snapshot.parameterCohorts[0]!.complete = true;
   snapshot.parameterCohorts[0]!.basis = "old";
   expect(() => p.mint()).toThrow("incomplete or stale");
+});
+
+it.each(["missing", "incomplete", "unequal"] as const)(
+  "refuses a %s peer claim and names every peer's value",
+  (kind) => {
+    const snapshot = synthetic();
+    snapshot.parameterCohorts = [
+      {
+        parameter: "ESP",
+        owner: { kind: "type", id: 77 },
+        members: [100, 999].map((id) => ({ elementId: id, uniqueId: `u${id}` })),
+        complete: true,
+        basis: at,
+      },
+    ];
+    const p = prepared(snapshot);
+    if (p.sheet.claim.kind !== "complete") throw Error("complete");
+    const incomplete: DomainClaim = {
+      kind: "incomplete",
+      basis: "peer-test",
+      knownInWg: 0.65,
+      coverage: [],
+      blockingIds: ["no-flow:999"],
+    };
+    p.context.peerClaims = new Map(
+      kind === "missing"
+        ? []
+        : [
+            [
+              999,
+              kind === "incomplete" ? incomplete : peerClaim(p.sheet.claim.requiredEspInWg + 0.1),
+            ],
+          ],
+    );
+    expect(() => p.mint()).toThrow(`100: ${p.sheet.claim.requiredEspInWg} in-wg`);
+    expect(() => p.mint()).toThrow(
+      kind === "missing"
+        ? "999: missing"
+        : kind === "incomplete"
+          ? "999: incomplete (known 0.65 in-wg)"
+          : "999: ",
+    );
+    if (kind === "unequal") {
+      const other = p.context.peerClaims.get(999);
+      if (other?.kind !== "complete") throw Error("complete peer");
+      expect(() => p.mint()).toThrow(`999: ${other.requiredEspInWg} in-wg`);
+    }
+  },
+);
+
+it("compares complete claims at six decimal in-wg without inventing a shared value", () => {
+  const snapshot = synthetic();
+  snapshot.parameterCohorts = [
+    {
+      parameter: "ESP",
+      owner: { kind: "type", id: 77 },
+      members: [100, 999].map((id) => ({ elementId: id, uniqueId: `u${id}` })),
+      complete: true,
+      basis: at,
+    },
+  ];
+  const p = prepared(snapshot);
+  if (p.sheet.claim.kind !== "complete") throw Error("complete");
+  p.context.peerClaims = new Map([[999, peerClaim(p.sheet.claim.requiredEspInWg + 0.0000001)]]);
+  expect(
+    p
+      .mint()
+      .equipment.every(
+        (row) =>
+          row.externalStaticInWg ===
+          (p.sheet.claim.kind === "complete" ? p.sheet.claim.requiredEspInWg : -1),
+      ),
+  ).toBe(true);
+  // A one-micro-inch difference is unequal even when coarser rounding would erase it.
+  p.sheet.claim = peerClaim(0.123456);
+  p.context.peerClaims = new Map([[999, peerClaim(0.123457)]]);
+  expect(() => p.mint()).toThrow("100: 0.123456 in-wg; 999: 0.123457 in-wg");
+});
+
+it("keeps an evidenced instance-owned ESP write independent of other units' claims", () => {
+  const snapshot = synthetic();
+  snapshot.parameterCohorts = [
+    {
+      parameter: "ESP",
+      owner: { kind: "instance", id: 100 },
+      members: [{ elementId: 100, uniqueId: "u100" }],
+      complete: true,
+      basis: at,
+    },
+  ];
+  const p = prepared(snapshot);
+  expect(p.mint().equipment.map((row) => row.id)).toEqual([100]);
 });
 it("a firm with no required ESP slot emits no equipment row, including over native peers", () => {
   const p = prepared();
@@ -241,6 +411,52 @@ it("includes the domain accessory writes and clips every noncohort row to the sh
   ])
     expect(rows.every((r) => p.sheet.walkedElementIds.includes(r.id) || r.id === 100)).toBe(true);
 });
+it("writes an accessory census row with no pressureDrop leg to duplicate it", () => {
+  const p = prepared();
+  p.input.snapshot.nodes.push(nodeOf(6, "accessory", { family: "Synthetic accessory census" }));
+  p.sheet.walkedElementIds.push(6);
+  // Synthetic mint input: this priced census row has no leg, so only accessoryWrites can emit it.
+  const fitting = p.sheet.fittings.find((f) => f.elementId === 2);
+  if (!fitting || fitting.elementId == null) throw Error("priced fitting fixture");
+  p.sheet.fittings.push({
+    ...fitting,
+    key: "6",
+    elementId: 6,
+    lossInWg: 0.21,
+    unpriced: null,
+    derivation: "synthetic:accessory-only",
+  });
+  expect(Object.values(p.sheet.legs).some((l) => l.elementId === 6)).toBe(false);
+  expect(p.mint().components).toEqual([{ id: 6, inWg: 0.21, source: "synthetic:accessory-only" }]);
+});
+
+it("stamps the explicit plan timestamp on the store and every instance, drop and flow record", () => {
+  const snapshot = component();
+  const fan = snapshot.nodes.find((n) => n.id === 100)!;
+  const terminal = snapshot.nodes.find((n) => n.id === 3)!;
+  const p = prepared(snapshot, {
+    equipmentFlows: { [elementSubject(fan)]: cell(200) },
+    flows: { [elementSubject(terminal)]: cell(200) },
+    terminalDrops: { [elementSubject(terminal)]: cell(0.03) },
+  });
+  const appliedAt = "2031-08-09T10:11:12Z";
+  const request = p.mint({
+    ...p.context,
+    appliedAt,
+    slots: { ...p.context.slots, fanFlow: "Fan Flow" },
+  });
+  expect(request.store.appliedAt).toBe(appliedAt);
+  for (const records of [
+    request.store.instances,
+    request.store.terminals,
+    request.store.terminalFlows,
+    request.store.equipmentFlows,
+  ]) {
+    const rows = Object.values(records ?? {});
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows) expect(row.appliedAt).toBe(appliedAt);
+  }
+});
 it("refuses an authored flow slot different from the observed slot", () => {
   const snapshot = synthetic(),
     terminal = snapshot.nodes.find((n) => n.id === 3)!;
@@ -268,6 +484,19 @@ it("compares the group and mint on the recorded Manual D fan before the engine i
     readFileSync(new URL("./fixtures/manual-d-20261102.json", import.meta.url), "utf8"),
   );
   const snapshot = withPeersRead(withFamilyFlipped(recorded as SheetSnapshot, 14577391));
+  const unit = snapshot.nodes.find((n) => n.id === 14577391)!;
+  const parameter = snapshot.slots?.requiredEsp;
+  if (!parameter) throw Error("Recorded fixture needs a required ESP slot");
+  // Replay provenance: fixture-only instance cohort adaptation. The old capture has no ownership evidence.
+  snapshot.parameterCohorts = [
+    {
+      parameter,
+      owner: { kind: "instance", id: unit.id },
+      members: [{ elementId: unit.id, uniqueId: unit.uniqueId }],
+      complete: true,
+      basis: snapshot.document.readAt,
+    },
+  ];
   const tableData = JSON.parse(
     readFileSync(new URL("./fixtures/manual-d-tables.json", import.meta.url), "utf8"),
   );
@@ -302,7 +531,7 @@ it("compares the group and mint on the recorded Manual D fan before the engine i
       ...snapshot.slots,
       fanFlow: snapshot.nodes.find((n) => n.id === 14577391)!.flowParameter,
     },
-    cells: [],
+    peerClaims: new Map(),
     rulings: {},
     storeDeletes: {},
   };

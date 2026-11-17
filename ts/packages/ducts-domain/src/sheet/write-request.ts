@@ -1,21 +1,43 @@
 import type { DuctsApplyInput } from "@pe/agent-contracts";
 import type { BuildSheetInput } from "./build.ts";
-import type { CompleteClaim } from "./encounters.ts";
+import { isCompleteClaim, type CompleteClaim, type DomainClaim } from "./encounters.ts";
 import type { Sheet } from "./types.ts";
 import { accessoryWrites } from "./accessory-writes.ts";
 
-declare const MINTED: unique symbol;
-/** The wire payload, with a phantom capability that only this mint supplies. */
+type FittingWrite = DuctsApplyInput["fittings"][number] & { ruleKey: string };
+
+const MINTED = Symbol("fan write request");
+/** The wire payload; only this mint supplies its hidden symbol capability, omitted by JSON. */
 export type FanWriteRequest = DuctsApplyInput & { readonly [MINTED]: true };
 export interface FanWriteContext {
   /** Stamped at plan and reused at apply, so unchanged inputs seal identically. */
   appliedAt: string;
   /** Resolved names: requiredEsp null means none, encoded as "" in native overrides (R3). */
   slots: DuctsApplyInput["slots"];
-  cells: readonly (readonly [segment: string, key: string])[];
+  /** P-060: caller builds this map from the other cohort units' current sheets, keyed by unit id.
+   * Type-owned ESP requires every peer complete and equal to `claim` at six decimal in-wg (the
+   * complete claim's written precision). Missing/incomplete/unequal peers refuse the whole write.
+   * The active unit uses the claim argument; instance-owned ESP needs no peer entry. */
+  peerClaims: ReadonlyMap<number, DomainClaim>;
   rulings: Pick<NonNullable<DuctsApplyInput["store"]>, "verdicts" | "roles">;
   storeDeletes: NonNullable<DuctsApplyInput["storeDeletes"]>;
 }
+
+/** Date.parse alone loses 100-ns freshness: normalize the zone at whole seconds, then retain all seven fractional digits. */
+const instantTicks = (value: string): bigint | null => {
+  const match = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d{1,7}))?(Z|[+-]\d{2}:\d{2})$/.exec(
+    value,
+  );
+  if (!match) return null;
+  const milliseconds = Date.parse(`${match[1]}${match[3]}`);
+  return Number.isFinite(milliseconds)
+    ? BigInt(milliseconds) * 10_000n + BigInt((match[2] ?? "").padEnd(7, "0"))
+    : null;
+};
+const sameInstant = (a: string, b: string): boolean => {
+  const ticks = instantTicks(a);
+  return ticks !== null && ticks === instantTicks(b);
+};
 
 /** No derived flow and no row outside the fan's walk, except its native ESP cohort. */
 export function mintWriteRequest(
@@ -24,7 +46,7 @@ export function mintWriteRequest(
   input: BuildSheetInput,
   context: FanWriteContext,
 ): FanWriteRequest {
-  if (sheet.claim !== claim || claim.kind !== "complete")
+  if (sheet.claim !== claim || claim.kind !== "complete" || !isCompleteClaim(claim))
     throw Error("The sheet's complete claim is required");
   const { snapshot, inputs } = input;
   const { appliedAt } = context;
@@ -41,7 +63,7 @@ export function mintWriteRequest(
         .map((l) => l.elementId),
     ),
   ];
-  const fittings: DuctsApplyInput["fittings"] = fittingIds.flatMap((id) => {
+  const fittings: FittingWrite[] = fittingIds.flatMap((id) => {
     const evidence = legs
       .filter((l) => l.elementId === id)
       .flatMap((l) => (l.evidence.kind === "coefficient" ? [l.evidence] : []));
@@ -116,28 +138,56 @@ export function mintWriteRequest(
   const terminalFlows = unique(flows("terminal")),
     equipmentFlows = unique(flows("equipment"));
   const required = slots.requiredEsp;
-  const cohort = snapshot.parameterCohorts?.find(
-    (c) => c.parameter === required && c.members.some((m) => m.elementId === sheet.fan.unitId),
-  );
-  if (
-    required !== "" &&
-    cohort &&
-    (!cohort.complete ||
-      cohort.basis !== snapshot.document.readAt ||
+  let equipment: DuctsApplyInput["equipment"] = [];
+  if (required !== "") {
+    const cohort = snapshot.parameterCohorts?.find(
+      (c) => c.parameter === required && c.members.some((m) => m.elementId === sheet.fan.unitId),
+    );
+    if (
+      !cohort ||
+      !cohort.complete ||
+      !sameInstant(cohort.basis, snapshot.document.readAt) ||
       !cohort.members.length ||
-      (cohort.owner.kind === "instance" && cohort.members.length !== 1))
-  )
-    throw Error("The required ESP parameter cohort is incomplete or stale; read again");
-  const equipment =
-    required === ""
-      ? []
-      : unique(
-          (cohort?.members.map((m) => m.elementId) ?? [sheet.fan.unitId]).map((id) => ({
-            id,
-            externalStaticInWg: claim.requiredEspInWg,
-          })),
+      (cohort.owner.kind === "instance" && cohort.members.length !== 1)
+    )
+      throw Error("The required ESP parameter cohort is missing, incomplete or stale; read again");
+    if (cohort.owner.kind === "type") {
+      const peers = cohort.members.map((m) => ({
+        id: m.elementId,
+        claim: m.elementId === sheet.fan.unitId ? claim : context.peerClaims.get(m.elementId),
+      }));
+      if (
+        peers.some(
+          (p) =>
+            p.claim?.kind !== "complete" ||
+            !isCompleteClaim(p.claim) ||
+            p.claim.requiredEspInWg.toFixed(6) !== claim.requiredEspInWg.toFixed(6),
+        )
+      )
+        throw Error(
+          `Required ESP type cohort cannot share one claimed value: ${peers
+            .map(
+              (p) =>
+                `${p.id}: ${
+                  p.claim?.kind === "complete"
+                    ? `${p.claim.requiredEspInWg} in-wg${isCompleteClaim(p.claim) ? "" : " (unbranded)"}`
+                    : p.claim
+                      ? `${p.claim.kind} (known ${p.claim.knownInWg} in-wg)`
+                      : "missing"
+                }`,
+            )
+            .join("; ")}. Use an instance ESP parameter or change the design`,
         );
-  return {
+    }
+    equipment = unique(
+      cohort.members.map((m) => ({
+        id: m.elementId,
+        externalStaticInWg: claim.requiredEspInWg,
+      })),
+    );
+  }
+  const request: FanWriteRequest = {
+    [MINTED]: true,
     slots,
     fittings,
     terminals,
@@ -151,7 +201,7 @@ export function mintWriteRequest(
       ...snapshot.store,
       appliedAt,
       slots,
-      rules: Object.fromEntries(fittings.map((f) => [f.ruleKey!, { table: f.table }])),
+      rules: Object.fromEntries(fittings.map((f) => [f.ruleKey, { table: f.table }])),
       instances: Object.fromEntries(
         fittings.map((f) => [
           String(f.id),
@@ -170,5 +220,6 @@ export function mintWriteRequest(
       ...context.rulings,
     },
     storeDeletes: context.storeDeletes,
-  } as FanWriteRequest;
+  };
+  return Object.defineProperty(request, MINTED, { enumerable: false });
 }
