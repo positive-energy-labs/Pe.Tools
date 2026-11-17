@@ -26,13 +26,14 @@ const contracts = [
 ] as const;
 const shape = (schema: z.ZodType) => z.toJSONSchema(schema, { unrepresentable: "any" });
 test("every guide calc read resolves through pe-api and the registered host read", () => {
+  const apiInput = z.fromJSONSchema(peRoutes["reads.value"].catalog.discovery!.input!);
   for (const read of Object.values(GUIDE_CALC_READS)) {
     const args = read === GUIDE_CALC_READS.calc
       ? { target: { session: "s", openId: "d" }, fan: [], calcPath: "" }
       : { target: { session: "s", openId: "d" }, mode: "fan", unitId: 1, portIndex: 0 };
     const raw = { read, args, subscription: `guide:${read}`, generation: 0 };
-    const request = peRoutes["reads.value"].body.parse(raw);
-    expect(peRoutes["reads.value"].body.safeParse({ ...raw, args: {} }).success, read).toBe(false);
+    const request = peRoutes["reads.value"].body.parse(apiInput.parse(raw));
+    expect(apiInput.safeParse({ ...raw, args: {} }).success, read).toBe(false);
     const definition = registeredReads.reads.get(read);
     expect(definition, read).toBeDefined();
     const bound = graphRoute("reads.value", request);
