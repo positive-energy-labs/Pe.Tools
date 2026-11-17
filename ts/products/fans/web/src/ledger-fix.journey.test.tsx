@@ -38,7 +38,7 @@ async function ledgerLink() {
   if (!isValidElement(node)) throw Error("The Ledger did not draw");
   render(<RegistryContext value={registry}>{node}</RegistryContext>);
   // The fixture's inferred join has no candidate pair, so its fix is ruling the open end capped: /ducts' Work.
-  const link = await screen.findByRole("link", { name: /^Fix in \/ducts: end .+ ›$/ });
+  const link = await screen.findByRole("link", { name: /^Fix in \/duct-systems: end .+ ›$/ });
   // The fix names the end and is no verb on /fans: no button stages it here.
   expect(screen.queryByRole("button", { name: /for inferred-join$/ })).toBeNull();
   const href = new URL(link.getAttribute("href")!, "http://pe.local");

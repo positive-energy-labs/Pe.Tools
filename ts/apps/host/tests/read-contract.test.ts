@@ -16,6 +16,8 @@ import { readRegistry, registeredReads, graphRoute } from "../src/reads/routes.t
 import { hostRead } from "../../web/src/route/host-read.ts";
 import * as fanContracts from "@pe/fans-contract/contract";
 import * as systemContracts from "@pe/duct-systems-contract/contract";
+import { GUIDE_CALC_READS } from "@pe/fans-contract/calc-read";
+import { peRoutes } from "@pe/agent-contracts/pe-api";
 import { workspace as roomsWorkspace } from "../../web/src/rooms/contract.ts";
 
 const contracts = [
@@ -23,6 +25,21 @@ const contracts = [
   ["fans", fanContracts], ["duct-systems", systemContracts],
 ] as const;
 const shape = (schema: z.ZodType) => z.toJSONSchema(schema, { unrepresentable: "any" });
+test("every guide calc read resolves through pe-api and the registered host read", () => {
+  for (const read of Object.values(GUIDE_CALC_READS)) {
+    const args = read === GUIDE_CALC_READS.calc
+      ? { target: { session: "s", openId: "d" }, fan: [], calcPath: "" }
+      : { target: { session: "s", openId: "d" }, mode: "fan", unitId: 1, portIndex: 0 };
+    const raw = { read, args, subscription: `guide:${read}`, generation: 0 };
+    const request = peRoutes["reads.value"].body.parse(raw);
+    expect(peRoutes["reads.value"].body.safeParse({ ...raw, args: {} }).success, read).toBe(false);
+    const definition = registeredReads.reads.get(read);
+    expect(definition, read).toBeDefined();
+    const bound = graphRoute("reads.value", request);
+    expect(bound.name).toBe(read);
+    expect(bound.args).toEqual(definition!.input.parse(args));
+  }
+});
 test.each(["ducts.sheet", "fans.sheet", "fans.worksheet"])("retired read %s is refused without an alias", read => {
   expect(() => graphRoute("reads.value", { read, args: {}, subscription: "retired", generation: 0 }))
     .toThrow(`Host read is not registered: ${read}`);

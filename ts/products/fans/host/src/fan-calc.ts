@@ -1,5 +1,5 @@
 import * as acquisition from "@pe/fans-contract/fans-host-reads";
-import { CALC_ENGINE_VERSION, CALC_DETAIL_READ } from "@pe/fans-contract/fan-calc";
+import { CALC_ENGINE_VERSION, CALC_DETAIL_READ, CALC_BREAKDOWN_READ } from "@pe/fans-contract/fan-calc";
 import { body } from "@pe/host/read-graph";
 import { networkCalcs } from "@pe/fans-domain/calc/network-calcs";
 import { native } from "@pe/agent-contracts/handle";
@@ -436,7 +436,7 @@ export const fanInputs = read("fans.inputs", {
     };
   },
 });
-export const fanCalcBreakdown = read("fans.calc-breakdown", {
+export const fanCalcBreakdown = read(CALC_BREAKDOWN_READ, {
   input: ductsCalcRequestSchema,
   output: details[3],
   async run(ctx, request) {

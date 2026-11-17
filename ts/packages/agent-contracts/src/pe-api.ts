@@ -1,4 +1,5 @@
 import { callPolicies, type CallPolicy } from "./call-policy.ts";
+import { CALC_READ, CALC_DETAIL_READ, CALC_BREAKDOWN_READ } from "@pe/fans-contract/fan-calc";
 import { commandCatalogAxes, commandTable, type CommandKey } from "./command-axes.ts";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import { tsOnlyOperationCatalog } from "@pe/host-contracts/operation-types";
@@ -27,10 +28,15 @@ const threadHistoryInput = z.strictObject({
 /** What Pea is shown for reads.value: the named duct reads carry their real args; any other registered read keeps open args. */
 const namedRead = <S extends z.ZodType>(read: string, args: S) =>
   schemas.valueReadRequest.extend({ read: z.literal(read), args });
+const namedReadKeys = ["fans.roster", CALC_READ, CALC_DETAIL_READ, CALC_BREAKDOWN_READ];
 const valueReadInput = z.union([
   namedRead("fans.roster", schemas.ductsRosterRequestSchema),
-  namedRead("fans.calc-detail", schemas.ductsCalcRequestSchema),
-  schemas.valueReadRequest.extend({ read: z.string().regex(/^(?!(?:fans\.roster|fans\.calc-detail)$)/) }),
+  namedRead(CALC_READ, schemas.fansReadArgs),
+  namedRead(CALC_DETAIL_READ, schemas.ductsCalcRequestSchema),
+  namedRead(CALC_BREAKDOWN_READ, schemas.ductsCalcRequestSchema),
+  schemas.valueReadRequest.extend({ read: z.string().regex(new RegExp(
+    `^(?!(?:${namedReadKeys.map(key => key.replaceAll(".", "\\.")).join("|")})$)`,
+  )) }),
 ]);
 const routeCatalog: Record<
   string,

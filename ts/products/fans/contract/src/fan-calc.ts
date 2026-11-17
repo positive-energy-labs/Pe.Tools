@@ -5,7 +5,9 @@
  */
 
 export const CALC_ENGINE_VERSION = "calc/1";
+export const CALC_READ = "fans.calc";
 export const CALC_DETAIL_READ = "fans.calc-detail";
+export const CALC_BREAKDOWN_READ = "fans.calc-breakdown";
 
 import type {
   Encounter,

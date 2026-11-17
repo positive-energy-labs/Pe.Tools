@@ -2,7 +2,7 @@
  * Where one fan's air meets another's (MAP invariant 5, rulings Q3 and H5), and the claim that
  * follows from it (invariant 1). Pure over a priced sheet: no walk, no pricing, no solver.
  */
-import type { CoverageGap, Encounter, FanClaim } from "@pe/agent-contracts";
+import type { CoverageGap, Encounter, FanClaim, SourcedValue } from "@pe/agent-contracts";
 import { coverageGaps, wholeCoverage, type Coverage, type WholeCoverage } from "@pe/ducts-domain/calc/coverage";
 import type { FanPortRef, Leg, CalcPath, Side } from "./types.ts";
 
@@ -92,22 +92,21 @@ export function encountersOf(
 /** What a host fan's calc says, as a tie-in reads it. */
 export interface HostCalc {
   claim: FanClaim;
+  esp?: { rated: SourcedValue<number> };
   network: string;
   paths: readonly CalcPath[];
   legs: Readonly<Record<string, Leg>>;
 }
 
 /**
- * H5 (MAP L1-5): the host duct's static at the tie-in is the host calc's cumulative loss from the
- * host fan to the tie-in node. Only a complete host calc at this read's basis answers; anything
- * else is a coverage gap, never a number.
- * ponytail: the tie-in duct's own leg is not apportioned to the node; legs before it are summed.
+ * H5 (owner 2026-11-17, supersedes MAP L1-5): pressure remaining at N, never pressure spent.
+ * The tie-in leg itself is not apportioned; sum only the host legs before it.
  */
 export function hostStatic(
   host: HostCalc | "absent" | "cycle",
   e: Encounter,
   network: string,
-): { inWg: number; basis: string } | CoverageGap {
+): { inWg: number; basis: string; source: string } | CoverageGap | { kind: "backflow"; detail: string } {
   const gap = (kind: CoverageGap["kind"], why: string): CoverageGap => ({
     kind,
     elementId: e.elementId,
@@ -119,13 +118,24 @@ export function hostStatic(
   if (host.claim.kind === "incomplete" && host.claim.coverage.some((g) => g.kind === "cycle"))
     return gap("cycle", "calc waits on this fan's own calc");
   if (host.claim.kind !== "complete") return gap("host-calc", `calc is ${host.claim.kind}`);
+  const rated = host.esp?.rated;
+  if (rated?.status === "invalid") return gap("host-calc", "rated ESP is invalid");
+  const rating = rated?.status === "valid" ? rated.value : null;
+  if (rating != null && (!Number.isFinite(rating) || rating < 0))
+    return gap("host-calc", "rated ESP is invalid");
+  if (rating != null && rating < host.claim.requiredEspInWg)
+    return { kind: "backflow", detail: `host rated ESP ${rating} is below required ESP ${host.claim.requiredEspInWg}: backflow/deadhead` };
   for (const p of host.paths) {
     if (p.side !== "supply") continue;
     const k = p.legIds.findIndex((id) => host.legs[id]?.elementId === e.elementId);
     if (k < 0) continue;
     const losses = p.legIds.slice(0, k).flatMap((id) => host.legs[id]?.lossInWg ?? []);
     if (losses.length < k) break;
-    return { inWg: losses.reduce((a, v) => a + v, 0), basis: host.claim.basis };
+    return {
+      inWg: (rating ?? host.claim.requiredEspInWg) - losses.reduce((a, v) => a + v, 0),
+      basis: host.claim.basis,
+      source: rating == null ? "host required ESP minus loss to tie-in; assumes the host is balanced" : "host rated ESP minus loss to tie-in",
+    };
   }
   return gap("host-calc", "calc does not reach the tie-in");
 }
@@ -134,6 +144,16 @@ export function hostStatic(
 const priced = (l: Leg | undefined) => l?.lossInWg != null && l.flowCfm != null;
 export const whole = (p: CalcPath, legs: Readonly<Record<string, Leg>>) =>
   p.blockerIds.length === 0 && p.legIds.every((id) => priced(legs[id]));
+
+/** R-SHARE: a priced terminal run through this same branch already pays for N onward. */
+export function pricesBeyond(m: Met, paths: readonly CalcPath[], legs: Readonly<Record<string, Leg>>): boolean {
+  const branch = paths[m.path]!;
+  const prefix = branch.legIds.slice(0, -1);
+  return paths.some((p) => p.side === branch.side && p.end.kind === "terminal" &&
+    p.legIds.length > branch.legIds.length && whole(p, legs) &&
+    prefix.every((id, i) => p.legIds[i] === id) &&
+    legs[p.legIds[prefix.length] ?? ""]?.elementId === m.encounter.elementId);
+}
 
 export interface ClaimFacts {
   basis: string;
@@ -181,7 +201,7 @@ export function claimOf(f: ClaimFacts): DomainClaim {
     if (e.verdict === "refused" || (m.policy.backflow && e.verdict === "unruled"))
       blocking.add(m.policy.backflow ? backflowId(e) : ENCOUNTER_KEY(e));
     // Added once, on the path that ends there; a return tie-in carries no static row at all.
-    if (e.static.kind === "host-calc") tieIn.set(m.path, e.static.inWg);
+    if (e.static.kind === "host-calc") tieIn.set(m.path, pricesBeyond(m, f.paths, f.legs) ? 0 : e.static.inWg);
     else if (
       m.policy.static === "host-calc" &&
       e.verdict === "accepted" &&

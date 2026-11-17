@@ -20,7 +20,7 @@ import { HOST_RUNTIME_SERVICE_HEADER } from "@pe/host-contracts/contracts";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import rosterCapture from "../../../../packages/host-contracts/src/fixtures/k2-roster.json";
 import { VOCABULARY } from "@pe/ducts-domain/calc/scoped-snapshot";
-import walkCapture from "@pe/fans-domain/calc/fixtures/muas-local-20261102.json";
+import { closedFan, recordedTables } from "../../host/src/tests/closed-fan.fixture";
 import { hostOwnership } from "../../../../apps/host/src/host-ownership";
 import { HostDocumentMarks } from "../../../../apps/host/src/document-marks";
 import { HostSessionInventory } from "../../../../apps/host/src/session-inventory";
@@ -80,9 +80,19 @@ export async function fansPlanJourney(journey: "watched publications" | "externa
  trace.holdPlan=()=>{if(mode!=="recording")return Promise.resolve();planPending=true;return releasePlan.promise;};
  let bridge:any;
  const roster=nativeResponseSchema("ducts.snapshot.roster").parse({ ...rosterCapture, vocabulary: VOCABULARY });
- const walk=nativeResponseSchema("ducts.snapshot.walk").parse({ ...walkCapture, vocabulary: VOCABULARY, walk: { ...walkCapture.walk, unreadPeers: [] } });
+ // A transport journey needs a complete claim, not the captured MUAS walk's unresolved joins.
+ const closed=closedFan(14577391,{requiredEsp:roster.slots.requiredEsp??undefined});
+ const fan=closed.nodes.find(node=>node.id===14577391)!;
+ fan.uniqueId=roster.nodes.find(node=>node.id===fan.id)!.uniqueId;
+ fan.flowParameter=roster.slots.fanFlow;
+ closed.slots.fanFlow=roster.slots.fanFlow;
+ fan.facts=[{key:"mark",text:"MUAS-1",unit:"",provenance:"designer-stated"},{key:"fanFlow",value:900,unit:"cfm",provenance:"designer-stated"}];
+ fan.connectors[0]!.index=2;
+ for(const item of [...closed.nodes,...closed.segments]) for(const port of item.connectors)
+   if(port.connectedTo?.elementId===fan.id&&port.connectedTo.connector===0) port.connectedTo.connector=2;
+ const walk=nativeResponseSchema("ducts.snapshot.walk").parse(closed);
  const muas=elementSubject({uniqueId:walk.nodes.find(n=>n.id===14577391)!.uniqueId!});
- const tables=nativeResponseSchema("ducts.tables").parse({folder:"fixture",tables:{},missing:[],unsupported:{}});
+ const tables=nativeResponseSchema("ducts.tables").parse(recordedTables());
  const native=Layer.effect(HostNativeRead,Effect.gen(function*(){
    bridge=yield* connectTestBridge(); trace.target=bridge.target;
    yield* Effect.forkScoped(Effect.forever(Queue.take(bridge.outgoing).pipe(Effect.flatMap((frame:any)=>{
@@ -245,6 +255,8 @@ export async function fansPlanJourney(journey: "watched publications" | "externa
    // journey waits on the panes' busy marks (slice 6.1) instead of pressing a re-read.
    for(const pane of document.querySelectorAll('[data-slot="pane"][data-pane-id^="sheet-"]')) await settled(pane,45000);
    await mount.whenWritable();
+   // Work creation/staging can reacquire its snapshot; only Plan must avoid dirtying it.
+   const planDirtyStart=dirties.length;
    for(mode of ["recording","batched"] as const){
      if(mode==="batched"){batchReleased=false;receiptBatch.length=0;heldReceipts.length=0;readyAfterBatch.length=0;}
      before=sample();
@@ -288,7 +300,7 @@ export async function fansPlanJourney(journey: "watched publications" | "externa
    expect(commandReads.every(record=>record.state==="complete"&&record.inputs.some(input=>input.input.kind==="work"&&input.input.view==="view"))).toBe(true);
    (trace as any).commandReads=commandReads;
    expect(trace.submit).toHaveBeenCalledTimes(2);
-   expect(dirties).toEqual([]);
+   expect(dirties.slice(planDirtyStart)).toEqual([]);
    const receiptKey=receiptBatch.find(row=>row.kind==="held").key;
    expect(receiptBatch.filter(row=>row.kind==="held"&&row.key===receiptKey).length).toBeGreaterThan(1);
    const stream=[...streams].find(stream=>stream.keys.has(receiptKey));

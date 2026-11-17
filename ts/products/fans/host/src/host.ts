@@ -179,4 +179,4 @@ export const fansCalc = body(contracts.calc, async function(ctx, args) {
     }));
   });
 
-export const reads = { calc: fansCalc, roster: fanRoster, calcDetail: ductCalc };
+export const reads = { calc: fansCalc, roster: fanRoster, calcDetail: ductCalc, calcBreakdown: fanCalcBreakdown };
