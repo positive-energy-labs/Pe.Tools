@@ -73,3 +73,30 @@ it.each([false, true])("R-SHARE supply co-supplier joins at the physical tap, mi
   // Reversing these families changes the other shared consumers: the resolved total is 1220.
   expect(pieces.map(p => p.cfm)).toEqual([1155, 1220]);
 });
+
+it("P-106: a sibling-only tap charges straight Cs and names the passed tap on the shared leg", () => {
+  const snapshot = structuredClone(raw) as unknown as CalcSnapshot;
+  const roster = suggestRoster(snapshot);
+  // Keep the retained topology but state one-tenth flow so its small tap stays below the velocity refusal.
+  const model = inputsFor(snapshot, {});
+  const endCfm = Object.fromEntries([...Object.entries(model.units), ...Object.entries(model.terminals)]
+    .flatMap(([id, row]) => row.cfm.value == null ? [] : [[id, row.cfm.value / 10]]));
+  const price = vi.spyOn(pricing, "priceLeg");
+  const sheet = buildCalc({ snapshot, fan: { unitId: 12806600, portIndex: 2 },
+    roster: [...roster.fans, ...roster.suggestions], inputs: inputsFor(snapshot, { endCfm }), grids: toGrids({ tables }) });
+  const leg = Object.values(sheet.legs).find(l => l.elementId === 14085956 && l.lossSource.kind === "friction")!;
+  // RV-30 owns the branch at 14086100; RV-27 only passes it on its shared duct.
+  expect(Object.values(sheet.legs).some(l => l.elementId === 14086100)).toBe(false);
+  const straight = price.mock.calls.findIndex(([p]) =>
+    p.kind === "fitting" && p.fitting.id === 14086100 && p.leg === "Cs");
+  expect(straight).toBeGreaterThanOrEqual(0);
+  const cs = price.mock.results[straight]!.value.lossInWg;
+  expect(cs, JSON.stringify(price.mock.results[straight]!.value)).not.toBeNull();
+  expect(cs).not.toBe(0);
+  const friction = price.mock.calls.flatMap(([p], i) =>
+    p.kind === "duct" && p.segment.id === 14085956 ? [price.mock.results[i]!.value.lossInWg] : []).slice(0, 2);
+  expect(leg.lossInWg).toBeCloseTo(friction.reduce((sum, loss) => sum + loss, 0) + cs, 12);
+  expect.soft(leg.lossSource.ref).toContain("14086100");
+  expect(leg.evidence.kind).toBe("friction");
+  if (leg.evidence.kind === "friction") expect.soft(leg.evidence.ref).toContain("14086100");
+});
