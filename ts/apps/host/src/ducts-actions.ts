@@ -2,11 +2,11 @@ import { catalogsFor } from "./ducts-files.ts";
 import { workElementId } from "@pe/ducts-domain/work-subject";
 import { elementLabeler } from "@pe/ducts-domain/element-label";
 import { ductWriteEvidence } from "@pe/ducts-domain/write-evidence";
-import { commands, tools, canonicalRouteInput, workKey, type DuctsApplyInput ,
+import { commands, tools, canonicalRouteInput, workKey, type DuctsApplyInput, type FanClaim,
 } from "@pe/agent-contracts";
 import { healPlan, healRequestGroup } from "@pe/ducts-domain/heal";
 import { fanOf } from "@pe/ducts-domain/action-targets";
-import { applyRequest, price, TABLE_IDS } from "@pe/ducts-domain/pricing";
+import { TABLE_IDS } from "@pe/ducts-domain/table-ids";
 import { toGrids } from "@pe/ducts-domain/loss-grid";
 import { ductsDesign, ductsFirmSchema, ductParameterSlots, stagedValues, subjectOf, workHandleSchema } from "@pe/agent-contracts";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
@@ -22,13 +22,13 @@ import type { ActionExecution } from "./action-journal.ts";
 import { lifetime } from "./document-lifetime.ts";
 import { ductsReadings } from "./ducts-readings.ts";
 import { runPods } from "./family-actions.ts";
-import { buildSheet, resolveCriteria, resolveInputs } from "@pe/ducts-domain/sheet/index";
-import { accessoryWrites } from "@pe/ducts-domain/sheet/accessory-writes";
+import { buildSheet, encounterRulings, mintWriteRequest, resolveCriteria, resolveInputs, type BuildSheetInput, type DomainClaim, type FanWriteContext, type SheetSnapshot } from "@pe/ducts-domain/sheet/index";
+import { followAcceptedJoins } from "@pe/ducts-domain/sheet/joins";
+import { storeRulings, withStoredRulings } from "@pe/ducts-domain/rulings";
 import { suggestRoster } from "@pe/ducts-domain/roster";
 import { firmLayer, workLayer } from "./ducts-inputs.ts";
 import { readSettingTiers } from "./tiered-settings.ts";
 import { resolveFirm } from "./reads/evaluator.ts";
-import { followAcceptedJoins } from "./ducts-walk.ts";
 import { scopeApplyRequest, appliedCellPaths, pendingCount, fanWriteCells } from "@pe/ducts-domain/staged";
 import type { DuctsApply, DuctsHeal } from "@pe/host-contracts/generated";
 
@@ -40,6 +40,7 @@ const prepared = z.object({
   subjects: z.record(z.string(), z.string()).default({}),
   cells: z.array(z.tuple([z.string(), z.string()])).default([]),
   labels: z.record(z.string(), z.string()).optional(),
+  claim: z.object({ basis: z.string(), requiredEspInWg: z.number() }).optional(),
 });
 const targetOf = (ctx: CommandContext) => {
   if (ctx.admission.target.kind !== "document") throw refused("Exact document target required");
@@ -78,20 +79,42 @@ export async function healSnapshot(
   return read({ kind: "systems", systemIds });
 }
 
-/** A fan preview acquires both sides, as its worksheet does; networks acquire their authored groups. */
+/** A fan preview acquires both sides, as its worksheet does. A truncated walk never previews a write. */
 export async function lossSnapshot(
-  intent: { walk?: { unitId: number; portIndex: number }; groups?: readonly string[] } | undefined,
+  intent: { walk?: { unitId: number; portIndex: number } } | undefined,
   read: (selector: Record<string, unknown>) => Promise<DuctSnapshot>,
 ): Promise<DuctSnapshot> {
-  if (!intent?.walk && !intent?.groups?.length)
-    throw refused("Preview needs writeIntent.walk from the fan roster or writeIntent.groups; stage a scope before previewing losses",
-    );
-  const snapshot = await (intent?.walk
-    ? read({ kind: "from", unitId: intent.walk.unitId })
-    : healSnapshot(intent?.groups ?? [], read));
+  if (!intent?.walk)
+    throw refused("Preview needs writeIntent.walk from the fan roster; stage a scope before previewing losses");
+  const snapshot = await read({ kind: "from", unitId: intent.walk.unitId });
   if (snapshot.walk?.truncated)
     throw refused("The fan walk is truncated; no writes can be previewed from this scope");
   return snapshot;
+}
+
+/** Why a claim writes nothing, in its own evidence (its boundaries, or its coverage gaps and blockers); null when complete. */
+export function claimRefusal(claim: FanClaim): string | null {
+  if (claim.kind === "complete") return null;
+  const held = claim.kind === "to-boundary"
+    ? claim.boundaries.map((b) => `${b.verdict} tie-in at element ${b.elementId} connector ${b.connector} into unit ${b.host.unitId}`)
+    : [...claim.coverage.map((gap) => `${gap.kind}${gap.elementId == null ? "" : ` at element ${gap.elementId}`} (${gap.ref})`), ...claim.blockingIds];
+  return `Nothing is written from a ${claim.kind} fan calc (known ${claim.knownInWg} in-wg): ${held.join("; ") || "no reason was given"}`;
+}
+
+/**
+ * The fans write (L2-3, invariant 1): the sheet is built here and the request is minted from its
+ * complete claim, the only place a write request is built. Any other claim is refused with its kind
+ * and what holds it open.
+ */
+export function fanWriteRequest(input: BuildSheetInput, context: FanWriteContext) {
+  const sheet = buildSheet(input), claim = sheet.claim;
+  if (claim.kind !== "complete") throw refused(claimRefusal(claim) ?? "", "ducts.claim-incomplete");
+  try {
+    // P-061: CompleteClaim is a phantom brand. Mint only from the buildSheet above, in this process, never from a decoded sheet or claim.
+    return { claim, request: mintWriteRequest(claim, sheet, input, context) };
+  } catch (error) {
+    throw refused(error instanceof Error ? error.message : String(error), "ducts.mint-refused");
+  }
 }
 
 /** The requested cells whose segment writes only through request rows but derived none (rules also write the store). */
@@ -103,7 +126,6 @@ export function unwrittenCells(
   const written: Record<string, readonly { id: number }[]> = {
     terminalDrops: request.terminals,
     componentDrops: request.components,
-    esp: request.equipment,
     flows: request.terminalFlows,
     equipmentFlows: request.equipmentFlows,
   };
@@ -255,76 +277,68 @@ export function ductsExecutors(
         }[kind]();
         const derived = await {
           losses: async () => {
+            const walk = intent.walk;
+            if (!walk) throw refused("Preview needs writeIntent.walk from the fan roster; stage a scope before previewing losses");
             const tables = await readNative("ducts.tables", { ids: TABLE_IDS });
             const grids = toGrids(tables);
             const catalogs = await runPods(deps, catalogsFor(deps.files!, pointer));
-            const layers = () => ({
-              snapshot,
-              firm,
-              store: snapshot.store ?? undefined,
-              work: workLayer(design),
-              catalogs: catalogs.tables,
-            });
-            if (intent?.walk)
-              snapshot = await followAcceptedJoins(
-                snapshot,
-                resolveInputs(layers()).rulings.joins,
-                (unitId) => read({ kind: "from", unitId }),
-              );
-            if (snapshot.walk?.truncated)
-              throw refused("The fan walk or an accepted continuation is truncated; no writes can be previewed",
-              );
-            // Timestamp is authored-revision stable; wall time would invalidate an identical preview.
-            const request = applyRequest(
-              snapshot,
-              price(snapshot, grids, doc, fans, catalogs.tables, settings),
-              appliedAt ?? "",
-              intent?.groups ?? [],
-            );
-            if (intent?.walk) {
-              const inputs = resolveInputs(layers());
-              const roster = suggestRoster(snapshot, [], {
-                // Ruled kinds and roles alone; a unit whose kind or role did not resolve is left for the roster to suggest.
+            const work = workLayer(design);
+            // One fan port's calc inputs, as its worksheet reads them: its walk, the far side of accepted joins, and the ruled roster.
+            const inputOf = async (fan: { unitId: number; portIndex: number }, near: DuctSnapshot) => {
+              const layers = (s: DuctSnapshot) => ({ snapshot: s, firm, store: s.store ?? undefined, work, catalogs: catalogs.tables });
+              const walked = await followAcceptedJoins(near, resolveInputs(layers(near)).rulings.joins, (unitId) => read({ kind: "from", unitId }));
+              const inputs = resolveInputs(layers(walked));
+              // Ruled kinds and roles alone; a unit whose kind or role did not resolve is left for the roster to suggest.
+              const roster = suggestRoster(walked, [], {
                 kinds: Object.fromEntries(Object.entries(inputs.units).flatMap(([id, u]) => (u.kind.status === "valid" ? [[id, u.kind.value]] : []))),
                 roles: Object.fromEntries(Object.entries(inputs.units).flatMap(([id, u]) => (u.role.status === "valid" ? [[id, u.role.value]] : []))),
               });
-              const sheet = buildSheet({
-                snapshot,
-                fan: intent.walk,
-                roster: [...roster.fans, ...roster.suggestions],
-                grids,
-                inputs,
-              });
-              request.components = [
-                ...new Map(
-                  [...accessoryWrites(snapshot, sheet), ...(request.components ?? [])].map((w) => [
-                    w.id,
-                    w,
-                  ]),
-                ).values(),
-              ];
-            }
-            const cells = fanScope?.walk
-              ? [...(ductsScope?.cells ?? []), ...fanWriteCells(fans, snapshot)]
-              : ductsScope?.cells;
+              return { walked, input: { snapshot: walked, fan, roster: [...roster.fans, ...roster.suggestions], grids, inputs, encounterRulings: encounterRulings({ work }) } satisfies BuildSheetInput };
+            };
+            const { walked, input } = await inputOf(walk, snapshot);
+            snapshot = walked;
+            if (snapshot.walk?.truncated)
+              throw refused("The fan walk or an accepted continuation is truncated; no writes can be previewed");
+            // P-060: a type-owned ESP slot is one value for every unit of the type, so each peer's own calc is built here
+            // (P-061: in this process, from its own walk) and the mint refuses unless all are complete and equal.
+            const cohorts: SheetSnapshot["parameterCohorts"] = snapshot.parameterCohorts;
+            const peers = cohorts
+              ?.find((c) => c.owner.kind === "type" && c.parameter === snapshot.slots.requiredEsp && c.members.some((m) => m.elementId === walk.unitId))
+              ?.members.filter((m) => m.elementId !== walk.unitId) ?? [];
+            // P-065: every peer claim is built in this prepare call from the peer's own native `from` walk, read here after the fan's; none is cached or carried between calls.
+            const peerClaims = new Map<number, DomainClaim>();
+            for (const { elementId: unitId } of peers)
+              peerClaims.set(unitId, buildSheet((await inputOf({ unitId, portIndex: walk.portIndex }, await read({ kind: "from", unitId }))).input).claim);
+            const cells = [...(ductsScope?.cells ?? []), ...fanWriteCells(fans, snapshot)];
+            const rulings = storeRulings(stagedValues(withStoredRulings(design, snapshot.store, snapshot), design), snapshot.store, appliedAt ?? "", snapshot);
+            // Timestamp is authored-revision stable; wall time would invalidate an identical preview.
+            const { claim, request } = fanWriteRequest(
+              input,
+              { appliedAt: appliedAt ?? "", slots: snapshot.slots, peerClaims, rulings,
+                // The native store overlays per key (K3): a ruling Work takes back is removed only by naming it here.
+                storeDeletes: {
+                  verdicts: Object.keys(snapshot.store?.verdicts ?? {}).filter((key) => !(key in rulings.verdicts)),
+                  roles: Object.keys(snapshot.store?.roles ?? {}).filter((id) => !(id in rulings.roles)).map(Number),
+                } },
+            );
             const scoped = scopeApplyRequest(request, snapshot.store, cells, snapshot);
-            const unwritten = unwrittenCells(scoped, cells ?? [], snapshot);
+            const unwritten = unwrittenCells(scoped, cells, snapshot);
             if (unwritten.length)
               throw refused(
                 `These requested cells derive no write in this scope: ${unwritten
-                  .map(
-                    (cell) =>
-                      `${cell.join("/")} (${unwrittenReason(stagedValues(doc, fans), cell)})`,
-                  )
+                  .map((cell) => `${cell.join("/")} (${unwrittenReason(stagedValues(doc, fans), cell)})`)
                   .join("; ")}`,
               );
             const label = elementLabeler(snapshot, { unique: true });
             return {
-              cells: cells ?? [],
-              subjects: Object.fromEntries((cells ?? []).filter(([s]) => ["terminalDrops", "componentDrops", "esp", "flows", "equipmentFlows", "roles"].includes(s)).map(([, k]) => [k, String(workElementId(snapshot, k))])),
+              cells,
+              subjects: Object.fromEntries(cells.filter(([s]) => ["terminalDrops", "componentDrops", "flows", "equipmentFlows", "roles"].includes(s)).map(([, k]) => [k, String(workElementId(snapshot, k))])),
               input: scoped as unknown as Record<string, unknown>,
-              nothingToWrite: pendingCount(design, snapshot.store, snapshot) === 0,
+              // The required ESP has no Work cell (R1): a complete claim's equipment rows are a write on their own.
+              nothingToWrite: pendingCount(design, snapshot.store, snapshot) === 0 && scoped.equipment.length === 0,
               labels: Object.fromEntries(snapshot.nodes.map((n) => [String(n.id), label(n.id)])),
+              // R1 (root ruling 20:25): the write's author is the caller who applies it; its ref is the claim's basis.
+              claim: { basis: claim.basis, requiredEspInWg: claim.requiredEspInWg },
               dependencies: {
                 snapshot: ductWriteEvidence(snapshot),
                 grids,
@@ -421,6 +435,7 @@ export function ductsExecutors(
     return {
       value,
       derivedRequest: p.input,
+      ...(p.claim ? { claim: p.claim } : {}),
       target: { session: target.session, document: null },
       ...(retired ? { retired } : {}),
     };

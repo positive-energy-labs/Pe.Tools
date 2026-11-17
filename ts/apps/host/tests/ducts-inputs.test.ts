@@ -18,14 +18,13 @@ import { expect, test } from "vite-plus/test";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
 import { editPatches, workLayer } from "../src/ducts-inputs.ts";
 import { criteriaLayer } from "@pe/agent-contracts";
-import { price } from "@pe/ducts-domain/pricing";
 import { resolveInputs, type WorkLayer } from "@pe/ducts-domain/sheet/index";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
 import { TEST_FIRM } from "../../../packages/ducts-domain/src/sheet/test-inputs.ts";
 import { fanWriteCells } from "@pe/ducts-domain/staged";
 import { snapshot } from "../../web/src/ducts/test-fixture.ts";
 
-test("joined Fans edits reach the pricing solve and input layer", () => {
+test("joined Fans edits reach the input layer", () => {
   const fans = fansDocumentSchema.parse({
     flows: { "UniqueId:fixture%3a4": { edit: { value: 250, by: "human" } } },
     terminalDrops: { "UniqueId:fixture%3a4": { edit: { value: { inWg: 0.27 }, by: "human" } } },
@@ -34,11 +33,6 @@ test("joined Fans edits reach the pricing solve and input layer", () => {
   const layer = workLayer(joined);
   expect(layer.flows).toEqual({ "UniqueId:fixture%3a4": { value: 250, by: "human", ref: "work:fans/flows/UniqueId:fixture%3a4" } });
   expect(layer.terminalDrops).toEqual({ "UniqueId:fixture%3a4": { value: 0.27, by: "human", ref: "work:fans/terminalDrops/UniqueId:fixture%3a4" } });
-  const priced = price(snapshot, {}, joined, joined);
-  expect(priced.edit.parameters).toEqual({});
-  expect(priced.flows.get(4)).toMatchObject({ cfm: 250 });
-  expect(priced.next.paths[4]?.rows.find((row) => row.id === 4)).toMatchObject({ dp: 0.27 });
-  expect(priced.overrides.terminalPs).toEqual({ "4": 0.27 });
 });
 
 // U4 supplies a real fans Work; this test owns only ducts edits.
