@@ -18,6 +18,8 @@ export interface RouteStateSpec<TSchema extends z.ZodType> {
   route: string;
   /** Retired Work addresses: preserve their bytes at startup, never read or migrate their cells. */
   retired?: readonly string[];
+  /** Home-file owners shown in this route's Timeline, independent of its Work address. */
+  settingsOwners?: readonly string[];
   /** Human-facing discovery metadata; adapters should not duplicate this. */
   title: string;
   description: string;

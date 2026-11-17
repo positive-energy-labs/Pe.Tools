@@ -409,6 +409,10 @@ export class RouteWorkspace {
     return failure;
   }
 
+  settingsOwners(works: readonly WorkKey[]): readonly string[] {
+    return [...new Set(works.flatMap(({ route }) => this.#registry.get(route)?.spec.settingsOwners ?? []))];
+  }
+
   list() {
     return [...this.#registry.values()].map(({ spec }) => ({
       route: spec.route,

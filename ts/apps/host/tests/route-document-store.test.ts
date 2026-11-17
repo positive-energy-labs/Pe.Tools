@@ -96,6 +96,8 @@ effectTest("admitted startup retires old Work when product registration is defer
   const workspace = new RouteWorkspace({ registrations: [], store });
   yield* Layer.build(admittedBuiltinsLayer(workspace,
     builtinEnrollments.filter(entry => entry.routeKey === "duct-systems")));
+  expect(workspace.settingsOwners([bindWork("duct-systems", null)])).toEqual(["ducts"]);
+  expect(workspace.settingsOwners([bindWork("ducts", null)])).toEqual([]);
   expect(yield* Effect.promise(() => store.getState({ targetKey: "old", route: "ducts" }))).toBeNull();
   expect(readFileSync(stateMachine(dir).notices, "utf8").trim().split("\n")).toHaveLength(1);
 }));

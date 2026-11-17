@@ -85,7 +85,7 @@ const workSpec = (
   route: string,
   registeredWork?: import("@pe/agent-contracts").RouteStateSpec<z.ZodType>,
 ) =>
-  (registeredWork ?? (tools[route as keyof typeof tools] as Tool)?.work) as WorkSpec;
+  (registeredWork ?? (Object.values(tools) as readonly Tool[]).find(tool => tool.work?.route === route)?.work) as WorkSpec;
 type Workspace = { spec(route: string): import("@pe/agent-contracts").RouteStateSpec<z.ZodType> | undefined };
 /** A door bound to one owner has its spec at boot; `ANY_ROUTE` (the sheet pair) resolves the handle's owner. */
 const specFor = (route: string, fixed: WorkSpec | undefined, workspace?: Workspace) => (handle: WorkHandle) => {

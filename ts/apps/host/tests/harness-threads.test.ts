@@ -6,6 +6,7 @@ import { markReadings } from "../src/resource-adapters.ts";
 import { openRecordingWriter, openRecordingReader, nativeCatalogIdentity } from "../src/native-recording.ts";
 import { fansDocumentSchema } from "@pe/agent-contracts";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
+import { closedFan, recordedTables } from "../../../products/fans/host/src/tests/closed-fan.fixture.ts";
 import { detachedBridge, sessionView, registryService, harnessThreads, testSpawner, settle, testHostInputs, captureStore, journalAt } from "./effect-test.ts";
 import { nativeReadRoot } from "../src/app.ts";
 import { HostNativeRead } from "@pe/host-internal/native-read";
@@ -214,7 +215,7 @@ test.each(["claude", "codex"] as const)(
       heads: { observe: () => () => {} },
       navigation: { documents: async () => [{ ...target, address }], threads: async () => [] },
     });
-    const snapshot = JSON.parse(
+    const captured = JSON.parse(
       await readFile(
         new URL(
           "../../../packages/host-contracts/src/fixtures/k2-four-fan-walk.json",
@@ -223,13 +224,21 @@ test.each(["claude", "codex"] as const)(
         "utf8",
       ),
     );
+    // This is a harness transport witness; an unresolved captured walk cannot authorize its write.
+    const snapshot = closedFan(14577391, { requiredEsp: captured.slots.requiredEsp ?? undefined });
+    const fan = snapshot.nodes.find(node => node.id === 14577391)!;
+    snapshot.slots.fanFlow = captured.slots.fanFlow;
+    fan.flowParameter = captured.slots.fanFlow;
+    fan.connectors[0]!.index = 2;
+    for (const item of [...snapshot.nodes, ...snapshot.segments]) for (const port of item.connectors)
+      if (port.connectedTo?.elementId === fan.id && port.connectedTo.connector === 0) port.connectedTo.connector = 2;
     const writes: unknown[] = [];
     const equipmentSubject = elementSubject(snapshot.nodes.find((node: { id: number }) => node.id === 14577391)!);
     const invokeFixture = (op: string, input: unknown, _session?: string, _doc?: string | null, requestId?: string) =>
         Effect.promise(async () => {
           let value: unknown;
           if (op.startsWith("ducts.snapshot.")) value = snapshot;
-          else if (op === "ducts.tables") value = { folder: "fixture", tables: {}, missing: [], unsupported: {} };
+          else if (op === "ducts.tables") value = recordedTables();
           else if (op === "ducts.apply" || op === "ducts.apply.plan") {
             const preview = op === "ducts.apply.plan";
             await journal.markDispatched(requestId!, "bridge");
@@ -326,7 +335,7 @@ test.each(["claude", "codex"] as const)(
                 target: { document: address },
                 result: {
                   revision: 1,
-                  doc: { equipmentFlows: { [equipmentSubject]: { edit: { value: { cfm: 975 } } } } },
+                  doc: { equipmentFlows: { [equipmentSubject]: { edit: { value: 975 } } } },
                 },
               });
               const census = await routes.workspace.instances();
@@ -365,7 +374,7 @@ test.each(["claude", "codex"] as const)(
                       patches: [
                         {
                           path: ["equipmentFlows", equipmentSubject],
-                          value: { edit: { value: { cfm: 975, source: "chain" } } },
+                          value: { edit: { value: 975, ref: "chain" } },
                         },
                         {
                           path: ["writeIntent"],
