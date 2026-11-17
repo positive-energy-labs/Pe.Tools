@@ -73,7 +73,9 @@ export function applyPatches<S extends z.ZodType>(
     return refuse("error", message(error), "patch paths must address plain document keys.");
   }
   const stamped = restore ? draft : stampChanges(draft, envelope.doc, by, expectedRevision);
-  return commitDoc(spec, envelope, restore ? stamped : spec.reconcileEdit?.(stamped, patches) ?? stamped);
+  const checked = commitDoc(spec, envelope, stamped);
+  if (!checked.ok || restore || !spec.reconcileEdit) return checked;
+  return commitDoc(spec, envelope, spec.reconcileEdit(checked.envelope.doc, patches) ?? checked.envelope.doc);
 }
 
 const suppliedStamp = (value: unknown): boolean => Array.isArray(value)
