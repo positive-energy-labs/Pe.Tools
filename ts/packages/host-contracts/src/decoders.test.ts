@@ -50,6 +50,18 @@ test("generated native decoders reject invalid payloads", () => {
   ).toBe(false);
 });
 
+test("a native ratedStatic fact keeps the separately named RatedEsp value and units", () => {
+  const payload = JSON.parse(readFileSync(new URL("./fixtures/k2-roster.json", import.meta.url), "utf8"));
+  payload.vocabulary = { unitKinds: [...DUCT_UNIT_KINDS], blockerKinds: [...FAN_BLOCKER_KINDS] };
+  payload.slots.ratedEsp = "Rated ESP";
+  const fan = payload.nodes.find((n: { kind: string }) => n.kind === "equipment");
+  fan.facts.push({ key: "ratedStatic", value: 0.65, text: null, unit: "in-wg", provenance: "designer-stated" });
+  const decoded = nativeResponseSchema("ducts.snapshot.roster").parse(payload);
+  expect(decoded.slots.ratedEsp).toBe("Rated ESP");
+  expect(decoded.nodes.find(n => n.id === fan.id)?.facts.find(f => f.key === "ratedStatic"))
+    .toMatchObject({ value: 0.65, unit: "in-wg", provenance: "designer-stated" });
+});
+
 test("Effect decode failures stay inside Zod safeParse during render", () => {
   const decoder = effectDecoder(Schema.Struct({ key: Schema.String }));
   for (const input of [undefined, null, {}, { key: 42 }]) {

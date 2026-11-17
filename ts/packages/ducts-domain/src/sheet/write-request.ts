@@ -1,6 +1,6 @@
 import type { DuctsApplyInput } from "@pe/agent-contracts";
 import type { BuildSheetInput } from "./build.ts";
-import type { CompleteClaim } from "./encounters.ts";
+import type { CompleteClaim, DomainClaim } from "./encounters.ts";
 import type { Sheet } from "./types.ts";
 import { accessoryWrites } from "./accessory-writes.ts";
 
@@ -12,7 +12,11 @@ export interface FanWriteContext {
   appliedAt: string;
   /** Resolved names: requiredEsp null means none, encoded as "" in native overrides (R3). */
   slots: DuctsApplyInput["slots"];
-  cells: readonly (readonly [segment: string, key: string])[];
+  /** P-060: caller builds this map from the other cohort units' current sheets, keyed by unit id.
+   * Type-owned ESP requires every peer complete and equal to `claim` at six decimal in-wg (the
+   * complete claim's written precision). Missing/incomplete/unequal peers refuse the whole write.
+   * The active unit uses the claim argument; instance-owned ESP needs no peer entry. */
+  peerClaims: ReadonlyMap<number, DomainClaim>;
   rulings: Pick<NonNullable<DuctsApplyInput["store"]>, "verdicts" | "roles">;
   storeDeletes: NonNullable<DuctsApplyInput["storeDeletes"]>;
 }
@@ -116,27 +120,54 @@ export function mintWriteRequest(
   const terminalFlows = unique(flows("terminal")),
     equipmentFlows = unique(flows("equipment"));
   const required = slots.requiredEsp;
-  const cohort = snapshot.parameterCohorts?.find(
-    (c) => c.parameter === required && c.members.some((m) => m.elementId === sheet.fan.unitId),
-  );
-  if (
-    required !== "" &&
-    cohort &&
-    (!cohort.complete ||
-      cohort.basis !== snapshot.document.readAt ||
-      !cohort.members.length ||
-      (cohort.owner.kind === "instance" && cohort.members.length !== 1))
-  )
-    throw Error("The required ESP parameter cohort is incomplete or stale; read again");
-  const equipment =
-    required === ""
-      ? []
-      : unique(
-          (cohort?.members.map((m) => m.elementId) ?? [sheet.fan.unitId]).map((id) => ({
-            id,
-            externalStaticInWg: claim.requiredEspInWg,
-          })),
+  let equipment: DuctsApplyInput["equipment"] = [];
+  if (required !== "") {
+    const cohort = snapshot.parameterCohorts?.find(
+      (c) => c.parameter === required && c.members.some((m) => m.elementId === sheet.fan.unitId),
+    );
+    if (
+      cohort &&
+      (!cohort.complete ||
+        cohort.basis !== snapshot.document.readAt ||
+        !cohort.members.length ||
+        (cohort.owner.kind === "instance" && cohort.members.length !== 1))
+    )
+      throw Error("The required ESP parameter cohort is incomplete or stale; read again");
+    if (cohort?.owner.kind === "type") {
+      const peers = cohort.members.map((m) => ({
+        id: m.elementId,
+        claim: m.elementId === sheet.fan.unitId ? claim : context.peerClaims.get(m.elementId),
+      }));
+      if (
+        peers.some(
+          (p) =>
+            p.claim?.kind !== "complete" ||
+            p.claim.requiredEspInWg.toFixed(6) !== claim.requiredEspInWg.toFixed(6),
+        )
+      )
+        throw Error(
+          `Required ESP type cohort cannot share one claimed value: ${peers
+            .map(
+              (p) =>
+                `${p.id}: ${
+                  p.claim?.kind === "complete"
+                    ? `${p.claim.requiredEspInWg} in-wg`
+                    : p.claim
+                      ? `${p.claim.kind} (known ${p.claim.knownInWg} in-wg)`
+                      : "missing"
+                }`,
+            )
+            .join("; ")}. Use an instance ESP parameter or change the design`,
         );
+    }
+    // P-058 follow-up: historical captures omit ownership, so preserve the instance path pending its witness.
+    equipment = unique(
+      (cohort?.members.map((m) => m.elementId) ?? [sheet.fan.unitId]).map((id) => ({
+        id,
+        externalStaticInWg: claim.requiredEspInWg,
+      })),
+    );
+  }
   return {
     slots,
     fittings,
