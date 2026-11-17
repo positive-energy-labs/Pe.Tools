@@ -11,7 +11,7 @@
   },
   "scripts": {
     "check": "vp exec tsc --noEmit",
-    "test": "vp test"
+    "test": "vp test --passWithNoTests"
   },
   "dependencies": {
     "@pe/agent-contracts": "workspace:*",

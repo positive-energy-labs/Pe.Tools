@@ -13,7 +13,7 @@ test("one row per builtin: static closure and host read imports, the work projec
     { key: "chat", folder: "chat", host: "./host.ts" },
     { key: "home", folder: "home" },
   ]);
-  expect(text).toContain(`import * as h0 from "@pe/fans-host/host";`);
+  expect(text).toContain(`import * as h0 from "../../web/src/fans/host.ts";`);
   expect(text).toContain(`import c2 from "../../web/src/home/source-closure.generated.json" with { type: "json" };`);
   // The Work binds from the route directory; the binding precedes every row that reads it.
   expect(text).toContain(`import { hydronicWorkSchema as hydronicWorkSchema } from "../../web/src/fans/work.ts";`);
@@ -27,7 +27,7 @@ test("one row per builtin: static closure and host read imports, the work projec
 test("a host read outside the route directory is refused; a duplicate key is refused", () => {
   const row = { key: "fans", folder: "fans" };
   expect(() => renderRouteRegistry([{ ...row, host: "../../../host/src/reads/fans.ts" }])).toThrow(
-    "fans: a host read lives in its route directory",
+    "fans: declare a route-relative host module or an exported host package",
   );
   expect(() => renderRouteRegistry([row, row])).toThrow("Duplicate route key fans");
 });
