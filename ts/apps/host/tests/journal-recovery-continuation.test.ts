@@ -55,7 +55,7 @@ test.each([
       await writeFile(join(directory, "design", "pod.json"), JSON.stringify({ id: "design" }));
       const original = '{"width":1}';
       await writeFile(file, original);
-      const work = new RouteWorkspace({
+      const work = new RouteWorkspace({ publicationAuthor: () => "human",
         registrations: [{ spec: settingsRouteState }],
         store: fileRouteDocumentStore(stateFixture(workDir)),
       });
@@ -129,7 +129,7 @@ test.each([
         await writeFile(path, crashBytes!);
         for (const [name, bytes] of workBytes) await writeFile(join(workDir, name), bytes);
       }
-      const restoredWork = new RouteWorkspace({
+      const restoredWork = new RouteWorkspace({ publicationAuthor: () => "human",
         registrations: [{ spec: settingsRouteState }],
         store: fileRouteDocumentStore(stateFixture(workDir)),
       });

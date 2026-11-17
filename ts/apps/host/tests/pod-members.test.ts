@@ -194,7 +194,7 @@ function settingsDoor() {
     work: memberWork(member),
   };
   const rows = new Map<string, unknown>();
-  const work = new RouteWorkspace({
+  const work = new RouteWorkspace({ publicationAuthor: () => "human",
     registrations: [{ spec: settingsRouteState }],
     store: {
       getState: async ({ targetKey, route }) => rows.get(targetKey + route),
