@@ -4,7 +4,6 @@ import { timelineReceipts } from "../../../host/src/reads/work-timeline";
 import { refusalOf, valueOf } from "./typed-route";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
 import { host as placesHost, seedPlaces } from "../workbench/places.test-support";
-import { snapshot as workSnapshot } from "../ducts/test-fixture";
 // @vitest-environment jsdom
 import { stableFanKey } from "../ducts/sheet/model";
 import { subjectCode } from "@pe/agent-contracts";
@@ -583,11 +582,15 @@ afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 test("JZ Fans undo after apply: public write journey leaves an honest toolbar refusal", async () => {
   const { nativeFixture } = await import("../../../host/tests/fans-work-fixture");
+  const { closedFan, recordedTables } = await import("../../../host/tests/closed-fan.fixture");
   const { observeResources } = await import("@pe/runtime");
   const { TimelineButtons } = await import("../shell/situation-band");
   const { withInvocationContext } = await import("@pe/runtime/context");
   const { peRouteUrl } = await import("@pe/agent-contracts/pe-api");
-  const f = await nativeFixture();
+  // The write is minted only from a complete claim, so the journey's fan is the closed fixture fan (unit 100, terminal 3).
+  const closed = closedFan(100), tables = recordedTables();
+  const f = await nativeFixture("real", (_key, input) => closedFan(100, { requiredEsp: input.slots?.requiredEsp }), null,
+    { native: key => (key === "ducts.tables" ? tables : undefined) });
   const human = { kind: "human" as const, via: "local" as const };
   const stage = async (route: string, patches: unknown[], label: string) => {
     const response = await withInvocationContext({ caller: human }, () => f.api.fetch(new Request(
@@ -626,30 +629,29 @@ test("JZ Fans undo after apply: public write journey leaves an honest toolbar re
   } } } });
   const view = render(<TimelineButtons owner={mount} />);
   try {
-    const staged = await stage("ducts", [
-      { path: ["writeIntent", "edit"], value: { value: { groups: ["group:g1"] } } },
-    ], "Choose fan walk");
-    await stage("fans", [
-      { path: ["flows", elementSubject(workSnapshot.nodes.find(node => node.id === 4)!), "edit"], value: { value: 250 } },
+    const staged = await stage("fans", [
+      { path: ["writeIntent", "edit"], value: { value: { walk: { unitId: 100, portIndex: 0 } } } },
+      { path: ["flows", elementSubject(closed.nodes.find(node => node.id === 3)!), "edit"], value: { value: 250 } },
       { path: ["calculation", "terminalFlow", "edit"], value: { value: { kind: "balanced-design", source: "test" } } },
     ], "Edit fan airflow");
     await screen.findByRole("button", { name: "Undo Edit fan airflow" });
     const command = async (id: string, commandKey: string) => {
       const response = await f.post("/actions", { id, key: commandKey, target: f.target,
-        input: { work: { key: f.key, revision: staged.revision } } });
+        input: { work: { key: { ...f.key, route: "fans" }, revision: staged.revision } } });
       expect(response.ok, await response.clone().text()).toBe(true);
-      expect(await f.journal.wait(id)).toMatchObject({ state: "succeeded" });
+      const receipt = await f.journal.wait(id);
+      expect(receipt, JSON.stringify(receipt)).toMatchObject({ state: "succeeded" });
     };
     await command("undo-plan", "sheet.plan");
     await command("undo-apply", "sheet.apply");
-    expect(f.native.get(4)).toBe(250);
+    expect(f.native.get(3)).toBe(250);
     await waitFor(() => expect(screen.getByRole("button", { name: "Undo" }).getAttribute("aria-disabled")).toBe("true"));
     const undo = screen.getByRole("button", { name: "Undo" });
     fireEvent(window, Object.assign(new Event("pointermove"), { movementX: 1 }));
     await userEvent.setup().hover(undo);
     await screen.findByText(/Cannot undo.*undo-apply.*already consumed/);
     fireEvent.click(undo);
-    expect(f.native.get(4)).toBe(250);
+    expect(f.native.get(3)).toBe(250);
     expect(screen.getByRole("button", { name: "Redo" }).getAttribute("aria-disabled")).toBe("true");
   } finally { view.unmount(); mount.dispose(); await f.close(); }
 }, 30_000);

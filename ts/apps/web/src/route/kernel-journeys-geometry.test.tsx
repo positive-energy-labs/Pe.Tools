@@ -198,7 +198,7 @@ const ambient = <S,I>(tag:Context.Key<S,I>)=>Layer.effect(tag,Effect.serviceOpti
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-test("JZ Fans Revert removes A from Plan before staging B",async()=>{
+test("JZ Fans Revert A then stage B: a plan on an incomplete fan calc is refused with the claim's reason",async()=>{
  trace.results=[];
  trace.submit.mockClear();
  const originalFetch=globalThis.fetch;
@@ -323,13 +323,12 @@ test("JZ Fans Revert removes A from Plan before staging B",async()=>{
    phase("before Plan");
    fireEvent.click(await screen.findByRole("button",{name:"plan Write to Revit"}));
    await vi.waitFor(()=>expect(trace.results).toHaveLength(1),{timeout:20000});
-   expect(trace.results[0].state,trace.results[0].error ?? mount.reviewProblem("losses")).toBe("succeeded");
-   await vi.waitFor(()=>expect(mount.review("losses")?.cells?.length).toBeGreaterThan(0),{timeout:20000});
-   const plan=requests.findLast(row=>row.key==="ducts.apply.plan");
-   expect(plan.input.components).toEqual([expect.objectContaining({id:13493812,inWg:0.01})]);
-   expect(JSON.stringify(plan.input)).not.toContain("14577394");
-   expect(mount.reviewProblem("losses")).toBeNull();
-   expect((await screen.findByRole("button",{name:"Write to Revit"})).hasAttribute("disabled")).toBe(false);
+   // The recorded MUAS-1 walk holds an unruled inferred join, so its calc is incomplete: the plan is refused with the
+   // claim's reason and no native plan is read (invariant 1). The group write once planned B without A here; that
+   // the fan scope is a projection of current edits is witnessed in ducts-domain staged.test.ts.
+   expect(trace.results[0].state).toBe("failed");
+   expect(String(trace.results[0].error ?? mount.reviewProblem("losses"))).toMatch(/Nothing is written from a incomplete fan calc .*inferred-join:14122436:1/);
+   expect(requests.some(row=>row.key==="ducts.apply.plan")).toBe(false);
    expect(document.body.textContent).not.toContain("no staged edit");
  } finally {
    phase("finally");

@@ -110,7 +110,8 @@ export function fanWriteRequest(input: BuildSheetInput, context: FanWriteContext
   const sheet = buildSheet(input), claim = sheet.claim;
   if (claim.kind !== "complete") throw refused(claimRefusal(claim) ?? "", "ducts.claim-incomplete");
   try {
-    // P-061: CompleteClaim is a phantom brand. Mint only from the buildSheet above, in this process, never from a decoded sheet or claim.
+    // P-061, P-067: a complete claim carries a runtime symbol that only buildSheet sets and the mint checks, so a decoded sheet
+    // or claim cannot pass. Mint only from the buildSheet above, in this process.
     return { claim, request: mintWriteRequest(claim, sheet, input, context) };
   } catch (error) {
     throw refused(error instanceof Error ? error.message : String(error), "ducts.mint-refused");
