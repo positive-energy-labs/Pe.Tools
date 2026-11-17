@@ -1,18 +1,17 @@
 import { DUCT_UNIT_KINDS, FAN_BLOCKER_KINDS } from "@pe/host-contracts/generated";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
-// U4 wires the real fans Work for callers without one.
-import { neutralFansWork } from "@pe/agent-contracts";
 import { readFileSync } from "node:fs";
 import { expect, test, vi } from "vite-plus/test";
-import { lossSnapshot, unwrittenCells, unwrittenReason } from "../src/ducts-actions.ts";
-import { scopeApplyRequest } from "@pe/ducts-domain/staged";
-import { mergeSnapshots } from "../src/ducts-walk.ts";
+import { claimRefusal, fanWriteRequest, lossSnapshot, unwrittenCells, unwrittenReason } from "../src/ducts-actions.ts";
+import { mergeFar } from "@pe/ducts-domain/sheet/joins";
+import { buildSheet, type BuildSheetInput, type FanWriteContext, type SheetSnapshot } from "@pe/ducts-domain/sheet/index";
+import { suggestRoster } from "@pe/ducts-domain/roster";
+import { toGrids } from "@pe/ducts-domain/loss-grid";
+import { TEST_WALK, inputsFor, withFamilyFlipped, withPeersRead } from "../../../packages/ducts-domain/src/sheet/test-inputs.ts";
 import { ductWriteEvidence } from "@pe/ducts-domain/write-evidence";
 import { writeSeal } from "../src/work-write-boundary.ts";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
-import { ductsDesign, fansDocumentSchema, stagedValues } from "@pe/agent-contracts";
-import { price, applyRequest } from "@pe/ducts-domain/pricing";
-import { EMPTY_CATALOGS } from "@pe/ducts-domain/catalog";
+import { ductsDesign, fanClaimSchema, fansDocumentSchema, stagedValues } from "@pe/agent-contracts";
 
 // The saved captures predate the native vocabulary; it is the generated one, added whole.
 const walkCapture = { parse: (raw: object) => nativeResponseSchema("ducts.snapshot.walk").parse({ ...raw, vocabulary: { unitKinds: [...DUCT_UNIT_KINDS], blockerKinds: [...FAN_BLOCKER_KINDS] } }) };
@@ -46,7 +45,7 @@ test("fan preview survives identical re-pricing but rejects changed model inputs
   };
   const seal = (s: typeof snapshot) =>
     writeSeal({ caller: { kind: "human", via: "local" },
-      request: applyRequest(s, price(s, {}, work, (work) ?? neutralFansWork, EMPTY_CATALOGS), "", []),
+      request: { slots: s.slots, fittings: [], terminals: [], components: [], equipment: [], terminalFlows: [], equipmentFlows: [] },
       input: work,
       work: handle,
       incarnation: { openId: "doc" },
@@ -99,7 +98,7 @@ test("fan preview survives identical re-pricing but rejects changed model inputs
   expect(seal(reread)).not.toEqual(preview);
 });
 
-test("fan loss preparation reads both sides and carries authored drops into preview", async () => {
+test("fan loss preparation reads both sides and refuses a truncated walk", async () => {
   const snapshot = walkCapture.parse(
     JSON.parse(
       readFileSync(
@@ -114,57 +113,65 @@ test("fan loss preparation reads both sides and carries authored drops into prev
   const read = vi.fn(async () => snapshot);
   expect(await lossSnapshot({ walk: { unitId: 14577391, portIndex: 2 } }, read)).toBe(snapshot);
   expect(read).toHaveBeenCalledExactlyOnceWith({ kind: "from", unitId: 14577391 });
-  const truncated = mergeSnapshots(snapshot, {
+  const truncated = mergeFar(snapshot, {
     ...snapshot,
     walk: { startId: 1, hops: 1, elementsReached: 1, openEnds: 0, candidates: [], elapsedMs: 1, truncated: true, unreadPeers: [] },
   });
   await expect(lossSnapshot({ walk: { unitId: 14577391, portIndex: 2 } }, async () => truncated))
     .rejects.toThrow("truncated");
-  const node = snapshot.nodes.find((n) => n.id === 14088043)!;
-  expect(node).toBeTruthy();
-  const work = ductsDesign(
-    null,
-    fansDocumentSchema.parse({
-      componentDrops: { [elementSubject(node)]: { edit: { by: "human", value: { inWg: 0.026 } } } },
-    }),
-  );
-  const request = applyRequest(
-    snapshot,
-    price(snapshot, {}, work, (work) ?? neutralFansWork, EMPTY_CATALOGS),
-    "2026-11-02T10:00:00Z",
-    [],
-  );
-  expect(request.components).toContainEqual(expect.objectContaining({ id: node.id, inWg: 0.026 }));
 });
 
+// L2-3, invariant 1: the host's one write derivation. The recorded Manual D fan, replayed as the domain's mint test does.
+function manualD(accept: boolean, over: Partial<SheetSnapshot> = {}) {
+  const fixture = (name: string) => JSON.parse(readFileSync(new URL(`../../../packages/ducts-domain/src/sheet/fixtures/${name}`, import.meta.url), "utf8"));
+  const recorded = fixture("manual-d-20261102.json") as SheetSnapshot;
+  const snapshot = { ...withPeersRead(withFamilyFlipped(recorded, 14577391)), ...over };
+  const roster = suggestRoster(recorded as never);
+  const input: BuildSheetInput = {
+    snapshot,
+    fan: { unitId: 14577391, portIndex: 2 },
+    grids: toGrids({ tables: fixture("manual-d-tables.json") }),
+    roster: [...roster.fans, ...roster.suggestions],
+    inputs: inputsFor(snapshot, { endCfm: { 14577391: 900 }, drops: { 14577394: 0.0132, 14577396: 0.18, 14088043: 0.026 }, rulings: [{ pair: ["14106988:1", "14122436:1"], verdict: "accept" }] }),
+  };
+  if (accept)
+    input.encounterRulings = buildSheet(input).encounters.map((e) => ({ at: { elementId: e.elementId, connector: e.connector }, verdict: "accepted", by: "human", ref: "replay:accepted-tie-in" }));
+  const context: FanWriteContext = {
+    appliedAt: "2026-11-16T00:00:00Z",
+    slots: { ...snapshot.slots, fanFlow: snapshot.nodes.find((n) => n.id === 14577391)!.flowParameter },
+    cells: [], rulings: {}, storeDeletes: {},
+  };
+  return { input, context };
+}
+
+test("a complete claim plans the minted request: required ESP on the fan, and no derived flow", () => {
+  const { input, context } = manualD(true);
+  const { claim, request } = fanWriteRequest(input, context);
+  expect(claim.kind).toBe("complete");
+  expect(request.equipment).toEqual([{ id: 14577391, externalStaticInWg: claim.requiredEspInWg }]);
+  expect(request.terminalFlows).toEqual([]);
+  // The one flow row is the stated (Work) fan flow; nothing derived rides along.
+  expect(request.equipmentFlows).toEqual([expect.objectContaining({ id: 14577391, cfm: 900, source: "Work:work:test" })]);
+  // The plan timestamp is an input, so an unchanged plan seals the same request at apply.
+  expect(fanWriteRequest(input, context).request).toEqual(request);
+});
+
+test("a claim that is not complete is refused with its kind and what holds it open", () => {
+  const fan = { unitId: 1, portIndex: 0 }, host = { unitId: 9, portIndex: 1 };
+  const boundary = fanClaimSchema.parse({ kind: "to-boundary", basis: "b", knownInWg: 0.4, coverage: [], blockingIds: [],
+    boundaries: [{ fan, host, elementId: 7, connector: 2, side: "supply", verdict: "unruled", static: { kind: "none" } }] });
+  expect(claimRefusal(boundary)).toBe("Nothing is written from a to-boundary fan calc (known 0.4 in-wg): unruled tie-in at element 7 connector 2 into unit 9");
+  expect(claimRefusal(buildSheet(manualD(true).input).claim)).toBeNull();
+  // A truncated walk is lost coverage: the claim refuses it without the explicit walk check.
+  const truncated = manualD(false, { walk: { ...TEST_WALK, truncated: true } });
+  expect(buildSheet(truncated.input).claim.kind).toBe("incomplete");
+  expect(() => fanWriteRequest(truncated.input, truncated.context)).toThrow(/incomplete fan calc .*: \S/);
+});
 
 test("unscoped losses do not fire a healing read", async () => {
   const read = vi.fn();
   await expect(lossSnapshot(undefined, read)).rejects.toThrow("stage a scope before previewing losses");
   expect(read).not.toHaveBeenCalled();
-});
-
-test("an authored terminal flow inside a fan walk with no network groups reaches the scoped plan", () => {
-  // The real-twin fan walk has no groups and no node groupId, like the Snowdon walk that planned an empty request.
-  const snapshot = walkCapture.parse(
-    JSON.parse(readFileSync(new URL("../../../packages/host-contracts/src/fixtures/k2-four-fan-walk.json", import.meta.url), "utf8")),
-  );
-  expect(snapshot.groups).toHaveLength(0);
-  const [authored, other] = snapshot.nodes.filter((n) => n.kind === "terminal");
-  const request = (walk: boolean) => {
-    // As the plan reads it: the staged terminalFlow slot is the observed one on the authored terminal.
-    const nodes = snapshot.nodes.map((n) => (n.id === authored!.id ? { ...n, flowParameter: "Flow" } : n));
-    const s = { ...snapshot, nodes, walk: walk ? { startId: 14577391, hops: 1, elementsReached: snapshot.nodes.length, openEnds: 0, candidates: [], truncated: false, elapsedMs: 1, unreadPeers: [] } : undefined };
-    const work = ductsDesign(null, fansDocumentSchema.parse({
-      flows: { [elementSubject(authored!)]: { edit: { by: "human", value: 123, ref: "controlled sample proof" } } },
-    }));
-    return scopeApplyRequest(applyRequest(s, price(s, {}, work, work ?? neutralFansWork, EMPTY_CATALOGS), "", []), s.store, [["flows", elementSubject(authored!)]], s);
-  };
-  expect(request(true).terminalFlows).toEqual([expect.objectContaining({ id: authored!.id, cfm: 123 })]);
-  // Derived flows keep their network guard: no group with an air mover, no write.
-  expect(request(true).terminalFlows.some((row) => row.id === other!.id)).toBe(false);
-  // Outside a known fan walk an ungrouped flow still has no air mover to stand on.
-  expect(request(false).terminalFlows).toEqual([]);
 });
 
 test("a requested write cell that derives no write is refused, never planned as an empty request", () => {
@@ -175,12 +182,12 @@ test("a requested write cell that derives no write is refused, never planned as 
 });
 
 test("an unwritten cell names why: an empty or consumed Work cell is not a staged value", () => {
-  // The preserved r82 shape: writeIntent still names both ESP cells after r67 published both edits.
+  // The preserved r82 shape: writeIntent still names both cells after r67 published both edits.
   const fans = fansDocumentSchema.parse({
-    esp: { "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00de6eef": { edit: null }, "UniqueId:6d52156a-3876-4d76-b641-341454252f26-0098d62d": { edit: { by: "human", value: { inWg: 2.7 } } } },
+    componentDrops: { "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00de6eef": { edit: null }, "UniqueId:6d52156a-3876-4d76-b641-341454252f26-0098d62d": { edit: { by: "human", value: { inWg: 2.7 } } } },
   });
   const staged = stagedValues(null, fans);
-  expect(unwrittenReason(staged, ["esp", "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00de6eef"])).toMatch(/no staged edit/);
+  expect(unwrittenReason(staged, ["componentDrops", "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00de6eef"])).toMatch(/no staged edit/);
   // A staged cell that still derives nothing is a different case; it is never called empty.
-  expect(unwrittenReason(staged, ["esp", "UniqueId:6d52156a-3876-4d76-b641-341454252f26-0098d62d"])).toMatch(/^staged/);
+  expect(unwrittenReason(staged, ["componentDrops", "UniqueId:6d52156a-3876-4d76-b641-341454252f26-0098d62d"])).toMatch(/^staged/);
 });

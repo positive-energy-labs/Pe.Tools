@@ -19,8 +19,8 @@ import { projectReader, type FamilyActionDependencies } from "../family-actions.
 
 const PLAN_LEAF = "revit.detail.parameter-values";
 const APPLY_LEAF = "revit.apply.parameter-values";
-// ponytail: the ducts losses store keeps its own native leaf (`ducts.apply`) until its owner moves onto store bindings.
-const LOSSES_ROUTES = new Set(["ducts", "fans"]);
+// ponytail: the fans write keeps its own native leaf (`ducts.apply`), minted from a complete claim; a one-name set until phase 4 guards it.
+const LOSSES_ROUTES = new Set(["fans"]);
 
 type Edit = RevitDetailParameterValues.Req.ParameterValueEdit;
 type PlanData = RevitDetailParameterValues.Res.Response;

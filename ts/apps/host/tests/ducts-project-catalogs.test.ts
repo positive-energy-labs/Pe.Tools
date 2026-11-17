@@ -8,8 +8,6 @@ import { nativeFixture } from "./fans-work-fixture.ts";
 import { snapshot } from "../../web/src/ducts/test-fixture.ts";
 import { catalogLinkKey } from "@pe/ducts-domain/catalog";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
-import { price, applyRequest } from "@pe/ducts-domain/pricing";
-import { ductsDocumentSchema, fansDocumentSchema } from "@pe/agent-contracts";
 import { HOST_RPC_BRIDGE_SESSION_HEADER, HOST_RPC_DOCUMENT_HEADER } from "@pe/host-contracts/contracts";
 import { settle } from "./effect-test.ts";
 
@@ -47,13 +45,16 @@ test("losses plan and sheet catalog read price from the target project home", as
   }] } });
   closes.push(() => f.close());
   const subject = elementSubject(terminal);
-  expect(await f.saved.apply({ ...f.key, route: "fans" }, "fans", "human", [
+  const fanKey = { ...f.key, route: "fans" };
+  // The fans write is the only losses plan: the scope is the fan's walk, staged in Fans Work.
+  const fans = await f.saved.apply(fanKey, "fans", "human", [
     { path: ["flows", subject, "edit"], value: { value: 250 } },
-  ], 0)).toMatchObject({ ok: true });
-  const ducts = await f.saved.apply(f.key, "ducts", "human", [{ path: ["catalogs", catalogLinkKey(terminal.family, terminal.type), "edit"], value: { value: { table: "project-table" } } }, { path: ["writeIntent", "edit"], value: { value: { groups: ["group:g1"] } } }], 0);
-  expect(ducts).toMatchObject({ ok: true });
+    { path: ["writeIntent", "edit"], value: { value: { walk: { unitId: 100, portIndex: 0 } } } },
+  ], 0);
+  expect(fans).toMatchObject({ ok: true });
+  expect(await f.saved.apply(f.key, "ducts", "human", [{ path: ["catalogs", catalogLinkKey(terminal.family, terminal.type), "edit"], value: { value: { table: "project-table" } } }], 0)).toMatchObject({ ok: true });
   const response = await f.post("/actions", { id: "project-loss", key: "sheet.plan", target: f.target,
-    input: { work: { key: f.key, revision: ducts.ok ? ducts.revision : -1 } } });
+    input: { work: { key: fanKey, revision: fans.ok ? fans.revision : -1 } } });
   expect(response.status, await response.clone().text()).toBeLessThan(400);
   const receipt = await f.journal.wait("project-loss");
   expect(receipt, JSON.stringify(receipt)).toMatchObject({ state: "succeeded", result: { derivedRequest: { terminals: [expect.objectContaining({ id: 4 })] } } });
@@ -62,7 +63,4 @@ test("losses plan and sheet catalog read price from the target project home", as
   const headers = { [HOST_RPC_BRIDGE_SESSION_HEADER]: f.target.ref.session, [HOST_RPC_DOCUMENT_HEADER]: f.target.ref.openId };
   const catalogs = await (await f.request(new Request("http://fixture/pe/ducts/catalogs", { headers }))).json();
   expect(catalogs.tables["project-table"].cells.values[0][0]).toBe(0.73);
-  const fans = fansDocumentSchema.parse((await f.saved.view({ ...f.key, route: "fans" }, "fans"))!.doc);
-  expect(applyRequest(captured, price(captured, {}, ductsDocumentSchema.parse((await f.saved.view(f.key, "ducts"))!.doc), fans, catalogs.tables), "", []).terminals)
-    .toContainEqual(expect.objectContaining({ id: 4, inWg: planned.inWg }));
 });
