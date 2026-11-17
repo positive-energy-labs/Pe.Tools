@@ -79,6 +79,7 @@ export type StateRoot = {
   readonly ductsAnalyses: StatePath;
   readonly peaWork: StatePath;
   readonly providers: StatePath;
+  readonly homesConfig: StatePath;
   readonly pluginDecisions: StatePath;
   readonly shippedPods: StatePath;
 };

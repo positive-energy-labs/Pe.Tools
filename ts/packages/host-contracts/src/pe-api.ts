@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { hostDescriptorSchema } from "./host-descriptor.ts";
+import { homesConfigSchema, homesStatusSchema } from "./homes-config.ts";
 import type { HostLocalCatalogEntry } from "./operation-types.ts";
 import { deviceListingSchema, deviceSessionSchema, pairingSchema } from "./remote-device.ts";
 import type { SessionObservation } from "./vendor/generated/pe-revit-contract.ts";
@@ -274,6 +275,9 @@ export function peRouteTable<S extends PeApiSchemas>(schemas: S) {
   const peRoutes = {
     "places.get": route("GET", "/pe/places", none, schemas.placesFileSchema as S["placesFileSchema"], "read", "pe", "read"),
     "places.put": route("PUT", "/pe/places", schemas.placesFileSchema as S["placesFileSchema"], schemas.placesFileSchema as S["placesFileSchema"], "human", "pe", "human"),
+    // This machine's chosen firm and user homes (`state\homes.json`) and the homes they resolve to.
+    "homes.get": route("GET", "/pe/homes", none, homesStatusSchema, "read", "pe", "read"),
+    "homes.put": route("PUT", "/pe/homes", homesConfigSchema, homesStatusSchema, "human", "pe", "human"),
     "families.readings": route(
       "GET",
       "/families/readings",

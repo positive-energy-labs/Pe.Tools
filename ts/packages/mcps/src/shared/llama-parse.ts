@@ -19,12 +19,6 @@ export const LLAMA_CLOUD_KEY_VAR = "LLAMA_CLOUD_API_KEY";
  */
 export const LLAMA_TIER = "agentic_plus";
 
-export function requireLlamaCloudKey(env: NodeJS.ProcessEnv = process.env): string {
-  const key = env[LLAMA_CLOUD_KEY_VAR];
-  if (!key) throw new Error(`${LLAMA_CLOUD_KEY_VAR} is not set in the host environment.`);
-  return key;
-}
-
 /** Who originates a send: the person (a press in the web app, or their Confirm), or anyone else. */
 export type Sender = "person" | "pea";
 

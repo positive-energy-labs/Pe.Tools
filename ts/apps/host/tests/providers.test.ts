@@ -410,3 +410,31 @@ test("witness: a thread event and meta echoing a shared key are written redacted
     await providers.close();
   }
 });
+
+test("a firm key makes a synthesized provider per harness, never stored, and it vanishes with the key", async () => {
+  const shared = join(root, "shared");
+  await mkdir(shared, { recursive: true });
+  await writeFile(join(shared, "pe-home.json"), `{"tier":"firm"}`);
+  await writeFile(join(shared, "keys.json"), JSON.stringify({ "openai.api-key": "firm-openai-key" }));
+  vi.stubEnv("PE_TOOLS_SHARED_ROOT", shared);
+  const providers = createProviders({ spawner: testSpawner(), probeOnStart: false });
+  try {
+    const list = async () => (await providers.fetch(request("providers"))).json();
+    const firm = (await list()).find((p: { id: string }) => p.id === "firm-codex");
+    expect(firm).toMatchObject({
+      harness: "codex",
+      name: "Firm key (Codex)",
+      auth: { kind: "endpoint", baseUrl: "https://api.openai.com/v1", keyLast4: "-key" },
+    });
+    expect((await list()).some((p: { id: string }) => p.id === "firm-claude")).toBe(false);
+    expect(JSON.stringify(await list())).not.toContain("firm-openai-key");
+    expect((await providers.fetch(request("providers/firm-codex", "DELETE"))).status).toBe(409);
+    expect(providers.keys()).toContain("firm-openai-key");
+    await writeFile(join(shared, "keys.json"), "{}");
+    expect((await list()).some((p: { id: string }) => p.id.startsWith("firm-"))).toBe(false);
+    expect((await providers.fetch(request("providers/firm-codex"))).status).toBe(404);
+  } finally {
+    vi.unstubAllEnvs();
+    await providers.close();
+  }
+});
