@@ -28,8 +28,8 @@ test("/fans stages no /ducts Work, and /ducts' sheet stages its criteria", () =>
     expect(binding === "writeIntent" || !ductsKeys.includes(binding), binding).toBe(true);
   }
   // /ducts' sheet stages its criteria (a row per cell) and the design friction rate, in /ducts Work.
-  expect(staged(designCalc).map(name => name.split("../../../../../../../products/fans/web/src")[0]).every(name => name === "criteria")).toBe(true);
-  for (const binding of staged(designCalc)) expect(ductsKeys).toContain(binding.split("../../../../../../../products/fans/web/src")[0]);
+  expect(staged(designCalc).map(name => name.split(".")[0]).every(name => name === "criteria")).toBe(true);
+  for (const binding of staged(designCalc)) expect(ductsKeys).toContain(binding.split(".")[0]);
   const rows = sheetCells(designCalc, { rows: [], work: { criteria: { velocitySupplyFpm: { edit: { value: 850, by: "human" } } } }, model: [], read: null });
   expect(rows.find((c) => c.binding === "criteria.velocitySupplyFpm")).toMatchObject({ value: 850, source: "work", label: "Velocity limit supply" });
   expect(rows.find((c) => c.binding === "setting.ducts.designFriction")).toMatchObject({ value: 0.08, source: "default", unit: "in-wg/100 ft" });

@@ -10,7 +10,7 @@ import { module as fans } from "@pe/fans-web/route";
  * `picture` and the kernel draws the pane. Neither route mounts a `Picture`, and the borrowed body's
  * cross-imports are gone: 22 from `fans/picture.tsx` into web `ducts/`, and `FansDrawContext` back.
  */
-const src = fileURLToPath(new URL("../../../../../../../products/fans/web/src", import.meta.url)).replaceAll("\\", "/");
+const src = fileURLToPath(new URL("../../../../../../../products/fans/web/src/", import.meta.url)).replaceAll("\\", "/");
 const products = fileURLToPath(new URL("../../../../../../../products", import.meta.url)).replaceAll("\\", "/").replace(/\/$/, "");
 const files = (dir: string): string[] =>
   readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
@@ -53,9 +53,9 @@ test("the borrowed body is gone: no route file mounts a Picture, and the picture
     .filter((file) => imports(file).some(mountsPicture));
   expect(mounts).toEqual([]);
   // The /fans overlay reaches the duct walk through one module, where it reached 22.
-  const borrowed = (from: string) => /^@pe\/(?:ducts|duct-systems)-web\//.test(from) || from.startsWith("../../../../../../../products/fans/web/src/calc") || /\/picture(?:\.tsx?)?$/.test(from);
-  expect(["@pe/fans-web/calc/picture", "@pe/ducts-web/second-picture"].filter(borrowed)).toHaveLength(2);
-  expect(imports(`${src}picture.tsx`).map((i) => i.from).filter(borrowed)).toEqual(["@pe/fans-web/calc/picture"]);
+  const borrowed = (from: string) => /^@pe\/(?:ducts|duct-systems)-web\//.test(from) || from.startsWith("./calc/") || /\/picture(?:\.tsx?)?$/.test(from);
+  expect(["./calc/picture.tsx", "@pe/ducts-web/second-picture"].filter(borrowed)).toHaveLength(2);
+  expect(imports(`${src}picture.tsx`).map((i) => i.from).filter(borrowed)).toEqual(["./calc/picture.tsx"]);
   // Nothing under ducts/ is typed by the /fans route.
   const back = productFiles().filter(file => !file.startsWith(src) || file.startsWith(`${src}calc/`)).filter((file) => imports(file).some((i) => i.names.includes("FansDrawContext")));
   expect(back).toEqual([]);
