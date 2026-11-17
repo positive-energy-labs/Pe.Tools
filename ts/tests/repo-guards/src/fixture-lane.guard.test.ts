@@ -1,13 +1,15 @@
 import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { join, relative, resolve } from "node:path";
 import ts from "typescript";
 import { expect, test } from "vite-plus/test";
-import { routeModules } from "./product-source-roots.ts";
+import { productWebDirectories, routeModules } from "./product-source-roots.ts";
 import { ROOT, productionFiles } from "./import-census.js";
 
 test("S1: fixture transports never branch on operation keys or seed routes", () => {
   const paths = [
     ...productionFiles("apps/web/src").filter((path) => /fixture[^/]*\.[jt]sx?$/.test(path)),
+    ...productWebDirectories().flatMap(dir => productionFiles(relative(ROOT, join(dir, "src")).replaceAll("\\", "/")))
+      .filter(path => /fixture[^/]*\.[jt]sx?$/.test(path)),
     "apps/host/src/demo-owner.ts",
     "packages/host-contracts/src/fixture-host.ts",
   ];
