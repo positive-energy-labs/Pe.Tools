@@ -33,7 +33,7 @@ export function nativeTestAdapter(mount: TypedMount, _door: WorkJournalDoor) {
       const body=mount.draw(id) as {props:{ctx?:unknown}};
       // A value-less read draws the shell's one line, with no body and so no ctx.
       if(!body.props.ctx) return body;
-      const Component=({"sheet-roster":RosterBody,"sheet-ledger":LedgerBody,"e-systems":networkBodies.SystemsPane,"e-sidebar":networkBodies.TreePane,"e-rules-all":networkBodies.AllRulesBody,"e-rules":networkBodies.RulesBody,"e-inbox":networkBodies.InboxBody} as Record<string,any>)[id];
+      const Component=({"calc-roster":RosterBody,"calc-ledger":LedgerBody,"e-systems":networkBodies.SystemsPane,"e-sidebar":networkBodies.TreePane,"e-rules-all":networkBodies.AllRulesBody,"e-rules":networkBodies.RulesBody,"e-inbox":networkBodies.InboxBody} as Record<string,any>)[id];
       return createElement(Component,{ctx:body.props.ctx});
     }, close: mount.dispose,
     controls: { subject: mount.page.subject, query: (key:string,value:unknown)=>mount.page.query({[key]:value}) },

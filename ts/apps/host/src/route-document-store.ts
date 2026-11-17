@@ -41,6 +41,23 @@ export function fileRouteDocumentStore(root: StateDirectory): RouteDocumentStore
       segments: () => [filename(targetKey, route)],
     }).in(root);
   return {
+    retireRoutes: async (routes) => {
+      // Startup retirement is an explicit mutation, unlike the bounded read-only listing below.
+      // Read one envelope at a time, never its retired value schema, and keep unreadable bytes.
+      const files = (await readdir(dir)).filter((file) => /^[a-f0-9]{64}\.json$/.test(file)).sort();
+      for (const file of files) {
+        let record: z.infer<typeof recordSchema>;
+        try {
+          const path = join(dir, file);
+          if ((await stat(path)).size > 16 * 1024 * 1024) continue;
+          record = recordSchema.parse(JSON.parse(await readFile(path, "utf8")));
+          if (!routes.has(record.route) || filename(record.targetKey, record.route) !== file) continue;
+        } catch { continue; }
+        const result = setAside(work(record.targetKey, record.route),
+          `Work route ${record.route} is retired. Start new Work; no cells were migrated.`);
+        if (result.kind === "kept") throw Object.assign(new Error(result.reason), result);
+      }
+    },
     getState: async ({ targetKey, route }) => {
       const read = readStoredFile(work(targetKey, route));
       return read.kind === "ok" ? read.value.value : null;

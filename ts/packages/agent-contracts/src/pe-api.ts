@@ -1,4 +1,5 @@
 import { callPolicies, type CallPolicy } from "./call-policy.ts";
+import { CALC_READ, CALC_DETAIL_READ, CALC_BREAKDOWN_READ } from "@pe/fans-contract/fan-calc";
 import { commandCatalogAxes, commandTable, type CommandKey } from "./command-axes.ts";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import { tsOnlyOperationCatalog } from "@pe/host-contracts/operation-types";
@@ -27,10 +28,15 @@ const threadHistoryInput = z.strictObject({
 /** What Pea is shown for reads.value: the named duct reads carry their real args; any other registered read keeps open args. */
 const namedRead = <S extends z.ZodType>(read: string, args: S) =>
   schemas.valueReadRequest.extend({ read: z.literal(read), args });
+const namedReadKeys = ["fans.roster", CALC_READ, CALC_DETAIL_READ, CALC_BREAKDOWN_READ];
 const valueReadInput = z.union([
   namedRead("fans.roster", schemas.ductsRosterRequestSchema),
-  namedRead("ducts.sheet", schemas.ductsCalcRequestSchema),
-  schemas.valueReadRequest.extend({ read: z.string().regex(/^(?!(?:fans\.roster|ducts\.sheet)$)/) }),
+  namedRead(CALC_READ, schemas.fansReadArgs),
+  namedRead(CALC_DETAIL_READ, schemas.ductsCalcRequestSchema),
+  namedRead(CALC_BREAKDOWN_READ, schemas.ductsCalcRequestSchema),
+  schemas.valueReadRequest.extend({ read: z.string().regex(new RegExp(
+    `^(?!(?:${namedReadKeys.map(key => key.replaceAll(".", "\\.")).join("|")})$)`,
+  )) }),
 ]);
 const routeCatalog: Record<
   string,
@@ -38,7 +44,7 @@ const routeCatalog: Record<
     description: string;
   }
 > = {
-  "reads.value": { description: "Publish a registered host Value. Supply read, args, subscription (any unique string) and generation (0 for a first read); the result is in value.data. Use fans.roster with args {target, mark} to find a fan port by its mark, ducts.sheet for a pressure sheet, and fans.sheet for the Fans worksheet." },
+  "reads.value": { description: "Publish a registered host Value. Supply read, args, subscription (any unique string) and generation (0 for a first read); the result is in value.data. Use fans.roster with args {target, mark} to find a fan port by its mark, fans.calc-detail for a pressure sheet, and fans.calc for the Fans worksheet." },
   "blobs.put": { description: "Retain uploaded bytes before command admission. Send fileName and base64, then use the returned immutable BlobRef as command input." },
   "threads.history": {
     description:

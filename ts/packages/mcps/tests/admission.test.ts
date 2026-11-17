@@ -372,14 +372,14 @@ import { ductsDocumentSchema, fansDocumentSchema, workHandle } from "@pe/agent-c
 test.each(["open", "address", "workspace", "host"] as const)("loss preview reads exact %s Work and refuses groups without a fan walk", async binding => {
  for (const scoped of [false, true]) {
   const posts: unknown[] = [];
-  const key = binding === "address" ? {route: "ducts", binding, target: "C:/Models/A.rvt"}
-    : binding === "open" ? {route: "ducts", binding, target: null, open: target.ref}
-    : binding === "workspace" ? {route: "ducts", binding, target: null, work: "draft"}
-    : {route: "ducts", binding, target: null};
+  const key = binding === "address" ? {route: "duct-systems", binding, target: "C:/Models/A.rvt"}
+    : binding === "open" ? {route: "duct-systems", binding, target: null, open: target.ref}
+    : binding === "workspace" ? {route: "duct-systems", binding, target: null, work: "draft"}
+    : {route: "duct-systems", binding, target: null};
   const work = { key, revision: 3 };
   vi.stubGlobal("fetch", async (input: Request | string | URL, init?: RequestInit) => {
     const url = new URL(input instanceof Request ? input.url : String(input));
-    if (url.pathname === "/pe/route-state/ducts" || url.pathname === "/pe/route-state/fans") {
+    if (url.pathname === "/pe/route-state/duct-systems" || url.pathname === "/pe/route-state/fans") {
       const expected = binding === "address" ? {target: "C:/Models/A.rvt"}
         : binding === "open" ? {open: "A/open-A"}
         : binding === "workspace" ? {work: "draft"} : {};
@@ -414,7 +414,7 @@ test("a fans handle runs the losses preflight: it reads both Works at its docume
   const work = { key: {route: "fans", binding: "host", target: null}, revision: 1 };
   await expect(runCapability("sheet.plan", {work}, {hostBaseUrl: "http://preflight.test", receipt: true}, {door: "command", mutates: false, needs: "project-document"}))
     .rejects.toThrow("before preview (503)");
-  expect(seen.some((path) => path.endsWith("/ducts"))).toBe(true);
+  expect(seen.some((path) => path.endsWith("/duct-systems"))).toBe(true);
   expect(seen.some((path) => path.endsWith("/fans"))).toBe(true);
 });
 

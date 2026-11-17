@@ -158,7 +158,7 @@ export const ductsPricing = body(contracts.pricing, async function(ctx, args) {
           fanRows: fans.rows,
           design,
           network,
-          ductsWork: layers.ducts,
+          ductSystemsWork: layers.ducts,
           fansWork: layers.fans,
           catalogFindings: catalog.findings,
           // Under Work: the store over the firm file, so a staged criterion draws beside what it replaces.

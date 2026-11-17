@@ -11,7 +11,7 @@ import * as tiers from "../src/tiered-settings.ts";
 import { callRouteOver, captureStore, detachedBridge, journalAt, sessionView, testHostInputs } from "./effect-test.ts";
 import { contextHeaders } from "./callers.ts";
 import { serveRoutes } from "./real-server.ts";
-import { bindWork } from "@pe/agent-contracts";
+import { bindWork, ductsRouteState } from "@pe/agent-contracts";
 import { RouteWorkspace } from "@pe/runtime";
 import { hostTimeline } from "../src/reads/work-timeline.ts";
 import { approvedPea, human, pea } from "./callers.ts";
@@ -30,11 +30,11 @@ function homeHistory() {
   const path = join(firm, "Settings", "ducts.json");
   writeFileSync(path, '{"designFriction":0.07}');
   const owner = journalAt(join(root, "actions.json"), Date.now);
-  const registrations = [{ spec: { route: "ducts", title: "Ducts", description: "Proof", schema: z.object({}) } }];
+  const registrations = [{ spec: ductsRouteState }];
   const workspace = new RouteWorkspace({ registrations, store: { getState: async () => null, setState: async () => {} } });
   const timeline = hostTimeline(workspace, owner);
   const routes = createPeRoutes({ workspace, registrations, journal: owner });
-  const works = [bindWork("ducts", null, "home-history")];
+  const works = [bindWork("duct-systems", null, "home-history")];
   return {
     path,
     read: () => timeline.read(works, "human"),
@@ -46,7 +46,7 @@ function homeHistory() {
       return { home: path, sha256: wrote.sha256, label: row.place };
     },
     async step(expected: unknown, caller = human, direction = "undo") {
-      const response = await withInvocationContext({ caller }, () => routes.fetch(new Request("http://host/pe/route-state/ducts/history?work=home-history", {
+      const response = await withInvocationContext({ caller }, () => routes.fetch(new Request("http://host/pe/route-state/duct-systems/history?work=home-history", {
         method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ direction, works, expected }),
       })));
       return response.json();
@@ -126,9 +126,9 @@ test("Pea's first home write records its caller and refuses undo with a reason, 
     expect(receipt).toMatchObject({ state: "succeeded", result: { priorSha256: null } });
     const wrote = z.object({ path: z.string(), sha256: z.string() }).parse(receipt.result);
     const before = readFileSync(wrote.path);
-    const workspace = new RouteWorkspace({ registrations: [], store: { getState: async () => null, setState: async () => {} } });
+    const workspace = new RouteWorkspace({ registrations: [{ spec: ductsRouteState }], store: { getState: async () => null, setState: async () => {} } });
     const timeline = hostTimeline(workspace, owner);
-    const works = [bindWork("ducts", null, "first-write")];
+    const works = [bindWork("duct-systems", null, "first-write")];
     const shown = await timeline.read(works, "pea");
     // Mutant ST7a-human-stamp: replace the saved Caller with a human.
     expect(shown.rows).toContainEqual(expect.objectContaining({ kind: "home-write", path: wrote.path, by: expect.objectContaining({ kind: "pea", thread: caller.thread }), undoable: false }));

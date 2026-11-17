@@ -37,7 +37,7 @@ test("fan preview survives identical re-pricing but rejects changed model inputs
   const handle = {
     key: {
       binding: "open" as const,
-      route: "ducts",
+      route: "duct-systems",
       target: null,
       open: { session: "A", openId: "doc" },
     },

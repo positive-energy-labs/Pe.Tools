@@ -108,7 +108,7 @@ const firstFeed = (
   });
 
 const recipe: ConsumerRecipe = {
-  key: "ducts.sheet",
+  key: "fans.calc-detail",
   input: { fan: "F-1" },
   scope: '["work-inputs"]',
 };
@@ -648,7 +648,7 @@ test("absent Work feeds capture and replay null without stopping recording", asy
 
 test("command Work reads carry context through binding and revalidation", async () => {
   const { dir, writer } = await bundle();
-  const commandWorkKey = { ...key, route: "ducts" };
+  const commandWorkKey = { ...key, route: "duct-systems" };
   const { ActionJournal } = await import("../src/action-journal.ts");
   const { commands, tools } = await import("@pe/agent-contracts");
   const { z } = await import("zod");
@@ -711,5 +711,5 @@ test("command Work reads carry context through binding and revalidation", async 
     { kind: "recording", recordingStore: store, at: null },
     request.consumption.id,
   );
-  expect((await replay.view(commandWorkKey, "ducts", again.context))?.revision).toBe(0);
+  expect((await replay.view(commandWorkKey, "duct-systems", again.context))?.revision).toBe(0);
 });

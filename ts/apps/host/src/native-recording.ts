@@ -206,11 +206,11 @@ const readSetIdName = Schema.String.check(
   Schema.makeFilter((id) => /^[0-9a-f-]{36}$/.test(id) || "Read-set id is not host minted"),
 );
 /**
- * Which exact takings one consumer read, in the same bundle (version 1, beside format-3 takings).
+ * Which exact takings one consumer read, in the same bundle (version 2, beside format-3 takings).
  * Metadata and links only: source data stays in the owners' observations.
  */
 export const readSetRecordSchema = Schema.Struct({
-  version: Schema.Literal(1),
+  version: Schema.Literal(2),
   id: readSetIdName,
   identity: Schema.Struct({ build: Schema.String, catalog: Schema.String }),
   recipe: consumerRecipe,
@@ -223,7 +223,7 @@ export const readSetRecordSchema = Schema.Struct({
   ),
   takingLinks: Schema.Record(Schema.String, Schema.String),
   dependencies: Schema.Record(Schema.String, readSetIdName),
-  exports: Schema.Array(Schema.Struct({ kind: Schema.Literal("ducts.sheet"), basis: Schema.String })),
+  exports: Schema.Array(Schema.Struct({ kind: Schema.String, basis: Schema.String })),
 });
 export type InputReadSetRecord = typeof readSetRecordSchema.Type;
 export type ConsumerRecipe = typeof consumerRecipe.Type;
@@ -452,7 +452,7 @@ const loadBundle = Effect.fn("Recording.load")(function* (
         if (text === null) return yield* refuse("context", `No read set ${name} in this recording`);
         const record = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(readSetRecordSchema))(
           text,
-        ).pipe(Effect.mapError(() => refuse("tamper", `Read set ${name} is damaged`)));
+        ).pipe(Effect.mapError(() => refuse("tamper", `Read set ${name} is damaged or retired; record it again. Recording bytes were not changed.`)));
         if (record.id !== name || record.identity.build !== identity.build || record.identity.catalog !== identity.catalog)
           return yield* refuse("mismatch", `Read set ${name} belongs to another build or name`);
         const seen = new Set<string>();

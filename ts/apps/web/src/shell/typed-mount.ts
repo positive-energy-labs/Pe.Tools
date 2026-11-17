@@ -99,6 +99,13 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
   const decodePage = (remembered = true) => {
     const search = input.address.read();
     const memory = remembered ? z.record(z.string(),z.unknown()).parse(input.memory() ?? {}) : {};
+    for (const key of spec.retiredPage?.fields ?? [])
+      if (search.has(key) || key in memory) throw Error(`Saved Page field ${key} is retired. Open a new Place.`);
+    for (const [key, values] of Object.entries(spec.retiredPage?.values ?? {})) {
+      const raw = search.get(key) ?? memory[key];
+      if (values.some(value => raw === value || raw === JSON.stringify(value)))
+        throw Error(`Saved Page value ${key} is retired. Open a new Place.`);
+    }
     return freezePage({ ...Object.fromEntries(Object.entries(spec.fields).map(([key, field]) => {
       const raw = search.get(key);
       return [key, decodeField(field, raw === null ? memory[key] ?? field.initial : raw)];

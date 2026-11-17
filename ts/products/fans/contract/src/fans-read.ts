@@ -30,18 +30,18 @@ export const fanCalcSchema = z.object({
     .nullable(),
 });
 export const FAN_READ_MAX = 32;
-export const fansReadArgs = z.object({
+export const fansReadArgs = z.strictObject({
   target: documentRefSchema,
   /** Fan ports as SubjectRef `UniqueId:<unit>#port:<n>` codes, decoded at this door. */
   fan: z.union([z.literal("all"), z.array(subjectRefCodeSchema).max(FAN_READ_MAX)]),
-  sheetPath: z.string().default(""),
+  calcPath: z.string().default(""),
 });
 export const fansReadRequest = publicationRequest(fansReadArgs);
 
 export const fansCalcData = fanCalcSchema.extend({
   espOptions: nativeResponseSchema("revit.catalog.field-options").nullable(),
   espOptionsError:z.string().nullable(),
-  sheetView: z.object({
+  calcView: z.object({
     blockers: detail[4].shape.blockers,
     tiers: z.record(z.enum(["taken", "accept", "preview"]), z.number()),
     taken: z.array(z.string()),
@@ -52,13 +52,18 @@ export const fansCalcData = fanCalcSchema.extend({
   /** Each owner's `Settings/<owner>.json` in every home tier, as the host read it: a `setting` cell's tiers (ADR 0037 rule 8). */
   settings: z.record(z.string(), settingTiersSchema),
   fans: ductsRosterResponseSchema,
-  ductsWork: ductsDocumentSchema,
+  ductSystemsWork: ductsDocumentSchema,
   /** The /ducts Work revision this read priced with: the Fans sheet's read-only line to the design it depends on. */
-  ductsRevision: z.number().int().nonnegative(),
+  ductSystemsRevision: z.number().int().nonnegative(),
   fansWork: fansDocumentSchema,
-  sheetSnapshot: z.union([
+  calcSnapshot: z.union([
     nativeResponseSchema("ducts.snapshot.walk").and(
       z.object({ sourceVersion: z.string().optional() }),
+    ).refine(
+      snapshot => !snapshot.groups.some(group => group.id === "sheet") &&
+        !snapshot.nodes.some(node => node.groupId === "sheet") &&
+        !snapshot.segments.some(segment => segment.groupId === "sheet"),
+      "Retired calc group; capture this calculation again. Recording bytes were not changed.",
     ),
     z.object({ kind: z.literal("absent") }),
   ]),

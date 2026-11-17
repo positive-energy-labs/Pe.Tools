@@ -56,7 +56,7 @@ for (const width of [720, 1280, 1920]) {
           bodies={bodies}
         />,
       );
-      const id = stage === "network" ? "sidebar" : "sheet-layout";
+      const id = stage === "network" ? "sidebar" : "calc-layout";
       const split = [...container.querySelectorAll<HTMLElement>("[data-layout-split]")].find((el) =>
         el.dataset.layoutSplit?.startsWith(`["${id}",`),
       )!;

@@ -12,7 +12,7 @@ const canonicalFixtures: Record<
   "/bind": { canonicalReviewUrl: "/bind?page=todo", fixtureKind: "live-route" },
   "/captures": { canonicalReviewUrl: "/captures", fixtureKind: "live-route" },
   "/pea": { canonicalReviewUrl: "/pea?demo=diagram", fixtureKind: "demo-fixture" },
-  "/ducts": { canonicalReviewUrl: "/ducts", fixtureKind: "live-route" },
+  "/duct-systems": { canonicalReviewUrl: "/duct-systems", fixtureKind: "live-route" },
   "/duct-loss": { canonicalReviewUrl: "/duct-loss", fixtureKind: "inherent-static" },
   "/families": { canonicalReviewUrl: "/families?demo=apply", fixtureKind: "demo-fixture" },
   "/family": { canonicalReviewUrl: "/family?demo=apply", fixtureKind: "demo-fixture" },

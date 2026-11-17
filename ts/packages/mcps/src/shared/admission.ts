@@ -190,11 +190,11 @@ export async function runCapability(
   // readWorks or the same key; a fan walk in fans Work.
   // The sheet pair serves every route (slice 7); only /ducts and /fans carry this losses preflight. Either may ask.
   const asked = key === "sheet.plan" ? workHandleSchema.safeParse(input.work) : null;
-  if (asked?.success && (asked.data.key.route === "ducts" || asked.data.key.route === "fans")) {
+  if (asked?.success && (asked.data.key.route === "duct-systems" || asked.data.key.route === "fans")) {
     const siblings = z.object({ ducts: workHandleSchema.optional(), fans: workHandleSchema.optional() }).optional().parse(input.readWorks);
-    const handle = asked.data.key.route === "ducts" ? asked.data : siblings?.ducts;
+    const handle = asked.data.key.route === "duct-systems" ? asked.data : siblings?.ducts;
     const fansHandle = asked.data.key.route === "fans" ? asked.data : siblings?.fans;
-    const ductsKey = handle?.key ?? { ...asked.data.key, route: "ducts" };
+    const ductsKey = handle?.key ?? { ...asked.data.key, route: "duct-systems" };
     const read = async (key: WorkHandle["key"]) => {
       const response = await createPeClient(context.hostBaseUrl, fetch).response("work.get", {
         params: { route: key.route },

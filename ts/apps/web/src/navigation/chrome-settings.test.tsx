@@ -36,10 +36,10 @@ test("a primary route's settings section appears inside the Settings popover, an
       </SurfaceHostProvider>
     ),
   });
-  const ducts = createRoute({ getParentRoute: () => root, path: "ducts" });
+  const ducts = createRoute({ getParentRoute: () => root, path: "duct-systems" });
   const router = createRouter({
     routeTree: root.addChildren([ducts]),
-    history: createMemoryHistory({ initialEntries: ["/ducts"] }),
+    history: createMemoryHistory({ initialEntries: ["/duct-systems"] }),
   });
   await router.load();
   render(<RouterProvider router={router} />);

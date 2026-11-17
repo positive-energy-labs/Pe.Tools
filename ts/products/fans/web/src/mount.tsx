@@ -51,7 +51,7 @@ export function useCalcData(ctx: CalcContext, snapshot: DuctSnapshot) {
     selected,
     /** The focused blocker: the selection's `issue:<key>` place, bare. */
     issue: issueOf(selected),
-    state: value?.sheetView ?? EMPTY_CALC_STATE,
+    state: value?.calcView ?? EMPTY_CALC_STATE,
     fanKey: stableFanKey,
     changeInputs,
     busy: reading.state === "refreshing",
@@ -61,7 +61,7 @@ export function RosterBody({ ctx }: { ctx: CalcContext }) {
   const authored = ctx.page.read();
   // This pane's read is the roster; the open sheet is a second reading, and it wins where it is held.
   const opened = ctx.read(sheet), held = valueOf(opened) ?? ctx.value.value;
-  const snapshot = calcSnapshot(held.sheetSnapshot);
+  const snapshot = calcSnapshot(held.calcSnapshot);
   const fans = held.fans;
   const roster = rosterOrder(held.rows ?? fans?.rows ?? []);
   const busy = opened.state === "reading" || opened.state === "refreshing";
@@ -109,7 +109,7 @@ export function CalcEmpty({ value }: { value: CalcContext["value"] }) {
   return value.state === "refreshing" ? <p role="status">computing</p> : <p>Open a fan from the roster.</p>;
 }
 export function LedgerBody({ ctx }: { ctx: CalcContext }) {
-  const snapshot = calcSnapshot(ctx.value.value?.sheetSnapshot);
+  const snapshot = calcSnapshot(ctx.value.value?.calcSnapshot);
   return "kind" in snapshot ? (
     <CalcEmpty value={ctx.value} />
   ) : (
@@ -128,7 +128,7 @@ function LedgerContent({ ctx, snapshot }: { ctx: CalcContext; snapshot: DuctSnap
   );
   const select = (selected: string) =>
     ctx.selection.set(selected ? [{ kind: "focus", id: selected }] : []);
-  const state = ctx.value.value?.sheetView ?? EMPTY_CALC_STATE;
+  const state = ctx.value.value?.calcView ?? EMPTY_CALC_STATE;
   const search = useRouteSearchSlice((search) => search);
   const closerOf = (blocker: import("./calc/tiers.ts").CalcBlocker, typed: number | null): Closer => {
     const closer = describeCloser(blocker, typed, {
@@ -173,7 +173,7 @@ function LedgerContent({ ctx, snapshot }: { ctx: CalcContext; snapshot: DuctSnap
         : action.kind === "price" ? `assignment ${action.family}` : action.kind === "table" ? `table ${action.rule}` : `fitting ${name}`;
       // Never a fallback to a write or an ElementId (slice 5): the blocker's producer stamps its
       // UniqueId SubjectRef; /ducts resolves the open fan's port walk, not the model's whole roster.
-      return { says: `Fix in /ducts: ${what} ›`, href: ductsLink(sheet?.overview.fan ?? null, search,
+      return { says: `Fix in /duct-systems: ${what} ›`, href: ductsLink(sheet?.overview.fan ?? null, search,
         // The contract admitted it as an element UniqueId code (`elementSubjectSchema`).
         blocker.subject ? { kind: "subject", code: blocker.subject as SubjectRefCode } : { kind: "route" }) };
     };

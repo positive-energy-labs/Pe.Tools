@@ -46,7 +46,7 @@ const provide = (snapshot: DuctSnapshot) => (args: { fan: "all" | readonly strin
         ),
     )
     .map(stableFanKey);
-  const ductsWork = ductsDocumentSchema.parse({}),
+  const ductSystemsWork = ductsDocumentSchema.parse({}),
     fansWork = fansDocumentSchema.parse({});
   const data = fansCalcData.parse({espOptions:null,espOptionsError:"Fixture has no native parameter options",
     open,
@@ -54,14 +54,14 @@ const provide = (snapshot: DuctSnapshot) => (args: { fan: "all" | readonly strin
     rows,
     progress: null,
     fans: { ...fixture.roster, rows },
-    sheetSnapshot: snapshot,
-    sheetView: calcState(open),
-    ductsWork,
-    ductsRevision: 0,
+    calcSnapshot: snapshot,
+    calcView: calcState(open),
+    ductSystemsWork,
+    ductSystemsRevision: 0,
     // The fixture lane reads no home: every setting cell says its home was not read.
     settings: {},
     fansWork,
-    design: ductsDesign(ductsWork, fansWork),
+    design: ductsDesign(ductSystemsWork, fansWork),
   });
   return {
     data,

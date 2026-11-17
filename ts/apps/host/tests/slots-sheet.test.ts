@@ -63,7 +63,7 @@ test.each([
   const losses = { "sheet.plan": { bind }, "sheet.apply": { bind } };
   const sheet = { draft: true, bindings: { criterion: { home: { at: "store", store: "_PE_DuctLosses" }, domain, per: "route" } } };
   const executors = sheetExecutors({} as never, { workspace: { sheet: () => sheet } } as never, losses as never);
-  await expect(executors["sheet.plan"]!.bind({ admission: { input: { work: { key: { route: "ducts" } }, doc: { criterion: { edit: { value } } } } } } as never))
+  await expect(executors["sheet.plan"]!.bind({ admission: { input: { work: { key: { route: "duct-systems" } }, doc: { criterion: { edit: { value } } } } } } as never))
     .rejects.toThrow(/criterion/);
   expect(bind).not.toHaveBeenCalled();
 });

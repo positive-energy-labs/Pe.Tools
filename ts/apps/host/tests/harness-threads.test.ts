@@ -6,6 +6,13 @@ import { markReadings } from "../src/resource-adapters.ts";
 import { openRecordingWriter, openRecordingReader, nativeCatalogIdentity } from "../src/native-recording.ts";
 import { fansDocumentSchema } from "@pe/agent-contracts";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
+import { graphRoute } from "../src/reads/routes.ts";
+import { RouteWorkspace } from "@pe/runtime";
+import { admittedBuiltinsLayer } from "../src/admitted-builtins.ts";
+import { builtinEnrollments } from "../src/builtin-enrollment.ts";
+import { workHandleSchema } from "@pe/agent-contracts";
+import { z } from "zod";
+import { closedFan, recordedTables } from "../../../products/fans/host/src/tests/closed-fan.fixture.ts";
 import { detachedBridge, sessionView, registryService, harnessThreads, testSpawner, settle, testHostInputs, captureStore, journalAt } from "./effect-test.ts";
 import { nativeReadRoot } from "../src/app.ts";
 import { HostNativeRead } from "@pe/host-internal/native-read";
@@ -207,14 +214,15 @@ test.each(["claude", "codex"] as const)(
       read = reader(h);
     const target = { session: "A", openId: "open-A" };
     const address = documentAddress("C:/Models/chain.rvt");
-    const key = bindWork("ducts", address, undefined, target);
+    const key = bindWork("fans", address, undefined, target);
+    const workspace = new RouteWorkspace({ registrations: [],
+      store: fileRouteDocumentStore(stateFixture(join(dir, "work"))) });
     const routes = createPeRoutes({
-      registrations: [{ spec: tools.ducts.work }, { spec: tools.fans.work }],
-      store: fileRouteDocumentStore(stateFixture(join(dir, "work"))),
+      registrations: [], workspace,
       heads: { observe: () => () => {} },
       navigation: { documents: async () => [{ ...target, address }], threads: async () => [] },
     });
-    const snapshot = JSON.parse(
+    const captured = JSON.parse(
       await readFile(
         new URL(
           "../../../packages/host-contracts/src/fixtures/k2-four-fan-walk.json",
@@ -223,13 +231,21 @@ test.each(["claude", "codex"] as const)(
         "utf8",
       ),
     );
+    // This is a harness transport witness; an unresolved captured walk cannot authorize its write.
+    const snapshot = closedFan(14577391, { requiredEsp: captured.slots.requiredEsp ?? undefined });
+    const fan = snapshot.nodes.find(node => node.id === 14577391)!;
+    snapshot.slots.fanFlow = captured.slots.fanFlow;
+    fan.flowParameter = captured.slots.fanFlow;
+    fan.connectors[0]!.index = 2;
+    for (const item of [...snapshot.nodes, ...snapshot.segments]) for (const port of item.connectors)
+      if (port.connectedTo?.elementId === fan.id && port.connectedTo.connector === 0) port.connectedTo.connector = 2;
     const writes: unknown[] = [];
     const equipmentSubject = elementSubject(snapshot.nodes.find((node: { id: number }) => node.id === 14577391)!);
     const invokeFixture = (op: string, input: unknown, _session?: string, _doc?: string | null, requestId?: string) =>
         Effect.promise(async () => {
           let value: unknown;
           if (op.startsWith("ducts.snapshot.")) value = snapshot;
-          else if (op === "ducts.tables") value = { folder: "fixture", tables: {}, missing: [], unsupported: {} };
+          else if (op === "ducts.tables") value = recordedTables();
           else if (op === "ducts.apply" || op === "ducts.apply.plan") {
             const preview = op === "ducts.apply.plan";
             await journal.markDispatched(requestId!, "bridge");
@@ -275,12 +291,13 @@ test.each(["claude", "codex"] as const)(
     const readScope = Scope.makeUnsafe();
     onTestFinished(() => settle(Scope.close(readScope, Exit.void)));
     const readContext = await settle(Layer.buildWithScope(
-      Layer.mergeAll(Layer.effect(HostNativeRead, HostNativeRead), testHostInputs).pipe(
+      Layer.mergeAll(Layer.effect(HostNativeRead, HostNativeRead), testHostInputs,
+        admittedBuiltinsLayer(workspace, builtinEnrollments.filter(entry => ["fans", "duct-systems"].includes(entry.routeKey)))).pipe(
         nativeReadRoot(Layer.succeed(SdkDriver, (args) => Effect.promise(() => sdkSessions(args)))),
         Layer.provide(Layer.succeed(RevitBridge, bridge)),
       ), readScope,
     ));
-    const deps = { sdk: sdkSessions, nativeRead: Context.get(readContext, HostNativeRead), files: Context.get(readContext, DuctFiles), marks: Context.get(readContext, HostDocumentMarks) };
+    const deps = { sdk: sdkSessions, workspace, nativeRead: Context.get(readContext, HostNativeRead), files: Context.get(readContext, DuctFiles), marks: Context.get(readContext, HostDocumentMarks) };
     const resolve = commandRegistry(bridge, captureStore(join(dir, "captures")), deps, () => Effect.fail(Error("No local command in this journey")));
     const journal = journalAt(join(dir, "journal.jsonl"), Date.now);
     journal.bindCommands({
@@ -316,24 +333,31 @@ test.each(["claude", "codex"] as const)(
               });
             if (path === "/pe/route-state/fans")
               return routes.fetch(new Request(`${base}${incoming.url}`));
+            if (path === "/pe/reads/value") {
+              const chunks: Buffer[] = [];
+              for await (const chunk of incoming) chunks.push(Buffer.from(chunk));
+              const graph = graphRoute("reads.value", JSON.parse(Buffer.concat(chunks).toString("utf8")));
+              const data = await graph.evaluate({ evaluation: "harness-route", origin: {},
+                take: async name => { throw Error(`Unexpected route metadata input ${name}`); }, revision: () => 0 });
+              return Response.json({ value: { data } });
+            }
             if (path === "/chain/locate") {
               const found = await peRead.execute(
                 { key: "route:fans", timeoutSeconds: 30, target: { kind: "open", ref: target } },
                 {},
               );
-              expect(found).toMatchObject({
+              expect(found, JSON.stringify(found)).toMatchObject({
                 ok: true,
-                target: { document: address },
                 result: {
                   revision: 1,
-                  doc: { equipmentFlows: { [equipmentSubject]: { edit: { value: { cfm: 975 } } } } },
+                  doc: { equipmentFlows: { [equipmentSubject]: { edit: { value: 975 } } } },
                 },
               });
               const census = await routes.workspace.instances();
               expect(census.works).toHaveLength(1);
               expect(census.works[0]).toMatchObject({ scope: { binding: "address" }, revision: 1 });
               expect(workKey(census.works[0]!.scope)).toBe(workKey({ ...key, route: "fans" }));
-              located = { key, revision: 0 };
+              located = z.object({ result: z.object({ handle: workHandleSchema }) }).parse(found).result.handle;
               return Response.json(found);
             }
             if (path === "/pe/capabilities")
@@ -365,7 +389,7 @@ test.each(["claude", "codex"] as const)(
                       patches: [
                         {
                           path: ["equipmentFlows", equipmentSubject],
-                          value: { edit: { value: { cfm: 975, source: "chain" } } },
+                          value: { edit: { value: 975, ref: "chain" } },
                         },
                         {
                           path: ["writeIntent"],
@@ -421,23 +445,25 @@ test.each(["claude", "codex"] as const)(
       expect(openAsks(done), String(failures[0] ?? JSON.stringify(done.events))).toEqual([]);
       expect(JSON.stringify(done.events)).not.toContain("permission_request");
       expect(JSON.stringify(done.events)).toContain("chain find:");
-      expect((await journal.list(undefined, "preview"))[0]).toMatchObject({
+      const preview = (await journal.list(undefined, "preview"))[0];
+      expect(preview, JSON.stringify(preview)).toMatchObject({
         state: "succeeded",
         result: { previewOnly: true, seal: { requestHash: expect.any(String) } },
       });
       expect(JSON.stringify(done.events)).toContain("chain apply:");
       expect(writes).toHaveLength(1);
-      expect(await journal.wait("apply")).toMatchObject({
+      const applied = await journal.wait("apply");
+      expect(applied, JSON.stringify(applied)).toMatchObject({
         state: "succeeded",
         steps: [
           { kind: "native", state: "succeeded", dispatchedAt: expect.any(String), touched: { kind: "wrote", modified: 1 } },
           { kind: "publication", state: "succeeded" },
         ],
       });
-      const saved = (await routes.workspace.view(key, "ducts"))!.doc as never;
+      const saved = (await routes.workspace.view({ ...key, route: "duct-systems" }, "duct-systems"))!.doc as never;
       const fans = fansDocumentSchema.parse((await routes.workspace.view({ ...key, route: "fans" }, "fans"))!.doc);
       expect(stagedDucts(saved, fans).equipmentFlows).toEqual({});
-      expect(writes[0]).toMatchObject({ equipmentFlows: [{ id: 14577391, cfm: 975, source: "chain" }] });
+      expect(writes[0]).toMatchObject({ equipmentFlows: [{ id: 14577391, cfm: 975, source: "Work:chain" }] });
     } finally {
       await h.close();
       await new Promise<void>((resolve) => server.close(() => resolve()));

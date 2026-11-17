@@ -76,7 +76,7 @@ test("Q2a keeps kind and colour editors on ducts and fan settings on fans", asyn
   await vi.waitFor(() => expect(f.owner.readingStatus("roster").snapshot.state === "ready").toBe(true));
   f.owner.controls.subject({ kind: "ids", ids: [systemCode("SA")] });
   await vi.waitFor(() => expect(f.owner.readingStatus("ducts").snapshot.state === "ready").toBe(true));
-  await vi.waitFor(() => expect(f.fans.readingStatus("sheetSnapshot").snapshot.state === "ready").toBe(true));
+  await vi.waitFor(() => expect(f.fans.readingStatus("calcSnapshot").snapshot.state === "ready").toBe(true));
   const view = render(<RegistryContext value={registry()}>
     {nodeFor(f.owner, "e-systems")}{nodeFor(f.owner, "e-rules-all")}
   </RegistryContext>);
@@ -90,7 +90,7 @@ test("Q2a keeps kind and colour editors on ducts and fan settings on fans", asyn
   expect(screen.queryByRole("region", { name: "Fan settings" })).toBeNull();
   view.unmount();
   // Fans' inputs are its own Work, drawn by the sheet slot; design friction is /ducts design data.
-  render(<RegistryContext value={registry()}>{nodeFor(f.fans, "sheet-inputs")}</RegistryContext>);
+  render(<RegistryContext value={registry()}>{nodeFor(f.fans, "calc-inputs")}</RegistryContext>);
   expect(document.querySelectorAll('[data-sheet-cell="Design friction"]')).toHaveLength(0);
   expect(screen.queryByRole("region", { name: "System colours" })).toBeNull();
   expect(screen.queryByRole("region", { name: "Unit kinds" })).toBeNull();
@@ -104,13 +104,13 @@ test("Q2a keeps kind and colour editors on ducts and fan settings on fans", asyn
 
 test("F6 the real Inputs pane renders an acknowledged role edit as a choice label", async () => {
   const f = await createWitness(closes);
-  await vi.waitFor(() => expect(f.fans.readingStatus("sheetSnapshot").snapshot.state === "ready").toBe(true));
+  await vi.waitFor(() => expect(f.fans.readingStatus("calcSnapshot").snapshot.state === "ready").toBe(true));
   await vi.waitFor(() => expect(f.fans.workBasis()).toBeTruthy());
   const unit = snapshot.nodes.find((node) => node.kind === "equipment")!;
   const id = elementSubject(unit);
   f.fans.invoke("edit", { patches: [{ path: ["roles", id], value: { edit: { value: { role: "fan" } } } }] }, f.fans.workBasis()!);
   await vi.waitFor(() => expect(f.fans.work()?.value).toMatchObject({ roles: { [id]: { edit: { value: { role: "fan" } } } } }));
-  const view = render(<RegistryContext value={registry()}>{nodeFor(f.fans, "sheet-inputs")}</RegistryContext>);
+  const view = render(<RegistryContext value={registry()}>{nodeFor(f.fans, "calc-inputs")}</RegistryContext>);
   const roles = await vi.waitFor(() => {
     const roles = [...view.container.querySelectorAll('[data-sheet-address^="roles:"]')];
     expect(roles.length).toBeGreaterThan(0);
@@ -139,16 +139,16 @@ test("the fan roster restores its Page query after its body is hidden and shown"
   f.fans.controls.query("rosterSearch", { ...emptyListSearch(), keywords: "FC" });
   const store = registry();
   const view = render(
-    <RegistryContext value={store}>{nodeFor(f.fans, "sheet-roster")}</RegistryContext>,
+    <RegistryContext value={store}>{nodeFor(f.fans, "calc-roster")}</RegistryContext>,
   );
   fireEvent.change(screen.getByRole("combobox", { name: "Search fans" }), {
     target: { value: "FC-23" },
   });
   await vi.waitFor(() => expect(f.fans.page.read().rosterSearch.keywords).toBe("FC-23"));
-  f.fans.setPaneDemand("sheet-roster", false);
+  f.fans.setPaneDemand("calc-roster", false);
   view.rerender(<RegistryContext value={store}>{null}</RegistryContext>);
-  f.fans.setPaneDemand("sheet-roster", true);
-  view.rerender(<RegistryContext value={store}>{nodeFor(f.fans, "sheet-roster")}</RegistryContext>);
+  f.fans.setPaneDemand("calc-roster", true);
+  view.rerender(<RegistryContext value={store}>{nodeFor(f.fans, "calc-roster")}</RegistryContext>);
   expect(screen.getByRole("combobox", { name: "Search fans" })).toHaveProperty("value", "FC-23");
 });
 
@@ -186,15 +186,15 @@ test("a restored semantic cell selection lands on that fitting cell through the 
 
 test("no open fan is absence and every sheet pane renders without a native decode error", async () => {
   const f = await createWitness(closes, new Map(), {
-    "ducts.sheet-snapshot": { kind: "use", open(_ctx, deliver) {
+    "fans.calc-detail-snapshot": { kind: "use", open(_ctx, deliver) {
       deliver({ kind: "complete", value: { kind: "absent" }, revision: 0 });
     } },
   });
-  for (const pane of ["sheet-roster", "sheet-inputs", "sheet-picture", "sheet-ledger"]) {
+  for (const pane of ["calc-roster", "calc-inputs", "calc-picture", "calc-ledger"]) {
     f.fans.setPaneDemand(pane, true);
-    await vi.waitFor(() => expect(f.fans.readingStatus("sheetSnapshot").snapshot.state === "ready").toBe(true));
+    await vi.waitFor(() => expect(f.fans.readingStatus("calcSnapshot").snapshot.state === "ready").toBe(true));
     const view = render(<RegistryContext value={registry()}>{nodeFor(f.fans, pane)}</RegistryContext>);
-    if (pane === "sheet-roster") expect(view.container.textContent).toContain("FC-23");
+    if (pane === "calc-roster") expect(view.container.textContent).toContain("FC-23");
     // The picture pane is the kernel's, loaded lazily: its empty state arrives after the first paint.
     else expect(await screen.findByText("Open a fan from the roster.")).toBeTruthy();
     expect(view.container.textContent).not.toContain("readAt");
@@ -206,18 +206,18 @@ test("no open fan is absence and every sheet pane renders without a native decod
 
 test("/ducts design sheet stages each criterion in /ducts Work, and Fans Work never moves", async () => {
   const f = await createWitness(closes, new Map(), {
-    "ducts.sheet": { kind: "use", open(_ctx, deliver) {
+    "fans.calc-detail": { kind: "use", open(_ctx, deliver) {
       deliver({ kind: "complete", revision: 1, value: {
         rows: sheetFixture.roster.rows, progress: null, opened: [],
         open: { overview: sheetFixture.overview, elements: null, legs: null, worstLegs: [], calcBreakdown: null,
           inputs: sheetFixture.inputs },
       } });
     } },
-    "ducts.sheet-snapshot": { kind: "use", open(_ctx, deliver) {
+    "fans.calc-detail-snapshot": { kind: "use", open(_ctx, deliver) {
       deliver({ kind: "complete", value: { ...snapshot, systems: [] }, revision: 1 });
     } },
   });
-  await vi.waitFor(() => expect(f.fans.readingStatus("ductsWork").snapshot.state === "ready").toBe(true));
+  await vi.waitFor(() => expect(f.fans.readingStatus("ductSystemsWork").snapshot.state === "ready").toBe(true));
   await vi.waitFor(() => expect(f.fans.readingStatus("sheet").snapshot.state === "ready").toBe(true));
   await vi.waitFor(() => expect(f.fans.workBasis()).toBeTruthy());
   const acks: { route: string; label?: string }[] = [];

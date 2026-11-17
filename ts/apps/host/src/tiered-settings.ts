@@ -97,14 +97,14 @@ export const homeWriteSource: HomeWriteSource = {
   },
 };
 registerTimelineSource({
-  read(works, by, documents) {
+  read(works, by, documents, settingsOwners) {
     const roots = new Set(homes().map(home => home.root));
     for (const work of works) {
       const document = documents.find(doc => work.binding === "address" ? doc.address !== null && sameAddress(work.target, doc.address) : work.binding === "open" && work.open.session === doc.session && work.open.openId === doc.openId);
       const project = projectHome(document?.projectHome);
       if (project) roots.add(project);
     }
-    const owners = new Set(works.map(work => work.route));
+    const owners = new Set(settingsOwners);
     const log = events();
     const active = new Set(activeWrites(log));
     const rows = log.filter((row): row is HomeWriteRow => row.kind === "home-write" && owners.has(row.owner) && roots.has(row.home));

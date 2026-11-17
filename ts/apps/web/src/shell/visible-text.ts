@@ -24,7 +24,7 @@ const LEAKS: readonly [string, RegExp][] = [
 /** Each leak found in `text`; `internal` adds exact tokens (verb ids, pane ids) that must not render. */
 export function leaks(text: string, internal: readonly string[] = []): string[] {
   const found = LEAKS.filter(([, pattern]) => pattern.test(text)).map(([name]) => name);
-  // Exact-token match bounded by non-identifier characters, so "sheet-inputs" never matches "Edit sheet inputs".
+  // Exact-token match bounded by non-identifier characters, so "calc-inputs" never matches "Edit sheet inputs".
   const bounded = (token: string) => (part: string) => part === token;
   for (const token of internal)
     if (text.split(/[^\w-]+/).some(bounded(token))) found.push(`internal token ${token}`);

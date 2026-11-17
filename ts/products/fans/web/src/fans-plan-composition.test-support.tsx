@@ -140,7 +140,7 @@ export async function fansPlanJourney(journey: "watched publications" | "externa
    constructor(readonly url:string){streams.add(this);void this.start(url);}
    deliver(data:string){
      const frame=JSON.parse(data);
-     if(frame.value?.handle?.key?.route === "ducts") workFrames.push(frame);
+     if(frame.value?.handle?.key?.route === "duct-systems") workFrames.push(frame);
      if(frame.kind==="snapshot"&&typeof frame.value?.generation==="number"&&typeof frame.value?.state==="string"){const key=JSON.parse(frame.key);if(key.kind==="publication")(trace as any).readEvents.push({subscription:key.subscription,...frame.value});}
      this.keys.add(frame.key);
      if(mode==="batched"&&!batchReleased&&trace.tokens.length && (frame.value?.kind==="receipt"||frame.value?.kind==="ready"&&frame.value.receipts)){
@@ -196,17 +196,17 @@ export async function fansPlanJourney(journey: "watched publications" | "externa
      expect(edited.status).toBe(200);
      expect(await edited.json()).toMatchObject({ok:true,revision:1,handle:{key:{route:"fans"},revision:1}});
      // Not `findByText`: each failed poll pretty-prints the whole sheet DOM for its error, on the thread
-     // the in-process host re-evaluates fans.sheet on, so the label lands ten times later than it would.
+     // the in-process host re-evaluates fans.calc on, so the label lands ten times later than it would.
      await vi.waitFor(()=>expect(screen.queryByText(/^MUAS-1.*1 staged$/)).not.toBeNull(),{timeout:45000,interval:100});
      await vi.waitFor(()=>expect(trace.mounts.at(-1).readiness().kind).not.toBe("pending"),{timeout:10000});
      expect(screen.getByRole("region",{name:"Situation"}).textContent).not.toContain("Start this Work");
      expect(screen.getByRole("region",{name:"Situation"}).textContent).not.toContain("Work is absent");
-     expect(screen.getByRole("region",{name:"Situation"}).textContent).not.toContain("ducts");
+     expect(screen.getByRole("region",{name:"Situation"}).textContent).not.toContain("duct-systems");
      expect(screen.queryByRole("button",{name:"Start"})).toBeNull();
      // Ruling 2026-11-10 (no cross-route write): /fans opens no /ducts Work and draws no /ducts criterion.
      expect(workFrames).toEqual([]);
      const beforeEdit=await (await forward("/pe/navigation")).json();
-     expect(beforeEdit.works.some((row:any)=>row.route==="ducts")).toBe(false);
+     expect(beforeEdit.works.some((row:any)=>row.route==="duct-systems")).toBe(false);
      expect(screen.queryByLabelText("Velocity limit supply fpm")).toBeNull();
      await trace.mounts.at(-1).whenWritable();
      expect(screen.getByRole("region",{name:"Situation"}).textContent).not.toContain("Work is absent");
@@ -224,7 +224,7 @@ export async function fansPlanJourney(journey: "watched publications" | "externa
      const history=await (await forward(`/pe/history?at=${point.id}`)).json();
      expect(history.work.find((row:any)=>row.handle.key.route==="fans")).toMatchObject({revision:1});
      // The host's plan reads /ducts Work itself (a read, not a cross-route write): nothing on /fans moved it.
-     expect(history.work.filter((row:any)=>row.handle.key.route==="ducts").every((row:any)=>row.revision===0)).toBe(true);
+     expect(history.work.filter((row:any)=>row.handle.key.route==="duct-systems").every((row:any)=>row.revision===0)).toBe(true);
      expect(document.body.textContent).not.toContain("Work is absent");
      return;
    }
@@ -248,7 +248,7 @@ export async function fansPlanJourney(journey: "watched publications" | "externa
    fireEvent.click(await screen.findByRole("option",{name:/MUAS-1.*0 staged/}));
    expect((await surfaceReadiness()).getAttribute("data-readiness")).toBe("ready");
    await act(async()=>{
-     const failure=await mount.draw("sheet-inputs",(ctx:any)=>ctx.cells.edit({equipmentFlows:{[muas]:925}},{label:"Stage MUAS-1 airflow"}));
+     const failure=await mount.draw("calc-inputs",(ctx:any)=>ctx.cells.edit({equipmentFlows:{[muas]:925}},{label:"Stage MUAS-1 airflow"}));
      if(failure) throw Error(failure.message);
    });
    // Slice 6 deleted per-pane Refresh; the staged Work republishes the watched Fans read, so the
@@ -260,7 +260,7 @@ export async function fansPlanJourney(journey: "watched publications" | "externa
    for(mode of ["recording","batched"] as const){
      if(mode==="batched"){batchReleased=false;receiptBatch.length=0;heldReceipts.length=0;readyAfterBatch.length=0;}
      before=sample();
-     const watched=trace.http.find(row=>row.url==="/pe/reads/value"&&row.request?.read==="fans.sheet"&&row.body?.value?.evaluation===before.dependencies["fans.sheet"]);
+     const watched=trace.http.find(row=>row.url==="/pe/reads/value"&&row.request?.read==="fans.calc"&&row.body?.value?.evaluation===before.dependencies["fans.calc"]);
      const watches=(row:any)=>row.subscription===watched.request.subscription;
      if(mode==="recording") await vi.waitFor(()=>expect((trace as any).readEvents.some(watches)).toBe(true),{timeout:10000});
      fireEvent.click(screen.getByRole("button",{name:"plan Write to Revit"}));
@@ -296,7 +296,7 @@ export async function fansPlanJourney(journey: "watched publications" | "externa
      const record=await Effect.runPromise(captureStore.readSets.get(id));
      if(record.recipe.key==="command.work.view"&&(record.recipe.input as any).command==="sheet.plan") commandReads.push(record);
    }
-   expect(new Set(commandReads.map(record=>(record.recipe.input as any).route))).toEqual(new Set(["ducts","fans"]));
+   expect(new Set(commandReads.map(record=>(record.recipe.input as any).route))).toEqual(new Set(["duct-systems","fans"]));
    expect(commandReads.every(record=>record.state==="complete"&&record.inputs.some(input=>input.input.kind==="work"&&input.input.view==="view"))).toBe(true);
    (trace as any).commandReads=commandReads;
    expect(trace.submit).toHaveBeenCalledTimes(2);

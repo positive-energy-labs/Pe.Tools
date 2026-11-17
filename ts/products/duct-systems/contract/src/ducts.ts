@@ -165,7 +165,7 @@ export const ductsDesign = (ducts: DuctsRouteDocument | null, fans: FansDocument
 export type StagedCell<V> = { value: V; by: "human" | "pea"; ref: string } | InvalidStagedCell;
 /** A stored cell the host could not read (`{ invalid: reason }`), at its Work location: handed on so the resolver blocks fallback (P-040). */
 export type InvalidStagedCell = { invalid: string; ref: string };
-const stagedOf = <V>(work: "fans" | "ducts", segment: string, cells: Record<string, { invalid?: string; edit?: { value?: V; by?: Author; ref?: string } | null } | undefined>) =>
+const stagedOf = <V>(work: "fans" | "duct-systems", segment: string, cells: Record<string, { invalid?: string; edit?: { value?: V; by?: Author; ref?: string } | null } | undefined>) =>
   Object.fromEntries<StagedCell<V>>(
     Object.entries(cells).flatMap(([key, cell]): [string, StagedCell<V>][] => {
       if (cell?.invalid) return [[key, { invalid: cell.invalid, ref: `work:${work}/${segment}/${key}` }]];
@@ -179,21 +179,21 @@ const stagedOf = <V>(work: "fans" | "ducts", segment: string, cells: Record<stri
 export function stagedDucts(doc: DuctsRouteDocument | null, fans: FansDocument) {
   return {
     calculation: stagedOf("fans", "calculation", fans.calculation),
-    rules: stagedOf("ducts", "rules", doc?.rules ?? {}),
+    rules: stagedOf("duct-systems", "rules", doc?.rules ?? {}),
     criteria: criteriaLayer(doc?.criteria ?? {}),
     /** Who staged each criterion and its ref; without it a staged criterion has no author and cannot resolve. */
     criteriaMeta: criteriaMeta(doc?.criteria ?? {}),
-    kinds: stagedOf("ducts", "kinds", doc?.kinds ?? {}),
-    assumptions: stagedOf("ducts", "assumptions", doc?.assumptions ?? {}),
-    catalogs: stagedOf("ducts", "catalogs", doc?.catalogs ?? {}),
-    ruleAssignments: stagedOf("ducts", "ruleAssignments", doc?.ruleAssignments ?? {}),
+    kinds: stagedOf("duct-systems", "kinds", doc?.kinds ?? {}),
+    assumptions: stagedOf("duct-systems", "assumptions", doc?.assumptions ?? {}),
+    catalogs: stagedOf("duct-systems", "catalogs", doc?.catalogs ?? {}),
+    ruleAssignments: stagedOf("duct-systems", "ruleAssignments", doc?.ruleAssignments ?? {}),
     terminalDrops: stagedOf("fans", "terminalDrops", fans.terminalDrops),
     componentDrops: stagedOf("fans", "componentDrops", fans.componentDrops),
     ratedEsp: stagedOf("fans", "ratedEsp", fans.ratedEsp),
     equipmentFlows: stagedOf("fans", "equipmentFlows", fans.equipmentFlows),
     roles: stagedOf("fans", "roles", fans.roles),
     flows: stagedOf("fans", "flows", fans.flows),
-    subject: stagedOf("ducts", "subject", doc?.subject ?? {}),
+    subject: stagedOf("duct-systems", "subject", doc?.subject ?? {}),
     labelParameter: doc?.labelParameter?.edit?.value ?? null,
     workingPhase: doc?.workingPhase?.edit?.value ?? null,
   };
@@ -420,7 +420,7 @@ export type DuctsAssignFanInput = z.infer<typeof ductsAssignFanInputSchema>;
 /** What a person says when they want the Ducts page: the whole route family answers to these words. */
 export const DUCTS_FINDS = [
   "duct",
-  "ducts",
+  "duct-systems",
   "pressure drop",
   "pdrop",
   "static pressure",
@@ -436,7 +436,9 @@ export const DUCTS_FINDS = [
 
 export const ductsRouteState = {
   schemaVersion: 3,
-  route: "ducts",
+  route: "duct-systems",
+  retired: ["ducts"],
+  settingsOwners: ["ducts"],
   title: "Ducts",
   description:
     "Human and Pea edit shared Work at an expected revision. Duct pressure-drop Work, one shared cell per key; the fan-side cells (drops, flows, equipmentFlows, roles, calculation) are /fans Work. criteria: one cell per criterion and side (velocitySupplyFpm, velocityReturnFpm, terminalDropInWg, autoJoinGapIn, healBoxIn, splitPolicy even | proportional, allowanceSupplyInWg, allowanceReturnInWg), each a project value over the stored and firm layers. Design friction is a project and firm setting in Settings/ducts.json, never Work or written to Revit. assumptions: an issue id from ducts.snapshot holds a verdict (capped, connect, ignore), and a proximity:<...> finding id holds ignore (break that inferred join) or connect (confirm it, or join a near miss across air classifications anyway); a near-miss or stretched join is bridged by the route and final (a diagnostic, no verdict owed); only an anomalous join (reversed connector, part through its host, cross-class) leaves a result provisional until an author edits a verdict, and a suggested verdict never makes it final, so include the evidence for a suggested ruling in the note; flex-roughness:<flex type> (ft), fan-static:<equipment id> (in-wg) and component-drop:<family> (in-wg) hold overrides, never written to Revit. An ignore verdict (an open end left out, an inferred join objected to) is a ruling the model keeps in its _PE_DuctLosses store once written: ducts.snapshot store.verdicts are the standing rulings, Work holds only pending changes over them, and either author removes a stored verdict with a delete edit. rules: a loss-rule key holds { table }, the ASHRAE table every instance of that fitting type is looked up under. ruleAssignments: a fitting family name no rule matches holds { rule }, the loss-rule key every fitting of that family is priced as (read before any rule's own match; stays in Pe, never written to Revit). catalogs: JSON.stringify([family, type]) (type \"\" = every type of the family) holds { table }, the manufacturer catalog table id; edited links beat the family TYPE Pe_Catalog parameter and stay in Work. The scene: subject is keyed by group id (the id from ducts.snapshot groups, g<lowest element id>), each cell holding the ordered element ids of that group's whole system as intended, end to end (outdoor intake or terminal through every element to the last equipment), including elements past a break; list every element in order, short stubs and transitions too, and never stop at the last connected element: the route draws breaks and omissions, so leave nothing out to avoid a gap. labelParameter is one cell naming the instance parameter whose value names equipment for people; absent it reads PE_G___TagInstance, the firm equipment tag (type counterpart PE_G___TagType), not the built-in Mark. workingPhase is one cell naming the phase the network is read in: suggest or edit the phase (a name in ducts.snapshot phases.order) that the snapshot's phases.views census shows in most views; the route leaves out every element that does not exist in it and warns out-of-phase where one touches the network. Fan inputs (calculation, flows, terminalDrops, componentDrops, equipmentFlows, roles) belong to /fans; edit them only there. /ducts owns rules, kinds, criteria, design friction and network rulings. A claim on an element, with its verdict, is a finding (findings.say), not ducts Work. Either author may edit rules, catalogs, the subject, the label parameter and the working phase; sheet.plan provides optional inspection; sheet.apply writes the current edits through the host.",

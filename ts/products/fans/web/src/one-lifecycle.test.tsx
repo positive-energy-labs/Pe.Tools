@@ -13,7 +13,7 @@ test("typed panes share declared Values; recorded Fans and Ducts use frozen Work
   const stop = vi.fn();
   const open = vi.fn((_ctx: ReadingContext) => stop);
   const document = address("C:/Jobs/History.rvt");
-  const f = await createWitness(closes, new Map(), { "fans.sheet": { kind: "use", open } }, {address:document,open:{session:"fixture",openId:"fans"}});
+  const f = await createWitness(closes, new Map(), { "fans.calc": { kind: "use", open } }, {address:document,open:{session:"fixture",openId:"fans"}});
   try {
     for (const pane of Object.keys(f.typed.spec.panes)) f.typed.draw(pane);
     expect(open).toHaveBeenCalledTimes(2);

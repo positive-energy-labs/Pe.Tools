@@ -63,14 +63,14 @@ test("D25: /fans Timeline names Fans, Ducts, Ducts for undo, undo, redo", async 
   await Promise.all([...listeners].map(refresh => refresh()));
   expect((await host.read([schedules], "human")).undo).toMatchObject({ work: schedules });
   expect(f.typed.timeline()?.rows.some(row => "work" in row && row.work?.route === "schedules")).toBe(false);
-  const before = (await f.ws.view(ducts, "ducts"))!.doc;
+  const before = (await f.ws.view(ducts, "duct-systems"))!.doc;
   // Control: the real host has the Ducts edit when given both Work keys.
   expect((await host.read([ducts], "human")).undo).toMatchObject({ work: ducts });
   for (const [direction, work] of [["undo", fans], ["undo", ducts], ["redo", ducts]] as const) {
     expect(f.typed.timeline()?.[direction]).toMatchObject({ work });
     expect(await f.typed.stepTimeline(direction)).toBeNull();
     if (work === ducts) {
-      const doc = (await f.ws.view(ducts, "ducts"))!.doc;
+      const doc = (await f.ws.view(ducts, "duct-systems"))!.doc;
       if (direction === "undo") expect(doc).not.toEqual(before);
       else expect(doc).toEqual(before);
     }
