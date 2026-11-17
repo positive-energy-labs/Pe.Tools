@@ -17,7 +17,10 @@ function Group({ group, ductsHref }: { group: FittingGroup; ductsHref: string })
     <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,7.5rem)_auto] items-center gap-x-2 gap-y-1 hairline-t pt-1"
       data-fitting-group={group.key} data-fitting-source={group.source}>
       <TooltipHint content={group.title}><span className="min-w-0 truncate">{group.title}</span></TooltipHint>
-      <span className="face-mono text-right">{inWg(group.lossInWg)} in-wg</span>
+      <span className="face-mono text-right">
+        {inWg(group.lossInWg)} in-wg
+        {group.lossInWg != null && group.unpriced > 0 && <span data-tone="caution"> partial</span>}
+      </span>
       <a href={ductsHref} className="t-small text-ink-2">{group.table ?? "unpriced"} · on /ducts</a>
       <span className="col-span-3 flex min-w-0 items-center gap-2 t-small">
         <Button kind="quiet" label={`${open ? "Hide" : "Show"} the ${group.members.length} fittings`} onPress={() => setOpen(!open)}>
