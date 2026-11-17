@@ -72,18 +72,8 @@ export function applyPatches<S extends z.ZodType>(
   } catch (error) {
     return refuse("error", message(error), "patch paths must address plain document keys.");
   }
-  return commitDoc(
-    spec,
-    envelope,
-    restore
-      ? draft
-      : stampChanges(
-          spec.reconcileEdit?.(draft, patches) ?? draft,
-          envelope.doc,
-          by,
-          expectedRevision,
-        ),
-  );
+  const stamped = restore ? draft : stampChanges(draft, envelope.doc, by, expectedRevision);
+  return commitDoc(spec, envelope, restore ? stamped : spec.reconcileEdit?.(stamped, patches) ?? stamped);
 }
 
 const suppliedStamp = (value: unknown): boolean => Array.isArray(value)
@@ -199,7 +189,7 @@ function formatZodError(error: z.ZodError): string {
       )
       .join("; ") +
     (error.issues.some((issue) => issue.path.includes("edit"))
-      ? ' Cell edits wrap the typed value: patch path ["equipmentFlows","<id>","edit"] with value {"value":{"cfm":1050}}. For another cell, read its value schema; do not put cfm directly under edit.'
+      ? ' Cell edits wrap the typed value: patch path ["equipmentFlows","<id>","edit"] with value {"value":1050}. For another cell, read its value schema.'
       : "")
   );
 }
