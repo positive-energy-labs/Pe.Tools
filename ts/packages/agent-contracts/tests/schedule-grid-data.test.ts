@@ -1,5 +1,15 @@
 import { expect, test } from "vite-plus/test";
-import { rebindScheduleWork, unstale } from "../src/index.ts";
+import { rebindScheduleWork, unstale, scheduleGridRouteState } from "../src/index.ts";
+
+test("reconciliation throws on an unstamped edit instead of silently preserving stale marks", () => {
+  const doc = {
+    basis: { captureId: "a".repeat(64), stale: [{ key: "1::2", was: "100 VA" }] },
+    cells: { "1::2": { edit: { value: "150 VA" } } },
+  };
+  expect(() => scheduleGridRouteState.reconcileEdit(doc, [
+    { path: ["cells", "1::2", "edit"], value: { value: "150 VA" } },
+  ])).toThrow();
+});
 
 /** A reading as the rebind sees it: an id and each row's bindings. */
 const reading = (id: string, load: string | null, mark = "P-1") =>
