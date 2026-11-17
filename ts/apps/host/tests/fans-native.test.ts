@@ -35,7 +35,7 @@ async function stage(f: Awaited<ReturnType<typeof nativeFixture>>) {
     "fans",
     "human",
     [
-      { path: ["flows", terminalSubject, "edit"], value: { value: { cfm: 250 } } },
+      { path: ["flows", terminalSubject, "edit"], value: { value: 250 } },
 
     ],
     0,
@@ -220,7 +220,7 @@ test("a stale Fans revision refuses sealed apply before native dispatch", async 
   const fans = await f.saved.view(fansKey, "fans");
   if (!fans) throw Error("Fans Work missing");
   const changed = await f.saved.apply(fansKey, "fans", "human", [
-    { path: ["flows", terminalSubject, "edit"], value: { value: { cfm: 300 } } }], fans.revision,
+    { path: ["flows", terminalSubject, "edit"], value: { value: 300 } }], fans.revision,
   );
   expect(changed.ok).toBe(true);
   await f.post("/actions", { id: "stale-fans", key: "sheet.apply", target: f.target,

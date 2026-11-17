@@ -100,10 +100,11 @@ async function fixture() {
 }
 const width = (value: number): RouteStatePatch[] => [{ path: ["settings", "width"], value }];
 
-test("HTTP apply overwrites client by with the principal, and restore preserves the Pea preimage", async () => {
+test("HTTP apply stamps the principal, and restore preserves the Pea preimage", async () => {
   const h = await fixture();
   const seeded = await h.apply(
-    [{ path: ["cells", "a", "edit"], value: { value: "Pea", by: "human" } }],
+    // RULES: by belongs to the host; callers cannot supply an author.
+    [{ path: ["cells", "a", "edit"], value: { value: "Pea" } }],
     0,
     pea(),
   );
@@ -119,7 +120,7 @@ test("HTTP apply overwrites client by with the principal, and restore preserves 
     patches: [
       {
         path: ["cells", "a", "edit"],
-        value: { value: "Human", by: "pea", at: "forged", base: 99 },
+        value: { value: "Human", at: "forged", base: 99 },
       },
     ],
     expectedRevision: 1,
@@ -158,7 +159,7 @@ test("acknowledgements and publications include reconciliation and inverse footp
   ]);
   expect(h.events.at(-1)).toMatchObject(edited.write);
   expect((await h.restore(edited.write)).doc).toEqual(h.spec.schema.parse({}));
-  const published = await h.app.workspace.publish(h.scope, h.scope.route, width(22), 2);
+  const published = await actAs(human, () => h.app.workspace.publish(h.scope, h.scope.route, width(22), 2));
   expect(published).toMatchObject({
     ok: true,
     write: { kind: "publish", press: null, patches: width(22) },
@@ -314,5 +315,6 @@ test("wrong cell edit shape returns a concrete wrapper example and remains uncha
   const result = await h.post({patches: [{path: ["cells", "a", "edit"], value: {value: 1050}}], expectedRevision: 0, press: "bad-cell"});
   expect(result).toMatchObject({ok: false});
   expect(result.hint).toContain('Cell edits wrap the typed value');
-  expect(result.hint).toContain('{"value":{"cfm":1050}}');
+  // Contract amendment 1: airflow is a plain number.
+  expect(result.hint).toContain('{"value":1050}');
 });

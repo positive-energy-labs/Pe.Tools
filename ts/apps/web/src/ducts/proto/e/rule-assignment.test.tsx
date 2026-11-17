@@ -27,7 +27,7 @@ test("family choices show a refused or failed write and allow the person to retr
 });
 
 test("clearing a family rule writes only its edit path", async () => {
-  const suggestion = { value: { rule: "elbow-mitered-vaned" } };
+  const suggestion = { value: { rule: "elbow-mitered-vaned" }, by: "human" };
   const doc = designOf({
     ruleAssignments: { Radius: { edit: suggestion } },
   });

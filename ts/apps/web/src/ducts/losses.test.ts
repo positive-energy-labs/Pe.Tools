@@ -210,7 +210,7 @@ it("runs the whole pipeline over W1's synthetic snapshot", () => {
 it("prices under the table a person edit in the Work document", () => {
   // The edit cell goes through the route contract, then becomes the solver's choices.
   const doc = designOf({
-    rules: { "elbow-1d-gt10": { edit: { value: { table: "CD3-2" } } } },
+    rules: { "elbow-1d-gt10": { edit: { by: "human", value: { table: "CD3-2" } } } },
   });
   const choices = Object.fromEntries(
     Object.entries(stagedValues(doc, doc ?? neutralFansWork).rules).map(([key, v]) => [key, v.table]),

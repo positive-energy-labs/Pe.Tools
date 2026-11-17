@@ -48,7 +48,7 @@ test("losses plan and sheet catalog read price from the target project home", as
   closes.push(() => f.close());
   const subject = elementSubject(terminal);
   expect(await f.saved.apply({ ...f.key, route: "fans" }, "fans", "human", [
-    { path: ["flows", subject, "edit"], value: { value: { cfm: 250 } } },
+    { path: ["flows", subject, "edit"], value: { value: 250 } },
   ], 0)).toMatchObject({ ok: true });
   const ducts = await f.saved.apply(f.key, "ducts", "human", [{ path: ["catalogs", catalogLinkKey(terminal.family, terminal.type), "edit"], value: { value: { table: "project-table" } } }, { path: ["writeIntent", "edit"], value: { value: { groups: ["group:g1"] } } }], 0);
   expect(ducts).toMatchObject({ ok: true });

@@ -2,6 +2,7 @@ import { stateFixture } from "../../../tests/isolated-home/storage.ts";
 import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
 import capturedWalk from "./native-recordings/driver-ducts.snapshot.walk.json" with { type: "json" };
+import { DUCT_UNIT_KINDS, FAN_BLOCKER_KINDS } from "@pe/host-contracts/generated";
 import { unavailableFieldOptions } from "./effect-test.ts";
 import { readFileSync, existsSync } from "node:fs";
 import { rm, writeFile, mkdir } from "node:fs/promises";
@@ -156,7 +157,10 @@ test.each(["off", "on", "recovery", "endurance", "tamper", "truncated", "legacy"
   const nativeEntered = Promise.withResolvers<void>(), releaseNative = Promise.withResolvers<void>();
   expect(createHash("sha256").update(readFileSync(source)).digest("hex")).toBe("57b0034722af64d997f35f9301cbff51c3af4728b940a09b2ef3d8405c930c68");
   const raw = JSON.parse(readFileSync(source, "utf8").replace(/^\uFEFF/, ""));
-  const snapshot = Schema.decodeUnknownSync(Schema.Json)(raw.result ?? raw);
+  // The recording predates the generated native vocabulary, as in host-read-graph.test-support.
+  const snapshot = Schema.decodeUnknownSync(Schema.Json)({ ...(raw.result ?? raw), vocabulary: {
+    unitKinds: [...DUCT_UNIT_KINDS], blockerKinds: [...FAN_BLOCKER_KINDS],
+  } });
   const snapshotContract = await run(readSchemas("ducts.snapshot.walk"));
   if (snapshotContract) Schema.decodeUnknownSync(snapshotContract.response)(snapshot);
   await mkdir(join(dir, "catalogs")); await mkdir(join(dir, "Settings"), { recursive: true }); await writeFile(join(dir, "Settings", "ducts.json"), JSON.stringify(FIRM_SEED));
@@ -201,7 +205,7 @@ test.each(["off", "on", "recovery", "endurance", "tamper", "truncated", "legacy"
           schema: z.object({ count: z.number().default(0) }).prefault({}) } });
         if (isCold) return;
         for (const [revision, cfm] of [[0, 250], [1, 300]] as const)
-          expect(await owner.apply(key("fans"), "fans", "human", [{ path: ["flows", terminalSubject, "edit"], value: { value: { cfm } } }], revision)).toMatchObject({ ok: true });
+          expect(await owner.apply(key("fans"), "fans", "human", [{ path: ["flows", terminalSubject, "edit"], value: { value: cfm } }], revision)).toMatchObject({ ok: true });
         expect(await owner.apply(key("ducts"), "ducts", "human", [], 0)).toMatchObject({ ok: true });
       },
     } });
@@ -554,7 +558,7 @@ test.each(["off", "on", "recovery", "endurance", "tamper", "truncated", "legacy"
     const workUrl = "/pe/route-state/fans?open=captured-chadds/chadds-open";
     const humanRead = capture(workUrl);
     await Promise.race([entered.promise, new Promise<never>((_, reject) => setTimeout(() => reject(Error("Work runner lost the actual human request context")), 10000))]);
-    expect(await workspace!.apply(key("fans"), "fans", "human", [{ path: ["flows", terminalSubject, "edit"], value: { value: { cfm: 400 } } }], 2)).toMatchObject({ ok: true });
+    expect(await workspace!.apply(key("fans"), "fans", "human", [{ path: ["flows", terminalSubject, "edit"], value: { value: 400 } }], 2)).toMatchObject({ ok: true });
     const pea: Caller = { kind: "pea", context: "occurrence-test", thread: "thread", run: { thread: "thread", turn: "1" }, root: { thread: "thread", turn: "1" } };
     const peaView = await capture(workUrl, undefined, false, pea);
     releaseHuman.resolve();
@@ -779,7 +783,7 @@ test.each(["on", "off", "full", "io"] as const)("inventory consumers %s", async 
     expect(listeners.size).toBe(1);
     title = "survivor"; for (const notify of listeners) notify({ kind: "state-sync", sessionId: ref.session });
     expect(await second.next()).toEqual({ kind: "snapshot", key: readingKey(inventoryReading), value: await expected() });
-    expect(await workspace!.apply(key("fans"), "fans", "human", [{ path: ["flows", terminalSubject, "edit"], value: { value: { cfm: 400 } } }], 0)).toMatchObject({ ok: true });
+    expect(await workspace!.apply(key("fans"), "fans", "human", [{ path: ["flows", terminalSubject, "edit"], value: { value: 400 } }], 0)).toMatchObject({ ok: true });
     expect(await first.next()).toMatchObject({ kind: "snapshot", key: readingKey(work), value: { revision: 1 } });
     await first.close(); first = undefined; await second.close(); second = undefined;
     expect(listeners.size).toBe(0);

@@ -96,7 +96,7 @@ async function fixture() {
   const doc = tools.schedules.work.schema.parse({
     writeIntent: {
       "schedule.apply": {
-        edit: { value: { source: { pod: "p", path: "s.json", sha256: "a".repeat(64) } } },
+        edit: { by: "human", value: { source: { pod: "p", path: "s.json", sha256: "a".repeat(64) } } },
       },
     },
   });

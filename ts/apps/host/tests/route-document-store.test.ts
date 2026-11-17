@@ -96,9 +96,15 @@ test("untrusted authors set stored Work aside once and retain its exact bytes", 
       await store.setState({ targetKey: workKey(key), route: spec.route, value: { version: 1, schemaVersion: spec.route === "findings" ? 2 : 1, revision: 1, doc } });
       const bytes = readFileSync(join(dir, readdirSync(dir)[0]!));
       const workspace = new RouteWorkspace({ registrations: [{ spec }], store });
-      expect((await workspace.view(key, spec.route))?.revision ?? 0).toBe(0);
-      expect((await workspace.view(key, spec.route))?.revision ?? 0).toBe(0);
-      expect(readdirSync(dir)).toEqual([]);
+      // P-040: retain an invalid cell marker and revision, while setting its original bytes aside.
+      const revision = spec.route === "stamp-test" ? 1 : 0;
+      const first = await workspace.view(key, spec.route);
+      expect(first?.revision ?? 0).toBe(revision);
+      expect((await workspace.view(key, spec.route))?.revision ?? 0).toBe(revision);
+      if (spec.route === "stamp-test") {
+        expect(first?.doc).toMatchObject({ cell: { invalid: expect.any(String) } });
+        expect(first?.doc).not.toHaveProperty("cell.edit");
+      } else expect(readdirSync(dir)).toEqual([]);
       const machine = stateMachine(dir);
       expect(readFileSync(machine.notices, "utf8").trim().split("\n")).toHaveLength(1);
       const blobs = readdirSync(machine.blobs, { recursive: true }).map(String);

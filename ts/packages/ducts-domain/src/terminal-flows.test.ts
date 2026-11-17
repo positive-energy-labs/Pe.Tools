@@ -166,7 +166,7 @@ describe("a group with no air mover", () => {
     expect(result.paths[30]).toBeDefined();
     // Staging unit 1 passive leaves g10 with no fan too.
     const passive = designOf({
-      roles: { "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000001": { edit: { value: { role: "passive" } } } },
+      roles: { "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000001": { edit: { by: "human", value: { role: "passive" } } } },
     });
     const again = survey(s, passive).findings.filter((f) => f.kind === "no-fan");
     expect(again.map((f) => f.groupId)).toEqual(["g10", "g40"]);

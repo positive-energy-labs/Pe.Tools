@@ -679,6 +679,7 @@ test("JX4 Families apply readback cannot overwrite a newer manual read or certif
   const target = { session: "session-a", openId: "open-a" };
   const key = bindWork("families", path, undefined, target);
   const workspace = new RouteWorkspace({
+    publicationAuthor: () => "human",
     registrations: [],
     store: fileRouteDocumentStore(stateFixture(join(dir, "work"))),
   });

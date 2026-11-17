@@ -329,7 +329,7 @@ test("JZ route-neutral Plan refusal preserves the reason and holds Apply through
     const reason = "Shared type cannot scope this authored flow";
     f.planRefusal.reason = reason;
     const fans = await f.saved.apply({ ...f.key, route: "fans" }, "fans", "human", [
-      { path: ["flows", elementSubject(workSnapshot.nodes.find(node => node.id === 4)!), "edit"], value: { value: { cfm: 321 } } },
+      { path: ["flows", elementSubject(workSnapshot.nodes.find(node => node.id === 4)!), "edit"], value: { value: 321 } },
       { path: ["calculation", "terminalFlow", "edit"], value: { value: { kind: "balanced-design", source: "test" } } },
     ], 0);
     if (!fans.ok) throw Error(JSON.stringify(fans));

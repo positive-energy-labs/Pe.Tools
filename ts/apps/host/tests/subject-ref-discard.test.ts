@@ -20,7 +20,7 @@ test("stored Families Work in the old [family,type,parameter] spelling is discar
   const spec = { ...familiesRouteState, route: "subject-ref-discard" };
   const key = bindWork(spec.route, null), targetKey = workKey(key);
   const path = join(dir, `${createHash("sha256").update(`${key.route}:${targetKey}`).digest("hex")}.json`);
-  const cell = { edit: { value: { value: "3", storageType: "String" } } };
+  const cell = { edit: { by: "human", value: { value: "3", storageType: "String" } } };
   const stored = (cellKey: string) =>
     JSON.stringify({ format: "route-state-record-v2", targetKey, route: key.route,
       value: { version: 1, schemaVersion: 1, revision: 7,
@@ -35,7 +35,8 @@ test("stored Families Work in the old [family,type,parameter] spelling is discar
     expect(await readdir(dir)).toEqual([]);
     // The loss is a notice in the feed's durable source, in the runtime's own words.
     expect(storedNotices(stateMachine(path)).filter((notice) => notice.path === path))
-      .toMatchObject([{ class: "discard", reason: expect.stringContaining("SubjectRef") }]);
+      // C4 notice ruling: name the staged row and its author before the decoder detail.
+      .toMatchObject([{ class: "discard", reason: expect.stringContaining('cells/["F","T","P"] by human') }]);
     // The canonical SubjectRef spelling is kept as written.
     await writeFile(path, stored('name:["F","T"]#field:P'));
     expect(await open()).toMatchObject({ revision: 7, doc: { cells: { 'name:["F","T"]#field:P': cell } } });
@@ -43,7 +44,7 @@ test("stored Families Work in the old [family,type,parameter] spelling is discar
 });
 
 test("the Work groups door refuses the old bare group spelling", () => {
-  const scope = (groups: string[]) => ({ writeIntent: { edit: { value: { groups } } } });
+  const scope = (groups: string[]) => ({ writeIntent: { edit: { by: "human", value: { groups } } } });
   expect(ductsDocumentSchema.safeParse(scope(["g8718801"])).success).toBe(false);
   expect(ductsDocumentSchema.safeParse(scope(["group:g8718801"])).success).toBe(true);
 });
@@ -55,7 +56,7 @@ test("stored fans Work with an ElementId cell is discarded; UniqueId port cells 
   const path = join(dir, `${createHash("sha256").update(`${key.route}:${targetKey}`).digest("hex")}.json`);
   const uid = uniqueIdSchema.parse("6d52156a-3876-4d76-b641-341454252f26-0000002a");
   const code = subjectCode({ keyKind: "UniqueId", key: uid, sub: { port: 2 } });
-  const cell = { edit: { value: { inWg: 0.2 } } };
+  const cell = { edit: { by: "human", value: { inWg: 0.2 } } };
   const open = async (cellKey: string) => {
     await writeFile(path, JSON.stringify({ format: "route-state-record-v2", targetKey, route: key.route,
       value: { version: 1, schemaVersion: spec.schemaVersion, revision: 7,

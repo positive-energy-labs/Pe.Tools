@@ -29,7 +29,7 @@ import { sdkSessions } from "./native-receipt-fixture.ts";
 import { RevitBridge, RevitBridgeLive, BridgeError } from "../src/bridge.ts";
 import { admittedBuiltinsLayer } from "../src/admitted-builtins.ts";
 import { RunRegistry } from "../src/run-registry.ts";
-import { bindControl } from "../src/control.ts";
+import { bindControl, currentCaller, workAuthorOf } from "../src/control.ts";
 import { hostResourceObserver } from "../src/resource-adapters.ts";
 import type { ReadSources } from "../src/reads/inputs.ts";
 import { Publications } from "../src/reads/publications.ts";
@@ -61,6 +61,7 @@ export async function nativeFixture(
   const dir = await mkdtemp(join(home, "fans-native-"));
   try {
     const saved = new RouteWorkspace({
+      publicationAuthor: () => workAuthorOf(currentCaller()),
       registrations: [],
       store: fileRouteDocumentStore(stateFixture(join(dir, "work"))),
     });

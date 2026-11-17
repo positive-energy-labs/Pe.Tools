@@ -45,7 +45,7 @@ test("Start publishes Family Work before immediate small attach and 7 MB refusal
   const writer = await Effect.runPromise(openRecordingWriter(stateFixture(join(dir, "history")), {build: "surface", catalog: nativeCatalogIdentity()}, {maxBytes: 10_000_000, maxTakings: 1000}));
   const lane = {kind: "live" as const, captureStore: writer};
   const sets = Context.get(await Effect.runPromise(Layer.buildWithScope(HostInputReadSets.layer(lane), scope)), HostInputReadSets);
-  const work = new RouteWorkspace({ registrations: [], store: fileRouteDocumentStore(stateFixture(join(dir, "work"))), capture: capturedWorkReads(writer, Effect.runPromise) });
+  const work = new RouteWorkspace({ publicationAuthor: () => "human", registrations: [], store: fileRouteDocumentStore(stateFixture(join(dir, "work"))), capture: capturedWorkReads(writer, Effect.runPromise) });
   const workReads: NonNullable<CommandResources["workReads"]> = admission => {
     const read = async (method: "read" | "view", key: Parameters<RouteWorkspace["read"]>[0], route: string) => {
       const current = await Effect.runPromise(sets.open({key: `command.work.${method}`, input: JSON.parse(JSON.stringify({id: admission.id, command: admission.key, key, route})), scope: JSON.stringify(admission.target)}, null));
@@ -139,7 +139,7 @@ test("resume reads prepared Family assets by digest without parsing again", asyn
   const dir = await mkdtemp(join(tmpdir(), "pe-attach-resume-"));
   const member = {pod: "test", path: "settings/family/HCB.json"};
   const key = bindWork("family", null);
-  const work = new RouteWorkspace({registrations: [{spec: familyDraftRouteState}], store: fileRouteDocumentStore(stateFixture(join(dir, "work")))});
+  const work = new RouteWorkspace({publicationAuthor: () => "human", registrations: [{spec: familyDraftRouteState}], store: fileRouteDocumentStore(stateFixture(join(dir, "work")))});
   const bridge = detachedBridge();
   const parsePdf = vi.fn(async () => ({jobId: "retained", fileName: "source.pdf", pages: [], blocks: [], images: []}));
   const deps = {workspace: work, podsRoot: dir, parsePdf};

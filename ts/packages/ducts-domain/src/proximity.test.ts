@@ -119,7 +119,7 @@ const snap = (segments: Segment[], nodes: Node[] = []): DuctSnapshot => {
 };
 const staging = (id: string, verdict: "ignore" | "connect"): DuctsDesign =>
   designOf({
-    assumptions: { [id]: { edit: { value: { kind: "verdict", verdict } } } },
+    assumptions: { [id]: { edit: { by: "human", value: { kind: "verdict", verdict } } } },
   });
 const ignoring = (id: string) => staging(id, "ignore");
 

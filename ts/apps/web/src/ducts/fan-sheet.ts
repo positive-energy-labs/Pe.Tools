@@ -89,8 +89,7 @@ const engineBase = {
  * The engine's own output, kept whole between reads: the claim, the three ESP values, encounters,
  * typed issues and the network hash ride with the numbers, and no completeness boolean exists.
  * Built from the wire parts, which agree except that the wire's fan also carries the rated ESP.
- * The contract types the engine returns hold readonly tuples where the schema's output is mutable,
- * so the parsed type is named as the engine's (`Sheet | Chain`) once, here.
+ * Parse at the boundary so readonly engine tuples become the wire schema's owned values.
  */
 const engineValue = z.union([
   z.object({
@@ -115,7 +114,7 @@ const engineValue = z.union([
     direction: z.enum(["supply", "return"]),
     path: enginePath.nullable(),
   }),
-]) as unknown as z.ZodType<Sheet | Chain>;
+]) satisfies z.ZodType<Sheet | Chain>;
 const modelSchema = z.object({
   target: ductsRosterRequestSchema.shape.target,
   mode: z.enum(["fan", "chain"]),
@@ -239,6 +238,7 @@ const sheetModel = read("fans.calculation", {
       grids = toGrids(tables.body);
     const roster = suggestRoster(snapshot, [], rosterInputs(inputs)),
       ports = [...roster.fans, ...roster.suggestions];
+    const endFlow = request.mode === "chain" ? inputs.terminals[String(request.end.elementId)]?.cfm.value : null;
     const value =
       request.mode === "fan"
         ? buildSheet({
@@ -259,8 +259,8 @@ const sheetModel = read("fans.calculation", {
             start: request.start,
             end: request.end,
             direction: request.direction,
-            ...(inputs.terminals[String(request.end.elementId)]?.cfm.value != null
-              ? { flowCfm: inputs.terminals[String(request.end.elementId)]!.cfm.value! }
+            ...(endFlow != null
+              ? { flowCfm: endFlow }
               : {}),
           });
     let beyond: SheetModel["beyond"] = [];
@@ -301,7 +301,7 @@ const sheetModel = read("fans.calculation", {
     return {
       target: request.target,
       mode: request.mode,
-      value,
+      value: engineValue.parse(value),
       inputs,
       firm:
         "refused" in saved.firm

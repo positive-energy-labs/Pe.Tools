@@ -66,7 +66,7 @@ it("a group climbs from blocked to walkable to budgetable as a person stages ass
     ...doc,
     assumptions: {
       ...doc.assumptions,
-      "component-drop:Damper": { edit: { value: { kind: "component-drop", inWg: 0.05 } } },
+      "component-drop:Damper": { edit: { by: "human", value: { kind: "component-drop", inWg: 0.05 } } },
     },
   });
   expect(readiness(snapshot, proposed).g1?.level).toBe("budgetable");

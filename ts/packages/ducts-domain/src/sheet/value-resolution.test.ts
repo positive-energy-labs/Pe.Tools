@@ -1,4 +1,5 @@
 import { expect, it } from "vite-plus/test";
+import { fansDocumentSchema, stagedDucts } from "@pe/agent-contracts";
 import { encounterRulings, resolveInputs, resolveCriteria, stagedEsp } from "./inputs.ts";
 import { cell, stamped, TEST_FIRM } from "./test-inputs.ts";
 import type { SheetSnapshot } from "./build.ts";
@@ -10,6 +11,13 @@ const snapshot = {
   nodes: [{ uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(1).toString(16).padStart(8, "0")}`,  id: 1, kind: "terminal", facts: [], connectors: [] }],
   segments: [],
 } as unknown as SheetSnapshot;
+it("P-048: a stored invalid marker crosses stagedDucts and blocks model fallback", () => {
+  const work = stagedDucts(null, fansDocumentSchema.parse({
+    flows: { "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000001": { invalid: "unstamped stored cell" } },
+  }));
+  expect(resolveInputs({ snapshot, work: { flows: work.flows }, firm: TEST_FIRM, store: { terminalFlows: { "1": { cfm: 200 } } } })
+    .terminals["1"]?.cfm).toMatchObject({ status: "invalid", value: null, source: "Work" });
+});
 it("duct readings expose run, Work, model and firm provenance with units", () => {
   const layers = {
     snapshot,
