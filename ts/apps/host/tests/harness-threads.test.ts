@@ -11,7 +11,7 @@ import { nativeReadRoot } from "../src/app.ts";
 import { HostNativeRead } from "@pe/host-internal/native-read";
 import { RevitBridge } from "../src/bridge.ts";
 import { SdkDriver } from "../src/sdk-session.ts";
-import { DuctFiles } from "../src/ducts-files.ts";
+import { DuctFiles } from "@pe/ducts-host/ducts-files";
 import { HostDocumentMarks, hostMarks } from "../src/document-marks.ts";
 import { createPeClient, servePeRoute } from "@pe/agent-contracts/pe-api";
 import { afterAll, afterEach, beforeAll, expect, onTestFinished, test, vi } from "vite-plus/test";

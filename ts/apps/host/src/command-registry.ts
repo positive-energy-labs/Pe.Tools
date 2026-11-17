@@ -15,7 +15,7 @@ import { familyExecutors, type FamilyActionDependencies } from "./family-actions
 import { scheduleExecutors } from "./schedule-actions.ts";
 import { instancesExecutors, type InstancesActionDependencies } from "./instances-actions.ts";
 import { takeoffExecutors } from "./takeoff-actions.ts";
-import { ductsExecutors } from "./ducts-actions.ts";
+import { productExecutors } from "./product-executors.generated.ts";
 import { catalogWorkExecutors } from "./catalog-work-actions.ts";
 import { sheetExecutors } from "./slots/sheet.ts";
 import { gatewayExecutor } from "./gateway-actions.ts";
@@ -32,21 +32,6 @@ import { SHEET_COMMANDS } from "@pe/agent-contracts/slots";
 import { hostProcessIdentity } from "@pe/host-contracts/contracts";
 
 type CommandDependencies = FamilyActionDependencies & InstancesActionDependencies & { nativeRead?: HostNativeRead["Service"] };
-type CommandExecutorGroup = (
-  bridge: RevitBridge["Service"],
-  captures: TakeoffCaptures,
-  deps: CommandDependencies,
-) => Record<string, CommandExecutor>;
-const registeredGroups: CommandExecutorGroup[] = [];
-/**
- * A product's `host/` registers its own executors here instead of this file importing them
- * (ADR 0046). A registered group passes the same duplicate-key and seal checks as the hand list
- * below, which only shrinks. Register at module load: `commandRegistry` reads the list once.
- */
-export const registerCommandExecutors = (group: CommandExecutorGroup): void => {
-  registeredGroups.push(group);
-};
-
 /** Composed once for this exact runtime. Invocation-local facts live only in bind/prepare. */
 export function commandRegistry(
   bridge: RevitBridge["Service"],
@@ -71,21 +56,20 @@ export function commandRegistry(
       deps.pictures!,
     ),
   };
-  // The ducts losses half of the sheet pair answers through the sheet dispatcher, not as its own entry.
-  const ducts = ductsExecutors(bridge, deps) as Record<string, CommandExecutor>;
-  const ductsWithoutSheet = Object.fromEntries(
-    Object.entries(ducts).filter(([key]) => !(Object.values(SHEET_COMMANDS) as string[]).includes(key)),
+  // Product-owned sheet writes answer through the generic sheet dispatcher.
+  const products = productExecutors(bridge, deps) as Record<string, CommandExecutor>;
+  const productsWithoutSheet = Object.fromEntries(
+    Object.entries(products).filter(([key]) => !(Object.values(SHEET_COMMANDS) as string[]).includes(key)),
   );
   for (const group of [
     familyExecutors(captures, bridge, deps),
     scheduleExecutors(captures, bridge, deps),
     instancesExecutors(deps),
     takeoffExecutors(captures, bridge, deps),
-    ductsWithoutSheet,
-    sheetExecutors(bridge, deps, ducts),
+    productsWithoutSheet,
+    sheetExecutors(bridge, deps, products),
     catalogWorkExecutors(bridge, deps),
     findingsExecutors(deps.workspace, bridge),
-    ...registeredGroups.map((group) => group(bridge, captures, deps)),
   ]) {
     for (const [key, factory] of Object.entries(group)) {
       if (implementations[key]) throw Error(`Command '${key}' has two executors`);

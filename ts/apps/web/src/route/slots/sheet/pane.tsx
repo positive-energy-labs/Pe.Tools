@@ -8,7 +8,7 @@ import { Button } from "@pe/kit/lang/button";
 import { StateCell } from "@pe/kit/lang/cell";
 import { useRouteSearchSlice } from "../../activity";
 import type { DrawContext, Fields } from "../../typed-route.ts";
-import { bindingPath, sheetCells, typedCells, type SheetCell } from "./index.ts";
+import { bindingPath, sheetCells, typedCells, type CalcCell } from "./index.ts";
 
 /*
  * The kernel's sheet pane (ADR 0035 rules 1 and 3): one kit StateCell per binding per row, staged
@@ -28,13 +28,13 @@ const rowsOf = (slot: SheetSlot, ctx: Ctx, field?: string): string[] => {
 };
 
 /** Where a value stands when Work holds none: the layer and, for the firm file, which file. */
-const layerWord = (cell: SheetCell) => (cell.ref ? `${cell.source} ${cell.ref}` : cell.source);
+const layerWord = (cell: CalcCell) => (cell.ref ? `${cell.source} ${cell.ref}` : cell.source);
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
 /** The row's subject, when its key is a SubjectRef code; a binding's own row key (a slot name) has none. */
 const subjectRow = (row: string | undefined) => (row !== undefined && decode(row).ok ? (row as SubjectRefCode) : null);
 
-function Cell({ ctx, cell }: { ctx: Ctx; cell: SheetCell }) {
+function Cell({ ctx, cell }: { ctx: Ctx; cell: CalcCell }) {
   const mention = useMention();
   const subject = subjectRow(cell.row);
   const [draft, setDraft] = useState<{ value: unknown } | null>(null);
@@ -68,7 +68,7 @@ function Cell({ ctx, cell }: { ctx: Ctx; cell: SheetCell }) {
     },
     };
   })();
-  const save = async (tier: NonNullable<SheetCell["setting"]>["tiers"][number]) => {
+  const save = async (tier: NonNullable<CalcCell["setting"]>["tiers"][number]) => {
     const value = draft?.value;
     if (!setting) return;
     if (value === undefined) return setSaid("Type a value or clear it before saving");

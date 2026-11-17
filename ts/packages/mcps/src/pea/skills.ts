@@ -1,7 +1,7 @@
 import path from "node:path";
 import { browserSkillName, renderBrowserGuide } from "@pe/browser/guide";
 import { userRoot } from "@pe/host-contracts/product-paths";
-import { renderDuctsSkill } from "./ducts-skill.ts";
+import { renderDuctsSkill } from "@pe/fans-contract/pea/ducts-skill";
 import { renderSchedulesSkill } from "./schedules-skill.ts";
 import { renderFamiliesSkill } from "./families-skill.ts";
 import { renderFamilySkill } from "./family-skill.ts";

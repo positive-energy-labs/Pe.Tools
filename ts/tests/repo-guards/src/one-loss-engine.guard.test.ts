@@ -25,7 +25,7 @@ it("native loss server only consumes host-priced results, with no table or param
     expect(readFileSync(file, "utf8"), file).not.toMatch(
       /class\s+(?:DuctFittingPricing|AshraeLookup)\b/,
     );
-  expect(source("ts/apps/host/src/ducts-actions.ts")).not.toContain(
+  expect(source("ts/products/fans/host/src/actions.ts")).not.toContain(
     "Loss server cannot price table",
   );
 });

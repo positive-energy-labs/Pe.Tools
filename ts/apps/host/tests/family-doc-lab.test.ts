@@ -15,7 +15,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { address, bindWork, familyDraftRouteState, type Caller } from "@pe/agent-contracts";
 import * as actionClient from "../../../packages/mcps/src/shared/takeoff-action-client.ts";
-import { nativeFixture } from "./fans-work-fixture.ts";
+import { nativeFixture } from "@pe/fans-host/tests/fans-work-fixture";
 import { heldSends, releaseSend } from "../src/guards.ts";
 import { noticeRows } from "../src/notice-feed.ts";
 import { actAs, contextHeaders, serviceHeaders } from "./callers.ts";

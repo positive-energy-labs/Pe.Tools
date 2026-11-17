@@ -3,7 +3,7 @@ import { useMemo } from "react";
 import { token } from "@pe/kit/lib/token";
 import { EmptyState } from "@pe/kit/lang/empty";
 import {
-  buildSheet,
+  buildCalc,
   sheetBounds,
   type ConnGeo,
   type FamilyModel,
@@ -46,7 +46,7 @@ export function ModelViews({
   // THE DRAFT IS THE TRUTH BEING DRAWN: page edits not yet saved are composed over the parsed
   // document before the evaluator sees it — type a number, watch the geometry move.
   const drafted = useMemo(() => draftedModel(model, draft, world), [model, draft, world]);
-  const sheet = useMemo(() => buildSheet(drafted, typeName), [drafted, typeName]);
+  const sheet = useMemo(() => buildCalc(drafted, typeName), [drafted, typeName]);
   const bounds = useMemo(() => sheetBounds(sheet), [sheet]);
 
   const drawable =

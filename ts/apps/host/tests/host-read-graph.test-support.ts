@@ -27,14 +27,14 @@ import fanCapture from "../../../packages/host-contracts/src/fixtures/k2-four-fa
 import { makeReadOwner } from "../src/builtin-inputs.ts";
 import { createPeRoutes, peCoreRoutes } from "../src/pe-routes.ts";
 import { historyRoutes } from "../src/reads/history-routes.ts";
-import { fansReadResponse } from "../../../packages/agent-contracts/src/fans-read.ts";
+import { fansReadResponse } from "@pe/fans-contract/fans-read";
 import { HostInputContext } from "../src/input-context.ts";
 import { hostResourceObserver } from "../src/resource-adapters.ts";
-import { DuctFiles } from "../src/ducts-files.ts";
+import { DuctFiles } from "@pe/ducts-host/ducts-files";
 import { HostDocumentMarks, hostMarks } from "../src/document-marks.ts";
 import { HostSessionInventory } from "../src/session-inventory.ts";
-import { FIRM_SEED } from "../src/ducts-inputs.ts";
-import { DuctsReadings } from "../src/ducts-readings.ts";
+import { FIRM_SEED } from "@pe/ducts-host/ducts-inputs";
+import { DuctsReadings } from "@pe/ducts-host/ducts-readings";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
 import { RequestIdentity, admittedRequestIdentity } from "../src/request-services.ts";
 import { nativeCatalogIdentity, openRecordingWriter } from "../src/native-recording.ts";

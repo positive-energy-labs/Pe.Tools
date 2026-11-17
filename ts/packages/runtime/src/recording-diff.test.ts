@@ -62,7 +62,7 @@ it("keeps a section across healing/splitting and separates all three facets", ()
 it("uses captured UniqueIds across renumbering; reused numeric ids never match different UniqueIds", () => {
   const actual = JSON.parse(
     readFileSync(
-      new URL("../../ducts-domain/src/sheet/fixtures/muas-real.json", import.meta.url),
+      new URL(import.meta.resolve("@pe/fans-domain/calc/fixtures/muas-real.json"), import.meta.url),
       "utf8",
     ),
   ) as { document: object; nodes: { id: number; uniqueId: string; kind: string }[] };

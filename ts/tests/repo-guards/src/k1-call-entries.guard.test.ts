@@ -27,9 +27,9 @@ export function keyBranches(text: string) {
   return found;
 }
 
-for (const file of ["call-route", "ducts-actions", "work-write-boundary"])
+for (const file of ["apps/host/src/call-route", "products/ducts/host/src/action-runtime", "apps/host/src/work-write-boundary"])
   test(`${file} reads declarations, never branches on catalog, route or command kind keys`, () => {
-    expect(keyBranches(readFileSync(resolve(root, `ts/apps/host/src/${file}.ts`), "utf8"))).toEqual([]);
+    expect(keyBranches(readFileSync(resolve(root, `ts/${file}.ts`), "utf8"))).toEqual([]);
   });
 test("the guard catches either comparison direction and switch cases, but permits entry declarations", () => {
   expect(

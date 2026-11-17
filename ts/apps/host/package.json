@@ -35,7 +35,17 @@
     "effect": "4.0.2",
     "parse5": "^8.0.1",
     "posthog-node": "5.55.2",
-    "zod": "catalog:"
+    "zod": "catalog:",
+    "@pe/duct-systems-contract": "workspace:*",
+    "@pe/duct-systems-host": "workspace:*",
+    "@pe/ducts-host": "workspace:*",
+    "@pe/ducts-web": "workspace:*",
+    "@pe/fans-contract": "workspace:*",
+    "@pe/fans-host": "workspace:*",
+    "jiti": "^2.7.0",
+    "@pe/web": "workspace:*",
+    "@pe/duct-systems-web": "workspace:*",
+    "@pe/fans-web": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^25.6.2",

@@ -1,6 +1,6 @@
 import { elementSubject } from "@pe/ducts-domain/work-subject";
 import { mkdtemp,stateFixture } from "../../../../tests/isolated-home/storage.ts";
-import { snapshot as workSnapshot } from "../ducts/test-fixture";
+import { snapshot as workSnapshot } from "@pe/ducts-web/ducts/test-fixture";
 // @vitest-environment jsdom
 import { workFingerprintSchema } from "@pe/agent-contracts";
 import { observeResources } from "@pe/runtime";
@@ -195,7 +195,7 @@ async function openRecordedGuidanceAfterRefusal() {
 }
 // H29 exercises the surviving sealed-Plan authority through the real HTTP action handler.
 test("JZ H29 human-only RPC and forged, foreign and stale review reuse refuse", async () => {
-  const { nativeFixture } = await import("../../../host/tests/fans-work-fixture");
+  const { nativeFixture } = await import("@pe/fans-host/tests/fans-work-fixture");
   const { pea } = await import("../../../host/tests/callers");
   const f = await nativeFixture();
   try {
@@ -323,7 +323,7 @@ test("JZ Open machine census: sampling drift lists documents; content conflict n
 
 
 test("JZ route-neutral Plan refusal preserves the reason and holds Apply through HTTP", async () => {
-  const { nativeFixture } = await import("../../../host/tests/fans-work-fixture");
+  const { nativeFixture } = await import("@pe/fans-host/tests/fans-work-fixture");
   const f = await nativeFixture();
   try {
     const reason = "Shared type cannot scope this authored flow";
@@ -354,7 +354,7 @@ test("JZ route-neutral Plan refusal preserves the reason and holds Apply through
 
 
 test("JZ upload retains BlobRef before command admission and rejects inline intent", async () => {
-  const { nativeFixture } = await import("../../../host/tests/fans-work-fixture");
+  const { nativeFixture } = await import("@pe/fans-host/tests/fans-work-fixture");
   const { bindWork } = await import("@pe/agent-contracts");
   const f = await nativeFixture();
   try {
@@ -384,7 +384,7 @@ test("JZ upload retains BlobRef before command admission and rejects inline inte
 
 
 test("JZ cold HTTP action inspection discards old journal rows without conversion", async () => {
-  const { nativeFixture } = await import("../../../host/tests/fans-work-fixture");
+  const { nativeFixture } = await import("@pe/fans-host/tests/fans-work-fixture");
   const { readFile, writeFile } = await import("node:fs/promises");
   const { join } = await import("node:path");
   const first = await nativeFixture();

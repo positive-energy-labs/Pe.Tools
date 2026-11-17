@@ -29,7 +29,7 @@ const namedRead = <S extends z.ZodType>(read: string, args: S) =>
   schemas.valueReadRequest.extend({ read: z.literal(read), args });
 const valueReadInput = z.union([
   namedRead("fans.roster", schemas.ductsRosterRequestSchema),
-  namedRead("ducts.sheet", schemas.ductsSheetRequestSchema),
+  namedRead("ducts.sheet", schemas.ductsCalcRequestSchema),
   schemas.valueReadRequest.extend({ read: z.string().regex(/^(?!(?:fans\.roster|ducts\.sheet)$)/) }),
 ]);
 const routeCatalog: Record<

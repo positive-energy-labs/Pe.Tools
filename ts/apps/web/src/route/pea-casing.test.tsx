@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { stableFanKey } from "../ducts/sheet/model";
-import { systemCode } from "../ducts/identity";
+import { stableFanKey } from "@pe/ducts-web/ducts/calc/model";
+import { systemCode } from "@pe/ducts-web/ducts/identity";
 import { useSyncExternalStore } from "react";
 import { act, cleanup, render, waitFor } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
@@ -10,8 +10,8 @@ import { machineFixture } from "../../../../packages/agent-contracts/tests/machi
 import { RouteViewStore } from "@pe/runtime";
 import { route, namesOf, type TypedRoute } from "./typed-route";
 import { scrollBody } from "./defaults";
-import { module as ducts } from "../ducts/route";
-import { module as fans } from "../fans/route";
+import { module as ducts } from "@pe/duct-systems-web/route";
+import { module as fans } from "@pe/fans-web/route";
 import { mountTypedRoute } from "../shell/typed-mount";
 import { useRouteViewBridge } from "./view-bridge";
 import { peReadings } from "../host/resource-stream";

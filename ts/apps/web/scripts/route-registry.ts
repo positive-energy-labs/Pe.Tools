@@ -43,9 +43,10 @@ export function renderRouteRegistry(rows: readonly RouteRegistryInput[]): string
       `import c${index} from "${web}/source-closure.generated.json" with { type: "json" };`,
     );
     if (row.host) {
-      if (!row.host.startsWith("./"))
-        throw Error(`${row.key}: a host read lives in its route directory, not ${row.host}`);
-      imports.push(`import * as h${index} from "${web}/${row.host.slice(2)}";`);
+      if (!row.host.startsWith("./") && !row.host.startsWith("@pe/"))
+        throw Error(`${row.key}: declare a route-relative host module or an exported host package`);
+      const host = row.host.startsWith("./") ? `${web}/${row.host.slice(2)}` : row.host;
+      imports.push(`import * as h${index} from "${host}";`);
     }
     if (row.work) {
       const lines = row.work.definition.trimEnd().split("\n");

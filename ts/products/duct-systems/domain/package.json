@@ -1,0 +1,34 @@
+{
+  "name": "@pe/duct-systems-domain",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./ducts/pricing-value": "./ducts/pricing-value.ts",
+    "./action-targets": "./src/action-targets.ts",
+    "./equivalent-length": "./src/equivalent-length.ts",
+    "./fan-headroom": "./src/fan-headroom.ts",
+    "./inbox-rows": "./src/inbox-rows.ts",
+    "./loss-breakdown": "./src/loss-breakdown.ts",
+    "./loss-split": "./src/loss-split.ts",
+    "./no-runs": "./src/no-runs.ts",
+    "./system-list-search": "./src/system-list-search.ts",
+    "./system-list": "./src/system-list.ts",
+    "./system-search": "./src/system-search.ts"
+  },
+  "scripts": {
+    "check": "vp exec tsc --noEmit",
+    "test": "vp test"
+  },
+  "dependencies": {
+    "@pe/agent-contracts": "workspace:*",
+    "@pe/ducts-domain": "workspace:*",
+    "@pe/fans-contract": "workspace:*",
+    "zod": "4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.2",
+    "typescript": "^6.0.3",
+    "vite-plus": "catalog:"
+  }
+}

@@ -1,0 +1,50 @@
+{
+  "name": "@pe/fans-host",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./ducts/fan-calc": "./ducts/fan-calc.ts",
+    "./fans/host": "./fans/host.ts",
+    "./actions": "./src/actions.ts",
+    "./tests/closed-fan.fixture": "./tests/closed-fan.fixture.ts",
+    "./tests/fans-native.fixture": "./tests/fans-native.fixture.ts",
+    "./tests/fans-work-fixture": "./tests/fans-work-fixture.ts",
+    "./tests/native-recordings/fans-accessory-initial.json": "./tests/native-recordings/fans-accessory-initial.json",
+    "./tests/native-recordings/fans-accessory-missing.json": "./tests/native-recordings/fans-accessory-missing.json"
+  },
+  "scripts": {
+    "check": "vp exec tsc --noEmit",
+    "test": "vp test"
+  },
+  "dependencies": {
+    "@pe/agent-contracts": "workspace:*",
+    "@pe/ducts-domain": "workspace:*",
+    "@pe/ducts-host": "workspace:*",
+    "@pe/fans-contract": "workspace:*",
+    "@pe/fans-domain": "workspace:*",
+    "@pe/host": "workspace:*",
+    "@pe/host-contracts": "workspace:*",
+    "zod": "4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.2",
+    "typescript": "^6.0.3",
+    "vite-plus": "catalog:",
+    "@effect/platform-node": "4.0.2",
+    "@pe/ducts-web": "workspace:*",
+    "@pe/host-internal": "workspace:*",
+    "@pe/runtime": "workspace:*",
+    "effect": "4.0.2"
+  },
+  "pe": {
+    "executors": {
+      "module": "./actions",
+      "factory": "fansExecutors",
+      "arguments": [
+        "bridge",
+        "deps"
+      ]
+    }
+  }
+}

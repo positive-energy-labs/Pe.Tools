@@ -15,7 +15,7 @@ import { join } from "node:path";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { nativeReadResolveEndpoint } from "../../../packages/agent-contracts/src/native-read-endpoint.ts";
 import { readInputRoutes, hostInputGraph } from "../src/app.ts";
-import { DuctFiles } from "../src/ducts-files.ts";
+import { DuctFiles } from "@pe/ducts-host/ducts-files";
 import { hostOwnership } from "../src/host-ownership.ts";
 import { hostInputs, recordingInputSelection } from "../src/host-program.ts";
 import { nativeCatalogIdentity, nativeInputIdentity, openRecordingWriter } from "../src/native-recording.ts";

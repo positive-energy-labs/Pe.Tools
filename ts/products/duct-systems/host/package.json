@@ -1,0 +1,40 @@
+{
+  "name": "@pe/duct-systems-host",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./ducts/host": "./ducts/host.ts",
+    "./actions": "./src/actions.ts"
+  },
+  "scripts": {
+    "check": "vp exec tsc --noEmit",
+    "test": "vp test"
+  },
+  "dependencies": {
+    "@pe/agent-contracts": "workspace:*",
+    "@pe/duct-systems-contract": "workspace:*",
+    "@pe/duct-systems-domain": "workspace:*",
+    "@pe/ducts-domain": "workspace:*",
+    "@pe/ducts-host": "workspace:*",
+    "@pe/fans-contract": "workspace:*",
+    "@pe/host": "workspace:*",
+    "@pe/host-contracts": "workspace:*",
+    "zod": "4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.2",
+    "typescript": "^6.0.3",
+    "vite-plus": "catalog:"
+  },
+  "pe": {
+    "executors": {
+      "module": "./actions",
+      "factory": "ductSystemsExecutors",
+      "arguments": [
+        "bridge",
+        "deps"
+      ]
+    }
+  }
+}

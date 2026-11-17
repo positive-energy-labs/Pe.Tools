@@ -25,7 +25,7 @@ import { observeSdkReading } from "./session-route.ts";
 import { sdkSession, SdkSession } from "./sdk-session.ts";
 import type { DocumentMarks, DocumentRef } from "./document-marks.ts";
 import type { MachineOwnerPromise } from "./machine.ts";
-import { ductsReadings } from "./ducts-readings.ts";
+import { ductsReadings } from "@pe/ducts-host/ducts-readings";
 
 /**
  * The host's own HTTP surface, read by the host on the host's clock. A one-shot Reading gets one

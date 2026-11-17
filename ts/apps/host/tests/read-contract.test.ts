@@ -14,7 +14,7 @@ import {
 import { Publications } from "../src/reads/publications.ts";
 import { readRegistry, registeredReads } from "../src/reads/routes.ts";
 import { hostRead } from "../../web/src/route/host-read.ts";
-import { sheet as fanSheet } from "../../web/src/fans/contract.ts";
+import { sheet as fanSheet } from "@pe/fans-contract/fans/contract";
 import { workspace as roomsWorkspace } from "../../web/src/rooms/contract.ts";
 
 const contracts = Object.entries(

@@ -1,9 +1,9 @@
-import { VOCABULARY } from "@pe/ducts-domain/sheet/scoped-snapshot";
+import { VOCABULARY } from "@pe/ducts-domain/calc/scoped-snapshot";
 import { mkdtemp, stateFixture } from "../../../../tests/isolated-home/storage.ts";
 import { refusalOf, valueOf } from "./typed-route";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
-import { stableFanKey } from "../ducts/sheet/model";
-import { systemCode } from "../ducts/identity";
+import { stableFanKey } from "@pe/ducts-web/ducts/calc/model";
+import { systemCode } from "@pe/ducts-web/ducts/identity";
 import { expect, test, vi } from "vite-plus/test";
 import { fileURLToPath } from "node:url";
 import retiredReads from "../../../../tests/repo-guards/src/retired-read-aliases.forbidden.json";
@@ -59,7 +59,7 @@ import { z } from "zod";
 import { observeResources } from "@pe/runtime";
 import { workFingerprintSchema, actionReceiptSchema } from "@pe/agent-contracts";
 import { fixture, ref, path, gate, snapshot, roster } from "../../../host/tests/host-read-graph.test-support";
-import { module as fans } from "../fans/route";
+import { module as fans } from "@pe/fans-web/route";
 import { direct, mountTypedRoute, planned } from "../shell/typed-mount";
 import { createWorkFeedClient } from "../shell/work-feed-client";
 import type { UseSource } from "../shell/source-contract";
@@ -68,9 +68,9 @@ import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import { ductsPricingData, ductsNetworkData, ductsRosterData, valueReadResponse } from "@pe/agent-contracts";
 import { InvalidRead } from "../../../host/src/native-reads";
 import { registeredReads } from "../../../host/src/reads/routes";
-import { ductsPricing, ductsNetwork, ductsRoster } from "../ducts/host";
-import { fansSheet } from "../fans/host";
-import { module as ducts } from "../ducts/route";
+import { ductsPricing, ductsNetwork, ductsRoster } from "@pe/duct-systems-host/ducts/host";
+import { fansCalc } from "@pe/fans-host/fans/host";
+import { module as ducts } from "@pe/duct-systems-web/route";
 import { module as families } from "../families/route";
 import type { TypedRoute } from "./typed-route";
 import { handle } from "@pe/agent-contracts/handle";
@@ -78,7 +78,7 @@ import { publicationSource } from "../host/publication-source";
 import { hostEventSource } from "../host/event-source.test-support";
 import { fixtureTimeline } from "../shell/fixture-work-door";
 import { builtinEnrollments } from "../../../host/src/builtin-enrollment";
-import savedNetwork from "../ducts/fixtures/synthetic-snapshot.json";
+import savedNetwork from "@pe/ducts-web/ducts/fixtures/synthetic-snapshot.json";
 import { rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -653,7 +653,7 @@ async function closeDocumentLifetime() {
           ),
   });
   const unregister = registeredReads.register(
-    registeredReads.reads.has(fansSheet.name) ? {} : { fansSheet },
+    registeredReads.reads.has(fansCalc.name) ? {} : { fansCalc },
   );
   const read = (target: unknown) =>
     host.probe({
@@ -1001,7 +1001,7 @@ test("JX4 Families apply readback cannot overwrite a newer manual read or certif
 }, 60_000);
 test("JZ H19 wait beyond the browser budget, then inspect queue and conflict refusals without retry", async () => {
   const { HOST_READ_WAIT_S, NATIVE_READ_WAIT_S } = await import("./waits");
-  const { nativeFixture } = await import("../../../host/tests/fans-native.fixture");
+  const { nativeFixture } = await import("@pe/fans-host/tests/fans-native.fixture");
   const { BridgeError } = await import("../../../host/src/bridge");
   const { callRouteOver, detachedBridge, testHostInputs } = await import("../../../host/tests/effect-test");
   const { serveRoutes } = await import("../../../host/tests/real-server");

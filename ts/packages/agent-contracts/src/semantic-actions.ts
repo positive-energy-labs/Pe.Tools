@@ -1,4 +1,4 @@
-import { fansRouteState } from "./fans.ts";
+import { fansRouteState } from "@pe/fans-contract/fans";
 import { stagedRoomWrites, roomsRouteState as roomsWorkSchema } from "./rooms.ts";
 import { ANY_ROUTE, workIntent, workWriteCommands } from "./write-intent.ts";
 import { SHEET_COMMANDS } from "./slots/sheet.ts";
@@ -212,7 +212,7 @@ import { familiesRouteState } from "./families.ts";
 import { scheduleGridRouteState } from "./schedule-grid-data.ts";
 import { takeoffsRouteState } from "./takeoffs.ts";
 import { roomsRouteState } from "./rooms.ts";
-import { ductsRouteState } from "./ducts.ts";
+import { ductsRouteState } from "@pe/duct-systems-contract/ducts";
 import { catalogWorkCommands } from "./catalog-work.ts";
 import { findingsCommands, findingsWork } from "./slots/findings.ts";
 /** Ducts derives its native request from the whole staged Work, not one writeIntent cell. */

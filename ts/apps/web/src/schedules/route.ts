@@ -11,7 +11,7 @@ import {
   showCellValue,
 } from "@pe/agent-contracts";
 import * as reads from "./contract.ts";
-import { route, field, subjectSchema, namesOf } from "../route/defaults.ts";
+import { route, field, subjectSchema, namesOf } from "../route/defaults";
 import { subjectCode } from "../../../../packages/agent-contracts/src/subject-ref.ts";
 import { hostRead } from "../route/host-read.ts";
 import { draw } from "../route/draw.tsx";

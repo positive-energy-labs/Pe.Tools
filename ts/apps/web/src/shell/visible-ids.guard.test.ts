@@ -3,13 +3,13 @@ import type { Page, Fields } from "../route/typed-route";
 import type { HostRead } from "../route/host-read";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { leaks } from "./visible-text";
-import { fanLabel } from "../ducts/sheet/model";
-import { SCENE_FIXTURE } from "../ducts/scene.fixture";
-import { LAYOUT_FIXTURE, LAYOUT_ROSTER } from "../ducts/layout.fixture";
+import { fanLabel } from "@pe/ducts-web/ducts/calc/model";
+import { SCENE_FIXTURE } from "@pe/ducts-web/ducts/scene.fixture";
+import { LAYOUT_FIXTURE, LAYOUT_ROSTER } from "@pe/ducts-web/ducts/layout.fixture";
 import { elementLabeler } from "@pe/ducts-domain/element-label";
 import type { FanPort } from "@pe/ducts-domain/roster";
-import { buildSheet, type SheetSnapshot } from "@pe/ducts-domain/sheet/index";
-import { inputsFor } from "@pe/ducts-domain/sheet/test-inputs";
+import { buildCalc, type CalcSnapshot } from "@pe/fans-domain/calc/index";
+import { inputsFor } from "@pe/fans-domain/calc/test-inputs";
 
 // Registry words and actual declared fixture publications must name things, never their keys.
 afterEach(() => vi.unstubAllGlobals());
@@ -73,7 +73,7 @@ test.each([
   ["scene", SCENE_FIXTURE.snapshot],
   ["layout", LAYOUT_FIXTURE.snapshot],
 ] as const)("the %s fixture's ledger names elements by label, never by id", (_, snapshot) => {
-  const model = snapshot as unknown as SheetSnapshot;
+  const model = snapshot as unknown as CalcSnapshot;
   // The seed's own roster (the fixture models carry no system graph for suggestRoster to elect from).
   const held = new Set(model.nodes.map((node) => node.id));
   const ports = LAYOUT_ROSTER.rows
@@ -81,7 +81,7 @@ test.each([
     .map((row) => ({ ...row, tag: row.mark, source: "ruling" as const })) as unknown as FanPort[];
   expect(ports.length).toBeGreaterThan(0);
   for (const port of ports) {
-    const sheet = buildSheet({
+    const sheet = buildCalc({
       snapshot: model,
       inputs: inputsFor(model),
       fan: { unitId: port.unitId, portIndex: port.portIndex },

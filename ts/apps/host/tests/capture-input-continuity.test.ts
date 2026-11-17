@@ -20,11 +20,11 @@ import {
 } from "@pe/host-contracts/operation-types";
 import { readInputRoutes } from "../src/app.ts";
 import { HostInputContext } from "../src/input-context.ts";
-import { DuctFiles } from "../src/ducts-files.ts";
+import { DuctFiles } from "@pe/ducts-host/ducts-files";
 import { HostDocumentMarks, hostMarks } from "../src/document-marks.ts";
 import { HostSessionInventory } from "../src/session-inventory.ts";
-import { DuctsReadings } from "../src/ducts-readings.ts";
-import { FIRM_SEED } from "../src/ducts-inputs.ts";
+import { DuctsReadings } from "@pe/ducts-host/ducts-readings";
+import { FIRM_SEED } from "@pe/ducts-host/ducts-inputs";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
 import { mintBrowserContext } from "../src/control.ts";
 import { requestIdentityLayer } from "../src/request-identity.ts";

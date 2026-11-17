@@ -5,7 +5,7 @@ import { testDocumentMarks, journalAt, callRouteOver } from "./effect-test.ts";
 import { graphRoute } from "../src/reads/routes.ts";
 import { Publications } from "../src/reads/publications.ts";
 import { inputPort } from "../src/reads/inputs.ts";
-import { DuctFiles } from "../src/ducts-files.ts";
+import { DuctFiles } from "@pe/ducts-host/ducts-files";
 import { HostDocumentMarks, hostMarks } from "../src/document-marks.ts";
 import { PictureCaptureStore } from "../src/captures-route.ts";
 import { detachedBridge, sessionView, captureStore } from "./effect-test.ts";

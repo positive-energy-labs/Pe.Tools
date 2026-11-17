@@ -13,7 +13,7 @@ import { TestClock } from "effect/testing";
 import { expect } from "vite-plus/test";
 import type { Caller } from "@pe/agent-contracts";
 import { effectTest } from "./effect-test.ts";
-import { DuctFiles } from "../src/ducts-files.ts";
+import { DuctFiles } from "@pe/ducts-host/ducts-files";
 import { HostDocumentMarks, hostMarks } from "../src/document-marks.ts";
 import { InvalidRead } from "../src/native-reads.ts";
 import {

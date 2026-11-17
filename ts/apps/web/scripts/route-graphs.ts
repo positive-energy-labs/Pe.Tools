@@ -1,3 +1,4 @@
+import { renderProductExecutors } from "./product-executors.ts";
 import { spawnSync } from "node:child_process";
 import { registerHooks } from "node:module";
 import { icons } from "lucide-react";
@@ -245,6 +246,7 @@ await emit(
   renderAddressTable([...addressRows.values()]),
 );
 await emit(registryFile, renderRouteRegistry(registryRows));
+await emit(new URL("../../host/src/product-executors.generated.ts", import.meta.url), renderProductExecutors(checkout));
 const closures = await buildBuiltinClosures(builtinOptions);
 const directory = [];
 for (const [key, closure] of closures) {

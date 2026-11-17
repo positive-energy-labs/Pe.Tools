@@ -28,7 +28,7 @@ import type { HostBridgeEvent, BridgeSessionView } from "../src/bridge.ts";
 import { PictureCaptureStore } from "../src/captures-route.ts";
 import { admitCrossing, bindControl } from "../src/control.ts";
 import { HostDocumentMarks } from "../src/document-marks.ts";
-import { DuctFiles } from "../src/ducts-files.ts";
+import { DuctFiles } from "@pe/ducts-host/ducts-files";
 import { ActionJournalService } from "../src/receipt-services.ts";
 import { Spawner } from "../src/harness/spawner.ts";
 import { MachineOwner } from "../src/machine.ts";

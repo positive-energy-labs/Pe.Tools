@@ -89,13 +89,21 @@ export const routeFolders = (): Set<string> =>
     ...productWebs().filter((key) => existsSync(join(TS, key, "route.ts"))),
   ]);
 
+/** Prune installed dependencies before descending, including workspace links on Windows. */
+export function webSourceFiles(root: string, prefix = ""): string[] {
+  return readdirSync(join(root, prefix), { withFileTypes: true }).flatMap(entry => {
+    if (entry.name === "node_modules" || entry.name === ".git") return [];
+    const path = posix.join(prefix, entry.name);
+    return entry.isDirectory() ? webSourceFiles(root, path) : isProduction(path) ? [path] : [];
+  });
+}
+
 export function webSources(): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [root, prefix] of [[WEB, ""], ...productWebs().map((key) => [join(TS, key), `${key}/`])] as [string, string][]) {
     if (!existsSync(root)) continue;
-    for (const rel of readdirSync(root, { recursive: true, encoding: "utf8" })) {
-      const path = rel.replaceAll("\\", "/");
-      if (isProduction(path) && !path.includes("node_modules/")) out[prefix + path] = readFileSync(join(root, path), "utf8");
+    for (const path of webSourceFiles(root)) {
+      out[prefix + path] = readFileSync(join(root, path), "utf8");
     }
   }
   return out;

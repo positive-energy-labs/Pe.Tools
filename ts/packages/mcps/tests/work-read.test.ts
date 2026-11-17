@@ -2,7 +2,7 @@ import { expect, test } from "vite-plus/test";
 import { z } from "zod";
 import { fansDocumentSchema } from "@pe/agent-contracts";
 import { peaWorkValue } from "../src/pea/capability-tools.ts";
-import { renderDuctsSkill } from "../src/pea/ducts-skill.ts";
+import { renderDuctsSkill } from "@pe/fans-contract/pea/ducts-skill";
 
 /** Driver C13: the /fans read carried its transport JSON Schema beside a tiny doc. */
 const fansRead = () => ({

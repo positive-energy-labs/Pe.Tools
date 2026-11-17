@@ -11,8 +11,8 @@ import { firmSettingsDir, machineFacts } from "@pe/host-contracts/product-paths"
 import { receiptGoldenEnvelope } from "../../../packages/agent-contracts/tests/receipt-fixture.ts";
 import { Effect } from "effect";
 import { ductsFirmSchema } from "@pe/agent-contracts";
-import { FIRM_SEED } from "../src/ducts-inputs.ts";
-import { DuctFiles, firmRootPath } from "../src/ducts-files.ts";
+import { FIRM_SEED } from "@pe/ducts-host/ducts-inputs";
+import { DuctFiles, firmRootPath } from "@pe/ducts-host/ducts-files";
 import { resolveFirm } from "../src/reads/door.ts";
 import { createReceiptExport } from "../src/receipt-export.ts";
 import { journalAt } from "./effect-test.ts";

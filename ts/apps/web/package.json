@@ -45,10 +45,21 @@
     "tailwindcss": "^4.1.18",
     "three": "catalog:",
     "tw-animate-css": "^1.3.6",
-    "zod": "4.3.6"
+    "zod": "4.3.6",
+    "@pe/duct-systems-domain": "workspace:*",
+    "@pe/duct-systems-host": "workspace:*",
+    "@pe/duct-systems-web": "workspace:*",
+    "@pe/ducts-host": "workspace:*",
+    "@pe/ducts-web": "workspace:*",
+    "@pe/fans-domain": "workspace:*",
+    "@pe/fans-host": "workspace:*",
+    "@pe/fans-web": "workspace:*",
+    "jiti": "^2.7.0",
+    "@pe/browser": "workspace:*",
+    "@pe/host": "workspace:*",
+    "@pe/host-internal": "workspace:*"
   },
   "devDependencies": {
-    "@pe/browser": "workspace:*",
     "@tailwindcss/typography": "^0.5.16",
     "@tailwindcss/vite": "^4.1.18",
     "@tanstack/devtools-vite": "0.8.4",
@@ -65,7 +76,7 @@
     "jsdom": "^28.1.0",
     "typescript": "^6.0.3",
     "vite-plus": "catalog:",
-    "@pe/host": "workspace:*"
+    "@pe/repo-guards": "workspace:*"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

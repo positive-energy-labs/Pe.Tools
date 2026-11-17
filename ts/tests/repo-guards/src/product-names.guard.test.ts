@@ -21,6 +21,7 @@ const GENERIC = [
 const ALLOWED = new Set([
   "apps/host/src/command-registry.ts",
   "apps/host/src/routes.generated.ts",
+  "apps/host/src/product-executors.generated.ts",
   "packages/agent-contracts/src/routes/table.generated.ts",
   "packages/agent-contracts/src/generated/route-directory.ts",
 ]);

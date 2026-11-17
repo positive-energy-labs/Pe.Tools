@@ -4,7 +4,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { z } from "zod";
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from "@tanstack/react-router";
 import { bindWork, draftCellSchema, workFingerprintSchema, workTimelineSchema } from "@pe/agent-contracts";
-import { module as reference } from "../fans/route";
+import { module as reference } from "@pe/fans-web/route";
 import { route } from "../route/typed-route";
 import { scrollBody } from "../route/body";
 import { BandOutlet, RouteControlsProvider } from "../navigation/route-controls";

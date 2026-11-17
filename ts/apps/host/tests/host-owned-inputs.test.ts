@@ -19,8 +19,8 @@ import { HostInputContext } from "../src/input-context.ts";
 import { PictureCaptures, PictureCaptureStore } from "../src/captures-route.ts";
 import { HostDocumentMarks, hostMarks } from "../src/document-marks.ts";
 import { HostSessionInventory } from "../src/session-inventory.ts";
-import { DuctFiles } from "../src/ducts-files.ts";
-import { DuctsReadings } from "../src/ducts-readings.ts";
+import { DuctFiles } from "@pe/ducts-host/ducts-files";
+import { DuctsReadings } from "@pe/ducts-host/ducts-readings";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
 import { RequestIdentity, admittedRequestIdentity } from "../src/request-services.ts";
 import {

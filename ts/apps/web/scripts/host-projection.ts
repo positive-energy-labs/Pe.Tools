@@ -78,7 +78,11 @@ export async function projectWork(
   const definitions = await load(
     binding.specifier.startsWith(".")
       ? resolve(dirname(entry), binding.specifier)
-      : binding.specifier,
+      : (() => {
+          const resolved = ts.resolveModuleName(binding.specifier, entry, { moduleResolution: ts.ModuleResolutionKind.Bundler }, ts.sys).resolvedModule;
+          if (!resolved) throw Error(`${entry}: cannot resolve Work contract ${binding.specifier}`);
+          return resolved.resolvedFileName;
+        })(),
   );
   // One registry binds every route's Work, so each wrapped schema needs its own local name.
   const schema = exported ? "schema" : `${exportName}Schema`;

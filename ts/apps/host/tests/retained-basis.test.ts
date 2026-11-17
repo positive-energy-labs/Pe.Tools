@@ -17,12 +17,12 @@ import { admittedRequestIdentity, RequestIdentity } from "../src/request-service
 import { admitNativeCaller } from "../src/native-read-policy.ts";
 import { hostNativeReadFor, inputBindingKey, nativeInputIdentity, nativeCatalogIdentity,
   openRecordingWriter, openRecordingReader, type HostInputLane, type Taking } from "../src/native-recording.ts";
-import { createDuctsBodyBasis, ductBodySubject } from "../src/ducts-body-basis.ts";
-import { DuctsReadings } from "../src/ducts-readings.ts";
+import { createDuctsBodyBasis, ductBodySubject } from "@pe/ducts-host/ducts-body-basis";
+import { DuctsReadings } from "@pe/ducts-host/ducts-readings";
 import { retainedDuctsRead } from "../src/call-route.ts";
 import { HostSessionInventory } from "../src/session-inventory.ts";
 import { httpProblems } from "../src/http-problems.ts";
-import { snapshot } from "../../web/src/ducts/test-fixture.ts";
+import { snapshot } from "@pe/ducts-web/ducts/test-fixture";
 
 const run = Effect.runPromise;
 const dirs: string[] = [];

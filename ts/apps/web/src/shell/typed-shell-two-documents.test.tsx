@@ -30,7 +30,7 @@ test("two open documents: the route settles on the picker, with no busy mark", a
   world.inventory = { state: "ready", observation: { sessions: [{ sessionId: "s1", connected: true, processId: 1, openDocuments: [doc("a"), doc("b")] }] } };
   // The machine census never answers here: no census can make one of two documents the sole one.
   world.machine = { state: "pending" };
-  const { admit } = await import("../fans/admission.fixture");
+  const { admit } = await import("@pe/fans-web/fans/admission.fixture");
   const fans = (await admit()).presenter;
   const root = createRootRoute({ component: () => <TypedShell module={fans.typed} fingerprint={fans.workFingerprint} /> });
   const router = createRouter({ routeTree: root, history: createMemoryHistory({ initialEntries: ["/fans"] }) });

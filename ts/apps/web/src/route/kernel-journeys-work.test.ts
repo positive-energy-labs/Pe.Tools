@@ -3,7 +3,7 @@ import { fixtureTimeline } from "../shell/fixture-work-door";
 import { refusalOf, valueOf } from "./typed-route";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
 import { snapshot as workSnapshot } from "../../../host/tests/host-read-graph.test-support";
-import { stableFanKey } from "../ducts/sheet/model";
+import { stableFanKey } from "@pe/ducts-web/ducts/calc/model";
 import { join } from "node:path";
 import { Context, Effect, Layer } from "effect";
 import { HttpRouter } from "effect/http";
@@ -28,14 +28,14 @@ import { fixture, ref, path, who, gate } from "../../../host/tests/host-read-gra
 import { builtinEnrollments } from "../../../host/src/builtin-enrollment";
 import { nativeReadRoot } from "../../../host/src/app";
 import { RevitBridgeLive } from "../../../host/src/bridge";
-import { DuctFiles } from "../../../host/src/ducts-files";
+import { DuctFiles } from "@pe/ducts-host/ducts-files";
 import { HostDocumentMarks } from "../../../host/src/document-marks";
 import { PictureCaptureStore } from "../../../host/src/captures-route";
 import { createPeRoutes } from "../../../host/src/pe-routes";
 import { RequestIdentity, admittedRequestIdentity } from "../../../host/src/request-services";
 import { bindControl } from "../../../host/src/control";
 import { testRegistry } from "../../../host/tests/effect-test";
-import { module as fans } from "../fans/route";
+import { module as fans } from "@pe/fans-web/route";
 import { direct, mountTypedRoute, planned } from "../shell/typed-mount";
 import { handle } from "@pe/agent-contracts/handle";
 import type { PlaceInput } from "../shell/typed-place";
@@ -1037,7 +1037,7 @@ test("JZ audit validation readiness and per-action busy admission prevent dispat
 // Ruling 2026-11-10 (no cross-route write): /fans held /ducts' assumptions as a foreign-owner cell;
 // it no longer does. The foreign-owner seam lives on through /ducts' own `owners.fans`.
 test("JZ cut /fans has no foreign /ducts cell: staging one refuses and /ducts Work is untouched", async () => {
-  const { JOIN_KEY } = await import("@pe/ducts-domain/sheet/inputs");
+  const { JOIN_KEY } = await import("@pe/ducts-domain/calc/inputs");
   const j = await journey();
   try {
     await j.start();

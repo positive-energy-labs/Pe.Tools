@@ -1,9 +1,9 @@
 import { host, seedPlaces } from "./places.test-support";
-import { stableFanKey } from "../ducts/sheet/model";
+import { stableFanKey } from "@pe/ducts-web/ducts/calc/model";
 import {route as declareRoute, scrollBody} from "../route/typed-route";
 import {module as familiesDeclaration} from "../families/route";
 import {workFingerprintSchema} from "@pe/agent-contracts";
-import { systemCode } from "../ducts/identity";
+import { systemCode } from "@pe/ducts-web/ducts/identity";
 import { namesOf } from "../route/typed-route";
 import type {TypedRoute} from "../route/typed-route";
 import type {RouteFingerprint} from "@pe/agent-contracts";
@@ -161,7 +161,7 @@ function Restore() {
 }
 async function mount(entry = "/pea?thread=T", strict = false, restore = false, validate = false) {
   if (entry.startsWith("/fans")) {
-    const { admit } = await import("../fans/admission.fixture");
+    const { admit } = await import("@pe/fans-web/fans/admission.fixture");
     fansRoute = (await admit()).presenter;
   }
   const root = createRootRoute({
@@ -905,7 +905,7 @@ test("6.1b first open of /fans while the document bind is pending reads as pendi
 test("6.1b a hidden Place's section carries no aria-busy while the document bind is pending", async () => {
   sessionStorage.clear();
   await seedPlaces([]);
-  const { admit } = await import("../fans/admission.fixture");
+  const { admit } = await import("@pe/fans-web/fans/admission.fixture");
   fansRoute = (await admit()).presenter;
   // The same pending bind as above (`useReading` is mocked pending), on a Place the dock hides.
   const root = createRootRoute({ component: () => <RouteVisibility.Provider value={false}><FansProbe /></RouteVisibility.Provider> });

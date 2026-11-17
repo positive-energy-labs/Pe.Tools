@@ -1,6 +1,6 @@
 import { mkdtemp, stateFixture } from "../../../../tests/isolated-home/storage.ts";
 // @vitest-environment jsdom
-import { stableFanKey } from "../ducts/sheet/model";
+import { stableFanKey } from "@pe/ducts-web/ducts/calc/model";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
 import { surfaceReadiness } from "../route/readiness.test.fixture";
 import { peRouteUrl } from "@pe/agent-contracts/pe-api";
@@ -19,12 +19,12 @@ import { HostNativeRead } from "../../../../packages/host-internal/src/native-re
 import { HOST_RUNTIME_SERVICE_HEADER } from "@pe/host-contracts/contracts";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import rosterCapture from "../../../../packages/host-contracts/src/fixtures/k2-roster.json";
-import { VOCABULARY } from "@pe/ducts-domain/sheet/scoped-snapshot";
-import walkCapture from "../../../../packages/ducts-domain/src/sheet/fixtures/muas-local-20261102.json";
+import { VOCABULARY } from "@pe/ducts-domain/calc/scoped-snapshot";
+import walkCapture from "@pe/fans-domain/calc/fixtures/muas-local-20261102.json";
 import { hostOwnership } from "../../../host/src/host-ownership";
 import { HostDocumentMarks } from "../../../host/src/document-marks";
 import { HostSessionInventory } from "../../../host/src/session-inventory";
-import { DuctFiles } from "../../../host/src/ducts-files";
+import { DuctFiles } from "@pe/ducts-host/ducts-files";
 import { RevitBridge, RevitBridgeLive } from "../../../host/src/bridge";
 import { SdkSession } from "../../../host/src/sdk-session";
 import { ReadOwner } from "../../../host/src/builtin-inputs";
@@ -34,9 +34,9 @@ import { bootHost } from "../../../host/tests/real-server";
 import { connectTestBridge } from "../../../host/tests/bridge-fixture";
 import { admittedReceiptStamps } from "../../../host/src/receipt-export";
 import { canonicalRouteInput, actionStatusSchema } from "@pe/agent-contracts";
-import "../fans/mount";
+import "@pe/fans-web/fans/mount";
 import { TypedShell } from "./typed-shell";
-import { module as fans } from "../fans/route";
+import { module as fans } from "@pe/fans-web/route";
 import { routeRegistry } from "../route/registry";
 import { peReadings, bindActionReadings } from "../host/resource-stream";
 import { settled } from "../test-journey";
