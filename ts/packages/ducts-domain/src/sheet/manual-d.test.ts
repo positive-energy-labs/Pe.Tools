@@ -11,8 +11,9 @@ import { lookupGrid, toGrids } from "../loss-grid.ts";
 // Q4 (kaitpw 2026-11-16): MUAS-1's family reads c2 out, c1 in, against its network. Before Q4 the ends chose
 // the roles and this capture priced as recorded; now the family does, so the roles the numbers below were
 // certified under are stated on the capture. The roster still comes from the capture as read.
-const snapshot = withPeersRead(withFamilyFlipped(raw as unknown as SheetSnapshot, 14577391));
-const r = suggestRoster(raw as unknown as SheetSnapshot),
+const acquired = raw as unknown as SheetSnapshot;
+const snapshot = withPeersRead(withFamilyFlipped(acquired, 14577391));
+const r = suggestRoster(acquired),
   roster = [...r.fans, ...r.suggestions];
 const grids = toGrids({ tables });
 function replay(id: number) {

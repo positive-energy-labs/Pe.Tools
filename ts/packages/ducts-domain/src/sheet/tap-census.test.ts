@@ -16,8 +16,9 @@ it.each([raw, live])(
     // Q4 (kaitpw 2026-11-16): MUAS-1's family reads c2 out, c1 in, against its network. Before Q4 the ends chose
     // the roles and this capture priced as recorded; now the family does, so the roles the numbers below were
     // certified under are stated on the capture. The roster still comes from the capture as read.
-    const snapshot = withPeersRead(withFamilyFlipped(capture as unknown as SheetSnapshot, 14577391));
-    const r = suggestRoster(capture as unknown as SheetSnapshot);
+    const acquired = capture as unknown as SheetSnapshot;
+    const snapshot = withPeersRead(withFamilyFlipped(acquired, 14577391));
+    const r = suggestRoster(acquired);
     const s = buildSheet({
       snapshot,
       fan: { unitId: 14577391, portIndex: 2 },

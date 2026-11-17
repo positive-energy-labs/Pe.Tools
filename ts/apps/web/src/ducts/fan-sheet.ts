@@ -9,10 +9,9 @@ import {
   ductsSheetRequestSchema,
   ductsSheetResponseSchema,
   ductParameterSlots,
-  type DuctsInputs,
   type DuctsSheetOverview,
   type DuctsSheetRequest,
-  fanClaimSchema, fanCloserSchema, fanEspValuesSchema, encounterSchema, fanIssueSchema,
+  fanClaimSchema, fanCloserSchema, fanEspValuesSchema, ductsFanCalcSchema,
 } from "@pe/agent-contracts";
 import { elementLabeler } from "@pe/ducts-domain/element-label";
 import { slotCoverage } from "@pe/ducts-domain/kernel/terminal-flow";
@@ -31,6 +30,7 @@ import {
 import type { Chain, Sheet as DomainSheet, SheetPath } from "@pe/ducts-domain/sheet/types";
 import { worksheet } from "@pe/ducts-domain/sheet/worksheet";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
+import { rosterInputs } from "./pricing-value.ts";
 import { z } from "zod";
 import { firmLayer, workLayer } from "@pe/host/ducts-inputs";
 import { followAcceptedJoins, mergeFar } from "@pe/ducts-domain/sheet/joins";
@@ -94,22 +94,7 @@ const engineBase = {
  * Parse at the boundary so readonly engine tuples become the wire schema's owned values.
  */
 const engineValue = z.union([
-  z.object({
-    ...engineBase,
-    fan: ductsSheetOverviewSchema.shape.fan.unwrap().omit({ ratedEspInWg: true }),
-    totals: ductsSheetOverviewSchema.shape.totals.unwrap(),
-    claim: fanClaimSchema,
-    esp: fanEspValuesSchema,
-    encounters: z.array(encounterSchema),
-    issues: z.array(fanIssueSchema),
-    network: z.string(),
-    paths: z.array(enginePath),
-    assumed: z.object({
-      paths: z.array(enginePath),
-      legs: engineBase.legs,
-      blockers: engineBase.blockers,
-    }),
-  }),
+  ductsFanCalcSchema,
   z.object({
     ...engineBase,
     start: z.object({ elementId: z.number(), connector: z.number().optional() }),
@@ -312,12 +297,6 @@ const sheetModel = read("fans.calculation", {
       beyond,
     };
   },
-});
-/** Resolved kinds and roles by unit id, so the roster reads the same rulings the engine prices under. */
-/** The ruled kinds and roles alone: a unit whose kind or role did not resolve is left for the roster to suggest. */
-const rosterInputs = (inputs: DuctsInputs) => ({
-  kinds: Object.fromEntries(Object.entries(inputs.units).flatMap(([id, u]) => (u.kind.status === "valid" ? [[id, u.kind.value]] : []))),
-  roles: Object.fromEntries(Object.entries(inputs.units).flatMap(([id, u]) => (u.role.status === "valid" ? [[id, u.role.value]] : []))),
 });
 const pathsOf = (value: Sheet | Chain): SheetPath[] =>
   "paths" in value ? value.paths : value.path ? [value.path] : [];

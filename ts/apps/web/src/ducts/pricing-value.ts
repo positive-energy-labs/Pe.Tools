@@ -9,6 +9,7 @@ import {
   ductParameterSlots,
   serveSetting,
   stagedValues,
+  type DuctsInputs,
   type DuctsDesign,
   type DuctsFirm,
   type SettingTierRead,
@@ -29,6 +30,11 @@ import { workElementId } from "@pe/ducts-domain/work-subject";
 import { FIRM_SEED, workLayer } from "@pe/host/ducts-inputs";
 import { z } from "zod";
 
+export const rosterInputs = (inputs: DuctsInputs) => ({
+  kinds: Object.fromEntries(Object.entries(inputs.units).flatMap(([id, u]) => (u.kind.status === "valid" ? [[id, u.kind.value]] : []))),
+  roles: Object.fromEntries(Object.entries(inputs.units).flatMap(([id, u]) => (u.role.status === "valid" ? [[id, u.role.value]] : []))),
+});
+
 export function pricingValue(
   snapshot: DuctSnapshot,
   grids: Grids,
@@ -48,12 +54,7 @@ export function pricingValue(
     firm,
     catalogs,
   });
-  // The ruled kinds and roles alone, as the fans roster reads them (`fan-sheet.ts` `rosterInputs`).
-  const units = Object.entries(inputs.units);
-  const suggested = suggestRoster(snapshot, [], {
-    kinds: Object.fromEntries(units.flatMap(([id, u]) => (u.kind.status === "valid" ? [[id, u.kind.value]] : []))),
-    roles: Object.fromEntries(units.flatMap(([id, u]) => (u.role.status === "valid" ? [[id, u.role.value]] : []))),
-  });
+  const suggested = suggestRoster(snapshot, [], rosterInputs(inputs));
   const ports = [...suggested.fans, ...suggested.suggestions];
   // One calc per roster port, each on this read's network and inputs, the way the fans read builds
   // one. ponytail: every port is priced on every read; price only the opened systems' ports if a

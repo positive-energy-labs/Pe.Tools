@@ -76,7 +76,7 @@ async function doors() {
     /** Text and author of each finding, oldest first, through `findings.list`. */
     async authors(subject?: SubjectRefCode) { return (await this.list(subject)).map((f) => [f.text, f.said.by]); },
     /** A Work the door cannot address (another document's), read from the workspace itself. */
-    held: async (at: typeof key) => Object.keys(((await workspace.view(at, "findings"))?.doc as { findings?: object } | undefined)?.findings ?? {}),
+    held: async (at: typeof key) => Object.keys(findingsWork.schema.parse((await workspace.view(at, "findings"))?.doc ?? {}).findings),
     /**
      * `on` is the route whose own Work handle the caller holds; a row verb on /fans holds Fans'.
      * `on: null` sends no handle, as Pea's first call does: the host binds the target document's.
@@ -299,7 +299,8 @@ test("findings reject legacy and missing stamps and caller-supplied by", async (
     expect(findingSchema.safeParse({ id: "n", kind: "note", subject: port, text: "note", said: { by, at: new Date().toISOString() } }).success).toBe(false);
   const d = await doors();
   try {
-    await expect(d.say({ ...input("forged", port, "note"), by: "human" } as FindingInput, d.peaCaller)).rejects.toThrow();
+    const forged = { ...input("forged", port, "note"), by: "human" };
+    await expect(d.say(forged, d.peaCaller)).rejects.toThrow();
     expect(await d.list()).toEqual([]);
     for (const caller of [human, d.peaCaller]) {
       await d.say(input(caller.kind, port, "note"), caller);

@@ -1,3 +1,4 @@
+import { nodeOf } from "./test-snapshot.ts";
 import { expect, test } from "vite-plus/test";
 import { ductsDocumentSchema, fansDocumentSchema, stagedDucts } from "@pe/agent-contracts";
 import { editPatches } from "./sheet/edits.ts";
@@ -11,7 +12,7 @@ const [onWalk, peer] = [1, 2].map(n => ({ elementId: n, uniqueId: uid(n) }));
 
 test("fan Work writes clip every segment to the walk; required ESP has no staged cell", () => {
   const doc = fansDocumentSchema.parse({ equipmentFlows: Object.fromEntries([onWalk!, peer!].map(n => [elementSubject(n), { edit: { by: "human", value: 200 } }])) });
-  const snapshot = { nodes: [{ uniqueId: onWalk!.uniqueId }], segments: [] } as unknown as Parameters<typeof fanWriteCells>[1];
+  const snapshot = { nodes: [nodeOf(1, "equipment", { uniqueId: onWalk!.uniqueId })], segments: [] };
   expect(fanWriteCells(doc, snapshot)).toEqual([["equipmentFlows", elementSubject(onWalk!)]]);
   expect(fansDocumentSchema.safeParse({ esp: {} }).success).toBe(false);
 });
@@ -20,7 +21,7 @@ test("stagedDucts never invents a caller for an unstamped cell, and locates unci
   const key = elementSubject(onWalk!), other = elementSubject(peer!);
   // Deliberately bypass storage decoding to challenge stagedDucts' own boundary.
   const raw = { flows: { [key]: { edit: { value: 250 } }, [other]: { edit: { value: 90, by: "human" } } } };
-  const fans = { ...fansDocumentSchema.parse({}), ...raw } as Parameters<typeof stagedDucts>[1];
+  const fans = Object.assign(fansDocumentSchema.parse({}), raw);
   expect(stagedDucts(null, fans).flows).toEqual({
     [other]: { value: 90, by: "human", ref: `work:fans/flows/${other}` },
   });
