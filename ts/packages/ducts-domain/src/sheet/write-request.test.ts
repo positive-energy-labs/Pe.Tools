@@ -197,6 +197,22 @@ it("refuses an absent required-ESP cohort with read again", () => {
   expect(p.mint({ ...p.context, slots: { requiredEsp: null } }).equipment).toEqual([]);
 });
 
+it.each([
+  ["2026-11-02T12:06:41.5008350+00:00", true],
+  ["2026-11-02T06:06:41.5008350-06:00", true],
+  ["2026-11-02T12:06:41.5008351Z", false],
+  ["invalid", false],
+] as const)("compares cohort instant %s without losing ticks", (basis, equal) => {
+  const snapshot = synthetic();
+  snapshot.document.readAt = "2026-11-02T12:06:41.500835+00:00";
+  const cohort = snapshot.parameterCohorts?.[0];
+  if (!cohort) throw Error("instance cohort fixture");
+  cohort.basis = basis;
+  const p = prepared(snapshot);
+  if (equal) expect(p.mint().equipment.map((row) => row.id)).toEqual([100]);
+  else expect(() => p.mint()).toThrow("read again");
+});
+
 it("refuses a cohort that does not hold this fan with read again", () => {
   const snapshot = synthetic();
   snapshot.parameterCohorts = [

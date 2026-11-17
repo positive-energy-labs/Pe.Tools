@@ -23,6 +23,22 @@ export interface FanWriteContext {
   storeDeletes: NonNullable<DuctsApplyInput["storeDeletes"]>;
 }
 
+/** Date.parse alone loses 100-ns freshness: normalize the zone at whole seconds, then retain all seven fractional digits. */
+const instantTicks = (value: string): bigint | null => {
+  const match = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d{1,7}))?(Z|[+-]\d{2}:\d{2})$/.exec(
+    value,
+  );
+  if (!match) return null;
+  const milliseconds = Date.parse(`${match[1]}${match[3]}`);
+  return Number.isFinite(milliseconds)
+    ? BigInt(milliseconds) * 10_000n + BigInt((match[2] ?? "").padEnd(7, "0"))
+    : null;
+};
+const sameInstant = (a: string, b: string): boolean => {
+  const ticks = instantTicks(a);
+  return ticks !== null && ticks === instantTicks(b);
+};
+
 /** No derived flow and no row outside the fan's walk, except its native ESP cohort. */
 export function mintWriteRequest(
   claim: CompleteClaim,
@@ -130,7 +146,7 @@ export function mintWriteRequest(
     if (
       !cohort ||
       !cohort.complete ||
-      cohort.basis !== snapshot.document.readAt ||
+      !sameInstant(cohort.basis, snapshot.document.readAt) ||
       !cohort.members.length ||
       (cohort.owner.kind === "instance" && cohort.members.length !== 1)
     )
