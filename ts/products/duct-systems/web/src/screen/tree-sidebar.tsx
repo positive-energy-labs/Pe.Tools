@@ -1,6 +1,6 @@
 import { useContext } from "react";
 import { AttentionDocument } from "@pe/kit/lang/attention";
-import { useElementIndex } from "../../../../../apps/web/src/element-index.ts";
+import { useElementIndex } from "@pe/web/element-index";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 import { useCallback } from "react";
 import { ListTree } from "lucide-react";
@@ -8,7 +8,7 @@ import { Button } from "@pe/kit/lang/button";
 import { useList, type ListPersist, type ListOptions } from "@pe/kit/lang/collection";
 import { ListView, listColumns, type ListRowParts } from "@pe/kit/lang/list-view";
 import { tokenRef } from "@pe/kit/lib/token";
-import { observedElements, useNativeObservation } from "../../../../../apps/web/src/revit/observation.tsx";
+import { observedElements, useNativeObservation } from "@pe/web/revit/observation";
 
 import { formatQuantity, type Encoding, type Quantity } from "@pe/ducts-web/encoding";
 

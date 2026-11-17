@@ -4,13 +4,13 @@ import {
   PopoverTrigger,
   SubjectPopoverContent as PopoverContent,
 } from "@pe/kit/lang/popover";
-import { useRouteSearchSlice } from "../../../../../apps/web/src/route/activity.tsx";
+import { useRouteSearchSlice } from "@pe/web/route/activity";
 import { fansLink } from "@pe/fans-contract/link";
-import { useHoveredIssue } from "../../../../../apps/web/src/attention.tsx";
+import { useHoveredIssue } from "@pe/web/attention";
 import { ductElements } from "@pe/ducts-web/identity";
-import { subscribe as knobsChanged } from "../../../../../apps/web/src/knobs/knobs.ts";
-import { useRevitSubjectProps } from "../../../../../apps/web/src/revit/element-menu.tsx";
-import { useAdmittedSubject } from "../../../../../apps/web/src/shell/subject.ts";
+import { subscribe as knobsChanged } from "@pe/web/knobs/knobs";
+import { useRevitSubjectProps } from "@pe/web/revit/element-menu";
+import { useAdmittedSubject } from "@pe/web/shell/subject";
 import {
   DUCT_UNIT_KINDS,
   neutralFansWork,
@@ -37,7 +37,7 @@ import { emptyListState, useList, useValue, type ValueHandle, type ListOptions }
 import { ListView } from "@pe/kit/lang/list-view";
 import { SubjectTextContext } from "@pe/kit/lang/reach";
 import { Scroll } from "@pe/kit/lang/scroll";
-import * as Atom from "../../../../../node_modules/effect/dist/reactivity/Atom.js";
+import * as Atom from "effect/reactivity/Atom";
 import type { ReactNode } from "react";
 import {
   memo,
@@ -51,7 +51,7 @@ import {
 import { z } from "zod";
 import type { DuctsDrawContext, DuctsReads, DuctsSystemsContext } from "../../route.ts";
 import { roster as rosterRead, network as networkSource, pricing as pricingSource } from "../../route.ts";
-import { refusalOf } from "../../../../../apps/web/src/route/typed-route.ts";
+import { refusalOf } from "@pe/web/route/typed-route";
 import { airflowOptions } from "@pe/ducts-web/airflow";
 import { cellFocusOf, cellFocusSubject, focusedElement, issueOf, issueSubject, selectedKeys } from "@pe/ducts-web/cell-focus";
 import {
@@ -79,7 +79,7 @@ import { FanFacts, fanFacts, type FanFact } from "./fan-sections.tsx";
 import { Inbox, type FanVerbs } from "./inbox.tsx";
 import { grilleLabels } from "./labels.ts";
 import { DuctsPicture } from "./picture.tsx";
-import type { PictureOverlayProps } from "../../../../../apps/web/src/route/slots/picture/overlay.tsx";
+import type { PictureOverlayProps } from "@pe/web/route/slots/picture/overlay";
 import { RulesTree, ruleOfIds } from "./rules-pane.tsx";
 import { SystemColours } from "./settings.tsx";
 import { SystemTree } from "./tree-sidebar.tsx";

@@ -147,7 +147,8 @@ export const whole = (p: CalcPath, legs: Readonly<Record<string, Leg>>) =>
 
 /** R-SHARE: a priced terminal run through this same branch already pays for N onward. */
 export function pricesBeyond(m: Met, paths: readonly CalcPath[], legs: Readonly<Record<string, Leg>>): boolean {
-  const branch = paths[m.path]!;
+  const branch = paths[m.path];
+  if (!branch) return false;
   const prefix = branch.legIds.slice(0, -1);
   return paths.some((p) => p.side === branch.side && p.end.kind === "terminal" &&
     p.legIds.length > branch.legIds.length && whole(p, legs) &&

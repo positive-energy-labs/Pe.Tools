@@ -1,7 +1,7 @@
 import { scopeOf } from "@pe/ducts-domain/system-scope";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import type { Members, SubjectKey } from "@pe/kit/lang/attention";
-import type { ElementIndex } from "../../../../apps/web/src/element-index.ts";
+import type { ElementIndex } from "@pe/web/element-index";
 import { z } from "zod";
 import type { CellRef } from "@pe/ducts-domain/stage-issue";
 

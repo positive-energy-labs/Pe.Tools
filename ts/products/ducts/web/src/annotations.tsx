@@ -11,9 +11,9 @@ import { useContext, useMemo } from "react";
 import { revitTarget } from "@pe/kit/lang/revit-target";
 import { token } from "@pe/kit/lib/token";
 import type { DuctFinding } from "@pe/agent-contracts";
-import { observedElements, useNativeObservation } from "../../../../apps/web/src/revit/observation.tsx";
+import { observedElements, useNativeObservation } from "@pe/web/revit/observation";
 import type { StageIssue } from "@pe/ducts-domain/stage-issue";
-import type { Project, Size } from "../../../../apps/web/src/scene/projection.ts";
+import type { Project, Size } from "@pe/web/scene/projection";
 
 import {
   DASH_CLASS,
@@ -27,10 +27,10 @@ import {
 import type { Scene } from "./scene.ts";
 import { pathOf, SubjectLabels } from "./subject-labels.tsx";
 import { reachProps, SubjectTextContext } from "@pe/kit/lang/reach";
-import { Footnotes, useFootnotes, type FootnoteProject } from "../../../../apps/web/src/scene/footnotes.tsx";
-import { useElementAttention } from "../../../../apps/web/src/attention.tsx";
+import { Footnotes, useFootnotes, type FootnoteProject } from "@pe/web/scene/footnotes";
+import { useElementAttention } from "@pe/web/attention";
 import { useMention } from "@pe/kit/lang/attention";
-import { useElementIndex } from "../../../../apps/web/src/element-index.ts";
+import { useElementIndex } from "@pe/web/element-index";
 
 export type Ruling =
   | { kind: "inferred"; n: number; at: number; finding: DuctFinding }

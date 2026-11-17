@@ -23,9 +23,9 @@ import {
   whenSubject,
 } from "@pe/web/route";
 import { hostRead } from "@pe/web/host-read";
-import { draw } from "../../../apps/web/src/route/draw.tsx";
-import { fillBody, scrollBody } from "../../../apps/web/src/route/body.ts";
-import { overlay } from "../../../apps/web/src/route/slots/picture/overlay.tsx";
+import { draw } from "@pe/web/route/draw";
+import { fillBody, scrollBody } from "@pe/web/route/body";
+import { overlay } from "@pe/web/route/slots/picture/overlay";
 import { describeInputHistory, editMetaSchema } from "@pe/ducts-web/calc/input-history.neutral";
 import * as reads from "@pe/duct-systems-contract/contract";
 import { presentLosses, presentHeal, presentFan } from "@pe/ducts-web/reviews";

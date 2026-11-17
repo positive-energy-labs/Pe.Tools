@@ -4,7 +4,7 @@ import { catalogSchema, type Catalogs, type CatalogTable } from "@pe/ducts-domai
 import { productPathNames } from "@pe/host-contracts/contracts";
 import { homeDirs } from "@pe/host-contracts/product-paths";
 import { read as readStoredFile, homeKind } from "@pe/host-contracts/kinds";
-import { hostState } from "../../../../apps/host/src/host-ownership.ts";
+import { hostState } from "@pe/host/host-ownership";
   const catalogKind = homeKind({
   schema: catalogSchema,
   place: (_library: string, id: string) => `Catalog ${id}`,
@@ -46,7 +46,7 @@ async function readCatalogsFolder(
     },
   );
   for (const folder of entries.sort((a, b) => a.name.localeCompare(b.name))) {
-    if (!folder.isDirectory() || folder.name.startsWith("../../../../apps/host/src/index.ts")) continue;
+    if (!folder.isDirectory() || folder.name.startsWith(".")) continue;
     try {
       const dir = await realpath(join(root, folder.name));
       // Authored (ADR 0039): a catalog that does not decode is refused and kept, with its reason.

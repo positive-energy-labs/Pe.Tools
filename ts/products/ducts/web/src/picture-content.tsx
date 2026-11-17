@@ -4,17 +4,17 @@
  * ruling pins). Picture behaviour stays in `scene/picture`; these are only marks.
  */
 import { useCallback, useMemo, useSyncExternalStore } from "react";
-import { useElementAttention } from "../../../../apps/web/src/attention.tsx";
-import { LOOK, paintOf as resolvePaint } from "../../../../apps/web/src/scene/grounds.ts";
-import { subscribe as knobsChanged } from "../../../../apps/web/src/knobs/knobs.ts";
-import { captionObstacles } from "../../../../apps/web/src/scene/framing.ts";
-import { continuationAnchor } from "../../../../apps/web/src/scene/continuations.tsx";
-import { portLayer } from "../../../../apps/web/src/scene/ports.ts";
-import type { ColourMode } from "../../../../apps/web/src/scene/renderer.ts";
-import { systemPaint } from "../../../../apps/web/src/scene/surfaces.ts";
-import type { Kinds, Layer3D, PaintOf, SceneMeshes } from "../../../../apps/web/src/scene/types.ts";
-import type { ElementIndex } from "../../../../apps/web/src/element-index.ts";
-import type { PictureLayer, PictureLine, PictureOverlayFrame } from "../../../../apps/web/src/scene/picture/picture.tsx";
+import { useElementAttention } from "@pe/web/attention";
+import { LOOK, paintOf as resolvePaint } from "@pe/web/scene/grounds";
+import { subscribe as knobsChanged } from "@pe/web/knobs/knobs";
+import { captionObstacles } from "@pe/web/scene/framing";
+import { continuationAnchor } from "@pe/web/scene/continuations";
+import { portLayer } from "@pe/web/scene/ports";
+import type { ColourMode } from "@pe/web/scene/renderer";
+import { systemPaint } from "@pe/web/scene/surfaces";
+import type { Kinds, Layer3D, PaintOf, SceneMeshes } from "@pe/web/scene/types";
+import type { ElementIndex } from "@pe/web/element-index";
+import type { PictureLayer, PictureLine, PictureOverlayFrame } from "@pe/web/scene/picture/picture";
 import { Annotations, type Label, type Ruling } from "./annotations.tsx";
 import type { Encoding } from "./encoding.tsx";
 import type { StageIssue } from "@pe/ducts-domain/stage-issue";

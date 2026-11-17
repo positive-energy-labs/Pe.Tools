@@ -1,3 +1,4 @@
+import { webConsumerDirectories } from "./product-source-roots.ts";
 /**
  * ADR 0035 rule 5: `Pane` and `GraphLayoutView` are not exported to route modules. A route fills
  * slots and returns a branded `Body` (`apps/web/src/route/body.ts`); the kernel alone composes
@@ -22,15 +23,12 @@ const REPO = execFileSync("git", ["rev-parse", "--show-toplevel"], { cwd: HERE, 
 const WEB_SRC = resolve(REPO, "ts/apps/web/src");
 const EXEMPT = new Set(["design-system"]);
 
-const routeDirs = () =>
-  readdirSync(WEB_SRC, { withFileTypes: true })
-    .filter((e) => e.isDirectory() && !EXEMPT.has(e.name) && existsSync(join(WEB_SRC, e.name, "route.ts")))
-    .map((e) => e.name)
-    .sort();
+const routeDirs = () => webConsumerDirectories()
+  .filter(dir => !EXEMPT.has(dir.split(/[\\/]/).at(-1) ?? ""));
 
 const sources = (dir: string): string[] =>
   readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
-    e.isDirectory() ? sources(join(dir, e.name)) : /\.tsx?$/.test(e.name) && !/\.test\.tsx?$/.test(e.name) ? [join(dir, e.name)] : [],
+    e.name === "node_modules" ? [] : e.isDirectory() ? sources(join(dir, e.name)) : /\.tsx?$/.test(e.name) && !/\.test\.tsx?$/.test(e.name) ? [join(dir, e.name)] : [],
   );
 
 /** An import statement whose module is the pane or graph-layout primitive, with the names it takes. */
@@ -50,7 +48,7 @@ const lineOf = (text: string, index: number) => text.slice(0, index).split("\n")
 test("route modules import neither Pane nor GraphLayoutView (ADR 0035 rule 5)", () => {
   const offenders: string[] = [];
   for (const dir of routeDirs())
-    for (const file of sources(join(WEB_SRC, dir))) {
+    for (const file of sources(dir)) {
       const text = readFileSync(file, "utf8");
       for (const m of text.matchAll(IMPORT)) {
         const [, , clause, module] = m;
@@ -71,8 +69,8 @@ test("route modules import neither Pane nor GraphLayoutView (ADR 0035 rule 5)", 
 
 test("the guard sees every route directory and exempts only the design-system window", () => {
   const dirs = routeDirs();
-  expect(dirs).toContain("chat");
-  expect(dirs).toContain("fans");
-  expect(dirs).not.toContain("design-system");
-  expect(dirs).not.toContain("shell");
+  expect(dirs).toContain(join(WEB_SRC, "chat"));
+  expect(dirs).toContain(resolve(REPO, "ts/products/fans/web"));
+  expect(dirs).not.toContain(join(WEB_SRC, "design-system"));
+  expect(dirs).not.toContain(join(WEB_SRC, "shell"));
 });

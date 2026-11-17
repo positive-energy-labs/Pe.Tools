@@ -18,7 +18,7 @@ import { makeAtomRegistry } from "../../../../../apps/web/src/shell/owner.ts";
 import { RegistryContext } from "@effect/atom-react";
 import { attention, setHovered } from "@pe/kit/lang/attention";
 import { act, cleanup, fireEvent, render } from "@testing-library/react";
-import * as Atom from "../../../../../node_modules/effect/dist/reactivity/Atom.js";
+import * as Atom from "effect/reactivity/Atom";
 import { createElement, type ComponentProps } from "react";
 import { afterEach, expect, it, vi } from "vite-plus/test";
 import { NAVIGATION_FIXTURE } from "@pe/ducts-web/navigation.fixture";

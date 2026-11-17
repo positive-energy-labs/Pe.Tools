@@ -4,9 +4,9 @@ import { expect, test } from "vite-plus/test";
 
 test("Ducts content cannot silently introduce structural panes or replace a layout branch", () => {
   // The fan sheet's bodies are /fans' own (`fans/mount`); its walk is ducts content the /fans overlay hands the kernel's picture pane.
-  for (const name of ["ducts/proto/e/screen", "ducts/proto/e/picture", "ducts/sheet/picture", "fans/mount", "fans/picture"]) {
+  for (const name of ["duct-systems/web/src/screen/screen", "duct-systems/web/src/screen/picture", "fans/web/src/calc/picture", "fans/web/src/mount", "fans/web/src/picture"]) {
     const text = readFileSync(
-      new URL(`../../../apps/web/src/${name}.tsx`, import.meta.url),
+      new URL(`../../../products/${name}.tsx`, import.meta.url),
       "utf8",
     );
     const source = ts.createSourceFile(

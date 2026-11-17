@@ -11,14 +11,14 @@ import { FactChip } from "@pe/kit/lang/chip";
 import { useList, emptyListState, type ListState, type ListPersist } from "@pe/kit/lang/collection";
 import { ListView, type ListRowParts } from "@pe/kit/lang/list-view";
 
-import { showInRevit } from "../../../../../apps/web/src/revit/element-menu.tsx";
+import { showInRevit } from "@pe/web/revit/element-menu";
 import { SelectInRevitIcon } from "@pe/kit/lang/gesture-glyph";
 import {
   prepareElements,
   showElementsMessage,
   type ShowElementsResult,
-} from "../../../../../apps/web/src/revit/element-target.ts";
-import { observedElements, useNativeObservation } from "../../../../../apps/web/src/revit/observation.tsx";
+} from "@pe/web/revit/element-target";
+import { observedElements, useNativeObservation } from "@pe/web/revit/observation";
 
 import { rulingPatches, verdictPatches } from "@pe/ducts-web/assumptions";
 import {

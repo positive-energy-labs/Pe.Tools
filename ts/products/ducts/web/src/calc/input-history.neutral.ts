@@ -2,7 +2,7 @@
 import { z } from "zod";
 import { decode } from "@pe/agent-contracts";
 import type { CalcEdits } from "@pe/agent-contracts";
-import type { WorkHistoryEntry } from "../../../../../packages/agent-contracts/src/route-kernel-bodies.ts";
+import type { WorkHistoryEntry } from "@pe/agent-contracts/route-kernel-bodies";
 import { CRITERION_WORDS } from "@pe/ducts-contract/criterion-words.neutral";
 
 export const editMetaSchema = z.strictObject({
