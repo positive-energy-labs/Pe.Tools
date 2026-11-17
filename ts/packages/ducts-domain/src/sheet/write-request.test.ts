@@ -27,8 +27,6 @@ import {
 import { resolveInputs, type WorkLayer } from "./inputs.ts";
 import { mintWriteRequest, type FanWriteContext } from "./write-request.ts";
 import { accessoryWrites } from "./accessory-writes.ts";
-import { applyRequest, price } from "../pricing.ts";
-import { designOf } from "../test-design.ts";
 import { claimOf, type DomainClaim } from "./encounters.ts";
 import { TEST_COVERAGE } from "./test-inputs.ts";
 const at = "2026-11-16T00:00:00Z";
@@ -479,7 +477,7 @@ it("is pure with an explicit plan timestamp and preserves native slot none on th
 // L2-3 accepted differences: port versus group scope, computed ESP versus staged ESP,
 // tap representative, free-text provenance, all priced fittings/drops versus staged-only writes,
 // and authored-only flows versus the old group's derived terminal flows.
-it("compares the group and mint on the recorded Manual D fan before the engine is removed", () => {
+it("mints computed ESP and authored-only flows on the recorded Manual D fan", () => {
   const recorded = JSON.parse(
     readFileSync(new URL("./fixtures/manual-d-20261102.json", import.meta.url), "utf8"),
   );
@@ -536,17 +534,10 @@ it("compares the group and mint on the recorded Manual D fan before the engine i
     storeDeletes: {},
   };
   const minted = mintWriteRequest(sheet.claim, sheet, input, context);
-  const group = applyRequest(
-    recorded,
-    price(recorded, fixtureGrids, designOf(), designOf()),
-    at,
-    [],
-  );
-  expect(group.equipment).toEqual([]);
   expect(minted.equipment).toEqual([
     { id: 14577391, externalStaticInWg: sheet.claim.requiredEspInWg },
   ]);
   expect(minted.components).toEqual(expect.arrayContaining(accessoryWrites(snapshot, sheet)));
-  expect(minted.fittings.length).toBeGreaterThan(group.fittings.length);
+  expect(minted.fittings.length).toBeGreaterThan(0);
   expect(minted.terminalFlows).toEqual([]);
 });

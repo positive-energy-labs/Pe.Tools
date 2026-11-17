@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import { lossGroups } from "./loss-breakdown.ts";
-import type { Row } from "./losses.ts";
+import type { Row } from "./calc-runs.ts";
 import { connOf, ductOf, nodeOf, snapshotOf } from "./test-snapshot.ts";
 
 const snapshot = snapshotOf({

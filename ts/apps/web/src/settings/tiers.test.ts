@@ -13,7 +13,7 @@ import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { Effect } from "effect";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
-import { fansSheetData, ductsFirmSchema, ductsDocumentSchema, fansDocumentSchema, ductParameterSlots, neutralFansWork, type DuctsCriteriaCell } from "@pe/agent-contracts";
+import { fansSheetData, ductsFirmSchema, ductsDocumentSchema, fansDocumentSchema, ductParameterSlots, type DuctsCriteriaCell } from "@pe/agent-contracts";
 import { notices as storedNotices } from "@pe/host-contracts/kinds";
 import { resolveCriteria, resolveInputs } from "@pe/ducts-domain/sheet/index";
 import { nodeOf, snapshotOf } from "@pe/ducts-domain/test-snapshot";
@@ -26,8 +26,6 @@ import { readSettingTiers, writeSettingTier, watchSettingTiers } from "../../../
 import { ductsSettings } from "@pe/agent-contracts/setting-owners";
 import { sheetCells } from "../route/slots/sheet/index.ts";
 
-import { price } from "@pe/ducts-domain/pricing";
-import { snapshot } from "../ducts/test-fixture.ts";
 
 import { fansSheet } from "../fans/sheet.ts";
 
@@ -200,7 +198,6 @@ test("design friction comes from the project home, never Work", async () => {
   const tiers = readSettingTiers("ducts", pointer);
   const cells = sheetCells({ bindings: ductsSettings }, { rows: [], work: null, model: [], read: { settings: { ducts: tiers } } });
   expect(cells.find(cell => cell.binding === "setting.ducts.designFriction")).toMatchObject({ value: 0.12, source: "project" });
-  expect(price(snapshot, {}, null, neutralFansWork, {}, tiers).edit.designFriction).toBe(0.12);
   expect(ductsDocumentSchema.parse({})).not.toHaveProperty("designFriction");
   expect(ductsDocumentSchema.safeParse({ designFriction: {} }).success).toBe(false);
 });
@@ -280,7 +277,6 @@ test("design friction can be cleared with null", () => {
   expect(writeSettingTier({ ...request, value: null, expectedSha256 }, { pointer })).toMatchObject({ ok: true });
   const read = readSettingTiers("ducts", pointer).find(read => read.tier === "project")!;
   expect(read.json).not.toHaveProperty("designFriction");
-  expect(price(snapshot, {}, null, neutralFansWork, {}, readSettingTiers("ducts", pointer)).edit.designFriction).toBe(0.08);
 });
 
 // Mutant W3-project: drop watchSettingTiers' filesystem watch; an outside writer stays silent.

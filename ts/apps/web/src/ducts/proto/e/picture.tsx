@@ -17,7 +17,7 @@ import {
 } from "#/scene/picture/picture";
 import type { Layer3D, SceneMeshes } from "#/scene/types";
 import { emptyListSearch } from "@pe/agent-contracts";
-import { worstRun } from "@pe/ducts-domain/losses";
+import { runsOf, worstRun } from "@pe/ducts-domain/calc-runs";
 import type { Neighbour } from "@pe/ducts-domain/neighbours";
 import { noRunBranches } from "@pe/ducts-domain/no-runs";
 import { snapshotById } from "@pe/ducts-domain/readiness";
@@ -29,7 +29,8 @@ import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 import { useAdmittedSubject } from "#/shell/subject";
 import { DEFAULT_DESIGN_FRICTION_RATE } from "@pe/ducts-domain/equivalent-length";
-import type { PricedView as Priced } from "@pe/ducts-domain/pricing-view";
+import type { Priced } from "../../priced";
+import { fanFacts } from "./fan-sections";
 import type { DuctsDrawContext } from "../../route.ts";
 import { network } from "../../route.ts";
 import type { Ruling } from "../../annotations";
@@ -43,7 +44,6 @@ import { labelOfNode, legsOf } from "../../legs";
 import type { Split } from "../../loss-split";
 import { activeName, namesOf, systemCode } from "../../identity.ts";
 import { DuctsOverlay, linesOf, useEquipment } from "../../picture-content";
-import { ProvisionalNote } from "../../provisional";
 import { indexOf, sceneOf, subjectScene } from "../../scene";
 import { Schematic } from "../../schematic";
 import { paintOfDucts, stubIdsOf } from "../../selection";
@@ -109,8 +109,6 @@ export interface DuctsPictureExtra {
   membership: Members;
   /** The networks one unit away (`neighboursOf`): their stubs join the capture, painted `stub`. */
   neighbours: readonly Neighbour[];
-  /** The group whose fan the header reads: the system's largest; the schematic draws it. */
-  lead: string;
   /** The system's issue ids; null = every issue on a drawn element. */
   issueScope: ReadonlySet<string> | null;
   /** The finding (and issue) ids the picture annotates (`annotatedFindings`). */
@@ -187,7 +185,6 @@ function Content({
   members,
   membership,
   neighbours,
-  lead,
   scale,
   nameOf,
   identity,
@@ -299,7 +296,7 @@ function Content({
       priced && page.system.length
         ? noRunBranches(
             priced.snapshot,
-            priced.next,
+            runsOf(priced.calcs),
             scopeOf(priced.snapshot, page.system)!,
             priced.flows,
           )
@@ -359,26 +356,17 @@ function Content({
       ? null
       : (byId.segments.get(firstId)?.systemName ?? byId.nodes.get(firstId)?.systemName)) ??
     null;
-  const groupId =
-    lead ||
-    (firstId == null
-      ? ""
-      : (byId.segments.get(firstId)?.groupId ?? byId.nodes.get(firstId)?.groupId ?? ""));
   const active = page.active;
   const activeScope = priced && active ? systemScope(priced.snapshot, active) : null;
-  const worst =
-    priced && activeScope ? worstRun(priced.next, activeScope.groups, activeScope.terminals) : null;
-  const groupSolve = groupId ? priced?.next.byGroup[groupId] : null;
-  const solved = groupSolve && {
-    fan: activeScope?.groups.some((g) =>
-      priced?.next.byGroup[g]?.implausible.some((id) => activeScope.prices.has(id)),
-    )
-      ? null
-      : (worst?.total ?? null),
+  const worst = priced && activeScope ? worstRun(priced.calcs, activeScope.terminals) : null;
+  // The system's fans, each on its own calc. One complete calc states the ESP; several never sum
+  // and none owns the network (MAP invariant 6), so the readout sends the reader to each fan.
+  const fans = priced && activeScope ? fanFacts(priced, activeScope.terminals) : null;
+  const solved = fans && {
+    fans,
+    fan: fans.length === 1 && fans[0]!.complete ? fans[0]!.esp : null,
     critical: worst?.terminal ?? null,
     criticalTel: worst?.tel ?? null,
-    provisional:
-      (worst && priced?.next.paths[worst.terminal]?.provisional) ?? groupSolve.provisional,
   };
   const criticalName = solved?.critical != null ? nameOf(solved.critical) : null;
   const scopeTerminals = activeScope?.terminals ?? null;
@@ -433,7 +421,7 @@ function Content({
     const segFacts = scene.segments.find((f) => f.segment.id === readId);
     const nodeFacts = scene.nodes.find((f) => f.node.id === readId);
     // How Pe prices the selection's run (was the sidebar's run detail; selection lives here now).
-    const run = priced && scope ? runOf(priced, scope.groups, readId) : null;
+    const run = priced && scope ? runOf(priced, readId) : null;
     return (
       <>
         {ruled && ruled.at === readId ? <RulingBody r={ruled} /> : null}
@@ -483,9 +471,17 @@ function Content({
             />{" "}
           </>
         ) : null}
-        {solved?.fan == null ? (
-          <span data-tone={solved ? "alarm" : undefined}>
-            {solved ? "no ESP: an implausible loss" : "not priced"}
+        {!solved ? (
+          <span>not priced</span>
+        ) : !solved.fans.length ? (
+          <span className="text-ink-2" data-readout-missing="">
+            Rule a fan to price this system
+          </span>
+        ) : solved.fan == null ? (
+          <span data-tone={solved.fans.length > 1 ? undefined : "alarm"} data-readout-missing="">
+            {solved.fans.length > 1
+              ? "Shared network; read pressure per fan"
+              : `no ESP: this fan's calc is ${solved.fans[0]!.claim}`}
           </span>
         ) : flowless.length ? (
           // A terminal with no design flow is priced at 0 cfm, so the sum would read as a
@@ -525,8 +521,7 @@ function Content({
                   {criticalName}
                 </button>
               </>
-            ) : null}{" "}
-            <ProvisionalNote provisional={solved.provisional} of="the fan static" />
+            ) : null}
           </>
         )}
       </span>

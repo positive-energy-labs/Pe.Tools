@@ -1,7 +1,7 @@
 /** A pressure-gaining part counts 0 ft; its dp stays signed (FC-23 13890167: ER5-1 Cb -2.65). */
 import { expect, it } from "vite-plus/test";
 import { withEquivalentLength } from "./equivalent-length.ts";
-import type { Row } from "./losses.ts";
+import type { Row } from "./calc-runs.ts";
 
 it("never gives a negative length to a part that gains pressure", () => {
   const rows = [

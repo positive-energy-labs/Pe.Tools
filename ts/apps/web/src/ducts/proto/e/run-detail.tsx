@@ -10,8 +10,9 @@ import { PlainList } from "@pe/kit/lang/list-view";
  * fittings it feeds each as equivalent feet and an SP loss. A "run" here is one duct and the parts
  * its air passes before the next duct, read off the priced path that carries the selected element.
  */
-import type { PricedView as Priced } from "@pe/ducts-domain/pricing-view";
-import type { Row } from "@pe/ducts-domain/losses";
+import { runsOf, type Row } from "@pe/ducts-domain/calc-runs";
+
+import type { Priced } from "../../priced";
 
 import { fmt, fmtFt } from "./bar";
 
@@ -27,8 +28,8 @@ interface RunPart {
 
 export interface RunData {
   ductId: number;
-  /** The path (terminal id) the numbers are read on. */
-  terminal: number;
+  /** The terminal the path the numbers are read on ends at; null when it ends anywhere else. */
+  terminal: number | null;
   lengthFt: number;
   /** The duct's own actual friction rate, in-wg per 100 ft. */
   rate: number | null;
@@ -42,18 +43,12 @@ export interface RunData {
 }
 
 /**
- * The run the selected element belongs to: the path of the system's groups that carries it (a
- * critical one first), the duct at or before it on that path, and the parts after that duct up to
- * the next duct.
+ * The run the selected element belongs to: the first fan calc path that carries it (each calc ranks
+ * its paths worst first), the duct at or before it on that path, and the parts after that duct up
+ * to the next duct. A shared duct reads the same on every fan's calc, so the first is enough.
  */
-export function runOf(priced: Priced, groups: readonly string[], selected: number): RunData | null {
-  const critical = new Set(groups.map((g) => priced.next.byGroup[g]?.critical));
-  const terminals = Object.keys(priced.next.paths)
-    .map(Number)
-    .filter((t) => groups.includes(priced.next.paths[t]!.groupId))
-    .sort((a, b) => Number(critical.has(b)) - Number(critical.has(a)) || a - b);
-  for (const terminal of terminals) {
-    const rows = priced.next.paths[terminal]!.rows;
+export function runOf(priced: Priced, selected: number): RunData | null {
+  for (const { rows, terminal } of runsOf(priced.calcs)) {
     const at = rows.findIndex((r) => r.id === selected);
     if (at < 0) continue;
     let anchor = at;

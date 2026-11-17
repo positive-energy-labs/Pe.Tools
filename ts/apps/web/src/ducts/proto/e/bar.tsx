@@ -30,14 +30,13 @@ import {
   type ReactNode,
 } from "react";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
-import type { PricedView as Priced } from "@pe/ducts-domain/pricing-view";
-import { tableOf } from "@pe/ducts-domain/pricing";
+import { tableOf, type Priced } from "../../priced";
 import { Button } from "@pe/kit/lang/button";
 import type { LossesWork } from "../../work";
 import { assignFamilyRule } from "./rule-assignment";
 import { barRows, ruleConditions, selectedBarRow, type BarRow } from "./bar-model";
 import { fanLoad } from "@pe/ducts-domain/fan-headroom";
-import type { Provisional } from "@pe/ducts-domain/losses";
+import type { Provisional } from "@pe/ducts-domain/calc-runs";
 import {
   Popover,
   SubjectPopoverContent as PopoverContent,

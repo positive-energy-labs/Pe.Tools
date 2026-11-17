@@ -5,7 +5,7 @@
  * priced row's `eqFt` is `dp / rate x 100` where `rate` is the rate of the duct run the part sits
  * on along its path. Pure; the pressure drop itself stays in in-wg (`losses.ts`).
  */
-import type { Row } from "./losses.ts";
+import type { Row } from "./calc-runs.ts";
 
 // firm-default: 0.08 in-wg per 100 ft is a typical residential design friction rate; the firm's
 // own number belongs in firm config. It is a project and firm setting (`designFriction` in Settings/ducts.json).

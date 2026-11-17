@@ -2,7 +2,6 @@ import { describe, expect, it } from "vite-plus/test";
 
 import { bin } from "./bins.ts";
 
-import { computeLosses } from "./losses.ts";
 import { survey } from "./survey.ts";
 import { terminalFlows } from "./terminal-flows.ts";
 import { designOf } from "./test-design.ts";
@@ -145,7 +144,7 @@ describe("terminalFlows", () => {
 });
 
 describe("a group with no air mover", () => {
-  it("prices nothing and raises one blocking no-fan finding; a edit passive root is no fan", () => {
+  it("raises one blocking no-fan finding; an edit passive root is no fan", () => {
     const s = snapshot(0.7854);
     // Units 1 and 2 are the base equipment of the systems their groups carry: proposed fans.
     s.groups[0]!.systemNames = ["SA 1"];
@@ -159,19 +158,12 @@ describe("a group with no air mover", () => {
     expect(found.map((f) => f.groupId)).toEqual(["g40"]);
     expect(found[0]!.elementIds).toEqual([40, 41]);
     expect(bin(found[0]!)).toBe("blocking");
-    const result = computeLosses(s, {});
-    expect(result.byGroup.g40!.hasAirMover).toBe(false);
-    expect(result.byGroup.g10!.hasAirMover).toBe(true);
-    expect(result.paths[40]).toBeUndefined();
-    expect(result.paths[30]).toBeDefined();
     // Staging unit 1 passive leaves g10 with no fan too.
     const passive = designOf({
       roles: { "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000001": { edit: { by: "human", value: { role: "passive" } } } },
     });
     const again = survey(s, passive).findings.filter((f) => f.kind === "no-fan");
     expect(again.map((f) => f.groupId)).toEqual(["g10", "g40"]);
-    expect(computeLosses(s, {}, {}, { unitRole: { 1: "passive" } }).byGroup.g10!.hasAirMover).toBe(
-      false,
-    );
+
   });
 });

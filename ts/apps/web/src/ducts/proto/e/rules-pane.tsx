@@ -1,4 +1,4 @@
-import type { PricedView as Priced } from "@pe/ducts-domain/pricing-view";
+import { unpriced, type Priced } from "../../priced";
 import { AttentionDocument, useMembers, type SubjectKey } from "@pe/kit/lang/attention";
 import { useElementIndex } from "#/element-index";
 import { useList } from "@pe/kit/lang/collection";
@@ -15,12 +15,11 @@ import { useCallback, useContext } from "react";
  * an override row under its type's rule, its drop editable. The tree's element rows jump here.
  */
 import { ruleByKey } from "@pe/ducts-domain/loss-rules";
-import type { LossResult } from "@pe/ducts-domain/losses";
-import { unpriced } from "@pe/ducts-domain/pricing";
+import { runsOf } from "@pe/ducts-domain/calc-runs";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { memo, useMemo } from "react";
 
-import { clearWords, ruleFanOut } from "../../inputs";
+import { clearWords } from "../../inputs";
 import type { LossesWork } from "../../work";
 import { RuleAssignment } from "./rule-assignment";
 import { Chips, DropCell, StagedRules } from "./rules";
@@ -30,21 +29,15 @@ type RuleNode =
   | { kind: "rule"; key: string; ids: number[] }
   | { kind: "override"; key: string; id: number };
 
-/** Each fitting id's rule key, over every priced path (applied first, then edit). */
+/** Each fitting id's rule key, over every fan calc's paths. */
 const ruleKey = (rule: string): SubjectKey => `rule:${rule}`;
 const familyKey = (n: { family: string | null; ids: ReadonlySet<number> }): SubjectKey =>
   `family:${n.family ?? `#${[...n.ids][0]}`}`;
 
 export function ruleOfIds(priced: Priced | null): Map<number, string> {
   const out = new Map<number, string>();
-  const walk = (r: LossResult) => {
-    for (const path of Object.values(r.paths))
-      for (const row of path.rows) if (row.rule && !out.has(row.id)) out.set(row.id, row.rule);
-  };
-  if (priced) {
-    walk(priced.now);
-    walk(priced.next);
-  }
+  for (const run of priced ? runsOf(priced.calcs) : [])
+    for (const row of run.rows) if (row.rule && !out.has(row.id)) out.set(row.id, row.rule);
   return out;
 }
 
@@ -90,7 +83,8 @@ export const RulesTree = memo(function RulesTree({
     const overrides = [
       ...new Set([
         ...Object.keys(priced.edit.componentDrops).map(key => workElementId(snapshot, key)),
-        ...(landing && ruleOf.has(landing.id) ? [landing.id] : []),
+        // A restored selection lands on its fitting's drop even where no fan calc reaches it yet.
+        ...(landing ? [landing.id] : []),
       ]),
     ].filter(inScope);
     const rules = [...ids]
@@ -112,20 +106,27 @@ export const RulesTree = memo(function RulesTree({
 
   // What staging each rule's table would move, known before anything is edit: the grilles
   const fanOuts = useMemo(() => {
-    const trees = new Map();
-    return new Map(
-      roots.flatMap((n) =>
-        n.kind === "rule" ? [[n.key, ruleFanOut(snapshot, ruleOf, n.key, trees)] as const] : [],
-      ),
-    );
-  }, [roots, snapshot, ruleOf]);
+    const runs = runsOf(priced.calcs);
+    const count = (key: string) => ({
+      // Every grille whose path on any fan's calc carries one of the rule's fittings.
+      grilles: new Set(
+        runs.flatMap((run) =>
+          run.terminal != null && run.rows.some((row) => row.rule === key) ? [run.terminal] : [],
+        ),
+      ).size,
+      systems: new Set(
+        [...ruleOf].flatMap(([id, rule]) => (rule === key ? (groupOf.get(id) ?? []) : [])),
+      ).size,
+    });
+    return new Map(roots.flatMap((n) => (n.kind === "rule" ? [[n.key, count(n.key)] as const] : [])));
+  }, [roots, priced, ruleOf, groupOf]);
 
   // Fittings no rule prices, by family, plus the families a person has assigned a rule to.
   const unruled = useMemo(() => {
     const own = new Set(groups);
     const inScope = (id: number) => wide || own.has(groupOf.get(id) ?? "");
     const byFamily = new Map<string, { family: string | null; ids: Set<number> }>();
-    for (const path of Object.values(priced.next.paths))
+    for (const path of runsOf(priced.calcs))
       for (const row of path.rows)
         if (row.finding === "no-rule" && inScope(row.id)) {
           const key = row.family ?? `#${row.id}`;
@@ -273,7 +274,7 @@ export const RulesTree = memo(function RulesTree({
         </div>
       ) : null}
       <div className="hairline-t pt-1">
-        <StagedRules priced={priced} groups={wide ? [] : groups} work={work} />
+        <StagedRules priced={priced} work={work} />
       </div>
     </div>
   );

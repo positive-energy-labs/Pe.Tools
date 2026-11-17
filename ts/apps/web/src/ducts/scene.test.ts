@@ -1,12 +1,10 @@
-import { neutralFansWork } from "@pe/agent-contracts";
-import { expect, test, vi } from "vite-plus/test";
+import { expect, test } from "vite-plus/test";
 import { readFileSync } from "node:fs";
-import type { Row } from "@pe/ducts-domain/losses";
-import { price } from "@pe/ducts-domain/pricing";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { syntheticSnapshot } from "./test-fixture";
 import { indexOf, sceneOf, subjectScene } from "./scene";
 import { legsOf } from "./legs";
+import { calcOf, calcsOf, legOf, withFan } from "./calcs.test-support";
 
 test("both Scene builders retain stub connector facts without admitting stubs to subject annotations", () => {
   const raw = syntheticSnapshot();
@@ -34,63 +32,62 @@ test("both Scene builders retain stub connector facts without admitting stubs to
 
 test("scopes share immutable loss projections, preserving interval sums and alternative legs", () => {
   const raw = syntheticSnapshot();
-  const priced = price(raw, {}, null, neutralFansWork);
-  const path = Object.values(priced.next.paths)[0]!;
-  const rows: Row[] = [
-    { id: 10, kind: "friction", dp: 2, desc: "first interval" },
-    { id: 10, kind: "friction", dp: 3, desc: "second interval" },
-    { id: 21, kind: "fitting", dp: 0.2, leg: "Cs", desc: "straight" },
-    { id: 21, kind: "fitting", dp: 0.7, leg: "Cb", desc: "branch" },
-    { id: 30, kind: "terminal", dp: null, desc: "unpriced" },
-    { id: 31, kind: "terminal", dp: 0, desc: "zero" },
+  const legs = [
+    legOf("10:1>2", 10, "duct", 2),
+    legOf("10:2>3", 10, "duct", 3),
+    legOf("21:1>2", 21, "fitting", 0.7),
+    legOf("21:1>3", 21, "fitting", 0.2),
+    legOf("30:1>", 30, "terminal", null),
+    legOf("31:1>", 31, "terminal", 0),
   ];
-  const next = {
-    ...priced.next,
-    paths: { 30: { ...path, rows }, 31: { ...path, rows: [...rows] } },
-  };
-  const current = { ...priced, next };
+  const calcs = [
+    calcOf(1, legs, [
+      { terminal: 30, legIds: ["10:1>2", "10:2>3", "21:1>2", "30:1>"] },
+      { terminal: 31, legIds: ["10:1>2", "10:2>3", "21:1>3", "31:1>"] },
+    ]),
+  ];
+  const current = { calcs };
   const index = indexOf(raw, current);
   expect([...index.loss]).toEqual([
     [10, 5],
     [21, 0.7],
     [31, 0],
   ]);
-  const visit = vi.spyOn(rows, Symbol.iterator);
-  try {
-    const again = indexOf(raw, { ...current });
-    expect(again.loss).toBe(index.loss);
-    expect(visit).not.toHaveBeenCalled();
-    const scene = sceneOf(again, ["g10"], () => true);
-    expect(scene.segments.find((f) => f.segment.id === 10)?.pressure).toEqual({ drop: 5 });
-    expect(scene.nodes.find((f) => f.node.id === 21)?.pressure).toEqual({ drop: 0.7 });
-    expect(scene.nodes.find((f) => f.node.id === 30)?.pressure).toBeUndefined();
-    const replacement = structuredClone(next);
-    const refreshed = indexOf(raw, { ...current, next: replacement });
-    expect(refreshed.loss).toEqual(index.loss);
-    expect(refreshed.loss).not.toBe(index.loss);
-    const changed = {
-      ...next,
-      paths: { 30: { ...path, rows: [{ ...rows[0]!, dp: 9 }] } },
-    };
-    expect([...indexOf(raw, { ...current, next: changed }).loss]).toEqual([[10, 9]]);
-    expect(indexOf(raw, current).loss).toBe(index.loss);
-    expect(indexOf(raw).loss.size).toBe(0);
-  } finally {
-    visit.mockRestore();
-  }
+  const again = indexOf(raw, { ...current });
+  expect(again.loss).toBe(index.loss);
+  const scene = sceneOf(again, ["g10"], () => true);
+  expect(scene.segments.find((f) => f.segment.id === 10)?.pressure).toEqual({ drop: 5 });
+  expect(scene.nodes.find((f) => f.node.id === 21)?.pressure).toEqual({ drop: 0.7 });
+  expect(scene.nodes.find((f) => f.node.id === 30)?.pressure).toBeUndefined();
+  const refreshed = indexOf(raw, { calcs: structuredClone(calcs) });
+  expect(refreshed.loss).toEqual(index.loss);
+  expect(refreshed.loss).not.toBe(index.loss);
+  const changed = [calcOf(1, [legOf("10:1>2", 10, "duct", 9)], [{ terminal: 30, legIds: ["10:1>2"] }])];
+  expect([...indexOf(raw, { calcs: changed }).loss]).toEqual([[10, 9]]);
+  expect(indexOf(raw, current).loss).toBe(index.loss);
+  expect(indexOf(raw).loss.size).toBe(0);
 });
 
-test("saved pricing reuses losses across scopes and replaces them when the result changes", () => {
-  const raw: DuctSnapshot = process.env.PE_DUCTS_CACHE_FIXTURE
-    ? JSON.parse(readFileSync(process.env.PE_DUCTS_CACHE_FIXTURE, "utf8"))
-    : syntheticSnapshot();
-  const priced = price(raw, {}, null, neutralFansWork);
-  const original = indexOf(priced.snapshot, priced);
+test("a shared duct draws one loss, the same on each fan's calc, never their sum (Q7)", () => {
+  const shared = () => legOf("10:1>2", 10, "duct", 2);
+  const calcs = [
+    calcOf(1, [shared(), legOf("30:1>", 30, "terminal", 0.1)], [{ terminal: 30, legIds: ["10:1>2", "30:1>"] }]),
+    calcOf(2, [shared(), legOf("31:1>", 31, "terminal", 0.2)], [{ terminal: 31, legIds: ["10:1>2", "31:1>"] }]),
+  ];
+  expect(indexOf(syntheticSnapshot(), { calcs }).loss.get(10)).toBe(2);
+});
+
+test("saved calcs reuse losses across scopes and replace them when the result changes", () => {
+  const raw: DuctSnapshot = withFan(
+    process.env.PE_DUCTS_CACHE_FIXTURE
+      ? JSON.parse(readFileSync(process.env.PE_DUCTS_CACHE_FIXTURE, "utf8"))
+      : syntheticSnapshot(),
+  );
+  const priced = { calcs: calcsOf(raw) };
+  const original = indexOf(raw, priced);
   expect(original.loss.size).toBeGreaterThan(0);
-  expect(indexOf(priced.snapshot, priced).loss).toBe(original.loss);
-  expect(indexOf({ ...priced.snapshot }, { ...priced }).loss).toBe(original.loss);
-  expect(
-    indexOf(priced.snapshot, { ...priced, next: { ...priced.next, paths: {} } }).loss.size,
-  ).toBe(0);
-  expect(indexOf(priced.snapshot, priced).loss).toBe(original.loss);
+  expect(indexOf(raw, priced).loss).toBe(original.loss);
+  expect(indexOf({ ...raw }, { ...priced }).loss).toBe(original.loss);
+  expect(indexOf(raw, { calcs: [] }).loss.size).toBe(0);
+  expect(indexOf(raw, priced).loss).toBe(original.loss);
 });

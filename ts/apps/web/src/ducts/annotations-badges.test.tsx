@@ -191,7 +191,7 @@ it("one gap repair has one row, two named subjects, two pins and one evidence se
     useMarks({
       heal,
       snapshot,
-      priced: { findings, next: { paths: {} } } as never,
+      priced: { findings, calcs: [] } as never,
       scene: { segments: segments.map((segment) => ({ segment })), nodes: [] } as never,
       work: { doc: null } as never,
       issueScope: null,

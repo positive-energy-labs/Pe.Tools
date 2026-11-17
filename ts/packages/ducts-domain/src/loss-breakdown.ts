@@ -4,7 +4,7 @@
  * split the strip has always drawn; a group sits inside exactly one part. Size is a choice, off by
  * default: 12" and 8" of the same duct type are one group unless `bySize`.
  */
-import type { LossResult, Row } from "./losses.ts";
+import type { Row } from "./calc-runs.ts";
 import type { DuctSnapshot } from "./types.ts";
 import { familyTypeName as typeLabel } from "@pe/agent-contracts/subject-ref";
 
@@ -64,15 +64,4 @@ export function lossGroups(
   }
   const order: Record<LossPart, number> = { unit: 0, duct: 1, terminal: 2 };
   return [...groups.values()].sort((a, b) => order[a.part] - order[b.part] || b.dp - a.dp);
-}
-
-/**
- * The rows of a group's critical run (the worst fan's), as the tree draws it: the fan's own rows when
- * that run crosses a junction, else the path priced to the critical terminal. Null with no critical run.
- */
-export function criticalRows(result: LossResult, groupId: string): Row[] | null {
-  const solved = result.byGroup[groupId];
-  if (solved?.critical == null) return null;
-  const via = solved.fans.find((f) => f.unit === solved.criticalFan && f.viaJunction);
-  return via ? via.rows : (result.paths[solved.critical]?.rows ?? null);
 }

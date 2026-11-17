@@ -11,8 +11,8 @@ import { makeAtomRegistry } from "#/shell/owner";
 import { TestAttention, eKey } from "#/test-attention";
 import { hovered } from "@pe/kit/lang/attention";
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import type { FanResult } from "@pe/ducts-domain/losses";
-import type { Priced } from "@pe/ducts-domain/pricing";
+import type { Priced } from "../../priced";
+import { calcOf, legOf } from "../../calcs.test-support";
 import { NativeObservationScope } from "#/revit/observation";
 import type { TreeNode } from "../b/model";
 import { SystemTree, type TreeCtx } from "./tree-sidebar";
@@ -235,31 +235,24 @@ test("address query and name sort round trip; revealing an excluded selection ne
 });
 
 // Q2: the removed Ducts Inputs pane is exercised through the admitted Fans pane instead.
-const fan = (unit: number, critical: number | null, cfm: number): FanResult => ({
-  unit,
-  cfm,
-  critical,
-  port: unit,
-  junction: null,
-  owned: [unit, unit + 1],
-  esp: 0.125,
-  tel: 12,
-  stretch: [],
-  viaJunction: false,
-  path: [],
-  rows: [],
-});
-test("fan facts keep largest-first order, name the trunk owner and where a smaller fan ends", () => {
-  const priced = {
-    next: { byGroup: { g: { fans: [fan(1, 20, 400), { ...fan(2, null, 200), junction: 9 }] } } },
-  } as unknown as Priced;
-  const facts = fanFacts(priced, ["g"], (id) => `E${id}`);
-  expect(facts.map((f) => [f.unit, f.role])).toEqual([
-    [1, "largest fan"],
-    [2, "fan"],
+test("fan facts list each reaching fan on its own calc, in roster order, and claim ESP only on a complete one", () => {
+  const terminal = (id: number) => legOf(`${id}:1>`, id, "terminal", 0.1);
+  const first = calcOf(1, [terminal(20)], [{ terminal: 20, legIds: ["20:1>"] }]);
+  const second = calcOf(2, [terminal(20), terminal(21)], [
+    { terminal: 20, legIds: ["20:1>"] },
+    { terminal: 21, legIds: ["21:1>"] },
   ]);
-  expect(facts[0]!.says).toBe("400 cfm · TEL 12 ft · ESP 0.125 in-wg · owns the trunk");
-  expect(facts[1]!.says).toMatch(/ · to E9$/);
-  // A lone fan carries no section words.
-  expect(fanFacts(priced, [], String)).toEqual([]);
+  first.claim = { kind: "complete", basis: "test", requiredEspInWg: 0.125, coverage: [], blockingIds: [] };
+  first.fan.flowCfm = 400;
+  const priced = { calcs: [first, second] } as unknown as Priced;
+  const facts = fanFacts(priced, new Set([20]));
+  expect(facts.map((f) => [f.unit, f.role, f.complete])).toEqual([
+    [1, "fan", true],
+    [2, "fan \u00b7 incomplete", false],
+  ]);
+  expect(facts[0]!.says).toBe("400 cfm \u00b7 TEL 0.0 ft \u00b7 ESP 0.125 in-wg");
+  expect(facts[1]!.says).toMatch(/known 0\.000 in-wg$/);
+  // A fan whose calc reaches none of the system's terminals is not one of its fans.
+  expect(fanFacts(priced, new Set([21])).map((f) => f.unit)).toEqual([2]);
+  expect(fanFacts(priced, new Set())).toEqual([]);
 });

@@ -1,11 +1,10 @@
 // U4 wires the real fans Work for callers without one.
 import { neutralFansWork } from "@pe/agent-contracts";
 /**
- * What the route runs before any tree or loss (pressure-drop ledger, 2026-10-16): the snapshot
+ * What the route runs before reading model health: the snapshot
  * read in Work's working phase (`phases.ts`) and tolerated (`proximity.ts`), every terminal's design flow resolved (`terminal-flows.ts`), and
  * the findings of both beside the snapshot's own issues, each naming who clears it. Cached per
- * snapshot for the last Work, so pricing readers share one survey; the tolerated
- * snapshot is cached per proximity verdict set, so a edit number re-solves only `next`.
+ * snapshot for the last Work. The tolerated snapshot is cached per proximity verdict set.
  */
 import {
   stagedValues,
@@ -14,13 +13,11 @@ import {
   type DuctsDesign,
 } from "@pe/agent-contracts";
 
-import { byFlow, groupFans } from "./fan-sections.ts";
 import { passThrough } from "./pass-through.ts";
 import { phased } from "./phases.ts";
 import { tolerate, type InferredLink } from "./proximity.ts";
 import {
   equipmentFlows,
-  markOf,
   terminalFlows,
   type EquipmentFlow,
   type FlowFinding,
@@ -28,7 +25,6 @@ import {
   type TerminalFlow,
 } from "./terminal-flows.ts";
 import { withStoredRulings } from "./rulings.ts";
-import { groupTree } from "./topology.ts";
 import { passiveOf, unitRoles, type UnitRole } from "./unit-roles.ts";
 import type { DuctSnapshot } from "./types.ts";
 import { elementLabeler } from "./element-label.ts";
@@ -36,13 +32,9 @@ import { elementLabeler } from "./element-label.ts";
 export interface Survey {
   snapshot: DuctSnapshot;
   flows: Map<number, TerminalFlow>;
-  /** Every unit's design flow: edit `equipmentFlows`, else Revit's `fanFlow` fact, else (a fan) the sum of the terminal flows it serves, `derived`. */
+  /** Stated equipment flows only; derived flows belong to the fan calcs. */
   equipmentFlows: Map<number, EquipmentFlow>;
-  /**
-   * Each group's fans with the flow the solve prices them at there (`groupFans`): stated, else the
-   * sum of the grilles the fan serves in that group (`derived`), else none. Read a unit's flow for a
-   * system through `unitFlowIn`, never `equipmentFlows`' largest-over-every-group reading.
-   */
+  /** No legacy group-derived flows; the fan calcs own terminal sums. */
   fanFlows: Map<string, Map<number, EquipmentFlow>>;
   /** Every root unit's role: ruled, edit, else proposed from its design flow (`unit-roles.ts`). */
   roles: Map<number, UnitRole>;
@@ -150,58 +142,10 @@ export function survey(
   const m = p.snapshot;
   const flows = terminalFlows(m, edit.flows, roomFlows);
   const noFan = noFanFindings(m, passive);
-  // A fan that states no flow takes the sum of the terminal flows it serves in each group (nearest
-  const nodeOf = new Map(m.nodes.map((n) => [n.id, n]));
-  const nameOf = (id: number) => markOf(nodeOf.get(id)) ?? String(id);
-  const derived = new Map(units);
   const fanFlows = new Map<string, Map<number, EquipmentFlow>>();
-  const multiFan: DuctFinding[] = [];
-  for (const g of m.groups) {
-    const roots = g.rootIds.filter((id) => !passive.has(id));
-    if (!roots.length) continue;
-    const fans = groupFans(
-      () => groupTree(m, g.id),
-      roots,
-      (id) => units.get(id)?.cfm,
-      (t) => flows.flows.get(t)?.cfm ?? 0,
-    );
-    fanFlows.set(
-      g.id,
-      new Map(
-        fans.map((f) => [
-          f.unit,
-          f.served
-            ? { cfm: f.cfm, source: "derived", grilles: f.served.length }
-            : (units.get(f.unit) ?? { cfm: null, source: null }),
-        ]),
-      ),
-    );
-    for (const f of fans)
-      if (f.served && f.cfm! > (derived.get(f.unit)?.cfm ?? 0))
-        derived.set(f.unit, { cfm: f.cfm, source: "derived", grilles: f.served.length });
-    // Several fans price per fan (`fan-sections.ts`) and never block: a Diagnostics line names the
-    if (fans.length < 2) continue;
-    const word = (f: (typeof fans)[number]) =>
-      f.cfm == null
-        ? "flow unknown"
-        : `${f.cfm} cfm${f.served ? ` (sum of ${f.served.length} grille${f.served.length === 1 ? "" : "s"})` : ""}`;
-    const [lead, ...rest] = byFlow(fans);
-    multiFan.push({
-      id: `multi-fan:${g.id}`,
-      kind: "multi-fan",
-      groupId: g.id,
-      elementIds: [lead!, ...rest].map((f) => f.unit),
-      note: `priced per fan: ${nameOf(lead!.unit)} ${word(lead!)} owns the trunk; ${rest
-        .map((f) => `${nameOf(f.unit)} ${word(f)} owns its port to the first junction`)
-        .join("; ")}`,
-      assumed: null,
-      clearer: "person" as const,
-    });
-  }
   const findings: DuctFinding[] = [
     ...noFan,
     ...p.findings,
-    ...multiFan,
     // An inference is likely, never correct (kaitpw 2026-10-19): a person rules on every one.
     ...t.findings.map((f) => ({
       ...f,
@@ -221,7 +165,7 @@ export function survey(
   const result = {
     snapshot: m,
     flows: flows.flows,
-    equipmentFlows: derived,
+    equipmentFlows: units,
     fanFlows,
     roles,
     findings,

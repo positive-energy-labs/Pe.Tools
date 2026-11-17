@@ -2,7 +2,7 @@ import { expect, it } from "vite-plus/test";
 import { noRunBranches } from "./no-runs.ts";
 import { systemScope } from "./system-scope.ts";
 import { connOf, groupOf, nodeOf, snapshotOf, type Node } from "./test-snapshot.ts";
-import type { LossResult } from "./losses.ts";
+import type { CalcRun } from "./calc-runs.ts";
 
 const part = (id: number, kind: Node["kind"], to: (number | null)[], systemName = "SA 1") =>
   nodeOf(id, kind, {
@@ -25,11 +25,8 @@ const snapshot = snapshotOf({
   ],
   groups: [groupOf("g", { rootIds: [1], systemNames: ["SA 1"] })],
 });
-const solved = {
-  paths: { 3: { path: [2, 3] } },
-  byGroup: {},
-  crossClass: [],
-} as unknown as Pick<LossResult, "paths" | "byGroup" | "crossClass">;
+// One fan calc path, from unit 1 to grille 3.
+const solved = [{ terminal: 3, path: [1, 2, 3] }] as unknown as CalcRun[];
 const flows = new Map([[3, { cfm: 100 }]]);
 
 it("leaves the fan-to-terminal trunk clear and groups the open and capped side branches", () => {
@@ -61,17 +58,10 @@ it("a foreign terminal does not make a system's branch a run", () => {
   );
 });
 
-it("a classification stop invalidates the run and names the stopped edge", () => {
-  const result = noRunBranches(
-    snapshot,
-    {
-      ...solved,
-      crossClass: [
-        { id: 2, from: 3, classification: "ReturnAir", fromClassification: "SupplyAir", cfm: 100 },
-      ],
-    },
-    systemScope(snapshot, "SA 1"),
-    flows,
-  );
-  expect(result.get(2)?.reasons.some((r) => r.kind === "classification-stop")).toBe(true);
+it("a run on any fan's calc clears its branch; no calc leaves the whole scope with no run", () => {
+  const scope = systemScope(snapshot, "SA 1");
+  const none = noRunBranches(snapshot, [], scope, flows);
+  expect([...none.keys()].sort()).toEqual([2, 3, 4, 5, 7, 8]);
+  const other = [{ terminal: 3, path: [9, 2, 3] }] as unknown as CalcRun[];
+  expect([...noRunBranches(snapshot, other, scope, flows).keys()].sort()).toEqual([4, 5, 7, 8]);
 });

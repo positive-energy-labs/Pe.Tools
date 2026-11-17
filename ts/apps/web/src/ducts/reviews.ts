@@ -1,7 +1,7 @@
 import { elementSubject } from "@pe/ducts-domain/work-subject";
 import type { DuctsApply, DuctsAssignFan, DuctsHeal } from "@pe/host-contracts/generated";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
-import type { HealView as HealPlan } from "@pe/ducts-domain/pricing-view";
+import type { HealPlan } from "@pe/ducts-domain/heal";
 import { healSystems, healWords, networkWord, outcomeWords } from "@pe/ducts-domain/words";
 type ReviewEvidence = {
   readonly heal?: import("@pe/agent-contracts").Immutable<Pick<HealPlan,"groups">> | null;

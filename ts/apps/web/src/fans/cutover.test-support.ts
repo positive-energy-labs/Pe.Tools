@@ -3,7 +3,7 @@ import * as ductsReads from "../ducts/contract.ts";
 import { systemList } from "@pe/ducts-domain/system-list";
 import { createHash } from "node:crypto";
 import { withStoredRulings } from "@pe/ducts-domain/rulings";
-import { pricingResult } from "@pe/ducts-domain/pricing-result";
+import { pricingValue } from "../ducts/pricing-value";
 import { ductsDesign, ductsDocumentSchema, fansDocumentSchema } from "@pe/agent-contracts";
 import {
   fansSheetData,
@@ -141,7 +141,7 @@ export async function createWitness(
               : read === "network"
                 ? network
                 : {
-                    ...wire(pricingResult(snapshot, {}, {}, ductsDesign(ductsWork, fansWork))),
+                    ...wire(pricingValue(snapshot, {}, {}, ductsDesign(ductsWork, fansWork))),
                     roster,
                     network,
                     fanRows: sheet.roster.rows,

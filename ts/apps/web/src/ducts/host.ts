@@ -11,11 +11,11 @@ import { DUCTS_SYSTEM_MAX,
   ductParameterSlots, } from "@pe/agent-contracts";
 import { SYSTEMS_PER_READ, mergeSnapshots } from "@pe/ducts-domain/system-reads";
 import { toGrids } from "@pe/ducts-domain/loss-grid";
-import { TABLE_IDS } from "@pe/ducts-domain/pricing";
-import { pricingResult } from "@pe/ducts-domain/pricing-result";
+import { TABLE_IDS } from "@pe/ducts-domain/table-ids";
 import { designLayers } from "./ducts-design.ts";
 import { firmLayer } from "@pe/host/ducts-inputs";
 import { resolveCriteria } from "@pe/ducts-domain/sheet/index";
+import { pricingValue, pricingWire } from "./pricing-value.ts";
 import { catalogs } from "@pe/host/builtin-read-handles";
 import { read } from "@pe/host/read-graph";
 import { systemList } from "@pe/ducts-domain/system-list";
@@ -99,22 +99,6 @@ export const ductsNetwork = body(contracts.network, async function(ctx, args) {
       },
     };
   });
-// Built once: z.json() constructs a lazy union per call, and wire visits every leaf of the pricing result.
-const jsonLeaf = z.json();
-/** The wire carries every Map entry and Set member, never JSON.stringify's empty object. */
-function wire(value: unknown): z.infer<ReturnType<typeof z.json>> {
-  if (value instanceof Map)
-    return Object.fromEntries([...value].map(([key, item]) => [String(key), wire(item)]));
-  if (value instanceof Set) return [...value].map(wire);
-  if (Array.isArray(value)) return value.map(wire);
-  if (value !== null && typeof value === "object")
-    return Object.fromEntries(
-      Object.entries(value)
-        .filter(([, item]) => item !== undefined)
-        .map(([key, item]) => [key, wire(item)]),
-    );
-  return jsonLeaf.parse(value);
-}
 export const ductsPricing = body(contracts.pricing, async function(ctx, args) {
     const network = await ctx.read(ductsNetwork, args);
     const layers = await ctx.read(designLayers, args.target),
@@ -144,34 +128,20 @@ export const ductsPricing = body(contracts.pricing, async function(ctx, args) {
       { roster, fans, network, layers, catalog, tables },
       ({ roster, fans, network, layers, catalog, tables }) => {
         const { sourceVersion: _version, systemReads: _coverage, ...snapshot } = network;
-        const result = ductsPricingData
-          .omit({
-            espOptions: true,
-            espOptionsError: true,
-            fanRows: true,
-            design: true,
-            effectiveDesign: true,
-            network: true,
-            ductsWork: true,
-            fansWork: true,
-            catalogFindings: true,
-            criteria: true,
-            firm: true,
-            settings: true,
-          })
-          .parse(
-            wire(
-              pricingResult(
-                snapshot,
-                toGrids(tables.body),
-                catalog.tables,
-                ductsDesign(layers.ducts, layers.fans),
-                layers.settings,
-              ),
-            ),
-          );
-        const priced = new Map(result.analysis.systems.map((row) => [row.key, row]));
         const design = ductsDesign(layers.ducts, layers.fans);
+        const stored = withStoredRulings(design, snapshot.store, snapshot) ?? design;
+        const result = pricingWire(
+          pricingValue(
+            snapshot,
+            toGrids(tables.body),
+            catalog.tables,
+            design,
+            layers.settings,
+            firmLayer(layers.firm, layers.settings),
+            layers.revision,
+          ),
+        );
+        const priced = new Map(result.analysis.systems.map((row) => [row.key, row]));
         return {
           ...options,
           ...result,
@@ -179,7 +149,7 @@ export const ductsPricing = body(contracts.pricing, async function(ctx, args) {
             ...result.analysis,
             systems: roster.rows.map((row) => priced.get(row.key) ?? row),
           },
-          effectiveDesign: withStoredRulings(design, snapshot.store, snapshot) ?? design,
+          effectiveDesign: stored,
           fanRows: fans.rows,
           design,
           network,
