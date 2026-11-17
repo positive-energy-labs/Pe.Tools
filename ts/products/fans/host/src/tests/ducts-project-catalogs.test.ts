@@ -62,7 +62,7 @@ test("a losses plan on an incomplete fan calc is refused with the claim's reason
     { path: ["writeIntent", "edit"], value: { value: { walk: { unitId: 100, portIndex: 0 } } } },
   ], 0);
   expect(fans).toMatchObject({ ok: true });
-  expect(await f.saved.apply(f.key, "ducts", "human", [{ path: ["catalogs", catalogLinkKey(terminal.family, terminal.type), "edit"], value: { value: { table: "project-table" } } }], 0)).toMatchObject({ ok: true });
+  expect(await f.saved.apply(f.key, "duct-systems", "human", [{ path: ["catalogs", catalogLinkKey(terminal.family, terminal.type), "edit"], value: { value: { table: "project-table" } } }], 0)).toMatchObject({ ok: true });
   const response = await f.post("/actions", { id: "project-loss", key: "sheet.plan", target: f.target,
     input: { work: { key: fanKey, revision: fans.ok ? fans.revision : -1 } } });
   expect(response.status, await response.clone().text()).toBeLessThan(400);

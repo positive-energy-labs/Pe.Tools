@@ -2,3 +2,5 @@
 import { peaGuide as guide0 } from "@pe/ducts-contract/pea-guide";
 import { peaGuide as guide1 } from "@pe/fans-contract/pea/ducts-skill";
 export const productGuides = [guide0, guide1] as const;
+import { admissionPreflight as preflight0 } from "@pe/fans-contract/admission";
+export const productAdmissionPreflights = [preflight0] as const;

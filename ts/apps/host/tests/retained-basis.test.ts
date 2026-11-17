@@ -377,7 +377,7 @@ test("retained calls in their own child contexts link the original native taking
   const web = router({ kind: "live", captureStore: writer }, new DuctsReadings(), counts,
     (taking) => Effect.sync(() => { takes.push(taking); }), consumer);
   const sets = Context.get(await run(Effect.scoped(Layer.build(HostInputReadSets.layer({ kind: "live", captureStore: writer })))), HostInputReadSets);
-  const recipe = { key: "ducts.sheet", input: { fan: "F-1" }, scope: canonicalJson(ref) };
+  const recipe = { key: "fans.calc-detail", input: { fan: "F-1" }, scope: canonicalJson(ref) };
   const retained = (role: string) => ({ key: "ducts.retained", input: { key: input.key, role }, scope: canonicalJson(scope) });
   const root = await run(sets.open(recipe, null));
   const child = (role: string) => { const made = root.child(retained(role)); if (Result.isFailure(made)) throw made.failure; return made.success; };
@@ -420,7 +420,7 @@ test("a cold hit-only child selects its stored native link for resolve and read;
   const web = router({ kind: "live", captureStore: writer }, new DuctsReadings(), { reads: 0 },
     (taking) => Effect.sync(() => { takes.push(taking); }), consumer);
   const sets = Context.get(await run(Effect.scoped(Layer.build(HostInputReadSets.layer({ kind: "live", captureStore: writer })))), HostInputReadSets);
-  const recipe = { key: "ducts.sheet", input: { fan: "F-1" }, scope: canonicalJson(ref) };
+  const recipe = { key: "fans.calc-detail", input: { fan: "F-1" }, scope: canonicalJson(ref) };
   const retained = (role: string) => ({ key: "ducts.retained", input: { key: input.key, role }, scope: canonicalJson(scope) });
   const root = await run(sets.open(recipe, null));
   const child = (consumption: InputConsumption, role: string) => {

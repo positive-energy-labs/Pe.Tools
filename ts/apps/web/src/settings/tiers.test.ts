@@ -218,10 +218,10 @@ test("snapshot slot names come from the project home, never Fans Work", () => {
 test("the pricing caption calls an absent firm file defaults, never firm seed", () => {
   const read = fansCalcData.parse({
     open: null, rows: [], progress: null, espOptions: null, espOptionsError: null,
-    ductsRevision: 0, ductsWork: {}, fansWork: {}, design: {}, settings: {},
-    sheetSnapshot: { kind: "absent" },
+    ductSystemsRevision: 0, ductSystemsWork: {}, fansWork: {}, design: {}, settings: {},
+    calcSnapshot: { kind: "absent" },
     fans: { target: { session: "test", openId: "doc" }, slots: [], activeSlot: "", rows: [] },
-    sheetView: { blockers: [], tiers: { taken: 0, accept: 0, preview: 0 }, taken: [], inputs: null,
+    calcView: { blockers: [], tiers: { taken: 0, accept: 0, preview: 0 }, taken: [], inputs: null,
       firm: { version: "seed", path: "Settings/ducts.json", present: false } },
   });
   const caption = fansCalc.from(read, {})!.says;

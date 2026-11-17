@@ -993,6 +993,9 @@ importers:
         specifier: workspace:*
         version: link:../../../packages/host-contracts
     devDependencies:
+      '@pe/ducts-contract':
+        specifier: workspace:*
+        version: link:../contract
       '@pe/ducts-web':
         specifier: workspace:*
         version: link:../web

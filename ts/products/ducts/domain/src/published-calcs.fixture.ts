@@ -18,6 +18,6 @@ export const publishedCalc = (...args: unknown[]) => calc.parse(captured("buildC
 export const publishedCalcs = (...args: unknown[]) => z.array(calc).parse(captured("networkCalcs", args));
 export const publishedPricing = () => ductsPricingData.pick({ calcs: true, survey: true, analysis: true }).parse(cases.pricing);
 export const publishedRoster = () => ductsPricingData.shape.analysis.shape.systems.parse(cases.roster);
-export const publishedSheetView = () => fansCalcData.shape.sheetView.parse(cases.sheetView);
+export const publishedCalcView = () => fansCalcData.shape.calcView.parse(cases.calcView);
 export const publishedCalcExample = () => calc.parse(Object.values(cases).find(value =>
   typeof value === "object" && value !== null && "fan" in value));

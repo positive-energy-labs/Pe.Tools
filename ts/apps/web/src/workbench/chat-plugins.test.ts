@@ -198,7 +198,7 @@ describe("chat plugin records", () => {
     const record = proposedRecord(
       "pe_do",
       {
-        key: "route:ducts.edit",
+        key: "route:duct-systems.edit",
         expectedRevision: 2,
         input: {
           system: "AHU-1",

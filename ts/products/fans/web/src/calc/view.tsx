@@ -263,7 +263,7 @@ export function Ledger({ props }: { props: LedgerProps }) {
   const causes = props.blockers.filter((b) => !isConsequence(b, present));
   const consequencesOf = (id: string) => props.blockers.filter((b) => b.causedBy === id);
   return (
-    <div className="flex flex-col gap-3 p-2" data-sheet-ledger="">
+    <div className="flex flex-col gap-3 p-2" data-calc-ledger="">
       {props.error && (
         <p role="alert" data-tone="caution">
           {props.error}

@@ -1,8 +1,13 @@
 /**
- * The fan sheet (docs/features/ducts/MAP.md, Data model): one per roster fan port, recomputed on
+ * The fan calc (docs/features/fans/LEDGER.md): one per roster fan port, recomputed on
  * every read, never persisted. Legs are keyed once; paths are leg-id lists from the fan outward.
  * The wire contract (W1-F) mirrors this file; change it there in the same commit.
  */
+
+export const CALC_ENGINE_VERSION = "calc/1";
+export const CALC_READ = "fans.calc";
+export const CALC_DETAIL_READ = "fans.calc-detail";
+export const CALC_BREAKDOWN_READ = "fans.calc-breakdown";
 
 import type {
   Encounter,

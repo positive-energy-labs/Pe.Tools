@@ -85,7 +85,7 @@ async function write(
  * The findings Work is always the admitted document's: the key comes from the target, one exact open
  * document, never from the caller (purge-2: a handle keyed to another document wrote that document).
  * A caller's handle gives only a revision, and only a findings handle has one to give: it is the
- * compare-and-set. With a route's own handle (a person's row verb on /fans or /families) or none
+ * compare-and-set. With a route's own handle (a person's row verb on its page) or none
  * (gate-ef940d36, Pea's first call) the write lands on the current revision.
  */
 async function bound<I extends { work?: z.output<typeof workHandleSchema> }>(

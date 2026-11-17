@@ -14,7 +14,7 @@ test("the retained pane owns disposal when Activity hides a still-current route"
   const retained = new Set<{ dispose(): void }>();
   const dispose = vi.fn();
   const scope: RouteActivityScope = {
-    pathname: "/ducts",
+    pathname: "/duct-systems",
     search: {},
     current: () => true,
     retain: (owner) => {
@@ -68,7 +68,7 @@ test("a body that first mounts hidden gets a non-null snapshot and ignores notif
     return null;
   }
   const scope: RouteActivityScope = {
-    pathname: "/ducts",
+    pathname: "/duct-systems",
     search: {},
     current: () => false,
     retain() {},

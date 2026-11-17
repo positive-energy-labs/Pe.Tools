@@ -20,11 +20,11 @@ const view = (instance: string, thread = "t"): RouteView => ({
   facts: { counts, ruleHelp: [] },
 });
 const ducts = (instance: string): RouteView => ({
-  route: "ducts",
+  route: "duct-systems",
   thread: "t",
   instance,
   surface: "route",
-  page: routeAddress("ducts").agent.write(routeAddress("ducts").defaults),
+  page: routeAddress("duct-systems").agent.write(routeAddress("duct-systems").defaults),
   context: { document: { session: "s", openId: "o" } },
   facts: { systems: [{ name: "Supply 1" }] },
 });
@@ -37,9 +37,9 @@ describe("mounted route view custody", () => {
       fan: { role: "subject", agent: "set" },
       viewport: { role: "pose", agent: "read" },
     } as never;
-    const store = new RouteViewStore(() => [{ key: "ducts", title: "Ducts", address: "/ducts", fields }]);
+    const store = new RouteViewStore(() => [{ key: "duct-systems", title: "Ducts", address: "/duct-systems", fields }]);
     const lease = store.publish({ ...ducts(id1), page: { fan: "", viewport: "" } });
-    expect(await store.set("t", "ducts", id1, lease.revision, { viewport: "{}" })).toMatchObject({
+    expect(await store.set("t", "duct-systems", id1, lease.revision, { viewport: "{}" })).toMatchObject({
       ok: false,
       error: expect.stringContaining("may not set"),
     });
@@ -49,7 +49,7 @@ describe("mounted route view custody", () => {
     });
     // Admitted JSON codec text that no legacy ducts codec reads; the owner decodes and settles it.
     const text = JSON.stringify({ kind: "ids", ids: [4] });
-    void store.set("t", "ducts", id1, lease.revision, { fan: text });
+    void store.set("t", "duct-systems", id1, lease.revision, { fan: text });
     expect(patch).toEqual({ fan: text });
   });
 
@@ -113,9 +113,9 @@ describe("mounted route view custody", () => {
     const lease = store.publish(ducts(id1));
     expect(store.select("t", "families")).toMatchObject({ ok: false });
     await expect(
-      store.set("t", "ducts", id1, lease.revision, { query: "x" }),
+      store.set("t", "duct-systems", id1, lease.revision, { query: "x" }),
     ).resolves.toMatchObject({ ok: false });
-    await expect(store.set("t", "ducts", id1, lease.revision, {})).resolves.toMatchObject({
+    await expect(store.set("t", "duct-systems", id1, lease.revision, {})).resolves.toMatchObject({
       ok: false,
     });
     let commandId = "";
@@ -124,7 +124,7 @@ describe("mounted route view custody", () => {
     });
     const system = JSON.stringify({kind:"ids",ids:["system-name:Supply 1"]});
     const page = {...ducts(id1).page,system};
-    const result = store.set("t", "ducts", id1, lease.revision, { system });
+    const result = store.set("t", "duct-systems", id1, lease.revision, { system });
     store.publish({ ...ducts(id1), page });
     expect(
       store.ack({

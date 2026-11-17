@@ -13,7 +13,7 @@ export const VOCABULARY: DuctSnapshot["vocabulary"] = {
   blockerKinds: [...FAN_BLOCKER_KINDS],
 };
 
-export const CALC_GROUP = "sheet";
+export const CALC_GROUP = "calc";
 
 /** Empty geometry for legacy unbound network views, never a native sheet reading. */
 export const EMPTY_SNAPSHOT: DuctSnapshot = {

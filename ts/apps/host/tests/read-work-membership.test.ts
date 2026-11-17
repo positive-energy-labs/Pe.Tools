@@ -7,14 +7,14 @@ import { RouteWorkspace } from "@pe/runtime";
 import { hostTimeline } from "../src/reads/work-timeline.ts";
 
 test("publication members are deduplicated Work leaves, including absent Work, never unread Works", async () => {
-  const ducts = bindWork("ducts", null, "one"), fans = { ...ducts, route: "fans" }, rooms = { ...ducts, route: "rooms" }, schedules = { ...ducts, route: "schedules" };
+  const ducts = bindWork("duct-systems", null, "one"), fans = { ...ducts, route: "fans" }, rooms = { ...ducts, route: "rooms" }, schedules = { ...ducts, route: "schedules" };
   const schema = z.object({ n: z.number() });
   const definition = read("membership-proof", {
     input: workKeySchema, output: z.literal(true),
     async run(ctx, scope) {
-      await ctx.read(workRead("ducts", schema), scope);
+      await ctx.read(workRead("duct-systems", schema), scope);
       await ctx.read(workRead("fans", schema), { ...scope, route: "fans" });
-      await ctx.read(workInput, { owner: "ducts", scope });
+      await ctx.read(workInput, { owner: "duct-systems", scope });
       // The input port dispatches by name, including an equivalent leaf from a bundled read.
       await ctx.read(leaf(workInput.name, workInput.input, workInput.output), { owner: "rooms", scope: rooms });
       return true as const;

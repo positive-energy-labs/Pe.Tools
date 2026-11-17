@@ -204,7 +204,7 @@ test("JZ H29 human-only RPC and forged, foreign and stale review reuse refuse", 
       expect(response.status, "H29: RPC refuses non-human binding").toBe(403);
       expect(await response.json()).toMatchObject({ notDispatched: true });
     }
-    const staged = await f.saved.apply(f.key, "ducts", "human", [
+    const staged = await f.saved.apply(f.key, "duct-systems", "human", [
       { path: ["writeIntent", "edit"], value: { value: { groups: ["group:g1"] } } },
     ], 0);
     expect(staged.ok).toBe(true);
@@ -225,7 +225,7 @@ test("JZ H29 human-only RPC and forged, foreign and stale review reuse refuse", 
     const forged = await f.post("/actions", { id: "jz-forged", key: "sheet.apply", target: f.target,
       input: { work, seal: { forged: true }, reviewTicket: "invented" } }, pea("forger"));
     expect(forged.status, "H29: strict admission rejects invented seal and ticket fields").toBe(409);
-    const changed = await f.saved.apply(f.key, "ducts", "human", [
+    const changed = await f.saved.apply(f.key, "duct-systems", "human", [
       { path: ["writeIntent", "edit"], value: { value: { groups: ["group:g2"] } } },
     ], staged.revision);
     expect(changed.ok).toBe(true);
@@ -333,7 +333,7 @@ test("JZ route-neutral Plan refusal preserves the reason and holds Apply through
       { path: ["calculation", "terminalFlow", "edit"], value: { value: { kind: "balanced-design", source: "test" } } },
     ], 0);
     if (!fans.ok) throw Error(JSON.stringify(fans));
-    const staged = await f.saved.apply(f.key, "ducts", "human", [
+    const staged = await f.saved.apply(f.key, "duct-systems", "human", [
       { path: ["writeIntent", "edit"], value: { value: { groups: ["group:g1"] } } },
     ], 0);
     if (!staged.ok) throw Error(JSON.stringify(staged));
@@ -390,7 +390,7 @@ test("JZ cold HTTP action inspection discards old journal rows without conversio
   const first = await nativeFixture();
   let bytes: string;
   try {
-    const staged = await first.saved.apply(first.key, "ducts", "human", [
+    const staged = await first.saved.apply(first.key, "duct-systems", "human", [
       { path: ["writeIntent", "edit"], value: { value: { groups: ["group:g1"] } } },
     ], 0);
     if (!staged.ok) throw Error(JSON.stringify(staged));

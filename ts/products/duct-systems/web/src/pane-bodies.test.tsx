@@ -1,10 +1,8 @@
 import { refusalOf, valueOf } from "../../../../apps/web/src/route/typed-route.ts";
 import { pricing } from "@pe/duct-systems-contract/contract";
-import { elementSubject } from "@pe/ducts-domain/work-subject";
 // @vitest-environment jsdom
 import { RegistryContext } from "@effect/atom-react";
-import { emptyListSearch } from "@pe/agent-contracts";
-import { cleanup,fireEvent,render,screen,within } from "@testing-library/react";
+import { cleanup,fireEvent,render,screen } from "@testing-library/react";
 import { isValidElement } from "react";
 import { afterEach,expect,test,vi } from "vite-plus/test";
 import { createWitness } from "./cutover.test-support.ts";
@@ -14,7 +12,6 @@ import { makeAtomRegistry } from "../../../../apps/web/src/shell/owner.ts";
 import { cellFocusOf,cellFocusSubject } from "@pe/ducts-web/cell-focus";
 import { ductsLink, systemCode } from "@pe/ducts-web/identity";
 import { snapshot } from "@pe/ducts-domain/test-fixture";
-import sheetFixture from "@pe/ducts-web/fixtures/fan-sheet.json";
 
 const leaves = vi.hoisted(() => ({ tree: vi.fn(), picture: vi.fn(), inbox: vi.fn() }));
 vi.mock("./screen/tree-sidebar.tsx", () => ({

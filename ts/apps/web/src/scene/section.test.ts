@@ -71,7 +71,7 @@ test("plane side and packed polygon clipping agree for hits in world coordinates
 
 test("section and preset survive the shared address contract; invalid boxes cannot enter Page", () => {
   const view = { preset: "nearby-structure", section: fitSection(bounds, 3) } as const;
-  const address = routeAddress("ducts");
+  const address = routeAddress("duct-systems");
   expect(address.read(address.write({ sceneView: view })).page.sceneView).toEqual(view);
   expect(
     sceneViewSchema.safeParse({

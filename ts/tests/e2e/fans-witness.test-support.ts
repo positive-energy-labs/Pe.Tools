@@ -12,7 +12,7 @@ import { nativeTestAdapter } from "@pe/ducts-web/native.test-support";
 export const createWitness = witnessFactory({
   admit: () => admitModules(ducts, fans), networkCalcs, systemList, pricingValue, calcState,
   nativeTestAdapter: (mount, door) => nativeTestAdapter(mount, door, {
-    "sheet-roster": RosterBody, "sheet-ledger": LedgerBody, "e-systems": bodies.SystemsPane,
+    "calc-roster": RosterBody, "calc-ledger": LedgerBody, "e-systems": bodies.SystemsPane,
     "e-sidebar": bodies.TreePane, "e-rules-all": bodies.AllRulesBody, "e-rules": bodies.RulesBody, "e-inbox": bodies.InboxBody,
   }),
 });

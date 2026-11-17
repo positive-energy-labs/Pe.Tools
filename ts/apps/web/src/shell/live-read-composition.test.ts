@@ -126,10 +126,10 @@ test("source startup records a cold Fans publication through real host inputs", 
       method: "POST",
       headers,
       body: JSON.stringify({
-        read: "fans.sheet",
+        read: "fans.calc",
         subscription: "cold-fans",
         generation: 0,
-        args: { target, fan: [], sheetPath: "" },
+        args: { target, fan: [], calcPath: "" },
       }),
     });
     const publication = await response.json();
@@ -187,10 +187,10 @@ test("an empty ancestor directory cannot invalidate the missing firm input mid-r
       method: "POST",
       headers: host.headers,
       body: JSON.stringify({
-        read: "fans.sheet",
+        read: "fans.calc",
         subscription: "metadata",
         generation: 1,
-        args: { target: host.target, fan: [], sheetPath: "" },
+        args: { target: host.target, fan: [], calcPath: "" },
       }),
     });
     const result = await response.json();
@@ -208,16 +208,16 @@ test("an empty ancestor directory cannot invalidate the missing firm input mid-r
 
 test("release fences its own attempt without consuming the next generation's changed args", async () => {
   const host = await liveHost();
-  const send = async (generation: number, sheetPath: string, release = false) => {
+  const send = async (generation: number, calcPath: string, release = false) => {
     const response = await fetch(`${host.base}/pe/reads/value`, {
       method: "POST",
       headers: host.headers,
       body: JSON.stringify({
-        read: "fans.sheet",
+        read: "fans.calc",
         subscription: "changing-args",
         generation,
         release,
-        args: { target: host.target, fan: [], sheetPath },
+        args: { target: host.target, fan: [], calcPath },
       }),
     });
     expect(response.status).toBe(200);
@@ -241,10 +241,10 @@ test("a captured Fans publication reopens through real host history", async () =
       method: "POST",
       headers: host.headers,
       body: JSON.stringify({
-        read: "fans.sheet",
+        read: "fans.calc",
         subscription: "capturing",
         generation: 1,
-        args: { target: host.target, fan: [], sheetPath: "" },
+        args: { target: host.target, fan: [], calcPath: "" },
       }),
     });
     const publication = await response.json();
@@ -263,14 +263,14 @@ test("a captured Fans publication reopens through real host history", async () =
         ...host.headers,
         "x-pe-history-point": point.id,
         "x-pe-history-page": encodeURIComponent(
-          JSON.stringify({ instance: "fans.sheet", route: "fans", page: {}, href: "/fans" }),
+          JSON.stringify({ instance: "fans.calc", route: "fans", page: {}, href: "/fans" }),
         ),
       },
       body: JSON.stringify({
-        read: "fans.sheet",
+        read: "fans.calc",
         subscription: "recorded",
         generation: 1,
-        args: { target: host.target, fan: [], sheetPath: "" },
+        args: { target: host.target, fan: [], calcPath: "" },
       }),
     });
     const recorded = await replay.json();
@@ -305,10 +305,10 @@ test("a stopped recording preserves live Fans but cannot hide a late closed targ
       method: "POST",
       headers: host.headers,
       body: JSON.stringify({
-        read: "fans.sheet",
+        read: "fans.calc",
         subscription: "capture-stop",
         generation: 0,
-        args: { target: host.target, fan: [], sheetPath: "" },
+        args: { target: host.target, fan: [], calcPath: "" },
       }),
     });
   try {

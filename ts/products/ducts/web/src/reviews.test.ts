@@ -21,10 +21,10 @@ test("fan review names targets from the Place sheet snapshot even when network s
       counts: { planned: 1, written: 0, refused: 0, unchanged: 0 },
     },
     {
-      page: { stage: "sheet" },
+      page: { stage: "calc" },
       readings: {
         ducts: { value: { ...snapshot, nodes: [], segments: [] } },
-        sheetSnapshot: { value: snapshot },
+        calcSnapshot: { value: snapshot },
       },
     },
   );

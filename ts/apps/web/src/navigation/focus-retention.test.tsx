@@ -76,10 +76,10 @@ test("blur-only focus refresh keeps navigation, ledger readiness, mounted contex
       </WorkOwner>
     ),
   });
-  const route = createRoute({ getParentRoute: () => root, path: "/ducts" });
+  const route = createRoute({ getParentRoute: () => root, path: "/duct-systems" });
   const router = createRouter({
     routeTree: root.addChildren([route]),
-    history: createMemoryHistory({ initialEntries: ["/ducts"] }),
+    history: createMemoryHistory({ initialEntries: ["/duct-systems"] }),
   });
   await router.load();
   const view = render(<RouterProvider router={router} />);

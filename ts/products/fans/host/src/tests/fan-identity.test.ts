@@ -19,7 +19,7 @@ test("roster composition retains UniqueId for two equipment instances with the s
   const workspace = new RouteWorkspace({ registrations: [], store: { getState: async () => null, setState: async () => {} } });
   const roster = (await evaluate(fanRoster, { target }, calcPort({
     firm: (owner) => settle(testDuctFiles().firm(owner)), catalogs: () => settle(testDuctFiles().ductCatalogs),
-    workKey: async () => bindWork("ducts", null, undefined, target),
+    workKey: async () => bindWork("duct-systems", null, undefined, target),
     call: async () => Response.json({ ...snapshot, nodes }),
   }, workspace))).data;
   expect(roster.rows).toHaveLength(2);
@@ -38,7 +38,7 @@ test("a numeric UniqueId row is refused without hiding the other fan rows", asyn
   const workspace = new RouteWorkspace({ registrations: [], store: { getState: async () => null, setState: async () => {} } });
   const roster = (await evaluate(fanRoster, { target }, calcPort({
     firm: (owner) => settle(testDuctFiles().firm(owner)), catalogs: () => settle(testDuctFiles().ductCatalogs),
-    workKey: async () => bindWork("ducts", null, undefined, target),
+    workKey: async () => bindWork("duct-systems", null, undefined, target),
     call: async () => Response.json({ ...snapshot, nodes }),
   }, workspace))).data;
   expect(roster.rows.map(row => row.uniqueId)).toEqual(["fixture-fan-good"]);
@@ -56,7 +56,7 @@ test("a lookup by mark returns only the rows carrying that mark, and no mark ret
     const workspace = new RouteWorkspace({ registrations: [], store: { getState: async () => null, setState: async () => {} } });
     return (await evaluate(fanRoster, args, calcPort({
       firm: (owner) => settle(testDuctFiles().firm(owner)), catalogs: () => settle(testDuctFiles().ductCatalogs),
-      workKey: async () => bindWork("ducts", null, undefined, target),
+      workKey: async () => bindWork("duct-systems", null, undefined, target),
       call: async () => Response.json({ ...snapshot, nodes }),
     }, workspace))).data;
   };

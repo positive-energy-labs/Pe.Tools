@@ -33,7 +33,7 @@ const imports = (file: string, text = readFileSync(file, "utf8")) => {
 
 test("Fans declares picture and the kernel draws its pane", () => {
   expect(fans.spec.picture).toBeDefined();
-  expect(fans.spec.panes["sheet-picture"]).toMatchObject({ kernel: "picture", body: "fill" });
+  expect(fans.spec.panes["calc-picture"]).toMatchObject({ kernel: "picture", body: "fill" });
   expect(fans.data.picture).toEqual({ scope: "derived", marks: [] });
   // One picture pane each: the kernel adds none beside the one the route placed.
   expect(Object.values(fans.spec.panes).filter((pane) => pane.kernel === "picture")).toHaveLength(1);

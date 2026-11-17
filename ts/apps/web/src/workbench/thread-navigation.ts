@@ -309,8 +309,8 @@ export function demoThreads(body: HarnessThreadBody): HarnessThreadSummary[] {
       tabs: [
         {
           id: "demo-tab-ducts",
-          route: "ducts",
-          link: "/ducts?fixture=scene&system=Office%20retained%20page",
+          route: "duct-systems",
+          link: "/duct-systems?fixture=scene&system=Office%20retained%20page",
           at: at(1),
         },
         { id: "demo-tab-families", route: "families", link: "/families?fixture=apply", at: at(2) },

@@ -23,33 +23,35 @@ import { lazyFixtures } from "@pe/ducts-web/registry";
 const calcValueFixtures = lazyFixtures(() => import("./src/calc/value-fixtures.ts").then(m => m.calcValueFixtures));
 import { presentLosses } from "@pe/ducts-web/reviews";
 import { fansCalc } from "./src/calc.ts";
+import { fansPanes } from "./src/panes.ts";
 
 const fan = subjectSchema(32);
 
 export const fields = {
   ...picturePose,
   fan: field(fan, { kind: "ids", ids: [] }, "subject", "push"),
-  stage: stageField(["sheet"]),
+  stage: stageField(["calc"]),
   ...listFields("input"),
   ...listFields("roster"),
-  sheetPath: field(z.string(), "", "query"),
+  calcPath: field(z.string(), "", "query"),
 };
 export const calc = read(
   hostRead(reads.calc, calcValueFixtures),
-  (page: { fan: Immutable<z.output<typeof fan>>; sheetPath: string }) => ({
+  (page: { fan: Immutable<z.output<typeof fan>>; calcPath: string }) => ({
     fan: page.fan.kind === "all" ? "all" : page.fan.ids,
-    sheetPath: page.sheetPath,
+    calcPath: page.calcPath,
   }),
 );
 // The roster pane draws this read: the sheet refuses a fan it cannot find ("choose it from the roster"),
 // and the roster is the control that clears that refusal.
 const roster = read(hostRead(reads.calc, calcValueFixtures), () => ({
   fan: [],
-  sheetPath: "",
+  calcPath: "",
 }));
 export type FansDrawContext = ContextOf<typeof fields, typeof calc, typeof import("@pe/fans-contract/fans").fansDocumentSchema, typeof import("@pe/agent-contracts").fansCalcEditsSchema>;
 export const module = route({
   key: "fans",
+  retiredPage: { fields: ["sheetPath"], values: { stage: ["sheet"] } },
   host: "@pe/fans-host/host",
   name: "Fans",
   directory: {
@@ -69,7 +71,7 @@ export const module = route({
     field: "fan",
     read: roster,
     noun: "fan",
-    pane: "sheet-roster",
+    pane: fansPanes.roster,
     options: (data: FansDrawContext["value"]["value"]) =>
       (data?.rows ?? []).map((row) => ({
         id: stableFanKey(row),
@@ -83,7 +85,7 @@ export const module = route({
   picture: { scope: { derive: fanScope }, overlay: overlay(() => import("./src/picture.tsx"), "FanPicture") },
   fields,
   panes: {
-    "sheet-roster": {
+    [fansPanes.roster]: {
       subjectList: true,
       title: "Fans",
       purpose: "Open fan ports",
@@ -92,7 +94,7 @@ export const module = route({
       body: "scroll",
       draw: draw("scroll", () => import("./src/mount.tsx"), "RosterBody"),
     },
-    "sheet-inputs": {
+    [fansPanes.inputs]: {
       title: "Inputs",
       purpose: "Edit fan inputs",
       bindings,
@@ -101,7 +103,7 @@ export const module = route({
       body: "scroll",
       draw: () => scrollBody(null),
     },
-    "sheet-picture": {
+    [fansPanes.picture]: {
       title: "Picture",
       purpose: "Inspect fan paths",
       bindings,
@@ -110,7 +112,7 @@ export const module = route({
       body: "fill",
       draw: () => fillBody(null),
     },
-    "sheet-ledger": {
+    [fansPanes.ledger]: {
       title: "Ledger",
       purpose: "Inspect ESP and provenance",
       bindings,
@@ -135,8 +137,8 @@ export const module = route({
       label: "Write to Revit",
       present: (result, { value: data, doc: work }) =>
         presentLosses(result, {
-          page: { stage: "sheet" },
-          readings: { sheetSnapshot: { value: data.sheetSnapshot }, fansWork: { value: work } },
+          page: { stage: "calc" },
+          readings: { calcSnapshot: { value: data.calcSnapshot }, fansWork: { value: work } },
         }),
     },
   },
@@ -144,15 +146,15 @@ export const module = route({
   layout: split(
     "h",
     [
-      split("v", ["sheet-roster", "sheet-inputs"], { id: "sheet-side", size: 360, sized: "end" }),
-      split("v", ["sheet-picture", "sheet-ledger"], {
-        id: "sheet-main",
+      split("v", [fansPanes.roster, fansPanes.inputs], { id: "calc-side", size: 360, sized: "end" }),
+      split("v", [fansPanes.picture, fansPanes.ledger], {
+        id: "calc-main",
         size: 360,
         sized: "start",
       }),
     ],
     {
-      id: "sheet-layout",
+      id: "calc-layout",
       size: 420,
       sized: "start",
       minOtherSize: 360,

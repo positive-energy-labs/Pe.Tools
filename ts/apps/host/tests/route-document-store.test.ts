@@ -10,6 +10,11 @@ import { readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
+import { ductsRouteState } from "@pe/duct-systems-contract/ducts";
+import { Effect, Layer } from "effect";
+import { effectTest } from "./effect-test.ts";
+import { admittedBuiltinsLayer } from "../src/admitted-builtins.ts";
+import { builtinEnrollments } from "../src/builtin-enrollment.ts";
 
 const interleave = vi.hoisted(() => ({ afterWrite: null as (() => void) | null, failRename: false }));
 vi.mock("node:fs", async (load) => {
@@ -28,6 +33,74 @@ vi.mock("node:fs", async (load) => {
     },
   };
 });
+
+test("startup retires old ducts Work, preserves exact bytes and emits one notice across restarts", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "pe-retired-work-"));
+  try {
+    const store = fileRouteDocumentStore(stateFixture(dir));
+    // The new address's hash cannot find this record. Its value deliberately has no current shape.
+    await store.setState({ targetKey: "old-address", route: "ducts", value: { old: "keep every byte" } });
+    await store.setState({ targetKey: "current-address", route: "duct-systems", value: { current: true } });
+    const bytes = readdirSync(dir).map(file => readFileSync(join(dir, file)))
+      .find(bytes => JSON.parse(bytes.toString()).route === "ducts")!;
+    await new RouteWorkspace({ registrations: [{ spec: ductsRouteState }], store }).ready;
+    expect(await store.getState({ targetKey: "old-address", route: "ducts" })).toBeNull();
+    expect(await store.getState({ targetKey: "current-address", route: "duct-systems" })).toEqual({ current: true });
+    const machine = stateMachine(dir);
+    const notices = readFileSync(machine.notices, "utf8");
+    expect(notices.trim().split("\n")).toHaveLength(1);
+    expect(notices).toContain("retired");
+    expect(readdirSync(machine.blobs, { recursive: true }).map(String).some(file => {
+      try { return readFileSync(join(machine.blobs, file)).equals(bytes); } catch { return false; }
+    })).toBe(true);
+    await new RouteWorkspace({ registrations: [{ spec: ductsRouteState }],
+      store: fileRouteDocumentStore(stateFixture(dir)) }).ready;
+    expect(readFileSync(machine.notices, "utf8")).toBe(notices);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("startup keeps an unreadable old Work record instead of deleting it", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "pe-retired-unreadable-"));
+  try {
+    const store = fileRouteDocumentStore(stateFixture(dir));
+    await store.setState({ targetKey: "old", route: "ducts", value: { important: true } });
+    const path = join(dir, readdirSync(dir)[0]!);
+    const bytes = Buffer.from('{"format":"route-state-record-v2","route":"ducts",');
+    writeFileSync(path, bytes);
+    await new RouteWorkspace({ registrations: [{ spec: ductsRouteState }], store }).ready;
+    expect(readFileSync(path)).toEqual(bytes);
+    expect(readdirSync(dir)).toHaveLength(1);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("startup keeps retired Work when preservation fails", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "pe-retired-kept-"));
+  try {
+    const store = fileRouteDocumentStore(stateFixture(dir));
+    await store.setState({ targetKey: "old", route: "ducts", value: { important: true } });
+    const path = join(dir, readdirSync(dir)[0]!);
+    const bytes = readFileSync(path);
+    writeFileSync(stateMachine(dir).blobs, "blocks preservation");
+    await expect(new RouteWorkspace({ registrations: [{ spec: ductsRouteState }], store }).ready)
+      .rejects.toMatchObject({ kind: "kept" });
+    expect(readFileSync(path)).toEqual(bytes);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+effectTest("admitted startup retires old Work when product registration is deferred", () => Effect.gen(function* () {
+  const dir = mkdtempSync(join(tmpdir(), "pe-retired-admitted-"));
+  yield* Effect.addFinalizer(() => Effect.sync(() => rmSync(dir, { recursive: true, force: true })));
+  const store = fileRouteDocumentStore(stateFixture(dir));
+  yield* Effect.promise(() => store.setState({ targetKey: "old", route: "ducts", value: { old: true } }));
+  // The real host excludes builtins from constructor registration, then admits their captured contract.
+  const workspace = new RouteWorkspace({ registrations: [], store });
+  yield* Layer.build(admittedBuiltinsLayer(workspace,
+    builtinEnrollments.filter(entry => entry.routeKey === "duct-systems")));
+  expect(workspace.settingsOwners([bindWork("duct-systems", null)])).toEqual(["ducts"]);
+  expect(workspace.settingsOwners([bindWork("ducts", null)])).toEqual([]);
+  expect(yield* Effect.promise(() => store.getState({ targetKey: "old", route: "ducts" }))).toBeNull();
+  expect(readFileSync(stateMachine(dir).notices, "utf8").trim().split("\n")).toHaveLength(1);
+}));
 
 test("a clear reports kept when the prior bytes cannot be copied aside", async () => {
   const dir = mkdtempSync(join(tmpdir(), "pe-work-clear-kept-"));

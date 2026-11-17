@@ -121,11 +121,11 @@ test("Help paints its generated screen before mounting prose, cases or invoking 
   ).toEqual(["How this tool works"]);
 });
 test("Alt+/ teaches the URL's page even from Pea's composer; Pea's own trigger teaches Pea", async () => {
-  window.history.pushState({}, "", "/ducts");
+  window.history.pushState({}, "", "/duct-systems");
   render(
     <>
       <HelpOwner />
-      <TeachTarget value="/ducts">
+      <TeachTarget value="/duct-systems">
         <RouteHelpButton name="Ducts" />
         <TeachPage value="/pea">
           <RouteHelpButton name="Pea" />
@@ -149,11 +149,11 @@ test("Alt+/ teaches the URL's page even from Pea's composer; Pea's own trigger t
   window.history.pushState({}, "", "/");
 });
 test("Alt+/ toggles; a page's later trigger unmounting restores the earlier one", async () => {
-  window.history.pushState({}, "", "/ducts");
+  window.history.pushState({}, "", "/duct-systems");
   const view = render(
     <>
       <HelpOwner />
-      <TeachTarget value="/ducts">
+      <TeachTarget value="/duct-systems">
         <RouteHelpButton name="Ducts" />
         <RouteHelpButton name="Ducts later" />
       </TeachTarget>
@@ -176,7 +176,7 @@ test("Alt+/ toggles; a page's later trigger unmounting restores the earlier one"
   view.rerender(
     <>
       <HelpOwner />
-      <TeachTarget value="/ducts">
+      <TeachTarget value="/duct-systems">
         <RouteHelpButton name="Ducts" />
       </TeachTarget>
     </>,

@@ -25,7 +25,7 @@ public sealed class DuctSyntheticFixtureTests {
 
     private static string FixturePath([CallerFilePath] string source = "") =>
         Path.GetFullPath(Path.Combine(Path.GetDirectoryName(source)!, "..", "..", "..",
-            "ts", "products", "ducts", "domain", "src", "fixtures", "synthetic-snapshot.json"));
+            "ts", "products", "ducts", "contract", "src", "fixtures", "synthetic-snapshot.json"));
 
     private static DuctConnector Port(int index, double[] at, DuctShape shape, double a, double? b, long to, int toPort, string kind = "end") =>
         new(index, kind, at, shape, shape == DuctShape.Round ? $"{a}\"ø" : $"{a}x{b}",

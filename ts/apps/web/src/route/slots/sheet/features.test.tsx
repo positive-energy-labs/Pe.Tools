@@ -103,7 +103,7 @@ test.each([null, { kind: "document" as const, ref: { session: "session", openId:
   action.mockClear();
   const refresh = vi.fn();
   action.mockResolvedValue({ state: "succeeded", result: { tier: "firm", path: "shared/Settings/ducts.json" } });
-  const slot = { bindings: { allowance: setting("ducts", ["criteria", "allowanceInWg", "return"], { kind: "number" }, ["firm"], { label: "Return allowance" }) } };
+  const slot = { bindings: { allowance: setting("duct-systems", ["criteria", "allowanceInWg", "return"], { kind: "number" }, ["firm"], { label: "Return allowance" }) } };
   const ctx = { target, cells: { doc: {} }, page: { read: () => ({}) }, refresh,
     value: { state: "ready", value: { settings: { ducts: [
       { tier: "firm", home: "shared", name: "shared", path: "shared/Settings/ducts.json", sha256: "prior", json: { criteria: { allowanceInWg: { return: 0.2 } } } },
@@ -118,7 +118,7 @@ test.each([null, { kind: "document" as const, ref: { session: "session", openId:
   fireEvent.click(screen.getByRole("button", { name: "Save Return allowance at the firm home" }));
   await vi.waitFor(() => expect(action).toHaveBeenCalledWith({
     id: expect.any(String), key: "settings.tiers.write", target: target ?? { kind: "host" },
-    input: { owner: "ducts", tier: "firm", path: ["criteria", "allowanceInWg", "return"], value: 0.35, expectedSha256: "prior" },
+    input: { owner: "duct-systems", tier: "firm", path: ["criteria", "allowanceInWg", "return"], value: 0.35, expectedSha256: "prior" },
   }));
   expect(refresh).toHaveBeenCalledOnce();
   expect((await screen.findByRole("status")).textContent).toContain("Saved at firm");
@@ -131,7 +131,7 @@ test.each(["refused", "stale"])("a %s stale-hash save re-reads the tier and draw
   const read = () => ({ settings: { ducts: [{ tier: "project", home: "project", name: "project",
     path: "project/Settings/ducts.json", sha256: disk.sha256,
     json: { criteria: { velocityLimitFpm: { supply: disk.value } } } }] } });
-  const slot = { bindings: { velocity: setting("ducts", ["criteria", "velocityLimitFpm", "supply"], { kind: "number" }, ["project"], { label: "Supply velocity" }) } };
+  const slot = { bindings: { velocity: setting("duct-systems", ["criteria", "velocityLimitFpm", "supply"], { kind: "number" }, ["project"], { label: "Supply velocity" }) } };
   function Pane() {
     const [value, setValue] = useState(read);
     const ctx = { cells: { doc: {} }, page: { read: () => ({}) }, refresh: () => setValue(read()),
@@ -191,14 +191,14 @@ test.each(["ready", "stale"] as const)("the real mount sends a setting-home save
     } } } });
   const stop = mount.subscribe(() => {});
   try {
-    const result = await mount.draw("sheet", ctx => ctx.cells.at(["setting", "ducts", "project", "criteria", "velocityLimitFpm", "supply"]).stage(850));
+    const result = await mount.draw("sheet", ctx => ctx.cells.at(["setting", "duct-systems", "project", "criteria", "velocityLimitFpm", "supply"]).stage(850));
     if (state === "stale") {
       expect(result).toMatchObject({ code: "refused" });
       expect(sent).toEqual([]);
     } else {
     expect(result).toBeNull();
     expect(sent).toEqual([expect.objectContaining({ key: "settings.tiers.write", target,
-      input: { owner: "ducts", tier: "project", path: ["criteria", "velocityLimitFpm", "supply"], value: 850, expectedSha256: "read-hash" } })]);
+      input: { owner: "duct-systems", tier: "project", path: ["criteria", "velocityLimitFpm", "supply"], value: 850, expectedSha256: "read-hash" } })]);
     }
     expect(mount.work()).toBeNull();
   } finally { stop(); mount.dispose(); }

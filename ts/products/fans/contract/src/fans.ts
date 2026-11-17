@@ -53,6 +53,7 @@ export const neutralFansWork: FansRouteDocument = fansDocumentSchema.parse({});
  */
 export const fansRouteState = {
   route: "fans",
+  settingsOwners: ["ducts"],
   title: "Fans",
   description: fansDocumentSchema.description ?? "Inspect fan paths, inputs and pressure requirements",
   schema: fansDocumentSchema,

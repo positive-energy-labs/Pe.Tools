@@ -84,7 +84,7 @@ export function capturedPlace(
   };
   if (key === "pods" && !podMemberSchema.safeParse({ pod: input.pod, path: input.path }).success)
     return { ok: false, refusal: "This reading did not record an exact pod member." };
-  if (subject && key === "ducts" && (typeof input.system !== "string" || !input.system.trim()))
+  if (subject && key === "duct-systems" && (typeof input.system !== "string" || !input.system.trim()))
     return {
       ok: false,
       refusal:
@@ -111,7 +111,7 @@ export function capturedPlace(
   const search = Object.fromEntries(
     at.keys.filter((name) => name in input).map((name) => [name, input[name]]),
   );
-  if (key === "ducts" && typeof search.system === "string" && search.system.trim()) {
+  if (key === "duct-systems" && typeof search.system === "string" && search.system.trim()) {
     const id = encode({ keyKind: "system-name", key: search.system });
     if (!id.ok) return { ok: false, refusal: id.reason };
     search.system = { kind: "ids", ids: [id.value] };

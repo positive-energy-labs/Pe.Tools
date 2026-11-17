@@ -6,6 +6,6 @@ import { RosterBody, LedgerBody } from "./mount.tsx";
 import { admit } from "./admission.fixture.ts";
 export const createWitness = witnessFactory({
   admit, calcState,
-  nativeTestAdapter: (mount, door) => nativeTestAdapter(mount, door, { "sheet-roster": RosterBody, "sheet-ledger": LedgerBody }),
+  nativeTestAdapter: (mount, door) => nativeTestAdapter(mount, door, { "calc-roster": RosterBody, "calc-ledger": LedgerBody }),
   systemList: publishedRoster, pricingValue: publishedPricing, networkCalcs: () => publishedPricing().calcs,
 });

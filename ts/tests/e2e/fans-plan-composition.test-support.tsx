@@ -1,67 +1,67 @@
-import { mkdtemp, stateFixture } from "../../isolated-home/storage.ts";
+import { mkdtemp, stateFixture } from "../isolated-home/storage.ts";
 // @vitest-environment jsdom
 import { stableFanKey } from "@pe/ducts-web/calc/model";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
-import { surfaceReadiness } from "../../../apps/web/src/route/readiness.test.fixture.ts";
+import { surfaceReadiness } from "../../apps/web/src/route/readiness.test.fixture.ts";
 import { peRouteUrl } from "@pe/agent-contracts/pe-api";
 import { Context, Effect, Layer, Queue, Option } from "effect";
 import { expect, vi } from "vite-plus/test";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { StandaloneBand } from "../../../apps/web/src/shell/band.test-support.tsx";
-import { browserWorkPorts, createWorkFeedClient } from "../../../apps/web/src/shell/work-feed-client.ts";
+import { StandaloneBand } from "../../apps/web/src/shell/band.test-support.tsx";
+import { browserWorkPorts, createWorkFeedClient } from "../../apps/web/src/shell/work-feed-client.ts";
 import { createRootRoute, createRouter, createMemoryHistory, RouterProvider } from "@tanstack/react-router";
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
-import { openRecordingWriter, nativeCatalogIdentity } from "../../../apps/host/src/native-recording.ts";
-import { HostInputContext } from "../../../apps/host/src/input-context.ts";
+import { openRecordingWriter, nativeCatalogIdentity } from "../../apps/host/src/native-recording.ts";
+import { HostInputContext } from "../../apps/host/src/input-context.ts";
 import { writeFileSync } from "node:fs";
-import { HostNativeRead } from "../../../packages/host-internal/src/native-read.ts";
+import { HostNativeRead } from "../../packages/host-internal/src/native-read.ts";
 import { HOST_RUNTIME_SERVICE_HEADER } from "@pe/host-contracts/contracts";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
-import rosterCapture from "../../../packages/host-contracts/src/fixtures/k2-roster.json";
+import rosterCapture from "../../packages/host-contracts/src/fixtures/k2-roster.json";
 import { VOCABULARY } from "@pe/ducts-domain/calc/scoped-snapshot";
 import { closedFan, recordedTables } from "@pe/fans-host/tests/closed-fan.fixture";
-import { hostOwnership } from "../../../apps/host/src/host-ownership.ts";
-import { HostDocumentMarks } from "../../../apps/host/src/document-marks.ts";
-import { HostSessionInventory } from "../../../apps/host/src/session-inventory.ts";
+import { hostOwnership } from "../../apps/host/src/host-ownership.ts";
+import { HostDocumentMarks } from "../../apps/host/src/document-marks.ts";
+import { HostSessionInventory } from "../../apps/host/src/session-inventory.ts";
 import { DuctFiles } from "@pe/ducts-host/ducts-files";
-import { RevitBridge, RevitBridgeLive } from "../../../apps/host/src/bridge.ts";
-import { SdkSession } from "../../../apps/host/src/sdk-session.ts";
-import { ReadOwner } from "../../../apps/host/src/builtin-inputs.ts";
-import { makeCallRoute } from "../../../apps/host/src/call-route.ts";
-import { sdkSessions } from "../../../apps/host/tests/native-receipt-fixture.ts";
-import { bootHost } from "../../../apps/host/tests/real-server.ts";
-import { connectTestBridge } from "../../../apps/host/tests/bridge-fixture.ts";
-import { admittedReceiptStamps } from "../../../apps/host/src/receipt-export.ts";
+import { RevitBridge, RevitBridgeLive } from "../../apps/host/src/bridge.ts";
+import { SdkSession } from "../../apps/host/src/sdk-session.ts";
+import { ReadOwner } from "../../apps/host/src/builtin-inputs.ts";
+import { makeCallRoute } from "../../apps/host/src/call-route.ts";
+import { sdkSessions } from "../../apps/host/tests/native-receipt-fixture.ts";
+import { bootHost } from "../../apps/host/tests/real-server.ts";
+import { connectTestBridge } from "../../apps/host/tests/bridge-fixture.ts";
+import { admittedReceiptStamps } from "../../apps/host/src/receipt-export.ts";
 import { canonicalRouteInput, actionStatusSchema } from "@pe/agent-contracts";
 import "@pe/fans-web/mount";
-import { TypedShell } from "../../../apps/web/src/shell/typed-shell.tsx";
+import { TypedShell } from "../../apps/web/src/shell/typed-shell.tsx";
 import { module as fans } from "@pe/fans-web/route";
-import { routeRegistry } from "../../../apps/web/src/route/registry.ts";
-import { peReadings, bindActionReadings } from "../../../apps/web/src/host/resource-stream.ts";
-import { settled } from "../../../apps/web/src/test-journey.ts";
+import { routeRegistry } from "../../apps/web/src/route/registry.ts";
+import { peReadings, bindActionReadings } from "../../apps/web/src/host/resource-stream.ts";
+import { settled } from "../../apps/web/src/test-journey.ts";
 
 const trace = vi.hoisted(()=>({gates:[] as any[],tokens:[] as any[],samples:[] as any[],stops:[] as any[],mounts:[] as any[],submit:vi.fn(),http:[] as any[],fetch:vi.fn(),base:"",target:null as any,holdPlan:()=>Promise.resolve()}));
 // These Work journeys do not import Pods; bootstrap otherwise outlives the isolated host's home.
-vi.mock("../../../apps/host/src/installed-pods.ts",async actual=>({
- ...await actual<typeof import("../../../apps/host/src/installed-pods.ts")>(),importShippedPods:async()=>({shippedRoot:null,outcomes:[]}),
+vi.mock("../../apps/host/src/installed-pods.ts",async actual=>({
+ ...await actual<typeof import("../../apps/host/src/installed-pods.ts")>(),importShippedPods:async()=>({shippedRoot:null,outcomes:[]}),
 }));
 // Command steps reach Revit through `nativeStep`; hold Plan after its native answer settles.
-vi.mock("../../../apps/host/src/command-executor.ts",async actual=>{
- const real=await actual<typeof import("../../../apps/host/src/command-executor.ts")>();
+vi.mock("../../apps/host/src/command-executor.ts",async actual=>{
+ const real=await actual<typeof import("../../apps/host/src/command-executor.ts")>();
  const {Effect}=await import("effect");
  return {...real,nativeStep:(...args:Parameters<typeof real.nativeStep>)=>real.nativeStep(...args).pipe(
    Effect.tap(()=>args[2]==="ducts.apply.plan"?Effect.promise(()=>trace.holdPlan()):Effect.void))};
 });
-vi.mock("../../../apps/web/src/host/runtime.ts",()=>({hostFetch:trace.fetch,runtimeStreamUrl:(url:string)=>new URL(url,trace.base).toString()}));
-vi.mock("../../../apps/host/src/session-route.ts",async actual=>{const real=await actual<any>();const {Effect}=await import("effect");const {sdkSessions}=await import("../../../apps/host/tests/native-receipt-fixture.ts");return {...real,runPeRevitCli:(args:any)=>Effect.promise(()=>sdkSessions(args))};});
-vi.mock("../../../packages/mcps/src/shared/takeoff-action-client.ts", async actual => {const real=await actual<any>(); trace.submit.mockImplementation(async(...args:any[])=>{const row=await real.submitAction(...args);((trace as any).results??=[]).push(row);return row;}); return {...real,submitAction:trace.submit};});
-vi.mock("../../../packages/runtime/src/route-scope-gate.ts",async actual=>{
+vi.mock("../../apps/web/src/host/runtime.ts",()=>({hostFetch:trace.fetch,runtimeStreamUrl:(url:string)=>new URL(url,trace.base).toString()}));
+vi.mock("../../apps/host/src/session-route.ts",async actual=>{const real=await actual<any>();const {Effect}=await import("effect");const {sdkSessions}=await import("../../apps/host/tests/native-receipt-fixture.ts");return {...real,runPeRevitCli:(args:any)=>Effect.promise(()=>sdkSessions(args))};});
+vi.mock("../../packages/mcps/src/shared/takeoff-action-client.ts", async actual => {const real=await actual<any>(); trace.submit.mockImplementation(async(...args:any[])=>{const row=await real.submitAction(...args);((trace as any).results??=[]).push(row);return row;}); return {...real,submitAction:trace.submit};});
+vi.mock("../../packages/runtime/src/route-scope-gate.ts",async actual=>{
  const original=await actual<any>();
  return {...original,createRouteScopeGate(options:any){const gate=original.createRouteScopeGate(options);trace.gates.push({gate,options});
  const invocation=gate.invocation;gate.invocation=(...args:any[])=>{const result=invocation(...args);if(result.ok&&args[0].channel.startsWith("plan:"))trace.tokens.push({token:result.value,gate});return result;};return gate;}};
 });
-vi.mock("../../../apps/web/src/shell/typed-mount.ts",async actual=>{
+vi.mock("../../apps/web/src/shell/typed-mount.ts",async actual=>{
  const original=await actual<any>();
  return {...original,mountTypedRoute(...args:any[]){const mount=original.mountTypedRoute(...args);trace.mounts.push(mount);mount.subscribe(()=>{const plan=trace.tokens.at(-1),state=plan?.gate.read();trace.samples.push({page:mount.page.read(),work:JSON.stringify(Object.keys(mount.spec.edits.owners).map((id:string)=>{const o=mount.owner(id);return[id,o.ready,o.handle];})),core:mount.value().current?mount.value().hash:"unavailable",plan:plan?{current:plan.gate.current(plan.token),samePageEpoch:plan.token.pageEpoch===state?.pageEpoch,pageRevision:state?.pageRevision,workRevision:state?.work?.revision}:null});});return mount;}};
 });
@@ -140,7 +140,7 @@ export async function fansPlanJourney(journey: "watched publications" | "externa
    constructor(readonly url:string){streams.add(this);void this.start(url);}
    deliver(data:string){
      const frame=JSON.parse(data);
-     if(frame.value?.handle?.key?.route === "ducts") workFrames.push(frame);
+     if(frame.value?.handle?.key?.route === "duct-systems") workFrames.push(frame);
      if(frame.kind==="snapshot"&&typeof frame.value?.generation==="number"&&typeof frame.value?.state==="string"){const key=JSON.parse(frame.key);if(key.kind==="publication")(trace as any).readEvents.push({subscription:key.subscription,...frame.value});}
      this.keys.add(frame.key);
      if(mode==="batched"&&!batchReleased&&trace.tokens.length && (frame.value?.kind==="receipt"||frame.value?.kind==="ready"&&frame.value.receipts)){
@@ -196,17 +196,17 @@ export async function fansPlanJourney(journey: "watched publications" | "externa
      expect(edited.status).toBe(200);
      expect(await edited.json()).toMatchObject({ok:true,revision:1,handle:{key:{route:"fans"},revision:1}});
      // Not `findByText`: each failed poll pretty-prints the whole sheet DOM for its error, on the thread
-     // the in-process host re-evaluates fans.sheet on, so the label lands ten times later than it would.
+     // the in-process host re-evaluates fans.calc on, so the label lands ten times later than it would.
      await vi.waitFor(()=>expect(screen.queryByText(/^MUAS-1.*1 staged$/)).not.toBeNull(),{timeout:45000,interval:100});
      await vi.waitFor(()=>expect(trace.mounts.at(-1).readiness().kind).not.toBe("pending"),{timeout:10000});
      expect(screen.getByRole("region",{name:"Situation"}).textContent).not.toContain("Start this Work");
      expect(screen.getByRole("region",{name:"Situation"}).textContent).not.toContain("Work is absent");
-     expect(screen.getByRole("region",{name:"Situation"}).textContent).not.toContain("ducts");
+     expect(screen.getByRole("region",{name:"Situation"}).textContent).not.toContain("duct-systems");
      expect(screen.queryByRole("button",{name:"Start"})).toBeNull();
      // Ruling 2026-11-10 (no cross-route write): /fans opens no /ducts Work and draws no /ducts criterion.
      expect(workFrames).toEqual([]);
      const beforeEdit=await (await forward("/pe/navigation")).json();
-     expect(beforeEdit.works.some((row:any)=>row.route==="ducts")).toBe(false);
+     expect(beforeEdit.works.some((row:any)=>row.route==="duct-systems")).toBe(false);
      expect(screen.queryByLabelText("Velocity limit supply fpm")).toBeNull();
      await trace.mounts.at(-1).whenWritable();
      expect(screen.getByRole("region",{name:"Situation"}).textContent).not.toContain("Work is absent");
@@ -224,7 +224,7 @@ export async function fansPlanJourney(journey: "watched publications" | "externa
      const history=await (await forward(`/pe/history?at=${point.id}`)).json();
      expect(history.work.find((row:any)=>row.handle.key.route==="fans")).toMatchObject({revision:1});
      // The host's plan reads /ducts Work itself (a read, not a cross-route write): nothing on /fans moved it.
-     expect(history.work.filter((row:any)=>row.handle.key.route==="ducts").every((row:any)=>row.revision===0)).toBe(true);
+     expect(history.work.filter((row:any)=>row.handle.key.route==="duct-systems").every((row:any)=>row.revision===0)).toBe(true);
      expect(document.body.textContent).not.toContain("Work is absent");
      return;
    }
@@ -248,19 +248,19 @@ export async function fansPlanJourney(journey: "watched publications" | "externa
    fireEvent.click(await screen.findByRole("option",{name:/MUAS-1.*0 staged/}));
    expect((await surfaceReadiness()).getAttribute("data-readiness")).toBe("ready");
    await act(async()=>{
-     const failure=await mount.draw("sheet-inputs",(ctx:any)=>ctx.cells.edit({equipmentFlows:{[muas]:925}},{label:"Stage MUAS-1 airflow"}));
+     const failure=await mount.draw("calc-inputs",(ctx:any)=>ctx.cells.edit({equipmentFlows:{[muas]:925}},{label:"Stage MUAS-1 airflow"}));
      if(failure) throw Error(failure.message);
    });
    // Slice 6 deleted per-pane Refresh; the staged Work republishes the watched Fans read, so the
    // journey waits on the panes' busy marks (slice 6.1) instead of pressing a re-read.
-   for(const pane of document.querySelectorAll('[data-slot="pane"][data-pane-id^="sheet-"]')) await settled(pane,45000);
+   for(const pane of document.querySelectorAll('[data-slot="pane"][data-pane-id^="calc-"]')) await settled(pane,45000);
    await mount.whenWritable();
    // No setup dirty is expected: Work dirties only for revision gaps or late stale acks (work-feed-client.ts:381,432).
    expect(dirties,"Work creation and staging: zero Work or receipt-feed dirties before Plan").toEqual([]);
    for(mode of ["recording","batched"] as const){
      if(mode==="batched"){batchReleased=false;receiptBatch.length=0;heldReceipts.length=0;readyAfterBatch.length=0;}
      before=sample();
-     const watched=trace.http.find(row=>row.url==="/pe/reads/value"&&row.request?.read==="fans.sheet"&&row.body?.value?.evaluation===before.dependencies["fans.sheet"]);
+     const watched=trace.http.find(row=>row.url==="/pe/reads/value"&&row.request?.read==="fans.calc"&&row.body?.value?.evaluation===before.dependencies["fans.calc"]);
      const watches=(row:any)=>row.subscription===watched.request.subscription;
      if(mode==="recording") await vi.waitFor(()=>expect((trace as any).readEvents.some(watches)).toBe(true),{timeout:10000});
      fireEvent.click(screen.getByRole("button",{name:"plan Write to Revit"}));
@@ -296,7 +296,7 @@ export async function fansPlanJourney(journey: "watched publications" | "externa
      const record=await Effect.runPromise(captureStore.readSets.get(id));
      if(record.recipe.key==="command.work.view"&&(record.recipe.input as any).command==="sheet.plan") commandReads.push(record);
    }
-   expect(new Set(commandReads.map(record=>(record.recipe.input as any).route))).toEqual(new Set(["ducts","fans"]));
+   expect(new Set(commandReads.map(record=>(record.recipe.input as any).route))).toEqual(new Set(["duct-systems","fans"]));
    expect(commandReads.every(record=>record.state==="complete"&&record.inputs.some(input=>input.input.kind==="work"&&input.input.view==="view"))).toBe(true);
    (trace as any).commandReads=commandReads;
    expect(trace.submit).toHaveBeenCalledTimes(2);

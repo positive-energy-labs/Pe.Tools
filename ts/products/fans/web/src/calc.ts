@@ -12,16 +12,16 @@ import { ductsSettings, ENGINE_DEFAULT_NO_SHARED_ROOT, NO_SHARED_ROOT } from "@p
 /*
  * /fans' sheet (ruling 2026-11-10: /fans keeps Fans Work only). Every binding stages Fans Work; the
  * /ducts design it prices with is the read-only `from` line, linked to /ducts. Rows, model values and
- * options come from the Fans core read (`fans.sheet`): the resolved inputs of the open fan's walk.
+ * options come from the Fans core read (`fans.calc`): the resolved inputs of the open fan's walk.
  */
 type Read = Immutable<z.output<typeof fansCalcData>> | null | undefined;
 type Snapshot = DuctSnapshot & { sourceVersion?: string };
 
 const snapshotOf = (read: Read): Snapshot | null => {
-  const s = read?.sheetSnapshot as unknown as Snapshot | { kind: "absent" } | undefined;
+  const s = read?.calcSnapshot as unknown as Snapshot | { kind: "absent" } | undefined;
   return s && !("kind" in s) ? s : null;
 };
-const inputsOf = (read: Read) => read?.sheetView.inputs ?? null;
+const inputsOf = (read: Read) => read?.calcView.inputs ?? null;
 /** The Work key of an element on the walk (its UniqueId SubjectRef), or null off the snapshot. */
 const subjectOf = (snapshot: Snapshot | null, id: string | number) => {
   const element = snapshot && [...snapshot.nodes, ...snapshot.segments].find((e) => e.id === Number(id));
@@ -47,7 +47,7 @@ const SOURCES: Readonly<Record<string, CellLayer["source"]>> = { Work: "work", "
 const layer = (resolved: { readonly value: unknown; readonly source: string; readonly units?: string | null; readonly ref?: string | null } | undefined, wrap: (v: unknown) => unknown, read?: Read): CellLayer | null => {
   if (!resolved || resolved.value == null) return null;
   const source = SOURCES[resolved.source] ?? "model";
-  const firm = read?.sheetView.firm;
+  const firm = read?.calcView.firm;
   // The evidence the resolver named rides with the value; only a refused firm home replaces it.
   return { value: wrap(resolved.value), source, ...(resolved.units ? { unit: resolved.units } : {}),
     ...(source === "default" && firm && "refused" in firm ? { ref: ENGINE_DEFAULT_NO_SHARED_ROOT } : resolved.ref ? { ref: resolved.ref } : {}) };
@@ -87,17 +87,17 @@ export const fansCalc = {
   empty: (read: Read) => (read && !snapshotOf(read) ? "Open a fan from the roster." : null),
   // The design it depends on, read across routes: one line and a link that opens /ducts on it.
   from: (read: Read, search) => {
-    if (read?.ductsRevision == null) return null;
-    const firm = read.sheetView.firm;
+    if (read?.ductSystemsRevision == null) return null;
+    const firm = read.calcView.firm;
     const snapshot = snapshotOf(read);
     const systems = snapshot ? calcSystems(snapshot) : [];
     return {
       // Slice 2b: without a shared root the firm layer is refused and the design runs on the engine seed.
-      says: `Priced with the /ducts design, Work r${read.ductsRevision}${!firm ? "" : "refused" in firm
+      says: `Priced with the /ducts design, Work r${read.ductSystemsRevision}${!firm ? "" : "refused" in firm
         ? `: ${ENGINE_DEFAULT_NO_SHARED_ROOT}. ${NO_SHARED_ROOT}`
         : !firm.present ? " over defaults where no home states a value"
         : ` over firm ${firm.version} · ${firm.path.split(/[\\/]/).at(-1)}`}`,
-      href: routeAddress("ducts").link(systems.length ? {
+      href: routeAddress("duct-systems").link(systems.length ? {
         system: { kind: "ids", ids: systems.map(name => subjectCode({ keyKind: "system-name", key: name })) },
       } : {}, Object.fromEntries(["target", "fixture", "thread"].flatMap(key => typeof search[key] === "string" ? [[key, search[key]]] : []))),
     };

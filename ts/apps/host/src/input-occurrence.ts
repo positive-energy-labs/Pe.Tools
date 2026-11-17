@@ -50,7 +50,7 @@ export interface InputConsumption {
   readonly taking: (name: string) => Effect.Effect<string, InvalidRead>;
   readonly linkReadSet: (name: string, id: ReadSetId) => Effect.Effect<void, InvalidRead>;
   readonly dependency: (name: string) => Effect.Effect<ReadSetId, InvalidRead>;
-  readonly exportBasis: (basis: string) => Effect.Effect<void, InvalidRead>;
+  readonly exportBasis: (contract: { readonly key: string }, basis: string) => Effect.Effect<void, InvalidRead>;
   readonly seal: Effect.Effect<void, InvalidRead>;
   /** Idempotent; an unsealed context stays incomplete and never synthesizes links. */
   readonly close: Effect.Effect<void>;
@@ -148,14 +148,14 @@ function liveContext(
   const children: { recipe: ConsumerRecipe; start: number; node: LiveNode }[] = [];
   const takingLinks: Record<string, string> = {};
   const dependencies: Record<string, string> = {};
-  const exports: { kind: "ducts.sheet"; basis: string }[] = [];
+  const exports: { kind: string; basis: string }[] = [];
   const record = (): InputReadSetRecord | null => {
     if (!writer) return null;
     const complete =
       inputs.every((entry) => entry.takingId !== null) &&
       children.every((child) => child.node.record()?.state === "complete");
     return {
-      version: 1,
+      version: 2,
       id,
       identity: writer.identity,
       recipe,
@@ -248,11 +248,11 @@ function liveContext(
           ? Effect.succeed(dependencies[name] as ReadSetId)
           : Effect.fail(refuse("miss", `No read-set dependency ${name}`)),
       ),
-    exportBasis: (basis) =>
+    exportBasis: (contract, basis) =>
       whileOpen(life.open, () =>
         Effect.sync(() => {
-          if (!exports.some((entry) => entry.basis === basis))
-            exports.push({ kind: "ducts.sheet", basis });
+          if (!exports.some((entry) => entry.kind === contract.key && entry.basis === basis))
+            exports.push({ kind: contract.key, basis });
         }),
       ),
     seal: Effect.suspend(() => {
@@ -437,9 +437,9 @@ function recordedContext(loaded: Loaded, parentOpen: () => boolean = () => true)
       name in record.dependencies
         ? Effect.succeed(record.dependencies[name] as ReadSetId)
         : Effect.fail(refuse("miss", `Read set ${id} has no dependency ${name}`)),
-    exportBasis: (basis) =>
+    exportBasis: (contract, basis) =>
       same(
-        record.exports.some((entry) => entry.basis === basis),
+        record.exports.some((entry) => entry.kind === contract.key && entry.basis === basis),
         "The recomputed basis",
       ),
     seal: Effect.suspend(() => (life.end("sealed") ? Effect.void : Effect.fail(closed()))),

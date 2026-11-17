@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./fixtures/synthetic-snapshot.json": "./src/fixtures/synthetic-snapshot.json",
     "./pea-guide": "./src/pea-guide.ts",
     "./criterion-words.neutral": "./src/criterion-words.neutral.ts",
     "./duct-calculation": "./src/duct-calculation.ts",

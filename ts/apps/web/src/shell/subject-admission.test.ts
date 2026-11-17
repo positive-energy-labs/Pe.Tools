@@ -7,7 +7,7 @@ import { createMemoryHistory } from "@tanstack/react-router";
 import { z } from "zod";
 import { subjectState } from "./subject";
 import { tabTitle } from "../workbench/route-tabs";
-import { admit } from "../../../../tests/e2e/products/cutover.test-support.ts";
+import { admit } from "../../../../tests/e2e/fans-witness.test-support.ts";
 import { mountTypedRoute } from "../shell/typed-mount";
 import { nativeTestAdapter } from "@pe/ducts-web/native.test-support";
 import { createWorkFeedClient } from "./work-feed-client";

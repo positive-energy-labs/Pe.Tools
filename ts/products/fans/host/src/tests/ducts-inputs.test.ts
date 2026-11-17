@@ -49,7 +49,7 @@ test("fitting edits land on Work's own keys and read back through the Work layer
   try {
     const registrations = [{ spec: ductsRouteState }];
     const workspace = new RouteWorkspace({ store: fileRouteDocumentStore(stateFixture(dir)), registrations });
-    const scope = bindWork("ducts", addressSchema.parse("C:\\models\\fittings.rvt"), undefined, {
+    const scope = bindWork("duct-systems", addressSchema.parse("C:\\models\\fittings.rvt"), undefined, {
       session: "s",
       openId: "o",
     });
@@ -71,20 +71,20 @@ test("fitting edits land on Work's own keys and read back through the Work layer
         value: { value: { kind: "component-drop", inWg: 0.04 } },
       },
     ]);
-    expect(await workspace.apply(scope, "ducts", "human", patches, 0)).toMatchObject({ ok: true });
-    const saved = await workspace.readRaw(scope, "ducts");
+    expect(await workspace.apply(scope, "duct-systems", "human", patches, 0)).toMatchObject({ ok: true });
+    const saved = await workspace.readRaw(scope, "duct-systems");
     const layer = workLayer(design(saved!.doc));
-    expect(layer.rules).toEqual({ "elbow-1d-le10": { value: "CD3-21", by: "human", ref: "work:ducts/rules/elbow-1d-le10" } });
-    expect(layer.ruleAssignments).toEqual({ "Round Elbow": { value: "elbow-15d-45-le10", by: "human", ref: "work:ducts/ruleAssignments/Round Elbow" } });
+    expect(layer.rules).toEqual({ "elbow-1d-le10": { value: "CD3-21", by: "human", ref: "work:duct-systems/rules/elbow-1d-le10" } });
+    expect(layer.ruleAssignments).toEqual({ "Round Elbow": { value: "elbow-15d-45-le10", by: "human", ref: "work:duct-systems/ruleAssignments/Round Elbow" } });
     expect(layer.assumptions?.[`component-drop:${key}`]).toMatchObject({ value: { kind: "component-drop", inWg: 0.04 }, by: "human" });
 
     // `null` takes each back.
     const cleared = editPatches({ assignments: { "Round Elbow": null }, fittingDrops: { [key]: null } });
-    expect(await workspace.apply(scope, "ducts", "human", cleared, saved!.revision)).toMatchObject({
+    expect(await workspace.apply(scope, "duct-systems", "human", cleared, saved!.revision)).toMatchObject({
       ok: true,
     });
     const after = workLayer(
-      design((await workspace.readRaw(scope, "ducts"))!.doc),
+      design((await workspace.readRaw(scope, "duct-systems"))!.doc),
     );
     expect(after.ruleAssignments).toEqual({});
     expect(after.assumptions?.[`component-drop:${key}`]).toBeUndefined();

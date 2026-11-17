@@ -78,7 +78,7 @@ import { publicationSource } from "../host/publication-source";
 import { hostEventSource } from "../host/event-source.test-support";
 import { fixtureTimeline } from "../shell/fixture-work-door";
 import { builtinEnrollments } from "../../../host/src/builtin-enrollment";
-import savedNetwork from "@pe/ducts-domain/fixtures/synthetic-snapshot.json";
+import savedNetwork from "@pe/ducts-contract/fixtures/synthetic-snapshot.json";
 import { rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -130,7 +130,7 @@ test("JZ Plan route switch: Ducts reads preserve the Fans seal; changed Work sta
     const source = publicationSource({ read: (ctx, publication, release) => j.host.send(publication.generation,
       (ctx.args as { fan: string[] }).fan, undefined, publication.subscription, release) });
     const row = valueOf(j.mount.value(fans.spec.reads!.roster)).rows.find((row: { mark: string }) => row.mark === "MUAS-1")!;
-    for (const route of ["fans", "ducts"])
+    for (const route of ["fans", "duct-systems"])
       expect((await j.host.workspace.start(bindWork(route, path, undefined, ref), {}, "human")).ok).toBe(true);
     const work = createWorkFeedClient(
       { subscribe: observeResources(j.host.workspace, { observe: () => () => {} }), dirty() {} },
@@ -146,7 +146,7 @@ test("JZ Plan route switch: Ducts reads preserve the Fans seal; changed Work sta
               counts: { planned: 1, written: 0, refused: 0, unchanged: 0 } } } }) });
     const fingerprint = workFingerprintSchema.parse(`builtin-closure:${builtinEnrollments.find(e => e.routeKey === "fans")!.closure.fingerprint}`);
     mounted = mountTypedRoute(fans, { ...j.input, memory: () => ({ fan: { kind: "ids", ids: [stableFanKey(row)] } }) }, fingerprint,
-      { work, sources: { "fans.sheet": source } });
+      { work, sources: { "fans.calc": source } });
     mounted.subscribe(() => {});
     await vi.waitFor(() => expect(mounted!.value().state === "ready").toBe(true), { timeout: 20_000 });
     // One stream for the tab, carrying each read's invalidation as a key.
@@ -195,7 +195,7 @@ test("JZ Plan route switch: Ducts reads preserve the Fans seal; changed Work sta
       },
     })]));
     const ductMount = mountTypedRoute(ducts, { ...j.input, address: { read: () => new URLSearchParams(), write() {}, subscribe: () => () => {} } },
-      workFingerprintSchema.parse(`builtin-closure:${builtinEnrollments.find(e => e.routeKey === "ducts")!.closure.fingerprint}`), { work, sources });
+      workFingerprintSchema.parse(`builtin-closure:${builtinEnrollments.find(e => e.routeKey === "duct-systems")!.closure.fingerprint}`), { work, sources });
     try {
       await ductMount.whenReady();
       const system = valueOf(ductMount.value(ducts.spec.reads!.roster)).systems[0]!.name;
@@ -294,7 +294,7 @@ async function journey(recorded: Parameters<typeof fixture>[1] = {}) {
   const mount = mountTypedRoute(fans, input, fingerprint, {
     work,
     timeline: fixtureTimeline(host.workspace),
-    sources: { "fans.sheet": source },
+    sources: { "fans.calc": source },
   });
   const stop = mount.subscribe(() => {});
   const ready = () => mount.whenReady();
@@ -452,7 +452,7 @@ test("JX3 open fixture Fans, change scope and attempt a native write without liv
     const calls = j.host.nativeCalls;
     const mounted = mountTypedRoute(fans, { ...j.input, fixture: "layout" }, j.fingerprint, {
       work: j.work,
-      sources: { "fans.sheet": j.source },
+      sources: { "fans.calc": j.source },
     });
     try {
       mounted.page.subject({ kind: "all" });
@@ -480,7 +480,7 @@ test("JX3 open fixture Fans, change scope and attempt a native write without liv
       () =>
         mountTypedRoute(fans, { ...j.input, fixture: "not-a-fixture" }, j.fingerprint, {
           work: j.work,
-          sources: { "fans.sheet": j.source },
+          sources: { "fans.calc": j.source },
         }),
       "H09: missing fixture refuses before mounting instead of using live inputs",
     ).toThrow("No fixture 'not-a-fixture'");
@@ -657,10 +657,10 @@ async function closeDocumentLifetime() {
   );
   const read = (target: unknown) =>
     host.probe({
-      read: "fans.sheet",
+      read: "fans.calc",
       subscription: "jx-lifetime",
       generation: 1,
-      args: { target, fan: [], sheetPath: "" },
+      args: { target, fan: [], calcPath: "" },
     });
   try {
     expect((await read(ref)).status, "H17: the resolved document lifetime is readable").toBe(200);
@@ -1040,7 +1040,7 @@ test("JZ H19 wait beyond the browser budget, then inspect queue and conflict ref
         expect(attempts).toBe(1);
       } finally { await server.close(); await queueJournal.close(); }
       const work = { key: f.key, revision: 0 };
-      const changed = await f.saved.apply(f.key, "ducts", "human", [{ path: ["writeIntent", "edit"], value: { value: { groups: ["group:g1"] } } }], 0);
+      const changed = await f.saved.apply(f.key, "duct-systems", "human", [{ path: ["writeIntent", "edit"], value: { value: { groups: ["group:g1"] } } }], 0);
       expect(changed.ok).toBe(true);
       const response = await f.post("/actions", { id: "jz-conflict", key: "sheet.apply", target: f.target, input: { work } });
       expect(response.ok).toBe(true);
@@ -1068,9 +1068,9 @@ test("JZ registry publishes fan roster and sheet through the shared read door on
     const roster = await read("fans.roster", { target: ref });
     const fan = roster.value.data.rows.find((row: { mark: string }) => row.mark === "MUAS-1");
     expect(fan).toBeTruthy();
-    const sheet = await read("ducts.sheet", { target: ref, mode: "fan", unitId: fan.unitId, portIndex: fan.portIndex });
+    const sheet = await read("fans.calc-detail", { target: ref, mode: "fan", unitId: fan.unitId, portIndex: fan.portIndex });
     expect(sheet.value.data).toHaveProperty("basis");
-    const fans = await read("fans.sheet", { target: ref, fan: [], sheetPath: "" });
+    const fans = await read("fans.calc", { target: ref, fan: [], calcPath: "" });
     expect(fans.value.data.rows.length).toBeGreaterThan(0);
     for (const path of retiredReads.paths) {
       const response = await f.request(new Request(`http://host${path}`, { method: "POST", body: "{}" }));

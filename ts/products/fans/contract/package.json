@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./admission": "./src/admission.ts",
     "./calc-read": "./src/calc-read.ts",
     "./contract": "./src/contract.ts",
     "./fan-calc": "./src/fan-calc.ts",
@@ -14,9 +15,7 @@
     "./link": "./src/link.ts",
     "./pea/ducts-skill": "./src/pea/ducts-skill.ts"
   },
-  "pe": {
-    "guide": "./pea/ducts-skill"
-  },
+  "pe": { "guide": "./pea/ducts-skill", "admissionPreflight": "./admission" },
   "scripts": {
     "check": "vp exec tsc --noEmit",
     "test": "vp test"

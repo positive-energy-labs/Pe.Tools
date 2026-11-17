@@ -134,7 +134,7 @@ export function useRouteTarget(
   const sole = target || seed ? null : held.request;
   lastSole.current = sole;
   // With no pin and more than one document open, no census can make one of them the sole
-  // document: the person must choose, so nothing is pending (drive 7: /fans spun 300 s here).
+  // document: the person must choose, so nothing is pending.
   const several =
     !target &&
     !sole &&

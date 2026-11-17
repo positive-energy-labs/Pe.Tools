@@ -46,7 +46,7 @@ const proposed = {
 };
 
 it("a proposed fitting is identified by its key and pair, with no element id (fix6 defect 1)", () => {
-  // MUAS-1 live, 2026-10-29: the C3 transition carried elementId 0 and the whole ducts.sheet
+  // MUAS-1 live, 2026-10-29: the C3 transition carried elementId 0 and the whole fans.calc-detail
   // response failed its output schema at fittings[35].elementId.
   expect(fittingPricingSchema.safeParse({ ...row, key, elementId: null, proposed }).success).toBe(
     true,
@@ -94,13 +94,13 @@ it("lets a layer or a tier file hold one side of a sided criterion; the engine b
 it("criteriaMeta keeps who staged each criterion, and a cell with no `by` has no entry (P-032)", () => {
   expect(
     criteriaMeta({
-      terminalDropInWg: { edit: { by: "pea", ref: "work:ducts/criteria/x" } },
+      terminalDropInWg: { edit: { by: "pea", ref: "work:duct-systems/criteria/x" } },
       allowanceSupplyInWg: { edit: { by: "human" } },
       allowanceReturnInWg: { edit: {} },
     } as never),
   ).toEqual({
-    terminalDropInWg: { by: "pea", ref: "work:ducts/criteria/x" },
-    allowanceSupplyInWg: { by: "human", ref: "work:ducts/criteria/allowanceSupplyInWg" },
+    terminalDropInWg: { by: "pea", ref: "work:duct-systems/criteria/x" },
+    allowanceSupplyInWg: { by: "human", ref: "work:duct-systems/criteria/allowanceSupplyInWg" },
   });
 });
 

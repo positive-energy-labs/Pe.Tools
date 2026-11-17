@@ -43,7 +43,7 @@ const snapshot = { nodes: [], segments: [], slots: { requiredEsp: "Old ESP" } };
 test("D25: a retained resolved Work airflow keeps Work provenance after its live edit is undone", () => {
   const unit = { id: 7, kind: "equipment", uniqueId: "unit-7", family: "MUAS", type: "A", mark: "MA-1", connectors: [], facts: [] };
   const row = elementSubject(unit);
-  const read = { sheetSnapshot: { ...snapshot, nodes: [unit] }, sheetView: { inputs: { units: { "7": { cfm: { value: 1234, source: "Work" } } } } } };
+  const read = { calcSnapshot: { ...snapshot, nodes: [unit] }, calcView: { inputs: { units: { "7": { cfm: { value: 1234, source: "Work" } } } } } };
   const cells = sheetCells({ ...fansCalc, bindings: { equipmentFlows: fansCalc.bindings.equipmentFlows } }, { rows: [], work: fansDocumentSchema.parse({}), model: [], read });
   expect(cells.find(cell => cell.row === row)).toMatchObject({ value: 1234, source: "work", pending: null });
   const view = drawn(read, {}, () => handle({}), "equipmentFlows", "refreshing");
@@ -63,7 +63,7 @@ test("F6 a staged unit role draws its option label with its author, never its ob
   const row = elementSubject(unit);
   const edit = { edit: { value: { role: "fan" }, by: "human" } };
   const resolved = { value: "passive", source: "model", units: null, version: null, status: "valid" };
-  const view = drawn({ sheetSnapshot: { nodes: [unit], segments: [], slots: {} }, sheetView: { inputs: { units: { 7: { role: resolved } } }, firm: null } },
+  const view = drawn({ calcSnapshot: { nodes: [unit], segments: [], slots: {} }, calcView: { inputs: { units: { 7: { role: resolved } } }, firm: null } },
     { roles: { [row]: edit } }, () => handle(edit), "roles");
   expect(view.container.textContent).toContain("Fan");
   expect(view.container.textContent).not.toContain('{"role"');
@@ -81,7 +81,7 @@ const paneOf = (slot: typeof fansCalc, read: object) =>
     value: { state: "ready", value: read } } as never, slot: slot as never }} /></RegistryContext>);
 
 test("/fans with no shared root: its line from the /ducts design says the engine default and draws the fix line", () => {
-  const read = { ductsRevision: 3, sheetSnapshot: { ...snapshot, systems: [] }, sheetView: { inputs: null, firm: refused }, fans: { slots: [] } };
+  const read = { ductSystemsRevision: 3, calcSnapshot: { ...snapshot, systems: [] }, calcView: { inputs: null, firm: refused }, fans: { slots: [] } };
   const from = paneOf({ ...fansCalc, bindings: {} } as never, read).container.querySelector("[data-sheet-from]")!.textContent;
   expect(from).toContain(ENGINE_DEFAULT_NO_SHARED_ROOT);
   expect(from).toContain(NO_SHARED_ROOT);

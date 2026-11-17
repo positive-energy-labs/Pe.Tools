@@ -1,18 +1,11 @@
-import { refusalOf, valueOf } from "../../../apps/web/src/route/typed-route.ts";
-import { pricing } from "@pe/duct-systems-contract/contract";
-import { elementSubject } from "@pe/ducts-domain/work-subject";
 // @vitest-environment jsdom
 import { RegistryContext } from "@effect/atom-react";
-import { emptyListSearch } from "@pe/agent-contracts";
 import { cleanup,fireEvent,render,screen,within } from "@testing-library/react";
 import { isValidElement } from "react";
 import { afterEach,expect,test,vi } from "vite-plus/test";
-import { createWitness } from "./cutover.test-support.ts";
-import { typedSubjectDoor } from "../../../apps/web/src/shell/subject.ts";
-import { SubjectDoor } from "../../../apps/web/src/shell/subject.ts";
+import { createWitness } from "../fans-witness.test-support.ts";
 import { makeAtomRegistry } from "../../../apps/web/src/shell/owner.ts";
-import { cellFocusOf,cellFocusSubject } from "@pe/ducts-web/cell-focus";
-import { ductsLink, systemCode } from "@pe/ducts-web/identity";
+import { systemCode } from "@pe/ducts-web/identity";
 import { snapshot } from "@pe/ducts-domain/test-fixture";
 import sheetFixture from "@pe/ducts-web/fixtures/fan-sheet.json";
 
@@ -59,8 +52,8 @@ test("Q2a keeps kind and colour editors on ducts and fan settings on fans", asyn
   const f = await createWitness(closes);
   await vi.waitFor(() => expect(f.owner.readingStatus("roster").snapshot.state === "ready").toBe(true));
   f.owner.controls.subject({ kind: "ids", ids: [systemCode("SA")] });
-  await vi.waitFor(() => expect(f.owner.readingStatus("ducts").snapshot.state === "ready").toBe(true));
-  await vi.waitFor(() => expect(f.fans.readingStatus("sheetSnapshot").snapshot.state === "ready").toBe(true));
+  await vi.waitFor(() => expect(f.owner.readingStatus("duct-systems").snapshot.state === "ready").toBe(true));
+  await vi.waitFor(() => expect(f.fans.readingStatus("calcSnapshot").snapshot.state === "ready").toBe(true));
   const view = render(<RegistryContext value={registry()}>
     {nodeFor(f.owner, "e-systems")}{nodeFor(f.owner, "e-rules-all")}
   </RegistryContext>);
@@ -74,7 +67,7 @@ test("Q2a keeps kind and colour editors on ducts and fan settings on fans", asyn
   expect(screen.queryByRole("region", { name: "Fan settings" })).toBeNull();
   view.unmount();
   // Fans' inputs are its own Work, drawn by the sheet slot; design friction is /ducts design data.
-  render(<RegistryContext value={registry()}>{nodeFor(f.fans, "sheet-inputs")}</RegistryContext>);
+  render(<RegistryContext value={registry()}>{nodeFor(f.fans, "calc-inputs")}</RegistryContext>);
   expect(document.querySelectorAll('[data-sheet-cell="Design friction"]')).toHaveLength(0);
   expect(screen.queryByRole("region", { name: "System colours" })).toBeNull();
   expect(screen.queryByRole("region", { name: "Unit kinds" })).toBeNull();
@@ -90,18 +83,18 @@ test("Q2a keeps kind and colour editors on ducts and fan settings on fans", asyn
 
 test("/ducts design sheet stages each criterion in /ducts Work, and Fans Work never moves", async () => {
   const f = await createWitness(closes, new Map(), {
-    "ducts.sheet": { kind: "use", open(_ctx, deliver) {
+    "fans.calc-detail": { kind: "use", open(_ctx, deliver) {
       deliver({ kind: "complete", revision: 1, value: {
         rows: sheetFixture.roster.rows, progress: null, opened: [],
         open: { overview: sheetFixture.overview, elements: null, legs: null, worstLegs: [], calcBreakdown: null,
           inputs: sheetFixture.inputs },
       } });
     } },
-    "ducts.sheet-snapshot": { kind: "use", open(_ctx, deliver) {
+    "fans.calc-detail-snapshot": { kind: "use", open(_ctx, deliver) {
       deliver({ kind: "complete", value: { ...snapshot, systems: [] }, revision: 1 });
     } },
   });
-  await vi.waitFor(() => expect(f.fans.readingStatus("ductsWork").snapshot.state === "ready").toBe(true));
+  await vi.waitFor(() => expect(f.fans.readingStatus("ductSystemsWork").snapshot.state === "ready").toBe(true));
   await vi.waitFor(() => expect(f.fans.readingStatus("sheet").snapshot.state === "ready").toBe(true));
   await vi.waitFor(() => expect(f.fans.workBasis()).toBeTruthy());
   const acks: { route: string; label?: string }[] = [];

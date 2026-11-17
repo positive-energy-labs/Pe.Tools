@@ -5,13 +5,13 @@ import type { HealPlan } from "@pe/ducts-domain/heal";
 import { healSystems, healWords, networkWord, outcomeWords } from "@pe/ducts-domain/words";
 type ReviewEvidence = {
   readonly heal?: import("@pe/agent-contracts").Immutable<Pick<HealPlan,"groups">> | null;
-  readonly page?: { readonly stage?: "network" | "sheet" };
+  readonly page?: { readonly stage?: "network" | "calc" };
   readonly work?:
     | import("@pe/agent-contracts").Immutable<import("@pe/agent-contracts").DuctsRouteDocument>
     | null;
   readonly readings: {
     readonly ducts?: { readonly value?: unknown };
-    readonly sheetSnapshot?: { readonly value?: unknown };
+    readonly calcSnapshot?: { readonly value?: unknown };
     readonly fansWork?: {
       readonly value?: import("@pe/agent-contracts").Immutable<
         import("@pe/agent-contracts").FansDocument
@@ -27,8 +27,8 @@ const responseOf = <T>(result: unknown): T => {
 };
 // Domain readonly sweep reached 28 files; domain snapshot inputs remain mutable.
 const snapshotOf = (scope: ReviewEvidence) =>
-  (scope.page?.stage === "sheet"
-    ? scope.readings.sheetSnapshot?.value
+  (scope.page?.stage === "calc"
+    ? scope.readings.calcSnapshot?.value
     : scope.readings.ducts?.value) as DuctSnapshot | undefined;
 
 export function presentHeal(result: unknown, scope: ReviewEvidence) {
@@ -143,7 +143,7 @@ export function presentLosses(result: unknown, scope: ReviewEvidence) {
   };
   const request = envelope.derivedRequest ?? envelope.receipt?.result?.derivedRequest;
   const snapshot =
-    snapshotOf(scope) ?? (scope.readings.sheetSnapshot?.value as DuctSnapshot | undefined);
+    snapshotOf(scope) ?? (scope.readings.calcSnapshot?.value as DuctSnapshot | undefined);
   const slots = { ...snapshot?.slots, ...request?.slots };
   const name = snapshot ? subjectNamer(snapshot, { unique: true }) : () => null;
   const lines = response.writes.flatMap((write) => {

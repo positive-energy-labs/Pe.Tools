@@ -11,7 +11,7 @@ import {
   systemOf,
 } from "./test-snapshot.ts";
 import type { DuctSnapshot } from "./types.ts";
-import saved from "./fixtures/synthetic-snapshot.json" with { type: "json" };
+import saved from "@pe/ducts-contract/fixtures/synthetic-snapshot.json" with { type: "json" };
 
 /** A fresh copy of the saved synthetic snapshot, decoded by the wire schema the page itself uses. */
 export const syntheticSnapshot = (): DuctSnapshot =>

@@ -20,11 +20,11 @@ it("a raw ids read draws every element under the one sheet group", () => {
 });
 
 it("decodes absence separately and keeps native timestamp validation strict", () => {
-  expect(fansCalcData.shape.sheetSnapshot.parse({ kind: "absent" })).toEqual({ kind: "absent" });
-  expect(fansCalcData.shape.sheetSnapshot.safeParse(EMPTY_SNAPSHOT).success).toBe(false);
+  expect(fansCalcData.shape.calcSnapshot.parse({ kind: "absent" })).toEqual({ kind: "absent" });
+  expect(fansCalcData.shape.calcSnapshot.safeParse(EMPTY_SNAPSHOT).success).toBe(false);
   const native = { ...networkSnapshot, document: { ...networkSnapshot.document, readAt: "2026-11-04T13:25:39.031595+00:00" } };
   expect(nativeResponseSchema("ducts.snapshot.walk").safeParse(native).success).toBe(true);
-  expect(fansCalcData.shape.sheetSnapshot.safeParse(native).success).toBe(true);
+  expect(fansCalcData.shape.calcSnapshot.safeParse(native).success).toBe(true);
 });
 
 it("owner links scope only canonical roster entries and omit scope for bounded ids snapshots", () => {

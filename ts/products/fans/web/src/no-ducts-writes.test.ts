@@ -9,7 +9,7 @@ import { module } from "../route.ts";
  */
 test("/fans stages no /ducts Work anywhere: no /ducts owner, and its edit door refuses /ducts keys", async () => {
   const edits = module.spec.edits!;
-  expect(Object.keys(edits.owners)).not.toContain("ducts");
+  expect(Object.keys(edits.owners)).not.toContain("duct-systems");
   const ducts = {
     kinds: { '["F","T"]': { kind: "erv" } },
     criteria: { healBoxIn: 30 },

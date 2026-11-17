@@ -25,7 +25,7 @@ async function at(entry: string) {
   });
   const router: AnyRouter = createRouter({
     routeTree: root.addChildren(
-      ["/pea", "/ducts"].map((path) => createRoute({ getParentRoute: () => root, path })),
+      ["/pea", "/duct-systems"].map((path) => createRoute({ getParentRoute: () => root, path })),
     ),
     history: createMemoryHistory({ initialEntries: [entry] }),
   });
@@ -40,7 +40,7 @@ async function at(entry: string) {
 
 test("a directory tool link keeps the selected chat", async () => {
   const open = await at("/pea?thread=T");
-  expect(await open("/ducts?target=C%3A%2FModels%2FOffice.rvt")).toEqual({
+  expect(await open("/duct-systems?target=C%3A%2FModels%2FOffice.rvt")).toEqual({
     thread: "T",
     target: "C:/Models/Office.rvt",
   });
@@ -50,7 +50,7 @@ test("a tool destination keeps structured and numeric route values", async () =>
   const open = await at("/pea?thread=T");
   const fan = { kind: "some", keys: ["MUAS-1 50%@2", "8081605"] };
   const query = new URLSearchParams({ fan: JSON.stringify(fan), contextRadiusFt: "15" });
-  expect(await open(`/ducts?${query}`)).toEqual({ thread: "T", fan, contextRadiusFt: 15 });
+  expect(await open(`/duct-systems?${query}`)).toEqual({ thread: "T", fan, contextRadiusFt: 15 });
 });
 
 test("a tool destination keeps JSON string codec text byte for byte", async () => {
@@ -58,19 +58,19 @@ test("a tool destination keeps JSON string codec text byte for byte", async () =
   const query = new URLSearchParams({
     stage: JSON.stringify("network"),
     inputSort: JSON.stringify(""),
-    sheetPath: JSON.stringify("8081605"),
+    calcPath: JSON.stringify("8081605"),
   });
-  await open(`/ducts?${query}`);
+  await open(`/duct-systems?${query}`);
   expect(open.router.history.location.search).toBe(`?${query}&thread=T`);
 });
 
 test("with no chat selected a tool link adds no thread and infers no target", async () => {
   const open = await at("/pea");
-  expect(await open("/ducts")).toEqual({});
+  expect(await open("/duct-systems")).toEqual({});
 });
 
 test("an explicit conversation link selects its own thread", async () => {
-  const open = await at("/ducts?thread=T");
+  const open = await at("/duct-systems?thread=T");
   expect(await open("/pea?thread=U")).toEqual({ thread: "U" });
 });
 
@@ -79,7 +79,7 @@ test("a new destination carries no prior Page or Pea open state", async () => {
   open.router.history.replace("/pea?thread=T", {
     __pePageMove: true, __peViewOpenCommandId: "old-open", __peRouteTab: { id: "old", route: "fans" },
   } as never);
-  await open("/ducts");
+  await open("/duct-systems");
   expect(open.router.history.location.state).not.toHaveProperty("__pePageMove");
   expect(open.router.history.location.state).not.toHaveProperty("__peViewOpenCommandId");
 });

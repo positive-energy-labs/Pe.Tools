@@ -73,14 +73,14 @@ test("Ducts and Fans own independent canonical host Work registrations", async (
   const run = await open(f.workspace);
   try {
     if (!run.service) throw Error(JSON.stringify(run.result));
-    const owner = run.service.routes.get("ducts")!;
+    const owner = run.service.routes.get("duct-systems")!;
     const presenter = run.service.routes.get("fans")!;
     // Q2: each admitted route owns its Work fingerprint.
     expect(presenter.workFingerprint).not.toBe(owner.workFingerprint);
-    const view = await f.workspace.view(bindWork("ducts", null), "ducts");
+    const view = await f.workspace.view(bindWork("duct-systems", null), "duct-systems");
     expect(view!.revision).toBe(0);
     expect(
-      await f.workspace.write(bindWork("ducts", null), "ducts", "human", {
+      await f.workspace.write(bindWork("duct-systems", null), "duct-systems", "human", {
         kind: "apply",
         press: "criteria",
         label: "Return allowance",
@@ -90,12 +90,12 @@ test("Ducts and Fans own independent canonical host Work registrations", async (
         ],
       }),
     ).toMatchObject({ ok: true });
-    expect((await f.workspace.view(bindWork("ducts", null), "ducts"))!.doc).toMatchObject({
+    expect((await f.workspace.view(bindWork("duct-systems", null), "duct-systems"))!.doc).toMatchObject({
       criteria: { allowanceReturnInWg: { edit: { value: 0.35 } } },
     });
     expect(presenter.resolvedWork!.spec.route).toBe("fans");
-    expect(owner.resolvedWork!.spec.route).toBe("ducts");
-    expect(createRouteRegistrations().filter((row) => row.spec.route === "ducts")).toHaveLength(1);
+    expect(owner.resolvedWork!.spec.route).toBe("duct-systems");
+    expect(createRouteRegistrations().filter((row) => row.spec.route === "duct-systems")).toHaveLength(1);
   } finally {
     await close(run.scope);
   }
@@ -106,7 +106,7 @@ test("fans enrolls alone with its own Work registration", async () => {
   const run = await open(f.workspace, [fan]);
   try {
     expect(run.service?.routes.get("fans")?.resolvedWork?.spec.route).toBe("fans");
-    expect(run.service?.routes.has("ducts")).toBe(false);
+    expect(run.service?.routes.has("duct-systems")).toBe(false);
     const key = bindWork("fans", null);
     expect(
       await f.workspace.admitFeed(key, {
@@ -140,7 +140,7 @@ test("partial startup failure unwinds prior Work registration with a typed failu
 });
 test("Pea's catalog lists admitted Work; the constructor guard keeps one registry owner per key", async () => {
   const registrations = createRouteRegistrations();
-  for (const key of ["fans", "ducts", "families"])
+  for (const key of ["fans", "duct-systems", "families"])
     expect(registrations.filter((r) => r.spec.route === key), key).toHaveLength(1);
   const root = mkdtempSync(join(tmpdir(), "pe-builtins-"));
   roots.push(root);
@@ -152,7 +152,7 @@ test("Pea's catalog lists admitted Work; the constructor guard keeps one registr
   try {
     if (!run.service) throw Error(JSON.stringify(run.result));
     const listed = ws.list().map((r) => r.route);
-    for (const key of ["fans", "ducts"]) expect(listed.filter((r) => r === key), key).toHaveLength(1);
+    for (const key of ["fans", "duct-systems"]) expect(listed.filter((r) => r === key), key).toHaveLength(1);
     // The same owner answers the browser pane and Pea's work.* doors: a write lands one revision both read.
     const key = bindWork("fans", null);
     expect(

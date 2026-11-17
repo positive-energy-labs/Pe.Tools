@@ -6,14 +6,14 @@ import { historySnapshotSchema } from "../../../apps/web/src/shell/history.ts";
 import { direct, mountTypedRoute, planned } from "../../../apps/web/src/shell/typed-mount.ts";
 import { scrollBody } from "../../../apps/web/src/route/body.ts";
 import type { ReadingContext } from "../../../apps/web/src/shell/source-contract.ts";
-import { createWitness } from "./cutover.test-support.ts";
+import { createWitness } from "../fans-witness.test-support.ts";
 
 test("typed panes share declared Values; recorded Fans and Ducts use frozen Work and refuse writes", async () => {
   const closes: (() => void)[] = [];
   const stop = vi.fn();
   const open = vi.fn((_ctx: ReadingContext) => stop);
   const document = address("C:/Jobs/History.rvt");
-  const f = await createWitness(closes, new Map(), { "fans.sheet": { kind: "use", open } }, {address:document,open:{session:"fixture",openId:"fans"}});
+  const f = await createWitness(closes, new Map(), { "fans.calc": { kind: "use", open } }, {address:document,open:{session:"fixture",openId:"fans"}});
   try {
     for (const pane of Object.keys(f.typed.spec.panes)) f.typed.draw(pane);
     expect(open).toHaveBeenCalledTimes(2);

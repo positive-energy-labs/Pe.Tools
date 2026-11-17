@@ -195,6 +195,7 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
       if (refusal) throw refusal;
     },
   });
+  yield* Effect.promise(() => workspace.ready);
   yield* Layer.build(admittedBuiltinsLayer(workspace, undefined, registrations));
   if (!recorded && options.initialize) yield* Effect.promise(() => options.initialize!(workspace));
   const owner = recorded ? new DuctsReadings() : live!.owner;
@@ -566,7 +567,7 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
               : name === "capture"
                 ? scoped(current)(asset(String(args), true)).then(() => String(args))
                 : takeFile(name, args, current),
-        workKey: async (ref) => bindWork("ducts", (await document(ref)).address, undefined, ref),
+        workKey: async (ref) => bindWork("duct-systems", (await document(ref)).address, undefined, ref),
         inputs: {
           consumption: current,
           run: scoped(current),

@@ -30,7 +30,7 @@ const fixture = (name: string) =>
   JSON.parse(
     readFileSync(join(__dirname, "./fixtures", name), "utf8"),
   ) as Record<string, unknown>;
-const synthetic = JSON.parse(readFileSync(new URL("../../domain/src/fixtures/synthetic-snapshot.json", import.meta.url), "utf8")) as DuctSnapshot;
+const synthetic = JSON.parse(readFileSync(new URL("../../contract/src/fixtures/synthetic-snapshot.json", import.meta.url), "utf8")) as DuctSnapshot;
 const excerpt = (nodes: Node[]): DuctSnapshot => ({ ...synthetic, nodes, segments: [] });
 const opened = (s: DuctSnapshot): DuctSnapshot => {
   const open = <T extends { connectors: Connector[] }>(e: T) => ({

@@ -56,7 +56,7 @@ test("the host refuses cross-route patches, /fans admits no /ducts feed, and rea
   ).toMatchObject({ kind: "registration-mismatch" });
   const badDuct = await f.ws.apply(
     ductKey,
-    "ducts",
+    "duct-systems",
     "human",
     [{ path: ["flows", elementSubject(workSnapshot.nodes.find(node => node.id === 4)!)], value: {} }],
     0,
@@ -78,7 +78,7 @@ test("the host refuses cross-route patches, /fans admits no /ducts feed, and rea
       value: {
         value: {
           data: {
-            ductsWork: {
+            ductSystemsWork: {
               rules: { elbow: { edit: { value: { table: "CD3-1" } } } },
             },
           },

@@ -57,9 +57,9 @@ export function commandRegistry(
     ),
   };
   // Product-owned sheet writes answer through the generic sheet dispatcher.
-  const products = productExecutors(bridge, deps) as Record<string, CommandExecutor>;
+  const products = productExecutors(bridge, deps);
   const productsWithoutSheet = Object.fromEntries(
-    Object.entries(products).filter(([key]) => !(Object.values(SHEET_COMMANDS) as string[]).includes(key)),
+    Object.entries(products.executors).filter(([key]) => !(Object.values(SHEET_COMMANDS) as string[]).includes(key)),
   );
   for (const group of [
     familyExecutors(captures, bridge, deps),
@@ -67,7 +67,7 @@ export function commandRegistry(
     instancesExecutors(deps),
     takeoffExecutors(captures, bridge, deps),
     productsWithoutSheet,
-    sheetExecutors(bridge, deps, products),
+    sheetExecutors(bridge, deps, products.executors, products.sheetRoutes),
     catalogWorkExecutors(bridge, deps),
     findingsExecutors(deps.workspace, bridge),
   ]) {
