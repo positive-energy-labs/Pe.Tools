@@ -707,7 +707,7 @@ class Pricer {
     return {
       p,
       ids,
-      note: `, ${round(length)} ft${cs.length ? `, ${cs.length} tap(s) passed (Cs)` : ""}`,
+      note: `, ${round(length)} ft${cs.length ? `, ${cs.length} tap(s) passed (Cs: ${cs.map(p => p.elementId).join(", ")})` : ""}`,
       // The flow the leg is priced at where it enters, the same piece its velocity is read from: a
       // duct left by a tap on its side carries the upstream flow up to that tap (RV-15's tap on
       // 14682079 is fed 150 cfm through 4.93 ft of the 10 in main), never the branch's 35.

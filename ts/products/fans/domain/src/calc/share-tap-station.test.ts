@@ -96,7 +96,7 @@ it("P-106: a sibling-only tap charges straight Cs and names the passed tap on th
   const friction = price.mock.calls.flatMap(([p], i) =>
     p.kind === "duct" && p.segment.id === 14085956 ? [price.mock.results[i]!.value.lossInWg] : []).slice(0, 2);
   expect(leg.lossInWg).toBeCloseTo(friction.reduce((sum, loss) => sum + loss, 0) + cs, 12);
-  expect.soft(leg.lossSource.ref).toContain("14086100");
+  // The source line discloses passed taps; the evidence ref names the friction method, Altshul-Tsal.
+  expect(leg.lossSource.ref).toContain("1 tap(s) passed (Cs: 14086100)");
   expect(leg.evidence.kind).toBe("friction");
-  if (leg.evidence.kind === "friction") expect.soft(leg.evidence.ref).toContain("14086100");
 });
