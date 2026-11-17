@@ -403,6 +403,7 @@ export function stagedDucts(doc: DuctsRouteDocument | null, fans: FansDocument) 
     terminalDrops: stagedOf("fans", "terminalDrops", fans.terminalDrops),
     componentDrops: stagedOf("fans", "componentDrops", fans.componentDrops),
     esp: stagedOf("fans", "esp", fans.esp),
+    ratedEsp: stagedOf("fans", "ratedEsp", fans.ratedEsp),
     equipmentFlows: stagedOf("fans", "equipmentFlows", fans.equipmentFlows),
     roles: stagedOf("fans", "roles", fans.roles),
     flows: stagedOf("fans", "flows", fans.flows),
@@ -425,7 +426,7 @@ export function stagedValues(doc: DuctsRouteDocument | null, fans: FansDocument)
     Object.fromEntries(Object.entries(cells).flatMap(([key, cell]) => (cell?.edit?.value === undefined ? [] : [[key, cell.edit.value]]))) as Record<string, V>;
   return { ...stagedDucts(doc, fans), calculation: bare(fans.calculation), rules: bare(doc?.rules ?? {}), kinds: bare(doc?.kinds ?? {}),
     assumptions: bare(doc?.assumptions ?? {}), catalogs: bare(doc?.catalogs ?? {}), ruleAssignments: bare(doc?.ruleAssignments ?? {}),
-    terminalDrops: bare(fans.terminalDrops), componentDrops: bare(fans.componentDrops), esp: bare(fans.esp),
+    terminalDrops: bare(fans.terminalDrops), componentDrops: bare(fans.componentDrops), esp: bare(fans.esp), ratedEsp: bare(fans.ratedEsp),
     equipmentFlows: bare(fans.equipmentFlows), roles: bare(fans.roles), flows: bare(fans.flows), subject: bare(doc?.subject ?? {}) };
 }
 

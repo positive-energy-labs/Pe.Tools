@@ -72,12 +72,12 @@ const scopeChoices = (read: Read): readonly EnumChoice[] => {
  * (`FAN_INPUTS`); only how many digits a unit draws is decided here.
  */
 const DIGITS: Readonly<Record<string, number>> = { "in-wg": 4, cfm: 0 };
+const drawn = (domain: Domain): Domain =>
+  domain.kind === "number" && domain.unit && domain.unit in DIGITS ? { ...domain, digits: DIGITS[domain.unit] }
+  : domain.kind === "object" ? { ...domain, fields: Object.fromEntries(Object.entries(domain.fields).map(([key, field]) => [key, drawn(field)])) }
+  : domain;
 const input = (row: { readonly parameter: string | null; readonly domain: Domain; readonly name: string }, draw: BindingDraw) => {
   if (!row.parameter) throw Error(`${row.name} is not a writable fan input`);
-  const drawn = (domain: Domain): Domain =>
-    domain.kind === "number" && domain.unit && domain.unit in DIGITS ? { ...domain, digits: DIGITS[domain.unit] }
-    : domain.kind === "object" ? { ...domain, fields: Object.fromEntries(Object.entries(domain.fields).map(([key, field]) => [key, drawn(field)])) }
-    : domain;
   return parameter(row.parameter, drawn(row.domain), draw);
 };
 
@@ -131,11 +131,18 @@ export const fansSheet = {
         };
       },
     }),
-    // The open fan's own ESP is an input of this sheet; another unit's only once Work stages it.
+    // The ESP written to the fan (required). The open fan's own is an input of this sheet; another unit's only once Work stages it.
     esp: input(FAN_CELLS.esp, {
-      rows: (read: Read) => rowsOf(read, units(read).filter((id) =>
-        Number(id) === fanUnit(read) || inputsOf(read)?.units[id]?.esp.source === "Work")),
+      rows: (read: Read) => rowsOf(read, units(read)).filter((key) =>
+        key === subjectOf(snapshotOf(read), fanUnit(read) ?? -1) || read?.fansWork.esp[key]?.edit != null),
       rowLabel: (read, row) => nameOf(read, row, "Unit ESP"),
+      // Only the open fan's staged value is resolved by this read; another unit's row shows its Work cell alone.
+      model: (read: Read, row) => idOf(read, row!) === fanUnit(read) ? layer(read?.open?.overview.espValues?.staged, (v) => ({ inWg: v })) : null,
+    }),
+    // The ESP a fan is rated for: stated here or by Pea and kept in Work, since no parameter holds it (P-030).
+    ratedEsp: local(drawn(FAN_CELLS.ratedEsp.domain), "subject", {
+      rows: (read: Read) => rowsOf(read, units(read)),
+      rowLabel: (read, row) => nameOf(read, row, "Unit rated ESP"),
       model: (read: Read, row) => layer(inputsOf(read)?.units[String(idOf(read, row!))]?.esp, (v) => ({ inWg: v })),
     }),
     flows: input(FAN_CELLS.flows, {

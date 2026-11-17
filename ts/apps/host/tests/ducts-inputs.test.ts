@@ -19,17 +19,18 @@ import { fileRouteDocumentStore } from "../src/route-document-store.ts";
 import { editPatches, workLayer } from "../src/ducts-inputs.ts";
 import { criteriaLayer } from "@pe/agent-contracts";
 import { price } from "@pe/ducts-domain/pricing";
+import { fanWriteCells } from "@pe/ducts-domain/staged";
 import { snapshot } from "../../web/src/ducts/test-fixture.ts";
 
 test("joined Fans edits reach the pricing solve and input layer", () => {
   const fans = fansDocumentSchema.parse({
-    flows: { "UniqueId:fixture%3a4": { edit: { value: { cfm: 250 } } } },
-    terminalDrops: { "UniqueId:fixture%3a4": { edit: { value: { inWg: 0.27 } } } },
+    flows: { "UniqueId:fixture%3a4": { edit: { value: 250, by: "human" } } },
+    terminalDrops: { "UniqueId:fixture%3a4": { edit: { value: { inWg: 0.27 }, by: "human" } } },
   });
   const joined = ductsDesign(ductsDocumentSchema.parse({}), fans);
   const layer = workLayer(joined);
-  expect(layer.flows).toEqual({ "UniqueId:fixture%3a4": { cfm: 250 } });
-  expect(layer.terminalDrops).toEqual({ "UniqueId:fixture%3a4": { inWg: 0.27 } });
+  expect(layer.flows).toEqual({ "UniqueId:fixture%3a4": { value: 250, by: "human", ref: "work:fans/flows/UniqueId:fixture%3a4" } });
+  expect(layer.terminalDrops).toEqual({ "UniqueId:fixture%3a4": { value: 0.27, by: "human", ref: "work:fans/terminalDrops/UniqueId:fixture%3a4" } });
   const priced = price(snapshot, {}, joined, joined);
   expect(priced.edit.parameters).toEqual({});
   expect(priced.flows.get(4)).toMatchObject({ cfm: 250 });
@@ -75,12 +76,9 @@ test("fitting edits land on Work's own keys and read back through the Work layer
     expect(await workspace.apply(scope, "ducts", "human", patches, 0)).toMatchObject({ ok: true });
     const saved = await workspace.readRaw(scope, "ducts");
     const layer = workLayer(design(saved!.doc));
-    expect(layer.rules).toEqual({ "elbow-1d-le10": { table: "CD3-21" } });
-    expect(layer.ruleAssignments).toEqual({ "Round Elbow": { rule: "elbow-15d-45-le10" } });
-    expect(layer.assumptions?.[`component-drop:${key}`]).toEqual({
-      kind: "component-drop",
-      inWg: 0.04,
-    });
+    expect(layer.rules).toEqual({ "elbow-1d-le10": { value: "CD3-21", by: "human", ref: "work:ducts/rules/elbow-1d-le10" } });
+    expect(layer.ruleAssignments).toEqual({ "Round Elbow": { value: "elbow-15d-45-le10", by: "human", ref: "work:ducts/ruleAssignments/Round Elbow" } });
+    expect(layer.assumptions?.[`component-drop:${key}`]).toMatchObject({ value: { kind: "component-drop", inWg: 0.04 }, by: "human" });
 
     // `null` takes each back.
     const cleared = editPatches({ assignments: { "Round Elbow": null }, fittingDrops: { [key]: null } });
@@ -111,4 +109,11 @@ test("a criteria edit writes and clears one side's own cell, leaving the other s
   // The engine reads the layer the cells make.
   expect(criteriaLayer({ velocitySupplyFpm: { edit: { value: 850 } }, velocityReturnFpm: {}, healBoxIn: { edit: { value: 30 } } }))
     .toEqual({ velocityLimitFpm: { supply: 850 }, healBoxIn: 30 });
+});
+
+test("a stated rated ESP reaches the resolver's Work layer with its caller and cited ref, and is never a write target", () => {
+  const key = "UniqueId:fixture%3a4";
+  const fans = fansDocumentSchema.parse({ ratedEsp: { [key]: { edit: { value: { inWg: 0.75 }, by: "pea", ref: "submittal p3" } } } });
+  expect(workLayer(ductsDesign(ductsDocumentSchema.parse({}), fans)).ratedEsp).toEqual({ [key]: { value: 0.75, by: "pea", ref: "submittal p3" } });
+  expect(fanWriteCells(fans, { nodes: [{ uniqueId: "fixture:4" }], segments: [] } as unknown as Parameters<typeof fanWriteCells>[1])).toEqual([]);
 });

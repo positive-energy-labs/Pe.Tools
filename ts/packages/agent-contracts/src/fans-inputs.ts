@@ -148,6 +148,8 @@ const input = <const D extends Domain>(name: string, on: FanInputRow<unknown>["o
  */
 export const FAN_CELLS = {
   esp: input("esp", "fan", "esp", "fanStatic", inWg),
+  /** The ESP the fan is rated for, as someone stated it. Work only: no parameter holds it, because `fanStatic` holds the required ESP Pe writes (P-030). */
+  ratedEsp: row({ name: "ratedEsp", role: "input", on: "fan", domain: inWg, home: "Work", owner: "fans", segment: "ratedEsp", parameter: null, write: "never" }),
   equipmentFlows: input("equipmentFlows", "fan", "equipmentFlows", "fanFlow", numberDomain("cfm")),
   flows: input("flows", "terminal", "flows", "terminalFlow", numberDomain("cfm")),
   terminalDrops: input("terminalDrops", "terminal", "terminalDrops", "terminalDrop", inWg),
@@ -156,7 +158,7 @@ export const FAN_CELLS = {
 };
 /** Phase 2 keeps metadata beside its existing consumer; phase 4 moves this single table to fans/contract. */
 export const FAN_INPUTS = [
-  FAN_CELLS.esp, FAN_CELLS.equipmentFlows, FAN_CELLS.flows, FAN_CELLS.terminalDrops, FAN_CELLS.componentDrops,
+  FAN_CELLS.esp, FAN_CELLS.ratedEsp, FAN_CELLS.equipmentFlows, FAN_CELLS.flows, FAN_CELLS.terminalDrops, FAN_CELLS.componentDrops,
   row({ name: "fittingCoefficient", role: "input", on: "fitting", domain: numberDomain(""), home: "model", owner: "ducts", segment: null, parameter: "fittingCoefficient", write: "never" }),
   FAN_CELLS.roles,
   row({ name: "kinds", role: "input", on: "fan", domain: { kind: "enum", shape: z.enum(DUCT_UNIT_KINDS), choices: DUCT_UNIT_KINDS.map(value => ({ value, label: value })) }, home: "Work", owner: "ducts", segment: "kinds", parameter: null, write: "never" }),
