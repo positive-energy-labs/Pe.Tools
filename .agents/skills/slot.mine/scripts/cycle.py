@@ -80,14 +80,15 @@ def row_counts(text):
 
 
 def wave_rows(map_text, merged_subjects, refs):
-    """`Wave: <n> <branches>` lines: a wave is closed when every branch has a merge that names it."""
+    """Enumerate branch hands; only an explicit declaration states wave status."""
     rows = []
+    statuses = dict(re.findall(r'^Wave-Status:\s*(\S+)\s+(ACTIVE|CLOSED)\s*$', map_text, re.M))
     for n, rest in re.findall(r'^\W*Wave:\s*(\S+)[ \t]+(.+)$', map_text, re.M):
         branches = re.findall(r'[\w.-]+/[\w./-]+', rest)
         merged = [b for b in branches if re.search(re.escape(b) + r'(?![\w-])', merged_subjects)]
         started = [b for b in branches if b in refs or b in merged]
         rows.append(dict(n=n, total=len(branches), merged=len(merged), started=len(started),
-                         closed=bool(branches) and len(merged) == len(branches)))
+                         status=statuses.get(n, 'UNKNOWN')))
     return rows
 
 
@@ -228,8 +229,8 @@ def main(argv=None):
         subjects = git('log', '--first-parent', '--merges', '--format=%s', whole + '..' + tip) if whole != tip else ''
         rows = wave_rows(map_text, subjects, git('for-each-ref', '--format=%(refname:short)', 'refs/heads').splitlines())
         if not rows: return 'unknown: the map has no `Wave: <n> <branches>` line'
-        return '\n'.join(['%d of %d closed' % (sum(r['closed'] for r in rows), len(rows))] + [
-            '- wave %s: %d of %d merged, %d started%s' % (r['n'], r['merged'], r['total'], r['started'], ' (closed)' if r['closed'] else '') for r in rows])
+        return '\n'.join(['%d of %d explicitly closed' % (sum(r['status'] == 'CLOSED' for r in rows), len(rows))] + [
+            '- wave %s: %s; branch hands %d of %d merged, %d started' % (r['n'], r['status'], r['merged'], r['total'], r['started']) for r in rows])
     lines += ['', '## Waves', '', optional(waves) if args.map else 'no map']
     for title, name, count, order in (('Rows', 'ROWS.md', row_counts, STAMPS), ('Backlog', 'BACKLOG.md', backlog_counts, STATES)):
         def counted():

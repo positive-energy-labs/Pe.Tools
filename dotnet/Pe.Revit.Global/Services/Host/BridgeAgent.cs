@@ -252,10 +252,17 @@ internal sealed class BridgeAgent : IDisposable {
             request.OperationKey, request.RequestId);
         var startedAt = Stopwatch.GetTimestamp();
         var requestBytes = Encoding.UTF8.GetByteCount(request.PayloadJson);
+        // Only Revit knows whether an edit landed, so native owns a mutation's attempt identity: one durable
+        // admission per requestId before any effect. A repeat is answered from the record, never run again.
         // Begin before dispatch and before any response frame: the receipt is what makes this
         // product op recoverable with `pe-revit op result <requestId>` when the caller dies mid-flight
         // (a bridge frame reaches exactly one live socket and is gone).
-        var receipt = BeginOpReceipt(request);
+        var mutation = IsMutation(request);
+        var receipt = mutation
+            ? await this.BeginAttemptAsync(request, cancellationToken).ConfigureAwait(false)
+            : BeginOpReceipt(request);
+        if (mutation && receipt is null)
+            return; // Answered from the attempt record, or refused closed; it never runs.
         RequestEvidence.Begin(request.RequestId);
         var late = new TaskCompletionSource<RevitTaskResult<Task<OpRun>>>(TaskCreationOptions.RunContinuationsAsynchronously);
         var deferred = false;
@@ -368,9 +375,9 @@ internal sealed class BridgeAgent : IDisposable {
                 request.RequestId,
                 responseBytes
             );
-            CompleteOpReceipt(receipt, BridgeWire.Verdicts.Ok, OpReceiptResponse.Ok(
-                new JRaw(payloadJson), touched, ran.EvidenceJson is null ? null : new JRaw(ran.EvidenceJson)));
-            await this.WriteFrameAsync(frame, cancellationToken).ConfigureAwait(false);
+            await this.RespondAsync(request, receipt, BridgeWire.Verdicts.Ok, OpReceiptResponse.Ok(
+                new JRaw(payloadJson), touched, ran.EvidenceJson is null ? null : new JRaw(ran.EvidenceJson)),
+                frame, cancellationToken).ConfigureAwait(false);
             Log.Information(
                 "Host bridge wrote response frame: OperationKey={OperationKey}, RequestId={RequestId}",
                 request.OperationKey,
@@ -385,8 +392,10 @@ internal sealed class BridgeAgent : IDisposable {
                 request.OperationKey,
                 request.RequestId
             );
-            CompleteOpReceipt(receipt, BridgeWire.Verdicts.Cancelled, OpReceiptResponse.Failed(
-                message, BridgeOperationExceptions.CancelledStatusCode, touched));
+            // The pump writes this frame; the attempt records the same one so a resend replays it.
+            this.Settle(request, receipt, BridgeWire.Verdicts.Cancelled, OpReceiptResponse.Failed(
+                message, BridgeOperationExceptions.CancelledStatusCode, touched),
+                Refusal(request, BridgeOperationExceptions.CancelledStatusCode, "Cancelled", message, touched).Response!);
             throw new OpCancelledException(touched, cancelled);
         } catch (BridgeOperationException ex) {
             var totalMs = GetElapsedMilliseconds(startedAt);
@@ -418,9 +427,9 @@ internal sealed class BridgeAgent : IDisposable {
             // 423 is Revit already executing something else — the op never ran, so it is `refused`,
             // not `failed`. `op result` reads the verdict; conflating them would tell an agent its
             // op broke when it was simply refused.
-            CompleteOpReceipt(receipt, ex.StatusCode == 423 ? BridgeWire.Verdicts.Refused : BridgeWire.Verdicts.Failed,
-                OpReceiptResponse.Failed(ex.Message, ex.StatusCode, touched));
-            await this.WriteFrameAsync(errorFrame, cancellationToken).ConfigureAwait(false);
+            var verdict = ex.StatusCode == 423 ? BridgeWire.Verdicts.Refused : BridgeWire.Verdicts.Failed;
+            await this.RespondAsync(request, receipt, verdict, OpReceiptResponse.Failed(ex.Message, ex.StatusCode, touched),
+                errorFrame, cancellationToken).ConfigureAwait(false);
         } catch (Exception ex) {
             var totalMs = GetElapsedMilliseconds(startedAt);
             var errorFrame = new BridgeFrame(
@@ -448,9 +457,8 @@ internal sealed class BridgeAgent : IDisposable {
                 request.OperationKey,
                 request.RequestId
             );
-            CompleteOpReceipt(receipt, BridgeWire.Verdicts.Failed, OpReceiptResponse.Failed(
-                ex.Message, BridgeOperationExceptions.UnexpectedStatusCode, touched));
-            await this.WriteFrameAsync(errorFrame, cancellationToken).ConfigureAwait(false);
+            await this.RespondAsync(request, receipt, BridgeWire.Verdicts.Failed, OpReceiptResponse.Failed(
+                ex.Message, BridgeOperationExceptions.UnexpectedStatusCode, touched), errorFrame, cancellationToken).ConfigureAwait(false);
         } finally {
             if (deferred)
                 _ = RequestEvidence.CompleteWhenFinishedAsync(request.RequestId, AwaitDeferredAsync(late.Task),
@@ -490,8 +498,6 @@ internal sealed class BridgeAgent : IDisposable {
         Touched touched = outcome is RevitTaskOutcome.TimedOut or RevitTaskOutcome.AbandonedStillRunning or RevitTaskOutcome.CancelledCooperatively
             ? new Touched.Unknown(TouchedUnknownReason.CancelledMidEffect)
             : new Touched.None();
-        CompleteOpReceipt(receipt, verdict, OpReceiptResponse.Failed(
-            message, statusCode, touched, outcome.ToString()));
         Log.Warning(
             "Host bridge Revit task ended without a value: OperationKey={OperationKey}, RequestId={RequestId}, Outcome={Outcome}, Verdict={Verdict}",
             request.OperationKey,
@@ -499,7 +505,11 @@ internal sealed class BridgeAgent : IDisposable {
             outcome,
             verdict
         );
-        await this.WriteFrameAsync(
+        await this.RespondAsync(
+            request,
+            receipt,
+            verdict,
+            OpReceiptResponse.Failed(message, statusCode, touched, outcome.ToString()),
             new BridgeFrame(
                 BridgeFrameKind.Response,
                 Response: new BridgeResponse(
@@ -527,6 +537,94 @@ internal sealed class BridgeAgent : IDisposable {
         _ => throw new ArgumentOutOfRangeException(nameof(outcome), outcome, "Expected a non-value Revit task outcome.")
     };
 
+    private static bool IsMutation(BridgeRequest request) =>
+        OpRegistry.TryGet(request.OperationKey, out var op) && op.Definition.Effect is OpEffect.SessionWrite or OpEffect.ModelWrite;
+
+    /// <summary>This bridge's name on an SDK <see cref="OpAttempt"/>: the door whose wire its replay bytes are in.</summary>
+    private const string AttemptDoor = "pe-tools/bridge";
+
+    /// <summary>
+    /// Begins one mutation through the SDK's native attempt identity, the owner of "did this request id already
+    /// run?" for every door into these ops (this bridge and the SDK's own /op/run). Returns the receipt when this
+    /// dispatch may run; otherwise answers it here and returns null, and it never runs. Pe.Tools only renders the
+    /// dispositions onto its own wire.
+    /// </summary>
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private async Task<object?> BeginAttemptAsync(BridgeRequest request, CancellationToken cancellationToken) {
+        OpAttempt.Result attempt;
+        try {
+            using var process = Process.GetCurrentProcess();
+            attempt = OpAttempt.Begin(request.RequestId, AttemptDoor, request.OperationKey, request.OpenDocumentId,
+                request.PayloadJson, process.Id, new DateTimeOffset(process.StartTime.ToUniversalTime(), TimeSpan.Zero));
+            if (attempt.Disposition == OpAttempt.Disposition.Pending)
+                attempt = await OpAttempt.JoinAsync(request.RequestId, AttemptDoor, cancellationToken).ConfigureAwait(false);
+        } catch (Exception ex) when (ex is not OperationCanceledException) {
+            attempt = new OpAttempt.Result(OpAttempt.Disposition.Unadmitted, null, null, ex.Message);
+        }
+        Log.Information("Mutation attempt: OperationKey={OperationKey}, RequestId={RequestId}, Disposition={Disposition}, Detail={Detail}, Door={Door}",
+            request.OperationKey, request.RequestId, attempt.Disposition, attempt.Detail, attempt.Door);
+        var id = request.RequestId;
+        var answer = attempt.Disposition switch {
+            OpAttempt.Disposition.Admitted => null,
+            OpAttempt.Disposition.Replay => new BridgeFrame(BridgeFrameKind.Response,
+                Response: JsonConvert.DeserializeObject<BridgeResponse>(attempt.Response!, this._serializerSettings)),
+            OpAttempt.Disposition.Conflict => Refusal(request, 409, "AttemptConflict",
+                $"Request '{id}' was already dispatched for a different '{attempt.Detail}' intent; nothing ran. Send a new request id.",
+                new Touched.None()),
+            OpAttempt.Disposition.AnsweredElsewhere => Refusal(request, 409, "AttemptAnsweredElsewhere",
+                $"Request '{id}' was already dispatched through '{attempt.Door}' and ended '{attempt.Detail}'; nothing ran here. Read its outcome there.",
+                new Touched.Unknown(TouchedUnknownReason.LostResponse)),
+            // The commit lived in an open instance this resend did not reach: the typed outcome (where, and whether it
+            // was saved) rides as the payload, because a recorded ok is no longer the truth about the document.
+            OpAttempt.Disposition.Ended => Refusal(request, 409, "AttemptEnded", attempt.Detail!,
+                new Touched.Unknown(TouchedUnknownReason.ProcessExit), attempt.Ended!.ToJson()),
+            OpAttempt.Disposition.Unknown => Refusal(request, 409, "AttemptOutcomeUnknown",
+                $"Request '{id}' was dispatched by a Revit process that ended before it recorded an outcome; it may have committed. Read the model before sending a new request id.",
+                new Touched.Unknown(TouchedUnknownReason.ProcessExit)),
+            OpAttempt.Disposition.Unreceipted => Refusal(request, 503, "ReceiptUnavailable",
+                $"Mutation '{request.OperationKey}' was not run: {attempt.Detail}", new Touched.None()),
+            _ => Refusal(request, 503, "AdmissionUnavailable",
+                $"Mutation '{request.OperationKey}' was not run: its attempt could not be durably admitted. {attempt.Detail}", new Touched.None())
+        };
+        if (answer is null)
+            return attempt.Receipt;
+        if (attempt.Disposition == OpAttempt.Disposition.Unreceipted)
+            this.Settle(request, null, BridgeWire.Verdicts.Refused, null, answer.Response!);
+        await this.WriteFrameAsync(answer, cancellationToken).ConfigureAwait(false);
+        return null;
+    }
+
+    /// <summary>Records the terminal, then answers.</summary>
+    private Task RespondAsync(BridgeRequest request, object? receipt, string verdict, OpReceiptResponse receiptResponse,
+        BridgeFrame frame, CancellationToken cancellationToken) {
+        this.Settle(request, receipt, verdict, receiptResponse, frame.Response!);
+        return this.WriteFrameAsync(frame, cancellationToken);
+    }
+
+    /// <summary>A mutation's terminal goes to its attempt (receipt and outcome in one SDK call, the response as the
+    /// replay bytes); a read's goes to its best-effort receipt only.</summary>
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private void Settle(BridgeRequest request, object? receipt, string verdict, OpReceiptResponse? receiptResponse,
+        BridgeResponse response) {
+        if (!IsMutation(request)) {
+            if (receiptResponse is not null)
+                CompleteOpReceipt(receipt, verdict, receiptResponse);
+            return;
+        }
+        try {
+            OpAttempt.Complete(request.RequestId, AttemptDoor, (OpReceiptHandle?)receipt, verdict,
+                JsonConvert.SerializeObject(response, this._serializerSettings), receiptResponse?.ToJson());
+        } catch (Exception ex) {
+            // Never a second run: the attempt stays pending while this Revit lives and reads unknown after it.
+            Log.Warning(ex, "Mutation outcome could not be recorded: RequestId={RequestId}", request.RequestId);
+        }
+    }
+
+    private static BridgeFrame Refusal(BridgeRequest request, int statusCode, string code, string message, Touched touched,
+        string? payloadJson = null) =>
+        new(BridgeFrameKind.Response, Response: new BridgeResponse(request.RequestId, false, payloadJson, message, statusCode,
+            [BridgeOperationExceptions.Issue("$", code, message, null)], new PerformanceMetrics(0, 0, 0, 0, 0), Touched: touched));
+
     private static object? ResolveDocument(Op op, string? openDocumentId, CancellationToken cancellationToken) {
         cancellationToken.ThrowIfCancellationRequested();
         if (op.Definition.Needs == OpNeeds.Nothing)
@@ -539,10 +637,9 @@ internal sealed class BridgeAgent : IDisposable {
     }
 
     /// <summary>
-    /// Opens an SDK operation receipt for one product bridge request. Best-effort by construction:
-    /// a receipt is diagnostics, and a diagnostics failure must never become a second Revit failure
-    /// on top of the op the user actually asked for. A null handle simply means this op is not
-    /// recoverable through `pe-revit op result`; every other behaviour is unchanged.
+    /// Opens an SDK operation receipt for one product bridge READ. Best-effort: a read without a receipt
+    /// is merely not recoverable through `pe-revit op result`. Mutations begin through OpAttempt instead,
+    /// which fails closed.
     /// </summary>
     // OPAQUE on purpose (object, never OpReceiptHandle) and never inlined: a type reference in
     // HandleRequestAsync's state machine is resolved when THAT method is JIT-compiled, so a
@@ -560,8 +657,7 @@ internal sealed class BridgeAgent : IDisposable {
                 new DateTimeOffset(process.StartTime.ToUniversalTime(), TimeSpan.Zero)
             );
         } catch (Exception ex) {
-            // Includes the duplicate-requestId collision Begin throws on: a receipt already exists
-            // for this (requestId, incarnation), so the recoverable record is there either way.
+            // A read keeps running without a receipt.
             Log.Warning(ex, "Operation receipt could not be opened for RequestId={RequestId}.", request.RequestId);
             return null;
         }

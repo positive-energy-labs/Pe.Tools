@@ -1,5 +1,6 @@
 import {
   workKey,
+  sameReceiptWork,
   type ActionStatus,
   type StepRef,
   type TimelineRow,
@@ -43,7 +44,6 @@ const pathLabel = (ack: WorkWriteAck) =>
  */
 export function timelineJournal(work: TimelineWork, receipts: readonly ActionStatus[]): WorkJournal {
   const journal = createWorkJournal(work.key);
-  const identity = workKey(work.key);
   // An ack stored without a stamp sorts first. The journal would otherwise read the clock, and the
   // same history would then project differently on each read.
   for (const ack of work.acks) journal.accept({ ...ack, at: ack.at ?? 0, replay: true });
@@ -54,7 +54,7 @@ export function timelineJournal(work: TimelineWork, receipts: readonly ActionSta
       at: receipt.startedAt,
       receiptId: receipt.id,
       paths: receipt.consumes.flatMap((item) =>
-        item.kind === "work" && workKey(item.probe.handle.key) === identity ? item.probe.paths : [],
+        item.kind === "work" && sameReceiptWork(item.probe.handle.key, work.key) ? item.probe.paths : [],
       ),
       outcome: receipt.outcome,
       basis: { receipt },
@@ -119,16 +119,16 @@ export function projectWorks(
       });
     }
   });
-  const identities = new Set(works.map((work) => workKey(work.key)));
   for (const receipt of receipts) {
     const consumed = receipt.consumes.find(
-      (item) => item.kind === "work" && identities.has(workKey(item.probe.handle.key)),
+      (item) => item.kind === "work" && works.some(work=>sameReceiptWork(item.probe.handle.key, work.key)),
     );
     if (consumed?.kind !== "work") continue;
+    const work=works.find(work=>sameReceiptWork(consumed.probe.handle.key,work.key))!;
     rows.push({
       kind: "receipt",
       id: receipt.id,
-      work: consumed.probe.handle.key,
+      work: work.key,
       label: receipt.key,
       by: receipt.caller.kind === "pea" ? "pea" : "human",
       state: receipt.state,

@@ -116,9 +116,10 @@ test("Start publishes Family Work before immediate small attach and 7 MB refusal
     await expect(run).rejects.toThrow("PDF parser refused this source");
     expect(mount.reviewProblem("attach")).toContain("PDF parser refused this source");
     const receipt = (await journal.list()).find(row=>row.key === "family.attach-spec" && row.state === "failed")!;
+    if (receipt.target.kind !== "host") throw Error("Attach fixture must retain its live host target");
     await expect(recoverAction(receipt.id, "family.attach-spec", {
       ...receipt.input, source: {...(receipt.input.source as object), fileName: "another.pdf"},
-    }, receipt.target)).rejects.toThrow("conflicts with its original intent");
+    }, receipt.target)).rejects.toThrow("returned a receipt for different intent or target");
     expect(JSON.stringify(receipt)).not.toMatch(/"(?:base64|bytesBase64)"/);
     expect(JSON.stringify(frames)).not.toMatch(/"(?:base64|bytesBase64)"/);
     expect(await readFile(join(dir, "journal.jsonl"), "utf8")).not.toMatch(/"(?:base64|bytesBase64)"/);

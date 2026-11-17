@@ -19,7 +19,6 @@ import {
   type FamilyReadKey,
   type ExecutionTarget,
   type SemanticActionKey,
-  type SdkSessionSelection,
   type ActionNeed,
 } from "@pe/agent-contracts";
 import { isTsOnlyOperationKey, tsOnlyOperationCatalog } from "@pe/host-contracts/operation-types";
@@ -39,7 +38,7 @@ import { contextFetch as fetch } from "@pe/runtime/context";
 export interface AdmissionContext {
   hostBaseUrl: string;
   bridgeSessionId?: string;
-  session?: SdkSessionSelection;
+  session?: HostSessionScope["session"];
   openDocumentId?: string;
   actionId?: string;
   timeoutMs?: number;

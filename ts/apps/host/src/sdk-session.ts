@@ -1,7 +1,7 @@
 import { BridgeError as DispatchBridgeError } from "@pe/host-internal/dispatch";
 import type { DoorFailure, ResolvedSdkSession } from "@pe/host-internal/request-contracts";
 import { RequestIdentity } from "./request-services.ts";
-import { sdkSessionSelectionSchema } from "@pe/agent-contracts";
+import { sdkSessionTargetSchema } from "@pe/agent-contracts";
 import { Context, Effect, Layer } from "effect";
 import { NodeServices } from "@effect/platform-node";
 import {
@@ -45,9 +45,13 @@ export function readSessionScope(headers: Record<string, string | undefined>): H
   const raw = headers[HOST_RPC_SDK_SESSION_HEADER];
   // Absent selectors stay absent: this same scope is the native capture/replay JSON fence.
   return {
-    ...(raw === undefined ? {} : { session: sdkSessionSelectionSchema.parse(JSON.parse(raw)) }),
-    ...(headers[HOST_RPC_BRIDGE_SESSION_HEADER] === undefined ? {} : { bridgeSessionId: headers[HOST_RPC_BRIDGE_SESSION_HEADER] }),
-    ...(headers[HOST_RPC_DOCUMENT_HEADER] === undefined ? {} : { openDocumentId: headers[HOST_RPC_DOCUMENT_HEADER] }),
+    ...(raw === undefined ? {} : { session: sdkSessionTargetSchema.parse(JSON.parse(raw)) }),
+    ...(headers[HOST_RPC_BRIDGE_SESSION_HEADER] === undefined
+      ? {}
+      : { bridgeSessionId: headers[HOST_RPC_BRIDGE_SESSION_HEADER] }),
+    ...(headers[HOST_RPC_DOCUMENT_HEADER] === undefined
+      ? {}
+      : { openDocumentId: headers[HOST_RPC_DOCUMENT_HEADER] }),
   };
 }
 
@@ -58,18 +62,33 @@ const resolveSdkCore = Effect.fn("SdkSession.sdk")(function* (
   read: SdkDriver,
   cache: ResolutionCache,
 ) {
-  const selection =
-    scope.session === undefined ? undefined : sdkSessionSelectionSchema.parse(scope.session);
-  if (scope.openDocumentId && !scope.bridgeSessionId)
+  const target =
+    scope.session === undefined ? undefined : sdkSessionTargetSchema.parse(scope.session);
+  const exact = target && "session" in target ? target : undefined;
+  const selection = target && "session" in target ? { id: target.session } : target;
+  const exactAttachment = exact
+    ? yield* resolveAttachment(bridge, { sdkSession: exact.session }).pipe(
+        Effect.mapError((error) => refusal(error.message)),
+      )
+    : undefined;
+  if (scope.openDocumentId && !scope.bridgeSessionId && !exact)
     return yield* refuse("A product document lifetime requires its exact bridge attachment");
   const attachments = scope.bridgeSessionId
     ? (yield* bridge.list).filter((s) => s.sessionId === scope.bridgeSessionId)
     : [];
   if (scope.bridgeSessionId && attachments.length !== 1)
     return yield* refuse("The exact bridge attachment is no longer available");
-  const held = attachments[0];
+  const held = attachments[0] ?? exactAttachment;
   if (held && (!held.connected || !held.processId || !held.processStartUtcUnixMs))
     return yield* refuse("The exact bridge attachment is no longer available");
+  if (
+    exact &&
+    held &&
+    (held.sdkSessionId !== exact.session ||
+      held.processId !== exact.processIncarnation.pid ||
+      held.processStartUtcUnixMs !== exact.processIncarnation.startedAt)
+  )
+    return yield* refuse("The exact SDK session process incarnation is no longer available");
   // ponytail: one owned attachment → its pid; the SDK's unscoped ladder (cwd-project) costs ~40 s against a 30 s budget. Owed: SDK ladder speed.
   const owned = held
     ? []
@@ -155,6 +174,14 @@ const resolveSdkCore = Effect.fn("SdkSession.sdk")(function* (
     return yield* refuse("The SDK resolved process has no unique bridge attachment", envelope);
   }
   const socket = matches[0]!;
+  // A retained public reference never adopts a later process behind the same SDK label.
+  if (exact && socket.sdkSessionId !== exact.session) {
+    cache.delete(key);
+    return yield* refuse(
+      "The exact SDK session process incarnation is no longer available",
+      envelope,
+    );
+  }
   const socketRejection = runtimeOwnerRejection(hostOwnership, socket);
   if (socketRejection) {
     cache.delete(key);
@@ -200,7 +227,8 @@ const resolveSdk = (
   ).pipe(
     Effect.tap(() =>
       Effect.sync(() => {
-        while (sharedResolutions.size > 64) sharedResolutions.delete(sharedResolutions.keys().next().value!);
+        while (sharedResolutions.size > 64)
+          sharedResolutions.delete(sharedResolutions.keys().next().value!);
       }),
     ),
   );
@@ -212,8 +240,10 @@ export const sdkSession = resolveSdk;
 const sessionPromise = <A, E>(lookup: Effect.Effect<A, E>) =>
   // effect-edge: island, phase 5
   Effect.runPromise(lookup);
-export const resolveSdkSession = (...args: Parameters<typeof resolveSdk>) => sessionPromise(resolveSdk(...args));
-export const attachedSession = (...args: Parameters<typeof resolveAttachment>) => sessionPromise(resolveAttachment(...args));
+export const resolveSdkSession = (...args: Parameters<typeof resolveSdk>) =>
+  sessionPromise(resolveSdk(...args));
+export const attachedSession = (...args: Parameters<typeof resolveAttachment>) =>
+  sessionPromise(resolveAttachment(...args));
 
 /** Which attachment a caller means: its bridge id, its SDK session id, or either. */
 export type AttachmentTarget = { session: string } | { sdkSession: string } | { id: string };

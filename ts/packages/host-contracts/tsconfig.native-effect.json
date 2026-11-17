@@ -1,0 +1,11 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "incremental": false },
+  "include": [
+    "scripts/host-typegen.ts",
+    "scripts/native-effect-generator.ts",
+    "src/generated/native-effect.generated.ts",
+    "src/generated/native-effect.test.ts",
+    "src/generated/native-effect-direction.typecheck.ts"
+  ]
+}
