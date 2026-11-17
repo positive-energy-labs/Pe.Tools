@@ -147,9 +147,8 @@ export function worksheet(sheet: Sheet, limits: WorksheetLimits): Worksheet {
 
     const delivering = paths.filter((p) => delivers(p.end));
     const complete = (p: SheetPath) => whole(p, sheet.legs);
-    // The claim is the one completeness signal (P-031): a calc it calls incomplete certifies no residual and no critical run.
-    const certified =
-      sheet.claim.kind !== "incomplete" && delivering.length > 0 && delivering.every(complete);
+    // Only a `complete` claim certifies a residual or a critical run (P-033(d)); `to-boundary` does not, and no per-path test stands beside it.
+    const certified = sheet.claim.kind === "complete" && delivering.length > 0;
     // F1 (2026-11-10): the worst is over complete branches only; a partial sum is no known loss.
     const known = delivering.filter(complete);
     const worst = known.length ? Math.max(...known.map((p) => p.knownInWg)) : null;

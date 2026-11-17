@@ -59,10 +59,11 @@ export interface WorkLayer {
 }
 
 /** A staged cell as a value layer: its caller is the author, its ref the evidence. */
-const staged = <T, V = T>(
-  cell: WorkCell<T> | undefined,
-  value: (v: T) => V | null | undefined = (v) => v as unknown as V,
-): ValueCell<V> => ({ value: cell ? value(cell.value) : undefined, author: cell?.by ?? null, ref: cell?.ref });
+function staged<T>(cell: WorkCell<T> | undefined): ValueCell<T>;
+function staged<T, V>(cell: WorkCell<T> | undefined, value: (v: T) => V | null | undefined): ValueCell<V>;
+function staged<T>(cell: WorkCell<T> | undefined, value: (v: T) => unknown = (v) => v): ValueCell<unknown> {
+  return { value: cell ? value(cell.value) : undefined, author: cell?.by ?? null, ref: cell?.ref };
+}
 /** A Work criterion as a value layer: the author is its cell's `by`. */
 const authored = <T>(
   layer: WorkLayer | null | undefined,
@@ -158,7 +159,7 @@ export function editCells(edits: SheetEdits): string[][] {
 }
 
 /** A drop parameter identical on every instance of a family (two or more) is the family's placeholder, not a design value: Chadds' 302 volume dampers all carry 1.0 in-wg (2026-10-28). */
-function familyPlaceholders(snapshot: SheetSnapshot) {
+function familyPlaceholders(snapshot: Pick<SheetSnapshot, "nodes">) {
   const values = new Map<string, (number | null)[]>();
   for (const n of snapshot.nodes)
     if (n.family && n.kind === "accessory")
@@ -170,6 +171,18 @@ function familyPlaceholders(snapshot: SheetSnapshot) {
         : [],
     ),
   );
+}
+const placeholderOf = (placeholders: ReturnType<typeof familyPlaceholders>, n: Node) =>
+  n.family && n.kind === "accessory" && positive(factOf(n, "pressureDrop")) != null
+    ? placeholders.get(n.family)
+    : undefined;
+const placeholdersBySnapshot = new WeakMap<object, ReturnType<typeof familyPlaceholders>>();
+/** Why a model drop was demoted to missing, for the engine's note: a missing value carries no ref (FANS-W2-MISSING-REF). */
+export function placeholderNote(snapshot: Pick<SheetSnapshot, "nodes">, n: Node): string | undefined {
+  const all = placeholdersBySnapshot.get(snapshot) ?? familyPlaceholders(snapshot);
+  placeholdersBySnapshot.set(snapshot, all);
+  const p = placeholderOf(all, n);
+  return p && `family placeholder ${p.inWg} on ${p.count}`;
 }
 
 /** The design criteria alone (no snapshot needed): what the C# read is asked to measure under. */
@@ -383,7 +396,7 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
       const typed = work.componentDrops?.[key]?.value;
       const family = n.family ? work.assumptions?.[`component-drop:${n.family}`]?.value.inWg : undefined;
       const stated = n.kind === "accessory" ? positive(factOf(n, "pressureDrop")) : null;
-      const placeholder = n.family && stated != null ? placeholders.get(n.family) : undefined;
+      const placeholder = placeholderOf(placeholders, n);
       if (
         typed != null ||
         family != null ||
@@ -399,16 +412,8 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
           },
           "in-wg",
         );
-        // A missing value still needs the reason this model parameter was demoted.
-        components[id] = {
-          drop:
-            resolved.status === "missing" && placeholder
-              ? {
-                  ...resolved,
-                  ref: `family placeholder ${placeholder.inWg} on ${placeholder.count}`,
-                }
-              : resolved,
-        };
+        // A missing value has no ref; the engine reads the reason it was demoted from `placeholderNote`.
+        components[id] = { drop: resolved };
       }
     }
   }
@@ -545,7 +550,8 @@ export function encounterRulings(layers: Pick<InputLayers, "run" | "work">): Enc
     v.verdict === "accept" ? "accepted" : v.verdict === "refuse" ? "refused" : null;
   return Object.keys({ ...work, ...run }).flatMap((key): EncounterRuling[] => {
     const [elementId, connector] = key.startsWith("encounter:") ? key.slice(10).split(":").map(Number) : [];
-    const at = { elementId: elementId!, connector: connector! };
+    if (elementId == null || connector == null) return [];
+    const at = { elementId, connector };
     if (!Number.isInteger(elementId) || !Number.isInteger(connector) || ENCOUNTER_KEY(at) !== key) return [];
     // P-029: a ruling is a staged value like any other, so one no known caller stamped is invalid and rules nothing.
     const r = resolveValue({ run: staged(run?.[key], verdict), Work: staged(work?.[key], verdict) });
@@ -554,7 +560,7 @@ export function encounterRulings(layers: Pick<InputLayers, "run" | "work">): Enc
 }
 
 const isKind = (v: string | undefined): v is DuctUnitKind =>
-  v != null && (DUCT_UNIT_KINDS as readonly string[]).includes(v);
+  DUCT_UNIT_KINDS.some((kind) => kind === v);
 const isRole = (v: string | undefined): v is "fan" | "passive" => v === "fan" || v === "passive";
 
 /** The resolved cfm of a terminal, for the engine's flow and for assumed fan flows. */

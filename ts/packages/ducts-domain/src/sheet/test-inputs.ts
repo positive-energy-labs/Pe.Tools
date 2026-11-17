@@ -4,6 +4,7 @@ import { DUCTS_CRITERIA_CELLS, type DuctsCriteriaCell, type DuctsFirm, type Duct
 import { catalogLinkKey } from "../catalog.ts";
 import type { DuctSnapshot } from "../types.ts";
 import type { SheetSnapshot } from "./build.ts";
+import { coverageOf } from "./coverage.ts";
 import { END_KEY, FITTING_DROP_CELL, JOIN_KEY, resolveInputs, type WorkCell, type WorkLayer } from "./inputs.ts";
 
 /** Test-only: a native walk that read every peer, so a fixture's coverage is known (P-028). */
@@ -17,6 +18,9 @@ export const TEST_WALK: NonNullable<DuctSnapshot["walk"]> = {
   elapsedMs: 0,
   unreadPeers: [],
 };
+
+/** Test-only: coverage of a snapshot whose one source, that walk, read every peer. */
+export const TEST_COVERAGE = coverageOf({ nodes: [], segments: [], walk: TEST_WALK }, new Set());
 
 /** Test-only: a staged cell as a person staged it (contract amendment 2). */
 export const cell = <T>(value: T, by: WorkCell<T>["by"] = "human", ref = "work:test"): WorkCell<T> => ({
@@ -82,14 +86,22 @@ export interface InputsShorthand {
 
 export function inputsFor(snapshot: SheetSnapshot, s: InputsShorthand = {}): DuctsInputs {
   const byId = new Map(snapshot.nodes.map((n) => [n.id, n]));
+  type Cells<K extends Exclude<keyof WorkLayer, "criteria" | "criteriaMeta">> = Record<string, NonNullable<WorkLayer[K]>[string]>;
+  const flows: Cells<"flows"> = {};
+  const equipmentFlows: Cells<"equipmentFlows"> = {};
+  const terminalDrops: Cells<"terminalDrops"> = {};
+  const componentDrops: Cells<"componentDrops"> = {};
+  const roles: Cells<"roles"> = {};
+  const kinds: Cells<"kinds"> = {};
+  const assumptions: Cells<"assumptions"> = {};
   const work: WorkLayer = {
-    flows: {},
-    equipmentFlows: {},
-    terminalDrops: {},
-    componentDrops: {},
-    roles: {},
-    kinds: {},
-    assumptions: {},
+    flows,
+    equipmentFlows,
+    terminalDrops,
+    componentDrops,
+    roles,
+    kinds,
+    assumptions,
     rules: Object.fromEntries(Object.entries(s.choices ?? {}).map(([k, table]) => [k, cell(table)])),
     ruleAssignments: Object.fromEntries(
       Object.entries(s.assignments ?? {}).map(([family, rule]) => [family, cell(rule)]),
@@ -107,12 +119,6 @@ export function inputsFor(snapshot: SheetSnapshot, s: InputsShorthand = {}): Duc
         : {}),
     }),
   };
-  type Cells<K extends Exclude<keyof WorkLayer, "criteria" | "criteriaMeta">> = Record<string, NonNullable<WorkLayer[K]>[string]>;
-  const flows = work.flows as Cells<"flows">;
-  const equipmentFlows = work.equipmentFlows as Cells<"equipmentFlows">;
-  const terminalDrops = work.terminalDrops as Cells<"terminalDrops">;
-  const componentDrops = work.componentDrops as Cells<"componentDrops">;
-  const assumptions = work.assumptions as Cells<"assumptions">;
   for (const [key, inWg] of Object.entries(s.fittingDrops ?? {}))
     assumptions[FITTING_DROP_CELL(key)] = cell({ kind: "component-drop", inWg });
   for (const [id, cfm] of Object.entries(s.endCfm ?? {}))
@@ -127,17 +133,24 @@ export function inputsFor(snapshot: SheetSnapshot, s: InputsShorthand = {}): Duc
   for (const r of s.endRulings ?? [])
     assumptions[END_KEY(r.end)] = cell({ kind: "verdict", verdict: "capped" });
   for (const [id, role] of Object.entries(s.roles ?? {}))
-    (work.roles as Cells<"roles">)[elementSubject(byId.get(Number(id))!)] = cell(role);
+    roles[elementSubject(byId.get(Number(id))!)] = cell(role);
   for (const [id, kind] of Object.entries(s.kinds ?? {})) {
     const n = byId.get(Number(id));
     if (n)
-      (work.kinds as Cells<"kinds">)[catalogLinkKey(n.family, n.type)] = cell<DuctUnitKind>(kind);
+      kinds[catalogLinkKey(n.family, n.type)] = cell<DuctUnitKind>(kind);
   }
   const snap = s.slot
     ? { ...snapshot, slots: { ...(snapshot.slots ?? {}), terminalFlow: s.slot } }
     : snapshot;
   return resolveInputs({ snapshot: snap as SheetSnapshot, work, firm: s.firm ?? TEST_FIRM });
 }
+
+/**
+ * Test-only: a capture taken before the native walk listed its unread peers (2026-11-02), with the
+ * empty list its numbers were certified under stated on it. Unstated, its coverage is `lost`.
+ */
+export const withPeersRead = <S extends SheetSnapshot>(snapshot: S): S =>
+  snapshot.walk ? { ...snapshot, walk: { ...snapshot.walk, unreadPeers: [] } } : snapshot;
 
 /**
  * Test-only: the same capture with one unit's connector directions swapped, the family as the network

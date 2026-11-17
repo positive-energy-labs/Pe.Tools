@@ -2,7 +2,7 @@ import { expect, it } from "vite-plus/test";
 import raw from "./fixtures/manual-d-20261102.json" with { type: "json" };
 import tables from "./fixtures/manual-d-tables.json" with { type: "json" };
 import { buildSheet, type SheetSnapshot } from "./build.ts";
-import { inputsFor, withFamilyFlipped } from "./test-inputs.ts";
+import { inputsFor, withFamilyFlipped, withPeersRead } from "./test-inputs.ts";
 import { suggestRoster } from "../roster.ts";
 import { friction, roundSection } from "../loss-physics.ts";
 import { lookupGrid, toGrids } from "../loss-grid.ts";
@@ -11,7 +11,7 @@ import { lookupGrid, toGrids } from "../loss-grid.ts";
 // Q4 (kaitpw 2026-11-16): MUAS-1's family reads c2 out, c1 in, against its network. Before Q4 the ends chose
 // the roles and this capture priced as recorded; now the family does, so the roles the numbers below were
 // certified under are stated on the capture. The roster still comes from the capture as read.
-const snapshot = withFamilyFlipped(raw as unknown as SheetSnapshot, 14577391);
+const snapshot = withPeersRead(withFamilyFlipped(raw as unknown as SheetSnapshot, 14577391));
 const r = suggestRoster(raw as unknown as SheetSnapshot),
   roster = [...r.fans, ...r.suggestions];
 const grids = toGrids({ tables });

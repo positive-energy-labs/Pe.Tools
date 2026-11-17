@@ -1480,6 +1480,10 @@ it("lost native coverage never reads complete, and typed evidence reproduces eac
   expect(
     buildSheet({ ...input, snapshot: { ...network, reach: { unreadPeers: [], complete: false } } }).claim,
   ).toMatchObject({ kind: "incomplete", coverage: [{ kind: "native-peer", elementId: null }] });
+  // P-035: this fan's own system seed read failed (`DuctRef(systemId, -1)`): never complete.
+  expect(
+    buildSheet({ ...input, snapshot: { ...network, walk, reach: { unreadPeers: [{ elementId: 555, connector: -1 }], complete: false } } }).claim,
+  ).toMatchObject({ kind: "incomplete", coverage: [{ kind: "native-peer", elementId: null, ref: "system 555 seed read failed" }] });
   const kinds = new Set<string>();
   for (const leg of Object.values(whole.legs)) {
     const e = leg.evidence;
