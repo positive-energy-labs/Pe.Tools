@@ -280,7 +280,7 @@ export function Ledger({ props }: { props: LedgerProps }) {
       {props.sheet && (
         <CalcBreakdown
           ws={props.sheet.calcBreakdown}
-          editing={{ inputs: props.inputs, changeInputs: props.changeInputs, busy: props.busy }}
+          editing={{ inputs: props.inputs, subjectFor: props.subjectFor, changeInputs: props.changeInputs, busy: props.busy }}
         />
       )}
       {props.sheet && (

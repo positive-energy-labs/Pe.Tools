@@ -41,6 +41,7 @@ export function branchesKnown(runs: readonly Pick<Run, "end" | "complete">[]): s
 /** What the table needs to edit a design value: the resolved inputs and the one write. */
 export interface CalcBreakdownEditing {
   inputs: CalcInputs | null;
+  subjectFor?: (id: number) => string;
   changeInputs: (edits: CalcEdits) => void;
   busy: boolean;
 }
@@ -58,9 +59,10 @@ export function derivedFlowSource(flowSource: string | null): string {
 
 /** Authored input and computed carried flow are separate values (ADR 0027 rule 8). */
 function CfmCell({ run, ws, editing }: { run: Run; ws: Ws; editing: CalcBreakdownEditing }) {
-  if (run.end.kind !== "terminal" || !editing.inputs)
+  if (run.end.kind !== "terminal" || !editing.inputs || !editing.subjectFor)
     return <span className={CFM}>{run.cfm ?? "—"}</span>;
   const id = String(run.end.elementId);
+  const subject = editing.subjectFor(run.end.elementId);
   const resolved = editing.inputs.terminals[id]?.cfm;
   const typed = resolved?.source === "Work";
   const stated = resolved?.value != null;
@@ -78,7 +80,7 @@ function CfmCell({ run, ws, editing }: { run: Run; ws: Ws; editing: CalcBreakdow
         clearable={typed}
         className="grid grid-cols-[4.5rem_minmax(0,1fr)] items-center gap-x-1"
         onValue={(value) =>
-          editing.changeInputs({ flows: { [id]: value ?? null } })
+          editing.changeInputs({ flows: { [subject]: value ?? null } })
         }
       />
       {carried && (
