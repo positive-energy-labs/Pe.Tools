@@ -27,6 +27,13 @@ const runtime = () =>
     sourceRoot: checkoutRootFrom(import.meta.dirname),
     installedRoot: null,
   });
+const expectInside = (root: string, resolver: () => string, name: string) =>
+  expect(relative(root, resolver()).startsWith(".."), name).toBe(false);
+
+test("a resolver returning a sibling of the product root fails containment", () => {
+  const root = join(tmpdir(), "product-root");
+  expect(() => expectInside(root, () => join(root, "..", "outside"), "sibling")).toThrow();
+});
 
 test("every production resolver output follows one locally selected product environment", () => {
   const home = mkdtempSync(join(tmpdir(), "pe-environment-"));
@@ -42,7 +49,7 @@ test("every production resolver output follows one locally selected product envi
     for (const [name, resolver] of Object.entries(productPaths).filter(
       ([name]) => !content.has(name),
     ))
-      expect(relative(hostOwnership.rootPath, resolver()).startsWith("../../../hos"), name).toBe(false);
+      expectInside(hostOwnership.rootPath, resolver, name);
     const paths = {
       ...Object.fromEntries(
         Object.entries(productPaths)
@@ -58,7 +65,7 @@ test("every production resolver output follows one locally selected product envi
       const child = relative(home, path);
       expect(
         !isAbsolute(child) &&
-          child !== "../../../hos" &&
+          child !== ".." &&
           !child.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`),
         `${name}: ${path}`,
       ).toBe(true);
@@ -91,7 +98,7 @@ test("without an isolated home, the agent's working directory is never under a c
   ] as const;
   const under = (home: string, path: string) => {
     const away = relative(home, path);
-    return !isAbsolute(away) && away !== "../../../hos" && !away.startsWith(`..${sep}`);
+    return !isAbsolute(away) && away !== ".." && !away.startsWith(`..${sep}`);
   };
   for (const [lane, owner] of [
     ["installed", "C:\\Users\\Alice\\AppData\\Local\\Positive Energy\\Pe.Tools"],

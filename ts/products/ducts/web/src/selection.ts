@@ -6,9 +6,9 @@
  */
 import type { Neighbour, Hop } from "@pe/ducts-domain/neighbours";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
-import type { PaintOf, Tier } from "../../../../apps/web/src/scene/types.ts";
+import type { PaintOf, Tier } from "@pe/web/scene/types";
 import { airTypesOf } from "@pe/ducts-domain/air-types";
-import { choice, defineKnobs, num } from "../../../../apps/web/src/knobs/knobs.ts";
+import { choice, defineKnobs, num } from "@pe/web/knobs/knobs";
 
 /**
  * The multi-system defaults, each a judgment call kaitpw re-rules once he has felt it.

@@ -7,7 +7,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vite-plus/test";
 import { AttentionScope, useHoveredIssue } from "../../../../../apps/web/src/attention.tsx";
-import * as Atom from "../../../../../node_modules/effect/dist/reactivity/Atom.js";
+import * as Atom from "effect/reactivity/Atom";
 import type { SubjectKey } from "@pe/kit/lang/attention";
 import { BlockerRow } from "./blocker-row.tsx";
 import { describeCloser, type Closer } from "./closer.ts";

@@ -2,12 +2,12 @@ import { sourcedValueSchema, authoredValueSchema } from "@pe/agent-contracts/wor
 export { sourcedValueSchema, authoredValueSchema } from "@pe/agent-contracts/work-value";
 import type { ValueSource, SourcedValue, AuthoredValue } from "@pe/agent-contracts/work-value";
 export type { SourcedValue, AuthoredValue } from "@pe/agent-contracts/work-value";
-import type { Domain } from "../../../../packages/agent-contracts/src/slots/sheet.ts";
+import type { Domain } from "@pe/agent-contracts/slots/sheet";
 import type { FanBlockerKind } from "@pe/host-contracts/generated";
 import { DUCT_UNIT_KINDS, FAN_BLOCKER_KINDS } from "@pe/host-contracts/generated";
 import { z } from "zod";
 import { VALUE_SOURCES } from "@pe/agent-contracts/work-value";
-import { schemaOf } from "../../../../packages/agent-contracts/src/slots/sheet.ts";
+import { schemaOf } from "@pe/agent-contracts/slots/sheet";
 
 export type FanRef = { unitId: number; portIndex: number };
 export type FanInputRow<T> = {

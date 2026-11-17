@@ -1,7 +1,7 @@
 import { z } from "zod";
-import { uniqueIdSchema } from "../../../../packages/agent-contracts/src/subject-ref.ts";
-import { documentRefSchema } from "../../../../packages/agent-contracts/src/target.ts";
-import { DUCT_UNIT_KINDS, FAN_BLOCKER_KINDS } from "../../../../packages/host-contracts/src/generated/host-ops.generated.ts";
+import { uniqueIdSchema } from "@pe/agent-contracts/subject-ref";
+import { documentRefSchema } from "@pe/agent-contracts/target";
+import { DUCT_UNIT_KINDS, FAN_BLOCKER_KINDS } from "@pe/host-contracts/generated";
 import { fanClaimSchema, fanCloserSchema, legEvidenceSchema, fanParameterCohortSchema, fanEspValuesSchema } from "./fans-inputs.ts";
 export * from "@pe/ducts-contract/duct-inputs";
 import { elementSubjectSchema, ductsInputsSchema, ductFirmLineSchema, calcNoteSchema } from "@pe/ducts-contract/duct-inputs";
