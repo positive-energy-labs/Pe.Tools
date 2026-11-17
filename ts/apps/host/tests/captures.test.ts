@@ -7,7 +7,7 @@ import { existsSync } from "node:fs";
 import { fixtureNative } from "./fixture-native.ts";
 import { nativeRecordings } from "./native-recordings.ts";
 import { z } from "zod";
-import { bindWork, type Caller } from "@pe/agent-contracts";
+import { bindWork, draftCellSchema, type Caller } from "@pe/agent-contracts";
 import { RouteWorkspace } from "@pe/runtime";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
 import { bindControl } from "../src/control.ts";
@@ -119,7 +119,10 @@ test.skipIf(!existsSync((nativeRecordings("retained-view-image").responses["revi
   }
 });
 
-test("Work start validates seeds and cannot overwrite a winner under an open run", async () => {
+test.each([
+  "Work start validates seeds and cannot overwrite a winner under an open run",
+  "Pea work.start publishes a cell-bearing seed stamped with pea",
+])("%s", async witness => {
   const dir = await mkdtemp(join(tmpdir(), "pe-work-start-"));
   const workspace = new RouteWorkspace({
     registrations: [],
@@ -130,7 +133,7 @@ test("Work start validates seeds and cannot overwrite a winner under an open run
       route: "sample",
       title: "Sample",
       description: "Start witness",
-      schema: z.object({ count: z.number() }),
+      schema: z.object({ count: z.number(), cell: draftCellSchema(z.string()).optional() }),
     },
   });
   const runs = testRegistry();
@@ -176,6 +179,13 @@ test("Work start validates seeds and cannot overwrite a winner under an open run
     return journal.wait(id);
   };
   try {
+    if (witness.startsWith("Pea")) {
+      expect((await invoke("pea-seed", { count: 1, cell: { edit: { value: "Pea's value" } } })).state).toBe("succeeded");
+      expect(await workspace.readRaw(key, "sample")).toMatchObject({
+        doc: { cell: { edit: { value: "Pea's value", by: "pea", base: 0 } } },
+      });
+      return;
+    }
     expect((await invoke("invalid", { count: "wrong" })).state).toBe("failed");
     expect(await workspace.readRaw(key, "sample")).toBeNull();
     // Pea's start asks nobody (ADR 0038); it loses to a person's start that landed first.

@@ -180,14 +180,6 @@ const placeholderOf = (placeholders: ReturnType<typeof familyPlaceholders>, n: N
   n.family && n.kind === "accessory" && positive(factOf(n, "pressureDrop")) != null
     ? placeholders.get(n.family)
     : undefined;
-const placeholdersBySnapshot = new WeakMap<object, ReturnType<typeof familyPlaceholders>>();
-/** Why a model drop was demoted to missing, for the engine's note: a missing value carries no ref (FANS-W2-MISSING-REF). */
-export function placeholderNote(snapshot: Pick<SheetSnapshot, "nodes">, n: Node): string | undefined {
-  const all = placeholdersBySnapshot.get(snapshot) ?? familyPlaceholders(snapshot);
-  placeholdersBySnapshot.set(snapshot, all);
-  const p = placeholderOf(all, n);
-  return p && `family placeholder ${p.inWg} on ${p.count}`;
-}
 
 /** The design criteria alone (no snapshot needed): what the C# read is asked to measure under. */
 export function resolveCriteria(

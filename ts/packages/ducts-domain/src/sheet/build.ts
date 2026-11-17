@@ -70,7 +70,7 @@ import {
 import { assumedFanFlows, type AssumedFlow } from "./assumed-flow.ts";
 import { FAN_INPUTS, resolveValue, type DuctsInputs, type Resolved } from "@pe/agent-contracts";
 import { coverageOf } from "./coverage.ts";
-import { observed, placeholderNote, PROPOSED_KEY, sourced, terminalCfmOf } from "./inputs.ts";
+import { observed, PROPOSED_KEY, sourced, terminalCfmOf } from "./inputs.ts";
 import { sectionOf } from "../loss-physics.ts";
 import type {
   CoverageGap,
@@ -481,7 +481,7 @@ class Pricer {
     }
     if (e.kind === "equipment") return drop(null, "inline equipment; no typed drop");
     // A missing drop has no ref; the family placeholder that demoted it is read from the model again (Chadds' 302 dampers at 1.0).
-    const placeholder = stated?.status === "missing" ? placeholderNote(this.input.snapshot, e) : undefined;
+    const placeholder = stated && stated.value == null ? stated.ref : undefined;
     if (isTap(e)) return this.tap(w, flows, side, s, cfm);
     // A tee walked in at its run: the run port faces the fan on both sides. On the return the air
     // leaves by that port, so the branch and straight converge into it.
