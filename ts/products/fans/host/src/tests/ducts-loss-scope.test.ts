@@ -122,7 +122,7 @@ test("fan loss preparation reads both sides and refuses a truncated walk", async
 });
 
 // L2-3, invariant 1: the host's one write derivation. The recorded Manual D fan, replayed as the domain's mint test does.
-function manualD(accept: boolean, over: Partial<CalcSnapshot> = {}) {
+function manualD(accept: boolean, over: Partial<CalcSnapshot> = {}, typed = true) {
   const fixture = (name: string) => JSON.parse(readFileSync(new URL(import.meta.resolve(`@pe/ducts-domain/fixtures/${name}`)), "utf8"));
   const recorded: CalcSnapshot = fixture("manual-d-20261102.json");
   const base = withPeersRead(withFamilyFlipped(recorded, 14577391));
@@ -136,7 +136,8 @@ function manualD(accept: boolean, over: Partial<CalcSnapshot> = {}) {
     fan: { unitId: 14577391, portIndex: 2 },
     grids: toGrids({ tables: fixture("manual-d-tables.json") }),
     roster: [...roster.fans, ...roster.suggestions],
-    inputs: inputsFor(snapshot, { endCfm: { 14577391: 900 }, drops: { 14577394: 0.0132, 14577396: 0.18, 14088043: 0.026 }, rulings: [{ pair: ["14106988:1", "14122436:1"], verdict: "accept" }] }),
+    // Was table-only complete replay; ruling (c), P-102 requires human Work drops at both refusals.
+    inputs: inputsFor(snapshot, { fittingDrops: typed ? { "proposed:14106988:1|14122436:1>straight": 0.05 } : {}, endCfm: { 14577391: 900 }, drops: { 14577394: 0.0132, 14577396: 0.18, 14088043: 0.026, ...Object.fromEntries(typed ? [[13926753, 0.04]] : []) }, rulings: [{ pair: ["14106988:1", "14122436:1"], verdict: "accept" }] }),
   };
   if (accept)
     input.encounterRulings = buildCalc(input).encounters.map((e) => ({ at: { elementId: e.elementId, connector: e.connector }, verdict: "accepted", by: "human", ref: "replay:accepted-tie-in" }));
@@ -165,7 +166,11 @@ test("a claim that is not complete is refused with its kind and what holds it op
   const boundary = fanClaimSchema.parse({ kind: "to-boundary", basis: "b", knownInWg: 0.4, coverage: [], blockingIds: [],
     boundaries: [{ fan, host, elementId: 7, connector: 2, side: "supply", verdict: "unruled", static: { kind: "none" } }] });
   expect(claimRefusal(boundary)).toBe("Nothing is written from a to-boundary fan calc (known 0.4 in-wg): unruled tie-in at element 7 connector 2 into unit 9");
-  expect(claimRefusal(buildCalc(manualD(true).input).claim)).toBeNull();
+  // Was null refusal; ruling (c), P-102 preserves the two real table refusals without typed drops.
+  const incomplete = buildCalc(manualD(true, {}, false).input);
+  expect(incomplete.claim.kind).toBe("incomplete");
+  expect(incomplete.blockers.map((b) => b.id)).toEqual(["not-priced:13926753", "not-priced:14122436:1"]);
+  expect(claimRefusal(incomplete.claim)).toContain("known 2.567653 in-wg");
   // A truncated walk is lost coverage: the claim refuses it without the explicit walk check.
   const truncated = manualD(false, { walk: { ...TEST_WALK, truncated: true } });
   expect(buildCalc(truncated.input).claim.kind).toBe("incomplete");

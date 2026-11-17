@@ -359,22 +359,25 @@ it("a capped mouth 2.6 in from an open end proposes replacing the cap with a tra
   expect(rows[0]).toMatchObject({
     proposed: { kind: "transition", path: "straight", toward: null },
     rule: "trx-grille",
-    table: "SR4-3",
+    table: null, // Was SR4-3; ruling (c), P-102: no successful table lookup.
     ruleSource: "matched",
-    unpriced: null,
+    // Was unpriced null and positive loss; ruling (c), P-102.
+    unpriced: expect.stringContaining("outside table"),
   });
-  expect(rows[0]!.lossInWg).toBeGreaterThan(0);
+  expect(rows[0]!.lossInWg).toBeNull();
   // fix6 defect 1 (live 500, `fittings[35].elementId`): a proposed fitting is no element; its
   // identity is its key and pair, never a sentinel id, and the census passes the route's schema.
   expect(rows[0]!.elementId).toBeNull();
   expect(fittingPricingSchema.array().safeParse(sheet.fittings).error?.issues ?? []).toEqual([]);
   const path = sheet.assumed.paths.find((x) => x.end.elementId === 200)!;
-  expect(path.blockerIds).toEqual([]);
+  // Was []; ruling (c), P-102 withholds the proposed transition.
+  expect(path.blockerIds).toEqual([expect.stringContaining("not-priced:")]);
   const fittingLegs = path.legIds.filter(
     (id) => id.startsWith("heal:") && id.includes(":fitting>"),
   );
   expect(fittingLegs).toEqual([`heal:1:1|2:0:fitting>2`]);
-  expect(sheet.assumed.legs[fittingLegs[0]!]!.lossSource.ref).toMatch(/^trx-grille SR4-3 /);
+  // Was trx-grille SR4-3 coefficient source; ruling (c), P-102.
+  expect(sheet.assumed.legs[fittingLegs[0]!]!.lossSource.ref).toContain("outside table");
   // A typed drop on that one path stands in for the table.
   const typed = buildCalc({ ...input, inputs: inputsFor(s, { fittingDrops: { [key]: 0.05 } }) });
   expect(typed.fittings.find((f) => f.key === key)).toMatchObject({ typed: 0.05, lossInWg: 0.05 });
