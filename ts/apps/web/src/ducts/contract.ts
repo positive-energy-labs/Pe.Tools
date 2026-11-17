@@ -6,7 +6,7 @@ import {
   ductsRosterData,
 } from "@pe/agent-contracts";
 import { contract } from "@pe/agent-contracts/handle";
-import { fanScopeSchema } from "./identity";
+import { fanScopeSchema } from "./fan-scope.neutral";
 const scopedNetworkArgs = ductsNetworkArgs.extend({ fan: fanScopeSchema.nullable().optional() });
 
 /**

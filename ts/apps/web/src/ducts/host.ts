@@ -21,7 +21,7 @@ import { read } from "@pe/host/read-graph";
 import { systemList } from "@pe/ducts-domain/system-list";
 import { withStoredRulings } from "@pe/ducts-domain/rulings";
 import { fanRoster, espOptions } from "./fan-sheet.ts";
-import { fanSystems } from "./identity";
+import { fanSystems } from "./fan-scope.neutral";
 
 export const ductsRoster = body(contracts.roster, async function(ctx, { target }) {
     const saved = await ctx.read(designLayers, target),
