@@ -7,6 +7,21 @@ try {
     . "$PSScriptRoot\AutomaticBoundary.ps1"
     . "$PSScriptRoot\UpdateReceipt.ps1"
     . "$PSScriptRoot\CompareSdkClosure.ps1"
+    . "$PSScriptRoot\VcRuntime.ps1"
+    $vcRuntime = Get-GateVcRuntime
+    $badVc = Join-Path $scratch 'changed-vc.exe'; 'not the pinned runtime' | Set-Content $badVc
+    $refused = $false
+    try { Assert-GateVcRuntime $badVc } catch { $refused = $true }
+    if (!$refused) { throw 'Changed VC++ installer accepted.' }
+    $refused = $false
+    try { Assert-GateVcRuntime (Join-Path $scratch 'missing-vc.exe') } catch { $refused = $true }
+    if (!$refused) { throw 'Missing VC++ installer accepted.' }
+    function Install($file, $arguments, $name) {
+        if ($file -ne $vcRuntime.path -or $arguments -notlike '/install /quiet /norestart /log *' -or $name -ne 'Mandatory VC++ x64 runtime') { throw 'VC++ bootstrap invocation changed.' }
+        $script:vcInvoked = $true
+    }
+    Install-GateVcRuntime (Split-Path $vcRuntime.path) $scratch
+    if (!$script:vcInvoked) { throw 'Mandatory VC++ bootstrap did not invoke installer.' }
     & "$PSScriptRoot\CheckAutomatic.ps1"
     Add-Type -Path "$PSScriptRoot\Windows.cs"
     $privateStatic = [Reflection.BindingFlags]'NonPublic,Static'
@@ -123,6 +138,17 @@ try {
     $spec = Join-Path $scratch 'spec.json'
     @{ previousVersion = '1'; candidateVersion = '2'; expectedSdkVersion = '0.1.0-beta.196'; files = $files } | ConvertTo-Json -Depth 10 | Set-Content $spec
     $wsb = & "$PSScriptRoot\Prepare.ps1" -Spec $spec -RunDirectory "$scratch\run"
+    $prepared = Get-Content "$scratch\run\input\gate.json" -Raw | ConvertFrom-Json
+    $stagedVc = @($prepared.files | Where-Object role -eq 'vcRuntime')
+    if ($stagedVc.Count -ne 1 -or $stagedVc[0].sha256 -ne $vcRuntime.sha256) { throw 'Preparation did not inject the mandatory pinned VC++ installer.' }
+    Assert-GateVcRuntime "$scratch\run\input\vc_redist.x64.exe"
+    $forbiddenSpec = Join-Path $scratch 'optional-vc-spec.json'
+    $forbidden = Get-Content $spec -Raw | ConvertFrom-Json
+    $forbidden.files += $vcRuntime
+    $forbidden | ConvertTo-Json -Depth 10 | Set-Content $forbiddenSpec
+    $refused = $false
+    try { & "$PSScriptRoot\Prepare.ps1" -Spec $forbiddenSpec -RunDirectory "$scratch\optional-vc" | Out-Null } catch { $refused = $_.Exception.Message -eq 'Unsupported input role: vcRuntime' }
+    if (!$refused -or (Test-Path "$scratch\optional-vc")) { throw 'Caller-controlled VC++ prerequisite accepted.' }
     $mcpStaged = "$scratch\run\input\ReadInstalledMcp.ps1"
     if (!(Test-Path $mcpStaged) -or (Get-FileHash $mcpStaged).Hash -ne (Get-FileHash "$PSScriptRoot\ReadInstalledMcp.ps1").Hash) { throw 'Installed MCP helper was not staged byte-identically.' }
     $stagedHashes = Get-Content "$scratch\run\input-hashes.json" -Raw | ConvertFrom-Json
@@ -217,7 +243,7 @@ try {
     $refused = $false
     try { & "$PSScriptRoot\Prepare.ps1" -Spec $spec -RunDirectory "$scratch\bad" | Out-Null } catch { $refused = $_.Exception.Message -like 'Input hash mismatch:*' }
     if (!$refused -or (Test-Path "$scratch\bad")) { throw 'Corrupt release must refuse before staging.' }
-    'PASS: syntax, safe mappings, input hashes, refusal boundaries; real HTTP MCP init/pe_find/DELETE with owner/session headers, malformed tool/map and cleanup failure handling. No Sandbox or installer executed.'
+    'PASS: syntax, safe mappings, mandatory pinned VC++ staging/invocation and refusal boundaries; real HTTP MCP init/pe_find/DELETE with owner/session headers, malformed tool/map and cleanup failure handling. No Sandbox or installer executed.'
 } finally {
     $resolved = [IO.Path]::GetFullPath($scratch)
     $tempRoot = [IO.Path]::GetFullPath($env:TEMP).TrimEnd('\') + '\'
