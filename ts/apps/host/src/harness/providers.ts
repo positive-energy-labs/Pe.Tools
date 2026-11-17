@@ -25,7 +25,7 @@ import { z } from "zod";
 import { harnessKeyRole, keyRefusalText, resolveKey, sharedKeys } from "@pe/host-contracts/shared-keys";
 import { adapterCli, adapterLogin, adapters, openAdapter, stopChild } from "./adapter.ts";
 import { classifyEndpointFailure } from "./endpoint-failure.ts";
-import { mergePath } from "./user-shell.ts";
+import { codexMcpServerNames, mergePath, userCodexConfigPath } from "./user-shell.ts";
 
 /**
  * Providers: one harness with one auth source. A subscription provider (the harness's own login)
@@ -168,10 +168,29 @@ function authEnv(record: ProviderRecord, modelId?: string): Record<string, strin
   );
   mkdirSync(codexHome, { recursive: true });
   const configPath = join(codexHome, "config.toml");
+  // The world root's project config turns the user's own MCP servers off by name with a bare
+  // `enabled = false` (user-shell.ts). Under the user's home that merges onto a real definition; under
+  // this Pea-owned home it is the whole entry, and codex refuses to load ("invalid transport"). A
+  // disabled stdio stub per name makes the merge valid and still runs nothing.
+  const disabled = codexMcpServerNames(
+    (() => {
+      try {
+        return readFileSync(userCodexConfigPath(), "utf8");
+      } catch {
+        return "";
+      }
+    })(),
+  );
   const config = [
     `model_provider = "${CODEX_PROVIDER}"`,
     `[model_providers.${CODEX_PROVIDER}]`,
     ...Object.entries(provider).map(([key, value]) => `${key} = ${JSON.stringify(value)}`),
+    ...disabled.flatMap((name) => [
+      "",
+      `[mcp_servers.${JSON.stringify(name)}]`,
+      `command = "pea-disabled"`,
+      "enabled = false",
+    ]),
     "",
   ].join("\n");
   // Atomic publication keeps a concurrent probe/session from reading a truncated config.
