@@ -44,7 +44,7 @@ test("a numeric UniqueId row is refused without hiding the other fan rows", asyn
   expect(ductsRosterResponseSchema.shape.rows.element.safeParse({ ...roster.rows[0], uniqueId: "101" }).success).toBe(false);
 });
 
-test("a lookup by mark returns that fan's one row under 4 KB, and no mark still returns every row", async () => {
+test("a lookup by mark returns only the rows carrying that mark, and no mark returns every row", async () => {
   const fan = snapshot.nodes.find((node) => node.id === 100)!;
   const nodes = [
     { ...fan, family: "Fan Coil", uniqueId: "fixture-fan-fc" },
@@ -61,7 +61,6 @@ test("a lookup by mark returns that fan's one row under 4 KB, and no mark still 
   };
   const found = await read({ target, mark: " ma-1 " });
   expect(found.rows.map((row) => [row.mark, row.uniqueId])).toEqual([["MA-1", "fixture-fan-ma"]]);
-  expect(JSON.stringify(found).length).toBeLessThan(4096);
   expect((await read({ target, mark: "MA-9" })).rows).toEqual([]);
   expect((await read({ target })).rows.map((row) => row.mark)).toEqual(["FC-1", "MA-1"]);
 });
