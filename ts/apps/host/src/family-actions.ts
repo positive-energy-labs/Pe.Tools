@@ -1,3 +1,4 @@
+import { authorSchema } from "@pe/agent-contracts";
 import { targetHomes } from "./call-route.ts";
 import { currentDocument as current, lifetime } from "./document-lifetime.ts";
 import { createHash } from "node:crypto";
@@ -327,7 +328,7 @@ const planLeafSchema = z.object({
   process: nativeProcessSchema,
   planned: z.strictObject({
     scope: appliedScopeSchema.nullable(),
-    excluded: z.record(z.string(), z.strictObject({ by: z.enum(["human", "pea", "unknown"]) })),
+    excluded: z.record(z.string(), z.strictObject({ by: authorSchema })),
     familyNames: z.array(z.string()).optional(),
     written: z.array(z.string()),
   }),

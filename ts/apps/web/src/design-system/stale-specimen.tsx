@@ -38,9 +38,9 @@ const STALE_DOC: ScheduleGridDocument = {
     ],
   },
   cells: {
-    "1::2": { edit: { value: "150 VA" } },
-    "2::2": { edit: { value: "95 VA" } },
-    "3::2": { edit: { value: "75 VA" } },
+    "1::2": { edit: { by: "human" as const, value: "150 VA" } },
+    "2::2": { edit: { by: "human" as const, value: "95 VA" } },
+    "3::2": { edit: { by: "human" as const, value: "75 VA" } },
   },
   takenAt: null,
 } as ScheduleGridDocument;
@@ -57,7 +57,7 @@ function StaleSpecimen({ say }: { say: (text: string) => void }) {
       for (const { path, value } of patches) {
         const key = String(path[1]);
         const { edit: _, ...rest } = cells[key] ?? {};
-        cells[key] = value == null ? rest : { ...rest, edit: value as { value: string } };
+        cells[key] = value == null ? rest : { ...rest, edit: { ...(value as { value: string }), by: "human" } };
       }
       const stale = (current.basis?.stale ?? []).filter((c) => !keys.includes(c.key));
       return {

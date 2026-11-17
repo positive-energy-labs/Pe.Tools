@@ -1,3 +1,4 @@
+import { authorSchema } from "./author.ts";
 import type { GraphJsonValue as JsonValue } from "./route-graph.ts";
 /** Shared Work schemas and semantic commands. The host stamps authorship and checks revisions.
  * Authored edits and optional suggestions use one model for human and Pea. External effects
@@ -201,7 +202,7 @@ export type WorkWriteAck = {
 export const workWriteAckSchema: z.ZodType<WorkWriteAck> = z.object({
   key: workKeySchema,
   kind: z.enum(["apply", "restore", "publish"]),
-  by: z.enum(["pea", "human"]),
+  by: authorSchema,
   press: z.string().min(1).nullable(),
   step: z.string().min(1).optional(),
   label: z.string().trim().min(1).optional(),

@@ -1,3 +1,4 @@
+import { authorSchema } from "./author.ts";
 import { z } from "zod";
 import { callerSchema } from "./caller.ts";
 import { workKeySchema } from "./route-state.ts";
@@ -14,7 +15,7 @@ export const stepRefSchema = z.union([
 ]);
 export type StepRef = z.infer<typeof stepRefSchema>;
 
-const by = z.enum(["human", "pea"]);
+const by = authorSchema;
 
 /** One successful `writeHome` by a command, as this machine recorded it (storage C3). */
 export const homeWriteRowSchema = z.strictObject({

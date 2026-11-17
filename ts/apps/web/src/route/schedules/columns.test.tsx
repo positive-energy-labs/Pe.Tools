@@ -236,8 +236,8 @@ const snapshot = scheduleGridSnapshotSchema.parse({
   ],
 });
 const cells: ScheduleGridDocument["cells"] = {
-  "1::1": { edit: { value: "180 VA" } },
-  "1::2": { edit: { value: "190 VA" } },
+  "1::1": { edit: { by: "human" as const, value: "180 VA" } },
+  "1::2": { edit: { by: "human" as const, value: "190 VA" } },
 };
 
 test("a grid cell draws the contract's transitions and accept writes at the rendered revision", async () => {

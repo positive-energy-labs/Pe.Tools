@@ -17,7 +17,7 @@ test("a type with no picture offers Findings; a person's note survives remount w
     kernelVerb: key => ({ label: key, effect: "WorkWrite", pending: false, refusal: null, failure: null,
       run: async input => {
         expect(key).toBe("findings.say");
-        const note = findingsWorkSchema.parse({ findings: { n1: { ...findingsCommands["findings.say"].input.parse(input), id: "n1", said: { by: "person", at: "2026-11-13T12:00:00Z" } } } });
+        const note = findingsWorkSchema.parse({ findings: { n1: { ...findingsCommands["findings.say"].input.parse(input), id: "n1", said: { by: "human", at: "2026-11-13T12:00:00Z" } } } });
         saved = JSON.stringify(note);
       } }),
   };
@@ -34,5 +34,5 @@ test("a type with no picture offers Findings; a person's note survives remount w
   fireEvent.contextMenu(screen.getByText("Type"));
   fireEvent.click(await screen.findByRole("option", { name: "Findings" }));
   expect(await screen.findByText("Check the clearance")).toBeTruthy();
-  expect(screen.getByText(/person/).textContent).toContain("2026-11-13T12:00:00Z");
+  expect(screen.getByText(/human/).textContent).toContain("2026-11-13T12:00:00Z");
 });

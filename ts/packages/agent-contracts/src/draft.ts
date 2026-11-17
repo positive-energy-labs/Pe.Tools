@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { authorSchema, type Author } from "./author.ts";
 import { canonicalRouteInput } from "./route-doc.ts";
 import { type RouteStatePatch } from "./route-state.ts";
 
@@ -19,15 +20,15 @@ const deletableRung = <V extends z.ZodType>(value: V) =>
 const oneWrite = (rung: { value?: unknown; delete?: true }) =>
   (rung.delete === true) !== Object.hasOwn(rung, "value");
 const ONE_WRITE = { error: "a rung sets a value or deletes the property: exactly one" };
-export const authorSchema = z.enum(["human", "pea", "unknown"]);
-const CHANGE_META = {
-  by: authorSchema.optional(),
+export { authorSchema, type Author } from "./author.ts";
+const CALLER_META = {
   ref: z.string().min(1).refine(value => value.trim().length > 0, "cite a nonempty evidence ref").optional(),
   at: z.string().nullable().optional(),
   base: z.number().int().nonnegative().nullable().optional(),
   note: z.string().nullish(),
   confidence: z.enum(["high", "low"]).nullish(),
 };
+const CHANGE_META = { ...CALLER_META, by: authorSchema };
 const valueCell = <V extends z.ZodType, E extends z.ZodRawShape>(value: V, extra: E) =>
   z
     .object({
@@ -51,6 +52,13 @@ const deletableCell = <V extends z.ZodType, E extends z.ZodRawShape>(value: V, e
     })
     .strict();
 
+/** Caller edit input: attribution belongs only to the stored cell, never to the request. */
+export const draftEditSchema = <V extends z.ZodType, E extends z.ZodRawShape = {}>(
+  value: V, { deletable = false, extend = {} as E }: { deletable?: boolean; extend?: E } = {},
+) => deletable
+  ? deletableRung(value).extend(CALLER_META).extend(extend).strict().refine(oneWrite, ONE_WRITE)
+  : valueRung(value).extend(CALLER_META).extend(extend).strict().refine(oneWrite, ONE_WRITE);
+
 /** One staged edit; domain metadata (`extend`) may ride on it. */
 export function draftCellSchema<V extends z.ZodType, E extends z.ZodRawShape = {}>(
   value: V,
@@ -73,7 +81,6 @@ export interface Rung {
   delete?: true;
 }
 
-export type Author = z.infer<typeof authorSchema>;
 export type Change = Rung & {
   by?: Author;
   ref?: string;

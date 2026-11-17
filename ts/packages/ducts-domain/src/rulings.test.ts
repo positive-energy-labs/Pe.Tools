@@ -28,7 +28,7 @@ const store = {
 const doc = designOf;
 
 it("reads the stored rulings as edit cells, and Work's own over them", () => {
-  const work = doc({ roles: { "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000385": { edit: { value: { role: "passive" } } } } });
+  const work = doc({ roles: { "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000385": { edit: { by: "human", value: { role: "passive" } } } } });
   const seen = withStoredRulings(work, store, snapshot)!;
   const edit = stagedValues(seen, (seen) ?? neutralFansWork);
 
@@ -42,8 +42,8 @@ it("reads the stored rulings as edit cells, and Work's own over them", () => {
 
 it("takes a stored verdict back with a edit delete, and a stored passive is ruled fan", () => {
   const work = doc({
-    assumptions: { "open-end:101:1": { edit: { delete: true } } },
-    roles: { "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000384": { edit: { value: { role: "fan" } } } },
+    assumptions: { "open-end:101:1": { edit: { by: "human", delete: true } } },
+    roles: { "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000384": { edit: { by: "human", value: { role: "fan" } } } },
   });
   const seen = withStoredRulings(work, store, snapshot);
   const edit = stagedValues(seen, seen ?? neutralFansWork);
@@ -63,8 +63,8 @@ it("takes a stored verdict back with a edit delete, and a stored passive is rule
 it("writes the stored rulings with their own time and new ones with the write's", () => {
   const work = doc({
     assumptions: {
-      "proximity:12:0|34:1": { edit: { value: { kind: "verdict", verdict: "ignore" } } },
-      "flex-roughness:Flex": { edit: { value: { kind: "flex-roughness", ft: 0.003 } } },
+      "proximity:12:0|34:1": { edit: { by: "human", value: { kind: "verdict", verdict: "ignore" } } },
+      "flex-roughness:Flex": { edit: { by: "human", value: { kind: "flex-roughness", ft: 0.003 } } },
     },
   });
   const seen = withStoredRulings(work, store, snapshot);

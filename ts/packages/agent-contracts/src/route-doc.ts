@@ -1,3 +1,4 @@
+import { type Author } from "./author.ts";
 import { z } from "zod";
 import {
   isRecord,
@@ -17,7 +18,7 @@ export interface RouteEnvelope<D> {
   doc: D;
 }
 
-export type WorkAuthor = "pea" | "human";
+export type WorkAuthor = Author;
 
 export type RouteRefusal = {
   ok: false;
@@ -54,6 +55,12 @@ export function applyPatches<S extends z.ZodType>(
       "Use the route's read or capture command.",
     );
 
+  if (!trusted && !restore && patches.some(patch =>
+    (patch.path.at(-1) === "by" && patch.path.at(-2) === "edit") ||
+    (patch.path.at(-1) === "edit" && isRecord(patch.value) && Object.hasOwn(patch.value, "by")) ||
+    suppliedStamp(patch.value)))
+    return refuse("refused", "Caller edits cannot supply by", "The host stamps the accepted edit's author.");
+
   let draft = structuredClone(envelope.doc) as Record<string, unknown>;
   try {
     for (const patch of patches) {
@@ -76,6 +83,11 @@ export function applyPatches<S extends z.ZodType>(
         ),
   );
 }
+
+const suppliedStamp = (value: unknown): boolean => Array.isArray(value)
+  ? value.some(suppliedStamp)
+  : isRecord(value) && Object.entries(value).some(([key, child]) =>
+      key === "edit" && isRecord(child) && Object.hasOwn(child, "by") || suppliedStamp(child));
 
 /** Replace a container when its keys change, so inverse replay preserves key order as well. */
 export function routeDocDelta(

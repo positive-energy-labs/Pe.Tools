@@ -10,11 +10,11 @@ export function familyDemoFields(raw: string): Record<string, SettingsFieldState
     .filter(([, spec]) => spec.dataType === "Length")
     .map(([name]) => settingsFieldPointer(["parameters", name, "value"]));
   return {
-    ...(edit ? { [edit]: { edit: { value: "5in" } } } : {}),
+    ...(edit ? { [edit]: { edit: { by: "human" as const, value: "5in" } } } : {}),
     ...(proposed
       ? {
           [proposed]: {
-            edit: { value: "6in", note: "office standard", confidence: "low" },
+            edit: { by: "human" as const, value: "6in", note: "office standard", confidence: "low" },
           },
         }
       : {}),

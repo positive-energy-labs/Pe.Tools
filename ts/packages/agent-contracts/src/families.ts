@@ -1,3 +1,4 @@
+import { authorSchema } from "./author.ts";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import { z } from "zod";
 import { familiesReadProgressSchema } from "./families-progress.ts";
@@ -308,7 +309,7 @@ export const familiesPatchCellSchema = draftCellSchema(familiesPatchSourceSchema
 export type FamiliesPatchCell = z.infer<typeof familiesPatchCellSchema>;
 
 /** Who held a family back. The route door checks it is the writer, so it is never just claimed. */
-export const exclusionAuthorSchema = z.enum(["human", "pea", "unknown"]);
+export const exclusionAuthorSchema = authorSchema;
 export type FamilyExclusions = Record<string, { by: z.infer<typeof exclusionAuthorSchema> }>;
 
 /**

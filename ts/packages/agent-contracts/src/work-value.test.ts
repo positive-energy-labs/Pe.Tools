@@ -1,8 +1,8 @@
 import { expect, it } from "vite-plus/test";
 import { resolveValue, VALUE_SOURCES, type ValueLayers } from "./work-value.ts";
 it("unattributed Work blocks fallback and a present layer must cite evidence", () => {
-  expect(resolveValue({ Work: { value: 1, author: "unknown", ref: "legacy:1" }, model: { value: 2, author: null, ref: "model:1" } }))
-    .toMatchObject({ status: "invalid", value: null, source: "Work", author: "unknown", ref: "legacy:1" });
+  expect(resolveValue({ Work: { value: 1, author: null, ref: "legacy:1" }, model: { value: 2, author: null, ref: "model:1" } }))
+    .toMatchObject({ status: "invalid", value: null, source: "Work", author: null, ref: "legacy:1" });
   expect(() => resolveValue({ model: { value: 1, author: null } })).toThrow("nonempty evidence ref");
 });
 it("resolves each layer in order and preserves units and the winning revision", () => {

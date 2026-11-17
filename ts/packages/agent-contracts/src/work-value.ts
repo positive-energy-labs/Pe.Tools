@@ -38,7 +38,7 @@ export const valueResolutionSchema = <T extends z.ZodType>(value: T) => z.discri
 export const sourcedValueSchema = valueResolutionSchema;
 export const authoredValueSchema = <T extends z.ZodType>(value: T) => z.strictObject({
   value, source: z.enum(VALUE_SOURCES), author: authorSchema, ref, version,
-}).refine(v => (v.source !== "Work" && v.source !== "run") || v.author !== "unknown", "Work/run offers require a known caller");
+});
 export function resolveValue<T>(
   layers: ValueLayers<T>,
   units: string | null = null,

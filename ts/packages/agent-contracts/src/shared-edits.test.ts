@@ -1,6 +1,6 @@
 import { expect, test } from "vite-plus/test";
 import { z } from "zod";
-import { draftCellSchema } from "./draft.ts";
+import { draftCellSchema, draftEditSchema } from "./draft.ts";
 import { applyPatches, type RouteEnvelope } from "./route-doc.ts";
 import type { RouteStateSpec } from "./route-state.ts";
 
@@ -29,7 +29,7 @@ test("either author knowingly replaces the current edit; provenance cannot be fo
       [
         {
           path: ["cells", "width", "edit"],
-          value: { value: 250, by: "unknown", at: "forged", base: 0 },
+          value: { value: 250, at: "forged", base: 0 },
         },
       ],
       13,
@@ -81,7 +81,7 @@ test("cell keys that look like slots or evidence do not bypass host attribution"
       spec,
       envelope,
       "pea",
-      [{ path: ["cells", key], value: { edit: { value: 7, by: "human", base: 0 } } }],
+      [{ path: ["cells", key], value: { edit: { value: 7, base: 0 } } }],
       13,
     );
     expect(result).toMatchObject({
@@ -109,4 +109,27 @@ test("generic patches cannot forge or erase any host observation for either auth
           ok: false,
           error: "Host observations cannot be changed by an edit",
         });
+});
+
+
+test("stored edits require the shared human or pea stamp", () => {
+  const cell = draftCellSchema(z.number());
+  for (const by of ["unknown", "person", undefined])
+    expect(cell.safeParse({ edit: { value: 1, by } }).success).toBe(false);
+  for (const by of ["human", "pea"])
+    expect(cell.parse(JSON.parse(JSON.stringify({ edit: { value: 1, by, ref: "evidence:1" } })))).toEqual({ edit: { value: 1, by, ref: "evidence:1" } });
+});
+
+
+test("caller edits refuse by at every patch depth while the host stamps accepted edits", () => {
+  const input = draftEditSchema(z.number());
+  expect(input.parse({ value: 1, ref: "evidence:1" })).toEqual({ value: 1, ref: "evidence:1" });
+  for (const by of ["human", "pea", "unknown", "person"]) {
+    expect(input.safeParse({ value: 1, by }).success).toBe(false);
+    for (const patch of [
+      { path: ["cells", "width", "edit"], value: { value: 1, by } },
+      { path: ["cells", "width"], value: { edit: { value: 1, by } } },
+      { path: ["cells", "width", "edit", "by"], value: by },
+    ]) expect(applyPatches(spec, envelope, "pea", [patch], 13)).toMatchObject({ ok: false, error: "Caller edits cannot supply by" });
+  }
 });

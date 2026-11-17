@@ -102,7 +102,7 @@ test("the mounted pane captures the scope's elements and draws the declared mark
   expect(seen.model!.contextMode).toBe("glass");
 });
 
-const said = { by: "person", at: "2026-11-11T12:00:00.000Z" } as const;
+const said = { by: "human", at: "2026-11-11T12:00:00.000Z" } as const;
 const finding: Finding = { id: "f1", subject: port, kind: "check", verdict: { ...said, value: "fail" }, text: "static reads low", said };
 test("a finding on a port draws one mark on the port's element, under the `findings` layer", () => {
   mount(pod.spec.picture!, [finding]);

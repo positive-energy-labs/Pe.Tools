@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { authorSchema } from "../author.ts";
 import { subjectRefCodeSchema } from "../subject-ref.ts";
 import type { RouteStateSpec } from "../route-state.ts";
 import { workCommand } from "../command.ts";
@@ -34,7 +35,7 @@ export const FINDINGS_DOORS = {
 } as const;
 
 /** Who and when, stamped by the host from the caller and its clock. Never caller-supplied. */
-const stampSchema = z.strictObject({ by: z.enum(["pea", "person"]), at: z.iso.datetime() });
+const stampSchema = z.strictObject({ by: authorSchema, at: z.iso.datetime() });
 export type Stamp = z.output<typeof stampSchema>;
 
 const base = {

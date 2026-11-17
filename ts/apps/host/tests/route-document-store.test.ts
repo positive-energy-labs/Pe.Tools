@@ -1,3 +1,8 @@
+import { subjectCode } from "@pe/agent-contracts/subject-ref";
+import { z } from "zod";
+import { RouteWorkspace } from "@pe/runtime";
+import { draftCellSchema, bindWork, workKey } from "@pe/agent-contracts";
+import { findingsWork } from "@pe/agent-contracts/slots";
 import { stateFixture, stateMachine } from "../../../tests/isolated-home/storage.ts";
 import { mkdtempSync } from "../../../tests/isolated-home/storage.ts";
 import { expect, test, vi } from "vite-plus/test";
@@ -72,5 +77,32 @@ test("a failed Work publish removes its own staging file", async () => {
   } finally {
     interleave.failRename = false;
     rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+
+test("untrusted authors set stored Work aside once and retain its exact bytes", async () => {
+  for (const by of ["unknown", "person", undefined]) {
+    for (const spec of [
+      { route: "stamp-test", title: "Stamp", description: "Stamp", schema: z.object({ cell: draftCellSchema(z.number()) }) },
+      findingsWork,
+    ]) {
+      const dir = mkdtempSync(join(tmpdir(), "pe-stamp-aside-"));
+      const store = fileRouteDocumentStore(stateFixture(dir));
+      const key = bindWork(spec.route, null);
+      const doc = spec.route === "findings"
+        ? { findings: { n: { id: "n", kind: "note", subject: subjectCode({ keyKind: "name", key: ["stamp"] }), text: "note", said: { by, at: new Date().toISOString() } } } }
+        : { cell: { edit: { value: 1, by } } };
+      await store.setState({ targetKey: workKey(key), route: spec.route, value: { version: 1, schemaVersion: spec.route === "findings" ? 2 : 1, revision: 1, doc } });
+      const bytes = readFileSync(join(dir, readdirSync(dir)[0]!));
+      const workspace = new RouteWorkspace({ registrations: [{ spec }], store });
+      expect((await workspace.view(key, spec.route))?.revision ?? 0).toBe(0);
+      expect((await workspace.view(key, spec.route))?.revision ?? 0).toBe(0);
+      expect(readdirSync(dir)).toEqual([]);
+      const machine = stateMachine(dir);
+      expect(readFileSync(machine.notices, "utf8").trim().split("\n")).toHaveLength(1);
+      const blobs = readdirSync(machine.blobs, { recursive: true }).map(String);
+      expect(blobs.some(file => { try { return readFileSync(join(machine.blobs, file)).equals(bytes); } catch { return false; } })).toBe(true);
+    }
   }
 });
