@@ -120,7 +120,8 @@ const idsOf = (node: TreeNode): number[] => {
   return [...out];
 };
 
-const idOf = (node: TreeNode) => (node.kind === "run" ? node.terminal : node.id);
+// A run that ends anywhere but a grille (an open end, another fan) selects where it ends.
+const idOf = (node: TreeNode) => (node.kind === "run" ? (node.terminal ?? node.id) : node.id);
 const childrenOf = (node: TreeNode) => node.children;
 const TREE_READERS = {
   keyOf: (node: TreeNode) => node.key,
@@ -265,6 +266,8 @@ export function SystemTree({ ctx, address }: { ctx: TreeCtx; address?: ListPersi
             }}
           />
         ) : undefined,
+        // What the row cannot say with a number: "Rule a fan to price this system", a shared network, a subtotal.
+        ...(n.message ? { sub: <span data-e-message="">{n.message}</span>, lines: 2 as const } : {}),
         revit: target.ids,
         revitRefs: target.refs,
       };

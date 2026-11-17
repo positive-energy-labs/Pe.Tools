@@ -83,7 +83,8 @@ export const RulesTree = memo(function RulesTree({
     const overrides = [
       ...new Set([
         ...Object.keys(priced.edit.componentDrops).map(key => workElementId(snapshot, key)),
-        ...(landing && ruleOf.has(landing.id) ? [landing.id] : []),
+        // A restored selection lands on its fitting's drop even where no fan calc reaches it yet.
+        ...(landing ? [landing.id] : []),
       ]),
     ].filter(inScope);
     const rules = [...ids]
