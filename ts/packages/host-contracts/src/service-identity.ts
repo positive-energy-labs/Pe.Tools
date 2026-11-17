@@ -12,7 +12,7 @@ import {
   productInstallLayout,
   productPathNames,
 } from "./contracts/product.ts";
-import { documentsUserRoot, firmHome, insideTestRoot, projectHomeAbove, type Home,
+import { documentsUserRoot, firmHome, insideTestRoot, projectHomeAbove, useHomesConfig, type Home,
 } from "./product-paths.ts";
 import { mintStatePath } from "./store-paths.ts";
 import {
@@ -95,7 +95,11 @@ export function productRoot(owner: RuntimeOwner): string {
   const away = relative(osUserProductRoot(), root);
   if (owner.lane === "dev" && (away === "" || (!away.startsWith("..") && !isAbsolute(away))))
     throw Error(`Dev host cannot use installed product state '${root}'.`);
-  return insideTestRoot(root);
+  insideTestRoot(root);
+  // The fence above is drawn before the file is read: homes.json lives under this root, and its
+  // writer refuses a home that holds the root, so a chosen home never moves or fences the state.
+  useHomesConfig(stateTree(root).homesConfig);
+  return root;
 }
 
 /**
@@ -142,6 +146,8 @@ export function stateTree(root: string): StateRoot & {
     peaWork: state("pea-work"),
     /** User-added endpoint providers (`harness/providers.ts`). Holds keys: state, not Documents. */
     providers: state("providers.json"),
+    /** The firm and user homes a person chose in Settings (`product-paths` `toldHome`). */
+    homesConfig: state(productPathNames.homesConfigFileName),
     pluginDecisions: state("plugins.json"),
     shippedPods: state("shipped-pods"),
   };

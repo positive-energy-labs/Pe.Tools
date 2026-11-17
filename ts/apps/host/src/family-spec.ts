@@ -15,7 +15,8 @@ import { reconcilePackageChanges } from "./package-lifecycle.ts";
 import { writeHome } from "@pe/host-contracts/kinds";
 import { parseFamilyPdf } from "@pe/mcps/family-pdf";
 import { readDerivedJson } from "@pe/mcps/held-parse";
-import { LLAMA_TIER, requireLlamaCloudKey } from "@pe/mcps/llama-parse";
+import { LLAMA_TIER } from "@pe/mcps/llama-parse";
+import { requireLlamaCloudKey } from "@pe/mcps/llama-key";
 import { derivedFor } from "@pe/host-contracts/service-identity";
 import { derivedKey,
   readDerivedIn,

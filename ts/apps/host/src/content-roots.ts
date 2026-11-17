@@ -1,6 +1,8 @@
-import { knownUserRoot, resolveHomes, resolveProjectHome, noFirmHomeText, type FirmHome, type Home, type FoundHome } from "@pe/host-contracts/product-paths";
-import { note, sha256Hex } from "@pe/host-contracts/kinds";
-import { hostState } from "./host-ownership.ts";
+import { isAbsolute, relative, resolve } from "node:path";
+import { homesConfigPath, homesConfigSchema, knownUserRoot, readHomesConfig, resolveHomes, resolveProjectHome, noFirmHomeText, toldHome, type FirmHome, type Home, type FoundHome, type HomesStatus } from "@pe/host-contracts/product-paths";
+import { keptStateKind, note, read, sha256Hex, writeState } from "@pe/host-contracts/kinds";
+import { productPathNames } from "@pe/host-contracts/contracts";
+import { hostOwnership, hostState } from "./host-ownership.ts";
 import { noteNoFirmHome, noteEarlierWork } from "./notice-feed.ts";
 
 export const contentRootsRefreshMs = 30_000;
@@ -8,7 +10,7 @@ export const contentRootsResolveTimeoutMs = 5_000;
 export class ContentHomeUnavailable extends Error {
   readonly code = "pod.home-unavailable";
   readonly status = 503;
-  constructor() { super("User content home is unavailable. Set PE_TOOLS_PRODUCT_HOME to its known location, or retry when the Documents lookup answers."); }
+  constructor() { super("User content home is unavailable. Choose it in Settings › Host › Content homes, or retry when the Documents lookup answers."); }
 }
 type Attempt = { stop: AbortController; expired: boolean; work: Promise<void> };
 type Roots = {
@@ -29,8 +31,9 @@ type Roots = {
 const owners = new Map<string, Roots>();
 
 function unavailable(roots: Roots, places: readonly string[], reason: unknown) {
-  const path = roots.firm.root ?? process.env.PE_TOOLS_SHARED_ROOT ?? places[0] ?? knownUserRoot() ?? "firm drives";
-  const where = [...new Set([roots.firm.root, process.env.PE_TOOLS_SHARED_ROOT, ...places]
+  const told = toldHome("firm")?.path;
+  const path = roots.firm.root ?? told ?? places[0] ?? knownUserRoot() ?? "firm drives";
+  const where = [...new Set([roots.firm.root, told, ...places]
     .filter((place): place is string => Boolean(place)))].join(", ") || "C: through Z:";
   const message = `Firm home unavailable at ${where}: ${String(reason)}. Keeping the last good homes, or the user home, while resolution continues.`;
   note(hostState(), { class: "keep", place: "Firm home", path, sha256: sha256Hex(message), reason: message });
@@ -57,9 +60,11 @@ async function bounded(work: Promise<void>, timeoutMs: number, expired: () => vo
   } finally { clearTimeout(timer); signal.removeEventListener("abort", cancelled); }
 }
 
-// One owner for Pods and Pages. Environment scoping keeps isolated fixtures independent.
+// One owner for Pods and Pages. Environment scoping keeps isolated fixtures independent; the
+// homes.json path joins the key because it names the machine state, and a write to it re-resolves
+// this owner (`reresolveContentRoots`) instead of minting a second one.
 function owner() {
-  const key = JSON.stringify([process.env.PE_TOOLS_PRODUCT_HOME, process.env.PE_TOOLS_SHARED_ROOT, process.env.PE_TEST_HOME_ROOT]);
+  const key = JSON.stringify([process.env.PE_TOOLS_PRODUCT_HOME, process.env.PE_TOOLS_SHARED_ROOT, process.env.PE_TEST_HOME_ROOT, homesConfigPath()]);
   const existing = owners.get(key);
   if (existing) return existing;
   const user = knownUserRoot();
@@ -149,7 +154,7 @@ export function contentHomesFound(): { homes: FoundHome[]; firmNotice: string | 
   const roots = owner();
   return {
     homes: (roots.homes.get("") ?? []).map(home => ({ ...home, found: home.tier === "project" ? "pointer" :
-      home.tier === "user" ? process.env.PE_TOOLS_PRODUCT_HOME ? "override" : "documents" : process.env.PE_TOOLS_SHARED_ROOT ? "override" : "probe" })),
+      toldHome(home.tier)?.found ?? (home.tier === "user" ? "documents" : "probe") })),
     firmNotice: !roots.homes.get("")?.length ? new ContentHomeUnavailable().message : roots.firm.root ? null : noFirmHomeText(roots.firm),
   };
 }
@@ -157,6 +162,22 @@ export function contentHomes(pointer?: string | null): readonly Home[] {
   const roots = owner();
   if (pointer) roots.pointers.add(pointer);
   return roots.homes.get(pointer ?? "") ?? roots.homes.get("") ?? [];
+}
+
+/**
+ * Resolve again now, after Settings changed homes.json: a found firm home is otherwise only re-read
+ * where it was, and a pending read may predate the file. Waits at most the resolve timeout.
+ */
+export async function reresolveContentRoots(): Promise<void> {
+  const roots = owner();
+  roots.pending?.stop.abort();
+  roots.pending = undefined;
+  for (const project of roots.projects.values()) project.stop.abort();
+  roots.projects.clear();
+  roots.firm = { root: null, looked: [] };
+  roots.noticedFirm = false;
+  roots.ready = roots.refresh();
+  await roots.ready;
 }
 
 export function acquireContentRoots() {
@@ -178,4 +199,46 @@ export function acquireContentRoots() {
       }
     },
   };
+}
+
+/** `state\homes.json`: a person's choice, so an unreadable file is refused and kept, never dropped. */
+const homesConfigKind = keptStateKind({
+  place: () => "Content homes",
+  schema: homesConfigSchema,
+  segments: () => [productPathNames.homesConfigFileName],
+});
+
+/** What Settings shows: the chosen paths, and every home as resolved now with how it was found. */
+export function homesStatus(): HomesStatus {
+  const { config, error } = readHomesConfig();
+  const found = contentHomesFound();
+  return {
+    config,
+    configError: error,
+    homes: found.homes.map(home => ({ tier: home.tier, path: home.root, found: home.found })),
+    firmNotice: found.firmNotice,
+  };
+}
+
+/**
+ * Settings' write: validate, refuse a home that holds this machine's state (ADR 0037 rule 6, the
+ * state-root fence), replace the file atomically, then re-resolve before answering. A chosen firm
+ * folder with no firm marker is accepted and answered with the notice naming it.
+ */
+export async function writeHomesConfig(value: unknown): Promise<HomesStatus> {
+  const parsed = homesConfigSchema.safeParse(value);
+  if (!parsed.success)
+    throw Error(parsed.error.issues.map(issue => `${issue.path.join(".") || "homes"}: ${issue.message}`).join("; "));
+  const next = parsed.data;
+  const state = resolve(hostOwnership.rootPath);
+  for (const [tier, path] of Object.entries(next)) {
+    const away = relative(resolve(path), state);
+    if (!away.startsWith("..") && !isAbsolute(away))
+      throw Error(`The ${tier} home '${path}' holds this machine's state '${state}'; choose a folder outside it.`);
+  }
+  const file = homesConfigKind.in(hostState());
+  read(file);
+  writeState(file, `${JSON.stringify(next, null, 2)}\n`);
+  await reresolveContentRoots();
+  return homesStatus();
 }

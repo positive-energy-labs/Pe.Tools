@@ -29,3 +29,14 @@ Vector 'Busy plan' {param($a,$p) $p.quiet=$false} $false
 Vector 'Malformed36char UUID' {param($a,$p) $a.requestId='xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'} $false
 if((Get-Content "$PSScriptRoot\Automatic.ps1" -Raw) -match 'Method Post|Start-Process|update.+apply'){throw 'Ordinary watcher contains lifecycle/update mutation'}
 Write-Output 'PASS:14 actual admission identity/root/hash/time/feed/quiet vectors'
+foreach ($case in @(
+    @{name='nested empty sessions';map=@{map=@{total=1};sources=@{catalog='no Revit'};machine=@{revit=@{sessions=@()}}};accept=$true},
+    @{name='nested active session cannot hide behind legacy empty';map=@{map=@{total=1};sources=@{catalog='ok'};machine=@{revit=@{sessions=@(@{pid=123})}};sessions=@()};accept=$false},
+    @{name='legacy empty sessions';map=@{map=@{total=1};sources=@{catalog='no Revit'};sessions=@()};accept=$true},
+    @{name='missing sessions shape';map=@{map=@{total=1};sources=@{catalog='no Revit'}};accept=$false}
+)) {
+    $map=$case.map|ConvertTo-Json -Depth 8|ConvertFrom-Json
+    try {Assert-GateNoRevitCapabilityMap $map;$accepted=$true} catch {$accepted=$false}
+    if($accepted -ne $case.accept){throw ('Unexpected capability map vector: '+$case.name)}
+}
+Write-Output 'PASS:4 capability map nested/legacy/absent/nonempty session vectors'

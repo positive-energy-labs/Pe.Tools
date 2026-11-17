@@ -206,3 +206,42 @@ test("H1: the host log has one line per home with its tier and how it was found,
   expect(both.firmNotice).toContain(firm);
   expect(both.firmNotice).toContain(twin);
 });
+
+// homes.json (Settings' choice). Mutants, each run red once (2026-11-17): let the file beat the
+// override and the isolation case goes red; fall back to the probe for an unmarked chosen firm
+// folder and the no-fallback case goes red; label a file value "override" and the found case goes red.
+test("homes.json names the firm and user homes; the override beats it; a chosen unmarked firm folder is no firm home, not the probe", async () => {
+  const { homesFound, readHomesConfig, useHomesConfig, homesConfigPath } = await import("../src/product-paths.ts");
+  const prior = homesConfigPath();
+  noHomeVariables();
+  vi.stubEnv(homeVariable, undefined);
+  const mapped = drive();
+  const probed = mark(join(mapped, "Shared drives", "Team", ...firmSegments), `{"tier":"firm"}`);
+  const facts = machineFacts([mapped]);
+  const chosenFirm = join(drive(), "Elsewhere", "Pe.Tools");
+  const chosenUser = mkdtempSync(join(tmpdir(), "pe-chosen-user-"));
+  const file = join(mkdtempSync(join(tmpdir(), "pe-state-")), "homes.json");
+  try {
+    useHomesConfig(file);
+    writeFileSync(file, JSON.stringify({ firm: chosenFirm, user: chosenUser }));
+    expect(userRoot()).toBe(chosenUser);
+    // Chosen but unmarked: no firm home, the notice names the chosen folder, and the probed one is not used.
+    expect(firmHome(facts)).toEqual({ root: null, looked: [chosenFirm] });
+    expect(homesFound({ facts }).firmNotice).toContain(chosenFirm);
+    mark(chosenFirm, `{"tier":"firm"}`);
+    expect(homesFound({ facts }).homes).toEqual([
+      { tier: "user", root: chosenUser, found: "config" },
+      { tier: "firm", root: chosenFirm, found: "config" },
+    ]);
+    // The isolation override beats the file, per tier.
+    const isolated = mkdtempSync(join(tmpdir(), "pe-isolated-"));
+    vi.stubEnv(homeVariable, isolated);
+    expect(homesFound({ facts }).homes[0]).toEqual({ tier: "user", root: isolated, found: "override" });
+    // An unreadable file is reported and not used: the defaults answer.
+    writeFileSync(file, JSON.stringify({ firm: "relative/path" }));
+    expect(readHomesConfig().error).toContain("absolute path");
+    expect(firmHome(facts).root).toBe(probed);
+  } finally {
+    useHomesConfig(prior);
+  }
+});

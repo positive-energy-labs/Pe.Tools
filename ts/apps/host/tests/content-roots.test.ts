@@ -53,14 +53,14 @@ test("an unanswered Documents lookup keeps health and bridge up, refuses Pages, 
     expect((await fetch(`${host.base}/host/install`)).status).toBe(200);
     const pages = await fetch(`${host.base}/pages`);
     expect(pages.status).toBe(503);
-    expect(await pages.json()).toMatchObject({ code: "pod.home-unavailable", message: expect.stringContaining("PE_TOOLS_PRODUCT_HOME") });
+    expect(await pages.json()).toMatchObject({ code: "pod.home-unavailable", message: expect.stringContaining("Settings › Host › Content homes") });
     await expect(listPackages()).rejects.toMatchObject({ code: "pod.home-unavailable", status: 503 });
     const exportStarted = performance.now();
     await expect(exportPod({ pod: "missing", archivePath: join(root, "missing.zip") })).rejects.toMatchObject({
-      code: "pod.home-unavailable", status: 503, message: expect.stringContaining("PE_TOOLS_PRODUCT_HOME"),
+      code: "pod.home-unavailable", status: 503, message: expect.stringContaining("Settings › Host › Content homes"),
     });
     expect(performance.now() - exportStarted).toBeLessThan(contentRootsResolveTimeoutMs + startupSchedulingMarginMs);
-    expect(() => productPodsRootPath()).toThrow("PE_TOOLS_PRODUCT_HOME");
+    expect(() => productPodsRootPath()).toThrow("Settings › Host › Content homes");
     expect(paths.userRoot).not.toHaveBeenCalled();
     socket = new WebSocket(`${host.base.replace("http:", "ws:")}${BRIDGE_PATH}?${HOST_RUNTIME_SERVICE_QUERY}=${hostOwnership.serviceName}`);
     await new Promise<void>((resolve, reject) => {
@@ -102,10 +102,10 @@ test("Pod export and its user-root door refuse a missing identity without a sync
   const owner = acquireContentRoots();
   const answer = exportPod({ pod: "missing", archivePath: join(root, "missing.zip") }).catch(error => error);
   try {
-    expect(() => productPodsRootPath()).toThrow("PE_TOOLS_PRODUCT_HOME");
+    expect(() => productPodsRootPath()).toThrow("Settings › Host › Content homes");
     await vi.advanceTimersByTimeAsync(contentRootsResolveTimeoutMs);
     expect(await answer).toMatchObject({ code: "pod.home-unavailable", status: 503,
-      message: expect.stringContaining("PE_TOOLS_PRODUCT_HOME") });
+      message: expect.stringContaining("Settings › Host › Content homes") });
     expect(sync).not.toHaveBeenCalled();
   } finally { owner.close(); await answer; }
 });

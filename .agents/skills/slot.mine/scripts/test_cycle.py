@@ -4,7 +4,10 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from cycle import backlog_counts, branch_rows, next_n, read_tip, row_counts, three_counts, wave_rows
+from cycle import (backlog_counts, branch_rows, merged_name, next_n, pending_requests, read_tip, resolve,
+                   row_counts, three_counts, wave_rows)
+import datetime as dt
+import sqlite3
 from pulse import ESTIMATE, line_verdict
 import re
 
@@ -56,6 +59,28 @@ class CycleTests(unittest.TestCase):
         self.assertEqual(line_verdict(400, '-', 700, 200), '2.2x its lines, AGAINST SIGN -')
         self.assertEqual(line_verdict(400, '0', 250, 150), 'AGAINST SIGN 0')
         self.assertIsNone(line_verdict(0, '', 9000, 0))
+
+    def test_map_names_slices_where_git_has_branches(self):
+        refs = ['crusade/fans-P1-undo', 'crusade/fans-P1-undo-fix', 'main']
+        self.assertEqual(resolve('P1-undo', refs), 'crusade/fans-P1-undo')
+        self.assertEqual(resolve('P9-none', refs), 'P9-none')
+        subjects = 'Merge crusade/fans-P1-read\nMerge crusade/fans-P2-B including P2-A'
+        self.assertTrue(merged_name('P1-read', subjects))
+        self.assertTrue(merged_name('P2-A', subjects))
+        self.assertFalse(merged_name('P1-rea', subjects))
+        waves = wave_rows('Wave: 1 P1-read P1-undo then P1-new   blockers: none (plan check)\n', subjects, refs)
+        self.assertEqual([(w['total'], w['merged'], w['started']) for w in waves], [(2, 1, 2)])
+
+    def test_pending_requests_only_for_running_threads(self):
+        db = sqlite3.connect(':memory:')
+        db.execute('create table orchestration_v2_projection_runtime_requests (thread_id, kind, status, created_at)')
+        db.executemany('insert into orchestration_v2_projection_runtime_requests values (?,?,?,?)', [
+            ('a', 'command', 'pending', '2026-11-17T14:00:00.000Z'), ('a', 'command', 'resolved', '2026-11-17T13:00:00.000Z'),
+            ('b', 'command', 'pending', '2026-11-17T02:00:00.000Z')])
+        now = dt.datetime(2026, 11, 17, 14, 30, tzinfo=dt.timezone.utc)
+        self.assertEqual(pending_requests(db, {'a': 'fans integrator'}, now),
+                         [dict(thread='fans integrator', kind='command', minutes=30.0)])
+        self.assertEqual(pending_requests(db, {}, now), [])
 
     def test_completed_run_uses_latest_prefix(self):
         with patch('cycle.git', side_effect=['pp/open\nold/open',

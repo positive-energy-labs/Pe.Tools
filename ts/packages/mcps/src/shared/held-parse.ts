@@ -18,7 +18,8 @@ import {
   type DerivedDir,
 } from "@pe/host-contracts/kinds";
 import { runtimeRoot } from "@pe/runtime/runtime-owner";
-import { LLAMA_TIER, parseWithLlamaCloud, requireLlamaCloudKey } from "./llama-parse.ts";
+import { LLAMA_TIER, parseWithLlamaCloud } from "./llama-parse.ts";
+import { requireLlamaCloudKey } from "./llama-key.ts";
 
 export const parsedPagesSchema = z.strictObject({
   /** Pages in the whole document; null when the parser does not say. */

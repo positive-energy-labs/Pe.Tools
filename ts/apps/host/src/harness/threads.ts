@@ -139,6 +139,8 @@ type Thread = {
   child: AdapterChild | null;
   events: HarnessEvent[];
   live: Promise<Live> | null;
+  /** The live adapter's stderr tail, so a start that fails can say why (the ACP error is often "Internal error"). */
+  stderr?: () => string;
   /** The log as text, carried by the next prompt when the session is new over an existing log. */
   refeed: string | null;
   session: HarnessThreadBody["session"];
@@ -1102,6 +1104,7 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
     });
     env[HOST_CONTEXT_VARIABLE] = context;
     let live: Live | undefined;
+    t.stderr = undefined; // a failed spawn must not report the previous session's stderr
     const { child, conn, stderr } = await spawner.open(harness, options.worldRoot, env, () => ({
       sessionUpdate: ({ update }) => {
         if (t.child !== child || t.stopped) return;
@@ -1162,6 +1165,7 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
     t.child = child;
     // Closed run identities remain inspectable for command-id recovery until host restart.
     if (!run) child.once("exit", () => retireContext(context));
+    t.stderr = stderr;
     child.on("exit", (code, signal) => {
       if (t.child !== child || t.session === "closed") return;
       clearIdle(t);
@@ -1317,12 +1321,17 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
               t.meta.providerId,
               "The harness failed to start; probe again.",
             );
+          const message =
+            expired ?? `${t.meta.harness} harness failed to start: ${String(error?.message ?? error)}`;
+          // The harness's own words (e.g. codex "invalid transport") are in stderr; the ACP error alone
+          // often reads "Internal error". Same last-whole-line cut as the exit path below.
+          const tail = expired ? "" : (t.stderr?.() ?? "").trim();
+          const raw = tail.length >= 1900 ? tail.slice(tail.indexOf("\n") + 1) : tail;
           append(t, {
             kind: "error",
             turnId: t.running,
-            message:
-              expired ??
-              `${t.meta.harness} harness failed to start: ${String(error?.message ?? error)}`,
+            message,
+            ...(raw ? { failure: { kind: "other" as const, message, raw } } : {}),
           });
         },
       );

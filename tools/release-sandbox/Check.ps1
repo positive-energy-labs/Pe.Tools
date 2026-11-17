@@ -7,6 +7,21 @@ try {
     . "$PSScriptRoot\AutomaticBoundary.ps1"
     . "$PSScriptRoot\UpdateReceipt.ps1"
     . "$PSScriptRoot\CompareSdkClosure.ps1"
+    . "$PSScriptRoot\VcRuntime.ps1"
+    $vcRuntime = Get-GateVcRuntime
+    $badVc = Join-Path $scratch 'changed-vc.exe'; 'not the pinned runtime' | Set-Content $badVc
+    $refused = $false
+    try { Assert-GateVcRuntime $badVc } catch { $refused = $true }
+    if (!$refused) { throw 'Changed VC++ installer accepted.' }
+    $refused = $false
+    try { Assert-GateVcRuntime (Join-Path $scratch 'missing-vc.exe') } catch { $refused = $true }
+    if (!$refused) { throw 'Missing VC++ installer accepted.' }
+    function Install($file, $arguments, $name) {
+        if ($file -ne $vcRuntime.path -or $arguments -notlike '/install /quiet /norestart /log *' -or $name -ne 'Mandatory VC++ x64 runtime') { throw 'VC++ bootstrap invocation changed.' }
+        $script:vcInvoked = $true
+    }
+    Install-GateVcRuntime (Split-Path $vcRuntime.path) $scratch
+    if (!$script:vcInvoked) { throw 'Mandatory VC++ bootstrap did not invoke installer.' }
     & "$PSScriptRoot\CheckAutomatic.ps1"
     Add-Type -Path "$PSScriptRoot\Windows.cs"
     $privateStatic = [Reflection.BindingFlags]'NonPublic,Static'
@@ -46,29 +61,36 @@ try {
     }
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     Add-Type -AssemblyName System.IO.Compression
-    $packageDirectory = Join-Path $scratch 'sdk-package'; $shims = Join-Path $scratch 'sdk-shims'
-    New-Item -ItemType Directory $packageDirectory, $shims | Out-Null
-    '<package><metadata><version>0.1.0-beta.196</version></metadata></package>' | Set-Content "$packageDirectory\Pe.Revit.Cli.nuspec"
-    foreach ($name in 'Pe.Revit.Cli.exe', 'Pe.Revit.Cli.dll', 'Pe.Revit.Cli.deps.json', 'Pe.Revit.Cli.runtimeconfig.json', 'loader/net48/Pe.Revit.Loader.dll', 'loader/net8.0-windows/Pe.Revit.Loader.dll', 'bridge/net48/Pe.Revit.Bridge.dll', 'bridge/net8.0-windows/Pe.Revit.Bridge.dll', 'bootstrap/net48/Pe.Revit.Loader.Bootstrap.dll', 'bootstrap/net8.0-windows/Pe.Revit.Loader.Bootstrap.dll') {
-        $original = Join-Path $packageDirectory ('tools/net8.0/any/' + $name)
-        $installed = Join-Path $shims $(if ($name -eq 'Pe.Revit.Cli.exe') { 'pe-revit.exe' } else { $name })
-        New-Item -ItemType Directory (Split-Path $original), (Split-Path $installed) -Force | Out-Null
-        $name | Set-Content $original; Copy-Item $original $installed
+    $packageDirectory=Join-Path $scratch 'sdk-package';$shims=Join-Path $scratch 'sdk-shims'
+    New-Item -ItemType Directory $packageDirectory,$shims|Out-Null
+    '<package><metadata><version>0.1.0-beta.196</version></metadata></package>'|Set-Content "$packageDirectory\Pe.Revit.Cli.nuspec"
+    $names=@('Pe.Revit.Cli.exe','Pe.Revit.Cli.dll','Pe.Revit.Cli.deps.json','Pe.Revit.Cli.runtimeconfig.json','loader/net48/Pe.Revit.Loader.dll','loader/net8.0-windows/Pe.Revit.Loader.dll','bridge/net48/Pe.Revit.Bridge.dll','bridge/net8.0-windows/Pe.Revit.Bridge.dll','bootstrap/net48/Pe.Revit.Loader.Bootstrap.dll','bootstrap/net8.0-windows/Pe.Revit.Loader.Bootstrap.dll','third-party.dll')
+    foreach($name in $names) {
+        $portable=Join-Path $packageDirectory ('tools/net8.0/any/'+$name)
+        $rid=Join-Path $packageDirectory ('tools/net8.0/any/installed/win-x64/'+$name)
+        $installed=Join-Path $shims $(if($name -eq 'Pe.Revit.Cli.exe'){'pe-revit.exe'}else{$name})
+        New-Item -ItemType Directory (Split-Path $portable),(Split-Path $rid),(Split-Path $installed) -Force|Out-Null
+        ('wrong portable bytes '+$name)|Set-Content $portable
+        ('exact RID bytes '+$name)|Set-Content $rid
+        Copy-Item $rid $installed
     }
-    $package = Join-Path $scratch 'sdk-closure.nupkg'; $archive = [IO.Compression.ZipFile]::Open($package, [IO.Compression.ZipArchiveMode]::Create)
+    foreach($name in 'DotnetToolSettings.xml','symbols.pdb'){'not installed'|Set-Content "$packageDirectory\tools\net8.0\any\installed\win-x64\$name"}
+    $package=Join-Path $scratch 'sdk-closure.nupkg';$archive=[IO.Compression.ZipFile]::Open($package,[IO.Compression.ZipArchiveMode]::Create)
     try {
-        foreach ($file in Get-ChildItem $packageDirectory -File -Recurse) {
-            $name = $file.FullName.Substring($packageDirectory.Length + 1).Replace('\', '/')
-            $entry = $archive.CreateEntry($name); $output = $entry.Open(); $input = [IO.File]::OpenRead($file.FullName)
-            try { $input.CopyTo($output) } finally { $input.Dispose(); $output.Dispose() }
+        foreach($file in Get-ChildItem $packageDirectory -File -Recurse) {
+            $name=$file.FullName.Substring($packageDirectory.Length+1).Replace('\','/')
+            $entry=$archive.CreateEntry($name);$output=$entry.Open();$input=[IO.File]::OpenRead($file.FullName)
+            try{$input.CopyTo($output)}finally{$input.Dispose();$output.Dispose()}
         }
-    } finally { $archive.Dispose() }
+    }finally{$archive.Dispose()}
     CompareSdkClosure $package $shims '0.1.0-beta.196' "$scratch\sdk-closure.json"
-    foreach ($bad in 'version', 'bytes') {
-        if ($bad -eq 'bytes') { 'changed runtime' | Set-Content "$shims\Pe.Revit.Cli.dll" }
-        $refused = $false
-        try { CompareSdkClosure $package $shims $(if ($bad -eq 'version') { '0.1.0-beta.197' } else { '0.1.0-beta.196' }) "$scratch\sdk-refused-$bad.json" } catch { $refused = $true }
-        if (!$refused) { throw 'Original SDK closure accepted changed version or bytes.' }
+    foreach($bad in 'version','managed-bytes','deps-bytes','runtimeconfig-bytes','third-party-bytes','required-runtime') {
+        $changed=switch($bad){'managed-bytes'{'Pe.Revit.Cli.dll'} 'deps-bytes'{'Pe.Revit.Cli.deps.json'} 'runtimeconfig-bytes'{'Pe.Revit.Cli.runtimeconfig.json'} 'third-party-bytes'{'third-party.dll'} 'required-runtime'{'bridge/net48/Pe.Revit.Bridge.dll'}}
+        if($changed){if($bad -eq 'required-runtime'){Remove-Item (Join-Path $shims $changed)}else{'changed RID bytes'|Set-Content (Join-Path $shims $changed)}}
+        $refused=$false
+        try{CompareSdkClosure $package $shims $(if($bad -eq 'version'){'0.1.0-beta.197'}else{'0.1.0-beta.196'}) "$scratch\sdk-refused-$bad.json"}catch{$refused=$true}
+        if(!$refused){throw "SDK RID byte closure accepted $bad."}
+        if($changed){Copy-Item (Join-Path $packageDirectory ('tools/net8.0/any/installed/win-x64/'+$changed)) (Join-Path $shims $changed)}
     }
     $evidence = Join-Path $scratch 'evidence'
     New-Item -ItemType Directory (Join-Path $evidence 'nested') -Force | Out-Null
@@ -123,6 +145,17 @@ try {
     $spec = Join-Path $scratch 'spec.json'
     @{ previousVersion = '1'; candidateVersion = '2'; expectedSdkVersion = '0.1.0-beta.196'; files = $files } | ConvertTo-Json -Depth 10 | Set-Content $spec
     $wsb = & "$PSScriptRoot\Prepare.ps1" -Spec $spec -RunDirectory "$scratch\run"
+    $prepared = Get-Content "$scratch\run\input\gate.json" -Raw | ConvertFrom-Json
+    $stagedVc = @($prepared.files | Where-Object role -eq 'vcRuntime')
+    if ($stagedVc.Count -ne 1 -or $stagedVc[0].sha256 -ne $vcRuntime.sha256) { throw 'Preparation did not inject the mandatory pinned VC++ installer.' }
+    Assert-GateVcRuntime "$scratch\run\input\vc_redist.x64.exe"
+    $forbiddenSpec = Join-Path $scratch 'optional-vc-spec.json'
+    $forbidden = Get-Content $spec -Raw | ConvertFrom-Json
+    $forbidden.files += $vcRuntime
+    $forbidden | ConvertTo-Json -Depth 10 | Set-Content $forbiddenSpec
+    $refused = $false
+    try { & "$PSScriptRoot\Prepare.ps1" -Spec $forbiddenSpec -RunDirectory "$scratch\optional-vc" | Out-Null } catch { $refused = $_.Exception.Message -eq 'Unsupported input role: vcRuntime' }
+    if (!$refused -or (Test-Path "$scratch\optional-vc")) { throw 'Caller-controlled VC++ prerequisite accepted.' }
     $mcpStaged = "$scratch\run\input\ReadInstalledMcp.ps1"
     if (!(Test-Path $mcpStaged) -or (Get-FileHash $mcpStaged).Hash -ne (Get-FileHash "$PSScriptRoot\ReadInstalledMcp.ps1").Hash) { throw 'Installed MCP helper was not staged byte-identically.' }
     $stagedHashes = Get-Content "$scratch\run\input-hashes.json" -Raw | ConvertFrom-Json
@@ -217,7 +250,7 @@ try {
     $refused = $false
     try { & "$PSScriptRoot\Prepare.ps1" -Spec $spec -RunDirectory "$scratch\bad" | Out-Null } catch { $refused = $_.Exception.Message -like 'Input hash mismatch:*' }
     if (!$refused -or (Test-Path "$scratch\bad")) { throw 'Corrupt release must refuse before staging.' }
-    'PASS: syntax, safe mappings, input hashes, refusal boundaries; real HTTP MCP init/pe_find/DELETE with owner/session headers, malformed tool/map and cleanup failure handling. No Sandbox or installer executed.'
+    'PASS: syntax, safe mappings, mandatory pinned VC++ staging/invocation and refusal boundaries; real HTTP MCP init/pe_find/DELETE with owner/session headers, malformed tool/map and cleanup failure handling. No Sandbox or installer executed.'
 } finally {
     $resolved = [IO.Path]::GetFullPath($scratch)
     $tempRoot = [IO.Path]::GetFullPath($env:TEMP).TrimEnd('\') + '\'
