@@ -30,7 +30,7 @@ export interface FixtureDependencies {
   systemList: (snapshot: DuctSnapshot, calcs: readonly Calc[] | null) => DuctsPricingData["analysis"]["systems"];
   pricingValue: (snapshot: DuctSnapshot, calcs: readonly Calc[], design: DuctsDesign) => unknown;
   networkCalcs: (snapshot: DuctSnapshot, grids: Grids, catalogs: Catalogs, design: DuctsDesign, firm: DuctsFirm, revision: number) => readonly Calc[];
-  calcState: (open: ReturnType<typeof openFanCalcSchema.parse>) => ReturnType<typeof fansCalcData.parse>["sheetView"];
+  calcState: (open: ReturnType<typeof openFanCalcSchema.parse>) => unknown;
 }
 
 /** The product supplies its implementation; a peer is represented by its public contract fixture. */

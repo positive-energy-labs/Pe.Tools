@@ -31,7 +31,7 @@ const imports = (file: string, text = readFileSync(file, "utf8")) => {
   return found;
 };
 
-test("/fans and /ducts declare `picture`, and the pane each places is the kernel's", () => {
+test("Fans declares picture and the kernel draws its pane", () => {
   expect(fans.spec.picture).toBeDefined();
   expect(fans.spec.panes["sheet-picture"]).toMatchObject({ kernel: "picture", body: "fill" });
   expect(fans.data.picture).toEqual({ scope: "derived", marks: [] });

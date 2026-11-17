@@ -3,7 +3,8 @@ import {
   createBuiltinRouteInventory,
 } from "../../../../packages/agent-contracts/src/route-module.ts";
 import type { TypedRoute } from "@pe/web/route";
-export async function admitModules(ducts: TypedRoute, fans: TypedRoute, hostVersion = "fans-fixture") {
+type AdmittableModule = Pick<TypedRoute, "data" | "host" | "entries">;
+export async function admitModules(ducts: AdmittableModule, fans: AdmittableModule, hostVersion = "fans-fixture") {
 const ductsHostModule = ducts.host;
 const fansHostModule = fans.host;
 const catalog = Object.entries(ducts.entries).map(([key, entry]) => ({

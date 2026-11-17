@@ -16,7 +16,7 @@ import { fansCalc } from "./calc.ts";
  */
 afterEach(cleanup);
 
-test("/fans stages no /ducts Work, and /ducts' sheet stages its criteria", () => {
+test("Fans bindings stage only Fans Work", () => {
   const fansKeys = Object.keys(fansDocumentSchema.shape), ductsKeys = Object.keys(ductsDocumentSchema.shape);
   // Every Fans binding addresses a Fans Work key that /ducts does not own.
   // A `setting` binding stages no Work at all: it saves at a home tier (slice 6b).
