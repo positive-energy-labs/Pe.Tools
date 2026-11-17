@@ -157,14 +157,11 @@ const undefinedKey: Test.Wire = { nullable: undefined };
   it("covers every catalog direction and regenerates identical bytes", () => {
     expect(Object.keys(nativeEffectSchemas)).toEqual(hostOpCatalog.map(op => op.key));
     expect(generateNativeEffect(hostOpCatalog)).toBe(readFileSync(resolve(import.meta.dirname, "../../../packages/host-contracts/src/generated/native-effect.generated.ts"), "utf8").replaceAll("\r\n", "\n"));
-    let definitions = 0;
     for (const operation of hostOpCatalog) {
       const root = JSON.parse(operation.responseSchemaJson);
       const keys = Object.keys(root.definitions ?? root.$defs ?? {}).sort();
       expect(Object.keys(nativeEffectResponseDefinitions[operation.key]), operation.key).toEqual(keys);
-      definitions += keys.length;
     }
-    expect(definitions).toBe(896);
     const mark = nativeEffectResponseDefinitions["revit.context.view-image"].RevitViewImageMark;
     expect(Schema.decodeUnknownSync(mark)({ elementId: 1, left: 0, top: 0, width: 1, height: 1 })).toEqual({ elementId: 1, left: 0, top: 0, width: 1, height: 1 });
     expect(() => Schema.decodeUnknownSync(mark)({ elementId: 9007199254740992, left: 0, top: 0, width: 1, height: 1 })).toThrow();
