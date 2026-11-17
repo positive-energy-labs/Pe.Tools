@@ -30,7 +30,7 @@ import { encodingFor } from "../encoding";
 import type { OpenSheet } from "./types.ts";
 import { DuctsOverlay, linesOf, useEquipment } from "../picture-content";
 import { GoToSubject } from "../proto/e/go-to";
-import { DUCTS_LAYER_OPTIONS } from "../proto/e/picture";
+import { DUCTS_LAYER_OPTIONS } from "../picture-options.ts";
 import { indexOf, sceneOf } from "../scene";
 import { paintOfDucts } from "../selection";
 import { subjectNamer } from "../subject-text";

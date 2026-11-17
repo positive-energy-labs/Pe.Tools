@@ -827,14 +827,8 @@ export const inboxDamage = (row: InboxItem): string | null =>
     ? compactStatus(row.status) || "blocked"
     : null;
 
-export interface StageIssue {
-  key: string;
-  ids: readonly number[];
-  findings: readonly string[];
-  damage: string | null;
-  priority?: number;
-}
-
+import type { StageIssue } from "./stage-issue.ts";
+export { issueAt, type StageIssue } from "./stage-issue.ts";
 /** The inbox owns identity and severity; the stage only chooses how to draw it. */
 export function stageIssues(
   rows: Pick<ReturnType<typeof inboxRows>, "fix" | "set" | "check" | "diagnostics">,
@@ -846,25 +840,6 @@ export function stageIssues(
     damage: inboxDamage(row),
     priority: Number(row.key === "airflow" || row.key === "unit-airflow"),
   }));
-}
-
-/** Prefer an element's own input over a system-wide parameter picker on the same mesh. */
-export function issueAt(
-  issues: readonly StageIssue[],
-  ids: readonly number[],
-  preferred?: string | null,
-) {
-  const candidates = issues.filter((issue) => issue.ids.some((id) => ids.includes(id)));
-  return (
-    candidates.find((issue) => issue.key === preferred) ??
-    candidates.sort(
-      (a, b) =>
-        Number(!!b.damage) - Number(!!a.damage) ||
-        a.ids.length - b.ids.length ||
-        Number(a.key === "airflow" || a.key === "unit-airflow") -
-          Number(b.key === "airflow" || b.key === "unit-airflow"),
-    )[0]
-  );
 }
 
 export const diagnosticKind = (item: InboxItem) => (item.kind === "join" ? item.status : item.kind);

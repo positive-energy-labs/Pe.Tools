@@ -15,10 +15,10 @@ import type { Author } from "@pe/agent-contracts";
 import { DUCT_UNIT_KINDS } from "@pe/host-contracts/generated";
 import { catalogLinkKey, catalogLoss, type Catalogs } from "../catalog.ts";
 import type { SourcedValue } from "@pe/agent-contracts";
-import { ENCOUNTER_KEY, type EncounterRuling } from "./encounters.ts";
+import { ENCOUNTER_KEY, type EncounterRuling } from "../encounter-ruling.ts";
 import { slotFlowOf } from "../kernel/terminal-flow.ts";
 import { suggestKind, suggestRole } from "../roster.ts";
-import type { SheetSnapshot } from "./build.ts";
+import type { SheetSnapshot } from "../input-snapshot.ts";
 
 type Node = SheetSnapshot["nodes"][number];
 

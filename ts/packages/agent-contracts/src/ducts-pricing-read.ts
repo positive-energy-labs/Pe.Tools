@@ -1,5 +1,7 @@
+import { DUCT_UNIT_ROLES } from "./duct-inputs.ts";
 import { z } from "zod";
-import { ductCalculationSchema, ductAssumptionSchema } from "./ducts.ts";
+import { ductCalculationSchema } from "./duct-calculation.ts";
+import { ductAssumptionSchema } from "./ducts.ts";
 import { ductsCriteriaLayerSchema, DUCT_UNIT_KINDS } from "./ducts-sheet.ts";
 /**
  * How far an inferred join stands from the evidence (pressure-drop ledger, 2026-10-19: inference
@@ -37,5 +39,5 @@ export const inferenceReadSchema=z.object({
   findings:z.array(z.object({id:s,kind:z.enum(["joined-by-proximity","tap-by-proximity","inline-by-inference","loop-by-inference","near-miss-across-classifications","missed-join","out-of-phase"]),elementIds:ns,note:s,grade:grade.nullable(),connectors:z.tuple([s,s]).optional(),gapIn:n.optional()})),
 });
 const drop=z.object({inWg:n,source:s.optional()});
-export const stagedDuctsReadSchema=z.object({calculation:record(ductCalculationSchema),rules:record(z.object({table:s})),criteria:ductsCriteriaLayerSchema,kinds:record(z.object({kind:z.enum(DUCT_UNIT_KINDS)})),assumptions:record(ductAssumptionSchema),catalogs:record(z.object({table:s})),ruleAssignments:record(z.object({rule:s})),terminalDrops:record(drop),componentDrops:record(drop),equipmentFlows:record(n),roles:record(z.object({role:z.enum(["fan","passive"])})),flows:record(n),parameters:record(s),subject:record(ns),labelParameter:s.nullable(),workingPhase:s.nullable(),designFriction:n.nullable()});
+export const stagedDuctsReadSchema=z.object({calculation:record(ductCalculationSchema),rules:record(z.object({table:s})),criteria:ductsCriteriaLayerSchema,kinds:record(z.object({kind:z.enum(DUCT_UNIT_KINDS)})),assumptions:record(ductAssumptionSchema),catalogs:record(z.object({table:s})),ruleAssignments:record(z.object({rule:s})),terminalDrops:record(drop),componentDrops:record(drop),equipmentFlows:record(n),roles:record(z.object({role:z.enum(DUCT_UNIT_ROLES)})),flows:record(n),parameters:record(s),subject:record(ns),labelParameter:s.nullable(),workingPhase:s.nullable(),designFriction:n.nullable()});
 

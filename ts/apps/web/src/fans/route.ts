@@ -8,9 +8,7 @@ import { fansDocumentSchema, fansRouteState } from "../../../../packages/agent-c
 import { z } from "zod";
 import {
   fansSheetEditsSchema,
-  routeAddress,
   type Immutable,
-  type SubjectRefCode,
 } from "@pe/agent-contracts";
 import * as reads from "./contract.ts";
 import { editPatches } from "@pe/ducts-domain/sheet/index";
@@ -164,13 +162,4 @@ export const module = route({
 });
 export const fansData = module.data;
 export const fansHostModule = module.host;
-export function fansLink(ids: SubjectRefCode[], search: Readonly<Record<string, unknown>>) {
-  return routeAddress("fans").link({
-    ...Object.fromEntries(
-      ["target", "fixture", "thread"].flatMap((key) =>
-        typeof search[key] === "string" ? [[key, search[key]]] : [],
-      ),
-    ),
-    fan: { kind: "ids", ids },
-  });
-}
+export { fansLink } from "./link.ts";

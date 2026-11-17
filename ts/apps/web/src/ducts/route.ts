@@ -11,7 +11,7 @@ import {
   ductsSheetEditsSchema,
   DUCTS_SYSTEM_MAX,
 } from "@pe/agent-contracts";
-import { editPatches } from "@pe/ducts-domain/sheet/index";
+import { editPatches } from "@pe/ducts-domain/sheet/edits";
 import {
   route,
   field,

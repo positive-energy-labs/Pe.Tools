@@ -17,7 +17,7 @@ import {
   type StagedCell,
   type SettingTierRead,
 } from "@pe/agent-contracts";
-import { type WorkLayer } from "@pe/ducts-domain/sheet/index";
+import { type WorkLayer } from "@pe/ducts-domain/sheet/inputs";
 import type { FirmValue } from "./reads/door.ts";
 
 // The engine default: what a criterion runs on when no home tier states it. Velocity limits are
@@ -74,4 +74,4 @@ export function workLayer(design: DuctsDesign): WorkLayer {
   };
 }
 
-export { editPatches } from "@pe/ducts-domain/sheet/index";
+export { editPatches } from "@pe/ducts-domain/sheet/edits";

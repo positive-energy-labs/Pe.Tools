@@ -5,7 +5,6 @@
  */
 import { familyDischarge, type FanPort } from "../roster.ts";
 import type { Grids } from "../loss-grid.ts";
-import type { DuctSnapshot } from "../types.ts";
 import {
   fittingFacts,
   teePorts,
@@ -89,9 +88,8 @@ import {
 } from "./encounters.ts";
 import { REVIT_FLOW_SLOT, slotFlowOf } from "../kernel/terminal-flow.ts";
 
-/** Issues and tolerances are C#'s model health (ducts LEDGER 2026-10-29); absent, no open end has a measured neighbourhood. */
-export type SheetSnapshot = Pick<DuctSnapshot, "nodes" | "segments" | "document"> &
-  Partial<Pick<DuctSnapshot, "slots" | "issues" | "tolerances" | "walk" | "reach" | "store" | "parameterCohorts">>;
+import type { SheetSnapshot } from "../input-snapshot.ts";
+export type { SheetSnapshot } from "../input-snapshot.ts";
 
 export interface PricingInput {
   snapshot: SheetSnapshot;

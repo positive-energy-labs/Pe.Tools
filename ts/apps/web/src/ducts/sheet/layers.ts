@@ -15,7 +15,7 @@ import type { Layer3D,SceneMeshes } from "#/scene/types";
 import type { DuctsDesign,DuctsSheetOverview } from "@pe/agent-contracts";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { findingLayers,findingShapes,type FindingShapes } from "../finding-layers";
-import type { StageIssue } from "../inbox-rows";
+import type { StageIssue } from "@pe/ducts-domain/stage-issue";
 import type { Detail } from "./model";
 import { isConsequence,presentIds,type SheetBlocker } from "./tiers";
 

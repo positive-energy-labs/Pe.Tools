@@ -1,3 +1,5 @@
+import { DUCT_UNIT_ROLES } from "./duct-inputs.ts";
+import { ductFirmLineSchema } from "./duct-inputs.ts";
 import { inferenceReadSchema, stagedDuctsReadSchema } from "./ducts-pricing-read.ts";
 import { z } from "zod";
 import { settingTiersSchema } from "./tiered-setting.ts";
@@ -130,10 +132,7 @@ export const ductsPricingData = z.object({
   /** The design criteria as they stand under Work (the store over the firm file), each with its source: the /ducts design sheet's model layer. */
   criteria: ductsInputsSchema.shape.criteria,
   /** The firm line, or refused without a shared root (slice 2b): criteria then resolve on the seed. */
-  firm: z.union([
-    z.strictObject({ version: z.string(), path: z.string(), present: z.boolean() }),
-    z.strictObject({ refused: z.literal("no-shared-root") }),
-  ]),
+  firm: ductFirmLineSchema,
   /** Each owner's `Settings/<owner>.json` in every home tier, as the host read it: a `setting` cell's tiers (ADR 0037 rule 8). */
   settings: z.record(z.string(), settingTiersSchema),
   /** Every roster fan's calc on this network, in roster order. No group pressure and no owner exist beside them (invariant 6). */
@@ -145,7 +144,7 @@ export const ductsPricingData = z.object({
     equipmentFlows: record(equipmentFlow),
     roles: record(
       z.object({
-        role: z.enum(["fan", "passive"]),
+        role: z.enum(DUCT_UNIT_ROLES),
         why: z.enum(["ruled", "edit", "proposed"]),
         reason: z.string(),
       }),

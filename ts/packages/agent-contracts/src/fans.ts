@@ -1,15 +1,13 @@
 /** /fans Work (FANSPLIT, routes LEDGER 2026-11-03): the fan-side cells, split out of the ducts Work. */
 import { z } from "zod";
-import { decode, subjectRefCodeSchema } from "./subject-ref.ts";
 import type { Immutable } from "./route-kernel-data.ts";
-import { ductCalculationSchema } from "./ducts.ts";
+import { ductCalculationSchema } from "./duct-calculation.ts";
 import { draftCellSchema } from "./draft.ts";
 import type { RouteStateSpec } from "./route-state.ts";
 import { FAN_CELLS } from "./fans-inputs.ts";
 import { schemaOf, type Domain } from "./slots/sheet.ts";
-const elementSubjectSchema: z.ZodType<string> = subjectRefCodeSchema.refine(code => {
-  const ref = decode(code); return ref.ok && ref.value.keyKind === "UniqueId";
-});
+import { elementSubjectSchema } from "./duct-inputs.ts";
+export { DUCT_UNIT_ROLES } from "./duct-inputs.ts";
 
 const dropSchema = z.strictObject({
   inWg: schemaOf(FAN_CELLS.terminalDrops.domain.fields.inWg),
@@ -17,13 +15,12 @@ const dropSchema = z.strictObject({
   source: z.string().optional(),
 });
 export type DuctDrop = z.infer<typeof dropSchema>;
-export const DUCT_UNIT_ROLES = ["fan", "passive"] as const;
 /** Whether an air mover moves air (`fan`) or only sits in the path with a loss (`passive`). */
 export type DuctUnitRole = z.infer<ReturnType<typeof schemaOf<typeof FAN_CELLS.roles.domain>>>;
 /** One Work segment of a table row: a staged cell per element, decoded by the row's own domain. */
 const cells = <const D extends Domain>(row: { readonly domain: D }) => z.record(elementSubjectSchema, draftCellSchema(schemaOf(row.domain))).default({});
 /** Stated airflow in CFM; the cell's ref cites its evidence. */
-export type DuctFlow = number;
+export type { DuctFlow } from "./duct-inputs.ts";
 
 export const fansDocumentSchema = z.strictObject({
   /** Authored scope for the fan walk's loss preview and apply; never a native request. */

@@ -5,7 +5,7 @@
  * terminal takes the first in calc order, which only selects which path lights up.
  */
 import type { DuctsPriceRow, FanClaim } from "@pe/agent-contracts";
-import type { Leg, Sheet } from "./sheet/types.ts";
+import type { Leg, Sheet } from "../../agent-contracts/src/fan-calc.ts";
 
 /** A fan calc as it crosses the wire: the domain `Sheet` with the wire claim, never the mint's brand. */
 export type Calc = Omit<Sheet, "claim"> & { claim: FanClaim };

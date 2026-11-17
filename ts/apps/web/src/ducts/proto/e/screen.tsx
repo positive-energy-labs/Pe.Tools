@@ -5,7 +5,7 @@ import {
   SubjectPopoverContent as PopoverContent,
 } from "@pe/kit/lang/popover";
 import { useRouteSearchSlice } from "#/route/activity";
-import { fansLink } from "../../../fans/route.ts";
+import { fansLink } from "../../../fans/link.ts";
 import { useHoveredIssue } from "#/attention";
 import { ductElements } from "../../identity.ts";
 import { subscribe as knobsChanged } from "#/knobs/knobs";

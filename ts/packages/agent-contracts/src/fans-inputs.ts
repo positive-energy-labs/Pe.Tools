@@ -8,7 +8,6 @@ import { DUCT_UNIT_KINDS, FAN_BLOCKER_KINDS } from "@pe/host-contracts/generated
 import { z } from "zod";
 import { VALUE_SOURCES } from "./work-value.ts";
 import { schemaOf } from "./slots/sheet.ts";
-import type { DuctsCriteriaLayer } from "./ducts-sheet.ts";
 
 export type FanRef = { unitId: number; portIndex: number };
 export type FanInputRow<T> = {
@@ -121,20 +120,8 @@ export const setAsideRowSchema = z.strictObject({ work: z.enum(["fans", "ducts"]
 
 const numberDomain = (unit: string) => ({ kind: "number", min: 0, unit } as const);
 const inWg = { kind: "object", fields: { inWg: numberDomain("in-wg") } } as const;
-const criterion = <const L extends readonly [keyof DuctsCriteriaLayer, ("supply" | "return")?], const D extends Domain>(layer: L, domain: D) =>
-  ({ layer, domain, value: schemaOf(domain), unit: domain.kind === "number" ? domain.unit : undefined });
-const splitPolicy = z.enum(["even", "proportional"]);
-/** Criteria cell locators and domains feed the same input table as the fan cells. */
-export const FAN_CRITERIA_CELLS = {
-  velocitySupplyFpm: criterion(["velocityLimitFpm", "supply"], { kind: "number", exclusiveMin: 0, unit: "fpm" }),
-  velocityReturnFpm: criterion(["velocityLimitFpm", "return"], { kind: "number", exclusiveMin: 0, unit: "fpm" }),
-  terminalDropInWg: criterion(["terminalDropInWg"], { kind: "number", min: 0, unit: "in-wg" }),
-  autoJoinGapIn: criterion(["autoJoinGapIn"], { kind: "number", min: 0, unit: "in" }),
-  healBoxIn: criterion(["healBoxIn"], { kind: "number", min: 0, unit: "in" }),
-  splitPolicy: criterion(["splitPolicy"], { kind: "enum", shape: splitPolicy, choices: ["even", "proportional"].map(value => ({ value, label: value })) }),
-  allowanceSupplyInWg: criterion(["allowanceInWg", "supply"], { kind: "number", min: 0, unit: "in-wg" }),
-  allowanceReturnInWg: criterion(["allowanceInWg", "return"], { kind: "number", min: 0, unit: "in-wg" }),
-};
+import { DUCTS_CRITERIA_CELLS as FAN_CRITERIA_CELLS, DUCT_PARAMETER_KEYS, DUCT_UNIT_ROLES } from "./duct-inputs.ts";
+export { DUCTS_CRITERIA_CELLS as FAN_CRITERIA_CELLS } from "./duct-inputs.ts";
 const row = <const R extends Omit<FanInputRow<unknown>, "accepts" | "layers">>(definition: R) => ({
   ...definition, layers: VALUE_SOURCES,
   accepts: (value: unknown): value is unknown => schemaOf(definition.domain).safeParse(value).success,
@@ -152,7 +139,7 @@ export const FAN_CELLS = {
   flows: input("flows", "terminal", "flows", "terminalFlow", numberDomain("cfm")),
   terminalDrops: input("terminalDrops", "terminal", "terminalDrops", "terminalDrop", inWg),
   componentDrops: input("componentDrops", "component", "componentDrops", "componentDrop", inWg),
-  roles: row({ name: "roles", role: "input", on: "fan", domain: { kind: "object", fields: { role: { kind: "enum", shape: z.enum(["fan", "passive"]), choices: ["fan", "passive"].map(value => ({ value, label: value })) } } }, home: "Work", owner: "fans", segment: "roles", parameter: null, write: "never" }),
+  roles: row({ name: "roles", role: "input", on: "fan", domain: { kind: "object", fields: { role: { kind: "enum", shape: z.enum(DUCT_UNIT_ROLES), choices: DUCT_UNIT_ROLES.map(value => ({ value, label: value })) } } }, home: "Work", owner: "fans", segment: "roles", parameter: null, write: "never" }),
 };
 /** Phase 2 keeps metadata beside its existing consumer; phase 4 moves this single table to fans/contract. */
 export const FAN_INPUTS = [
@@ -168,4 +155,4 @@ export const fanInputRows = (rows: readonly FanInputRow<unknown>[] = FAN_INPUTS)
 export const fanWriteRows = (rows: readonly FanInputRow<unknown>[] = FAN_INPUTS) => rows.filter(r => r.write === "stated-only" && r.segment !== null);
 export const fanBindingRows = (rows: readonly FanInputRow<unknown>[] = FAN_INPUTS) => rows.filter(r => r.segment !== null);
 export const fanInputShape = (rows: readonly FanInputRow<unknown>[] = FAN_INPUTS) => Object.fromEntries(fanBindingRows(rows).map(r => [r.name, schemaOf(r.domain)]));
-export const FAN_PARAMETER_KEYS = [...new Set(FAN_INPUTS.flatMap(r => r.parameter === null ? [] : [r.parameter]))];
+export const FAN_PARAMETER_KEYS = DUCT_PARAMETER_KEYS;
