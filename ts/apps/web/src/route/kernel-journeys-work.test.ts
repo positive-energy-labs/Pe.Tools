@@ -509,7 +509,7 @@ test("JW1 edit typed flows and race two atomic HTTP writes at the accepted revis
           label: `Set both flows to ${cfm}`,
           patches: [terminalA, terminalB].map((id) => ({
             path: ["flows", id, "edit"],
-            value: { value: { cfm } },
+            value: { value: cfm },
           })),
         }),
       ),
@@ -960,7 +960,7 @@ test.each(["accepted", "refused"] as const)("JZ audit member switch keeps a late
     expect(m.owner()!.handle).toEqual(handle);
     expect(m.problem()).toBeNull();
     expect(m.pendingEdits().some(intent => intent.label === "Member A delayed edit")).toBe(false);
-    await vi.waitFor(() => expect(inspectorA.owner()!.doc.flows[terminalA].edit.value).toEqual({ cfm: outcome === "accepted" ? 210 : 700 }));
+    await vi.waitFor(() => expect(inspectorA.owner()!.doc.flows[terminalA].edit.value).toEqual(outcome === "accepted" ? 210 : 700));
   } finally { held?.release.resolve(); await j.close(); }
 }, 60_000);
 

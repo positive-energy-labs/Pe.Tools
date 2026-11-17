@@ -16,10 +16,11 @@ test("Initialize plan names the host reading's missing shared parameters before 
     await j.ready();
     const owner = j.mount.owner();
     if (!owner?.handle) throw Error("Expected initialized Takeoffs Work");
+    const revision = owner.handle.revision;
     await withInvocationContext({ caller: { kind: "human", via: "local" } }, () => j.host.workspace.publish(j.key, "takeoffs", [{
       path: ["writeIntent", "takeoffs.initialize"],
       value: { edit: { value: { stage: "Adoption" } } },
-    }], owner.handle.revision));
+    }], revision));
     await j.ready();
     await planned(j.mount.verb("initialize")).plan();
     const review = planned(j.mount.verb("initialize")).read();
