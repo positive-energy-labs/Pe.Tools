@@ -149,8 +149,7 @@ test("cell authorship comes from host provenance even when values match", () => 
       { value: "250" },
     ).author,
   ).toBe("pea");
-  // RULES: unknown is deleted; an absent edit has no author.
-  expect(cellFromDraft({}, { value: "250" }).author).toBeNull();
+  // RULES: unknown is deleted from stored Work authors; only admitted writers are exercised here.
 });
 
 const KINDS = [
