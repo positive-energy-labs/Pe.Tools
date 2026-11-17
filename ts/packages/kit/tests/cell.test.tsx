@@ -149,9 +149,8 @@ test("cell authorship comes from host provenance even when values match", () => 
       { value: "250" },
     ).author,
   ).toBe("pea");
-  expect(cellFromDraft({ edit: { ...same, by: "unknown" } }, { value: "250" }).author).toBe(
-    "unknown",
-  );
+  // RULES: unknown is deleted; an absent edit has no author.
+  expect(cellFromDraft({}, { value: "250" }).author).toBeNull();
 });
 
 const KINDS = [
