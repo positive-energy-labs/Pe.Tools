@@ -1,10 +1,12 @@
 import { expect, it } from "vite-plus/test";
+import { resolveValue } from "@pe/agent-contracts/work-value";
 import {
   ENCOUNTERS,
   backflowId,
   claimOf,
   encountersOf,
   hostStatic,
+  pricesBeyond,
   type ClaimFacts,
   type HostCalc,
 } from "./encounters.ts";
@@ -104,9 +106,28 @@ it("an unruled encounter never reads complete: backflow is a boundary with its e
   expect(claimOf(facts({ blockingIds: ["no-flow:90"] })).kind).toBe("incomplete");
 });
 
-it("H5: the host static is its calc's cumulative loss to the tie-in, and only a complete calc at this basis answers", () => {
+it("H5 clause 1: rated pressure remaining at N", () => {
   const e = encountersOf(SELF, paths, legs)[0]!.encounter;
-  expect(hostStatic(host(), e, "n")).toEqual({ inWg: 0.3, basis: "hb" });
+  // Clause 1: rated 1.2 - upstream 0.3 = 0.9 (old 0.3).
+  expect(hostStatic(host({ esp: { rated: resolveValue({ model: { value: 1.2, author: null, ref: "rated" } }) } }), e, "n"))
+    .toMatchObject({ inWg: expect.closeTo(0.9), basis: "hb", source: "host rated ESP minus loss to tie-in" });
+});
+
+it("H5 clause 2: missing rating assumes the host is balanced", () => {
+  const e = encountersOf(SELF, paths, legs)[0]!.encounter;
+  // Clause 2: required 1.0 - upstream 0.3 = 0.7 (old 0.3); warning, never a coverage gap.
+  expect(hostStatic(host(), e, "n")).toEqual({ inWg: 0.7, basis: "hb", source: "host required ESP minus loss to tie-in; assumes the host is balanced" });
+});
+
+it("H5 clause 5: a rating below required ESP is backflow/deadhead", () => {
+  const e = encountersOf(SELF, paths, legs)[0]!.encounter;
+  // Clause 5: rated 0.8 < required 1.0, so no pressure can authorize a write.
+  expect(hostStatic(host({ esp: { rated: resolveValue({ model: { value: 0.8, author: null, ref: "rated" } }) } }), e, "n"))
+    .toMatchObject({ kind: "backflow", detail: expect.stringContaining("backflow/deadhead") });
+});
+
+it("H5: only a complete host at this basis answers", () => {
+  const e = encountersOf(SELF, paths, legs)[0]!.encounter;
   const gap = (h: Parameters<typeof hostStatic>[0]) => hostStatic(h, e, "n");
   expect(gap("absent")).toMatchObject({ kind: "host-calc", elementId: 20 });
   expect(gap("cycle")).toMatchObject({ kind: "cycle" });
@@ -126,12 +147,12 @@ it("a positive tie-in static is added once, on its own path; an accepted tie-in 
     coverage: [{ kind: "host-calc", elementId: 20 }],
   });
   const met = accepted();
-  met[0]!.encounter.static = { kind: "host-calc", basis: "hb", inWg: 0.3, source: "host" };
-  // Worst supply is the tie-in path 0.15 + 0.3 once; return 0.2; allowances 0.03.
+  met[0]!.encounter.static = { kind: "host-calc", basis: "hb", inWg: 0.7, source: "host" };
+  // Clause 2: 0.15 + (1 - 0.3) + 0.2 + 0.03 = 1.08 (old 0.68).
   expect(claimOf(facts({ met }))).toEqual({
     kind: "complete",
     basis: "b",
-    requiredEspInWg: 0.68,
+    requiredEspInWg: 1.08,
     coverage: [],
     blockingIds: [],
   });
@@ -141,6 +162,21 @@ it("a positive tie-in static is added once, on its own path; an accepted tie-in 
   expect(claimOf(facts({ met: refused })).kind).toBe("incomplete");
 });
 
+it("H5 clause 3: a priced run beyond N pays the downstream loss once", () => {
+  const sharedLegs = { ...legs, downstream: leg("downstream", 50, 0.4) };
+  const sharedPaths = [path("supply", ["a", "tie", "downstream"], 0.55), tieIn, paths[2]!];
+  const met = encountersOf(SELF, sharedPaths, sharedLegs, [
+    { at: { elementId: 20, connector: 2 }, verdict: "accepted", by: "human", ref: "work:test" },
+  ]);
+  met[0]!.encounter.static = { kind: "host-calc", basis: "hb", inWg: 0.7, source: "host" };
+  // 0.55 full supply + 0.2 return + 0.03 allowances = 0.78; no extra 0.7 at N.
+  expect(claimOf(facts({ paths: sharedPaths, legs: sharedLegs, met })))
+    .toMatchObject({ kind: "complete", requiredEspInWg: 0.78 });
+  // An unpriced onward run or a different branch is not evidence that N onward was paid.
+  expect(pricesBeyond(met[0]!, sharedPaths, { ...sharedLegs, downstream: leg("downstream", 50, null) })).toBe(false);
+  expect(pricesBeyond(met[0]!, [{ ...sharedPaths[0]!, legIds: ["r", "tie", "downstream"] }, ...sharedPaths.slice(1)], sharedLegs)).toBe(false);
+});
+
 it("a return tie-in takes no credit and adds nothing", () => {
   const onReturn = [
     path("supply", ["a"], 0.1),
@@ -148,6 +184,7 @@ it("a return tie-in takes no credit and adds nothing", () => {
   ];
   const met = encountersOf(SELF, onReturn, legs);
   expect(met[0]!.encounter).toMatchObject({ side: "return", verdict: "accepted", static: { kind: "none" } });
+  // Clause 4: 0.1 supply + 0.2 return + 0.03 allowances + 0 host pressure = 0.33.
   expect(claimOf(facts({ paths: onReturn, met }))).toMatchObject({ kind: "complete", requiredEspInWg: 0.33 });
 });
 

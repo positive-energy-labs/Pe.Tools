@@ -7,6 +7,8 @@ import { inputsFor, TEST_FIRM, TEST_SLOTS, TEST_WALK } from "./test-inputs.ts";
  */
 import { existsSync, readFileSync } from "node:fs";
 import { expect, it } from "vite-plus/test";
+import { resolveValue } from "@pe/agent-contracts/work-value";
+import { mintWriteRequest } from "./write-request.ts";
 
 import { lookupGrid } from "@pe/ducts-domain/loss-grid";
 import { friction, roundSection } from "@pe/ducts-domain/loss-physics";
@@ -1605,7 +1607,7 @@ it("H5 through two real calcs: a guest discharging into a host's supply trunk is
       kind: "incomplete",
       coverage: [{ kind: "cycle" }],
     });
-  // A complete host calc at this read's basis answers: its loss to the tee (duct 20) is added once.
+  // A complete host answers, but this walk already prices beyond N, so H5 adds zero.
   const complete = {
     kind: "complete",
     basis: host.basis,
@@ -1624,7 +1626,7 @@ it("H5 through two real calcs: a guest discharging into a host's supply trunk is
       hosts: new Map([["200:0", { ...host, claim: complete, network }]]),
     });
   const answered = withHost(host.network);
-  const tieIn = host.legs["20:0>1"]!.lossInWg!;
+  const tieIn = 0; // Old add-on: host.legs["20:0>1"].lossInWg (spent upstream loss).
   expect(answered.encounters[0]!.static).toMatchObject({
     kind: "host-calc",
     basis: host.basis,
@@ -1641,6 +1643,21 @@ it("H5 through two real calcs: a guest discharging into a host's supply trunk is
   });
   // Backflow stays on the calc as an error after the ruling, no longer blocking.
   expect(answered.issues.find((i) => i.kind === "backflow")).toMatchObject({ severity: "warning" });
+  expect(answered.blockers.find((b) => b.kind === "backflow")!.detail).toContain("assumes the host is balanced");
+  // Clause 5: rated 0.8 < required 1.0: acceptance cannot complete or mint a write.
+  const deadhead = buildCalc({
+    snapshot: snap, fan: { unitId: 300, portIndex: 0 }, roster, grids, inputs,
+    encounterRulings: [{ at: mine, verdict: "accepted", by: "human", ref: "work:test" }],
+    hosts: new Map([["200:0", { ...host, claim: complete, esp: {
+      rated: resolveValue({ model: { value: 0.8, author: null, ref: "rated" } }),
+    } }]]),
+  });
+  expect(deadhead.claim).toMatchObject({ kind: "incomplete", blockingIds: ["backflow:40:0"] });
+  expect(deadhead.issues.find((i) => i.kind === "backflow")).toMatchObject({ severity: "blocking" });
+  expect(deadhead.blockers.find((b) => b.kind === "backflow")!.detail).toContain("backflow/deadhead");
+  expect(deadhead.totals.requiredEspInWg).toBeNull();
+  // The capability check runs before the input/context; no mint can reach native preview.
+  expect(() => mintWriteRequest(deadhead.claim as never, deadhead, {} as never, {} as never)).toThrow("complete claim");
   expect(withHost("stale").claim).toMatchObject({
     kind: "incomplete",
     coverage: [{ kind: "host-calc", ref: "host 200:0 calc is at a stale basis" }],
