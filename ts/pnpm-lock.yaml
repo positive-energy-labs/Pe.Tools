@@ -661,6 +661,9 @@ importers:
       '@pe/browser':
         specifier: workspace:*
         version: link:../browser
+      '@pe/ducts-contract':
+        specifier: workspace:*
+        version: link:../../products/ducts/contract
       '@pe/ducts-domain':
         specifier: workspace:*
         version: link:../../products/ducts/domain
