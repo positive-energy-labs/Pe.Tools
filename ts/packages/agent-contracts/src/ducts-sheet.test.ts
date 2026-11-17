@@ -113,8 +113,8 @@ it("a resolved wire value agrees with its status, as the kernel resolution does 
     { ...base, status: "valid", value: 100, source: "Work", author: "pea", ref: "work:fans/flows/k" },
     { ...base, status: "invalid", value: null, source: "Work", author: null, ref: "work:fans/flows/k" },
     { ...base, status: "missing", value: null, source: "none", author: null, ref: null },
-    // The one admitted departure from the kernel union: the engine's "where it looked" ref on a missing value.
-    { ...base, status: "missing", value: null, source: "none", author: null, ref: "family placeholder 1 on 2" },
+    // A refused model value (a family placeholder) is invalid from the model, citing why.
+    { ...base, status: "invalid", value: null, source: "model", author: null, ref: "family placeholder 1 on 2" },
   ];
   const bad = [
     { ...base, status: "valid", value: 100, source: "none", author: null, ref: null },
@@ -122,6 +122,8 @@ it("a resolved wire value agrees with its status, as the kernel resolution does 
     { ...base, status: "valid", value: null, source: "model", author: null, ref: "model:7/Flow" },
     { ...base, status: "invalid", value: 100, source: "model", author: null, ref: "model:7/Flow" },
     { ...base, status: "missing", value: null, source: "firm", author: null, ref: "firm:x" },
+    // P-041: the wire is the kernel union, so a missing value carries no ref.
+    { ...base, status: "missing", value: null, source: "none", author: null, ref: "family placeholder 1 on 2" },
     { ...base, status: "valid", value: 100, source: "model", author: null, ref: " " },
   ];
   expect(ok.map(v => cfm.safeParse(v).success)).toEqual(ok.map(() => true));

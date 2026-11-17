@@ -509,9 +509,10 @@ it.skipIf(!existsSync(CHADDS))(
       ).toEqual(
         Array.from({ length: n }, () => ({
           value: null,
-          source: "none",
+          // A refused model value is the kernel's invalid from the model, never a missing value with a ref (P-041).
+          source: "model",
           units: "in-wg",
-          status: "missing",
+          status: "invalid",
           version: null,
           author: null,
           ref: `family placeholder 1 on ${n}`,

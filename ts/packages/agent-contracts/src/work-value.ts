@@ -30,8 +30,10 @@ const ref = z.string().min(1).refine(value => value.trim().length > 0, "evidence
 const version = z.union([z.string(), z.number().finite()]).nullable();
 const provenance = { source: z.enum(VALUE_SOURCES), author: authorSchema.nullable(), ref, version };
 /** Work/run valid values require a known caller; invalid winning layers never become fallback. */
+export const validValueSchema = <T extends z.ZodType>(value: T) =>
+  z.strictObject({ status: z.literal("valid"), value, ...provenance, units: z.string().nullable() });
 export const valueResolutionSchema = <T extends z.ZodType>(value: T) => z.discriminatedUnion("status", [
-  z.strictObject({ status: z.literal("valid"), value, ...provenance, units: z.string().nullable() }),
+  validValueSchema(value),
   z.strictObject({ status: z.literal("invalid"), value: z.null(), ...provenance, units: z.string().nullable() }),
   z.strictObject({ status: z.literal("missing"), value: z.null(), source: z.literal("none"), author: z.null(), ref: z.null(), version: z.null(), units: z.string().nullable() }),
 ]).refine(v => v.status !== "valid" || (v.source !== "Work" && v.source !== "run") || v.author === "human" || v.author === "pea", "valid Work/run values require a known caller");
