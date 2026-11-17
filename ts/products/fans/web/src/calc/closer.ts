@@ -180,6 +180,7 @@ function describeBase(blocker: CalcBlocker, typed: number | null, context: Close
     action,
   });
   const fix = context.fix?.(blocker) ?? null;
+  if (blocker.kind === "backflow" && fix?.kind === "none") return refuse("correct host pressure", fix.reason);
   if (fix?.kind === "encounter") return live("rule encounter", {
     kind: "encounter", key: `encounter:${fix.encounter.elementId}:${fix.encounter.connector}`,
   });

@@ -1953,7 +1953,7 @@ function buildCalcPass(input: BuildCalcInput, assumeHeals: boolean): Calc {
         owner: m.encounter.host,
         detail: `${g.name(unit.id)} discharges into the positive-pressure duct of fan ${tagOf(m.encounter.host.unitId) || g.name(m.encounter.host.unitId)} at ${g.name(m.encounter.elementId)}${reason ? `; ${reason}` : ""}`,
         effectInWg: m.encounter.static.kind === "host-calc" ? m.encounter.static.inWg : null,
-        closer: { kind: "ruling", note: "rule this tie-in accepted or refused" },
+        closer: { kind: "ruling", note: deadheads.get(backflowId(m.encounter)) ?? "rule this tie-in accepted or refused" },
       });
   }
   // Q4 (implementor default 2026-11-16, queued to the owner): a family direction the network reads the
