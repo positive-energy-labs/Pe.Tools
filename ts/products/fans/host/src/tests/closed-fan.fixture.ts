@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { connOf, ductOf, factOf, groupOf, nodeOf, round, slots, snapshotOf, uniqueIdOf } from "@pe/ducts-domain/test-snapshot";
-import { TEST_WALK } from "@pe/fans-domain/calc/test-inputs";
+import { TEST_WALK } from "@pe/ducts-domain/test-inputs";
 
 export const CLOSED_AT = "2026-11-16T00:00:00Z";
 /** The recorded loss tables, as the native `ducts.tables` read answers them. */

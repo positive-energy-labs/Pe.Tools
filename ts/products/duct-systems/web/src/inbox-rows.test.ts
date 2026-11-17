@@ -19,7 +19,7 @@ import {
   issueAt,
   inboxRows,
   type TriageInput,
-} from "@pe/duct-systems-web/inbox-rows";
+} from "./inbox-rows.ts";
 
 const node = (id: number, kind: Node["kind"], groupId: string | null) =>
   nodeOf(id, kind, { groupId });

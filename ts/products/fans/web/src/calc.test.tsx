@@ -7,7 +7,6 @@ import { elementSubject } from "@pe/ducts-domain/work-subject";
 import { makeAtomRegistry } from "../../../../apps/web/src/shell/owner.ts";
 import { SheetPane } from "../../../../apps/web/src/route/slots/sheet/pane.tsx";
 import { sheetCells } from "../../../../apps/web/src/route/slots/sheet/index.ts";
-import { designCalc } from "@pe/duct-systems-web/design-calc";
 import { ENGINE_DEFAULT_NO_SHARED_ROOT, NO_SHARED_ROOT } from "@pe/agent-contracts/setting-owners";
 import { fansCalc } from "./calc.ts";
 
@@ -17,7 +16,7 @@ import { fansCalc } from "./calc.ts";
  */
 afterEach(cleanup);
 
-test("/fans stages no /ducts Work, and /ducts' sheet stages its criteria", () => {
+test("Fans bindings stage only Fans Work", () => {
   const fansKeys = Object.keys(fansDocumentSchema.shape), ductsKeys = Object.keys(ductsDocumentSchema.shape);
   // Every Fans binding addresses a Fans Work key that /ducts does not own.
   // A `setting` binding stages no Work at all: it saves at a home tier (slice 6b).
@@ -27,12 +26,7 @@ test("/fans stages no /ducts Work, and /ducts' sheet stages its criteria", () =>
     expect(fansKeys, binding).toContain(binding);
     expect(binding === "writeIntent" || !ductsKeys.includes(binding), binding).toBe(true);
   }
-  // /ducts' sheet stages its criteria (a row per cell) and the design friction rate, in /ducts Work.
-  expect(staged(designCalc).map(name => name.split(".")[0]).every(name => name === "criteria")).toBe(true);
-  for (const binding of staged(designCalc)) expect(ductsKeys).toContain(binding.split(".")[0]);
-  const rows = sheetCells(designCalc, { rows: [], work: { criteria: { velocitySupplyFpm: { edit: { value: 850, by: "human" } } } }, model: [], read: null });
-  expect(rows.find((c) => c.binding === "criteria.velocitySupplyFpm")).toMatchObject({ value: 850, source: "work", label: "Velocity limit supply" });
-  expect(rows.find((c) => c.binding === "setting.ducts.designFriction")).toMatchObject({ value: 0.08, source: "default", unit: "in-wg/100 ft" });
+
 });
 
 const handle = (value: object, stage = vi.fn(async () => null)) => ({
@@ -82,19 +76,9 @@ test("F6 a staged unit role draws its option label with its author, never its ob
  * line is drawn. /ducts on the cell, /fans on its line from the /ducts design.
  */
 const refused = { refused: "no-shared-root" } as const;
-const paneOf = (slot: typeof designCalc | typeof fansCalc, read: object) =>
+const paneOf = (slot: typeof fansCalc, read: object) =>
   render(<RegistryContext value={makeAtomRegistry()}><SheetPane ctx={{ draw: { cells: { doc: {}, at: () => handle({}) }, page: { read: () => ({}) }, verb: () => ({ run: async () => null, refusal: null }),
     value: { state: "ready", value: read } } as never, slot: slot as never }} /></RegistryContext>);
-
-test("/ducts with no shared root: a firm criterion is the engine default, and the fix line is drawn", () => {
-  const firmCell = { value: 900, source: "firm", units: "fpm" };
-  const read = { criteria: { velocityLimitFpm: { supply: firmCell, return: firmCell } }, firm: refused };
-  const cell = sheetCells(designCalc, { rows: [], work: {}, model: [], read }).find((c) => c.binding === "criteria.velocitySupplyFpm");
-  expect(cell).toMatchObject({ value: 900, source: "default", ref: ENGINE_DEFAULT_NO_SHARED_ROOT });
-  const pane = paneOf(designCalc, read).container;
-  expect(pane.querySelector('[data-sheet-address="criteria.velocitySupplyFpm"]')!.textContent).toContain(ENGINE_DEFAULT_NO_SHARED_ROOT);
-  expect(pane.querySelector("[data-sheet-from]")!.textContent).toBe(NO_SHARED_ROOT);
-});
 
 test("/fans with no shared root: its line from the /ducts design says the engine default and draws the fix line", () => {
   const read = { ductSystemsRevision: 3, calcSnapshot: { ...snapshot, systems: [] }, calcView: { inputs: null, firm: refused }, fans: { slots: [] } };

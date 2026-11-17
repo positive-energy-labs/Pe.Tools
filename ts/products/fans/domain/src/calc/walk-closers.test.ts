@@ -1,8 +1,8 @@
-import { inputsFor } from "./test-inputs.ts";
+import { inputsFor } from "@pe/ducts-domain/test-inputs";
 import { expect, it } from "vite-plus/test";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { buildChain } from "./build.ts";
-import { withHealth } from "./health.fixture.ts";
+import { withHealth } from "@pe/ducts-domain/health.fixture";
 import { graphOf, walkFrom } from "./walk.ts";
 
 type Connector = DuctSnapshot["nodes"][number]["connectors"][number];

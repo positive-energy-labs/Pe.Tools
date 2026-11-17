@@ -17,13 +17,13 @@ import { RouteWorkspace } from "@pe/runtime";
 import { nodeOf } from "@pe/ducts-domain/test-snapshot";
 import { expect, test } from "vite-plus/test";
 import { fileRouteDocumentStore } from "../../../../../apps/host/src/route-document-store.ts";
-import { editPatches, workLayer } from "../ducts-inputs.ts";
+import { editPatches, workLayer } from "@pe/ducts-host/ducts-inputs";
 import { criteriaLayer } from "@pe/agent-contracts";
 import { resolveInputs, type WorkLayer } from "@pe/fans-domain/calc/index";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
-import { TEST_FIRM } from "@pe/fans-domain/calc/test-inputs";
+import { TEST_FIRM } from "@pe/ducts-domain/test-inputs";
 import { fanWriteCells } from "@pe/ducts-domain/staged";
-import { snapshot } from "@pe/ducts-web/test-fixture";
+import { snapshot } from "@pe/ducts-domain/test-fixture";
 
 test("joined Fans edits reach the input layer", () => {
   const fans = fansDocumentSchema.parse({

@@ -1,6 +1,6 @@
 import { expect, test } from "vite-plus/test";
-import { buildCalc } from "@pe/fans-domain/calc/index";
-import { inputsFor, TEST_WALK, withFamilyFlipped } from "@pe/fans-domain/calc/test-inputs";
+import { publishedCalc } from "@pe/ducts-domain/published-calcs.fixture";
+import { inputsFor, TEST_WALK, withFamilyFlipped } from "@pe/ducts-domain/test-inputs";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import { VOCABULARY } from "@pe/ducts-domain/calc/scoped-snapshot";
 import type { FanPort } from "@pe/ducts-domain/roster";
@@ -15,8 +15,8 @@ import {
 } from "@pe/ducts-domain/test-snapshot";
 import { buildCalcTree, type CalcTreeNode } from "./calc-model.ts";
 import type { TreeNode } from "./model.ts";
-import retained from "@pe/fans-domain/calc/fixtures/manual-d-20261102.json" with { type: "json" };
-import tables from "@pe/fans-domain/calc/fixtures/manual-d-tables.json" with { type: "json" };
+import retained from "@pe/ducts-domain/fixtures/manual-d-20261102.json" with { type: "json" };
+import tables from "@pe/ducts-domain/fixtures/manual-d-tables.json" with { type: "json" };
 import { calcSnapshot } from "@pe/ducts-domain/calc/scoped-snapshot";
 import { suggestRoster } from "@pe/ducts-domain/roster";
 import { toGrids } from "@pe/ducts-domain/loss-grid";
@@ -88,7 +88,7 @@ function example(shared = false) {
   });
   return {
     snapshot,
-    sheets: roster.map((fan) => buildCalc({ snapshot, roster, fan, grids: {}, inputs })),
+    sheets: roster.map((fan) => publishedCalc({ snapshot, roster, fan, grids: {}, inputs })),
   };
 }
 const flatten = (nodes: readonly CalcTreeNode[]): CalcTreeNode[] =>
@@ -212,7 +212,7 @@ test("retained Manual D geometry: fan boundaries and a sibling's shared intake s
   const roster = [...suggested.fans, ...suggested.suggestions];
   const grids = toGrids({ tables });
   const sheets = [14577391, 13760867, 6104810].map((unitId) =>
-    buildCalc({
+    publishedCalc({
       snapshot,
       roster,
       grids,

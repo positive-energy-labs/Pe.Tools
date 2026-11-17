@@ -11,11 +11,11 @@ import { expect, it } from "vite-plus/test";
 import { type DuctsDesign } from "@pe/agent-contracts";
 
 import { axisOf, inferJoints, tolerate, MISSED_JOIN_MAX_IN } from "./proximity.ts";
-import { withHealth } from "@pe/fans-domain/calc/health.fixture";
+import { withHealth } from "./health.fixture.ts";
 import { survey } from "./survey.ts";
 import { groupTree } from "./topology.ts";
 import type { DuctSnapshot } from "./types.ts";
-import { TEST_SLOTS } from "@pe/fans-domain/calc/test-inputs";
+import { TEST_SLOTS } from "./test-inputs.ts";
 import { VOCABULARY } from "./calc/scoped-snapshot.ts";
 
 type Node = DuctSnapshot["nodes"][number];

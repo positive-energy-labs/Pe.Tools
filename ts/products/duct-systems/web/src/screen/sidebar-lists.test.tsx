@@ -12,7 +12,7 @@ import { TestAttention, eKey } from "../../../../../apps/web/src/test-attention.
 import { hovered } from "@pe/kit/lang/attention";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import type { Priced } from "@pe/ducts-web/priced";
-import { calcOf, legOf, pricedOf } from "../calcs.test-support.ts";
+import { calcOf, legOf, pricedOf } from "@pe/ducts-web/calcs.test-support";
 import { NativeObservationScope } from "../../../../../apps/web/src/revit/observation.tsx";
 import type { TreeNode } from "../network/model.ts";
 import { SystemTree, type TreeCtx } from "./tree-sidebar.tsx";

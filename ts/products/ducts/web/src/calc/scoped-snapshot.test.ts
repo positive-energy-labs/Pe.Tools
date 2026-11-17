@@ -2,7 +2,7 @@
 import { expect, it } from "vite-plus/test";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import { fansCalcData } from "@pe/agent-contracts";
-import { snapshot as networkSnapshot } from "../test-fixture.ts";
+import { snapshot as networkSnapshot } from "@pe/ducts-domain/test-fixture";
 import { indexOf, sceneOf } from "../scene.ts";
 import { EMPTY_SNAPSHOT, CALC_GROUP, calcSnapshot, calcSystems } from "./scoped-snapshot.ts";
 

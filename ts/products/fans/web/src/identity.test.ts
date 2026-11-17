@@ -1,10 +1,10 @@
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { createWitness } from "./cutover.test-support.ts";
-import { admit } from "./admission.fixture.ts";
+import { createWitness } from "@pe/fans-web/cutover.test-support";
+import { admit } from "@pe/fans-web/admission.fixture";
 import { stableFanKey } from "@pe/ducts-web/calc/model";
 import { decode, uniqueIdSchema } from "@pe/agent-contracts/subject-ref";
 import { workFeedFailureMessage } from "../../../../packages/agent-contracts/src/work-journal-door.ts";
-import fixture from "./calc/calc.fixture.json";
+import fixture from "@pe/ducts-web/fixtures/fan-sheet.json";
 const closes: (() => void)[] = [];
 afterEach(() =>
   closes

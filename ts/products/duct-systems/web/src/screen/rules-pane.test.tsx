@@ -4,7 +4,7 @@ import { designOf } from "@pe/ducts-domain/test-design";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import type { Priced } from "@pe/ducts-web/priced";
-import { calcOf, legOf } from "../calcs.test-support.ts";
+import { calcOf, legOf } from "@pe/ducts-web/calcs.test-support";
 import { nodeOf, snapshotOf } from "@pe/ducts-domain/test-snapshot";
 import { RulesTree } from "./rules-pane.tsx";
 

@@ -1,10 +1,10 @@
 import { expect, test } from "vite-plus/test";
 import { readFileSync } from "node:fs";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
-import { syntheticSnapshot } from "./test-fixture.ts";
+import { syntheticSnapshot } from "@pe/ducts-domain/test-fixture";
 import { indexOf, sceneOf, subjectScene } from "./scene.ts";
 import { legsOf } from "./legs.ts";
-import { calcOf, calcsOf, legOf, withFan } from "@pe/duct-systems-web/calcs.test-support";
+import { calcOf, calcsOf, legOf, withFan } from "./calcs.test-support.ts";
 
 test("both Scene builders retain stub connector facts without admitting stubs to subject annotations", () => {
   const raw = syntheticSnapshot();

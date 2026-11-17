@@ -1,5 +1,5 @@
 import { fittingPricingSchema } from "@pe/agent-contracts";
-import { inputsFor, TEST_WALK } from "./test-inputs.ts";
+import { inputsFor, TEST_WALK } from "@pe/ducts-domain/test-inputs";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { expect, it } from "vite-plus/test";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
@@ -14,8 +14,8 @@ import {
 } from "@pe/ducts-domain/test-snapshot";
 import { friction, roundSection } from "@pe/ducts-domain/loss-physics";
 import { buildCalc } from "./build.ts";
-import { grids } from "./tables.fixture.ts";
-import { withHealth } from "./health.fixture.ts";
+import { grids } from "@pe/ducts-domain/tables.fixture";
+import { withHealth } from "@pe/ducts-domain/health.fixture";
 import { graphOf, walkFrom } from "./walk.ts";
 import { PROPOSED_KEY } from "@pe/ducts-domain/calc/inputs";
 import { assumedFanFlows } from "./assumed-flow.ts";

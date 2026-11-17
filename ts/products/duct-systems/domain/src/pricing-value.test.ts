@@ -2,8 +2,8 @@ import { expect, it } from "vite-plus/test";
 import { designOf } from "@pe/ducts-domain/test-design";
 import { connOf, nodeOf, snapshotOf } from "@pe/ducts-domain/test-snapshot";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
-import { networkCalcs } from "../../../fans/domain/src/calc/network-calcs.ts";
-import { TEST_FIRM } from "../../../fans/domain/src/calc/test-inputs.ts";
+import { publishedCalcExample } from "@pe/ducts-domain/published-calcs.fixture";
+import { TEST_FIRM } from "@pe/ducts-domain/test-inputs";
 import { pricingValue } from "./pricing-value.ts";
 
 it.each(["terminalDrops", "componentDrops"])(
@@ -38,7 +38,7 @@ it("P-077 includes every suggested roster port, including two ports on one ERV",
     ],
   });
   const design = designOf();
-  const calcs = networkCalcs(snapshot, {}, {}, design, TEST_FIRM, 0);
+  const calcs = [0, 2].map(portIndex => ({ ...publishedCalcExample(), fan: { unitId: 1, portIndex }, paths: [], legs: {}, walkedElementIds: [] }));
   const value = pricingValue(snapshot, calcs, design);
   expect(value.calcs.map(({ fan }) => [fan.unitId, fan.portIndex])).toEqual([
     [1, 0],

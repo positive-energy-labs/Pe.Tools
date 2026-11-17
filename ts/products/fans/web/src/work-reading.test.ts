@@ -1,12 +1,12 @@
 import { elementSubject } from "@pe/ducts-domain/work-subject";
-import { snapshot as workSnapshot } from "@pe/ducts-web/test-fixture";
+import { snapshot as workSnapshot } from "@pe/ducts-domain/test-fixture";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import type {} from "../../../../packages/agent-contracts/src/route-kernel-bodies.ts";
 import type {
   Observation,
   WorkWriteOutcome,
 } from "../../../../packages/agent-contracts/src/work-journal-door.ts";
-import { createWitness } from "./cutover.test-support.ts";
+import { createWitness } from "@pe/fans-web/cutover.test-support";
 
 const closes: (() => void)[] = [];
 afterEach(() =>

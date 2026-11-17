@@ -4,7 +4,7 @@
  */
 import { expect, it } from "vite-plus/test";
 import { resolveCriteria } from "./index.ts";
-import { stamped, TEST_FIRM } from "./test-inputs.ts";
+import { stamped, TEST_FIRM } from "@pe/ducts-domain/test-inputs";
 
 it("resolves each side of a sided criterion through its own layers", () => {
   const c = resolveCriteria(

@@ -15,7 +15,7 @@ import { withInvocationContext } from "@pe/runtime/context";
 import { human } from "../../../../../host/tests/callers";
 import { fixtureNative } from "../../../../../host/tests/fixture-native";
 import { createPeRoutes } from "../../../../../host/src/pe-routes";
-import { createWitness } from "@pe/fans-web/cutover.test-support";
+import { createWitness } from "../../../../../../tests/e2e/fans-witness.test-support.ts";
 import { Notes } from "../findings/notes.tsx";
 import type { ModelPicture } from "#/scene/picture/model";
 import { SceneMeshes } from "#/scene/types";

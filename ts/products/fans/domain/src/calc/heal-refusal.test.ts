@@ -1,4 +1,4 @@
-import { inputsFor } from "./test-inputs.ts";
+import { inputsFor } from "@pe/ducts-domain/test-inputs";
 /**
  * R-A and R-B (kaitpw 2026-10-28) on the retained raw Chadds snapshot, FC-23 (unit 8732550,
  * port 1, slot `revit:Flow`). Skipped when the file is absent, like the host's ducts-sheet test.
@@ -13,7 +13,7 @@ import { expect, it } from "vite-plus/test";
 import { suggestRoster } from "@pe/ducts-domain/roster";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { buildCalc } from "./index.ts";
-import { grids } from "./tables.fixture.ts";
+import { grids } from "@pe/ducts-domain/tables.fixture";
 import { foreignOwners, graphOf, walkFrom } from "./walk.ts";
 
 const CHADDS =

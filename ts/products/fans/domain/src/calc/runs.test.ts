@@ -1,9 +1,9 @@
 import { expect, it } from "vite-plus/test";
 import { ductsPricingData } from "@pe/agent-contracts";
-import { buildCalc } from "@pe/fans-domain/calc/index";
-import { inputsFor } from "@pe/fans-domain/calc/test-inputs";
-import { connOf, nodeOf, snapshotOf } from "./test-snapshot.ts";
-import { rowOf, runsOf } from "./calc-runs.ts";
+import { buildCalc } from "./index.ts";
+import { inputsFor } from "@pe/ducts-domain/test-inputs";
+import { connOf, nodeOf, snapshotOf } from "@pe/ducts-domain/test-snapshot";
+import { rowOf, runsOf } from "@pe/ducts-domain/calc-runs";
 
 const snapshot = snapshotOf({
   nodes: [

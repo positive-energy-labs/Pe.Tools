@@ -993,7 +993,7 @@ test("JZ B02 undo follows focus between typed routes, portal and hidden pane; te
 
 
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
-import { inputsFor } from "@pe/fans-domain/calc/test-inputs";
+import { inputsFor } from "@pe/ducts-domain/test-inputs";
 import { SheetPane } from "./slots/sheet/pane.tsx";
 import { fansCalc } from "@pe/fans-web/calc";
 
@@ -1003,7 +1003,7 @@ import rawMuas from "@pe/fans-domain/calc/fixtures/muas-local-20261102.json";
 import { VOCABULARY } from "@pe/ducts-domain/calc/scoped-snapshot";
 // The saved capture predates the required `vocabulary` and the P2-B coverage field `walk.unreadPeers`.
 const realMuas = { ...rawMuas, vocabulary: VOCABULARY, walk: { ...rawMuas.walk, unreadPeers: [] } };
-import { createWitness } from "@pe/fans-web/cutover.test-support";
+import { createWitness } from "../../../../tests/e2e/fans-witness.test-support.ts";
 import type { ReceiptFeedState } from "../../../../packages/agent-contracts/src/work-journal-door";
 import { TypedWrite } from "../shell/typed-shell";
 import type { ReadingDelivery } from "../shell/source-contract";

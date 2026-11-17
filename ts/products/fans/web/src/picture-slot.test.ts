@@ -2,7 +2,6 @@ import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
 import { expect, test } from "vite-plus/test";
-import { module as ducts } from "@pe/duct-systems-web/route";
 import { module as fans } from "../route.ts";
 
 /*
@@ -32,15 +31,12 @@ const imports = (file: string, text = readFileSync(file, "utf8")) => {
   return found;
 };
 
-test("/fans and /ducts declare `picture`, and the pane each places is the kernel's", () => {
+test("Fans declares picture and the kernel draws its pane", () => {
   expect(fans.spec.picture).toBeDefined();
   expect(fans.spec.panes["calc-picture"]).toMatchObject({ kernel: "picture", body: "fill" });
   expect(fans.data.picture).toEqual({ scope: "derived", marks: [] });
-  expect(ducts.spec.picture).toBeDefined();
-  expect(ducts.spec.panes["e-picture"]).toMatchObject({ kernel: "picture", body: "fill" });
   // One picture pane each: the kernel adds none beside the one the route placed.
   expect(Object.values(fans.spec.panes).filter((pane) => pane.kernel === "picture")).toHaveLength(1);
-  expect(Object.values(ducts.spec.panes).filter((pane) => pane.kernel === "picture")).toHaveLength(1);
 });
 
 test("the borrowed body is gone: no route file mounts a Picture, and the picture's cross-imports are cut", () => {

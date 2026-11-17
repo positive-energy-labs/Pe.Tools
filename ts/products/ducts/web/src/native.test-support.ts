@@ -1,16 +1,14 @@
 import { valueOf } from "../../../../apps/web/src/route/typed-route.ts";
 import { createElement } from "react";
-import { RosterBody, LedgerBody } from "./mount.tsx";
 import { kernelPane } from "../../../../apps/web/src/shell/typed-shell.tsx";
 import { SheetPane } from "../../../../apps/web/src/route/slots/sheet/pane.tsx";
-import * as networkBodies from "@pe/duct-systems-web/screen/screen";
 import { planned, type TypedMount } from "../../../../apps/web/src/shell/typed-mount.ts";
 import type { FansRouteDocument } from "@pe/agent-contracts";
 import { completion } from "../../../../apps/web/src/shell/work-door-observation.ts";
 import type { WorkJournalDoor, WorkWriteOutcome } from "../../../../packages/agent-contracts/src/work-journal-door.ts";
 
 // Old behavior witnesses keep their assertions; only their former admitted-shell test driver changes.
-export function nativeTestAdapter(mount: TypedMount, _door: WorkJournalDoor) {
+export function nativeTestAdapter(mount: TypedMount, _door: WorkJournalDoor, components: Record<string,any> = {}) {
   const snapshot = (id: string) => {
     if (id.startsWith("owner:")) {
       const record = mount.owner(id.slice(6));
@@ -33,8 +31,8 @@ export function nativeTestAdapter(mount: TypedMount, _door: WorkJournalDoor) {
       const body=mount.draw(id) as {props:{ctx?:unknown}};
       // A value-less read draws the shell's one line, with no body and so no ctx.
       if(!body.props.ctx) return body;
-      const Component=({"calc-roster":RosterBody,"calc-ledger":LedgerBody,"e-systems":networkBodies.SystemsPane,"e-sidebar":networkBodies.TreePane,"e-rules-all":networkBodies.AllRulesBody,"e-rules":networkBodies.RulesBody,"e-inbox":networkBodies.InboxBody} as Record<string,any>)[id];
-      return createElement(Component,{ctx:body.props.ctx});
+      const Component=components[id];
+      return Component ? createElement(Component,{ctx:body.props.ctx}) : body;
     }, close: mount.dispose,
     controls: { subject: mount.page.subject, query: (key:string,value:unknown)=>mount.page.query({[key]:value}) },
     page: { ...mount.page, read: (): Record<string,any> => mount.page.read() },

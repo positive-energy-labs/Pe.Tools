@@ -3,7 +3,7 @@ import { RegistryContext } from "@effect/atom-react";
 import { cleanup, render, screen } from "@testing-library/react";
 import { isValidElement } from "react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { createWitness } from "@pe/fans-web/cutover.test-support";
+import { createWitness } from "./cutover.test-support.ts";
 import { makeAtomRegistry } from "../../../../apps/web/src/shell/owner.ts";
 import { systemCode } from "@pe/ducts-web/identity";
 import { pricing } from "@pe/duct-systems-contract/contract";

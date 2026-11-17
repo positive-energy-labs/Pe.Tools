@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, expect, test } from "vite-plus/test";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { createWitness } from "@pe/fans-web/cutover.test-support";
+import { createWitness } from "../../../../tests/e2e/fans-witness.test-support.ts";
 import { SubjectPicker as AdmittedSubjectPicker, subjectOf } from "./subject-picker";
 
 const closes: (() => void)[] = [];

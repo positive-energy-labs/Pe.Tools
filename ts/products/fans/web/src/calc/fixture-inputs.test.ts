@@ -2,7 +2,7 @@ import { designOf } from "@pe/ducts-domain/test-design";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { stagedDucts } from "@pe/agent-contracts";
 import { resolveCriteria } from "@pe/fans-domain/calc/index";
-import { createWitness } from "../cutover.test-support.ts";
+import { createWitness } from "@pe/fans-web/cutover.test-support";
 import type {
   Observation,
   WorkWriteOutcome,

@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { toGrids, type Grid, type Grids } from "@pe/ducts-domain/loss-grid";
+import { toGrids, type Grid, type Grids } from "./loss-grid.ts";
 
 // ---- test-only .tbl reader (ctable.py parse), as in kernel/price-leg.test.ts ------------------
 function parseTbl(file: string): Record<string, Grid> {
@@ -40,8 +40,8 @@ function parseTbl(file: string): Record<string, Grid> {
   return out;
 }
 const GRID_DIRS = [
-  join(__dirname, "../../../../ducts/web/src/fixtures/ashrae"),
-  join(__dirname, "../../../../../../dotnet/Pe.Shared.Tests/RevitData/Fixtures/Ashrae"),
+  join(__dirname, "../../web/src/fixtures/ashrae"),
+  join(__dirname, "../../../../../dotnet/Pe.Shared.Tests/RevitData/Fixtures/Ashrae"),
 ];
 export const grids: Grids = Object.fromEntries(
   GRID_DIRS.filter(existsSync).flatMap((d) =>

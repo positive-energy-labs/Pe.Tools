@@ -1,10 +1,10 @@
 import { expect, test } from "vite-plus/test";
 import { systemScope } from "@pe/ducts-domain/system-scope";
-import { syntheticSnapshot } from "./test-fixture.ts";
-import { systemList } from "@pe/duct-systems-web/system-list";
-import { fanFacts } from "@pe/duct-systems-web/screen/fan-sections";
-import { buildCalcTree, runNodesOf } from "@pe/duct-systems-web/network/calc-model";
-import { calcsOf, withFan } from "@pe/duct-systems-web/calcs.test-support";
+import { syntheticSnapshot } from "@pe/ducts-domain/test-fixture";
+import { systemList } from "./system-list.ts";
+import { fanFacts } from "./screen/fan-sections.tsx";
+import { buildCalcTree, runNodesOf } from "./network/calc-model.ts";
+import { calcsOf, withFan } from "@pe/ducts-web/calcs.test-support";
 import { runsOf } from "@pe/ducts-domain/calc-runs";
 
 test("F16 metadata-only roster exposes system information before network pricing", () => {

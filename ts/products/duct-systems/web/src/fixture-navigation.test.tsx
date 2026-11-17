@@ -13,9 +13,12 @@ import { StandaloneBand } from "../../../../apps/web/src/shell/band.test-support
 const closes: (() => void)[] = [];
 afterEach(() => { cleanup(); closes.splice(0).forEach(close => close()); vi.unstubAllGlobals(); });
 async function arrive(href: string) {
+  expect(Object.values(ducts.spec.panes).filter((pane) => pane.kernel === "picture")).toHaveLength(1);
   vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
   await import("./screen/screen.tsx");
   vi.stubGlobal("fetch", vi.fn(() => { throw Error("Fixture called the host"); }));
+  expect(ducts.spec.picture).toBeDefined();
+  expect(ducts.spec.panes["e-picture"]).toMatchObject({ kernel: "picture", body: "fill" });
   const url = new URL(href, "http://pe.local");
   const mount = mountTypedRoute(ducts, {
     fixture: url.searchParams.get("fixture"), target: { kind: "document", ref: { session: "fixture", openId: "clinic" } },

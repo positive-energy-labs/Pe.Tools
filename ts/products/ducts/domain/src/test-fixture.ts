@@ -1,4 +1,4 @@
-import { VOCABULARY } from "@pe/ducts-domain/calc/scoped-snapshot";
+import { VOCABULARY } from "./calc/scoped-snapshot.ts";
 /** Test support: the six-element slice and the saved synthetic snapshot, both typed with no cast. */
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import {
@@ -9,9 +9,9 @@ import {
   nodeOf,
   snapshotOf,
   systemOf,
-} from "@pe/ducts-domain/test-snapshot";
-import type { DuctSnapshot } from "@pe/ducts-domain/types";
-import saved from "./fixtures/synthetic-snapshot.json" with { type: "json" };
+} from "./test-snapshot.ts";
+import type { DuctSnapshot } from "./types.ts";
+import saved from "@pe/ducts-contract/fixtures/synthetic-snapshot.json" with { type: "json" };
 
 /** A fresh copy of the saved synthetic snapshot, decoded by the wire schema the page itself uses. */
 export const syntheticSnapshot = (): DuctSnapshot =>

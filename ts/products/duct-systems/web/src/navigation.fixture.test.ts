@@ -1,16 +1,16 @@
-import { networkCalcs } from "@pe/fans-domain/calc/network-calcs";
+import { publishedCalcs } from "@pe/ducts-domain/published-calcs.fixture";
 import { FIRM_SEED } from "@pe/ducts-domain/input-layers";
 import { expect, test } from "vite-plus/test";
 import { EMPTY_CATALOGS } from "@pe/ducts-domain/catalog";
 import { systemScope, systemsOf } from "@pe/ducts-domain/system-scope";
-import { NAVIGATION_FIXTURE } from "./navigation.fixture.ts";
-import { SCENE_FIXTURE } from "./scene.fixture.ts";
+import { NAVIGATION_FIXTURE } from "@pe/ducts-web/navigation.fixture";
+import { SCENE_FIXTURE } from "@pe/ducts-web/scene.fixture";
 import { designOf } from "@pe/ducts-domain/test-design";
 import { pricingValue, pricingWire } from "@pe/duct-systems-domain/pricing-value";
 
 test("navigation fixture reaches production pricing with three systems, long lists and a shared finding", () => {
   const { snapshot, grids } = NAVIGATION_FIXTURE;
-  const value = pricingValue(snapshot, networkCalcs(snapshot, grids, EMPTY_CATALOGS, designOf({}), FIRM_SEED, 0), designOf({}));
+  const value = pricingValue(snapshot, publishedCalcs(snapshot, grids, EMPTY_CATALOGS, designOf({}), FIRM_SEED, 0), designOf({}));
   const { survey: priced, analysis, calcs } = value;
   // The read's own contract decodes what the body computes: every calc, the survey and the analysis.
   expect(pricingWire(value).calcs).toHaveLength(calcs.length);

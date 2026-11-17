@@ -5,10 +5,10 @@ import { isValidElement } from "react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { elementKey } from "@pe/kit/lang/attention";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
-import { snapshot } from "@pe/ducts-web/test-fixture";
-import sheetFixture from "./calc/calc.fixture.json";
-import { makeAtomRegistry } from "../../../../apps/web/src/shell/owner.ts";
-import { createWitness } from "./cutover.test-support.ts";
+import { snapshot } from "@pe/ducts-domain/test-fixture";
+import sheetFixture from "@pe/ducts-web/fixtures/fan-sheet.json";
+import { makeAtomRegistry } from "../../../apps/web/src/shell/owner.ts";
+import { createWitness } from "../fans-witness.test-support.ts";
 import { ductsLink, namesOf, fanSystems } from "@pe/ducts-web/identity";
 import { fields } from "@pe/duct-systems-web/route";
 

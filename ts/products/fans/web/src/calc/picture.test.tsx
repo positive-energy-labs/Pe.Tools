@@ -24,7 +24,7 @@ import { afterEach, expect, it, vi } from "vite-plus/test";
 import { NAVIGATION_FIXTURE } from "@pe/ducts-web/navigation.fixture";
 import { openFanCalcSchema as openSheetSchema } from "@pe/agent-contracts";
 import type { OpenCalc } from "./types.ts";
-import sheetFixture from "./calc.fixture.json";
+import sheetFixture from "@pe/ducts-web/fixtures/fan-sheet.json";
 import { type FanPort } from "@pe/ducts-web/calc/model";
 import { beyondLabels, beyondPicture, CalcPicture } from "./picture.tsx";
 

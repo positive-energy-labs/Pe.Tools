@@ -1,4 +1,4 @@
-import { inputsFor, TEST_FIRM, TEST_SLOTS, TEST_WALK } from "./test-inputs.ts";
+import { inputsFor, TEST_FIRM, TEST_SLOTS, TEST_WALK } from "@pe/ducts-domain/test-inputs";
 /**
  * The path engine, deterministic. Synthetic: the kernel's independently computed network
  * (price-leg.test.ts, handcalc.py totals T6/T8) hung off a roster fan with a return run; a
@@ -15,9 +15,9 @@ import { friction, roundSection } from "@pe/ducts-domain/loss-physics";
 import { suggestRoster, type FanPort } from "@pe/ducts-domain/roster";
 import { uniqueIdOf, type Connector as Conn, type Node, type Segment } from "@pe/ducts-domain/test-snapshot";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
-import { withHealth } from "./health.fixture.ts";
+import { withHealth } from "@pe/ducts-domain/health.fixture";
 import { buildChain, buildCalc, type CalcSnapshot } from "./index.ts";
-import { grids } from "./tables.fixture.ts";
+import { grids } from "@pe/ducts-domain/tables.fixture";
 
 // `conn`, `node` and `duct` keep their casts: `withHealth` keys the recorded C# health by a hash of
 // the exact node and segment JSON (field order included), so these shapes stay byte-for-byte until

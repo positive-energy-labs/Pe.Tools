@@ -11,7 +11,7 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import type { DuctSnapshot } from "@pe/ducts-domain/types";
+import type { DuctSnapshot } from "./types.ts";
 
 const DIR = join(__dirname, "fixtures");
 const OUT = join(DIR, "synthetic-health.json");

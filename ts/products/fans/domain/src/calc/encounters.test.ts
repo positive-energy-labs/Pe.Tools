@@ -14,7 +14,7 @@ import { mergeCoverage } from "@pe/ducts-domain/system-reads";
 import { nodeOf } from "@pe/ducts-domain/test-snapshot";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { coverageOf, wholeCoverage } from "@pe/ducts-domain/calc/coverage";
-import { TEST_COVERAGE, TEST_WALK } from "./test-inputs.ts";
+import { TEST_COVERAGE, TEST_WALK } from "@pe/ducts-domain/test-inputs";
 import type { Leg, CalcPath } from "./types.ts";
 
 const leg = (id: string, elementId: number, lossInWg: number | null, out = 1): Leg => ({

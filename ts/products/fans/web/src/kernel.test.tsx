@@ -2,7 +2,7 @@ import { expect, test } from "vite-plus/test";
 import { module as fans } from "../route.ts";
 import { fansLink } from "../route.ts";
 import { selectedFans, stableFanKey } from "@pe/ducts-web/calc/model";
-import sheet from "./calc/calc.fixture.json";
+import sheet from "@pe/ducts-web/fixtures/fan-sheet.json";
 
 test("fan links carry the destination identity and binding without ducts Page fields", () => {
   const row = sheet.roster.rows[0];

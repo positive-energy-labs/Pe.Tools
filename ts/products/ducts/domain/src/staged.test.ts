@@ -3,7 +3,7 @@ import { expect, test } from "vite-plus/test";
 import { ductsDocumentSchema, fansDocumentSchema, stagedDucts } from "@pe/agent-contracts";
 import { editPatches } from "./calc/edits.ts";
 import { resolveCriteria } from "./calc/inputs.ts";
-import { TEST_FIRM } from "@pe/fans-domain/calc/test-inputs";
+import { TEST_FIRM } from "./test-inputs.ts";
 import { elementSubject } from "./work-subject.ts";
 import { fanWriteCells } from "./staged.ts";
 

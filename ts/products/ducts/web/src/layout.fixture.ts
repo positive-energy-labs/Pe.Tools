@@ -1,6 +1,6 @@
 import { SCENE_FIXTURE } from "./scene.fixture.ts";
 import { NAVIGATION_FIXTURE } from "./navigation.fixture.ts";
-import sheetFixture from "@pe/fans-web/calc/calc.fixture.json";
+import sheetFixture from "./fixtures/fan-sheet.json";
 
 const systems = Array.from({ length: 369 }, (_, index) => ({
   id: 900 + index,

@@ -1,4 +1,4 @@
-import { snapshot } from "./test-fixture.ts";
+import { snapshot } from "@pe/ducts-domain/test-fixture";
 
 /** RA 23's shape: one zero-flow dangling duct end, with no finding required to name it. */
 export function ra23Snapshot() {

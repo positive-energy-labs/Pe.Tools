@@ -1,11 +1,11 @@
 /** Test-only: build a resolved `DuctsInputs` from the shorthand the sheet tests used to pass the engine directly (typed end cfm and drops by element id, join and end rulings, a unit's own flow), through the real resolver over a test firm. */
-import { elementSubject } from "@pe/ducts-domain/work-subject";
+import { elementSubject } from "./work-subject.ts";
 import { DUCTS_CRITERIA_CELLS, type DuctsCriteriaCell, type DuctsFirm, type DuctsInputs, type DuctUnitKind } from "@pe/agent-contracts";
-import { catalogLinkKey } from "@pe/ducts-domain/catalog";
-import type { DuctSnapshot } from "@pe/ducts-domain/types";
-import type { CalcSnapshot } from "./build.ts";
-import { coverageOf } from "@pe/ducts-domain/calc/coverage";
-import { END_KEY, FITTING_DROP_CELL, JOIN_KEY, resolveInputs, type WorkCell, type WorkLayer } from "@pe/ducts-domain/calc/inputs";
+import { catalogLinkKey } from "./catalog.ts";
+import type { DuctSnapshot } from "./types.ts";
+import type { CalcSnapshot } from "./input-snapshot.ts";
+import { coverageOf } from "./calc/coverage.ts";
+import { END_KEY, FITTING_DROP_CELL, JOIN_KEY, resolveInputs, type WorkCell, type WorkLayer } from "./calc/inputs.ts";
 
 /** Test-only: a native walk that read every peer, so a fixture's coverage is known (P-028). */
 export const TEST_WALK: NonNullable<DuctSnapshot["walk"]> = {

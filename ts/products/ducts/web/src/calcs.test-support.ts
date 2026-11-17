@@ -1,15 +1,15 @@
 /** Test support: every roster fan's calc on a snapshot, built the way the `ducts.pricing` read builds them. */
 import type { Calc } from "@pe/ducts-domain/calc-runs";
 import { suggestRoster } from "@pe/ducts-domain/roster";
-import { buildCalc } from "@pe/fans-domain/calc/index";
-import { inputsFor, TEST_WALK, type InputsShorthand } from "@pe/fans-domain/calc/test-inputs";
+import { publishedCalc } from "@pe/ducts-domain/published-calcs.fixture";
+import { inputsFor, TEST_WALK, type InputsShorthand } from "@pe/ducts-domain/test-inputs";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
 export function calcsOf(snapshot: DuctSnapshot, shorthand: InputsShorthand = {}): Calc[] {
   const suggested = suggestRoster(snapshot);
   const roster = [...suggested.fans, ...suggested.suggestions];
   const inputs = inputsFor(snapshot, shorthand);
-  return roster.map((fan) => buildCalc({ snapshot, roster, fan, grids: {}, inputs }));
+  return roster.map((fan) => publishedCalc({ snapshot, roster, fan, grids: {}, inputs }));
 }
 
 /** A hand-built leg: only what the panes' projections read. */
@@ -67,4 +67,4 @@ export const withFan = (snapshot: DuctSnapshot): DuctSnapshot => ({
 
 /** The panes' view over hand-built calcs alone: no survey, an empty network. */
 export const pricedOf = (calcs: readonly Calc[]) =>
-  ({ calcs, snapshot: { segments: [] } }) as unknown as import("@pe/ducts-web/priced").Priced;
+  ({ calcs, snapshot: { segments: [] } }) as unknown as import("./priced.ts").Priced;

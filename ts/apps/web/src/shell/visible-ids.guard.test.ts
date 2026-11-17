@@ -9,7 +9,7 @@ import { LAYOUT_FIXTURE, LAYOUT_ROSTER } from "@pe/ducts-web/layout.fixture";
 import { elementLabeler } from "@pe/ducts-domain/element-label";
 import type { FanPort } from "@pe/ducts-domain/roster";
 import { buildCalc, type CalcSnapshot } from "@pe/fans-domain/calc/index";
-import { inputsFor } from "@pe/fans-domain/calc/test-inputs";
+import { inputsFor } from "@pe/ducts-domain/test-inputs";
 
 // Registry words and actual declared fixture publications must name things, never their keys.
 afterEach(() => vi.unstubAllGlobals());

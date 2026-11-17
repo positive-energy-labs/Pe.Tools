@@ -1,5 +1,5 @@
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
-import { snapshot } from "./test-fixture.ts";
+import { snapshot } from "@pe/ducts-domain/test-fixture";
 
 /** EX 1's failing shape: a fan discharges through a duct's open end, with no terminal path. */
 export function noTerminalSnapshot(): DuctSnapshot {

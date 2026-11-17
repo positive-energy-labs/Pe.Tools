@@ -7,7 +7,7 @@
 import { expect, it } from "vite-plus/test";
 
 import type { Grids } from "../loss-grid.ts";
-import { grids as tableGrids } from "@pe/fans-domain/calc/tables.fixture";
+import { grids as tableGrids } from "../tables.fixture.ts";
 import {
   connOf,
   ductOf,

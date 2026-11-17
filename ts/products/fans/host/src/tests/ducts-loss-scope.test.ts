@@ -7,7 +7,7 @@ import { mergeFar } from "@pe/ducts-domain/calc/joins";
 import { buildCalc, type BuildCalcInput, type FanWriteContext, type CalcSnapshot } from "@pe/fans-domain/calc/index";
 import { suggestRoster } from "@pe/ducts-domain/roster";
 import { toGrids } from "@pe/ducts-domain/loss-grid";
-import { TEST_WALK, inputsFor, withFamilyFlipped, withPeersRead } from "@pe/fans-domain/calc/test-inputs";
+import { TEST_WALK, inputsFor, withFamilyFlipped, withPeersRead } from "@pe/ducts-domain/test-inputs";
 import { ductWriteEvidence } from "@pe/ducts-domain/write-evidence";
 import { writeSeal } from "../../../../../apps/host/src/work-write-boundary.ts";
 import { nativeResponseSchema } from "../../../../../packages/host-contracts/src/decoders.ts";

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { syntheticSnapshot } from "./test-fixture.ts";
+import { syntheticSnapshot } from "@pe/ducts-domain/test-fixture";
 import { subjectNamer } from "./subject-text.ts";
 import { SubjectText, subjectDocument } from "@pe/kit/lang/subject-text";
 import { SubjectTextContext } from "@pe/kit/lang/reach";

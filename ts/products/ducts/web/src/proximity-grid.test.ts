@@ -9,28 +9,28 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, it, vi } from "vite-plus/test";
 
-import { SCENE_FIXTURE } from "@pe/ducts-web/scene.fixture";
-import { inferJoints } from "./proximity.ts";
-import type { DuctSnapshot } from "./types.ts";
+import { SCENE_FIXTURE } from "./scene.fixture.ts";
+import { inferJoints } from "@pe/ducts-domain/proximity";
+import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
 type Node = DuctSnapshot["nodes"][number];
 type Segment = DuctSnapshot["segments"][number];
 type Connector = Segment["connectors"][number];
 
-vi.doMock("./geometry.ts", async (actual) => ({
-  ...(await actual<typeof import("./geometry.ts")>()),
+vi.doMock("@pe/ducts-domain/geometry", async (actual) => ({
+  ...(await actual<typeof import("@pe/ducts-domain/geometry")>()),
   cells: (boxes: readonly unknown[]) => () => boxes.map((_, i) => i),
 }));
 vi.resetModules();
-const oracle = (await import("./proximity.ts")).inferJoints;
-vi.doUnmock("./geometry.ts");
+const oracle = (await import("@pe/ducts-domain/proximity")).inferJoints;
+vi.doUnmock("@pe/ducts-domain/geometry");
 
 // Kept casts (here and in `cases`): an untyped JSON file boundary, not a constructed shape.
 const fixture = (name: string) =>
   JSON.parse(
-    readFileSync(join(__dirname, "../../web/src/fixtures", name), "utf8"),
+    readFileSync(join(__dirname, "./fixtures", name), "utf8"),
   ) as Record<string, unknown>;
-const synthetic = fixture("synthetic-snapshot.json") as unknown as DuctSnapshot;
+const synthetic = JSON.parse(readFileSync(new URL("../../contract/src/fixtures/synthetic-snapshot.json", import.meta.url), "utf8")) as DuctSnapshot;
 const excerpt = (nodes: Node[]): DuctSnapshot => ({ ...synthetic, nodes, segments: [] });
 const opened = (s: DuctSnapshot): DuctSnapshot => {
   const open = <T extends { connectors: Connector[] }>(e: T) => ({

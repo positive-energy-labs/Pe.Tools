@@ -2,8 +2,8 @@ import { expect, test } from "vite-plus/test";
 import type { DuctFinding } from "@pe/agent-contracts";
 import type { HealPlan } from "@pe/ducts-domain/heal";
 import { survey } from "@pe/ducts-domain/survey";
-import { syntheticSnapshot } from "./test-fixture.ts";
-import { systemNotes } from "@pe/duct-systems-web/system-list-search";
+import { syntheticSnapshot } from "@pe/ducts-domain/test-fixture";
+import { systemNotes } from "./system-list-search.ts";
 
 test("Fix notes exclude advisory Heal rows and another system sharing the group", () => {
   const fixture = syntheticSnapshot();
