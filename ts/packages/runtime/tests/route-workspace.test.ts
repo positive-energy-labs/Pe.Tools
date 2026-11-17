@@ -553,6 +553,12 @@ const cellSpec = {
   schema: z.object({ esp: z.record(z.string(), draftCellSchema(z.object({ inWg: z.number(), source: z.string().optional() }))).default({}) }),
 } satisfies RouteStateSpec<z.ZodType>;
 
+test("seed preflight refuses invalid route-level fields without creating Work", async () => {
+  const routes = workspace(memoryStore().store);
+  expect(() => routes.validateSeed(documentA, { count: "wrong" })).toThrow();
+  expect(await routes.readUncaptured(documentA, "test-route")).toBeNull();
+});
+
 test("a publish seed cannot name its own author: every seeded cell is stamped with the caller", async () => {
   for (const { by, supplied } of [
     { by: "human", supplied: false },
