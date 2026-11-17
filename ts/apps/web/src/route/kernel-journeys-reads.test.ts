@@ -456,10 +456,10 @@ test("JX3 open fixture Fans, change scope and attempt a native write without liv
     });
     try {
       mounted.page.subject({ kind: "all" });
-      expect(
+      await vi.waitFor(() => expect(
         mounted.value().publication?.origin,
         "H09: fixture publication discloses its origin",
-      ).toMatchObject({ kind: "fixture", name: "layout" });
+      ).toMatchObject({ kind: "fixture", name: "layout" }));
       expect(
         mounted.verb("losses").refusal,
         "H09: fixture discloses native action refusal",
@@ -469,6 +469,8 @@ test("JX3 open fixture Fans, change scope and attempt a native write without liv
         "H09: even direct invocation cannot write native",
       ).rejects.toThrow(/Fixture/);
       mounted.page.subject({ kind: "ids", ids: [] });
+      await vi.waitFor(() => expect(mounted.value().publication, "H09: changed scope retains fixture provenance")
+        .toMatchObject({ origin: { kind: "fixture", name: "layout" }, coverage: { requested: [] } }));
       expect(
         j.host.nativeCalls,
         "H09: fixture selection and attempted write never call native",
@@ -476,14 +478,14 @@ test("JX3 open fixture Fans, change scope and attempt a native write without liv
     } finally {
       mounted.dispose();
     }
-    expect(
-      () =>
-        mountTypedRoute(fans, { ...j.input, fixture: "not-a-fixture" }, j.fingerprint, {
-          work: j.work,
-          sources: { "fans.calc": j.source },
-        }),
-      "H09: missing fixture refuses before mounting instead of using live inputs",
-    ).toThrow("No fixture 'not-a-fixture'");
+    const missing = mountTypedRoute(fans, { ...j.input, fixture: "not-a-fixture" }, j.fingerprint, {
+      work: j.work,
+      sources: { "fans.calc": j.source },
+    });
+    try {
+      await vi.waitFor(() => expect(missing.value(), "H09: missing fixture refuses instead of using live inputs")
+        .toMatchObject({ state: "refused", reason: expect.stringContaining("No fixture 'not-a-fixture'") }));
+    } finally { missing.dispose(); }
     expect(j.host.nativeCalls, "H09: missing fixture never dispatches native").toBe(calls);
   } finally {
     await j.close();
