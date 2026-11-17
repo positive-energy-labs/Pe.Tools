@@ -115,7 +115,7 @@ test("first Send from /duct-systems?target=… creates one chat with no targets 
   const router = createRouter({
     routeTree: root.addChildren([
       createRoute({ getParentRoute: () => root, path: "/" }),
-      createRoute({ getParentRoute: () => root, path: "/duct-systems", component: () => <p>ducts</p> }),
+      createRoute({ getParentRoute: () => root, path: "/duct-systems", component: () => <p>duct-systems</p> }),
     ]),
     history: createMemoryHistory({
       initialEntries: ["/", "/duct-systems?target=C%3A%2FModels%2FOffice.rvt"],

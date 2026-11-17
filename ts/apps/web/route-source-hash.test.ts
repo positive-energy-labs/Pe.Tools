@@ -2,7 +2,8 @@ import { afterEach, expect, test } from "vite-plus/test";
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { createRequire } from "node:module";
 import { execFileSync } from "node:child_process";
 import {
   buildBuiltinClosure,
@@ -122,7 +123,7 @@ test("explicit roots are portable and producer works in another process cwd", as
   const first = await f.build();
   expect((await fixture().build()).fingerprint).toBe(first.fingerprint);
   const producer = fileURLToPath(new URL("./route-source-hash.ts", import.meta.url));
-  const jiti = new URL("jiti", import.meta.url).href;
+  const jiti = pathToFileURL(createRequire(import.meta.url).resolve("jiti")).href;
   const runner = join(f.root, "probe.mjs");
   writeFileSync(
     runner,

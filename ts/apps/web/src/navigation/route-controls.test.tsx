@@ -63,7 +63,7 @@ test("the shell attaches only its current owner's host across retained route swi
   await router.load();
   const view = render(<RouterProvider router={router} />);
   const outlet = view.container.querySelector(".pe-appbar-situation")!;
-  expect(outlet.textContent).toBe("ducts controls");
+  expect(outlet.textContent).toBe("duct-systems controls");
   expect(view.container.querySelectorAll('[data-slot="situation-band"]')).toHaveLength(1);
   const firstHost = outlet.firstElementChild!;
   await act(async () => {
@@ -77,7 +77,7 @@ test("the shell attaches only its current owner's host across retained route swi
   });
   expect(outlet.childElementCount).toBe(1);
   expect(outlet.firstElementChild).toBe(firstHost);
-  expect(outlet.textContent).toBe("ducts controls");
+  expect(outlet.textContent).toBe("duct-systems controls");
 });
 
 // Row 11-pea-one-band: /pea needs the host and keeps no Work. Its band holds a host target, never a

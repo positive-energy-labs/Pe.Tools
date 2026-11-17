@@ -44,6 +44,6 @@ test("a primary route's settings section appears inside the Settings popover, an
   await router.load();
   render(<RouterProvider router={router} />);
   fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
-  const section = await screen.findByText("ducts registered settings");
+  const section = await screen.findByText("duct-systems registered settings");
   expect(section.closest('[aria-label="Settings menu"]')).not.toBeNull();
 });
