@@ -330,10 +330,15 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
           try {
             const packet = read.output.parse(frame.value);
             const publication = freezePage(packet.value);
+            const coverage = packet.value?.coverage;
+            const coverageReason = coverage && (coverage.unknown.length || coverage.refused.length)
+              ? input.fixture !== null ? "not covered by this fixture"
+                : coverage.refused.map(entry => entry.reason).join("; ") || packet.reason || `Coverage unknown for ${coverage.unknown.join(", ")}`
+              : undefined;
             const current = frame.kind === "complete" && frame.fresh !== false && packet.state === "current" &&
               !!packet.value && !packet.value.coverage.unknown.length && !packet.value.coverage.refused.length;
             record.snapshot = current ? { state: "ready", value: publication!.data, publication, hash: packet.value!.evaluation }
-              : unavailable(valueRefusal(frame.reason ?? packet.reason ?? "Incomplete Value", read.key), publication?.data??valueOf(record.snapshot), publication??record.snapshot.publication);
+              : unavailable(valueRefusal(frame.reason ?? coverageReason ?? packet.reason ?? "Incomplete Value", read.key), publication?.data??valueOf(record.snapshot), publication??record.snapshot.publication);
           } catch (error) { record.snapshot = unavailable(valueRefusal(error, read.key), valueOf(record.snapshot), record.snapshot.publication); }
         } else if (frame.kind !== "log") record.snapshot = frame.kind === "failure"?unavailable(valueRefusal(frame.error, read.key),valueOf(record.snapshot),record.snapshot.publication):reading(valueOf(record.snapshot),record.snapshot.publication);
         connectTimeline(); notify();
