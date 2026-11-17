@@ -299,9 +299,8 @@ it("a junction past ED5-3's edge is refused, never charged an extrapolated coeff
   );
 });
 
-it("without ER5-1 served, ER5-2 prices at its own Ab/Ac 0.5 and says so; an assigned table is never swapped", async () => {
+it("without ER5-1 served, off-geometry ER5-2 is refused; an assigned table is never swapped", async () => {
   const { priceLeg } = await import("./kernel/price-leg.ts");
-  const { friction } = await import("./loss-physics.ts");
   const tap = rectTap(12, 8);
   const input = {
     kind: "fitting" as const,
@@ -312,23 +311,71 @@ it("without ER5-1 served, ER5-2 prices at its own Ab/Ac 0.5 and says so; an assi
   };
   const only = { "ER5-2": CONVERGING["ER5-2"]!, "ER5-3": CONVERGING["ER5-3"]! };
   const p = priceLeg(input, only);
-  // ER5-2 Cb 0.65 at Qb/Qc 0.4, stated at Ab/Ac 0.5: on the common Pv, 0.65 x (0.4 / 0.5)^2.
-  expect(p.source).toMatchObject({ table: "ER5-2" });
-  expect(p.lossInWg).toBeCloseTo(
-    0.65 * (0.4 / 0.5) ** 2 * friction({ areaFt2: (32 * 11) / 144, dhIn: 1 }, 1000, 0).pv,
-    12,
-  );
-  expect(p.source?.kind === "rule" && p.source.notes).toEqual([
-    "Cb x 0.298: charged on the velocity the table's own geometry has where it was read",
-    "ER5-1 is not served; its fallback ER5-2 priced",
-    "ER5-2 is stated for Ab/Ac 0.5, As = Ac; this junction's Ab/Ac is 0.273; round-tap table on a rectangular branch",
-  ]);
+  expect(p.source).toBeNull();
+  expect(p.lossInWg).toBeNull();
+  expect(p.unpriced).toBe("ER5-2 Cb not read: ER5-2 is stated for Ab/Ac 0.5, As/Ac 1 (As = Ac); actual Ab/Ac 0.273, As/Ac 1");
   const assigned = priceLeg(input, only, { "tap-converging-rect": "ER5-3" });
-  expect(assigned.source).toMatchObject({ table: "ER5-3" });
+  expect(assigned.lossInWg).toBeNull();
+  expect(assigned.unpriced).toContain("ER5-3 Cb not read");
   expect(priceLeg(input, {}, { "tap-converging-rect": "ER5-1" }).unpriced).toBe(
     "ER5-1 Cb is not loaded",
   );
 });
+
+it.each(["ER5-2", "ER5-3"])(
+  "%s preserves both stated-geometry leg prices and admits only float noise",
+  async (table) => {
+    const { priceLeg } = await import("./kernel/price-leg.ts");
+    const { friction } = await import("./loss-physics.ts");
+    const tap = rectTap(22, 8),
+      facts = await tapFacts(tap, trunk);
+    for (const leg of ["Cb", "Cs"] as const) {
+      const input = { kind: "fitting" as const, fitting: tap, facts,
+        flows: { through: 400, branch: 400, upstreamMain: 1000, downstreamMain: 600 },
+        leg };
+      const price = (abOverAc: number) =>
+        priceLeg({ ...input, facts: { ...facts, abOverAc } }, CONVERGING, {
+          "tap-converging-rect": table,
+        });
+      const expected =
+        lookupGrid(CONVERGING[table]![leg]!, leg === "Cb" ? 0.4 : 0.6).value *
+        friction((leg === "Cb" ? facts.inlet : facts.main)!.section!, leg === "Cb" ? 400 : 600, 0)
+          .pv;
+      expect(price(0.5).lossInWg).toBeCloseTo(expected, 12);
+      expect(price(0.5).source).toMatchObject({ table });
+      expect(price(0.5 + 5e-10).unpriced).toBeNull();
+      expect(price(0.5 + 2e-9).lossInWg).toBeNull();
+      expect(price(0.5 - 2e-9).lossInWg).toBeNull();
+    }
+  },
+);
+
+it.each(["ER5-2", "ER5-3"])(
+  "%s never reads a 0.115 junction at its stated 0.5 geometry",
+  async (table) => {
+    const { priceLeg } = await import("./kernel/price-leg.ts");
+    const tap = rectTap(22, 8);
+    const facts = { ...(await tapFacts(tap, trunk)), abOverAc: 0.115 };
+    for (const leg of ["Cb", "Cs"] as const) {
+      const p = priceLeg(
+        {
+          kind: "fitting",
+          fitting: tap,
+          facts,
+          flows: { through: 400, branch: 400, upstreamMain: 1000, downstreamMain: 600 },
+          leg,
+        },
+        CONVERGING,
+        { "tap-converging-rect": table },
+      );
+      expect(p.lossInWg).toBeNull();
+      expect(p.source).toBeNull();
+      expect(p.unpriced).toContain(`${table} ${leg} not read`);
+      expect(p.unpriced).toContain("stated for Ab/Ac 0.5, As/Ac 1");
+      expect(p.unpriced).toContain("actual Ab/Ac 0.115, As/Ac 1");
+    }
+  },
+);
 
 it("a round junction where air joins prices on ED5-3 by Dc, Ab/Ac and As/Ac: a takeoff and a tee", async () => {
   const { fittingFacts } = await import("./kernel/fitting-facts.ts");

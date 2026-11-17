@@ -469,7 +469,7 @@ export const LOSS_RULES: readonly LossRule[] = [
     // is a smooth-radius wye (Idelchik 1986, 7-11; branch 90 degrees): a straight-collar takeoff is
     // read on it as the nearest stated geometry, and the row says so. A takeoff on a constant main
     // has As = Ac. ER5-2 (round tap) and ER5-3 (45 degree entry) state one axis, at Ab/Ac 0.5 and
-    // As = Ac (Revit's ASHRAE.xml): read at that geometry, the row names this junction's Ab/Ac.
+    // As = Ac (Revit's ASHRAE.xml): refuse every other geometry.
     input: (f, flows, table, leg) => {
       const abAc = tapAbAc(f);
       const x = (leg === "Cs" ? flows.qs! : flows.qb!) / flows.qc!;
@@ -493,6 +493,20 @@ export const LOSS_RULES: readonly LossRule[] = [
               note,
             };
       }
+      const asAc = 1; // A takeoff hangs off one constant-section main, so As = Ac.
+      // Stated-geometry tolerance 1e-9 absorbs ratio arithmetic noise, never a physical size band.
+      const statedGeometryTolerance = 1e-9;
+      if (
+        !(
+          Math.abs(abAc - 0.5) <= statedGeometryTolerance &&
+          Math.abs(asAc - 1) <= statedGeometryTolerance
+        )
+      )
+        return {
+          res: leg === "Cs" ? "Cs" : "Cb",
+          x: NaN,
+          refuse: `${table} is stated for Ab/Ac 0.5, As/Ac 1 (As = Ac); actual Ab/Ac ${ratio(abAc)}, As/Ac ${ratio(asAc)}`,
+        };
       const branch =
         table === "ER5-2" && f.inlet.shape !== "round"
           ? "; round-tap table on a rectangular branch"

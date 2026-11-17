@@ -178,6 +178,53 @@ it("requires this sheet's branded complete claim, never a wire FanClaim", () => 
   expect(() => mintWriteRequest(wire, p.sheet, p.input, p.context)).toThrow("complete claim");
 });
 
+it("ER5-2 off-geometry refuses a mint until a typed junction drop completes the claim", () => {
+  const snapshot = synthetic();
+  const rect = { shape: "rectangular" as const, widthIn: 20, heightIn: 10 };
+  const branch = { shape: "rectangular" as const, widthIn: 5, heightIn: 4.6 };
+  const main = snapshot.segments.find((s) => s.id === 4)!;
+  Object.assign(main, rect);
+  for (const c of main.connectors) Object.assign(c, rect);
+  main.connectors.push(connOf(2, [6, 0], { ...branch, kind: "curve" }));
+  snapshot.nodes.push(
+    nodeOf(6, "fitting", {
+      partType: "TapAdjustable",
+      family: "Rectangular Takeoff",
+      groupId: "r",
+      connectors: [connOf(0, [4, 2], branch), connOf(1, [7, 0], branch)],
+      facts: [factOf("takeoff", 1), factOf("mainArea", 200 / 144), factOf("abOverAc", 0.115)],
+    }),
+    nodeOf(7, "terminal", {
+      groupId: "r",
+      flowParameter: "revit:Flow",
+      connectors: [
+        { ...connOf(0, [6, 1], { ...branch, classification: "ReturnAir" }), flowCfm: 100 },
+      ],
+      facts: [factOf("flow", 100)],
+    }),
+  );
+  const work: WorkLayer = { rules: { "tap-converging-rect": cell("ER5-2") } };
+  const before = prepared(snapshot, work);
+  expect(before.sheet.fittings.find((f) => f.elementId === 6)?.unpriced).toContain(
+    "actual Ab/Ac 0.115, As/Ac 1",
+  );
+  expect(before.sheet.claim.kind).toBe("incomplete");
+  expect(() => before.mint()).toThrow();
+  const after = prepared(snapshot, {
+    ...work,
+    componentDrops: { [elementSubject(snapshot.nodes.find((n) => n.id === 6)!)]: cell(0.04) },
+  });
+  expect(after.sheet.blockers).toEqual([]);
+  expect(after.sheet.claim.kind).toBe("complete");
+  expect(after.mint().equipment).toContainEqual(expect.objectContaining({ id: 100 }));
+  const invalid = prepared(snapshot, {
+    ...work,
+    componentDrops: { [elementSubject(snapshot.nodes.find((n) => n.id === 6)!)]: cell(-0.04) },
+  });
+  expect(invalid.sheet.claim.kind).toBe("incomplete");
+  expect(() => invalid.mint()).toThrow();
+});
+
 it("refuses a truncated walk before it can mint any native preview", () => {
   const p = prepared();
   p.input.snapshot.walk = { ...TEST_WALK, truncated: true };
