@@ -873,7 +873,7 @@ export class RouteWorkspace {
       for (const [key, value] of Object.entries(node)) {
         if (key === "edit") {
           if (value && typeof value === "object" && Object.hasOwn(value, "by"))
-            z.never().parse((value as Record<string, unknown>).by);
+            z.never().parse(Reflect.get(value, "by"));
           if (value != null) edit.parse(value);
         }
         validate(value);
@@ -889,7 +889,9 @@ export class RouteWorkspace {
   async start(scope:WorkKey,seed:unknown,by:WorkAuthor,receiptId?:string):Promise<RouteStateWriteResult> {
     this.#authorize("publish");
     const input=this.validateSeed(scope,seed);
-    const spec=this.#registry.get(scope.route)!.spec;
+    const registration = this.#registry.get(scope.route);
+    if (!registration) throw Error(`Unknown Work route ${scope.route}`);
+    const spec = registration.spec;
     const doc=spec.schema.parse(stampChanges(input,undefined,by,0));
     return this.#serialized(async()=>{
       if(await this.#store.getState({targetKey:workKey(scope),route:scope.route}) != null)
@@ -1434,8 +1436,9 @@ export function stagedRows(route: string, raw: unknown) {
   const walk = (node: unknown, path: string[]): { work: string; segment: string; row: string; by: string | null; source: string | null; ref: string | null }[] => {
     if (!record(node)) return [];
     const edit = node.edit;
-    if (path.length && record(edit) && (Object.hasOwn(edit, "value") || edit.delete === true))
-      return [{ work: route, segment: path[0]!, row: path.slice(1).join("/") || path[0]!, by: typeof edit.by === "string" ? edit.by : null, source: text(edit, "source"), ref: text(edit, "ref") }];
+    const [segment, ...rest] = path;
+    if (segment !== undefined && record(edit) && (Object.hasOwn(edit, "value") || edit.delete === true))
+      return [{ work: route, segment, row: rest.join("/") || segment, by: typeof edit.by === "string" ? edit.by : null, source: text(edit, "source"), ref: text(edit, "ref") }];
     return Object.entries(node).flatMap(([key, value]) => walk(value, [...path, key]));
   };
   return walk(record(raw) && record(raw.doc) ? raw.doc : raw, []);
@@ -1471,7 +1474,9 @@ function recoverCells(raw: unknown, spec: RouteStateSpec<z.ZodType>) {
   if (!header.success) return null;
   const result = spec.schema.safeParse(header.data.doc);
   if (result.success) return null;
-  const doc = structuredClone(header.data.doc) as Record<string, unknown>, failed: Record<string, unknown> = {};
+  const object = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === "object";
+  const doc = structuredClone(header.data.doc), failed: Record<string, unknown> = {};
+  if (!object(doc) || !object(raw)) return null;
   const paths: string[][] = [];
   const walk = (node: unknown, path: string[]) => {
     if (!node || typeof node !== "object") return;
@@ -1487,16 +1492,24 @@ function recoverCells(raw: unknown, spec: RouteStateSpec<z.ZodType>) {
   }
   const put = (root: Record<string, unknown>, path: string[], value: unknown) => {
     let node = root;
-    for (const key of path.slice(0, -1)) node = (node[key] ??= {}) as Record<string, unknown>;
-    node[path.at(-1)!] = value;
+    for (const key of path.slice(0, -1)) {
+      const child = node[key] ??= {};
+      if (!object(child)) throw Error("Stored cell path crosses a scalar");
+      node = child;
+    }
+    const last = path.at(-1);
+    if (last !== undefined) node[last] = value;
   };
   for (const [path, reason] of bad) {
     let original: unknown = header.data.doc;
-    for (const key of path) original = (original as Record<string, unknown>)[key];
+    for (const key of path) {
+      if (!object(original)) return null;
+      original = original[key];
+    }
     put(failed, path, original);
     put(doc, path, { invalid: reason });
   }
-  const projected = { ...(raw as object), doc };
+  const projected = { ...raw, doc };
   try { return { raw: projected, envelope: parseEnvelope(projected, spec), failed }; }
   catch { return null; }
 }
