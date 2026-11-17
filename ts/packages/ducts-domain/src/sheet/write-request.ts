@@ -126,14 +126,14 @@ export function mintWriteRequest(
       (c) => c.parameter === required && c.members.some((m) => m.elementId === sheet.fan.unitId),
     );
     if (
-      cohort &&
-      (!cohort.complete ||
-        cohort.basis !== snapshot.document.readAt ||
-        !cohort.members.length ||
-        (cohort.owner.kind === "instance" && cohort.members.length !== 1))
+      !cohort ||
+      !cohort.complete ||
+      cohort.basis !== snapshot.document.readAt ||
+      !cohort.members.length ||
+      (cohort.owner.kind === "instance" && cohort.members.length !== 1)
     )
-      throw Error("The required ESP parameter cohort is incomplete or stale; read again");
-    if (cohort?.owner.kind === "type") {
+      throw Error("The required ESP parameter cohort is missing, incomplete or stale; read again");
+    if (cohort.owner.kind === "type") {
       const peers = cohort.members.map((m) => ({
         id: m.elementId,
         claim: m.elementId === sheet.fan.unitId ? claim : context.peerClaims.get(m.elementId),
@@ -160,10 +160,9 @@ export function mintWriteRequest(
             .join("; ")}. Use an instance ESP parameter or change the design`,
         );
     }
-    // P-058 follow-up: historical captures omit ownership, so preserve the instance path pending its witness.
     equipment = unique(
-      (cohort?.members.map((m) => m.elementId) ?? [sheet.fan.unitId]).map((id) => ({
-        id,
+      cohort.members.map((m) => ({
+        id: m.elementId,
         externalStaticInWg: claim.requiredEspInWg,
       })),
     );
