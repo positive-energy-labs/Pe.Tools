@@ -110,7 +110,7 @@ public static class DuctApplier {
             items.Add(Duplicate("component", w.Id) ?? Plan("component", w.Id, () => Lossy(doc, w.Id, "component", BuiltInCategory.OST_DuctAccessory, SpecificLoss, schemas,
                 [(PressureLossField, Finite(w.InWg) ? UnitUtils.ConvertToInternalUnits(w.InWg, InWg).ToString("R", CultureInfo.InvariantCulture) : "")], w.InWg, $"specific-loss {w.InWg:0.####} in-wg")));
         foreach (var w in request.Terminals ?? []) items.Add(Duplicate("terminal", w.Id) ?? Plan("terminal", w.Id, () => Terminal(doc, w, slots)));
-        foreach (var w in request.Equipment ?? []) items.Add(Duplicate("equipment", w.Id) ?? Plan("equipment", w.Id, () => Equipment(doc, w, slots)));
+        foreach (var w in slots.RequiredEsp is null ? [] : request.Equipment ?? []) items.Add(Duplicate("equipment", w.Id) ?? Plan("equipment", w.Id, () => Equipment(doc, w, slots)));
         foreach (var w in request.TerminalFlows ?? []) items.Add(Duplicate("terminal-flow", w.Id) ?? Plan("terminal-flow", w.Id, () => TerminalFlow(doc, w)));
         foreach (var w in request.EquipmentFlows ?? []) items.Add(Duplicate("equipment-flow", w.Id) ?? Plan("equipment-flow", w.Id, () => EquipmentFlow(doc, w, slots)));
         var unscoped = SharedTypes(doc, items, "equipment", (request.Equipment ?? []).Select(w => (w.Id, w.ExternalStaticInWg)), "fan statics")
@@ -193,7 +193,8 @@ public static class DuctApplier {
         var had = stored?.Slots?.Resolve();
         var will = next.Slots!.Resolve();
         var names = new[] {
-            ("fanStatic", had?.FanStatic, will.FanStatic),
+            ("requiredEsp", had?.RequiredEsp, will.RequiredEsp),
+            ("ratedEsp", had?.RatedEsp, will.RatedEsp),
             ("fanFlow", had?.FanFlow, will.FanFlow),
             ("componentDrop", had?.ComponentDrop, will.ComponentDrop),
             ("terminalDrop", had?.TerminalDrop, will.TerminalDrop),
@@ -520,7 +521,7 @@ public static class DuctApplier {
     }
 
     private static Item Equipment(Document doc, DuctEquipmentWrite w, DuctParameterSlots slots) =>
-        FanParameter(doc, "equipment", w.Id, w.ExternalStaticInWg, slots.FanStatic, nameof(DuctParameterSlots.FanStatic), SpecTypeId.HvacPressure, InWg, "in-wg", "static");
+        FanParameter(doc, "equipment", w.Id, w.ExternalStaticInWg, slots.RequiredEsp!, nameof(DuctParameterSlots.RequiredEsp), SpecTypeId.HvacPressure, InWg, "in-wg", "static");
 
     private static Parameter? ResolveFanParameter(Element e, string name) =>
         e.LookupParameter(name) ?? (e as FamilyInstance)?.Symbol?.LookupParameter(name);
@@ -619,7 +620,7 @@ public static class DuctApplier {
             Version = DuctLossStore.CurrentVersion, Rules = rules, Instances = instances, Terminals = drops, TerminalFlows = terminalFlows, EquipmentFlows = equipmentFlows,
             Verdicts = DuctLossStore.Overlay(stored?.Verdicts, asked.Verdicts, deletes.Verdicts, StringComparer.Ordinal),
             Roles = DuctLossStore.Overlay(stored?.Roles, asked.Roles, deletes.Roles),
-            Slots = new DuctParameterSlotOverrides(slots.FanStatic, slots.FanFlow, slots.ComponentDrop,
+            Slots = new DuctParameterSlotOverrides(slots.RequiredEsp ?? "", slots.RatedEsp, slots.FanFlow, slots.ComponentDrop,
                 slots.TerminalDrop, slots.FittingCoefficient, slots.TerminalFlow), WorkRevision = revision, AppliedAt = now, Unknown = unknown
         };
     }

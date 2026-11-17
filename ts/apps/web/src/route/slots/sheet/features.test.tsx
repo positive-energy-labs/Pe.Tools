@@ -46,7 +46,7 @@ test("model value from the read: a binding reads its row's model value out of th
 
 test("choice kind with options from the read: a binding offers the read's options for its row", () => {
   const slot = { bindings: {
-    fanStatic: local({ kind: "enum", shape: z.string(), choices: (read: { esp: string[] }) => read.esp.map((p) => ({ value: p, label: p })) }),
+    requiredEsp: local({ kind: "enum", shape: z.string(), choices: (read: { esp: string[] }) => read.esp.map((p) => ({ value: p, label: p })) }),
   } };
   const [cell] = sheetCells(slot, { rows: [], work: {}, model: [], read: { esp: ["ESP", "PE_ESP"] } });
   expect(cell!.choices?.map((c) => c.key)).toEqual(["ESP", "PE_ESP"]);

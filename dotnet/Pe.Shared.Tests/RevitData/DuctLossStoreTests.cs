@@ -96,10 +96,31 @@ public sealed class DuctLossStoreTests {
     public void Partial_slots_from_the_wire_fall_back_to_the_defaults() {
         var slots = Newtonsoft.Json.JsonConvert.DeserializeObject<DuctParameterSlotOverrides>("""{"componentDrop":"Damper Drop"}""")!;
 
-        Assert.That(slots.FanStatic, Is.Null, "Newtonsoft passes null for a missing ctor argument");
-        Assert.That(slots.Resolve().FanStatic, Is.EqualTo("PE_M_Fan_ExternalStaticPressure"));
+        Assert.That(slots.RequiredEsp, Is.Null, "Newtonsoft passes null for a missing ctor argument");
+        Assert.That(slots.Resolve().RequiredEsp, Is.EqualTo("PE_M_Fan_ExternalStaticPressure"));
         Assert.That(slots.Resolve(), Is.EqualTo(new DuctParameterSlotOverrides(ComponentDrop: "Damper Drop").Resolve()));
     }
+
+    [Test]
+    public void Required_esp_none_round_trips_and_retired_slot_is_ignored_without_migration() {
+        var oldKey = "fan" + "Static";
+        var read = Read(Stored("{\"slots\":{\"" + oldKey + "\":\"Old ESP\"}}"));
+        Assert.That(read.Refusal, Is.Null);
+        Assert.That(read.Value!.Slots!.Resolve().RequiredEsp, Is.EqualTo("PE_M_Fan_ExternalStaticPressure"));
+        var store = new DuctLossStore { Slots = new(RequiredEsp: "", RatedEsp: "Rated ESP") };
+        var back = Read(store.ToJson()).Value!;
+        Assert.That(back.Version, Is.EqualTo(2));
+        Assert.That(back.Slots!.RequiredEsp, Is.EqualTo(""));
+        Assert.That(back.Slots.Resolve().RequiredEsp, Is.Null);
+        Assert.That(RevitDataJson.Serialize(back.Slots.Resolve()), Does.Contain("\"requiredEsp\":null"), "the snapshot must preserve resolved none across the wire");
+        Assert.That(back.Slots.Resolve().RatedEsp, Is.EqualTo("Rated ESP"));
+    }
+
+    [TestCase("ESP", "ESP")]
+    [TestCase("ESP", "esp")]
+    [TestCase(" ESP ", "esp")]
+    public void Required_and_rated_esp_must_be_different_parameters(string required, string rated) =>
+        Assert.Throws<ArgumentException>(() => new DuctParameterSlotOverrides(RequiredEsp: required, RatedEsp: rated).Resolve());
 
     [Test]
     public void Staged_slots_win_over_the_store_and_the_store_over_the_defaults() {

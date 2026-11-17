@@ -1,6 +1,6 @@
 import { expect, it } from "vite-plus/test";
 import { fansDocumentSchema, stagedDucts } from "@pe/agent-contracts";
-import { encounterRulings, resolveInputs, resolveCriteria, stagedEsp } from "./inputs.ts";
+import { encounterRulings, resolveInputs, resolveCriteria } from "./inputs.ts";
 import { cell, stamped, TEST_FIRM } from "./test-inputs.ts";
 import type { SheetSnapshot } from "./build.ts";
 import { flowsOf } from "./flow.ts";
@@ -117,7 +117,7 @@ it("unknown inflow creates a missing leg and cannot certify worksheet totals", (
   expect(w.sections[0]).toMatchObject({ complete: false, unpricedLegs: 1 });
 });
 
-it("Q2: rated ESP is a stated value only, never the parameter Pe writes; staged required is its own value with its author", () => {
+it("P-030: rated ESP is stated or read from its own named slot, never the parameter Pe writes", () => {
   const key = "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000002";
   const fan = {
     nodes: [
@@ -133,10 +133,14 @@ it("Q2: rated ESP is a stated value only, never the parameter Pe writes; staged 
     ],
     segments: [],
   } as unknown as SheetSnapshot;
-  const layers = { snapshot: fan, firm: TEST_FIRM, work: { esp: { [key]: cell(0.9, "human", "work:fans/esp/2") } } };
-  // P-030: the `externalStatic` fact is what a Pe write of required ESP leaves in `fanStatic`. Rated stays
+  const layers = { snapshot: fan, firm: TEST_FIRM, work: {} };
+  // P-030: the `externalStatic` fact is what a Pe write of required ESP leaves in `requiredEsp`. Rated stays
   // unknown over it, and a stated rated value is the stated one, never the written 0.5.
   expect(resolveInputs(layers).units["2"]!.esp).toMatchObject({ status: "missing", value: null, source: "none" });
+  fan.nodes[0]!.facts.push({ key: "ratedStatic", value: 0.65 } as never);
+  expect(resolveInputs(layers).units["2"]!.esp.status).toBe("missing");
+  fan.slots = { ...fan.slots, ratedEsp: "Rated ESP" } as NonNullable<SheetSnapshot["slots"]>;
+  expect(resolveInputs(layers).units["2"]!.esp).toMatchObject({ value: 0.65, source: "model", author: null });
   const rated = (ratedEsp: unknown) =>
     resolveInputs({ ...layers, work: { ...layers.work, ratedEsp: { [key]: ratedEsp as never } } }).units["2"]!.esp;
   expect(rated(cell(0.75, "human", "work:fans/ratedEsp/2"))).toMatchObject({
@@ -153,13 +157,6 @@ it("Q2: rated ESP is a stated value only, never the parameter Pe writes; staged 
       work: { assumptions: { "encounter:20:2": { value: { kind: "verdict", verdict: "accept" }, ref: "work:test" } as never } },
     }),
   ).toEqual([]);
-  expect(stagedEsp(layers)["2"]).toMatchObject({ status: "valid", value: 0.9, source: "Work", author: "human", ref: "work:fans/esp/2" });
-  expect(stagedEsp({ ...layers, run: { esp: { [key]: cell(1.1, "pea") } } })["2"]).toMatchObject({
-    value: 1.1,
-    source: "run",
-    author: "pea",
-  });
-  expect(stagedEsp({ snapshot: fan })).toEqual({});
   expect(
     encounterRulings({ work: { assumptions: { "encounter:20:2": cell({ kind: "verdict", verdict: "accept" }) } } }),
   ).toEqual([{ at: { elementId: 20, connector: 2 }, verdict: "accepted", by: "human", ref: "work:test" }]);

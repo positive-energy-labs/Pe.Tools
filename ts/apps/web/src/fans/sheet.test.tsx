@@ -44,7 +44,7 @@ const drawn = (read: object, doc: Record<string, unknown>, at: (path: readonly s
   const ctx = { cells: { doc, at }, page: { read: () => ({}) }, value: { state, value: read }, verb: () => ({ run: async () => null, refusal: null }) };
   return render(<RegistryContext value={makeAtomRegistry()}><SheetPane ctx={{ draw: ctx as never, slot }} /></RegistryContext>);
 };
-const snapshot = { nodes: [], segments: [], slots: { fanStatic: "Old ESP" } };
+const snapshot = { nodes: [], segments: [], slots: { requiredEsp: "Old ESP" } };
 
 test("D25: a retained resolved Work airflow keeps Work provenance after its live edit is undone", () => {
   const unit = { id: 7, kind: "equipment", uniqueId: "unit-7", family: "MUAS", type: "A", mark: "MA-1", connectors: [], facts: [] };
@@ -59,8 +59,8 @@ test("D25: a retained resolved Work airflow keeps Work provenance after its live
 });
 
 test("slot names use project and firm settings and never stage Work", () => {
-  const binding = Object.entries(fansSheet.bindings).find(([key]) => key === "setting.ducts.parameters.fanStatic")?.[1];
-  expect(binding).toMatchObject({ home: { at: "setting", owner: "ducts", path: ["parameters", "fanStatic"], tiers: ["project", "firm"] } });
+  const binding = Object.entries(fansSheet.bindings).find(([key]) => key === "setting.ducts.parameters.fanFlow")?.[1];
+  expect(binding).toMatchObject({ home: { at: "setting", owner: "ducts", path: ["parameters", "fanFlow"], tiers: ["project", "firm"] } });
   expect(fansDocumentSchema.parse({})).not.toHaveProperty("parameters");
 });
 

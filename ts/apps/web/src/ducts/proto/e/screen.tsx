@@ -25,7 +25,7 @@ import { kindMeaning, kindDisabledReason } from "../../sheet/kind-meaning.ts";
 import { DEFAULT_DESIGN_FRICTION_RATE } from "@pe/ducts-domain/equivalent-length";
 import { neighboursOf, type Neighbour } from "@pe/ducts-domain/neighbours";
 import { noRunBranches } from "@pe/ducts-domain/no-runs";
-import { pendingCount, stagedEsp } from "@pe/ducts-domain/staged";
+import { pendingCount } from "@pe/ducts-domain/staged";
 import { unitFlowsView as unitFlowsIn } from "@pe/ducts-domain/pricing-view";
 import { scopeOf, sectionsOf, systemScope } from "@pe/ducts-domain/system-scope";
 import { systemSearch } from "@pe/ducts-domain/system-search";
@@ -701,7 +701,7 @@ function useInboxProjection(
       airflow: airflowOptions(surveyed.snapshot, scope),
       unitAirflow: airflowOptions(surveyed.snapshot, scope, "unit"),
       roles: surveyed.roles,
-      write: { edit, esp: stagedEsp(doc) },
+      write: { edit, esp: 0 },
     });
     return { heal, inbox: { ...base, diagnostics: [...base.diagnostics, ...noRuns] } };
   }, [snapshot, priced, doc, projection, edit, analysis]);

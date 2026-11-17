@@ -20,7 +20,7 @@ export type FanInputRow<T> = {
   owner: "fans" | "ducts";
   layers: readonly ValueSource[];
   segment: string | null;
-  parameter: "fanStatic" | "fanFlow" | "componentDrop" |
+  parameter: "requiredEsp" | "ratedEsp" | "fanFlow" | "componentDrop" |
     "terminalDrop" | "fittingCoefficient" | "terminalFlow" | null;
   write: "stated-only" | "never";
   accepts: (value: unknown) => value is T;
@@ -75,7 +75,6 @@ export type FanParameterCohort = {
 export type FanEspValues = {
   rated: SourcedValue<number>;
   required: FanClaim;
-  staged: SourcedValue<number>;
 };
 export type SetAsideRow = {
   work: "fans" | "ducts"; segment: string; row: string;
@@ -117,7 +116,7 @@ export const fanParameterCohortSchema = z.strictObject({
   parameter: ref, owner: z.strictObject({ kind: z.enum(["instance", "type"]), id }),
   members: z.array(z.strictObject({ elementId: id, uniqueId: ref })), basis: ref, complete: z.boolean(),
 }).refine(c => !c.complete || (c.members.length > 0 && new Set(c.members.map(m => m.elementId)).size === c.members.length && (c.owner.kind !== "instance" || (c.members.length === 1 && c.members[0].elementId === c.owner.id))), "complete cohorts require distinct members and one instance owner");
-export const fanEspValuesSchema = z.strictObject({ rated: sourcedValueSchema(pressure), required: fanClaimSchema, staged: sourcedValueSchema(pressure) });
+export const fanEspValuesSchema = z.strictObject({ rated: sourcedValueSchema(pressure), required: fanClaimSchema });
 export const setAsideRowSchema = z.strictObject({ work: z.enum(["fans", "ducts"]), segment: ref, row: ref, source: z.string().nullable(), ref: ref.nullable() });
 
 const numberDomain = (unit: string) => ({ kind: "number", min: 0, unit } as const);
@@ -147,9 +146,8 @@ const input = <const D extends Domain>(name: string, on: FanInputRow<unknown>["o
  * by name, so neither restates a domain nor counts positions in the table below.
  */
 export const FAN_CELLS = {
-  esp: input("esp", "fan", "esp", "fanStatic", inWg),
-  /** The ESP the fan is rated for, as someone stated it. Work only: no parameter holds it, because `fanStatic` holds the required ESP Pe writes (P-030). */
-  ratedEsp: row({ name: "ratedEsp", role: "input", on: "fan", domain: inWg, home: "Work", owner: "fans", segment: "ratedEsp", parameter: null, write: "never" }),
+  /** The ESP the fan is rated for, as someone stated it. Work or a separately named rated parameter, never the required ESP write target (P-030). */
+  ratedEsp: row({ name: "ratedEsp", role: "input", on: "fan", domain: inWg, home: "Work", owner: "fans", segment: "ratedEsp", parameter: "ratedEsp", write: "never" }),
   equipmentFlows: input("equipmentFlows", "fan", "equipmentFlows", "fanFlow", numberDomain("cfm")),
   flows: input("flows", "terminal", "flows", "terminalFlow", numberDomain("cfm")),
   terminalDrops: input("terminalDrops", "terminal", "terminalDrops", "terminalDrop", inWg),
@@ -158,7 +156,7 @@ export const FAN_CELLS = {
 };
 /** Phase 2 keeps metadata beside its existing consumer; phase 4 moves this single table to fans/contract. */
 export const FAN_INPUTS = [
-  FAN_CELLS.esp, FAN_CELLS.ratedEsp, FAN_CELLS.equipmentFlows, FAN_CELLS.flows, FAN_CELLS.terminalDrops, FAN_CELLS.componentDrops,
+  FAN_CELLS.ratedEsp, FAN_CELLS.equipmentFlows, FAN_CELLS.flows, FAN_CELLS.terminalDrops, FAN_CELLS.componentDrops,
   row({ name: "fittingCoefficient", role: "input", on: "fitting", domain: numberDomain(""), home: "model", owner: "ducts", segment: null, parameter: "fittingCoefficient", write: "never" }),
   FAN_CELLS.roles,
   row({ name: "kinds", role: "input", on: "fan", domain: { kind: "enum", shape: z.enum(DUCT_UNIT_KINDS), choices: DUCT_UNIT_KINDS.map(value => ({ value, label: value })) }, home: "Work", owner: "ducts", segment: "kinds", parameter: null, write: "never" }),

@@ -1,6 +1,7 @@
 import { Schema } from "effect";
 import { readFileSync } from "node:fs";
 import { expect, test } from "vite-plus/test";
+import { DUCT_UNIT_KINDS, FAN_BLOCKER_KINDS } from "./generated/host-ops.generated.ts";
 import {
   generatedJsonSchema,
   nativeResponseSchema,
@@ -26,6 +27,8 @@ test.each(["roster", "system-walk", "four-fan-walk"])(
     const payload = JSON.parse(
       readFileSync(new URL(`./fixtures/k2-${name}.json`, import.meta.url), "utf8"),
     );
+    // These native captures predate the generated vocabulary; add contract data, never model evidence.
+    payload.vocabulary = { unitKinds: [...DUCT_UNIT_KINDS], blockerKinds: [...FAN_BLOCKER_KINDS] };
     const schema = nativeResponseSchema(
       name === "roster" ? "ducts.snapshot.roster" : "ducts.snapshot.walk",
     );

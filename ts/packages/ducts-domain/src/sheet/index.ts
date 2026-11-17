@@ -21,7 +21,6 @@ export {
   editCells,
   encounterRulings,
   sourced,
-  stagedEsp,
   type InputLayers,
   type WorkLayer,
   type StoreLayer,
@@ -30,10 +29,12 @@ export {
 export {
   ENCOUNTERS,
   ENCOUNTER_KEY,
-  claimOf,
   encountersOf,
   hostStatic,
   type EncounterRuling,
   type HostCalc,
 } from "./encounters.ts";
 export { editPatches } from "./edits.ts";
+
+export type { CompleteClaim, DomainClaim } from "./encounters.ts";
+export { mintWriteRequest, type FanWriteRequest, type FanWriteContext } from "./write-request.ts";

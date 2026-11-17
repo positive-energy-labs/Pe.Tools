@@ -65,7 +65,7 @@ test.each(["with-from", "without-from", "path-only", "canonical-handle"] as cons
         : spelling === "path-only" ? { ...key("fans"), target: workHandle(key("fans"), 1).key.target } : workHandle(key("fans"), 1).key;
       expect(workKey(scope)).toBe(workKey(key("fans")));
       await act(async () => {
-        const result = await host.workspace.apply(scope, "fans", "pea", [{ path: ["esp", `UniqueId:${fan.uniqueId}`, "edit"], value: { value: { inWg: 1.25 } } }], 1);
+        const result = await host.workspace.apply(scope, "fans", "pea", [{ path: ["ratedEsp", `UniqueId:${fan.uniqueId}`, "edit"], value: { value: { inWg: 1.25 } } }], 1);
         expect(result.ok).toBe(true);
       });
       await waitFor(() => expect(requests.length).toBeGreaterThan(before), { timeout: 2000 });

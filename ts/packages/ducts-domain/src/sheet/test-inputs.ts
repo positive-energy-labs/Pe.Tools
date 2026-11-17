@@ -41,7 +41,7 @@ export const stamped = (criteria: NonNullable<WorkLayer["criteria"]>): Pick<Work
 });
 
 export const TEST_SLOTS: DuctSnapshot["slots"] = {
-  fanStatic: "",
+  requiredEsp: "",
   fanFlow: "",
   componentDrop: "",
   terminalDrop: "PE_M_Grd_ExternalStaticPressure",

@@ -61,7 +61,6 @@ export function workLayer(design: DuctsDesign): WorkLayer {
     flows: staged.flows,
     terminalDrops: cells(staged.terminalDrops, (v) => v.inWg),
     componentDrops: cells(staged.componentDrops, (v) => v.inWg),
-    esp: cells(staged.esp, (v) => v.inWg),
     ratedEsp: cells(staged.ratedEsp, (v) => v.inWg),
     equipmentFlows: staged.equipmentFlows,
     roles: cells(staged.roles, (v) => v.role),

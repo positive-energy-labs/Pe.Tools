@@ -5,7 +5,7 @@ import { createHash } from "node:crypto";
 import { canonicalJson } from "@pe/host-internal/native-read";
 
 const directory = join(import.meta.dirname, "native-recordings");
-const provenance = JSON.parse(readFileSync(join(directory, "provenance.json"), "utf8")) as Record<string, { operation: string; source: string; canonicalResponseSha256: string; requestFile?: string }>;
+const provenance = JSON.parse(readFileSync(join(directory, "provenance.json"), "utf8")) as Record<string, { operation: string; source: string; canonicalResponseSha256: string; requestFile?: string; fixtureAdaptation?: string }>;
 
 export function nativeRecordings(...names: string[]) {
   const responses: Record<string, unknown> = {};
@@ -23,7 +23,7 @@ export function nativeRecordings(...names: string[]) {
     responses[record.operation] = addVocabulary
       ? { ...value, vocabulary: { unitKinds: [...DUCT_UNIT_KINDS], blockerKinds: [...FAN_BLOCKER_KINDS] } }
       : value;
-    sources[record.operation] = addVocabulary ? `${record.source}; fixture vocabulary from generated contract` : record.source;
+    sources[record.operation] = [record.source, record.fixtureAdaptation, addVocabulary ? "fixture vocabulary from generated contract" : null].filter(Boolean).join("; ");
   }
   return { responses, sources };
 }

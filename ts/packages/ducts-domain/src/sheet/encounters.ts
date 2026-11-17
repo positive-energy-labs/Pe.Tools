@@ -6,6 +6,11 @@ import type { Author, CoverageGap, Encounter, FanClaim } from "@pe/agent-contrac
 import { coverageGaps, wholeCoverage, type Coverage, type WholeCoverage } from "./coverage.ts";
 import type { FanPortRef, Leg, SheetPath, Side } from "./types.ts";
 
+declare const COMPLETE: unique symbol;
+/** Only complete(), after WholeCoverage, constructs this phantom capability; never the wire claim. */
+export type CompleteClaim = Extract<FanClaim, { kind: "complete" }> & { readonly [COMPLETE]: true };
+export type DomainClaim = CompleteClaim | Exclude<FanClaim, { kind: "complete" }>;
+
 type Reached = NonNullable<SheetPath["end"]["reached"]> | "unknown";
 interface Policy {
   /** The verdict with no ruling from a person. */
@@ -161,15 +166,15 @@ const complete = (
   _read: WholeCoverage,
   basis: string,
   requiredEspInWg: number,
-): Extract<FanClaim, { kind: "complete" }> => ({
+): CompleteClaim => ({
   kind: "complete",
   basis,
   requiredEspInWg,
   coverage: [],
   blockingIds: [],
-});
+}) as unknown as CompleteClaim;
 
-export function claimOf(f: ClaimFacts): FanClaim {
+export function claimOf(f: ClaimFacts): DomainClaim {
   const coverage = [...coverageGaps(f.coverage), ...f.gaps];
   const blocking = new Set(f.blockingIds);
   const tieIn = new Map<number, number>();

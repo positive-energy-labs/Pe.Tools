@@ -99,7 +99,7 @@ const DuctSystem = (v: DuctsSnapshotWalk.Res.DuctSystem) => ({
   sections: set(v.sections.map(DuctSection))
 });
 const DuctParameterSlots = (v: DuctsSnapshotWalk.Res.DuctParameterSlotOverrides) => ({
-  ...pick(v, "fanStatic", "fanFlow", "componentDrop", "terminalDrop", "fittingCoefficient", "terminalFlow")
+  ...pick(v, "requiredEsp", "ratedEsp", "fanFlow", "componentDrop", "terminalDrop", "fittingCoefficient", "terminalFlow")
 });
 const DuctLossStore = (v: DuctsSnapshotWalk.Res.DuctLossStore) => ({
   ...pick(v, "version", "rules", "instances", "terminals", "terminalFlows", "equipmentFlows", "verdicts", "roles", "workRevision", "appliedAt"),

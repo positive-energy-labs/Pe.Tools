@@ -29,7 +29,7 @@ export const EMPTY_SNAPSHOT: DuctSnapshot = {
   layers: [],
   systems: [],
   slots: {
-    fanStatic: "",
+    requiredEsp: "",
     fanFlow: "",
     componentDrop: "",
     terminalDrop: "",

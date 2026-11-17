@@ -176,7 +176,7 @@ public sealed class DuctApplyPlanReviewProofTests {
             });
             foreach (var scope in new[] { "instance", "type", "missing" }) {
                 var prefix = scope == "type" ? "Type" : scope == "instance" ? "Instance" : "Missing";
-                var request = new DuctApplyRequest(new DuctParameterSlotOverrides(FanStatic: prefix + "Static", FanFlow: prefix + "Flow"),
+                var request = new DuctApplyRequest(new DuctParameterSlotOverrides(RequiredEsp: prefix + "Static", FanFlow: prefix + "Flow"),
                     [], [], [], [new(fan.Id.Value(), 0.25)], [], [new(fan.Id.Value(), 1000, "native proof")], Store(doc));
                 var result = Read(ui, doc, "fan-" + scope, request, State);
                 foreach (var kind in new[] { "equipment", "equipment-flow" }) {

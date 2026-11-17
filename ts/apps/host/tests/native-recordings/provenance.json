@@ -24,7 +24,9 @@
     "commit": "4c6c3ef0dfe63de7bd0544d517fded3ffcf9652c",
     "modelCopy": "native proof-owned fixture copy / generated fan project",
     "receipt": "C:/Users/kaitp/source/repos/Pe.Tools/.artifacts/runs/kernel-crusade-20261104/takeover/fans-review-before-evidence/native/run-02/sdk.json",
-    "canonicalResponseSha256": "19e11a95202a97cce60fc762860c1657f34f852ebaf492b697456cc536aa0c04"
+    "canonicalResponseSha256": "cce0aac9e654106678ac07ad60df8900d0a5da5d5002a291e7d92f93859c4032",
+    "originalCanonicalResponseSha256": "19e11a95202a97cce60fc762860c1657f34f852ebaf492b697456cc536aa0c04",
+    "fixtureAdaptation": "Phase-3 RequiredEsp slot rename; fixture contract projection only, not new native evidence. Source file and source hash remain unchanged."
   },
   "fans-accessory-missing": {
     "operation": "ducts.apply.plan",
@@ -37,7 +39,9 @@
     "commit": "4c6c3ef0dfe63de7bd0544d517fded3ffcf9652c",
     "modelCopy": "native proof-owned fixture copy / generated fan project",
     "receipt": "C:/Users/kaitp/source/repos/Pe.Tools/.artifacts/runs/kernel-crusade-20261104/takeover/fans-review-before-evidence/native/run-02/sdk.json",
-    "canonicalResponseSha256": "6ce4cc315aa1f7e7a7945ae8f6e8f729984d22324ff1a4657388be8ef9c3684a"
+    "canonicalResponseSha256": "6ea69665e755aca325309f1d785888d4d2b2d260d99e6b6d12ecc880493a2882",
+    "originalCanonicalResponseSha256": "6ce4cc315aa1f7e7a7945ae8f6e8f729984d22324ff1a4657388be8ef9c3684a",
+    "fixtureAdaptation": "Phase-3 RequiredEsp slot rename; fixture contract projection only, not new native evidence. Source file and source hash remain unchanged."
   },
   "fresh-takeoffs.initialize-carrier": {
     "operation": "takeoffs.initialize-carrier",
@@ -231,7 +235,9 @@
     "lane": "session",
     "date": "2026-11-07T22:48:31.1844987Z",
     "modelCopy": "Driver gate c1 owned model copy; original SDK receipt identifies its exact process",
-    "canonicalResponseSha256": "362a79a4178f3923e60fcf333b44095bd6b6985203ef2863b1557c00eea961eb"
+    "canonicalResponseSha256": "150f4eabb0018f63c836f4004f2d1ff3987315ff807dca84b4225ab20e37e0cc",
+    "originalCanonicalResponseSha256": "362a79a4178f3923e60fcf333b44095bd6b6985203ef2863b1557c00eea961eb",
+    "fixtureAdaptation": "Phase-3 RequiredEsp slot rename; fixture contract projection only, not new native evidence. Source file and source hash remain unchanged."
   },
   "driver-ducts.tables": {
     "operation": "ducts.tables",
@@ -275,7 +281,9 @@
     "lane": "session",
     "date": "2026-11-07T22:33:45.3204785Z",
     "modelCopy": "Driver gate c1 owned model copy; original SDK receipt identifies its exact process",
-    "canonicalResponseSha256": "38a8c9f8fce9eeb5ff040ba21388d72123f83ae13b389987e20784b9f476634d"
+    "canonicalResponseSha256": "68cd3efc8ff489cd88f9b866cededd7dcf91f58251d213996c39c8217c9f1e2e",
+    "originalCanonicalResponseSha256": "38a8c9f8fce9eeb5ff040ba21388d72123f83ae13b389987e20784b9f476634d",
+    "fixtureAdaptation": "Phase-3 RequiredEsp slot rename; fixture contract projection only, not new native evidence. Source file and source hash remain unchanged."
   },
   "sdk-ducts.apply": {
     "operation": "ducts.apply",
@@ -534,7 +542,9 @@
     "modelCopy": null,
     "lane": "retained SDK native receipt; original custody not reconstructed",
     "date": "2026-11-06T12:15:19.1779389Z",
-    "canonicalResponseSha256": "bda25d9c7e6c729b9dd32627d57c71fba8becda9dd7b52472572ad9e71a5f961"
+    "canonicalResponseSha256": "9ed48263771f23fbb532028c142f916d779c31b2aeea2fbc3f7d142e526402a4",
+    "originalCanonicalResponseSha256": "bda25d9c7e6c729b9dd32627d57c71fba8becda9dd7b52472572ad9e71a5f961",
+    "fixtureAdaptation": "Phase-3 RequiredEsp slot rename; fixture contract projection only, not new native evidence. Source file and source hash remain unchanged."
   },
   "retained-script-RuntimeFailed": {
     "operation": "scripting.execute",
@@ -585,11 +595,13 @@
     "source": "C:/Users/kaitp/.t3/worktrees/Pe.Tools/t3-3b950b02-4b2d98da810b31fd/ts/packages/host-contracts/.cache/ops-catalog.json",
     "sourceSha256": "0bd17bad38aa1bc707e1b483a580879f6b3efef7091a5696951c152e8cc41eb2",
     "pointer": "$",
-    "canonicalResponseSha256": "e33a17997d94c83880f13f2d3ae4936997997196b93d36e78b03c04996dd5eaf",
+    "canonicalResponseSha256": "754fa6ce2b7fb5c122fea0dce6ac79673bdd9689b3483829e6deeccd41c985ac",
     "lane": "deterministic",
     "commit": "53bc79617da25875cd7a34381da85c7783dbfbc1",
     "date": "2026-11-13",
-    "dirty": true
+    "dirty": true,
+    "originalCanonicalResponseSha256": "e33a17997d94c83880f13f2d3ae4936997997196b93d36e78b03c04996dd5eaf",
+    "fixtureAdaptation": "Phase-3 RequiredEsp slot rename; fixture contract projection only, not new native evidence. Source file and source hash remain unchanged."
   },
   "retained-view-image": {
     "operation": "revit.context.view-image",

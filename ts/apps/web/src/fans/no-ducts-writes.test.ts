@@ -1,4 +1,5 @@
 import { expect, test } from "vite-plus/test";
+import { module } from "./route.ts";
 
 /*
  * Ruling 2026-11-10, verdict 1: no cross-route write. /fans stages no /ducts Work anywhere. It declares
@@ -7,7 +8,6 @@ import { expect, test } from "vite-plus/test";
  * (`fans/ledger-fix.journey.test.tsx`). Red at 0e7e4270: Fans owned /ducts Work and edited it.
  */
 test("/fans stages no /ducts Work anywhere: no /ducts owner, and its edit door refuses /ducts keys", async () => {
-  const { module } = await import("./route.ts");
   const edits = module.spec.edits!;
   expect(Object.keys(edits.owners)).not.toContain("ducts");
   const ducts = {
@@ -22,5 +22,7 @@ test("/fans stages no /ducts Work anywhere: no /ducts owner, and its edit door r
   for (const [key, value] of Object.entries(ducts))
     expect(edits.input.safeParse({ [key]: value }).success, key).toBe(false);
   // Fans' own cells still pass through the same door.
-  expect(edits.input.safeParse({ esp: {} }).success).toBe(true);
+  expect(edits.input.safeParse({ flows: {} }).success).toBe(true);
+  // Required ESP is a result now, so the retired input is refused.
+  expect(edits.input.safeParse({ esp: {} }).success).toBe(false);
 });

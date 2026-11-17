@@ -26,9 +26,9 @@ import {
   resolveCriteria,
   resolveInputs,
   scopeInputs,
-  stagedEsp, encounterRulings,
+  encounterRulings,
 } from "@pe/ducts-domain/sheet/index";
-import type { Chain, Sheet, SheetPath } from "@pe/ducts-domain/sheet/types";
+import type { Chain, Sheet as DomainSheet, SheetPath } from "@pe/ducts-domain/sheet/types";
 import { worksheet } from "@pe/ducts-domain/sheet/worksheet";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import { z } from "zod";
@@ -37,6 +37,8 @@ import { followAcceptedJoins, mergeSnapshots } from "@pe/host/ducts-walk";
 import { designLayers } from "./ducts-design.ts";
 import { catalogs } from "@pe/host/builtin-read-handles";
 import { fingerprint, nativeRead, read } from "@pe/host/reads/evaluator";
+// Wire reads carry FanClaim, never the domain write capability (contract 3a).
+type Sheet = Omit<DomainSheet, "claim"> & { claim: import("@pe/agent-contracts").FanClaim };
 const snapshotSchema = nativeResponseSchema("ducts.snapshot.walk");
 export const espOptions = read("fans.esp-options", {
   input: z.object({ target: ductsRosterRequestSchema.shape.target, units: z.array(z.string()) }),
@@ -247,7 +249,6 @@ const sheetModel = read("fans.calculation", {
             inputs,
             roster: ports,
             fan: { unitId: request.unitId, portIndex: request.portIndex },
-            stagedEsp: stagedEsp({ snapshot, work }),
             encounterRulings: encounterRulings({ work }),
             // `hosts` stays unpassed: one read prices one fan, and the engine builds a host's calc where it meets one.
           })

@@ -3,37 +3,17 @@ import { ductsDocumentSchema, fansDocumentSchema, stagedDucts } from "@pe/agent-
 import { editPatches } from "./sheet/edits.ts";
 import { resolveCriteria } from "./sheet/inputs.ts";
 import { TEST_FIRM } from "./sheet/test-inputs.ts";
-import { fanWriteCells, stageEspCohort } from "./staged.ts";
 import { elementSubject } from "./work-subject.ts";
+import { fanWriteCells } from "./staged.ts";
 
 const uid = (n: number) => `3f2c9a10-0000-4000-8000-00000000000${n}-0001e240`;
-const [onWalk, peer, stranger] = [1, 2, 3].map(n => ({ elementId: n, uniqueId: uid(n) }));
-const snapshot = { nodes: [{ uniqueId: onWalk!.uniqueId }], segments: [] } as unknown as Parameters<typeof fanWriteCells>[1];
-const cohort = { parameter: "fanStatic", owner: { kind: "type" as const, id: 77 }, members: [onWalk!, peer!], basis: "b1", complete: true };
+const [onWalk, peer] = [1, 2].map(n => ({ elementId: n, uniqueId: uid(n) }));
 
-test("a complete cohort stages one value on every member, and only its off-walk members join the write scope", () => {
-  const staged = stageEspCohort(cohort, "b1", { inWg: 0.75 });
-  if ("refused" in staged) throw Error(staged.refused);
-  expect(staged.esp).toEqual({ [elementSubject(onWalk!)]: { inWg: 0.75 }, [elementSubject(peer!)]: { inWg: 0.75 } });
-  const cell = (value: unknown) => ({ edit: { value, by: "human" } });
-  const doc = fansDocumentSchema.parse({
-    esp: { ...Object.fromEntries(Object.entries(staged.esp).map(([k, v]) => [k, cell(v)])), [elementSubject(stranger!)]: cell({ inWg: 2 }) },
-    equipmentFlows: { [elementSubject(peer!)]: cell(500) },
-  });
-  // Without native membership the walk still clips: nothing off it is written.
-  expect(fanWriteCells(doc, snapshot)).toEqual([["esp", elementSubject(onWalk!)]]);
-  // With it, the peer's ESP alone joins; its other cells and an unrelated unit's edit stay out.
-  expect(fanWriteCells(doc, snapshot, [cohort])).toEqual([["esp", elementSubject(onWalk!)], ["esp", elementSubject(peer!)]]);
-  // A cohort with no member on this walk, or an incomplete one, widens nothing.
-  expect(fanWriteCells(doc, snapshot, [{ ...cohort, members: [peer!, stranger!] }, { ...cohort, complete: false, members: [onWalk!, stranger!] }])).toHaveLength(1);
-});
-
-test("an incomplete, stale or misowned cohort refuses and stages nothing", () => {
-  expect(stageEspCohort({ ...cohort, complete: false }, "b1", { inWg: 1 })).toHaveProperty("refused");
-  expect(stageEspCohort(cohort, "b2", { inWg: 1 })).toHaveProperty("refused");
-  expect(stageEspCohort({ ...cohort, owner: { kind: "instance", id: 1 } }, "b1", { inWg: 1 })).toHaveProperty("refused");
-  expect(stageEspCohort({ ...cohort, members: [] }, "b1", { inWg: 1 })).toHaveProperty("refused");
-  expect(stageEspCohort({ ...cohort, owner: { kind: "instance", id: 1 }, members: [onWalk!] }, "b1", { inWg: 1 })).toHaveProperty("esp");
+test("fan Work writes clip every segment to the walk; required ESP has no staged cell", () => {
+  const doc = fansDocumentSchema.parse({ equipmentFlows: Object.fromEntries([onWalk!, peer!].map(n => [elementSubject(n), { edit: { by: "human", value: 200 } }])) });
+  const snapshot = { nodes: [{ uniqueId: onWalk!.uniqueId }], segments: [] } as unknown as Parameters<typeof fanWriteCells>[1];
+  expect(fanWriteCells(doc, snapshot)).toEqual([["equipmentFlows", elementSubject(onWalk!)]]);
+  expect(fansDocumentSchema.safeParse({ esp: {} }).success).toBe(false);
 });
 
 test("stagedDucts never invents a caller for an unstamped cell, and locates uncited evidence", () => {
@@ -50,13 +30,13 @@ test("stagedDucts hands the resolver { value, by, ref } cells: airflow a plain n
   const key = elementSubject(onWalk!), other = elementSubject(peer!);
   const fans = fansDocumentSchema.parse({
     flows: { [key]: { edit: { value: 250, by: "pea", ref: "balancing report p2" } }, [other]: {} },
-    esp: { [key]: { edit: { value: { inWg: 0.5 }, by: "human" } }, [other]: {} },
+    ratedEsp: { [key]: { edit: { value: { inWg: 0.5 }, by: "human" } }, [other]: {} },
   });
   const staged = stagedDucts(null, fans);
   expect(staged.flows).toEqual({
     [key]: { value: 250, by: "pea", ref: "balancing report p2" },
   });
-  expect(staged.esp).toEqual({ [key]: { value: { inWg: 0.5 }, by: "human", ref: `work:fans/esp/${key}` } });
+  expect(staged.ratedEsp).toEqual({ [key]: { value: { inWg: 0.5 }, by: "human", ref: `work:fans/ratedEsp/${key}` } });
 });
 
 test("a staged criterion resolves from Work with the caller who staged it and the ref they cited", () => {
