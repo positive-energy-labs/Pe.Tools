@@ -377,7 +377,7 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
     const url = new URL(web.url),
       declared = matchPeRoute(web.method, url.pathname)!;
     if (declared.id === "resources.subscriptions") return { resourceOwner: connectionOwner };
-    if (![...graphRouteIds, "work.get", "ducts.analysis", "resources.stream"].includes(declared.id)) return {};
+    if (![...graphRouteIds, "work.get", "resources.stream"].includes(declared.id)) return {};
     const stream = declared.id === "resources.stream";
     const input = declared.route.input.parse({
       params: declared.params,

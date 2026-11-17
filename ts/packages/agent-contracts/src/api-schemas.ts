@@ -69,7 +69,7 @@ export * from "./plugin.ts";
 export * from "./plugin-runtime.ts";
 
 export * from "./thread-export.ts";
-export * from "./ducts-analysis.ts";
+export { DUCT_INFERENCE_GRADES, ductFindingSchema, type DuctInferenceGrade, type DuctFinding } from "./ducts-pricing-read.ts";
 export * from "./list-search.ts";
 export * from "./scene-view.ts";
 export { threadSearchDefault } from "./routes/shared.ts";

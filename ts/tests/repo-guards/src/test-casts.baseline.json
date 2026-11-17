@@ -8,7 +8,6 @@
     "apps/host/tests/callers.ts": 1,
     "apps/host/tests/device-mcp.test.ts": 1,
     "apps/host/tests/document-marks.test.ts": 1,
-    "apps/host/tests/ducts-analysis.test.ts": 2,
     "apps/host/tests/ducts-heal-preparation.test.ts": 3,
     "apps/host/tests/ducts-loss-scope.test.ts": 1,
     "apps/host/tests/family-read.test.ts": 1,

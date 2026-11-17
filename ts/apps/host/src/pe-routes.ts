@@ -96,12 +96,6 @@ import {
   threadHead,
 } from "./control.ts";
 import { HostDocumentMarks } from "./document-marks.ts";
-import {
-  createDuctsAnalysis,
-  ductsNativeRead,
-  type DuctsAnalysisSources,
-} from "./ducts-analysis.ts";
-import { catalogsFor, DuctFiles } from "./ducts-files.ts";
 import { runPods } from "./family-actions.ts";
 import { familySpecAsset } from "./family-spec.ts";
 import { ActionJournalService, HostLogService } from "./receipt-services.ts";
@@ -176,7 +170,7 @@ import { bindRevoke } from "./revoke.ts";
 import { fileRouteDocumentStore } from "./route-document-store.ts";
 import { RunRegistry } from "./run-registry.ts";
 import { createScheduledTasks, scheduledTasksKind } from "./scheduled-tasks.ts";
-import { resolveSdkSession, readSessionScope } from "./sdk-session.ts";
+import { readSessionScope } from "./sdk-session.ts";
 import type { DocumentRow } from "./session-inventory.ts";
 import { CaptureStore, type TakeoffCaptures } from "./takeoff-captures.ts";
 import { eligibleThreads, threadHistory } from "./thread-history.ts";
@@ -213,7 +207,6 @@ export interface PeRoutesOptions {
   reportContext?: (thread: string) => AgentReportContext | null;
   /** The log from the composing HostLogService. */
   log?: HostLog;
-  ductsAnalysis?: Omit<DuctsAnalysisSources, "readWork">;
   readGraph?: (request: unknown) => Promise<unknown>;
 }
 export interface PeRouteInvocation {
@@ -322,16 +315,6 @@ export function createPeRoutes(options: PeRoutesOptions) {
     // Identity and revision checks govern shared Work; thread targets only constrain trust adapters.
     return bindWork(route, doc.address, undefined, { session: doc.session, openId: doc.openId });
   }
-  const analysis = (context?: import("@pe/runtime").WorkReadContext) => options.ductsAnalysis
-    ? createDuctsAnalysis({
-        ...options.ductsAnalysis,
-        readWork: async (key) => {
-          const saved = await (context ? work.read(key, key.route, context) : work.readUncaptured(key, key.route));
-          if (!saved) throw Error(`Work is absent for ${key.route}`);
-          return saved;
-        },
-      })
-    : null;
   const views = new RouteViewStore(() => work.admittedRoutes());
   const workReads = new OwnerReads();
   const resources = observeResources(work, options.heads, (request, publish, after) => {
@@ -452,28 +435,6 @@ export function createPeRoutes(options: PeRoutesOptions) {
     }
     if (declared.id === "places.get") return json(readPlaces());
     if (declared.id === "places.put") return json(writePlaces(await request.json()));
-    if (declared.id === "ducts.analysis" || declared.id === "ducts.analysis-artifact") {
-      if (!options.ductsAnalysis) return json({ error: "Ducts analysis is unavailable" }, 503);
-      try {
-        return declared.id === "ducts.analysis"
-          ? json(await analysis(invocation.work)!.read(peRoutes["ducts.analysis"].body.parse(await request.json())))
-          : await analysis()!.artifact(declared.params.id!);
-      } catch (error) {
-        const problem = error as { message?: unknown; statusCode?: unknown };
-        const status =
-          typeof problem?.statusCode === "number" &&
-          problem.statusCode >= 400 &&
-          problem.statusCode <= 599
-            ? problem.statusCode
-            : error instanceof z.ZodError
-              ? 400
-              : 409;
-        return json(
-          { error: typeof problem?.message === "string" ? problem.message : message(error) },
-          status,
-        );
-      }
-    }
     if (declared.id === "features.get") return Response.json(hostDescriptor(resolveHostVersion()), {
       headers: options.inputs ? { "x-pe-source": JSON.stringify(options.inputs.source) } : undefined,
     });
@@ -1242,7 +1203,6 @@ function* hostPeRoutes(
   const hostLog = yield* HostLogService;
   const marks = yield* HostDocumentMarks;
   const pictures = yield* PictureCaptureStore;
-  const files = yield* DuctFiles;
   const inputContext = yield* Effect.serviceOption(HostInputContext);
   const sourceRoot = hostOwnership.sourceRoot;
   // Host startup prepares this fixed machine-state directory before any harness can spawn.
@@ -1504,38 +1464,6 @@ function* hostPeRoutes(
     inputs: inputContext._tag === "Some" ? inputContext.value : undefined,
     workspace: hostWork?.workspace,
     registrations,
-    ductsAnalysis: {
-      root: stateScope(hostState(), hostState().ductsAnalyses),
-      producer: { version: resolveHostVersion(), ...hostOwnership },
-      marks,
-      catalogs: (pointer) => runPods({}, catalogsFor(files, pointer)),
-      resolve: async (target) => {
-        if (!bridge) throw Error("No Revit bridge is available");
-        const session = await resolveSdkSession(bridge, {
-          bridgeSessionId: target.session,
-          openDocumentId: target.openId,
-        });
-        const document = session.state?.openDocuments.find((doc) => doc.openId === target.openId);
-        if (!document || document.isFamilyDocument)
-          throw Error("Ducts analysis requires the exact open project document");
-        return {
-          target,
-          address: document.address ?? null,
-          projectHome: document.projectHome,
-          title: document.title,
-          process: { pid: session.processId, startUtcUnixMs: session.processStartUtcUnixMs },
-          provenance: {
-            sdk: session.resolved,
-            lane: session.lane,
-            sourceRoot: session.sourceRoot,
-            installedRoot: session.installedRoot,
-            buildStamp: session.buildStamp,
-            sdkSessionId: session.sdkSessionId,
-          },
-        };
-      },
-      call: ductsNativeRead(hostBaseUrl),
-    },
     ...(hostWork ? {} : { store: fileRouteDocumentStore(stateScope(hostState(), hostState().work)) }),
     heads: threads.heads,
     turnElementNames: (request) =>

@@ -306,7 +306,7 @@ export const DUCTS_SHEET_GUIDE = {
   ],
   never: [
     "Never grep raw snapshots or analysis artifacts for pressure drop.",
-    "Never elect groups, assign a system fan, or use route:ducts.analysis, circuit calculations, or network totals as the pressure-drop path.",
+    "Never elect groups, assign a system fan, or use circuit calculations, or network totals as the pressure-drop path.",
     "Never compute pressure drop by hand or rebuild the engine in scripts.",
     "Never write required ESP from an incomplete sheet or confuse a fan's rated ESP with its required ESP.",
   ],
