@@ -49,8 +49,10 @@ function replay(unitId: number, mirrored = false, supply = false) {
   }
   price.mockRestore();
   // Host inspection can price the same physical piece from its other end: length differs at roundoff only.
+  const same = (a: number | null | undefined, b: number | null | undefined) =>
+    a === b || (a != null && b != null && Math.abs(a - b) < 1e-12);
   return pieces.filter((p, i) => pieces.findIndex(q => q.cfm === p.cfm &&
-    Math.abs((q.length ?? 0) - (p.length ?? 0)) < 1e-12 && Math.abs((q.drop ?? 0) - (p.drop ?? 0)) < 1e-12) === i);
+    same(q.length, p.length) && same(q.drop, p.drop)) === i);
 }
 
 it("R-SHARE RV-27 excludes RV-30's 65 cfm until tap 14086100", () => {
