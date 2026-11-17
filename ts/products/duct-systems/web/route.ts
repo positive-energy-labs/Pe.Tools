@@ -32,6 +32,8 @@ import { presentLosses, presentHeal, presentFan } from "@pe/ducts-web/reviews";
 import { designCalc } from "./src/design-calc.ts";
 import { lazyFixtures } from "@pe/ducts-web/registry";
 const fixtures = lazyFixtures(() => import("./src/value-fixtures.ts"));
+let drawingModule: Promise<typeof import("./src/screen/screen.tsx")> | undefined;
+const drawings = () => drawingModule ??= import("./src/screen/screen.tsx");
 
 const system = subjectSchema(DUCTS_SYSTEM_MAX);
 export const fields = {
@@ -103,7 +105,7 @@ export const module = route({
   sheet: designCalc,
   // The picture is of the opened systems. A system is a name, not geometry: the overlay hands the kernel
   // its members to capture, with the stubs, labels, rulings and schematic the closed marks cannot express.
-  picture: { scope: "subject", overlay: overlay(() => import("./src/screen/screen.tsx"), "NetworkPicture") },
+  picture: { scope: "subject", overlay: overlay(drawings, "NetworkPicture") },
   panes: {
     "e-systems": {
       subjectList: true,
@@ -112,28 +114,28 @@ export const module = route({
       read: roster,
       bindings,
       body: "scroll",
-      draw: draw("scroll", () => import("./src/screen/screen.tsx"), "SystemsPane"),
+      draw: draw("scroll", drawings, "SystemsPane"),
     },
     "e-sidebar": {
       title: "System tree",
       purpose: "Inspect the opened systems and their runs",
       bindings,
       body: "scroll",
-      draw: draw("scroll", () => import("./src/screen/screen.tsx"), "TreePane"),
+      draw: draw("scroll", drawings, "TreePane"),
     },
     "e-rules-all": {
       title: "All-systems rules",
       purpose: "Price every read fitting type",
       bindings,
       body: "scroll",
-      draw: draw("scroll", () => import("./src/screen/screen.tsx"), "AllRulesBody"),
+      draw: draw("scroll", drawings, "AllRulesBody"),
     },
     "e-rules": {
       title: "This system’s rules",
       purpose: "Review fitting rules for the opened systems",
       bindings,
       body: "scroll",
-      draw: draw("scroll", () => import("./src/screen/screen.tsx"), "RulesBody"),
+      draw: draw("scroll", drawings, "RulesBody"),
     },
     "e-picture": {
       title: "Picture",
@@ -156,7 +158,7 @@ export const module = route({
       purpose: "Review assumptions and planned writes",
       bindings,
       body: "scroll",
-      draw: draw("scroll", () => import("./src/screen/screen.tsx"), "InboxBody"),
+      draw: draw("scroll", drawings, "InboxBody"),
     },
   },
   edits: {
