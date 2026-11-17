@@ -1,4 +1,3 @@
-import { VOCABULARY } from "@pe/ducts-domain/sheet/scoped-snapshot";
 import { mkdtemp, stateFixture } from "../../../../tests/isolated-home/storage.ts";
 // @vitest-environment jsdom
 import { stableFanKey } from "../ducts/sheet/model";
