@@ -383,8 +383,8 @@ class Pricer {
       leg.lossSource = { kind: "default", ref: "carries none of this fan's flow" };
     } else if (cfm != null) {
       const r = this.price(w, flows, side, s, out, cfm);
-      // Domain pricing receipt only; the generated wire leg contract remains the published surface.
-      if (r.pieces) Object.defineProperty(leg, "pieces", { value: r.pieces });
+      // Test-visible receipt: the wire evidence omits per-piece length, cfm and drop; keep this off the wire.
+      if (r.testVisiblePieceReceipt) Object.defineProperty(leg, "testVisiblePieceReceipt", { value: r.testVisiblePieceReceipt });
       p = r.p;
       ids.push(...r.ids);
       if (r.cfm != null && r.cfm !== cfm) {
@@ -461,7 +461,7 @@ class Pricer {
     s: number,
     out: number | undefined,
     cfm: number,
-  ): { p: PricedLeg | null; ids: string[]; note?: string; cfm?: number; pieces?: Leg["pieces"] } {
+  ): { p: PricedLeg | null; ids: string[]; note?: string; cfm?: number; testVisiblePieceReceipt?: Leg["testVisiblePieceReceipt"] } {
     const { grids } = this.input;
     const st = w.states[s]!;
     const e = st.el;
@@ -710,7 +710,7 @@ class Pricer {
     return {
       p,
       ids,
-      pieces: pieces.map((piece, i) => ({ lengthFt: piece.lengthFt, cfm: piece.cfm, lossInWg: priced[i]?.lossInWg ?? null })),
+      testVisiblePieceReceipt: pieces.map((piece, i) => ({ lengthFt: piece.lengthFt, cfm: piece.cfm, lossInWg: priced[i]?.lossInWg ?? null })),
       note: `, ${round(length)} ft${cs.length ? `, ${cs.length} tap(s) passed (Cs: ${cs.map(p => p.elementId).join(", ")})` : ""}${cs.flatMap(p => p.source?.kind === "drop" ? [`; ${p.source.source}`] : []).join("")}`,
       // The flow the leg is priced at where it enters, the same piece its velocity is read from: a
       // duct left by a tap on its side carries the upstream flow up to that tap (RV-15's tap on

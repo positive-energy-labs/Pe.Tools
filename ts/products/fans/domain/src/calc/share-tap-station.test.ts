@@ -32,15 +32,15 @@ function replay(unitId: number, mirrored = false, supply = false) {
   const r = suggestRoster(snapshot);
   const sheet = buildCalc({ snapshot, fan: { unitId, portIndex: supply ? 4 : 2 }, roster: [...r.fans, ...r.suggestions],
     inputs: inputsFor(snapshot, {}), grids: toGrids({ tables }) });
-  const leg = Object.values(sheet.legs).find(l => l.elementId === duct.id && l.pieces)!;
+  const leg = Object.values(sheet.legs).find(l => l.elementId === duct.id && l.testVisiblePieceReceipt)!;
   expect(leg).toBeDefined();
-  expect(Object.keys(leg)).not.toContain("pieces");
-  for (const p of leg.pieces!) {
+  expect(Object.keys(leg)).not.toContain("testVisiblePieceReceipt");
+  for (const p of leg.testVisiblePieceReceipt!) {
     expect(p.lossInWg).not.toBeNull();
     expect(p.lossInWg).toBeCloseTo(friction(sectionOf(duct.shape, duct.diameterIn, duct.widthIn, duct.heightIn)!,
       p.cfm, p.lengthFt, duct.roughness.valueFt).dp, 12);
   }
-  return leg.pieces!.map(p => ({ length: p.lengthFt, cfm: p.cfm, drop: p.lossInWg }));
+  return leg.testVisiblePieceReceipt!.map(p => ({ length: p.lengthFt, cfm: p.cfm, drop: p.lossInWg }));
 }
 
 it("R-SHARE RV-27 excludes RV-30's 65 cfm until tap 14086100", () => {
@@ -86,9 +86,9 @@ it("P-106: a sibling-only tap charges straight Cs and names the passed tap on th
   const straight = sheet.fittings.find(p => p.elementId === 14086100)!;
   expect(straight.lossInWg).not.toBeNull();
   expect(straight.lossInWg).not.toBe(0);
-  expect(leg.pieces).toHaveLength(2);
-  expect(leg.pieces!.every(p => p.lossInWg != null)).toBe(true);
-  expect(leg.lossInWg).toBeCloseTo(leg.pieces!.reduce((sum, p) => sum + p.lossInWg!, 0) + straight.lossInWg!, 12);
+  expect(leg.testVisiblePieceReceipt).toHaveLength(2);
+  expect(leg.testVisiblePieceReceipt!.every(p => p.lossInWg != null)).toBe(true);
+  expect(leg.lossInWg).toBeCloseTo(leg.testVisiblePieceReceipt!.reduce((sum, p) => sum + p.lossInWg!, 0) + straight.lossInWg!, 12);
   // The source line discloses passed taps; the evidence ref names the friction method, Altshul-Tsal.
   expect(leg.lossSource.ref).toContain("1 tap(s) passed (Cs: 14086100)");
   expect(leg.evidence.kind).toBe("friction");
@@ -112,9 +112,9 @@ it.each([false, true])("P-107: typed branch drop replaces Cs only when refused=%
     expect(after.fittings.find(p => p.elementId === 14086100)).toMatchObject({ table: "SD5-9" });
   } else {
     expect(leg(before).lossInWg).toBeNull();
-    expect(leg(after).pieces).toHaveLength(2);
-    expect(leg(after).pieces!.every(p => p.lossInWg != null)).toBe(true);
-    expect(leg(after).lossInWg).toBeCloseTo(leg(after).pieces!.reduce((sum, p) => sum + p.lossInWg!, 0) + 0.123, 12);
+    expect(leg(after).testVisiblePieceReceipt).toHaveLength(2);
+    expect(leg(after).testVisiblePieceReceipt!.every(p => p.lossInWg != null)).toBe(true);
+    expect(leg(after).lossInWg).toBeCloseTo(leg(after).testVisiblePieceReceipt!.reduce((sum, p) => sum + p.lossInWg!, 0) + 0.123, 12);
     expect(leg(after).lossSource.ref).toContain("typed drop from 14086100 (Cs refused: SD5-9 Cs is not loaded)");
     expect(leg(after).lossSource.ref).toContain("); Work");
   }
