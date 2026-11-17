@@ -5,12 +5,18 @@ import { inputsFor, withFamilyFlipped } from "@pe/ducts-domain/test-inputs";
 import { suggestRoster } from "@pe/ducts-domain/roster";
 import { toGrids } from "@pe/ducts-domain/loss-grid";
 import * as pricing from "@pe/ducts-domain/kernel/price-leg";
-import { buildCalc, type CalcSnapshot } from "./build.ts";
+import { nativeResponseSchema } from "@pe/host-contracts/decoders";
+import { VOCABULARY } from "@pe/ducts-domain/calc/scoped-snapshot";
+import { buildCalc } from "./build.ts";
 
 afterEach(() => vi.restoreAllMocks());
 
+const loadSnapshot = () => nativeResponseSchema("ducts.snapshot.walk").parse({
+  ...structuredClone(raw), vocabulary: VOCABULARY, walk: { ...raw.walk, unreadPeers: [] },
+});
+
 function replay(unitId: number, mirrored = false, supply = false) {
-  let snapshot = structuredClone(raw) as unknown as CalcSnapshot;
+  let snapshot = loadSnapshot();
   if (supply) {
     for (const id of [12777429, 12806600]) snapshot = withFamilyFlipped(snapshot, id);
   }
@@ -75,7 +81,7 @@ it.each([false, true])("R-SHARE supply co-supplier joins at the physical tap, mi
 });
 
 it("P-106: a sibling-only tap charges straight Cs and names the passed tap on the shared leg", () => {
-  const snapshot = structuredClone(raw) as unknown as CalcSnapshot;
+  const snapshot = loadSnapshot();
   const roster = suggestRoster(snapshot);
   // Keep the retained topology but state one-tenth flow so its small tap stays below the velocity refusal.
   const model = inputsFor(snapshot, {});
@@ -102,7 +108,7 @@ it("P-106: a sibling-only tap charges straight Cs and names the passed tap on th
 });
 
 it.each([false, true])("P-107: typed branch drop replaces Cs only when refused=%s", refused => {
-  const snapshot = structuredClone(raw) as unknown as CalcSnapshot;
+  const snapshot = loadSnapshot();
   const roster = suggestRoster(snapshot);
   const model = inputsFor(snapshot, {});
   const endCfm = Object.fromEntries([...Object.entries(model.units), ...Object.entries(model.terminals)]
