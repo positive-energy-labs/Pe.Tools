@@ -2052,8 +2052,9 @@ function issueOf(
       : { kind: "none", reason: b.closer.note };
   };
   const encounter = encounters.find((e) => backflowId(e) === b.id);
-  const closer: FanIssue["closer"] = deadheads.has(b.id)
-    ? { kind: "none", reason: deadheads.get(b.id)! }
+  const deadhead = deadheads.get(b.id);
+  const closer: FanIssue["closer"] = deadhead != null
+    ? { kind: "none", reason: deadhead }
     : encounter
     ? { kind: "encounter", encounter }
     : b.closer.candidate
