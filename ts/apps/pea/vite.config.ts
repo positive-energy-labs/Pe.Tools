@@ -1,5 +1,6 @@
 import { defineConfig } from "vite-plus";
 import { browserGuardianPlugin } from "@pe/browser/build";
+import { liteParseNativePlugin } from "@pe/mcps/build";
 import { join } from "node:path";
 import { receiptBuildDefines } from "../host/src/build-stamp.ts";
 
@@ -9,7 +10,12 @@ export default defineConfig({
     outDir: "dist-installed/bundle",
     clean: ["dist-installed"],
     shims: true,
-    plugins: [browserGuardianPlugin(join(import.meta.dirname, "dist-installed"))],
+    plugins: [
+      browserGuardianPlugin(join(import.meta.dirname, "dist-installed")),
+      // Installed Pea threads run read_document in this executable's MCP server (adapter.ts peaMcpServer),
+      // so LiteParse's native and pdfium must sit beside pea.exe too, not only beside Pe.Host.exe.
+      liteParseNativePlugin(join(import.meta.dirname, "dist-installed")),
+    ],
     define: {
       __PE_SOURCE_COMMIT__: receiptBuildDefines("release").__PE_SOURCE_COMMIT__,
     },
