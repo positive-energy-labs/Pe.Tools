@@ -15,7 +15,7 @@ it("P-048: a stored invalid marker crosses stagedDucts and blocks model fallback
   const work = stagedDucts(null, fansDocumentSchema.parse({
     flows: { "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000001": { invalid: "unstamped stored cell" } },
   }));
-  expect(resolveInputs({ snapshot, work, firm: TEST_FIRM, store: { terminalFlows: { "1": { cfm: 200 } } } })
+  expect(resolveInputs({ snapshot, work: { flows: work.flows }, firm: TEST_FIRM, store: { terminalFlows: { "1": { cfm: 200 } } } })
     .terminals["1"]?.cfm).toMatchObject({ status: "invalid", value: null, source: "Work" });
 });
 it("duct readings expose run, Work, model and firm provenance with units", () => {
