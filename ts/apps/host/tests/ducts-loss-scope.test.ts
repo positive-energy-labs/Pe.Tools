@@ -139,7 +139,7 @@ function manualD(accept: boolean, over: Partial<SheetSnapshot> = {}) {
   const context: FanWriteContext = {
     appliedAt: "2026-11-16T00:00:00Z",
     slots: { ...snapshot.slots, fanFlow: snapshot.nodes.find((n) => n.id === 14577391)!.flowParameter },
-    cells: [], rulings: {}, storeDeletes: {},
+    peerClaims: new Map(), rulings: {}, storeDeletes: {},
   };
   return { input, context };
 }

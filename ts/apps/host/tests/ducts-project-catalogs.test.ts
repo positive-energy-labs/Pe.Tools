@@ -14,7 +14,7 @@ import { settle } from "./effect-test.ts";
 const closes: (() => Promise<unknown>)[] = [];
 afterEach(async () => { for (const close of closes.splice(0).reverse()) await close(); vi.unstubAllEnvs(); });
 
-test("losses plan and sheet catalog read price from the target project home", async () => {
+test("a losses plan on an incomplete fan calc is refused with the claim's reason, and the catalog read prices from the target project home", async () => {
   const root = await mkdtemp(join(tmpdir(), "pe-loss-catalogs-"));
   closes.push(() => rm(root, { recursive: true, force: true }));
   const firm = join(root, "04 PE Software Files", "Pe.Tools"), project = join(root, "Projects", "Example", "Pe.Tools"), user = join(root, "user");
@@ -57,9 +57,9 @@ test("losses plan and sheet catalog read price from the target project home", as
     input: { work: { key: fanKey, revision: fans.ok ? fans.revision : -1 } } });
   expect(response.status, await response.clone().text()).toBeLessThan(400);
   const receipt = await f.journal.wait("project-loss");
-  expect(receipt, JSON.stringify(receipt)).toMatchObject({ state: "succeeded", result: { derivedRequest: { terminals: [expect.objectContaining({ id: 4 })] } } });
-  const planned = (receipt as { result: { derivedRequest: { terminals: { id: number; inWg: number }[] } } }).result.derivedRequest.terminals.find(t => t.id === 4)!;
-  expect(planned.inWg).toBeCloseTo(0.7619678404550739);
+  // The fixture's fan has no return path and an open end, so its claim is incomplete: nothing is planned (invariant 1).
+  expect(JSON.stringify(receipt)).toMatch(/Nothing is written from a incomplete fan calc \(known [\d.]+ in-wg\): .*pricing \(no return path\).*open-end:100/);
+  expect(receipt, JSON.stringify(receipt)).not.toMatchObject({ state: "succeeded" });
   const headers = { [HOST_RPC_BRIDGE_SESSION_HEADER]: f.target.ref.session, [HOST_RPC_DOCUMENT_HEADER]: f.target.ref.openId };
   const catalogs = await (await f.request(new Request("http://fixture/pe/ducts/catalogs", { headers }))).json();
   expect(catalogs.tables["project-table"].cells.values[0][0]).toBe(0.73);

@@ -22,7 +22,7 @@ import type { ActionExecution } from "./action-journal.ts";
 import { lifetime } from "./document-lifetime.ts";
 import { ductsReadings } from "./ducts-readings.ts";
 import { runPods } from "./family-actions.ts";
-import { buildSheet, encounterRulings, mintWriteRequest, resolveCriteria, resolveInputs, type BuildSheetInput, type FanWriteContext } from "@pe/ducts-domain/sheet/index";
+import { buildSheet, encounterRulings, mintWriteRequest, resolveCriteria, resolveInputs, type BuildSheetInput, type DomainClaim, type FanWriteContext, type SheetSnapshot } from "@pe/ducts-domain/sheet/index";
 import { followAcceptedJoins } from "@pe/ducts-domain/sheet/joins";
 import { storeRulings, withStoredRulings } from "@pe/ducts-domain/rulings";
 import { suggestRoster } from "@pe/ducts-domain/roster";
@@ -111,7 +111,6 @@ export function fanWriteRequest(input: BuildSheetInput, context: FanWriteContext
   if (claim.kind !== "complete") throw refused(claimRefusal(claim)!, "ducts.claim-incomplete");
   try {
     // P-061: CompleteClaim is a phantom brand. Mint only from the buildSheet above, in this process, never from a decoded sheet or claim.
-    // TODO(P-060): W0's fix round adds the cohort peers' complete claims to this call; adapt here only.
     return { claim, request: mintWriteRequest(claim, sheet, input, context) };
   } catch (error) {
     throw refused(error instanceof Error ? error.message : String(error), "ducts.mint-refused");
@@ -284,22 +283,36 @@ export function ductsExecutors(
             const grids = toGrids(tables);
             const catalogs = await runPods(deps, catalogsFor(deps.files!, pointer));
             const work = workLayer(design);
-            const layers = () => ({ snapshot, firm, store: snapshot.store ?? undefined, work, catalogs: catalogs.tables });
-            snapshot = await followAcceptedJoins(snapshot, resolveInputs(layers()).rulings.joins, (unitId) => read({ kind: "from", unitId }));
+            // One fan port's calc inputs, as its worksheet reads them: its walk, the far side of accepted joins, and the ruled roster.
+            const inputOf = async (fan: { unitId: number; portIndex: number }, near: DuctSnapshot) => {
+              const layers = (s: DuctSnapshot) => ({ snapshot: s, firm, store: s.store ?? undefined, work, catalogs: catalogs.tables });
+              const walked = await followAcceptedJoins(near, resolveInputs(layers(near)).rulings.joins, (unitId) => read({ kind: "from", unitId }));
+              const inputs = resolveInputs(layers(walked));
+              // Ruled kinds and roles alone; a unit whose kind or role did not resolve is left for the roster to suggest.
+              const roster = suggestRoster(walked, [], {
+                kinds: Object.fromEntries(Object.entries(inputs.units).flatMap(([id, u]) => (u.kind.status === "valid" ? [[id, u.kind.value]] : []))),
+                roles: Object.fromEntries(Object.entries(inputs.units).flatMap(([id, u]) => (u.role.status === "valid" ? [[id, u.role.value]] : []))),
+              });
+              return { walked, input: { snapshot: walked, fan, roster: [...roster.fans, ...roster.suggestions], grids, inputs, encounterRulings: encounterRulings({ work }) } satisfies BuildSheetInput };
+            };
+            const { walked, input } = await inputOf(walk, snapshot);
+            snapshot = walked;
             if (snapshot.walk?.truncated)
               throw refused("The fan walk or an accepted continuation is truncated; no writes can be previewed");
-            const inputs = resolveInputs(layers());
-            // Ruled kinds and roles alone; a unit whose kind or role did not resolve is left for the roster to suggest.
-            const roster = suggestRoster(snapshot, [], {
-              kinds: Object.fromEntries(Object.entries(inputs.units).flatMap(([id, u]) => (u.kind.status === "valid" ? [[id, u.kind.value]] : []))),
-              roles: Object.fromEntries(Object.entries(inputs.units).flatMap(([id, u]) => (u.role.status === "valid" ? [[id, u.role.value]] : []))),
-            });
+            // P-060: a type-owned ESP slot is one value for every unit of the type, so each peer's own calc is built here
+            // (P-061: in this process, from its own walk) and the mint refuses unless all are complete and equal.
+            const peers = (input.snapshot as SheetSnapshot).parameterCohorts
+              ?.find((c) => c.owner.kind === "type" && c.parameter === snapshot.slots.requiredEsp && c.members.some((m) => m.elementId === walk.unitId))
+              ?.members.filter((m) => m.elementId !== walk.unitId) ?? [];
+            const peerClaims = new Map<number, DomainClaim>();
+            for (const { elementId: unitId } of peers)
+              peerClaims.set(unitId, buildSheet((await inputOf({ unitId, portIndex: walk.portIndex }, await read({ kind: "from", unitId }))).input).claim);
             const cells = [...(ductsScope?.cells ?? []), ...fanWriteCells(fans, snapshot)];
             const rulings = storeRulings(stagedValues(withStoredRulings(design, snapshot.store, snapshot), design), snapshot.store, appliedAt ?? "", snapshot);
             // Timestamp is authored-revision stable; wall time would invalidate an identical preview.
             const { claim, request } = fanWriteRequest(
-              { snapshot, fan: walk, roster: [...roster.fans, ...roster.suggestions], grids, inputs, encounterRulings: encounterRulings({ work }) },
-              { appliedAt: appliedAt ?? "", slots: snapshot.slots, cells, rulings,
+              input,
+              { appliedAt: appliedAt ?? "", slots: snapshot.slots, peerClaims, rulings,
                 // The native store overlays per key (K3): a ruling Work takes back is removed only by naming it here.
                 storeDeletes: {
                   verdicts: Object.keys(snapshot.store?.verdicts ?? {}).filter((key) => !(key in rulings.verdicts)),
