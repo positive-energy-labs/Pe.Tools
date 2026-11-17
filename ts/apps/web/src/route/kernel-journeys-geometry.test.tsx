@@ -1,4 +1,3 @@
-import { VOCABULARY } from "@pe/ducts-domain/sheet/scoped-snapshot";
 // These witnesses test capture and camera ownership; resolve the lazy module before their timed gestures.
 import "./slots/picture/pane.tsx";
 import { valueOf } from "./typed-route";

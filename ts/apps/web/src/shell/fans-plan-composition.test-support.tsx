@@ -1,4 +1,3 @@
-import { VOCABULARY } from "@pe/ducts-domain/sheet/scoped-snapshot";
 import { mkdtemp, stateFixture } from "../../../../tests/isolated-home/storage.ts";
 // @vitest-environment jsdom
 import { stableFanKey } from "../ducts/sheet/model";
@@ -180,7 +179,7 @@ export async function fansPlanJourney(journey: "watched publications" | "externa
          kind:"apply",expectedRevision:0,press:"outside-mount",label:"Stage fan from outside the page",
          patches:[
            {path:["writeIntent","edit"],value:{value:{walk:{unitId:14577391,portIndex:2}}}},
-           {path:["equipmentFlows",muas],value:{edit:{value:{cfm:925}}}},
+           {path:["equipmentFlows",muas],value:{edit:{value:925}}}, // amendment 1 item 4: airflow is a plain number
          ],
        }),
      }));
@@ -239,7 +238,7 @@ export async function fansPlanJourney(journey: "watched publications" | "externa
    fireEvent.click(await screen.findByRole("option",{name:/MUAS-1.*0 staged/}));
    expect((await surfaceReadiness()).getAttribute("data-readiness")).toBe("ready");
    await act(async()=>{
-     const failure=await mount.draw("sheet-inputs",(ctx:any)=>ctx.cells.edit({equipmentFlows:{[muas]:{cfm:925}}},{label:"Stage MUAS-1 airflow"}));
+     const failure=await mount.draw("sheet-inputs",(ctx:any)=>ctx.cells.edit({equipmentFlows:{[muas]:925}},{label:"Stage MUAS-1 airflow"}));
      if(failure) throw Error(failure.message);
    });
    // Slice 6 deleted per-pane Refresh; the staged Work republishes the watched Fans read, so the
