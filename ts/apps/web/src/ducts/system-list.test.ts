@@ -37,6 +37,15 @@ test("two systems sharing a fan retain their own worst run and breakdown termina
   expect(second.total).toBeGreaterThan(0.35);
   // SA 1's only path is unknown on this capture: unpriced, never a copy of SA 2's.
   expect(rows[0]!.total).toBeNull();
+  // P-074: a grille of SA 2 that no fan's calc reaches makes SA 2 unpriced, never priced on grille 31 alone.
+  const grille = snapshot.nodes.find((node) => node.id === 31);
+  if (!grille) throw Error("The fixture has no grille 31");
+  const stranded = {
+    ...snapshot,
+    nodes: [...snapshot.nodes, { ...grille, id: 99, uniqueId: "stranded-99", connectors: [] }],
+  };
+  expect([...systemScope(stranded, "SA 2").terminals].sort()).toEqual([31, 99]);
+  expect(systemList(stranded, calcs)[1]).toMatchObject({ key: "SA 2", fanless: false, total: null, split: null });
   const scope = systemScope(snapshot, "SA 2");
   const facts = fanFacts({ calcs } as never, scope);
   // The fan's calc is not complete on this capture (it has no return path), so no ESP is claimed.
