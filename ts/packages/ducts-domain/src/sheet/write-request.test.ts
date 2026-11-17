@@ -172,7 +172,9 @@ it("requires this sheet's branded complete claim, never a wire FanClaim", () => 
   if (other.sheet.claim.kind !== "complete") throw Error("fixture must be complete");
   const claim = other.sheet.claim;
   expect(() => mintWriteRequest(claim, p.sheet, p.input, p.context)).toThrow("complete claim");
-  const wire: FanClaim = JSON.parse(JSON.stringify(other.sheet.claim));
+  const wire: FanClaim = JSON.parse(JSON.stringify(p.sheet.claim));
+  Object.assign(p.sheet, { claim: wire });
+  expect(p.sheet.claim).toBe(wire); // Identity matches: the missing runtime brand must refuse it.
   // @ts-expect-error The wire claim has no complete capability.
   expect(() => mintWriteRequest(wire, p.sheet, p.input, p.context)).toThrow("complete claim");
 });
@@ -265,6 +267,10 @@ it("writes the claim's required ESP only when every type-cohort peer has an equa
       externalStaticInWg: p.sheet.claim.kind === "complete" ? p.sheet.claim.requiredEspInWg : -1,
     })),
   );
+  const peer = p.context.peerClaims.get(999);
+  if (!peer || peer.kind !== "complete") throw Error("complete peer fixture");
+  p.context.peerClaims = new Map([[999, { ...peer }]]);
+  expect(() => p.mint()).toThrow(`999: ${peer.requiredEspInWg} in-wg (unbranded)`);
   snapshot.parameterCohorts[0]!.complete = false;
   expect(() => p.mint()).toThrow("incomplete or stale");
   snapshot.parameterCohorts[0]!.complete = true;

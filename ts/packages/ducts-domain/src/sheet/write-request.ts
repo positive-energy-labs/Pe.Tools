@@ -1,6 +1,6 @@
 import type { DuctsApplyInput } from "@pe/agent-contracts";
 import type { BuildSheetInput } from "./build.ts";
-import type { CompleteClaim, DomainClaim } from "./encounters.ts";
+import { isCompleteClaim, type CompleteClaim, type DomainClaim } from "./encounters.ts";
 import type { Sheet } from "./types.ts";
 import { accessoryWrites } from "./accessory-writes.ts";
 
@@ -46,7 +46,7 @@ export function mintWriteRequest(
   input: BuildSheetInput,
   context: FanWriteContext,
 ): FanWriteRequest {
-  if (sheet.claim !== claim || claim.kind !== "complete")
+  if (sheet.claim !== claim || claim.kind !== "complete" || !isCompleteClaim(claim))
     throw Error("The sheet's complete claim is required");
   const { snapshot, inputs } = input;
   const { appliedAt } = context;
@@ -160,6 +160,7 @@ export function mintWriteRequest(
         peers.some(
           (p) =>
             p.claim?.kind !== "complete" ||
+            !isCompleteClaim(p.claim) ||
             p.claim.requiredEspInWg.toFixed(6) !== claim.requiredEspInWg.toFixed(6),
         )
       )
@@ -169,7 +170,7 @@ export function mintWriteRequest(
               (p) =>
                 `${p.id}: ${
                   p.claim?.kind === "complete"
-                    ? `${p.claim.requiredEspInWg} in-wg`
+                    ? `${p.claim.requiredEspInWg} in-wg${isCompleteClaim(p.claim) ? "" : " (unbranded)"}`
                     : p.claim
                       ? `${p.claim.kind} (known ${p.claim.knownInWg} in-wg)`
                       : "missing"
