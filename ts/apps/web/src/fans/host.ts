@@ -43,7 +43,8 @@ const openFan = read("fans.open", {
     };
     const overview = await ctx.read(fanOverview, request);
     const worst = (["supply", "return"] as const).flatMap((side) =>
-      overview.totals?.[side].complete && overview.paths[side].paths[0]
+      // A side with a priced worst path has legs worth reading; whether the calc is complete is the claim's alone.
+      overview.totals?.[side].worstPath != null && overview.paths[side].paths[0]
         ? [overview.paths[side].paths[0]!.pathId]
         : [],
     );
@@ -121,7 +122,8 @@ export const fansSheet = body(contracts.sheet, async function(ctx, args) {
             blockerCount: overview.blockers.length,
             requiredEspInWg: overview.totals?.requiredEspInWg ?? null,
             requiredEspAssumedInWg: overview.totals?.requiredEspAssumedInWg ?? null,
-            complete: !!overview.totals?.supply.complete && !!overview.totals?.return.complete,
+            // The engine's claim is the only completeness (invariant 1); with none served, the row is not complete.
+            complete: overview.claim?.kind === "complete",
           }
         : row;
     });

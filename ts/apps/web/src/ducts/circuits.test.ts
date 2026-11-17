@@ -285,8 +285,8 @@ it("both authors share revision-fenced Work edits and refuses lossy scalar unit 
 it("writes a edit unit flow for any unit rooted in the group, not only the baseline's pick", () => {
   const s = fixture();
   const doc = work(evidence(s));
-  doc.equipmentFlows[elementSubject(s.nodes.find(node => node.id === 200)!)] = { edit: { value: { cfm: 825 } } };
-  doc.equipmentFlows[elementSubject(s.nodes.find(node => node.id === 100)!)] = { edit: { value: { cfm: 400 } } };
+  doc.equipmentFlows[elementSubject(s.nodes.find(node => node.id === 200)!)] = { edit: { value: 825 } };
+  doc.equipmentFlows[elementSubject(s.nodes.find(node => node.id === 100)!)] = { edit: { value: 400 } };
   const ids = applyRequest(s, price(s, {}, doc, doc ?? neutralFansWork), "purpose-time", [
     "upstream",
   ]).equipmentFlows.map((f) => f.id);

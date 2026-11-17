@@ -20,10 +20,10 @@
 import { decode, subjectOf, subjectRefCodeSchema } from "./subject-ref.ts";
 import { z } from "zod";
 import { serveSetting, type SettingTierRead } from "./tiered-setting.ts";
-import { DUCT_PARAMETER_KEYS, DUCT_UNIT_KINDS, DUCTS_CRITERIA_CELLS, criteriaLayer } from "./ducts-sheet.ts";
+import { DUCT_PARAMETER_KEYS, DUCT_UNIT_KINDS, DUCTS_CRITERIA_CELLS, criteriaLayer, criteriaMeta } from "./ducts-sheet.ts";
 
-import { draftCellSchema } from "./draft.ts";
-import type { DuctFlow, DuctUnitRole, FansDocument } from "./fans.ts";
+import { draftCellSchema, type Author } from "./draft.ts";
+import type { FansDocument } from "./fans.ts";
 import { type RouteStateSpec } from "./route-state.ts";
 
 export const ductAssumptionSchema = z.discriminatedUnion("kind", [
@@ -372,33 +372,61 @@ export const ductsDesign = (ducts: DuctsRouteDocument | null, fans: FansDocument
   ...(ducts ?? ductsDocumentSchema.parse({})),
 });
 
-const stagedOf = <V>(cells: Record<string, { edit?: { value?: V } | null } | undefined>) =>
-  Object.fromEntries(
-    Object.entries(cells).flatMap(([key, cell]) =>
-      cell?.edit?.value === undefined ? [] : [[key, cell.edit.value]],
-    ),
-  ) as Record<string, V>;
+/**
+ * One staged cell as the resolver reads it (wave 2 amendment 2): the value, the caller the host
+ * stamped (`by`), and the evidence the caller cited, else the cell's own location, which says where
+ * the evidence lives and claims nothing more. A cell with no human or Pea stamp is not handed over
+ * at all: the runtime sets such stored Work aside before it is read, and no author is ever invented.
+ */
+export type StagedCell<V> = { value: V; by: "human" | "pea"; ref: string };
+const stagedOf = <V>(work: "fans" | "ducts", segment: string, cells: Record<string, { edit?: { value?: V; by?: Author; ref?: string } | null } | undefined>) =>
+  Object.fromEntries<StagedCell<V>>(
+    Object.entries(cells).flatMap(([key, cell]) => {
+      const edit = cell?.edit;
+      return edit?.value === undefined || (edit.by !== "human" && edit.by !== "pea") ? []
+        : [[key, { value: edit.value, by: edit.by, ref: edit.ref?.trim() ? edit.ref : `work:${work}/${segment}/${key}` }]];
+    }),
+  );
 
-/** Staged edits only, per segment. */
+/** Staged edits only, per segment, each as a `StagedCell`. */
 export function stagedDucts(doc: DuctsRouteDocument | null, fans: FansDocument) {
   return {
-    calculation: stagedOf(fans.calculation),
-    rules: stagedOf(doc?.rules ?? {}),
+    calculation: stagedOf("fans", "calculation", fans.calculation),
+    rules: stagedOf("ducts", "rules", doc?.rules ?? {}),
     criteria: criteriaLayer(doc?.criteria ?? {}),
-    kinds: stagedOf(doc?.kinds ?? {}) as Record<string, { kind: (typeof DUCT_UNIT_KINDS)[number] }>,
-    assumptions: stagedOf<DuctAssumption>(doc?.assumptions ?? {}),
-    catalogs: stagedOf(doc?.catalogs ?? {}),
-    ruleAssignments: stagedOf(doc?.ruleAssignments ?? {}),
-    terminalDrops: stagedOf(fans.terminalDrops),
-    componentDrops: stagedOf(fans.componentDrops),
-    esp: stagedOf(fans.esp),
-    equipmentFlows: stagedOf(fans.equipmentFlows) as Record<string, DuctFlow>,
-    roles: stagedOf(fans.roles) as Record<string, DuctUnitRole>,
-    flows: stagedOf(fans.flows) as Record<string, DuctFlow>,
-    subject: stagedOf<readonly number[]>(doc?.subject ?? {}),
+    /** Who staged each criterion and its ref; without it a staged criterion has no author and cannot resolve. */
+    criteriaMeta: criteriaMeta(doc?.criteria ?? {}),
+    kinds: stagedOf("ducts", "kinds", doc?.kinds ?? {}),
+    assumptions: stagedOf("ducts", "assumptions", doc?.assumptions ?? {}),
+    catalogs: stagedOf("ducts", "catalogs", doc?.catalogs ?? {}),
+    ruleAssignments: stagedOf("ducts", "ruleAssignments", doc?.ruleAssignments ?? {}),
+    terminalDrops: stagedOf("fans", "terminalDrops", fans.terminalDrops),
+    componentDrops: stagedOf("fans", "componentDrops", fans.componentDrops),
+    esp: stagedOf("fans", "esp", fans.esp),
+    equipmentFlows: stagedOf("fans", "equipmentFlows", fans.equipmentFlows),
+    roles: stagedOf("fans", "roles", fans.roles),
+    flows: stagedOf("fans", "flows", fans.flows),
+    subject: stagedOf("ducts", "subject", doc?.subject ?? {}),
     labelParameter: doc?.labelParameter?.edit?.value ?? null,
     workingPhase: doc?.workingPhase?.edit?.value ?? null,
   };
+}
+
+/**
+ * The staged values alone, per segment, for a reader that prices and never attributes: group
+ * pricing and the survey, which phase 3 retires with the group write path. Departs from "every
+ * consumer reads the cell" (wave 2 amendment 2) because those readers resolve no provenance; the
+ * resolver, and anything that names an author, reads `stagedDucts`.
+ */
+export function stagedValues(doc: DuctsRouteDocument | null, fans: FansDocument) {
+  // Every staged value, stamped or not: the model's stored rulings are laid under Work as cells no
+  // caller wrote (`withStoredRulings`), and this reader prices them without naming anyone.
+  const bare = <V>(cells: Record<string, { edit?: { value?: V } | null } | undefined>) =>
+    Object.fromEntries(Object.entries(cells).flatMap(([key, cell]) => (cell?.edit?.value === undefined ? [] : [[key, cell.edit.value]]))) as Record<string, V>;
+  return { ...stagedDucts(doc, fans), calculation: bare(fans.calculation), rules: bare(doc?.rules ?? {}), kinds: bare(doc?.kinds ?? {}),
+    assumptions: bare(doc?.assumptions ?? {}), catalogs: bare(doc?.catalogs ?? {}), ruleAssignments: bare(doc?.ruleAssignments ?? {}),
+    terminalDrops: bare(fans.terminalDrops), componentDrops: bare(fans.componentDrops), esp: bare(fans.esp),
+    equipmentFlows: bare(fans.equipmentFlows), roles: bare(fans.roles), flows: bare(fans.flows), subject: bare(doc?.subject ?? {}) };
 }
 
 /**

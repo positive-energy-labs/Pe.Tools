@@ -59,7 +59,7 @@ test("human calculation/drop/flow edits stay in Fans Work, preserve siblings and
       patches: [
         {
           path: ["flows", terminal],
-          value: { edit: { value: { cfm: 200 } } },
+          value: { edit: { value: 200 } },
         },
       ],
     },

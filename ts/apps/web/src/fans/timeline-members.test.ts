@@ -54,7 +54,7 @@ test("D25: /fans Timeline names Fans, Ducts, Ducts for undo, undo, redo", async 
     await new Promise(resolve => setTimeout(resolve, 3));
   };
   await edit(ducts, ["criteria", "velocitySupplyFpm"], 925, "Ducts supply velocity 925");
-  await edit(fans, ["equipmentFlows", fan], { cfm: 1234 }, "Fans airflow 1234");
+  await edit(fans, ["equipmentFlows", fan], 1234, "Fans airflow 1234");
   // A newer edit in a Work /fans never reads must not compete with either step.
   const schedules = { ...fans, route: "schedules" };
   closes.push(f.ws.register({ spec: { route: "schedules", title: "Schedules", description: "Unread Work", schema: z.object({ n: z.number() }) } }));

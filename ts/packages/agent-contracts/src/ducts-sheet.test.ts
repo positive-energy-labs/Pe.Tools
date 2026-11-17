@@ -103,3 +103,27 @@ it("criteriaMeta keeps who staged each criterion, and a cell with no `by` has no
     allowanceSupplyInWg: { by: "human", ref: "work:ducts/criteria/allowanceSupplyInWg" },
   });
 });
+
+it("a resolved wire value agrees with its status, as the kernel resolution does (P-024)", async () => {
+  const { ductsInputsSchema } = await import("./ducts-sheet.ts");
+  const cfm = ductsInputsSchema.shape.terminals.valueType.shape.cfm;
+  const base = { units: "cfm", version: null };
+  const ok = [
+    { ...base, status: "valid", value: 100, source: "model", author: null, ref: "model:7/Flow" },
+    { ...base, status: "valid", value: 100, source: "Work", author: "pea", ref: "work:fans/flows/k" },
+    { ...base, status: "invalid", value: null, source: "Work", author: null, ref: "work:fans/flows/k" },
+    { ...base, status: "missing", value: null, source: "none", author: null, ref: null },
+    // The one admitted departure from the kernel union: the engine's "where it looked" ref on a missing value.
+    { ...base, status: "missing", value: null, source: "none", author: null, ref: "family placeholder 1 on 2" },
+  ];
+  const bad = [
+    { ...base, status: "valid", value: 100, source: "none", author: null, ref: null },
+    { ...base, status: "valid", value: 100, source: "Work", author: null, ref: "work:fans/flows/k" },
+    { ...base, status: "valid", value: null, source: "model", author: null, ref: "model:7/Flow" },
+    { ...base, status: "invalid", value: 100, source: "model", author: null, ref: "model:7/Flow" },
+    { ...base, status: "missing", value: null, source: "firm", author: null, ref: "firm:x" },
+    { ...base, status: "valid", value: 100, source: "model", author: null, ref: " " },
+  ];
+  expect(ok.map(v => cfm.safeParse(v).success)).toEqual(ok.map(() => true));
+  expect(bad.map(v => cfm.safeParse(v).success)).toEqual(bad.map(() => false));
+});

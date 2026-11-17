@@ -301,8 +301,8 @@ it("reprices the same ducts Work when only the fans Work changes", () => {
   const raw = snapshot();
   const grids = {};
   const ducts = ductsDocumentSchema.parse({});
-  const fans = fansDocumentSchema.parse({ flows: { "UniqueId:6d52156a-3876-4d76-b641-341454252f26-0000001e": { edit: { value: { cfm: 450 } } } } });
-  expect(stagedDucts(ducts, fans).flows).toEqual({ "UniqueId:6d52156a-3876-4d76-b641-341454252f26-0000001e": { cfm: 450 } });
+  const fans = fansDocumentSchema.parse({ flows: { "UniqueId:6d52156a-3876-4d76-b641-341454252f26-0000001e": { edit: { value: 450, by: "human" } } } });
+  expect(stagedDucts(ducts, fans).flows).toEqual({ "UniqueId:6d52156a-3876-4d76-b641-341454252f26-0000001e": { value: 450, by: "human", ref: "work:fans/flows/UniqueId:6d52156a-3876-4d76-b641-341454252f26-0000001e" } });
   const before = price(raw, grids, ducts, neutralFansWork);
   const after = price(raw, grids, ducts, fans);
   expect(before.flows.get(30)?.cfm).toBe(300);

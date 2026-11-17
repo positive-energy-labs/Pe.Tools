@@ -50,21 +50,24 @@ export function firmLayer(reading: FirmReading, settings: readonly SettingTierRe
   return { version: firmFile?.version ?? (firmFile ? "firm" : FIRM_SEED.version), criteria: criteria as DuctsFirm["criteria"], served };
 }
 
-/** Work's staged edits as the resolver reads them. */
+/** Work's staged cells as the resolver reads them: each keeps its caller and ref, with the value unwrapped to what is priced. */
 export function workLayer(design: DuctsDesign): WorkLayer {
   const staged = stagedDucts(design, design);
+  const cells = <V, T>(segment: Record<string, { value: V; by: "human" | "pea"; ref: string }>, value: (v: V) => T) =>
+    Object.fromEntries(Object.entries(segment).map(([key, cell]) => [key, { ...cell, value: value(cell.value) }]));
   return {
     flows: staged.flows,
-    terminalDrops: staged.terminalDrops,
-    componentDrops: staged.componentDrops,
-    esp: staged.esp,
+    terminalDrops: cells(staged.terminalDrops, (v) => v.inWg),
+    componentDrops: cells(staged.componentDrops, (v) => v.inWg),
+    esp: cells(staged.esp, (v) => v.inWg),
     equipmentFlows: staged.equipmentFlows,
-    roles: staged.roles,
-    kinds: staged.kinds,
+    roles: cells(staged.roles, (v) => v.role),
+    kinds: cells(staged.kinds, (v) => v.kind),
     criteria: staged.criteria,
-    rules: staged.rules,
-    ruleAssignments: staged.ruleAssignments,
-    catalogs: staged.catalogs,
+    criteriaMeta: staged.criteriaMeta,
+    rules: cells(staged.rules, (v) => v.table),
+    ruleAssignments: cells(staged.ruleAssignments, (v) => v.rule),
+    catalogs: cells(staged.catalogs, (v) => v.table),
     assumptions: staged.assumptions as WorkLayer["assumptions"],
   };
 }

@@ -1,3 +1,4 @@
+import { VOCABULARY } from "@pe/ducts-domain/sheet/scoped-snapshot";
 import { mkdtemp, stateFixture } from "../../../../tests/isolated-home/storage.ts";
 import { Context, Effect, Fiber, Layer, Schema, Option } from "effect";
 import { expect, test, vi } from "vite-plus/test";
@@ -46,7 +47,7 @@ async function liveHost(
   await writeFile(join(firmHome, "pe-home.json"), `{"tier":"firm"}`);
   vi.stubEnv("PE_TOOLS_SHARED_ROOT", firmHome);
   const inputRoot = dirname(firmRootPath()!);
-  const roster = nativeResponseSchema("ducts.snapshot.roster").parse(rosterCapture);
+  const roster = nativeResponseSchema("ducts.snapshot.roster").parse({ ...rosterCapture, vocabulary: VOCABULARY });
   const inputs =
     isolated ??
     (record

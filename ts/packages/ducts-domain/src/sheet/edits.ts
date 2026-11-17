@@ -6,7 +6,8 @@ import type {
 import { EDIT_SEGMENTS, END_KEY, FITTING_DROP_CELL, JOIN_KEY } from "./inputs.ts";
 
 /**
- * A sheet's edits as Work patches: one per record key (`null` deletes the pending edit), one per
+ * A sheet's edits as Work patches: one per record key (`null` deletes the pending edit; a cited
+ * `refs` entry rides on the cell's `ref`), one per
  * criterion and side, join and end rulings as `assumptions` verdicts
  * (`clear` writes a delete rung, which also takes back a verdict the model's store holds), and a
  * proposed fitting's per-path drop as a `component-drop:proposed:…` override.
@@ -21,7 +22,7 @@ export function editPatches(edits: SheetEdits): RouteStatePatch[] {
       patches.push(
         value === null
           ? { path: [segment, key] }
-          : { path: [segment, key, "edit"], value: { value } },
+          : { path: [segment, key, "edit"], value: { value, ...(edits.refs?.[field]?.[key] ? { ref: edits.refs[field][key] } : {}) } },
       );
   }
   // One cell per criterion and side: a value stages it, null removes its pending edit, absent keeps it.

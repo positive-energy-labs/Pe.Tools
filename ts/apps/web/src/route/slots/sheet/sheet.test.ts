@@ -68,7 +68,7 @@ test("slice 7: a draft slot draws each Work cell's staged value with its author,
   });
   expect(cells.map((c) => [c.binding, c.value, c.source, c.pending?.by ?? null])).toEqual([
     ["localRate", 0.1, "work", "pea"],
-    ["roles", { role: "fan" }, "work", "person"],
+    ["roles", { role: "fan" }, "work", "human"],
     ["roles", { role: "passive" }, "model", null],
   ]);
   expect(cells[0]!.pending).toEqual({ by: "pea", value: 0.1, at: "2026-11-10T00:00:00Z" });

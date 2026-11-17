@@ -1,3 +1,4 @@
+import { DUCT_UNIT_KINDS, FAN_BLOCKER_KINDS } from "@pe/host-contracts/generated";
 import { stateFixture } from "../../../tests/isolated-home/storage.ts";
 import { mkdtempSync } from "../../../tests/isolated-home/storage.ts";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
@@ -52,6 +53,7 @@ function fixture() {
     connectedTo: { elementId: other, connector: 1 },
   });
   const snapshot: DuctSnapshot = {
+    vocabulary: { unitKinds: [...DUCT_UNIT_KINDS], blockerKinds: [...FAN_BLOCKER_KINDS] },
     coordinateEncoding: "native-double",
     document: {
       title: "Purpose fixture",

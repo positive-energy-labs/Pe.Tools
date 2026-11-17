@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { DUCT_UNIT_ROLES, routeAddress, subjectCode, type fansSheetData, type Immutable, type Resolved } from "@pe/agent-contracts";
-import { local, parameter, store, type CellLayer, type EnumChoice, type SheetSlot } from "@pe/agent-contracts/slots";
+import { DUCT_UNIT_ROLES, fanWriteRows, routeAddress, subjectCode, type fansSheetData, type Immutable } from "@pe/agent-contracts";
+import { local, parameter, store, type BindingDraw, type CellLayer, type Domain, type EnumChoice, type SheetSlot } from "@pe/agent-contracts/slots";
 import { fanWriteCells } from "@pe/ducts-domain/staged";
 import { suggestKind, suggestRole } from "@pe/ducts-domain/roster";
 import { sheetSystems } from "@pe/ducts-domain/sheet/scoped-snapshot";
@@ -39,17 +39,18 @@ const rowsOf = (read: Read, ids: readonly string[]) =>
   ids.flatMap((id) => { const s = subjectOf(snapshotOf(read), id); return s ? [s] : []; });
 
 /**
- * A resolved input as a model layer under Work, in the cell's shape (`{ inWg }`, `{ cfm }`). The
+ * A resolved input as a model layer under Work, in the cell's shape (`{ inWg }`, a plain cfm). The
  * source is the tier the host served: `project` or `firm` only when that home's file states the
  * value; a criterion no home states is `default`, and says so when the firm home was not found.
  */
 const SOURCES: Readonly<Record<string, CellLayer["source"]>> = { Work: "work", "model-store": "model-store", project: "project", firm: "firm", default: "default" };
-const layer = (resolved: Immutable<Resolved<unknown>> | undefined, wrap: (v: unknown) => unknown, read?: Read): CellLayer | null => {
+const layer = (resolved: { readonly value: unknown; readonly source: string; readonly units?: string | null; readonly ref?: string | null } | undefined, wrap: (v: unknown) => unknown, read?: Read): CellLayer | null => {
   if (!resolved || resolved.value == null) return null;
   const source = SOURCES[resolved.source] ?? "model";
   const firm = read?.sheetView.firm;
+  // The evidence the resolver named rides with the value; only a refused firm home replaces it.
   return { value: wrap(resolved.value), source, ...(resolved.units ? { unit: resolved.units } : {}),
-    ...(source === "default" && firm && "refused" in firm ? { ref: ENGINE_DEFAULT_NO_SHARED_ROOT } : {}) };
+    ...(source === "default" && firm && "refused" in firm ? { ref: ENGINE_DEFAULT_NO_SHARED_ROOT } : resolved.ref ? { ref: resolved.ref } : {}) };
 };
 
 const units = (read: Read) => Object.keys(inputsOf(read)?.units ?? {});
@@ -60,14 +61,26 @@ const scopeChoices = (read: Read): readonly EnumChoice[] => {
   const fan = read?.open?.overview.fan, standing = read?.fansWork.writeIntent.edit?.value?.walk;
   const mine = (walk: { unitId: number; portIndex: number }) => !!fan && walk.unitId === fan.unitId && walk.portIndex === (fan as { portIndex?: number }).portIndex;
   return [
-    ...(fan && "portIndex" in fan ? [{ label: `${fan.mark || `unit ${fan.unitId}`} · ${snapshot ? fanWriteCells(read!.fansWork, snapshot).length : 0} staged`, value: { walk: { unitId: fan.unitId, portIndex: fan.portIndex } },
+    ...(fan && "portIndex" in fan ? [{ label: `${fan.mark || `unit ${fan.unitId}`} · ${snapshot ? fanWriteCells(read!.fansWork, snapshot, read!.open?.overview.cohorts ?? []).length : 0} staged`, value: { walk: { unitId: fan.unitId, portIndex: fan.portIndex } },
       description: "Write this fan's walk and its staged cells" }] : []),
     ...(standing && !mine(standing) ? [{ label: `unit ${standing.unitId}`, value: { walk: standing }, description: "Another fan's scope, still standing" }] : []),
     { value: null, label: "None", description: "Clear the write scope" },
   ];
 };
-const inWg = { kind: "object", fields: { inWg: { kind: "number", min: 0, unit: "in-wg", digits: 4 } } } as const;
-const cfm = { kind: "object", fields: { cfm: { kind: "number", min: 0, unit: "cfm", digits: 0 } } } as const;
+/**
+ * One writable fan input as a sheet binding: its slot and domain come from the one inputs table
+ * (`FAN_INPUTS`); only how many digits a unit draws is decided here.
+ */
+const DIGITS: Readonly<Record<string, number>> = { "in-wg": 4, cfm: 0 };
+const input = (name: string, draw: BindingDraw) => {
+  const row = fanWriteRows().find((r) => r.name === name);
+  if (!row?.parameter) throw Error(`${name} is not a writable fan input`);
+  const drawn = (domain: Domain): Domain =>
+    domain.kind === "number" && domain.unit && domain.unit in DIGITS ? { ...domain, digits: DIGITS[domain.unit] }
+    : domain.kind === "object" ? { ...domain, fields: Object.fromEntries(Object.entries(domain.fields).map(([key, field]) => [key, drawn(field)])) }
+    : domain;
+  return parameter(row.parameter, drawn(row.domain), draw);
+};
 
 export const fansSheet = {
   draft: true,
@@ -105,13 +118,13 @@ export const fansSheet = {
         return node ? { value: { role: suggestRole(node, suggestKind(node).kind) }, source: "default" } : null;
       },
     }),
-    equipmentFlows: parameter("fanFlow", cfm, {
+    equipmentFlows: input("equipmentFlows", {
       rows: (read: Read) => rowsOf(read, units(read)),
       rowLabel: (read, row) => nameOf(read, row, "Unit airflow"),
       model: (read: Read, row) => {
         const id = idOf(read, row!), node = snapshotOf(read)?.nodes.find((n) => n.id === id);
         const conflict = id === fanUnit(read) ? read?.open?.inputs?.notes.find((n) => n.kind === "flow-conflict")?.text : undefined;
-        const base = layer(inputsOf(read)?.units[String(id)]?.cfm, (v) => ({ cfm: v })) ?? { value: null };
+        const base = layer(inputsOf(read)?.units[String(id)]?.cfm, (v) => v) ?? { value: null };
         return {
           ...base,
           ...(conflict ? { note: conflict.replace(/^fan \d+: /, "Conflict: ") } : {}),
@@ -120,23 +133,23 @@ export const fansSheet = {
       },
     }),
     // The open fan's own ESP is an input of this sheet; another unit's only once Work stages it.
-    esp: parameter("fanStatic", inWg, {
+    esp: input("esp", {
       rows: (read: Read) => rowsOf(read, units(read).filter((id) =>
         Number(id) === fanUnit(read) || inputsOf(read)?.units[id]?.esp.source === "Work")),
       rowLabel: (read, row) => nameOf(read, row, "Unit ESP"),
       model: (read: Read, row) => layer(inputsOf(read)?.units[String(idOf(read, row!))]?.esp, (v) => ({ inWg: v })),
     }),
-    flows: parameter("terminalFlow", cfm, {
+    flows: input("flows", {
       rows: (read: Read) => rowsOf(read, Object.keys(inputsOf(read)?.terminals ?? {})),
       rowLabel: (read, row) => nameOf(read, row, "Terminal airflow"),
-      model: (read: Read, row) => layer(inputsOf(read)?.terminals[String(idOf(read, row!))]?.cfm, (v) => ({ cfm: v })),
+      model: (read: Read, row) => layer(inputsOf(read)?.terminals[String(idOf(read, row!))]?.cfm, (v) => v),
     }),
-    terminalDrops: parameter("terminalDrop", inWg, {
+    terminalDrops: input("terminalDrops", {
       rows: (read: Read) => rowsOf(read, Object.keys(inputsOf(read)?.terminals ?? {})),
       rowLabel: (read, row) => nameOf(read, row, "Terminal drop"),
       model: (read: Read, row) => layer(inputsOf(read)?.terminals[String(idOf(read, row!))]?.drop, (v) => ({ inWg: v }), read),
     }),
-    componentDrops: parameter("componentDrop", inWg, {
+    componentDrops: input("componentDrops", {
       rows: (read: Read) => rowsOf(read, Object.keys(inputsOf(read)?.components ?? {})),
       rowLabel: (read, row) => nameOf(read, row, "Part drop"),
       model: (read: Read, row) => layer(inputsOf(read)?.components[String(idOf(read, row!))]?.drop, (v) => ({ inWg: v })),

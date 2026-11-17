@@ -24,6 +24,7 @@ import { pricingResult } from "./pricing-result.ts";
 import { TEST_SLOTS } from "./sheet/test-inputs.ts";
 import { systemList } from "./system-list.ts";
 import type { DuctSnapshot } from "./types.ts";
+import { VOCABULARY } from "./sheet/scoped-snapshot.ts";
 
 type Node = DuctSnapshot["nodes"][number];
 type Segment = DuctSnapshot["segments"][number];
@@ -94,6 +95,7 @@ const duct = (id: number, a: number[], b: number[], ca: unknown, cb: unknown) =>
 /** FC-11 (equipment 1, rootId) -> main duct 10 -> grille 30; branch duct 11 ends 0.3 in off the main's side -> grille 31. */
 const snapshot = (branchGapFt = 3.3 * IN): DuctSnapshot =>
   ({
+    vocabulary: VOCABULARY,
     coordinateEncoding: "native-double",
     document: {
       title: "t",

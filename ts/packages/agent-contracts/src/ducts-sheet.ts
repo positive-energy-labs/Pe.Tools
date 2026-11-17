@@ -36,7 +36,20 @@ const resolved = <T extends z.ZodType>(value: T) =>
     units: z.string().nullable(),
     version: z.union([z.string(), z.number()]).nullable(),
     status: z.enum(["valid", "missing", "invalid"]),
-  });
+  // The flat shape keeps one object type for the engine's readers; this refine holds it to the kernel
+  // union (`ValueResolution`, work-value.ts): each status admits only its own value, source, author and ref.
+  }).refine(r => {
+    const value = (r as { value?: unknown }).value;
+    return r.status === "missing"
+      // Exception to the kernel union (`missing` has `ref: null`): the engine states where it looked on a missing
+      // value ("family placeholder 1 on 2"), so a ref is admitted here until the engine stops. No source, author or version still holds.
+      ? value === null && r.source === "none" && r.author === null && r.version === null
+      : r.source !== "none" && !!r.ref?.trim() && (r.status === "invalid" ? value === null
+        : value !== null && ((r.source !== "Work" && r.source !== "run") || r.author === "human" || r.author === "pea"));
+  },
+    "a resolved value must agree with its status: missing has no source, author or ref; valid and invalid cite a ref; valid Work names its caller");
+/** Compile-time tie: every kernel resolution is a wire `resolved` value. A field the kernel adds or retypes fails here. */
+((r: import("./work-value.ts").ValueResolution<number>): z.output<ReturnType<typeof resolved<z.ZodNullable<z.ZodNumber>>>> => r) satisfies unknown;
 // TODO: docs/features/routes/LEDGER.md#s7-2f8fa50d55 G1 render authored Work values separately; badge source from this reading (Work/model/firm/default).
 export type Resolved<T> = Omit<import("./work-value.ts").ValueResolution<T>, "value"> & {
   value: T;
@@ -202,11 +215,16 @@ export type DuctsFirm = z.infer<typeof ductsBaseSchema>;
  */
 const edits = <T extends z.ZodType>(value: T) => z.record(elementSubjectSchema, value.nullable());
 export const sheetEditsSchema = z.strictObject({
-  flows: edits(z.strictObject({ cfm: nonneg })).optional(),
+  /**
+   * The evidence a caller cites for a value in this same edit, by segment and key; it lands on the
+   * cell's `ref` (`CHANGE_META.ref`). The host still stamps who wrote it.
+   */
+  refs: z.record(z.string(), z.record(elementSubjectSchema, z.string().trim().min(1))).optional(),
+  flows: edits(nonneg).optional(),
   terminalDrops: edits(z.strictObject({ inWg: nonneg })).optional(),
   componentDrops: edits(z.strictObject({ inWg: nonneg })).optional(),
   esp: edits(z.strictObject({ inWg: nonneg })).optional(),
-  equipmentFlows: edits(z.strictObject({ cfm: nonneg })).optional(),
+  equipmentFlows: edits(nonneg).optional(),
   roles: edits(z.strictObject({ role: unitRole })).optional(),
   /** Keyed by JSON.stringify([family, type]); one ruling fixes every instance of the type. */
   kinds: z
@@ -236,7 +254,7 @@ export const sheetEditsSchema = z.strictObject({
 });
 /** Every edit the shared sheet engine prices (`editPatches`); each route's door admits only its own Work's keys. */
 export type SheetEdits = z.infer<typeof sheetEditsSchema>;
-const FANS_EDITS = { flows: true, terminalDrops: true, componentDrops: true, esp: true, equipmentFlows: true, roles: true } as const;
+const FANS_EDITS = { refs: true, flows: true, terminalDrops: true, componentDrops: true, esp: true, equipmentFlows: true, roles: true } as const;
 /** /ducts' edit door (ruling 2026-11-10, no cross-route write): Ducts Work only; the Fans inputs are /fans' door. */
 export const ductsSheetEditsSchema = sheetEditsSchema.omit(FANS_EDITS);
 export type DuctsSheetEdits = z.infer<typeof ductsSheetEditsSchema>;
@@ -313,7 +331,8 @@ const fan = fanRef.extend({
   ratedEspInWg: z.number().nullable(),
   inletPortIndex: portIndex.nullable(),
   dischargePortIndex: portIndex,
-  directionOverride: z.string().nullable().optional(),
+  /** Q4: the family's connector direction set the roles and the network's ends read the other way; null when they agree. */
+  directionMismatch: z.object({ discharge: portIndex, networkDischarge: portIndex, evidence: z.string() }).nullable(),
   flowCfm: z.number().nullable(),
 });
 const pathEnd = z.object({
@@ -328,7 +347,6 @@ const sideTotals = z.object({
   knownInWg: z.number(),
   assumedInWg: z.number().nullable(),
   allowanceInWg: z.number(),
-  complete: z.boolean(),
   telFt: z.number(),
   frictionRatePer100: z.number().nullable(),
 });
@@ -339,7 +357,8 @@ const totals = z.object({
   requiredEspAssumedInWg: z.number().nullable(),
 });
 const leg = z.object({
-  evidence: legEvidenceSchema.optional(),
+  /** How the leg was priced, as data: the engine states it on every leg. */
+  evidence: legEvidenceSchema,
   id: z.string(),
   elementId,
   kind: z.enum(["duct", "fitting", "accessory", "equipment", "terminal"]),
@@ -443,7 +462,6 @@ const pathSummary = z.object({
   pathId: z.string(),
   end: pathEnd,
   knownInWg: z.number(),
-  complete: z.boolean(),
   legCount: z.number().int(),
   blockerIds: z.array(z.string()),
 });
@@ -538,7 +556,6 @@ export const ductsSheetResponseSchema = z.discriminatedUnion("kind", [
   z.object({
     ...responseBase,
     kind: z.literal("inputs"),
-    directionOverride: z.string().nullable().optional(),
     inputs: ductsInputsSchema,
     /**
      * The firm layer: the file's version, or "seed" with present false when the file is absent;

@@ -47,7 +47,8 @@ test("the admitted criteria editor resolves Work, and host Undo resolves the fir
   };
   const current = () => {
     const work = designOf(f.owner.work()!.value as Record<string, unknown>);
-    return resolveCriteria(stagedDucts(work, work), null, firm).allowanceInWg.return;
+    const { criteria, criteriaMeta } = stagedDucts(work, work);
+    return resolveCriteria({ criteria, criteriaMeta }, null, firm).allowanceInWg.return;
   };
   expect(current()).toMatchObject({ value: 0.35, source: "Work" });
   await vi.waitFor(() => expect(f.owner.timeline()?.undo).toBeTruthy());

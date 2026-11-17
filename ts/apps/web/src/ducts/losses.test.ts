@@ -6,7 +6,7 @@ import { neutralFansWork } from "@pe/agent-contracts";
  * synthetic network whose totals were computed independently in Python from the same grids.
  */
 import { designOf } from "@pe/ducts-domain/test-design";
-import { stagedDucts } from "@pe/agent-contracts";
+import { stagedValues } from "@pe/agent-contracts";
 import { expect, it } from "vite-plus/test";
 import { nativeResponseDefinitionSchema } from "@pe/host-contracts/decoders";
 
@@ -213,7 +213,7 @@ it("prices under the table a person edit in the Work document", () => {
     rules: { "elbow-1d-gt10": { edit: { value: { table: "CD3-2" } } } },
   });
   const choices = Object.fromEntries(
-    Object.entries(stagedDucts(doc, doc ?? neutralFansWork).rules).map(([key, v]) => [key, v.table]),
+    Object.entries(stagedValues(doc, doc ?? neutralFansWork).rules).map(([key, v]) => [key, v.table]),
   );
   const r = computeLosses(syntheticSnapshot(), grids, choices);
   const elbow = r.paths[30]!.rows.find((x) => x.rule === "elbow-1d-gt10")!;

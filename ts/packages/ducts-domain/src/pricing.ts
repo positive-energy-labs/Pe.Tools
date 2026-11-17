@@ -4,7 +4,7 @@ import { z } from "zod";
 import { flowWriteSlot } from "./flow-write-slot.ts";
 /** The losses view's model, pure: what Revit holds now (the applied tables), what the person edit on top, the two solves, and the `ducts.apply` request built from the edit cells. */
 import {
-  stagedDucts,
+  stagedValues,
   ductParameterSlots,
   ductsDesign,
   type FansDocument,
@@ -72,7 +72,7 @@ const appliedUnits = (raw: DuctSnapshot) => {
   if (cached) return cached;
   const stated = equipmentFlows(raw, {});
   const stored = withStoredRulings(null, raw.store, raw);
-  const roles = unitRoles(raw, stated, stagedDucts(stored, stored ?? neutralFansWork).roles);
+  const roles = unitRoles(raw, stated, stagedValues(stored, stored ?? neutralFansWork).roles);
   const units = unitOverrides(roles, stated);
   appliedUnitCache.set(raw, units);
   return units;
@@ -161,7 +161,7 @@ export interface Priced extends Survey {
   now: LossResult;
   /** The solve with every edit cell landed. */
   next: LossResult;
-  edit: ReturnType<typeof stagedDucts> & { designFriction: number; parameters: ReturnType<typeof ductParameterSlots> };
+  edit: ReturnType<typeof stagedValues> & { designFriction: number; parameters: ReturnType<typeof ductParameterSlots> };
 }
 
 const completed = new WeakMap<
@@ -248,7 +248,7 @@ export function price(
   if (entry.last?.doc === ducts && entry.last.fans === fans && entry.last.priced.edit.designFriction === rate && JSON.stringify(entry.last.priced.edit.parameters) === JSON.stringify(ductParameterSlots(settings))) return entry.last.priced;
   // The model's stored rulings under Work's pending ones (`rulings.ts`), as the survey read them.
   const stored = withStoredRulings(doc, raw.store, raw);
-  const edit = { ...stagedDucts(stored, stored ?? fans), designFriction: rate, parameters: ductParameterSlots(settings) };
+  const edit = { ...stagedValues(stored, stored ?? fans), designFriction: rate, parameters: ductParameterSlots(settings) };
   if (entry.rate !== rate) {
     entry.now = computeLosses(
       snapshot,

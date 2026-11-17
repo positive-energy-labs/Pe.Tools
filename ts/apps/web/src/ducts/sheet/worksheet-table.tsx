@@ -78,7 +78,7 @@ function CfmCell({ run, ws, editing }: { run: Run; ws: Ws; editing: WorksheetEdi
         clearable={typed}
         className="grid grid-cols-[4.5rem_minmax(0,1fr)] items-center gap-x-1"
         onValue={(value) =>
-          editing.changeInputs({ flows: { [id]: value == null ? null : { cfm: value } } })
+          editing.changeInputs({ flows: { [id]: value ?? null } })
         }
       />
       {carried && (

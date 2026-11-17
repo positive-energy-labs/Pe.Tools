@@ -12,8 +12,26 @@ import { SheetPicture } from "../ducts/sheet/picture.tsx";
 import type { PictureOverlayProps } from "../route/slots/picture/overlay.tsx";
 import { SheetEmpty, SheetFrame, sheetSnapshot, useSheetData } from "./mount.tsx";
 import type { FansDrawContext } from "./route.ts";
+import type { FanEspValues, Immutable } from "@pe/agent-contracts";
 
 type Props = PictureOverlayProps<FansDrawContext>;
+
+const inWg = (value: number) => `${value.toFixed(2)} in-wg`;
+/**
+ * What the picture must say about a fan's ESP: rated is what the unit states, required is the
+ * engine's claim, staged is what Work would write. They are three facts and never stand in for one
+ * another, so a required value that is not a complete claim is named as partial, with its reach.
+ */
+export function espWarnings({ rated, required, staged }: Immutable<FanEspValues>): string[] {
+  if (required.kind !== "complete")
+    return [`Required ESP is not known: ${required.kind === "to-boundary" ? `priced to ${required.boundaries.length} unruled boundar${required.boundaries.length === 1 ? "y" : "ies"}` : `${required.coverage.length} coverage gap${required.coverage.length === 1 ? "" : "s"}, ${required.blockingIds.length} blocking`}; ${inWg(required.knownInWg)} so far`];
+  const need = required.requiredEspInWg;
+  return [
+    ...(rated.status === "invalid" ? [`Rated ESP is unreadable (${rated.source} ${rated.ref})`] : []),
+    ...(rated.status === "valid" && rated.value < need ? [`Rated ESP ${inWg(rated.value)} is below the required ${inWg(need)}`] : []),
+    ...(staged.status === "valid" && Math.abs(staged.value - need) > 0.005 ? [`Staged ESP ${inWg(staged.value)} differs from the required ${inWg(need)}`] : []),
+  ];
+}
 
 export function FanPicture({ ctx, picture }: Props) {
   const snapshot = sheetSnapshot(ctx.value.value?.sheetSnapshot);
@@ -24,8 +42,11 @@ function FanWalk({ ctx, snapshot, picture }: Pick<Props, "ctx" | "picture"> & { 
   const { authored, value, sheet, roster, nameOf, issue, state, fanKey } = useSheetData(ctx, snapshot);
   const picked = authored.fan.kind === "all" ? "all" : authored.fan.ids;
   const jump = useRef<((key: SubjectKey) => void) | null>(null);
+  const esp = sheet?.overview.espValues, direction = sheet?.overview.fan?.directionMismatch?.evidence;
   return (
     <SheetFrame ctx={ctx} snapshot={snapshot} nameOf={nameOf} jump={jump}>
+      {[...(direction ? [`Family direction differs from the network: ${direction}`] : []), ...(esp ? espWarnings(esp) : [])]
+        .map((warning) => <p key={warning} role="alert">{warning}</p>)}
       <SheetPicture
         props={{
           page: { layers: authored.layers, context: authored.context, encoding: authored.encoding, issue },

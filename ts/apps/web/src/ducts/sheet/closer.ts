@@ -15,7 +15,7 @@ import type { SheetFitting } from "./model";
  * through a proposed tee or tap takes a typed drop for that path only (`edits.fittingDrops`), with
  * no default. Everything else is ruled in Revit and the row says so.
  */
-import type { Resolved } from "@pe/agent-contracts";
+import type { FanCloser, Resolved } from "@pe/agent-contracts";
 import { ruleByKey, ruleWords } from "@pe/ducts-domain/loss-rules";
 import { tableMeaning } from "./fitting-groups";
 import type { SheetBlocker } from "./tiers";
@@ -24,7 +24,8 @@ import { closerKind, healPair } from "./tiers";
 export type CloserAction =
   | { kind: "rule"; pair: readonly [string, string] }
   | { kind: "cap"; end: { elementId: number; connector: number } }
-  | { kind: "drop"; elementId: number; value: number; terminal: boolean }
+  /** `ref` is the evidence an offered default cites (its tier and ref), for the cell's own `ref`; a typed number cites none. */
+  | { kind: "drop"; elementId: number; value: number; terminal: boolean; ref?: string }
   | { kind: "cfm"; elementId: number; value: number }
   | { kind: "unitCfm"; unitId: number; value: number }
   /** Price every fitting of `family` no rule matches with `rule`; `table` swaps that rule's table too. */
@@ -76,11 +77,18 @@ export type Closer = {
 
 export type CloserContext = {
   /** The resolved default terminal drop (firm or project), with its source; null until inputs land. */
-  terminalDrop: Resolved<number> | null;
+  terminalDrop: Pick<Resolved<number>, "value" | "source"> & { ref?: string | null } | null;
   /** `elementLabeler`: total, never an id. */
   nameOf: (id: number) => string;
   /** The sheet-wide refusal (busy, inputs detail not yet read); null when verbs may run. */
   wait: string | null;
+  /**
+   * The engine's typed closer for a blocker: the Work cell it fills and the values on offer. Where
+   * the read carries none, `terminal` (the element is a terminal of this walk) decides the cell.
+   * Neither reads the blocker's `detail`, which is prose for people.
+   */
+  fix?: (blocker: SheetBlocker) => FanCloser | null;
+  terminal?: (elementId: number) => boolean;
   /** The open fan's unit, for closers that set its design flow; null with no fan open. */
   fan?: { unitId: number; name: string } | null;
   /**
@@ -170,6 +178,9 @@ function describeBase(blocker: SheetBlocker, typed: number | null, context: Clos
     input,
     action,
   });
+  const fix = context.fix?.(blocker) ?? null;
+  const cell = fix?.kind === "cell" ? fix : null;
+  const terminal = cell ? cell.target.segment === "terminalDrops" || cell.target.segment === "flows" : (context.terminal?.(blocker.elementId) ?? false);
   const pair = healPair(blocker);
   const to = candidateId(blocker);
   const toName = to == null ? null : context.nameOf(to);
@@ -256,9 +267,8 @@ function describeBase(blocker: SheetBlocker, typed: number | null, context: Clos
           };
     }
     case "unknown-drop": {
-      const terminal = blocker.detail?.startsWith("terminal") ?? false;
-      // The firm's terminal drop seeds terminals only; no default suits another part.
-      const fallback = terminal ? context.terminalDrop : null;
+      // The engine's first offer; without one, the firm's terminal drop seeds terminals only (no default suits another part).
+      const fallback = cell?.offers[0] ?? (terminal ? context.terminalDrop : null);
       const input: CloserInput = { unit: "in-wg", placeholder: fallback?.value ?? null };
       if (typed != null)
         return live(
@@ -270,25 +280,13 @@ function describeBase(blocker: SheetBlocker, typed: number | null, context: Clos
         ? { ...refuse("set drop", "Type the drop in in-wg"), input }
         : live(
             `set drop ${fallback.value} in-wg (${fallback.source}${fallback.ref ? ` ${fallback.ref}` : ""})`,
-            { kind: "drop", elementId: blocker.elementId, value: fallback.value, terminal },
+            // The staged cell cites where the default came from; the host stamps who took it.
+            { kind: "drop", elementId: blocker.elementId, value: fallback.value, terminal, ref: [fallback.source, fallback.ref].filter(Boolean).join(" ") },
             input,
           );
     }
     case "no-flow": {
       const input: CloserInput = { unit: "cfm", placeholder: null };
-      // A side-stream unit's own flow splits across its receiving ends (A2): one design cfm for the
-      // unit closes every such row, split by the policy, instead of a typed share per end.
-      if (context.fan && /fan's own flow/.test(blocker.detail ?? ""))
-        return typed != null
-          ? live(
-              `set ${context.fan.name} design flow ${typed} cfm`,
-              { kind: "unitCfm", unitId: context.fan.unitId, value: typed },
-              input,
-            )
-          : {
-              ...refuse(`set ${context.fan.name} design flow`, "Type the unit's design cfm"),
-              input,
-            };
       // An end at another unit's port carries that unit's design flow, never a per-end share
       // (ducts LEDGER 2026-10-29, owed 6: per-end shares into another fan's port were dropped and
       // `work.flows` is read for terminals only). The engine reads a receiving unit's typed design
@@ -302,6 +300,20 @@ function describeBase(blocker: SheetBlocker, typed: number | null, context: Clos
               input,
             )
           : { ...refuse(`set ${receiving.name} design flow`, "Type the unit's design cfm"), input };
+      // A side-stream unit's own flow splits across its receiving ends (A2): one design cfm for the
+      // unit closes every such row, split by the policy, instead of a typed share per end. Only the
+      // engine's typed target says so; without one the row writes its own element, never another's.
+      if (context.fan && cell?.target.segment === "equipmentFlows")
+        return typed != null
+          ? live(
+              `set ${context.fan.name} design flow ${typed} cfm`,
+              { kind: "unitCfm", unitId: context.fan.unitId, value: typed },
+              input,
+            )
+          : {
+              ...refuse(`set ${context.fan.name} design flow`, "Type the unit's design cfm"),
+              input,
+            };
       return typed != null
         ? live(
             `set flow ${typed} cfm`,

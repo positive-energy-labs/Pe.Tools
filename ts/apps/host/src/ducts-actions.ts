@@ -8,7 +8,7 @@ import { healPlan, healRequestGroup } from "@pe/ducts-domain/heal";
 import { fanOf } from "@pe/ducts-domain/action-targets";
 import { applyRequest, price, TABLE_IDS } from "@pe/ducts-domain/pricing";
 import { toGrids } from "@pe/ducts-domain/loss-grid";
-import { ductsDesign, ductsFirmSchema, ductParameterSlots, stagedDucts, subjectOf, workHandleSchema } from "@pe/agent-contracts";
+import { ductsDesign, ductsFirmSchema, ductParameterSlots, stagedValues, subjectOf, workHandleSchema } from "@pe/agent-contracts";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import type { HostNativeRead } from "@pe/host-internal/native-read";
 import { Effect } from "effect";
@@ -115,7 +115,7 @@ export function unwrittenCells(
  * Why one requested cell derived no write. A cell whose Work edit is empty (published, restored or
  * never staged) is not a staged value: the scope naming it is no authority to write it.
  */
-export function unwrittenReason(staged: ReturnType<typeof stagedDucts>, [segment, key]: readonly [string, string],
+export function unwrittenReason(staged: ReturnType<typeof stagedValues>, [segment, key]: readonly [string, string],
 ) {
   const cells = staged[segment as keyof typeof staged] as Record<string, unknown> | undefined;
   return cells && key in cells
@@ -315,7 +315,7 @@ export function ductsExecutors(
                 `These requested cells derive no write in this scope: ${unwritten
                   .map(
                     (cell) =>
-                      `${cell.join("/")} (${unwrittenReason(stagedDucts(doc, fans), cell)})`,
+                      `${cell.join("/")} (${unwrittenReason(stagedValues(doc, fans), cell)})`,
                   )
                   .join("; ")}`,
               );

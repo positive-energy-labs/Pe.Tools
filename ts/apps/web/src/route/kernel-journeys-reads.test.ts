@@ -1,3 +1,4 @@
+import { VOCABULARY } from "@pe/ducts-domain/sheet/scoped-snapshot";
 import { mkdtemp, stateFixture } from "../../../../tests/isolated-home/storage.ts";
 import { refusalOf, valueOf } from "./typed-route";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
@@ -162,7 +163,7 @@ test("JZ Plan route switch: Ducts reads preserve the Fans seal; changed Work sta
     const key = mounted.work()!.handle.key;
     const staged = await j.host.workspace.apply(key, "fans", "human", [
       { path: ["writeIntent"], value: { edit: { value: { walk: { unitId: row.unitId, portIndex: row.portIndex } } } } },
-      { path: ["equipmentFlows", elementSubject(row), "edit"], value: { value: { cfm: 925, source: "test" } } },
+      { path: ["equipmentFlows", elementSubject(row), "edit"], value: { value: 925, ref: "test" } },
     ], mounted.work()!.revision);
     expect(staged.ok).toBe(true);
     mounted.refresh();
@@ -353,8 +354,7 @@ test("JX1 compare named Fans and shared-fan Duct systems, clear scope, then clos
         "H23: published pressure belongs to that fan's overview",
       ).toMatchObject({
         requiredEspInWg: open.overview.totals?.requiredEspInWg ?? null,
-        complete:
-          !!open.overview.totals?.supply.complete && !!open.overview.totals?.return.complete,
+        complete: open.overview.claim?.kind === "complete",
       });
       expect(open.overview.basis, "H23: engineering answer retains its provenance").toBeTruthy();
     }
@@ -492,7 +492,7 @@ test("JX3 open fixture Fans, change scope and attempt a native write without liv
 
 async function compareSystemAnswers() {
   // Existing native-shaped purpose capture, with the same shared-fan variant as system-list.test.ts.
-  const snapshot = nativeResponseSchema("ducts.snapshot.walk").parse(savedNetwork);
+  const snapshot = nativeResponseSchema("ducts.snapshot.walk").parse({ ...savedNetwork, vocabulary: VOCABULARY });
   for (const element of [...snapshot.nodes, ...snapshot.segments])
     element.uniqueId ||= `jx-native-${element.id}`;
   snapshot.groups[0]!.systemNames.push("SA 2");

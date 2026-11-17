@@ -1,3 +1,4 @@
+import { VOCABULARY } from "@pe/ducts-domain/sheet/scoped-snapshot";
 import "../styles.css";
 import { createRoot } from "react-dom/client";
 import { useSyncExternalStore, type ReactNode } from "react";
@@ -19,9 +20,9 @@ import type { ReadingDelivery } from "../shell/source-contract";
 
 // Native boundary: replay the committed Chadds roster, holding network completion
 // until the instrument has measured the usable chooser during Reading.
-const snapshot = nativeResponseSchema("ducts.snapshot.walk").parse(recorded);
+const snapshot = nativeResponseSchema("ducts.snapshot.walk").parse({ ...recorded, vocabulary: VOCABULARY });
 const value = { ...snapshot, rows: systemList(snapshot, null), sourceVersion: "layout-recording" };
-const networkValue = nativeResponseSchema("ducts.snapshot.walk").parse(recordedNetwork);
+const networkValue = nativeResponseSchema("ducts.snapshot.walk").parse({ ...recordedNetwork, vocabulary: VOCABULARY });
 const publication = (data: unknown) => ({ key: "layout", generation: 1, version: 1, state: "current", value: {
   data, evaluation: "layout", inputs: "recorded", coverage: { requested: [], covered: [], unknown: [], refused: [] },
   origin: { kind: "fixture" }, works: [], trace: [], freshness: "current",

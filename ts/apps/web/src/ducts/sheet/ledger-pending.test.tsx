@@ -21,10 +21,10 @@ test("a Work ESP is labelled by its resolved source, never as a Revit write", ()
   if (!sheet.overview.fan) throw Error("The MUAS fixture must contain its fan");
   const inputs = sheet.inputs!.inputs;
   inputs.units[String(sheet.overview.fan.unitId)] = {
-    kind: { value: "muas", source: "default", units: null, version: null, status: "valid" },
-    role: { value: "fan", source: "default", units: null, version: null, status: "valid" },
-    cfm: { value: null, source: "none", units: "cfm", version: null, status: "missing" },
-    esp: { value: 2.658079, source: "Work", units: "in-wg", version: 4, status: "valid" },
+    kind: { value: "muas", source: "default", units: null, version: null, status: "valid", author: null, ref: "test" },
+    role: { value: "fan", source: "default", units: null, version: null, status: "valid", author: null, ref: "test" },
+    cfm: { value: null, source: "none", units: "cfm", version: null, status: "missing", author: null, ref: null },
+    esp: { value: 2.658079, source: "Work", units: "in-wg", version: 4, status: "valid", author: null, ref: "test" },
   };
   const draw = () => (
     <div data-pane-id="sheet-ledger">
@@ -59,7 +59,7 @@ test("a Work ESP is labelled by its resolved source, never as a Revit write", ()
     source: "model",
     units: "in-wg",
     version: 5,
-    status: "valid",
+    status: "valid", author: null, ref: "test",
   };
   view.rerender(draw());
   expect(view.container.querySelector(FANS_LEDGER_ESP)?.textContent).toBe("1.2500");

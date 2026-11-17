@@ -8,9 +8,6 @@ const context: CloserContext = {
     value: 0.03,
     source: "firm",
     ref: "seed",
-    units: null,
-    version: null,
-    status: "valid",
   },
   nameOf: (id) => (id === 2 ? "14×10 duct" : "an element outside this read"),
   wait: null,
@@ -74,26 +71,28 @@ it("an unknown drop takes the typed value, else the firm shim named in the verb"
     detail: "terminal 5 has no drop",
     closer: { kind: "default", note: "" },
   });
-  expect(describeCloser(blocker, null, context)).toMatchObject({
+  // Whether element 5 is a terminal is the walk's fact (`terminal`), never read from `detail`.
+  const walk = { ...context, terminal: (id: number) => id === 5 };
+  expect(describeCloser(blocker, null, walk)).toMatchObject({
     verb: "set drop 0.03 in-wg (firm seed)",
     refusal: null,
     input: { unit: "in-wg", placeholder: 0.03 },
     action: { kind: "drop", elementId: 5, value: 0.03 },
   });
-  expect(describeCloser(blocker, 0.05, context)).toMatchObject({
+  expect(describeCloser(blocker, 0.05, walk)).toMatchObject({
     verb: "set drop 0.05 in-wg",
     action: { kind: "drop", elementId: 5, value: 0.05 },
   });
-  const noShim = { ...context, terminalDrop: null };
+  const noShim = { ...walk, terminalDrop: null };
   expect(describeCloser(blocker, null, noShim)).toMatchObject({
     refusal: "Type the drop in in-wg",
     action: null,
   });
   // The firm's terminal drop seeds terminals only: a part's unknown drop is typed, never seeded.
   const part = describeCloser(
-    { ...blocker, detail: "equipment has no drop (inline equipment)" },
+    { ...blocker, elementId: 6 },
     null,
-    context,
+    walk,
   );
   expect(part).toMatchObject({
     refusal: "Type the drop in in-wg",
@@ -333,7 +332,9 @@ it("a side-stream unit's no-flow row sets the unit's design flow, one number for
     detail:
       "the fan's own flow splits across 3 receiving fan/merge ends; no unit design flow or complete typed shares are available",
   });
-  const withFan = { ...context, fan: { unitId: 14577391, name: "MUAS-1" } };
+  // The engine's typed closer names the unit's design-flow cell; the prose above is for people.
+  const withFan = { ...context, fan: { unitId: 14577391, name: "MUAS-1" },
+    fix: (b: { id: string }) => b.id === blocker.id ? { kind: "cell" as const, target: { work: "fans" as const, segment: "equipmentFlows", row: "unit" }, offers: [] } : null };
   expect(describeCloser(blocker, null, withFan)).toMatchObject({
     verb: "set MUAS-1 design flow",
     refusal: "Type the unit's design cfm",
