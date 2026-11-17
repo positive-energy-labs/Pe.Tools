@@ -24,8 +24,48 @@ import {
   sameReceiptWork,
 } from "@pe/agent-contracts";
 import { Effect } from "effect";
+import { effectTest } from "./effect-test.ts";
 
 const id = "retained-original";
+for (const touched of [
+  { kind: "wrote" as const, transactions: ["Family A"], added: 0, modified: 1, deleted: 0 },
+  { kind: "unknown" as const, reason: "process-exit" as const },
+]) {
+  effectTest(`PUR-FFX-RECOVER-WITNESS-01: recovered failed native step with ${touched.kind} settles incomplete`, () =>
+    Effect.gen(function* () {
+      const original = action(exact, "unknown");
+      const f = yield* Effect.acquireRelease(
+        Effect.tryPromise(() => journal(original)),
+        (f) => Effect.tryPromise(() => f.owner.close()).pipe(Effect.orDie),
+      );
+      f.owner.bindCommands({
+        probe: async () => { throw Error("No current probe"); },
+        resolve: () => ({
+          definition: {
+            says: "held", needs: "document", effect: "command", dirties: [],
+            input: z.record(z.string(), z.unknown()),
+          },
+          prepared: z.unknown(),
+          bind: async () => { throw Error("No fresh bind"); },
+          run: () => Effect.die("No fresh effect"),
+          recover: async (step) => ({
+            step: {
+              ...step, state: "failed", error: "family 3 threw", status: 500, touched,
+              opReceipt: {
+                requestId: step.id, key: step.key, pid: process.pid,
+                processStartUtc: process.processStartUtc, verdict: "failed",
+              },
+            },
+            evidence: {},
+          }),
+        }),
+      });
+      const observed = yield* Effect.tryPromise(() => f.owner.recover(id));
+      expect(observed.steps[0]).toMatchObject({ state: "failed", touched });
+      expect(observed.state).toBe("incomplete");
+    }),
+  );
+}
 const uuid = (n: number) => `10000000-0000-4000-8000-${n.toString().padStart(12, "0")}`;
 const broker = {
   kind: "document" as const,
