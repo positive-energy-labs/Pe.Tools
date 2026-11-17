@@ -148,6 +148,7 @@ export function Ladder({
       // The trigger's face is a value or a placeholder; its name says what it chooses.
       triggerLabel={name}
       levels={rungs}
+      crumbMark={(depth) => levels[depth]?.provenance}
       header={header}
       onCollection={(current) => {
         collection.current = current;
