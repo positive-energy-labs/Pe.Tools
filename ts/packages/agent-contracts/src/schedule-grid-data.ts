@@ -194,9 +194,7 @@ export const scheduleGridRouteState = {
     "Review schedule cell edits. Read op:schedule.grid.snapshot for the subject Work address and binding basis; both authors apply.",
   schema: scheduleGridDocumentSchema,
   reconcileEdit: (next, patches) => {
-    const parsed = scheduleGridDocumentSchema.safeParse(next);
-    if (!parsed.success) return next;
-    const doc = parsed.data;
+    const doc = scheduleGridDocumentSchema.parse(next);
     if (!doc.basis?.stale) return doc;
     const edited = new Set(
       patches
