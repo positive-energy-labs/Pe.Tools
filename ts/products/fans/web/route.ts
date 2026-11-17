@@ -1,6 +1,6 @@
 import type { ContextOf } from "@pe/web/route";
 import { handle } from "@pe/agent-contracts/handle";
-import { bindings, fanScope } from "./fans/bindings.ts";
+import { bindings, fanScope } from "./src/bindings.ts";
 import { read } from "@pe/web/route";
 import { stageField } from "@pe/web/route";
 import { listFields } from "@pe/web/route";
@@ -10,18 +10,18 @@ import {
   fansCalcEditsSchema,
   type Immutable,
 } from "@pe/agent-contracts";
-import * as reads from "@pe/fans-contract/fans/contract";
+import * as reads from "@pe/fans-contract/contract";
 import { editPatches } from "@pe/ducts-domain/calc/edits";
 import { field, picturePose, route, subjectSchema, split } from "@pe/web/route";
 import { hostRead } from "@pe/web/host-read";
 import { draw } from "../../../apps/web/src/route/draw.tsx";
 import { fillBody, scrollBody } from "../../../apps/web/src/route/body.ts";
 import { overlay } from "../../../apps/web/src/route/slots/picture/overlay.tsx";
-import { fanLabel, stableFanKey } from "@pe/ducts-web/ducts/calc/model";
-import { describeInputHistory, editMetaSchema } from "@pe/ducts-web/ducts/calc/input-history.neutral";
-import { calcValueFixtures } from "./ducts/calc/value-fixtures.ts";
-import { presentLosses } from "@pe/ducts-web/ducts/reviews";
-import { fansCalc } from "./fans/calc.ts";
+import { fanLabel, stableFanKey } from "@pe/ducts-web/calc/model";
+import { describeInputHistory, editMetaSchema } from "@pe/ducts-web/calc/input-history.neutral";
+import { calcValueFixtures } from "./src/calc/value-fixtures.ts";
+import { presentLosses } from "@pe/ducts-web/reviews";
+import { fansCalc } from "./src/calc.ts";
 
 const fan = subjectSchema(32);
 
@@ -49,7 +49,7 @@ const roster = read(hostRead(reads.calc, calcValueFixtures), () => ({
 export type FansDrawContext = ContextOf<typeof fields, typeof calc, typeof import("@pe/fans-contract/fans").fansDocumentSchema, typeof import("@pe/agent-contracts").fansCalcEditsSchema>;
 export const module = route({
   key: "fans",
-  host: "@pe/fans-host/fans/host",
+  host: "@pe/fans-host/host",
   name: "Fans",
   directory: {
     aliases: ["fan", "ESP", "pressure"],
@@ -79,7 +79,7 @@ export const module = route({
   reads: { roster },
   sheet: fansCalc,
   // The open fans' walk. Strands, blocker skins and the ESP readout are beyond the closed marks: the overlay hands them over.
-  picture: { scope: { derive: fanScope }, overlay: overlay(() => import("./fans/picture.tsx"), "FanPicture") },
+  picture: { scope: { derive: fanScope }, overlay: overlay(() => import("./src/picture.tsx"), "FanPicture") },
   fields,
   panes: {
     "sheet-roster": {
@@ -89,7 +89,7 @@ export const module = route({
       read: roster,
       bindings,
       body: "scroll",
-      draw: draw("scroll", () => import("./fans/mount.tsx"), "RosterBody"),
+      draw: draw("scroll", () => import("./src/mount.tsx"), "RosterBody"),
     },
     "sheet-inputs": {
       title: "Inputs",
@@ -114,7 +114,7 @@ export const module = route({
       purpose: "Inspect ESP and provenance",
       bindings,
       body: "scroll",
-      draw: draw("scroll", () => import("./fans/mount.tsx"), "LedgerBody"),
+      draw: draw("scroll", () => import("./src/mount.tsx"), "LedgerBody"),
     },
   },
   edits: {

@@ -9,7 +9,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, it, vi } from "vite-plus/test";
 
-import { SCENE_FIXTURE } from "@pe/ducts-web/ducts/scene.fixture";
+import { SCENE_FIXTURE } from "@pe/ducts-web/scene.fixture";
 import { inferJoints } from "./proximity.ts";
 import type { DuctSnapshot } from "./types.ts";
 

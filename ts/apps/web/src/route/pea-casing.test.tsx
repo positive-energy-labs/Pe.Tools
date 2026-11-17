@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { stableFanKey } from "@pe/ducts-web/ducts/calc/model";
-import { systemCode } from "@pe/ducts-web/ducts/identity";
+import { stableFanKey } from "@pe/ducts-web/calc/model";
+import { systemCode } from "@pe/ducts-web/identity";
 import { useSyncExternalStore } from "react";
 import { act, cleanup, render, waitFor } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";

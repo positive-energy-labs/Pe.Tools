@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./ducts/host": "./ducts/host.ts",
-    "./actions": "./src/actions.ts"
+    "./actions": "./src/actions.ts",
+    "./host": "./src/host.ts"
   },
   "scripts": {
     "check": "vp exec tsc --noEmit",

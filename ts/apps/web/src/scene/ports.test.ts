@@ -1,8 +1,8 @@
 import { expect, it } from "vite-plus/test";
 import * as THREE from "three";
 import type { LineSegments2 } from "three/addons/lines/LineSegments2.js";
-import { equipmentPaint, equipmentPorts } from "@pe/ducts-web/ducts/paint";
-import type { Scene } from "@pe/ducts-web/ducts/scene";
+import { equipmentPaint, equipmentPorts } from "@pe/ducts-web/paint";
+import type { Scene } from "@pe/ducts-web/scene";
 import { LOOK } from "./grounds";
 import { portLayer, portSegments, type SurfacePort } from "./ports";
 import { sectionContains } from "./section";

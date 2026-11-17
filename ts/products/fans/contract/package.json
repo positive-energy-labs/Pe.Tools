@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./fans/contract": "./fans/contract.ts",
     "./calc-read": "./src/calc-read.ts",
+    "./contract": "./src/contract.ts",
     "./fan-calc": "./src/fan-calc.ts",
     "./fans-host-reads": "./src/fans-host-reads.ts",
     "./fans-inputs": "./src/fans-inputs.ts",

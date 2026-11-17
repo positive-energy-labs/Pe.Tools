@@ -40,7 +40,7 @@ function parseTbl(file: string): Record<string, Grid> {
   return out;
 }
 const GRID_DIRS = [
-  join(__dirname, "../../../../ducts/web/ducts/fixtures/ashrae"),
+  join(__dirname, "../../../../ducts/web/src/fixtures/ashrae"),
   join(__dirname, "../../../../../../dotnet/Pe.Shared.Tests/RevitData/Fixtures/Ashrae"),
 ];
 export const grids: Grids = Object.fromEntries(

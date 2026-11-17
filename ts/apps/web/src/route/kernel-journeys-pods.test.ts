@@ -1,6 +1,6 @@
 import { elementSubject } from "@pe/ducts-domain/work-subject";
 import { mkdtemp,stateFixture } from "../../../../tests/isolated-home/storage.ts";
-import { snapshot as workSnapshot } from "@pe/ducts-web/ducts/test-fixture";
+import { snapshot as workSnapshot } from "@pe/ducts-web/test-fixture";
 // @vitest-environment jsdom
 import { workFingerprintSchema } from "@pe/agent-contracts";
 import { observeResources } from "@pe/runtime";

@@ -1,0 +1,169 @@
+import { stateFixture } from "../../../../../tests/isolated-home/storage.ts";
+import { mkdtemp } from "../../../../../tests/isolated-home/storage.ts";
+import { HostNativeRead } from "@pe/host-internal/native-read";
+import { NativeReads } from "../../../../../apps/host/src/native-reads.ts";
+
+
+import { testDuctFiles } from "../../../../../apps/host/tests/effect-test.ts";
+import { rm } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { NodeCrypto } from "@effect/platform-node";
+import { Context, Effect, Exit, Layer, Scope } from "effect";
+
+import { TestClock } from "effect/testing";
+import { bindWork, NATIVE_BODY_VERSION_HEADER, type Address, type Caller } from "@pe/agent-contracts";
+import {
+  HOST_RPC_BRIDGE_SESSION_HEADER,
+  HOST_RPC_DOCUMENT_HEADER,
+} from "@pe/host-contracts/operation-types";
+import { RouteWorkspace } from "@pe/runtime";
+import type { ResourceObserver } from "@pe/runtime/resource-stream";
+
+
+import { settle } from "../../../../../apps/host/tests/effect-test.ts";
+
+import { sdkSessions } from "../../../../../apps/host/tests/native-receipt-fixture.ts";
+import { RevitBridge, BridgeError } from "../../../../../apps/host/src/bridge.ts";
+
+
+import { admittedBuiltinsLayer } from "../../../../../apps/host/src/admitted-builtins.ts";
+import { RunRegistry } from "../../../../../apps/host/src/run-registry.ts";
+import { bindControl } from "../../../../../apps/host/src/control.ts";
+import { hostResourceObserver } from "../../../../../apps/host/src/resource-adapters.ts";
+import type { ReadSources } from "@pe/host/reads/inputs";
+import { Publications } from "../../../../../apps/host/src/reads/publications.ts";
+import { graphRoute } from "../../../../../apps/host/src/reads/routes.ts";
+import { calcPort } from "@pe/ducts-host/tests/ducts-read.fixture";
+import { fileRouteDocumentStore } from "../../../../../apps/host/src/route-document-store.ts";
+import { createPeRoutes } from "../../../../../apps/host/src/pe-routes.ts";
+
+import { RequestIdentity, admittedRequestIdentity } from "../../../../../apps/host/src/request-services.ts";
+import { SdkSession, SdkDriver } from "../../../../../apps/host/src/sdk-session.ts";
+
+
+import { fixtureNative } from "../../../../../apps/host/tests/fixture-native.ts";
+import { nativeResponseSchema } from "@pe/host-contracts/decoders";
+import { captureStore } from "../../../../../apps/host/tests/effect-test.ts";
+/** Recorded bridge data only; Work, admission, seals and the run registry run in the host. */
+export async function nativeFixture(
+  clockMode: "real" | "test" = "real",
+  scenario?: (key: string, input: unknown) => unknown,
+  address: Address | null = null,
+) {
+  const scope = Scope.makeUnsafe();
+  const dir = await mkdtemp(join(tmpdir(), "fans-recorded-"));
+  const saved = new RouteWorkspace({ registrations: [], store: fileRouteDocumentStore(stateFixture(join(dir, "work"))) });
+  const context = await settle(Layer.buildWithScope(Layer.mergeAll(admittedBuiltinsLayer(saved),
+    RunRegistry.layer.pipe(Layer.provide(NodeCrypto.layer))), scope));
+  const clock = clockMode === "test" ? await settle(Layer.buildWithScope(TestClock.layer(), scope)) : Context.empty();
+  const runs = Context.get(context, RunRegistry);
+  bindControl({ runs });
+  const transport = await fixtureNative(join(dir, "native"), "driver-ducts.snapshot.walk", "driver-ducts.snapshot.roster",
+    "driver-ducts.tables", "driver-revit.catalog.field-options", "fans-accessory-initial", "sdk-ducts.apply", "driver-op.cancel");
+  // Current synthetic topology can exercise the write mint without presenting old captures as complete.
+  const installScenario = () => {
+    const reply = transport.transport.reply;
+    transport.transport.reply = (action, key, input) => {
+      const value = scenario?.(key, input);
+      if (value === undefined) return reply(action, key, input);
+      transport.transport.admit(action, key, input);
+      return nativeResponseSchema(key as import("@pe/host-contracts/operation-types").HostOperationKey).parse(value);
+    };
+  };
+  installScenario();
+  const bridge = transport.bridge, journal = transport.journal;
+  const captures = captureStore(join(dir, "captures"));
+  const connection = await transport.connect();
+  const target = { kind: "document" as const, ref: connection.target };
+  const key = bindWork("ducts", address, undefined, target.ref);
+  const rootReads: { native?: HostNativeRead["Service"]; shared?: NativeReads["Service"] } = {};
+  const sdkInput = { read: sdkSessions };
+  const http = transport.actions({ workspace: saved, sdk: args => sdkInput.read(args), files: testDuctFiles() }, undefined, {}, Layer.effectDiscard(Effect.gen(function* () {
+    rootReads.native = yield* HostNativeRead; rootReads.shared = yield* NativeReads;
+  })));
+  const request = http.request;
+  const post = (path: string, body: unknown, caller?: Caller) => request(new Request(`http://fixture${path}`, {
+    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body),
+  }), caller);
+  const readPause = { key: "", wait: Effect.void };
+  transport.onRequest(async key => { if (key === readPause.key) await settle(readPause.wait); });
+    const sdkContext = await settle(
+      Layer.buildWithScope(
+        SdkSession.layer.pipe(
+          Layer.provide(
+            Layer.mergeAll(
+              Layer.succeed(RevitBridge, bridge),
+              Layer.succeed(SdkDriver, (args) => Effect.promise(() => sdkSessions(args))),
+            ),
+          ),
+        ),
+        scope,
+      ),
+    );
+    const sdk = Context.get(sdkContext, SdkSession);
+    const observeHostResource: ResourceObserver = hostResourceObserver(
+      bridge,
+      () => journal,
+      () => captures,
+      "http://fixture",
+      (url, init) => request(new Request(url, init)),
+      undefined,
+      (_bridge, scope) =>
+        sdk.resolve(scope).pipe(
+          Effect.mapError((error) => new BridgeError(error.message, error.status)),
+          Effect.provideService(
+            RequestIdentity,
+            admittedRequestIdentity({ kind: "human", via: "local" }, scope),
+          ),
+        ),
+    );
+    const readDucts: ReadSources["call"] = (op, input, raw, version) => {
+      const ref="kind" in raw ? raw.kind === "document"?raw.ref:null : raw;
+      if(!ref) throw Error("Fixture requires a document target");
+      return request(
+        new Request("http://fixture/call", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            [HOST_RPC_BRIDGE_SESSION_HEADER]: ref.session,
+            [HOST_RPC_DOCUMENT_HEADER]: ref.openId,
+            ...(version && { [NATIVE_BODY_VERSION_HEADER]: version }),
+          },
+          body: JSON.stringify({ key: op, request: input }),
+        }),
+      );
+    };
+    const publications = new Publications();
+    const api = createPeRoutes({
+      workspace: saved,
+      registrations: [],
+      store: fileRouteDocumentStore(stateFixture(join(dir, "work"))),
+      heads: { observe: () => () => {} },
+      navigation: {
+        threads: async () => [],
+        documents: async () => [{ ...target.ref, address }],
+      },
+      readGraph: async raw => {
+        const port = calcPort({ firm: (owner) => settle(testDuctFiles().firm(owner)), catalogs: () => settle(testDuctFiles().ductCatalogs), call: readDucts,
+          workKey: async ref => bindWork("ducts", address, undefined, ref) }, saved);
+        const graph = graphRoute("reads.value", raw);
+        return graph.publish(publications, graph.publication!.subscription, graph.publication!.generation, port);
+      },
+      observeHostResource,
+    });
+  return {
+    api, dir, target, key, saved, journal, runs, rootReads, sdkInput, readPause,
+    dispatched: transport.calls, readDucts, observeHostResource, post, request,
+    select: (...names: string[]) => { transport.select(...names); installScenario(); },
+    advance: (milliseconds: number) => settle(TestClock.adjust(milliseconds).pipe(Effect.provide(clock))),
+    async close() {
+      runs.closeAll();
+      for (const row of await journal.list()) if (row.state === "running") await journal.cancel(row.id);
+      await transport.close();
+      await settle(Scope.close(scope, Exit.void));
+      bindControl({ runs: undefined });
+      await rm(dir, { recursive: true, force: true });
+    },
+  };
+}

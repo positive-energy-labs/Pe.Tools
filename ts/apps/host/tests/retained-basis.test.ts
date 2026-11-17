@@ -22,7 +22,7 @@ import { DuctsReadings } from "@pe/ducts-host/ducts-readings";
 import { retainedDuctsRead } from "../src/call-route.ts";
 import { HostSessionInventory } from "../src/session-inventory.ts";
 import { httpProblems } from "../src/http-problems.ts";
-import { snapshot } from "@pe/ducts-web/ducts/test-fixture";
+import { snapshot } from "@pe/ducts-web/test-fixture";
 
 const run = Effect.runPromise;
 const dirs: string[] = [];

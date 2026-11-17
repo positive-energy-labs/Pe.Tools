@@ -1,10 +1,10 @@
 import { valueOf } from "./typed-route";
-import { stableFanKey } from "@pe/ducts-web/ducts/calc/model";
+import { stableFanKey } from "@pe/ducts-web/calc/model";
 import { expect, test, vi } from "vite-plus/test";
 import { observeResources } from "@pe/runtime";
 import { historyPointSchema, workFingerprintSchema } from "@pe/agent-contracts";
 import { registeredReads } from "../../../host/src/reads/routes";
-import { fansCalc } from "@pe/fans-host/fans/host";
+import { fansCalc } from "@pe/fans-host/host";
 import { fixture, ref, path, gate } from "../../../host/tests/host-read-graph.test-support";
 import { module as fans } from "@pe/fans-web/route";
 import { mountTypedRoute } from "../shell/typed-mount";

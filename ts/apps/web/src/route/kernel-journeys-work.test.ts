@@ -3,7 +3,7 @@ import { fixtureTimeline } from "../shell/fixture-work-door";
 import { refusalOf, valueOf } from "./typed-route";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
 import { snapshot as workSnapshot } from "../../../host/tests/host-read-graph.test-support";
-import { stableFanKey } from "@pe/ducts-web/ducts/calc/model";
+import { stableFanKey } from "@pe/ducts-web/calc/model";
 import { join } from "node:path";
 import { Context, Effect, Layer } from "effect";
 import { HttpRouter } from "effect/http";

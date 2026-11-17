@@ -27,7 +27,7 @@ import { ductsSettings } from "@pe/agent-contracts/setting-owners";
 import { sheetCells } from "../route/slots/sheet/index.ts";
 
 
-import { fansCalc } from "@pe/fans-web/fans/calc";
+import { fansCalc } from "@pe/fans-web/calc";
 
 const pointer = "Projects/2026-014 Chadds Ford";
 let user: string, drive: string, firm: string, project: string;

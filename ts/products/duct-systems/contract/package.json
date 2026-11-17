@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./ducts/contract": "./ducts/contract.ts",
+    "./contract": "./src/contract.ts",
     "./ducts-pricing-read": "./src/ducts-pricing-read.ts",
     "./ducts-read": "./src/ducts-read.ts",
     "./ducts": "./src/ducts.ts"

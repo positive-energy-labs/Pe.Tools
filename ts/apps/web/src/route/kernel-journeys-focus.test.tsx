@@ -5,7 +5,7 @@ import { refusalOf, valueOf } from "./typed-route";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
 import { host as placesHost, seedPlaces } from "../workbench/places.test-support";
 // @vitest-environment jsdom
-import { stableFanKey } from "@pe/ducts-web/ducts/calc/model";
+import { stableFanKey } from "@pe/ducts-web/calc/model";
 import { subjectCode } from "@pe/agent-contracts";
 import { surfaceReadiness } from "./readiness.test.fixture";
 import { useState, useSyncExternalStore } from "react";
@@ -995,7 +995,7 @@ test("JZ B02 undo follows focus between typed routes, portal and hidden pane; te
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { inputsFor } from "@pe/fans-domain/calc/test-inputs";
 import { SheetPane } from "./slots/sheet/pane.tsx";
-import { fansCalc } from "@pe/fans-web/fans/calc";
+import { fansCalc } from "@pe/fans-web/calc";
 
 // Plan reviews seal model inputs, never browser pane visibility or Page pose.
 import { useEffect, useReducer } from "react";
@@ -1003,7 +1003,7 @@ import rawMuas from "@pe/fans-domain/calc/fixtures/muas-local-20261102.json";
 import { VOCABULARY } from "@pe/ducts-domain/calc/scoped-snapshot";
 // The saved capture predates the required `vocabulary` and the P2-B coverage field `walk.unreadPeers`.
 const realMuas = { ...rawMuas, vocabulary: VOCABULARY, walk: { ...rawMuas.walk, unreadPeers: [] } };
-import { createWitness } from "@pe/fans-web/fans/cutover.test-support";
+import { createWitness } from "@pe/fans-web/cutover.test-support";
 import type { ReceiptFeedState } from "../../../../packages/agent-contracts/src/work-journal-door";
 import { TypedWrite } from "../shell/typed-shell";
 import type { ReadingDelivery } from "../shell/source-contract";

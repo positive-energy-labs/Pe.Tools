@@ -4,7 +4,6 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./ducts/pricing-value": "./ducts/pricing-value.ts",
     "./action-targets": "./src/action-targets.ts",
     "./equivalent-length": "./src/equivalent-length.ts",
     "./fan-headroom": "./src/fan-headroom.ts",
@@ -12,6 +11,7 @@
     "./loss-breakdown": "./src/loss-breakdown.ts",
     "./loss-split": "./src/loss-split.ts",
     "./no-runs": "./src/no-runs.ts",
+    "./pricing-value": "./src/pricing-value.ts",
     "./system-list-search": "./src/system-list-search.ts",
     "./system-list": "./src/system-list.ts",
     "./system-search": "./src/system-search.ts"

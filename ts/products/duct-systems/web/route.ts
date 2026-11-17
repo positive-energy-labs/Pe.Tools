@@ -1,7 +1,7 @@
 import type { ContextOf } from "@pe/web/route";
-import { systemCode } from "@pe/ducts-web/ducts/identity";
+import { systemCode } from "@pe/ducts-web/identity";
 import { handle } from "@pe/agent-contracts/handle";
-import { bindings } from "./ducts/bindings.ts";
+import { bindings } from "./src/bindings.ts";
 import { read } from "@pe/web/route";
 import { stageField } from "@pe/web/route";
 import { ductsRouteState } from "@pe/duct-systems-contract/ducts";
@@ -25,10 +25,10 @@ import { hostRead } from "@pe/web/host-read";
 import { draw } from "../../../apps/web/src/route/draw.tsx";
 import { fillBody, scrollBody } from "../../../apps/web/src/route/body.ts";
 import { overlay } from "../../../apps/web/src/route/slots/picture/overlay.tsx";
-import { describeInputHistory, editMetaSchema } from "@pe/ducts-web/ducts/calc/input-history.neutral";
-import * as reads from "@pe/duct-systems-contract/ducts/contract";
-import { presentLosses, presentHeal, presentFan } from "@pe/ducts-web/ducts/reviews";
-import { designCalc } from "./ducts/design-calc.ts";
+import { describeInputHistory, editMetaSchema } from "@pe/ducts-web/calc/input-history.neutral";
+import * as reads from "@pe/duct-systems-contract/contract";
+import { presentLosses, presentHeal, presentFan } from "@pe/ducts-web/reviews";
+import { designCalc } from "./src/design-calc.ts";
 
 const system = subjectSchema(DUCTS_SYSTEM_MAX);
 export const fields = {
@@ -66,7 +66,7 @@ const evidence = (
 });
 export const module = route({
   key: "ducts",
-  host: "@pe/duct-systems-host/ducts/host",
+  host: "@pe/duct-systems-host/host",
   name: "Ducts",
   directory: {
     group: "Calculate loads & airflow",
@@ -98,7 +98,7 @@ export const module = route({
   sheet: designCalc,
   // The picture is of the opened systems. A system is a name, not geometry: the overlay hands the kernel
   // its members to capture, with the stubs, labels, rulings and schematic the closed marks cannot express.
-  picture: { scope: "subject", overlay: overlay(() => import("./ducts/screen/screen.tsx"), "NetworkPicture") },
+  picture: { scope: "subject", overlay: overlay(() => import("./src/screen/screen.tsx"), "NetworkPicture") },
   panes: {
     "e-systems": {
       subjectList: true,
@@ -107,28 +107,28 @@ export const module = route({
       read: roster,
       bindings,
       body: "scroll",
-      draw: draw("scroll", () => import("./ducts/screen/screen.tsx"), "SystemsPane"),
+      draw: draw("scroll", () => import("./src/screen/screen.tsx"), "SystemsPane"),
     },
     "e-sidebar": {
       title: "System tree",
       purpose: "Inspect the opened systems and their runs",
       bindings,
       body: "scroll",
-      draw: draw("scroll", () => import("./ducts/screen/screen.tsx"), "TreePane"),
+      draw: draw("scroll", () => import("./src/screen/screen.tsx"), "TreePane"),
     },
     "e-rules-all": {
       title: "All-systems rules",
       purpose: "Price every read fitting type",
       bindings,
       body: "scroll",
-      draw: draw("scroll", () => import("./ducts/screen/screen.tsx"), "AllRulesBody"),
+      draw: draw("scroll", () => import("./src/screen/screen.tsx"), "AllRulesBody"),
     },
     "e-rules": {
       title: "This system’s rules",
       purpose: "Review fitting rules for the opened systems",
       bindings,
       body: "scroll",
-      draw: draw("scroll", () => import("./ducts/screen/screen.tsx"), "RulesBody"),
+      draw: draw("scroll", () => import("./src/screen/screen.tsx"), "RulesBody"),
     },
     "e-picture": {
       title: "Picture",
@@ -151,7 +151,7 @@ export const module = route({
       purpose: "Review assumptions and planned writes",
       bindings,
       body: "scroll",
-      draw: draw("scroll", () => import("./ducts/screen/screen.tsx"), "InboxBody"),
+      draw: draw("scroll", () => import("./src/screen/screen.tsx"), "InboxBody"),
     },
   },
   edits: {

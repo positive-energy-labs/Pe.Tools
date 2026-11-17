@@ -1260,15 +1260,24 @@ importers:
       '@pe/duct-systems-web':
         specifier: workspace:*
         version: link:../../duct-systems/web
+      '@pe/ducts-host':
+        specifier: workspace:*
+        version: link:../../ducts/host
       '@pe/host':
         specifier: workspace:*
         version: link:../../../apps/host
+      '@pe/host-contracts':
+        specifier: workspace:*
+        version: link:../../../packages/host-contracts
       '@pe/host-internal':
         specifier: workspace:*
         version: link:../../../packages/host-internal
       '@pe/runtime':
         specifier: workspace:*
         version: link:../../../packages/runtime
+      '@tanstack/react-router':
+        specifier: 1.170.31
+        version: 1.170.31(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@testing-library/react':
         specifier: ^16.3.0
         version: 16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -1287,6 +1296,9 @@ importers:
       '@types/three':
         specifier: 'catalog:'
         version: 0.186.0
+      effect:
+        specifier: 4.0.2
+        version: 4.0.2
       three:
         specifier: 'catalog:'
         version: 0.186.1

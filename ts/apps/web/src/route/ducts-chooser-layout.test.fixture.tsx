@@ -9,7 +9,7 @@ import recorded from "../../../../packages/host-contracts/src/fixtures/k2-roster
 import recordedNetwork from "../../../../packages/host-contracts/src/fixtures/k2-system-walk.json";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import { module as ducts, roster, network } from "@pe/duct-systems-web/route";
-import { SystemsPane } from "@pe/duct-systems-web/ducts/screen/screen";
+import { SystemsPane } from "@pe/duct-systems-web/screen/screen";
 import { mountTypedRoute } from "../shell/typed-mount";
 import { makeAtomRegistry } from "../shell/owner";
 import { SubjectDoor, typedSubjectDoor } from "../shell/subject";

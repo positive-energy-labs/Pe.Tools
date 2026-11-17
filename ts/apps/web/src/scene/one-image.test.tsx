@@ -1,6 +1,6 @@
 import { expect, it } from "vite-plus/test";
 import { renderToStaticMarkup } from "react-dom/server";
-import { layoutCaptions, pathOf } from "@pe/ducts-web/ducts/subject-labels";
+import { layoutCaptions, pathOf } from "@pe/ducts-web/subject-labels";
 import { frame } from "./orbit";
 import { sectionProject, viewportProject, type Project } from "./projection";
 import { ContinuationMarks } from "./continuations";

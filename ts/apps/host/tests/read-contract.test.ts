@@ -14,8 +14,8 @@ import {
 import { Publications } from "../src/reads/publications.ts";
 import { readRegistry, registeredReads } from "../src/reads/routes.ts";
 import { hostRead } from "../../web/src/route/host-read.ts";
-import * as fanContracts from "@pe/fans-contract/fans/contract";
-import * as systemContracts from "@pe/duct-systems-contract/ducts/contract";
+import * as fanContracts from "@pe/fans-contract/contract";
+import * as systemContracts from "@pe/duct-systems-contract/contract";
 import { workspace as roomsWorkspace } from "../../web/src/rooms/contract.ts";
 
 const contracts = [

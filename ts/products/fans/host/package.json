@@ -4,14 +4,14 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./ducts/fan-calc": "./ducts/fan-calc.ts",
-    "./fans/host": "./fans/host.ts",
     "./actions": "./src/actions.ts",
-    "./tests/closed-fan.fixture": "./tests/closed-fan.fixture.ts",
-    "./tests/fans-native.fixture": "./tests/fans-native.fixture.ts",
-    "./tests/fans-work-fixture": "./tests/fans-work-fixture.ts",
-    "./tests/native-recordings/fans-accessory-initial.json": "./tests/native-recordings/fans-accessory-initial.json",
-    "./tests/native-recordings/fans-accessory-missing.json": "./tests/native-recordings/fans-accessory-missing.json"
+    "./fan-calc": "./src/fan-calc.ts",
+    "./host": "./src/host.ts",
+    "./tests/closed-fan.fixture": "./src/tests/closed-fan.fixture.ts",
+    "./tests/fans-native.fixture": "./src/tests/fans-native.fixture.ts",
+    "./tests/fans-work-fixture": "./src/tests/fans-work-fixture.ts",
+    "./tests/native-recordings/fans-accessory-initial.json": "./src/tests/native-recordings/fans-accessory-initial.json",
+    "./tests/native-recordings/fans-accessory-missing.json": "./src/tests/native-recordings/fans-accessory-missing.json"
   },
   "scripts": {
     "check": "vp exec tsc --noEmit",

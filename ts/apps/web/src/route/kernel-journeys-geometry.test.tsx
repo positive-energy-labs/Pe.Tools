@@ -3,7 +3,7 @@ import "./slots/picture/pane.tsx";
 import { valueOf } from "./typed-route";
 // @vitest-environment jsdom
 import { elementSubject } from "@pe/ducts-domain/work-subject";
-import { stableFanKey } from "@pe/ducts-web/ducts/calc/model";
+import { stableFanKey } from "@pe/ducts-web/calc/model";
 import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { SceneMeshes } from "../scene/types";
@@ -15,7 +15,7 @@ import { fixtureTimeline } from "../shell/fixture-work-door";
 import { hostEventSource } from "../host/event-source.test-support";
 import { route } from "./typed-route";
 import { module as fans } from "@pe/fans-web/route";
-import { RosterBody } from "@pe/fans-web/fans/mount";
+import { RosterBody } from "@pe/fans-web/mount";
 import { kernelPane } from "../shell/typed-shell";
 import { SubjectDoor, typedSubjectDoor } from "../shell/subject";
 import { workFingerprintSchema } from "@pe/agent-contracts";
@@ -184,7 +184,7 @@ import { sdkSessions } from "../../../host/tests/native-receipt-fixture";
 import { bootHost } from "../../../host/tests/real-server";
 import { connectTestBridge } from "../../../host/tests/bridge-fixture";
 import { admittedReceiptStamps } from "../../../host/src/receipt-export";
-import "@pe/fans-web/fans/mount";
+import "@pe/fans-web/mount";
 import { routeRegistry } from "../route/registry";
 import { bindActionReadings } from "../host/resource-stream";
 

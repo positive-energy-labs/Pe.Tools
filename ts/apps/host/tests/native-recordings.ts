@@ -6,7 +6,7 @@ import { canonicalJson } from "@pe/host-internal/native-read";
 
 const directory = join(import.meta.dirname, "native-recordings");
 const products = resolve(import.meta.dirname, "../../../products");
-const recordingRoots = [directory, ...readdirSync(products).map(product => join(products, product, "host/tests/native-recordings"))];
+const recordingRoots = [directory, ...readdirSync(products).map(product => join(products, product, "host/src/tests/native-recordings"))];
 const recordingFile = (name: string) => {
   const matches = recordingRoots.map(root => join(root, name)).filter(existsSync);
   if (matches.length !== 1) throw Error(`Expected one native fixture ${name}, found ${matches.length}`);

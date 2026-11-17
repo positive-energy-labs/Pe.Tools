@@ -12,7 +12,7 @@ import c3 from "../../web/src/design-system/source-closure.generated.json" with 
 import c4 from "../../web/src/duct-loss/source-closure.generated.json" with { type: "json" };
 import * as h4 from "../../web/src/duct-loss/host.ts";
 import c5 from "../../../products/duct-systems/web/source-closure.generated.json" with { type: "json" };
-import * as h5 from "@pe/duct-systems-host/ducts/host";
+import * as h5 from "@pe/duct-systems-host/host";
 import { ductsRouteState as ductsWork } from "@pe/duct-systems-contract/ducts";
 import c6 from "../../web/src/families/source-closure.generated.json" with { type: "json" };
 import * as h6 from "../../web/src/families/host.ts";
@@ -21,7 +21,7 @@ import c7 from "../../web/src/family/source-closure.generated.json" with { type:
 import * as h7 from "../../web/src/family/host.ts";
 import { familyDraftRouteState as familyWork } from "@pe/agent-contracts";
 import c8 from "../../../products/fans/web/source-closure.generated.json" with { type: "json" };
-import * as h8 from "@pe/fans-host/fans/host";
+import * as h8 from "@pe/fans-host/host";
 import { fansRouteState as fansWork } from "@pe/fans-contract/fans";
 import c9 from "../../web/src/home/source-closure.generated.json" with { type: "json" };
 import c10 from "../../web/src/open/source-closure.generated.json" with { type: "json" };
