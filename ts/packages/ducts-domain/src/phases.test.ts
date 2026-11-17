@@ -93,7 +93,7 @@ const snap = (segments: Segment[], order: string[] | null = ORDER): DuctSnapshot
       : {}),
   };
 };
-const working = (phase: string | null) => designOf({ workingPhase: { edit: { value: phase } } });
+const working = (phase: string | null) => designOf({ workingPhase: { edit: { by: "human", value: phase } } });
 
 /** Project A's shape: Existing run 1 -> 2; Future duct 3 joined to 2's end and lying inside duct 4. */
 const projectA = () => {
