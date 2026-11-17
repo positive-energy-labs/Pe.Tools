@@ -28,7 +28,7 @@
 
 - MAP L1-5 and BACKLOG FANS-DRIVER-H5-WITNESS-A418: reconcile REPORT C4 topology with the retained Chadds capture before naming DH-20/13760945 or DH-31/6530455 as positive-pressure witnesses. The recorded replay identifies those trunks as return/static-none; native coverage, complete pricing and the picture warning remain unproven.
 
-- P4-docs-guard census 2026-11-17 at 6648a9bf: beyond P4-fix-seams, generic product references remain in builtin-inputs, call-route, resource-adapters, builtin-read-handles, family-actions, fixture-examples, capability-tools, capability-projections, agent-contracts schemas/exports/reading/settings/actions and generic journey fixtures. The enforcing guard reports the exact paths; no extra offender baseline is accepted. Integration must assign these before claiming a green product boundary.
+- FANS-P4-NAMES-25, P4-docs-guard census 2026-11-17: eliminate the 25 files and 383 mentions frozen by the shrink-only name guard. Beyond P4-fix-seams, generic references remain in host acquisition, MCP tools, contracts and journey fixtures. The [shared-base ledger](../ducts/LEDGER.md) records the root's baseline ruling; a green ratchet does not certify zero debt.
 
 - MAP W0-1, W0-2, W0-3 and W0-6; prior ducts ledger FANS CRUSADE: retain proof of shared Place undo, bounded mark roster lookup, removal of ignored proposal/edits read inputs, and review author from the staged cell. Source history at 6648a9bf preserves the readiness findings; this doc migration does not certify runtime closure.
 - MAP L1-2, L1-3, L1-4 and L1-6: retain producer-to-write evidence refs, typed closers without prose parsing, lost-peer claim refusal, generated native vocabulary and row/source set-aside notices. Recheck end-to-end claims against the merged tip, not just schemas.
@@ -46,4 +46,4 @@
 - BACKLOG P-065: peer reads are fresh but sequential; only the fan's own cohort carries a basis check. Prove or close cross-read freshness before claiming atomic peer evidence.
 - BACKLOG FANS-BASE-LOAD: kernel read and out-of-band Work journeys fail under suite load but pass alone. Measure test contention before changing product behavior.
 - BACKLOG FANS-BASE-GATE: baseline format and lint failures predate this run; bulk formatting remains outside the crusade scope.
-- P4-fix-seams, implementor instruction 2026-11-17: generic host slots/sheet.ts LOSSES_ROUTES and MCP shared/admission.ts fan preflight are in flight. The product-name guard is not yet green or certified enforcing on the integrated tip.
+- P4-fix-seams, implementor instruction 2026-11-17: generic host slots/sheet.ts LOSSES_ROUTES and MCP shared/admission.ts fan preflight are in flight. Lower their FANS-P4-NAMES-25 baseline counts when the seams move.

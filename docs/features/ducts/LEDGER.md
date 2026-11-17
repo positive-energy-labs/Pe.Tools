@@ -4,6 +4,8 @@ Shared base for [Fans](../fans/LEDGER.md) and [Duct systems](../duct-systems/LED
 
 ## Decided
 
+- 2026-11-17, root ruling on P4-docs-guard: product-names.baseline.json freezes 25 generic files and 383 mentions as an enforcing, shrink-only baseline. New files and increased counts fail; reduced counts require lowering the baseline. FANS-P4-NAMES-25 tracks it to zero; P4-fix-seams must shrink admission.ts and slots/sheet.ts when it lands. This supersedes the zero-offender landing gate, not the target of zero leaks.
+
 - 2026-11-16, RULES.md kernel provenance, kaitpw: "i definitely dont think this should b fans only." Evidence ref and author travel through Work cells, the value ladder and seeded RouteWorkspace cells; the generic kernel owns provenance, not Fans.
 - 2026-11-16, RULES.md stamp ruling, kaitpw: "human is better than person imo". One host-stamped `human | pea` type replaces human/person/unknown variants.
 - 2026-11-16, RULES.md no-legacy ruling, kaitpw: "yes please. and no legacy. just let work die or be set aside. migratuion is not worth it before our product surface is even reasonably settled". Undecodable Work is set aside with its bytes and one notice, never migrated.
