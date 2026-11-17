@@ -124,7 +124,8 @@ export function projectWorks(
       (item) => item.kind === "work" && works.some(work=>sameReceiptWork(item.probe.handle.key, work.key)),
     );
     if (consumed?.kind !== "work") continue;
-    const work=works.find(work=>sameReceiptWork(consumed.probe.handle.key,work.key))!;
+    const work = works.find(work => sameReceiptWork(consumed.probe.handle.key, work.key));
+    if (!work) throw Error(`Missing timeline Work for receipt ${receipt.id}`);
     rows.push({
       kind: "receipt",
       id: receipt.id,
