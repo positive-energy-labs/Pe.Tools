@@ -14,6 +14,7 @@ import {
   type DuctsSheetEdits,
 } from "@pe/agent-contracts";
 import { RouteWorkspace } from "@pe/runtime";
+import { nodeOf } from "@pe/ducts-domain/test-snapshot";
 import { expect, test } from "vite-plus/test";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
 import { editPatches, workLayer } from "../src/ducts-inputs.ts";
@@ -112,7 +113,7 @@ test("a stated rated ESP reaches the resolver's Work layer with its caller and c
   const key = "UniqueId:fixture%3a4";
   const fans = fansDocumentSchema.parse({ ratedEsp: { [key]: { edit: { value: { inWg: 0.75 }, by: "pea", ref: "submittal p3" } } } });
   expect(workLayer(ductsDesign(ductsDocumentSchema.parse({}), fans)).ratedEsp).toEqual({ [key]: { value: 0.75, by: "pea", ref: "submittal p3" } });
-  expect(fanWriteCells(fans, { nodes: [{ uniqueId: "fixture:4" }], segments: [] } as unknown as Parameters<typeof fanWriteCells>[1])).toEqual([]);
+  expect(fanWriteCells(fans, { nodes: [nodeOf(4, "equipment", { uniqueId: "fixture:4" })], segments: [] })).toEqual([]);
 });
 
 // P-040 falsifier: a stored cell the host could not read keeps its marker to the resolver. Its row is

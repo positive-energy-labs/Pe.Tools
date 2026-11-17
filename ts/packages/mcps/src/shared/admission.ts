@@ -12,7 +12,6 @@ import {
   workKeySchema,
   workHandleSchema,
   workKey,
-  ductsDocumentSchema,
   fansDocumentSchema,
   type WorkHandle,
   type ActionControlKey,
@@ -189,7 +188,7 @@ export async function runCapability(
   }
   // Prerequisites are checked before submission, so an unscoped probe is not a journal attempt. Mirrors the
   // host derive (ducts-actions.ts): the ducts and fans Work at one document, either one asking, the other from
-  // readWorks or the same key; a fan walk in fans Work or writeIntent.groups in ducts Work.
+  // readWorks or the same key; a fan walk in fans Work.
   // The sheet pair serves every route (slice 7); only /ducts and /fans carry this losses preflight. Either may ask.
   const asked = key === "sheet.plan" ? workHandleSchema.safeParse(input.work) : null;
   if (asked?.success && (asked.data.key.route === "ducts" || asked.data.key.route === "fans")) {
@@ -217,7 +216,7 @@ export async function runCapability(
     if (handle && !same(ducts.handle, handle)) throw Error("Ducts Work changed; read its current revision before preview");
     if (fansHandle && !same(fans.handle, fansHandle)) throw Error("Fans Work changed; read its current revision before preview");
     const walk = fansDocumentSchema.parse(fans.doc).writeIntent.edit?.value?.walk;
-    if (!walk && !ductsDocumentSchema.parse(ducts.doc).writeIntent.edit?.value?.groups?.length)
+    if (!walk)
       throw Error('Preview needs a fan walk. Read route:reads.value (read fans.roster), then stage writeIntent.edit = {"value":{"walk":{"unitId":<id>,"portIndex":<n>}}} in route:fans Work. Retry with the accepted Work revision. No preview was submitted.');
   }
   const id = context.actionId ?? crypto.randomUUID();

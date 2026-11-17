@@ -1,4 +1,5 @@
 import { expect, it } from "vite-plus/test";
+import { factOf, nodeOf, snapshotOf } from "../test-snapshot.ts";
 import { fansDocumentSchema, stagedDucts } from "@pe/agent-contracts";
 import { encounterRulings, resolveInputs, resolveCriteria } from "./inputs.ts";
 import { cell, stamped, TEST_FIRM } from "./test-inputs.ts";
@@ -119,27 +120,25 @@ it("unknown inflow creates a missing leg and cannot certify worksheet totals", (
 
 it("P-030: rated ESP is stated or read from its own named slot, never the parameter Pe writes", () => {
   const key = "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000002";
-  const fan = {
+  const fan = snapshotOf({
     nodes: [
-      {
+      nodeOf(2, "equipment", {
         uniqueId: key.slice(9),
-        id: 2,
-        kind: "equipment",
         family: "AHU",
         type: "a",
-        facts: [{ key: "externalStatic", value: 0.5 }],
+        facts: [factOf("externalStatic", 0.5)],
         connectors: [],
-      },
+      }),
     ],
     segments: [],
-  } as unknown as SheetSnapshot;
+  });
   const layers = { snapshot: fan, firm: TEST_FIRM, work: {} };
   // P-030: the `externalStatic` fact is what a Pe write of required ESP leaves in `requiredEsp`. Rated stays
   // unknown over it, and a stated rated value is the stated one, never the written 0.5.
   expect(resolveInputs(layers).units["2"]!.esp).toMatchObject({ status: "missing", value: null, source: "none" });
-  fan.nodes[0]!.facts.push({ key: "ratedStatic", value: 0.65 } as never);
+  fan.nodes[0]!.facts.push(factOf("ratedStatic", 0.65));
   expect(resolveInputs(layers).units["2"]!.esp.status).toBe("missing");
-  fan.slots = { ...fan.slots, ratedEsp: "Rated ESP" } as NonNullable<SheetSnapshot["slots"]>;
+  fan.slots = { ...fan.slots, ratedEsp: "Rated ESP" };
   expect(resolveInputs(layers).units["2"]!.esp).toMatchObject({ value: 0.65, source: "model", author: null });
   const rated = (ratedEsp: unknown) =>
     resolveInputs({ ...layers, work: { ...layers.work, ratedEsp: { [key]: ratedEsp as never } } }).units["2"]!.esp;

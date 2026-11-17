@@ -48,7 +48,7 @@ const sheet = {
   // d5 is unpriced, so the claim the engine makes of this sheet is incomplete.
   claim: { kind: "incomplete" },
 } as unknown as Sheet;
-(sheet.legs as Record<string, Leg>).x7 = leg("x7", 0, 0, 0);
+Object.assign(sheet.legs, { x7: leg("x7", 0, 0, 0) });
 
 it("sections are where the run bundle keeps its count; residual and velocity-over per run", () => {
   const w = worksheet(sheet, { maxFpm: { supply: 900, return: 700 } }).supply;

@@ -39,7 +39,7 @@ test("a taken default keeps its cited ref beside the caller; an unstamped legacy
 });
 
 const blocker = (kind: SheetBlocker["kind"], detail: string): SheetBlocker =>
-  ({ id: `${kind}:9`, kind, elementId: 9, connector: 1, effectInWg: null, detail, closer: { kind: "default", note: "" } }) as SheetBlocker;
+  ({ id: `${kind}:9`, kind, elementId: 9, connector: 1, effectInWg: null, detail, closer: { kind: "default", note: "" } });
 const context = { terminalDrop: null, nameOf: () => "part", wait: null, fan: { unitId: 5, name: "EF-1" } };
 
 test("typed closers choose the cell and carry the offer's provenance; the blocker's prose decides nothing", () => {
