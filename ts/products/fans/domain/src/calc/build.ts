@@ -687,7 +687,8 @@ class Pricer {
       },
       unpriced: null,
       // Equivalent feet: the straight length, plus any Cs charged on it at this duct's own rate.
-      lengthFt: rate ? (loss / rate) * 100 : length,
+      equivalentFt: rate ? (loss / rate) * 100 : length,
+      lengthFt: length,
     };
     return {
       p,
@@ -927,7 +928,8 @@ class Pricer {
         inputs.components[String(leg.elementId)]?.drop ??
         inputs.terminals[String(leg.elementId)]?.drop;
       leg.evidence =
-        leg.lossInWg == null
+        // Straight geometry remains evidence when a passed tap's lookup leaves this leg unpriced.
+        leg.lossInWg == null && src?.kind !== "friction"
           ? { kind: "unpriced", issueId: done?.blockerIds[0] ?? `pricing:${leg.id}` }
           : src?.kind === "friction"
             ? {

@@ -107,7 +107,7 @@ export const fanCloserSchema = z.discriminatedUnion("kind", [
 export const fanIssueSchema = z.strictObject({ id: ref, kind: z.enum(FAN_BLOCKER_KINDS), elementId: id, severity: z.enum(["blocking", "warning"]), closer: fanCloserSchema });
 export const legEvidenceSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("friction"), roughnessFt: pressure, lengthFt: pressure, hydraulicDiameterFt: pressure.positive(), ref }),
-  z.strictObject({ kind: z.literal("coefficient"), coefficient: pressure, velocityPressureInWg: pressure, basisElementId: id, rule: ref, table: ref, lookup: z.record(z.string(), z.union([z.number().finite(), z.string()])), ref }),
+  z.strictObject({ kind: z.literal("coefficient"), coefficient: z.number().finite(), velocityPressureInWg: pressure, basisElementId: id, rule: ref, table: ref, lookup: z.record(z.string(), z.union([z.number().finite(), z.string()])), ref }),
   z.strictObject({ kind: z.literal("drop"), value: sourcedValueSchema(pressure) }),
   z.strictObject({ kind: z.literal("unpriced"), issueId: ref }),
 ]);

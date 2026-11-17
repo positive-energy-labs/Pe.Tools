@@ -16,10 +16,8 @@
  * 0.1, 0.2 is Cb x (Qb/Qc)^2 = -0.63, -0.54, -0.36), which is a coefficient stated on the branch's
  * own velocity, and Cs rows the same in Qs/Qc on the straight's; ER5-5's Cb1 likewise on branch 1's.
  * That is ASHRAE's own-section convention for these tables, so Cb is charged on the branch Pv, Cs
- * on the straight (main away from the fan) Pv. Where a lookup clamps a ratio the coefficient is
- * the table's at its edge, so it is charged on the velocity the table's geometry implies there
- * (`atTableVelocity`), never a table coefficient on an off-table velocity: that pairing is what
- * blew up ER5-2 at Ab/Ac far from its 0.5 (Cb -1550 x the real branch Pv, -1.95 in-wg on a 4x4 tap).
+ * on the straight (main away from the fan) Pv. Out-of-table ratios are refused by interpolation,
+ * so a coefficient can never be charged on an off-table velocity.
  */
 import { lookupGrid, type LookupPoint } from "./loss-grid.ts";
 import type { Section } from "./loss-physics.ts";

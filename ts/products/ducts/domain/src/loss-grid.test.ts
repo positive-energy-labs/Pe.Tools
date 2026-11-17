@@ -22,7 +22,7 @@ it("a three-axis wire narrows to slices, a null row where the table prints none"
   );
 });
 
-it("trilinear: on a node, between slices, and a ragged slice clamped on its own rows", () => {
+it("trilinear: on a node, between slices, and refusing a ragged slice outside its rows", () => {
   // As/Ac 1, Ab/Ac 0.5, Qb/Qc 0.5: the printed 0.45.
   expect(lookupGrid(er51, 0.5, 0.5, 1)).toEqual({
     value: 0.45,
@@ -40,30 +40,19 @@ it("trilinear: on a node, between slices, and a ragged slice clamped on its own 
   );
   // As/Ac 0.5 prints no Ab/Ac 0.25 row: that slice clamps at its own 0.5 and says so; As/Ac 0.75
   // reads its 0.25 row. At As/Ac 0.625 the point read is Ab/Ac 0.375, the slices' mean.
-  const ragged = lookupGrid(er51, 0.5, 0.25, 0.625);
-  expect(ragged.value).toBeCloseTo((0 + 0.75) / 2, 12);
-  expect(ragged.notes).toEqual(["Ab/Ac clamped at 0.5 (As/Ac 0.5)"]);
-  expect(ragged.at).toEqual({ x: 0.5, y: 0.375, z: 0.625 });
+  expect(() => lookupGrid(er51, 0.5, 0.25, 0.625)).toThrow(/Ab\/Ac .*outside/);
 });
 
-it("each axis clamps at its edge with a note, and the point read says where", () => {
+it("each axis refuses outside its edge", () => {
   // A 4x4 collar on the 32x11 trunk, Ab/Ac 0.045, at Qb/Qc 0.005: every axis past its edge.
-  const edge = lookupGrid(er51, 0.005, 0.045, 1.2);
-  expect(edge.value).toBe(-444);
-  expect(edge.notes).toEqual([
-    "As/Ac clamped at 1",
-    "Qb/Qc clamped at 0.01",
-    "Ab/Ac clamped at 0.25 (As/Ac 1)",
-  ]);
-  expect(edge.at).toEqual({ x: 0.01, y: 0.25, z: 1 });
+  for (const [x, y, z] of [[0.005, 0.5, 1], [1.1, 0.5, 1], [0.5, 0.045, 1], [0.5, 1.1, 1], [0.5, 0.5, 0.4], [0.5, 0.5, 1.2]])
+    expect(() => lookupGrid(er51, x!, y!, z!)).toThrow(/outside/);
 });
 
-it("ED5-4 states Ab2/Ac only up to Ab1/Ac; a lookup above it clamps to the slice's last row", () => {
+it("ED5-4 refuses above a slice's last row", () => {
   const ed54 = grids["ED5-4"]!.Cb1!;
   // Ab1/Ac 0.1 states Ab2/Ac 0.01 and 0.1; Ab2/Ac 0.5 reads the 0.1 row (Qb1/Qc 0.5: 0.40).
-  const v = lookupGrid(ed54, 0.5, 0.5, 0.1);
-  expect(v.value).toBe(0.4);
-  expect(v.notes).toEqual(["Ab2/A clamped at 0.1 (Ab1/Ac 0.1)"]);
+  expect(() => lookupGrid(ed54, 0.5, 0.5, 0.1)).toThrow(/outside/);
 });
 
 it("a three-axis grid needs all three inputs; a two-axis grid refuses a third", () => {
@@ -92,7 +81,7 @@ it("low branch flow interpolates fixed-basis loss, preserves nodes and labels of
   const x = 0.05,
     t = (x - 0.01) / 0.09;
   expect(lookupBranchLoss(g, x, 1).value * x * x).toBeCloseTo(1.0069 * (1 - t) + 0.996 * t, 10);
-  expect(lookupBranchLoss(g, 0.005, 1).notes.join(" ")).toContain("extrapolated");
+  expect(() => lookupBranchLoss(g, 0.005, 1)).toThrow(/outside/);
   expect(g).toEqual(before);
 });
 
