@@ -159,7 +159,7 @@ test("acknowledgements and publications include reconciliation and inverse footp
   ]);
   expect(h.events.at(-1)).toMatchObject(edited.write);
   expect((await h.restore(edited.write)).doc).toEqual(h.spec.schema.parse({}));
-  const published = await actAs(human(), () => h.app.workspace.publish(h.scope, h.scope.route, width(22), 2));
+  const published = await actAs(human, () => h.app.workspace.publish(h.scope, h.scope.route, width(22), 2));
   expect(published).toMatchObject({
     ok: true,
     write: { kind: "publish", press: null, patches: width(22) },
