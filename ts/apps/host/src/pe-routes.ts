@@ -251,7 +251,7 @@ export function createPeRoutes(options: PeRoutesOptions) {
   if (!options.workspace && !options.store) throw Error("Pe routes require their canonical workspace or live store");
   const work =
     options.workspace ??
-    new RouteWorkspace({ registrations: options.registrations, store: options.store! });
+    new RouteWorkspace({ registrations: options.registrations, store: options.store!, publicationAuthor: () => workAuthorOf(currentCaller()) });
   async function routeWorkKey(url: URL, route: string, shape: "read" | "write", caller: Caller, lookup?: PeRouteInvocation["document"]) {
     const scope = workKey(url, route, shape);
     if (scope instanceof Response || scope.binding === "workspace" || scope.binding === "host")

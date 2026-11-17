@@ -29,9 +29,13 @@ const CALLER_META = {
   confidence: z.enum(["high", "low"]).nullish(),
 };
 const CHANGE_META = { ...CALLER_META, by: authorSchema };
+/** Host-only tombstone for a cell whose original bytes were retained by the store. */
+export const invalidCellSchema = z.strictObject({ invalid: z.string().min(1) });
+export type InvalidCell = z.output<typeof invalidCellSchema>;
 const valueCell = <V extends z.ZodType, E extends z.ZodRawShape>(value: V, extra: E) =>
   z
     .object({
+      invalid: z.string().min(1).optional(),
       edit: valueRung(value)
         .extend(CHANGE_META)
         .extend(extra)
@@ -39,10 +43,11 @@ const valueCell = <V extends z.ZodType, E extends z.ZodRawShape>(value: V, extra
         .refine(oneWrite, ONE_WRITE)
         .nullish(),
     })
-    .strict();
+    .strict().refine(cell => !cell.invalid || cell.edit == null, "invalid cells cannot carry an edit");
 const deletableCell = <V extends z.ZodType, E extends z.ZodRawShape>(value: V, extra: E) =>
   z
     .object({
+      invalid: z.string().min(1).optional(),
       edit: deletableRung(value)
         .extend(CHANGE_META)
         .extend(extra)
@@ -50,7 +55,7 @@ const deletableCell = <V extends z.ZodType, E extends z.ZodRawShape>(value: V, e
         .refine(oneWrite, ONE_WRITE)
         .nullish(),
     })
-    .strict();
+    .strict().refine(cell => !cell.invalid || cell.edit == null, "invalid cells cannot carry an edit");
 
 /** Caller edit input: attribution belongs only to the stored cell, never to the request. */
 export const draftEditSchema = <V extends z.ZodType, E extends z.ZodRawShape = {}>(
@@ -58,6 +63,14 @@ export const draftEditSchema = <V extends z.ZodType, E extends z.ZodRawShape = {
 ) => deletable
   ? deletableRung(value).extend(CALLER_META).extend(extend).strict().refine(oneWrite, ONE_WRITE)
   : valueRung(value).extend(CALLER_META).extend(extend).strict().refine(oneWrite, ONE_WRITE);
+
+/** Caller Work retains domain fields, but only the metadata admitted by draftEditSchema. */
+type CallerEdit<E> = E extends object
+  ? Omit<E, "by"> & { [K in Exclude<keyof Change, keyof z.output<ReturnType<typeof draftEditSchema>>>]?: never }
+  : E;
+export type CallerWorkValue<T> = T extends readonly unknown[]
+  ? { [K in keyof T]: CallerWorkValue<T[K]> }
+  : T extends object ? { [K in keyof T]: K extends "invalid" ? never : K extends "edit" ? CallerEdit<T[K]> : CallerWorkValue<T[K]> } : T;
 
 /** One staged edit; domain metadata (`extend`) may ride on it. */
 export function draftCellSchema<V extends z.ZodType, E extends z.ZodRawShape = {}>(

@@ -5,6 +5,20 @@ import { elementSubject } from "@pe/ducts-domain/work-subject";
 import { describeCloser } from "../ducts/sheet/closer";
 import type { SheetBlocker } from "../ducts/sheet/tiers";
 import { espWarnings } from "./picture.tsx";
+import { settingsRouteState } from "@pe/agent-contracts";
+import { RouteWorkspace } from "@pe/runtime";
+import { DEMO_SPEC } from "../route/seeds.ts";
+
+test("demo caller seed fields publish with the host's caller stamp", async () => {
+  let saved: unknown;
+  const workspace = new RouteWorkspace({ registrations: [{ spec: settingsRouteState }], store: {
+    getState: async () => saved, setState: async ({ value }) => { saved = value; },
+  } });
+  const key = { binding: "workspace" as const, route: "pods", work: "demo", target: null };
+  const result = await workspace.start(key, { fields: DEMO_SPEC.fields }, "human");
+  expect(result).toMatchObject({ ok: true });
+  expect(saved).toMatchObject({ doc: { fields: { "/ViewTemplateName": { edit: { by: "human", value: "Schedule - PE Standard v2" } } } } });
+});
 
 const uid = (n: number) => `3f2c9a10-0000-4000-8000-00000000000${n}-0001e240`;
 const members = [1, 2].map(n => ({ elementId: n, uniqueId: uid(n) }));
@@ -27,10 +41,10 @@ test("a taken default keeps its cited ref beside the caller; an unstamped legacy
   const key = elementSubject({ uniqueId: uid(1) }), old = elementSubject({ uniqueId: uid(2) });
   // The caller cites the default's evidence on the cell's own `ref`; the host stamps `by` and keeps the citation.
   const human = landed({ terminalDrops: cells({ [key]: { inWg: 0.03 } }, "firm ducts.json#terminalDrop") }, "human");
-  const legacy = fansDocumentSchema.parse({ flows: cells({ [old]: 100 }) });
+  expect(fansDocumentSchema.safeParse({ flows: cells({ [old]: 100 }) }).success).toBe(false);
   // A stored legacy `{ cfm, source }` is not decoded into a number with a made-up author: the schema refuses it.
   expect(fansDocumentSchema.safeParse({ flows: cells({ [old]: { cfm: 100, source: "balancing report" } }) }).success).toBe(false);
-  const design = ductsDesign(null, { ...human, flows: legacy.flows });
+  const design = ductsDesign(null, human);
   const { terminalDrops, flows } = stagedDucts(design, design);
   expect(terminalDrops[key]).toEqual({ value: { inWg: 0.03 }, by: "human", ref: "firm ducts.json#terminalDrop" });
   // No stamp, no caller: the cell is not handed over, and nobody is named as its author.

@@ -15,7 +15,7 @@ test("a complete cohort stages one value on every member, and only its off-walk 
   const staged = stageEspCohort(cohort, "b1", { inWg: 0.75 });
   if ("refused" in staged) throw Error(staged.refused);
   expect(staged.esp).toEqual({ [elementSubject(onWalk!)]: { inWg: 0.75 }, [elementSubject(peer!)]: { inWg: 0.75 } });
-  const cell = (value: unknown) => ({ edit: { value } });
+  const cell = (value: unknown) => ({ edit: { value, by: "human" } });
   const doc = fansDocumentSchema.parse({
     esp: { ...Object.fromEntries(Object.entries(staged.esp).map(([k, v]) => [k, cell(v)])), [elementSubject(stranger!)]: cell({ inWg: 2 }) },
     equipmentFlows: { [elementSubject(peer!)]: cell(500) },
@@ -36,10 +36,20 @@ test("an incomplete, stale or misowned cohort refuses and stages nothing", () =>
   expect(stageEspCohort({ ...cohort, owner: { kind: "instance", id: 1 }, members: [onWalk!] }, "b1", { inWg: 1 })).toHaveProperty("esp");
 });
 
+test("stagedDucts never invents a caller for an unstamped cell, and locates uncited evidence", () => {
+  const key = elementSubject(onWalk!), other = elementSubject(peer!);
+  // Deliberately bypass storage decoding to challenge stagedDucts' own boundary.
+  const raw = { flows: { [key]: { edit: { value: 250 } }, [other]: { edit: { value: 90, by: "human" } } } };
+  const fans = { ...fansDocumentSchema.parse({}), ...raw } as Parameters<typeof stagedDucts>[1];
+  expect(stagedDucts(null, fans).flows).toEqual({
+    [other]: { value: 90, by: "human", ref: `work:fans/flows/${other}` },
+  });
+});
+
 test("stagedDucts hands the resolver { value, by, ref } cells: airflow a plain number, a cited ref kept, else the cell's location, and no unstamped cell", () => {
   const key = elementSubject(onWalk!), other = elementSubject(peer!);
   const fans = fansDocumentSchema.parse({
-    flows: { [key]: { edit: { value: 250, by: "pea", ref: "balancing report p2" } }, [other]: { edit: { value: 90 } } },
+    flows: { [key]: { edit: { value: 250, by: "pea", ref: "balancing report p2" } }, [other]: {} },
     esp: { [key]: { edit: { value: { inWg: 0.5 }, by: "human" } }, [other]: {} },
   });
   const staged = stagedDucts(null, fans);
@@ -54,9 +64,8 @@ test("a staged criterion resolves from Work with the caller who staged it and th
   const { criteria, criteriaMeta } = stagedDucts(ducts, fansDocumentSchema.parse({}));
   expect(resolveCriteria({ criteria, criteriaMeta }, null, TEST_FIRM).terminalDropInWg)
     .toMatchObject({ status: "valid", value: 0.07, source: "Work", author: "pea", ref: "spec 23 37 13" });
-  // The same staged value with no stamp names nobody: the resolver refuses it outright and never falls back to the firm value.
-  const bare = stagedDucts(ductsDocumentSchema.parse({ criteria: { terminalDropInWg: { edit: { value: 0.07 } } } }), fansDocumentSchema.parse({}));
-  expect(() => resolveCriteria({ criteria: bare.criteria, criteriaMeta: bare.criteriaMeta }, null, TEST_FIRM)).toThrow("Invalid ducts criterion from Work");
+  // Unstamped stored Work is refused at decoding, before it reaches the resolver.
+  expect(ductsDocumentSchema.safeParse({ criteria: { terminalDropInWg: { edit: { value: 0.07 } } } }).success).toBe(false);
 });
 
 test("a sheet edit's cited ref lands on the cell it cites, and airflow is a plain number", () => {

@@ -47,6 +47,8 @@ export function applyPatches<S extends z.ZodType>(
 ): RouteLanded<z.infer<S>> | RouteRefusal {
   const stale = checkRevision(envelope, expectedRevision);
   if (stale) return stale;
+  if (!restore && patches.some(patch => patch.path.at(-1) === "invalid" || suppliedInvalid(patch.value)))
+    return refuse("refused", "Caller edits cannot supply invalid markers", "Replace the cell with a valid edit.");
   const observed = new Set(["basis", "reading", "snapshot", "takenAt", "readback", "consent"]);
   if (!trusted && patches.some((patch) => observed.has(String(patch.path[0]))))
     return refuse(
@@ -88,6 +90,10 @@ const suppliedStamp = (value: unknown): boolean => Array.isArray(value)
   ? value.some(suppliedStamp)
   : isRecord(value) && Object.entries(value).some(([key, child]) =>
       key === "edit" && isRecord(child) && Object.hasOwn(child, "by") || suppliedStamp(child));
+
+const suppliedInvalid = (value: unknown): boolean => Array.isArray(value)
+  ? value.some(suppliedInvalid)
+  : isRecord(value) && (Object.hasOwn(value, "invalid") || Object.values(value).some(suppliedInvalid));
 
 /** Replace a container when its keys change, so inverse replay preserves key order as well. */
 export function routeDocDelta(
