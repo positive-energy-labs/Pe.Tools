@@ -1497,7 +1497,7 @@ function endDirection(
     // An end at another fan is an encounter, and `ENCOUNTERS` explains it on either side (a discharge
     // met on the supply is backflow, on the return an inflow), so it is no evidence of this fan's
     // direction and does not vote (FANS-W2-COSUPPLY).
-    if (e.end.fan && e.end.fan.unitId !== w.states[0]!.el.id) continue;
+    if (e.end.fan && e.end.fan.unitId !== w.states[0]?.el.id) continue;
     if (e.directionHint) {
       score += e.directionHint === "supply" ? 1 : -1;
       reasons.add(
@@ -1832,9 +1832,10 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
       ([w, f]) => [
         ...f.draws.map((d) => {
           const fan = w.ends[d.sibling]!.end.fan!;
+          const terminal = w.ends[d.terminal]?.end.elementId;
           return note(
             "sibling",
-            `sibling ${tagOf(fan.unitId) || g.name(fan.unitId)} ${w === supply.w ? "feeds" : "draws"} ${d.cfm == null ? "an unknown flow" : `${round(d.cfm)} cfm`} ${w === supply.w ? "into" : "from"} shared terminal ${g.name(w.ends[d.terminal]!.end.elementId)}: ${d.source ?? "no design flow"}`,
+            `sibling ${tagOf(fan.unitId) || g.name(fan.unitId)} ${w === supply.w ? "feeds" : "draws"} ${d.cfm == null ? "an unknown flow" : `${round(d.cfm)} cfm`} ${w === supply.w ? "into" : "from"} shared terminal ${terminal == null ? "unknown" : g.name(terminal)}: ${d.source ?? "no design flow"}`,
             d.cfm == null ? null : round(d.cfm),
           );
         }),
