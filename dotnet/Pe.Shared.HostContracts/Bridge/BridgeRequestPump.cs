@@ -64,8 +64,9 @@ public sealed class BridgeRequestPump(
 
     private void Dispatch(BridgeRequest request, CancellationToken cancellationToken) {
         var source = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        // A duplicate requestId is the caller's mistake, not a reason to drop the op: it runs,
-        // it just is not addressable by op.cancel while its twin holds the name.
+        // The pump is transport and never decides attempt identity. A duplicate requestId still dispatches:
+        // a read runs again, and a mutation is answered from its SDK OpAttempt record (BridgeAgent), never run twice.
+        // Either way the twin is not addressable by op.cancel while the original holds the name.
         var tracked = this._inFlight.TryAdd(request.RequestId, source);
         if (!tracked)
             log?.Invoke($"Host bridge request '{request.RequestId}' is already in flight; it cannot be cancelled by id.", null);

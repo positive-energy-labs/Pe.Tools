@@ -53,7 +53,6 @@ import {
   parseContributionKey,
   type FamiliesRouteDocument,
   type FamilyDraft,
-  type ExecutionTarget,
   type WorkPath,
 } from "@pe/agent-contracts";
 import type {
@@ -85,7 +84,7 @@ import {
 import { z } from "zod";
 import type { Consumed as Dependency, WorkHandle } from "@pe/agent-contracts";
 import { type TakeoffActionDependencies } from "./takeoff-actions.ts";
-import { readNativeReceipt, type NativeProcess } from "./native-receipts.ts";
+import type { NativeProcess } from "./native-receipts.ts";
 import {
   composedSpec,
   podFolder,
@@ -98,7 +97,6 @@ import {
 } from "./settings.ts";
 import type { TakeoffCaptures } from "./takeoff-captures.ts";
 import { LocalOpError } from "./local-error.ts";
-import { familiesApplyRun, isFamiliesApplyResponse } from "./family-run-recovery.ts";
 import { familySpecExecutor } from "./family-spec.ts";
 import type { FamiliesReader } from "./families-reader.ts";
 import { nativeInputSchema } from "./native-input.ts";
@@ -275,6 +273,27 @@ const retirementSchema = z.strictObject({
   patch: z.literal(true).optional(),
 });
 type Retirement = z.infer<typeof retirementSchema>;
+/**
+ * The consumed Work paths a native apply result confirms. Only a successful receipt confirms intent:
+ * a cancelled or refused run retires nothing, so the edits stay staged. A family document is one
+ * family, so any success confirms its cells; a project confirms each cell by its family's receipt.
+ */
+export const confirmedRetirement = (
+  consumed: Retirement,
+  patchNames: readonly string[] | null | undefined,
+  receipts: readonly { familyName: string; success: boolean; converged: boolean }[],
+): WorkPath[] => {
+  const succeeded = new Set(receipts.filter((x) => x.success).map((x) => x.familyName)),
+    converged = new Set(receipts.filter((x) => x.success && x.converged).map((x) => x.familyName));
+  if (!succeeded.size) return [];
+  const paths: WorkPath[] = consumed.cells
+    .filter(
+      (cell) => consumed.route === "family" || succeeded.has(familyCellAddress(cell).familyName),
+    )
+    .map((cell) => ["cells", cell]);
+  if (consumed.patch && patchNames?.every((name) => converged.has(name))) paths.push(["patch"]);
+  return paths;
+};
 const sourceMemberSchema = z
   .strictObject({
     id: z.string(),
@@ -882,23 +901,12 @@ export function familyExecutors(
         )) as FamiliesApply.Res.Response,
         consumed = prepared.retire;
       let retired: unknown;
-      if (consumed) {
-        const succeeded = new Set(
-            result.receipts.filter((x) => x.success).map((x) => x.familyName),
-          ),
-          converged = new Set(
-            result.receipts.filter((x) => x.success && x.converged).map((x) => x.familyName),
-          );
-        const paths: WorkPath[] = consumed.cells
-          .filter(
-            (cell) =>
-              consumed.route === "family" || succeeded.has(familyCellAddress(cell).familyName),
-          )
-          .map((cell) => ["cells", cell]);
-        if (consumed.patch && prepared.retirePatchNames?.every((name) => converged.has(name)))
-          paths.push(["patch"]);
-        retired = yield* execution.retireWork(consumed.key, consumed.route, paths);
-      }
+      if (consumed)
+        retired = yield* execution.retireWork(
+          consumed.key,
+          consumed.route,
+          confirmedRetirement(consumed, prepared.retirePatchNames, result.receipts),
+        );
       const readback: Record<string, unknown> = {},
         names = [...new Set(result.receipts.filter((x) => x.success).map((x) => x.familyName))];
       if (project && names.length)
@@ -941,57 +949,6 @@ export function familyExecutors(
     }
     return (execution.prepared as { kind: string }).kind === "batch" ? { results } : results[0];
   });
-  const recover = async (
-    step: import("@pe/agent-contracts").ActionStep,
-    _prepared: unknown,
-    target: ExecutionTarget,
-  ) => {
-    if (step.kind !== "native") return { step, evidence: { reason: "No native step" } };
-    const process = step.process;
-    if (!process) throw refused("Original native step process is unavailable");
-    const prepared = { input: step.input, process };
-    if (step.key !== "families.apply") return readNativeReceipt(step, process, deps.sdk);
-    if (step.state === "succeeded" && isFamiliesApplyResponse(step.result))
-      return { step, evidence: { recordedNativeOutcome: true } };
-    const sdk = await readNativeReceipt(step, process, deps.sdk).catch((error: unknown) => ({
-      step,
-      evidence: { error: String(error) },
-    }));
-    if (sdk.step.state === "succeeded" && isFamiliesApplyResponse(sdk.step.result)) return sdk;
-    const unknown = {
-      ...step,
-      state: "unknown" as const,
-      error:
-        "The SDK response does not prove the Families apply outcome; inspect its exact native run",
-      status: 503,
-    };
-    if (sdk.step.state === "failed" || sdk.step.state === "cancelled")
-      return { step: unknown, evidence: { sdk: sdk.evidence, conflict: sdk.step } };
-    try {
-      const source = (prepared.input as { source: { root: { id: string | null } } }).source;
-      const run =
-        target.kind === "document"
-          ? await familiesApplyRun(
-              await sourceRunDirectory(
-                source.root.id,
-                deps, await podContext(deps, bridge, target.ref),
-              ),
-              step,
-              { ...prepared, process },
-              target.ref.openId,
-            )
-          : null;
-      return run
-        ? {
-            step: { ...step, state: "succeeded" as const, result: run.result },
-            evidence: { sdk: sdk.evidence, nativeRun: run.evidence },
-          }
-        : { step: unknown, evidence: { sdk: sdk.evidence, nativeRun: "missing or ambiguous" } };
-    } catch (error) {
-      return { step: unknown, evidence: { sdk: sdk.evidence, nativeRun: String(error) } };
-    }
-  };
-
   type Review = {
     family: true | "project";
     takenAt: string | null;
@@ -1116,7 +1073,6 @@ export function familyExecutors(
   const familyPlan = command(commands["family.plan"], plansSchema, {
     bind: async (ctx) => planBinding(ctx, ctx.admission.input, await reviewFamily(ctx)),
     run: (ctx, execution) => runPreview(ctx, execution, runFamilyPlan),
-    recover,
   });
   const familiesPlan = command(commands["families.plan"], plansSchema, {
     bind: async (ctx) =>
@@ -1126,14 +1082,12 @@ export function familyExecutors(
         await reviewFamilies(ctx, ctx.admission.input.familyNames),
       ),
     run: (ctx, execution) => runPreview(ctx, execution, runFamiliesPlan),
-    recover,
   });
   const familyApply = command(commands["family.apply"], familyAppliesSchema, {
     seal: (p) => ({ request: p.kind === "batch" ? p.items.map(({ input }) => input) : p.input }),
     bind: async (ctx) =>
       applyBinding(ctx, ctx.admission.input, await reviewFamily(ctx), "family.plan"),
     run: (ctx, execution) => runApply(ctx, execution, false),
-    recover,
   });
   const familiesApply = command(commands["families.apply"], familiesAppliesSchema, {
     seal: (p) => ({ request: p.kind === "batch" ? p.items.map(({ input }) => input) : p.input }),
@@ -1145,7 +1099,6 @@ export function familyExecutors(
         "families.plan",
       ),
     run: (ctx, execution) => runApply(ctx, execution, true),
-    recover,
   });
 
   // A capture names no family before Revit answers, so its member is named by the action that filed it.
@@ -1247,7 +1200,6 @@ export function familyExecutors(
         evidence: { ...seen, origin: "capture", rfaPath: null, run: runs.get(0) ?? null },
       };
     }),
-    recover,
   });
   const familiesCapture = command(commands["families.capture"], preparedFamiliesCaptureSchema, {
     bind: async (ctx) => {
@@ -1284,7 +1236,6 @@ export function familyExecutors(
         }),
       };
     }),
-    recover,
   });
   const familyObserve = command(commands["family.observe"], observationSchema, {
     bind: async (ctx) => {
@@ -1510,7 +1461,6 @@ export function familyExecutors(
         outputPath: (result as { outputPath?: string }).outputPath,
       };
     }),
-    recover,
   });
   return {
     "settings.observe": settingsObserve,
