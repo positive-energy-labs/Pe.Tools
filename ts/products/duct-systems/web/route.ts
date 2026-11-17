@@ -127,7 +127,7 @@ export const module = route({
       draw: draw("scroll", () => import("./src/screen/screen.tsx"), "AllRulesBody"),
     },
     "e-rules": {
-      title: "This systemâ€™s rules",
+      title: "This system’s rules",
       purpose: "Review fitting rules for the opened systems",
       bindings,
       body: "scroll",
