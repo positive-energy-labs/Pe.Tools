@@ -90,7 +90,7 @@ test("JZ recorded bridge rejects obsolete native DTOs behind actual Adopt admiss
   const native = await fixtureNative(join(dir, "native"), "fresh-takeoffs.initialize-carrier", "manuella-adopt");
   const socket = await native.connect();
   let state: unknown;
-  const workspace = new RouteWorkspace({ registrations: [{ spec: tools.takeoffs.work }], store: {
+  const workspace = new RouteWorkspace({ publicationAuthor: () => "human", registrations: [{ spec: tools.takeoffs.work }], store: {
     getState: async () => state, setState: async ({ value }) => { state = structuredClone(value); },
   } });
   const key = { binding: "address" as const, route: "takeoffs", target: address("C:/model.rvt") };
@@ -127,7 +127,7 @@ test.each([
   const route = commandKey.startsWith("rooms.") ? "rooms" : "takeoffs";
   const key = { binding: "address" as const, target: address("C:/model.rvt"), route };
   let saved: unknown;
-  const workspace = new RouteWorkspace({ registrations: [{ spec: tools[route].work }], store: {
+  const workspace = new RouteWorkspace({ publicationAuthor: () => "human", registrations: [{ spec: tools[route].work }], store: {
     getState: async () => saved, setState: async ({ value }) => { saved = structuredClone(value); },
   } });
   const native = await fixtureNative(join(dir, "native"),
@@ -452,27 +452,27 @@ test("JZ release reads preserves Work edits until departure or disposal", async 
     const revision = j.m.owner()!.handle!.revision;
     j.m.release();
     expect(j.m.current(token)).toBe(true);
-    expect(await cells.at(["flows", terminalA]).stage({ cfm: 270 }, { label: "Edit after read release" })).toBeNull();
+    expect(await cells.at(["flows", terminalA]).stage(270, { label: "Edit after read release" })).toBeNull();
     expect(j.m.available()).toBe(true);
     expect(j.m.owner()!.handle!.revision).toBe(revision + 1);
-    expect(j.m.owner()!.doc.flows[terminalA].edit.value).toEqual({ cfm: 270 });
+    expect(j.m.owner()!.doc.flows[terminalA].edit.value).toEqual(270);
     // Read release does not relax the captured revision fence.
-    expect(await cells.at(["flows", terminalA]).stage({ cfm: 280 }, { label: "Old draw" })).toMatchObject({ code: "refused" });
+    expect(await cells.at(["flows", terminalA]).stage(280, { label: "Old draw" })).toMatchObject({ code: "refused" });
     const reopened = j.mount(false, { custody: { current: () => true } });
     await vi.waitFor(() => expect(reopened.owner()?.ready).toBe(true));
     expect(reopened.owner()!.handle!.revision).toBe(revision + 1);
-    expect(reopened.owner()!.doc.flows[terminalA].edit.value).toEqual({ cfm: 270 });
+    expect(reopened.owner()!.doc.flows[terminalA].edit.value).toEqual(270);
     const stop = j.m.subscribe(() => {}); stop();
     await j.ready();
     const retained = j.cells().at(["flows", terminalA]);
     j.depart();
-    expect(await retained.stage({ cfm: 290 }, { label: "After departure" })).toMatchObject({ code: "refused" });
+    expect(await retained.stage(290, { label: "After departure" })).toMatchObject({ code: "refused" });
     await vi.waitFor(() => expect(reopened.workBasis()).toBeTruthy());
     const disposedCell = (reopened.draw("sheet-inputs", ctx => ctx.cells) as DrawContext<any, any, any, any>["cells"]).at(["flows", terminalA]);
     reopened.dispose();
-    expect(await disposedCell.stage({ cfm: 300 }, { label: "After disposal" })).toMatchObject({ code: "refused" });
+    expect(await disposedCell.stage(300, { label: "After disposal" })).toMatchObject({ code: "refused" });
     expect(reopened.owner()!.handle!.revision).toBe(revision + 1);
-    expect(reopened.owner()!.doc.flows[terminalA].edit.value).toEqual({ cfm: 270 });
+    expect(reopened.owner()!.doc.flows[terminalA].edit.value).toEqual(270);
   } finally { await j.close(); }
 }, 60_000);
 
@@ -481,7 +481,7 @@ test("JW1 edit typed flows and race two atomic HTTP writes at the accepted revis
   try {
     await j.start();
     expect(
-      await j.cells().at(["flows", terminalA]).stage({ cfm: 240 }, { label: "Terminal A airflow" }),
+      await j.cells().at(["flows", terminalA]).stage(240, { label: "Terminal A airflow" }),
       "H02: typed flow commits",
     ).toBeNull();
     await j.ready();
@@ -539,7 +539,7 @@ test("JM B06 complete an acknowledged HTTP edit after its typed Page is disposed
   try {
     await j.start();
     held = j.holdWrite();
-    const writing = j.cells().at(["flows", terminalA]).stage({ cfm: 410 }, { label: "Departing airflow" });
+    const writing = j.cells().at(["flows", terminalA]).stage(410, { label: "Departing airflow" });
     await held.entered.promise;
     j.m.dispose();
     const retired = structuredClone(j.m.owner()!.doc);
@@ -549,7 +549,7 @@ test("JM B06 complete an acknowledged HTTP edit after its typed Page is disposed
     const replacement = j.mount();
     await vi.waitFor(() => expect(replacement.owner()?.ready).toBe(true));
     expect(replacement.owner()!.doc.flows[terminalA].edit.value,
-      "H03: the host acknowledgement stays durable for a new inspection").toEqual({ cfm: 410 });
+      "H03: the host acknowledgement stays durable for a new inspection").toEqual(410);
   } finally { held?.release.resolve(); await j.close(); }
 }, 60_000);
 
@@ -572,8 +572,8 @@ test("JW2 receive Pea proposals, accept and deny individual cells without changi
         press: crypto.randomUUID(),
         label: "Propose two flows",
         patches: [
-          { path: ["flows", terminalA], value: { edit: { value: { cfm: 250 } } } },
-          { path: ["flows", terminalB], value: { edit: { value: { cfm: 350 } } } },
+          { path: ["flows", terminalA], value: { edit: { value: 250 } } },
+          { path: ["flows", terminalB], value: { edit: { value: 350 } } },
         ],
       },
       by,
@@ -603,7 +603,7 @@ test("JW2 receive Pea proposals, accept and deny individual cells without changi
       valueOf(j.m.value()).sheetSnapshot,
       "H20: stored native facts survive proposal transitions",
     ).toEqual(stored);
-    expect(j.m.owner()!.doc.flows[terminalA].edit.value).toEqual({ cfm: 250 });
+    expect(j.m.owner()!.doc.flows[terminalA].edit.value).toEqual(250);
   } finally {
     await j.close();
   }
@@ -613,7 +613,7 @@ test("JM H27 interleave a second writer, refuse the original undo and keep its n
   const j = await journey();
   try {
     await j.start();
-    expect(await j.cells().at(["flows", terminalA]).stage({ cfm: 240 }, { label: "Set terminal airflow" })).toBeNull();
+    expect(await j.cells().at(["flows", terminalA]).stage(240, { label: "Set terminal airflow" })).toBeNull();
     await j.ready();
     await vi.waitFor(() => expect(j.m.timeline()?.undo).toBeTruthy());
     const step = j.m.timeline()!.undo!;
@@ -623,9 +623,9 @@ test("JM H27 interleave a second writer, refuse the original undo and keep its n
     await j.ready();
     const result = await j.write(j.key(), { kind: "apply", expectedRevision: j.m.owner()!.handle!.revision,
       press: crypto.randomUUID(), label: "Another designer changes airflow",
-      patches: [{ path: ["flows", terminalA, "edit"], value: { value: { cfm: 500 } } }] });
+      patches: [{ path: ["flows", terminalA, "edit"], value: { value: 500 } }] });
     expect(result).toMatchObject({ ok: true });
-    await vi.waitFor(() => expect(j.m.owner()!.doc.flows[terminalA].edit.value).toEqual({ cfm: 500 }));
+    await vi.waitFor(() => expect(j.m.owner()!.doc.flows[terminalA].edit.value).toEqual(500));
     await j.ready();
     const before = structuredClone(j.m.owner()!.doc), revision = j.m.owner()!.handle!.revision;
     const undo = await j.host.workspace.step([j.key()], "human", "undo", step, async () => []);
@@ -640,7 +640,7 @@ test("JM H01/H13 hide one document, inspect another and reopen the first named W
   const j = await journey();
   try {
     await j.start();
-    expect(await j.cells().at(["flows", terminalA]).stage({ cfm: 240 }, { label: "Terminal A design airflow" })).toBeNull();
+    expect(await j.cells().at(["flows", terminalA]).stage(240, { label: "Terminal A design airflow" })).toBeNull();
     await j.ready();
     const firstKey = j.m.owner()!.scope.key;
     j.m.release();
@@ -652,7 +652,7 @@ test("JM H01/H13 hide one document, inspect another and reopen the first named W
     const reopened = j.mount();
     await vi.waitFor(() => expect(reopened.owner()?.ready).toBe(true));
     expect(reopened.owner()!.scope.key).toEqual(firstKey);
-    expect(reopened.owner()!.doc.flows[terminalA].edit.value).toEqual({ cfm: 240 });
+    expect(reopened.owner()!.doc.flows[terminalA].edit.value).toEqual(240);
     await vi.waitFor(() => expect(JSON.stringify(reopened.timeline()), "H13: cold reopening retains the human action label").toContain("Terminal A design airflow"));
   } finally { await j.close(); }
 }, 60_000);
@@ -665,7 +665,7 @@ test("JM H12 leave a Page with drawn cells, inspect it, and refuse both old edit
     const receipts = (await j.journal.list()).length;
     j.depart();
     expect(valueOf(j.m.value()), "H12: departure preserves inspection").toBeDefined();
-    expect(await cell.stage({ cfm: 700 }, { label: "Late airflow" }), "H12: captured cell cannot write after departure").toMatchObject({ code: "refused" });
+    expect(await cell.stage(700, { label: "Late airflow" }), "H12: captured cell cannot write after departure").toMatchObject({ code: "refused" });
     await expect(planned(j.m.verb("losses")).plan(), "H12: departure cannot acquire a new native plan").rejects.toThrow("Place");
     expect(j.m.owner()!.doc).toEqual(before);
     expect((await j.journal.list()).length, "H12: neither path submits a native action").toBe(receipts);
@@ -677,10 +677,10 @@ test("JM H30 refuse a stale drawn edit and retain its original intent across ref
   try {
     await j.start();
     const old = j.cells().at(["flows", terminalA]);
-    expect(await j.cells().at(["flows", terminalB]).stage({ cfm: 300 }, { label: "Newer sibling edit" })).toBeNull();
+    expect(await j.cells().at(["flows", terminalB]).stage(300, { label: "Newer sibling edit" })).toBeNull();
     await j.ready();
     const before = structuredClone(j.m.owner()!.doc);
-    expect(await old.stage({ cfm: 731 }, { label: "Keep my original airflow" })).toMatchObject({ code: "refused" });
+    expect(await old.stage(731, { label: "Keep my original airflow" })).toMatchObject({ code: "refused" });
     await j.ready();
     expect(j.m.owner()!.doc, "H30: stale intent never recomputes on newer Work").toEqual(before);
     expect(JSON.stringify(j.m.pendingEdits()), "H30: rejected input remains inspectable until explicit discard").toContain("Keep my original airflow");
@@ -697,10 +697,10 @@ test("JZ C121/C090 drawn authority rejects copied, foreign and old bases without
     const replacement = j.mount();
     await vi.waitFor(() => expect(replacement.owner()?.ready).toBe(true));
     expect(replacement.current(old)).toBe(false);
-    expect(await drawn.at(["flows", terminalA]).stage({ cfm: 200 })).toBeNull();
+    expect(await drawn.at(["flows", terminalA]).stage(200)).toBeNull();
     await j.ready();
     const before = structuredClone(j.m.owner()!.doc), count = j.writes.length;
-    const edit = { cfm: 731 };
+    const edit = 731;
     expect(await drawn.patch([{ path: ["flows", terminalA, "edit"], value: { value: edit } }],
       { label: "Original refused airflow" })).toMatchObject({ code: "refused" });
     expect(j.m.current(old)).toBe(false);
@@ -713,7 +713,7 @@ test("JZ C121/C090 drawn authority rejects copied, foreign and old bases without
     expect(j.m.owner()!.doc).toEqual(before);
     j.m.discardIntent(intent.id);
     expect(j.m.pendingEdits().some(i => i.id === intent.id)).toBe(false);
-    expect(await j.cells().at(["flows", terminalA]).stage({ cfm: 201 })).toBeNull();
+    expect(await j.cells().at(["flows", terminalA]).stage(201)).toBeNull();
   } finally { await j.close(); }
 }, 60_000);
 
@@ -724,16 +724,16 @@ test("JZ C122 delayed mounted submit retains its revision after a newer edit", a
     await j.start();
     const revision = j.m.owner()!.handle!.revision;
     held = j.holdBeforeWrite();
-    const pending = j.cells().at(["flows", terminalA]).stage({ cfm: 200 });
+    const pending = j.cells().at(["flows", terminalA]).stage(200);
     await held.entered.promise;
-    expect(await j.cells().at(["flows", terminalA]).stage({ cfm: 500 })).toBeNull();
+    expect(await j.cells().at(["flows", terminalA]).stage(500)).toBeNull();
     await j.ready();
     held.release.resolve();
     expect(await pending).toMatchObject({ code: "refused" });
     expect(j.writes.slice(-2).map(w => w.expectedRevision)).toEqual([revision, revision]);
-    expect(j.m.owner()!.doc.flows[terminalA].edit.value).toEqual({ cfm: 500 });
+    expect(j.m.owner()!.doc.flows[terminalA].edit.value).toEqual(500);
     expect(j.m.pendingEdits().at(-1)!.input.patches).toEqual([
-      { path: ["flows", terminalA, "edit"], value: { value: { cfm: 200 } } },
+      { path: ["flows", terminalA, "edit"], value: { value: 200 } },
     ]);
   } finally { held?.release.resolve(); await j.close(); }
 }, 60_000);
@@ -744,17 +744,17 @@ test.each(["ack-first", "stream-first"])("JZ C086 %s delivery and pending depart
   try {
     await j.start();
     if (order === "ack-first") j.holdStream(); else held = j.holdWrite();
-    const pending = j.cells().at(["flows", terminalA]).stage({ cfm: 210 });
+    const pending = j.cells().at(["flows", terminalA]).stage(210);
     if (held) {
       await held.entered.promise;
-      await vi.waitFor(() => expect(j.m.owner()!.doc.flows[terminalA].edit.value).toEqual({ cfm: 210 }));
+      await vi.waitFor(() => expect(j.m.owner()!.doc.flows[terminalA].edit.value).toEqual(210));
       held.release.resolve();
     }
     expect(await pending).toBeNull();
-    expect(j.m.owner()!.doc.flows[terminalA].edit.value).toEqual({ cfm: 210 });
+    expect(j.m.owner()!.doc.flows[terminalA].edit.value).toEqual(210);
     j.flushStream(); await j.ready();
     held = j.holdBeforeWrite();
-    const departing = j.cells().at(["flows", terminalA]).stage({ cfm: 310 });
+    const departing = j.cells().at(["flows", terminalA]).stage(310);
     await held.entered.promise;
     j.m.dispose();
     const retired = structuredClone(j.m.owner()!.doc);
@@ -762,7 +762,7 @@ test.each(["ack-first", "stream-first"])("JZ C086 %s delivery and pending depart
     expect(await departing).toBeNull();
     expect(j.m.owner()!.doc).toEqual(retired);
     const reopened = j.mount();
-    await vi.waitFor(() => expect(reopened.owner()?.doc.flows[terminalA]?.edit.value).toEqual({ cfm: 310 }));
+    await vi.waitFor(() => expect(reopened.owner()?.doc.flows[terminalA]?.edit.value).toEqual(310));
   } finally { held?.release.resolve(); j.flushStream(); await j.close(); }
 }, 60_000);
 
@@ -771,14 +771,14 @@ test("JZ C718/C675/C676/C730 atomic press, Timeline undo, root addressing and lo
   try {
     await j.start();
     const original = structuredClone(j.m.owner()!.doc);
-    expect(await j.cells().patch([terminalA, terminalB].map(id => ({ path: ["flows", id, "edit"], value: { value: { cfm: 240 } } })),
+    expect(await j.cells().patch([terminalA, terminalB].map(id => ({ path: ["flows", id, "edit"], value: { value: 240 } })),
       { label: "Both terminals" })).toBeNull();
     await j.ready();
     await vi.waitFor(() => expect(j.m.timeline()?.undo?.label).toBe("Both terminals"));
     expect(j.writes.at(-1)!.patches).toHaveLength(2);
     expect(await j.m.stepTimeline("undo")).toBeNull();
     await j.ready(); expect(j.m.owner()!.doc).toEqual(original);
-    expect(await j.cells().patch([terminalA, terminalB].map(id => ({ path: ["flows", id], value: { edit: { value: { cfm: 250 } } } })))).toBeNull();
+    expect(await j.cells().patch([terminalA, terminalB].map(id => ({ path: ["flows", id], value: { edit: { value: 250 } } })))).toBeNull();
     await j.ready();
     const before = structuredClone(j.m.owner()!.doc), steps = j.m.timeline()!.rows.length;
     for (const [id, action] of [[terminalA, "clear"], [terminalB, "clear"], [terminalA, "delete"]] as const) {
@@ -840,7 +840,7 @@ test("JZ raw Work patch paths and ambiguous operation fields refuse atomically a
     await j.start();
     const before = structuredClone(j.m.owner()!.doc), revision = j.m.owner()!.handle!.revision;
     const patches = [
-      { path: ["flows", terminalA], op: "delete", value: { edit: { value: { cfm: 220 } } } },
+      { path: ["flows", terminalA], op: "delete", value: { edit: { value: 220 } } },
       { path: ["missing"], value: {} },
       { path: ["flows", terminalA, "missing"], value: 2 },
       { path: ["flows", "__proto__"] },
@@ -861,9 +861,9 @@ test("JZ raw Work patch paths and ambiguous operation fields refuse atomically a
     await j.ready();
     expect(j.m.owner()!.doc).toEqual(before);
     expect(j.m.owner()!.handle!.revision).toBe(revision);
-    expect(await j.cells().at(["flows", terminalA]).stage({ cfm: 240 })).toBeNull();
+    expect(await j.cells().at(["flows", terminalA]).stage(240)).toBeNull();
     await j.ready();
-    expect(j.m.owner()!.doc.flows[terminalA].edit.value).toEqual({ cfm: 240 });
+    expect(j.m.owner()!.doc.flows[terminalA].edit.value).toEqual(240);
   } finally { await j.close(); }
 }, 60_000);
 
@@ -943,16 +943,16 @@ test.each(["accepted", "refused"] as const)("JZ audit member switch keeps a late
     await vi.waitFor(() => expect(inspectorA.owner()?.ready).toBe(true));
     const cells = () => m.draw("main", ctx => ctx.cells) as DrawContext<any, any, any, any>["cells"];
     held = j.holdBeforeWrite();
-    const pending = cells().at(["flows", terminalA]).stage({ cfm: 210 }, { label: "Member A delayed edit" });
+    const pending = cells().at(["flows", terminalA]).stage(210, { label: "Member A delayed edit" });
     await held.entered.promise;
     m.page.query({ member: "b" });
     await vi.waitFor(() => expect(m.owner()?.absent).toBe(true));
     await m.startAction()!.run();
     await vi.waitFor(() => expect(m.owner()?.ready).toBe(true));
-    expect(await cells().at(["flows", terminalA]).stage({ cfm: 520 }, { label: "Member B edit" })).toBeNull();
+    expect(await cells().at(["flows", terminalA]).stage(520, { label: "Member B edit" })).toBeNull();
     const before = structuredClone(m.owner()!.doc), handle = m.owner()!.handle!;
     if (outcome === "refused") expect(await j.write(keyA, { kind: "apply", expectedRevision: revisionA,
-      press: crypto.randomUUID(), patches: [{ path: ["flows", terminalA, "edit"], value: { value: { cfm: 700 } } }] })).toMatchObject({ ok: true });
+      press: crypto.randomUUID(), patches: [{ path: ["flows", terminalA, "edit"], value: { value: 700 } }] })).toMatchObject({ ok: true });
     held.release.resolve();
     const result = await pending;
     if (outcome === "accepted") expect(result).toBeNull(); else expect(result).toMatchObject({ code: "refused" });
@@ -1010,7 +1010,7 @@ test("JZ audit validation readiness and per-action busy admission prevent dispat
   const calls = () => j.submits.filter((key) => key === "findings.list").length;
   try {
     await j.ready();
-    expect(await j.cells().at(["flows", terminalA]).stage({ cfm: 220 })).toMatchObject({ code: "unavailable" });
+    expect(await j.cells().at(["flows", terminalA]).stage(220)).toMatchObject({ code: "unavailable" });
     expect(j.writes).toHaveLength(0);
     expect(j.m.verb("audit").refusal, "A verb that carries the Work handle refuses before the Work exists").toBe("Start this Work to edit");
     await expect(direct(j.m.verb("audit")).run({})).rejects.toThrow("Start this Work to edit");
@@ -1108,7 +1108,7 @@ test.each(["stream held", "stream free"])("D17 a pick behind the mount's own una
     if (stream === "stream held") j.holdStream();
     held = j.holdWrite();
     const cells = j.cells();
-    const edit = cells.at(["flows", terminalA]).stage({ cfm: 240 }, { label: "Terminal A airflow" });
+    const edit = cells.at(["flows", terminalA]).stage(240, { label: "Terminal A airflow" });
     const pick = cells.at(["writeIntent"]).stage(scope, { label: "Write scope" });
     await held.entered.promise;
     held.release.resolve();
@@ -1136,7 +1136,7 @@ test("D17 a pick after the mount's own edit has landed, on the drawing made befo
   try {
     await j.start();
     const cells = j.cells(), revision = j.m.owner()!.handle!.revision;
-    expect(await cells.at(["flows", terminalA]).stage({ cfm: 240 }, { label: "Terminal A airflow" })).toBeNull();
+    expect(await cells.at(["flows", terminalA]).stage(240, { label: "Terminal A airflow" })).toBeNull();
     await vi.waitFor(async () => expect((await hostWork(j)).revision).toBe(revision + 1));
     expect(await cells.at(["writeIntent"]).stage(scope, { label: "Write scope" }))
       .toMatchObject({ code: "refused", message: "Stale accepted Work basis" });
