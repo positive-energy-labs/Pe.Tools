@@ -6,11 +6,13 @@ import { markReadings } from "../src/resource-adapters.ts";
 import { openRecordingWriter, openRecordingReader, nativeCatalogIdentity } from "../src/native-recording.ts";
 import { fansDocumentSchema } from "@pe/agent-contracts";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
+import { nativeResponseSchema } from "@pe/host-contracts/decoders";
+import { DUCT_UNIT_KINDS, FAN_BLOCKER_KINDS } from "@pe/host-contracts/generated";
 import { graphRoute } from "../src/reads/routes.ts";
 import { RouteWorkspace } from "@pe/runtime";
 import { admittedBuiltinsLayer } from "../src/admitted-builtins.ts";
 import { builtinEnrollments } from "../src/builtin-enrollment.ts";
-import { workHandleSchema } from "@pe/agent-contracts";
+import { workHandleSchema, canonicalWorkKey } from "@pe/agent-contracts";
 import { z } from "zod";
 import { closedFan, recordedTables } from "../../../products/fans/host/src/tests/closed-fan.fixture.ts";
 import { detachedBridge, sessionView, registryService, harnessThreads, testSpawner, settle, testHostInputs, captureStore, journalAt } from "./effect-test.ts";
@@ -46,6 +48,8 @@ import {
   onRevoke,
   Refused,
   callerOf,
+  currentCaller,
+  workAuthorOf,
   originOf,
   assertRunAdmission,
 } from "../src/control.ts";
@@ -205,9 +209,14 @@ const kinds = (events: HarnessEvent[]) =>
     )
     .map((e) => (e.kind === "update" ? `update:${e.update.sessionUpdate}` : e.kind));
 
-test.each(["claude", "codex"] as const)(
-  "%s: canonical Address Work joins find, stage, sealed preview, journal apply and receipt in one chain, asking nobody",
-  async (harness) => {
+const chainTitle = "canonical Address Work joins find, stage, sealed preview, journal apply and receipt in one chain, asking nobody";
+test.each([
+  { harness: "claude", capturedNetwork: false, title: chainTitle },
+  { harness: "codex", capturedNetwork: false, title: chainTitle },
+  { harness: "codex", capturedNetwork: true, title: "captured network chain refuses an unresolved fan before writing, asking nobody" },
+] as const)(
+  "$harness: $title",
+  async ({ harness, capturedNetwork }) => {
     const dir = await mkdtemp(join(root, "chain-"));
     const h = await host(),
       call = caller(h),
@@ -216,6 +225,7 @@ test.each(["claude", "codex"] as const)(
     const address = documentAddress("C:/Models/chain.rvt");
     const key = bindWork("fans", address, undefined, target);
     const workspace = new RouteWorkspace({ registrations: [],
+      publicationAuthor: () => workAuthorOf(currentCaller()),
       store: fileRouteDocumentStore(stateFixture(join(dir, "work"))) });
     const routes = createPeRoutes({
       registrations: [], workspace,
@@ -232,13 +242,18 @@ test.each(["claude", "codex"] as const)(
       ),
     );
     // This is a harness transport witness; an unresolved captured walk cannot authorize its write.
-    const snapshot = closedFan(14577391, { requiredEsp: captured.slots.requiredEsp ?? undefined });
+    const snapshot = capturedNetwork
+      ? nativeResponseSchema("ducts.snapshot.walk").parse({ ...captured,
+          vocabulary: { unitKinds: [...DUCT_UNIT_KINDS], blockerKinds: [...FAN_BLOCKER_KINDS] } })
+      : closedFan(14577391, { requiredEsp: captured.slots.requiredEsp ?? undefined });
     const fan = snapshot.nodes.find(node => node.id === 14577391)!;
-    snapshot.slots.fanFlow = captured.slots.fanFlow;
-    fan.flowParameter = captured.slots.fanFlow;
-    fan.connectors[0]!.index = 2;
-    for (const item of [...snapshot.nodes, ...snapshot.segments]) for (const port of item.connectors)
-      if (port.connectedTo?.elementId === fan.id && port.connectedTo.connector === 0) port.connectedTo.connector = 2;
+    if (!capturedNetwork) {
+      snapshot.slots.fanFlow = captured.slots.fanFlow;
+      fan.flowParameter = captured.slots.fanFlow;
+      fan.connectors[0]!.index = 2;
+      for (const item of [...snapshot.nodes, ...snapshot.segments]) for (const port of item.connectors)
+        if (port.connectedTo?.elementId === fan.id && port.connectedTo.connector === 0) port.connectedTo.connector = 2;
+    }
     const writes: unknown[] = [];
     const equipmentSubject = elementSubject(snapshot.nodes.find((node: { id: number }) => node.id === 14577391)!);
     const invokeFixture = (op: string, input: unknown, _session?: string, _doc?: string | null, requestId?: string) =>
@@ -348,7 +363,9 @@ test.each(["claude", "codex"] as const)(
               );
               expect(found, JSON.stringify(found)).toMatchObject({
                 ok: true,
+                target,
                 result: {
+                  handle: { key: { target: canonicalWorkKey(key).target, binding: "address" } },
                   revision: 1,
                   doc: { equipmentFlows: { [equipmentSubject]: { edit: { value: 975 } } } },
                 },
@@ -446,6 +463,13 @@ test.each(["claude", "codex"] as const)(
       expect(JSON.stringify(done.events)).not.toContain("permission_request");
       expect(JSON.stringify(done.events)).toContain("chain find:");
       const preview = (await journal.list(undefined, "preview"))[0];
+      if (capturedNetwork) {
+        expect(preview, JSON.stringify(preview)).toMatchObject({ state: "failed", notDispatched: true,
+          error: expect.stringContaining("Nothing is written from a incomplete fan calc") });
+        expect(writes).toEqual([]);
+        expect((await journal.wait("apply")).steps).toEqual([]);
+        return;
+      }
       expect(preview, JSON.stringify(preview)).toMatchObject({
         state: "succeeded",
         result: { previewOnly: true, seal: { requestHash: expect.any(String) } },
