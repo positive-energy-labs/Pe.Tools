@@ -18,6 +18,7 @@ import {
 import {
   applyPatches,
   stampChanges,
+  draftEditSchema,
   routeDocDelta,
   canonicalRouteInput,
   refuse,
@@ -858,19 +859,32 @@ export class RouteWorkspace {
       : refuse("refused", result.ok ? "Nothing restored" : result.message, "Re-read the Timeline.");
   }
 
-  /** Observations and conditional retirement are host facts, never raw client edits. */
+  /** Caller cells have no author; route-specific values and metadata are checked after stamping. */
   validateSeed(scope: WorkKey, seed: unknown): unknown {
     const registration=this.#registry.get(scope.route);
     if(!registration) throw Error(`Unknown Work route ${scope.route}`);
-    return registration.spec.schema.parse(seed);
+    const edit = draftEditSchema(z.unknown(), { deletable: true }).loose();
+    const validate = (node: unknown): void => {
+      if (Array.isArray(node)) return node.forEach(validate);
+      if (!node || typeof node !== "object") return;
+      for (const [key, value] of Object.entries(node)) {
+        if (key === "edit") {
+          if (value && typeof value === "object" && Object.hasOwn(value, "by"))
+            z.never().parse((value as Record<string, unknown>).by);
+          if (value != null) edit.parse(value);
+        } else validate(value);
+      }
+    };
+    validate(seed);
+    return seed;
   }
 
   /** The journal calls this only after consent. The write tail makes absence a compare-and-set. */
   async start(scope:WorkKey,seed:unknown,by:WorkAuthor,receiptId?:string):Promise<RouteStateWriteResult> {
     this.#authorize("publish");
-    // Every seeded cell is the caller's: a seed's own `by` is never read, so it cannot name another author.
-    const doc=this.validateSeed(scope,stampChanges(this.validateSeed(scope,seed),undefined,by,0));
+    const input=this.validateSeed(scope,seed);
     const spec=this.#registry.get(scope.route)!.spec;
+    const doc=spec.schema.parse(stampChanges(input,undefined,by,0));
     return this.#serialized(async()=>{
       if(await this.#store.getState({targetKey:workKey(scope),route:scope.route}) != null)
         return refuse("refused","Work already exists","Open the existing Work.");

@@ -27,10 +27,10 @@ test("a taken default keeps its cited ref beside the caller; an unstamped legacy
   const key = elementSubject({ uniqueId: uid(1) }), old = elementSubject({ uniqueId: uid(2) });
   // The caller cites the default's evidence on the cell's own `ref`; the host stamps `by` and keeps the citation.
   const human = landed({ terminalDrops: cells({ [key]: { inWg: 0.03 } }, "firm ducts.json#terminalDrop") }, "human");
-  const legacy = fansDocumentSchema.parse({ flows: cells({ [old]: 100 }) });
+  expect(fansDocumentSchema.safeParse({ flows: cells({ [old]: 100 }) }).success).toBe(false);
   // A stored legacy `{ cfm, source }` is not decoded into a number with a made-up author: the schema refuses it.
   expect(fansDocumentSchema.safeParse({ flows: cells({ [old]: { cfm: 100, source: "balancing report" } }) }).success).toBe(false);
-  const design = ductsDesign(null, { ...human, flows: legacy.flows });
+  const design = ductsDesign(null, human);
   const { terminalDrops, flows } = stagedDucts(design, design);
   expect(terminalDrops[key]).toEqual({ value: { inWg: 0.03 }, by: "human", ref: "firm ducts.json#terminalDrop" });
   // No stamp, no caller: the cell is not handed over, and nobody is named as its author.
