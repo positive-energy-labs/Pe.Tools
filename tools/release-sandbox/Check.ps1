@@ -70,6 +70,14 @@ try {
         New-Item -ItemType Directory (Split-Path $original), (Split-Path $installed) -Force | Out-Null
         $name | Set-Content $original; Copy-Item $original $installed
     }
+    $originalDeps = @{ runtimeTarget = @{ name = '.NETCoreApp,Version=v8.0' }; libraries = @{ 'Pe.Revit.Cli/0.1.0-beta.196' = @{}; 'Pe.Revit.Core/1.2.3' = @{} } }
+    $installedDeps = @{ runtimeTarget = @{ name = '.NETCoreApp,Version=v8.0/win-x64' }; libraries = $originalDeps.libraries }
+    $originalRuntime = @{ runtimeOptions = @{ tfm = 'net8.0'; framework = @{ name = 'Microsoft.NETCore.App'; version = '8.0.0' } } }
+    $installedRuntime = @{ runtimeOptions = @{ tfm = 'net8.0'; includedFrameworks = @(@{ name = 'Microsoft.NETCore.App'; version = '8.0.26' }) } }
+    foreach ($item in @(@{ name='Pe.Revit.Cli.deps.json'; original=$originalDeps; installed=$installedDeps }, @{ name='Pe.Revit.Cli.runtimeconfig.json'; original=$originalRuntime; installed=$installedRuntime })) {
+        $item.original | ConvertTo-Json -Depth 8 | Set-Content (Join-Path $packageDirectory ('tools/net8.0/any/'+$item.name))
+        $item.installed | ConvertTo-Json -Depth 8 | Set-Content (Join-Path $shims $item.name)
+    }
     '<DotNetCliTool />' | Set-Content "$packageDirectory\tools\net8.0\any\DotnetToolSettings.xml"
     $package = Join-Path $scratch 'sdk-closure.nupkg'; $archive = [IO.Compression.ZipFile]::Open($package, [IO.Compression.ZipArchiveMode]::Create)
     try {
@@ -80,6 +88,21 @@ try {
         }
     } finally { $archive.Dispose() }
     CompareSdkClosure $package $shims '0.1.0-beta.196' "$scratch\sdk-closure.json"
+    $referenceDeps = $originalDeps | ConvertTo-Json -Depth 8 | ConvertFrom-Json
+    foreach ($bad in 'rid','library-version','tfm','framework-version','framework-dependent') {
+        $deps = $installedDeps | ConvertTo-Json -Depth 8 | ConvertFrom-Json
+        $runtime = $installedRuntime | ConvertTo-Json -Depth 8 | ConvertFrom-Json
+        switch ($bad) {
+            'rid' { $deps.runtimeTarget.name = '.NETCoreApp,Version=v8.0/linux-x64' }
+            'library-version' { $deps.libraries.PSObject.Properties.Remove('Pe.Revit.Core/1.2.3'); $deps.libraries | Add-Member 'Pe.Revit.Core/9.9.9' @{} }
+            'tfm' { $runtime.runtimeOptions.tfm = 'net9.0' }
+            'framework-version' { $runtime.runtimeOptions.includedFrameworks[0].version = '9.0.0' }
+            'framework-dependent' { $runtime.runtimeOptions | Add-Member framework @{ name='Microsoft.NETCore.App'; version='8.0.26' } }
+        }
+        $refused = $false
+        try { Assert-GateSdkDeploymentForm 'Pe.Revit.Cli.deps.json' $referenceDeps $deps; Assert-GateSdkDeploymentForm 'Pe.Revit.Cli.runtimeconfig.json' $originalRuntime $runtime } catch { $refused = $true }
+        if (!$refused) { throw "SDK deployment form accepted $bad." }
+    }
     foreach ($bad in 'version', 'bytes') {
         if ($bad -eq 'bytes') { 'changed runtime' | Set-Content "$shims\Pe.Revit.Cli.dll" }
         $refused = $false
