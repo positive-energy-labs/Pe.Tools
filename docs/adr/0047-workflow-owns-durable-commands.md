@@ -1,6 +1,6 @@
 # 0047: Workflow owns durable commands
 
-Date: 2026-11-16. Status: accepted target, runtime UNPROVEN. Source: accepted [Converge map](../features/host/CONVERGE-MAP.md). Amends [ADR 0029](0029-effect-is-the-standard-library-one-fiber-per-request.md) rules 3, 9, 10, 14 and 15; [ADR 0031](0031-recording-at-host-input-services-history-in-the-shell.md) rules 1 and 10; [ADR 0033](0033-one-host-read-graph-history-is-host-publication.md)'s ActionJournal survival clause; and [ADR 0039](0039-two-failure-policies-by-class.md)'s journal discard policy. Other rules stand.
+Date: 2026-11-16. Status: deferred, not adopted (amended 2026-11-17; see Consequences). Source: accepted [Converge map](../features/host/CONVERGE-MAP.md). Amends [ADR 0029](0029-effect-is-the-standard-library-one-fiber-per-request.md) rules 3, 9, 10, 14 and 15; [ADR 0031](0031-recording-at-host-input-services-history-in-the-shell.md) rules 1 and 10; [ADR 0033](0033-one-host-read-graph-history-is-host-publication.md)'s ActionJournal survival clause; and [ADR 0039](0039-two-failure-policies-by-class.md)'s journal discard policy. Other rules stand.
 
 ## Context
 
@@ -18,6 +18,8 @@ The rejection of workflow and cluster assumed a second owner beside ActionJourna
 8. The engine database takes ADR 0039's derived journal class: incompatible/corrupt state is discarded with one visible notice while preserving prior bytes aside. Before a replacement accepts work, persist a discard epoch outside that database (OD9). Refuse old or unprovable admission generations, including pre-epoch resends, rather than recreating effect authority. Missing, corrupt or unwritable fence means command admission stays closed; unrelated host reads may start. No legacy migration or replay from discarded state. Authored keep and foreign policies remain intact.
 
 ## Consequences
+
+Amendment, 2026-11-17, root default on the seam: Workflow is deferred, not adopted. ActionJournal stays the one durable owner of commands, and native truth comes from the SDK's recorded attempt response. The Family Foundry crossing showed that the journal already owns admission with changed-intent refusal, plan claims, receipts, Stop and crash settlement behind every door, and that the Workflow core had no production importer, so it was deleted instead of connected (`ts/apps/host/src/commands/`, last present at `73d17472`). The decision above is the record of a design that was not taken up. A later S4 is a separate owner decision, judged by the journal's measured defects, and the owner can reopen this default.
 
 FND-02 is an unresolved S4 gate: "attempt id only" names the logical admission key, not Effect's tag-dependent execution hash. Admission must freeze the original Workflow tag/execution id, recipe/code compatibility identity and derived step request identities. Resume must use a compatible frozen continuation or refuse before any new effect; current handler registration and Activity name/attempt reuse do not prove code meaning. UNPROVEN[upgrade falsifier not run]: complete A, suspend before B, change A's meaning or insert a step, and restart; also resend through a renamed Workflow tag. Require no mismatched result reuse or second execution/native identity. Preserve responsibility-transfer D2 before deleting the old validator.
 

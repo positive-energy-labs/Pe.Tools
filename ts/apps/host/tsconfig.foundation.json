@@ -1,9 +1,0 @@
-{
-  "extends": "./tsconfig.json",
-  "include": [
-    "src/commands/**/*.ts",
-    "tests/command-foundation.test.ts",
-    "../../../packages/runtime/src/command-invocation.ts"
-  ],
-  "compilerOptions": { "incremental": false }
-}
