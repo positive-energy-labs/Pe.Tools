@@ -304,9 +304,8 @@ export const ductsRosterRequestSchema = z.strictObject({
     .optional()
     .describe("Equipment mark, e.g. MA-1. Returns only the ports whose mark matches (case-insensitive). Omit for the whole roster."),
 });
-export type DuctsRosterRequest = z.infer<typeof ductsRosterRequestSchema>;
 
-/** Shared product instructions for Pea and the sheet tutorial. */
+/** Pea's product instructions for the pressure-drop sheet. */
 export const DUCTS_SHEET_GUIDE = {
   summary:
     "Read one fan's pressure-drop sheet. Each number is a sum along a path; an incomplete known subtotal is never required ESP.",

@@ -361,10 +361,6 @@ export const ductsDocumentSchema = z
   });
 export type DuctsRouteDocument = z.infer<typeof ductsDocumentSchema>;
 
-/**
- * Ducts Work 1 -> 2 (FANSPLIT, kaitpw 2026-11-03 Q5): the fan cells and the Load Preview are
- * deleted, not moved; the /fans Work starts empty. The write scope keeps only its ducts keys.
- */
 /** What pricing reads: both Works' cells side by side (FANSPLIT Q4); ducts owns `writeIntent`. */
 export type DuctsDesign = DuctsRouteDocument & FansDocument;
 export const ductsDesign = (ducts: DuctsRouteDocument | null, fans: FansDocument): DuctsDesign => ({

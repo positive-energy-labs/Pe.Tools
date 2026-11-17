@@ -1,10 +1,8 @@
-import { z } from "zod";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
 import type { DuctsApply, DuctsAssignFan, DuctsHeal } from "@pe/host-contracts/generated";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import type { HealView as HealPlan } from "@pe/ducts-domain/pricing-view";
 import { healSystems, healWords, networkWord, outcomeWords } from "@pe/ducts-domain/words";
-import { ductsHealInputSchema } from "@pe/agent-contracts";
 type ReviewEvidence = {
   readonly heal?: import("@pe/agent-contracts").Immutable<Pick<HealPlan,"groups">> | null;
   readonly page?: { readonly stage?: "network" | "sheet" };
@@ -23,35 +21,6 @@ type ReviewEvidence = {
 };
 import { elementLabeler as subjectNamer } from "@pe/ducts-domain/element-label";
 
-export const healReviewSchema = z.object({
-  group: z.string(),
-  mode: z.enum(["preview", "apply"]),
-  // Evidence remains host-owned; the picture consumes the typed targets and words below.
-  response: z.unknown(),
-  basis: z.string(),
-  request: ductsHealInputSchema.extend({
-    groups: z.array(ductsHealInputSchema.shape.groups.element),
-  }),
-  before: z.object({
-    esp: z.number().nullable(),
-    roots: z.array(z.number()),
-    ids: z.array(z.number()),
-  }),
-  targets: z.array(
-    z.object({
-      key: z.string(),
-      end: z.string(),
-      other: z.string().optional(),
-      how: z.enum(["cap", "connect", "union", "extend"]),
-      ids: z.array(z.number()),
-      findings: z.array(z.string()),
-      outcome: z.string(),
-    }),
-  ),
-  sentence: z.string(),
-  rows: z.array(z.string()),
-});
-export type HealReview = z.infer<typeof healReviewSchema>;
 const responseOf = <T>(result: unknown): T => {
   const envelope = result as { response?: T; value?: T };
   return envelope.response ?? envelope.value ?? (result as T);
