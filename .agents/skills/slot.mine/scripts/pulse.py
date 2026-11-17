@@ -163,9 +163,11 @@ def main(argv):
         for branch, est, planned, sign in estimates:
             if planned or sign:
                 exists = not subprocess.run(['git', 'rev-parse', '-q', '--verify', branch], capture_output=True).returncode
-                done = [m for m in ms if re.search(re.escape(branch) + r'(?![\w-])', m[1])]
-                # every merge of the slice counts: fix rounds are part of what it moved
-                spans = [(git('merge-base', *m[2]).strip(), m[2][1]) for m in done]
+                # every merge of the slice into the branch counts, fix rounds included, and each counts what it
+                # brought (first parent to merge): a branch that carried another slice's merge counts it once, not twice
+                spine = set(git('rev-list', '--first-parent', '%s..%s' % (base, tip)).split())
+                done = [m for m in ms if m[0] in spine and re.search(re.escape(branch) + r'(?![\w-])', m[1])]
+                spans = [(m[2][0], m[0]) for m in done]
                 if exists: spans.append((git('merge-base', tip, branch).strip(), branch))
                 a = d = 0
                 for x, y in spans:

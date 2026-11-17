@@ -26,6 +26,7 @@ It owns the ratchets and the structural static analysis that keep those findings
 - Stupid code, and a unit test that mirrors an implementation.
 - Dead code and its tests, deleted together.
 - A deleted test whose witness has no other home.
+- On every driver branch, an assertion made weaker, a journey that waits longer to pass, or a fixture changed to fit the product, because the driver fixes its own lane and the purger is the reader who did not write it.
 
 ## never does
 

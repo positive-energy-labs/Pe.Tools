@@ -79,17 +79,42 @@ def row_counts(text):
     return {s: found[s] for s in STAMPS}
 
 
+def resolve(name, refs):
+    """A map may name a slice (`P1-undo`) where git has `crusade/fans-P1-undo`: the one ref ending in it."""
+    if name in refs:
+        return name
+    hits = [r for r in refs if re.search(r'[/-]' + re.escape(name) + '$', r)]
+    return hits[0] if len(hits) == 1 else name
+
+
+def merged_name(name, merged_subjects):
+    """A merge subject names the branch, and a slice id ends it (k2/store must not match k2/store-sweeps)."""
+    return bool(re.search(r'(?:^|[\s/\'"-])' + re.escape(name) + r'(?![\w-])', merged_subjects, re.M))
+
+
 def wave_rows(map_text, merged_subjects, refs):
     """Enumerate branch hands; only an explicit declaration states wave status."""
     rows = []
     statuses = dict(re.findall(r'^Wave-Status:\s*(\S+)\s+(ACTIVE|CLOSED)\s*$', map_text, re.M))
     for n, rest in re.findall(r'^\W*Wave:\s*(\S+)[ \t]+(.+)$', map_text, re.M):
-        branches = re.findall(r'[\w.-]+/[\w./-]+', rest)
-        merged = [b for b in branches if re.search(re.escape(b) + r'(?![\w-])', merged_subjects)]
-        started = [b for b in branches if b in refs or b in merged]
+        rest = re.split(r'blockers?:', rest, flags=re.I)[0]
+        tokens = list(dict.fromkeys(re.findall(r'[\w.-]+(?:/[\w./-]+)?', rest)))
+        # a word is a branch when it names one: a path with a slash, a ref, or a merge
+        branches = [b for b in tokens if '/' in b or resolve(b, refs) in refs or merged_name(b, merged_subjects)]
+        merged = [b for b in branches if merged_name(b, merged_subjects)]
+        started = [b for b in branches if resolve(b, refs) in refs or b in merged]
         rows.append(dict(n=n, total=len(branches), merged=len(merged), started=len(started),
                          status=statuses.get(n, 'UNKNOWN')))
     return rows
+
+
+def pending_requests(db, running, now):
+    """Requests a running thread is blocked on. No agent can approve one, so the root restarts the thread."""
+    if not running:
+        return []
+    rows = db.execute('select thread_id, kind, created_at from orchestration_v2_projection_runtime_requests '
+                      "where status='pending' and thread_id in (%s)" % ','.join('?' * len(running)), list(running))
+    return [dict(thread=running[t], kind=k, minutes=round((now - ts(c)).total_seconds() / 60, 1)) for t, k, c in rows]
 
 
 def thread_snapshot(root, now):
@@ -121,7 +146,9 @@ def thread_snapshot(root, now):
                                minutes_running=round((now - ts(min(r[1] for r in active))).total_seconds() / 60, 1) if active else None,
                                since_end=round((now - ts(ended[2])).total_seconds() / 60, 1) if ended else None,
                                failed=ended[0] == 'failed' if ended else None))
-        return result
+        # a request left by an ended turn is orphaned, not a block
+        waiting = pending_requests(db, {r['id']: r['title'] for r in result if r['running']}, now)
+        return result, waiting
 
 
 def partner_rows(threads, run_dir, tip):
@@ -200,6 +227,10 @@ def main(argv=None):
     parser.add_argument('--base')
     parser.add_argument('--if-older-than', type=float)
     args = parser.parse_args(argv)
+    base_file = args.run_dir / 'base.sha'
+    if not args.base and base_file.exists():
+        # merge-base with main drifts once main is merged into the run's branch
+        args.base = base_file.read_text(encoding='utf-8').strip()
     now = dt.datetime.now(dt.timezone.utc)
     directory = args.run_dir / 'cycle'
     files = cycle_files(directory)
@@ -238,7 +269,8 @@ def main(argv=None):
             return ', '.join('%s %d' % (k, found[k]) for k in order)
         lines += ['', '## ' + title, '', optional(counted)]
     lines += ['', '## Pulse', '', optional(lambda: pulse(previous, tip, args.map)), '', '## Partners', '']
-    threads = optional(lambda: thread_snapshot(args.root, now))
+    snapshot = optional(lambda: thread_snapshot(args.root, now))
+    threads, waiting = snapshot if isinstance(snapshot, tuple) else (snapshot, snapshot)
     partners = partner_rows(threads, args.run_dir, tip) if isinstance(threads, list) else []
     if isinstance(threads, str):
         lines.append(threads)
@@ -250,6 +282,9 @@ def main(argv=None):
                 p['role'], 'running' if p['running'] else 'idle', ended, failed, p['read']))
         if not partners:
             lines.append('none')
+    lines += ['', '## Waiting on a request', '']
+    lines += (['- %s: %s request open %s min' % (w['thread'], w['kind'], w['minutes']) for w in waiting]
+              or ['none']) if isinstance(waiting, list) else [waiting]
     lines += ['', '## Children running', '']
     lines += (['- %s: %s min' % (t['title'], t['minutes_running']) for t in threads
                if t['running'] and not t['role']] or ['none']) if isinstance(threads, list) else [threads]
@@ -258,6 +293,10 @@ def main(argv=None):
     # Prefix inference needs the whole run, even when this cycle has no new merges.
     base = optional(lambda: git('rev-parse', args.base + '^{commit}') if args.base else git('merge-base', args.branch, 'main'))
     branches = optional(lambda: branch_rows(tip, base, threads if isinstance(threads, list) else []))
+    subjects = optional(lambda: git('log', '--first-parent', '--merges', '--format=%s', base + '..' + tip))
+    if isinstance(estimates, list) and isinstance(refs, list):
+        done = subjects if isinstance(subjects, str) and not subjects.startswith('unknown:') else ''
+        estimates = [resolve(e, refs) for e in estimates if not merged_name(e, done)]
     counts = three_counts(estimates if isinstance(estimates, list) else [], refs if isinstance(refs, list) else [],
                           branches if isinstance(branches, list) else [], partners)
     for title, items, error in (

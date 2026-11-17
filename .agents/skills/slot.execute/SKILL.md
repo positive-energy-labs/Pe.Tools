@@ -93,6 +93,7 @@ Run pea scripts, host operations, or `pea --prompt` only after the SDK session i
 
 - Create a worktree as a sibling directory with `git worktree add`. Never nest one.
 - A worktree is cut from a commit, so a tool or rule that is uncommitted in the launching checkout does not exist for the child, and neither does one on a branch its base has not merged. Commit it and merge it before the launch.
+- Remove a worktree, a baseline copy or a run's scratch tree with `python tools/clean.py <path>`. It removes a registered worktree with git, deletes the ignored `ts/` tree git leaves behind, and refuses any path outside the worktree folder, `.artifacts`, the temp folder or a `Pe.Tools-*` sibling. Never delete a directory with an inline `Remove-Item` or `rm -rf`, because a Codex thread can stop on an approval prompt for it even in full-access mode, and no agent can answer one.
 - A fresh worktree has no dependency install. From `ts`, run `vp i --frozen-lockfile --prefer-offline`. Vite+ owns dependency installation, so never run bare `pnpm install`.
 - A fresh worktree uses the release feed at `%USERPROFILE%\source\feeds\pe-revit-sdk`, or `sdk.feed` in `product.payloads.json`. `pe-revit sdk adopt <version>` repins and regenerates the client. Review its `--plan` first. Do not copy, junction or symlink a feed into the worktree.
 
