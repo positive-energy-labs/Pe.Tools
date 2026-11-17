@@ -178,6 +178,12 @@ const undefinedKey: Test.Wire = { nullable: undefined };
       { $schema: "http://json-schema.org/draft-04/schema#", type: "number", exclusiveMinimum: 2 },
     ]) expect(() => schemaCode(input)).toThrow();
   });
+  it("names malformed schema containers and bounds", () => {
+    expect(() => schemaCode({ properties: { missing: null } })).toThrow("#/properties/missing: expected a schema object");
+    expect(() => schemaCode({ properties: [] })).toThrow("#/properties: expected a schema map");
+    expect(() => schemaCode({ anyOf: {} })).toThrow("#/anyOf: expected a schema array");
+    expect(() => schemaCode({ type: "integer", format: "int32", minimum: "bad" })).toThrow("#: minimum must be a number");
+  });
   it("preserves draft04 exclusive bounds rather than relabeling booleans", async () => {
     const decoder = await generated({ $schema: "http://json-schema.org/draft-04/schema#", type: "number", minimum: 1, exclusiveMinimum: true });
     expect(() => Schema.decodeUnknownSync(decoder)(1)).toThrow();
