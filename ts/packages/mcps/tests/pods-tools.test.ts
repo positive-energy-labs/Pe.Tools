@@ -1,3 +1,4 @@
+import { currentCaller, workAuthorOf } from "../../../apps/host/src/control.ts";
 import { machineFixture } from "../../agent-contracts/tests/machine-fixture.ts";
 import { withInvocationContext } from "@pe/runtime/context";
 import { afterEach, expect, test, vi } from "vite-plus/test";
@@ -16,11 +17,12 @@ afterEach(() => {
 });
 
 test("Pea enumerates Pod members and proposes revision-checked Work without route handlers", () =>
-  withInvocationContext({ hostBaseUrl: "http://pods.test" }, async () => {
+  withInvocationContext({ hostBaseUrl: "http://pods.test", caller: { kind: "human", via: "cli" } }, async () => {
     const registrations = createRouteRegistrations();
     const rows = new Map<string, unknown>();
     const runtime = new RouteWorkspace({
       registrations,
+      publicationAuthor: () => workAuthorOf(currentCaller()),
       store: {
         getState: async ({ targetKey, route }) => rows.get(targetKey + route),
         setState: async ({ targetKey, route, value }) => {
