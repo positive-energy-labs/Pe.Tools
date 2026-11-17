@@ -1,5 +1,5 @@
 import { elementSubject } from "@pe/ducts-domain/work-subject";
-import capturedWalk from "./native-recordings/driver-ducts.snapshot.walk.json" with { type: "json" };
+import { closedFan } from "./closed-fan.fixture.ts";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { address, canonicalRouteInput, type Caller } from "@pe/agent-contracts";
 import { Deferred, Effect } from "effect";
@@ -18,14 +18,16 @@ import { nativeFixture } from "./fans-native.fixture.ts";
 
 
 
-const terminalSubject = elementSubject(capturedWalk.nodes.find(node => node.id === 8718801)!);
+const terminalSubject = elementSubject(closedFan(100).nodes.find(node => node.id === 3)!);
+const scenario = (key: string, input: unknown) => key === "ducts.snapshot.walk"
+  ? closedFan(100, { requiredEsp: (input as { slots?: { requiredEsp?: string } }).slots?.requiredEsp }) : undefined;
 
 const closes: (() => Promise<void>)[] = [];
 afterEach(async () => {
   for (const close of closes.splice(0).reverse()) await close();
 });
 const fixture = async () => {
-  const f = await nativeFixture("test");
+  const f = await nativeFixture("test", scenario);
   closes.push(() => f.close());
   return f;
 };
@@ -35,8 +37,7 @@ async function stage(f: Awaited<ReturnType<typeof nativeFixture>>) {
     "fans",
     "human",
     [
-      { path: ["flows", terminalSubject, "edit"], value: { value: 250 } },
-
+      { path: ["writeIntent", "edit"], value: { value: { walk: { unitId: 100, portIndex: 0 } } } },
     ],
     0,
   );
@@ -44,7 +45,7 @@ async function stage(f: Awaited<ReturnType<typeof nativeFixture>>) {
   const ducts = await f.saved.apply(f.key, "ducts", "human", [{ path: ["writeIntent", "edit"], value: { value: { groups: ["group:g8718801"] } } }], 0,
   );
   if (!ducts.ok) throw Error(JSON.stringify(ducts));
-  return { key: f.key, revision: ducts.revision };
+  return { key: { ...f.key, route: "fans" }, revision: staged.revision };
 }
 async function command(
   f: Awaited<ReturnType<typeof nativeFixture>>,
@@ -110,7 +111,7 @@ test.each(["human", "pea"] as const)("D03/C07: %s plan shares admitted inputs, p
   const preview = await f.journal.wait("preview");
   if (preview.state !== "succeeded") throw Error(JSON.stringify(preview));
   expect(preview.caller).toMatchObject(caller.kind === "pea" ? { kind: "pea", thread: caller.thread } : { kind: "human" });
-  expect((await f.saved.view(f.key, "ducts"))?.handle).toEqual(work);
+  expect((await f.saved.view(work.key, "fans"))?.handle).toEqual(work);
   expect((await f.saved.view({ ...f.key, route: "fans" }, "fans"))?.handle).toEqual(fans.handle);
   // The human must review its own Plan before applying a Pea-derived scope.
   if (actor === "pea") {
@@ -142,7 +143,7 @@ test("a changed SDK incarnation between plan input reads refuses without applyin
   expect(JSON.stringify(result)).toMatch(/incarnation|process|attachment/i);
   expect(f.dispatched.filter((row) => row.key === "ducts.tables" || row.key === "ducts.apply"),
   ).toEqual([]);
-  expect((await f.saved.view(f.key, "ducts"))?.handle).toEqual(work);
+  expect((await f.saved.view(work.key, "fans"))?.handle).toEqual(work);
 });
 
 // ADR 0038: Pea's sealed write asks nobody. The run registry still ends it: a stopped run dispatches nothing.
@@ -198,7 +199,7 @@ test("a refused native Plan retains its review without Apply authority or model 
   await command(f, "refused-plan-apply", "sheet.apply", work);
   expect(await f.journal.wait("refused-plan-apply")).toMatchObject({ state: "failed", refusal: { code: "ducts.plan-refused" } });
   expect(f.dispatched.filter((row) => row.key === "ducts.apply")).toEqual([]);
-  expect((await f.saved.view(f.key, "ducts"))?.revision).toBe(work.revision);
+  expect((await f.saved.view(work.key, "fans"))?.revision).toBe(work.revision);
 });
 
 test("a stale Fans revision refuses sealed apply before native dispatch", async () => {
@@ -230,7 +231,7 @@ test("a stale Fans revision refuses sealed apply before native dispatch", async 
   expect(receipt).toMatchObject({ state: "failed", notDispatched: true, refusal: { kind: "stale_revision" } ,
   });
   expect(f.dispatched.filter((row) => row.key === "ducts.apply")).toEqual([]);
-  await command(f, "changed-fans", "sheet.apply", work);
+  await command(f, "changed-fans", "sheet.apply", { key: fansKey, revision: changed.ok ? changed.revision : -1 });
   const changedSeal = await f.journal.wait("changed-fans");
   expect(changedSeal).toMatchObject({ state: "failed", notDispatched: true,
     refusal: { kind: "domain", code: "preview.stale" } ,
@@ -239,7 +240,7 @@ test("a stale Fans revision refuses sealed apply before native dispatch", async 
 });
 
 test("H1: a canonical Fans handle beside an Address key carrying case and Save As from is the same document", async () => {
-  const f = await nativeFixture("test", undefined, address("C:/model.rvt"));
+  const f = await nativeFixture("test", scenario, address("C:/model.rvt"));
   closes.push(() => f.close());
   const work = await stage(f);
   expect(work.key).toMatchObject({ binding: "address", from: expect.anything() });

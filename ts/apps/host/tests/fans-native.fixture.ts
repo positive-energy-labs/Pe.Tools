@@ -43,11 +43,12 @@ import { SdkSession, SdkDriver } from "../src/sdk-session.ts";
 
 
 import { fixtureNative } from "./fixture-native.ts";
+import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import { captureStore } from "./effect-test.ts";
 /** Recorded bridge data only; Work, admission, seals and the run registry run in the host. */
 export async function nativeFixture(
   clockMode: "real" | "test" = "real",
-  _recordings?: undefined,
+  scenario?: (key: string, input: unknown) => unknown,
   address: Address | null = null,
 ) {
   const scope = Scope.makeUnsafe();
@@ -60,6 +61,17 @@ export async function nativeFixture(
   bindControl({ runs });
   const transport = await fixtureNative(join(dir, "native"), "driver-ducts.snapshot.walk", "driver-ducts.snapshot.roster",
     "driver-ducts.tables", "driver-revit.catalog.field-options", "fans-accessory-initial", "sdk-ducts.apply", "driver-op.cancel");
+  // Current synthetic topology can exercise the write mint without presenting old captures as complete.
+  const installScenario = () => {
+    const reply = transport.transport.reply;
+    transport.transport.reply = (action, key, input) => {
+      const value = scenario?.(key, input);
+      if (value === undefined) return reply(action, key, input);
+      transport.transport.admit(action, key, input);
+      return nativeResponseSchema(key as import("@pe/host-contracts/operation-types").HostOperationKey).parse(value);
+    };
+  };
+  installScenario();
   const bridge = transport.bridge, journal = transport.journal;
   const captures = captureStore(join(dir, "captures"));
   const connection = await transport.connect();
@@ -143,7 +155,7 @@ export async function nativeFixture(
   return {
     api, dir, target, key, saved, journal, runs, rootReads, sdkInput, readPause,
     dispatched: transport.calls, readDucts, observeHostResource, post, request,
-    select: (...names: string[]) => transport.select(...names),
+    select: (...names: string[]) => { transport.select(...names); installScenario(); },
     advance: (milliseconds: number) => settle(TestClock.adjust(milliseconds).pipe(Effect.provide(clock))),
     async close() {
       runs.closeAll();
