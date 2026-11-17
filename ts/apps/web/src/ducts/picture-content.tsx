@@ -17,7 +17,7 @@ import type { ElementIndex } from "#/element-index";
 import type { PictureLayer, PictureLine, PictureOverlayFrame } from "#/scene/picture/picture";
 import { Annotations, type Label, type Ruling } from "./annotations";
 import type { Encoding } from "./encoding";
-import type { StageIssue } from "./inbox-rows";
+import type { StageIssue } from "@pe/ducts-domain/stage-issue";
 import { equipmentPaint, equipmentPorts } from "./paint";
 import type { Scene } from "./scene";
 import { CaptionBounds } from "./subject-labels";

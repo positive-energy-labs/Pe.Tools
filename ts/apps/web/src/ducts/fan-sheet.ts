@@ -1,3 +1,6 @@
+import * as acquisition from "../../../../packages/agent-contracts/src/fans-host-reads.ts";
+import { body } from "@pe/host/read-graph";
+import { networkCalcs } from "@pe/ducts-domain/sheet/network-calcs";
 import { native } from "@pe/agent-contracts/handle";
 import {
   canonicalRouteInput,
@@ -30,7 +33,7 @@ import {
 import type { Chain, Sheet as DomainSheet, SheetPath } from "@pe/ducts-domain/sheet/types";
 import { worksheet } from "@pe/ducts-domain/sheet/worksheet";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
-import { rosterInputs } from "./pricing-value.ts";
+import { rosterInputs } from "@pe/ducts-domain/roster-inputs";
 import { z } from "zod";
 import { firmLayer, workLayer } from "@pe/host/ducts-inputs";
 import { followAcceptedJoins, mergeFar } from "@pe/ducts-domain/sheet/joins";
@@ -40,13 +43,7 @@ import { fingerprint, nativeRead, read } from "@pe/host/reads/evaluator";
 // Wire reads carry FanClaim, never the domain write capability (contract 3a).
 type Sheet = Omit<DomainSheet, "claim"> & { claim: import("@pe/agent-contracts").FanClaim };
 const snapshotSchema = nativeResponseSchema("ducts.snapshot.walk");
-export const espOptions = read("fans.esp-options", {
-  input: z.object({ target: ductsRosterRequestSchema.shape.target, units: z.array(z.string()) }),
-  output: z.object({
-    espOptions: nativeResponseSchema("revit.catalog.field-options").nullable(),
-    espOptionsError: z.string().nullable(),
-  }),
-  async run(ctx, { target, units }) {
+export const espOptions = body(acquisition.espOptions, async function(ctx, { target, units }) {
     if (!units.length)
       return { espOptions: null, espOptionsError: "No unit identities in this fan scope" };
     try {
@@ -68,7 +65,6 @@ export const espOptions = read("fans.esp-options", {
         espOptionsError: error instanceof Error ? error.message : String(error),
       };
     }
-  },
 });
 const details = ductsSheetResponseSchema.options;
 const enginePath = z.object({
@@ -503,10 +499,7 @@ export const ductSheet = read("ducts.sheet", {
     }
   },
 });
-export const fanRoster = read("fans.roster", {
-  input: ductsRosterRequestSchema,
-  output: ductsRosterResponseSchema,
-  async run(ctx, { target, mark }) {
+export const fanRoster = body(acquisition.fanRoster, async function(ctx, { target, mark }) {
     const saved = await ctx.read(designLayers, target),
       design = ductsDesign(saved.ducts, saved.fans);
     const slots = ductParameterSlots(saved.settings);
@@ -548,5 +541,6 @@ export const fanRoster = read("fans.roster", {
         };
       }).filter((row) => wanted === undefined || row.mark.trim().toLowerCase() === wanted),
     });
-  },
 });
+export const networkCalcsBody = body(acquisition.networkCalcs, (_ctx, args) =>
+  acquisition.networkCalcs.data.parse(networkCalcs(args.snapshot, toGrids(args.tables), args.catalogs, args.design, args.firm, args.revision)));

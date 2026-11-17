@@ -21,17 +21,8 @@ export const INBOX_LABELS: Record<InboxGroup, string> = {
   diagnostics: "Diagnostics",
 };
 
-export type CellSegment =
-  | "flows"
-  | "terminalDrops"
-  | "equipmentFlows"
-  | "esp"
-  | "roles"
-  | "componentDrops";
-export interface CellRef {
-  segment: CellSegment;
-  id: number;
-}
+import type { CellRef, CellSegment } from "./stage-issue.ts";
+export type { CellRef, CellSegment } from "./stage-issue.ts";
 
 export function compactStatus(status: string): string {
   const read = /^(\d+) of (\d+) (?:terminals|units) read$/.exec(status);

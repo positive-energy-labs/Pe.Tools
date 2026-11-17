@@ -25,7 +25,7 @@ import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { inkOf } from "#/scene/ink";
 import { markFrame, markLines, markVolume } from "#/scene/marks";
 import type { Layer3D } from "#/scene/types";
-import type { NoRunBranch } from "@pe/ducts-domain/no-runs";
+import type { NoRunBranch } from "@pe/ducts-domain/no-run-types";
 import { issueAt, type StageIssue } from "@pe/ducts-domain/stage-issue";
 
 /** The picture's inks: inferred red, open end orange, cap and heal amber. */

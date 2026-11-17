@@ -12,7 +12,7 @@ import { revitTarget } from "@pe/kit/lang/revit-target";
 import { token } from "@pe/kit/lib/token";
 import type { DuctFinding } from "@pe/agent-contracts";
 import { observedElements, useNativeObservation } from "#/revit/observation";
-import type { StageIssue } from "./inbox-rows";
+import type { StageIssue } from "@pe/ducts-domain/stage-issue";
 import type { Project, Size } from "#/scene/projection";
 
 import {

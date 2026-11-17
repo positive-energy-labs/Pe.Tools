@@ -10,17 +10,16 @@ import { DUCTS_SYSTEM_MAX,
   stagedDucts,
   ductParameterSlots, } from "@pe/agent-contracts";
 import { SYSTEMS_PER_READ, mergeSnapshots } from "@pe/ducts-domain/system-reads";
-import { toGrids } from "@pe/ducts-domain/loss-grid";
 import { TABLE_IDS } from "@pe/ducts-domain/table-ids";
 import { designLayers } from "./ducts-design.ts";
 import { firmLayer } from "@pe/host/ducts-inputs";
-import { resolveCriteria } from "@pe/ducts-domain/sheet/index";
+import { resolveCriteria } from "@pe/ducts-domain/sheet/inputs";
 import { pricingValue, pricingWire } from "./pricing-value.ts";
 import { catalogs } from "@pe/host/builtin-read-handles";
 import { read } from "@pe/host/read-graph";
 import { systemList } from "@pe/ducts-domain/system-list";
 import { withStoredRulings } from "@pe/ducts-domain/rulings";
-import { fanRoster, espOptions } from "./fan-sheet.ts";
+import { fanRoster, espOptions, networkCalcs } from "../../../../packages/agent-contracts/src/fans-host-reads.ts";
 
 export const ductsRoster = body(contracts.roster, async function(ctx, { target }) {
     const saved = await ctx.read(designLayers, target),
@@ -123,22 +122,22 @@ export const ductsPricing = body(contracts.pricing, async function(ctx, args) {
       target: args.target,
       units: fans.rows.flatMap((row) => (row.uniqueId ? [row.uniqueId] : [])),
     });
+    const { sourceVersion: _version, systemReads: _coverage, ...acquired } = network;
+    const calcs = await ctx.read(networkCalcs, { snapshot: acquired, tables: tables.body, catalogs: catalog.tables,
+      design: ductsDesign(layers.ducts, layers.fans), firm: firmLayer(layers.firm, layers.settings), revision: layers.revision });
     return ctx.compute(
       ductsPricingData,
-      { roster, fans, network, layers, catalog, tables },
-      ({ roster, fans, network, layers, catalog, tables }) => {
+      { roster, fans, network, layers, catalog, calcs },
+      ({ roster, fans, network, layers, catalog, calcs }) => {
         const { sourceVersion: _version, systemReads: _coverage, ...snapshot } = network;
         const design = ductsDesign(layers.ducts, layers.fans);
         const stored = withStoredRulings(design, snapshot.store, snapshot) ?? design;
         const result = pricingWire(
           pricingValue(
             snapshot,
-            toGrids(tables.body),
-            catalog.tables,
+            calcs,
             design,
             layers.settings,
-            firmLayer(layers.firm, layers.settings),
-            layers.revision,
           ),
         );
         const priced = new Map(result.analysis.systems.map((row) => [row.key, row]));

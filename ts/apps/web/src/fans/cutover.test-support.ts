@@ -1,3 +1,5 @@
+import { networkCalcs } from "@pe/ducts-domain/sheet/network-calcs";
+import { FIRM_SEED } from "@pe/ducts-domain/input-layers";
 import { fixtureTimeline } from "../shell/fixture-work-door";
 import * as ductsReads from "../ducts/contract.ts";
 import { systemList } from "@pe/ducts-domain/system-list";
@@ -141,7 +143,7 @@ export async function createWitness(
               : read === "network"
                 ? network
                 : {
-                    ...wire(pricingValue(snapshot, {}, {}, ductsDesign(ductsWork, fansWork))),
+                    ...wire(pricingValue(snapshot, networkCalcs(snapshot, {}, {}, ductsDesign(ductsWork, fansWork), FIRM_SEED, 0), ductsDesign(ductsWork, fansWork))),
                     roster,
                     network,
                     fanRows: sheet.roster.rows,

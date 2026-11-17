@@ -9,11 +9,7 @@ import type { FanPort, SheetInputs } from "./model";
 import type { SheetBlocker } from "./tiers";
 
 export type SheetCriteria = SheetInputs["criteria"];
-export interface SheetFirm {
-  version: string;
-  path: string;
-  present: boolean;
-}
+export type SheetFirm = Exclude<import("../../../../../packages/agent-contracts/src/duct-inputs.ts").DuctFirmLine, { refused: string }>;
 /** Presentation leaves receive only the data their own pane draws. */
 export interface RosterProps {
   value?: ValueHandle<unknown>;

@@ -5,22 +5,8 @@ import { terminalCfm } from "./topology.ts";
 import type { DuctSnapshot } from "./types.ts";
 import { elementLabeler } from "./element-label.ts";
 
-export interface NoRunReason {
-  kind:
-    | "open"
-    | "capped"
-    | "flowless-terminal"
-    | "foreign-terminal"
-    | "no-fan-path";
-  at: number;
-  /** The open connector (kind "open"); its text names the element, never `id:index`. */
-  connector?: number;
-  text: string;
-}
-export interface NoRunBranch {
-  elements: number[];
-  reasons: NoRunReason[];
-}
+import type { NoRunBranch } from "./no-run-types.ts";
+export type { NoRunBranch, NoRunReason } from "./no-run-types.ts";
 
 /**
  * Uses the fan calcs' actual paths, every fan's. An unpriced leg does not erase a run; a flowless

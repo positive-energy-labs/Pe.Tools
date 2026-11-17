@@ -9,66 +9,27 @@ import {
   ductParameterSlots,
   serveSetting,
   stagedValues,
-  type DuctsInputs,
   type DuctsDesign,
-  type DuctsFirm,
   type SettingTierRead,
 } from "@pe/agent-contracts";
-import type { Catalogs } from "@pe/ducts-domain/catalog";
 import { DEFAULT_DESIGN_FRICTION_RATE } from "@pe/ducts-domain/equivalent-length";
 import { healPlan } from "@pe/ducts-domain/heal";
-import type { Grids } from "@pe/ducts-domain/loss-grid";
 import { inferJoints } from "@pe/ducts-domain/proximity";
-import { suggestRoster } from "@pe/ducts-domain/roster";
 import { withStoredRulings } from "@pe/ducts-domain/rulings";
-import { buildSheet, encounterRulings, resolveInputs } from "@pe/ducts-domain/sheet/index";
 import { survey } from "@pe/ducts-domain/survey";
 import { systemList } from "@pe/ducts-domain/system-list";
 import { systemNotes } from "@pe/ducts-domain/system-list-search";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { workElementId } from "@pe/ducts-domain/work-subject";
-import { FIRM_SEED, workLayer } from "@pe/host/ducts-inputs";
 import { z } from "zod";
-
-export const rosterInputs = (inputs: DuctsInputs) => ({
-  kinds: Object.fromEntries(Object.entries(inputs.units).flatMap(([id, u]) => (u.kind.status === "valid" ? [[id, u.kind.value]] : []))),
-  roles: Object.fromEntries(Object.entries(inputs.units).flatMap(([id, u]) => (u.role.status === "valid" ? [[id, u.role.value]] : []))),
-});
 
 export function pricingValue(
   snapshot: DuctSnapshot,
-  grids: Grids,
-  catalogs: Catalogs,
+  calcs: readonly import("../../../../packages/agent-contracts/src/fan-calc.ts").Sheet[],
   design: DuctsDesign,
   settings: readonly SettingTierRead[] = [],
-  firm: DuctsFirm = FIRM_SEED,
-  revision = 0,
 ) {
   const stored = withStoredRulings(design, snapshot.store, snapshot) ?? design;
-  const work = workLayer(design);
-  const inputs = resolveInputs({
-    snapshot,
-    work,
-    versions: { Work: revision },
-    store: snapshot.store,
-    firm,
-    catalogs,
-  });
-  const suggested = suggestRoster(snapshot, [], rosterInputs(inputs));
-  const ports = [...suggested.fans, ...suggested.suggestions];
-  // One calc per roster port, each on this read's network and inputs, the way the fans read builds
-  // one. ponytail: every port is priced on every read; price only the opened systems' ports if a
-  // document-wide read measures slow.
-  const calcs = ports.map((fan) =>
-    buildSheet({
-      snapshot,
-      grids,
-      inputs,
-      roster: ports,
-      fan: { unitId: fan.unitId, portIndex: fan.portIndex },
-      encounterRulings: encounterRulings({ work }),
-    }),
-  );
   const surveyed = survey(snapshot, design);
   const heal = healPlan(snapshot, design);
   const edit = stagedValues(stored, stored);

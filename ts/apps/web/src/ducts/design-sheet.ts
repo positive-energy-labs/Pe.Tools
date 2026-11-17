@@ -11,7 +11,7 @@ import { ductsSettings, criterionDomain, criterionCellLabel as cellLabel, NO_SHA
 type Resolved = { readonly value: unknown; readonly source: string; readonly units: string | null };
 type DesignRead = {
   readonly criteria?: Readonly<Record<string, Resolved | Readonly<Record<"supply" | "return", Resolved>>>>;
-  readonly firm?: { readonly version: string; readonly path: string; readonly present: boolean } | { readonly refused: "no-shared-root" };
+  readonly firm?: import("../../../../packages/agent-contracts/src/duct-inputs.ts").DuctFirmLine;
 } | null;
 
 const SOURCES: Readonly<Record<string, CellLayer["source"]>> = { "model-store": "model-store", model: "model", project: "project", firm: "firm", default: "default" };

@@ -1,3 +1,15 @@
+export type CellSegment =
+  | "flows"
+  | "terminalDrops"
+  | "equipmentFlows"
+  | "esp"
+  | "roles"
+  | "componentDrops";
+export interface CellRef {
+  segment: CellSegment;
+  id: number;
+}
+
 export interface StageIssue {
   key: string;
   ids: readonly number[];

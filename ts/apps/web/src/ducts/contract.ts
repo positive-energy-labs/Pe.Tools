@@ -1,3 +1,4 @@
+import { fanRoster, espOptions, networkCalcs } from "../../../../packages/agent-contracts/src/fans-host-reads.ts";
 import {
   ductsNetworkArgs,
   ductsNetworkData,
@@ -32,5 +33,5 @@ export const pricing = contract("ducts.pricing", {
   input: ductsNetworkArgs,
   data: ductsPricingData,
   // The fan roster and its ESP options are host-only recipes with no contract; this names their natives.
-  uses: [network, roster, "ducts.tables", "ducts.snapshot.roster", "revit.catalog.field-options"],
+  uses: [network, roster, fanRoster, espOptions, networkCalcs, "ducts.tables"],
 });

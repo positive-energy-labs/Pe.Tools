@@ -1,6 +1,6 @@
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { elementLabeler } from "@pe/ducts-domain/element-label";
-import type { NoRunBranch } from "@pe/ducts-domain/no-runs";
+import type { NoRunBranch } from "@pe/ducts-domain/no-run-types";
 import type { SubjectPart } from "@pe/kit/lang/subject-text";
 
 /** No-run reasons already identify their subject; only compound/free explanations need parsing. */

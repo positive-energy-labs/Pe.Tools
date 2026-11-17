@@ -1,5 +1,5 @@
 /** The /ducts tree, read off the fan calcs alone (spike B, landed at the phase-3 cutover). */
-import type { FanPortRef } from "@pe/ducts-domain/sheet/types";
+import type { FanPortRef } from "../../../../../../packages/agent-contracts/src/fan-calc.ts";
 import { rowOf, type Calc as Sheet } from "@pe/ducts-domain/calc-runs";
 import { splitOf } from "../../loss-split";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";

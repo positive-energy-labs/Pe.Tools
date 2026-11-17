@@ -1,3 +1,5 @@
+import { networkCalcs } from "@pe/ducts-domain/sheet/network-calcs";
+import { FIRM_SEED } from "@pe/ducts-domain/input-layers";
 import { expect, test } from "vite-plus/test";
 import { EMPTY_CATALOGS } from "@pe/ducts-domain/catalog";
 import { systemScope, systemsOf } from "@pe/ducts-domain/system-scope";
@@ -8,7 +10,7 @@ import { pricingValue, pricingWire } from "./pricing-value";
 
 test("navigation fixture reaches production pricing with three systems, long lists and a shared finding", () => {
   const { snapshot, grids } = NAVIGATION_FIXTURE;
-  const value = pricingValue(snapshot, grids, EMPTY_CATALOGS, designOf({}));
+  const value = pricingValue(snapshot, networkCalcs(snapshot, grids, EMPTY_CATALOGS, designOf({}), FIRM_SEED, 0), designOf({}));
   const { survey: priced, analysis, calcs } = value;
   // The read's own contract decodes what the body computes: every calc, the survey and the analysis.
   expect(pricingWire(value).calcs).toHaveLength(calcs.length);
