@@ -515,7 +515,7 @@ it.skipIf(!existsSync(CHADDS))(
           status: "invalid",
           version: null,
           author: null,
-          ref: null,
+          ref: `family placeholder 1 on ${n}`,
         })),
       );
 
