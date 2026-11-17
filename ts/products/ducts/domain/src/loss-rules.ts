@@ -87,7 +87,7 @@ export interface LossRule {
   when(f: FittingFacts, flows: Flows): boolean;
   /**
    * Table inputs for a leg under `table`: the result name and the x / y (/ z) to look up. A factor
-   * scales the coefficient; as a function it reads the point the lookup used (clamps applied).
+   * scales the coefficient; as a function it reads the point the lookup used. A point outside the table's range refuses (no clamp).
    */
   input(
     f: FittingFacts,
@@ -159,8 +159,9 @@ const ratio = (v: number) => +v.toFixed(3);
  * columns run to +-2.6e5): FC-23's proposed tap at 13771256, a 20x20 collar on the 6 in duct
  * 13973156 (Ab/Ac 14.2), read Cb -262998 at the edge and, charged on the collar's 18 fpm, about
  * -5.3e7 (2026-10-29). Refused, the leg is not priced; a person types its drop or picks a table.
- * A small collar (below the axis) still reads at the edge, and ER5-1 keeps its clamp: a
- * rectangular collar on a main's long face can exceed the main's section (Chadds has 7 that do).
+ * A small collar (below the axis) is refused the same way, ER5-1 included (root 2026-11-17,
+ * FANS-P4-NEG-EVIDENCE (c)): no lookup reads at a table edge. A rectangular collar on a main's
+ * long face can exceed the main's section (Chadds has 7 that do); those legs are unpriced.
  */
 const pastCommon = (table: string, abAc: number, asAc = 1) =>
   abAc > 1 + 1e-6 || asAc > 1 + 1e-6
