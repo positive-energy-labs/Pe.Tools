@@ -36,7 +36,8 @@ export type CoverageEvidence = Pick<DuctSnapshot, "nodes" | "segments"> &
 /**
  * One fan's coverage of one snapshot. `walked` is the fan's scope: the elements its own walk took.
  * An unread peer is another fan's only when it names an element the snapshot holds and this fan did
- * not walk. A system seed (`connector` -1, DuctSnapshots.cs) names no element, so no fan can disown it.
+ * not walk. A `connector` -1 entry names no element, so no fan can disown it: a failed system seed
+ * (DuctSnapshots.cs), or a merged part that carried no evidence (`BLIND_PART`, system-reads.ts; P-047).
  */
 export function coverageOf(snapshot: CoverageEvidence, walked: ReadonlySet<number>): Coverage {
   const held = new Set([...snapshot.nodes, ...snapshot.segments].map((e) => e.id));
@@ -55,14 +56,18 @@ export function coverageOf(snapshot: CoverageEvidence, walked: ReadonlySet<numbe
     if (!Array.isArray(peers)) return [lost(name, "absent", null, `the native ${name} lists no unread peers`)];
     const entries = peers.flatMap((p) =>
       p.connector < 0
-        ? [lost(name, "seed", null, `system ${p.elementId} seed read failed`)]
+        ? [
+            p.elementId < 0
+              ? lost(name, "absent", null, "a merged read carried no walk and no reach")
+              : lost(name, "seed", null, `system ${p.elementId} seed read failed`),
+          ]
         : walked.has(p.elementId)
           ? [lost(name, "peer", p.elementId, `${p.elementId}:${p.connector}`)]
           : held.has(p.elementId)
             ? []
             : [lost(name, "unplaced", null, `${p.elementId}:${p.connector} is on no element this read holds`)],
     );
-    // A truncated walk is lost whatever it names; an incomplete reach is explained only by a peer it names.
+    // A walk is truncated unless it says `false` (P-047). A truncated walk is lost whatever it names; an incomplete reach is explained only by a peer it names.
     if (failed === "truncated" || (failed && peers.length === 0))
       entries.push(lost(name, failed, null, `the native ${name} is ${failed}`));
     return entries.length ? entries : [{ kind: "read", source: name, peers }];
@@ -71,7 +76,7 @@ export function coverageOf(snapshot: CoverageEvidence, walked: ReadonlySet<numbe
   if (walk == null && reach == null)
     return [lost("snapshot", "absent", null, "coverage unread: the snapshot carries no walk and no reach")];
   return [
-    ...(walk == null ? [] : source("walk", walk.unreadPeers, walk.truncated ? "truncated" : null)),
+    ...(walk == null ? [] : source("walk", walk.unreadPeers, walk.truncated === false ? null : "truncated")),
     ...(reach == null ? [] : source("reach", reach.unreadPeers, reach.complete ? null : "incomplete")),
   ];
 }
