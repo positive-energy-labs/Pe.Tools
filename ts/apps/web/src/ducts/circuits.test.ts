@@ -266,12 +266,12 @@ it("both authors share revision-fenced Work edits and refuses lossy scalar unit 
   expect(applyPatches(fansRouteState, env, "human", stage, 3)).toMatchObject({ ok: true });
   expect(applyPatches(fansRouteState, env, "human", stage, 2)).toMatchObject({ ok: false });
   const doc = work(evidence(s));
-  doc.esp[elementSubject(s.nodes.find(node => node.id === 100)!)] = { edit: { value: { inWg: 0.2 } } };
+  doc.esp[elementSubject(s.nodes.find(node => node.id === 100)!)] = { edit: { by: "human", value: { inWg: 0.2 } } };
   expect(() =>
     applyRequest(s, price(s, {}, doc, doc ?? neutralFansWork), "purpose-time", []),
   ).toThrow("no admitted manufacturer scalar ESP mapping");
   delete doc.esp[elementSubject(s.nodes.find(node => node.id === 100)!)];
-  doc.esp[elementSubject(s.nodes.find(node => node.id === 200)!)] = { edit: { value: { inWg: 0.2 } } };
+  doc.esp[elementSubject(s.nodes.find(node => node.id === 200)!)] = { edit: { by: "human", value: { inWg: 0.2 } } };
   expect(() =>
     applyRequest(
       s,
@@ -285,8 +285,8 @@ it("both authors share revision-fenced Work edits and refuses lossy scalar unit 
 it("writes a edit unit flow for any unit rooted in the group, not only the baseline's pick", () => {
   const s = fixture();
   const doc = work(evidence(s));
-  doc.equipmentFlows[elementSubject(s.nodes.find(node => node.id === 200)!)] = { edit: { value: 825 } };
-  doc.equipmentFlows[elementSubject(s.nodes.find(node => node.id === 100)!)] = { edit: { value: 400 } };
+  doc.equipmentFlows[elementSubject(s.nodes.find(node => node.id === 200)!)] = { edit: { by: "human", value: 825 } };
+  doc.equipmentFlows[elementSubject(s.nodes.find(node => node.id === 100)!)] = { edit: { by: "human", value: 400 } };
   const ids = applyRequest(s, price(s, {}, doc, doc ?? neutralFansWork), "purpose-time", [
     "upstream",
   ]).equipmentFlows.map((f) => f.id);
