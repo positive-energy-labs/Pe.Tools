@@ -91,7 +91,7 @@ test("a recomputing sheet does not claim that no fan is open", () => {
  * F1 (2026-11-10): the Ledger summary counts a side's known branches and names a worst only over
  * complete ones; a side with an incomplete branch never prints a total built from it.
  */
-test("the Ledger summary says N of M branches known and names only a complete branch's worst", () => {
+test.each([false, true])("the Ledger summary qualifies the worst subtotal when side complete is %s", (complete) => {
   const sheet = openSheetSchema.parse({
     overview: fixture.overview, inputs: fixture.inputs, elements: null, legs: null, worstLegs: [], calcBreakdown: null,
   });
@@ -100,6 +100,7 @@ test("the Ledger summary says N of M branches known and names only a complete br
     legIds: [legId], sectionIds: [], cfm: complete ? 200 : null, telFt: complete ? 40 : 0,
     knownInWg, complete, residualInWg: null, critical: false, maxFpm: null, overLegIds: [],
   });
+  sheet.overview.totals!.supply.worstPath = complete ? 0.05 : null;
   const leg = (id: string, flowCfm: number | null, lossInWg: number | null) => ({
     id, elementId: Number(id.slice(1)), kind: "duct", flowCfm, flowSource: null, velocityFpm: null,
     lossInWg, lossSource: { kind: "fitting" }, equivalentFt: lossInWg == null ? null : 40,
@@ -124,6 +125,8 @@ test("the Ledger summary says N of M branches known and names only a complete br
   const side = (name: string) =>
     [...view.container.querySelectorAll(`[data-sheet-esp] [data-side='${name}'] > span`)].map((c) => c.textContent);
   // side, count, worst, allowance (the resolved criterion, not a row total).
-  expect(side("supply").slice(0, 3)).toEqual(["supply", "1 of 2 branches known", "0.0500"]);
+  expect(side("supply").slice(0, 3)).toEqual(["supply", "1 of 2 branches known", complete ? "0.0500" : "0.0500 partial"]);
+  const worst = view.container.querySelector('[data-sheet-esp] [data-side="supply"] > span:nth-child(3)')!;
+  expect(worst.querySelector('[data-tone="caution"]')?.textContent ?? null).toBe(complete ? null : " partial");
   expect(side("return").slice(0, 3)).toEqual(["return", "0 of 1 branches known", "—"]);
 });
