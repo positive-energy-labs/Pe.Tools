@@ -123,7 +123,7 @@ test("fan loss preparation reads both sides and refuses a truncated walk", async
 
 // L2-3, invariant 1: the host's one write derivation. The recorded Manual D fan, replayed as the domain's mint test does.
 function manualD(accept: boolean, over: Partial<CalcSnapshot> = {}) {
-  const fixture = (name: string) => JSON.parse(readFileSync(new URL(`../../../domain/src/calc/fixtures/${name}`, import.meta.url), "utf8"));
+  const fixture = (name: string) => JSON.parse(readFileSync(new URL(import.meta.resolve(`@pe/ducts-domain/fixtures/${name}`)), "utf8"));
   const recorded: CalcSnapshot = fixture("manual-d-20261102.json");
   const base = withPeersRead(withFamilyFlipped(recorded, 14577391));
   // Fixture data, not recorded: the capture predates native ESP cohorts, so the fan's instance cohort is stated here.

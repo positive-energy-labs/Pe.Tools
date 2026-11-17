@@ -480,7 +480,7 @@ it("is pure with an explicit plan timestamp and preserves native slot none on th
 // and authored-only flows versus the old group's derived terminal flows.
 it("mints computed ESP and authored-only flows on the recorded Manual D fan", () => {
   const recorded = JSON.parse(
-    readFileSync(new URL("./fixtures/manual-d-20261102.json", import.meta.url), "utf8"),
+    readFileSync(new URL(import.meta.resolve("@pe/ducts-domain/fixtures/manual-d-20261102.json")), "utf8"),
   );
   const snapshot = withFamilyFlipped(nativeResponseSchema("ducts.snapshot.walk").parse({
     ...recorded, walk: { ...recorded.walk, unreadPeers: [] }, vocabulary: VOCABULARY,
@@ -499,7 +499,7 @@ it("mints computed ESP and authored-only flows on the recorded Manual D fan", ()
     },
   ];
   const tableData = JSON.parse(
-    readFileSync(new URL("./fixtures/manual-d-tables.json", import.meta.url), "utf8"),
+    readFileSync(new URL(import.meta.resolve("@pe/ducts-domain/fixtures/manual-d-tables.json")), "utf8"),
   );
   const fixtureGrids = toGrids({ tables: tableData });
   const r = suggestRoster(recorded);
