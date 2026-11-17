@@ -145,9 +145,16 @@ const via = z.object({ via: z.enum(["losses", "parameters"]), value: z.unknown()
 
 /** One entry per key: product composition selects the executor for the Work handle's route. */
 function dispatch(key: (typeof SHEET_COMMANDS)[keyof typeof SHEET_COMMANDS], deps: FamilyActionDependencies, byVia: Record<string, CommandExecutor>, routes: Readonly<Record<string, string>>): CommandExecutor {
+  const executorFor = (name: string) => {
+    const executor = Object.hasOwn(byVia, name) ? byVia[name] : undefined;
+    if (!via.shape.via.safeParse(name).success || !executor)
+      throw refused(`Unknown sheet executor via: ${name}`, "sheet.executor-unknown");
+    return executor;
+  };
   const inner = (value: unknown) => {
     const p = via.parse(value);
-    return { executor: byVia[p.via]!, value: byVia[p.via]!.prepared.parse(p.value) };
+    const executor = executorFor(p.via);
+    return { executor, value: executor.prepared.parse(p.value) };
   };
   return {
     definition: commands[key],
@@ -163,7 +170,7 @@ function dispatch(key: (typeof SHEET_COMMANDS)[keyof typeof SHEET_COMMANDS], dep
       if (!sheet) throw refused(`Route ${work.key.route} declares no sheet slot`, "sheet.undeclared");
       validateSheetValues(sheet, doc);
       const name = Object.hasOwn(routes, work.key.route) ? routes[work.key.route]! : "parameters";
-      const bound = await byVia[name]!.bind(ctx);
+      const bound = await executorFor(name).bind(ctx);
       return { ...bound, prepare: async () => ({ via: name, value: await bound.prepare?.() }) };
     },
     run: (ctx, execution) => {

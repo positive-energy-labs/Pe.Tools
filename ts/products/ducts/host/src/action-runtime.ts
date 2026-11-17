@@ -69,6 +69,7 @@ const targetOf = (ctx: CommandContext) => {
 type Kind = "losses" | "heal" | "assign-fan";
 /** plan seals (Read), rehearse rolls back (TransactRead, never seal authority), apply commits. */
 type Phase = "plan" | "rehearse" | "apply";
+const ductsRoute = tools.ducts.work.route, fansRoute = tools.fans.work.route;
 
 /** Each kind's sealed plan entry: the losses plan is the sheet pair's (slice 7). */
 const PLAN_OF = { losses: "sheet.plan", heal: "ducts.plan-heal", "assign-fan": "ducts.plan-assign-fan" } as const;
@@ -83,9 +84,9 @@ export function ductActionExecutors(
     const target = targetOf(ctx);
     // The sheet pair takes the asking route's own handle (/ducts or /fans); the sibling comes from readWorks or the same document.
     const primary = ctx.admission.input.work as import("@pe/agent-contracts").WorkHandle;
-    const siblings = z.record(z.string(), workHandleSchema).optional().parse(ctx.admission.input.readWorks);
-    const ductsView = primary.key.route === "duct-systems" || siblings?.ducts ? null : await ctx.work.view({ ...primary.key, route: "duct-systems" }, "duct-systems");
-    const raw = primary.key.route === "duct-systems" ? primary : siblings?.ducts ?? ductsView?.handle;
+    const siblings = z.strictObject({ [ductsRoute]: workHandleSchema.optional(), [fansRoute]: workHandleSchema.optional() }).optional().parse(ctx.admission.input.readWorks);
+    const ductsView = primary.key.route === ductsRoute || siblings?.[ductsRoute] ? null : await ctx.work.view({ ...primary.key, route: ductsRoute }, ductsRoute);
+    const raw = primary.key.route === ductsRoute ? primary : siblings?.[ductsRoute] ?? ductsView?.handle;
     if (!raw) throw refused("Ducts Work is unavailable", "work.unavailable");
     const { process } = await lifetime(bridge, target, "project", deps);
     const doc = await ctx.selectWork(tools.ducts.work, raw, (_doc, cells) => ({
@@ -96,10 +97,9 @@ export function ductActionExecutors(
     // The persisted identity (workKey) decides "another document"; address case and Save As `from` are transport.
     const fanView = await ctx.work.view({ ...raw.key, route: "fans" }, "fans");
     if (!fanView) throw refused("Fans Work is unavailable", "work.unavailable");
-    const readWorks = z.record(z.string(), workHandleSchema).optional().parse(ctx.admission.input.readWorks);
-    if (readWorks?.fans && workKey(readWorks.fans.key) !== workKey(fanView.handle.key))
+    if (siblings?.[fansRoute] && workKey(siblings[fansRoute].key) !== workKey(fanView.handle.key))
       throw refused("Fans Work belongs to another document", "work.target");
-    const fans = await ctx.selectWork(tools.fans.work, readWorks?.fans ?? (primary.key.route === "fans" ? primary : fanView.handle), (_doc, cells) => ({
+    const fans = await ctx.selectWork(tools.fans.work, siblings?.[fansRoute] ?? (primary.key.route === fansRoute ? primary : fanView.handle), (_doc, cells) => ({
       edits: tools.fans.work.editable,
       cells: cells.filter(({ cell }) => cell.edit).map(({ path }) => path),
     }),
