@@ -6,11 +6,11 @@ import type { TypedRoute } from "../route/typed-route";
 export type DockSurfaceProps = { target?: string; docked?: boolean };
 export const DockSurface = createContext<DockSurfaceProps>({});
 export function dockChatAddress(address: AdmittedAddressPort): AdmittedAddressPort {
-  // A tool's fixture owns its model reads; docked Pea still reads the host's conversation context.
+  // Fixture pages prohibit host transport; Pea uses the same attach seed as its workbench provider.
   return {
     read() {
       const search = new URLSearchParams(address.read());
-      search.delete("fixture");
+      if (search.has("fixture")) search.set("fixture", "attach");
       return search;
     },
     write(next, history) {
