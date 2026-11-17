@@ -83,3 +83,9 @@ test("registered sheet routes select their product executor; unregistered routes
   }
   expect(bind).toHaveBeenCalledTimes(1);
 });
+
+test.each(["unknown", "toString"])("P-097: unknown sheet executor via %s refuses by name", async name => {
+  const executors = sheetExecutors({} as never, { workspace: { sheet: () => ({ bindings: {} }) } } as never, {}, { custom: name });
+  await expect(executors["sheet.plan"]!.bind({ admission: { input: { work: { key: { route: "custom" } }, doc: {} } } } as never))
+    .rejects.toMatchObject({ refusal: { code: "sheet.executor-unknown", message: `Unknown sheet executor via: ${name}` } });
+});

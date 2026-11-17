@@ -9,6 +9,8 @@ export function renderProductExecutors(checkout: string): string {
     const pkg = JSON.parse(readFileSync(file, "utf8"));
     const declaration = pkg.pe?.executors;
     if (!declaration) return [];
+    if (declaration.sheet && !["losses", "parameters"].includes(declaration.sheet.via))
+      throw Error(`Invalid sheet executor via in ${file}: ${declaration.sheet.via}`);
     if (!pkg.exports[declaration.module] || !declaration.arguments.every((a: string) => a === "bridge" || a === "deps"))
       throw Error(`Invalid executor export in ${file}`);
     return [{ name: pkg.name, ...declaration }];
