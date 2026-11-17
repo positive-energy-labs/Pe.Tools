@@ -49,6 +49,7 @@ const COMPACT: Record<string, string> = {
 };
 
 export type RowVerb =
+  | { kind: "encounter"; issue: import("@pe/fans-contract/fans-inputs").FanIssue; choice: "connect" | "ignore"; label: string }
   | { kind: "price-as"; family: string }
   | {
       kind: "verdict";

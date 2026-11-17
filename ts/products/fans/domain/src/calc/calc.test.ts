@@ -1658,6 +1658,11 @@ it("H5 through two real calcs: a guest discharging into a host's supply trunk is
   expect(deadhead.issues.find((i) => i.kind === "backflow")).toMatchObject({ severity: "blocking" });
   expect(deadhead.blockers.find((b) => b.kind === "backflow")!.detail).toContain("backflow/deadhead");
   expect(deadhead.totals.requiredEspInWg).toBeNull();
+  expect(deadhead.issues.find(i => i.kind === "backflow")!.closer.kind).toBe("none");
+  const unruledDeadhead = buildCalc({ snapshot: snap, fan: { unitId: 300, portIndex: 0 }, roster, grids, inputs,
+    hosts: new Map([["200:0", { ...host, claim: complete, esp: { rated: resolveValue({ model: { value: 0.8, author: null, ref: "rated" } }) } }]]) });
+  expect(unruledDeadhead.claim.kind).toBe("incomplete");
+  expect(unruledDeadhead.issues.find(i => i.kind === "backflow")!.closer.kind).toBe("none");
   // The capability check runs before the input/context; no mint can reach native preview.
   expect(() => mintWriteRequest(deadhead.claim as never, deadhead, {} as never, {} as never)).toThrow("complete claim");
   expect(withHost("stale").claim).toMatchObject({

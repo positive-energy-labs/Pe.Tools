@@ -19,6 +19,8 @@
  */
 import { decode, subjectOf, subjectRefCodeSchema } from "@pe/agent-contracts/subject-ref";
 import { z } from "zod";
+import { cellPatches } from "@pe/agent-contracts/draft";
+import type { FanIssue } from "@pe/fans-contract/fans-inputs";
 import { serveSetting, type SettingTierRead } from "@pe/agent-contracts/tiered-setting";
 import { DUCT_PARAMETER_KEYS, DUCT_UNIT_KINDS, DUCTS_CRITERIA_CELLS, criteriaLayer, criteriaMeta } from "@pe/ducts-contract/duct-inputs";
 
@@ -38,6 +40,14 @@ export const ductAssumptionSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("component-drop"), inWg: z.number().nonnegative() }),
 ]);
 export type DuctAssumption = z.infer<typeof ductAssumptionSchema>;
+
+/** A deadhead has no encounter closer, so neither button nor staging can accept it. */
+export function encounterPatches(issue: FanIssue, choice: "connect" | "ignore", doc: DuctsRouteDocument | null) {
+  if (issue.closer.kind !== "encounter") throw Error("This encounter cannot be ruled");
+  const e = issue.closer.encounter, key = `encounter:${e.elementId}:${e.connector}`;
+  return cellPatches(["assumptions"], key, doc?.assumptions[key] ?? {},
+    { kind: "set", rung: { value: { kind: "verdict", verdict: choice } } });
+}
 
 const OVERRIDES = ["flex-roughness", "fan-static", "component-drop"] as const;
 export type DuctOverrideKind = (typeof OVERRIDES)[number];

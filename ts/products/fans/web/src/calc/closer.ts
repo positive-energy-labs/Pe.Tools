@@ -22,6 +22,7 @@ import type { CalcBlocker } from "./tiers.ts";
 import { closerKind, healPair } from "./tiers.ts";
 
 export type CloserAction =
+  | { kind: "encounter"; key: string }
   | { kind: "rule"; pair: readonly [string, string] }
   | { kind: "cap"; end: { elementId: number; connector: number } }
   /** `ref` is the evidence an offered default cites (its tier and ref), for the cell's own `ref`; a typed number cites none. */
@@ -36,7 +37,7 @@ export type CloserAction =
   | { kind: "pathDrop"; key: string; value: number };
 
 /** The fixes whose Work is /duct-systems' (joins, ends, assignments, tables, proposed-path drops): /fans links to them. */
-export const DUCTS_FIXES: ReadonlySet<CloserAction["kind"]> = new Set(["rule", "cap", "price", "table", "pathDrop"]);
+export const DUCTS_FIXES: ReadonlySet<CloserAction["kind"]> = new Set(["encounter", "rule", "cap", "price", "table", "pathDrop"]);
 
 /** One table a fitting may be priced with: the verb names the table, `detail` the rule it reads under. */
 export type PriceChoice = { verb: string; detail: string; action: CloserAction };
@@ -179,6 +180,9 @@ function describeBase(blocker: CalcBlocker, typed: number | null, context: Close
     action,
   });
   const fix = context.fix?.(blocker) ?? null;
+  if (fix?.kind === "encounter") return live("rule encounter", {
+    kind: "encounter", key: `encounter:${fix.encounter.elementId}:${fix.encounter.connector}`,
+  });
   const cell = fix?.kind === "cell" ? fix : null;
   const terminal = cell ? cell.target.segment === "terminalDrops" || cell.target.segment === "flows" : (context.terminal?.(blocker.elementId) ?? false);
   const pair = healPair(blocker);

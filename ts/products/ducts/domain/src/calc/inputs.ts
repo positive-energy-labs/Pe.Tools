@@ -516,11 +516,11 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
 export const sourced = (r: Resolved<number> | undefined): SourcedValue<number> =>
   r ?? { status: "missing", value: null, source: "none", author: null, ref: null, version: null, units: null };
 
-/** A person's encounter verdicts: `encounter:<element>:<connector>` assumption cells, `accept` or `refuse`. */
+/** Encounter rulings use Work's network verdicts: connect accepts, ignore refuses. */
 export function encounterRulings(layers: Pick<InputLayers, "run" | "work">): EncounterRuling[] {
   const [run, work] = [layers.run?.assumptions, layers.work?.assumptions];
   const verdict = (v: { verdict?: string }): EncounterRuling["verdict"] | null =>
-    v.verdict === "accept" ? "accepted" : v.verdict === "refuse" ? "refused" : null;
+    v.verdict === "connect" ? "accepted" : v.verdict === "ignore" ? "refused" : null;
   return Object.keys({ ...work, ...run }).flatMap((key): EncounterRuling[] => {
     const [elementId, connector] = key.startsWith("encounter:") ? key.slice(10).split(":").map(Number) : [];
     if (elementId == null || connector == null) return [];

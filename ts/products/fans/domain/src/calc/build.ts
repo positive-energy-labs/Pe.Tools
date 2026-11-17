@@ -1924,12 +1924,15 @@ function buildCalcPass(input: BuildCalcInput, assumeHeals: boolean): Calc {
   const gaps: CoverageGap[] = [];
   const deadheads = new Map<string, string>();
   for (const m of met) {
-    if (m.policy.static !== "host-calc" || m.encounter.verdict !== "accepted") continue;
+    if (m.policy.static !== "host-calc") continue;
     const read = hostStatic(hostOf(m.encounter.host), m.encounter, network);
     if ("kind" in read) {
-      if (read.kind === "backflow") deadheads.set(backflowId(m.encounter), read.detail);
-      else gaps.push(read);
-    } else
+      if (read.kind === "backflow") {
+        deadheads.set(backflowId(m.encounter), read.detail);
+        gaps.push({ kind: "host-calc", elementId: m.encounter.elementId, ref: read.detail });
+      }
+      else if (m.encounter.verdict === "accepted") gaps.push(read);
+    } else if (m.encounter.verdict === "accepted")
       m.encounter.static = {
         kind: "host-calc",
         basis: read.basis,
@@ -2004,6 +2007,7 @@ function buildCalcPass(input: BuildCalcInput, assumeHeals: boolean): Calc {
         g,
         met.map((m) => m.encounter),
         blocking,
+        deadheads,
       ),
     ),
     fan: {
@@ -2033,6 +2037,7 @@ function issueOf(
   g: Graph,
   encounters: readonly Encounter[],
   blocking: ReadonlySet<string>,
+  deadheads: ReadonlyMap<string, string>,
 ): FanIssue {
   const el = g.byId.get(b.elementId);
   const kind = el && !isSegment(el) ? el.kind : "duct";
@@ -2047,7 +2052,9 @@ function issueOf(
       : { kind: "none", reason: b.closer.note };
   };
   const encounter = encounters.find((e) => backflowId(e) === b.id);
-  const closer: FanIssue["closer"] = encounter
+  const closer: FanIssue["closer"] = deadheads.has(b.id)
+    ? { kind: "none", reason: deadheads.get(b.id)! }
+    : encounter
     ? { kind: "encounter", encounter }
     : b.closer.candidate
       ? { kind: "heal", pair: b.closer.candidate.pair }
