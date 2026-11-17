@@ -14,7 +14,7 @@ export type PicturePage<_L extends string = string, _F extends string = string> 
   issue: string;
 };
 
-/** The /ducts picture's layer names (the fan sheet draws the same network). Context is the pose's `context`, never a layer. */
+/** Network picture layer names. Context is the pose's `context`, never a layer. */
 export const DUCTS_LAYERS = [
   "meshes",
   "system-colours",

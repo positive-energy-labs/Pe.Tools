@@ -3,7 +3,7 @@ import type { Closer, Goal } from "@pe/agent-contracts/slots";
 /*
  * The kernel seam for the goal slot (ADR 0030 rule 3; ADR 0035 rule 8). Every route draws the
  * unresolved list the same way, first, and the answer stays greyed until that list is empty.
- * Owner: slice 7, which replaces the throw and makes the ducts inbox this list.
+ * Owner: slice 7, which replaces the throw and makes a route's inbox this list.
  */
 
 export interface GoalView<R = unknown> {
