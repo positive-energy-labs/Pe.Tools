@@ -4,7 +4,7 @@ import { neutralFansWork } from "@pe/agent-contracts";
  * What the route runs before any tree or loss (pressure-drop ledger, 2026-10-16): the snapshot
  * read in Work's working phase (`phases.ts`) and tolerated (`proximity.ts`), every terminal's design flow resolved (`terminal-flows.ts`), and
  * the findings of both beside the snapshot's own issues, each naming who clears it. Cached per
- * snapshot for the last Work, so `price` and `assessDucts` share one survey; the tolerated
+ * snapshot for the last Work, so pricing readers share one survey; the tolerated
  * snapshot is cached per proximity verdict set, so a edit number re-solves only `next`.
  */
 import {

@@ -5,7 +5,7 @@ import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import { documentRefSchema } from "./target.ts";
 import { ductsDocumentSchema } from "./ducts.ts";
 import { fansDocumentSchema } from "./fans.ts";
-import { ductFindingSchema, DUCT_INFERENCE_GRADES } from "./ducts-analysis.ts";
+import { ductFindingSchema, DUCT_INFERENCE_GRADES } from "./ducts-pricing-read.ts";
 import { catalogTableSchema } from "./duct-catalog.ts";
 import { ductsInputsSchema } from "./ducts-sheet.ts";
 import { fansReadRequest, fansReadResponse, fansSheetData } from "./fans-read.ts";

@@ -28,7 +28,7 @@ describe("catalog dependency graph", () => {
         expect(route.touches).toEqual(expect.arrayContaining([...child.touches]));
       }
     }
-    for (const id of ["thread.export", "turn.element-names", "ducts.analysis"] as const)
+    for (const id of ["thread.export", "turn.element-names"] as const)
       expect(peRoutes[id].catalog.effect).toBe("SessionWrite");
   });
   test("refuses uncapped geometry cardinality", () => {

@@ -47,21 +47,11 @@
   ],
   "sites": {
     "routeNames": [
-      "ts/apps/host/src/pe-routes.ts#:Identifier:Identifier:DuctsAnalysisSources",
-      "ts/apps/host/src/pe-routes.ts#:Identifier:Identifier:DuctsAnalysisSources",
-      "ts/apps/host/src/pe-routes.ts#:StringLiteral:StringLiteral:\"./ducts-analysis.ts\"",
-      "ts/apps/host/src/pe-routes.ts#:StringLiteral:StringLiteral:\"./ducts-files.ts\"",
       "ts/apps/host/src/pe-routes.ts#:StringLiteral:StringLiteral:\"./family-actions.ts\"",
       "ts/apps/host/src/pe-routes.ts#:StringLiteral:StringLiteral:\"./family-spec.ts\"",
       "ts/apps/host/src/pe-routes.ts#createContributionContent:FirstStatement:Comment:// after import and invalidate the catalog so Home discovers them without restarting.",
-      "ts/apps/host/src/pe-routes.ts#createPeRoutes/handle/error:StringLiteral:StringLiteral:\"Ducts analysis is unavailable\"",
-      "ts/apps/host/src/pe-routes.ts#createPeRoutes/handle:StringLiteral:StringLiteral:\"ducts.analysis\"",
-      "ts/apps/host/src/pe-routes.ts#createPeRoutes/handle:StringLiteral:StringLiteral:\"ducts.analysis\"",
-      "ts/apps/host/src/pe-routes.ts#createPeRoutes/handle:StringLiteral:StringLiteral:\"ducts.analysis\"",
-      "ts/apps/host/src/pe-routes.ts#createPeRoutes/handle:StringLiteral:StringLiteral:\"ducts.analysis-artifact\"",
       "ts/apps/host/src/pe-routes.ts#createPeRoutes/handle:StringLiteral:StringLiteral:\"family.spec\"",
-      "ts/apps/host/src/pe-routes.ts#createPeRoutes:FunctionDeclaration:Comment:/** The route-document, Reading, capability and Families-view surface, host-owned. */",
-      "ts/apps/host/src/pe-routes.ts#hostPeRoutes/routes/ductsAnalysis/resolve:StringLiteral:StringLiteral:\"Ducts analysis requires the exact open project document\""
+      "ts/apps/host/src/pe-routes.ts#createPeRoutes:FunctionDeclaration:Comment:/** The route-document, Reading, capability and Families-view surface, host-owned. */"
     ]
   }
 }
