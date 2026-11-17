@@ -153,10 +153,10 @@ it("P-030: rated ESP is stated or read from its own named slot, never the parame
   // P-029: a ruling no known caller stamped is invalid and rules nothing.
   expect(
     encounterRulings({
-      work: { assumptions: { "encounter:20:2": { value: { kind: "verdict", verdict: "accept" }, ref: "work:test" } as never } },
+      work: { assumptions: { "encounter:20:2": { value: { kind: "verdict", verdict: "connect" }, ref: "work:test" } as never } },
     }),
   ).toEqual([]);
   expect(
-    encounterRulings({ work: { assumptions: { "encounter:20:2": cell({ kind: "verdict", verdict: "accept" }) } } }),
+    encounterRulings({ work: { assumptions: { "encounter:20:2": cell({ kind: "verdict", verdict: "connect" }) } } }),
   ).toEqual([{ at: { elementId: 20, connector: 2 }, verdict: "accepted", by: "human", ref: "work:test" }]);
 });
