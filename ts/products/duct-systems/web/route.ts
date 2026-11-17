@@ -30,7 +30,8 @@ import { describeInputHistory, editMetaSchema } from "@pe/ducts-web/calc/input-h
 import * as reads from "@pe/duct-systems-contract/contract";
 import { presentLosses, presentHeal, presentFan } from "@pe/ducts-web/reviews";
 import { designCalc } from "./src/design-calc.ts";
-import { rosterFixtures, networkValueFixtures, pricingFixtures } from "./src/value-fixtures.ts";
+import { lazyFixtures } from "@pe/ducts-web/registry";
+const fixtures = lazyFixtures(() => import("./src/value-fixtures.ts"));
 
 const system = subjectSchema(DUCTS_SYSTEM_MAX);
 export const fields = {
@@ -51,9 +52,9 @@ const args = (page: {
     | z.output<typeof system>
     | import("@pe/agent-contracts").Immutable<z.output<typeof system>>;
 }) => ({ system: namesOf(page.system), fan: page.fan });
-export const roster = read(hostRead(reads.roster, rosterFixtures));
-export const network = read(hostRead(reads.network, networkValueFixtures), args);
-export const pricing = read(hostRead(reads.pricing, pricingFixtures), args);
+export const roster = read(hostRead(reads.roster, () => fixtures().then(m => m.rosterFixtures)));
+export const network = read(hostRead(reads.network, () => fixtures().then(m => m.networkValueFixtures)), args);
+export const pricing = read(hostRead(reads.pricing, () => fixtures().then(m => m.pricingFixtures)), args);
 export type DuctsDrawContext = ContextOf<typeof fields, typeof pricing, typeof import("@pe/duct-systems-contract/ducts").ductsRouteState, typeof import("@pe/agent-contracts").ductsCalcEditsSchema>;
 /** What every ducts pane shares, whichever read it names: the pane's own `value` is not part of it. */
 export type DuctsReads = Omit<DuctsDrawContext, "value">;

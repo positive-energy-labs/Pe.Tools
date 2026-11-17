@@ -1,4 +1,4 @@
-import { networkFixtures } from "@pe/ducts-web/fixture-registry";
+import { networkFixtures } from "@pe/ducts-web/network-fixtures";
 import { ductsDesign, ductsDocumentSchema, fansDocumentSchema, ductsRosterData, ductsNetworkData, ductsPricingData } from "@pe/agent-contracts";
 import { pricingValue, pricingWire } from "@pe/duct-systems-domain/pricing-value";
 import { systemList } from "@pe/duct-systems-domain/system-list";
