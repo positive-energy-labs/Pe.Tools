@@ -312,11 +312,11 @@ test("physical circuits and path pages retain staged evidence and never acquire 
   const doc = fansDocumentSchema.parse({
     calculation: {
       scenario: {
-        edit: { value: { kind: "balanced-design", source: "Purpose balanced design" } },
+        edit: { by: "human", value: { kind: "balanced-design", source: "Purpose balanced design" } },
       },
       fan: {
         edit: {
-          value: {
+          by: "human", value: {
             kind: "fan",
             element: { id: 1, uniqueId: "purpose-1" },
             inlet: null,
@@ -329,7 +329,7 @@ test("physical circuits and path pages retain staged evidence and never acquire 
       },
       terminal: {
         edit: {
-          value: {
+          by: "human", value: {
             kind: "terminal",
             element: { id: 2, uniqueId: "purpose-2" },
             port: pin(2),
@@ -472,10 +472,10 @@ test("canonical staged component constraints drive shared analysis without claim
   };
   const doc = fansDocumentSchema.parse({
     calculation: {
-      scenario: { edit: { value: { kind: "balanced-design", source: "Synthetic design" } } },
+      scenario: { edit: { by: "human", value: { kind: "balanced-design", source: "Synthetic design" } } },
       a: {
         edit: {
-          value: {
+          by: "human", value: {
             kind: "fan",
             element: { id: 1, uniqueId: "flow-1" },
             inlet: null,
@@ -488,7 +488,7 @@ test("canonical staged component constraints drive shared analysis without claim
       },
       b: {
         edit: {
-          value: {
+          by: "human", value: {
             kind: "fan",
             element: { id: 3, uniqueId: "flow-3" },
             inlet: null,
@@ -501,7 +501,7 @@ test("canonical staged component constraints drive shared analysis without claim
       },
       t: {
         edit: {
-          value: {
+          by: "human", value: {
             kind: "terminal",
             element: { id: 2, uniqueId: "flow-2" },
             port: pin(2, 0),
@@ -539,7 +539,7 @@ test("canonical staged component constraints drive shared analysis without claim
   };
   const staged = fansDocumentSchema.parse({
     ...doc,
-    calculation: { ...doc.calculation, flow: { edit: { value: design } } },
+    calculation: { ...doc.calculation, flow: { edit: { by: "human", value: design } } },
   });
   f.sources.readWork = works(() => staged, 2);
   const fresh = ductsAnalysisResponseSchema.parse(
@@ -694,10 +694,10 @@ test("actual analysis handler shares bounded prescribed hydraulic closure and ex
   };
   let doc = fansDocumentSchema.parse({
     calculation: {
-      scenario: { edit: { value: { kind: "balanced-design", source: "Purpose design" } } },
+      scenario: { edit: { by: "human", value: { kind: "balanced-design", source: "Purpose design" } } },
       fan: {
         edit: {
-          value: {
+          by: "human", value: {
             kind: "fan",
             element: { id: 1, uniqueId: "purpose-1" },
             inlet: null,
@@ -710,7 +710,7 @@ test("actual analysis handler shares bounded prescribed hydraulic closure and ex
       },
       terminal: {
         edit: {
-          value: {
+          by: "human", value: {
             kind: "terminal",
             element: { id: 2, uniqueId: "purpose-2" },
             port: port(2),
@@ -738,7 +738,7 @@ test("actual analysis handler shares bounded prescribed hydraulic closure and ex
       ...doc.calculation,
       pressure: {
         edit: {
-          value: {
+          by: "human", value: {
             kind: "component-flow",
             componentWitness: witness,
             constraints: [],
@@ -818,10 +818,10 @@ function candidateWork() {
   return fansDocumentSchema.parse({
     terminalDrops: {
       "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000002": {
-        edit: { value: { inWg: 0.12, source: "Approved purpose point" } },
+        edit: { by: "human", value: { inWg: 0.12, source: "Approved purpose point" } },
       },
     },
-    componentDrops: { "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000003": { edit: { value: { inWg: 0.02, source: "Stated component" } } } },
+    componentDrops: { "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000003": { edit: { by: "human", value: { inWg: 0.02, source: "Stated component" } } } },
   });
 }
 const candidateRead = (id: string, selector: unknown = { kind: "document" }) =>
@@ -916,7 +916,7 @@ test("apply-request builds a canonical immutable candidate without reacquiring",
 test("a fan cell left in the ducts Work is not priced; at the fans binding it is", async () => {
   const f = fixture();
   // Analysis reads fan drops from the fans Work only.
-  const drop = { "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000002": { edit: { value: { inWg: 0.12, source: "Approved purpose point" } } } };
+  const drop = { "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000002": { edit: { by: "human", value: { inWg: 0.12, source: "Approved purpose point" } } } };
   f.sources.readWork = works(() => ({}), 1, () => ({ terminalDrops: drop }));
   await expect(f.api.read(read({ kind: "fresh", target: f.target }))).rejects.toThrow();
   f.sources.readWork = works(() => ({}));
@@ -1022,11 +1022,11 @@ test("apply-request cannot turn empty Work or physical fan required head into na
     ...candidateWork(),
     terminalDrops: { "UniqueId:purpose-2": Object.values(candidateWork().terminalDrops)[0] },
     componentDrops: { "UniqueId:purpose-3": Object.values(candidateWork().componentDrops)[0] },
-    esp: { "UniqueId:purpose-1": { edit: { value: { inWg: 0.25 } } } },
+    esp: { "UniqueId:purpose-1": { edit: { by: "human", value: { inWg: 0.25 } } } },
     calculation: {
       fan: {
         edit: {
-          value: {
+          by: "human", value: {
             kind: "fan",
             element: { id: 1, uniqueId: "purpose-1" },
             inlet: null,
