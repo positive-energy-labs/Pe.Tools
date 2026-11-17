@@ -5,24 +5,24 @@ import type { Immutable } from "./route-kernel-data.ts";
 import { ductCalculationSchema } from "./ducts.ts";
 import { draftCellSchema } from "./draft.ts";
 import type { RouteStateSpec } from "./route-state.ts";
-import { FAN_INPUTS } from "./fans-inputs.ts";
-import { schemaOf } from "./slots/sheet.ts";
+import { FAN_CELLS } from "./fans-inputs.ts";
+import { schemaOf, type Domain } from "./slots/sheet.ts";
 const elementSubjectSchema: z.ZodType<string> = subjectRefCodeSchema.refine(code => {
   const ref = decode(code); return ref.ok && ref.value.keyKind === "UniqueId";
 });
 
 const dropSchema = z.strictObject({
-  inWg: schemaOf(FAN_INPUTS[3].domain.fields.inWg),
+  inWg: schemaOf(FAN_CELLS.terminalDrops.domain.fields.inWg),
   /** Where the number came from: a catalog page, a submittal, "rule of thumb". */
   source: z.string().optional(),
 });
 export type DuctDrop = z.infer<typeof dropSchema>;
 /** The external static Pe writes to an air mover (a unit id key); staged only, never a side effect. */
-const espSchema = schemaOf(FAN_INPUTS[0].domain);
 export const DUCT_UNIT_ROLES = ["fan", "passive"] as const;
 /** Whether an air mover moves air (`fan`) or only sits in the path with a loss (`passive`). */
-const roleSchema = z.strictObject({ role: z.enum(DUCT_UNIT_ROLES) });
-export type DuctUnitRole = z.infer<typeof roleSchema>;
+export type DuctUnitRole = z.infer<ReturnType<typeof schemaOf<typeof FAN_CELLS.roles.domain>>>;
+/** One Work segment of a table row: a staged cell per element, decoded by the row's own domain. */
+const cells = <const D extends Domain>(row: { readonly domain: D }) => z.record(elementSubjectSchema, draftCellSchema(schemaOf(row.domain))).default({});
 /** Stated airflow in CFM; the cell's ref cites its evidence. */
 export type DuctFlow = number;
 
@@ -36,13 +36,15 @@ export const fansDocumentSchema = z.strictObject({
   calculation: z.record(z.string().min(1), draftCellSchema(ductCalculationSchema)).default({}),
   terminalDrops: z.record(elementSubjectSchema, draftCellSchema(dropSchema)).default({}),
   componentDrops: z.record(elementSubjectSchema, draftCellSchema(dropSchema)).default({}),
-  esp: z.record(elementSubjectSchema, draftCellSchema(espSchema)).default({}),
+  esp: cells(FAN_CELLS.esp),
+  /** The ESP a fan is rated for, stated by a person or Pea; stays in Work, never written to Revit. */
+  ratedEsp: cells(FAN_CELLS.ratedEsp),
   /** A unit's design flow (air mover id), written to the FanFlow slot; beats Revit's fanFlow fact. */
-  equipmentFlows: z.record(elementSubjectSchema, draftCellSchema(schemaOf(FAN_INPUTS[1].domain))).default({}),
+  equipmentFlows: cells(FAN_CELLS.equipmentFlows),
   /** Whether an air mover is a fan or a passive part; keyed by the unit's UniqueId SubjectRef. */
-  roles: z.record(elementSubjectSchema, draftCellSchema(roleSchema)).default({}),
-  flows: z.record(elementSubjectSchema, draftCellSchema(schemaOf(FAN_INPUTS[2].domain))).default({}),
-}).describe("/fans owns calculation, flows, terminalDrops, componentDrops, esp, equipmentFlows, roles. Parameter slot names are project and firm settings in Settings/ducts.json. /ducts owns rules, kinds, criteria, design friction and network rulings; read their cells in Values and edit through the owning /ducts Work. Fan-side Work, one shared cell per key; human and Pea edit it at an expected revision. terminalDrops and componentDrops: an UniqueId SubjectRef holds { inWg, source }. esp: an air mover's UniqueId SubjectRef holds { inWg }, the external static written to it (FanStatic slot). equipmentFlows: an air mover's UniqueId SubjectRef holds a plain CFM number, with evidence cited by the cell ref, the unit's design flow written to its FanFlow slot; it beats Revit's fanFlow fact. roles: an air mover's UniqueId SubjectRef holds { role: fan | passive }; a passive part adds a loss and moves no air, a fan is what a group needs to price. Unruled, a unit is proposed fan when it is base equipment of a Revit system its groups carry, else when it has airflow in the FanFlow slot; passive only when every duct port carries one classification and another unit moves air in its network; else fan. A unit role is a ruling the model keeps in its _PE_DuctLosses store once written: Work holds only the pending change. A fan with no stated flow reads the sum of the terminal flows it serves (derived, never written). flows: a terminal id holds a plain CFM number, with evidence cited by the cell ref, a design flow that beats every other source (precedence: edited flow, then the rooms split when the rooms route supplies one, then Revit's own flow); apply writes the resolved terminal flow to the terminal's TerminalFlow slot. Settings/ducts.json parameters: fanStatic, fanFlow, componentDrop, terminalDrop, fittingCoefficient, terminalFlow name the Revit parameter of each slot; terminalFlow and fanFlow are walk steps over ducts.snapshot airflowCandidates and fanFlowCandidates. calculation: edit-only physical port witnesses and design scenarios; evidence is calculation-only, never native apply. writeIntent holds the fan walk { unitId, portIndex } from route:reads.value (read fans.roster). Its write targets are the current staged fan cells in that walk, derived at Plan and Apply.");
+  roles: cells(FAN_CELLS.roles),
+  flows: cells(FAN_CELLS.flows),
+}).describe("/fans owns calculation, flows, terminalDrops, componentDrops, esp, ratedEsp, equipmentFlows, roles. Parameter slot names are project and firm settings in Settings/ducts.json. /ducts owns rules, kinds, criteria, design friction and network rulings; read their cells in Values and edit through the owning /ducts Work. Fan-side Work, one shared cell per key; human and Pea edit it at an expected revision. terminalDrops and componentDrops: an UniqueId SubjectRef holds { inWg, source }. esp: an air mover's UniqueId SubjectRef holds { inWg }, the external static written to it (FanStatic slot). ratedEsp: an air mover's UniqueId SubjectRef holds { inWg }, the ESP the fan is rated for as stated (cite the submittal or schedule in the cell ref); it is the only source of rated ESP, stays in Work and is never written to Revit. equipmentFlows: an air mover's UniqueId SubjectRef holds a plain CFM number, with evidence cited by the cell ref, the unit's design flow written to its FanFlow slot; it beats Revit's fanFlow fact. roles: an air mover's UniqueId SubjectRef holds { role: fan | passive }; a passive part adds a loss and moves no air, a fan is what a group needs to price. Unruled, a unit is proposed fan when it is base equipment of a Revit system its groups carry, else when it has airflow in the FanFlow slot; passive only when every duct port carries one classification and another unit moves air in its network; else fan. A unit role is a ruling the model keeps in its _PE_DuctLosses store once written: Work holds only the pending change. A fan with no stated flow reads the sum of the terminal flows it serves (derived, never written). flows: a terminal id holds a plain CFM number, with evidence cited by the cell ref, a design flow that beats every other source (precedence: edited flow, then the rooms split when the rooms route supplies one, then Revit's own flow); apply writes the resolved terminal flow to the terminal's TerminalFlow slot. Settings/ducts.json parameters: fanStatic, fanFlow, componentDrop, terminalDrop, fittingCoefficient, terminalFlow name the Revit parameter of each slot; terminalFlow and fanFlow are walk steps over ducts.snapshot airflowCandidates and fanFlowCandidates. calculation: edit-only physical port witnesses and design scenarios; evidence is calculation-only, never native apply. writeIntent holds the fan walk { unitId, portIndex } from route:reads.value (read fans.roster). Its write targets are the current staged fan cells in that walk, derived at Plan and Apply.");
 export type FansRouteDocument = z.infer<typeof fansDocumentSchema>;
 /** Fan cells read by domain pricing; each route retains its own writeIntent. */
 export type FansDocument = Immutable<Omit<FansRouteDocument, "writeIntent">>;

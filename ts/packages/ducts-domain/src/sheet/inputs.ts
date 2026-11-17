@@ -9,6 +9,7 @@ import type {
   DuctsInputs,
   SheetEdits,
   Resolved,
+  Stated,
 } from "@pe/agent-contracts";
 import type { Author } from "@pe/agent-contracts";
 import { DUCT_UNIT_KINDS } from "@pe/host-contracts/generated";
@@ -30,7 +31,9 @@ export interface WorkCell<T> {
   by: Author;
   ref: string;
 }
-type Cells<T> = Readonly<Record<string, WorkCell<T>>>;
+/** A stored cell the host could not read: no value and no caller, only why and where (P-040). */
+type InvalidCell = { invalid: string; ref: string };
+type Cells<T> = Readonly<Record<string, WorkCell<T> | InvalidCell>>;
 /** Work's staged edits, as `stagedDucts(doc)` shapes them; every segment optional so tests pass literals. */
 export interface WorkLayer {
   flows?: Cells<number>;
@@ -45,7 +48,7 @@ export interface WorkLayer {
   kinds?: Cells<DuctUnitKind>;
   criteria?: DuctsCriteriaLayer;
   /** Who staged each criterion cell and its ref (`criteriaMeta`); a criterion with none resolves invalid. */
-  criteriaMeta?: Partial<Record<DuctsCriteriaCell, Pick<WorkCell<unknown>, "by" | "ref">>>;
+  criteriaMeta?: Partial<Record<DuctsCriteriaCell, Pick<WorkCell<unknown>, "by" | "ref"> | InvalidCell>>;
   /** Loss-rule key to table (Work `rules`). */
   rules?: Cells<string>;
   /** Fitting family to the rule key it is priced as where no rule matches (Work `ruleAssignments`). */
@@ -59,9 +62,10 @@ export interface WorkLayer {
 }
 
 /** A staged cell as a value layer: its caller is the author, its ref the evidence. */
-function staged<T>(cell: WorkCell<T> | undefined): ValueCell<T>;
-function staged<T, V>(cell: WorkCell<T> | undefined, value: (v: T) => V | null | undefined): ValueCell<V>;
-function staged<T>(cell: WorkCell<T> | undefined, value: (v: T) => unknown = (v) => v): ValueCell<unknown> {
+function staged<T>(cell: WorkCell<T> | InvalidCell | undefined): ValueCell<T>;
+function staged<T, V>(cell: WorkCell<T> | InvalidCell | undefined, value: (v: T) => V | null | undefined): ValueCell<V>;
+function staged<T>(cell: WorkCell<T> | InvalidCell | undefined, value: (v: T) => unknown = (v) => v): ValueCell<unknown> {
+  if (cell && "invalid" in cell) return { value: null, invalid: cell.invalid, author: null, ref: cell.ref };
   return { value: cell ? value(cell.value) : undefined, author: cell?.by ?? null, ref: cell?.ref };
 }
 /** A Work criterion as a value layer: the author is its cell's `by`. */
@@ -69,11 +73,11 @@ const authored = <T>(
   layer: WorkLayer | null | undefined,
   cell: DuctsCriteriaCell,
   value: T | undefined,
-): ValueCell<T> => ({
-  value,
-  author: layer?.criteriaMeta?.[cell]?.by ?? null,
-  ref: layer?.criteriaMeta?.[cell]?.ref ?? `work:ducts/criteria/${cell}`,
-});
+): ValueCell<T> => {
+  const meta = layer?.criteriaMeta?.[cell];
+  return meta && "invalid" in meta ? { value: null, invalid: meta.invalid, author: null, ref: meta.ref }
+    : { value, author: meta?.by ?? null, ref: meta?.ref ?? `work:ducts/criteria/${cell}` };
+};
 /** Every model, store, project, firm and default layer cell: no author, and a ref of its tier and location. */
 export const observed = <T>(
   tier: string,
@@ -202,7 +206,7 @@ export function resolveCriteria(
     units: string | null,
     immediate: T | undefined,
     cell: DuctsCriteriaCell,
-  ): Resolved<T> => {
+  ): Stated<T> => {
     // The base is labelled by the tier that served this cell (ADR 0037 rule 8), never "firm" by default of thought.
     const tier = firm.served?.[cell] ?? "firm";
     const result = resolveValue(
@@ -215,12 +219,9 @@ export function resolveCriteria(
       units,
     );
     if (result.status !== "valid") throw new Error(`Invalid ducts criterion from ${result.source}`);
-    return {
-      ...result,
-      version: result.version ?? versions?.[result.source as ValueSource] ?? null,
-    } as Resolved<T>;
+    return { ...result, version: result.version ?? versions?.[result.source] ?? null };
   };
-  const criterion = <K extends Scalar>(key: K): Resolved<DuctsCriteriaValues[K]> =>
+  const criterion = <K extends Scalar>(key: K): Stated<DuctsCriteriaValues[K]> =>
     layered(
       work?.criteria?.[key] as DuctsCriteriaValues[K] | undefined,
       store?.criteria?.[key] as DuctsCriteriaValues[K] | undefined,
@@ -267,7 +268,7 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
     units: string | null = null,
     valid: (value: T) => boolean = (value) =>
       typeof value !== "number" || (Number.isFinite(value) && value >= 0),
-  ): Resolved<T | null> =>
+  ): Resolved<T> =>
     resolveValue(
       Object.fromEntries(
         Object.entries(values).map(([source, cell]) => [
@@ -310,7 +311,7 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
       const storedDrop = store.terminals?.[id]?.inWg;
       const dropCell = criteriaCellOf("terminalDropInWg")!;
       const tables = Object.fromEntries(
-        Object.entries(work.catalogs ?? {}).map(([k, c]) => [k, { table: c.value }]),
+        Object.entries(work.catalogs ?? {}).flatMap(([k, c]) => ("value" in c ? [[k, { table: c.value }]] : [])),
       );
       const catalog =
         catalogs && Object.keys(catalogs).length
@@ -345,17 +346,17 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
         },
         null,
         isKind,
-      ) as Resolved<DuctUnitKind>;
+      );
       const role = pick<"fan" | "passive">(
         {
           run: staged(run.roles?.[key]),
           Work: staged(work.roles?.[key]),
           "model-store": observed("model-store", `${id}/${STORE}`, store.roles?.[id]?.role as "fan" | "passive"),
-          default: observed("default", `${id}/name`, suggestRole(n, kind.value)),
+          default: observed("default", `${id}/name`, suggestRole(n, kind.value ?? suggestion.kind)),
         },
         null,
         isRole,
-      ) as Resolved<"fan" | "passive">;
+      );
       // Revit categorizes inline heaters and silencers as equipment. They need a part drop,
       if (kind.value === "other" && role.value === "passive" && n.connectors.length === 2) {
         components[id] = {
@@ -393,8 +394,10 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
         };
     } else {
       // Accessories, fittings and caps: a drop only where something states one, or where a stated
-      const typed = work.componentDrops?.[key]?.value;
-      const family = n.family ? work.assumptions?.[`component-drop:${n.family}`]?.value.inWg : undefined;
+      // The cells themselves gate the row: an unreadable one still resolves, as invalid (P-040).
+      const typed = work.componentDrops?.[key];
+      const familyCell = n.family ? work.assumptions?.[`component-drop:${n.family}`] : undefined;
+      const family = familyCell && ("invalid" in familyCell || familyCell.value.inWg != null) ? familyCell : undefined;
       const stated = n.kind === "accessory" ? positive(factOf(n, "pressureDrop")) : null;
       const placeholder = placeholderOf(placeholders, n);
       if (
@@ -412,8 +415,15 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
           },
           "in-wg",
         );
-        // A missing value has no ref; the engine reads the reason it was demoted from `placeholderNote`.
-        components[id] = { drop: resolved };
+        // The model states a value and it is refused as a family placeholder: the kernel's invalid, citing why,
+        // never a missing value with a ref (P-041).
+        components[id] = {
+          drop:
+            resolved.status === "missing" && placeholder
+              ? { status: "invalid", value: null, source: "model", author: null, version: null, units: resolved.units,
+                  ref: `family placeholder ${placeholder.inWg} on ${placeholder.count}` }
+              : resolved,
+        };
       }
     }
   }
@@ -472,7 +482,7 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
       Work: staged(work.rules?.[key]),
       "model-store": observed("model-store", `${key}/${STORE}`, store.rules?.[key]?.table),
     });
-    if (value.value != null) tables[key] = value as Resolved<string>;
+    if (value.status === "valid") tables[key] = value;
   }
   const assignments: DuctsInputs["assignments"] = {};
   for (const family of new Set([
@@ -483,7 +493,7 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
       run: staged(run.ruleAssignments?.[family]),
       Work: staged(work.ruleAssignments?.[family]),
     });
-    if (value.value != null) assignments[family] = value as Resolved<string>;
+    if (value.status === "valid") assignments[family] = value;
   }
   const fittingDrops: DuctsInputs["fittingDrops"] = {};
   for (const key of new Set([
@@ -498,8 +508,7 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
       },
       "in-wg",
     );
-    if (value.value != null)
-      fittingDrops[key.slice(COMPONENT_DROP.length)] = value as Resolved<number>;
+    if (value.status === "valid") fittingDrops[key.slice(COMPONENT_DROP.length)] = value;
   }
 
   return {
@@ -514,15 +523,9 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
   };
 }
 
-/** A resolved number as the contract's sourced value; the kernel resolution already carries author and ref. */
-export function sourced(r: Resolved<number | null> | undefined): SourcedValue<number> {
-  if (!r || r.source === "none" || r.status === "missing")
-    return { status: "missing", value: null, source: "none", author: null, ref: null, version: null, units: r?.units ?? null };
-  const rest = { source: r.source, author: r.author, ref: r.ref ?? r.source, version: r.version, units: r.units };
-  return r.status === "valid" && r.value != null
-    ? { status: "valid", value: r.value, ...rest }
-    : { status: "invalid", value: null, ...rest };
-}
+/** A resolved number as the contract's sourced value: the same kernel resolution, with an absent input read as missing. */
+export const sourced = (r: Resolved<number> | undefined): SourcedValue<number> =>
+  r ?? { status: "missing", value: null, source: "none", author: null, ref: null, version: null, units: null };
 
 /** Staged required ESP by unit element id (Q2): the run and Work layers only, with who staged it. A cell no known caller staged resolves invalid (kernel law), never a guess. */
 export function stagedEsp(

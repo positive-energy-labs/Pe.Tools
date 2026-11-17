@@ -7,7 +7,7 @@ import { module } from "./route.ts";
 const fansData = { ...module.data, work: { schema: "work" as const, route: "fans", version: 1, } };
 const schemas = { work: module.spec.edits!.work.schema };
 const unit = elementSubject({ uniqueId: "02d3886c-b439-49e2-9967-e703036c2c90-00000007" });
-const patch: WorkPatches<typeof fansData, typeof schemas> = [{ path: ["equipmentFlows", unit], value: { edit: { by: "human", value: 200 } } }];
+const patch: WorkPatches<typeof fansData, typeof schemas> = [{ path: ["equipmentFlows", unit], value: { edit: { value: 200 } } }];
 const invalid: WorkPatches<typeof fansData, typeof schemas> = [
   // @ts-expect-error Q2: fan writers cannot author ducts rules.
   { path: ["rules"], value: {} },

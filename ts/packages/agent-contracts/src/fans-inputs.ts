@@ -121,7 +121,7 @@ export const fanEspValuesSchema = z.strictObject({ rated: sourcedValueSchema(pre
 export const setAsideRowSchema = z.strictObject({ work: z.enum(["fans", "ducts"]), segment: ref, row: ref, source: z.string().nullable(), ref: ref.nullable() });
 
 const numberDomain = (unit: string) => ({ kind: "number", min: 0, unit } as const);
-const objectDomain = <const F extends string>(field: F, unit: string) => ({ kind: "object", fields: { [field]: numberDomain(unit) } as Record<F, ReturnType<typeof numberDomain>> } as const);
+const inWg = { kind: "object", fields: { inWg: numberDomain("in-wg") } } as const;
 const criterion = <const L extends readonly [keyof DuctsCriteriaLayer, ("supply" | "return")?], const D extends Domain>(layer: L, domain: D) =>
   ({ layer, domain, value: schemaOf(domain), unit: domain.kind === "number" ? domain.unit : undefined });
 const splitPolicy = z.enum(["even", "proportional"]);
@@ -142,15 +142,25 @@ const row = <const R extends Omit<FanInputRow<unknown>, "accepts" | "layers">>(d
 });
 const input = <const D extends Domain>(name: string, on: FanInputRow<unknown>["on"], segment: string, parameter: FanInputRow<unknown>["parameter"], domain: D) =>
   row({ name, role: "input", on, domain, home: "Work", owner: "fans", segment, parameter, write: "stated-only" } as const);
+/**
+ * The Fans Work cells, by segment name: the rows the Fans document schema and the Fans sheet read
+ * by name, so neither restates a domain nor counts positions in the table below.
+ */
+export const FAN_CELLS = {
+  esp: input("esp", "fan", "esp", "fanStatic", inWg),
+  /** The ESP the fan is rated for, as someone stated it. Work only: no parameter holds it, because `fanStatic` holds the required ESP Pe writes (P-030). */
+  ratedEsp: row({ name: "ratedEsp", role: "input", on: "fan", domain: inWg, home: "Work", owner: "fans", segment: "ratedEsp", parameter: null, write: "never" }),
+  equipmentFlows: input("equipmentFlows", "fan", "equipmentFlows", "fanFlow", numberDomain("cfm")),
+  flows: input("flows", "terminal", "flows", "terminalFlow", numberDomain("cfm")),
+  terminalDrops: input("terminalDrops", "terminal", "terminalDrops", "terminalDrop", inWg),
+  componentDrops: input("componentDrops", "component", "componentDrops", "componentDrop", inWg),
+  roles: row({ name: "roles", role: "input", on: "fan", domain: { kind: "object", fields: { role: { kind: "enum", shape: z.enum(["fan", "passive"]), choices: ["fan", "passive"].map(value => ({ value, label: value })) } } }, home: "Work", owner: "fans", segment: "roles", parameter: null, write: "never" }),
+};
 /** Phase 2 keeps metadata beside its existing consumer; phase 4 moves this single table to fans/contract. */
 export const FAN_INPUTS = [
-  input("esp", "fan", "esp", "fanStatic", objectDomain("inWg", "in-wg")),
-  input("equipmentFlows", "fan", "equipmentFlows", "fanFlow", numberDomain("cfm")),
-  input("flows", "terminal", "flows", "terminalFlow", numberDomain("cfm")),
-  input("terminalDrops", "terminal", "terminalDrops", "terminalDrop", objectDomain("inWg", "in-wg")),
-  input("componentDrops", "component", "componentDrops", "componentDrop", objectDomain("inWg", "in-wg")),
+  FAN_CELLS.esp, FAN_CELLS.ratedEsp, FAN_CELLS.equipmentFlows, FAN_CELLS.flows, FAN_CELLS.terminalDrops, FAN_CELLS.componentDrops,
   row({ name: "fittingCoefficient", role: "input", on: "fitting", domain: numberDomain(""), home: "model", owner: "ducts", segment: null, parameter: "fittingCoefficient", write: "never" }),
-  row({ name: "roles", role: "input", on: "fan", domain: { kind: "object", fields: { role: { kind: "enum", shape: z.enum(["fan", "passive"]), choices: ["fan", "passive"].map(value => ({ value, label: value })) } } }, home: "Work", owner: "fans", segment: "roles", parameter: null, write: "never" }),
+  FAN_CELLS.roles,
   row({ name: "kinds", role: "input", on: "fan", domain: { kind: "enum", shape: z.enum(DUCT_UNIT_KINDS), choices: DUCT_UNIT_KINDS.map(value => ({ value, label: value })) }, home: "Work", owner: "ducts", segment: "kinds", parameter: null, write: "never" }),
   row({ name: "derivedFlow", role: "result", on: "fan", domain: numberDomain("cfm"), home: "derived", owner: "fans", segment: null, parameter: null, write: "never" }),
   row({ name: "requiredEsp", role: "result", on: "fan", domain: numberDomain("in-wg"), home: "derived", owner: "fans", segment: null, parameter: null, write: "never" }),

@@ -14,6 +14,8 @@ export interface ValueCell<T> {
   version?: string | number | null;
   ref?: string;
   author: Author | null;
+  /** Why a stored cell could not be read (the host's marker). It wins its layer as invalid, so no lower layer answers for it. */
+  invalid?: string;
 }
 export type ValueLayers<T> = Partial<Record<ValueSource, ValueCell<T>>>;
 export type ValueResolution<T> =
@@ -30,8 +32,10 @@ const ref = z.string().min(1).refine(value => value.trim().length > 0, "evidence
 const version = z.union([z.string(), z.number().finite()]).nullable();
 const provenance = { source: z.enum(VALUE_SOURCES), author: authorSchema.nullable(), ref, version };
 /** Work/run valid values require a known caller; invalid winning layers never become fallback. */
+export const validValueSchema = <T extends z.ZodType>(value: T) =>
+  z.strictObject({ status: z.literal("valid"), value, ...provenance, units: z.string().nullable() });
 export const valueResolutionSchema = <T extends z.ZodType>(value: T) => z.discriminatedUnion("status", [
-  z.strictObject({ status: z.literal("valid"), value, ...provenance, units: z.string().nullable() }),
+  validValueSchema(value),
   z.strictObject({ status: z.literal("invalid"), value: z.null(), ...provenance, units: z.string().nullable() }),
   z.strictObject({ status: z.literal("missing"), value: z.null(), source: z.literal("none"), author: z.null(), ref: z.null(), version: z.null(), units: z.string().nullable() }),
 ]).refine(v => v.status !== "valid" || (v.source !== "Work" && v.source !== "run") || v.author === "human" || v.author === "pea", "valid Work/run values require a known caller");
@@ -46,6 +50,9 @@ export function resolveValue<T>(
 ): ValueResolution<T> {
   for (const source of VALUE_SOURCES) {
     const cell = layers[source];
+    // An unreadable stored cell blocks fallback: the row is invalid at its own ref, never the model or firm value beneath it.
+    if (cell?.invalid)
+      return { status: "invalid", value: null, units, source, version: cell.version ?? null, ref: cell.ref?.trim() ? cell.ref : cell.invalid, author: null };
     if (cell?.value == null) continue;
     if (!cell.ref?.trim()) throw new Error("A stated value layer must cite a nonempty evidence ref");
     const accepted = valid(cell.value) && ((source !== "Work" && source !== "run") || cell.author === "human" || cell.author === "pea");

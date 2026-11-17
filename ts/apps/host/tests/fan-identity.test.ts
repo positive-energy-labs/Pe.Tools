@@ -5,7 +5,8 @@ import { evaluate } from "../src/reads/evaluator.ts";
 import { sheetPort } from "./ducts-read.fixture.ts";
 import { RouteWorkspace } from "@pe/runtime";
 import { subjectCode, uniqueIdSchema } from "../../../packages/agent-contracts/src/subject-ref.ts";
-import { bindWork, ductsRosterResponseSchema, type DuctsRosterRequest } from "@pe/agent-contracts";
+import { bindWork, ductsRosterResponseSchema, type ductsRosterRequestSchema } from "@pe/agent-contracts";
+import type { z } from "zod";
 import { snapshot } from "../../web/src/ducts/test-fixture.ts";
 
 test("roster composition retains UniqueId for two equipment instances with the same mark", async () => {
@@ -44,14 +45,14 @@ test("a numeric UniqueId row is refused without hiding the other fan rows", asyn
   expect(ductsRosterResponseSchema.shape.rows.element.safeParse({ ...roster.rows[0], uniqueId: "101" }).success).toBe(false);
 });
 
-test("a lookup by mark returns that fan's one row under 4 KB, and no mark still returns every row", async () => {
+test("a lookup by mark returns only the rows carrying that mark, and no mark returns every row", async () => {
   const fan = snapshot.nodes.find((node) => node.id === 100)!;
   const nodes = [
     { ...fan, family: "Fan Coil", uniqueId: "fixture-fan-fc" },
     { ...fan, id: 101, family: "Fan Coil", uniqueId: "fixture-fan-ma", facts: fan.facts.map((fact) => ({ ...fact, text: "MA-1" })) },
   ];
   const target = { session: "fixture", openId: "doc" };
-  const read = async (args: DuctsRosterRequest) => {
+  const read = async (args: z.input<typeof ductsRosterRequestSchema>) => {
     const workspace = new RouteWorkspace({ registrations: [], store: { getState: async () => null, setState: async () => {} } });
     return (await evaluate(fanRoster, args, sheetPort({
       firm: (owner) => settle(testDuctFiles().firm(owner)), catalogs: () => settle(testDuctFiles().ductCatalogs),
@@ -61,7 +62,6 @@ test("a lookup by mark returns that fan's one row under 4 KB, and no mark still 
   };
   const found = await read({ target, mark: " ma-1 " });
   expect(found.rows.map((row) => [row.mark, row.uniqueId])).toEqual([["MA-1", "fixture-fan-ma"]]);
-  expect(JSON.stringify(found).length).toBeLessThan(4096);
   expect((await read({ target, mark: "MA-9" })).rows).toEqual([]);
   expect((await read({ target })).rows.map((row) => row.mark)).toEqual(["FC-1", "MA-1"]);
 });

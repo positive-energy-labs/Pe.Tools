@@ -198,7 +198,7 @@ export function findingShapes(
       shapes.outlines.push({ outline: land, ink: "inferred", finding: t.id, elementId: t.segment });
     shapes.bars.push(edgeFor(t.id, Number(t.a.split(":")[0]), [from.center, t.point]));
   }
-  // A capped end of an element a drawn finding names is drawn amber, as the illustrations do.
+  // A capped end of an element a drawn finding names is drawn amber.
   for (const cap of caps) if (named.has(cap.owner)) capOutline(cap, named.get(cap.owner)!);
 
   for (const item of repairs ?? healPlan(snapshot, work).groups.flatMap((group) => group.items)) {

@@ -30,7 +30,8 @@ export const presentCellSchema = z.strictObject({
   label: z.string(),
   before: z.string().nullable(),
   after: z.string(),
-  author: authorSchema,
+  /** Null when the row has no Work cell (a store, slot or derived row): nobody is named, and a reader says "no author". */
+  author: authorSchema.nullable(),
 });
 export type PresentCell = z.output<typeof presentCellSchema>;
 export const presentationSchema = z.union([

@@ -284,10 +284,9 @@ export function ductsExecutors(
             if (intent?.walk) {
               const inputs = resolveInputs(layers());
               const roster = suggestRoster(snapshot, [], {
-                kinds: Object.fromEntries(Object.entries(inputs.units).map(([id, u]) => [id, u.kind.value]),
-                ),
-                roles: Object.fromEntries(Object.entries(inputs.units).map(([id, u]) => [id, u.role.value]),
-                ),
+                // Ruled kinds and roles alone; a unit whose kind or role did not resolve is left for the roster to suggest.
+                kinds: Object.fromEntries(Object.entries(inputs.units).flatMap(([id, u]) => (u.kind.status === "valid" ? [[id, u.kind.value]] : []))),
+                roles: Object.fromEntries(Object.entries(inputs.units).flatMap(([id, u]) => (u.role.status === "valid" ? [[id, u.role.value]] : []))),
               });
               const sheet = buildSheet({
                 snapshot,

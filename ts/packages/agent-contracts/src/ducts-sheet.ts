@@ -1,8 +1,8 @@
 import { z } from "zod";
 import { decode, uniqueIdSchema, subjectRefCodeSchema } from "./subject-ref.ts";
 import { documentRefSchema } from "./target.ts";
-import { VALUE_SOURCES } from "./work-value.ts";
-import { authorSchema, type Author } from "./draft.ts";
+import { VALUE_SOURCES, validValueSchema, valueResolutionSchema, type ValueResolution } from "./work-value.ts";
+import type { Author } from "./draft.ts";
 import { settingWrittenSchema } from "./tiered-setting.ts";
 import { DUCT_UNIT_KINDS, FAN_BLOCKER_KINDS } from "@pe/host-contracts/generated";
 import { FAN_PARAMETER_KEYS, FAN_CRITERIA_CELLS, fanClaimSchema, fanCloserSchema, legEvidenceSchema, fanParameterCohortSchema, fanEspValuesSchema } from "./fans-inputs.ts";
@@ -27,33 +27,15 @@ const detail = z.discriminatedUnion("kind", [
 /** Resolved engine inputs expose the winning Work layer and its revision (ADR 0028). */
 export const DUCT_INPUT_SOURCES = [...VALUE_SOURCES, "none"] as const;
 export type DuctInputSource = (typeof DUCT_INPUT_SOURCES)[number];
-const resolved = <T extends z.ZodType>(value: T) =>
-  z.strictObject({
-    value,
-    source: z.enum(DUCT_INPUT_SOURCES),
-    author: authorSchema.nullable(),
-    ref: z.string().nullable(),
-    units: z.string().nullable(),
-    version: z.union([z.string(), z.number()]).nullable(),
-    status: z.enum(["valid", "missing", "invalid"]),
-  // The flat shape keeps one object type for the engine's readers; this refine holds it to the kernel
-  // union (`ValueResolution`, work-value.ts): each status admits only its own value, source, author and ref.
-  }).refine(r => {
-    const value = (r as { value?: unknown }).value;
-    return r.status === "missing"
-      // Exception to the kernel union (`missing` has `ref: null`): the engine states where it looked on a missing
-      // value ("family placeholder 1 on 2"), so a ref is admitted here until the engine stops. No source, author or version still holds.
-      ? value === null && r.source === "none" && r.author === null && r.version === null
-      : r.source !== "none" && !!r.ref?.trim() && (r.status === "invalid" ? value === null
-        : value !== null && ((r.source !== "Work" && r.source !== "run") || r.author === "human" || r.author === "pea"));
-  },
-    "a resolved value must agree with its status: missing has no source, author or ref; valid and invalid cite a ref; valid Work names its caller");
-/** Compile-time tie: every kernel resolution is a wire `resolved` value. A field the kernel adds or retypes fails here. */
-((r: import("./work-value.ts").ValueResolution<number>): z.output<ReturnType<typeof resolved<z.ZodNullable<z.ZodNumber>>>> => r) satisfies unknown;
-// TODO: docs/features/routes/LEDGER.md#s7-2f8fa50d55 G1 render authored Work values separately; badge source from this reading (Work/model/firm/default).
-export type Resolved<T> = Omit<import("./work-value.ts").ValueResolution<T>, "value"> & {
-  value: T;
-};
+/**
+ * A resolved input is the kernel resolution itself (`ValueResolution`, work-value.ts): the wire schema
+ * is the kernel's schema, so neither can admit a shape the other refuses (P-041).
+ */
+const resolved = valueResolutionSchema;
+export type Resolved<T> = ValueResolution<T>;
+/** A value some tier always states (a criterion, a typed table): only the kernel's valid member. */
+const stated = validValueSchema;
+export type Stated<T> = Extract<Resolved<T>, { status: "valid" }>;
 const num = z.number().finite();
 const nonneg = num.nonnegative();
 const sided = <T extends z.ZodType>(value: T) => z.strictObject({ supply: value, return: value });
@@ -103,6 +85,7 @@ export type DuctsCriteriaLayer = z.infer<typeof ductsCriteriaLayerSchema>;
  */
 export const DUCTS_CRITERIA_CELLS = FAN_CRITERIA_CELLS;
 export type DuctsCriteriaCell = keyof typeof DUCTS_CRITERIA_CELLS;
+const isCriteriaCell = (cell: string): cell is DuctsCriteriaCell => cell in DUCTS_CRITERIA_CELLS;
 /** The criteria layer the cells' staged values make; an unstaged cell leaves its criterion (or side) out. */
 export function criteriaLayer(cells: Readonly<Partial<Record<DuctsCriteriaCell, { readonly edit?: { readonly value?: unknown } | null }>>>): DuctsCriteriaLayer {
   const layer: Record<string, unknown> = {};
@@ -115,9 +98,13 @@ export function criteriaLayer(cells: Readonly<Partial<Record<DuctsCriteriaCell, 
   return layer as DuctsCriteriaLayer;
 }
 /** Who staged each criterion cell and its ref (contract amendment 2): the host-stamped `by`, and the cited ref or the cell's location. A cell with no `by` has no entry, so its criterion resolves invalid. */
-export function criteriaMeta(cells: Readonly<Partial<Record<DuctsCriteriaCell, { readonly edit?: { readonly by?: Author; readonly ref?: string } | null }>>>, work = "ducts") {
-  const meta: Partial<Record<DuctsCriteriaCell, { by: Author; ref: string }>> = {};
-  for (const cell of Object.keys(DUCTS_CRITERIA_CELLS) as DuctsCriteriaCell[]) {
+export function criteriaMeta(cells: Readonly<Partial<Record<DuctsCriteriaCell, { readonly invalid?: string; readonly edit?: { readonly by?: Author; readonly ref?: string } | null }>>>, work = "ducts") {
+  const meta: Partial<Record<DuctsCriteriaCell, { by: Author; ref: string } | { invalid: string; ref: string }>> = {};
+  for (const cell of Object.keys(DUCTS_CRITERIA_CELLS)) {
+    if (!isCriteriaCell(cell)) continue;
+    // An unreadable stored criterion keeps its marker, so the resolver holds it invalid instead of falling to the firm value (P-040).
+    const invalid = cells[cell]?.invalid;
+    if (invalid) { meta[cell] = { invalid, ref: `work:${work}/criteria/${cell}` }; continue; }
     const edit = cells[cell]?.edit;
     if (edit?.by) meta[cell] = { by: edit.by, ref: edit.ref ?? `work:${work}/criteria/${cell}` };
   }
@@ -148,7 +135,7 @@ export const endRulingSchema = z.strictObject({
 export const ductsInputsSchema = z.strictObject({
   terminals: z.record(
     z.string(),
-    z.strictObject({ cfm: resolved(nonneg.nullable()), drop: resolved(nonneg.nullable()) }),
+    z.strictObject({ cfm: resolved(nonneg), drop: resolved(nonneg) }),
   ),
   units: z.record(
     z.string(),
@@ -156,34 +143,34 @@ export const ductsInputsSchema = z.strictObject({
       kind: resolved(z.enum(DUCT_UNIT_KINDS)),
       role: resolved(unitRole),
       /** The unit's own design flow; null reads as the sum of the terminals it serves (never an input). */
-      cfm: resolved(nonneg.nullable()),
-      esp: resolved(nonneg.nullable()),
+      cfm: resolved(nonneg),
+      esp: resolved(nonneg),
     }),
   ),
   /** An accessory, inline equipment, or a fitting a person priced by hand; null when nothing states a drop. */
-  components: z.record(z.string(), z.strictObject({ drop: resolved(nonneg.nullable()) })),
+  components: z.record(z.string(), z.strictObject({ drop: resolved(nonneg) })),
   rulings: z.strictObject({ joins: z.array(joinRulingSchema), ends: z.array(endRulingSchema) }),
   criteria: z.strictObject({
-    velocityLimitFpm: sided(resolved(num.positive())),
-    terminalDropInWg: resolved(nonneg),
-    autoJoinGapIn: resolved(nonneg),
-    healBoxIn: resolved(nonneg),
-    splitPolicy: resolved(splitPolicy),
-    allowanceInWg: sided(resolved(nonneg)),
+    velocityLimitFpm: sided(stated(num.positive())),
+    terminalDropInWg: stated(nonneg),
+    autoJoinGapIn: stated(nonneg),
+    healBoxIn: stated(nonneg),
+    splitPolicy: stated(splitPolicy),
+    allowanceInWg: sided(stated(nonneg)),
   }),
   /** A loss-rule key's ASHRAE table where a person swapped it (Work `rules`). */
-  tables: z.record(z.string(), resolved(z.string().min(1))),
+  tables: z.record(z.string(), stated(z.string().min(1))),
   /**
    * A fitting family no rule matches, priced as the rule a person assigned (Work `ruleAssignments`).
    * Read only where no rule's own match prices the fitting; a matched fitting keeps its rule.
    */
-  assignments: z.record(z.string(), resolved(z.string().min(1))),
+  assignments: z.record(z.string(), stated(z.string().min(1))),
   /**
    * A typed drop on one path through a proposed fitting (a heal's tee, tap or transition), keyed
    * `proposed:<pair>><toward>` (toward: the main element the branch path continues into, or
    * `straight`). A fallback where no table prices that path; never one number for both paths.
    */
-  fittingDrops: z.record(z.string(), resolved(nonneg)),
+  fittingDrops: z.record(z.string(), stated(nonneg)),
 });
 export type DuctsInputs = z.infer<typeof ductsInputsSchema>;
 /**
@@ -304,9 +291,8 @@ export const ductsRosterRequestSchema = z.strictObject({
     .optional()
     .describe("Equipment mark, e.g. MA-1. Returns only the ports whose mark matches (case-insensitive). Omit for the whole roster."),
 });
-export type DuctsRosterRequest = z.infer<typeof ductsRosterRequestSchema>;
 
-/** Shared product instructions for Pea and the sheet tutorial. */
+/** Pea's product instructions for the pressure-drop sheet. */
 export const DUCTS_SHEET_GUIDE = {
   summary:
     "Read one fan's pressure-drop sheet. Each number is a sum along a path; an incomplete known subtotal is never required ESP.",

@@ -8,13 +8,13 @@ import {
   ductsInputsSchema,
   type DuctsInputs,
   type FittingPricing,
-  type Resolved,
+  type Stated,
 } from "@pe/agent-contracts";
 import { connOf, factOf, nodeOf } from "@pe/ducts-domain/test-snapshot";
 import { fittingGroups, tableMeaning } from "./fitting-groups";
 import { kindDisabledReason, kindMeaning } from "./kind-meaning";
 
-const firm = <T>(value: T): Resolved<T> => ({
+const firm = <T>(value: T): Stated<T> => ({
   value,
   source: "firm",
   ref: "seed",

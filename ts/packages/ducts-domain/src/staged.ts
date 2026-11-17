@@ -9,8 +9,10 @@ import type { DuctSnapshot } from "./types.ts";
 
 type Cohort = Pick<FanParameterCohort, "owner" | "members" | "basis" | "complete">;
 type Segment = "terminalDrops" | "componentDrops" | "esp" | "flows" | "equipmentFlows" | "roles";
-/** The Fans Work segments, from the one inputs table. */
-const SEGMENTS = fanBindingRows().flatMap(row => (row.owner === "fans" && row.segment ? [row.segment as Segment] : []));
+/** The Fans Work segments apply carries, from the one inputs table. Rated ESP stays in Work: nothing in the model holds it. */
+const WRITTEN_SEGMENTS: Record<Segment, true> = { terminalDrops: true, componentDrops: true, esp: true, flows: true, equipmentFlows: true, roles: true };
+const isSegment = (segment: string | null): segment is Segment => segment != null && segment in WRITTEN_SEGMENTS;
+const SEGMENTS = fanBindingRows().flatMap(row => (row.owner === "fans" && isSegment(row.segment) ? [row.segment] : []));
 
 /**
  * Fan targets are a projection of current edits, never a list frozen when scope was chosen. The walk

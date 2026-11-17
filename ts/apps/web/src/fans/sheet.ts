@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { DUCT_UNIT_ROLES, fanWriteRows, routeAddress, subjectCode, type fansSheetData, type Immutable } from "@pe/agent-contracts";
+import { DUCT_UNIT_ROLES, FAN_CELLS, routeAddress, subjectCode, type fansSheetData, type Immutable } from "@pe/agent-contracts";
 import { local, parameter, store, type BindingDraw, type CellLayer, type Domain, type EnumChoice, type SheetSlot } from "@pe/agent-contracts/slots";
 import { fanWriteCells } from "@pe/ducts-domain/staged";
 import { suggestKind, suggestRole } from "@pe/ducts-domain/roster";
@@ -27,9 +27,9 @@ const subjectOf = (snapshot: Snapshot | null, id: string | number) => {
   const element = snapshot && [...snapshot.nodes, ...snapshot.segments].find((e) => e.id === Number(id));
   return element ? elementSubject(element) : null;
 };
-const idOf = (read: Read, row: string) => {
+const idOf = (read: Read, row: string | undefined) => {
   const snapshot = snapshotOf(read);
-  return snapshot ? workElementId(snapshot, row) : null;
+  return snapshot && row != null ? workElementId(snapshot, row) : null;
 };
 const nameOf = (read: Read, row: string, word: string) => {
   const snapshot = snapshotOf(read), id = idOf(read, row);
@@ -72,13 +72,12 @@ const scopeChoices = (read: Read): readonly EnumChoice[] => {
  * (`FAN_INPUTS`); only how many digits a unit draws is decided here.
  */
 const DIGITS: Readonly<Record<string, number>> = { "in-wg": 4, cfm: 0 };
-const input = (name: string, draw: BindingDraw) => {
-  const row = fanWriteRows().find((r) => r.name === name);
-  if (!row?.parameter) throw Error(`${name} is not a writable fan input`);
-  const drawn = (domain: Domain): Domain =>
-    domain.kind === "number" && domain.unit && domain.unit in DIGITS ? { ...domain, digits: DIGITS[domain.unit] }
-    : domain.kind === "object" ? { ...domain, fields: Object.fromEntries(Object.entries(domain.fields).map(([key, field]) => [key, drawn(field)])) }
-    : domain;
+const drawn = (domain: Domain): Domain =>
+  domain.kind === "number" && domain.unit && domain.unit in DIGITS ? { ...domain, digits: DIGITS[domain.unit] }
+  : domain.kind === "object" ? { ...domain, fields: Object.fromEntries(Object.entries(domain.fields).map(([key, field]) => [key, drawn(field)])) }
+  : domain;
+const input = (row: { readonly parameter: string | null; readonly domain: Domain; readonly name: string }, draw: BindingDraw) => {
+  if (!row.parameter) throw Error(`${row.name} is not a writable fan input`);
   return parameter(row.parameter, drawn(row.domain), draw);
 };
 
@@ -112,17 +111,17 @@ export const fansSheet = {
       rows: (read: Read) => rowsOf(read, (snapshotOf(read)?.nodes ?? []).filter((n) => n.kind === "equipment").map((n) => String(n.id))),
       rowLabel: (read, row) => nameOf(read, row, "Unit role"),
       model: (read: Read, row) => {
-        const id = idOf(read, row!), resolved = id == null ? undefined : inputsOf(read)?.units[String(id)]?.role;
+        const id = idOf(read, row), resolved = id == null ? undefined : inputsOf(read)?.units[String(id)]?.role;
         if (resolved?.value != null) return layer(resolved, (role) => ({ role }));
         const node = snapshotOf(read)?.nodes.find((n) => n.id === id);
         return node ? { value: { role: suggestRole(node, suggestKind(node).kind) }, source: "default" } : null;
       },
     }),
-    equipmentFlows: input("equipmentFlows", {
+    equipmentFlows: input(FAN_CELLS.equipmentFlows, {
       rows: (read: Read) => rowsOf(read, units(read)),
       rowLabel: (read, row) => nameOf(read, row, "Unit airflow"),
       model: (read: Read, row) => {
-        const id = idOf(read, row!), node = snapshotOf(read)?.nodes.find((n) => n.id === id);
+        const id = idOf(read, row), node = snapshotOf(read)?.nodes.find((n) => n.id === id);
         const conflict = id === fanUnit(read) ? read?.open?.inputs?.notes.find((n) => n.kind === "flow-conflict")?.text : undefined;
         const base = layer(inputsOf(read)?.units[String(id)]?.cfm, (v) => v) ?? { value: null };
         return {
@@ -132,27 +131,34 @@ export const fansSheet = {
         };
       },
     }),
-    // The open fan's own ESP is an input of this sheet; another unit's only once Work stages it.
-    esp: input("esp", {
-      rows: (read: Read) => rowsOf(read, units(read).filter((id) =>
-        Number(id) === fanUnit(read) || inputsOf(read)?.units[id]?.esp.source === "Work")),
+    // The ESP written to the fan (required). The open fan's own is an input of this sheet; another unit's only once Work stages it.
+    esp: input(FAN_CELLS.esp, {
+      rows: (read: Read) => rowsOf(read, units(read)).filter((key) =>
+        key === subjectOf(snapshotOf(read), fanUnit(read) ?? -1) || read?.fansWork.esp[key]?.edit != null),
       rowLabel: (read, row) => nameOf(read, row, "Unit ESP"),
-      model: (read: Read, row) => layer(inputsOf(read)?.units[String(idOf(read, row!))]?.esp, (v) => ({ inWg: v })),
+      // Only the open fan's staged value is resolved by this read; another unit's row shows its Work cell alone.
+      model: (read: Read, row) => idOf(read, row) === fanUnit(read) ? layer(read?.open?.overview.espValues?.staged, (v) => ({ inWg: v })) : null,
     }),
-    flows: input("flows", {
+    // The ESP a fan is rated for: stated here or by Pea and kept in Work, since no parameter holds it (P-030).
+    ratedEsp: local(drawn(FAN_CELLS.ratedEsp.domain), "subject", {
+      rows: (read: Read) => rowsOf(read, units(read)),
+      rowLabel: (read, row) => nameOf(read, row, "Unit rated ESP"),
+      model: (read: Read, row) => layer(inputsOf(read)?.units[String(idOf(read, row))]?.esp, (v) => ({ inWg: v })),
+    }),
+    flows: input(FAN_CELLS.flows, {
       rows: (read: Read) => rowsOf(read, Object.keys(inputsOf(read)?.terminals ?? {})),
       rowLabel: (read, row) => nameOf(read, row, "Terminal airflow"),
-      model: (read: Read, row) => layer(inputsOf(read)?.terminals[String(idOf(read, row!))]?.cfm, (v) => v),
+      model: (read: Read, row) => layer(inputsOf(read)?.terminals[String(idOf(read, row))]?.cfm, (v) => v),
     }),
-    terminalDrops: input("terminalDrops", {
+    terminalDrops: input(FAN_CELLS.terminalDrops, {
       rows: (read: Read) => rowsOf(read, Object.keys(inputsOf(read)?.terminals ?? {})),
       rowLabel: (read, row) => nameOf(read, row, "Terminal drop"),
-      model: (read: Read, row) => layer(inputsOf(read)?.terminals[String(idOf(read, row!))]?.drop, (v) => ({ inWg: v }), read),
+      model: (read: Read, row) => layer(inputsOf(read)?.terminals[String(idOf(read, row))]?.drop, (v) => ({ inWg: v }), read),
     }),
-    componentDrops: input("componentDrops", {
+    componentDrops: input(FAN_CELLS.componentDrops, {
       rows: (read: Read) => rowsOf(read, Object.keys(inputsOf(read)?.components ?? {})),
       rowLabel: (read, row) => nameOf(read, row, "Part drop"),
-      model: (read: Read, row) => layer(inputsOf(read)?.components[String(idOf(read, row!))]?.drop, (v) => ({ inWg: v })),
+      model: (read: Read, row) => layer(inputsOf(read)?.components[String(idOf(read, row))]?.drop, (v) => ({ inWg: v })),
     }),
   },
 } as const satisfies SheetSlot;

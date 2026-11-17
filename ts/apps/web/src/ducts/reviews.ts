@@ -1,10 +1,8 @@
-import { z } from "zod";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
 import type { DuctsApply, DuctsAssignFan, DuctsHeal } from "@pe/host-contracts/generated";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import type { HealView as HealPlan } from "@pe/ducts-domain/pricing-view";
 import { healSystems, healWords, networkWord, outcomeWords } from "@pe/ducts-domain/words";
-import { ductsHealInputSchema } from "@pe/agent-contracts";
 type ReviewEvidence = {
   readonly heal?: import("@pe/agent-contracts").Immutable<Pick<HealPlan,"groups">> | null;
   readonly page?: { readonly stage?: "network" | "sheet" };
@@ -23,35 +21,6 @@ type ReviewEvidence = {
 };
 import { elementLabeler as subjectNamer } from "@pe/ducts-domain/element-label";
 
-export const healReviewSchema = z.object({
-  group: z.string(),
-  mode: z.enum(["preview", "apply"]),
-  // Evidence remains host-owned; the picture consumes the typed targets and words below.
-  response: z.unknown(),
-  basis: z.string(),
-  request: ductsHealInputSchema.extend({
-    groups: z.array(ductsHealInputSchema.shape.groups.element),
-  }),
-  before: z.object({
-    esp: z.number().nullable(),
-    roots: z.array(z.number()),
-    ids: z.array(z.number()),
-  }),
-  targets: z.array(
-    z.object({
-      key: z.string(),
-      end: z.string(),
-      other: z.string().optional(),
-      how: z.enum(["cap", "connect", "union", "extend"]),
-      ids: z.array(z.number()),
-      findings: z.array(z.string()),
-      outcome: z.string(),
-    }),
-  ),
-  sentence: z.string(),
-  rows: z.array(z.string()),
-});
-export type HealReview = z.infer<typeof healReviewSchema>;
 const responseOf = <T>(result: unknown): T => {
   const envelope = result as { response?: T; value?: T };
   return envelope.response ?? envelope.value ?? (result as T);
@@ -136,10 +105,10 @@ export function presentHeal(result: unknown, scope: ReviewEvidence) {
 }
 
 /** Who staged the write scope: the ducts Work writeIntent cell's stamped author. */
-function intentAuthor(scope: ReviewEvidence): "pea" | "human" | "unknown" {
+function intentAuthor(scope: ReviewEvidence): "pea" | "human" | null {
   const by = (scope.work as { writeIntent?: { edit?: { by?: string } } } | null | undefined)
     ?.writeIntent?.edit?.by;
-  return by === "pea" || by === "human" ? by : "unknown";
+  return by === "pea" || by === "human" ? by : null;
 }
 
 /** DuctApplier names loss methods by token; a review speaks Revit's words. */
@@ -229,7 +198,7 @@ export function presentLosses(result: unknown, scope: ReviewEvidence) {
     const before = spoken(write.before) ?? null;
     const key = `${write.kind}:${write.id ?? write.key ?? ""}`;
     // The store row is Pe's provenance record in Project Information; its "absent"/"revision n" are machine words.
-    // Store and slot rows have no source cell: their staging author stays unknown, regardless of caller.
+    // Store and slot rows have no source cell: they have no author, regardless of caller.
     if (write.id == null && write.kind === "slot") {
       const label = `Pe loss record (Project Information): ${SLOT_WORDS[write.key ?? ""] ?? write.key} slot`;
       return {
@@ -240,7 +209,7 @@ export function presentLosses(result: unknown, scope: ReviewEvidence) {
           group: "Pe loss record",
           before,
           after: `${spoken(write.after) ?? "none"} · ${tail}`,
-          author: "unknown" as const,
+          author: null,
         },
       };
     }
@@ -254,7 +223,7 @@ export function presentLosses(result: unknown, scope: ReviewEvidence) {
           group: "Pe loss record",
           before: write.before === "absent" ? "none yet" : before,
           after: `${write.before === "absent" ? "created" : "updated"} · ${tail}`,
-          author: "unknown" as const,
+          author: null,
         },
       };
     }
@@ -307,8 +276,8 @@ const FAN_SEGMENT = {
   "terminal-flow": "flows",
   equipment: "esp",
 } as const;
-/** The Work cell's stamped author; "unknown" when Work does not hold that value (derived or Revit's). */
-function fanAuthor(scope: ReviewEvidence, kind: string, id: number): "pea" | "human" | "unknown" {
+/** The Work cell's stamped author; null when Work does not hold that value (derived or Revit's). */
+function fanAuthor(scope: ReviewEvidence, kind: string, id: number): "pea" | "human" | null {
   const segment = FAN_SEGMENT[kind as keyof typeof FAN_SEGMENT];
   const work = scope.readings.fansWork?.value as
     | Readonly<Record<string, Readonly<Record<string, { edit?: { by?: string } }>> | undefined>>
@@ -316,7 +285,7 @@ function fanAuthor(scope: ReviewEvidence, kind: string, id: number): "pea" | "hu
     | undefined;
   const key = fanSubject(scope, id);
   const by = segment && key ? work?.[segment]?.[key]?.edit?.by : undefined;
-  return by === "pea" || by === "human" ? by : "unknown";
+  return by === "pea" || by === "human" ? by : null;
 }
 
 function fanSubject(scope: ReviewEvidence, id: number) {

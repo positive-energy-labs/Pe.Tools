@@ -361,10 +361,6 @@ export const ductsDocumentSchema = z
   });
 export type DuctsRouteDocument = z.infer<typeof ductsDocumentSchema>;
 
-/**
- * Ducts Work 1 -> 2 (FANSPLIT, kaitpw 2026-11-03 Q5): the fan cells and the Load Preview are
- * deleted, not moved; the /fans Work starts empty. The write scope keeps only its ducts keys.
- */
 /** What pricing reads: both Works' cells side by side (FANSPLIT Q4); ducts owns `writeIntent`. */
 export type DuctsDesign = DuctsRouteDocument & FansDocument;
 export const ductsDesign = (ducts: DuctsRouteDocument | null, fans: FansDocument): DuctsDesign => ({
@@ -378,10 +374,13 @@ export const ductsDesign = (ducts: DuctsRouteDocument | null, fans: FansDocument
  * the evidence lives and claims nothing more. A cell with no human or Pea stamp is not handed over
  * at all: the runtime sets such stored Work aside before it is read, and no author is ever invented.
  */
-export type StagedCell<V> = { value: V; by: "human" | "pea"; ref: string };
-const stagedOf = <V>(work: "fans" | "ducts", segment: string, cells: Record<string, { edit?: { value?: V; by?: Author; ref?: string } | null } | undefined>) =>
+export type StagedCell<V> = { value: V; by: "human" | "pea"; ref: string } | InvalidStagedCell;
+/** A stored cell the host could not read (`{ invalid: reason }`), at its Work location: handed on so the resolver blocks fallback (P-040). */
+export type InvalidStagedCell = { invalid: string; ref: string };
+const stagedOf = <V>(work: "fans" | "ducts", segment: string, cells: Record<string, { invalid?: string; edit?: { value?: V; by?: Author; ref?: string } | null } | undefined>) =>
   Object.fromEntries<StagedCell<V>>(
-    Object.entries(cells).flatMap(([key, cell]) => {
+    Object.entries(cells).flatMap(([key, cell]): [string, StagedCell<V>][] => {
+      if (cell?.invalid) return [[key, { invalid: cell.invalid, ref: `work:${work}/${segment}/${key}` }]];
       const edit = cell?.edit;
       return edit?.value === undefined || (edit.by !== "human" && edit.by !== "pea") ? []
         : [[key, { value: edit.value, by: edit.by, ref: edit.ref?.trim() ? edit.ref : `work:${work}/${segment}/${key}` }]];
@@ -403,6 +402,7 @@ export function stagedDucts(doc: DuctsRouteDocument | null, fans: FansDocument) 
     terminalDrops: stagedOf("fans", "terminalDrops", fans.terminalDrops),
     componentDrops: stagedOf("fans", "componentDrops", fans.componentDrops),
     esp: stagedOf("fans", "esp", fans.esp),
+    ratedEsp: stagedOf("fans", "ratedEsp", fans.ratedEsp),
     equipmentFlows: stagedOf("fans", "equipmentFlows", fans.equipmentFlows),
     roles: stagedOf("fans", "roles", fans.roles),
     flows: stagedOf("fans", "flows", fans.flows),
@@ -425,7 +425,7 @@ export function stagedValues(doc: DuctsRouteDocument | null, fans: FansDocument)
     Object.fromEntries(Object.entries(cells).flatMap(([key, cell]) => (cell?.edit?.value === undefined ? [] : [[key, cell.edit.value]]))) as Record<string, V>;
   return { ...stagedDucts(doc, fans), calculation: bare(fans.calculation), rules: bare(doc?.rules ?? {}), kinds: bare(doc?.kinds ?? {}),
     assumptions: bare(doc?.assumptions ?? {}), catalogs: bare(doc?.catalogs ?? {}), ruleAssignments: bare(doc?.ruleAssignments ?? {}),
-    terminalDrops: bare(fans.terminalDrops), componentDrops: bare(fans.componentDrops), esp: bare(fans.esp),
+    terminalDrops: bare(fans.terminalDrops), componentDrops: bare(fans.componentDrops), esp: bare(fans.esp), ratedEsp: bare(fans.ratedEsp),
     equipmentFlows: bare(fans.equipmentFlows), roles: bare(fans.roles), flows: bare(fans.flows), subject: bare(doc?.subject ?? {}) };
 }
 

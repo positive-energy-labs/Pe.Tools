@@ -313,9 +313,10 @@ const sheetModel = read("fans.calculation", {
   },
 });
 /** Resolved kinds and roles by unit id, so the roster reads the same rulings the engine prices under. */
+/** The ruled kinds and roles alone: a unit whose kind or role did not resolve is left for the roster to suggest. */
 const rosterInputs = (inputs: DuctsInputs) => ({
-  kinds: Object.fromEntries(Object.entries(inputs.units).map(([id, u]) => [id, u.kind.value])),
-  roles: Object.fromEntries(Object.entries(inputs.units).map(([id, u]) => [id, u.role.value])),
+  kinds: Object.fromEntries(Object.entries(inputs.units).flatMap(([id, u]) => (u.kind.status === "valid" ? [[id, u.kind.value]] : []))),
+  roles: Object.fromEntries(Object.entries(inputs.units).flatMap(([id, u]) => (u.role.status === "valid" ? [[id, u.role.value]] : []))),
 });
 const pathsOf = (value: Sheet | Chain): SheetPath[] =>
   "paths" in value ? value.paths : value.path ? [value.path] : [];
