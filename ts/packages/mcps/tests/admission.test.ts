@@ -386,7 +386,7 @@ test.each(["open", "address", "workspace", "host"] as const)("loss preview reads
       expect(Object.fromEntries(url.searchParams)).toEqual(expected);
       // The fan walk lives in fans Work at the same document key (the host derive reads it there).
       return Response.json(url.pathname.endsWith("/fans")
-        ? {revision: 5, handle: workHandle({...key, route: "fans"} as never, 5), doc: fansDocumentSchema.parse(scoped ? {writeIntent: {edit: {value: {walk: {unitId: 14577391, portIndex: 0}}}}} : {})}
+        ? {revision: 5, handle: workHandle({...key, route: "fans"} as never, 5), doc: fansDocumentSchema.parse(scoped ? {writeIntent: {edit: {value: {walk: {unitId: 14577391, portIndex: 0}}, by: "human"}}} : {})}
         : {revision: 3, handle: workHandle(key as never, 3), doc: ductsDocumentSchema.parse({})});
     }
     if (url.pathname === "/actions" && init?.method === "POST") {
