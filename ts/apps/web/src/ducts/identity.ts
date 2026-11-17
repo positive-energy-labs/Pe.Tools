@@ -2,12 +2,8 @@ import type { Many } from "../../../../packages/agent-contracts/src/route-kernel
 import { subjectCode, subjectOf, type SubjectRefCode } from "../../../../packages/agent-contracts/src/subject-ref.ts";
 import { elementIndex } from "../element-index.ts";
 import { openSet } from "../shell/open-set.neutral.ts";
-import { z } from "zod";
-export const fanScopeSchema = z.object({ unitId: z.number().int().positive(), portIndex: z.number().int().nonnegative() });
-export type FanScope = z.infer<typeof fanScopeSchema>;
-/** A port walk's segments carry single canonical system names; equipment labels may combine names. */
-export const fanSystems = (walk: { segments: readonly { systemName?: string | null; reason?: string | null }[] }, roster: readonly { name: string }[]) =>
-  roster.filter(system => walk.segments.some(segment => segment.reason === "walked" && segment.systemName === system.name)).map(system => system.name);
+import type { FanScope } from "./fan-scope.neutral";
+export { fanScopeSchema, fanSystems, type FanScope } from "./fan-scope.neutral";
 export { namesOf } from "../route/typed-route.ts";
 /** A duct system is the SubjectRef `system-name:<name>` (ADR 0035 rule 2). */
 export const systemCode = (name: string) => subjectCode({ keyKind: "system-name", key: name });
