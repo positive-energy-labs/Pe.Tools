@@ -202,7 +202,7 @@ export function tapDistance(duct: Segment, tap: Node, upstream: Connector | unde
   return Math.max(0, Math.min(duct.lengthFt, (s / total) * duct.lengthFt));
 }
 
-/** A tap on a duct with the flow its branch carries, cfm. */
+/** A tap's signed branch cfm: positive leaves the walk, negative joins at its station. */
 export interface TapOn {
   tap: Node;
   branchCfm: number;
@@ -255,16 +255,16 @@ export function splitTappedDuct(args: {
       });
       return pieces;
     }
-    if (t.branchCfm > 0) {
+    if (t.branchCfm !== 0) {
       pieces.push({
         kind: "tap-straight",
         tap: t.tap,
         leg: "Cs",
         flows: {
           through: q,
-          branch: t.branchCfm,
-          upstreamMain: q,
-          downstreamMain: q - t.branchCfm,
+          branch: Math.abs(t.branchCfm),
+          upstreamMain: Math.max(q, q - t.branchCfm),
+          downstreamMain: Math.min(q, q - t.branchCfm),
         },
         atFt: at,
       });

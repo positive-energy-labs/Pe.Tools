@@ -170,7 +170,7 @@ test("a claim that is not complete is refused with its kind and what holds it op
   const incomplete = buildCalc(manualD(true, {}, false).input);
   expect(incomplete.claim.kind).toBe("incomplete");
   expect(incomplete.blockers.map((b) => b.id)).toEqual(["not-priced:13926753", "not-priced:14122436:1"]);
-  expect(claimRefusal(incomplete.claim)).toContain("known 2.567653 in-wg");
+  expect(claimRefusal(incomplete.claim)).toContain("known 2.56803 in-wg");
   // A truncated walk is lost coverage: the claim refuses it without the explicit walk check.
   const truncated = manualD(false, { walk: { ...TEST_WALK, truncated: true } });
   expect(buildCalc(truncated.input).claim.kind).toBe("incomplete");
