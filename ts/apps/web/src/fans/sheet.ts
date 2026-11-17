@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { DUCT_UNIT_ROLES, fanWriteRows, routeAddress, subjectCode, type fansSheetData, type Immutable } from "@pe/agent-contracts";
+import { DUCT_UNIT_ROLES, FAN_CELLS, routeAddress, subjectCode, type fansSheetData, type Immutable } from "@pe/agent-contracts";
 import { local, parameter, store, type BindingDraw, type CellLayer, type Domain, type EnumChoice, type SheetSlot } from "@pe/agent-contracts/slots";
 import { fanWriteCells } from "@pe/ducts-domain/staged";
 import { suggestKind, suggestRole } from "@pe/ducts-domain/roster";
@@ -72,9 +72,8 @@ const scopeChoices = (read: Read): readonly EnumChoice[] => {
  * (`FAN_INPUTS`); only how many digits a unit draws is decided here.
  */
 const DIGITS: Readonly<Record<string, number>> = { "in-wg": 4, cfm: 0 };
-const input = (name: string, draw: BindingDraw) => {
-  const row = fanWriteRows().find((r) => r.name === name);
-  if (!row?.parameter) throw Error(`${name} is not a writable fan input`);
+const input = (row: { readonly parameter: string | null; readonly domain: Domain; readonly name: string }, draw: BindingDraw) => {
+  if (!row.parameter) throw Error(`${row.name} is not a writable fan input`);
   const drawn = (domain: Domain): Domain =>
     domain.kind === "number" && domain.unit && domain.unit in DIGITS ? { ...domain, digits: DIGITS[domain.unit] }
     : domain.kind === "object" ? { ...domain, fields: Object.fromEntries(Object.entries(domain.fields).map(([key, field]) => [key, drawn(field)])) }
@@ -118,7 +117,7 @@ export const fansSheet = {
         return node ? { value: { role: suggestRole(node, suggestKind(node).kind) }, source: "default" } : null;
       },
     }),
-    equipmentFlows: input("equipmentFlows", {
+    equipmentFlows: input(FAN_CELLS.equipmentFlows, {
       rows: (read: Read) => rowsOf(read, units(read)),
       rowLabel: (read, row) => nameOf(read, row, "Unit airflow"),
       model: (read: Read, row) => {
@@ -133,23 +132,23 @@ export const fansSheet = {
       },
     }),
     // The open fan's own ESP is an input of this sheet; another unit's only once Work stages it.
-    esp: input("esp", {
+    esp: input(FAN_CELLS.esp, {
       rows: (read: Read) => rowsOf(read, units(read).filter((id) =>
         Number(id) === fanUnit(read) || inputsOf(read)?.units[id]?.esp.source === "Work")),
       rowLabel: (read, row) => nameOf(read, row, "Unit ESP"),
       model: (read: Read, row) => layer(inputsOf(read)?.units[String(idOf(read, row!))]?.esp, (v) => ({ inWg: v })),
     }),
-    flows: input("flows", {
+    flows: input(FAN_CELLS.flows, {
       rows: (read: Read) => rowsOf(read, Object.keys(inputsOf(read)?.terminals ?? {})),
       rowLabel: (read, row) => nameOf(read, row, "Terminal airflow"),
       model: (read: Read, row) => layer(inputsOf(read)?.terminals[String(idOf(read, row!))]?.cfm, (v) => v),
     }),
-    terminalDrops: input("terminalDrops", {
+    terminalDrops: input(FAN_CELLS.terminalDrops, {
       rows: (read: Read) => rowsOf(read, Object.keys(inputsOf(read)?.terminals ?? {})),
       rowLabel: (read, row) => nameOf(read, row, "Terminal drop"),
       model: (read: Read, row) => layer(inputsOf(read)?.terminals[String(idOf(read, row!))]?.drop, (v) => ({ inWg: v }), read),
     }),
-    componentDrops: input("componentDrops", {
+    componentDrops: input(FAN_CELLS.componentDrops, {
       rows: (read: Read) => rowsOf(read, Object.keys(inputsOf(read)?.components ?? {})),
       rowLabel: (read, row) => nameOf(read, row, "Part drop"),
       model: (read: Read, row) => layer(inputsOf(read)?.components[String(idOf(read, row!))]?.drop, (v) => ({ inWg: v })),

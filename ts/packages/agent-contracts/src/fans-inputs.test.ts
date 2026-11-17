@@ -71,3 +71,19 @@ it("complete instance cohorts contain exactly their owner and type members are u
   expect(fanParameterCohortSchema.safeParse({ ...cohort, members: [{ elementId: 2, uniqueId: "two" }] }).success).toBe(false);
   expect(fanParameterCohortSchema.safeParse({ ...cohort, owner: { kind: "type", id: 3 }, members: [...cohort.members, ...cohort.members] }).success).toBe(false);
 });
+
+it("the Fans document's element segments are exactly the table's Fans-owned cells (P-026)", async () => {
+  const { fansDocumentSchema } = await import("./fans.ts");
+  const { FAN_CELLS, fanBindingRows } = await import("./fans-inputs.ts");
+  const own = fanBindingRows().filter(row => row.owner === "fans").map(row => row.segment);
+  // `writeIntent` is the route's scope and `calculation` its evidence; neither is an input row.
+  const segments = Object.keys(fansDocumentSchema.shape).filter(key => key !== "writeIntent" && key !== "calculation");
+  expect(segments.toSorted()).toEqual(own.toSorted());
+  expect(Object.keys(FAN_CELLS).toSorted()).toEqual(own.toSorted());
+  // A value the row's domain refuses is refused by the document, and the reverse.
+  const key = "UniqueId:02d3886c-b439-49e2-9967-e703036c2c90-00000007";
+  for (const [name, row] of Object.entries(FAN_CELLS))
+    for (const value of [250, { inWg: 0.5 }, { role: "fan" }, "x"])
+      if (name !== "terminalDrops" && name !== "componentDrops")
+        expect(fansDocumentSchema.safeParse({ [name]: { [key]: { edit: { value, by: "human" } } } }).success, `${name} ${JSON.stringify(value)}`).toBe(row.accepts(value));
+});
