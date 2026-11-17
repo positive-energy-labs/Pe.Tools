@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { cleanup, render, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { useSyncExternalStore } from "react";
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from "@tanstack/react-router";
 import { workFingerprintSchema } from "@pe/agent-contracts";
@@ -11,10 +11,14 @@ import { StandaloneBand } from "../shell/band.test-support";
 import { dockChatAddress } from "./hosted-route";
 import { WorkbenchProvider } from "./provider";
 import { PaneActionSlots } from "../shell/pane-actions";
+import type { DrawContext } from "../route/typed-route";
 
 afterEach(() => {cleanup(); vi.unstubAllGlobals(); window.history.replaceState({}, "", "/");});
-test.each(["/fans?fixture=scene", "/duct-systems?fixture=navigation"])(
-  "Pea beside %s settles with New Thread and keeps the tool fixture", async href => {
+test.each([
+  ["/fans?fixture=scene", true], ["/duct-systems?fixture=navigation", true],
+  ["/fans?fixture=scene", false],
+] as const)(
+  "Pea beside %s settles and labels fixture origin %s", async (href, demo) => {
     window.history.replaceState({}, "", href);
     vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
     vi.stubGlobal("localStorage", {getItem: () => null, setItem() {}});
@@ -28,7 +32,13 @@ test.each(["/fans?fixture=scene", "/duct-systems?fixture=navigation"])(
     }, workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`));
     function Panel() {
       useSyncExternalStore(mount.subscribe, mount.revision, mount.revision);
-      return <WorkbenchProvider><StandaloneBand><PaneActionSlots><TypedChrome mount={mount} document={null} /></PaneActionSlots></StandaloneBand></WorkbenchProvider>;
+      // Same document names, but no fixture origin: names must never decide provenance.
+      const displayed: typeof mount = demo ? mount : { ...mount, draw: (id, draw) =>
+        mount.draw<DrawContext<unknown, never, unknown, unknown>>(id, ctx => draw?.({ ...ctx,
+          value: { ...ctx.value, publication: { ...ctx.value.publication, origin: null } },
+        } as never)),
+      };
+      return <WorkbenchProvider><StandaloneBand><PaneActionSlots><TypedChrome mount={displayed} document={null} /></PaneActionSlots></StandaloneBand></WorkbenchProvider>;
     }
     const router = createRouter({ routeTree: createRootRoute({ component: Panel }), history: createMemoryHistory({ initialEntries: [href] }) });
     try {
@@ -41,6 +51,12 @@ test.each(["/fans?fixture=scene", "/duct-systems?fixture=navigation"])(
         expect(mount.value().state).toBe("ready");
       }, {timeout:5000});
       expect(fetch).not.toHaveBeenCalled();
+      expect(mount.value().publication?.origin).toMatchObject({ kind: "fixture" });
+      fireEvent.click(page.getByRole("button", { name: "Choose session" }));
+      await waitFor(() => {
+        const label = page.getByText("pe-app-25-main");
+        expect(label.parentElement?.textContent?.includes("Demo")).toBe(demo);
+      });
       const next = address.read();
       next.set("thread", "chosen");
       address.write(next, "replace");

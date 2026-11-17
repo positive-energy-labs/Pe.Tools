@@ -22,6 +22,8 @@ interface RungOption {
 }
 
 export interface Rung {
+  /** Provenance drawn beside this rung's names, including its picker rows. */
+  provenance?: ReactNode;
   key: string;
   /** What the sentence says for this rung once bound; null = unbound. */
   label: string | null;
@@ -135,7 +137,7 @@ export function Ladder({
     <ListPopup<Hit>
       anchor="trigger"
       face={face}
-      trigger={word}
+      trigger={levels.some((rung) => rung.provenance) ? <>{word}{levels.find((rung) => rung.provenance)?.provenance}</> : word}
       title={title}
       disabled={disabled}
       open={isOpen}
@@ -189,7 +191,7 @@ export function Ladder({
             {rungOf(hit).picked?.(hit.id) ? "☑" : "☐"}
           </span>
         ) : undefined,
-        label: hit.label,
+        label: rungOf(hit).provenance ? <>{hit.label}{rungOf(hit).provenance}</> : hit.label,
         meta: rungOf(hit).only ? (
           <Button kind="quiet"
             label={`Only ${hit.label}`}
