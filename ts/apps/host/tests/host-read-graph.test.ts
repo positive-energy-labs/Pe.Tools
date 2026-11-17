@@ -428,7 +428,7 @@ test("F2 Work, same-version firm criteria and document mark changes during a mul
           key("fans"),
           "fans",
           "human",
-          [{ path: ["flows", elementSubject(snapshot.nodes.find(node => node.kind === "terminal")!), "edit"], value: { value: { cfm: 321 } } }],
+          [{ path: ["flows", elementSubject(snapshot.nodes.find(node => node.kind === "terminal")!), "edit"], value: { value: 321 } }],
           0,
         );
         expect(staged.ok).toBe(true);

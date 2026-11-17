@@ -1,3 +1,4 @@
+import { DUCT_UNIT_KINDS, FAN_BLOCKER_KINDS } from "@pe/host-contracts/generated";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
@@ -16,8 +17,13 @@ export function nativeRecordings(...names: string[]) {
     // Git controls wire-file line endings; integrity belongs to the decoded JSON value.
     if (createHash("sha256").update(canonicalJson(value)).digest("hex") !== record.canonicalResponseSha256)
       throw Error(`Recorded native body changed: ${name}`);
-    responses[record.operation] = value;
-    sources[record.operation] = record.source;
+    // These captures predate vocabulary. Keep the recorded bytes/hash intact and label the
+    // generated-contract fixture addition, which supplies vocabulary rather than model evidence.
+    const addVocabulary = record.operation.startsWith("ducts.snapshot.") && !value.vocabulary;
+    responses[record.operation] = addVocabulary
+      ? { ...value, vocabulary: { unitKinds: [...DUCT_UNIT_KINDS], blockerKinds: [...FAN_BLOCKER_KINDS] } }
+      : value;
+    sources[record.operation] = addVocabulary ? `${record.source}; fixture vocabulary from generated contract` : record.source;
   }
   return { responses, sources };
 }

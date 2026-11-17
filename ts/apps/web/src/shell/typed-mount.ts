@@ -30,7 +30,6 @@ import {
   type WorkHandle,
   type WorkWrite,
   type RouteStatePatch,
-  bare,
   focusSelectionSchema,
   type WorkJournalDoor,
   type WorkScope,

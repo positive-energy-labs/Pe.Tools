@@ -628,12 +628,15 @@ test("Pea discovers the sheet plan, decodes any route's handle, and previews Duc
             elementSubject(capturedWalk.nodes.find((node) => node.id === 8718801)!),
             "edit",
           ],
-          value: { value: { cfm: 250 } },
+          value: { value: 250 },
         },
       ],
       0,
     );
     expect(staged.ok).toBe(true);
+    expect((await f.saved.view({ ...f.key, route: "fans" }, "fans"))!.doc).toMatchObject({
+      flows: { [elementSubject(capturedWalk.nodes.find(node => node.id === 8718801)!)]: { edit: { value: 250, by: "human" } } },
+    });
     const ducts = await f.saved.apply(
       f.key,
       "ducts",

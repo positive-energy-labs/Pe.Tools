@@ -32,7 +32,7 @@ test("fan preview survives identical re-pricing but rejects changed model inputs
   const work = ductsDesign(
     null,
     fansDocumentSchema.parse({
-      componentDrops: { [elementSubject(snapshot.nodes.find(n => n.id === 14088043)!) ]: { edit: { value: { inWg: 0.026 } } } },
+      componentDrops: { [elementSubject(snapshot.nodes.find(n => n.id === 14088043)!) ]: { edit: { by: "human", value: { inWg: 0.026 } } } },
     }),
   );
   const handle = {
@@ -125,7 +125,7 @@ test("fan loss preparation reads both sides and carries authored drops into prev
   const work = ductsDesign(
     null,
     fansDocumentSchema.parse({
-      componentDrops: { [elementSubject(node)]: { edit: { value: { inWg: 0.026 } } } },
+      componentDrops: { [elementSubject(node)]: { edit: { by: "human", value: { inWg: 0.026 } } } },
     }),
   );
   const request = applyRequest(
@@ -156,7 +156,7 @@ test("an authored terminal flow inside a fan walk with no network groups reaches
     const nodes = snapshot.nodes.map((n) => (n.id === authored!.id ? { ...n, flowParameter: "Flow" } : n));
     const s = { ...snapshot, nodes, walk: walk ? { startId: 14577391, hops: 1, elementsReached: snapshot.nodes.length, openEnds: 0, candidates: [], truncated: false, elapsedMs: 1, unreadPeers: [] } : undefined };
     const work = ductsDesign(null, fansDocumentSchema.parse({
-      flows: { [elementSubject(authored!)]: { edit: { value: 123, ref: "controlled sample proof" } } },
+      flows: { [elementSubject(authored!)]: { edit: { by: "human", value: 123, ref: "controlled sample proof" } } },
     }));
     return scopeApplyRequest(applyRequest(s, price(s, {}, work, work ?? neutralFansWork, EMPTY_CATALOGS), "", []), s.store, [["flows", elementSubject(authored!)]], s);
   };
@@ -177,7 +177,7 @@ test("a requested write cell that derives no write is refused, never planned as 
 test("an unwritten cell names why: an empty or consumed Work cell is not a staged value", () => {
   // The preserved r82 shape: writeIntent still names both ESP cells after r67 published both edits.
   const fans = fansDocumentSchema.parse({
-    esp: { "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00de6eef": { edit: null }, "UniqueId:6d52156a-3876-4d76-b641-341454252f26-0098d62d": { edit: { value: { inWg: 2.7 } } } },
+    esp: { "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00de6eef": { edit: null }, "UniqueId:6d52156a-3876-4d76-b641-341454252f26-0098d62d": { edit: { by: "human", value: { inWg: 2.7 } } } },
   });
   const staged = stagedValues(null, fans);
   expect(unwrittenReason(staged, ["esp", "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00de6eef"])).toMatch(/no staged edit/);
