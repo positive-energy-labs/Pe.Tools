@@ -3,6 +3,18 @@ import { z } from "zod";
 import { contract } from "@pe/agent-contracts/handle";
 import { hostRead } from "./host-read.ts";
 
+test("lazy fixture providers load on demand and refuse unregistered names", async () => {
+  let loaded = 0;
+  const read = hostRead(contract("example.lazy", { input: z.object({}), data: z.number(), uses: [] }), async () => {
+    loaded++;
+    return { scene: () => ({ data: 42, coverage: { requested: [], covered: [], unknown: [], refused: [] } }) };
+  });
+  expect(loaded).toBe(0);
+  expect((await read.source.provide!("scene", {})).value?.data).toBe(42);
+  expect(loaded).toBe(1);
+  await expect(read.source.provide!("missing", {})).rejects.toThrow("No fixture 'missing'");
+});
+
 test("union read inputs retain member validation", () => {
   const input = z.union([
     z.object({ kind: z.literal("a"), a: z.string() }),

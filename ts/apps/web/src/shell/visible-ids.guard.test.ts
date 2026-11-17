@@ -14,30 +14,30 @@ import { inputsFor } from "@pe/fans-domain/calc/test-inputs";
 // Registry words and actual declared fixture publications must name things, never their keys.
 afterEach(() => vi.unstubAllGlobals());
 const routes = Object.keys(routeRegistry).sort().map((key) => routeRegistry[key]!.module);
-const fixtures = (module: (typeof routes)[number]) => {
+const fixtures = async (module: (typeof routes)[number]) => {
   const page: Page<Fields> = { ...Object.fromEntries(Object.entries(module.spec.fields).map(([key, field]) => [key, field.initial])), selected: [] };
   const reads = new Set<HostRead & { args?(page: Page<Fields>): unknown }>([
     ...Object.values(module.spec.reads ?? {}),
     ...Object.values(module.spec.panes).flatMap((pane) => pane.read ? [pane.read] : []),
     ...(module.spec.core ? [module.spec.core] : []),
   ]);
-  return [...reads].flatMap((read) => Object.keys(read.fixtures ?? {}).map((name) => ({
-    read, name, publication: read.source.provide!(name, read.args?.(page) ?? {}),
-  })));
+  return (await Promise.all([...reads].map(async read => Promise.all(Object.keys(
+    typeof read.fixtures === "function" ? await read.fixtures() : read.fixtures ?? {},
+  ).map(async name => ({ read, name, publication: await read.source.provide!(name, read.args?.(page) ?? {}) })))))).flat();
 };
 
 // C746 Family runtime picker/roster/stage labels are also driven by the D G07 Family journey
 // in route/kernel-journeys-focus.test.tsx; this registry inventory stays exhaustive.
 test.each(routes.map((module) => [module.data.address, module] as const))(
   "/%s renders no internal identity in its subject, verb, pane or stage words",
-  (_, module) => {
+  async (_, module) => {
     vi.stubGlobal("fetch", vi.fn(() => { throw Error("Real host called"); }));
     const data = module.data;
     const internal = [...Object.keys(data.verbs), ...Object.keys(data.panes)].filter(id => id.includes("-"));
     const words = [data.name, data.directory.label, ...(data.subject ? [data.subject.noun] : []),
       ...Object.values(data.verbs).map(verb => verb.label),
       ...Object.values(data.panes).flatMap(pane => [pane.label, pane.purpose])];
-    for (const fixture of fixtures(module))
+    for (const fixture of await fixtures(module))
       if (module.spec.subject && fixture.read === (module.spec.subject.read ?? module.spec.core))
         words.push(...module.spec.subject.options(fixture.publication.value!.data).map(option => option.label));
     for (const word of words) expect(leaks(word, internal), `${data.key}: ${word}`).toEqual([]);
@@ -60,9 +60,9 @@ function displayStrings(value: unknown, key = "", out: string[] = []): string[] 
 // Inspect the display fields of the actual typed fixture providers, not legacy seed URLs.
 test.each(routes.map((module) => [module.data.address, module] as const))(
   "/%s fixture seeds carry no internal identity in any display text",
-  (_, module) => {
+  async (_, module) => {
     vi.stubGlobal("fetch", vi.fn(() => { throw Error("Real host called"); }));
-    for (const { read, name, publication } of fixtures(module))
+    for (const { read, name, publication } of await fixtures(module))
       for (const text of displayStrings(publication.value?.data))
         expect(leaks(text), `${module.spec.key}/${read.key}/${name}: ${text}`).toEqual([]);
   },

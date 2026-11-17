@@ -107,8 +107,8 @@ function pictureJourney() {
       work: { address: null, open: null },
       address: { read: () => new URLSearchParams(), write() {}, subscribe: () => () => {} },
       custody: { current: () => true }, memory: () => ({ viewport: { kind: "orbit", yaw: 225, elev: 32, zoom: 1, pivot: [0, 0, 0] } }),
-    }, stamp, { timeline: fixtureTimeline(), sources: { "fans.sheet": { kind: "use", open(ctx, deliver) {
-      const packet = structuredClone(fans.spec.core!.source.provide!("layout", ctx.args));
+    }, stamp, { timeline: fixtureTimeline(), sources: { "fans.sheet": { kind: "use", async open(ctx, deliver) {
+      const packet = structuredClone(await fans.spec.core!.source.provide!("layout", ctx.args));
       const data = packet.value!.data as any;
       data.sheetSnapshot.sourceVersion = `h04-${openId}`;
       if (empty) { data.sheetSnapshot.nodes = []; data.sheetSnapshot.segments = []; data.open = null; data.opened = []; data.rows = []; data.fans.rows = []; }
