@@ -89,9 +89,9 @@ test.each(["human", "pea"])("each write keeps the Work cell's author when %s pre
   );
   expect(review.cells).toEqual([
     expect.objectContaining({ key: "equipment-flow:7", before: "880 cfm", author: "pea" }),
-    expect.objectContaining({ key: "terminal:8", before: null, author: "unknown" }),
-    expect.objectContaining({ key: "slot:fanFlow", author: "unknown" }),
-    expect.objectContaining({ key: "store:", author: "unknown" }),
+    expect.objectContaining({ key: "terminal:8", before: null, author: null }),
+    expect.objectContaining({ key: "slot:fanFlow", author: null }),
+    expect.objectContaining({ key: "store:", author: null }),
   ]);
   expect(review.cells[0]!.after).toContain("925 cfm");
   expect(review.cells[1]!.after).toContain("0.05 in-wg");

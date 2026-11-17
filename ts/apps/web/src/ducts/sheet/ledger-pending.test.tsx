@@ -9,7 +9,7 @@ import { FANS_LEDGER_ESP } from "../../../../../tests/e2e/cdp.ts";
 
 afterEach(cleanup);
 
-test("a Work ESP is labelled by its resolved source, never as a Revit write", () => {
+test("a stated rated ESP is labelled rated with its resolved source, never as required or a Revit write", () => {
   const sheet = openSheetSchema.parse({
     overview: fixture.overview,
     inputs: fixture.inputs,
@@ -50,7 +50,7 @@ test("a Work ESP is labelled by its resolved source, never as a Revit write", ()
     </div>
   );
   const view = render(draw());
-  expect(view.getByText("required (Work)")).toBeTruthy();
+  expect(view.getByText("rated (Work)")).toBeTruthy();
   expect(view.getByText("2.6581")).toBeTruthy();
   expect(view.queryByText("required (written)")).toBeNull();
   expect(view.container.querySelector(FANS_LEDGER_ESP)?.textContent).toBe("2.6581");
