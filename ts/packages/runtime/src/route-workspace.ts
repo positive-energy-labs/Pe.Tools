@@ -880,6 +880,8 @@ export class RouteWorkspace {
       }
     };
     validate(seed);
+    // A stand-in author is only for complete preflight validation; these stamped bytes are never persisted.
+    registration.spec.schema.parse(stampChanges(seed, undefined, "human", 0));
     return seed;
   }
 
