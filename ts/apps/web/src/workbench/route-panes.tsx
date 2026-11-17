@@ -1,11 +1,12 @@
 import { usePlaceViews, PlaceViewsProvider, PublishedPlaceViews } from "../shell/typed-shell";
 import { useEffect, useLayoutEffect, useMemo, useState, type ReactNode } from "react";
 import { useAtomValue } from "@effect/atom-react";
-import { useNavigate, useRouterState } from "@tanstack/react-router";
+import { useNavigate, useRouter, useRouterState } from "@tanstack/react-router";
 import { routeAddress, split, pane } from "@pe/agent-contracts";
 import { TypedShell } from "../shell/typed-shell";
 import { routeRegistry } from "../route/registry";
-import { DockSurface } from "./hosted-route";
+import { DockSurface, dockChatAddress } from "./hosted-route";
+import { admittedRouterAddress } from "../shell/typed-place-boundary";
 import { DockBand } from "../shell/pane-actions";
 import { EmptyState } from "@pe/kit/lang/empty";
 import { Button } from "@pe/kit/lang/button";
@@ -38,6 +39,8 @@ export function RouteDock({
   renderRoute: (body: ReactNode) => ReactNode;
 }) {
   const { store } = useWorkbench();
+  const router = useRouter();
+  const chatAddress = useMemo(() => dockChatAddress(admittedRouterAddress(router.history)), [router]);
   const views = usePlaceViews();
   const tabs = useRouteTabs();
   const chat = routeRegistry.chat;
@@ -139,7 +142,7 @@ export function RouteDock({
             frame(
               tabs.route || pea ? (
                 <DockBand value={{ node: peaHead }}><DockSurface value={{ docked: Boolean(tabs.route), target: tabs.target }}>
-                  <TypedShell module={chat.module} fingerprint={chat.fingerprint} />
+                  <TypedShell module={chat.module} fingerprint={chat.fingerprint} address={tabs.route ? chatAddress : undefined} />
                 </DockSurface></DockBand>
               ) : (
                 children

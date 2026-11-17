@@ -5,6 +5,24 @@ import { subjectCode } from "@pe/agent-contracts";
 import type { TypedRoute } from "../route/typed-route";
 export type DockSurfaceProps = { target?: string; docked?: boolean };
 export const DockSurface = createContext<DockSurfaceProps>({});
+export function dockChatAddress(address: AdmittedAddressPort): AdmittedAddressPort {
+  // A tool's fixture owns its model reads; docked Pea still reads the host's conversation context.
+  return {
+    read() {
+      const search = new URLSearchParams(address.read());
+      search.delete("fixture");
+      return search;
+    },
+    write(next, history) {
+      const search = new URLSearchParams(next);
+      const fixture = address.read().get("fixture");
+      if (fixture === null) search.delete("fixture");
+      else search.set("fixture", fixture);
+      address.write(search, history);
+    },
+    subscribe: listener => address.subscribe(listener),
+  };
+}
 export interface HostedRouteProps {
   thread: string;
   visible: boolean;
