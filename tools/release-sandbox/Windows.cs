@@ -131,6 +131,10 @@ public static class PeConsoleObserver {
     var process=new ProcessInfo();
     var cmd=Environment.GetEnvironmentVariable("ComSpec");
     var caption="PE_CONSOLE_OBSERVER_CONTROL_"+Guid.NewGuid().ToString("N");
+    // The console must carry the caption from creation: `title` inside cmd runs after the window is shown, and the
+    // title change is a NAMECHANGE event the hook does not watch, so a fast guest saw only the default title
+    // (release-20261117-0731-wsb remaining-events.json) and calibration timed out. The match rule is unchanged.
+    startup.Title=caption;
     if(Interlocked.CompareExchange(ref controlTitle,caption,null)!=null) throw new InvalidOperationException("Control pulse already active");
     var started=DateTime.UtcNow;
     try {
