@@ -119,6 +119,7 @@ export function buildCalcTree(
             const blockers = sheet.blockers.filter((b) => b.elementId === leg.elementId);
             const values = {
               fan: sheet.fan,
+              partial: sheet.claim.kind === "incomplete",
               self: leg.lossInWg,
               total: complete ? known : null,
               knownInWg: known,
@@ -166,6 +167,7 @@ export function buildCalcTree(
             fan: sheet.fan,
             total: wholeOf(sheet, path) ? path.knownInWg : null,
             knownInWg: path.knownInWg,
+            partial: sheet.claim.kind === "incomplete",
             ft: knownFt,
             split: splitOf(
               snapshot,
