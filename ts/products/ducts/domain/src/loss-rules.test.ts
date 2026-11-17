@@ -330,13 +330,9 @@ it.each(["ER5-2", "ER5-3"])(
     const tap = rectTap(22, 8),
       facts = await tapFacts(tap, trunk);
     for (const leg of ["Cb", "Cs"] as const) {
-      const input = {
-        kind: "fitting" as const,
-        fitting: tap,
-        facts,
+      const input = { kind: "fitting" as const, fitting: tap, facts,
         flows: { through: 400, branch: 400, upstreamMain: 1000, downstreamMain: 600 },
-        leg,
-      };
+        leg };
       const price = (abOverAc: number) =>
         priceLeg({ ...input, facts: { ...facts, abOverAc } }, CONVERGING, {
           "tap-converging-rect": table,
