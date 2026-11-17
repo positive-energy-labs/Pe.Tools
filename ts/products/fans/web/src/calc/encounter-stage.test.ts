@@ -4,7 +4,7 @@ import { ductsRouteState, ductsDocumentSchema, stagedDucts, encounterPatches } f
 import { RouteWorkspace } from "@pe/runtime";
 import { encounterRulings } from "@pe/ducts-domain/calc/inputs";
 import { TEST_COVERAGE, TEST_FIRM } from "@pe/ducts-domain/test-inputs";
-import { snapshotOf } from "@pe/ducts-domain/test-snapshot";
+import { snapshotOf, nodeOf, uniqueIdOf } from "@pe/ducts-domain/test-snapshot";
 import { publishedCalcExample } from "@pe/ducts-domain/published-calcs.fixture";
 import { resolveInputs } from "@pe/ducts-domain/calc/inputs";
 import { claimOf, encountersOf, hostStatic } from "@pe/fans-domain/calc/encounters";
@@ -46,9 +46,12 @@ it.each(["connect", "ignore"] as const)("closer stages %s through duct-systems W
   if (choice === "ignore") { expect(claim.kind).toBe("incomplete"); return; }
   expect(claim).toMatchObject({ kind: "complete", requiredEspInWg: 1 }); // 0.1 + (1 - 0.3) + 0.2
   if (claim.kind !== "complete") throw Error("Expected complete");
-  const snapshot = snapshotOf({}), sheet = { ...publishedCalcExample(), claim, legs, walkedElementIds: [] };
+  const at = "2026-11-17T00:00:00Z", prior = publishedCalcExample();
+  const snapshot = snapshotOf({ document: { title: "tie-in", readAt: at, elapsedMs: 0, networkBasedCalculations: true }, nodes: [nodeOf(300, "equipment")],
+    parameterCohorts: [{ parameter: "ESP", owner: { kind: "instance", id: 300 }, complete: true, basis: at, members: [{ elementId: 300, uniqueId: uniqueIdOf(300) }] }] });
+  const sheet = { ...prior, fan: { ...prior.fan, ...fan }, claim, legs, walkedElementIds: [] };
   expect(mintWriteRequest(claim, sheet, { snapshot, fan, roster: [], grids: {}, inputs: resolveInputs({ snapshot, firm: TEST_FIRM }) },
-    { appliedAt: "2026-11-17T00:00:00Z", slots: { requiredEsp: "" }, peerClaims: new Map(), rulings: {}, storeDeletes: { roles: [], verdicts: [] } })).toHaveProperty("equipment");
+    { appliedAt: at, slots: { requiredEsp: "ESP" }, peerClaims: new Map(), rulings: {}, storeDeletes: { roles: [], verdicts: [] } }).equipment).toEqual([{ id: 300, externalStaticInWg: 1 }]);
 });
 
 it("a deadhead has no accept closer and staging acceptance is refused", () => {
