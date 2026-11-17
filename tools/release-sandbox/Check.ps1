@@ -61,53 +61,36 @@ try {
     }
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     Add-Type -AssemblyName System.IO.Compression
-    $packageDirectory = Join-Path $scratch 'sdk-package'; $shims = Join-Path $scratch 'sdk-shims'
-    New-Item -ItemType Directory $packageDirectory, $shims | Out-Null
-    '<package><metadata><version>0.1.0-beta.196</version></metadata></package>' | Set-Content "$packageDirectory\Pe.Revit.Cli.nuspec"
-    foreach ($name in 'Pe.Revit.Cli.exe', 'Pe.Revit.Cli.dll', 'Pe.Revit.Cli.deps.json', 'Pe.Revit.Cli.runtimeconfig.json', 'loader/net48/Pe.Revit.Loader.dll', 'loader/net8.0-windows/Pe.Revit.Loader.dll', 'bridge/net48/Pe.Revit.Bridge.dll', 'bridge/net8.0-windows/Pe.Revit.Bridge.dll', 'bootstrap/net48/Pe.Revit.Loader.Bootstrap.dll', 'bootstrap/net8.0-windows/Pe.Revit.Loader.Bootstrap.dll') {
-        $original = Join-Path $packageDirectory ('tools/net8.0/any/' + $name)
-        $installed = Join-Path $shims $(if ($name -eq 'Pe.Revit.Cli.exe') { 'pe-revit.exe' } else { $name })
-        New-Item -ItemType Directory (Split-Path $original), (Split-Path $installed) -Force | Out-Null
-        $name | Set-Content $original; Copy-Item $original $installed
+    $packageDirectory=Join-Path $scratch 'sdk-package';$shims=Join-Path $scratch 'sdk-shims'
+    New-Item -ItemType Directory $packageDirectory,$shims|Out-Null
+    '<package><metadata><version>0.1.0-beta.196</version></metadata></package>'|Set-Content "$packageDirectory\Pe.Revit.Cli.nuspec"
+    $names=@('Pe.Revit.Cli.exe','Pe.Revit.Cli.dll','Pe.Revit.Cli.deps.json','Pe.Revit.Cli.runtimeconfig.json','loader/net48/Pe.Revit.Loader.dll','loader/net8.0-windows/Pe.Revit.Loader.dll','bridge/net48/Pe.Revit.Bridge.dll','bridge/net8.0-windows/Pe.Revit.Bridge.dll','bootstrap/net48/Pe.Revit.Loader.Bootstrap.dll','bootstrap/net8.0-windows/Pe.Revit.Loader.Bootstrap.dll','third-party.dll')
+    foreach($name in $names) {
+        $portable=Join-Path $packageDirectory ('tools/net8.0/any/'+$name)
+        $rid=Join-Path $packageDirectory ('tools/net8.0/any/installed/win-x64/'+$name)
+        $installed=Join-Path $shims $(if($name -eq 'Pe.Revit.Cli.exe'){'pe-revit.exe'}else{$name})
+        New-Item -ItemType Directory (Split-Path $portable),(Split-Path $rid),(Split-Path $installed) -Force|Out-Null
+        ('wrong portable bytes '+$name)|Set-Content $portable
+        ('exact RID bytes '+$name)|Set-Content $rid
+        Copy-Item $rid $installed
     }
-    $originalDeps = @{ runtimeTarget = @{ name = '.NETCoreApp,Version=v8.0' }; libraries = @{ 'Pe.Revit.Cli/0.1.0-beta.196' = @{}; 'Pe.Revit.Core/1.2.3' = @{} } }
-    $installedDeps = @{ runtimeTarget = @{ name = '.NETCoreApp,Version=v8.0/win-x64' }; libraries = $originalDeps.libraries }
-    $originalRuntime = @{ runtimeOptions = @{ tfm = 'net8.0'; framework = @{ name = 'Microsoft.NETCore.App'; version = '8.0.0' } } }
-    $installedRuntime = @{ runtimeOptions = @{ tfm = 'net8.0'; includedFrameworks = @(@{ name = 'Microsoft.NETCore.App'; version = '8.0.26' }) } }
-    foreach ($item in @(@{ name='Pe.Revit.Cli.deps.json'; original=$originalDeps; installed=$installedDeps }, @{ name='Pe.Revit.Cli.runtimeconfig.json'; original=$originalRuntime; installed=$installedRuntime })) {
-        $item.original | ConvertTo-Json -Depth 8 | Set-Content (Join-Path $packageDirectory ('tools/net8.0/any/'+$item.name))
-        $item.installed | ConvertTo-Json -Depth 8 | Set-Content (Join-Path $shims $item.name)
-    }
-    '<DotNetCliTool />' | Set-Content "$packageDirectory\tools\net8.0\any\DotnetToolSettings.xml"
-    $package = Join-Path $scratch 'sdk-closure.nupkg'; $archive = [IO.Compression.ZipFile]::Open($package, [IO.Compression.ZipArchiveMode]::Create)
+    foreach($name in 'DotnetToolSettings.xml','symbols.pdb'){'not installed'|Set-Content "$packageDirectory\tools\net8.0\any\installed\win-x64\$name"}
+    $package=Join-Path $scratch 'sdk-closure.nupkg';$archive=[IO.Compression.ZipFile]::Open($package,[IO.Compression.ZipArchiveMode]::Create)
     try {
-        foreach ($file in Get-ChildItem $packageDirectory -File -Recurse) {
-            $name = $file.FullName.Substring($packageDirectory.Length + 1).Replace('\', '/')
-            $entry = $archive.CreateEntry($name); $output = $entry.Open(); $input = [IO.File]::OpenRead($file.FullName)
-            try { $input.CopyTo($output) } finally { $input.Dispose(); $output.Dispose() }
+        foreach($file in Get-ChildItem $packageDirectory -File -Recurse) {
+            $name=$file.FullName.Substring($packageDirectory.Length+1).Replace('\','/')
+            $entry=$archive.CreateEntry($name);$output=$entry.Open();$input=[IO.File]::OpenRead($file.FullName)
+            try{$input.CopyTo($output)}finally{$input.Dispose();$output.Dispose()}
         }
-    } finally { $archive.Dispose() }
+    }finally{$archive.Dispose()}
     CompareSdkClosure $package $shims '0.1.0-beta.196' "$scratch\sdk-closure.json"
-    $referenceDeps = $originalDeps | ConvertTo-Json -Depth 8 | ConvertFrom-Json
-    foreach ($bad in 'rid','library-version','tfm','framework-version','framework-dependent') {
-        $deps = $installedDeps | ConvertTo-Json -Depth 8 | ConvertFrom-Json
-        $runtime = $installedRuntime | ConvertTo-Json -Depth 8 | ConvertFrom-Json
-        switch ($bad) {
-            'rid' { $deps.runtimeTarget.name = '.NETCoreApp,Version=v8.0/linux-x64' }
-            'library-version' { $deps.libraries.PSObject.Properties.Remove('Pe.Revit.Core/1.2.3'); $deps.libraries | Add-Member 'Pe.Revit.Core/9.9.9' @{} }
-            'tfm' { $runtime.runtimeOptions.tfm = 'net9.0' }
-            'framework-version' { $runtime.runtimeOptions.includedFrameworks[0].version = '9.0.0' }
-            'framework-dependent' { $runtime.runtimeOptions | Add-Member framework @{ name='Microsoft.NETCore.App'; version='8.0.26' } }
-        }
-        $refused = $false
-        try { Assert-GateSdkDeploymentForm 'Pe.Revit.Cli.deps.json' $referenceDeps $deps; Assert-GateSdkDeploymentForm 'Pe.Revit.Cli.runtimeconfig.json' $originalRuntime $runtime } catch { $refused = $true }
-        if (!$refused) { throw "SDK deployment form accepted $bad." }
-    }
-    foreach ($bad in 'version', 'bytes') {
-        if ($bad -eq 'bytes') { 'changed runtime' | Set-Content "$shims\Pe.Revit.Cli.dll" }
-        $refused = $false
-        try { CompareSdkClosure $package $shims $(if ($bad -eq 'version') { '0.1.0-beta.197' } else { '0.1.0-beta.196' }) "$scratch\sdk-refused-$bad.json" } catch { $refused = $true }
-        if (!$refused) { throw 'Original SDK closure accepted changed version or bytes.' }
+    foreach($bad in 'version','managed-bytes','deps-bytes','runtimeconfig-bytes','third-party-bytes','required-runtime') {
+        $changed=switch($bad){'managed-bytes'{'Pe.Revit.Cli.dll'} 'deps-bytes'{'Pe.Revit.Cli.deps.json'} 'runtimeconfig-bytes'{'Pe.Revit.Cli.runtimeconfig.json'} 'third-party-bytes'{'third-party.dll'} 'required-runtime'{'bridge/net48/Pe.Revit.Bridge.dll'}}
+        if($changed){if($bad -eq 'required-runtime'){Remove-Item (Join-Path $shims $changed)}else{'changed RID bytes'|Set-Content (Join-Path $shims $changed)}}
+        $refused=$false
+        try{CompareSdkClosure $package $shims $(if($bad -eq 'version'){'0.1.0-beta.197'}else{'0.1.0-beta.196'}) "$scratch\sdk-refused-$bad.json"}catch{$refused=$true}
+        if(!$refused){throw "SDK RID byte closure accepted $bad."}
+        if($changed){Copy-Item (Join-Path $packageDirectory ('tools/net8.0/any/installed/win-x64/'+$changed)) (Join-Path $shims $changed)}
     }
     $evidence = Join-Path $scratch 'evidence'
     New-Item -ItemType Directory (Join-Path $evidence 'nested') -Force | Out-Null
