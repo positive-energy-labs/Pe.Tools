@@ -1,0 +1,1738 @@
+{
+  "branch": "crusade/fans-P4-move",
+  "implementation_sha": "86c02c98d76fdac87ed047630eba689f4698b342",
+  "status": "implemented; zero new reds; two untouched-base stray journey reds carried",
+  "checkpoint_sha": "3efd2b57a3e5ecddd5212a40511ed67594bd81ec",
+  "integration_merges": {
+    "9a4b646b": "4288034c05ba91112375a6114d2e260d111a57d5",
+    "1999f3fa": "4ba9b2cd7d182ade63d667889ebc03b738ff84fa"
+  },
+  "sdk": "beta.224",
+  "typecheck_exits": {
+    "packages/agent-contracts": 0,
+    "packages/host-contracts": 0,
+    "packages/runtime": 0,
+    "packages/mcps": 0,
+    "apps/host": 0,
+    "apps/web": 0,
+    "tests/repo-guards": 0,
+    "products/ducts/contract": 0,
+    "products/ducts/domain": 0,
+    "products/ducts/host": 0,
+    "products/ducts/web": 0,
+    "products/fans/contract": 0,
+    "products/fans/domain": 0,
+    "products/fans/host": 0,
+    "products/fans/web": 0,
+    "products/duct-systems/contract": 0,
+    "products/duct-systems/domain": 0,
+    "products/duct-systems/host": 0,
+    "products/duct-systems/web": 0
+  },
+  "last_product_test_results": {
+    "products/fans/host": {
+      "exit": 0,
+      "files_selected": 6,
+      "summary": [
+        "Test Files  6 passed (6)",
+        "Tests  37 passed (37)",
+        "Duration  593.14s (transform 26.49s, setup 49ms, import 41.06s, tests 547.18s, environment 0ms)"
+      ],
+      "log": "final-products-fans-host.log"
+    },
+    "products/fans/web": {
+      "exit": 1,
+      "files_selected": 34,
+      "summary": [
+        "Test Files  2 failed | 32 passed (34)",
+        "Tests  2 failed | 99 passed (101)",
+        "Duration  91.80s (transform 195.93s, setup 9.66s, import 331.56s, tests 144.64s, environment 30.11s)"
+      ],
+      "log": "final-products-fans-web.log"
+    },
+    "products/duct-systems/web": {
+      "exit": 0,
+      "files_selected": 15,
+      "summary": [
+        "Test Files  15 passed (15)",
+        "Tests  61 passed (61)",
+        "Duration  19.70s (transform 64.18s, setup 7.49s, import 109.04s, tests 8.15s, environment 18.16s)"
+      ],
+      "log": "final-products-duct-systems-web.log"
+    },
+    "products/ducts/web": {
+      "exit": 0,
+      "files_selected": 16,
+      "summary": [
+        "Test Files  16 passed (16)",
+        "Tests  52 passed | 1 skipped (53)",
+        "Duration  11.06s (transform 52.34s, setup 1.94s, import 101.57s, tests 1.11s, environment 3.09s)"
+      ],
+      "log": "final-products-ducts-web.log"
+    },
+    "products/ducts/host": {
+      "exit": 0,
+      "files_selected": 3,
+      "summary": [
+        "Test Files  3 passed (3)",
+        "Tests  9 passed (9)",
+        "Duration  23.24s (transform 8.59s, setup 38ms, import 17.21s, tests 856ms, environment 1ms)"
+      ],
+      "log": "final-products-ducts-host.log"
+    },
+    "products/duct-systems/host": {
+      "exit": 0,
+      "files_selected": 1,
+      "summary": [
+        "Test Files  1 passed (1)",
+        "Tests  2 passed (2)",
+        "Duration  11.01s (transform 4.59s, setup 20ms, import 7.36s, tests 6ms, environment 0ms)"
+      ],
+      "log": "final-products-duct-systems-host.log"
+    },
+    "products/ducts/contract": {
+      "exit": 0,
+      "files_selected": 1,
+      "summary": [
+        "Test Files  1 passed (1)",
+        "Tests  5 passed (5)",
+        "Duration  851ms (transform 281ms, setup 19ms, import 476ms, tests 13ms, environment 0ms)"
+      ],
+      "log": "final-products-ducts-contract.log"
+    },
+    "products/fans/contract": {
+      "exit": 0,
+      "files_selected": 2,
+      "summary": [
+        "Test Files  2 passed (2)",
+        "Tests  12 passed (12)",
+        "Duration  3.56s (transform 2.46s, setup 48ms, import 4.13s, tests 34ms, environment 0ms)"
+      ],
+      "log": "final-products-fans-contract.log"
+    },
+    "products/ducts/domain": {
+      "exit": 0,
+      "files_selected": 21,
+      "summary": [
+        "Test Files  21 passed (21)",
+        "Tests  119 passed (119)",
+        "Duration  5.50s (transform 24.06s, setup 1.03s, import 42.50s, tests 959ms, environment 4ms)"
+      ],
+      "log": "final-products-ducts-domain.log"
+    },
+    "products/duct-systems/domain": {
+      "exit": 0,
+      "files_selected": 4,
+      "summary": [
+        "Test Files  4 passed (4)",
+        "Tests  9 passed (9)",
+        "Duration  4.32s (transform 2.78s, setup 67ms, import 4.41s, tests 21ms, environment 0ms)"
+      ],
+      "log": "final-products-duct-systems-domain.log"
+    },
+    "products/fans/domain": {
+      "exit": 0,
+      "files_selected": 16,
+      "summary": [
+        "Test Files  16 passed (16)",
+        "Tests  98 passed (98)",
+        "Duration  64.68s (transform 43.59s, setup 1.24s, import 77.94s, tests 135.68s, environment 2ms)"
+      ],
+      "log": "final-products-fans-domain.log"
+    }
+  },
+  "before": {
+    "files": 117,
+    "tests": 503,
+    "passed": 494,
+    "failed": 8,
+    "skipped": 1,
+    "host_checkpoint_log": "ts-apps-host-cuts.log"
+  },
+  "after": {
+    "files": 119,
+    "tests": 506,
+    "passed": 503,
+    "failed": 2,
+    "skipped": 1
+  },
+  "count_differences": [
+    "Handoff adds one 369-system case in the existing ledger-fix journey file.",
+    "STRAYS adds two existing test files / two cases from generic shell, plus one support file.",
+    "Eight native-door base reds repaired in fixtures; all nine native-door cases pass.",
+    "Both stray Plan-wait cases fail unchanged on untouched 1999f3fa; copied into product without a behavior change."
+  ],
+  "base_fans_native_test": "Untouched 79323b91: 8 failed / 1 passed; primary ducts Work had the fan plan. Repaired by 5dedc71c, test fixtures only.",
+  "base_stray_test": {
+    "sha": "1999f3fa",
+    "exit": 1,
+    "files": 2,
+    "failed": 2,
+    "log": "p4-stray-untouched-tests.log",
+    "assertions": [
+      "fans-plan-composition.test-support.tsx:204 planPending remains false",
+      "fans-plan-composition.test-support.tsx:256 planPending remains false"
+    ]
+  },
+  "generation": {
+    "command": "machine.py run codegen -- vp run codegen:routes",
+    "cwd": "ts/apps/web",
+    "exit": 0,
+    "routes": 18,
+    "host_executor_groups": 3
+  },
+  "guards": {
+    "files": 3,
+    "passed": 7,
+    "log": "p4-guards.log",
+    "route_closure_baseline": 1,
+    "unchanged_edge": "sessions/route.ts -> open/route",
+    "product_names": {
+      "files": 43,
+      "mentions": 528,
+      "found": {
+        "apps/host/src/agent-directory.ts": 1,
+        "apps/host/src/builtin-inputs.ts": 45,
+        "apps/host/src/builtin-read-handles.ts": 2,
+        "apps/host/src/call-route.ts": 33,
+        "apps/host/src/content-roots.ts": 3,
+        "apps/host/src/family-actions.ts": 3,
+        "apps/host/src/input-occurrence.ts": 2,
+        "apps/host/src/native-recording.ts": 1,
+        "apps/host/src/resource-adapters.ts": 9,
+        "apps/host/src/pages/pe.js": 3,
+        "apps/host/src/slots/findings.ts": 1,
+        "apps/host/src/slots/sheet.ts": 5,
+        "apps/web/src/route/help.tsx": 1,
+        "apps/web/src/route/route-discovery.ts": 1,
+        "apps/web/src/route/route-target.ts": 1,
+        "apps/web/src/route/seed-schedule-content.ts": 1,
+        "apps/web/src/route/seeds.ts": 1,
+        "apps/web/src/route/slots/goal/index.ts": 1,
+        "apps/web/src/shell/fixture-examples.ts": 7,
+        "packages/runtime/src/recording-diff.ts": 4,
+        "packages/mcps/src/pea/capability-projections.ts": 2,
+        "packages/mcps/src/pea/capability-tools.ts": 6,
+        "packages/mcps/src/pea/instructions.ts": 13,
+        "packages/mcps/src/pea/skills.ts": 42,
+        "packages/mcps/src/shared/admission.ts": 37,
+        "packages/mcps/src/shared/diagram.ts": 1,
+        "packages/agent-contracts/src/api-schemas.ts": 18,
+        "packages/agent-contracts/src/call-policy.ts": 3,
+        "packages/agent-contracts/src/index.ts": 10,
+        "packages/agent-contracts/src/native-output-read.ts": 1,
+        "packages/agent-contracts/src/pe-api.ts": 19,
+        "packages/agent-contracts/src/reading.ts": 32,
+        "packages/agent-contracts/src/recording-diff.ts": 1,
+        "packages/agent-contracts/src/route-kernel.fixtures.ts": 1,
+        "packages/agent-contracts/src/semantic-actions.ts": 109,
+        "packages/agent-contracts/src/setting-owners.ts": 25,
+        "packages/agent-contracts/src/work-timeline.ts": 1,
+        "packages/agent-contracts/src/work-value.ts": 2,
+        "packages/agent-contracts/src/generated/command-axes.generated.ts": 72,
+        "packages/agent-contracts/src/routes/index.ts": 3,
+        "packages/agent-contracts/src/routes/picture.ts": 3,
+        "packages/agent-contracts/src/slots/goal.ts": 1,
+        "packages/agent-contracts/src/slots/picture.ts": 1
+      }
+    }
+  },
+  "boundaries": {
+    "edges": 666,
+    "violations": [],
+    "forbidden_paths": []
+  },
+  "domain_dom_libs": false,
+  "wire_values_kept": {
+    "CALC_ENGINE_VERSION = \"sheet/4\"": "ts/products/fans/domain/src/calc/types.ts",
+    "CALC_GROUP = \"sheet\"": "ts/products/ducts/domain/src/calc/scoped-snapshot.ts",
+    "calc read id = \"fans.sheet\"": "ts/products/fans/contract/src/contract.ts",
+    "fanCalcBreakdown read id = \"fans.worksheet\"; ductCalc read id = \"ducts.sheet\"": "ts/products/fans/host/src/fan-calc.ts",
+    "Work key / route key \"ducts\"; pane/stage ids; sheetPath / sheetView / sheetSnapshot wire properties": "ts/products/fans/web/route.ts; ts/products/duct-systems/web/route.ts; ts/products/fans/contract/src/fans.ts; ts/products/ducts/contract/src/ducts-calc.ts",
+    "FAN_CALC_GUIDE text / read ids": "ts/products/fans/contract/src/calc-read.ts",
+    "recording metadata wire values": "ts/packages/agent-contracts/src/input-occurrence.ts; ts/packages/agent-contracts/src/native-recording.ts"
+  },
+  "guide_paths": [
+    "ts/products/fans/web/src/calc/closer.ts",
+    "ts/products/fans/contract/src/pea/ducts-skill.ts",
+    "ts/products/fans/contract/src/calc-read.ts",
+    "ts/packages/mcps/src/pea/instructions.ts",
+    "ts/packages/mcps/src/pea/skills.ts"
+  ],
+  "integrity": {
+    "native_recording_blobs": [
+      {
+        "old": "ts/apps/host/tests/native-recordings/driver-ducts.snapshot.roster.json",
+        "new": "ts/products/ducts/host/src/tests/native-recordings/driver-ducts.snapshot.roster.json",
+        "sha256": "8b8100610db7887d9370d25114ea8b147045c8ed6f2d0c43ecb29469ea310bda"
+      },
+      {
+        "old": "ts/apps/host/tests/native-recordings/driver-ducts.snapshot.walk.json",
+        "new": "ts/products/ducts/host/src/tests/native-recordings/driver-ducts.snapshot.walk.json",
+        "sha256": "ade91466ece0875fb04c972bb8ab70fafb6c90253ded737dbdca582f5cba729c"
+      },
+      {
+        "old": "ts/apps/host/tests/native-recordings/driver-ducts.tables.json",
+        "new": "ts/products/ducts/host/src/tests/native-recordings/driver-ducts.tables.json",
+        "sha256": "763978d9115ad9ebe65d0014d2dcd9757148bcdaf4a31f9248206eff637ec6b7"
+      },
+      {
+        "old": "ts/apps/host/tests/native-recordings/fans-accessory-initial.json",
+        "new": "ts/products/fans/host/src/tests/native-recordings/fans-accessory-initial.json",
+        "sha256": "f35b98af92ac842b5f49700417234f02a75fcc537b2146ed0c6af4c9b8218bca"
+      },
+      {
+        "old": "ts/apps/host/tests/native-recordings/fans-accessory-missing.json",
+        "new": "ts/products/fans/host/src/tests/native-recordings/fans-accessory-missing.json",
+        "sha256": "ce85c8944a4807221e82a87de9457ad9cec1e9e7befb044c9f228cff15072a09"
+      },
+      {
+        "old": "ts/apps/host/tests/native-recordings/fresh-ducts.heal-request.json",
+        "new": "ts/products/ducts/host/src/tests/native-recordings/fresh-ducts.heal-request.json",
+        "sha256": "0855649ac234929bc3b72f271a3234554df151eb2b0d8c05c71ee18fa6e08a40"
+      },
+      {
+        "old": "ts/apps/host/tests/native-recordings/fresh-ducts.heal.json",
+        "new": "ts/products/ducts/host/src/tests/native-recordings/fresh-ducts.heal.json",
+        "sha256": "b3cb43d3d35ff3a2ffe53226b81c65f964747f0f5ccabd212c1813577b64d113"
+      },
+      {
+        "old": "ts/apps/host/tests/native-recordings/fresh-ducts.heal.preview-request.json",
+        "new": "ts/products/ducts/host/src/tests/native-recordings/fresh-ducts.heal.preview-request.json",
+        "sha256": "0855649ac234929bc3b72f271a3234554df151eb2b0d8c05c71ee18fa6e08a40"
+      },
+      {
+        "old": "ts/apps/host/tests/native-recordings/fresh-ducts.heal.preview.json",
+        "new": "ts/products/ducts/host/src/tests/native-recordings/fresh-ducts.heal.preview.json",
+        "sha256": "ca2ab60f92eb0935e4bfa771fd136a728d5ea18cb3c55f59d8578cfbbb4fde88"
+      },
+      {
+        "old": "ts/apps/host/tests/native-recordings/sdk-ducts.apply.json",
+        "new": "ts/products/ducts/host/src/tests/native-recordings/sdk-ducts.apply.json",
+        "sha256": "9efdefac769b46ea3769d3149dd03cedaea241679e2b59499b57a864b37064d5"
+      }
+    ],
+    "guide_templates_equal": true,
+    "guide_path": "ts/products/fans/contract/src/pea/ducts-skill.ts"
+  },
+  "production_line_counts": {
+    "production_ts": [
+      30979,
+      30821,
+      158
+    ],
+    "configs_json": [
+      934,
+      75,
+      859
+    ]
+  },
+  "growth": "Production TypeScript +158 net vs 1999f3fa, excluding tests, fixture/support files, generated output and configs. The pre-move cuts account for +152; composition / generation / rehoming account for the remaining +6. Generated package/config scaffolding is separately +859 net. No duplicated algorithm was added to a split file.",
+  "manifest_rehomings": [
+    {
+      "old": "ts/apps/host/tests/closed-fan.fixture.ts",
+      "manifest": "ts/products/fans/host/tests/closed-fan.fixture.ts",
+      "final": "ts/products/fans/host/src/tests/closed-fan.fixture.ts"
+    },
+    {
+      "old": "ts/apps/host/tests/ducts-heal-preparation.test.ts",
+      "manifest": "ts/products/duct-systems/host/tests/ducts-heal-preparation.test.ts",
+      "final": "ts/products/duct-systems/host/src/tests/ducts-heal-preparation.test.ts"
+    },
+    {
+      "old": "ts/apps/host/tests/ducts-inputs.test.ts",
+      "manifest": "ts/products/ducts/host/tests/ducts-inputs.test.ts",
+      "final": "ts/products/ducts/host/src/tests/ducts-inputs.test.ts"
+    },
+    {
+      "old": "ts/apps/host/tests/ducts-loss-scope.test.ts",
+      "manifest": "ts/products/ducts/host/tests/ducts-loss-scope.test.ts",
+      "final": "ts/products/fans/host/src/tests/ducts-loss-scope.test.ts"
+    },
+    {
+      "old": "ts/apps/host/tests/ducts-peer-claims.test.ts",
+      "manifest": "ts/products/ducts/host/tests/ducts-peer-claims.test.ts",
+      "final": "ts/products/fans/host/src/tests/ducts-peer-claims.test.ts"
+    },
+    {
+      "old": "ts/apps/host/tests/ducts-project-catalogs.test.ts",
+      "manifest": "ts/products/ducts/host/tests/ducts-project-catalogs.test.ts",
+      "final": "ts/products/ducts/host/src/tests/ducts-project-catalogs.test.ts"
+    },
+    {
+      "old": "ts/apps/host/tests/ducts-read.fixture.ts",
+      "manifest": "ts/products/ducts/host/tests/ducts-read.fixture.ts",
+      "final": "ts/products/ducts/host/src/tests/ducts-read.fixture.ts"
+    },
+    {
+      "old": "ts/apps/host/tests/ducts-type-footprint.test.ts",
+      "manifest": "ts/products/ducts/host/tests/ducts-type-footprint.test.ts",
+      "final": "ts/products/fans/host/src/tests/ducts-type-footprint.test.ts"
+    },
+    {
+      "old": "ts/apps/host/tests/fan-identity.test.ts",
+      "manifest": "ts/products/fans/host/tests/fan-identity.test.ts",
+      "final": "ts/products/fans/host/src/tests/fan-identity.test.ts"
+    },
+    {
+      "old": "ts/apps/host/tests/fans-native.fixture.ts",
+      "manifest": "ts/products/fans/host/tests/fans-native.fixture.ts",
+      "final": "ts/products/fans/host/src/tests/fans-native.fixture.ts"
+    },
+    {
+      "old": "ts/apps/host/tests/fans-native.test.ts",
+      "manifest": "ts/products/fans/host/tests/fans-native.test.ts",
+      "final": "ts/products/fans/host/src/tests/fans-native.test.ts"
+    },
+    {
+      "old": "ts/apps/host/tests/fans-work-fixture.ts",
+      "manifest": "ts/products/fans/host/tests/fans-work-fixture.ts",
+      "final": "ts/products/fans/host/src/tests/fans-work-fixture.ts"
+    },
+    {
+      "old": "ts/apps/host/tests/fixtures/ducts-live-seal-20261102.json",
+      "manifest": "ts/products/ducts/host/tests/fixtures/ducts-live-seal-20261102.json",
+      "final": "ts/products/ducts/host/src/tests/fixtures/ducts-live-seal-20261102.json"
+    },
+    {
+      "old": "ts/apps/host/tests/native-recordings/driver-ducts.snapshot.roster.json",
+      "manifest": "ts/products/ducts/host/tests/native-recordings/driver-ducts.snapshot.roster.json",
+      "final": "ts/products/ducts/host/src/tests/native-recordings/driver-ducts.snapshot.roster.json"
+    },
+    {
+      "old": "ts/apps/host/tests/native-recordings/driver-ducts.snapshot.walk.json",
+      "manifest": "ts/products/ducts/host/tests/native-recordings/driver-ducts.snapshot.walk.json",
+      "final": "ts/products/ducts/host/src/tests/native-recordings/driver-ducts.snapshot.walk.json"
+    },
+    {
+      "old": "ts/apps/host/tests/native-recordings/driver-ducts.tables.json",
+      "manifest": "ts/products/ducts/host/tests/native-recordings/driver-ducts.tables.json",
+      "final": "ts/products/ducts/host/src/tests/native-recordings/driver-ducts.tables.json"
+    },
+    {
+      "old": "ts/apps/host/tests/native-recordings/fans-accessory-initial.json",
+      "manifest": "ts/products/fans/host/tests/native-recordings/fans-accessory-initial.json",
+      "final": "ts/products/fans/host/src/tests/native-recordings/fans-accessory-initial.json"
+    },
+    {
+      "old": "ts/apps/host/tests/native-recordings/fans-accessory-missing.json",
+      "manifest": "ts/products/fans/host/tests/native-recordings/fans-accessory-missing.json",
+      "final": "ts/products/fans/host/src/tests/native-recordings/fans-accessory-missing.json"
+    },
+    {
+      "old": "ts/apps/host/tests/native-recordings/fresh-ducts.heal-request.json",
+      "manifest": "ts/products/ducts/host/tests/native-recordings/fresh-ducts.heal-request.json",
+      "final": "ts/products/ducts/host/src/tests/native-recordings/fresh-ducts.heal-request.json"
+    },
+    {
+      "old": "ts/apps/host/tests/native-recordings/fresh-ducts.heal.json",
+      "manifest": "ts/products/ducts/host/tests/native-recordings/fresh-ducts.heal.json",
+      "final": "ts/products/ducts/host/src/tests/native-recordings/fresh-ducts.heal.json"
+    },
+    {
+      "old": "ts/apps/host/tests/native-recordings/fresh-ducts.heal.preview-request.json",
+      "manifest": "ts/products/ducts/host/tests/native-recordings/fresh-ducts.heal.preview-request.json",
+      "final": "ts/products/ducts/host/src/tests/native-recordings/fresh-ducts.heal.preview-request.json"
+    },
+    {
+      "old": "ts/apps/host/tests/native-recordings/fresh-ducts.heal.preview.json",
+      "manifest": "ts/products/ducts/host/tests/native-recordings/fresh-ducts.heal.preview.json",
+      "final": "ts/products/ducts/host/src/tests/native-recordings/fresh-ducts.heal.preview.json"
+    },
+    {
+      "old": "ts/apps/host/tests/native-recordings/sdk-ducts.apply.json",
+      "manifest": "ts/products/ducts/host/tests/native-recordings/sdk-ducts.apply.json",
+      "final": "ts/products/ducts/host/src/tests/native-recordings/sdk-ducts.apply.json"
+    },
+    {
+      "old": "ts/apps/host/tests/product-home.test.ts",
+      "manifest": "ts/products/ducts/host/tests/product-home.test.ts",
+      "final": "ts/products/ducts/host/src/tests/product-home.test.ts"
+    },
+    {
+      "old": "ts/apps/host/tests/recorded-fans-graph.test.ts",
+      "manifest": "ts/products/fans/host/tests/recorded-fans-graph.test.ts",
+      "final": "ts/products/fans/host/src/tests/recorded-fans-graph.test.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/airflow.ts",
+      "manifest": "ts/products/ducts/web/ducts/airflow.ts",
+      "final": "ts/products/ducts/web/src/airflow.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/annotations-badges.test.tsx",
+      "manifest": "ts/products/duct-systems/web/ducts/annotations-badges.test.tsx",
+      "final": "ts/products/duct-systems/web/src/annotations-badges.test.tsx"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/annotations.test.ts",
+      "manifest": "ts/products/ducts/web/ducts/annotations.test.ts",
+      "final": "ts/products/ducts/web/src/annotations.test.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/annotations.tsx",
+      "manifest": "ts/products/ducts/web/ducts/annotations.tsx",
+      "final": "ts/products/ducts/web/src/annotations.tsx"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/assumptions.tsx",
+      "manifest": "ts/products/ducts/web/ducts/assumptions.tsx",
+      "final": "ts/products/ducts/web/src/assumptions.tsx"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/bindings.ts",
+      "manifest": "ts/products/duct-systems/web/ducts/bindings.ts",
+      "final": "ts/products/duct-systems/web/src/bindings.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/calcs.test-support.ts",
+      "manifest": "ts/products/duct-systems/web/ducts/calcs.test-support.ts",
+      "final": "ts/products/duct-systems/web/src/calcs.test-support.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/cell-focus.ts",
+      "manifest": "ts/products/ducts/web/ducts/cell-focus.ts",
+      "final": "ts/products/ducts/web/src/cell-focus.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/colours.fixture.ts",
+      "manifest": "ts/products/ducts/web/ducts/colours.fixture.ts",
+      "final": "ts/products/ducts/web/src/colours.fixture.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/colours.test.ts",
+      "manifest": "ts/products/ducts/web/ducts/colours.test.ts",
+      "final": "ts/products/ducts/web/src/colours.test.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/colours.ts",
+      "manifest": "ts/products/ducts/web/ducts/colours.ts",
+      "final": "ts/products/ducts/web/src/colours.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/contract.ts",
+      "manifest": "ts/products/duct-systems/contract/ducts/contract.ts",
+      "final": "ts/products/duct-systems/contract/src/contract.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/design-sheet.ts",
+      "manifest": "ts/products/duct-systems/web/ducts/design-calc.ts",
+      "final": "ts/products/duct-systems/web/src/design-calc.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/ducts-design.ts",
+      "manifest": "ts/products/ducts/host/ducts/design-layers.ts",
+      "final": "ts/products/ducts/host/src/design-layers.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/element-names.tsx",
+      "manifest": "ts/products/ducts/web/ducts/element-names.tsx",
+      "final": "ts/products/ducts/web/src/element-names.tsx"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/encoding.tsx",
+      "manifest": "ts/products/ducts/web/ducts/encoding.tsx",
+      "final": "ts/products/ducts/web/src/encoding.tsx"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/facts.tsx",
+      "manifest": "ts/products/ducts/web/ducts/facts.tsx",
+      "final": "ts/products/ducts/web/src/facts.tsx"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/fan-sheet.ts",
+      "manifest": "ts/products/fans/host/ducts/fan-calc.ts",
+      "final": "ts/products/fans/host/src/fan-calc.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/finding-layers.test.ts",
+      "manifest": "ts/products/ducts/web/ducts/finding-layers.test.ts",
+      "final": "ts/products/ducts/web/src/finding-layers.test.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/finding-layers.ts",
+      "manifest": "ts/products/ducts/web/ducts/finding-layers.ts",
+      "final": "ts/products/ducts/web/src/finding-layers.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/fixtures/ashrae/Cd3-2.tbl",
+      "manifest": "ts/products/ducts/web/ducts/fixtures/ashrae/Cd3-2.tbl",
+      "final": "ts/products/ducts/web/src/fixtures/ashrae/Cd3-2.tbl"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/fixtures/ashrae/Cd3-21.tbl",
+      "manifest": "ts/products/ducts/web/ducts/fixtures/ashrae/Cd3-21.tbl",
+      "final": "ts/products/ducts/web/src/fixtures/ashrae/Cd3-21.tbl"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/fixtures/ashrae/Sd4-2.tbl",
+      "manifest": "ts/products/ducts/web/ducts/fixtures/ashrae/Sd4-2.tbl",
+      "final": "ts/products/ducts/web/src/fixtures/ashrae/Sd4-2.tbl"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/fixtures/ashrae/Sd5-9.tbl",
+      "manifest": "ts/products/ducts/web/ducts/fixtures/ashrae/Sd5-9.tbl",
+      "final": "ts/products/ducts/web/src/fixtures/ashrae/Sd5-9.tbl"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/fixtures/ashrae/Sr4-3.tbl",
+      "manifest": "ts/products/ducts/web/ducts/fixtures/ashrae/Sr4-3.tbl",
+      "final": "ts/products/ducts/web/src/fixtures/ashrae/Sr4-3.tbl"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/fixtures/physical-transitions.json",
+      "manifest": "ts/products/ducts/web/ducts/fixtures/physical-transitions.json",
+      "final": "ts/products/ducts/web/src/fixtures/physical-transitions.json"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/fixtures/root-attached-fittings.json",
+      "manifest": "ts/products/ducts/web/ducts/fixtures/root-attached-fittings.json",
+      "final": "ts/products/ducts/web/src/fixtures/root-attached-fittings.json"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/fixtures/synthetic-snapshot.json",
+      "manifest": "ts/products/ducts/web/ducts/fixtures/synthetic-snapshot.json",
+      "final": "ts/products/ducts/web/src/fixtures/synthetic-snapshot.json"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/heal.fixture.ts",
+      "manifest": "ts/products/ducts/web/ducts/heal.fixture.ts",
+      "final": "ts/products/ducts/web/src/heal.fixture.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/host.ts",
+      "manifest": "ts/products/duct-systems/host/ducts/host.ts",
+      "final": "ts/products/duct-systems/host/src/host.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/identity.ts",
+      "manifest": "ts/products/ducts/web/ducts/identity.ts",
+      "final": "ts/products/ducts/web/src/identity.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/inbox-rows.test.ts",
+      "manifest": "ts/products/ducts/web/ducts/inbox-rows.test.ts",
+      "final": "ts/products/ducts/web/src/inbox-rows.test.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/inbox-rows.ts",
+      "manifest": "ts/products/ducts/web/ducts/inbox-rows.ts",
+      "final": "ts/products/duct-systems/web/src/inbox-rows.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/inputs.ts",
+      "manifest": "ts/products/ducts/web/ducts/inputs.ts",
+      "final": "ts/products/ducts/web/src/inputs.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/issues.tsx",
+      "manifest": "ts/products/ducts/web/ducts/issues.tsx",
+      "final": "ts/products/ducts/web/src/issues.tsx"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/layout.fixture.ts",
+      "manifest": "ts/products/ducts/web/ducts/layout.fixture.ts",
+      "final": "ts/products/ducts/web/src/layout.fixture.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/legs.test.ts",
+      "manifest": "ts/products/ducts/web/ducts/legs.test.ts",
+      "final": "ts/products/ducts/web/src/legs.test.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/legs.ts",
+      "manifest": "ts/products/ducts/web/ducts/legs.ts",
+      "final": "ts/products/ducts/web/src/legs.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/loss-review.test.ts",
+      "manifest": "ts/products/duct-systems/web/ducts/loss-review.test.ts",
+      "final": "ts/products/duct-systems/web/src/loss-review.test.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/loss-split.ts",
+      "manifest": "ts/products/ducts/web/ducts/loss-split.ts",
+      "final": "ts/products/duct-systems/web/src/loss-split.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/navigation.fixture.test.ts",
+      "manifest": "ts/products/ducts/web/ducts/navigation.fixture.test.ts",
+      "final": "ts/products/ducts/web/src/navigation.fixture.test.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/navigation.fixture.ts",
+      "manifest": "ts/products/ducts/web/ducts/navigation.fixture.ts",
+      "final": "ts/products/ducts/web/src/navigation.fixture.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/no-terminal.fixture.ts",
+      "manifest": "ts/products/ducts/web/ducts/no-terminal.fixture.ts",
+      "final": "ts/products/ducts/web/src/no-terminal.fixture.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/paint.ts",
+      "manifest": "ts/products/ducts/web/ducts/paint.ts",
+      "final": "ts/products/ducts/web/src/paint.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/pane-bodies.test.tsx",
+      "manifest": "ts/products/duct-systems/web/ducts/pane-bodies.test.tsx",
+      "final": "ts/products/duct-systems/web/src/pane-bodies.test.tsx"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/pane-context.tsx",
+      "manifest": "ts/products/duct-systems/web/ducts/pane-context.tsx",
+      "final": "ts/products/duct-systems/web/src/pane-context.tsx"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/picture-content.tsx",
+      "manifest": "ts/products/ducts/web/ducts/picture-content.tsx",
+      "final": "ts/products/ducts/web/src/picture-content.tsx"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/priced.ts",
+      "manifest": "ts/products/ducts/web/ducts/priced.ts",
+      "final": "ts/products/ducts/web/src/priced.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/pricing-value.ts",
+      "manifest": "ts/products/duct-systems/domain/ducts/pricing-value.ts",
+      "final": "ts/products/duct-systems/domain/src/pricing-value.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/proto/b/model.ts",
+      "manifest": "ts/products/duct-systems/web/ducts/network/model.ts",
+      "final": "ts/products/duct-systems/web/src/network/model.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/proto/b/sheet-model.test.ts",
+      "manifest": "ts/products/duct-systems/web/ducts/network/calc-model.test.ts",
+      "final": "ts/products/duct-systems/web/src/network/calc-model.test.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/proto/b/sheet-model.ts",
+      "manifest": "ts/products/duct-systems/web/ducts/network/calc-model.ts",
+      "final": "ts/products/duct-systems/web/src/network/calc-model.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/proto/e/bar-model.test.ts",
+      "manifest": "ts/products/duct-systems/web/ducts/screen/bar-model.test.ts",
+      "final": "ts/products/duct-systems/web/src/screen/bar-model.test.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/proto/e/bar-model.ts",
+      "manifest": "ts/products/duct-systems/web/ducts/screen/bar-model.ts",
+      "final": "ts/products/duct-systems/web/src/screen/bar-model.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/proto/e/bar.tsx",
+      "manifest": "ts/products/duct-systems/web/ducts/screen/bar.tsx",
+      "final": "ts/products/duct-systems/web/src/screen/bar.tsx"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/proto/e/fan-sections.tsx",
+      "manifest": "ts/products/duct-systems/web/ducts/screen/fan-sections.tsx",
+      "final": "ts/products/duct-systems/web/src/screen/fan-sections.tsx"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/proto/e/go-to.tsx",
+      "manifest": "ts/products/ducts/web/ducts/screen/go-to.tsx",
+      "final": "ts/products/ducts/web/src/screen/go-to.tsx"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/proto/e/inbox-write.tsx",
+      "manifest": "ts/products/duct-systems/web/ducts/screen/inbox-write.tsx",
+      "final": "ts/products/duct-systems/web/src/screen/inbox-write.tsx"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/proto/e/inbox.test.tsx",
+      "manifest": "ts/products/duct-systems/web/ducts/screen/inbox.test.tsx",
+      "final": "ts/products/duct-systems/web/src/screen/inbox.test.tsx"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/proto/e/inbox.tsx",
+      "manifest": "ts/products/duct-systems/web/ducts/screen/inbox.tsx",
+      "final": "ts/products/duct-systems/web/src/screen/inbox.tsx"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/proto/e/labels.ts",
+      "manifest": "ts/products/duct-systems/web/ducts/screen/labels.ts",
+      "final": "ts/products/duct-systems/web/src/screen/labels.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/proto/e/picture.tsx",
+      "manifest": "ts/products/duct-systems/web/ducts/screen/picture.tsx",
+      "final": "ts/products/duct-systems/web/src/screen/picture.tsx"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/proto/e/pressure-equivalent.tsx",
+      "manifest": "ts/products/duct-systems/web/ducts/screen/pressure-equivalent.tsx",
+      "final": "ts/products/duct-systems/web/src/screen/pressure-equivalent.tsx"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/proto/e/rule-assignment.test.tsx",
+      "manifest": "ts/products/duct-systems/web/ducts/screen/rule-assignment.test.tsx",
+      "final": "ts/products/duct-systems/web/src/screen/rule-assignment.test.tsx"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/proto/e/rule-assignment.tsx",
+      "manifest": "ts/products/duct-systems/web/ducts/screen/rule-assignment.tsx",
+      "final": "ts/products/duct-systems/web/src/screen/rule-assignment.tsx"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/proto/e/rules-pane.test.tsx",
+      "manifest": "ts/products/duct-systems/web/ducts/screen/rules-pane.test.tsx",
+      "final": "ts/products/duct-systems/web/src/screen/rules-pane.test.tsx"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/proto/e/rules-pane.tsx",
+      "manifest": "ts/products/duct-systems/web/ducts/screen/rules-pane.tsx",
+      "final": "ts/products/duct-systems/web/src/screen/rules-pane.tsx"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/proto/e/rules.tsx",
+      "manifest": "ts/products/duct-systems/web/ducts/screen/rules.tsx",
+      "final": "ts/products/duct-systems/web/src/screen/rules.tsx"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/proto/e/rulings.tsx",
+      "manifest": "ts/products/duct-systems/web/ducts/screen/rulings.tsx",
+      "final": "ts/products/duct-systems/web/src/screen/rulings.tsx"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/proto/e/run-detail.tsx",
+      "manifest": "ts/products/duct-systems/web/ducts/screen/run-detail.tsx",
+      "final": "ts/products/duct-systems/web/src/screen/run-detail.tsx"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/proto/e/screen.tsx",
+      "manifest": "ts/products/duct-systems/web/ducts/screen/screen.tsx",
+      "final": "ts/products/duct-systems/web/src/screen/screen.tsx"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/proto/e/settings-colours.test.tsx",
+      "manifest": "ts/products/duct-systems/web/ducts/screen/settings-colours.test.tsx",
+      "final": "ts/products/duct-systems/web/src/screen/settings-colours.test.tsx"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/proto/e/settings.tsx",
+      "manifest": "ts/products/duct-systems/web/ducts/screen/settings.tsx",
+      "final": "ts/products/duct-systems/web/src/screen/settings.tsx"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/proto/e/sidebar-lists.test.tsx",
+      "manifest": "ts/products/duct-systems/web/ducts/screen/sidebar-lists.test.tsx",
+      "final": "ts/products/duct-systems/web/src/screen/sidebar-lists.test.tsx"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/proto/e/systems-empty.test.ts",
+      "manifest": "ts/products/duct-systems/web/ducts/screen/systems-empty.test.ts",
+      "final": "ts/products/duct-systems/web/src/screen/systems-empty.test.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/proto/e/tree-sidebar.tsx",
+      "manifest": "ts/products/duct-systems/web/ducts/screen/tree-sidebar.tsx",
+      "final": "ts/products/duct-systems/web/src/screen/tree-sidebar.tsx"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/proto/encoding/flow.ts",
+      "manifest": "ts/products/ducts/web/ducts/encoding/flow.ts",
+      "final": "ts/products/ducts/web/src/encoding/flow.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/proto/encoding/picker.tsx",
+      "manifest": "ts/products/ducts/web/ducts/encoding/picker.tsx",
+      "final": "ts/products/ducts/web/src/encoding/picker.tsx"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/proto/encoding/scale-legend.tsx",
+      "manifest": "ts/products/ducts/web/ducts/encoding/scale-legend.tsx",
+      "final": "ts/products/ducts/web/src/encoding/scale-legend.tsx"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/proto/encoding/use-encoding.ts",
+      "manifest": "ts/products/ducts/web/ducts/encoding/use-encoding.ts",
+      "final": "ts/products/ducts/web/src/encoding/use-encoding.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/readiness.test.ts",
+      "manifest": "ts/products/duct-systems/web/ducts/readiness.test.ts",
+      "final": "ts/products/duct-systems/web/src/readiness.test.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/reviews.test.ts",
+      "manifest": "ts/products/ducts/web/ducts/reviews.test.ts",
+      "final": "ts/products/ducts/web/src/reviews.test.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/reviews.ts",
+      "manifest": "ts/products/ducts/web/ducts/reviews.ts",
+      "final": "ts/products/ducts/web/src/reviews.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/route.ts",
+      "manifest": "ts/products/duct-systems/web/ducts/route.ts",
+      "final": "ts/products/duct-systems/web/route.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/rules-settle.test.tsx",
+      "manifest": "ts/products/duct-systems/web/ducts/rules-settle.test.tsx",
+      "final": "ts/products/duct-systems/web/src/rules-settle.test.tsx"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/scene.fixture.ts",
+      "manifest": "ts/products/ducts/web/ducts/scene.fixture.ts",
+      "final": "ts/products/ducts/web/src/scene.fixture.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/scene.test.ts",
+      "manifest": "ts/products/ducts/web/ducts/scene.test.ts",
+      "final": "ts/products/ducts/web/src/scene.test.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/scene.ts",
+      "manifest": "ts/products/ducts/web/ducts/scene.ts",
+      "final": "ts/products/ducts/web/src/scene.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/schematic.test.tsx",
+      "manifest": "ts/products/ducts/web/ducts/schematic.test.tsx",
+      "final": "ts/products/ducts/web/src/schematic.test.tsx"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/schematic.tsx",
+      "manifest": "ts/products/ducts/web/ducts/schematic.tsx",
+      "final": "ts/products/ducts/web/src/schematic.tsx"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/selection.test.ts",
+      "manifest": "ts/products/ducts/web/ducts/selection.test.ts",
+      "final": "ts/products/ducts/web/src/selection.test.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/selection.ts",
+      "manifest": "ts/products/ducts/web/ducts/selection.ts",
+      "final": "ts/products/ducts/web/src/selection.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/sheet/blocker-row.test.tsx",
+      "manifest": "ts/products/fans/web/ducts/calc/blocker-row.test.tsx",
+      "final": "ts/products/fans/web/src/calc/blocker-row.test.tsx"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/sheet/blocker-row.tsx",
+      "manifest": "ts/products/fans/web/ducts/calc/blocker-row.tsx",
+      "final": "ts/products/fans/web/src/calc/blocker-row.tsx"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/sheet/closer.test.ts",
+      "manifest": "ts/products/fans/web/ducts/calc/closer.test.ts",
+      "final": "ts/products/fans/web/src/calc/closer.test.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/sheet/closer.ts",
+      "manifest": "ts/products/fans/web/ducts/calc/closer.ts",
+      "final": "ts/products/fans/web/src/calc/closer.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/sheet/fitting-groups.ts",
+      "manifest": "ts/products/fans/web/ducts/calc/fitting-groups.ts",
+      "final": "ts/products/fans/web/src/calc/fitting-groups.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/sheet/fitting-readouts.tsx",
+      "manifest": "ts/products/fans/web/ducts/calc/fitting-readouts.tsx",
+      "final": "ts/products/fans/web/src/calc/fitting-readouts.tsx"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/sheet/fixture-inputs.test.ts",
+      "manifest": "ts/products/fans/web/ducts/calc/fixture-inputs.test.ts",
+      "final": "ts/products/fans/web/src/calc/fixture-inputs.test.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/sheet/input-history.neutral.test.ts",
+      "manifest": "ts/products/ducts/web/ducts/calc/input-history.neutral.test.ts",
+      "final": "ts/products/ducts/web/src/calc/input-history.neutral.test.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/sheet/input-history.neutral.ts",
+      "manifest": "ts/products/ducts/web/ducts/calc/input-history.neutral.ts",
+      "final": "ts/products/ducts/web/src/calc/input-history.neutral.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/sheet/inputs-trust.test.ts",
+      "manifest": "ts/products/fans/web/ducts/calc/inputs-trust.test.ts",
+      "final": "ts/products/fans/web/src/calc/inputs-trust.test.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/sheet/kind-meaning.ts",
+      "manifest": "ts/products/ducts/web/ducts/calc/kind-meaning.ts",
+      "final": "ts/products/ducts/web/src/calc/kind-meaning.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/sheet/layers.test.ts",
+      "manifest": "ts/products/fans/web/ducts/calc/layers.test.ts",
+      "final": "ts/products/fans/web/src/calc/layers.test.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/sheet/layers.ts",
+      "manifest": "ts/products/fans/web/ducts/calc/layers.ts",
+      "final": "ts/products/fans/web/src/calc/layers.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/sheet/ledger-pending.test.tsx",
+      "manifest": "ts/products/fans/web/ducts/calc/ledger-pending.test.tsx",
+      "final": "ts/products/fans/web/src/calc/ledger-pending.test.tsx"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/sheet/model.ts",
+      "manifest": "ts/products/ducts/web/ducts/calc/model.ts",
+      "final": "ts/products/ducts/web/src/calc/model.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/sheet/picture.test.tsx",
+      "manifest": "ts/products/fans/web/ducts/calc/picture.test.tsx",
+      "final": "ts/products/fans/web/src/calc/picture.test.tsx"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/sheet/picture.tsx",
+      "manifest": "ts/products/fans/web/ducts/calc/picture.tsx",
+      "final": "ts/products/fans/web/src/calc/picture.tsx"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/sheet/roster-computed.test.ts",
+      "manifest": "ts/products/fans/web/ducts/calc/roster-computed.test.ts",
+      "final": "ts/products/fans/web/src/calc/roster-computed.test.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/sheet/scoped-snapshot.test.ts",
+      "manifest": "ts/products/ducts/web/ducts/calc/scoped-snapshot.test.ts",
+      "final": "ts/products/ducts/web/src/calc/scoped-snapshot.test.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/sheet/scoped-snapshot.ts",
+      "manifest": "ts/products/ducts/web/ducts/calc/scoped-snapshot.ts",
+      "final": "ts/products/ducts/web/src/calc/scoped-snapshot.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/sheet/sheet-cell.test.tsx",
+      "manifest": "ts/products/fans/web/ducts/calc/calc-cell.test.tsx",
+      "final": "ts/products/fans/web/src/calc/calc-cell.test.tsx"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/sheet/sheet-cell.tsx",
+      "manifest": "ts/products/fans/web/ducts/calc/calc-cell.tsx",
+      "final": "ts/products/fans/web/src/calc/calc-cell.tsx"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/sheet/sheet.fixture.json",
+      "manifest": "ts/products/fans/web/ducts/calc/calc.fixture.json",
+      "final": "ts/products/fans/web/src/calc/calc.fixture.json"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/sheet/state.ts",
+      "manifest": "ts/products/fans/web/ducts/calc/state.ts",
+      "final": "ts/products/fans/web/src/calc/state.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/sheet/tiers.test.ts",
+      "manifest": "ts/products/fans/web/ducts/calc/tiers.test.ts",
+      "final": "ts/products/fans/web/src/calc/tiers.test.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/sheet/tiers.ts",
+      "manifest": "ts/products/fans/web/ducts/calc/tiers.ts",
+      "final": "ts/products/fans/web/src/calc/tiers.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/sheet/types.ts",
+      "manifest": "ts/products/fans/web/ducts/calc/types.ts",
+      "final": "ts/products/fans/web/src/calc/types.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/sheet/value-fixtures.ts",
+      "manifest": "ts/products/fans/web/ducts/calc/value-fixtures.ts",
+      "final": "ts/products/fans/web/src/calc/value-fixtures.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/sheet/view.tsx",
+      "manifest": "ts/products/fans/web/ducts/calc/view.tsx",
+      "final": "ts/products/fans/web/src/calc/view.tsx"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/sheet/worksheet-picture.test.ts",
+      "manifest": "ts/products/fans/web/ducts/calc/workcalc-picture.test.ts",
+      "final": "ts/products/fans/web/src/calc/calc-breakdown-picture.test.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/sheet/worksheet-table.test.tsx",
+      "manifest": "ts/products/fans/web/ducts/calc/workcalc-table.test.tsx",
+      "final": "ts/products/fans/web/src/calc/calc-breakdown-table.test.tsx"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/sheet/worksheet-table.tsx",
+      "manifest": "ts/products/fans/web/ducts/calc/workcalc-table.tsx",
+      "final": "ts/products/fans/web/src/calc/calc-breakdown-table.tsx"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/stub-labels.test.ts",
+      "manifest": "ts/products/ducts/web/ducts/stub-labels.test.ts",
+      "final": "ts/products/ducts/web/src/stub-labels.test.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/stub-labels.ts",
+      "manifest": "ts/products/ducts/web/ducts/stub-labels.ts",
+      "final": "ts/products/ducts/web/src/stub-labels.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/subject-labels.tsx",
+      "manifest": "ts/products/ducts/web/ducts/subject-labels.tsx",
+      "final": "ts/products/ducts/web/src/subject-labels.tsx"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/subject-text.test.tsx",
+      "manifest": "ts/products/ducts/web/ducts/subject-text.test.tsx",
+      "final": "ts/products/ducts/web/src/subject-text.test.tsx"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/subject-text.ts",
+      "manifest": "ts/products/ducts/web/ducts/subject-text.ts",
+      "final": "ts/products/ducts/web/src/subject-text.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/system-list-search.test.ts",
+      "manifest": "ts/products/ducts/web/ducts/system-list-search.test.ts",
+      "final": "ts/products/ducts/web/src/system-list-search.test.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/system-list-search.ts",
+      "manifest": "ts/products/ducts/web/ducts/system-list-search.ts",
+      "final": "ts/products/duct-systems/web/src/system-list-search.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/system-list.test.ts",
+      "manifest": "ts/products/ducts/web/ducts/system-list.test.ts",
+      "final": "ts/products/ducts/web/src/system-list.test.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/system-list.ts",
+      "manifest": "ts/products/ducts/web/ducts/system-list.ts",
+      "final": "ts/products/duct-systems/web/src/system-list.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/system-notes.test.tsx",
+      "manifest": "ts/products/duct-systems/web/ducts/system-notes.test.tsx",
+      "final": "ts/products/duct-systems/web/src/system-notes.test.tsx"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/system-reads.test.ts",
+      "manifest": "ts/products/duct-systems/web/ducts/system-reads.test.ts",
+      "final": "ts/products/duct-systems/web/src/system-reads.test.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/test-fixture.ts",
+      "manifest": "ts/products/ducts/web/ducts/test-fixture.ts",
+      "final": "ts/products/ducts/web/src/test-fixture.ts"
+    },
+    {
+      "old": "ts/apps/web/src/ducts/work.ts",
+      "manifest": "ts/products/ducts/web/ducts/work.ts",
+      "final": "ts/products/ducts/web/src/work.ts"
+    },
+    {
+      "old": "ts/apps/web/src/fans/admission.fixture.ts",
+      "manifest": "ts/products/fans/web/fans/admission.fixture.ts",
+      "final": "ts/products/fans/web/src/admission.fixture.ts"
+    },
+    {
+      "old": "ts/apps/web/src/fans/bindings.ts",
+      "manifest": "ts/products/fans/web/fans/bindings.ts",
+      "final": "ts/products/fans/web/src/bindings.ts"
+    },
+    {
+      "old": "ts/apps/web/src/fans/cohort.test.ts",
+      "manifest": "ts/products/fans/web/fans/cohort.test.ts",
+      "final": "ts/products/fans/web/src/cohort.test.ts"
+    },
+    {
+      "old": "ts/apps/web/src/fans/contract.ts",
+      "manifest": "ts/products/fans/contract/fans/contract.ts",
+      "final": "ts/products/fans/contract/src/contract.ts"
+    },
+    {
+      "old": "ts/apps/web/src/fans/cutover.test-support.ts",
+      "manifest": "ts/products/fans/web/fans/cutover.test-support.ts",
+      "final": "ts/products/fans/web/src/cutover.test-support.ts"
+    },
+    {
+      "old": "ts/apps/web/src/fans/cutover.test.ts",
+      "manifest": "ts/products/fans/web/fans/cutover.test.ts",
+      "final": "ts/products/fans/web/src/cutover.test.ts"
+    },
+    {
+      "old": "ts/apps/web/src/fans/feedback-inputs.test.tsx",
+      "manifest": "ts/products/fans/web/fans/feedback-inputs.test.tsx",
+      "final": "ts/products/fans/web/src/feedback-inputs.test.tsx"
+    },
+    {
+      "old": "ts/apps/web/src/fans/host.ts",
+      "manifest": "ts/products/fans/host/fans/host.ts",
+      "final": "ts/products/fans/host/src/host.ts"
+    },
+    {
+      "old": "ts/apps/web/src/fans/identity.test.ts",
+      "manifest": "ts/products/fans/web/fans/identity.test.ts",
+      "final": "ts/products/fans/web/src/identity.test.ts"
+    },
+    {
+      "old": "ts/apps/web/src/fans/kernel.test.tsx",
+      "manifest": "ts/products/fans/web/fans/kernel.test.tsx",
+      "final": "ts/products/fans/web/src/kernel.test.tsx"
+    },
+    {
+      "old": "ts/apps/web/src/fans/ledger-fix.journey.test.tsx",
+      "manifest": "ts/products/fans/web/fans/ledger-fix.journey.test.tsx",
+      "final": "ts/products/fans/web/src/ledger-fix.journey.test.tsx"
+    },
+    {
+      "old": "ts/apps/web/src/fans/mount.tsx",
+      "manifest": "ts/products/fans/web/fans/mount.tsx",
+      "final": "ts/products/fans/web/src/mount.tsx"
+    },
+    {
+      "old": "ts/apps/web/src/fans/native.test-support.ts",
+      "manifest": "ts/products/fans/web/fans/native.test-support.ts",
+      "final": "ts/products/fans/web/src/native.test-support.ts"
+    },
+    {
+      "old": "ts/apps/web/src/fans/no-ducts-writes.test.ts",
+      "manifest": "ts/products/fans/web/fans/no-ducts-writes.test.ts",
+      "final": "ts/products/fans/web/src/no-ducts-writes.test.ts"
+    },
+    {
+      "old": "ts/apps/web/src/fans/one-lifecycle.test.tsx",
+      "manifest": "ts/products/fans/web/fans/one-lifecycle.test.tsx",
+      "final": "ts/products/fans/web/src/one-lifecycle.test.tsx"
+    },
+    {
+      "old": "ts/apps/web/src/fans/owner-schema-gap.test.ts",
+      "manifest": "ts/products/fans/web/fans/owner-schema-gap.test.ts",
+      "final": "ts/products/fans/web/src/owner-schema-gap.test.ts"
+    },
+    {
+      "old": "ts/apps/web/src/fans/picture-slot.test.ts",
+      "manifest": "ts/products/fans/web/fans/picture-slot.test.ts",
+      "final": "ts/products/fans/web/src/picture-slot.test.ts"
+    },
+    {
+      "old": "ts/apps/web/src/fans/picture.tsx",
+      "manifest": "ts/products/fans/web/fans/picture.tsx",
+      "final": "ts/products/fans/web/src/picture.tsx"
+    },
+    {
+      "old": "ts/apps/web/src/fans/presentation-gap.test.ts",
+      "manifest": "ts/products/fans/web/fans/presentation-gap.test.ts",
+      "final": "ts/products/fans/web/src/presentation-gap.test.ts"
+    },
+    {
+      "old": "ts/apps/web/src/fans/q5-join.test.ts",
+      "manifest": "ts/products/fans/web/fans/q5-join.test.ts",
+      "final": "ts/products/fans/web/src/q5-join.test.ts"
+    },
+    {
+      "old": "ts/apps/web/src/fans/route.ts",
+      "manifest": "ts/products/fans/web/fans/route.ts",
+      "final": "ts/products/fans/web/route.ts"
+    },
+    {
+      "old": "ts/apps/web/src/fans/sheet-slot.test.ts",
+      "manifest": "ts/products/fans/web/fans/calc-slot.test.ts",
+      "final": "ts/products/fans/web/src/calc-slot.test.ts"
+    },
+    {
+      "old": "ts/apps/web/src/fans/sheet.test.tsx",
+      "manifest": "ts/products/fans/web/fans/calc.test.tsx",
+      "final": "ts/products/fans/web/src/calc.test.tsx"
+    },
+    {
+      "old": "ts/apps/web/src/fans/sheet.ts",
+      "manifest": "ts/products/fans/web/fans/calc.ts",
+      "final": "ts/products/fans/web/src/calc.ts"
+    },
+    {
+      "old": "ts/apps/web/src/fans/slot-patch-gap.test.ts",
+      "manifest": "ts/products/fans/web/fans/slot-patch-gap.test.ts",
+      "final": "ts/products/fans/web/src/slot-patch-gap.test.ts"
+    },
+    {
+      "old": "ts/apps/web/src/fans/timeline-member-switch.test.ts",
+      "manifest": "ts/products/fans/web/fans/timeline-member-switch.test.ts",
+      "final": "ts/products/fans/web/src/timeline-member-switch.test.ts"
+    },
+    {
+      "old": "ts/apps/web/src/fans/timeline-members.test.ts",
+      "manifest": "ts/products/fans/web/fans/timeline-members.test.ts",
+      "final": "ts/products/fans/web/src/timeline-members.test.ts"
+    },
+    {
+      "old": "ts/apps/web/src/fans/work-invalidation.test.ts",
+      "manifest": "ts/products/fans/web/fans/work-invalidation.test.ts",
+      "final": "ts/products/fans/web/src/work-invalidation.test.ts"
+    },
+    {
+      "old": "ts/apps/web/src/fans/work-reading.test.ts",
+      "manifest": "ts/products/fans/web/fans/work-reading.test.ts",
+      "final": "ts/products/fans/web/src/work-reading.test.ts"
+    },
+    {
+      "old": "ts/apps/web/src/fans/write-action.test.tsx",
+      "manifest": "ts/products/fans/web/fans/write-action.test.tsx",
+      "final": "ts/products/fans/web/src/write-action.test.tsx"
+    },
+    {
+      "old": "ts/packages/agent-contracts/src/ducts-sheet.ts",
+      "manifest": "ts/products/ducts/contract/src/ducts-calc.ts",
+      "final": "ts/products/fans/contract/src/calc-read.ts"
+    },
+    {
+      "old": "ts/packages/ducts-domain/src/calc-runs.ts",
+      "manifest": "ts/products/duct-systems/domain/src/calc-runs.ts",
+      "final": "ts/products/ducts/domain/src/calc-runs.ts"
+    },
+    {
+      "old": "ts/packages/ducts-domain/src/sheet/worksheet.test.ts",
+      "manifest": "ts/products/fans/domain/src/calc/workcalc.test.ts",
+      "final": "ts/products/fans/domain/src/calc/calc-breakdown.test.ts"
+    },
+    {
+      "old": "ts/packages/ducts-domain/src/sheet/worksheet.ts",
+      "manifest": "ts/products/fans/domain/src/calc/workcalc.ts",
+      "final": "ts/products/fans/domain/src/calc/calc-breakdown.ts"
+    },
+    {
+      "old": "ts/packages/mcps/tests/ducts-skill.test.ts",
+      "manifest": "ts/products/fans/contract/tests/ducts-skill.test.ts",
+      "final": "ts/products/fans/contract/src/tests/ducts-skill.test.ts"
+    }
+  ],
+  "final_mapping": {
+    "ts/apps/host/src/duct-catalogs.ts": "ts/products/ducts/host/src/duct-catalogs.ts",
+    "ts/apps/host/src/ducts-body-basis.ts": "ts/products/ducts/host/src/ducts-body-basis.ts",
+    "ts/apps/host/src/ducts-files.ts": "ts/products/ducts/host/src/ducts-files.ts",
+    "ts/apps/host/src/ducts-inputs.ts": "ts/products/ducts/host/src/ducts-inputs.ts",
+    "ts/apps/host/src/ducts-readings.ts": "ts/products/ducts/host/src/ducts-readings.ts",
+    "ts/apps/host/tests/closed-fan.fixture.ts": "ts/products/fans/host/src/tests/closed-fan.fixture.ts",
+    "ts/apps/host/tests/ducts-heal-preparation.test.ts": "ts/products/duct-systems/host/src/tests/ducts-heal-preparation.test.ts",
+    "ts/apps/host/tests/ducts-inputs.test.ts": "ts/products/ducts/host/src/tests/ducts-inputs.test.ts",
+    "ts/apps/host/tests/ducts-loss-scope.test.ts": "ts/products/fans/host/src/tests/ducts-loss-scope.test.ts",
+    "ts/apps/host/tests/ducts-peer-claims.test.ts": "ts/products/fans/host/src/tests/ducts-peer-claims.test.ts",
+    "ts/apps/host/tests/ducts-project-catalogs.test.ts": "ts/products/ducts/host/src/tests/ducts-project-catalogs.test.ts",
+    "ts/apps/host/tests/ducts-read.fixture.ts": "ts/products/ducts/host/src/tests/ducts-read.fixture.ts",
+    "ts/apps/host/tests/ducts-type-footprint.test.ts": "ts/products/fans/host/src/tests/ducts-type-footprint.test.ts",
+    "ts/apps/host/tests/fan-identity.test.ts": "ts/products/fans/host/src/tests/fan-identity.test.ts",
+    "ts/apps/host/tests/fans-native.fixture.ts": "ts/products/fans/host/src/tests/fans-native.fixture.ts",
+    "ts/apps/host/tests/fans-native.test.ts": "ts/products/fans/host/src/tests/fans-native.test.ts",
+    "ts/apps/host/tests/fans-work-fixture.ts": "ts/products/fans/host/src/tests/fans-work-fixture.ts",
+    "ts/apps/host/tests/fixtures/ducts-live-seal-20261102.json": "ts/products/ducts/host/src/tests/fixtures/ducts-live-seal-20261102.json",
+    "ts/apps/host/tests/native-recordings/driver-ducts.snapshot.roster.json": "ts/products/ducts/host/src/tests/native-recordings/driver-ducts.snapshot.roster.json",
+    "ts/apps/host/tests/native-recordings/driver-ducts.snapshot.walk.json": "ts/products/ducts/host/src/tests/native-recordings/driver-ducts.snapshot.walk.json",
+    "ts/apps/host/tests/native-recordings/driver-ducts.tables.json": "ts/products/ducts/host/src/tests/native-recordings/driver-ducts.tables.json",
+    "ts/apps/host/tests/native-recordings/fans-accessory-initial.json": "ts/products/fans/host/src/tests/native-recordings/fans-accessory-initial.json",
+    "ts/apps/host/tests/native-recordings/fans-accessory-missing.json": "ts/products/fans/host/src/tests/native-recordings/fans-accessory-missing.json",
+    "ts/apps/host/tests/native-recordings/fresh-ducts.heal-request.json": "ts/products/ducts/host/src/tests/native-recordings/fresh-ducts.heal-request.json",
+    "ts/apps/host/tests/native-recordings/fresh-ducts.heal.json": "ts/products/ducts/host/src/tests/native-recordings/fresh-ducts.heal.json",
+    "ts/apps/host/tests/native-recordings/fresh-ducts.heal.preview-request.json": "ts/products/ducts/host/src/tests/native-recordings/fresh-ducts.heal.preview-request.json",
+    "ts/apps/host/tests/native-recordings/fresh-ducts.heal.preview.json": "ts/products/ducts/host/src/tests/native-recordings/fresh-ducts.heal.preview.json",
+    "ts/apps/host/tests/native-recordings/sdk-ducts.apply.json": "ts/products/ducts/host/src/tests/native-recordings/sdk-ducts.apply.json",
+    "ts/apps/host/tests/product-home.test.ts": "ts/products/ducts/host/src/tests/product-home.test.ts",
+    "ts/apps/host/tests/recorded-fans-graph.test.ts": "ts/products/fans/host/src/tests/recorded-fans-graph.test.ts",
+    "ts/apps/web/src/ducts/airflow.ts": "ts/products/ducts/web/src/airflow.ts",
+    "ts/apps/web/src/ducts/annotations-badges.test.tsx": "ts/products/duct-systems/web/src/annotations-badges.test.tsx",
+    "ts/apps/web/src/ducts/annotations.test.ts": "ts/products/ducts/web/src/annotations.test.ts",
+    "ts/apps/web/src/ducts/annotations.tsx": "ts/products/ducts/web/src/annotations.tsx",
+    "ts/apps/web/src/ducts/assumptions.tsx": "ts/products/ducts/web/src/assumptions.tsx",
+    "ts/apps/web/src/ducts/bindings.ts": "ts/products/duct-systems/web/src/bindings.ts",
+    "ts/apps/web/src/ducts/calcs.test-support.ts": "ts/products/duct-systems/web/src/calcs.test-support.ts",
+    "ts/apps/web/src/ducts/cell-focus.ts": "ts/products/ducts/web/src/cell-focus.ts",
+    "ts/apps/web/src/ducts/colours.fixture.ts": "ts/products/ducts/web/src/colours.fixture.ts",
+    "ts/apps/web/src/ducts/colours.test.ts": "ts/products/ducts/web/src/colours.test.ts",
+    "ts/apps/web/src/ducts/colours.ts": "ts/products/ducts/web/src/colours.ts",
+    "ts/apps/web/src/ducts/contract.ts": "ts/products/duct-systems/contract/src/contract.ts",
+    "ts/apps/web/src/ducts/design-sheet.ts": "ts/products/duct-systems/web/src/design-calc.ts",
+    "ts/apps/web/src/ducts/ducts-design.ts": "ts/products/ducts/host/src/design-layers.ts",
+    "ts/apps/web/src/ducts/element-names.tsx": "ts/products/ducts/web/src/element-names.tsx",
+    "ts/apps/web/src/ducts/encoding.tsx": "ts/products/ducts/web/src/encoding.tsx",
+    "ts/apps/web/src/ducts/facts.tsx": "ts/products/ducts/web/src/facts.tsx",
+    "ts/apps/web/src/ducts/fan-sheet.ts": "ts/products/fans/host/src/fan-calc.ts",
+    "ts/apps/web/src/ducts/finding-layers.test.ts": "ts/products/ducts/web/src/finding-layers.test.ts",
+    "ts/apps/web/src/ducts/finding-layers.ts": "ts/products/ducts/web/src/finding-layers.ts",
+    "ts/apps/web/src/ducts/fixtures/ashrae/Cd3-2.tbl": "ts/products/ducts/web/src/fixtures/ashrae/Cd3-2.tbl",
+    "ts/apps/web/src/ducts/fixtures/ashrae/Cd3-21.tbl": "ts/products/ducts/web/src/fixtures/ashrae/Cd3-21.tbl",
+    "ts/apps/web/src/ducts/fixtures/ashrae/Sd4-2.tbl": "ts/products/ducts/web/src/fixtures/ashrae/Sd4-2.tbl",
+    "ts/apps/web/src/ducts/fixtures/ashrae/Sd5-9.tbl": "ts/products/ducts/web/src/fixtures/ashrae/Sd5-9.tbl",
+    "ts/apps/web/src/ducts/fixtures/ashrae/Sr4-3.tbl": "ts/products/ducts/web/src/fixtures/ashrae/Sr4-3.tbl",
+    "ts/apps/web/src/ducts/fixtures/physical-transitions.json": "ts/products/ducts/web/src/fixtures/physical-transitions.json",
+    "ts/apps/web/src/ducts/fixtures/root-attached-fittings.json": "ts/products/ducts/web/src/fixtures/root-attached-fittings.json",
+    "ts/apps/web/src/ducts/fixtures/synthetic-snapshot.json": "ts/products/ducts/web/src/fixtures/synthetic-snapshot.json",
+    "ts/apps/web/src/ducts/heal.fixture.ts": "ts/products/ducts/web/src/heal.fixture.ts",
+    "ts/apps/web/src/ducts/host.ts": "ts/products/duct-systems/host/src/host.ts",
+    "ts/apps/web/src/ducts/identity.ts": "ts/products/ducts/web/src/identity.ts",
+    "ts/apps/web/src/ducts/inbox-rows.test.ts": "ts/products/ducts/web/src/inbox-rows.test.ts",
+    "ts/apps/web/src/ducts/inbox-rows.ts": "ts/products/duct-systems/web/src/inbox-rows.ts",
+    "ts/apps/web/src/ducts/inputs.ts": "ts/products/ducts/web/src/inputs.ts",
+    "ts/apps/web/src/ducts/issues.tsx": "ts/products/ducts/web/src/issues.tsx",
+    "ts/apps/web/src/ducts/layout.fixture.ts": "ts/products/ducts/web/src/layout.fixture.ts",
+    "ts/apps/web/src/ducts/legs.test.ts": "ts/products/ducts/web/src/legs.test.ts",
+    "ts/apps/web/src/ducts/legs.ts": "ts/products/ducts/web/src/legs.ts",
+    "ts/apps/web/src/ducts/loss-review.test.ts": "ts/products/duct-systems/web/src/loss-review.test.ts",
+    "ts/apps/web/src/ducts/loss-split.ts": "ts/products/duct-systems/web/src/loss-split.ts",
+    "ts/apps/web/src/ducts/navigation.fixture.test.ts": "ts/products/ducts/web/src/navigation.fixture.test.ts",
+    "ts/apps/web/src/ducts/navigation.fixture.ts": "ts/products/ducts/web/src/navigation.fixture.ts",
+    "ts/apps/web/src/ducts/no-terminal.fixture.ts": "ts/products/ducts/web/src/no-terminal.fixture.ts",
+    "ts/apps/web/src/ducts/paint.ts": "ts/products/ducts/web/src/paint.ts",
+    "ts/apps/web/src/ducts/pane-bodies.test.tsx": "ts/products/duct-systems/web/src/pane-bodies.test.tsx",
+    "ts/apps/web/src/ducts/pane-context.tsx": "ts/products/duct-systems/web/src/pane-context.tsx",
+    "ts/apps/web/src/ducts/picture-content.tsx": "ts/products/ducts/web/src/picture-content.tsx",
+    "ts/apps/web/src/ducts/priced.ts": "ts/products/ducts/web/src/priced.ts",
+    "ts/apps/web/src/ducts/pricing-value.ts": "ts/products/duct-systems/domain/src/pricing-value.ts",
+    "ts/apps/web/src/ducts/proto/b/model.ts": "ts/products/duct-systems/web/src/network/model.ts",
+    "ts/apps/web/src/ducts/proto/b/sheet-model.test.ts": "ts/products/duct-systems/web/src/network/calc-model.test.ts",
+    "ts/apps/web/src/ducts/proto/b/sheet-model.ts": "ts/products/duct-systems/web/src/network/calc-model.ts",
+    "ts/apps/web/src/ducts/proto/e/bar-model.test.ts": "ts/products/duct-systems/web/src/screen/bar-model.test.ts",
+    "ts/apps/web/src/ducts/proto/e/bar-model.ts": "ts/products/duct-systems/web/src/screen/bar-model.ts",
+    "ts/apps/web/src/ducts/proto/e/bar.tsx": "ts/products/duct-systems/web/src/screen/bar.tsx",
+    "ts/apps/web/src/ducts/proto/e/fan-sections.tsx": "ts/products/duct-systems/web/src/screen/fan-sections.tsx",
+    "ts/apps/web/src/ducts/proto/e/go-to.tsx": "ts/products/ducts/web/src/screen/go-to.tsx",
+    "ts/apps/web/src/ducts/proto/e/inbox-write.tsx": "ts/products/duct-systems/web/src/screen/inbox-write.tsx",
+    "ts/apps/web/src/ducts/proto/e/inbox.test.tsx": "ts/products/duct-systems/web/src/screen/inbox.test.tsx",
+    "ts/apps/web/src/ducts/proto/e/inbox.tsx": "ts/products/duct-systems/web/src/screen/inbox.tsx",
+    "ts/apps/web/src/ducts/proto/e/labels.ts": "ts/products/duct-systems/web/src/screen/labels.ts",
+    "ts/apps/web/src/ducts/proto/e/picture.tsx": "ts/products/duct-systems/web/src/screen/picture.tsx",
+    "ts/apps/web/src/ducts/proto/e/pressure-equivalent.tsx": "ts/products/duct-systems/web/src/screen/pressure-equivalent.tsx",
+    "ts/apps/web/src/ducts/proto/e/rule-assignment.test.tsx": "ts/products/duct-systems/web/src/screen/rule-assignment.test.tsx",
+    "ts/apps/web/src/ducts/proto/e/rule-assignment.tsx": "ts/products/duct-systems/web/src/screen/rule-assignment.tsx",
+    "ts/apps/web/src/ducts/proto/e/rules-pane.test.tsx": "ts/products/duct-systems/web/src/screen/rules-pane.test.tsx",
+    "ts/apps/web/src/ducts/proto/e/rules-pane.tsx": "ts/products/duct-systems/web/src/screen/rules-pane.tsx",
+    "ts/apps/web/src/ducts/proto/e/rules.tsx": "ts/products/duct-systems/web/src/screen/rules.tsx",
+    "ts/apps/web/src/ducts/proto/e/rulings.tsx": "ts/products/duct-systems/web/src/screen/rulings.tsx",
+    "ts/apps/web/src/ducts/proto/e/run-detail.tsx": "ts/products/duct-systems/web/src/screen/run-detail.tsx",
+    "ts/apps/web/src/ducts/proto/e/screen.tsx": "ts/products/duct-systems/web/src/screen/screen.tsx",
+    "ts/apps/web/src/ducts/proto/e/settings-colours.test.tsx": "ts/products/duct-systems/web/src/screen/settings-colours.test.tsx",
+    "ts/apps/web/src/ducts/proto/e/settings.tsx": "ts/products/duct-systems/web/src/screen/settings.tsx",
+    "ts/apps/web/src/ducts/proto/e/sidebar-lists.test.tsx": "ts/products/duct-systems/web/src/screen/sidebar-lists.test.tsx",
+    "ts/apps/web/src/ducts/proto/e/systems-empty.test.ts": "ts/products/duct-systems/web/src/screen/systems-empty.test.ts",
+    "ts/apps/web/src/ducts/proto/e/tree-sidebar.tsx": "ts/products/duct-systems/web/src/screen/tree-sidebar.tsx",
+    "ts/apps/web/src/ducts/proto/encoding/flow.ts": "ts/products/ducts/web/src/encoding/flow.ts",
+    "ts/apps/web/src/ducts/proto/encoding/picker.tsx": "ts/products/ducts/web/src/encoding/picker.tsx",
+    "ts/apps/web/src/ducts/proto/encoding/scale-legend.tsx": "ts/products/ducts/web/src/encoding/scale-legend.tsx",
+    "ts/apps/web/src/ducts/proto/encoding/use-encoding.ts": "ts/products/ducts/web/src/encoding/use-encoding.ts",
+    "ts/apps/web/src/ducts/readiness.test.ts": "ts/products/duct-systems/web/src/readiness.test.ts",
+    "ts/apps/web/src/ducts/reviews.test.ts": "ts/products/ducts/web/src/reviews.test.ts",
+    "ts/apps/web/src/ducts/reviews.ts": "ts/products/ducts/web/src/reviews.ts",
+    "ts/apps/web/src/ducts/route.ts": "ts/products/duct-systems/web/route.ts",
+    "ts/apps/web/src/ducts/rules-settle.test.tsx": "ts/products/duct-systems/web/src/rules-settle.test.tsx",
+    "ts/apps/web/src/ducts/scene.fixture.ts": "ts/products/ducts/web/src/scene.fixture.ts",
+    "ts/apps/web/src/ducts/scene.test.ts": "ts/products/ducts/web/src/scene.test.ts",
+    "ts/apps/web/src/ducts/scene.ts": "ts/products/ducts/web/src/scene.ts",
+    "ts/apps/web/src/ducts/schematic.test.tsx": "ts/products/ducts/web/src/schematic.test.tsx",
+    "ts/apps/web/src/ducts/schematic.tsx": "ts/products/ducts/web/src/schematic.tsx",
+    "ts/apps/web/src/ducts/selection.test.ts": "ts/products/ducts/web/src/selection.test.ts",
+    "ts/apps/web/src/ducts/selection.ts": "ts/products/ducts/web/src/selection.ts",
+    "ts/apps/web/src/ducts/sheet/blocker-row.test.tsx": "ts/products/fans/web/src/calc/blocker-row.test.tsx",
+    "ts/apps/web/src/ducts/sheet/blocker-row.tsx": "ts/products/fans/web/src/calc/blocker-row.tsx",
+    "ts/apps/web/src/ducts/sheet/closer.test.ts": "ts/products/fans/web/src/calc/closer.test.ts",
+    "ts/apps/web/src/ducts/sheet/closer.ts": "ts/products/fans/web/src/calc/closer.ts",
+    "ts/apps/web/src/ducts/sheet/fitting-groups.ts": "ts/products/fans/web/src/calc/fitting-groups.ts",
+    "ts/apps/web/src/ducts/sheet/fitting-readouts.tsx": "ts/products/fans/web/src/calc/fitting-readouts.tsx",
+    "ts/apps/web/src/ducts/sheet/fixture-inputs.test.ts": "ts/products/fans/web/src/calc/fixture-inputs.test.ts",
+    "ts/apps/web/src/ducts/sheet/input-history.neutral.test.ts": "ts/products/ducts/web/src/calc/input-history.neutral.test.ts",
+    "ts/apps/web/src/ducts/sheet/input-history.neutral.ts": "ts/products/ducts/web/src/calc/input-history.neutral.ts",
+    "ts/apps/web/src/ducts/sheet/inputs-trust.test.ts": "ts/products/fans/web/src/calc/inputs-trust.test.ts",
+    "ts/apps/web/src/ducts/sheet/kind-meaning.ts": "ts/products/ducts/web/src/calc/kind-meaning.ts",
+    "ts/apps/web/src/ducts/sheet/layers.test.ts": "ts/products/fans/web/src/calc/layers.test.ts",
+    "ts/apps/web/src/ducts/sheet/layers.ts": "ts/products/fans/web/src/calc/layers.ts",
+    "ts/apps/web/src/ducts/sheet/ledger-pending.test.tsx": "ts/products/fans/web/src/calc/ledger-pending.test.tsx",
+    "ts/apps/web/src/ducts/sheet/model.ts": "ts/products/ducts/web/src/calc/model.ts",
+    "ts/apps/web/src/ducts/sheet/picture.test.tsx": "ts/products/fans/web/src/calc/picture.test.tsx",
+    "ts/apps/web/src/ducts/sheet/picture.tsx": "ts/products/fans/web/src/calc/picture.tsx",
+    "ts/apps/web/src/ducts/sheet/roster-computed.test.ts": "ts/products/fans/web/src/calc/roster-computed.test.ts",
+    "ts/apps/web/src/ducts/sheet/scoped-snapshot.test.ts": "ts/products/ducts/web/src/calc/scoped-snapshot.test.ts",
+    "ts/apps/web/src/ducts/sheet/scoped-snapshot.ts": "ts/products/ducts/web/src/calc/scoped-snapshot.ts",
+    "ts/apps/web/src/ducts/sheet/sheet-cell.test.tsx": "ts/products/fans/web/src/calc/calc-cell.test.tsx",
+    "ts/apps/web/src/ducts/sheet/sheet-cell.tsx": "ts/products/fans/web/src/calc/calc-cell.tsx",
+    "ts/apps/web/src/ducts/sheet/sheet.fixture.json": "ts/products/fans/web/src/calc/calc.fixture.json",
+    "ts/apps/web/src/ducts/sheet/state.ts": "ts/products/fans/web/src/calc/state.ts",
+    "ts/apps/web/src/ducts/sheet/tiers.test.ts": "ts/products/fans/web/src/calc/tiers.test.ts",
+    "ts/apps/web/src/ducts/sheet/tiers.ts": "ts/products/fans/web/src/calc/tiers.ts",
+    "ts/apps/web/src/ducts/sheet/types.ts": "ts/products/fans/web/src/calc/types.ts",
+    "ts/apps/web/src/ducts/sheet/value-fixtures.ts": "ts/products/fans/web/src/calc/value-fixtures.ts",
+    "ts/apps/web/src/ducts/sheet/view.tsx": "ts/products/fans/web/src/calc/view.tsx",
+    "ts/apps/web/src/ducts/sheet/worksheet-picture.test.ts": "ts/products/fans/web/src/calc/calc-breakdown-picture.test.ts",
+    "ts/apps/web/src/ducts/sheet/worksheet-table.test.tsx": "ts/products/fans/web/src/calc/calc-breakdown-table.test.tsx",
+    "ts/apps/web/src/ducts/sheet/worksheet-table.tsx": "ts/products/fans/web/src/calc/calc-breakdown-table.tsx",
+    "ts/apps/web/src/ducts/stub-labels.test.ts": "ts/products/ducts/web/src/stub-labels.test.ts",
+    "ts/apps/web/src/ducts/stub-labels.ts": "ts/products/ducts/web/src/stub-labels.ts",
+    "ts/apps/web/src/ducts/subject-labels.tsx": "ts/products/ducts/web/src/subject-labels.tsx",
+    "ts/apps/web/src/ducts/subject-text.test.tsx": "ts/products/ducts/web/src/subject-text.test.tsx",
+    "ts/apps/web/src/ducts/subject-text.ts": "ts/products/ducts/web/src/subject-text.ts",
+    "ts/apps/web/src/ducts/system-list-search.test.ts": "ts/products/ducts/web/src/system-list-search.test.ts",
+    "ts/apps/web/src/ducts/system-list-search.ts": "ts/products/duct-systems/web/src/system-list-search.ts",
+    "ts/apps/web/src/ducts/system-list.test.ts": "ts/products/ducts/web/src/system-list.test.ts",
+    "ts/apps/web/src/ducts/system-list.ts": "ts/products/duct-systems/web/src/system-list.ts",
+    "ts/apps/web/src/ducts/system-notes.test.tsx": "ts/products/duct-systems/web/src/system-notes.test.tsx",
+    "ts/apps/web/src/ducts/system-reads.test.ts": "ts/products/duct-systems/web/src/system-reads.test.ts",
+    "ts/apps/web/src/ducts/test-fixture.ts": "ts/products/ducts/web/src/test-fixture.ts",
+    "ts/apps/web/src/ducts/work.ts": "ts/products/ducts/web/src/work.ts",
+    "ts/apps/web/src/fans/admission.fixture.ts": "ts/products/fans/web/src/admission.fixture.ts",
+    "ts/apps/web/src/fans/bindings.ts": "ts/products/fans/web/src/bindings.ts",
+    "ts/apps/web/src/fans/cohort.test.ts": "ts/products/fans/web/src/cohort.test.ts",
+    "ts/apps/web/src/fans/contract.ts": "ts/products/fans/contract/src/contract.ts",
+    "ts/apps/web/src/fans/cutover.test-support.ts": "ts/products/fans/web/src/cutover.test-support.ts",
+    "ts/apps/web/src/fans/cutover.test.ts": "ts/products/fans/web/src/cutover.test.ts",
+    "ts/apps/web/src/fans/feedback-inputs.test.tsx": "ts/products/fans/web/src/feedback-inputs.test.tsx",
+    "ts/apps/web/src/fans/host.ts": "ts/products/fans/host/src/host.ts",
+    "ts/apps/web/src/fans/identity.test.ts": "ts/products/fans/web/src/identity.test.ts",
+    "ts/apps/web/src/fans/kernel.test.tsx": "ts/products/fans/web/src/kernel.test.tsx",
+    "ts/apps/web/src/fans/ledger-fix.journey.test.tsx": "ts/products/fans/web/src/ledger-fix.journey.test.tsx",
+    "ts/apps/web/src/fans/mount.tsx": "ts/products/fans/web/src/mount.tsx",
+    "ts/apps/web/src/fans/native.test-support.ts": "ts/products/fans/web/src/native.test-support.ts",
+    "ts/apps/web/src/fans/no-ducts-writes.test.ts": "ts/products/fans/web/src/no-ducts-writes.test.ts",
+    "ts/apps/web/src/fans/one-lifecycle.test.tsx": "ts/products/fans/web/src/one-lifecycle.test.tsx",
+    "ts/apps/web/src/fans/owner-schema-gap.test.ts": "ts/products/fans/web/src/owner-schema-gap.test.ts",
+    "ts/apps/web/src/fans/picture-slot.test.ts": "ts/products/fans/web/src/picture-slot.test.ts",
+    "ts/apps/web/src/fans/picture.tsx": "ts/products/fans/web/src/picture.tsx",
+    "ts/apps/web/src/fans/presentation-gap.test.ts": "ts/products/fans/web/src/presentation-gap.test.ts",
+    "ts/apps/web/src/fans/q5-join.test.ts": "ts/products/fans/web/src/q5-join.test.ts",
+    "ts/apps/web/src/fans/route.ts": "ts/products/fans/web/route.ts",
+    "ts/apps/web/src/fans/sheet-slot.test.ts": "ts/products/fans/web/src/calc-slot.test.ts",
+    "ts/apps/web/src/fans/sheet.test.tsx": "ts/products/fans/web/src/calc.test.tsx",
+    "ts/apps/web/src/fans/sheet.ts": "ts/products/fans/web/src/calc.ts",
+    "ts/apps/web/src/fans/slot-patch-gap.test.ts": "ts/products/fans/web/src/slot-patch-gap.test.ts",
+    "ts/apps/web/src/fans/timeline-member-switch.test.ts": "ts/products/fans/web/src/timeline-member-switch.test.ts",
+    "ts/apps/web/src/fans/timeline-members.test.ts": "ts/products/fans/web/src/timeline-members.test.ts",
+    "ts/apps/web/src/fans/work-invalidation.test.ts": "ts/products/fans/web/src/work-invalidation.test.ts",
+    "ts/apps/web/src/fans/work-reading.test.ts": "ts/products/fans/web/src/work-reading.test.ts",
+    "ts/apps/web/src/fans/write-action.test.tsx": "ts/products/fans/web/src/write-action.test.tsx",
+    "ts/packages/agent-contracts/src/criterion-words.neutral.ts": "ts/products/ducts/contract/src/criterion-words.neutral.ts",
+    "ts/packages/agent-contracts/src/duct-catalog.ts": "ts/products/ducts/contract/src/duct-catalog.ts",
+    "ts/packages/agent-contracts/src/duct-loss-read.ts": "ts/products/ducts/contract/src/duct-loss-read.ts",
+    "ts/packages/agent-contracts/src/ducts-pricing-read.ts": "ts/products/duct-systems/contract/src/ducts-pricing-read.ts",
+    "ts/packages/agent-contracts/src/ducts-read.ts": "ts/products/duct-systems/contract/src/ducts-read.ts",
+    "ts/packages/agent-contracts/src/ducts-sheet.test.ts": "ts/products/ducts/contract/src/ducts-calc.test.ts",
+    "ts/packages/agent-contracts/src/ducts-sheet.ts": "ts/products/fans/contract/src/calc-read.ts",
+    "ts/packages/agent-contracts/src/ducts.ts": "ts/products/duct-systems/contract/src/ducts.ts",
+    "ts/packages/agent-contracts/src/fans-inputs.test.ts": "ts/products/fans/contract/src/fans-inputs.test.ts",
+    "ts/packages/agent-contracts/src/fans-inputs.ts": "ts/products/fans/contract/src/fans-inputs.ts",
+    "ts/packages/agent-contracts/src/fans-read.ts": "ts/products/fans/contract/src/fans-read.ts",
+    "ts/packages/agent-contracts/src/fans.ts": "ts/products/fans/contract/src/fans.ts",
+    "ts/packages/ducts-domain/src/action-targets.ts": "ts/products/duct-systems/domain/src/action-targets.ts",
+    "ts/packages/ducts-domain/src/air-types.test.ts": "ts/products/ducts/domain/src/air-types.test.ts",
+    "ts/packages/ducts-domain/src/air-types.ts": "ts/products/ducts/domain/src/air-types.ts",
+    "ts/packages/ducts-domain/src/airflow.ts": "ts/products/ducts/domain/src/airflow.ts",
+    "ts/packages/ducts-domain/src/bins.ts": "ts/products/ducts/domain/src/bins.ts",
+    "ts/packages/ducts-domain/src/calc-runs.ts": "ts/products/ducts/domain/src/calc-runs.ts",
+    "ts/packages/ducts-domain/src/catalog.ts": "ts/products/ducts/domain/src/catalog.ts",
+    "ts/packages/ducts-domain/src/drawn-graph.ts": "ts/products/ducts/domain/src/drawn-graph.ts",
+    "ts/packages/ducts-domain/src/duct-loss-math.ts": "ts/products/ducts/domain/src/duct-loss-math.ts",
+    "ts/packages/ducts-domain/src/element-label.ts": "ts/products/ducts/domain/src/element-label.ts",
+    "ts/packages/ducts-domain/src/equivalent-length.test.ts": "ts/products/duct-systems/domain/src/equivalent-length.test.ts",
+    "ts/packages/ducts-domain/src/equivalent-length.ts": "ts/products/duct-systems/domain/src/equivalent-length.ts",
+    "ts/packages/ducts-domain/src/faces.test.ts": "ts/products/ducts/domain/src/faces.test.ts",
+    "ts/packages/ducts-domain/src/faces.ts": "ts/products/ducts/domain/src/faces.ts",
+    "ts/packages/ducts-domain/src/fan-assignment.test.ts": "ts/products/ducts/domain/src/fan-assignment.test.ts",
+    "ts/packages/ducts-domain/src/fan-assignment.ts": "ts/products/ducts/domain/src/fan-assignment.ts",
+    "ts/packages/ducts-domain/src/fan-headroom.test.ts": "ts/products/duct-systems/domain/src/fan-headroom.test.ts",
+    "ts/packages/ducts-domain/src/fan-headroom.ts": "ts/products/duct-systems/domain/src/fan-headroom.ts",
+    "ts/packages/ducts-domain/src/fixtures/catalogs/price-lbp/catalog.json": "ts/products/ducts/domain/src/fixtures/catalogs/price-lbp/catalog.json",
+    "ts/packages/ducts-domain/src/fixtures/catalogs/price-lbp/lbp.pdf": "ts/products/ducts/domain/src/fixtures/catalogs/price-lbp/lbp.pdf",
+    "ts/packages/ducts-domain/src/fixtures/converging-tables.json": "ts/products/ducts/domain/src/fixtures/converging-tables.json",
+    "ts/packages/ducts-domain/src/geometry.ts": "ts/products/ducts/domain/src/geometry.ts",
+    "ts/packages/ducts-domain/src/heal.test.ts": "ts/products/ducts/domain/src/heal.test.ts",
+    "ts/packages/ducts-domain/src/heal.ts": "ts/products/ducts/domain/src/heal.ts",
+    "ts/packages/ducts-domain/src/inbox-rows.ts": "ts/products/duct-systems/domain/src/inbox-rows.ts",
+    "ts/packages/ducts-domain/src/issues.ts": "ts/products/ducts/domain/src/issues.ts",
+    "ts/packages/ducts-domain/src/kernel/fitting-facts.ts": "ts/products/ducts/domain/src/kernel/fitting-facts.ts",
+    "ts/packages/ducts-domain/src/kernel/index.ts": "ts/products/ducts/domain/src/kernel/index.ts",
+    "ts/packages/ducts-domain/src/kernel/inferred-joins.test.ts": "ts/products/ducts/domain/src/kernel/inferred-joins.test.ts",
+    "ts/packages/ducts-domain/src/kernel/inferred-joins.ts": "ts/products/ducts/domain/src/kernel/inferred-joins.ts",
+    "ts/packages/ducts-domain/src/kernel/price-leg.test.ts": "ts/products/ducts/domain/src/kernel/price-leg.test.ts",
+    "ts/packages/ducts-domain/src/kernel/price-leg.ts": "ts/products/ducts/domain/src/kernel/price-leg.ts",
+    "ts/packages/ducts-domain/src/kernel/terminal-flow.test.ts": "ts/products/ducts/domain/src/kernel/terminal-flow.test.ts",
+    "ts/packages/ducts-domain/src/kernel/terminal-flow.ts": "ts/products/ducts/domain/src/kernel/terminal-flow.ts",
+    "ts/packages/ducts-domain/src/loss-breakdown.test.ts": "ts/products/duct-systems/domain/src/loss-breakdown.test.ts",
+    "ts/packages/ducts-domain/src/loss-breakdown.ts": "ts/products/duct-systems/domain/src/loss-breakdown.ts",
+    "ts/packages/ducts-domain/src/loss-grid.test.ts": "ts/products/ducts/domain/src/loss-grid.test.ts",
+    "ts/packages/ducts-domain/src/loss-grid.ts": "ts/products/ducts/domain/src/loss-grid.ts",
+    "ts/packages/ducts-domain/src/loss-physics.ts": "ts/products/ducts/domain/src/loss-physics.ts",
+    "ts/packages/ducts-domain/src/loss-rules.test.ts": "ts/products/ducts/domain/src/loss-rules.test.ts",
+    "ts/packages/ducts-domain/src/loss-rules.ts": "ts/products/ducts/domain/src/loss-rules.ts",
+    "ts/packages/ducts-domain/src/loss-split.ts": "ts/products/duct-systems/domain/src/loss-split.ts",
+    "ts/packages/ducts-domain/src/neighbours.test.ts": "ts/products/ducts/domain/src/neighbours.test.ts",
+    "ts/packages/ducts-domain/src/neighbours.ts": "ts/products/ducts/domain/src/neighbours.ts",
+    "ts/packages/ducts-domain/src/no-runs.test.ts": "ts/products/duct-systems/domain/src/no-runs.test.ts",
+    "ts/packages/ducts-domain/src/no-runs.ts": "ts/products/duct-systems/domain/src/no-runs.ts",
+    "ts/packages/ducts-domain/src/pass-through.ts": "ts/products/ducts/domain/src/pass-through.ts",
+    "ts/packages/ducts-domain/src/phases.test.ts": "ts/products/ducts/domain/src/phases.test.ts",
+    "ts/packages/ducts-domain/src/phases.ts": "ts/products/ducts/domain/src/phases.ts",
+    "ts/packages/ducts-domain/src/proximity-grid.test.ts": "ts/products/ducts/domain/src/proximity-grid.test.ts",
+    "ts/packages/ducts-domain/src/proximity.test.ts": "ts/products/ducts/domain/src/proximity.test.ts",
+    "ts/packages/ducts-domain/src/proximity.ts": "ts/products/ducts/domain/src/proximity.ts",
+    "ts/packages/ducts-domain/src/read-index.ts": "ts/products/ducts/domain/src/read-index.ts",
+    "ts/packages/ducts-domain/src/readiness.ts": "ts/products/ducts/domain/src/readiness.ts",
+    "ts/packages/ducts-domain/src/roster.test.ts": "ts/products/ducts/domain/src/roster.test.ts",
+    "ts/packages/ducts-domain/src/roster.ts": "ts/products/ducts/domain/src/roster.ts",
+    "ts/packages/ducts-domain/src/rulings.test.ts": "ts/products/ducts/domain/src/rulings.test.ts",
+    "ts/packages/ducts-domain/src/rulings.ts": "ts/products/ducts/domain/src/rulings.ts",
+    "ts/packages/ducts-domain/src/sheet/accessory-writes.ts": "ts/products/fans/domain/src/calc/accessory-writes.ts",
+    "ts/packages/ducts-domain/src/sheet/assumed-flow.ts": "ts/products/fans/domain/src/calc/assumed-flow.ts",
+    "ts/packages/ducts-domain/src/sheet/beyond.test.ts": "ts/products/fans/domain/src/calc/beyond.test.ts",
+    "ts/packages/ducts-domain/src/sheet/beyond.ts": "ts/products/fans/domain/src/calc/beyond.ts",
+    "ts/packages/ducts-domain/src/sheet/build.ts": "ts/products/fans/domain/src/calc/build.ts",
+    "ts/packages/ducts-domain/src/sheet/coverage.ts": "ts/products/ducts/domain/src/calc/coverage.ts",
+    "ts/packages/ducts-domain/src/sheet/criteria.test.ts": "ts/products/fans/domain/src/calc/criteria.test.ts",
+    "ts/packages/ducts-domain/src/sheet/d8-open-end.test.ts": "ts/products/fans/domain/src/calc/d8-open-end.test.ts",
+    "ts/packages/ducts-domain/src/sheet/edits.ts": "ts/products/ducts/domain/src/calc/edits.ts",
+    "ts/packages/ducts-domain/src/sheet/encounters.test.ts": "ts/products/fans/domain/src/calc/encounters.test.ts",
+    "ts/packages/ducts-domain/src/sheet/encounters.ts": "ts/products/fans/domain/src/calc/encounters.ts",
+    "ts/packages/ducts-domain/src/sheet/fc23-close.test.ts": "ts/products/fans/domain/src/calc/fc23-close.test.ts",
+    "ts/packages/ducts-domain/src/sheet/fitting-pricing.test.ts": "ts/products/fans/domain/src/calc/fitting-pricing.test.ts",
+    "ts/packages/ducts-domain/src/sheet/fixtures/manual-d-20261102.json": "ts/products/fans/domain/src/calc/fixtures/manual-d-20261102.json",
+    "ts/packages/ducts-domain/src/sheet/fixtures/manual-d-tables.json": "ts/products/fans/domain/src/calc/fixtures/manual-d-tables.json",
+    "ts/packages/ducts-domain/src/sheet/fixtures/muas-local-20261102.json": "ts/products/fans/domain/src/calc/fixtures/muas-local-20261102.json",
+    "ts/packages/ducts-domain/src/sheet/fixtures/muas-real.json": "ts/products/fans/domain/src/calc/fixtures/muas-real.json",
+    "ts/packages/ducts-domain/src/sheet/fixtures/synthetic-health-inputs.json": "ts/products/fans/domain/src/calc/fixtures/synthetic-health-inputs.json",
+    "ts/packages/ducts-domain/src/sheet/fixtures/synthetic-health.json": "ts/products/fans/domain/src/calc/fixtures/synthetic-health.json",
+    "ts/packages/ducts-domain/src/sheet/flow.ts": "ts/products/fans/domain/src/calc/flow.ts",
+    "ts/packages/ducts-domain/src/sheet/heal-refusal.test.ts": "ts/products/fans/domain/src/calc/heal-refusal.test.ts",
+    "ts/packages/ducts-domain/src/sheet/heal.test.ts": "ts/products/fans/domain/src/calc/heal.test.ts",
+    "ts/packages/ducts-domain/src/sheet/heal.ts": "ts/products/fans/domain/src/calc/heal.ts",
+    "ts/packages/ducts-domain/src/sheet/health.fixture.ts": "ts/products/fans/domain/src/calc/health.fixture.ts",
+    "ts/packages/ducts-domain/src/sheet/index.ts": "ts/products/fans/domain/src/calc/index.ts",
+    "ts/packages/ducts-domain/src/sheet/inputs.ts": "ts/products/ducts/domain/src/calc/inputs.ts",
+    "ts/packages/ducts-domain/src/sheet/joins.test.ts": "ts/products/ducts/domain/src/calc/joins.test.ts",
+    "ts/packages/ducts-domain/src/sheet/joins.ts": "ts/products/ducts/domain/src/calc/joins.ts",
+    "ts/packages/ducts-domain/src/sheet/manual-d.test.ts": "ts/products/fans/domain/src/calc/manual-d.test.ts",
+    "ts/packages/ducts-domain/src/sheet/muas-regression.test.ts": "ts/products/fans/domain/src/calc/muas-regression.test.ts",
+    "ts/packages/ducts-domain/src/sheet/scoped-snapshot.ts": "ts/products/ducts/domain/src/calc/scoped-snapshot.ts",
+    "ts/packages/ducts-domain/src/sheet/sheet.test.ts": "ts/products/fans/domain/src/calc/calc.test.ts",
+    "ts/packages/ducts-domain/src/sheet/state.ts": "ts/products/fans/domain/src/calc/state.ts",
+    "ts/packages/ducts-domain/src/sheet/tables.fixture.ts": "ts/products/fans/domain/src/calc/tables.fixture.ts",
+    "ts/packages/ducts-domain/src/sheet/tap-census.test.ts": "ts/products/fans/domain/src/calc/tap-census.test.ts",
+    "ts/packages/ducts-domain/src/sheet/test-inputs.ts": "ts/products/fans/domain/src/calc/test-inputs.ts",
+    "ts/packages/ducts-domain/src/sheet/tiers.ts": "ts/products/fans/domain/src/calc/tiers.ts",
+    "ts/packages/ducts-domain/src/sheet/types.ts": "ts/products/fans/domain/src/calc/types.ts",
+    "ts/packages/ducts-domain/src/sheet/value-resolution.test.ts": "ts/products/fans/domain/src/calc/value-resolution.test.ts",
+    "ts/packages/ducts-domain/src/sheet/walk-closers.test.ts": "ts/products/fans/domain/src/calc/walk-closers.test.ts",
+    "ts/packages/ducts-domain/src/sheet/walk.ts": "ts/products/fans/domain/src/calc/walk.ts",
+    "ts/packages/ducts-domain/src/sheet/worksheet.test.ts": "ts/products/fans/domain/src/calc/calc-breakdown.test.ts",
+    "ts/packages/ducts-domain/src/sheet/worksheet.ts": "ts/products/fans/domain/src/calc/calc-breakdown.ts",
+    "ts/packages/ducts-domain/src/sheet/write-request.test.ts": "ts/products/fans/domain/src/calc/write-request.test.ts",
+    "ts/packages/ducts-domain/src/sheet/write-request.ts": "ts/products/fans/domain/src/calc/write-request.ts",
+    "ts/packages/ducts-domain/src/staged.test.ts": "ts/products/ducts/domain/src/staged.test.ts",
+    "ts/packages/ducts-domain/src/staged.ts": "ts/products/ducts/domain/src/staged.ts",
+    "ts/packages/ducts-domain/src/survey.ts": "ts/products/ducts/domain/src/survey.ts",
+    "ts/packages/ducts-domain/src/system-list-search.ts": "ts/products/duct-systems/domain/src/system-list-search.ts",
+    "ts/packages/ducts-domain/src/system-list.ts": "ts/products/duct-systems/domain/src/system-list.ts",
+    "ts/packages/ducts-domain/src/system-reads.test.ts": "ts/products/ducts/domain/src/system-reads.test.ts",
+    "ts/packages/ducts-domain/src/system-reads.ts": "ts/products/ducts/domain/src/system-reads.ts",
+    "ts/packages/ducts-domain/src/system-scope.test.ts": "ts/products/ducts/domain/src/system-scope.test.ts",
+    "ts/packages/ducts-domain/src/system-scope.ts": "ts/products/ducts/domain/src/system-scope.ts",
+    "ts/packages/ducts-domain/src/system-search.ts": "ts/products/duct-systems/domain/src/system-search.ts",
+    "ts/packages/ducts-domain/src/table-ids.ts": "ts/products/ducts/domain/src/table-ids.ts",
+    "ts/packages/ducts-domain/src/terminal-flows.test.ts": "ts/products/ducts/domain/src/terminal-flows.test.ts",
+    "ts/packages/ducts-domain/src/terminal-flows.ts": "ts/products/ducts/domain/src/terminal-flows.ts",
+    "ts/packages/ducts-domain/src/test-design.ts": "ts/products/ducts/domain/src/test-design.ts",
+    "ts/packages/ducts-domain/src/test-snapshot.ts": "ts/products/ducts/domain/src/test-snapshot.ts",
+    "ts/packages/ducts-domain/src/topology.ts": "ts/products/ducts/domain/src/topology.ts",
+    "ts/packages/ducts-domain/src/types.ts": "ts/products/ducts/domain/src/types.ts",
+    "ts/packages/ducts-domain/src/unit-roles.ts": "ts/products/ducts/domain/src/unit-roles.ts",
+    "ts/packages/ducts-domain/src/words.test.ts": "ts/products/ducts/domain/src/words.test.ts",
+    "ts/packages/ducts-domain/src/words.ts": "ts/products/ducts/domain/src/words.ts",
+    "ts/packages/ducts-domain/src/work-subject.ts": "ts/products/ducts/domain/src/work-subject.ts",
+    "ts/packages/ducts-domain/src/write-evidence.ts": "ts/products/ducts/domain/src/write-evidence.ts",
+    "ts/packages/mcps/src/pea/ducts-skill.ts": "ts/products/fans/contract/src/pea/ducts-skill.ts",
+    "ts/packages/mcps/tests/ducts-skill.test.ts": "ts/products/fans/contract/src/tests/ducts-skill.test.ts",
+    "ts/apps/web/src/fans/link.ts": "ts/products/fans/contract/src/link.ts",
+    "ts/apps/web/src/ducts/picture-options.ts": "ts/products/ducts/web/src/picture-options.ts",
+    "ts/packages/agent-contracts/src/duct-calculation.ts": "ts/products/ducts/contract/src/duct-calculation.ts",
+    "ts/packages/agent-contracts/src/duct-inputs.ts": "ts/products/ducts/contract/src/duct-inputs.ts",
+    "ts/packages/agent-contracts/src/fan-calc.ts": "ts/products/fans/contract/src/fan-calc.ts",
+    "ts/packages/agent-contracts/src/fans-host-reads.ts": "ts/products/fans/contract/src/fans-host-reads.ts",
+    "ts/packages/ducts-domain/src/input-layers.ts": "ts/products/ducts/domain/src/input-layers.ts",
+    "ts/packages/ducts-domain/src/input-snapshot.ts": "ts/products/ducts/domain/src/input-snapshot.ts",
+    "ts/packages/ducts-domain/src/encounter-ruling.ts": "ts/products/ducts/domain/src/encounter-ruling.ts",
+    "ts/packages/ducts-domain/src/roster-inputs.ts": "ts/products/ducts/domain/src/roster-inputs.ts",
+    "ts/packages/ducts-domain/src/stage-issue.ts": "ts/products/ducts/domain/src/stage-issue.ts",
+    "ts/packages/ducts-domain/src/no-run-types.ts": "ts/products/ducts/domain/src/no-run-types.ts",
+    "ts/packages/ducts-domain/src/sheet/network-calcs.ts": "ts/products/fans/domain/src/calc/network-calcs.ts",
+    "ts/apps/host/src/ducts-action-runtime.ts": "ts/products/ducts/host/src/action-runtime.ts",
+    "ts/apps/host/src/fans-actions.ts": "ts/products/fans/host/src/actions.ts",
+    "ts/apps/host/src/duct-systems-actions.ts": "ts/products/duct-systems/host/src/actions.ts",
+    "ts/apps/web/src/shell/fans-plan-composition.test.tsx": "ts/products/fans/web/src/fans-plan-composition.test.tsx",
+    "ts/apps/web/src/shell/fans-plan-composition.test-support.tsx": "ts/products/fans/web/src/fans-plan-composition.test-support.tsx",
+    "ts/apps/web/src/shell/fans-oob-work.journey.test.tsx": "ts/products/fans/web/src/fans-oob-work.journey.test.tsx"
+  },
+  "post_flatten_tree": [
+    "ts/products/duct-systems/contract",
+    "ts/products/duct-systems/contract/src",
+    "ts/products/duct-systems/domain",
+    "ts/products/duct-systems/domain/src",
+    "ts/products/duct-systems/host",
+    "ts/products/duct-systems/host/src",
+    "ts/products/duct-systems/host/src/tests",
+    "ts/products/duct-systems/web",
+    "ts/products/duct-systems/web/src",
+    "ts/products/duct-systems/web/src/network",
+    "ts/products/duct-systems/web/src/screen",
+    "ts/products/ducts/contract",
+    "ts/products/ducts/contract/src",
+    "ts/products/ducts/domain",
+    "ts/products/ducts/domain/src",
+    "ts/products/ducts/domain/src/calc",
+    "ts/products/ducts/domain/src/fixtures",
+    "ts/products/ducts/domain/src/fixtures/catalogs/price-lbp",
+    "ts/products/ducts/domain/src/kernel",
+    "ts/products/ducts/host",
+    "ts/products/ducts/host/src",
+    "ts/products/ducts/host/src/tests",
+    "ts/products/ducts/host/src/tests/fixtures",
+    "ts/products/ducts/host/src/tests/native-recordings",
+    "ts/products/ducts/web",
+    "ts/products/ducts/web/src",
+    "ts/products/ducts/web/src/calc",
+    "ts/products/ducts/web/src/encoding",
+    "ts/products/ducts/web/src/fixtures",
+    "ts/products/ducts/web/src/fixtures/ashrae",
+    "ts/products/ducts/web/src/screen",
+    "ts/products/fans/contract",
+    "ts/products/fans/contract/src",
+    "ts/products/fans/contract/src/pea",
+    "ts/products/fans/contract/src/tests",
+    "ts/products/fans/domain",
+    "ts/products/fans/domain/src/calc",
+    "ts/products/fans/domain/src/calc/fixtures",
+    "ts/products/fans/host",
+    "ts/products/fans/host/src",
+    "ts/products/fans/host/src/tests",
+    "ts/products/fans/host/src/tests/native-recordings",
+    "ts/products/fans/web",
+    "ts/products/fans/web/src",
+    "ts/products/fans/web/src/calc"
+  ],
+  "scripts_committed": [
+    ".artifacts/p4-move.py",
+    ".artifacts/p4-flatten.py"
+  ],
+  "normal_host_config": true,
+  "timing": "Final fans host suite 593.14s, of which tests report 547.18s. Normal kit build retained; its separate duration was not instrumented.",
+  "other_checks": [
+    "host read-contract: 1 file / 7 passed",
+    "frozen prefer-offline install after merges and final scaffold: exit 0"
+  ],
+  "not_verified": [
+    "Native Revit operation / browser drive / installed build; deterministic moved tests and compile lane only.",
+    "Full workspace suite / full build / mutants intentionally not run."
+  ],
+  "cleanup": "Temporary untouched-base worktree removed, including long-path node_modules remnants. No Revit session or browser/server was started outside test-owned hosts.",
+  "evidence_time": "2026-11-17T08:03:53.449946+00:00"
+}
