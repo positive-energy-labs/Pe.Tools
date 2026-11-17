@@ -36,6 +36,19 @@ public static class PaletteThreading {
             : result!;
     }
 
+    /// <summary>
+    ///     For an op that writes. Its result is the evidence of what landed, so once the action ran, a later
+    ///     cancellation never discards it, and a request cancelled before the action throws instead of answering
+    ///     an empty success.
+    /// </summary>
+    public static async Task<T> RunRevitEffectAsync<T>(Func<T> action, CancellationToken ct) {
+        ct.ThrowIfCancellationRequested();
+        T result = default!;
+        if (!await RunRevitAsync(() => { result = action(); return true; }, CancellationToken.None))
+            throw new InvalidOperationException("The Revit task ended without running the operation.");
+        return result;
+    }
+
     public static Task RunOnUiAsync(
         Dispatcher dispatcher,
         Action action,

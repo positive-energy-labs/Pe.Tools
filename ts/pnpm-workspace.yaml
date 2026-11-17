@@ -37,6 +37,7 @@ catalog:
   '@llamaindex/liteparse': 2.18.0
   pngjs: 7.0.0
   '@types/pngjs': 6.0.5
+  effect: 4.0.2
 overrides:
   vite: "catalog:"
   "@smithy/core": 3.33.3

@@ -77,7 +77,14 @@ export {
 
 export const hostSessionScopeSchema = Schema.Struct({
   session: Schema.optional(
-    Schema.Union([Schema.Struct({ id: Schema.String }), Schema.Struct({ pid: Schema.Number })]),
+    Schema.Union([
+      Schema.Struct({ id: Schema.String }),
+      Schema.Struct({ pid: Schema.Number }),
+      Schema.Struct({
+        session: Schema.String,
+        processIncarnation: Schema.Struct({ pid: Schema.Number, startedAt: Schema.Number }),
+      }),
+    ]),
   ),
   // Private exact attachment and product document lifetime, never selector text.
   bridgeSessionId: Schema.optional(Schema.String),

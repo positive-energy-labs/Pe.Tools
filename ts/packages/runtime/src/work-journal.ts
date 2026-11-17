@@ -3,6 +3,7 @@ import {
   canonicalRouteInput,
   refusalText,
   workKey,
+  sameReceiptWork,
   type RouteStatePatch,
   type RouteStateWriteResult,
   type WorkKey,
@@ -196,7 +197,7 @@ export function createWorkJournal(key: WorkKey) {
               receipt.consumes.some(
                 (item) =>
                   item.kind === "work" &&
-                  workKey(item.probe.handle.key) === identity &&
+                  sameReceiptWork(item.probe.handle.key, key) &&
                   transition.revision <= item.probe.handle.revision,
               )),
         )
@@ -622,7 +623,7 @@ export function createWorkJournal(key: WorkKey) {
           a.startedAt.localeCompare(b.startedAt),
         )) {
           const consumed = receipt.consumes.find(
-            (item) => item.kind === "work" && workKey(item.probe.handle.key) === identity,
+            (item) => item.kind === "work" && sameReceiptWork(item.probe.handle.key, key),
           );
           if (
             consumed?.kind !== "work" ||

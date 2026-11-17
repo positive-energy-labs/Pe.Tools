@@ -15,6 +15,7 @@ import type {
   WorkPath,
   RouteStateSpec,
   ExecutionTarget,
+  ReceiptTarget,
   ActionNeed,
   CommandRefusal,
 } from "@pe/agent-contracts";
@@ -143,7 +144,7 @@ export interface CommandBinding {
 export type StepRecovery = (
   step: ActionStep,
   prepared: unknown,
-  target: ExecutionTarget,
+  target: ReceiptTarget,
 ) => Promise<{
   step: ActionStep;
   evidence: unknown;

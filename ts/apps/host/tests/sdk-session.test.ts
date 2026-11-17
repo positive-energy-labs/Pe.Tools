@@ -1,11 +1,30 @@
 import { Context, Effect, Layer } from "effect";
-import { expect } from "vite-plus/test";
+import { expect, test } from "vite-plus/test";
 import { detachedBridge, sessionView, effectTest } from "./effect-test.ts";
-import { SdkSession, SdkDriver } from "../src/sdk-session.ts";
+import { SdkSession, SdkDriver, readSessionScope } from "../src/sdk-session.ts";
+import {
+  HOST_RPC_SDK_SESSION_HEADER,
+  HOST_RPC_DOCUMENT_HEADER,
+} from "@pe/host-contracts/operation-types";
 import { RevitBridge, type HostBridgeEvent } from "../src/bridge.ts";
 import { RequestIdentity, admittedRequestIdentity } from "../src/request-services.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
 import { replay } from "./sdk-replay.ts";
+
+test("the public session header decodes exact identity without a private broker id", () => {
+  const exact = { session: "sdk-session", processIncarnation: { pid: 42, startedAt: 1000 } };
+  expect(
+    readSessionScope({
+      [HOST_RPC_SDK_SESSION_HEADER]: JSON.stringify(exact),
+      [HOST_RPC_DOCUMENT_HEADER]: "open",
+    }),
+  ).toEqual({ session: exact, openDocumentId: "open" });
+  expect(() =>
+    readSessionScope({
+      [HOST_RPC_SDK_SESSION_HEADER]: JSON.stringify({ ...exact, id: "mixed-selector" }),
+    }),
+  ).toThrow();
+});
 
 effectTest(
   "scoped SDK cache invalidates on bridge changes and never falls back across incarnations or owners",
@@ -17,16 +36,30 @@ effectTest(
       let calls = 0;
       let changesDuringResolution = 0;
       let changed: (() => void) | undefined;
+      let duplicate = false;
       const bridge = detachedBridge({
         list: Effect.sync(() => [
           sessionView({
             ...hostOwnership,
             connected: true,
             sessionId: "attachment",
+            sdkSessionId: "sdk-session",
             processId: process.pid,
             processStartUtcUnixMs: startedAt,
             state: { openDocuments: [{ openId: "open" }] },
           }),
+          ...(duplicate
+            ? [
+                sessionView({
+                  ...hostOwnership,
+                  connected: true,
+                  sessionId: "another-attachment",
+                  sdkSessionId: "sdk-session",
+                  processId: process.pid + 1,
+                  processStartUtcUnixMs: startedAt,
+                }),
+              ]
+            : []),
         ]),
         subscribe: (listener: (event: HostBridgeEvent) => void) => {
           changed = () => listener({ kind: "state-sync", sessionId: "attachment" });
@@ -111,5 +144,39 @@ effectTest(
       sdkStart = 2000;
       sourceRoot = "C:/foreign-checkout";
       expect((yield* resolve.pipe(Effect.result))._tag).toBe("Failure");
+      sourceRoot = hostOwnership.sourceRoot;
+      const exact = {
+        session: {
+          session: "sdk-session",
+          processIncarnation: { pid: process.pid, startedAt: 2000 },
+        },
+        openDocumentId: "open",
+      };
+      const exactRead = (scope: typeof exact) =>
+        sdk
+          .resolve(scope)
+          .pipe(
+            Effect.provideService(
+              RequestIdentity,
+              admittedRequestIdentity({ kind: "anonymous" }, scope),
+            ),
+          );
+      expect((yield* exactRead(exact)).processIncarnation).toEqual(
+        exact.session.processIncarnation,
+      );
+      const beforeStale = calls;
+      const stale = {
+        ...exact,
+        session: { ...exact.session, processIncarnation: { pid: process.pid, startedAt: 1000 } },
+      };
+      expect((yield* exactRead(stale).pipe(Effect.result))._tag).toBe("Failure");
+      expect(calls).toBe(beforeStale);
+      duplicate = true;
+      expect((yield* exactRead(exact).pipe(Effect.result))._tag).toBe("Failure");
+      expect(calls).toBe(beforeStale);
+      duplicate = false;
+      expect(
+        (yield* exactRead({ ...exact, openDocumentId: "closed" }).pipe(Effect.result))._tag,
+      ).toBe("Failure");
     }),
 );

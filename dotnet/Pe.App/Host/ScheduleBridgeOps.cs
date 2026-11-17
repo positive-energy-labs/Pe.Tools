@@ -40,7 +40,7 @@ internal static class ScheduleBridgeOps {
     /// </summary>
     [Op("schedule.cells.apply", OpSubject.Elements, OpTouches.Metadata, Internal = true, Does = "Write reviewed schedule cells by their exact reviewed bindings (target element id, parameter id, storage, read-only, hasValue, raw value) in one transaction. Stale, missing, blocked, or conflicting evidence refuses per cell; results keep the request cell index and each cell's own target index. CurrentBinding targets carry native element label, UniqueId, parameter name, instance/type scope and formatted before value for write review.", Title = "Apply Schedule Cells", Finds = ["schedule", "cells", "apply", "binding", "reviewed", "write"], Cost = OpCost.Mutation, Actor = OpActor.Any)]
     private static Task<ScheduleCellApplyData> ApplyCells(ScheduleCellApplyRequest request, ProjectDocument document, ModelWrite scope, CancellationToken cancellationToken) =>
-        PaletteThreading.RunRevitAsync(() => {
+        PaletteThreading.RunRevitEffectAsync(() => {
             if (!request.DryRun && document.Value.IsReadOnly)
                 throw BridgeOperationExceptions.Conflict("The document is read-only.");
             EngineEdge.RequireReachableCentral(document.Value);
@@ -50,7 +50,7 @@ internal static class ScheduleBridgeOps {
 
     [Op("schedule.apply", OpSubject.Document, OpTouches.Metadata, Internal = true, Does = "Create a new schedule from a saved schedule spec and write the run receipt into the source pod. Never edits an existing schedule.", Title = "Apply Schedule", Finds = ["schedule", "apply", "spec", "create", "receipt"], Cost = OpCost.Mutation, Actor = OpActor.Any)]
     private static Task<ScheduleSpecApplyData> Apply(ScheduleSpecApplyRequest request, ProjectDocument document, ModelWrite scope, CancellationToken cancellationToken) =>
-        PaletteThreading.RunRevitAsync(() => {
+        PaletteThreading.RunRevitEffectAsync(() => {
             try {
                 return ApplySpec(document.Value, request.SpecJson, request.Source).Data;
             } catch (JsonValidationException exception) {

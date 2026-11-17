@@ -4,6 +4,8 @@ Date: 2026-11-11. Status: accepted, not built. Source: kaitpw's ruling in the ho
 
 ## Context
 
+Current amendment: [ADR 0050](0050-workflow-owns-durable-commands.md) applies the journal discard class to the engine database with an external discard epoch and fail-closed admission. The accepted historical decision below is unchanged.
+
 Three failure policies coexist in stored-file readers. Some delete on a parse failure (Work, the journal on an unsupported version). One refuses and keeps (`providers.json`). Several throw at start or mid-read (scheduled tasks, devices, remote ingress, share, the update reader, captures, route settings, a corrupt journal line, a Page event log), so one corrupt row can stop the host. Work's discard is a `console.warn` in `route-document-store.ts`, which no person sees. Two earlier rulings pulled apart: ADR 0033 rule 5, "NO LEGACY! ... work should simply be deleted", and ADR 0026 D4, "Unknown is not old".
 
 ## Decision

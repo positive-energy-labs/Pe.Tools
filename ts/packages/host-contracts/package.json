@@ -87,7 +87,8 @@
     "./native-adapter": "./src/native-adapter.ts",
     "./host-descriptor": "./src/host-descriptor.ts",
     "./decoders": "./src/decoders.ts",
-    "./native-schemas": "./src/native-schemas.ts"
+    "./native-schemas": "./src/native-schemas.ts",
+    "./native-effect": "./src/generated/native-effect.generated.ts"
   },
   "publishConfig": {
     "access": "public"
@@ -97,6 +98,7 @@
     "dev": "vp pack --watch",
     "test": "vp test",
     "check": "vp check",
+    "check:native-effect": "vpx tsc --project tsconfig.native-effect.json",
     "prepublishOnly": "vp run build",
     "codegen:sdk-wire": "node scripts/sdk-wire.ts",
     "codegen": "node scripts/sdk-wire.ts && dotnet run --disable-build-servers --project ../../../dotnet/Pe.Dev.Cli -- ops-catalog --out .cache/ops-catalog.json && vpx node --import jiti/register scripts/host-typegen.ts --catalog .cache/ops-catalog.json && node scripts/ops-catalog-hash.ts --write",
