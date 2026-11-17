@@ -159,6 +159,12 @@ Root foundation holds override compile cleanup. These gates must pass on their o
 
 Staffing: Sol or Terra can run every role from these briefs. Each brief carries its slice row, its exact file set from a fresh census, and its falsifier.
 
+Wave: 1 t3/ff-crossing
+
+Estimate: t3/ff-crossing 3h 600L -
+
+The run's TAKEOVER.md section "Opus root takeover" is the authority for this crossing: "The only goal until it passes is the simplification proof".
+
 Wave: 0 t3/converge-s4-wave0-shared-foundation t3/s2-identity-root-fix t3/s3-native-effect-generator
 
 Wave-Status: 0 ACTIVE
