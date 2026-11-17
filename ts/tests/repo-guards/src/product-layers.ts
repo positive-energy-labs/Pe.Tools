@@ -27,7 +27,7 @@ export function productLayerViolations(sources: Record<string, string>): string[
       const declared = subpath !== null && Object.hasOwn(to.exports, subpath);
       const downward = to.layer === "contract" || to.layer === from.layer ||
         (to.layer === "domain" && ["web", "host"].includes(from.layer));
-      const forbidden = !downward || (from.product === "ducts" && to.product !== "ducts");
+      const forbidden = !downward || (from.product === "ducts" && to.product !== "ducts" && to.layer !== "contract");
       const crossProduct = from.product !== to.product;
       const allowed = to.layer === "contract" || (to.product === "ducts" && downward);
       if (forbidden || (named && !declared) || (crossProduct && (!allowed || !declared)))

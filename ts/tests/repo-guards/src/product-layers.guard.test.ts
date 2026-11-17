@@ -37,3 +37,8 @@ test("the shared base domain may not import a product domain", () => {
   const spec = "@pe/fans-domain/calc/network-calcs";
   expect(productLayerViolations({ [file]: `import { x } from "${spec}";` })).toEqual([`${file} -> ${spec}`]);
 });
+
+test("the shared base domain may import a product contract", () => {
+  expect(productLayerViolations({ "products/ducts/domain/src/planted.ts":
+    'import { Calc } from "@pe/fans-contract/fan-calc";' })).toEqual([]);
+});
