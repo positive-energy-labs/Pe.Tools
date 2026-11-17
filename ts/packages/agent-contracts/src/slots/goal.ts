@@ -5,8 +5,8 @@ import type { StateCell } from "./sheet.ts";
 /*
  * The goal slot (ADR 0030 rule 3; ADR 0035 rules 1 and 8). A route's core is one host Read that
  * returns a Goal; the kernel draws the unresolved list first, on every route the same way, and
- * greys the answer until that list is empty. Pea reads the same Goal the UI fetches. The ducts
- * inbox is this list, not a notice surface. Owner: slice 7. Scaffold: types only.
+ * greys the answer until that list is empty. Pea reads the same Goal the UI fetches.
+ * A route's inbox is this list, not a notice surface. Owner: slice 7. Scaffold: types only.
  */
 
 /** Who closes an open question: a person, Pea, or one catalog op. */

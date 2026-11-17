@@ -20,7 +20,7 @@ const by = authorSchema;
 /** One successful `writeHome` by a command, as this machine recorded it (storage C3). */
 export const homeWriteRowSchema = z.strictObject({
   kind: z.literal("home-write"),
-  /** Words a person reads: "ducts designFriction at project (Chadds Ford Residence)". */
+  /** Words a person reads: "design friction at project (Chadds Ford Residence)". */
   place: z.string(),
   path: z.string(),
   sha256: z.string(),

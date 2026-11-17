@@ -122,7 +122,7 @@ export async function connect(
     url: () => read<string>("location.href"),
     async open(url: string) {
       const before = loadSerial;
-      // Leaving a loaded Revit route can hold the old page past the 30 s command default (/fans: >30 s).
+      // Leaving a loaded Revit route can hold the old page past the 30 s command default.
       const navigation: any = await transport.sendRaw(
         "Page.navigate",
         { url },
@@ -310,7 +310,7 @@ const cellOf = (row: string[], column: string) => `(() => {
 })()`;
 
 /**
- * Run one journey: `E2E_LABEL=green|red node tests/e2e/j6-fans-write.ts`. Writes steps, the failing
+ * Run one journey with E2E_LABEL=green|red and its entrypoint. Writes steps, the failing
  * assertion (if any), and DOM dumps under `.artifacts/proof/interaction/<id>-<tip7>/<label>/`.
  */
 export async function journey(
@@ -378,7 +378,7 @@ export const revit = {
  * Place's target is a document a connected Revit lists as open; unbound, it is absent.
  */
 export const BOUND = "[data-bound-document] [data-list-trigger]";
-/** Unit ESP cell address emitted by route/slots/sheet/pane.tsx for fans/sheet.ts's esp binding. */
+/** Unit ESP cell address emitted by the sheet pane for its ESP binding. */
 export const FANS_ESP_ROW = '[data-pane-id="calc-inputs"] [data-sheet-address^="esp:"]';
 /** Resolved unit ESP, the final cell in the ledger's first numeric grid, not calculated system ESP. */
 export const FANS_LEDGER_ESP =

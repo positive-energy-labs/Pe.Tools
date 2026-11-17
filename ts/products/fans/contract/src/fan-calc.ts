@@ -1,5 +1,5 @@
 /**
- * The fan sheet (docs/features/ducts/MAP.md, Data model): one per roster fan port, recomputed on
+ * The fan calc (docs/features/fans/LEDGER.md): one per roster fan port, recomputed on
  * every read, never persisted. Legs are keyed once; paths are leg-id lists from the fan outward.
  * The wire contract (W1-F) mirrors this file; change it there in the same commit.
  */

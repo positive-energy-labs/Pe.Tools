@@ -1134,7 +1134,7 @@ async function dispatch(
 /** Workspace Work and browser leases keep their own addressing contracts. */
 /**
  * Pea's Work value: doc, revision, handle and provenance as the host read them. The transport JSON
- * Schema (74557 bytes against a 180-byte /fans doc, Driver C13) stays out unless the read asks
+ * Schema (74557 bytes against a 180-byte Work doc, Driver C13) stays out unless the read asks
  * `{schema: true}`; the host still validates every write against it.
  */
 export function peaWorkValue(result: Record<string, unknown>, withSchema = false) {
