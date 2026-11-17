@@ -5,6 +5,20 @@ import { elementSubject } from "@pe/ducts-domain/work-subject";
 import { describeCloser } from "../ducts/sheet/closer";
 import type { SheetBlocker } from "../ducts/sheet/tiers";
 import { espWarnings } from "./picture.tsx";
+import { settingsRouteState } from "@pe/agent-contracts";
+import { RouteWorkspace } from "@pe/runtime";
+import { DEMO_SPEC } from "../route/seeds.ts";
+
+test("demo caller seed fields publish with the host's caller stamp", async () => {
+  let saved: unknown;
+  const workspace = new RouteWorkspace({ registrations: [{ spec: settingsRouteState }], store: {
+    getState: async () => saved, setState: async ({ value }) => { saved = value; },
+  } });
+  const key = { binding: "workspace" as const, route: "pods", work: "demo", target: null };
+  const result = await workspace.start(key, { fields: DEMO_SPEC.fields }, "human");
+  expect(result).toMatchObject({ ok: true });
+  expect(saved).toMatchObject({ doc: { fields: { "/ViewTemplateName": { edit: { by: "human", value: "Schedule - PE Standard v2" } } } } });
+});
 
 const uid = (n: number) => `3f2c9a10-0000-4000-8000-00000000000${n}-0001e240`;
 const members = [1, 2].map(n => ({ elementId: n, uniqueId: uid(n) }));
