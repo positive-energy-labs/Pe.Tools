@@ -157,7 +157,7 @@ test("a recorded workspace with no store serves the delivered Work, feed and his
         key,
         "fans",
         "human",
-        [{ path: ["flows", terminalSubject, "edit"], value: { value: { cfm } } }],
+        [{ path: ["flows", terminalSubject, "edit"], value: { value: cfm } }],
         revision,
       ),
     ).toMatchObject({ ok: true });
@@ -205,7 +205,7 @@ test("a recorded workspace with no store serves the delivered Work, feed and his
       key,
       "fans",
       "human",
-      [{ path: ["flows", terminalSubject, "edit"], value: { value: { cfm: 1 } } }],
+      [{ path: ["flows", terminalSubject, "edit"], value: { value: 1 } }],
       2,
     ),
   ).rejects.toThrow("recorded workspace refuses Work edit");
@@ -281,7 +281,7 @@ async function instrumented(capture: import("@pe/runtime").WorkReadCapture) {
         key,
         "fans",
         "human",
-        [{ path: ["flows", terminalSubject, "edit"], value: { value: { cfm: 100 + revision } } }],
+        [{ path: ["flows", terminalSubject, "edit"], value: { value: 100 + revision } }],
         revision++,
       ),
     ).toMatchObject({ ok: true });
@@ -571,7 +571,7 @@ test("two request contexts cross the Work queue with reverse capture completion;
     key,
     "fans",
     "human",
-    [{ path: ["flows", terminalSubject, "edit"], value: { value: { cfm: 7 } } }],
+    [{ path: ["flows", terminalSubject, "edit"], value: { value: 7 } }],
     0,
   );
   expect(await live.view(key, "fans", pea.context)).toMatchObject({ revision: 1 });
