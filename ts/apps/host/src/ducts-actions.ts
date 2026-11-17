@@ -305,6 +305,7 @@ export function ductsExecutors(
             const peers = cohorts
               ?.find((c) => c.owner.kind === "type" && c.parameter === snapshot.slots.requiredEsp && c.members.some((m) => m.elementId === walk.unitId))
               ?.members.filter((m) => m.elementId !== walk.unitId) ?? [];
+            // P-065: every peer claim is built in this prepare call from the peer's own native `from` walk, read here after the fan's; none is cached or carried between calls.
             const peerClaims = new Map<number, DomainClaim>();
             for (const { elementId: unitId } of peers)
               peerClaims.set(unitId, buildSheet((await inputOf({ unitId, portIndex: walk.portIndex }, await read({ kind: "from", unitId }))).input).claim);
