@@ -1,5 +1,5 @@
 import { lossGroups, type LossGroup } from "@pe/ducts-domain/loss-breakdown";
-import type { Row } from "@pe/ducts-domain/losses";
+import type { Row } from "./calc-runs.ts";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
 /** One end of a run's loss: its in-wg and the elements that pay it (the set a hover lights). */

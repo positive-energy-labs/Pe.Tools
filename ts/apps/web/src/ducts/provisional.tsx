@@ -5,7 +5,7 @@
  * ids it rests on are in the hint, and the findings list holds each one's confirm.
  */
 import type { DuctInferenceGrade } from "@pe/agent-contracts";
-import type { Provisional } from "@pe/ducts-domain/losses";
+import type { Provisional } from "@pe/ducts-domain/calc-runs";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 const GRADE_TONE: Record<DuctInferenceGrade, "caution" | "alarm" | undefined> = {

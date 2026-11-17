@@ -1,13 +1,14 @@
-import { circuitReadSchema, inferenceReadSchema, overridesReadSchema, stagedDuctsReadSchema } from "./ducts-pricing-read.ts";
+import { inferenceReadSchema, stagedDuctsReadSchema } from "./ducts-pricing-read.ts";
 import { z } from "zod";
 import { settingTiersSchema } from "./tiered-setting.ts";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import { documentRefSchema } from "./target.ts";
 import { ductsDocumentSchema } from "./ducts.ts";
 import { fansDocumentSchema } from "./fans.ts";
+import { encounterSchema, fanClaimSchema, fanEspValuesSchema, fanIssueSchema } from "./fans-inputs.ts";
 import { ductFindingSchema, DUCT_INFERENCE_GRADES } from "./ducts-pricing-read.ts";
 import { catalogTableSchema } from "./duct-catalog.ts";
-import { ductsInputsSchema } from "./ducts-sheet.ts";
+import { ductsInputsSchema, ductsSheetOverviewSchema, ductsSheetResponseSchema } from "./ducts-sheet.ts";
 import { fansReadRequest, fansReadResponse, fansSheetData } from "./fans-read.ts";
 
 const numberOrNull = z.number().nullable();
@@ -80,70 +81,42 @@ const flow = z.object({
   finding: z.literal("no-flow").optional(),
 });
 const equipmentFlow=z.object({cfm:numberOrNull,source:ductEquipmentFlowSourceSchema.nullable(),grilles:z.number().optional()});
-const path = z.object({
-  groupId: z.string(),
-  total: z.number(),
-  tel: z.number(),
-  path: z.array(z.number()),
-  rows: z.array(ductsPriceRow),
-  inferred: z.array(z.string()),
-  provisional,
+const details = ductsSheetResponseSchema.options;
+const calcPath = z.object({
+  side: z.enum(["supply", "return"]),
+  legIds: z.array(z.string()),
+  end: details[4].shape.ends.element,
+  knownInWg: z.number(),
+  blockerIds: z.array(z.string()),
 });
-const fan = z.object({
-  unit: z.number(),
-  cfm: numberOrNull,
-  port: numberOrNull,
-  junction: numberOrNull,
-  owned: z.array(z.number()),
-  esp: z.number(),
-  critical: numberOrNull,
-  tel: numberOrNull,
-  stretch: z.array(ductsPriceRow),
-  viaJunction: z.boolean(),
-  path: z.array(z.number()),
-  rows: z.array(ductsPriceRow),
+/**
+ * One fan calc whole (the domain `Sheet`, `ducts-domain/src/sheet/types.ts`), as /ducts reads it:
+ * the same wire parts the fans read publishes. The claim is the wire `FanClaim`; the brand never crosses.
+ */
+export const ductsFanCalcSchema = z.object({
+  engineVersion: z.string(),
+  basis: z.string(),
+  fan: ductsSheetOverviewSchema.shape.fan.unwrap().omit({ ratedEspInWg: true }),
+  legs: details[3].shape.legs,
+  paths: z.array(calcPath),
+  claim: fanClaimSchema,
+  esp: fanEspValuesSchema,
+  encounters: z.array(encounterSchema),
+  issues: z.array(fanIssueSchema),
+  network: z.string(),
+  totals: ductsSheetOverviewSchema.shape.totals.unwrap(),
+  assumed: z.object({
+    paths: z.array(calcPath),
+    legs: details[3].shape.legs,
+    blockers: details[4].shape.blockers,
+  }),
+  blockers: details[4].shape.blockers,
+  notes: details[4].shape.notes,
+  fittings: details[4].shape.fittings,
+  walkedElementIds: details[2].shape.walkedElementIds,
 });
-const loss = z.object({
-  // The circuit solver's complete evidence is retained as JSON; renderers need no circuit engine.
-  design: circuitReadSchema(ductsPriceRow),
-  paths: record(path),
-  fan: z.number(),
-  critical: numberOrNull,
-  provisional,
-  byGroup: record(
-    z.object({
-      fan: numberOrNull,
-      critical: numberOrNull,
-      criticalTel: numberOrNull,
-      criticalFan: numberOrNull,
-      revitCritical: numberOrNull,
-      hasAirMover: z.boolean(),
-      implausible: z.array(z.number()),
-      provisional,
-      fans: z.array(fan),
-    }),
-  ),
-  byRule: record(
-    z.object({ critical: z.number(), per: record(z.number()), instances: z.number() }),
-  ),
-  errors: z.array(
-    z.object({
-      id: z.number(),
-      rule: z.string().optional(),
-      table: z.string().optional(),
-      message: z.string(),
-    }),
-  ),
-  crossClass: z.array(
-    z.object({
-      id: z.number(),
-      from: z.number(),
-      classification: z.string(),
-      fromClassification: z.string(),
-      cfm: z.number(),
-    }),
-  ),
-});
+export type DuctsFanCalc = z.infer<typeof ductsFanCalcSchema>;
+export type DuctsPriceRow = z.infer<typeof ductsPriceRow>;
 export const ductsPricingData = z.object({
   espOptions: nativeResponseSchema("revit.catalog.field-options").nullable(),
   espOptionsError:z.string().nullable(),
@@ -163,11 +136,13 @@ export const ductsPricingData = z.object({
   ]),
   /** Each owner's `Settings/<owner>.json` in every home tier, as the host read it: a `setting` cell's tiers (ADR 0037 rule 8). */
   settings: z.record(z.string(), settingTiersSchema),
-  priced: z.object({
+  /** Every roster fan's calc on this network, in roster order. No group pressure and no owner exist beside them (invariant 6). */
+  calcs: z.array(ductsFanCalcSchema),
+  /** The network as surveyed: flows, roles, findings and the staged Work values. It prices nothing. */
+  survey: z.object({
     snapshot: nativeResponseSchema("ducts.snapshot.walk"),
     flows: record(flow),
     equipmentFlows: record(equipmentFlow),
-    fanFlows: record(record(equipmentFlow)),
     roles: record(
       z.object({
         role: z.enum(["fan", "passive"]),
@@ -176,29 +151,8 @@ export const ductsPricingData = z.object({
       }),
     ),
     findings: z.array(ductFindingSchema),
-    inferred: z.array(
-      z.object({
-        between: z.tuple([z.number(), z.number()]),
-        id: z.string(),
-        grade: z.enum(DUCT_INFERENCE_GRADES),
-        ruled: z.boolean(),
-      }),
-    ),
-    catalogs: record(catalogTableSchema),
-    applied: record(z.string()),
-    choices: record(z.string()),
-    overrides: overridesReadSchema,
-    now: loss,
-    next: loss,
     edit: stagedDuctsReadSchema,
   }),
-  ready: record(
-    z.object({
-      level: z.enum(["blocked", "walkable", "budgetable"]),
-      walk: z.array(z.string()),
-      budget: z.array(z.string()),
-    }),
-  ),
   analysis: z.object({
     heal: z.object({
       groups: z.array(

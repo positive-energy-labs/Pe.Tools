@@ -26,7 +26,7 @@ import { DEFAULT_DESIGN_FRICTION_RATE } from "@pe/ducts-domain/equivalent-length
 import { neighboursOf, type Neighbour } from "@pe/ducts-domain/neighbours";
 import { noRunBranches } from "@pe/ducts-domain/no-runs";
 import { pendingCount } from "@pe/ducts-domain/staged";
-import { unitFlowsView as unitFlowsIn } from "@pe/ducts-domain/pricing-view";
+import { runsOf } from "@pe/ducts-domain/calc-runs";
 import { scopeOf, sectionsOf, systemScope } from "@pe/ducts-domain/system-scope";
 import { systemSearch } from "@pe/ducts-domain/system-search";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
@@ -70,7 +70,9 @@ import { noRunParts, subjectNamer } from "../../subject-text";
 import type { systemList } from "../../system-list";
 import type { SystemNote } from "../../system-list-search";
 import { systemReadCoverage } from "@pe/ducts-domain/system-reads";
-import { buildTree, type TreeNode } from "../b/model";
+import type { TreeNode } from "../b/model";
+import { buildSheetTree, runNodesOf } from "../b/sheet-model";
+import type { Priced } from "../../priced";
 import { useGroupEncoding } from "../encoding/use-encoding";
 import { BarRules, systemNoteCount, systemRowParts } from "./bar";
 import { FanFacts, fanFacts, type FanFact } from "./fan-sections";
@@ -108,6 +110,11 @@ function useNetworkData(ctx: NetworkContext) {
     | null;
   const pricingData = useValue(pricing);
   const priced = pricing.state === "ready" ? pricingData : undefined;
+  // One identity per pricing Value: the panes memoize on it.
+  const calcView = useMemo(
+    () => (priced ? ({ ...priced.survey, calcs: priced.calcs } as Priced) : null),
+    [priced],
+  );
   const edit = useMemo(() => stagedValues(workDoc ?? null, workDoc ?? neutralFansWork), [workDoc]);
   const seen = held?.effectiveDesign ?? null;
   const attentionDoc = doc ? `${doc.session}/${doc.openId}` : "ducts:unbound";
@@ -191,7 +198,7 @@ function useNetworkData(ctx: NetworkContext) {
     snapshot: snapshot ?? EMPTY_SNAPSHOT,
     snapshotRead: networkRead,
     pricingRead: pricing,
-    priced: priced?.priced ?? null,
+    priced: calcView,
     analysis: priced?.analysis ?? null,
     subject: subjectIds ? { ids: subjectIds, work: workDoc } : null,
     work: {
@@ -316,12 +323,7 @@ export function SystemsPane({ ctx }: { ctx: DuctsSystemsContext }) {
   const systemKeys = { version, system, active, systemSearch, systemSort };
   const fansOf = useCallback(
     (system: ReturnType<typeof systemList>[number]) =>
-      fanFacts(
-        priced,
-        system.groups,
-        nameOf,
-        drawn ? systemScope(drawn, system.name).terminals : undefined,
-      ),
+      fanFacts(priced, drawn ? systemScope(drawn, system.name).terminals : NO_TERMINALS),
     [priced, nameOf, drawn],
   );
   const systemsPane = (
@@ -393,9 +395,8 @@ export function TreePane({ ctx }: { ctx: DuctsDrawContext }) {
   const jumpToRule = (key: string) => select(`rule:${key}`);
   const tree = trees.length ? trees : null;
   const critical =
-    tree
-      ?.flatMap((t) => t.children)
-      .filter((r) => r.terminal == null || !scope || scope.terminals.has(r.terminal))
+    (tree ? runNodesOf(tree) : null)
+      ?.filter((r) => r.terminal == null || !scope || scope.terminals.has(r.terminal))
       .reduce<TreeNode | null>(
         (best, r) => (r.total != null && (best?.total == null || r.total > best.total) ? r : best),
         null,
@@ -561,24 +562,13 @@ export function NetworkPicture({ ctx, picture }: PictureOverlayProps<DuctsDrawCo
     [inbox, heal, diagnostic],
   );
   const encoded = useGroupEncoding(snapshot, priced, drawGroups, page.encoding);
-  const activeCritical = trees
-    .flatMap((tree) => tree.children)
+  const activeCritical = runNodesOf(trees)
     .filter((run) => run.terminal != null && activeScope?.terminals.has(run.terminal))
     .reduce<TreeNode | null>(
       (best, run) =>
         run.total != null && (best?.total == null || run.total > best.total) ? run : best,
       null,
     );
-  const lead =
-    activeScope?.groups.reduce<string | null>(
-      (best, group) =>
-        best == null ||
-        (priced?.next.byGroup[group]?.fan ?? -Infinity) >
-          (priced?.next.byGroup[best]?.fan ?? -Infinity)
-          ? group
-          : best,
-      null,
-    ) ?? "";
   const systemRows = analysis?.systems ?? NO_SYSTEMS;
   const notes = analysis?.notes ?? NO_NOTES;
   const chosen = systemRows.find((row) => row.key === active);
@@ -614,7 +604,6 @@ export function NetworkPicture({ ctx, picture }: PictureOverlayProps<DuctsDrawCo
             groups={drawGroups}
             members={displayMembers}
             neighbours={neighbours}
-            lead={lead}
             identity={{
               system: chosen ? { ...chosen, note: notes[chosen.key] } : null,
               census,
@@ -627,12 +616,7 @@ export function NetworkPicture({ ctx, picture }: PictureOverlayProps<DuctsDrawCo
                       scale: activeCritical.total,
                       fans: () => (
                         <FanFacts
-                          facts={fanFacts(
-                            priced,
-                            activeScope?.groups ?? [],
-                            nameOf,
-                            activeScope?.terminals,
-                          )}
+                          facts={fanFacts(priced, activeScope?.terminals ?? NO_TERMINALS)}
                           nameOf={nameOf}
                         />
                       ),
@@ -661,7 +645,7 @@ function useInboxProjection(
     const noRuns: InboxItem[] =
       priced && scope
         ? [
-            ...new Set(noRunBranches(priced.snapshot, priced.next, scope, priced.flows).values()),
+            ...new Set(noRunBranches(priced.snapshot, runsOf(priced.calcs), scope, priced.flows).values()),
           ].map((branch) => ({
             key: `no-run:${branch.elements[0]}`,
             group: "diagnostics",
@@ -693,7 +677,8 @@ function useInboxProjection(
       scope,
       findings: surveyed.findings,
       flows: surveyed.flows,
-      equipmentFlows: unitFlowsIn(surveyed, scope?.groups ?? null),
+      // The survey's unit flows; a fan's own flow on a network is on its calc (`calc.fan.flowCfm`).
+      equipmentFlows: surveyed.equipmentFlows,
       doc,
       nameOf,
       groupLabel,
@@ -949,6 +934,7 @@ export function AllRulesBody({ ctx }: { ctx: DuctsDrawContext }) {
     </>
   );
 }
+const NO_TERMINALS: ReadonlySet<number> = new Set();
 function useTreeProjection(
   snapshot: DuctSnapshot,
   priced: NetworkData["priced"],
@@ -965,10 +951,12 @@ function useTreeProjection(
       const name = sections.get(group) ?? scope?.name ?? "";
       return others?.length ? `${name} \u00b7 shared with ${others.join(", ")}` : name;
     };
-    const trees = scope ? buildTree(drawn, priced, doc, groups, sectionOf, scope.members) : [];
+    const trees = scope
+      ? buildSheetTree(drawn, priced?.calcs ?? [], groups, scope.members, sectionOf)
+      : [];
     const labels = grilleLabels(
       drawn,
-      trees.flatMap((tree) => tree.children),
+      runNodesOf(trees),
     );
     const subjectName = subjectNamer(snapshot);
     const nameOf = (id: number) => labels.get(id) ?? subjectName(id) ?? "element not in snapshot";

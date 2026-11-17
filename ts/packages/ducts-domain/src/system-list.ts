@@ -1,5 +1,4 @@
-import { worstRun } from "@pe/ducts-domain/losses";
-import type { Priced } from "@pe/ducts-domain/pricing";
+import { calcsIn, worstRun, type Calc } from "./calc-runs.ts";
 import { systemsOf, systemScope } from "@pe/ducts-domain/system-scope";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
@@ -8,10 +7,10 @@ import { markOf } from "@pe/ducts-domain/terminal-flows";
 
 /**
  * The system list: one childless row per Revit system (no run tree is built, so 350 systems stay
- * cheap), keyed by its name. Its total is the largest fan over the groups it is in; `fanless` when
- * none of them has an air mover.
+ * cheap), keyed by its name. Its total is the worst complete run to one of its terminals on any fan's
+ * calc (a path's loss, never a fan pressure); `fanless` when no calc reaches it.
  */
-export function systemList(snapshot: DuctSnapshot, priced: Pick<Priced,"next"|"snapshot"> | import("./pricing-view.ts").PricedView | null): import("@pe/agent-contracts").DuctsPricingData["analysis"]["systems"] {
+export function systemList(snapshot: DuctSnapshot, calcs: readonly Calc[] | null): import("@pe/agent-contracts").DuctsPricingData["analysis"]["systems"] {
   const nodes = new Map(snapshot.nodes.map((n) => [n.id, n]));
   const equipment = new Set(snapshot.nodes.filter((n) => n.kind === "equipment").map((n) => n.id));
   const systems = systemsOf(snapshot);
@@ -31,12 +30,12 @@ export function systemList(snapshot: DuctSnapshot, priced: Pick<Priced,"next"|"s
     });
   }
   return systems.map((system) => {
-    const solved = system.groups.flatMap((g) => priced?.next.byGroup[g] ?? []);
-    // The minibar's breakdown: the system's worst group's critical run, as its tree would split it.
-    // A group with an implausible row has no price: the system reads needs a fix, never a partial number.
-    const scope = systemScope(priced?.snapshot ?? snapshot, system.name);
-    const blocked = solved.some((s) => s.implausible.some((id) => scope.prices.has(id)));
-    const worst = priced && !blocked ? worstRun(priced.next, scope.groups, scope.terminals) : null;
+    // The minibar's breakdown: the system's worst run, as its tree would split it.
+    const scope = systemScope(snapshot, system.name);
+    const reached = calcs ? calcsIn(calcs, scope.prices) : [];
+    const worst = calcs ? worstRun(calcs, scope.terminals) : null;
+    // A blocker on a reaching calc's element here holds the system's price: needs a fix, never a partial number.
+    const blocked = reached.some((calc) => calc.blockers.some((b) => scope.prices.has(b.elementId)));
     const rows = worst?.rows;
     const first = snapshot.groups.find((g) => g.id === system.groups[0]);
     const lead = worst?.unit;
@@ -60,10 +59,10 @@ export function systemList(snapshot: DuctSnapshot, priced: Pick<Priced,"next"|"s
         .join(" · "),
       blocked,
       groups: system.groups,
-      fanless: !!priced && solved.length > 0 && solved.every((s) => !s.hasAirMover),
+      fanless: !!calcs && system.groups.length > 0 && !reached.length,
       rating: rated ?? null,
       id: first?.rootIds[0] ?? null,
-      total: worst?.total ?? null,
+      total: blocked ? null : (worst?.total ?? null),
       self: null,
       ft: null,
       selfFt: null,
@@ -73,7 +72,7 @@ export function systemList(snapshot: DuctSnapshot, priced: Pick<Priced,"next"|"s
       level: null,
       scale: null,
       critical: null,
-      provisional: solved.find((s) => s.provisional)?.provisional ?? null,
+      provisional: null,
       terminal: null,
       children: [],
     };

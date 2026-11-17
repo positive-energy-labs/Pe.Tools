@@ -1,4 +1,4 @@
-import type { HealView as HealPlan } from "@pe/ducts-domain/pricing-view";
+import { runsOf, runTo } from "@pe/ducts-domain/calc-runs";
 /** Picture findings share domain identity and numbering with the inbox. */
 import { useMemo } from "react";
 
@@ -6,7 +6,7 @@ import { healFindings } from "@pe/ducts-domain/heal";
 import { INFERRED_KINDS } from "@pe/ducts-domain/proximity";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
-import type { PricedView as Priced } from "@pe/ducts-domain/pricing-view";
+import type { Priced } from "../../priced";
 import { SubjectText } from "@pe/kit/lang/subject-text";
 import type { Label, Ruling } from "../../annotations";
 import { FindingsList, ISSUE_KINDS } from "../../issues";
@@ -18,7 +18,7 @@ import { fmtFt } from "./bar";
 function cumulativeOf(priced: Priced | null): Map<number, number> {
   const out = new Map<number, number>();
   if (!priced) return out;
-  for (const path of Object.values(priced.next.paths)) {
+  for (const path of runsOf(priced.calcs)) {
     let run = 0;
     for (const row of path.rows) {
       run += row.eqFt ?? 0;
@@ -41,7 +41,7 @@ export function useMarks({
 }: {
   snapshot: DuctSnapshot;
   priced: Priced | null;
-  heal: HealPlan | import("@pe/ducts-domain/heal").HealPlan | null;
+  heal: import("@pe/agent-contracts").DuctsPricingData["analysis"]["heal"] | import("@pe/ducts-domain/heal").HealPlan | null;
   scene: Scene;
   work: LossesWork;
   issueScope: ReadonlySet<string> | null;
@@ -101,7 +101,7 @@ export function useMarks({
           })
         : scene.nodes.flatMap((f) => {
             if (f.node.kind !== "terminal" || !f.node.point) return [];
-            const total = priced?.next.paths[f.node.id]?.tel;
+            const total = priced ? runTo(priced.calcs, f.node.id)?.tel : null;
             return [
               {
                 key: String(f.node.id),

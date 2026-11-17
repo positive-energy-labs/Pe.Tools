@@ -5,7 +5,7 @@
  */
 import type { DuctNode, EncodingFacts, Issue, Segment, SegmentFacts } from "./encoding";
 import type { Leg, Place, SubjectCut } from "./legs";
-import type { LossResult } from "@pe/ducts-domain/losses";
+import { runsOf, type Calc } from "@pe/ducts-domain/calc-runs";
 import { snapshotById } from "@pe/ducts-domain/readiness";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { drawnGraph, type DuctGraph } from "@pe/ducts-domain/drawn-graph";
@@ -53,28 +53,22 @@ const push = <K, V>(map: Map<K, V[]>, key: K, value: V) => {
 const lossCache = new WeakMap<object, Map<number, number>>();
 
 /**
- * Pe's loss per element from a priced result. Every terminal path repeats the rows it shares, so
- * rows are counted once by (element, kind, leg, desc): a duct's friction intervals add, while a
- * fitting's or terminal's legs are alternatives and show the largest.
+ * Pe's loss per element from the fan calcs. A shared duct is on every fan's calc at its total flow,
+ * so its loss is the same on each (MAP invariant 6): the largest leg of an element is drawn, never a
+ * sum across fans or across a fitting's alternative paths.
  */
-function lossesOf(result: Pick<LossResult,"paths">): Map<number, number> {
-  const cached = lossCache.get(result);
+function lossesOf(calcs: readonly Calc[]): Map<number, number> {
+  const cached = lossCache.get(calcs);
   if (cached) return cached;
-  const unique = new Map<string, LossResult["paths"][number]["rows"][number]>();
-  for (const path of Object.values(result.paths))
-    for (const row of path.rows)
-      unique.set(`${row.id}|${row.kind}|${row.leg ?? ""}|${row.desc}`, row);
   const losses = new Map<number, number>();
-  for (const row of unique.values()) {
-    if (row.dp == null) continue;
-    const was = losses.get(row.id);
-    losses.set(row.id, row.kind === "friction" ? (was ?? 0) + row.dp : Math.max(was ?? 0, row.dp));
-  }
-  lossCache.set(result, losses);
+  for (const run of runsOf(calcs))
+    for (const row of run.rows)
+      if (row.dp != null) losses.set(row.id, Math.max(losses.get(row.id) ?? 0, row.dp));
+  lossCache.set(calcs, losses);
   return losses;
 }
 
-export function indexOf(snapshot: DuctSnapshot, priced: {next:Pick<LossResult,"paths">} | null = null): DuctIndex {
+export function indexOf(snapshot: DuctSnapshot, priced: { calcs: readonly Calc[] } | null = null): DuctIndex {
   const levels = [...snapshot.levels].sort((a, b) => a.elevationFt - b.elevationFt);
   const flows = new Map(snapshot.flows.map((flow) => [flow.segmentId, flow.cfm]));
   const issuesOf = new Map<number, Issue[]>();
@@ -99,7 +93,7 @@ export function indexOf(snapshot: DuctSnapshot, priced: {next:Pick<LossResult,"p
     const own = id == null ? null : (segmentLevel.get(id) ?? nodeById.get(id)?.levelId ?? null);
     return own ?? (issue.point ? (levelAt(issue.point[2]!)?.id ?? null) : null);
   };
-  const loss = priced ? lossesOf(priced.next) : new Map<number, number>();
+  const loss = priced ? lossesOf(priced.calcs) : new Map<number, number>();
   return { snapshot, levels, flows, issuesOf, segmentsOf, nodesOf, levelAt, levelOf, loss };
 }
 

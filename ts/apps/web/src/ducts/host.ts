@@ -6,16 +6,23 @@ import { DUCTS_SYSTEM_MAX,
   ductsRosterArgs,
   ductsNetworkData,
   ductsPricingData,
+  ductsFanCalcSchema,
   ductsDesign,
   stagedDucts,
   ductParameterSlots, } from "@pe/agent-contracts";
 import { SYSTEMS_PER_READ, mergeSnapshots } from "@pe/ducts-domain/system-reads";
 import { toGrids } from "@pe/ducts-domain/loss-grid";
-import { TABLE_IDS } from "@pe/ducts-domain/pricing";
-import { pricingResult } from "@pe/ducts-domain/pricing-result";
+import { TABLE_IDS } from "@pe/ducts-domain/table-ids";
 import { designLayers } from "./ducts-design.ts";
-import { firmLayer } from "@pe/host/ducts-inputs";
-import { resolveCriteria } from "@pe/ducts-domain/sheet/index";
+import { firmLayer, workLayer } from "@pe/host/ducts-inputs";
+import { buildSheet, encounterRulings, resolveCriteria, resolveInputs } from "@pe/ducts-domain/sheet/index";
+import { suggestRoster } from "@pe/ducts-domain/roster";
+import { survey } from "@pe/ducts-domain/survey";
+import { healPlan } from "@pe/ducts-domain/heal";
+import { inferJoints } from "@pe/ducts-domain/proximity";
+import { systemNotes } from "@pe/ducts-domain/system-list-search";
+import { stagedValues, serveSetting } from "@pe/agent-contracts";
+import { DEFAULT_DESIGN_FRICTION_RATE } from "@pe/ducts-domain/equivalent-length";
 import { catalogs } from "@pe/host/builtin-read-handles";
 import { read } from "@pe/host/read-graph";
 import { systemList } from "@pe/ducts-domain/system-list";
@@ -144,42 +151,73 @@ export const ductsPricing = body(contracts.pricing, async function(ctx, args) {
       { roster, fans, network, layers, catalog, tables },
       ({ roster, fans, network, layers, catalog, tables }) => {
         const { sourceVersion: _version, systemReads: _coverage, ...snapshot } = network;
-        const result = ductsPricingData
-          .omit({
-            espOptions: true,
-            espOptionsError: true,
-            fanRows: true,
-            design: true,
-            effectiveDesign: true,
-            network: true,
-            ductsWork: true,
-            fansWork: true,
-            catalogFindings: true,
-            criteria: true,
-            firm: true,
-            settings: true,
-          })
-          .parse(
-            wire(
-              pricingResult(
-                snapshot,
-                toGrids(tables.body),
-                catalog.tables,
-                ductsDesign(layers.ducts, layers.fans),
-                layers.settings,
-              ),
-            ),
-          );
-        const priced = new Map(result.analysis.systems.map((row) => [row.key, row]));
         const design = ductsDesign(layers.ducts, layers.fans);
+        const stored = withStoredRulings(design, snapshot.store, snapshot) ?? design;
+        // The fan calcs are the only pricing: one per roster port, each on this read's network and
+        // inputs, the way the fans read builds one (`fan-sheet.ts`). No group result stands beside them.
+        const work = workLayer(design);
+        const inputs = resolveInputs({
+          snapshot,
+          work,
+          versions: { Work: layers.revision },
+          store: snapshot.store as Parameters<typeof resolveInputs>[0]["store"],
+          firm: firmLayer(layers.firm, layers.settings),
+          catalogs: catalog.tables,
+        });
+        // The ruled kinds and roles alone, as the fans roster reads them (`fan-sheet.ts` `rosterInputs`).
+        const units = Object.entries(inputs.units);
+        const suggested = suggestRoster(snapshot, [], {
+          kinds: Object.fromEntries(units.flatMap(([id, u]) => (u.kind.status === "valid" ? [[id, u.kind.value]] : []))),
+          roles: Object.fromEntries(units.flatMap(([id, u]) => (u.role.status === "valid" ? [[id, u.role.value]] : []))),
+        });
+        const ports = [...suggested.fans, ...suggested.suggestions];
+        const grids = toGrids(tables.body);
+        const calcs = z.array(ductsFanCalcSchema).parse(
+          ports.map((fan) =>
+            buildSheet({
+              snapshot,
+              grids,
+              inputs,
+              roster: ports,
+              fan: { unitId: fan.unitId, portIndex: fan.portIndex },
+              encounterRulings: encounterRulings({ work }),
+            }),
+          ),
+        );
+        const surveyed = survey(snapshot, design);
+        const heal = healPlan(snapshot, design);
+        const result = ductsPricingData.pick({ survey: true, analysis: true }).parse(
+          wire({
+            survey: {
+              snapshot: surveyed.snapshot,
+              flows: surveyed.flows,
+              equipmentFlows: surveyed.equipmentFlows,
+              roles: surveyed.roles,
+              findings: surveyed.findings,
+              edit: {
+                ...stagedValues(stored, stored),
+                designFriction: serveSetting(layers.settings, ["project", "firm"], ["designFriction"], z.number().positive(), DEFAULT_DESIGN_FRICTION_RATE).value!,
+                parameters: ductParameterSlots(layers.settings),
+              },
+            },
+            analysis: {
+              heal,
+              notes: systemNotes(surveyed, design, heal),
+              systems: systemList(surveyed.snapshot, calcs),
+              inference: inferJoints(snapshot, 1, stored),
+            },
+          }),
+        );
+        const priced = new Map(result.analysis.systems.map((row) => [row.key, row]));
         return {
           ...options,
           ...result,
+          calcs,
           analysis: {
             ...result.analysis,
             systems: roster.rows.map((row) => priced.get(row.key) ?? row),
           },
-          effectiveDesign: withStoredRulings(design, snapshot.store, snapshot) ?? design,
+          effectiveDesign: stored,
           fanRows: fans.rows,
           design,
           network,

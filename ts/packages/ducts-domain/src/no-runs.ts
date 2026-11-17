@@ -1,5 +1,5 @@
 /** Branches in a system's pricing scope that carry no positive-flow fan-to-terminal run. */
-import type { LossResult } from "./losses.ts";
+import type { CalcRun } from "./calc-runs.ts";
 import type { SystemScope } from "./system-scope.ts";
 import { terminalCfm } from "./topology.ts";
 import type { DuctSnapshot } from "./types.ts";
@@ -11,7 +11,6 @@ export interface NoRunReason {
     | "capped"
     | "flowless-terminal"
     | "foreign-terminal"
-    | "classification-stop"
     | "no-fan-path";
   at: number;
   /** The open connector (kind "open"); its text names the element, never `id:index`. */
@@ -24,13 +23,12 @@ export interface NoRunBranch {
 }
 
 /**
- * Uses the solve's actual paths, including smaller fans' stretches. A missing pressure lookup
- * does not erase a run; a flowless or foreign terminal and a classification stop do.
- * The snapshot and flows must be the survey used by this solve, so edit flow is respected.
+ * Uses the fan calcs' actual paths, every fan's. An unpriced leg does not erase a run; a flowless
+ * or foreign terminal does. The flows must be the survey's, so edit flow is respected.
  */
 export function noRunBranches(
   snapshot: DuctSnapshot,
-  solved: Pick<LossResult, "paths" | "byGroup" | "crossClass">,
+  runs: readonly CalcRun[],
   scope: SystemScope,
   flows: ReadonlyMap<number, { cfm: number | null }> | Readonly<Record<number,{cfm:number|null}>>,
 ): Map<number, NoRunBranch> {
@@ -39,20 +37,10 @@ export function noRunBranches(
   const name = elementLabeler(snapshot);
   const flow = (id: number) =>
     (flows instanceof Map ? (flows.has(id)?flows.get(id)!.cfm:terminalCfm(nodes.get(id))) : Object.hasOwn(flows,id)?(flows as Readonly<Record<number,{cfm:number|null}>>)[id]!.cfm:terminalCfm(nodes.get(id))) ?? 0;
-  const stops = new Set(solved.crossClass.map((c) => `${c.id}:${c.from}`));
-  const valid = (terminal: number, path: readonly number[]) =>
-    scope.terminals.has(terminal) &&
-    flow(terminal) > 0 &&
-    !path.some(
-      (id, i) => i > 0 && (stops.has(`${path[i - 1]}:${id}`) || stops.has(`${id}:${path[i - 1]}`)),
-    );
   const inRun = new Set<number>();
-  for (const [terminal, run] of Object.entries(solved.paths))
-    if (valid(Number(terminal), run.path)) for (const id of run.path) inRun.add(id);
-  for (const group of Object.values(solved.byGroup))
-    for (const fan of group.fans)
-      if (fan.critical != null && valid(fan.critical, fan.path))
-        for (const id of fan.path) inRun.add(id);
+  for (const run of runs)
+    if (run.terminal != null && scope.terminals.has(run.terminal) && flow(run.terminal) > 0)
+      for (const id of run.path) inRun.add(id);
 
   const remaining = new Set(
     [...scope.prices].filter((id) => {
@@ -114,13 +102,6 @@ export function noRunBranches(
           if (!c.connectedTo && c.kind !== "curve")
             branch.reasons.push({ kind: "open", at: id, text: `Ends open at ${name(id)}`, connector: c.index });
     }
-    for (const c of solved.crossClass)
-      if (branch.elements.includes(c.id) || branch.elements.includes(c.from))
-        branch.reasons.push({
-          kind: "classification-stop",
-          at: c.id,
-          text: `Flow stops at ${name(c.from)} → ${name(c.id)}: ${c.fromClassification} meets ${c.classification}`,
-        });
     if (!branch.reasons.length)
       branch.reasons.push({
         kind: "no-fan-path",

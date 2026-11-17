@@ -1,16 +1,13 @@
-import type { PricedView as Priced } from "@pe/ducts-domain/pricing-view";
+import { appliedTableOf, tableOf, type Priced } from "../../priced";
 /** proto: copied from losses-view.tsx (round 3, E2 Rules section). */
 import { cellPatches, type DuctsDesign, type RouteStatePatch } from "@pe/agent-contracts";
 import { LOSS_RULES, ruleByKey } from "@pe/ducts-domain/loss-rules";
-import { tableOf } from "@pe/ducts-domain/pricing";
 import { Button } from "@pe/kit/lang/button";
 import { cellFromDraft, StateCell } from "@pe/kit/lang/cell";
 import { ValueDiff } from "@pe/kit/lang/value-diff";
 import type { LossesWork } from "../../work";
 import { PressureEquivalent } from "./pressure-equivalent";
 
-// proto: copied from losses-view.tsx
-const fmt = (n: number | null | undefined) => (n == null ? "" : n.toFixed(4));
 /** Stage a rule's table; staging the table already edit takes it back. */
 const tablePatches = (doc: DuctsDesign | null, key: string, table: string): RouteStatePatch[] => {
   const cell = doc?.rules[key] ?? {};
@@ -113,12 +110,9 @@ export function Chips({
 /** proto: copied from losses-view.tsx (`StagedLosses`, reduced): each edit rule as applied → edit, the edit drops and unit statics with the fan they move, and discard. */
 export function StagedRules({
   priced,
-  groups,
   work,
 }: {
   priced: Priced;
-  /** The system's groups; empty is the document (its largest fan). */
-  groups: readonly string[];
   work: LossesWork;
 }) {
   const keys = Object.keys(priced.edit.rules).sort();
@@ -129,11 +123,6 @@ export function StagedRules({
   const flows = Object.keys(priced.edit.flows).length;
   const unitFlows = Object.keys(priced.edit.equipmentFlows).length;
   const roles = Object.keys(priced.edit.roles).length;
-  const fanOf = (r: Priced["now"]) => {
-    if (!groups.length) return r.fan;
-    const fans = groups.flatMap((g) => r.byGroup[g]?.fan ?? []);
-    return fans.length ? Math.max(...fans) : undefined;
-  };
   const discard = () => {
     const doc = work.doc;
     if (!doc) return;
@@ -177,7 +166,7 @@ export function StagedRules({
               {rule.cond ? <span className="text-ink-2"> · {rule.cond}</span> : null}
             </span>
             <ValueDiff
-              from={(priced.applied[key] ?? rule.table).toUpperCase()}
+              from={appliedTableOf(priced, key)}
               to={priced.edit.rules[key]!.table.toUpperCase()}
             />
           </div>
@@ -199,9 +188,6 @@ export function StagedRules({
         </div>
       ) : null}
       <div className="flex items-baseline gap-2">
-        <span>
-          fan <ValueDiff from={fmt(fanOf(priced.now))} to={fmt(fanOf(priced.next))} /> in-wg
-        </span>
         <Button
           label="Discard every edit rule, drop, catalog link, flow, role and unit ESP"
           onClick={discard}

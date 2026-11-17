@@ -113,7 +113,7 @@ export interface TriageInput {
   doc: DuctsDesign | null;
   nameOf?: (id: number) => string;
   groupLabel?: (id: string) => string;
-  heal?: HealPlan | import("./pricing-view.ts").HealView | null;
+  heal?: HealPlan | import("@pe/agent-contracts").DuctsPricingData["analysis"]["heal"] | null;
   airflow?: { current: string; options: readonly AirflowOption[] };
   unitAirflow?: { current: string; options: readonly AirflowOption[] };
   roles?: ReadIndex<number, { role: "fan" | "passive"; why: string; reason: string }>;
