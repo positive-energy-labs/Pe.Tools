@@ -212,3 +212,19 @@ it("a fitting whose flow is unknown stays in the census, unpriced under the rule
   // Withheld by the path's no-flow blockers, never a not-priced blocker of its own.
   expect(sheet.blockers.filter((b) => b.kind === "not-priced")).toEqual([]);
 });
+
+// P-054: an invalid winning layer blocks fallback, so the matched rule must not price over it.
+it("an unreadable Work drop on a rule-matched elbow withholds the leg with its ref, never the rule's price", () => {
+  const inputs = inputsFor(network, { endCfm: { 6: 150, 10: 150 }, drops: { 6: 0.03, 10: 0.03 }, assignments: { "Round Elbow": "elbow-15d-45-le10" } });
+  const build = (components: typeof inputs.components) =>
+    buildSheet({ snapshot: network, fan: { unitId: 100, portIndex: 0 }, roster, grids, inputs: { ...inputs, components } });
+  expect(build(inputs.components).blockers).toEqual([]);
+  const sheet = build({
+    ...inputs.components,
+    4: { drop: { status: "invalid", value: null, source: "Work", author: null, version: null, units: "in-wg", ref: "componentDrops/4" } },
+  });
+  expect(sheet.totals.requiredEspInWg).toBeNull();
+  expect(sheet.blockers).toHaveLength(1);
+  expect(sheet.blockers[0]).toMatchObject({ elementId: 4 });
+  expect(sheet.blockers[0]!.detail).toContain("componentDrops/4");
+});
