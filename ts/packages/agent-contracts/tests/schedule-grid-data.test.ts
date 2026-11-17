@@ -1,5 +1,12 @@
 import { expect, test } from "vite-plus/test";
-import { rebindScheduleWork, unstale, scheduleGridRouteState } from "../src/index.ts";
+import { applyPatches, rebindScheduleWork, unstale, scheduleGridRouteState } from "../src/index.ts";
+
+test("a wrong-typed schedule edit returns the invalid-document refusal and edit hint", () => {
+  const result = applyPatches(scheduleGridRouteState, { version: 1, revision: 0, doc: { cells: {} } }, "human", [
+    { path: ["cells", "1::2", "edit"], value: { value: { bogus: true } } },
+  ], 0);
+  expect(result).toMatchObject({ ok: false, kind: "error", error: "the patched document is invalid", hint: expect.stringContaining("Cell edits wrap the typed value") });
+});
 
 test("reconciliation throws on an unstamped edit instead of silently preserving stale marks", () => {
   const doc = {
