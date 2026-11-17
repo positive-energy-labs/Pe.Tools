@@ -26,7 +26,7 @@ export type PictureScope =
   /** A polygon in the frame's plane, extruded along the frame's `z` between `depth[0]` and `depth[1]`. */
   | { readonly kind: "prism"; readonly frame: Frame; readonly polygon: readonly Vec2[]; readonly depth: Vec2 };
 
-/** Closed. From the illustrations the ducts cases draw: ring, outline, bar, volume, plus a label. */
+/** Closed set of illustration forms: ring, outline, bar, volume, plus a label. */
 export const MARK_KINDS = ["ring", "outline", "bar", "volume", "label"] as const;
 export type MarkKind = (typeof MARK_KINDS)[number];
 
