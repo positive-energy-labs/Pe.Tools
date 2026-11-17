@@ -100,3 +100,31 @@ it("P-106: a sibling-only tap charges straight Cs and names the passed tap on th
   expect(leg.lossSource.ref).toContain("1 tap(s) passed (Cs: 14086100)");
   expect(leg.evidence.kind).toBe("friction");
 });
+
+it.each([false, true])("P-107: typed branch drop replaces Cs only when refused=%s", refused => {
+  const snapshot = structuredClone(raw) as unknown as CalcSnapshot;
+  const roster = suggestRoster(snapshot);
+  const model = inputsFor(snapshot, {});
+  const endCfm = Object.fromEntries([...Object.entries(model.units), ...Object.entries(model.terminals)]
+    .flatMap(([id, row]) => row.cfm.value == null ? [] : [[id, row.cfm.value / 10]]));
+  const grids = refused ? {} : toGrids({ tables });
+  const input = { snapshot, fan: { unitId: 12806600, portIndex: 2 },
+    roster: [...roster.fans, ...roster.suggestions], grids };
+  const before = buildCalc({ ...input, inputs: inputsFor(snapshot, { endCfm }) });
+  const price = vi.spyOn(pricing, "priceLeg");
+  const after = buildCalc({ ...input, inputs: inputsFor(snapshot, { endCfm, drops: { 14086100: 0.123 } }) });
+  const leg = (sheet: typeof after) => Object.values(sheet.legs)
+    .find(l => l.elementId === 14085956 && l.lossSource.kind === "friction")!;
+  if (!refused) {
+    expect(leg(after).lossInWg).toBe(leg(before).lossInWg);
+    const index = price.mock.calls.findIndex(([p]) => p.kind === "fitting" && p.fitting.id === 14086100 && p.leg === "Cs");
+    expect(price.mock.results[index]!.value.source).toMatchObject({ kind: "rule", table: "SD5-9" });
+  } else {
+    expect(leg(before).lossInWg).toBeNull();
+    const friction = price.mock.calls.flatMap(([p], i) =>
+      p.kind === "duct" && p.segment.id === 14085956 ? [price.mock.results[i]!.value.lossInWg] : []).slice(0, 2);
+    expect(leg(after).lossInWg).toBeCloseTo(friction.reduce((sum, loss) => sum + loss, 0) + 0.123, 12);
+    expect(leg(after).lossSource.ref).toContain("typed drop from 14086100 (Cs refused: SD5-9 Cs is not loaded)");
+    expect(leg(after).lossSource.ref).toContain("); Work");
+  }
+});

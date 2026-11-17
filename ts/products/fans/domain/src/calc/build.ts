@@ -521,14 +521,6 @@ class Pricer {
     if (this.pricingLeg && !proposed) this.onLeg(this.pricingLeg, key);
     const stated = !proposed && input.leg === "Cs"
       ? this.input.inputs.components[String(input.fitting.id)]?.drop : undefined;
-    if (stated && (stated.value != null || (stated.status === "invalid" && stated.source !== "model")))
-      return priceLeg({
-        kind: "drop", element: input.fitting,
-        cfm: input.flows.through, inWg: stated.value,
-        source: stated.value == null
-          ? `${stated.ref ?? provenance(stated)}; the stated drop is unreadable, retype it`
-          : provenance(stated),
-      }, this.input.grids);
     const flows = ruleFlows(input.flows);
     const matched = input.facts.inputError
       ? undefined
@@ -540,6 +532,15 @@ class Pricer {
       this.input.grids,
       this.choices,
     );
+    // P-107: a typed branch drop substitutes only for a refused straight loss, never a rule price.
+    if (p.lossInWg == null && stated && (stated.value != null || (stated.status === "invalid" && stated.source !== "model")))
+      return priceLeg({
+        kind: "drop", element: input.fitting,
+        cfm: input.flows.through, inWg: stated.value,
+        source: `typed drop from ${input.fitting.id} (Cs refused: ${p.unpriced}); ${stated.value == null
+          ? `${stated.ref ?? provenance(stated)}; the stated drop is unreadable, retype it`
+          : provenance(stated)}`,
+      }, this.input.grids);
     const src = p.source?.kind === "rule" ? p.source : null;
     const rule = src ? ruleByKey(src.rule) : assigned ? ruleByKey(assigned.value) : matched;
     const chosen = rule ? this.input.inputs.tables[rule.key] : undefined;
@@ -707,7 +708,7 @@ class Pricer {
     return {
       p,
       ids,
-      note: `, ${round(length)} ft${cs.length ? `, ${cs.length} tap(s) passed (Cs: ${cs.map(p => p.elementId).join(", ")})` : ""}`,
+      note: `, ${round(length)} ft${cs.length ? `, ${cs.length} tap(s) passed (Cs: ${cs.map(p => p.elementId).join(", ")})` : ""}${cs.flatMap(p => p.source?.kind === "drop" ? [`; ${p.source.source}`] : []).join("")}`,
       // The flow the leg is priced at where it enters, the same piece its velocity is read from: a
       // duct left by a tap on its side carries the upstream flow up to that tap (RV-15's tap on
       // 14682079 is fed 150 cfm through 4.93 ft of the 10 in main), never the branch's 35.
