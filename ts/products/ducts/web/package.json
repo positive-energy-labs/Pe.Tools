@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./fixture-registry": "./src/fixture-registry.ts",
+    "./registry": "./src/fixture-registry.ts",
+    "./network-fixtures": "./src/network-fixtures.ts",
     "./airflow": "./src/airflow.ts",
     "./annotations": "./src/annotations.tsx",
     "./assumptions": "./src/assumptions.tsx",

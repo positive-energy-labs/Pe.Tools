@@ -56,10 +56,6 @@ test("S1: fixture transports never branch on operation keys or seed routes", () 
   expect(violations).toEqual([]);
 });
 
-// Frozen: the one route module that still imports a fixture payload eagerly. Slice 6 (one read
-// constructor) removes `hostRead(reads.sheet, sheetValueFixtures)`; this list only shrinks.
-const D2_FROZEN = ["products/fans/web/route.ts: ./src/calc/value-fixtures.ts"];
-
 // Retargeted from `*/graph.ts` (none since 6ecbc716) to the route modules route-graphs.ts loads.
 test("D2: route modules never eagerly import fixture payloads", () => {
   const violations: string[] = [];
@@ -79,6 +75,5 @@ test("D2: route modules never eagerly import fixture payloads", () => {
         violations.push(`${path}: ${specifier.text}`);
     }
   }
-  expect(violations.filter((v) => !D2_FROZEN.includes(v)), "a new eager fixture import").toEqual([]);
-  expect(D2_FROZEN.filter((v) => !violations.includes(v)), "fixed: delete it from D2_FROZEN").toEqual([]);
+  expect(violations, "an eager fixture import").toEqual([]);
 });

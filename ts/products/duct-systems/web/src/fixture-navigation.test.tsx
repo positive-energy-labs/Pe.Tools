@@ -4,7 +4,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from "@tanstack/react-router";
 import { module as ducts } from "../route.ts";
 import { ductsLink } from "@pe/ducts-web/identity";
-import { networkFixtures } from "@pe/ducts-web/fixture-registry";
+import { networkFixtures } from "@pe/ducts-web/network-fixtures";
 import { workFingerprintSchema } from "@pe/agent-contracts";
 import { mountTypedRoute } from "../../../../apps/web/src/shell/typed-mount.ts";
 import { TypedChrome } from "../../../../apps/web/src/shell/typed-shell.tsx";

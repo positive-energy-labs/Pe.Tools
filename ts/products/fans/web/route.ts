@@ -19,7 +19,8 @@ import { fillBody, scrollBody } from "@pe/web/route/body";
 import { overlay } from "@pe/web/route/slots/picture/overlay";
 import { fanLabel, stableFanKey } from "@pe/ducts-web/calc/model";
 import { describeInputHistory, editMetaSchema } from "@pe/ducts-web/calc/input-history.neutral";
-import { calcValueFixtures } from "./src/calc/value-fixtures.ts";
+import { lazyFixtures } from "@pe/ducts-web/registry";
+const calcValueFixtures = lazyFixtures(() => import("./src/calc/value-fixtures.ts").then(m => m.calcValueFixtures));
 import { presentLosses } from "@pe/ducts-web/reviews";
 import { fansCalc } from "./src/calc.ts";
 
