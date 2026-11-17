@@ -563,7 +563,7 @@ export function NetworkPicture({ ctx, picture }: PictureOverlayProps<DuctsDrawCo
   );
   const encoded = useGroupEncoding(snapshot, priced, drawGroups, page.encoding);
   const activeCritical = runNodesOf(trees)
-    .filter((run) => run.terminal != null && activeScope?.terminals.has(run.terminal))
+    .filter((run) => run.scale != null && run.terminal != null && activeScope?.terminals.has(run.terminal))
     .reduce<TreeNode | null>(
       (best, run) =>
         run.total != null && (best?.total == null || run.total > best.total) ? run : best,

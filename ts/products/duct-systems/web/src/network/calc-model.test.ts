@@ -1,4 +1,8 @@
+// @vitest-environment jsdom
 import { expect, test } from "vite-plus/test";
+import { createElement } from "react";
+import { render, cleanup } from "@testing-library/react";
+import { SystemTree } from "../screen/tree-sidebar.tsx";
 import { publishedCalc } from "@pe/ducts-domain/published-calcs.fixture";
 import { inputsFor, TEST_WALK, withFamilyFlipped } from "@pe/ducts-domain/test-inputs";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
@@ -93,6 +97,39 @@ function example(shared = false) {
 }
 const flatten = (nodes: readonly CalcTreeNode[]): CalcTreeNode[] =>
   nodes.flatMap((node) => [node, ...flatten(node.children)]);
+
+test("shared trunk renders partial known loss and withholds ESP bars on two incomplete claims", () => {
+  const { snapshot, sheets } = example(true);
+  for (const incomplete of [false, true]) {
+    if (incomplete) for (const sheet of sheets) {
+      sheet.claim = { kind: "incomplete", basis: "test", knownInWg: 0, coverage: [], blockingIds: ["missing"] };
+      sheet.totals.requiredEspInWg = null;
+    }
+    const all = flatten(buildCalcTree(snapshot, sheets));
+    const shared = all.filter((n) => n.kind === "element" && n.id === 13);
+    const fans = all.filter((n) => n.name.includes("full fan sheet")).map((n) => ({ ...n, children: [] }));
+    expect(shared).toHaveLength(2);
+    expect(all.filter((n) => n.name.includes("full fan sheet")).every((n) => incomplete ? n.total === null : n.total! > 0)).toBe(true);
+    const { container } = render(createElement(SystemTree, { ctx: {
+      trees: [...shared, ...fans], scale: 1, criticalKey: null, selected: null,
+      grilleName: (n) => n.name, ruleOf: new Map(), select: () => {},
+      jumpToRule: () => {}, reading: null, designRate: 1,
+    } }));
+    const bars = [...container.querySelectorAll("[data-e-bar]")];
+    expect(bars).toHaveLength(4);
+    for (const [i, bar] of bars.slice(0, 2).entries()) {
+      expect(bar.textContent).toContain(shared[i]!.self!.toFixed(4));
+      expect(bar.querySelector('[data-tone="caution"]')?.textContent.includes("partial") ?? false).toBe(incomplete);
+      if (incomplete) expect(bar.querySelector('[data-tone="caution"]')!.parentElement!.textContent).toContain(shared[i]!.total!.toFixed(4));
+      expect(bar.getAttribute("data-e-bar") !== "").toBe(!incomplete);
+    }
+    for (const [i, bar] of bars.slice(2).entries()) {
+      expect(bar.textContent).toContain(incomplete ? "\u2014" : fans[i]!.total!.toFixed(4));
+      expect(bar.getAttribute("data-e-bar") !== "").toBe(!incomplete);
+    }
+    cleanup();
+  }
+});
 
 test("one fan: the existing tree view shape carries full fan pressure and each sheet path", () => {
   const { snapshot, sheets } = example();

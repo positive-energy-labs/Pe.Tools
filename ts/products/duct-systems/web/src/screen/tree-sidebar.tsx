@@ -248,7 +248,8 @@ export function SystemTree({ ctx, address }: { ctx: TreeCtx; address?: ListPersi
             value={n.total}
             ft={n.ft}
             selfFt={n.kind === "leg" || n.kind === "element" ? n.selfFt : undefined}
-            scale={ctx.scale}
+            scale={n.scale}
+            partial={n.partial}
             provisional={n.provisional}
             self={n.kind === "leg" || n.kind === "element" ? n.self : ""}
             unpriced={n.unpriced}
