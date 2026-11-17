@@ -16,9 +16,15 @@ export interface SheetTreeNode extends TreeNode {
   children: SheetTreeNode[];
 }
 
+const legOf = (sheet: Sheet, id: string) => {
+  const leg = sheet.legs[id];
+  if (!leg) throw Error(`Fan calc path names missing leg ${id}`);
+  return leg;
+};
+
 /** A path with every leg priced and no blocker: its known loss is its whole loss. */
 const wholeOf = (sheet: Sheet, path: Sheet["paths"][number]) =>
-  !path.blockerIds.length && path.legIds.every((id) => sheet.legs[id]!.lossInWg != null);
+  !path.blockerIds.length && path.legIds.every((id) => legOf(sheet, id).lossInWg != null);
 
 const node = (
   props: Pick<SheetTreeNode, "key" | "kind" | "name" | "id"> & Partial<SheetTreeNode>,
@@ -85,7 +91,7 @@ export function buildSheetTree(
             ({ path }) =>
               ids.has(path.end.elementId) ||
               group.rootIds.includes(path.end.elementId) ||
-              path.legIds.some((id) => ids.has(sheet.legs[id]!.elementId)),
+              path.legIds.some((id) => ids.has(legOf(sheet, id).elementId)),
           );
         if (!relevant.length && !group.rootIds.includes(sheet.fan.unitId)) return [];
         fans.add(fanKey);
@@ -94,7 +100,7 @@ export function buildSheetTree(
           .filter(({ path }) => wholeOf(sheet, path))
           .reduce<number | null>(
             (best, { path, index }) =>
-              best == null || path.knownInWg > sheet.paths[best]!.knownInWg ? index : best,
+              best == null || path.knownInWg > (sheet.paths[best]?.knownInWg ?? -Infinity) ? index : best,
             null,
           );
         const paths = relevant.map(({ path, index }) => {
@@ -104,7 +110,7 @@ export function buildSheetTree(
           let knownFt = 0;
           let complete = true;
           const legs = path.legIds.map((legId) => {
-            const leg = sheet.legs[legId]!;
+            const leg = legOf(sheet, legId);
             if (ids.has(leg.elementId)) reached.add(leg.elementId);
             known += leg.lossInWg ?? 0;
             knownFt += leg.equivalentFt ?? 0;
@@ -120,7 +126,7 @@ export function buildSheetTree(
               selfFt: leg.equivalentFt,
               rate:
                 evidence.kind === "friction" && evidence.lengthFt > 1e-9 && (leg.lossInWg ?? 0) > 0
-                  ? (leg.lossInWg! / evidence.lengthFt) * 100
+                  ? ((leg.lossInWg ?? 0) / evidence.lengthFt) * 100
                   : null,
               scale: sheet.totals.requiredEspInWg,
               terminal: path.end.kind === "terminal" ? path.end.elementId : null,
@@ -151,7 +157,7 @@ export function buildSheetTree(
               ],
             });
           });
-          const pathIds = new Set(path.legIds.map((id) => sheet.legs[id]!.elementId));
+          const pathIds = new Set(path.legIds.map((id) => legOf(sheet, id).elementId));
           return node({
             key,
             kind: "run",
@@ -163,7 +169,7 @@ export function buildSheetTree(
             ft: knownFt,
             split: splitOf(
               snapshot,
-              path.legIds.map((id) => rowOf(sheet.legs[id]!, sheet)),
+              path.legIds.map((id) => rowOf(legOf(sheet, id), sheet)),
               equipment,
             ),
             critical: index === worst ? "pe" : null,
@@ -223,7 +229,7 @@ export function buildSheetTree(
                 node({
                   key: `${group.id}/unwalked`,
                   kind: "leg",
-                  id: unwalked[0]!.id,
+                  id: unwalked[0]?.id ?? null,
                   name: "Ducts and parts outside fan paths",
                   children: unwalked,
                 }),

@@ -364,7 +364,7 @@ function Content({
   const fans = priced && activeScope ? fanFacts(priced, activeScope.terminals) : null;
   const solved = fans && {
     fans,
-    fan: fans.length === 1 && fans[0]!.complete ? fans[0]!.esp : null,
+    fan: fans.length === 1 && fans[0]?.complete ? fans[0].esp : null,
     critical: worst?.terminal ?? null,
     criticalTel: worst?.tel ?? null,
   };
@@ -481,7 +481,7 @@ function Content({
           <span data-tone={solved.fans.length > 1 ? undefined : "alarm"} data-readout-missing="">
             {solved.fans.length > 1
               ? "Shared network; read pressure per fan"
-              : `no ESP: this fan's calc is ${solved.fans[0]!.claim}`}
+              : `no ESP: this fan's calc is ${solved.fans[0]?.claim}`}
           </span>
         ) : flowless.length ? (
           // A terminal with no design flow is priced at 0 cfm, so the sum would read as a
