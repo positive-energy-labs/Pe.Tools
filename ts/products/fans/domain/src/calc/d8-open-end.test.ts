@@ -2,8 +2,8 @@ import { expect, it } from "vite-plus/test";
 import { connOf, ductOf, nodeOf, round, snapshotOf } from "@pe/ducts-domain/test-snapshot";
 import { buildCalc } from "./build.ts";
 import { flowsOf } from "./flow.ts";
-import { grids } from "./tables.fixture.ts";
-import { inputsFor } from "./test-inputs.ts";
+import { grids } from "@pe/ducts-domain/tables.fixture";
+import { inputsFor } from "@pe/ducts-domain/test-inputs";
 import { calcBreakdown } from "./calc-breakdown.ts";
 import type { Walk } from "./walk.ts";
 

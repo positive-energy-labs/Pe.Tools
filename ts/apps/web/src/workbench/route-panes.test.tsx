@@ -161,7 +161,7 @@ function Restore() {
 }
 async function mount(entry = "/pea?thread=T", strict = false, restore = false, validate = false) {
   if (entry.startsWith("/fans")) {
-    const { admit } = await import("@pe/fans-web/admission.fixture");
+    const { admit } = await import("../product-tests/fans/web/src/admission.fixture.ts");
     fansRoute = (await admit()).presenter;
   }
   const root = createRootRoute({
@@ -905,7 +905,7 @@ test("6.1b first open of /fans while the document bind is pending reads as pendi
 test("6.1b a hidden Place's section carries no aria-busy while the document bind is pending", async () => {
   sessionStorage.clear();
   await seedPlaces([]);
-  const { admit } = await import("@pe/fans-web/admission.fixture");
+  const { admit } = await import("../product-tests/fans/web/src/admission.fixture.ts");
   fansRoute = (await admit()).presenter;
   // The same pending bind as above (`useReading` is mocked pending), on a Place the dock hides.
   const root = createRootRoute({ component: () => <RouteVisibility.Provider value={false}><FansProbe /></RouteVisibility.Provider> });

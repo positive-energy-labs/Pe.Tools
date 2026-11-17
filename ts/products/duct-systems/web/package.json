@@ -6,7 +6,6 @@
   "exports": {
     "./route": "./route.ts",
     "./bindings": "./src/bindings.ts",
-    "./calcs.test-support": "./src/calcs.test-support.ts",
     "./design-calc": "./src/design-calc.ts",
     "./inbox-rows": "./src/inbox-rows.ts",
     "./loss-split": "./src/loss-split.ts",

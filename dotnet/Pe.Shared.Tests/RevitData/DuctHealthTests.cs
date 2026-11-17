@@ -265,7 +265,7 @@ public sealed class DuctHealthTests {
 
     private static string SheetFixtures([CallerFilePath] string source = "") =>
         Path.GetFullPath(Path.Combine(Path.GetDirectoryName(source)!, "..", "..", "..",
-            "ts", "packages", "ducts-domain", "src", "sheet", "fixtures"));
+            "ts", "products", "ducts", "domain", "src", "fixtures"));
 
     /// <summary>
     ///     The TypeScript sheet's synthetic graphs (recorded by its tests to synthetic-health-inputs.json) given their

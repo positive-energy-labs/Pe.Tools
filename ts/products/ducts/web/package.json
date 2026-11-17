@@ -26,7 +26,6 @@
     "./finding-layers": "./src/finding-layers.ts",
     "./fixtures/physical-transitions.json": "./src/fixtures/physical-transitions.json",
     "./fixtures/root-attached-fittings.json": "./src/fixtures/root-attached-fittings.json",
-    "./fixtures/synthetic-snapshot.json": "./src/fixtures/synthetic-snapshot.json",
     "./heal.fixture": "./src/heal.fixture.ts",
     "./identity": "./src/identity.ts",
     "./inputs": "./src/inputs.ts",
@@ -48,8 +47,8 @@
     "./stub-labels": "./src/stub-labels.ts",
     "./subject-labels": "./src/subject-labels.tsx",
     "./subject-text": "./src/subject-text.ts",
-    "./test-fixture": "./src/test-fixture.ts",
-    "./work": "./src/work.ts"
+    "./work": "./src/work.ts",
+    "./fixtures/fan-sheet.json": "./src/fixtures/fan-sheet.json"
   },
   "scripts": {
     "check": "vp exec tsc --noEmit",

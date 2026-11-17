@@ -10,7 +10,7 @@ import { connOf, ductOf, nodeOf, snapshotOf } from "@pe/ducts-domain/test-snapsh
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { beyondOf, stoppingUnits } from "./beyond.ts";
 import { buildCalc } from "./build.ts";
-import { inputsFor } from "./test-inputs.ts";
+import { inputsFor } from "@pe/ducts-domain/test-inputs";
 import type { Calc } from "./types.ts";
 
 type Kind = "equipment" | "terminal" | "fitting";

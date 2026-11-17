@@ -2,7 +2,7 @@ import { expect, it } from "vite-plus/test";
 import raw from "./fixtures/muas-real.json" with { type: "json" };
 import type { CalcSnapshot } from "./build.ts";
 import { buildCalc } from "./build.ts";
-import { inputsFor, withFamilyFlipped } from "./test-inputs.ts";
+import { inputsFor, withFamilyFlipped } from "@pe/ducts-domain/test-inputs";
 import { suggestRoster } from "@pe/ducts-domain/roster";
 const snapshot = raw as unknown as CalcSnapshot;
 // Retained Chadds topology: .artifacts/tmp/ducts-sheet/chadds-snapshot-health.json,

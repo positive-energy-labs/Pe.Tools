@@ -6,7 +6,7 @@ import { historySnapshotSchema } from "../../../../apps/web/src/shell/history.ts
 import { direct, mountTypedRoute, planned } from "../../../../apps/web/src/shell/typed-mount.ts";
 import { scrollBody } from "../../../../apps/web/src/route/body.ts";
 import type { ReadingContext } from "../../../../apps/web/src/shell/source-contract.ts";
-import { createWitness } from "./cutover.test-support.ts";
+import { createWitness } from "../../../../apps/web/src/product-tests/fans/web/src/cutover.test-support.ts";
 
 test("typed panes share declared Values; recorded Fans and Ducts use frozen Work and refuse writes", async () => {
   const closes: (() => void)[] = [];

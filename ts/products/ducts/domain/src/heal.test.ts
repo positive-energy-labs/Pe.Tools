@@ -5,7 +5,7 @@ import { expect, it } from "vite-plus/test";
 import { HEAL_JOIN_GAP_IN, healPlan, healRequestGroup, proximityId } from "./heal.ts";
 import { groupOf, snapshotOf } from "./test-snapshot.ts";
 import type { DuctSnapshot } from "./types.ts";
-import { TEST_SLOTS } from "@pe/fans-domain/calc/test-inputs";
+import { TEST_SLOTS } from "./test-inputs.ts";
 
 type Node = DuctSnapshot["nodes"][number];
 type Segment = DuctSnapshot["segments"][number];

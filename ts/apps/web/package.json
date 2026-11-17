@@ -60,6 +60,9 @@
     "@pe/host-internal": "workspace:*"
   },
   "devDependencies": {
+    "@pe/ducts-contract": "workspace:*",
+    "@pe/duct-systems-contract": "workspace:*",
+    "@pe/fans-contract": "workspace:*",
     "@tailwindcss/typography": "^0.5.16",
     "@tailwindcss/vite": "^4.1.18",
     "@tanstack/devtools-vite": "0.8.4",

@@ -10,7 +10,7 @@ import { expect, it } from "vite-plus/test";
 import { phased } from "./phases.ts";
 import { tolerated } from "./survey.ts";
 import type { DuctSnapshot } from "./types.ts";
-import { TEST_SLOTS } from "@pe/fans-domain/calc/test-inputs";
+import { TEST_SLOTS } from "./test-inputs.ts";
 import { VOCABULARY } from "./calc/scoped-snapshot.ts";
 
 type Segment = DuctSnapshot["segments"][number];

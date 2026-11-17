@@ -40,7 +40,7 @@ import { createPeRoutes } from "../../../../../apps/host/src/pe-routes.ts";
 import { CaptureStore } from "../../../../../apps/host/src/takeoff-captures.ts";
 import { RequestIdentity, admittedRequestIdentity } from "../../../../../apps/host/src/request-services.ts";
 import { readSessionScope, SdkSession, SdkDriver } from "../../../../../apps/host/src/sdk-session.ts";
-import { snapshot } from "@pe/ducts-web/test-fixture";
+import { snapshot } from "@pe/ducts-domain/test-fixture";
 
 /** Only the native socket and SDK observation are substituted. Work, seals and the run registry are real. */
 export async function nativeFixture(

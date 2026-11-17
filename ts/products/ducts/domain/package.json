@@ -59,7 +59,12 @@
     "./unit-roles": "./src/unit-roles.ts",
     "./words": "./src/words.ts",
     "./work-subject": "./src/work-subject.ts",
-    "./write-evidence": "./src/write-evidence.ts"
+    "./write-evidence": "./src/write-evidence.ts",
+    "./test-fixture": "./src/test-fixture.ts",
+    "./test-inputs": "./src/test-inputs.ts",
+    "./fixtures/synthetic-snapshot.json": "./src/fixtures/synthetic-snapshot.json",
+    "./health.fixture": "./src/health.fixture.ts",
+    "./tables.fixture": "./src/tables.fixture.ts"
   },
   "scripts": {
     "check": "vp exec tsc --noEmit",

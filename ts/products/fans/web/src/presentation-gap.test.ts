@@ -10,7 +10,7 @@ import { expect, test } from "vite-plus/test";
 
 
 import { presentFan } from "@pe/ducts-web/reviews";
-import { snapshot } from "@pe/ducts-web/test-fixture";
+import { snapshot } from "@pe/ducts-domain/test-fixture";
 
 
 

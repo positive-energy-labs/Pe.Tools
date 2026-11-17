@@ -1,12 +1,12 @@
 import { elementSubject } from "@pe/ducts-domain/work-subject";
-import { snapshot } from "@pe/ducts-web/test-fixture";
+import { snapshot } from "@pe/ducts-domain/test-fixture";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { fansDocumentSchema, ductsDocumentSchema, workKey } from "@pe/agent-contracts";
 import type {
   Observation,
   WorkWriteOutcome,
 } from "../../../../packages/agent-contracts/src/work-journal-door.ts";
-import { createWitness } from "./cutover.test-support.ts";
+import { createWitness } from "../../../../apps/web/src/product-tests/fans/web/src/cutover.test-support.ts";
 const closes: (() => void)[] = [];
 const partNode = snapshot.nodes.find(node => node.kind === "fitting")!;
 const part = elementSubject(partNode);

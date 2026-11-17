@@ -3,7 +3,7 @@ import raw from "./fixtures/manual-d-20261102.json" with { type: "json" };
 import live from "./fixtures/muas-local-20261102.json" with { type: "json" };
 import tables from "./fixtures/manual-d-tables.json" with { type: "json" };
 import { buildCalc, type CalcSnapshot } from "./build.ts";
-import { inputsFor, withFamilyFlipped, withPeersRead } from "./test-inputs.ts";
+import { inputsFor, withFamilyFlipped, withPeersRead } from "@pe/ducts-domain/test-inputs";
 import { suggestRoster } from "@pe/ducts-domain/roster";
 import { toGrids } from "@pe/ducts-domain/loss-grid";
 import { accessoryWrites } from "./accessory-writes.ts";

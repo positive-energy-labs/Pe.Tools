@@ -1,4 +1,4 @@
-import { inputsFor } from "./test-inputs.ts";
+import { inputsFor } from "@pe/ducts-domain/test-inputs";
 /**
  * R-Q4, A-INFLOW, A-COMPLETE and the three closers of 2026-10-28 (R-SIB siblings, R-CAP capped
  * ends, R-FACE walked pairs; kaitpw / counsel) on the retained raw Chadds snapshot, slot

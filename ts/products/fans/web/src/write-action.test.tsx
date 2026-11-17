@@ -4,7 +4,7 @@
 // design itself and seals it (ducts-actions.ts: the sibling from readWorks, else the host's own view).
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import type { WorkHandle } from "@pe/agent-contracts";
-import { createWitness } from "./cutover.test-support.ts";
+import { createWitness } from "../../../../apps/web/src/product-tests/fans/web/src/cutover.test-support.ts";
 
 const closes: (() => void)[] = [];
 afterEach(() =>

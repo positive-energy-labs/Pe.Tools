@@ -7,7 +7,7 @@ import { RouteWorkspace } from "@pe/runtime";
 import { subjectCode, uniqueIdSchema } from "@pe/agent-contracts/subject-ref";
 import { bindWork, ductsRosterResponseSchema, type ductsRosterRequestSchema } from "@pe/agent-contracts";
 import type { z } from "zod";
-import { snapshot } from "@pe/ducts-web/test-fixture";
+import { snapshot } from "@pe/ducts-domain/test-fixture";
 
 test("roster composition retains UniqueId for two equipment instances with the same mark", async () => {
   const fan = snapshot.nodes.find((node) => node.id === 100)!;

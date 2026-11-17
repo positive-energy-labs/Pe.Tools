@@ -15,8 +15,8 @@ import {
   type Node,
 } from "@pe/ducts-domain/test-snapshot";
 import { buildCalc, resolveInputs, type CalcSnapshot } from "./index.ts";
-import { grids } from "./tables.fixture.ts";
-import { inputsFor, TEST_FIRM, TEST_WALK, cell } from "./test-inputs.ts";
+import { grids } from "@pe/ducts-domain/tables.fixture";
+import { inputsFor, TEST_FIRM, TEST_WALK, cell } from "@pe/ducts-domain/test-inputs";
 
 // The size string is the bare diameter here, not the shared `round`'s `8"ø`.
 const round = (d: number) => ({ shape: "round" as const, size: `${d}`, diameterIn: d });

@@ -78,7 +78,7 @@ import { publicationSource } from "../host/publication-source";
 import { hostEventSource } from "../host/event-source.test-support";
 import { fixtureTimeline } from "../shell/fixture-work-door";
 import { builtinEnrollments } from "../../../host/src/builtin-enrollment";
-import savedNetwork from "@pe/ducts-web/fixtures/synthetic-snapshot.json";
+import savedNetwork from "@pe/ducts-domain/fixtures/synthetic-snapshot.json";
 import { rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";

@@ -19,7 +19,7 @@ import { TimelineButtons } from "../../../shell/situation-band";
 import { createTimelineClient, type TimelineClient } from "../../../shell/work-feed-client";
 import { GraphHistory } from "../../../shell/graph-history";
 import { observeWorkReceipts } from "../../../../../host/src/work-receipt-feed";
-import { createWitness } from "@pe/fans-web/cutover.test-support";
+import { createWitness } from "../../../product-tests/fans/web/src/cutover.test-support.ts";
 import { Notes } from "./notes.tsx";
 import { subjectCode } from "@pe/agent-contracts/subject-ref";
 import { workReadings } from "./readings.test-support";

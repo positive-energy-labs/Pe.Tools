@@ -24,12 +24,12 @@ import {
   cell,
   inputsFor,
   withFamilyFlipped,
-} from "./test-inputs.ts";
+} from "@pe/ducts-domain/test-inputs";
 import { resolveInputs, type WorkLayer } from "@pe/ducts-domain/calc/inputs";
 import { mintWriteRequest, type FanWriteContext } from "./write-request.ts";
 import { accessoryWrites } from "./accessory-writes.ts";
 import { claimOf, type DomainClaim } from "./encounters.ts";
-import { TEST_COVERAGE } from "./test-inputs.ts";
+import { TEST_COVERAGE } from "@pe/ducts-domain/test-inputs";
 const at = "2026-11-16T00:00:00Z";
 const grids = toGrids(
   JSON.parse(
