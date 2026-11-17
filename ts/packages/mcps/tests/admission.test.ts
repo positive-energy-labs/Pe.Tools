@@ -240,7 +240,7 @@ test("pe_do replays the original receipt without catalog or target discovery and
   expect(posts).toEqual([]);
   expect(
     await call(peDo, { key: "op:scripting.execute", input: { scriptContent: "changed" } }),
-  ).toMatchObject({ isError: true, content: expect.stringContaining("conflicts") });
+  ).toMatchObject({ isError: true, content: expect.stringContaining("different intent or target") });
   expect(
     await call(peDo, {
       key: "op:scripting.execute",
@@ -315,7 +315,7 @@ test("semantic recovery normalizes declared defaults before reading a later thre
   });
   expect(await recover({ ...selected, work: { ...selected.work, revision: 14 } })).toMatchObject({
     isError: true,
-    content: expect.stringContaining("conflicts"),
+    content: expect.stringContaining("different intent or target"),
   });
   expect(
     await recover(selected, { kind: "open", ref: { session: "B", openId: "open-B" } }),

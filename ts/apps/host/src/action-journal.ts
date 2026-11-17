@@ -1085,7 +1085,8 @@ export class ActionJournal implements ReceiptReader {
     if (dead)
       throw new CommandRejected({ kind: "trust", code: dead.refusal.code, message: dead.message });
     try {
-      validateFootprintCaller(this.activeCallers.get(row.id) ?? row.caller, row.effects);
+      // Parsing validates portable receipt data but clones away the Page's weak capability.
+      validateFootprintCaller(this.activeCallers.get(row.id) ?? retained.caller, row.effects);
     } catch (error) {
       if (!(error instanceof Refused) || moment === "admit") throw error;
       throw new CommandRejected({

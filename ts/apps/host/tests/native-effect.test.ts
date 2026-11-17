@@ -4,10 +4,10 @@ import { createJiti } from "jiti";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import ts from "typescript";
-import { emitSchema, generateNativeEffect, nativeEffectPrelude, schemaCode } from "../../scripts/native-effect-generator.ts";
-import { hostOpCatalog } from "./host-catalog.generated.ts";
-import { nativeEffectSchemas, nativeEffectResponseDefinitions } from "./native-effect.generated.ts";
-import { nativeRecordings, nativeRecordingRequest } from "../../../../apps/host/tests/native-recordings.ts";
+import { emitSchema, generateNativeEffect, nativeEffectPrelude, schemaCode } from "../../../packages/host-contracts/scripts/native-effect-generator.ts";
+import { hostOpCatalog } from "@pe/host-contracts/catalog";
+import { nativeEffectSchemas, nativeEffectResponseDefinitions } from "@pe/host-contracts/native-effect";
+import { nativeRecordings, nativeRecordingRequest } from "./native-recordings.ts";
 
 const jiti = createJiti(import.meta.url);
 async function generatedModule(input: Record<string, any>, definitions = false, witness = "") {
@@ -156,7 +156,7 @@ const undefinedKey: Test.Wire = { nullable: undefined };
   });
   it("covers every catalog direction and regenerates identical bytes", () => {
     expect(Object.keys(nativeEffectSchemas)).toEqual(hostOpCatalog.map(op => op.key));
-    expect(generateNativeEffect(hostOpCatalog)).toBe(readFileSync(resolve(import.meta.dirname, "native-effect.generated.ts"), "utf8").replaceAll("\r\n", "\n"));
+    expect(generateNativeEffect(hostOpCatalog)).toBe(readFileSync(resolve(import.meta.dirname, "../../../packages/host-contracts/src/generated/native-effect.generated.ts"), "utf8").replaceAll("\r\n", "\n"));
     let definitions = 0;
     for (const operation of hostOpCatalog) {
       const root = JSON.parse(operation.responseSchemaJson);
@@ -226,11 +226,11 @@ const undefinedKey: Test.Wire = { nullable: undefined };
 });
 
 it("decodes retained wire recordings through the provenance-checked loader", () => {
-  const provenance = JSON.parse(readFileSync(resolve(import.meta.dirname, "../../../../apps/host/tests/native-recordings/provenance.json"), "utf8"));
+  const provenance = JSON.parse(readFileSync(resolve(import.meta.dirname, "native-recordings/provenance.json"), "utf8"));
   const results: Record<string, unknown> = {};
   const refused: string[] = [];
   for (const [name, record] of Object.entries(provenance) as [string, { operation: string; source: string; requestFile?: string }][]) {
-    const schema = nativeEffectSchemas[record.operation as keyof typeof nativeEffectSchemas];
+    const schema = Object.entries(nativeEffectSchemas).find(([operation]) => operation === record.operation)?.[1];
     // Catalog and retired operations are classified explicitly, never decoded as
     // another operation and never replaced by a live source.
     if (!schema) { results[name] = { operation: record.operation, source: record.source, state: "no-current-operation" }; continue; }
