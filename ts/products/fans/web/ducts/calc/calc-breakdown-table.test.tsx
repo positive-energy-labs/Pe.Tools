@@ -139,14 +139,14 @@ it("an incomplete branch shows no zero, and the caption names the known count", 
   expect(cells.slice(1, 3)).toEqual(["", ""]);
   expect(incomplete.textContent).not.toMatch(/\b0(\.0+)?\b/);
   expect(incomplete.textContent).toContain("no flow");
-  const caption = both.container.querySelector("[data-worksheet-caption='supply']")!.textContent!;
+  const caption = both.container.querySelector("[data-calc-breakdown-caption='supply']")!.textContent!;
   expect(caption).toContain("1 of 2 branches known");
   expect(caption).toContain("worst known 0.0500");
   both.unmount();
 
   // No complete branch: the caption counts and names no worst.
   const none = render(<CalcBreakdown ws={ws([run("r2", "l2", false, 0)])} editing={editing} />);
-  const bare = none.container.querySelector("[data-worksheet-caption='supply']")!.textContent!;
+  const bare = none.container.querySelector("[data-calc-breakdown-caption='supply']")!.textContent!;
   expect(bare).toContain("0 of 1 branches known");
   expect(bare).not.toMatch(/worst|0\.0000/);
 });
@@ -155,6 +155,6 @@ it("each side labels the home that served its own velocity limit", () => {
   const side = (name: string) => ({ runs: [{ id: name, side: name, end: { kind: "terminal", elementId: 1 }, legIds: [], sectionIds: [], complete: true, telFt: 20, knownInWg: 0.03, residualInWg: null, maxFpm: null, cfm: 100, overLegIds: [] }], sections: [], worstKnownInWg: null, elementSections: {} });
   const ws = { kind: "worksheet", limits: { supplyFpm: 800, returnFpm: 700, supplySource: "project", returnSource: "firm" }, supply: side("supply"), return: side("return"), legs: {} } as unknown as Ws;
   const { container } = render(<CalcBreakdown ws={ws} editing={{ inputs: null, changeInputs: () => {}, busy: false }} />);
-  expect(container.querySelector("[data-worksheet-caption='supply']")!.textContent).toContain("over 800 fpm (project)");
-  expect(container.querySelector("[data-worksheet-caption='return']")!.textContent).toContain("over 700 fpm (firm)");
+  expect(container.querySelector("[data-calc-breakdown-caption='supply']")!.textContent).toContain("over 800 fpm (project)");
+  expect(container.querySelector("[data-calc-breakdown-caption='return']")!.textContent).toContain("over 700 fpm (firm)");
 });

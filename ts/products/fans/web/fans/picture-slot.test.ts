@@ -10,7 +10,7 @@ import { module as fans } from "../route.ts";
  * `picture` and the kernel draws the pane. Neither route mounts a `Picture`, and the borrowed body's
  * cross-imports are gone: 22 from `fans/picture.tsx` into web `ducts/`, and `FansDrawContext` back.
  */
-const src = fileURLToPath(new URL("../../../../apps/web/src", import.meta.url));
+const src = fileURLToPath(new URL("../", import.meta.url));
 const files = (dir: string): string[] =>
   readdirSync(`${src}${dir}`, { withFileTypes: true }).flatMap((entry) =>
     entry.isDirectory() ? files(`${dir}/${entry.name}`) : /\.tsx?$/.test(entry.name) ? [`${dir}/${entry.name}`] : []);
@@ -45,7 +45,7 @@ test("the borrowed body is gone: no route file mounts a Picture, and the picture
   // Only the kernel pane mounts the one `Picture`.
   const mounts = [...files("fans"), ...files("ducts")]
     .filter((file) => !/\.test\.|test-support|\.fixture\./.test(file))
-    .filter((file) => imports(file).some((i) => /scene\/picture\/picture$/.test(i.from) && i.names.includes("Picture")));
+    .filter((file) => imports(file).some((i) => /scene\/picture\/picture(?:\.tsx?)?$/.test(i.from) && i.names.includes("Picture")));
   expect(mounts).toEqual([]);
   // The /fans overlay reaches the duct walk through one module, where it reached 22.
   expect(imports("fans/picture.tsx").map((i) => i.from).filter((from) => /(^|\/)ducts\//.test(from))).toEqual(["../ducts/calc/picture.tsx"]);

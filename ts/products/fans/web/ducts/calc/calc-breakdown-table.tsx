@@ -242,12 +242,12 @@ function SideTable({
   return (
     <section
       aria-label={`${side} worksheet`}
-      data-calcBreakdown={side}
+      data-calc-breakdown={side}
       className="flex min-w-0 flex-col"
     >
       <header className="flex items-baseline gap-3">
         <h3 className="t-head">{side}</h3>
-        <span className="t-small face-mono text-ink-2" data-calcBreakdown-caption={side}>
+        <span className="t-small face-mono text-ink-2" data-calc-breakdown-caption={side}>
           {sideCaption(runs)} · {branchesKnown(runs)}
           {worstKnownInWg != null && ` · worst known ${pressure(worstKnownInWg)} in-wg`} · over {limit} fpm (
           {side === "supply" ? ws.limits.supplySource : ws.limits.returnSource})
@@ -321,7 +321,7 @@ export function CalcBreakdown({ ws, editing }: { ws: Ws | null; editing: CalcBre
   const doc = useContext(AttentionDocument) ?? "";
   if (!ws) return <p className="t-small text-ink-2">Reading the calcBreakdown…</p>;
   return (
-    <div className="flex min-w-0 flex-col gap-3" data-calcBreakdown="">
+    <div className="flex min-w-0 flex-col gap-3" data-calc-breakdown="">
       {/* Keyed by basis: a new sheet starts with its own critical runs open. */}
       <SideTable key={`${ws.basis}:supply`} ws={ws} side="supply" doc={doc} editing={editing} />
       <SideTable key={`${ws.basis}:return`} ws={ws} side="return" doc={doc} editing={editing} />

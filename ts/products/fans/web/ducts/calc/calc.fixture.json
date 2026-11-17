@@ -144,7 +144,7 @@
       "inputs": {
         "kind": "inputs"
       },
-      "worksheet": {
+      "calcBreakdown": {
         "kind": "worksheet"
       }
     },
