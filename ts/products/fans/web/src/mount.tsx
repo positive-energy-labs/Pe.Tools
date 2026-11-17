@@ -169,7 +169,7 @@ function LedgerContent({ ctx, snapshot }: { ctx: CalcContext; snapshot: DuctSnap
     const linkTo = (action: CloserAction | null | undefined): CloserLink | null => {
       if (!action || !DUCTS_FIXES.has(action.kind)) return null;
       const name = nameOf(blocker.elementId);
-      const what = action.kind === "rule" ? `join ${name}` : action.kind === "cap" ? `end ${name}`
+      const what = action.kind === "encounter" ? `encounter ${name}` : action.kind === "rule" ? `join ${name}` : action.kind === "cap" ? `end ${name}`
         : action.kind === "price" ? `assignment ${action.family}` : action.kind === "table" ? `table ${action.rule}` : `fitting ${name}`;
       // Never a fallback to a write or an ElementId (slice 5): the blocker's producer stamps its
       // UniqueId SubjectRef; /ducts resolves the open fan's port walk, not the model's whole roster.
@@ -236,6 +236,7 @@ function LedgerContent({ ctx, snapshot }: { ctx: CalcContext; snapshot: DuctSnap
         loading: ctx.value.state === "refreshing",
         error: null,
         changeInputs: changeInputs,
+        subjectFor: id => elementSubject(nativeElement(id)),
         closerOf: closerOf,
         close: (closer: Closer) => changeInputs(editsFor([closer]), { label: closer.verb }),
         closeMany: (closers: readonly Closer[]) => changeInputs(editsFor(closers)),

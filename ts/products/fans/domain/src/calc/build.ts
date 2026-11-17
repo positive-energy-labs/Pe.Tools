@@ -1581,7 +1581,7 @@ const sideSum = (f: Flows, w: Walk) => {
   return ends.some(([, v]) => v == null) ? null : ends.reduce((a, [, v]) => a + v!, 0);
 };
 
-function buildCalcPass(input: BuildCalcInput, assumeHeals: boolean): Calc {
+function buildCalcPass(input: BuildCalcInput, assumeHeals: boolean, hosts: Map<string, HostCalc>): Calc {
   const g = graphOf(input.snapshot);
   const pricer = new Pricer(input, g);
   const unit = g.byId.get(input.fan.unitId);
@@ -1912,24 +1912,32 @@ function buildCalcPass(input: BuildCalcInput, assumeHeals: boolean): Calc {
   const network = basisOf(input.snapshot, [input.inputs, input.roster]);
   // ENCOUNTERS: every other fan this fan's air meets; a tie-in's static is the host's own calc (H5).
   const self = fanKey(input.fan);
+  const buildHost = (host: FanPortRef): HostCalc => {
+    // H5 consumes the known claim only; a host's heal preview cannot supply required pressure.
+    const calc = buildCalcPass({ ...input, fan: host, dependents: [...(input.dependents ?? []), self] }, false, hosts);
+    hosts.set(fanKey(host), calc);
+    return calc;
+  };
   const hostOf = (host: FanPortRef): HostCalc | "absent" | "cycle" =>
     host.unitId === unit.id || input.dependents?.includes(fanKey(host))
       ? "cycle"
-      : (input.hosts?.get(fanKey(host)) ??
+      : (hosts.get(fanKey(host)) ??
         (g.byId.has(host.unitId) && input.roster.some((p) => fanKey(p) === fanKey(host))
-          ? // ponytail: one host build per tie-in per pass, no memo; pass `hosts` when a read builds every fan.
-            buildCalc({ ...input, fan: host, dependents: [...(input.dependents ?? []), self] })
+          ? buildHost(host)
           : "absent"));
   const met = encountersOf(input.fan, paths, pricer.legs, input.encounterRulings);
   const gaps: CoverageGap[] = [];
   const deadheads = new Map<string, string>();
   for (const m of met) {
-    if (m.policy.static !== "host-calc" || m.encounter.verdict !== "accepted") continue;
+    if (m.policy.static !== "host-calc") continue;
     const read = hostStatic(hostOf(m.encounter.host), m.encounter, network);
     if ("kind" in read) {
-      if (read.kind === "backflow") deadheads.set(backflowId(m.encounter), read.detail);
-      else gaps.push(read);
-    } else
+      if (read.kind === "backflow") {
+        deadheads.set(backflowId(m.encounter), read.detail);
+        gaps.push({ kind: "host-calc", elementId: m.encounter.elementId, ref: read.detail });
+      }
+      else if (m.encounter.verdict === "accepted") gaps.push(read);
+    } else if (m.encounter.verdict === "accepted")
       m.encounter.static = {
         kind: "host-calc",
         basis: read.basis,
@@ -1950,7 +1958,7 @@ function buildCalcPass(input: BuildCalcInput, assumeHeals: boolean): Calc {
         owner: m.encounter.host,
         detail: `${g.name(unit.id)} discharges into the positive-pressure duct of fan ${tagOf(m.encounter.host.unitId) || g.name(m.encounter.host.unitId)} at ${g.name(m.encounter.elementId)}${reason ? `; ${reason}` : ""}`,
         effectInWg: m.encounter.static.kind === "host-calc" ? m.encounter.static.inWg : null,
-        closer: { kind: "ruling", note: "rule this tie-in accepted or refused" },
+        closer: { kind: "ruling", note: deadheads.get(backflowId(m.encounter)) ?? "rule this tie-in accepted or refused" },
       });
   }
   // Q4 (implementor default 2026-11-16, queued to the owner): a family direction the network reads the
@@ -2004,6 +2012,7 @@ function buildCalcPass(input: BuildCalcInput, assumeHeals: boolean): Calc {
         g,
         met.map((m) => m.encounter),
         blocking,
+        deadheads,
       ),
     ),
     fan: {
@@ -2033,6 +2042,7 @@ function issueOf(
   g: Graph,
   encounters: readonly Encounter[],
   blocking: ReadonlySet<string>,
+  deadheads: ReadonlyMap<string, string>,
 ): FanIssue {
   const el = g.byId.get(b.elementId);
   const kind = el && !isSegment(el) ? el.kind : "duct";
@@ -2047,7 +2057,10 @@ function issueOf(
       : { kind: "none", reason: b.closer.note };
   };
   const encounter = encounters.find((e) => backflowId(e) === b.id);
-  const closer: FanIssue["closer"] = encounter
+  const deadhead = deadheads.get(b.id);
+  const closer: FanIssue["closer"] = deadhead != null
+    ? { kind: "none", reason: deadhead }
+    : encounter
     ? { kind: "encounter", encounter }
     : b.closer.candidate
       ? { kind: "heal", pair: b.closer.candidate.pair }
@@ -2073,8 +2086,10 @@ function issueOf(
 
 /** Reuse exactly the same flow/pricing rules for known and continued heal walks. */
 export function buildCalc(input: BuildCalcInput): Calc {
-  const known = buildCalcPass(input, false);
-  const assumed = buildCalcPass(input, true);
+  // Share known host claims across both passes; cycle checks precede reuse, and caller maps stay read-only.
+  const hosts = new Map(input.hosts);
+  const known = buildCalcPass(input, false, hosts);
+  const assumed = buildCalcPass(input, true, hosts);
   known.assumed = assumed.assumed;
   known.totals.supply.assumedInWg = assumed.totals.supply.worstPath;
   known.totals.return.assumedInWg = assumed.totals.return.worstPath;

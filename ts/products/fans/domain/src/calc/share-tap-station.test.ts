@@ -48,8 +48,11 @@ function replay(unitId: number, mirrored = false, supply = false) {
     } });
   }
   price.mockRestore();
-  // The actual and assumed-topology calculations price the same unchanged duct.
-  return pieces.filter((p, i) => pieces.findIndex(q => JSON.stringify(q) === JSON.stringify(p)) === i);
+  // Host inspection can price the same physical piece from its other end: length differs at roundoff only.
+  const same = (a: number | null | undefined, b: number | null | undefined) =>
+    a === b || (a != null && b != null && Math.abs(a - b) < 1e-12);
+  return pieces.filter((p, i) => pieces.findIndex(q => q.cfm === p.cfm &&
+    same(q.length, p.length) && same(q.drop, p.drop)) === i);
 }
 
 it("R-SHARE RV-27 excludes RV-30's 65 cfm until tap 14086100", () => {

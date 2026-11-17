@@ -37,6 +37,7 @@ import { inboxWriteRows, type WriteVerbs, type RulingRow } from "./inbox-write.t
 import { SubjectText, citedReferences, subjectDocument } from "@pe/kit/lang/subject-text";
 import { SubjectTextContext } from "@pe/kit/lang/reach";
 import { RuleAssignment } from "./rule-assignment.tsx";
+import { encounterPatches } from "@pe/duct-systems-contract/ducts";
 
 type InboxWork = {
   doc: DuctsDesign | null;
@@ -155,6 +156,9 @@ export function Inbox({
         </Button>
       );
       switch (verb.kind) {
+        case "encounter":
+          return make(`e${i}`, Link, verb.label, verb.label,
+            () => void work.write(encounterPatches(verb.issue, verb.choice, work.doc)));
         case "price-as":
           return worded ? (
             <RuleAssignment key={`rule${i}`} family={verb.family} work={work} />

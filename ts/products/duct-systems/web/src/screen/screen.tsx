@@ -1,4 +1,5 @@
 import { Settings } from "lucide-react";
+import { encounterRows } from "../encounter-closer.ts";
 import {
   Popover,
   PopoverTrigger,
@@ -688,7 +689,7 @@ function useInboxProjection(
       roles: surveyed.roles,
       write: { edit, esp: 0 },
     });
-    return { heal, inbox: { ...base, diagnostics: [...base.diagnostics, ...noRuns] } };
+    return { heal, inbox: { ...base, fix: [...base.fix, ...encounterRows(priced.calcs.flatMap(c => c.issues))], diagnostics: [...base.diagnostics, ...noRuns] } };
   }, [snapshot, priced, doc, projection, edit, analysis]);
 }
 export function RulesBody({ ctx, wide = false }: { ctx: DuctsDrawContext; wide?: boolean }) {

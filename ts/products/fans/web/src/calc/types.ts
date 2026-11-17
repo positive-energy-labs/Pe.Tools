@@ -22,6 +22,7 @@ export interface RosterProps {
   loading: boolean;
 }
 export interface LedgerProps {
+  subjectFor?: (id: number) => string;
   sheet: OpenCalc | null;
   blockers: readonly CalcBlocker[];
   taken: readonly string[];
