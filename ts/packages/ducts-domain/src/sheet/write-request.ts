@@ -4,8 +4,10 @@ import type { CompleteClaim, DomainClaim } from "./encounters.ts";
 import type { Sheet } from "./types.ts";
 import { accessoryWrites } from "./accessory-writes.ts";
 
-declare const MINTED: unique symbol;
-/** The wire payload, with a phantom capability that only this mint supplies. */
+type FittingWrite = DuctsApplyInput["fittings"][number] & { ruleKey: string };
+
+const MINTED = Symbol("fan write request");
+/** The wire payload; only this mint supplies its hidden symbol capability, omitted by JSON. */
 export type FanWriteRequest = DuctsApplyInput & { readonly [MINTED]: true };
 export interface FanWriteContext {
   /** Stamped at plan and reused at apply, so unchanged inputs seal identically. */
@@ -45,7 +47,7 @@ export function mintWriteRequest(
         .map((l) => l.elementId),
     ),
   ];
-  const fittings: DuctsApplyInput["fittings"] = fittingIds.flatMap((id) => {
+  const fittings: FittingWrite[] = fittingIds.flatMap((id) => {
     const evidence = legs
       .filter((l) => l.elementId === id)
       .flatMap((l) => (l.evidence.kind === "coefficient" ? [l.evidence] : []));
@@ -167,7 +169,8 @@ export function mintWriteRequest(
       })),
     );
   }
-  return {
+  const request: FanWriteRequest = {
+    [MINTED]: true,
     slots,
     fittings,
     terminals,
@@ -181,7 +184,7 @@ export function mintWriteRequest(
       ...snapshot.store,
       appliedAt,
       slots,
-      rules: Object.fromEntries(fittings.map((f) => [f.ruleKey!, { table: f.table }])),
+      rules: Object.fromEntries(fittings.map((f) => [f.ruleKey, { table: f.table }])),
       instances: Object.fromEntries(
         fittings.map((f) => [
           String(f.id),
@@ -200,5 +203,6 @@ export function mintWriteRequest(
       ...context.rulings,
     },
     storeDeletes: context.storeDeletes,
-  } as FanWriteRequest;
+  };
+  return Object.defineProperty(request, MINTED, { enumerable: false });
 }
