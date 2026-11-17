@@ -2,7 +2,7 @@ import { expect, test } from "vite-plus/test";
 import { peaAgentInstructions } from "../src/pea/instructions.ts";
 import { bundledPeaSkills } from "../src/pea/skills.ts";
 import { productGuides } from "../src/pea/guides.generated.ts";
-import { renderDuctsSkill } from "../../../products/fans/contract/src/pea/ducts-skill.ts";
+import { renderDuctsSkill } from "@pe/fans-contract/pea/ducts-skill";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { renderProductGuides } from "../../../apps/web/scripts/product-guides.ts";
