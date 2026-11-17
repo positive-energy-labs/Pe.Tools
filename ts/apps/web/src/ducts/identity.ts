@@ -11,14 +11,15 @@ export const activeName = (value: Many<SubjectRefCode>, roster: readonly string[
 };
 export type DuctsDestination = { kind: "route" } | { kind: "rule"; key: string } | { kind: "subject"; code: SubjectRefCode };
 export function ductsLink(
-  ids: readonly string[],
+  ids: readonly string[] | "all",
   search: Readonly<Record<string, unknown>>,
   destination: DuctsDestination = { kind: "route" },
 ) {
   const params = new URLSearchParams();
   for (const key of ["target", "fixture", "thread"])
     if (typeof search[key] === "string") params.set(key, search[key]);
-  if (ids.length) params.set("system", JSON.stringify({ kind: "ids", ids: ids.map(systemCode) }));
+  if (ids === "all") params.set("system", JSON.stringify({ kind: "all" }));
+  else if (ids.length) params.set("system", JSON.stringify({ kind: "ids", ids: ids.map(systemCode) }));
   // A rule is a route attention place, never a SubjectRef (ADR 0035 rule 9).
   if (destination.kind === "rule")
     params.set("selected", JSON.stringify([{ kind: "focus", id: `rule:${destination.key}` }]));
