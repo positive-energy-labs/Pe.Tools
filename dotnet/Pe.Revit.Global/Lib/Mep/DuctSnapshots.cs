@@ -672,6 +672,7 @@ public static class DuctSnapshots {
                 break;
             case DuctNodeKind.Equipment:
                 if (slots.RequiredEsp != null) facts.Add(Fact(DuctNetwork.ExternalStatic, Converted(Named(e, slots.RequiredEsp), UnitTypeId.InchesOfWater60DegreesFahrenheit), "in-wg", DuctProvenance.DesignerStated));
+                if (slots.RatedEsp != null) facts.Add(Fact("ratedStatic", Converted(Named(e, slots.RatedEsp), UnitTypeId.InchesOfWater60DegreesFahrenheit), "in-wg", DuctProvenance.DesignerStated));
                 var (fanCfm, fanFrom) = SlotFlow(e, slots.FanFlow);
                 flowParameter = fanFrom;
                 facts.Add(Fact("fanFlow", fanCfm, "cfm", DuctProvenance.DesignerStated));
