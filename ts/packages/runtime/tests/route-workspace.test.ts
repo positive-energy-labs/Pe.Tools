@@ -58,6 +58,14 @@ const documentA: WorkKey = {
   route: "test-route",
   target: address("C:\\Models\\A.rvt"),
 };
+
+test("trusted publish requires a resolvable caller and stamps the resolved author", async () => {
+  const options = { registrations: [{ spec: cellSpec }], store: memoryStore().store };
+  expect(() => new RouteWorkspace(options).publish(documentA, "test-route", [], 0)).toThrow("admitted caller");
+  const routes = new RouteWorkspace({ ...options, publicationAuthor: () => "pea" });
+  expect(await routes.publish(documentA, "test-route", [{ path: ["esp", "a"], value: { edit: { value: { inWg: 1 } } } }], 0))
+    .toMatchObject({ ok: true, doc: { esp: { a: { edit: { by: "pea" } } } } });
+});
 const documentB: WorkKey = {
   binding: "address" as const,
   route: "test-route",

@@ -154,6 +154,8 @@ export type RouteWorkspaceOptions = {
   registrations: readonly RouteWorkspaceRegistration[];
   /** Root-fixed source policy, checked before reads or writes at a mutation boundary. */
   authorizeMutation?: (verb: "edit" | "undo" | "redo" | "publish" | "retire") => void;
+  /** Required for trusted publication; the host resolves the admitted caller at invocation time. */
+  publicationAuthor?: () => WorkAuthor;
   workHistoryLimits?: { readonly maxCount: number; readonly maxBytes: number };
 } & (
   | { store: RouteDocumentStore; capture?: WorkReadCapture; recorded?: never }
@@ -907,7 +909,9 @@ export class RouteWorkspace {
     receiptId?: string,
   ) {
     this.#authorize("publish");
-    return this.apply(scope, route, "human", patches, expectedRevision, true, {
+    if (!this.options.publicationAuthor) throw Error("Trusted publication requires an admitted caller");
+    const by = this.options.publicationAuthor();
+    return this.apply(scope, route, by, patches, expectedRevision, true, {
       kind: "apply",
       press: null,
       receiptId,
