@@ -47,7 +47,7 @@ The owner's rulings in their original words. The plan, the waves and the estimat
 
 ## produces
 
-A progress report to the owner at each wake that finds something changed, in the root's own thread, short enough to read on a phone: waves closed out of waves planned, test rows and journey rows PROVEN out of each declared, hours and lines against the plan, the backlog's open count, what changed since the last report, and what waits in the owner queue. A count that should read 0 and does not is named first.
+A progress report to the owner at each wake that finds something changed, in the root's own thread, short enough to read on a phone: waves closed out of waves planned, test rows and journey rows PROVEN out of each declared, hours and lines against the plan, the backlog's open count, what changed since the last report, and what waits in the owner queue. A count that should read 0 and does not is named first. When a wave closes, and when the owner asks how the run is going, the report also shows the run's cadence, drawn with `mine`'s cadence verb and rendered in the root's thread, because the owner reads convergence at a glance from it and from nothing else.
 
 The wake is one T3 schedule bound to the root's own thread, so the owner sees one entry per run and stops a run's wakes by deleting it. The root arms it when the plan is agreed, with `schedule_task`, titled `<run> wake`, at an interval of 40 minutes, and writes its id to `wake.id` in the run directory. It deletes it with `delete_scheduled_task` when the run ends or parks, because a parked run wakes on the owner's message alone. The schedule's prompt is the whole checklist, so that no compaction can drop it:
 

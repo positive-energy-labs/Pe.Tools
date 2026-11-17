@@ -79,6 +79,20 @@ def row_counts(text):
     return {s: found[s] for s in STAMPS}
 
 
+def row_kinds(text):
+    """Counts per kind, from the `## Test rows` and `## Journey rows` headings `delegate` names; {} without them."""
+    sections, kind = collections.defaultdict(list), None
+    for line in text.splitlines():
+        heading = re.match(r'#+\s*(test|journey) rows\b', line, re.I)
+        if heading:
+            kind = heading[1].lower()
+        elif line.startswith('#'):
+            kind = None
+        elif kind:
+            sections[kind].append(line)
+    return {k: row_counts('\n'.join(v)) for k, v in sections.items()}
+
+
 def resolve(name, refs):
     """A map may name a slice (`P1-undo`) where git has `crusade/fans-P1-undo`: the one ref ending in it."""
     if name in refs:
@@ -265,8 +279,10 @@ def main(argv=None):
     lines += ['', '## Waves', '', optional(waves) if args.map else 'no map']
     for title, name, count, order in (('Rows', 'ROWS.md', row_counts, STAMPS), ('Backlog', 'BACKLOG.md', backlog_counts, STATES)):
         def counted():
-            found = count((args.run_dir / name).read_text(encoding='utf-8'))
-            return ', '.join('%s %d' % (k, found[k]) for k in order)
+            text = (args.run_dir / name).read_text(encoding='utf-8')
+            fmt = lambda found: ', '.join('%s %d' % (k, found[k]) for k in order)
+            kinds = row_kinds(text) if name == 'ROWS.md' else {}
+            return '\n'.join([fmt(count(text))] + ['- %s rows: %s' % (k, fmt(v)) for k, v in sorted(kinds.items())])
         lines += ['', '## ' + title, '', optional(counted)]
     lines += ['', '## Pulse', '', optional(lambda: pulse(previous, tip, args.map)), '', '## Partners', '']
     snapshot = optional(lambda: thread_snapshot(args.root, now))
