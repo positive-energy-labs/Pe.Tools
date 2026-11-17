@@ -82,6 +82,7 @@ import {
   claimOf,
   encountersOf,
   hostStatic,
+  pricesBeyond,
   type EncounterRuling,
   type HostCalc,
   whole,
@@ -1903,20 +1904,25 @@ function buildCalcPass(input: BuildCalcInput, assumeHeals: boolean): Calc {
           : "absent"));
   const met = encountersOf(input.fan, paths, pricer.legs, input.encounterRulings);
   const gaps: CoverageGap[] = [];
+  const deadheads = new Map<string, string>();
   for (const m of met) {
     if (m.policy.static !== "host-calc" || m.encounter.verdict !== "accepted") continue;
     const read = hostStatic(hostOf(m.encounter.host), m.encounter, network);
-    if ("kind" in read) gaps.push(read);
-    else
+    if ("kind" in read) {
+      if (read.kind === "backflow") deadheads.set(backflowId(m.encounter), read.detail);
+      else gaps.push(read);
+    } else
       m.encounter.static = {
         kind: "host-calc",
         basis: read.basis,
-        inWg: round(read.inWg),
-        source: `cumulative loss from fan ${fanKey(m.encounter.host)} to ${g.name(m.encounter.elementId)}`,
+        inWg: pricesBeyond(m, paths, pricer.legs) ? 0 : round(read.inWg),
+        source: `${read.source} (fan ${fanKey(m.encounter.host)} at ${g.name(m.encounter.elementId)})`,
       };
   }
   // Q3: backflow is an error on the calc and the picture whatever a person ruled.
-  for (const m of met)
+  for (const m of met) {
+    const reason = deadheads.get(backflowId(m.encounter)) ??
+      (m.encounter.static.kind === "host-calc" ? m.encounter.static.source : null);
     if (m.policy.backflow && !pricer.blockers.has(backflowId(m.encounter)))
       pricer.blockers.set(backflowId(m.encounter), {
         id: backflowId(m.encounter),
@@ -1924,10 +1930,11 @@ function buildCalcPass(input: BuildCalcInput, assumeHeals: boolean): Calc {
         elementId: m.encounter.elementId,
         connector: m.encounter.connector,
         owner: m.encounter.host,
-        detail: `${g.name(unit.id)} discharges into the positive-pressure duct of fan ${tagOf(m.encounter.host.unitId) || g.name(m.encounter.host.unitId)} at ${g.name(m.encounter.elementId)}`,
+        detail: `${g.name(unit.id)} discharges into the positive-pressure duct of fan ${tagOf(m.encounter.host.unitId) || g.name(m.encounter.host.unitId)} at ${g.name(m.encounter.elementId)}${reason ? `; ${reason}` : ""}`,
         effectInWg: m.encounter.static.kind === "host-calc" ? m.encounter.static.inWg : null,
         closer: { kind: "ruling", note: "rule this tie-in accepted or refused" },
       });
+  }
   // Q4 (implementor default 2026-11-16, queued to the owner): a family direction the network reads the
   // other way is an error, and an unruled error is never a warning, so it withholds `complete`.
   if (directionMismatch)
@@ -1953,7 +1960,7 @@ function buildCalcPass(input: BuildCalcInput, assumeHeals: boolean): Calc {
     basis,
     paths,
     legs: pricer.legs,
-    blockingIds: blockers.filter((b) => !backflow.has(b.id)).map((b) => b.id),
+    blockingIds: blockers.filter((b) => !backflow.has(b.id) || deadheads.has(b.id)).map((b) => b.id),
     coverage: coverageOf(input.snapshot, walked),
     gaps,
     met,

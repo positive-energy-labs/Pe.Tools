@@ -393,6 +393,9 @@ export function CalcPicture({
           </>
         )}{" "}
         · {blockers.length} blocker{blockers.length === 1 ? "" : "s"}
+        {blockers.filter((b) => b.kind === "backflow").map((b) => (
+          <span key={b.id} data-tone="caution"> · {b.detail}</span>
+        ))}
       </span>
     );
   return picture({
