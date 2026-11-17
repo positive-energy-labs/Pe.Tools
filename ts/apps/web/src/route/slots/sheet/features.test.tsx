@@ -103,10 +103,10 @@ test.each([null, { kind: "document" as const, ref: { session: "session", openId:
   action.mockClear();
   const refresh = vi.fn();
   action.mockResolvedValue({ state: "succeeded", result: { tier: "firm", path: "shared/Settings/ducts.json" } });
-  const slot = { bindings: { allowance: setting("ducts", ["criteria", "allowanceInWg", "return"], { kind: "number" }, ["firm"], { label: "Return allowance" }) } };
+  const slot = { bindings: { required: ductsSettings["setting.ducts.parameters.requiredEsp"]!, allowance: setting("ducts", ["criteria", "allowanceInWg", "return"], { kind: "number" }, ["firm"], { label: "Return allowance" }) } };
   const ctx = { target, cells: { doc: {} }, page: { read: () => ({}) }, refresh,
     value: { state: "ready", value: { settings: { ducts: [
-      { tier: "firm", home: "shared", name: "shared", path: "shared/Settings/ducts.json", sha256: "prior", json: { criteria: { allowanceInWg: { return: 0.2 } } } },
+      { tier: "firm", home: "shared", name: "shared", path: "shared/Settings/ducts.json", sha256: "prior", json: { parameters: { requiredEsp: "ESP" }, criteria: { allowanceInWg: { return: 0.2 } } } },
     ] } } } };
   Object.assign(ctx.cells, { at: (path: readonly string[]) => homeHandle(path, ctx.value.value, async input => {
     await action({ id: crypto.randomUUID(), key: "settings.tiers.write", target: target ?? { kind: "host" }, input }); refresh();
@@ -122,6 +122,14 @@ test.each([null, { kind: "document" as const, ref: { session: "session", openId:
   }));
   expect(refresh).toHaveBeenCalledOnce();
   expect((await screen.findByRole("status")).textContent).toContain("Saved at firm");
+  const esp = screen.getByRole("textbox", { name: "requiredEsp slot (empty writes nowhere): value to save" });
+  expect(esp.closest("[data-source]")?.getAttribute("data-source")).toBe("firm");
+  fireEvent.change(esp, { target: { value: "" } });
+  fireEvent.keyDown(esp, { key: "Enter" });
+  fireEvent.click(screen.getByRole("button", { name: "Save requiredEsp slot (empty writes nowhere) at the firm home" }));
+  await vi.waitFor(() => expect(action).toHaveBeenLastCalledWith(expect.objectContaining({ input: {
+    owner: "ducts", tier: "firm", path: ["parameters", "requiredEsp"], value: "", expectedSha256: "prior",
+  } })));
 });
 
 // Mutant: omit the re-read after a refused stale-hash save; the sheet stays at 800.

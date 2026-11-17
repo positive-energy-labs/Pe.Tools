@@ -236,6 +236,7 @@ function LedgerContent({ ctx, snapshot }: { ctx: CalcContext; snapshot: DuctSnap
         loading: ctx.value.state === "refreshing",
         error: null,
         changeInputs: changeInputs,
+        subjectFor: id => elementSubject(nativeElement(id)),
         closerOf: closerOf,
         close: (closer: Closer) => changeInputs(editsFor([closer]), { label: closer.verb }),
         closeMany: (closers: readonly Closer[]) => changeInputs(editsFor(closers)),

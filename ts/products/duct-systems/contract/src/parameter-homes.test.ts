@@ -13,7 +13,7 @@ it("a firm can name RequiredEsp", () => {
 });
 it("an explicit empty RequiredEsp survives as writes nowhere", () => {
   expect(slots({ requiredEsp: "" })).toEqual({ requiredEsp: "" });
-  expect(ductsSettings["setting.ducts.parameters.requiredEsp"]?.domain).toMatchObject({ choices: [{ value: "", label: "writes nowhere" }] });
+  expect(ductsSettings["setting.ducts.parameters.requiredEsp"]?.label).toContain("writes nowhere");
 });
 it("RequiredEsp cannot overwrite RatedEsp", () => {
   const schema = ductsApplyInputSchema.shape.slots;

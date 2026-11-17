@@ -21,7 +21,7 @@ export const ductsSettings: Readonly<Record<string, SheetBinding>> = {
       label: side ? `${criterionLabel(key)} ${side}` : criterionLabel(key), default: side && typeof base === "object" ? base[side] : base,
     })];
   })),
-  ...Object.fromEntries(DUCT_PARAMETER_KEYS.map(key => [`setting.ducts.parameters.${key}`, setting("ducts", ["parameters", key], key === "requiredEsp" ? { ...parameterName, shape: ductParameterNameSchema(key), choices: [{ value: "", label: "writes nowhere" }] } : parameterName, ["project", "firm"], { label: `${key} slot` })])),
+  ...Object.fromEntries(DUCT_PARAMETER_KEYS.map(key => [`setting.ducts.parameters.${key}`, setting("ducts", ["parameters", key], { ...parameterName, shape: ductParameterNameSchema(key) }, ["project", "firm"], { label: key === "requiredEsp" ? "requiredEsp slot (empty writes nowhere)" : `${key} slot` })])),
   "setting.ducts.designFriction": setting("ducts", ["designFriction"], { kind: "number", exclusiveMin: 0, unit: "in-wg/100 ft", digits: 3 }, ["project", "firm"], { label: "Design friction", default: 0.08 }),
 };
 export type SettingDeclaration = { name: string; label: string; default: unknown; domain: Domain; home: Extract<Home, { at: "setting" }> };

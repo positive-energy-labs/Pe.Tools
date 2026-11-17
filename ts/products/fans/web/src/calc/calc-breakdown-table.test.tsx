@@ -4,13 +4,58 @@
  * rows it shows, and a terminal stating no flow of its own reads the flow its run carries with
  * where that came from, never the alarm "none".
  */
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, act } from "@testing-library/react";
 import { afterEach, expect, it } from "vite-plus/test";
 import type { DuctsInputs } from "@pe/agent-contracts";
 import type { Detail } from "@pe/ducts-web/calc/model";
 import { derivedFlowSource, sideCaption, CalcBreakdown } from "./calc-breakdown-table.tsx";
+import { fansCalcEditsSchema } from "@pe/ducts-contract/duct-inputs";
+import { fixture, key as workKey, roster as capturedRoster } from "../../../../../apps/host/tests/host-read-graph.test-support";
+import { snapshot as testSnapshot } from "@pe/ducts-domain/test-fixture";
+import { elementSubject } from "@pe/ducts-domain/work-subject";
+import { stableFanKey } from "@pe/ducts-web/calc/model";
 
 afterEach(cleanup);
+
+it("a breakdown edit reaches UniqueId Work and reprices the recorded fan", async () => {
+  const snapshot = structuredClone(testSnapshot);
+  const unit = snapshot.nodes.find(n => n.id === 100)!;
+  unit.id = 14577391;
+  unit.uniqueId = capturedRoster.nodes.find(n => n.id === unit.id)!.uniqueId;
+  unit.connectors[0]!.index = 2;
+  for (const e of [...snapshot.nodes, ...snapshot.segments]) for (const c of e.connectors)
+    if (c.connectedTo?.elementId === 100) c.connectedTo = { elementId: unit.id, connector: 2 };
+  snapshot.groups[0]!.rootIds = [unit.id];
+  const host = await fixture(false, { snapshot });
+  try {
+    const roster = await host.send(0, []);
+    const fan = roster.value!.data.rows.find(row => row.mark === "MUAS-1")!;
+    const selected = [stableFanKey(fan)];
+    const before = (await host.send(1, selected)).value!.data;
+    const ws = before.open!.calcBreakdown!;
+    const run = [...ws.supply.runs, ...ws.return.runs].find(r => r.end.kind === "terminal")!;
+    const node = snapshot.nodes.find(n => n.id === run.end.elementId)!;
+    const subject = elementSubject(node);
+    await host.workspace.start(workKey("fans"), before.fansWork, "human");
+    let pending: Promise<unknown> | undefined;
+    const { container } = render(<CalcBreakdown ws={ws} editing={{
+      inputs: before.calcView.inputs, busy: false, subjectFor: () => subject,
+      changeInputs: edits => { const flows = fansCalcEditsSchema.parse(edits).flows!;
+        pending = host.workspace.apply(workKey("fans"), "fans", "human", Object.entries(flows).map(([key, value]) => ({ path: ["flows", key, "edit"], value: { value } })), 1); },
+    }} />);
+    const input = container.querySelector(`[data-sheet-cell='design cfm at ${node.id}'] input`)!;
+    await act(async () => {
+      fireEvent.change(input, { target: { value: "432" } }); fireEvent.blur(input);
+      await pending;
+    });
+    const after = (await host.send(2, selected)).value!.data;
+    expect(after.fansWork.flows[subject]?.edit?.value).toBe(432);
+    expect(after.calcView.inputs?.terminals[String(node.id)]?.cfm).toMatchObject({ value: 432, source: "Work" });
+    const priced = after.open!.calcBreakdown!;
+    expect([...priced.supply.runs, ...priced.return.runs].find(r => r.id === run.id)?.cfm).toBe(432);
+    expect(after.open?.calcBreakdown?.basis).not.toBe(ws.basis);
+  } finally { await host.close(); }
+});
 
 type Ws = Detail<"worksheet">;
 const end = (kind: Ws["supply"]["runs"][number]["end"]["kind"], elementId: number) => ({
@@ -95,8 +140,10 @@ it("a shared louver keeps its authored flow empty and shows the computed consume
       },
     },
   } as unknown as DuctsInputs;
+  const key = "UniqueId:33aa576c-31d0-4633-b2a9-d7becda6ca74-00d6f76b";
+  let changed: unknown;
   const { container } = render(
-    <CalcBreakdown ws={ws} editing={{ inputs, changeInputs: () => {}, busy: false }} />,
+    <CalcBreakdown ws={ws} editing={{ inputs, subjectFor: () => key, changeInputs: edits => { changed = edits; }, busy: false }} />,
   );
   const cell = container.querySelector("[data-sheet-cell='design cfm at 14088043']")!;
   expect(cell.querySelector("input")?.value).toBe("");
@@ -104,6 +151,9 @@ it("a shared louver keeps its authored flow empty and shows the computed consume
   const source = cell.querySelector("[data-input-source]")!;
   expect(source.textContent).toBe("none");
   expect(source.getAttribute("data-tone")).toBe("alarm");
+  fireEvent.change(cell.querySelector("input")!, { target: { value: "420" } });
+  fireEvent.blur(cell.querySelector("input")!);
+  expect(fansCalcEditsSchema.parse(changed).flows).toEqual({ [key]: 420 });
 
   expect(screen.getByText(/1 run · 1 of 1 branches known · worst known 0\.0469/)).toBeTruthy();
 });
