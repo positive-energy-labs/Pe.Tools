@@ -2,6 +2,7 @@ import { stateFixture } from "../../../tests/isolated-home/storage.ts";
 import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
 import capturedWalk from "./native-recordings/driver-ducts.snapshot.walk.json" with { type: "json" };
+import { DUCT_UNIT_KINDS, FAN_BLOCKER_KINDS } from "@pe/host-contracts/generated";
 import { unavailableFieldOptions } from "./effect-test.ts";
 import { readFileSync, existsSync } from "node:fs";
 import { rm, writeFile, mkdir } from "node:fs/promises";
@@ -156,7 +157,10 @@ test.each(["off", "on", "recovery", "endurance", "tamper", "truncated", "legacy"
   const nativeEntered = Promise.withResolvers<void>(), releaseNative = Promise.withResolvers<void>();
   expect(createHash("sha256").update(readFileSync(source)).digest("hex")).toBe("57b0034722af64d997f35f9301cbff51c3af4728b940a09b2ef3d8405c930c68");
   const raw = JSON.parse(readFileSync(source, "utf8").replace(/^\uFEFF/, ""));
-  const snapshot = Schema.decodeUnknownSync(Schema.Json)(raw.result ?? raw);
+  // The recording predates the generated native vocabulary, as in host-read-graph.test-support.
+  const snapshot = Schema.decodeUnknownSync(Schema.Json)({ ...(raw.result ?? raw), vocabulary: {
+    unitKinds: [...DUCT_UNIT_KINDS], blockerKinds: [...FAN_BLOCKER_KINDS],
+  } });
   const snapshotContract = await run(readSchemas("ducts.snapshot.walk"));
   if (snapshotContract) Schema.decodeUnknownSync(snapshotContract.response)(snapshot);
   await mkdir(join(dir, "catalogs")); await mkdir(join(dir, "Settings"), { recursive: true }); await writeFile(join(dir, "Settings", "ducts.json"), JSON.stringify(FIRM_SEED));
