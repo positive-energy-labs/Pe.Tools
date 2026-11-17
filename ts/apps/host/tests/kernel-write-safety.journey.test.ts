@@ -25,7 +25,7 @@ async function fixture(withPage = false) {
   const recordings = ["sdk-revit.detail.parameter-links", "sdk-revit.apply.parameter-links"];
   let native = await fixtureNative(join(dir, "native"), ...recordings);
   let socket = await native.connect();
-  const makeWorkspace = () => new RouteWorkspace({ registrations: [{ spec: catalogWorkSpecs["parameter-links"] }, { spec: tools.rooms.work }], store: fileRouteDocumentStore(stateFixture(join(dir, "work"))) });
+  const makeWorkspace = () => new RouteWorkspace({ publicationAuthor: () => "human", registrations: [{ spec: catalogWorkSpecs["parameter-links"] }, { spec: tools.rooms.work }], store: fileRouteDocumentStore(stateFixture(join(dir, "work"))) });
   let workspace = makeWorkspace();
   const key = { binding: "address" as const, target: address("C:/model.rvt"), route: "parameter-links" };
   const body = nativeRecordings("sdk-revit.detail.parameter-links").responses["revit.detail.parameter-links"] as any;
