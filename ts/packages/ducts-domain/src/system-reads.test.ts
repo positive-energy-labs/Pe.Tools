@@ -1,5 +1,5 @@
 import { expect, it } from "vite-plus/test";
-import { mergeSnapshots } from "./system-reads.ts";
+import { BLIND_PART, mergeSnapshots } from "./system-reads.ts";
 import { snapshotOf } from "./test-snapshot.ts";
 
 it("a merge keeps every part's lost coverage: only the second part damaged (P-021)", () => {
@@ -30,5 +30,5 @@ it("a merge never drops a part that carries no coverage evidence, and keeps ever
     startId: 9, hops: 4, elementsReached: 6, openEnds: 2, candidates: [end(5), end(6)],
   });
   for (const parts of [[first, snapshotOf()], [snapshotOf(), first]])
-    expect(mergeSnapshots(parts)!.reach).toEqual({ complete: false, unreadPeers: [] });
+    expect(mergeSnapshots(parts)!.reach).toEqual({ complete: false, unreadPeers: [BLIND_PART] });
 });

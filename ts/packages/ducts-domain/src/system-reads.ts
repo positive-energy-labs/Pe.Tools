@@ -88,13 +88,19 @@ const mergeCandidates = (lists: readonly (Candidates | null | undefined)[]): Can
 
 type Coverage = Pick<DuctSnapshot, "walk" | "reach">;
 type Walk = NonNullable<Coverage["walk"]>;
+/**
+ * The unread entry a part with no walk and no reach leaves in the merged reach (P-047). It names no
+ * element (`connector` -1), so `coverageOf` reads it as lost for every fan; `complete: false` alone
+ * was disowned once the reach named another fan's peer.
+ */
+export const BLIND_PART = { elementId: -1, connector: -1 };
 const refKey = (p: { elementId: number; connector: number }) => `${p.elementId}:${p.connector}`;
 /**
  * Coverage over several reads, in the wire shape `coverageOf` (sheet/coverage.ts) reads back as the
  * `read`/`lost` union, so no part's loss can merge away (P-021, P-012, P-033): unread peers union, a
  * walk is truncated if any part's was and keeps every part's candidates and counts, a reach is
  * complete only if every part's was, and a part carrying neither walk nor reach makes the merged
- * reach incomplete. The last part's walk identity (`startId`) stands.
+ * reach incomplete and leaves `BLIND_PART` in it. The last part's walk identity (`startId`) stands.
  * ponytail: hops, elements and open ends are sums, so two walks over shared ducts count them twice.
  */
 export function mergeCoverage(parts: readonly Coverage[]): Coverage {
@@ -123,7 +129,10 @@ export function mergeCoverage(parts: readonly Coverage[]): Coverage {
       reaches.length || blind
         ? {
             complete: !blind && reaches.every((r) => r.complete),
-            unreadPeers: byKey(reaches.flatMap((r) => r.unreadPeers), refKey),
+            unreadPeers: byKey(
+              [...reaches.flatMap((r) => r.unreadPeers), ...(blind ? [BLIND_PART] : [])],
+              refKey,
+            ),
           }
         : parts.at(-1)?.reach,
   };

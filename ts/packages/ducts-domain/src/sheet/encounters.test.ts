@@ -181,6 +181,8 @@ it("coverage: every way a read can fail withholds `complete`, and only a fully r
     "null walk and reach": { walk: null, reach: null },
     "a merged part with no evidence, beside a walk": mergeCoverage([{ walk: TEST_WALK }, {}]),
     "a merged part with no evidence, beside a reach": mergeCoverage([{ walk: null, reach: null }, { reach }]),
+    "a merged part with no evidence, beside a reach that names only another fan's peer (P-047)": mergeCoverage([{}, { reach: { complete: false, unreadPeers: [peer(99)] } }]),
+    "a walk that does not say whether it was truncated (P-047)": { walk: JSON.parse(JSON.stringify({ ...TEST_WALK, truncated: undefined })) }, // off the wire: the key is gone
     "a walk's unread peer on a walked element": { walk: { ...TEST_WALK, unreadPeers: [peer(30)] } },
     "a reach's unread peer on a walked element": { reach: { complete: false, unreadPeers: [peer(30)] } },
     "a failed system seed read (connector -1)": { walk: TEST_WALK, reach: { complete: false, unreadPeers: [peer(555, -1)] } },

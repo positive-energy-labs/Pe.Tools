@@ -473,6 +473,10 @@ class Pricer {
     };
     const stated = this.input.inputs.components[String(e.id)]?.drop;
     if (stated && stated.value != null) return drop(stated.value, provenance(stated));
+    // A refused drop (invalid) withholds the leg with its ref unless it is a model placeholder a loss rule prices.
+    // An invalid winning layer blocks fallback (work-value.ts), so a person's or Pea's unreadable drop never falls to a rule (P-054).
+    if (stated?.status === "invalid" && stated.source !== "model")
+      return drop(null, `${stated.ref ?? provenance(stated)}; the stated drop is unreadable, retype it`);
     if (isSegment(e)) return this.duct(w, flows, side, s, out, cfm);
     const conn = (i: number | undefined) => e.connectors.find((c) => c.index === i);
     if (e.kind === "terminal") {
@@ -480,7 +484,7 @@ class Pricer {
       return t ? drop(t.drop.value, provenance(t.drop)) : drop(null, "terminal not in inputs");
     }
     if (e.kind === "equipment") return drop(null, "inline equipment; no typed drop");
-    // A missing drop has no ref; the family placeholder that demoted it is read from the model again (Chadds' 302 dampers at 1.0).
+    // What is left is the model's refused family placeholder (Chadds' 302 dampers at 1.0).
     const placeholder = stated && stated.value == null ? stated.ref : undefined;
     if (isTap(e)) return this.tap(w, flows, side, s, cfm);
     // A tee walked in at its run: the run port faces the fan on both sides. On the return the air
