@@ -161,12 +161,12 @@ test("computed imports refuse, external content integrity affects the envelope",
 
 test("builtin closures hash independently in declaration order", async () => {
   const f = fixture();
-  const options = ["fans", "ducts"].map((key) => ({
+  const options = ["fans", "duct-systems"].map((key) => ({
     ...f.options,
     data: { ...builtinData, key, address: `/${key}`, work: { ...builtinData.work, route: key } },
   }));
   const closures = await buildBuiltinClosures(options);
-  expect([...closures.keys()]).toEqual(["fans", "ducts"]);
+  expect([...closures.keys()]).toEqual(["fans", "duct-systems"]);
   const alone = await buildBuiltinClosures([options[0]!]);
   expect(alone.get("fans")).toEqual(closures.get("fans"));
 });

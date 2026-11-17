@@ -27,7 +27,7 @@ test("a stated rated ESP is labelled rated with its resolved source, never as re
     esp: { value: 2.658079, source: "Work", units: "in-wg", version: 4, status: "valid", author: null, ref: "test" },
   };
   const draw = () => (
-    <div data-pane-id="sheet-ledger">
+    <div data-pane-id="calc-ledger">
       <Ledger
         props={{
           sheet,

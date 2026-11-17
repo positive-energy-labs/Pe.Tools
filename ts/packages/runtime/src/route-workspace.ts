@@ -68,6 +68,8 @@ export type RouteWorkspaceEvent = {
 );
 
 export interface RouteDocumentStore {
+  /** Visit retired addresses without decoding their value; unreadable files stay in place. */
+  retireRoutes?(routes: ReadonlySet<string>): Promise<void>;
   getState(input: { targetKey: string; route: string }): Promise<unknown>;
   /**
    * `value: null` sets the stored Work aside with its bytes kept and one notice. With a `reason`
@@ -226,6 +228,18 @@ export class RouteWorkspace {
     for (const registration of options.registrations) {
       this.register(registration);
     }
+    this.ready = this.#retireRoutes();
+  }
+
+  /** Startup retirement uses only indexed identities, never the retired Work's schema. */
+  readonly ready: Promise<void>;
+  async #retireRoutes(specs = this.options.registrations.map(({ spec }) => spec)): Promise<void> {
+    if (!this.options.store) return;
+    const retired = new Set(specs.flatMap(spec => spec.retired ?? []));
+    if (!retired.size) return;
+    for (const route of retired)
+      if (this.#registry.has(route)) throw Error(`Retired Work route is still registered: ${route}`);
+    await this.options.store.retireRoutes?.(retired);
   }
 
   /** A trusted plugin's lifetime owns registration, never its saved Work bytes. */
@@ -290,7 +304,7 @@ export class RouteWorkspace {
       receipt.deactivate();
       throw error;
     }
-    const ready: Promise<WorkFeedFailure | null> = Promise.resolve(null);
+    const ready: Promise<WorkFeedFailure | null> = this.ready.then(() => this.#retireRoutes([spec])).then(() => null);
     const record = {
       fingerprint: route.workFingerprint,
       workRoute: work.route,
@@ -406,6 +420,7 @@ export class RouteWorkspace {
   /** Persisted instances, not the registration catalogue. Never calls read/view or carry-over. */
   async instances() {
     return this.#serialized(async () => {
+      await this.ready;
       if (this.options.recorded || !this.#store.listState)
         return { works: [], unindexed: 0, unreadable: 0, truncated: false, available: false };
       const census = await this.#store.listState();
@@ -1247,6 +1262,7 @@ export class RouteWorkspace {
     spec: RouteStateSpec<z.ZodType>,
     create = true,
   ): Promise<RouteEnvelope<unknown> | null> {
+    await this.ready;
     const decoded = await this.#decodeStored(workKey(scope), spec, await this.#carryOver(scope, spec.route));
     if (!decoded) {
       this.#inverses.delete(workKey(scope));

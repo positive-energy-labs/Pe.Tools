@@ -373,7 +373,7 @@ async function journey(module: TypedRoute = fans) {
   const mount = (readOnly = false, place: Partial<PlaceInput> = {}, ports: Parameters<typeof mountTypedRoute>[3] = {}, candidate: TypedRoute = module) => {
     const m = mountTypedRoute(candidate, { ...input, ...place, readOnly }, fingerprint, {
       work, timeline: fixtureTimeline(host.workspace),
-      sources: { "fans.sheet": read }, ...ports,
+      sources: { "fans.calc": read }, ...ports,
     });
     mounts.push(m);
     m.subscribe(() => {});
@@ -394,7 +394,7 @@ async function journey(module: TypedRoute = fans) {
     );
   };
   const cells = () =>
-    m.draw("sheet-inputs", (ctx) => ctx.cells) as DrawContext<any, any, any, any>["cells"];
+    m.draw("calc-inputs", (ctx) => ctx.cells) as DrawContext<any, any, any, any>["cells"];
   const key = () => m.owner()!.handle!.key;
   return {
     host,
@@ -425,7 +425,7 @@ async function journey(module: TypedRoute = fans) {
       await ready();
       await vi.waitFor(() => expect(m.owner()?.absent).toBe(true));
       // Ruling 2026-11-10: /fans owns only its own Work; /ducts' is never staged from here.
-      expect(m.owner("ducts")).toBeUndefined();
+      expect(m.owner("duct-systems")).toBeUndefined();
       await m.startAction()!.run();
       await vi.waitFor(() => expect(m.owner()?.ready).toBe(true));
       await ready();
@@ -468,7 +468,7 @@ test("JZ release reads preserves Work edits until departure or disposal", async 
     j.depart();
     expect(await retained.stage(290, { label: "After departure" })).toMatchObject({ code: "refused" });
     await vi.waitFor(() => expect(reopened.workBasis()).toBeTruthy());
-    const disposedCell = (reopened.draw("sheet-inputs", ctx => ctx.cells) as DrawContext<any, any, any, any>["cells"]).at(["flows", terminalA]);
+    const disposedCell = (reopened.draw("calc-inputs", ctx => ctx.cells) as DrawContext<any, any, any, any>["cells"]).at(["flows", terminalA]);
     reopened.dispose();
     expect(await disposedCell.stage(300, { label: "After disposal" })).toMatchObject({ code: "refused" });
     expect(reopened.owner()!.handle!.revision).toBe(revision + 1);
@@ -558,7 +558,7 @@ test("JW2 receive Pea proposals, accept and deny individual cells without changi
   try {
     await j.start();
     const by: Caller = { kind: "pea", context: "jw", thread: "jw-proposals" };
-    const stored = structuredClone(valueOf(j.m.value()).sheetSnapshot);
+    const stored = structuredClone(valueOf(j.m.value()).calcSnapshot);
     expect(
       stored.nodes.length,
       "H20: proposal journey starts with actual recorded native facts",
@@ -600,7 +600,7 @@ test("JW2 receive Pea proposals, accept and deny individual cells without changi
     await j.ready();
     expect(j.m.owner()!.doc.flows[terminalB]?.edit, "H20: deny clears the proposed edit").toBeNull();
     expect(
-      valueOf(j.m.value()).sheetSnapshot,
+      valueOf(j.m.value()).calcSnapshot,
       "H20: stored native facts survive proposal transitions",
     ).toEqual(stored);
     expect(j.m.owner()!.doc.flows[terminalA].edit.value).toEqual(250);
@@ -879,13 +879,13 @@ test("JZ a null Place target refuses Work before dispatch but still permits clie
     // The read is value-less, so the shell draws its line and no body: there is no cell to stage through.
     // The refused stage over a held value keeps its witness in rooms.test.tsx ("Unsafe").
     let drew = false;
-    unbound.draw("sheet-inputs", () => { drew = true; return null; });
+    unbound.draw("calc-inputs", () => { drew = true; return null; });
     expect(drew, "No target means no body, so no write authority").toBe(false);
     expect(j.writes).toHaveLength(count);
     expect(unbound.owner()!.doc).toEqual(before);
     expect(unbound.owner()!.handle!.revision).toBe(revision);
-    unbound.page.query({ sheetPath: "inspection-only" });
-    expect(unbound.page.read().sheetPath).toBe("inspection-only");
+    unbound.page.query({ calcPath: "inspection-only" });
+    expect(unbound.page.read().calcPath).toBe("inspection-only");
   } finally { await j.close(); }
 }, 60_000);
 
@@ -904,7 +904,7 @@ test("JZ released reads resume once after custody returns through an unchanged a
     await j.start();
     const m = j.mount(false, { custody: { current: () => current }, address: {
       read: () => new URLSearchParams(), write() {}, subscribe(notify) { listeners.add(notify); return () => { listeners.delete(notify); }; },
-    } }, { sources: { "fans.sheet": source } });
+    } }, { sources: { "fans.calc": source } });
     await Promise.allSettled([...tasks]);
     expect(m.value().state === "ready").toBe(true);
     const initial = reads, retained = valueOf(m.value());
@@ -982,7 +982,7 @@ test("JZ audit a read refuses malformed HTTP Value data and recovers without exp
     tasks.add(task); void task.finally(() => tasks.delete(task)); return () => {};
   } };
   try {
-    const m = j.mount(false, {}, { sources: { "fans.sheet": source } }, module);
+    const m = j.mount(false, {}, { sources: { "fans.calc": source } }, module);
     await Promise.allSettled([...tasks]);
     expect(opened).toBe(1);
     expect(m.value().state === "ready").toBe(false);
@@ -1042,8 +1042,8 @@ test("JZ cut /fans has no foreign /ducts cell: staging one refuses and /ducts Wo
   try {
     await j.start();
     const cells = j.cells(), key = JOIN_KEY(["10:1", "30:1"]), local = j.m.owner()!.handle;
-    expect(j.m.owner("ducts")).toBeUndefined();
-    expect(() => cells.at(["assumptions", key], "ducts")).toThrow("No owning Work for assumptions");
+    expect(j.m.owner("duct-systems")).toBeUndefined();
+    expect(() => cells.at(["assumptions", key], "duct-systems")).toThrow("No owning Work for assumptions");
     await j.settle();
     expect(j.m.owner()!.handle).toEqual(local);
   } finally { await j.close(); }

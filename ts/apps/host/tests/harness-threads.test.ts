@@ -207,7 +207,7 @@ test.each(["claude", "codex"] as const)(
       read = reader(h);
     const target = { session: "A", openId: "open-A" };
     const address = documentAddress("C:/Models/chain.rvt");
-    const key = bindWork("ducts", address, undefined, target);
+    const key = bindWork("duct-systems", address, undefined, target);
     const routes = createPeRoutes({
       registrations: [{ spec: tools.ducts.work }, { spec: tools.fans.work }],
       store: fileRouteDocumentStore(stateFixture(join(dir, "work"))),
@@ -434,7 +434,7 @@ test.each(["claude", "codex"] as const)(
           { kind: "publication", state: "succeeded" },
         ],
       });
-      const saved = (await routes.workspace.view(key, "ducts"))!.doc as never;
+      const saved = (await routes.workspace.view(key, "duct-systems"))!.doc as never;
       const fans = fansDocumentSchema.parse((await routes.workspace.view({ ...key, route: "fans" }, "fans"))!.doc);
       expect(stagedDucts(saved, fans).equipmentFlows).toEqual({});
       expect(writes[0]).toMatchObject({ equipmentFlows: [{ id: 14577391, cfm: 975, source: "chain" }] });

@@ -84,8 +84,8 @@ export function ductActionExecutors(
     // The sheet pair takes the asking route's own handle (/ducts or /fans); the sibling comes from readWorks or the same document.
     const primary = ctx.admission.input.work as import("@pe/agent-contracts").WorkHandle;
     const siblings = z.record(z.string(), workHandleSchema).optional().parse(ctx.admission.input.readWorks);
-    const ductsView = primary.key.route === "ducts" || siblings?.ducts ? null : await ctx.work.view({ ...primary.key, route: "ducts" }, "ducts");
-    const raw = primary.key.route === "ducts" ? primary : siblings?.ducts ?? ductsView?.handle;
+    const ductsView = primary.key.route === "duct-systems" || siblings?.ducts ? null : await ctx.work.view({ ...primary.key, route: "duct-systems" }, "duct-systems");
+    const raw = primary.key.route === "duct-systems" ? primary : siblings?.ducts ?? ductsView?.handle;
     if (!raw) throw refused("Ducts Work is unavailable", "work.unavailable");
     const { process } = await lifetime(bridge, target, "project", deps);
     const doc = await ctx.selectWork(tools.ducts.work, raw, (_doc, cells) => ({
@@ -216,12 +216,12 @@ export function ductActionExecutors(
         };
     }
     const asked = ctx.admission.input.work as { key: import("@pe/agent-contracts").WorkKey };
-    const handle = { key: { ...asked.key, route: "ducts" } };
+    const handle = { key: { ...asked.key, route: "duct-systems" } };
     const paths = phase === "apply" ? entry.retires(p.input, value, p.subjects, p.cells) : [];
     const fanPaths = paths.filter((path) => tools.fans.work.editable.some((pattern) => pattern[0] === path[0]),
     );
     const ductPaths = paths.filter((path) => !fanPaths.includes(path));
-    const retired = ductPaths.length ? yield* execution.retireWork(handle.key, "ducts", ductPaths) : undefined;
+    const retired = ductPaths.length ? yield* execution.retireWork(handle.key, "duct-systems", ductPaths) : undefined;
     if (fanPaths.length) yield* execution.retireWork({ ...handle.key, route: "fans" }, "fans", fanPaths);
     return {
       value,

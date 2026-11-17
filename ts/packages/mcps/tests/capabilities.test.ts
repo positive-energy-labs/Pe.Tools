@@ -589,7 +589,7 @@ test("pe_read route graphs read the real host door before releasing their public
     return f.request(request);
   });
   try {
-    for (const route of ["fans", "ducts"]) {
+    for (const route of ["fans", "duct-systems"]) {
       const result = await run(peRead, { key: `route:${route}`, timeoutSeconds: 5 });
       expect(result, JSON.stringify(result)).toMatchObject({ ok: true });
       expect(result).toMatchObject({
@@ -599,7 +599,7 @@ test("pe_read route graphs read the real host door before releasing their public
         },
       });
     }
-    for (const route of ["fans", "ducts"]) {
+    for (const route of ["fans", "duct-systems"]) {
       const calls = requests.filter((request) => request.read === `route:${route}`);
       expect(calls).toHaveLength(2);
       expect(calls[0]!.release).not.toBe(true);
@@ -642,7 +642,7 @@ test("Pea discovers the sheet plan, decodes any route's handle, and previews a c
       flows: { [elementSubject(closed.nodes.find(node => node.id === 3)!)]: { edit: { value: 250, by: "human" } } },
     });
     const fans = (await f.saved.view({ ...f.key, route: "fans" }, "fans"))!.handle;
-    const work = (await f.saved.view(f.key, "ducts"))!.handle;
+    const work = (await f.saved.view(f.key, "duct-systems"))!.handle;
     const source = catalog();
     const paths: string[] = [];
     vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
@@ -810,8 +810,8 @@ test("W0-1: a Pea undo on /fans steps the Ducts edit the fans read used", async 
   const project = "C:\\Models\\projectA.rvt";
   const ref = { session: "b1", openId: "project-a" };
   const fansWork = { binding: "address", route: "fans", target: project };
-  const ductsWork = { ...fansWork, route: "ducts" };
-  const step = { work: ductsWork, revision: 7, label: "Ducts supply velocity 925" };
+  const ductSystemsWork = { ...fansWork, route: "duct-systems" };
+  const step = { work: ductSystemsWork, revision: 7, label: "Ducts supply velocity 925" };
   const reads: { read: string; args: { works?: { route: string }[] } }[] = [];
   const historyBodies: unknown[] = [];
   vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
@@ -835,9 +835,9 @@ test("W0-1: a Pea undo on /fans steps the Ducts edit the fans read used", async 
       reads.push(body);
       // The roster's publication names the Works its evaluation reached: Fans and Ducts.
       if (body.read === "fans.roster")
-        return Response.json({ value: { data: { rows: [] }, works: [fansWork, ductsWork] } });
+        return Response.json({ value: { data: { rows: [] }, works: [fansWork, ductSystemsWork] } });
       // The host Timeline stand-in: Pea's last step is a Ducts edit, offered only to a Place that names Ducts.
-      const member = body.args.works.some((key: { route: string }) => key.route === "ducts");
+      const member = body.args.works.some((key: { route: string }) => key.route === "duct-systems");
       return Response.json({
         value: {
           data: {
@@ -874,7 +874,7 @@ test("W0-1: a Pea undo on /fans steps the Ducts edit the fans read used", async 
     expect(reads[0]).toMatchObject({ read: "fans.roster", args: { target: ref } });
     // The owner once, then the read Work; never the findings Work, which the host adds.
     expect(historyBodies).toEqual([
-      { direction: "undo", works: [fansWork, ductsWork], expected: step },
+      { direction: "undo", works: [fansWork, ductSystemsWork], expected: step },
     ]);
   } finally {
     vi.unstubAllGlobals();
@@ -1205,9 +1205,9 @@ test("Pea dispatches roster and sheet through the registered read door without a
       });
       return Response.json({ target, rows: [] });
     }
-    if (path === "/pe/reads/value" && request.read === "ducts.sheet") {
+    if (path === "/pe/reads/value" && request.read === "fans.calc-detail") {
       expect(request).toMatchObject({
-        read: "ducts.sheet",
+        read: "fans.calc-detail",
         subscription: "pea-sheet",
         generation: 0,
         args: {
@@ -1234,7 +1234,7 @@ test("Pea dispatches roster and sheet through the registered read door without a
     result: { rows: [] },
   });
   const input = {
-    read: "ducts.sheet",
+    read: "fans.calc-detail",
     args: { target, mode: "fan", unitId: 14577391, portIndex: 2 },
     subscription: "pea-sheet",
     generation: 0,
@@ -1249,7 +1249,7 @@ test("Pea dispatches roster and sheet through the registered read door without a
   });
 });
 
-test("route:ducts.set-view with no mounted view opens only through an explicit command and ignores an older lease", async () => {
+test("route:duct-systems.set-view with no mounted view opens only through an explicit command and ignores an older lease", async () => {
   fakeRuntimeHost("http://127.0.0.1:9");
   const opens: unknown[] = [];
   const sets: unknown[] = [];
@@ -1261,18 +1261,18 @@ test("route:ducts.set-view with no mounted view opens only through an explicit c
     const url = new URL(input instanceof Request ? input.url : String(input));
     const method = init?.method ?? "GET";
     if (url.pathname === "/pe/capabilities") return Response.json(catalog());
-    if (url.pathname === "/pe/route-view/ducts/open") {
+    if (url.pathname === "/pe/route-view/duct-systems/open") {
       opens.push(JSON.parse(init!.body as string));
       mounted = visible;
       return Response.json({ ok: true, commandId });
     }
-    if (url.pathname === "/pe/route-view/ducts" && method === "GET")
+    if (url.pathname === "/pe/route-view/duct-systems" && method === "GET")
       return mounted
         ? Response.json({
             instance: "6f1c2a9e-4b7d-4c3e-9a1f-2d8e5b7c0a11",
             revision: 3,
             openCommandId: reads++ ? commandId : "an-older-command",
-            route: "ducts",
+            route: "duct-systems",
             thread: "t1",
             page: { system: "" },
             facts: { systems: [{ name: "SA 19" }], levels: [] },
@@ -1281,14 +1281,14 @@ test("route:ducts.set-view with no mounted view opens only through an explicit c
             { ok: false, error: "no mounted ducts view", instances: [] },
             { status: 409 },
           );
-    if (url.pathname === "/pe/route-view/ducts/set") {
+    if (url.pathname === "/pe/route-view/duct-systems/set") {
       sets.push(JSON.parse(init!.body as string));
       return Response.json({ ok: true, context: {} });
     }
     throw Error(`unexpected ${method} ${url.pathname}`);
   });
   const result = await run(peDo, {
-    key: "route:ducts.set-view",
+    key: "route:duct-systems.set-view",
     input: { system: "sa 19" },
     timeoutSeconds: 30,
   });
@@ -1311,7 +1311,7 @@ test("route:ducts.set-view with no mounted view opens only through an explicit c
   sets.length = 0;
   expect(
     await run(peDo, {
-      key: "route:ducts.set-view",
+      key: "route:duct-systems.set-view",
       timeoutSeconds: 30,
       input: { instance: "6f1c2a9e-4b7d-4c3e-9a1f-2d8e5b7c0a11", revision: 1, system: "SA 19" },
     }),
@@ -1320,7 +1320,7 @@ test("route:ducts.set-view with no mounted view opens only through an explicit c
   sets.length = 0;
   expect(
     await run(peDo, {
-      key: "route:ducts.set-view",
+      key: "route:duct-systems.set-view",
       timeoutSeconds: 30,
       input: { revision: 1, system: "SA 19" },
     }),
@@ -1335,7 +1335,7 @@ test("route:ducts.set-view with no mounted view opens only through an explicit c
   vi.useFakeTimers({ toFake: ["setTimeout"] });
   try {
     const pending = run(peDo, {
-      key: "route:ducts.set-view",
+      key: "route:duct-systems.set-view",
       input: { system: "SA 19" },
       timeoutSeconds: 30,
     });
@@ -1369,7 +1369,7 @@ test("person-only admin routes expose no Page fields in builtin or admitted capa
     for (const key of ["bind", "ops"]) {
       expect(rows.filter((row) => row.key.startsWith(`route:${key}.`))).toEqual([]);
     }
-    expect(rows.some((row) => row.key === "route:ducts.set-view")).toBe(true);
+    expect(rows.some((row) => row.key === "route:duct-systems.set-view")).toBe(true);
   }
 });
 
@@ -1394,7 +1394,7 @@ test("an admitted route's view rows project keys from its agent policy, never th
   });
   expect(JSON.stringify(set.input)).not.toContain('"viewport"');
   // A legacy route keeps its own lease projection.
-  expect(rows.find((row) => row.key === "route:ducts.view")!.description).not.toContain(
+  expect(rows.find((row) => row.key === "route:duct-systems.view")!.description).not.toContain(
     "settable: fan)",
   );
 });

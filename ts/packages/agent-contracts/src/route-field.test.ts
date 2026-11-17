@@ -71,8 +71,8 @@ test("formerly narrowed routes preserve all through URL and Pea", () => {
   // Slice 10: the open rooms are the subject, so every room is the subject's own `all`.
   expect(routeAddress("rooms").read({ room: JSON.stringify({ kind: "all" }) }).page).toHaveProperty("room", { kind: "all" });
   // Slice 8: a picture route's layers are the kernel pose; `default` is the picture's own set and there is no `all`.
-  expect(routeAddress("ducts").read({ layers: JSON.stringify("default") }).page).toHaveProperty("layers", "default");
-  expect(routeAddress("ducts").read({ layers: JSON.stringify("all") }).page).toHaveProperty("layers", "default");
+  expect(routeAddress("duct-systems").read({ layers: JSON.stringify("default") }).page).toHaveProperty("layers", "default");
+  expect(routeAddress("duct-systems").read({ layers: JSON.stringify("all") }).page).toHaveProperty("layers", "default");
 });
 
 test("sort and keyed set constructors own lossless codecs and reject malformed values", () => {

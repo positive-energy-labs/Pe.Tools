@@ -251,23 +251,23 @@ test("JZ numeric cells refuse bounds and fractional integers without changing Wo
       </section>
     </>;
   }
-  const router = createRouter({ routeTree: createRootRoute({ component: Journey }), history: createMemoryHistory({ initialEntries: ["/ducts"] }) });
+  const router = createRouter({ routeTree: createRootRoute({ component: Journey }), history: createMemoryHistory({ initialEntries: ["/duct-systems"] }) });
   const user = userEvent.setup();
   render(<RouterProvider router={router} />);
   const friction = await screen.findByRole("textbox", { name: "Velocity limit supply" });
-  const before = structuredClone(f.saved.get("ducts"));
+  const before = structuredClone(f.saved.get("duct-systems"));
   const revision = ducts.work()!.revision;
   await user.click(friction);
   await user.keyboard("{Control>}a{/Control}-0.1{Enter}");
   await waitFor(() => expect(friction.closest(".dl-cell")?.getAttribute("aria-busy")).not.toBe("true"));
-  expect.soft(f.saved.get("ducts")).toEqual(before);
+  expect.soft(f.saved.get("duct-systems")).toEqual(before);
   expect.soft(ducts.work()!.revision).toBe(revision);
   expect.soft(friction.closest("[data-sheet-cell]")?.textContent).toContain("at least 0");
   await user.click(screen.getByRole("textbox", { name: "Velocity limit supply" }));
   await user.keyboard("{Control>}a{/Control}0.123456789{Enter}");
   await waitFor(() => expect(ducts.owner()?.doc.criteria?.velocitySupplyFpm?.edit).toBeDefined());
   expect.soft(ducts.owner()?.doc.criteria?.velocitySupplyFpm?.edit?.value).toBe(0.123456789);
-  expect.soft((f.saved.get("ducts") as { doc: { criteria?: { velocitySupplyFpm?: { edit?: { value: number } } } } }).doc.criteria?.velocitySupplyFpm?.edit?.value).toBe(0.123456789);
+  expect.soft((f.saved.get("duct-systems") as { doc: { criteria?: { velocitySupplyFpm?: { edit?: { value: number } } } } }).doc.criteria?.velocitySupplyFpm?.edit?.value).toBe(0.123456789);
   const occupants = within(screen.getByRole("region", { name: "Takeoff occupants" }));
   await user.click(occupants.getByRole("textbox"));
   await user.keyboard("{Control>}a{/Control}2.7{Enter}");
@@ -621,7 +621,7 @@ test("JZ Fans undo after apply: public write journey leaves an honest toolbar re
     target: f.target, fixture: null, work: { address: null, open: f.target.ref },
     address: { read: () => new URLSearchParams(), write() {}, subscribe: () => () => {} },
     custody: { current: () => true }, memory: () => ({}),
-  }, routeRegistry.fans!.fingerprint, { work, timeline: fixtureTimeline(f.saved, () => timelineReceipts(f.journal), changed => f.journal.subscribe({ kinds: ["action"] }, changed)), sources: { "fans.sheet": { kind: "use", open(ctx, deliver) {
+  }, routeRegistry.fans!.fingerprint, { work, timeline: fixtureTimeline(f.saved, () => timelineReceipts(f.journal), changed => f.journal.subscribe({ kinds: ["action"] }, changed)), sources: { "fans.calc": { kind: "use", open(ctx, deliver) {
     const packet = fans.spec.core?.source.provide?.("scene", ctx.args);
     if (!packet) throw Error("Missing current Fans fixture");
     deliver({ kind: "complete", revision: 1, value: packet });
@@ -1069,7 +1069,7 @@ test("JZ Fans native before: stage, Plan, inspect method and unset pressure; unr
       },
     }); });
     const f = await createWitness(closes, new Map(), {
-      "ducts.sheet-snapshot": { kind: "use", open(_ctx, deliver) {
+      "fans.calc-detail-snapshot": { kind: "use", open(_ctx, deliver) {
         deliver({ kind: "complete", value: capture, revision: 1 });
       } },
     });
@@ -1131,7 +1131,7 @@ test.each([false, true])(
     const receiptSubscribers=new Set<(state:ReceiptFeedState)=>void>();
     const receipts:WorkJournalDoor["receipts"]=()=>({subscribe(deliver){receiptSubscribers.add(deliver);return ()=>{receiptSubscribers.delete(deliver);};}});
     const f = await createWitness(closes, new Map(), {
-      "ducts.sheet-snapshot": {
+      "fans.calc-detail-snapshot": {
         kind: "use",
         open(_ctx, deliver) {
           snapshots.push(deliver);
@@ -1193,7 +1193,7 @@ test.each([false, true])(
     expect(document.body.textContent).not.toContain(refusedText);
     const stagedRevision = f.fans.work()!.revision;
     const beforeSwitch = f.typed.value().publication!.evaluation;
-    const beforeReads = f.calls.get("fans:fans.sheet");
+    const beforeReads = f.calls.get("fans:fans.calc");
     // The shell releases the retained typed mount while another pane is expanded.
     await act(async () => {
       f.typed.release();
@@ -1201,7 +1201,7 @@ test.each([false, true])(
       f.typed.page.pose({ layers: [] });
     });
     expect(f.fans.work()!.revision).toBe(stagedRevision);
-    expect(f.calls.get("fans:fans.sheet")).toBeGreaterThan(beforeReads!);
+    expect(f.calls.get("fans:fans.calc")).toBeGreaterThan(beforeReads!);
     await waitFor(() => expect(f.typed.value().state === "ready").toBe(true));
     expect(f.typed.value().publication!.evaluation).toBe(beforeSwitch);
     await act(async () =>
@@ -1716,7 +1716,7 @@ test("JZ E8-03 a typed Fans refused Plan explains the atomic Apply hold at the a
   const damper = capture.nodes.find(node => node.id === 14607308)!;
   Object.assign(damper, { partType: "Damper" });
   capture.nodes.push({ ...structuredClone(damper), id: 99999991, uniqueId: "fixture-other-damper", levelId: 30, connectors: [] });
-  const f = await createWitness(closes, new Map(), { "ducts.sheet-snapshot": {
+  const f = await createWitness(closes, new Map(), { "fans.calc-detail-snapshot": {
     kind: "use", open(_ctx, deliver) { deliver({ kind: "complete", value: capture, revision: 1 }); },
   } });
   await vi.waitFor(() => expect(f.fans.work()).not.toBeNull());
@@ -1766,10 +1766,10 @@ test("JZ E8-03 a typed Fans refused Plan explains the atomic Apply hold at the a
   function MissingFlow({ ctx }: { ctx: any }) {
     const data = ctx.value.value;
     if (!data.open) throw Error("The native Fan must be open");
-    const value = { ...ctx.value, value: { ...data, sheetView: { ...data.sheetView, inputs: nativeInputs } } };
+    const value = { ...ctx.value, value: { ...data, calcView: { ...data.calcView, inputs: nativeInputs } } };
     return <SheetPane ctx={{ draw: { ...ctx, value }, slot }} />;
   }
-  render(f.typed.draw("sheet-inputs", ctx => <MissingFlow ctx={ctx} />) as React.ReactElement);
+  render(f.typed.draw("calc-inputs", ctx => <MissingFlow ctx={ctx} />) as React.ReactElement);
   expect(document.querySelector('[data-body="locked"]'), "The missing native parameter locks the actual typed cell before Plan").not.toBeNull();
   expect(document.body.innerHTML).toContain("PE_M_Fan_AirFlowDesign");
 
@@ -1779,7 +1779,7 @@ test("JZ E8-03 a typed Fans refused Plan explains the atomic Apply hold at the a
 test.each(["Fans", "Ducts"] as const)("JZ C042 %s subject-list declaration suppresses the header chooser across panes", async name => {
   const { useAdmittedSubject } = await import("../shell/subject");
   const read = fans.spec.core!;
-  const declared = name === "Fans" ? fans.spec.panes["sheet-roster"] : ducts.spec.panes["e-systems"];
+  const declared = name === "Fans" ? fans.spec.panes["calc-roster"] : ducts.spec.panes["e-systems"];
   function Roster({ ctx }: { ctx: any }) {
     const subject = useAdmittedSubject()!;
     const first = fans.spec.subject!.options(ctx.value.value)[0]!;
@@ -1835,7 +1835,7 @@ test("JZ audit named subject choices preserve all none add and toggle without ra
     target: { kind: "document", ref }, fixture: null, work: { address: documentPath, open: ref },
     memory: () => ({ fan: { kind: "ids", ids: [unknown] } }), custody: { current: () => true },
     address: { read: () => new URLSearchParams(search), write(next) { search = next; moves++; }, subscribe: () => () => {} },
-  }, workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`), { sources: { "fans.sheet": source } });
+  }, workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`), { sources: { "fans.calc": source } });
   const router = createRouter({ routeTree: createRootRoute({ component: () => <TypedChrome mount={mount} document={<span>Recorded subjects</span>} /> }), history: createMemoryHistory({ initialEntries: ["/"] }) });
   let view: ReturnType<typeof render> | undefined;
   try {
@@ -1966,7 +1966,7 @@ test("JZ audit Schedules keyed edits preserve a sibling stale mark and narrow in
 
 
 test("JZ Plan refusal marker holds a valid sealed ancillary-only review at the typed action", async () => {
-  const f = await createWitness(closes, new Map(), { "ducts.sheet-snapshot": {
+  const f = await createWitness(closes, new Map(), { "fans.calc-detail-snapshot": {
     kind: "use", open(_ctx, deliver) { deliver({ kind: "complete", value: structuredClone(realMuas), revision: 1 }); },
   } });
   await vi.waitFor(() => expect(f.fans.work()).not.toBeNull());

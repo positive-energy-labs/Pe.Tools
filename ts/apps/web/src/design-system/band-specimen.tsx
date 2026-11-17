@@ -224,7 +224,7 @@ export function ChatScale({
           <div className="w-82 hairline">
             <ProposalHead
               asks={[]}
-              works={["ducts", "unitFlows", "parameters"].map((subject) => ({
+              works={["duct-systems", "unitFlows", "parameters"].map((subject) => ({
                 ...matrixHeadWork(matrix, say),
                 id: `ducts:${subject}`,
                 route: "Ducts",

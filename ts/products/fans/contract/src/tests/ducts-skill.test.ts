@@ -61,7 +61,7 @@ test("Pea is shown the roster's by-mark lookup in the reads.value input schema",
   expect(ductsRosterRequestSchema.safeParse({ target }).success).toBe(true);
   expect(ductsRosterRequestSchema.safeParse({ target, mark: "MA-1" }).success).toBe(true);
   const input = JSON.stringify(peRoutes["reads.value"].catalog.discovery?.input);
-  for (const shown of ['"const":"fans.roster"', '"mark"', '"const":"ducts.sheet"', '"unitId"'])
+  for (const shown of ['"const":"fans.roster"', '"mark"', '"const":"fans.calc-detail"', '"unitId"'])
     expect(input).toContain(shown);
   expect(input).not.toContain('"proposal"');
   expect(FAN_CALC_GUIDE.walk[0]).toContain("{target: {session, openId}, mark}");

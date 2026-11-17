@@ -56,6 +56,7 @@ export interface HostRouteAdmissionPort {
 // Exhaustive against RouteStateSpec: adding a field requires deciding its boundary validation.
 const workStateFields = {
   route: hostZ.string().min(1),
+  retired: hostZ.array(hostZ.string().min(1)).optional(),
   title: hostZ.string(),
   description: hostZ.string(),
   finds: hostZ.array(hostZ.string()).optional(),

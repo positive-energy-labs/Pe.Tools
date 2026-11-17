@@ -74,7 +74,7 @@ const authored = <T>(
 ): ValueCell<T> => {
   const meta = layer?.criteriaMeta?.[cell];
   return meta && "invalid" in meta ? { value: null, invalid: meta.invalid, author: null, ref: meta.ref }
-    : { value, author: meta?.by ?? null, ref: meta?.ref ?? `work:ducts/criteria/${cell}` };
+    : { value, author: meta?.by ?? null, ref: meta?.ref ?? `work:duct-systems/criteria/${cell}` };
 };
 /** Every model, store, project, firm and default layer cell: no author, and a ref of its tier and location. */
 export const observed = <T>(

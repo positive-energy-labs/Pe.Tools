@@ -4,7 +4,7 @@ import { module } from "../route.ts";
 
 /*
  * Slice 7's Delete falsifier: Fans draws no borrowed body, and its inputs render through the
- * sheet slot (a kernel `sheet` pane over `module.data.sheet`). Red at f42ca101: `sheet-inputs`
+ * sheet slot (a kernel `sheet` pane over `module.data.sheet`). Red at f42ca101: `calc-inputs`
  * draws /ducts' `InputsBody`. Green after the split by owner (ruling 2026-11-10).
  */
 test("Fans draws no borrowed body; its inputs render through the sheet slot", async () => {

@@ -37,22 +37,23 @@ test.each(["with-from", "without-from", "path-only", "canonical-handle"] as cons
     try {
       const initial = await host.send(0, []);
       const fan = initial.value!.data.rows.find((row) => row.mark === "MUAS-1")!;
-      for (const owner of ["fans", "ducts"])
-        expect((await host.workspace.start(key(owner), (initial.value!.data as any)[`${owner}Work`], "human")).ok).toBe(true);
+      for (const [owner, doc] of Object.entries({ fans: initial.value!.data.fansWork,
+        "duct-systems": initial.value!.data.ductSystemsWork }))
+        expect((await host.workspace.start(key(owner), doc, "human")).ok).toBe(true);
       const door = createFixtureWorkDoor(fansRouteState, {});
       const work = { ...door, open: (scope: any) => ({ subscribe: (deliver: any) => host.workspace.observeFeed(scope.key,
         (s: any) => deliver({ kind: "ready", history: s.history, snapshot: { handle: s.handle, revision: s.revision, value: s.doc } }),
         (ack) => deliver({ kind: "ack", ack }), (error) => { throw error; }) }) };
       const source = publicationSource({ async read(ctx, publication, release) {
         if (!release) requests.push(ctx.args);
-        return (await host.probe({ ...publication, release, read: "fans.sheet", args: { ...(ctx.args as any), target: ref } })).json();
+        return (await host.probe({ ...publication, release, read: "fans.calc", args: { ...(ctx.args as any), target: ref } })).json();
       } });
       mount = mountTypedRoute(fans, {
         fixture: null, target: { kind: "document", ref }, work: { address: path, open: ref }, custody: { current: () => true },
         memory: () => ({ fan: { kind: "ids", ids: [stableFanKey(fan)] } }),
         address: { read: () => new URLSearchParams(), write() {}, subscribe: () => () => {} },
       }, workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`), {
-        work, sources: { "fans.sheet": source },
+        work, sources: { "fans.calc": source },
         timeline: { open(_works, deliver) { deliver({ rows: [], undo: null, redo: null, refusal: { undo: null, redo: null } }); return () => {}; }, step: async () => null },
       });
       const mounted = mount;

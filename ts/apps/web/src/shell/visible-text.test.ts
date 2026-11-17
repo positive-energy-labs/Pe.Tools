@@ -18,7 +18,7 @@ test("Manual D's leaked strings are each caught; their human forms pass", () => 
     "MUAS 10 [14577391] · PE_M_Fan_AirFlow: 900 cfm → 950 cfm",
   ])
     expect(leaks(bad), bad).not.toEqual([]);
-  expect(leaks("sheet-inputs · succeeded", ["sheet-inputs"])).toEqual(["internal token sheet-inputs"]);
+  expect(leaks("calc-inputs · succeeded", ["calc-inputs"])).toEqual(["internal token calc-inputs"]);
   for (const good of [
     "Fans · MUAS-1 / port 2",
     "FC-23 · Level 2 / port 0",
@@ -28,5 +28,5 @@ test("Manual D's leaked strings are each caught; their human forms pass", () => 
     "Edit sheet inputs · succeeded",
     "Pe loss record (Project Information): none yet → created · planned",
   ])
-    expect(leaks(good, ["sheet-inputs"]), good).toEqual([]);
+    expect(leaks(good, ["calc-inputs"]), good).toEqual([]);
 });

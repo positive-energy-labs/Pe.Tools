@@ -107,17 +107,17 @@ function pictureJourney() {
       work: { address: null, open: null },
       address: { read: () => new URLSearchParams(), write() {}, subscribe: () => () => {} },
       custody: { current: () => true }, memory: () => ({ viewport: { kind: "orbit", yaw: 225, elev: 32, zoom: 1, pivot: [0, 0, 0] } }),
-    }, stamp, { timeline: fixtureTimeline(), sources: { "fans.sheet": { kind: "use", open(ctx, deliver) {
+    }, stamp, { timeline: fixtureTimeline(), sources: { "fans.calc": { kind: "use", open(ctx, deliver) {
       const packet = structuredClone(fans.spec.core!.source.provide!("layout", ctx.args));
       const data = packet.value!.data as any;
-      data.sheetSnapshot.sourceVersion = `h04-${openId}`;
-      if (empty) { data.sheetSnapshot.nodes = []; data.sheetSnapshot.segments = []; data.open = null; data.opened = []; data.rows = []; data.fans.rows = []; }
+      data.calcSnapshot.sourceVersion = `h04-${openId}`;
+      if (empty) { data.calcSnapshot.nodes = []; data.calcSnapshot.segments = []; data.open = null; data.opened = []; data.rows = []; data.fans.rows = []; }
       deliver({ kind: "complete", value: packet, revision: 1 });
     } } } });
     mounts.push(mount); mount.subscribe(() => {}); mount.page.subject({ kind: "ids", ids: [stableFanKey({ uniqueId: "9cb9f188-28aa-4094-8b76-785395cc35e1-00000001", portIndex: 2 })] });
     return mount;
   };
-  const tree = (mount: ReturnType<typeof open>) => <TestAttention registry={registry}>{mount.draw("sheet-picture", ctx => kernelPane(mount, "sheet-picture", ctx)) as React.ReactNode}</TestAttention>;
+  const tree = (mount: ReturnType<typeof open>) => <TestAttention registry={registry}>{mount.draw("calc-picture", ctx => kernelPane(mount, "calc-picture", ctx)) as React.ReactNode}</TestAttention>;
   const resize = () => act(() => { for (const [target, callback] of observers) callback([{ target, contentRect: { width: 640, height: 480 } } as ResizeObserverEntry], {} as ResizeObserver); });
   return { open, tree, resize, mounts, registry };
 }
@@ -142,7 +142,7 @@ test("JM B03/B14/B18 named Fans roster and a live gesture survive typed Page pro
     act(() => orbit.end(gesture));
     expect(a.page.read().viewport, "B18: gesture release commits the same pose into Page").toEqual(pose);
     const roster = render(<TestAttention registry={registry}><SubjectDoor value={typedSubjectDoor(a)}>
-      {a.draw("sheet-roster", ctx => <RosterBody ctx={ctx as any} />) as React.ReactNode}
+      {a.draw("calc-roster", ctx => <RosterBody ctx={ctx as any} />) as React.ReactNode}
     </SubjectDoor></TestAttention>);
     expect(roster.getByRole("combobox", { name: "Search fans" }), "B03: Fans keeps its own named roster").toBeTruthy();
     expect(roster.queryByRole("button", { name: "Choose fan" }), "B03: a route roster has no duplicate picker").toBeNull();
@@ -242,7 +242,7 @@ test("JZ Fans Revert A then stage B: a plan on an incomplete fan calc is refused
  const {fansReadResponse,address:workAddress}=await import("@pe/agent-contracts");
  const source: import("../shell/source-contract").UseSource={kind:"use",open(ctx,deliver){
    const subscription=crypto.randomUUID(),current=++generation;
-   const body={read:"fans.sheet",subscription,generation:current,args:{target:trace.target,...ctx.args as object}};
+   const body={read:"fans.calc",subscription,generation:current,args:{target:trace.target,...ctx.args as object}};
    void forward("/pe/reads/value",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body)}).then(async response=>{
      const wire=await response.json();if(!response.ok)throw Error(JSON.stringify(wire));const value=fansReadResponse.parse(wire);
      if(!ctx.signal.aborted)deliver({kind:"complete",value,revision:value.version});
@@ -257,11 +257,11 @@ test("JZ Fans Revert A then stage B: a plan on an incomplete fan calc is refused
    target:{kind:"document",ref:trace.target},fixture:null,work:{address:workAddress("C:/model.rvt"),open:trace.target},
    address:{read:()=>new URLSearchParams(search),write:next=>{search=new URLSearchParams(next);},subscribe:()=>()=>{}},
    custody:{current:()=>true},memory:()=>({}),
- },routeRegistry.fans!.fingerprint,{sources:{"fans.sheet":source}});
+ },routeRegistry.fans!.fingerprint,{sources:{"fans.calc":source}});
  const React=await import("react");
  const {SheetPane}=await import("./slots/sheet/pane.tsx");
  const registry=makeAtomRegistry();
- function Journey(){const [,set]=React.useState(0);React.useEffect(()=>mount.subscribe(()=>set(n=>n+1)),[]);return <TestAttention registry={registry}><SubjectDoor value={typedSubjectDoor(mount)}><KeyScopeHost id="scope-revert"><TypedWrite mount={mount} id="losses"/>{mount.draw("sheet-inputs",ctx=><SheetPane ctx={{draw:ctx as any,slot:mount.spec.sheet!,field:mount.spec.subject?.field}}/>) as React.ReactNode}</KeyScopeHost></SubjectDoor></TestAttention>;}
+ function Journey(){const [,set]=React.useState(0);React.useEffect(()=>mount.subscribe(()=>set(n=>n+1)),[]);return <TestAttention registry={registry}><SubjectDoor value={typedSubjectDoor(mount)}><KeyScopeHost id="scope-revert"><TypedWrite mount={mount} id="losses"/>{mount.draw("calc-inputs",ctx=><SheetPane ctx={{draw:ctx as any,slot:mount.spec.sheet!,field:mount.spec.subject?.field}}/>) as React.ReactNode}</KeyScopeHost></SubjectDoor></TestAttention>;}
  const router=createRouter({routeTree:createRootRoute({component:Journey}),history:createMemoryHistory({initialEntries:["/fans"]})});
  const phase=(at:string)=>{if(process.env.PE_FANS_SCOPE_EVIDENCE)writeFileSync(process.env.PE_FANS_SCOPE_EVIDENCE,JSON.stringify({at,revision:mount.owner()?.handle?.revision,problem:mount.reviewProblem("losses"),results:(trace as any).results,requests},null,2));};
  try{

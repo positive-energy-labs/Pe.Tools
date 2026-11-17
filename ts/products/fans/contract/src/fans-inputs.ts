@@ -16,7 +16,7 @@ export type FanInputRow<T> = {
   on: "fan" | "terminal" | "component" | "fitting" | "criteria";
   domain: Domain;
   home: "Work" | "project" | "firm" | "model" | "derived";
-  owner: "fans" | "ducts";
+  owner: "fans" | "duct-systems";
   layers: readonly ValueSource[];
   segment: string | null;
   parameter: "requiredEsp" | "ratedEsp" | "fanFlow" | "componentDrop" |
@@ -44,7 +44,7 @@ export type FanClaim =
   | { kind: "incomplete"; basis: string; knownInWg: number;
       coverage: readonly CoverageGap[]; blockingIds: readonly string[] };
 export type InputTarget = {
-  work: "fans" | "ducts"; segment: string; row: string;
+  work: "fans" | "duct-systems"; segment: string; row: string;
 };
 export type FanCloser =
   | { kind: "cell"; target: InputTarget;
@@ -76,7 +76,7 @@ export type FanEspValues = {
   required: FanClaim;
 };
 export type SetAsideRow = {
-  work: "fans" | "ducts"; segment: string; row: string;
+  work: "fans" | "duct-systems"; segment: string; row: string;
   source: string | null; ref: string | null;
 };
 
@@ -97,7 +97,7 @@ export const fanClaimSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("to-boundary"), basis: ref, knownInWg: pressure, boundaries: z.tuple([encounterSchema], encounterSchema), coverage: z.tuple([]), blockingIds: z.array(ref) }),
   z.strictObject({ kind: z.literal("incomplete"), basis: ref, knownInWg: pressure, coverage: z.array(coverageGapSchema), blockingIds: z.array(ref) }),
 ]);
-export const inputTargetSchema = z.strictObject({ work: z.enum(["fans", "ducts"]), segment: ref, row: ref });
+export const inputTargetSchema = z.strictObject({ work: z.enum(["fans", "duct-systems"]), segment: ref, row: ref });
 export const fanCloserSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("cell"), target: inputTargetSchema, offers: z.array(authoredValueSchema(pressure)) }),
   z.strictObject({ kind: z.literal("heal"), pair: z.tuple([ref, ref]) }),
@@ -116,7 +116,7 @@ export const fanParameterCohortSchema = z.strictObject({
   members: z.array(z.strictObject({ elementId: id, uniqueId: ref })), basis: ref, complete: z.boolean(),
 }).refine(c => !c.complete || (c.members.length > 0 && new Set(c.members.map(m => m.elementId)).size === c.members.length && (c.owner.kind !== "instance" || (c.members.length === 1 && c.members[0].elementId === c.owner.id))), "complete cohorts require distinct members and one instance owner");
 export const fanEspValuesSchema = z.strictObject({ rated: sourcedValueSchema(pressure), required: fanClaimSchema });
-export const setAsideRowSchema = z.strictObject({ work: z.enum(["fans", "ducts"]), segment: ref, row: ref, source: z.string().nullable(), ref: ref.nullable() });
+export const setAsideRowSchema = z.strictObject({ work: z.enum(["fans", "duct-systems"]), segment: ref, row: ref, source: z.string().nullable(), ref: ref.nullable() });
 
 const numberDomain = (unit: string) => ({ kind: "number", min: 0, unit } as const);
 const inWg = { kind: "object", fields: { inWg: numberDomain("in-wg") } } as const;
@@ -144,12 +144,12 @@ export const FAN_CELLS = {
 /** Phase 2 keeps metadata beside its existing consumer; phase 4 moves this single table to fans/contract. */
 export const FAN_INPUTS = [
   FAN_CELLS.ratedEsp, FAN_CELLS.equipmentFlows, FAN_CELLS.flows, FAN_CELLS.terminalDrops, FAN_CELLS.componentDrops,
-  row({ name: "fittingCoefficient", role: "input", on: "fitting", domain: numberDomain(""), home: "model", owner: "ducts", segment: null, parameter: "fittingCoefficient", write: "never" }),
+  row({ name: "fittingCoefficient", role: "input", on: "fitting", domain: numberDomain(""), home: "model", owner: "duct-systems", segment: null, parameter: "fittingCoefficient", write: "never" }),
   FAN_CELLS.roles,
-  row({ name: "kinds", role: "input", on: "fan", domain: { kind: "enum", shape: z.enum(DUCT_UNIT_KINDS), choices: DUCT_UNIT_KINDS.map(value => ({ value, label: value })) }, home: "Work", owner: "ducts", segment: "kinds", parameter: null, write: "never" }),
+  row({ name: "kinds", role: "input", on: "fan", domain: { kind: "enum", shape: z.enum(DUCT_UNIT_KINDS), choices: DUCT_UNIT_KINDS.map(value => ({ value, label: value })) }, home: "Work", owner: "duct-systems", segment: "kinds", parameter: null, write: "never" }),
   row({ name: "derivedFlow", role: "result", on: "fan", domain: numberDomain("cfm"), home: "derived", owner: "fans", segment: null, parameter: null, write: "never" }),
   row({ name: "requiredEsp", role: "result", on: "fan", domain: numberDomain("in-wg"), home: "derived", owner: "fans", segment: null, parameter: null, write: "never" }),
-  ...Object.entries(FAN_CRITERIA_CELLS).map(([name, cell]) => row({ name, role: "input", on: "criteria", domain: cell.domain, home: "project", owner: "ducts", segment: "criteria", parameter: null, write: "never" })),
+  ...Object.entries(FAN_CRITERIA_CELLS).map(([name, cell]) => row({ name, role: "input", on: "criteria", domain: cell.domain, home: "project", owner: "duct-systems", segment: "criteria", parameter: null, write: "never" })),
 ] as const satisfies readonly FanInputRow<unknown>[];
 export const fanInputRows = (rows: readonly FanInputRow<unknown>[] = FAN_INPUTS) => rows.filter(r => r.role === "input");
 export const fanWriteRows = (rows: readonly FanInputRow<unknown>[] = FAN_INPUTS) => rows.filter(r => r.write === "stated-only" && r.segment !== null);

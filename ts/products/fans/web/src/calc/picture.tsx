@@ -371,18 +371,18 @@ export function CalcPicture({
   // With no fan open there is nothing to capture; say what to do instead of the network picture's words.
   if (!fan)
     return (
-      <p className="t-small p-3 text-ink-2" data-sheet-picture="">
+      <p className="t-small p-3 text-ink-2" data-calc-picture="">
         Pick a fan in the Fans list, or choose one in its header, to draw its walk.
       </p>
     );
   const esp = sheet?.overview.totals?.requiredEspInWg ?? null;
   const summary =
     hoveredBeyond != null ? (
-      <span data-sheet-picture-beyond="" className="text-ink-2">
+      <span data-calc-picture-beyond="" className="text-ink-2">
         {nameOf(hoveredBeyond)}
       </span>
     ) : (
-      <span data-sheet-picture-state="">
+      <span data-calc-picture-state="">
         {fan.mark} · port {fan.portIndex} ·{" "}
         {esp == null ? (
           // An incomplete sheet has no required ESP: missing reads as missing, never a number.

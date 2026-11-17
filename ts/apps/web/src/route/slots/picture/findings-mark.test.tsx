@@ -78,7 +78,7 @@ test("a person's finding on a fan port draws one mark on the port's geometry in 
     };
     render(<RegistryContext value={makeAtomRegistry()}>
       <Notes mount={f.typed} />
-      <Shown id="sheet-picture" />
+      <Shown id="calc-picture" />
     </RegistryContext>);
 
     // The person writes through the shell on the first fan port in the declared roster.

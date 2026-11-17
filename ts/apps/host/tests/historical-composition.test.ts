@@ -46,7 +46,7 @@ const bundle = async () => {
   const append: typeof writer.append = (input, outcome) => Effect.gen(function* () {
     const taking = yield* writer.append(input, outcome);
     yield* writer.readSets.keep({
-      version: 1, id: randomUUID(), identity,
+      version: 2, id: randomUUID(), identity,
       recipe: { key: "native.call", input: { key, input: {}, scope }, scope: JSON.stringify(scope) },
       state: "complete", inputs: [{ input: input.input, scope: input.scope, start: 0, takingId: taking.id }],
       children: [], takingLinks: {}, dependencies: {}, exports: [],
@@ -129,7 +129,7 @@ test("native root bindings refuse foreign consumers, scopes, unknown takings and
       : (await Effect.runPromise(recording.append({ ...input, scope: JSON.stringify(selectedScope) }, outcome))).id;
     if (refusal !== "unknown-taking") {
       await Effect.runPromise(recording.readSets.keep({
-        version: 1, id: randomUUID(), identity,
+        version: 2, id: randomUUID(), identity,
         recipe: { key: refusal === "foreign-root" ? "another.consumer" : "native.call",
           input: { key, input: {}, scope: selectedScope }, scope: JSON.stringify(selectedScope) },
         state: "complete", inputs: refusal === "wrong-occurrence"

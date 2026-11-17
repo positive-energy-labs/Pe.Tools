@@ -125,10 +125,10 @@ test("named reads cannot fall through the advertised open read arm", () => {
   const input = peRoutes["reads.value"].catalog.discovery!.input as { anyOf: { properties: { read: { pattern?: string } } }[] };
   const open = input.anyOf.at(-1)!.properties.read.pattern!;
   expect(new RegExp(open).test("fans.roster")).toBe(false);
-  expect(new RegExp(open).test("ducts.sheet")).toBe(false);
+  expect(new RegExp(open).test("fans.calc-detail")).toBe(false);
   expect(new RegExp(open).test("other.read")).toBe(true);
   const advertised = z.fromJSONSchema(input);
-  for (const read of ["fans.roster", "ducts.sheet"])
+  for (const read of ["fans.roster", "fans.calc-detail"])
     expect(advertised.safeParse({ read, args: { proposal: {}, edits: [] }, subscription: "test", generation: 0 }).success).toBe(false);
   expect(advertised.safeParse({ read: "other.read", args: {}, subscription: "test", generation: 0 }).success).toBe(true);
 });

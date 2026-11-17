@@ -34,7 +34,7 @@ async function ledgerLink() {
   const ducts0 = f.owner.work()?.revision ?? 0;
   const registry = makeAtomRegistry();
   closes.push(() => registry.dispose());
-  const node = f.fans.read("sheet-ledger");
+  const node = f.fans.read("calc-ledger");
   if (!isValidElement(node)) throw Error("The Ledger did not draw");
   render(<RegistryContext value={registry}>{node}</RegistryContext>);
   // The fixture's inferred join has no candidate pair, so its fix is ruling the open end capped: /ducts' Work.
@@ -42,7 +42,7 @@ async function ledgerLink() {
   // The fix names the end and is no verb on /fans: no button stages it here.
   expect(screen.queryByRole("button", { name: /for inferred-join$/ })).toBeNull();
   const href = new URL(link.getAttribute("href")!, "http://pe.local");
-  expect(href.pathname).toBe("/ducts");
+  expect(href.pathname).toBe("/duct-systems");
   const selected = JSON.parse(href.searchParams.get("selected") ?? "[]") as { kind: string; id: string }[];
   return { f, href, selected, ducts0 };
 }

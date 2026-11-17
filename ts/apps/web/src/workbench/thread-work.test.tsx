@@ -110,7 +110,7 @@ test("a thread press opens the conversation; a Work press opens the tool", async
   );
   expect(onSelect).not.toHaveBeenCalled();
   await vi.waitFor(() =>
-    expect(onWork).toHaveBeenCalledWith("demo-review", "ducts", undefined, undefined),
+    expect(onWork).toHaveBeenCalledWith("demo-review", "duct-systems", undefined, undefined),
   );
 });
 
@@ -123,7 +123,7 @@ test("a demo Work press asks the host nothing and opens its route", async () => 
   await vi.waitFor(() =>
     expect(onWork).toHaveBeenCalledWith(
       "fixture-ended",
-      "ducts",
+      "duct-systems",
       undefined,
       expect.objectContaining({ document: "Level 1.rvt", intent: "duct resize", unfinished: 4 }),
     ),
@@ -175,7 +175,7 @@ test("outside demo the sidebar subscribes to one thread-work Reading and draws o
               threadId: "fixture-local",
               documents: [{ id: "d", name: "Live Plant.rvt", availability: "open" }],
               works: [
-                { id: "w", documentId: "d", route: "ducts", intent: "live intent", unfinished: 7 },
+                { id: "w", documentId: "d", route: "duct-systems", intent: "live intent", unfinished: 7 },
               ],
             },
           ],
@@ -205,7 +205,7 @@ function mountLive() {
   );
   return pressed;
 }
-const KEY = { binding: "address", route: "ducts", target: "C:/Review/Level 1.rvt" };
+const KEY = { binding: "address", route: "duct-systems", target: "C:/Review/Level 1.rvt" };
 const pressWork = (doc: string) =>
   fireEvent.click(row(doc).querySelector<HTMLElement>('button[aria-label="Open duct resize"]')!);
 const hintOf = async (text: string) => {
@@ -214,14 +214,14 @@ const hintOf = async (text: string) => {
 };
 
 test("every live Work press hands the host's key and url to the tool, open document or closed", async () => {
-  call.mockResolvedValueOnce({ id: "w-4", key: KEY, url: "/ducts?target=L1", reason: null });
+  call.mockResolvedValueOnce({ id: "w-4", key: KEY, url: "/duct-systems?target=L1", reason: null });
   const { onWork } = mountLive();
   pressWork("Level 1.rvt");
   await vi.waitFor(() =>
     expect(onWork).toHaveBeenCalledWith(
       "fixture-ended",
-      "ducts",
-      expect.objectContaining({ key: KEY, url: "/ducts?target=L1" }),
+      "duct-systems",
+      expect.objectContaining({ key: KEY, url: "/duct-systems?target=L1" }),
       expect.objectContaining({ document: "Level 1.rvt", intent: "duct resize", unfinished: 4 }),
     ),
   );
@@ -245,7 +245,7 @@ test("a null url still opens the route and says the reason in the row hint", asy
   await vi.waitFor(() =>
     expect(onWork).toHaveBeenCalledWith(
       "fixture-ended",
-      "ducts",
+      "duct-systems",
       expect.objectContaining({ key: KEY, url: null }),
       expect.objectContaining({ document: "Level 1.rvt", intent: "duct resize", unfinished: 4 }),
     ),
@@ -265,7 +265,7 @@ test("a 404 for an unknown Work is the reason; no key, and the row stays pressab
   await vi.waitFor(() =>
     expect(onWork).toHaveBeenCalledWith(
       "fixture-ended",
-      "ducts",
+      "duct-systems",
       expect.objectContaining({ key: null, url: null }),
       expect.objectContaining({ document: "Level 1.rvt", intent: "duct resize", unfinished: 4 }),
     ),
@@ -291,7 +291,7 @@ test("a thread whose old documents have no remembered name keeps its conversatio
               threadId: "fixture-local",
               documents: [],
               works: [
-                { id: "w", documentId: "gone", route: "ducts", intent: "old work", unfinished: 2 },
+                { id: "w", documentId: "gone", route: "duct-systems", intent: "old work", unfinished: 2 },
               ],
             },
           ],

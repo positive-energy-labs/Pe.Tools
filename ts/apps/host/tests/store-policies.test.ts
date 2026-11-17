@@ -148,10 +148,10 @@ describe("discard: the corrupt bytes are gone, with one notice that does not rep
     const name = (route: string, targetKey: string) =>
       `${createHash("sha256").update(`${route}:${targetKey}`).digest("hex")}.json`;
     const read = seed(join(dir, name("ducts", "doc-a")), CORRUPT);
-    expect(await store.getState({ route: "ducts", targetKey: "doc-a" })).toBeNull();
+    expect(await store.getState({ route: "duct-systems", targetKey: "doc-a" })).toBeNull();
     expect(existsSync(read)).toBe(false);
     expect(posted(read)).toMatchObject([{ class: "discard", place: "Work for ducts (doc-a)" }]);
-    expect(await store.getState({ route: "ducts", targetKey: "doc-a" })).toBeNull();
+    expect(await store.getState({ route: "duct-systems", targetKey: "doc-a" })).toBeNull();
     expect(posted(read)).toHaveLength(1);
 
     const listed = seed(join(dir, name("fans", "doc-b")), CORRUPT);

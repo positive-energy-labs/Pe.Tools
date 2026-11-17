@@ -31,7 +31,7 @@ import {
 } from "./fan-calc.ts";
 const openFan = read("fans.open", {
   input: fansReadArgs
-    .pick({ target: true, sheetPath: true })
+    .pick({ target: true, calcPath: true })
     .extend({ unitId: z.number(), portIndex: z.number() }),
   output: openFanCalcSchema,
   async run(ctx, args) {
@@ -48,7 +48,7 @@ const openFan = read("fans.open", {
         ? [overview.paths[side].paths[0]!.pathId]
         : [],
     );
-    const paths = [...new Set([...worst, ...(args.sheetPath ? [args.sheetPath] : [])])];
+    const paths = [...new Set([...worst, ...(args.calcPath ? [args.calcPath] : [])])];
     const inputs = await ctx.read(fanInputs, { ...request, basis: overview.basis }),
       elements = await ctx.read(fanElements, { ...request, basis: overview.basis }),
       calcBreakdown = await ctx.read(fanCalcBreakdown, { ...request, basis: overview.basis });
@@ -67,7 +67,7 @@ const openFan = read("fans.open", {
       inputs,
       elements,
       calcBreakdown,
-      legs: legs[args.sheetPath ? paths.indexOf(args.sheetPath) : 0] ?? null,
+      legs: legs[args.calcPath ? paths.indexOf(args.calcPath) : 0] ?? null,
       worstLegs: legs.slice(0, worst.length),
     };
   },
@@ -99,7 +99,7 @@ export const fansCalc = body(contracts.calc, async function(ctx, args) {
       key: (fan) => subjectCode({ keyKind: "UniqueId", key: fan.uniqueId, sub: { port: fan.portIndex } }),
       args: ([fan]) => ({
         target: args.target,
-        sheetPath: args.sheetPath,
+        calcPath: args.calcPath,
         unitId: fan!.unitId,
         portIndex: fan!.portIndex,
       }),
@@ -127,7 +127,7 @@ export const fansCalc = body(contracts.calc, async function(ctx, args) {
           }
         : row;
     });
-    const { ducts: ductsDoc, fans: fansDoc, revision: ductsRevision, settings } = await ctx.read(designLayers, args.target);
+    const { ducts: ductsDoc, fans: fansDoc, revision: ductSystemsRevision, settings } = await ctx.read(designLayers, args.target);
     const design = ductsDesign(ductsDoc, fansDoc),
       staged = stagedDucts(design, design);
     const ids = [
@@ -163,14 +163,14 @@ export const fansCalc = body(contracts.calc, async function(ctx, args) {
       opened: [...data.opened],
       rows: data.rows,
       progress: null,
-      sheetView: fansCalcData.shape.sheetView.parse(calcState(data.opened[0] ?? null)),
+      calcView: fansCalcData.shape.calcView.parse(calcState(data.opened[0] ?? null)),
       design: fansCalcData.shape.design.parse(design),
       settings: { ducts: settings },
       fans: { ...data.fans, rows: data.rows },
-      ductsWork: ductsDoc,
-      ductsRevision,
+      ductSystemsWork: ductsDoc,
+      ductSystemsRevision,
       fansWork: fansDoc,
-      sheetSnapshot: data.geometry
+      calcSnapshot: data.geometry
         ? {
             ...calcSnapshot(data.geometry.body as Parameters<typeof calcSnapshot>[0]),
             sourceVersion: data.geometry.version ?? undefined,

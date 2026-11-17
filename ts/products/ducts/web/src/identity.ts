@@ -27,7 +27,7 @@ export function ductsLink(
     params.set("selected", JSON.stringify([{ kind: "focus", id: `rule:${destination.key}` }]));
   // An element SubjectRef is the attention key /ducts selects on arrival (`elementKey`).
   if (destination.kind === "subject") params.set("selected", JSON.stringify([{ kind: "focus", id: destination.code }]));
-  return `/ducts?${params}`;
+  return `/duct-systems?${params}`;
 }
 
 /** A snapshot's elements as the attention bus knows them (ElementId <-> UniqueId). */

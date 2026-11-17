@@ -57,7 +57,7 @@ test("a Ducts focus selection reaches shell carry readers without a Pea field de
     target: "Chadds",
     selected: JSON.stringify([{ kind: "focus", id: '["ducts-focus","cell:equipmentFlows:8108427:inputs"]' }]),
   });
-  const router = createRouter({ routeTree: route, history: createMemoryHistory({ initialEntries: [`/ducts?${search}`] }) });
+  const router = createRouter({ routeTree: route, history: createMemoryHistory({ initialEntries: [`/duct-systems?${search}`] }) });
   const view = render(<RouterProvider router={router} />);
   await waitFor(() => expect(view.getByTestId("focus-target").textContent).toBe("Chadds"));
 });

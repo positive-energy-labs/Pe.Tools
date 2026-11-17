@@ -33,7 +33,7 @@ export function espWarnings({ rated, required }: Immutable<FanEspValues>): strin
 }
 
 export function FanPicture({ ctx, picture }: Props) {
-  const snapshot = calcSnapshot(ctx.value.value?.sheetSnapshot);
+  const snapshot = calcSnapshot(ctx.value.value?.calcSnapshot);
   return "kind" in snapshot ? <CalcEmpty value={ctx.value} /> : <FanWalk ctx={ctx} snapshot={snapshot} picture={picture} />;
 }
 

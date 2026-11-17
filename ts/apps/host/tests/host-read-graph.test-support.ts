@@ -237,7 +237,7 @@ export async function fixture(
                 "x-pe-history-point": at,
                 "x-pe-history-page": encodeURIComponent(
                   JSON.stringify({
-                    instance: "fans.sheet",
+                    instance: "fans.calc",
                     route: "fans",
                     page: {},
                     href: "/fans",
@@ -246,11 +246,11 @@ export async function fixture(
               }
             : {},
           body: JSON.stringify({
-            read: "fans.sheet",
+            read: "fans.calc",
             subscription,
             generation,
             release,
-            args: { target: ref, fan, sheetPath: "" },
+            args: { target: ref, fan, calcPath: "" },
           }),
         }),
         Context.make(RequestIdentity, admitted),

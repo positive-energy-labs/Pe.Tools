@@ -76,7 +76,7 @@ export async function nativeFixture(
   const captures = captureStore(join(dir, "captures"));
   const connection = await transport.connect();
   const target = { kind: "document" as const, ref: connection.target };
-  const key = bindWork("ducts", address, undefined, target.ref);
+  const key = bindWork("duct-systems", address, undefined, target.ref);
   const rootReads: { native?: HostNativeRead["Service"]; shared?: NativeReads["Service"] } = {};
   const sdkInput = { read: sdkSessions };
   const http = transport.actions({ workspace: saved, sdk: args => sdkInput.read(args), files: testDuctFiles() }, undefined, {}, Layer.effectDiscard(Effect.gen(function* () {
@@ -146,7 +146,7 @@ export async function nativeFixture(
       },
       readGraph: async raw => {
         const port = calcPort({ firm: (owner) => settle(testDuctFiles().firm(owner)), catalogs: () => settle(testDuctFiles().ductCatalogs), call: readDucts,
-          workKey: async ref => bindWork("ducts", address, undefined, ref) }, saved);
+          workKey: async ref => bindWork("duct-systems", address, undefined, ref) }, saved);
         const graph = graphRoute("reads.value", raw);
         return graph.publish(publications, graph.publication!.subscription, graph.publication!.generation, port);
       },

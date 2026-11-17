@@ -29,8 +29,8 @@ const namedRead = <S extends z.ZodType>(read: string, args: S) =>
   schemas.valueReadRequest.extend({ read: z.literal(read), args });
 const valueReadInput = z.union([
   namedRead("fans.roster", schemas.ductsRosterRequestSchema),
-  namedRead("ducts.sheet", schemas.ductsCalcRequestSchema),
-  schemas.valueReadRequest.extend({ read: z.string().regex(/^(?!(?:fans\.roster|ducts\.sheet)$)/) }),
+  namedRead("fans.calc-detail", schemas.ductsCalcRequestSchema),
+  schemas.valueReadRequest.extend({ read: z.string().regex(/^(?!(?:fans\.roster|fans\.calc-detail)$)/) }),
 ]);
 const routeCatalog: Record<
   string,
@@ -38,7 +38,7 @@ const routeCatalog: Record<
     description: string;
   }
 > = {
-  "reads.value": { description: "Publish a registered host Value. Supply read, args, subscription (any unique string) and generation (0 for a first read); the result is in value.data. Use fans.roster with args {target, mark} to find a fan port by its mark, ducts.sheet for a pressure sheet, and fans.sheet for the Fans worksheet." },
+  "reads.value": { description: "Publish a registered host Value. Supply read, args, subscription (any unique string) and generation (0 for a first read); the result is in value.data. Use fans.roster with args {target, mark} to find a fan port by its mark, fans.calc-detail for a pressure sheet, and fans.calc for the Fans worksheet." },
   "blobs.put": { description: "Retain uploaded bytes before command admission. Send fileName and base64, then use the returned immutable BlobRef as command input." },
   "threads.history": {
     description:

@@ -4,7 +4,7 @@ import { activityTime, timelineRowKey } from "./timeline";
 
 test("equal revisions on different Works have distinct row identities", () => {
   const row: TimelineRow = { kind: "edit", work: bindWork("fans", null, "a"), revision: 1, by: "human", label: "Edit", state: "applied", at: 1 };
-  expect(timelineRowKey(row)).not.toBe(timelineRowKey({ ...row, work: bindWork("ducts", null, "a") }));
+  expect(timelineRowKey(row)).not.toBe(timelineRowKey({ ...row, work: bindWork("duct-systems", null, "a") }));
 });
 
 test("activity time treats ISO and epoch stamps alike and labels invalid stamps", () => {

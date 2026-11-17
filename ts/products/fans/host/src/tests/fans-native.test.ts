@@ -42,7 +42,7 @@ async function stage(f: Awaited<ReturnType<typeof nativeFixture>>) {
     0,
   );
   if (!staged.ok) throw Error(JSON.stringify(staged));
-  const ducts = await f.saved.apply(f.key, "ducts", "human", [{ path: ["writeIntent", "edit"], value: { value: { groups: ["group:g8718801"] } } }], 0,
+  const ducts = await f.saved.apply(f.key, "duct-systems", "human", [{ path: ["writeIntent", "edit"], value: { value: { groups: ["group:g8718801"] } } }], 0,
   );
   if (!ducts.ok) throw Error(JSON.stringify(ducts));
   return { key: { ...f.key, route: "fans" }, revision: staged.revision };
@@ -207,7 +207,7 @@ test("a stale Fans revision refuses sealed apply before native dispatch", async 
   const work = await stage(f);
   await command(f, "preview-two", "sheet.plan", work);
   expect(await f.journal.wait("preview-two")).toMatchObject({ state: "succeeded", result: { seal: { work: {
-    consumed: expect.arrayContaining(["ducts", "fans"].map((route) => expect.objectContaining({
+    consumed: expect.arrayContaining(["duct-systems", "fans"].map((route) => expect.objectContaining({
       kind: "work", probe: expect.objectContaining({ handle: expect.objectContaining({ key: expect.objectContaining({ route }) }) ,
                 }),
     }),

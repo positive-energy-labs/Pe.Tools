@@ -210,7 +210,7 @@ test.each(["off", "on", "recovery", "endurance", "tamper", "truncated", "legacy"
         if (isCold) return;
         for (const [revision, cfm] of [[0, 250], [1, 300]] as const)
           expect(await owner.apply(key("fans"), "fans", "human", [{ path: ["flows", terminalSubject, "edit"], value: { value: cfm } }], revision)).toMatchObject({ ok: true });
-        expect(await owner.apply(key("ducts"), "ducts", "human", [], 0)).toMatchObject({ ok: true });
+        expect(await owner.apply(key("duct-systems"), "duct-systems", "human", [], 0)).toMatchObject({ ok: true });
       },
     } });
   type Web = { handler: (request: Request, context: Context.Context<import("@pe/host-internal/request-contracts").RequestIdentity>) => Promise<Response>; dispose: () => Promise<void> };
@@ -513,9 +513,9 @@ test.each(["off", "on", "recovery", "endurance", "tamper", "truncated", "legacy"
     expect(nativeCalls).toBe(rosterCalls);
     const fan = roster.rows.find((row: any) => row.unitId === 14577391) ?? roster.rows[0];
     const request = { target: ref, mode: "fan", unitId: fan.unitId, portIndex: fan.portIndex };
-    const overview = await capture("/pe/reads/value", readBody("ducts.sheet", request));
+    const overview = await capture("/pe/reads/value", readBody("fans.calc-detail", request));
     for (const kind of ["inputs", "worksheet"] as const) {
-      const detail = await capture("/pe/reads/value", readBody("ducts.sheet", { ...request, basis: overview.basis, detail: { kind } }));
+      const detail = await capture("/pe/reads/value", readBody("fans.calc-detail", { ...request, basis: overview.basis, detail: { kind } }));
       expect(detail.kind).toBe(kind);
       expect(detail.basis).toBe(overview.basis);
     }
@@ -549,13 +549,13 @@ test.each(["off", "on", "recovery", "endurance", "tamper", "truncated", "legacy"
       `builtin-closure:${builtinEnrollments.find((entry) => entry.routeKey === routeKey)!.closure.fingerprint}`) });
     const workKeys = (route: string, by = route) => `/pe/resources?keys=${encodeURIComponent(JSON.stringify([{ ...key(route), kind: "work", admission: admission(by) } satisfies ReadingRequest]))}`;
     // Each route's own feed; the reconciliation case below replays both as recorded siblings.
-    for (const route of ["fans", "ducts"]) {
+    for (const route of ["fans", "duct-systems"]) {
       const frame = await capture(workKeys(route), undefined, true);
       expect(frame.kind).toBe("snapshot"); expect(frame.changed).toBe(true);
       expect(frame.value.handle.key.route).toBe(route); expect(frame.value.history).toBeDefined();
     }
     // Ruling 2026-11-10 (no cross-route write): Fans' admission seals no /ducts Work feed.
-    const foreign = await firstFrame(await send(live, workKeys("ducts", "fans")));
+    const foreign = await firstFrame(await send(live, workKeys("duct-systems", "fans")));
     expect(foreign.kind, JSON.stringify(foreign)).toBe("failure");
     expect(foreign.failure.code).toBe("WorkRouteMismatch");
     holdHuman = true;
@@ -570,7 +570,7 @@ test.each(["off", "on", "recovery", "endurance", "tamper", "truncated", "legacy"
     expect([humanView.revision, peaView.revision]).toEqual([2, 3]);
     if (recovery) {
       await persistentProof();
-      const fresh = await send(live, "/pe/reads/value", readBody("ducts.sheet", request));
+      const fresh = await send(live, "/pe/reads/value", readBody("fans.calc-detail", request));
       expect(fresh.status, await fresh.clone().text()).toBe(200);
       expect((await fresh.json()).value.data.basis).not.toBe(overview.basis);
       const recovered = cases.filter((entry) => entry.url === "/pe/reads/value" && entry.body.read === "fans.roster").at(-1)!;
@@ -603,7 +603,7 @@ test.each(["off", "on", "recovery", "endurance", "tamper", "truncated", "legacy"
       expect(response.status, await response.clone().text()).toBe(200);
       await response.json();
       expect(nativeCalls, "A model change must retire the exact /call retained body").toBeGreaterThan(calls);
-      const sheet = await send(live, "/pe/reads/value", readBody("ducts.sheet", request));
+      const sheet = await send(live, "/pe/reads/value", readBody("fans.calc-detail", request));
       expect(sheet.status, await sheet.clone().text()).toBe(200);
       expect((await sheet.json()).value.data.basis).not.toBe(overview.basis);
     };

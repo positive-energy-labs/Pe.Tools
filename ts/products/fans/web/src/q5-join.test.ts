@@ -27,7 +27,7 @@ test("Q5: a join patch issued from the fans route does not land in Ducts Work", 
   expect(applyPatches(ductsRouteState, envelope(ductsRouteState.schema.parse({})), "human", patches, 0)).toMatchObject({ ok: true });
   // From /fans it has three doors, and each is shut.
   expect(edits.input.safeParse({ joins }).success).toBe(false);
-  expect(Object.keys(edits.owners)).not.toContain("ducts");
+  expect(Object.keys(edits.owners)).not.toContain("duct-systems");
   expect(edits.work).toBe(fansRouteState);
   expect(applyPatches(fansRouteState, envelope(fansRouteState.schema.parse({})), "human", patches, 0)).toMatchObject({ ok: false });
   // So the closer's join action is one of /ducts' fixes, which /fans draws as a link.

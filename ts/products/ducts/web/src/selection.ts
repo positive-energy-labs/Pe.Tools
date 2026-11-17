@@ -15,7 +15,7 @@ import { choice, defineKnobs, num } from "../../../../apps/web/src/knobs/knobs.t
  * Each can change the captured element set. Equipment hops keep to the same classification by
  * default; plenums and shared ducts use their physical connections.
  */
-export const DUCTS_MULTI = defineKnobs("ducts", "ts/apps/web/src/ducts/selection.ts", {
+export const DUCTS_MULTI = defineKnobs("duct-systems", "ts/apps/web/src/ducts/selection.ts", {
   selection: {
     stubFt: num("Stub reach (ft)", 10, [0, 50, 1], "refetch"),
     hop: choice<Hop>(

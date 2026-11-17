@@ -1,4 +1,5 @@
 import * as acquisition from "@pe/fans-contract/fans-host-reads";
+import { CALC_ENGINE_VERSION, CALC_DETAIL_READ } from "@pe/fans-contract/fan-calc";
 import { body } from "@pe/host/read-graph";
 import { networkCalcs } from "@pe/fans-domain/calc/network-calcs";
 import { native } from "@pe/agent-contracts/handle";
@@ -75,7 +76,7 @@ const enginePath = z.object({
   blockerIds: z.array(z.string()),
 });
 const engineBase = {
-  engineVersion: z.string(),
+  engineVersion: z.literal(CALC_ENGINE_VERSION, "Retired calc engine; record this calculation again. Recording bytes were not changed."),
   basis: z.string(),
   legs: details[3].shape.legs,
   blockers: details[4].shape.blockers,
@@ -435,7 +436,7 @@ export const fanInputs = read("fans.inputs", {
     };
   },
 });
-export const fanCalcBreakdown = read("fans.worksheet", {
+export const fanCalcBreakdown = read("fans.calc-breakdown", {
   input: ductsCalcRequestSchema,
   output: details[3],
   async run(ctx, request) {
@@ -481,7 +482,7 @@ export const fanLegs = read("fans.legs", {
   },
 });
 /** The existing Pea and Ducts HTTP contract projects the same graph as Fans. */
-export const ductCalc = read("ducts.sheet", {
+export const ductCalc = read(CALC_DETAIL_READ, {
   input: ductsCalcRequestSchema,
   output: ductsCalcResponseSchema,
   run(ctx, request): Promise<z.infer<typeof ductsCalcResponseSchema>> {

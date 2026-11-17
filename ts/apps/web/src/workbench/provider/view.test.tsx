@@ -100,7 +100,7 @@ function Probe() {
   return null;
 }
 
-test("first Send from /ducts?target=… creates one chat with no targets and keeps the tool", async () => {
+test("first Send from /duct-systems?target=… creates one chat with no targets and keeps the tool", async () => {
   sessionStorage.clear();
   const root = createRootRoute({
     component: () => (
@@ -115,10 +115,10 @@ test("first Send from /ducts?target=… creates one chat with no targets and kee
   const router = createRouter({
     routeTree: root.addChildren([
       createRoute({ getParentRoute: () => root, path: "/" }),
-      createRoute({ getParentRoute: () => root, path: "/ducts", component: () => <p>ducts</p> }),
+      createRoute({ getParentRoute: () => root, path: "/duct-systems", component: () => <p>ducts</p> }),
     ]),
     history: createMemoryHistory({
-      initialEntries: ["/", "/ducts?target=C%3A%2FModels%2FOffice.rvt"],
+      initialEntries: ["/", "/duct-systems?target=C%3A%2FModels%2FOffice.rvt"],
     }),
   });
   await router.load();
@@ -138,14 +138,14 @@ test("first Send from /ducts?target=… creates one chat with no targets and kee
       <RouterProvider router={router} />
     </RegistryContext.Provider>,
   );
-  await screen.findByText("ducts");
+  await screen.findByText("duct-systems");
   fireEvent.change(screen.getByLabelText("draft"), { target: { value: "unsent words" } });
   await act(() => send!("size it"));
 
   expect(client.create).toHaveBeenCalledTimes(1);
   // initialTargets = []: the tool's pin never seeds the chat's targets.
   expect(client.target).not.toHaveBeenCalled();
-  expect(router.state.location.pathname).toBe("/ducts");
+  expect(router.state.location.pathname).toBe("/duct-systems");
   expect(router.state.location.search).toMatchObject({
     target: "C:/Models/Office.rvt",
     thread: "NEW",
@@ -154,7 +154,7 @@ test("first Send from /ducts?target=… creates one chat with no targets and kee
   expect(call.mock.calls.filter(([door]) => door === "thread.place")).toEqual([
     [
       "thread.place",
-      { params: { id: "NEW" }, body: { route: "ducts", link: expect.stringContaining("/ducts") } },
+      { params: { id: "NEW" }, body: { route: "duct-systems", link: expect.stringContaining("/duct-systems") } },
     ],
   ]);
 
@@ -162,7 +162,7 @@ test("first Send from /ducts?target=… creates one chat with no targets and kee
   await act(async () => router.history.back());
   await waitFor(() => expect(router.state.location.pathname).toBe("/"));
   await act(async () => router.history.forward());
-  await waitFor(() => expect(router.state.location.pathname).toBe("/ducts"));
+  await waitFor(() => expect(router.state.location.pathname).toBe("/duct-systems"));
   expect(router.state.location.search).toMatchObject({ thread: "NEW" });
   expect((screen.getByLabelText("draft") as HTMLInputElement).value).toBe("unsent words");
   expect(client.create).toHaveBeenCalledTimes(1);
@@ -170,7 +170,7 @@ test("first Send from /ducts?target=… creates one chat with no targets and kee
     openThread!("OTHER");
   });
   await waitFor(() => expect(router.state.location.search.thread).toBe("OTHER"));
-  expect(router.state.location.pathname).toBe("/ducts");
+  expect(router.state.location.pathname).toBe("/duct-systems");
   expect(router.state.location.search.target).toBe("C:/Models/Office.rvt");
   expect((screen.getByLabelText("draft") as HTMLInputElement).value).toBe("unsent words");
 });

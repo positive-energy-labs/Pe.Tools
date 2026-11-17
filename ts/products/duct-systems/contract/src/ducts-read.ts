@@ -1,4 +1,5 @@
 import { DUCT_UNIT_ROLES } from "@pe/ducts-contract/duct-inputs";
+import { CALC_ENGINE_VERSION } from "@pe/fans-contract/fan-calc";
 import { ductFirmLineSchema } from "@pe/ducts-contract/duct-inputs";
 import { inferenceReadSchema, stagedDuctsReadSchema } from "./ducts-pricing-read.ts";
 import { z } from "zod";
@@ -96,7 +97,7 @@ const calcPath = z.object({
  * the same wire parts the fans read publishes. The claim is the wire `FanClaim`; the brand never crosses.
  */
 export const ductsFanCalcSchema = z.object({
-  engineVersion: z.string(),
+  engineVersion: z.literal(CALC_ENGINE_VERSION, "Retired calc engine; record this calculation again. Recording bytes were not changed."),
   basis: z.string(),
   fan: ductsCalcOverviewSchema.shape.fan.unwrap().omit({ ratedEspInWg: true }),
   legs: details[3].shape.legs,
@@ -126,7 +127,7 @@ export const ductsPricingData = z.object({
   design: fansDocumentSchema.extend(ductsDocumentSchema.shape),
   effectiveDesign: fansDocumentSchema.extend(ductsDocumentSchema.shape),
   network: ductsNetworkData,
-  ductsWork: ductsDocumentSchema,
+  ductSystemsWork: ductsDocumentSchema,
   fansWork: fansDocumentSchema,
   catalogFindings: z.array(z.string()),
   /** The design criteria as they stand under Work (the store over the firm file), each with its source: the /ducts design sheet's model layer. */

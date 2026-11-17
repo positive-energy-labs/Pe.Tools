@@ -121,8 +121,8 @@ export async function createWitness(
       open(_ctx, deliver) {
         let version = 0;
         const send = () => {
-          const ductsWork = ductsDocumentSchema.parse(
-            (saved.get("ducts") as { doc?: unknown })?.doc ?? {},
+          const ductSystemsWork = ductsDocumentSchema.parse(
+            (saved.get("duct-systems") as { doc?: unknown })?.doc ?? {},
           );
           const fansWork = fansDocumentSchema.parse(
             (saved.get("fans") as { doc?: unknown })?.doc ?? {},
@@ -143,16 +143,16 @@ export async function createWitness(
               : read === "network"
                 ? network
                 : {
-                    ...wire(pricingValue(snapshot, networkCalcs(snapshot, {}, {}, ductsDesign(ductsWork, fansWork), FIRM_SEED, 0), ductsDesign(ductsWork, fansWork))),
+                    ...wire(pricingValue(snapshot, networkCalcs(snapshot, {}, {}, ductsDesign(ductSystemsWork, fansWork), FIRM_SEED, 0), ductsDesign(ductSystemsWork, fansWork))),
                     roster,
                     network,
                     fanRows: sheet.roster.rows,
-                    ductsWork,
+                    ductSystemsWork,
                     fansWork,
-                    design: ductsDesign(ductsWork, fansWork),
+                    design: ductsDesign(ductSystemsWork, fansWork),
                     effectiveDesign:
-                      withStoredRulings(ductsDesign(ductsWork, fansWork), snapshot.store, snapshot) ??
-                      ductsDesign(ductsWork, fansWork),
+                      withStoredRulings(ductsDesign(ductSystemsWork, fansWork), snapshot.store, snapshot) ??
+                      ductsDesign(ductSystemsWork, fansWork),
                     catalogFindings: [],settings: {},espOptions:null,espOptionsError:"Fixture has no native parameter options",
                     // The fixture's criteria as the Fans sheet fixture resolved them, over a stand-in firm file.
                     criteria: sheet.inputs.inputs.criteria,
@@ -168,13 +168,13 @@ export async function createWitness(
       },
     };
   }
-  native["fans.sheet"] = {
+  native["fans.calc"] = {
     kind: "use",
     async open(ctx, deliver) {
       let version = 0;
       const send = (capture: unknown) => {
-        const ductsWork = ductsDocumentSchema.parse(
-          (saved.get("ducts") as { doc?: unknown })?.doc ?? {},
+        const ductSystemsWork = ductsDocumentSchema.parse(
+          (saved.get("duct-systems") as { doc?: unknown })?.doc ?? {},
         );
         const fansWork = fansDocumentSchema.parse(
           (saved.get("fans") as { doc?: unknown })?.doc ?? {},
@@ -193,13 +193,13 @@ export async function createWitness(
           rows: sheet.roster.rows,
           progress: null,
           fans: sheet.roster,
-          sheetSnapshot: capture,
-          sheetView: calcState(open),
-          ductsWork,
-          ductsRevision: (saved.get("ducts") as { revision?: number } | undefined)?.revision ?? 0,
+          calcSnapshot: capture,
+          calcView: calcState(open),
+          ductSystemsWork,
+          ductSystemsRevision: (saved.get("duct-systems") as { revision?: number } | undefined)?.revision ?? 0,
           settings: {},
           fansWork,
-          design: ductsDesign(ductsWork, fansWork),
+          design: ductsDesign(ductSystemsWork, fansWork),
         });
         deliver({
           kind: "complete",
@@ -214,7 +214,7 @@ export async function createWitness(
               // Mirror host content identity; reopening a recorded source restarts its frame counter.
               evaluation: createHash("sha256").update(JSON.stringify(data)).digest("hex"),
               inputs: "fixture",
-              works: ctx.workKey ? [ctx.workKey, { ...ctx.workKey, route: "ducts" }] : [],
+              works: ctx.workKey ? [ctx.workKey, { ...ctx.workKey, route: "duct-systems" }] : [],
               origin: { kind: "fixture", name: "cutover" },
               trace: [],
               coverage: { requested: [], covered: [], unknown: [], refused: [] },
@@ -223,7 +223,7 @@ export async function createWitness(
           },
         });
       };
-      const capture = overrides["ducts.sheet-snapshot"];
+      const capture = overrides["fans.calc-detail-snapshot"];
       let captured: unknown = snapshot;
       const stopCapture =
         capture?.kind === "use" || capture?.kind === "feed"

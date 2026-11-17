@@ -102,7 +102,7 @@ export function criteriaLayer(cells: Readonly<Partial<Record<DuctsCriteriaCell, 
   return layer as DuctsCriteriaLayer;
 }
 /** Who staged each criterion cell and its ref (contract amendment 2): the host-stamped `by`, and the cited ref or the cell's location. A cell with no `by` has no entry, so its criterion resolves invalid. */
-export function criteriaMeta(cells: Readonly<Partial<Record<DuctsCriteriaCell, { readonly invalid?: string; readonly edit?: { readonly by?: Author; readonly ref?: string } | null }>>>, work = "ducts") {
+export function criteriaMeta(cells: Readonly<Partial<Record<DuctsCriteriaCell, { readonly invalid?: string; readonly edit?: { readonly by?: Author; readonly ref?: string } | null }>>>, work = "duct-systems") {
   const meta: Partial<Record<DuctsCriteriaCell, { by: Author; ref: string } | { invalid: string; ref: string }>> = {};
   for (const cell of Object.keys(DUCTS_CRITERIA_CELLS)) {
     if (!isCriteriaCell(cell)) continue;

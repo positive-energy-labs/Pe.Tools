@@ -19,20 +19,20 @@ import { workFingerprintSchema } from "@pe/agent-contracts";
 afterEach(cleanup);
 
 test("two mounted typed routes publish only the addressed route's band", async () => {
-  const modules = ["ducts", "fans"].map(key => route({ key, name: key, needs: "browser", fields: {},
+  const modules = ["duct-systems", "fans"].map(key => route({ key, name: key, needs: "browser", fields: {},
     directory: schedules.data.directory, panes: { main: { title: key, purpose: key, body: "scroll", draw: () => scrollBody(key) } },
     layout: paneLayout("main") }));
   const fingerprint = workFingerprintSchema.parse(`builtin-closure:${"0".repeat(64)}`);
   const root = createRootRoute({ component: () => <RouteControlsProvider><BandOutlet />
     {modules.map(module => <TypedShell key={module.spec.key} module={module} fingerprint={fingerprint} />)}
   </RouteControlsProvider> });
-  const router = createRouter({ routeTree: root, history: createMemoryHistory({ initialEntries: ["/ducts"] }) });
+  const router = createRouter({ routeTree: root, history: createMemoryHistory({ initialEntries: ["/duct-systems"] }) });
   await router.load();
   const view = render(<RouterProvider router={router} />);
   await waitFor(() => expect(view.container.querySelectorAll('[data-slot="pane"]')).toHaveLength(2));
   const bands = view.container.querySelectorAll('[data-slot="situation-band"]');
   expect(bands).toHaveLength(1);
-  expect(bands[0]!.textContent).toContain("ducts");
+  expect(bands[0]!.textContent).toContain("duct-systems");
   expect(view.container.querySelector('[data-slot="timeline-head"]')).toBeNull();
 });
 
@@ -42,7 +42,7 @@ test("the shell attaches only its current owner's host across retained route swi
     return (
       <RouteControlsProvider>
         <BandOutlet className="pe-appbar-situation" />
-        {(["ducts", "fans"] as const).map((route) => (
+        {(["duct-systems", "fans"] as const).map((route) => (
           <Activity key={route} mode={path === `/${route}` ? "visible" : "hidden"}>
             <RouteBand route={route}>
               <span data-slot="situation-band">{route} controls</span>
@@ -55,10 +55,10 @@ test("the shell attaches only its current owner's host across retained route swi
   const root = createRootRoute({ component: Shell });
   const router = createRouter({
     routeTree: root.addChildren([
-      createRoute({ getParentRoute: () => root, path: "/ducts" }),
+      createRoute({ getParentRoute: () => root, path: "/duct-systems" }),
       createRoute({ getParentRoute: () => root, path: "/fans" }),
     ]),
-    history: createMemoryHistory({ initialEntries: ["/ducts"] }),
+    history: createMemoryHistory({ initialEntries: ["/duct-systems"] }),
   });
   await router.load();
   const view = render(<RouterProvider router={router} />);
@@ -73,7 +73,7 @@ test("the shell attaches only its current owner's host across retained route swi
   expect(outlet.textContent).toBe("fans controls");
   expect(firstHost.isConnected).toBe(false);
   await act(async () => {
-    await router.navigate({ to: "/$route", params: { route: "ducts" } });
+    await router.navigate({ to: "/$route", params: { route: "duct-systems" } });
   });
   expect(outlet.childElementCount).toBe(1);
   expect(outlet.firstElementChild).toBe(firstHost);

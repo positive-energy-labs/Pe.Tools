@@ -68,7 +68,7 @@ const evidence = (
   readings: { ducts: { value: data?.network }, fansWork: { value: data?.fansWork } },
 });
 export const module = route({
-  key: "ducts",
+  key: "duct-systems",
   host: "@pe/duct-systems-host/host",
   name: "Ducts",
   directory: {
@@ -160,7 +160,7 @@ export const module = route({
   edits: {
     seed: () => ductsRouteState.schema.parse({}),
     work: ductsRouteState,
-    value: "ductsWork",
+    value: "ductSystemsWork",
     // No cross-route write (ruling 2026-11-10): /ducts owns only its Work; the host reads Fans Work into its core read.
     owners: {},
     input: ductsCalcEditsSchema,
