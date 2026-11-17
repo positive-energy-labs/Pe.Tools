@@ -6,10 +6,10 @@ import type { CommandExecutor } from "./command-executor.ts";
 import { ductSystemsExecutors as group0 } from "@pe/duct-systems-host/actions";
 import { ductsRefreshExecutors as group1 } from "@pe/ducts-host/action-runtime";
 import { fansExecutors as group2 } from "@pe/fans-host/actions";
-export function productExecutors(bridge: RevitBridge["Service"], deps: FamilyActionDependencies & { nativeRead?: HostNativeRead["Service"] } = {}): Record<string, CommandExecutor> {
+export function productExecutors(bridge: RevitBridge["Service"], deps: FamilyActionDependencies & { nativeRead?: HostNativeRead["Service"] } = {}) {
   const result: Record<string, CommandExecutor> = {};
   for (const [key, executor] of Object.entries(group0(bridge, deps))) { if (result[key]) throw Error(`Duplicate product executor ${key}`); result[key] = executor; }
   for (const [key, executor] of Object.entries(group1(bridge))) { if (result[key]) throw Error(`Duplicate product executor ${key}`); result[key] = executor; }
   for (const [key, executor] of Object.entries(group2(bridge, deps))) { if (result[key]) throw Error(`Duplicate product executor ${key}`); result[key] = executor; }
-  return result;
+  return { executors: result, sheetRoutes: {"fans":"losses"} as Readonly<Record<string, string>> };
 }

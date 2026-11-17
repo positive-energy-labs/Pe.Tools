@@ -41,6 +41,7 @@
     "executors": {
       "module": "./actions",
       "factory": "fansExecutors",
+      "sheet": { "routes": ["fans"], "via": "losses" },
       "arguments": [
         "bridge",
         "deps"
