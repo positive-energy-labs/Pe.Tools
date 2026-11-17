@@ -172,9 +172,8 @@ function LedgerContent({ ctx, snapshot }: { ctx: SheetContext; snapshot: DuctSna
       const what = action.kind === "rule" ? `join ${name}` : action.kind === "cap" ? `end ${name}`
         : action.kind === "price" ? `assignment ${action.family}` : action.kind === "table" ? `table ${action.rule}` : `fitting ${name}`;
       // Never a fallback to a write or an ElementId (slice 5): the blocker's producer stamps its
-      // UniqueId SubjectRef; /ducts resolves the canonical roster itself so the URL never grows
-      // with the snapshot's system roster. A stand-in with none opens that scope without selection.
-      return { says: `Fix in /ducts: ${what} ›`, href: ductsLink("all", search,
+      // UniqueId SubjectRef; /ducts resolves the open fan's port walk, not the model's whole roster.
+      return { says: `Fix in /ducts: ${what} ›`, href: ductsLink(sheet?.overview.fan ?? null, search,
         // The contract admitted it as an element UniqueId code (`elementSubjectSchema`).
         blocker.subject ? { kind: "subject", code: blocker.subject as SubjectRefCode } : { kind: "route" }) };
     };
@@ -252,7 +251,7 @@ function LedgerContent({ ctx, snapshot }: { ctx: SheetContext; snapshot: DuctSna
   return (
     <SheetFrame ctx={ctx} snapshot={snapshot} nameOf={nameOf}>
       {ownPane}
-      <FittingReadouts groups={groups} ductsHref={ductsLink("all", search)}
+      <FittingReadouts groups={groups} ductsHref={ductsLink(sheet?.overview.fan ?? null, search)}
         waiting={!sheet ? "Open a fan first" : state.inputs ? null : "Wait for inputs"} />
     </SheetFrame>
   );
