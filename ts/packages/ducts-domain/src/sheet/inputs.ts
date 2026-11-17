@@ -31,7 +31,9 @@ export interface WorkCell<T> {
   by: Author;
   ref: string;
 }
-type Cells<T> = Readonly<Record<string, WorkCell<T>>>;
+/** A stored cell the host could not read: no value and no caller, only why and where (P-040). */
+type InvalidCell = { invalid: string; ref: string };
+type Cells<T> = Readonly<Record<string, WorkCell<T> | InvalidCell>>;
 /** Work's staged edits, as `stagedDucts(doc)` shapes them; every segment optional so tests pass literals. */
 export interface WorkLayer {
   flows?: Cells<number>;
@@ -46,7 +48,7 @@ export interface WorkLayer {
   kinds?: Cells<DuctUnitKind>;
   criteria?: DuctsCriteriaLayer;
   /** Who staged each criterion cell and its ref (`criteriaMeta`); a criterion with none resolves invalid. */
-  criteriaMeta?: Partial<Record<DuctsCriteriaCell, Pick<WorkCell<unknown>, "by" | "ref">>>;
+  criteriaMeta?: Partial<Record<DuctsCriteriaCell, Pick<WorkCell<unknown>, "by" | "ref"> | InvalidCell>>;
   /** Loss-rule key to table (Work `rules`). */
   rules?: Cells<string>;
   /** Fitting family to the rule key it is priced as where no rule matches (Work `ruleAssignments`). */
@@ -61,19 +63,20 @@ export interface WorkLayer {
 
 /** A staged cell as a value layer: its caller is the author, its ref the evidence. */
 const staged = <T, V = T>(
-  cell: WorkCell<T> | undefined,
+  cell: WorkCell<T> | InvalidCell | undefined,
   value: (v: T) => V | null | undefined = (v) => v as unknown as V,
-): ValueCell<V> => ({ value: cell ? value(cell.value) : undefined, author: cell?.by ?? null, ref: cell?.ref });
+): ValueCell<V> => cell && "invalid" in cell ? { value: null, invalid: cell.invalid, author: null, ref: cell.ref }
+  : { value: cell ? value(cell.value) : undefined, author: cell?.by ?? null, ref: cell?.ref };
 /** A Work criterion as a value layer: the author is its cell's `by`. */
 const authored = <T>(
   layer: WorkLayer | null | undefined,
   cell: DuctsCriteriaCell,
   value: T | undefined,
-): ValueCell<T> => ({
-  value,
-  author: layer?.criteriaMeta?.[cell]?.by ?? null,
-  ref: layer?.criteriaMeta?.[cell]?.ref ?? `work:ducts/criteria/${cell}`,
-});
+): ValueCell<T> => {
+  const meta = layer?.criteriaMeta?.[cell];
+  return meta && "invalid" in meta ? { value: null, invalid: meta.invalid, author: null, ref: meta.ref }
+    : { value, author: meta?.by ?? null, ref: meta?.ref ?? `work:ducts/criteria/${cell}` };
+};
 /** Every model, store, project, firm and default layer cell: no author, and a ref of its tier and location. */
 export const observed = <T>(
   tier: string,
@@ -295,7 +298,7 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
       const storedDrop = store.terminals?.[id]?.inWg;
       const dropCell = criteriaCellOf("terminalDropInWg")!;
       const tables = Object.fromEntries(
-        Object.entries(work.catalogs ?? {}).map(([k, c]) => [k, { table: c.value }]),
+        Object.entries(work.catalogs ?? {}).flatMap(([k, c]) => ("value" in c ? [[k, { table: c.value }]] : [])),
       );
       const catalog =
         catalogs && Object.keys(catalogs).length
@@ -378,8 +381,10 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
         };
     } else {
       // Accessories, fittings and caps: a drop only where something states one, or where a stated
-      const typed = work.componentDrops?.[key]?.value;
-      const family = n.family ? work.assumptions?.[`component-drop:${n.family}`]?.value.inWg : undefined;
+      // The cells themselves gate the row: an unreadable one still resolves, as invalid (P-040).
+      const typed = work.componentDrops?.[key];
+      const familyCell = n.family ? work.assumptions?.[`component-drop:${n.family}`] : undefined;
+      const family = familyCell && ("invalid" in familyCell || familyCell.value.inWg != null) ? familyCell : undefined;
       const stated = n.kind === "accessory" ? positive(factOf(n, "pressureDrop")) : null;
       const placeholder = n.family && stated != null ? placeholders.get(n.family) : undefined;
       if (

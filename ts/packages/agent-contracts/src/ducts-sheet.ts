@@ -98,11 +98,15 @@ export function criteriaLayer(cells: Readonly<Partial<Record<DuctsCriteriaCell, 
   return layer as DuctsCriteriaLayer;
 }
 /** Who staged each criterion cell and its ref (contract amendment 2): the host-stamped `by`, and the cited ref or the cell's location. A cell with no `by` has no entry, so its criterion resolves invalid. */
-export function criteriaMeta(cells: Readonly<Partial<Record<DuctsCriteriaCell, { readonly edit?: { readonly by?: Author; readonly ref?: string } | null }>>>, work = "ducts") {
-  const meta: Partial<Record<DuctsCriteriaCell, { by: Author; ref: string }>> = {};
+export function criteriaMeta(cells: Readonly<Partial<Record<DuctsCriteriaCell, { readonly invalid?: string; readonly edit?: { readonly by?: Author; readonly ref?: string } | null }>>>, work = "ducts") {
+  const meta: Partial<Record<DuctsCriteriaCell, { by: Author; ref: string } | { invalid: string; ref: string }>> = {};
   for (const cell of Object.keys(DUCTS_CRITERIA_CELLS)) {
-    const edit = isCriteriaCell(cell) ? cells[cell]?.edit : undefined;
-    if (edit?.by && isCriteriaCell(cell)) meta[cell] = { by: edit.by, ref: edit.ref ?? `work:${work}/criteria/${cell}` };
+    if (!isCriteriaCell(cell)) continue;
+    // An unreadable stored criterion keeps its marker, so the resolver holds it invalid instead of falling to the firm value (P-040).
+    const invalid = cells[cell]?.invalid;
+    if (invalid) { meta[cell] = { invalid, ref: `work:${work}/criteria/${cell}` }; continue; }
+    const edit = cells[cell]?.edit;
+    if (edit?.by) meta[cell] = { by: edit.by, ref: edit.ref ?? `work:${work}/criteria/${cell}` };
   }
   return meta;
 }

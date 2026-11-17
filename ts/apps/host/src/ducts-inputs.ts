@@ -14,6 +14,7 @@ import {
   type DuctsDesign,
   type DuctsFirm,
   type DuctsFirmFile,
+  type StagedCell,
   type SettingTierRead,
 } from "@pe/agent-contracts";
 import { type WorkLayer } from "@pe/ducts-domain/sheet/index";
@@ -53,8 +54,9 @@ export function firmLayer(reading: FirmReading, settings: readonly SettingTierRe
 /** Work's staged cells as the resolver reads them: each keeps its caller and ref, with the value unwrapped to what is priced. */
 export function workLayer(design: DuctsDesign): WorkLayer {
   const staged = stagedDucts(design, design);
-  const cells = <V, T>(segment: Record<string, { value: V; by: "human" | "pea"; ref: string }>, value: (v: V) => T) =>
-    Object.fromEntries(Object.entries(segment).map(([key, cell]) => [key, { ...cell, value: value(cell.value) }]));
+  // An unreadable cell's marker passes through untouched, so the resolver holds its row invalid.
+  const cells = <V, T>(segment: Record<string, StagedCell<V>>, value: (v: V) => T) =>
+    Object.fromEntries(Object.entries(segment).map(([key, cell]) => [key, "invalid" in cell ? cell : { ...cell, value: value(cell.value) }]));
   return {
     flows: staged.flows,
     terminalDrops: cells(staged.terminalDrops, (v) => v.inWg),

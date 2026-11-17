@@ -19,6 +19,9 @@ import { fileRouteDocumentStore } from "../src/route-document-store.ts";
 import { editPatches, workLayer } from "../src/ducts-inputs.ts";
 import { criteriaLayer } from "@pe/agent-contracts";
 import { price } from "@pe/ducts-domain/pricing";
+import { resolveInputs, type WorkLayer } from "@pe/ducts-domain/sheet/index";
+import { elementSubject } from "@pe/ducts-domain/work-subject";
+import { TEST_FIRM } from "../../../packages/ducts-domain/src/sheet/test-inputs.ts";
 import { fanWriteCells } from "@pe/ducts-domain/staged";
 import { snapshot } from "../../web/src/ducts/test-fixture.ts";
 
@@ -116,4 +119,20 @@ test("a stated rated ESP reaches the resolver's Work layer with its caller and c
   const fans = fansDocumentSchema.parse({ ratedEsp: { [key]: { edit: { value: { inWg: 0.75 }, by: "pea", ref: "submittal p3" } } } });
   expect(workLayer(ductsDesign(ductsDocumentSchema.parse({}), fans)).ratedEsp).toEqual({ [key]: { value: 0.75, by: "pea", ref: "submittal p3" } });
   expect(fanWriteCells(fans, { nodes: [{ uniqueId: "fixture:4" }], segments: [] } as unknown as Parameters<typeof fanWriteCells>[1])).toEqual([]);
+});
+
+// P-040 falsifier: a stored cell the host could not read keeps its marker to the resolver. Its row is
+// invalid at its Work location, never the model's own flow, and its readable neighbor is untouched.
+test("a stored Work with one unreadable cell resolves that row invalid, never the model value, and its neighbor valid", () => {
+  const [bad, good] = snapshot.nodes.filter((node) => node.kind === "terminal");
+  const badKey = elementSubject(bad!), goodKey = elementSubject(good!);
+  const fans = fansDocumentSchema.parse({
+    flows: { [badKey]: { invalid: "expected number, received object" }, [goodKey]: { edit: { value: 250, by: "human" } } },
+  });
+  const read = (work: WorkLayer) => resolveInputs({ snapshot, firm: TEST_FIRM, work }).terminals;
+  const resolved = read(workLayer(ductsDesign(ductsDocumentSchema.parse({}), fans)));
+  expect(resolved[String(bad!.id)]!.cfm).toMatchObject({ status: "invalid", value: null, source: "Work", author: null, ref: `work:fans/flows/${badKey}` });
+  expect(resolved[String(good!.id)]!.cfm).toMatchObject({ status: "valid", value: 250, source: "Work", author: "human" });
+  // Without the marker the same row falls to a lower layer: the marker is what blocks it.
+  expect(read({})[String(bad!.id)]!.cfm.status).not.toBe("invalid");
 });

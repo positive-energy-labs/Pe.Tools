@@ -374,10 +374,13 @@ export const ductsDesign = (ducts: DuctsRouteDocument | null, fans: FansDocument
  * the evidence lives and claims nothing more. A cell with no human or Pea stamp is not handed over
  * at all: the runtime sets such stored Work aside before it is read, and no author is ever invented.
  */
-export type StagedCell<V> = { value: V; by: "human" | "pea"; ref: string };
-const stagedOf = <V>(work: "fans" | "ducts", segment: string, cells: Record<string, { edit?: { value?: V; by?: Author; ref?: string } | null } | undefined>) =>
+export type StagedCell<V> = { value: V; by: "human" | "pea"; ref: string } | InvalidStagedCell;
+/** A stored cell the host could not read (`{ invalid: reason }`), at its Work location: handed on so the resolver blocks fallback (P-040). */
+export type InvalidStagedCell = { invalid: string; ref: string };
+const stagedOf = <V>(work: "fans" | "ducts", segment: string, cells: Record<string, { invalid?: string; edit?: { value?: V; by?: Author; ref?: string } | null } | undefined>) =>
   Object.fromEntries<StagedCell<V>>(
-    Object.entries(cells).flatMap(([key, cell]) => {
+    Object.entries(cells).flatMap(([key, cell]): [string, StagedCell<V>][] => {
+      if (cell?.invalid) return [[key, { invalid: cell.invalid, ref: `work:${work}/${segment}/${key}` }]];
       const edit = cell?.edit;
       return edit?.value === undefined || (edit.by !== "human" && edit.by !== "pea") ? []
         : [[key, { value: edit.value, by: edit.by, ref: edit.ref?.trim() ? edit.ref : `work:${work}/${segment}/${key}` }]];
