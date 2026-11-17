@@ -25,6 +25,7 @@
 - 2026-11-17, RULES.md H5 amendment: adding host loss before N counted pressure already spent. The remaining-pressure rule above supersedes the 2026-11-16 H5 reading.
 
 ## Owed
+- Root 2026-11-17, FC-23, owner may upgrade: the [fans fixture provider](../../../ts/products/fans/web/src/calc/value-fixtures.ts#L24-L39) publishes only MUAS-1, so every other offered fan, FC-23 included, is uncovered, with empty `worstLegs` and null `calcBreakdown`; the [duct-systems navigation fixture](../../../ts/products/duct-systems/web/src/value-fixtures.ts#L25-L26) publishes empty calcs and empty `fanRows`. Both must run the production calc path, and one fan must be staged complete with priced bars. Rows J-P2, J-P3 and J-P4 on fans and ducts, and FANS-P3-REVERT-COVERAGE, wait on this. Evidence: `.artifacts/runs/fans-20261116/ev/fc23/`.
 
 - MAP L1-5 and BACKLOG FANS-DRIVER-H5-WITNESS-A418: reconcile REPORT C4 topology with the retained Chadds capture before naming DH-20/13760945 or DH-31/6530455 as positive-pressure witnesses. The recorded replay identifies those trunks as return/static-none; native coverage, complete pricing and the picture warning remain unproven.
 
