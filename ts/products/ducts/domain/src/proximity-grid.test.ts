@@ -28,7 +28,7 @@ vi.doUnmock("./geometry.ts");
 // Kept casts (here and in `cases`): an untyped JSON file boundary, not a constructed shape.
 const fixture = (name: string) =>
   JSON.parse(
-    readFileSync(join(__dirname, "../../web/ducts/fixtures", name), "utf8"),
+    readFileSync(join(__dirname, "../../web/src/fixtures", name), "utf8"),
   ) as Record<string, unknown>;
 const synthetic = fixture("synthetic-snapshot.json") as unknown as DuctSnapshot;
 const excerpt = (nodes: Node[]): DuctSnapshot => ({ ...synthetic, nodes, segments: [] });
