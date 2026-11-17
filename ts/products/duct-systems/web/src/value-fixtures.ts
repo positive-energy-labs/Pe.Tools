@@ -18,12 +18,12 @@ export const rosterFixtures = providers(snapshot => ductsRosterData.parse({
 }));
 export const networkValueFixtures = providers(network);
 export const pricingFixtures = providers(snapshot => {
-  const ductsWork = ductsDocumentSchema.parse({}), fansWork = fansDocumentSchema.parse({});
-  const design = ductsDesign(ductsWork, fansWork);
+  const ductSystemsWork = ductsDocumentSchema.parse({}), fansWork = fansDocumentSchema.parse({});
+  const design = ductsDesign(ductSystemsWork, fansWork);
   const firm = { refused: "no-shared-root" as const };
   return ductsPricingData.parse({
     ...pricingWire(pricingValue(snapshot, [], design)), network: network(snapshot),
-    ductsWork, fansWork, design, effectiveDesign: design, fanRows: [], catalogFindings: [],
+    ductSystemsWork, fansWork, design, effectiveDesign: design, fanRows: [], catalogFindings: [],
     espOptions: null, espOptionsError: "Fixture has no native parameter options",
     criteria: resolveCriteria(null, snapshot.store, FIRM_SEED), firm, settings: {},
   });
