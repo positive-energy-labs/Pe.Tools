@@ -495,6 +495,10 @@ async function compareSystemAnswers() {
   const snapshot = nativeResponseSchema("ducts.snapshot.walk").parse({ ...savedNetwork, vocabulary: VOCABULARY });
   for (const element of [...snapshot.nodes, ...snapshot.segments])
     element.uniqueId ||= `jx-native-${element.id}`;
+  // The saved capture's unit connector reads `bidirectional`, so the roster finds no fan port and both
+  // systems read "Rule a fan to price this system". H23 is about a fan two systems share: give it one.
+  for (const node of snapshot.nodes)
+    if (node.kind === "equipment") for (const port of node.connectors) port.direction = "out";
   snapshot.groups[0]!.systemNames.push("SA 2");
   snapshot.systems.push({ ...snapshot.systems[0]!, id: 501, name: "SA 2" });
   for (const element of [...snapshot.nodes, ...snapshot.segments])
@@ -567,10 +571,17 @@ async function compareSystemAnswers() {
       { route: "fans", binding: "address", target: path },
       "fans",
       "human",
-      [30, 31].map((id, i) => ({
-        path: ["terminalDrops", elementSubject(snapshot.nodes.find(node => node.id === id)!), "edit"],
-        value: { value: { inWg: i ? 0.35 : 0.05 } },
-      })),
+      [
+        ...[30, 31].map((id, i) => ({
+          path: ["terminalDrops", elementSubject(snapshot.nodes.find(node => node.id === id)!), "edit"],
+          value: { value: { inWg: i ? 0.35 : 0.05 } },
+        })),
+        // No table is served here, so each fitting on a run needs a stated drop to be priced.
+        ...[21, 22].map((id) => ({
+          path: ["componentDrops", elementSubject(snapshot.nodes.find(node => node.id === id)!), "edit"],
+          value: { value: { inWg: 0.01 } },
+        })),
+      ],
       0,
     );
     expect(staged.ok).toBe(true);
@@ -586,20 +597,21 @@ async function compareSystemAnswers() {
     const result = ductsPricingData.parse(valueOf(mount.value()));
     const first = result.analysis.systems.find((row) => row.name === "SA 1")!;
     const second = result.analysis.systems.find((row) => row.name === "SA 2")!;
+    expect(result.calcs.map((calc) => calc.fan.unitId), "H23: the shared fan has one calc").toEqual([1]);
+    expect(second.total, "H23: the second system reads its own worst run on the fan's calc").toBeGreaterThan(0.35);
+    // The first system's only run passes the second's takeoff, which no table prices here: unknown, never a copy.
+    expect(first.total, "H23: sharing a fan does not copy the other system's pressure").toBeNull();
+    expect([first.fanless, second.fanless], "H23: both systems are reached by the fan's calc").toEqual([false, false]);
     expect(
-      first.total,
-      "H23: sharing a fan does not copy the other system's pressure",
-    ).toBeLessThan(second.total!);
-    expect(
-      first.split!.rows.some((row) => row.id === 30),
-      "H23: first system retains its own terminal",
+      second.split!.rows.some((row) => row.id === 31),
+      "H23: second system retains its own terminal",
     ).toBe(true);
     expect(
-      first.split!.rows.some((row) => row.id === 31),
-      "H23: first system excludes the second terminal",
+      second.split!.rows.some((row) => row.id === 30),
+      "H23: second system excludes the first terminal",
     ).toBe(false);
     expect(
-      result.priced.flows["30"]?.source,
+      result.survey.flows["30"]?.source,
       "H23: terminal flow retains its provenance",
     ).toBeTruthy();
     expect(

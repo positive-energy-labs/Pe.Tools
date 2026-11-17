@@ -1,6 +1,7 @@
 import { expect, test } from "vite-plus/test";
 import { buildSheet } from "@pe/ducts-domain/sheet/index";
-import { inputsFor } from "@pe/ducts-domain/sheet/test-inputs";
+import { inputsFor, TEST_WALK, withFamilyFlipped, withPeersRead } from "@pe/ducts-domain/sheet/test-inputs";
+import type { SheetSnapshot } from "@pe/ducts-domain/sheet/build";
 import type { FanPort } from "@pe/ducts-domain/roster";
 import {
   connOf,
@@ -15,7 +16,6 @@ import { buildSheetTree, type SheetTreeNode } from "./sheet-model";
 import type { TreeNode } from "./model";
 import retained from "../../../../../../packages/ducts-domain/src/sheet/fixtures/manual-d-20261102.json" with { type: "json" };
 import tables from "../../../../../../packages/ducts-domain/src/sheet/fixtures/manual-d-tables.json" with { type: "json" };
-import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import { sheetSnapshot } from "@pe/ducts-domain/sheet/scoped-snapshot";
 import { suggestRoster } from "@pe/ducts-domain/roster";
 import { toGrids } from "@pe/ducts-domain/loss-grid";
@@ -30,7 +30,9 @@ function example(shared = false) {
       ...(classification ? { classification } : {}),
     });
   const at = { groupId: "g1", systemName: "Air" };
+  // A walk that read every peer: without it no calc may claim a whole coverage (P-028).
   const snapshot = snapshotOf({
+    walk: TEST_WALK,
     groups: [groupOf("g1", { rootIds: shared ? [100, 200] : [100], systemNames: ["Air"] })],
     nodes: [
       nodeOf(100, "equipment", { family: "MUAS", connectors: [c(0, [11, 0]), c(1, [20, 0])] }),
@@ -199,7 +201,10 @@ test("a system scope retains full sheet identity without relabelling a clipped s
 test("retained Manual D geometry: fan boundaries and a sibling's shared intake stay distinct", () => {
   // The capture contains no native groups. This existing adapter gives the captured ids one
   // navigation group, while the legs, connectivity and native health remain captured evidence.
-  const snapshot = sheetSnapshot(nativeResponseSchema("ducts.snapshot.walk").parse(retained));
+  // Q4 (2026-11-16): MUAS-1's family reads against its network, so the capture states the roles it was certified under (`manual-d.test.ts`).
+  const snapshot = sheetSnapshot(
+    withPeersRead(withFamilyFlipped(retained as unknown as SheetSnapshot, 14577391)) as never,
+  );
   const suggested = suggestRoster(snapshot);
   const roster = [...suggested.fans, ...suggested.suggestions];
   const grids = toGrids({ tables });

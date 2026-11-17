@@ -34,8 +34,10 @@ export function systemList(snapshot: DuctSnapshot, calcs: readonly Calc[] | null
     const scope = systemScope(snapshot, system.name);
     const reached = calcs ? calcsIn(calcs, scope.prices) : [];
     const worst = calcs ? worstRun(calcs, scope.terminals) : null;
-    // A blocker on a reaching calc's element here holds the system's price: needs a fix, never a partial number.
-    const blocked = reached.some((calc) => calc.blockers.some((b) => scope.prices.has(b.elementId)));
+    // An implausible loss on one of the system's own elements holds its price: needs a fix, never a partial number.
+    const blocked = reached.some((calc) =>
+      calc.blockers.some((b) => b.kind === "implausible-loss" && scope.prices.has(b.elementId)),
+    );
     const rows = worst?.rows;
     const first = snapshot.groups.find((g) => g.id === system.groups[0]);
     const lead = worst?.unit;

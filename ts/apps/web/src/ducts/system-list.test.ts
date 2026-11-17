@@ -1,13 +1,10 @@
-import { elementSubject } from "@pe/ducts-domain/work-subject";
-import { neutralFansWork } from "@pe/agent-contracts";
-import { designOf } from "@pe/ducts-domain/test-design";
 import { expect, test } from "vite-plus/test";
-import { price } from "@pe/ducts-domain/pricing";
 import { systemScope } from "@pe/ducts-domain/system-scope";
 import { syntheticSnapshot } from "./test-fixture";
 import { systemList } from "./system-list";
 import { fanFacts } from "./proto/e/fan-sections";
-import { buildTree } from "./proto/b/model";
+import { buildSheetTree, runNodesOf } from "./proto/b/sheet-model";
+import { calcsOf, withFan } from "./calcs.test-support";
 
 test("F16 metadata-only roster exposes system information before network pricing", () => {
   const snapshot = syntheticSnapshot();
@@ -22,26 +19,33 @@ test("F16 metadata-only roster exposes system information before network pricing
   expect(rows[0]!.sub).not.toContain("no fan");
 });
 
-test("two systems sharing a fan retain their own pressure and breakdown terminal", () => {
-  const snapshot = syntheticSnapshot();
+test("two systems sharing a fan retain their own worst run and breakdown terminal", () => {
+  const snapshot = withFan(syntheticSnapshot());
   snapshot.groups[0]!.systemNames.push("SA 2");
   snapshot.systems.push({ ...snapshot.systems[0]!, id: 501, name: "SA 2" });
   for (const e of [...snapshot.nodes, ...snapshot.segments])
     if ([12, 22, 31].includes(e.id)) e.systemName = "SA 2";
-  const cell = (inWg: number) => ({ edit: { value: { inWg }, by: "human" } });
-  const work = designOf({
-    terminalDrops: { [elementSubject(snapshot.nodes.find(node => node.id === 30)!)]: cell(0.05), [elementSubject(snapshot.nodes.find(node => node.id === 31)!)]: cell(0.35) },
-    componentDrops: { [elementSubject(snapshot.nodes.find(node => node.id === 21)!)]: cell(0.01), [elementSubject(snapshot.nodes.find(node => node.id === 22)!)]: cell(0.01) },
+  const calcs = calcsOf(snapshot, {
+    endCfm: { 30: 300, 31: 100 },
+    drops: { 21: 0.01, 22: 0.01, 30: 0.05, 31: 0.35 },
   });
-  const priced = price(snapshot, {}, work, (work) ?? neutralFansWork);
-  const rows = systemList(priced.snapshot, priced);
+  const rows = systemList(snapshot, calcs);
   expect(rows.map((r) => r.key)).toEqual(["SA 1", "SA 2"]);
-  expect(rows[0]!.total).toBeLessThan(rows[1]!.total!);
-  expect(rows[0]!.split!.rows.some((r) => r.id === 30)).toBe(true);
-  expect(rows[0]!.split!.rows.some((r) => r.id === 31)).toBe(false);
-  const scope = systemScope(priced.snapshot, "SA 1");
-  const facts = fanFacts(priced, scope.groups, String, scope.terminals);
-  expect(facts[0]!.esp).toBe(rows[0]!.total);
-  const tree = buildTree(priced.snapshot, priced, work, scope.groups, undefined, scope.members);
-  expect(tree.flatMap((t) => t.children).map((r) => r.terminal)).toEqual([30]);
+  const second = rows[1]!;
+  expect(second.fanless).toBe(false);
+  const scope = systemScope(snapshot, "SA 2");
+  const facts = fanFacts({ calcs } as never, scope.terminals);
+  // The fan's calc is not complete on this capture (it has no return path), so no ESP is claimed.
+  expect(facts.map((f) => [f.unit, f.complete, f.claim])).toEqual([[1, false, "incomplete"]]);
+  const tree = buildSheetTree(snapshot, calcs, scope.groups, scope.members);
+  expect(runNodesOf(tree).map((r) => r.terminal)).toEqual([31, 30]);
+  expect(tree[0]!.children[0]!.name).toContain("full fan sheet");
+});
+
+test("a system no fan calc reaches is fanless and its tree says to rule a fan (L2-4)", () => {
+  const snapshot = syntheticSnapshot();
+  const calcs = calcsOf(snapshot);
+  expect(calcs).toEqual([]);
+  expect(systemList(snapshot, calcs)[0]).toMatchObject({ fanless: true, total: null });
+  expect(buildSheetTree(snapshot, calcs)[0]!.message).toBe("Rule a fan to price this system");
 });

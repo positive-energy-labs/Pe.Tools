@@ -54,16 +54,19 @@ const lossCache = new WeakMap<object, Map<number, number>>();
 
 /**
  * Pe's loss per element from the fan calcs. A shared duct is on every fan's calc at its total flow,
- * so its loss is the same on each (MAP invariant 6): the largest leg of an element is drawn, never a
- * sum across fans or across a fitting's alternative paths.
+ * so its loss is the same on each (MAP invariant 6). An element's legs on one path are in series
+ * and add (a duct's intervals); across paths they are alternatives (a fitting's branch and straight
+ * legs, the same duct on two fans' calcs) and the largest is drawn, never a sum.
  */
 function lossesOf(calcs: readonly Calc[]): Map<number, number> {
   const cached = lossCache.get(calcs);
   if (cached) return cached;
   const losses = new Map<number, number>();
-  for (const run of runsOf(calcs))
-    for (const row of run.rows)
-      if (row.dp != null) losses.set(row.id, Math.max(losses.get(row.id) ?? 0, row.dp));
+  for (const run of runsOf(calcs)) {
+    const own = new Map<number, number>();
+    for (const row of run.rows) if (row.dp != null) own.set(row.id, (own.get(row.id) ?? 0) + row.dp);
+    for (const [id, dp] of own) losses.set(id, Math.max(losses.get(id) ?? 0, dp));
+  }
   lossCache.set(calcs, losses);
   return losses;
 }

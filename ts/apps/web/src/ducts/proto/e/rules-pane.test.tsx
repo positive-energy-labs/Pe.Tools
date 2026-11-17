@@ -3,7 +3,8 @@ import { elementSubject } from "@pe/ducts-domain/work-subject";
 import { designOf } from "@pe/ducts-domain/test-design";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import type { PricedView as Priced } from "@pe/ducts-domain/pricing-view";
+import type { Priced } from "../../priced";
+import { calcOf, legOf } from "../../calcs.test-support";
 import { nodeOf, snapshotOf } from "@pe/ducts-domain/test-snapshot";
 import { RulesTree } from "./rules-pane";
 
@@ -17,20 +18,19 @@ afterEach(cleanup);
 test("rule rows keep native ids and editable cells keep their arrow and Enter keys", () => {
   const onFocus = vi.fn();
   const snapshot = snapshotOf({ nodes: [20, 30, 40].map((id) => nodeOf(id, "fitting")) });
-  const result = {
-    paths: {
-      20: {
-        rows: [
-          { id: 20, rule: "elbow-mitered" },
-          { id: 40, finding: "no-rule", family: "Unassigned" },
-        ],
-      },
-    },
-  };
+  // One fan calc whose path to grille 99 carries a ruled elbow and a fitting no rule matches.
+  const calc = calcOf(
+    1,
+    [legOf("20:1>2", 20, "fitting", 0.1), legOf("40:1>2", 40, "fitting", null)],
+    [{ terminal: 99, legIds: ["20:1>2", "40:1>2"] }],
+  );
+  calc.fittings = [
+    { key: "20", elementId: 20, family: "Elbow", rule: "elbow-mitered", ruleSource: "matched", lossInWg: 0.1 },
+    { key: "40", elementId: 40, family: "Unassigned", rule: null, ruleSource: "none", lossInWg: null },
+  ] as never;
   const priced = {
     snapshot,
-    now: result,
-    next: result,
+    calcs: [calc],
     edit: { componentDrops: { [elementSubject(snapshot.nodes.find(node => node.id === 30)!)]: {} }, ruleAssignments: {} },
   } as unknown as Priced;
   render(
@@ -47,6 +47,8 @@ test("rule rows keep native ids and editable cells keep their arrow and Enter ke
   );
   const row = document.querySelector('[data-key="elbow-mitered"]')!;
   expect(row.getAttribute("data-revit-ids")).toBe("20");
+  // The fan-out is counted from the fan calcs' paths: one grille's path carries the elbow.
+  expect(document.querySelector('[data-e-fanout="elbow-mitered"]')?.textContent).toContain("moves 1 grille");
   const input = screen.getByRole("textbox", { name: "table cell" });
   input.focus();
   fireEvent.keyDown(input, { key: "ArrowDown" });

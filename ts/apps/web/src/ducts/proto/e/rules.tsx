@@ -118,7 +118,6 @@ export function StagedRules({
   const keys = Object.keys(priced.edit.rules).sort();
   const terminals = Object.keys(priced.edit.terminalDrops).length;
   const components = Object.keys(priced.edit.componentDrops).length;
-  const units = Object.keys(priced.edit.esp).length;
   const catalogs = Object.keys(priced.edit.catalogs).length;
   const flows = Object.keys(priced.edit.flows).length;
   const unitFlows = Object.keys(priced.edit.equipmentFlows).length;
@@ -148,7 +147,6 @@ export function StagedRules({
     !keys.length &&
     !terminals &&
     !components &&
-    !units &&
     !catalogs &&
     !flows &&
     !unitFlows &&
@@ -172,13 +170,12 @@ export function StagedRules({
           </div>
         );
       })}
-      {terminals || components || units || catalogs || flows || unitFlows || roles ? (
+      {terminals || components || catalogs || flows || unitFlows || roles ? (
         <div>
           {[
             terminals ? `${terminals} terminal drop${terminals === 1 ? "" : "s"}` : "",
             components ? `${components} component drop${components === 1 ? "" : "s"}` : "",
             catalogs ? `${catalogs} catalog link${catalogs === 1 ? "" : "s"}` : "",
-            units ? `${units} unit ESP${units === 1 ? "" : "s"}` : "",
             flows ? `${flows} terminal flow${flows === 1 ? "" : "s"}` : "",
             unitFlows ? `${unitFlows} unit flow${unitFlows === 1 ? "" : "s"}` : "",
             roles ? `${roles} unit role${roles === 1 ? "" : "s"}` : "",
@@ -189,7 +186,7 @@ export function StagedRules({
       ) : null}
       <div className="flex items-baseline gap-2">
         <Button
-          label="Discard every edit rule, drop, catalog link, flow, role and unit ESP"
+          label="Discard every edit rule, drop, catalog link, flow and role"
           onClick={discard}
         >
           discard
