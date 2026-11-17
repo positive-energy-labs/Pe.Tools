@@ -61,7 +61,7 @@ const scopeChoices = (read: Read): readonly EnumChoice[] => {
   const fan = read?.open?.overview.fan, standing = read?.fansWork.writeIntent.edit?.value?.walk;
   const mine = (walk: { unitId: number; portIndex: number }) => !!fan && walk.unitId === fan.unitId && walk.portIndex === (fan as { portIndex?: number }).portIndex;
   return [
-    ...(fan && "portIndex" in fan ? [{ label: `${fan.mark || `unit ${fan.unitId}`} · ${snapshot ? fanWriteCells(read!.fansWork, snapshot, read!.open?.overview.cohorts ?? []).length : 0} staged`, value: { walk: { unitId: fan.unitId, portIndex: fan.portIndex } },
+    ...(fan && "portIndex" in fan ? [{ label: `${fan.mark || `unit ${fan.unitId}`} · ${snapshot ? fanWriteCells(read!.fansWork, snapshot).length : 0} staged`, value: { walk: { unitId: fan.unitId, portIndex: fan.portIndex } },
       description: "Write this fan's walk and its staged cells" }] : []),
     ...(standing && !mine(standing) ? [{ label: `unit ${standing.unitId}`, value: { walk: standing }, description: "Another fan's scope, still standing" }] : []),
     { value: null, label: "None", description: "Clear the write scope" },
@@ -131,15 +131,7 @@ export const fansSheet = {
         };
       },
     }),
-    // The ESP written to the fan (required). The open fan's own is an input of this sheet; another unit's only once Work stages it.
-    esp: input(FAN_CELLS.esp, {
-      rows: (read: Read) => rowsOf(read, units(read)).filter((key) =>
-        key === subjectOf(snapshotOf(read), fanUnit(read) ?? -1) || read?.fansWork.esp[key]?.edit != null),
-      rowLabel: (read, row) => nameOf(read, row, "Unit ESP"),
-      // Only the open fan's staged value is resolved by this read; another unit's row shows its Work cell alone.
-      model: (read: Read, row) => idOf(read, row) === fanUnit(read) ? layer(read?.open?.overview.espValues?.staged, (v) => ({ inWg: v })) : null,
-    }),
-    // The ESP a fan is rated for: stated here or by Pea and kept in Work, since no parameter holds it (P-030).
+    // The ESP a fan is rated for: stated here or read from its separately named parameter (P-030).
     ratedEsp: local(drawn(FAN_CELLS.ratedEsp.domain), "subject", {
       rows: (read: Read) => rowsOf(read, units(read)),
       rowLabel: (read, row) => nameOf(read, row, "Unit rated ESP"),

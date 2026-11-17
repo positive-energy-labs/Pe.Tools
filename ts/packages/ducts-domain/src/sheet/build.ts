@@ -77,7 +77,6 @@ import type {
   Encounter,
   FanIssue,
   LegEvidence,
-  SourcedValue,
 } from "@pe/agent-contracts";
 import {
   backflowId,
@@ -92,7 +91,7 @@ import { REVIT_FLOW_SLOT, slotFlowOf } from "../kernel/terminal-flow.ts";
 
 /** Issues and tolerances are C#'s model health (ducts LEDGER 2026-10-29); absent, no open end has a measured neighbourhood. */
 export type SheetSnapshot = Pick<DuctSnapshot, "nodes" | "segments" | "document"> &
-  Partial<Pick<DuctSnapshot, "slots" | "issues" | "tolerances" | "walk" | "reach">>;
+  Partial<Pick<DuctSnapshot, "slots" | "issues" | "tolerances" | "walk" | "reach" | "store" | "parameterCohorts">>;
 
 export interface PricingInput {
   snapshot: SheetSnapshot;
@@ -108,8 +107,6 @@ export interface BuildSheetInput extends PricingInput {
   assumeServedFlow?: boolean;
   /** A person's verdicts on this read's encounters (`encounterRulings`). */
   encounterRulings?: readonly EncounterRuling[];
-  /** Staged required ESP by unit element id (`stagedEsp`); never read as rated or as pressure authority. */
-  stagedEsp?: Readonly<Record<string, SourcedValue<number>>>;
   /** Host calcs already built for this read, by `unitId:portIndex`; one at another basis is stale. */
   hosts?: ReadonlyMap<string, HostCalc>;
   /** The fans whose calcs are waiting on this one (cycle guard); callers leave it unset. */
@@ -1972,11 +1969,10 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
     basis,
     network,
     claim,
-    // Q2 (P-030): rated is only a stated run or Work `ratedEsp` cell, never the model's `fanStatic`; a staged required ESP is a third value and never either's source.
+    // P-030: rated reads its own slot or stated inputs; required reads only the claim.
     esp: {
       rated: sourced(input.inputs.units[unitId]?.esp),
       required: claim,
-      staged: input.stagedEsp?.[unitId] ?? sourced(undefined),
     },
     encounters: met.map((m) => m.encounter),
     issues: blockers.map((b) =>

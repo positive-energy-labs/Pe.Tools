@@ -144,7 +144,6 @@ export function StagedRules({
           "catalogs",
           "terminalDrops",
           "componentDrops",
-          "esp",
           "flows",
           "equipmentFlows",
           "roles",

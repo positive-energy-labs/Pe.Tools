@@ -78,7 +78,7 @@ function makeupSnapshot(rows: Row[]): DuctSnapshot {
     levels: LEVELS,
     nodes,
     segments,
-    slots: { ...slots, fanStatic: "", fanFlow: "", componentDrop: "" },
+    slots: { ...slots, requiredEsp: "", fanFlow: "", componentDrop: "" },
   });
 }
 

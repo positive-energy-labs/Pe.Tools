@@ -17,7 +17,7 @@ import {
 import { stagedLink, EMPTY_CATALOGS, type Catalogs } from "./catalog.ts";
 import { DEFAULT_DESIGN_FRICTION_RATE } from "./equivalent-length.ts";
 import type { Grids } from "./loss-grid.ts";
-import { LOSS_RULES, ruleByKey } from "./loss-rules.ts";
+import { ruleByKey } from "./loss-rules.ts";
 import {
   computeLosses,
   fanout,
@@ -38,10 +38,8 @@ import { elementSubject, workElementId } from "./work-subject.ts";
 type Node = DuctSnapshot["nodes"][number];
 type Group = DuctSnapshot["groups"][number];
 
-/** Every table a rule may be looked up under: the one `ducts.tables` read. */
-export const TABLE_IDS: readonly string[] = [
-  ...new Set(LOSS_RULES.flatMap((rule) => rule.options)),
-].sort();
+import { TABLE_IDS } from "./table-ids.ts";
+export { TABLE_IDS };
 
 /** The tables Pe's provenance store says were last applied, per rule key; absent = the default. */
 const appliedChoices = (snapshot: DuctSnapshot): Choices =>
@@ -525,29 +523,7 @@ export function applyRequest(
     // Any unit rooted in the group, not the baseline's one pick (it is blind to a edit passive role).
     .filter(({ id }) => !scoped.size || roots.has(id))
     .sort((a, b) => a.id - b.id);
-  const calculationOwners = new Set(
-    Object.values(priced.edit.calculation).flatMap((e) =>
-      e.kind === "fan" || e.kind === "passive" ? [e.element.id] : [],
-    ),
-  );
-  if (Object.keys(priced.edit.esp).some((id) => calculationOwners.has(workElementId(snapshot, id))))
-    throw Error(
-      "Physical fan circuits have no admitted manufacturer scalar ESP mapping; clear the esp cell. Circuit evidence is calculation-only.",
-    );
-  // A unit of a group an implausible row blocks is never written an ESP: that group has no price.
-  const blockedUnits = new Set(
-    snapshot.groups.flatMap((group) =>
-      priced.next.byGroup[group.id]?.implausible.length
-        ? [...group.rootIds, unitOf(snapshot, priced.next, group) ?? -1]
-        : [],
-    ),
-  );
-  const equipment = Object.entries(priced.edit.esp)
-    .map(([id, { inWg }]) => ({ id: workElementId(snapshot, id), externalStaticInWg: inWg }))
-    .filter(({ id }) => !blockedUnits.has(id))
-    // Any unit rooted in the group, not the baseline's one pick (it is blind to a edit passive role).
-    .filter(({ id }) => !scoped.size || roots.has(id))
-    .sort((a, b) => a.id - b.id);
+  const equipment: DuctsApplyInput["equipment"] = [];
   const slots = priced.edit.parameters;
   const stored = snapshot.store;
   const rulings = storeRulings(priced.edit, stored, appliedAt, snapshot);

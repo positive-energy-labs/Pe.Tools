@@ -119,7 +119,7 @@ export const issueOf = (
 ): Issue => ({ id, kind, elementId, note: "", ...over });
 
 export const slots: DuctSnapshot["slots"] = {
-  fanStatic: "PE_M_Fan_ExternalStaticPressure",
+  requiredEsp: "PE_M_Fan_ExternalStaticPressure",
   fanFlow: "PE_M_Fan_AirFlow",
   componentDrop: "Pressure Drop",
   terminalDrop: "PE_M_Grd_ExternalStaticPressure",

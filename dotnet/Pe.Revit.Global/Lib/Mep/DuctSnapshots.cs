@@ -310,7 +310,7 @@ public static class DuctSnapshots {
     }
 
     private static IReadOnlyList<DuctFanParameterCohort> Cohorts(Document doc, IEnumerable<Element> equipment, DuctParameterSlots slots, DateTimeOffset readAt) =>
-        equipment.SelectMany(e => new[] { slots.FanStatic, slots.FanFlow }.Distinct()
+        equipment.SelectMany(e => new[] { slots.RequiredEsp, slots.FanFlow }.OfType<string>().Distinct()
             .Select(name => DuctApplier.ParameterCohort(doc, e.Id.Value(), name, readAt.ToString("O"))))
             .OfType<DuctFanParameterCohort>().GroupBy(c => (c.Parameter, c.Owner)).Select(g => g.First()).ToList();
 
@@ -671,7 +671,7 @@ public static class DuctSnapshots {
                 facts.Add(Fact(DuctNetwork.PressureDrop, Converted(Named(e, slots.ComponentDrop), UnitTypeId.InchesOfWater60DegreesFahrenheit), "in-wg", DuctProvenance.DesignerStated));
                 break;
             case DuctNodeKind.Equipment:
-                facts.Add(Fact(DuctNetwork.ExternalStatic, Converted(Named(e, slots.FanStatic), UnitTypeId.InchesOfWater60DegreesFahrenheit), "in-wg", DuctProvenance.DesignerStated));
+                if (slots.RequiredEsp != null) facts.Add(Fact(DuctNetwork.ExternalStatic, Converted(Named(e, slots.RequiredEsp), UnitTypeId.InchesOfWater60DegreesFahrenheit), "in-wg", DuctProvenance.DesignerStated));
                 var (fanCfm, fanFrom) = SlotFlow(e, slots.FanFlow);
                 flowParameter = fanFrom;
                 facts.Add(Fact("fanFlow", fanCfm, "cfm", DuctProvenance.DesignerStated));
@@ -758,7 +758,7 @@ public static class DuctSnapshots {
                 "DuctNetwork.PassOne: terminal design flow summed up the tree from the one equipment port of each loop-free group",
                 new(a.Flows.Count, segs.Count), DuctProvenance.Derived),
             new("fan-static", "Fan external static",
-                $"OST_MechanicalEquipment with HVAC connectors: LookupParameter(\"{slots.FanStatic}\") (InchesOfWater60DegreesFahrenheit) on the instance, else on its FamilySymbol; GetParameters(\"{slots.FanFlow}\") of the AirFlow spec, the first nonzero (CubicFeetPerMinute), else on its FamilySymbol",
+                $"OST_MechanicalEquipment with HVAC connectors: LookupParameter(\"{slots.RequiredEsp}\") (InchesOfWater60DegreesFahrenheit) on the instance, else on its FamilySymbol; GetParameters(\"{slots.FanFlow}\") of the AirFlow spec, the first nonzero (CubicFeetPerMinute), else on its FamilySymbol",
                 new(equipment.Count(e => DuctNetwork.Fact(e, DuctNetwork.ExternalStatic) > 0), equipment.Count), DuctProvenance.DesignerStated),
             new("component-drop", "Component pressure drop",
                 $"OST_DuctAccessory instances: LookupParameter(\"{slots.ComponentDrop}\") (InchesOfWater60DegreesFahrenheit) on the instance, else on its FamilySymbol",

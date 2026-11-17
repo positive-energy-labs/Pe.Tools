@@ -179,7 +179,7 @@ export namespace DocumentTemporaryStatus {
   }
 }
 
-/** Write duct losses into Revit so they travel with the model. Each fitting names a method: pe-server points it at the Pe loss server, which charges the family's own coefficient parameter live (the fittingCoefficient slot, default Pe_C) when the family carries one and otherwise prices each leg live from the write's ASHRAE table and the connectors' flows (taps, transitions, unstamped elbows); specific-coefficient freezes a number (export only). Revit's own ASHRAE-table route is never written. Also Specific Loss (in-wg) on duct accessories, terminal connector drops where the family connector is Specific Loss, fan external static on equipment through the fanStatic slot, and Pe's provenance store in the hidden _PE_DuctLosses Project Information parameter. ducts.apply.plan plans every write and refusal without a transaction. A real apply commits Not Defined on every targeted fitting, then the losses, in one undo step; a failed stage rolls everything back and is named. Returns per-target outcomes and the touched systems' critical path after. */
+/** Write duct losses into Revit so they travel with the model. Each fitting names a method: pe-server points it at the Pe loss server, which charges the family's own coefficient parameter live (the fittingCoefficient slot, default Pe_C) when the family carries one and otherwise prices each leg live from the write's ASHRAE table and the connectors' flows (taps, transitions, unstamped elbows); specific-coefficient freezes a number (export only). Revit's own ASHRAE-table route is never written. Also Specific Loss (in-wg) on duct accessories, terminal connector drops where the family connector is Specific Loss, fan external static on equipment through the requiredEsp slot, and Pe's provenance store in the hidden _PE_DuctLosses Project Information parameter. ducts.apply.plan plans every write and refusal without a transaction. A real apply commits Not Defined on every targeted fitting, then the losses, in one undo step; a failed stage rolls everything back and is named. Returns per-target outcomes and the touched systems' critical path after. */
 export namespace DuctsApply {
   export namespace Req {
     /**
@@ -202,14 +202,15 @@ export namespace DuctsApply {
       storeDeletes?: null | DuctStoreDeletes;
     }
     /**
-     * Parameter names the census reads, instance first and then type. FanStatic (in-wg) and FanFlow (CFM) on HVAC
+     * Parameter names the census reads, instance first and then type. RequiredEsp (in-wg) and FanFlow (CFM) on HVAC
      * equipment, ComponentDrop (in-wg) on accessories, TerminalDrop (in-wg) and TerminalFlow (CFM) on terminals,
      * FittingCoefficient (a number) on fittings: the family's own loss coefficient, which the Pe loss server reads
      * live (the configurable door, kaitpw 2026-10-08).
      *
      */
     export interface DuctParameterSlotOverrides {
-      fanStatic?: null | string;
+      requiredEsp?: null | string;
+      ratedEsp?: null | string;
       fanFlow?: null | string;
       componentDrop?: null | string;
       terminalDrop?: null | string;
@@ -479,14 +480,15 @@ export namespace DuctsApplyPlan {
       storeDeletes?: null | DuctStoreDeletes;
     }
     /**
-     * Parameter names the census reads, instance first and then type. FanStatic (in-wg) and FanFlow (CFM) on HVAC
+     * Parameter names the census reads, instance first and then type. RequiredEsp (in-wg) and FanFlow (CFM) on HVAC
      * equipment, ComponentDrop (in-wg) on accessories, TerminalDrop (in-wg) and TerminalFlow (CFM) on terminals,
      * FittingCoefficient (a number) on fittings: the family's own loss coefficient, which the Pe loss server reads
      * live (the configurable door, kaitpw 2026-10-08).
      *
      */
     export interface DuctParameterSlotOverrides {
-      fanStatic?: null | string;
+      requiredEsp?: null | string;
+      ratedEsp?: null | string;
       fanFlow?: null | string;
       componentDrop?: null | string;
       terminalDrop?: null | string;
@@ -1211,14 +1213,15 @@ export namespace DuctsSnapshotRoster {
       selector?: null | DuctSnapshotSelector;
     }
     /**
-     * Parameter names the census reads, instance first and then type. FanStatic (in-wg) and FanFlow (CFM) on HVAC
+     * Parameter names the census reads, instance first and then type. RequiredEsp (in-wg) and FanFlow (CFM) on HVAC
      * equipment, ComponentDrop (in-wg) on accessories, TerminalDrop (in-wg) and TerminalFlow (CFM) on terminals,
      * FittingCoefficient (a number) on fittings: the family's own loss coefficient, which the Pe loss server reads
      * live (the configurable door, kaitpw 2026-10-08).
      *
      */
     export interface DuctParameterSlotOverrides {
-      fanStatic?: null | string;
+      requiredEsp?: null | string;
+      ratedEsp?: null | string;
       fanFlow?: null | string;
       componentDrop?: null | string;
       terminalDrop?: null | string;
@@ -1654,7 +1657,8 @@ export namespace DuctsSnapshotRoster {
      * Complete parameter names after override, store and engine-default resolution.
      */
     export interface DuctParameterSlots {
-      fanStatic: string;
+      requiredEsp?: null | string;
+      ratedEsp?: null | string;
       fanFlow: string;
       componentDrop: string;
       terminalDrop: string;
@@ -1749,14 +1753,15 @@ export namespace DuctsSnapshotRoster {
       ruledAt: string;
     }
     /**
-     * Parameter names the census reads, instance first and then type. FanStatic (in-wg) and FanFlow (CFM) on HVAC
+     * Parameter names the census reads, instance first and then type. RequiredEsp (in-wg) and FanFlow (CFM) on HVAC
      * equipment, ComponentDrop (in-wg) on accessories, TerminalDrop (in-wg) and TerminalFlow (CFM) on terminals,
      * FittingCoefficient (a number) on fittings: the family's own loss coefficient, which the Pe loss server reads
      * live (the configurable door, kaitpw 2026-10-08).
      *
      */
     export interface DuctParameterSlotOverrides {
-      fanStatic?: null | string;
+      requiredEsp?: null | string;
+      ratedEsp?: null | string;
       fanFlow?: null | string;
       componentDrop?: null | string;
       terminalDrop?: null | string;
@@ -1892,14 +1897,15 @@ export namespace DuctsSnapshotWalk {
       selector?: null | DuctSnapshotSelector;
     }
     /**
-     * Parameter names the census reads, instance first and then type. FanStatic (in-wg) and FanFlow (CFM) on HVAC
+     * Parameter names the census reads, instance first and then type. RequiredEsp (in-wg) and FanFlow (CFM) on HVAC
      * equipment, ComponentDrop (in-wg) on accessories, TerminalDrop (in-wg) and TerminalFlow (CFM) on terminals,
      * FittingCoefficient (a number) on fittings: the family's own loss coefficient, which the Pe loss server reads
      * live (the configurable door, kaitpw 2026-10-08).
      *
      */
     export interface DuctParameterSlotOverrides {
-      fanStatic?: null | string;
+      requiredEsp?: null | string;
+      ratedEsp?: null | string;
       fanFlow?: null | string;
       componentDrop?: null | string;
       terminalDrop?: null | string;
@@ -2335,7 +2341,8 @@ export namespace DuctsSnapshotWalk {
      * Complete parameter names after override, store and engine-default resolution.
      */
     export interface DuctParameterSlots {
-      fanStatic: string;
+      requiredEsp?: null | string;
+      ratedEsp?: null | string;
       fanFlow: string;
       componentDrop: string;
       terminalDrop: string;
@@ -2430,14 +2437,15 @@ export namespace DuctsSnapshotWalk {
       ruledAt: string;
     }
     /**
-     * Parameter names the census reads, instance first and then type. FanStatic (in-wg) and FanFlow (CFM) on HVAC
+     * Parameter names the census reads, instance first and then type. RequiredEsp (in-wg) and FanFlow (CFM) on HVAC
      * equipment, ComponentDrop (in-wg) on accessories, TerminalDrop (in-wg) and TerminalFlow (CFM) on terminals,
      * FittingCoefficient (a number) on fittings: the family's own loss coefficient, which the Pe loss server reads
      * live (the configurable door, kaitpw 2026-10-08).
      *
      */
     export interface DuctParameterSlotOverrides {
-      fanStatic?: null | string;
+      requiredEsp?: null | string;
+      ratedEsp?: null | string;
       fanFlow?: null | string;
       componentDrop?: null | string;
       terminalDrop?: null | string;

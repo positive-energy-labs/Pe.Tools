@@ -1,7 +1,7 @@
 /**
  * A fan's load against its own limit: the external static the system needs (Pe's priced fan static)
- * over the external static the unit is rated for (its `externalStatic` fact, read through the
- * `fanStatic` parameter slot). A unit with no rating is unknown, never a full or an empty bar.
+ * over the external static the unit is rated for (its `ratedStatic` fact, read through the
+ * `ratedEsp` parameter slot). A unit with no rating is unknown, never a full or an empty bar.
  */
 export type FanLoad =
   | { state: "unrated"; required: number | null }

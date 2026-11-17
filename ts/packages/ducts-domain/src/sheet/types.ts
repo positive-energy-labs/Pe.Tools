@@ -1,3 +1,4 @@
+import type { DomainClaim } from "./encounters.ts";
 /**
  * The fan sheet (docs/features/ducts/MAP.md, Data model): one per roster fan port, recomputed on
  * every read, never persisted. Legs are keyed once; paths are leg-id lists from the fan outward.
@@ -7,7 +8,6 @@
 import type {
   Encounter,
   FanBlockerKind,
-  FanClaim,
   FanEspValues,
   FanIssue,
   LegEvidence,
@@ -181,8 +181,8 @@ export interface Sheet {
   /** Ranked worst first per side, supply first. */
   paths: SheetPath[];
   /** The one authority on completeness and required ESP (invariant 1). */
-  claim: FanClaim;
-  /** Q2: rated, required and staged ESP are three values with three sources. */
+  claim: DomainClaim;
+  /** Rated ESP and the computed required claim have independent sources (P-030). */
   esp: FanEspValues;
   /** Every other fan this fan's air meets, each under its `ENCOUNTERS` row. */
   encounters: Encounter[];

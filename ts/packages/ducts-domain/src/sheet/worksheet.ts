@@ -80,7 +80,7 @@ const maxOf = (legs: readonly Leg[]) => {
   return v.length ? Math.max(...v) : null;
 };
 
-export function worksheet(sheet: Sheet, limits: WorksheetLimits): Worksheet {
+export function worksheet(sheet: Omit<Sheet, "claim"> & { claim: import("@pe/agent-contracts").FanClaim }, limits: WorksheetLimits): Worksheet {
   const side = (s: Side): WorksheetSide => {
     const paths = sheet.paths.filter((p) => p.side === s);
     const leg = (id: string) => {

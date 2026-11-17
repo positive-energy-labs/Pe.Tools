@@ -523,6 +523,6 @@
     {"id":"loop:13971115","kind":"loop","elementId":13971115,"point":[453.973,744.4501,10.8204],"note":"closes a loop"},
     {"id":"loop:14551208","kind":"loop","elementId":14551208,"point":[468.7571,745.8997,26.1918],"note":"closes a loop"}
   ],
-  "slots": {"fanStatic":"PE_M_Fan_ExternalStaticPressure","fanFlow":"PE_M_Fan_AirFlowDesign","componentDrop":"Pressure Drop","terminalDrop":"PE_M_Grd_ExternalStaticPressure","fittingCoefficient":"Pe_C","terminalFlow":"PE_M_Grd_AirFlow"},
+  "slots": {"requiredEsp":"PE_M_Fan_ExternalStaticPressure","fanFlow":"PE_M_Fan_AirFlowDesign","componentDrop":"Pressure Drop","terminalDrop":"PE_M_Grd_ExternalStaticPressure","fittingCoefficient":"Pe_C","terminalFlow":"PE_M_Grd_AirFlow"},
   "tolerances": {"candidateBoxIn":36,"autoJoinGapIn":3}
 }

@@ -1,6 +1,5 @@
 import { expect, test } from "vite-plus/test";
 import { ductsDesign, fansDocumentSchema, stagedDucts, stampChanges } from "@pe/agent-contracts";
-import { fanWriteCells, stageEspCohort } from "@pe/ducts-domain/staged";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
 import { describeCloser } from "../ducts/sheet/closer";
 import type { SheetBlocker } from "../ducts/sheet/tiers";
@@ -21,21 +20,9 @@ test("demo caller seed fields publish with the host's caller stamp", async () =>
 });
 
 const uid = (n: number) => `3f2c9a10-0000-4000-8000-00000000000${n}-0001e240`;
-const members = [1, 2].map(n => ({ elementId: n, uniqueId: uid(n) }));
-const cohort = { parameter: "fanStatic", owner: { kind: "type" as const, id: 9 }, members, basis: "b1", complete: true };
 const cells = (values: Record<string, unknown>, ref?: string) => Object.fromEntries(Object.entries(values).map(([k, value]) => [k, { edit: { value, ...(ref ? { ref } : {}) } }]));
 /** Work as the host lands it: the caller stamped on each changed cell, then stored and decoded again. */
 const landed = (doc: unknown, by: "human" | "pea") => fansDocumentSchema.parse(JSON.parse(JSON.stringify(stampChanges(doc, undefined, by, 4))));
-
-test("a cohort ESP staged by Pea keeps one caller and one value on every member through Work, reload and stagedDucts", () => {
-  const staged = stageEspCohort(cohort, "b1", { inWg: 0.6 });
-  if ("refused" in staged) throw Error(staged.refused);
-  const fans = landed({ esp: cells(staged.esp) }, "pea");
-  const { esp } = stagedDucts(null, fans);
-  for (const member of members)
-    expect(esp[elementSubject(member)]).toEqual({ value: { inWg: 0.6 }, by: "pea", ref: `work:fans/esp/${elementSubject(member)}` });
-  expect(fanWriteCells(fans, { nodes: [{ uniqueId: uid(1) }], segments: [] } as never, [cohort]).map(([, key]) => key)).toEqual(members.map(m => elementSubject(m)));
-});
 
 test("a taken default keeps its cited ref beside the caller; an unstamped legacy cell is not handed to the resolver", () => {
   const key = elementSubject({ uniqueId: uid(1) }), old = elementSubject({ uniqueId: uid(2) });
@@ -78,13 +65,12 @@ test("typed closers choose the cell and carry the offer's provenance; the blocke
   expect(describeCloser(blocker("unknown-drop", "terminal 9"), 0.1, { ...context, terminal: () => false }).action).toMatchObject({ terminal: false });
 });
 
-test("rated, required and staged ESP are three facts: a partial claim is named partial, a short rating and a drifted stage warn", () => {
+test("rated and required ESP stay separate: a partial claim is named partial and a short rating warns", () => {
   const value = (v: number, source: "model" | "Work" = "model") => ({ status: "valid" as const, value: v, source, author: source === "Work" ? "human" as const : null, ref: "r", version: null, units: "in-wg" });
-  const missing = { status: "missing" as const, value: null, source: "none" as const, author: null, ref: null, version: null, units: "in-wg" };
   const complete = { kind: "complete" as const, basis: "b", requiredEspInWg: 0.8, coverage: [] as const, blockingIds: [] as const };
-  expect(espWarnings({ rated: value(0.8), required: complete, staged: missing })).toEqual([]);
-  expect(espWarnings({ rated: value(0.5), required: complete, staged: value(0.6, "Work") })).toEqual([
-    "Rated ESP 0.50 in-wg is below the required 0.80 in-wg", "Staged ESP 0.60 in-wg differs from the required 0.80 in-wg"]);
-  const partial = espWarnings({ rated: value(2), staged: missing, required: { kind: "incomplete", basis: "b", knownInWg: 0.3, coverage: [{ kind: "pricing", elementId: 4, ref: "x" }], blockingIds: ["no-flow:4"] } });
+  expect(espWarnings({ rated: value(0.8), required: complete })).toEqual([]);
+  expect(espWarnings({ rated: value(0.5), required: complete })).toEqual([
+    "Rated ESP 0.50 in-wg is below the required 0.80 in-wg"]);
+  const partial = espWarnings({ rated: value(2), required: { kind: "incomplete", basis: "b", knownInWg: 0.3, coverage: [{ kind: "pricing", elementId: 4, ref: "x" }], blockingIds: ["no-flow:4"] } });
   expect(partial).toEqual(["Required ESP is not known: 1 coverage gap, 1 blocking; 0.30 in-wg so far"]);
 });

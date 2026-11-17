@@ -157,6 +157,10 @@ test.each(["off", "on", "recovery", "endurance", "tamper", "truncated", "legacy"
   const nativeEntered = Promise.withResolvers<void>(), releaseNative = Promise.withResolvers<void>();
   expect(createHash("sha256").update(readFileSync(source)).digest("hex")).toBe("57b0034722af64d997f35f9301cbff51c3af4728b940a09b2ef3d8405c930c68");
   const raw = JSON.parse(readFileSync(source, "utf8").replace(/^\uFEFF/, ""));
+  // This immutable historical recording predates the slot split. Adapt only its fixture contract.
+  const body = raw.result ?? raw;
+  const { ["fan" + "Static"]: oldRequired, ...slots } = body.slots;
+  body.slots = { ...slots, requiredEsp: oldRequired };
   // The recording predates the generated native vocabulary, as in host-read-graph.test-support.
   const snapshot = Schema.decodeUnknownSync(Schema.Json)({ ...(raw.result ?? raw), vocabulary: {
     unitKinds: [...DUCT_UNIT_KINDS], blockerKinds: [...FAN_BLOCKER_KINDS],

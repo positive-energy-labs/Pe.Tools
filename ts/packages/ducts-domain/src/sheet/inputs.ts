@@ -39,9 +39,7 @@ export interface WorkLayer {
   flows?: Cells<number>;
   terminalDrops?: Cells<number>;
   componentDrops?: Cells<number>;
-  /** Staged required ESP (Q2): never rated, never pressure authority. */
-  esp?: Cells<number>;
-  /** A fan's stated rated ESP (Q2): the only place a rated value comes from. */
+  /** A fan's stated rated ESP, above the separately named model slot. */
   ratedEsp?: Cells<number>;
   equipmentFlows?: Cells<number>;
   roles?: Cells<"fan" | "passive">;
@@ -138,7 +136,6 @@ export const EDIT_SEGMENTS = {
   flows: "flows",
   terminalDrops: "terminalDrops",
   componentDrops: "componentDrops",
-  esp: "esp",
   equipmentFlows: "equipmentFlows",
   roles: "roles",
   kinds: "kinds",
@@ -374,8 +371,8 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
         },
         "cfm",
       );
-      // Q2 (P-030): rated ESP is only ever a stated value (a run or Work `ratedEsp` cell) and never the `fanStatic` parameter, because Pe writes required ESP into that parameter.
-      const esp = pick({ run: staged(run.ratedEsp?.[key]), Work: staged(work.ratedEsp?.[key]) }, "in-wg");
+      // P-030: ratedStatic comes only from the separate RatedEsp slot, below stated Work and run values.
+      const esp = pick({ run: staged(run.ratedEsp?.[key]), Work: staged(work.ratedEsp?.[key]), model: observed("model", snapshot.slots?.ratedEsp ?? "ratedStatic", snapshot.slots?.ratedEsp ? factOf(n, "ratedStatic") : null) }, "in-wg");
       units[id] = { kind, role, cfm, esp };
       if (work.componentDrops?.[key] || run.componentDrops?.[key])
         components[id] = {
@@ -518,25 +515,6 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
 /** A resolved number as the contract's sourced value: the same kernel resolution, with an absent input read as missing. */
 export const sourced = (r: Resolved<number> | undefined): SourcedValue<number> =>
   r ?? { status: "missing", value: null, source: "none", author: null, ref: null, version: null, units: null };
-
-/** Staged required ESP by unit element id (Q2): the run and Work layers only, with who staged it. A cell no known caller staged resolves invalid (kernel law), never a guess. */
-export function stagedEsp(
-  layers: Pick<InputLayers, "snapshot" | "run" | "work">,
-): Record<string, SourcedValue<number>> {
-  return Object.fromEntries(
-    layers.snapshot.nodes.flatMap((n) => {
-      const key = elementSubject(n);
-      const cell = layers.run?.esp?.[key] ?? layers.work?.esp?.[key];
-      if (!cell) return [];
-      const r = resolveValue(
-        { [layers.run?.esp?.[key] ? "run" : "Work"]: staged(cell) },
-        "in-wg",
-        (v: number) => Number.isFinite(v) && v >= 0,
-      );
-      return [[String(n.id), r] as const];
-    }),
-  );
-}
 
 /** A person's encounter verdicts: `encounter:<element>:<connector>` assumption cells, `accept` or `refuse`. */
 export function encounterRulings(layers: Pick<InputLayers, "run" | "work">): EncounterRuling[] {

@@ -122,7 +122,7 @@ const METHODS: Record<string, string> = {
 };
 /** The loss record's slot keys (C# `DuctApplier.StoreEntries`), as a person reads them. */
 const SLOT_WORDS: Record<string, string> = {
-  fanStatic: "fan static",
+  requiredEsp: "fan static",
   fanFlow: "fan flow",
   componentDrop: "component drop",
   terminalDrop: "terminal drop",
@@ -165,7 +165,7 @@ export function presentLosses(result: unknown, scope: ReviewEvidence) {
       write.kind === "equipment-flow"
         ? slots.fanFlow
         : write.kind === "equipment"
-          ? slots.fanStatic
+          ? slots.requiredEsp
           : write.kind === "component"
             ? "Specific Loss"
             : write.kind === "terminal"
