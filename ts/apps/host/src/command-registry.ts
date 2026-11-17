@@ -80,7 +80,9 @@ export function commandRegistry(
       implementations[key] = factory;
     }
   }
-  const recover: NonNullable<CommandExecutor["recover"]> = (step) => {
+  const recover: NonNullable<CommandExecutor["recover"]> = async (step) => {
+    // A host file or publication step has no native receipt to read; it keeps its recorded state.
+    if (step.kind !== "native") return { step, evidence: { reason: "No native step" } };
     if (!step.process) throw Error("No exact native process was captured for this step");
     return readNativeReceipt(step, step.process, deps.sdk);
   };
