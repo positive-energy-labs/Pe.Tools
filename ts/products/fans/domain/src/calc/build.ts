@@ -1912,12 +1912,18 @@ function buildCalcPass(input: BuildCalcInput, assumeHeals: boolean, hosts: Map<s
   const network = basisOf(input.snapshot, [input.inputs, input.roster]);
   // ENCOUNTERS: every other fan this fan's air meets; a tie-in's static is the host's own calc (H5).
   const self = fanKey(input.fan);
+  const buildHost = (host: FanPortRef): HostCalc => {
+    // H5 consumes the known claim only; a host's heal preview cannot supply required pressure.
+    const calc = buildCalcPass({ ...input, fan: host, dependents: [...(input.dependents ?? []), self] }, false, hosts);
+    hosts.set(fanKey(host), calc);
+    return calc;
+  };
   const hostOf = (host: FanPortRef): HostCalc | "absent" | "cycle" =>
     host.unitId === unit.id || input.dependents?.includes(fanKey(host))
       ? "cycle"
       : (hosts.get(fanKey(host)) ??
         (g.byId.has(host.unitId) && input.roster.some((p) => fanKey(p) === fanKey(host))
-          ? buildWithHosts({ ...input, fan: host, dependents: [...(input.dependents ?? []), self] }, hosts)
+          ? buildHost(host)
           : "absent"));
   const met = encountersOf(input.fan, paths, pricer.legs, input.encounterRulings);
   const gaps: CoverageGap[] = [];
@@ -2080,11 +2086,8 @@ function issueOf(
 
 /** Reuse exactly the same flow/pricing rules for known and continued heal walks. */
 export function buildCalc(input: BuildCalcInput): Calc {
-  return buildWithHosts(input, new Map(input.hosts));
-}
-
-/** One read's host builds are shared by both passes and nested encounters; cycle checks precede reuse. */
-function buildWithHosts(input: BuildCalcInput, hosts: Map<string, HostCalc>): Calc {
+  // Share known host claims across both passes; cycle checks precede reuse, and caller maps stay read-only.
+  const hosts = new Map(input.hosts);
   const known = buildCalcPass(input, false, hosts);
   const assumed = buildCalcPass(input, true, hosts);
   known.assumed = assumed.assumed;
@@ -2111,7 +2114,6 @@ function buildWithHosts(input: BuildCalcInput, hosts: Map<string, HostCalc>): Ca
   known.walkedElementIds = [
     ...new Set([...known.walkedElementIds, ...assumed.walkedElementIds]),
   ].sort((a, b) => a - b);
-  hosts.set(fanKey(input.fan), known);
   return known;
 }
 
