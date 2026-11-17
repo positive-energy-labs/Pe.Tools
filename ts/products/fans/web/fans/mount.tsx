@@ -172,8 +172,9 @@ function LedgerContent({ ctx, snapshot }: { ctx: CalcContext; snapshot: DuctSnap
       const what = action.kind === "rule" ? `join ${name}` : action.kind === "cap" ? `end ${name}`
         : action.kind === "price" ? `assignment ${action.family}` : action.kind === "table" ? `table ${action.rule}` : `fitting ${name}`;
       // Never a fallback to a write or an ElementId (slice 5): the blocker's producer stamps its
-      // UniqueId SubjectRef; a stand-in with none opens /ducts on the sheet's systems, named by the text.
-      return { says: `Fix in /ducts: ${what} ›`, href: ductsLink(calcSystems(snapshot), search,
+      // UniqueId SubjectRef; /ducts resolves the canonical roster itself so the URL never grows
+      // with the snapshot's system roster. A stand-in with none opens that scope without selection.
+      return { says: `Fix in /ducts: ${what} ›`, href: ductsLink("all", search,
         // The contract admitted it as an element UniqueId code (`elementSubjectSchema`).
         blocker.subject ? { kind: "subject", code: blocker.subject as SubjectRefCode } : { kind: "route" }) };
     };
@@ -251,7 +252,7 @@ function LedgerContent({ ctx, snapshot }: { ctx: CalcContext; snapshot: DuctSnap
   return (
     <CalcFrame ctx={ctx} snapshot={snapshot} nameOf={nameOf}>
       {ownPane}
-      <FittingReadouts groups={groups} ductsHref={ductsLink(calcSystems(snapshot), search)}
+      <FittingReadouts groups={groups} ductsHref={ductsLink("all", search)}
         waiting={!sheet ? "Open a fan first" : state.inputs ? null : "Wait for inputs"} />
     </CalcFrame>
   );

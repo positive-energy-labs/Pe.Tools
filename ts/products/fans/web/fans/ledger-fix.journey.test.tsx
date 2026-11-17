@@ -9,6 +9,9 @@ import { snapshot } from "@pe/ducts-web/ducts/test-fixture";
 import sheetFixture from "../ducts/calc/calc.fixture.json";
 import { makeAtomRegistry } from "../../../../apps/web/src/shell/owner.ts";
 import { createWitness } from "./cutover.test-support.ts";
+import { ductsLink, namesOf } from "@pe/ducts-web/ducts/identity";
+import { fields } from "@pe/duct-systems-web/route";
+import { calcSystems } from "@pe/ducts-web/ducts/calc/scoped-snapshot";
 
 /*
  * Ruling 2026-11-10, verdict 1: a Fans Ledger fix whose Work is /ducts' is a link, named by what it
@@ -76,4 +79,22 @@ test("a blocker with no UniqueId opens /ducts on its systems, never a raw Elemen
   expect(selected).toEqual([]);
   expect(href.searchParams.get("system")).toBeTruthy();
   expect(href.search).not.toContain("14122436");
+});
+
+test("the 369-system handoff stays short and resolves to the old roster scope", async () => {
+  const recorded = snapshot.systems;
+  snapshot.systems = Array.from({ length: 369 }, (_, id) => ({
+    ...recorded[0]!, id, name: `System ${id} with a long model-specific name`,
+  }));
+  closes.push(() => { snapshot.systems = recorded; });
+  const { href } = await ledgerLink();
+  expect(href.href.length).toBeLessThan(2048);
+  const scope = namesOf(fields.system.schema.parse(JSON.parse(href.searchParams.get("system")!)));
+  expect(scope).toBe("all");
+  // /ducts' network read resolves "all" against its canonical system roster.
+  const resolved = scope === "all" ? snapshot.systems.map(system => system.name) : scope;
+  expect(resolved).toEqual(calcSystems(snapshot));
+  const named = new URL(ductsLink([snapshot.systems[0]!.name], {}), "http://pe.local");
+  expect(namesOf(fields.system.schema.parse(JSON.parse(named.searchParams.get("system")!))))
+    .toEqual([snapshot.systems[0]!.name]);
 });

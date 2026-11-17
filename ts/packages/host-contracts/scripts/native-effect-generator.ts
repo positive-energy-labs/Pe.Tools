@@ -1,6 +1,8 @@
 import { JsonSchema, SchemaRepresentation as Rep } from "effect";
 
-type Node = Record<string, any>;
+type Node = JsonSchema.JsonSchema;
+const isNode = (value: unknown): value is Node =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
 type Operation = { key: string; requestSchemaJson: string; responseSchemaJson: string; artifactSchemaJson?: string };
 
 // This is the catalog's vocabulary, not a permissive draft04 relabel. Unknown
@@ -13,12 +15,13 @@ const keywords = new Set([
   "x-enumNames", "x-enumFlags", "x-options",
 ]);
 
-function normalize(input: Node | boolean, path: string, draft04: boolean): Node | boolean {
+function normalize(input: unknown, path: string, draft04: boolean): Node | boolean {
   // Object spread would erase false before the importer can lower it to Never.
   if (typeof input === "boolean") {
     if (draft04) throw Error(`${path}: draft04 boolean schema unsupported`);
     return input;
   }
+  if (!isNode(input)) throw Error(`${path}: expected a schema object`);
   const node = { ...input };
   for (const key of Object.keys(node))
     if (!keywords.has(key)) throw Error(`${path}: unsupported keyword ${key}`);
@@ -40,6 +43,8 @@ function normalize(input: Node | boolean, path: string, draft04: boolean): Node 
     case undefined: break;
     case "int32":
       if (!(Array.isArray(node.type) ? node.type : [node.type]).includes("integer")) throw Error(`${path}: int32 requires integer`);
+      if (node.minimum !== undefined && typeof node.minimum !== "number") throw Error(`${path}: minimum must be a number`);
+      if (node.maximum !== undefined && typeof node.maximum !== "number") throw Error(`${path}: maximum must be a number`);
       node.minimum = Math.max(node.minimum ?? -2147483648, -2147483648);
       node.maximum = Math.min(node.maximum ?? 2147483647, 2147483647);
       break;
@@ -57,8 +62,11 @@ function normalize(input: Node | boolean, path: string, draft04: boolean): Node 
     default: throw Error(`${path}: unsupported format ${node.format}`);
   }
   for (const key of ["properties", "definitions", "$defs"])
-    if (node[key]) node[key] = Object.fromEntries(Object.entries(node[key]).map(([name, value]) =>
-      [name, normalize(value as Node, `${path}/${key}/${name}`, draft04)]));
+    if (node[key]) {
+      if (!isNode(node[key])) throw Error(`${path}/${key}: expected a schema map`);
+      node[key] = Object.fromEntries(Object.entries(node[key]).map(([name, value]) =>
+        [name, normalize(value, `${path}/${key}/${name}`, draft04)]));
+    }
   for (const key of ["items", "additionalProperties"])
     if (key === "items" && typeof node[key] === "boolean")
       node[key] = normalize(node[key], `${path}/${key}`, draft04);
@@ -67,7 +75,10 @@ function normalize(input: Node | boolean, path: string, draft04: boolean): Node 
       node[key] = normalize(node[key], `${path}/${key}`, draft04);
     }
   for (const key of ["oneOf", "anyOf", "allOf"])
-    if (node[key]) node[key] = node[key].map((value: Node, i: number) => normalize(value, `${path}/${key}/${i}`, draft04));
+    if (node[key]) {
+      if (!Array.isArray(node[key])) throw Error(`${path}/${key}: expected a schema array`);
+      node[key] = node[key].map((value: unknown, i: number) => normalize(value, `${path}/${key}/${i}`, draft04));
+    }
   return node;
 }
 
@@ -155,7 +166,8 @@ function compileSchemas(input: Node, includeDefinitions: boolean) {
   ]);
   const project = (decoderReferences: boolean): Rep.MultiDocument => ({
     ...representation,
-    representations: representation.representations.map(node => augment(node, representation.references, decoderReferences)) as [Rep.Representation, ...Rep.Representation[]],
+    representations: [augment(representation.representations[0], representation.references, decoderReferences),
+      ...representation.representations.slice(1).map(node => augment(node, representation.references, decoderReferences))],
     references: Object.fromEntries(Object.entries(representation.references).map(([key, value]) => [key, augment(value, representation.references, decoderReferences)])),
   });
   let code = Rep.toCodeDocument(project(false));
