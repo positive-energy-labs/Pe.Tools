@@ -59,6 +59,14 @@ export const draftEditSchema = <V extends z.ZodType, E extends z.ZodRawShape = {
   ? deletableRung(value).extend(CALLER_META).extend(extend).strict().refine(oneWrite, ONE_WRITE)
   : valueRung(value).extend(CALLER_META).extend(extend).strict().refine(oneWrite, ONE_WRITE);
 
+/** Caller Work retains domain fields, but only the metadata admitted by draftEditSchema. */
+type CallerEdit<E> = E extends object
+  ? Omit<E, "by"> & { [K in Exclude<keyof Change, keyof z.output<ReturnType<typeof draftEditSchema>>>]?: never }
+  : E;
+export type CallerWorkValue<T> = T extends readonly unknown[]
+  ? { [K in keyof T]: CallerWorkValue<T[K]> }
+  : T extends object ? { [K in keyof T]: K extends "edit" ? CallerEdit<T[K]> : CallerWorkValue<T[K]> } : T;
+
 /** One staged edit; domain metadata (`extend`) may ride on it. */
 export function draftCellSchema<V extends z.ZodType, E extends z.ZodRawShape = {}>(
   value: V,

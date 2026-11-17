@@ -152,13 +152,13 @@ type BareSchema<S> = S extends {
   ? BareSchema<I>
   : S;
 type EntryPatch<K extends string, Key extends string, V extends z.core.SomeType> =
-  | { readonly path: readonly [K, Key]; readonly value: z.output<V>; readonly op?: never }
+  | { readonly path: readonly [K, Key]; readonly value: import("./draft.ts").CallerWorkValue<z.output<V>>; readonly op?: never }
   | { readonly path: readonly [K, Key]; readonly op: "delete"; readonly value?: never }
   | (BareSchema<V> extends z.ZodObject<infer Shape>
       ? {
           [L in keyof Shape & string]: {
             readonly path: readonly [K, Key, L];
-            readonly value: z.output<Shape[L]>;
+            readonly value: import("./draft.ts").CallerWorkValue<{ [P in L]: z.output<Shape[L]> }>[L];
             readonly op?: never;
           };
         }[keyof Shape & string]
@@ -169,7 +169,7 @@ export type WorkPatch<S extends z.ZodType> =
   BareSchema<S> extends z.ZodObject<infer Shape>
     ? {
         [K in keyof Shape & string]:
-          | { readonly path: readonly [K]; readonly value: z.output<Shape[K]>; readonly op?: never }
+          | { readonly path: readonly [K]; readonly value: import("./draft.ts").CallerWorkValue<z.output<Shape[K]>>; readonly op?: never }
           | (BareSchema<Shape[K]> extends z.ZodRecord<infer Key, infer Value>
               ? EntryPatch<K, Extract<z.output<Key>, string>, Value>
               : never);
