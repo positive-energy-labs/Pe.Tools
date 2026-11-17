@@ -12,7 +12,6 @@ import { mintWriteRequest } from "@pe/fans-domain/calc/write-request";
 import type { CalcPath, Leg } from "@pe/fans-contract/fan-calc";
 import type { FanIssue } from "@pe/fans-contract/fans-inputs";
 import { describeCloser, DUCTS_FIXES } from "./closer.ts";
-
 const leg: Leg = { id: "a", elementId: 20, kind: "duct", outConnector: 0, flowCfm: 100,
   flowSource: "test", velocityFpm: 500, lossInWg: 0.1, lossSource: { kind: "friction", ref: "test" },
   equivalentFt: null, evidence: { kind: "unpriced", issueId: "" } };
@@ -23,7 +22,6 @@ const paths: CalcPath[] = [ { side: "supply", legIds: ["a"], knownInWg: 0.1, blo
 const legs = { a: leg, r: { ...leg, id: "r", elementId: 32, lossInWg: 0.2 } };
 const issue: FanIssue = { id: "backflow:20:0", kind: "backflow", elementId: 20, severity: "blocking",
   closer: { kind: "encounter", encounter: encountersOf(fan, paths, legs)[0]!.encounter } };
-
 it.each(["connect", "ignore"] as const)("closer stages %s through duct-systems Work, then resolves the guest claim", async choice => {
   const saved = new Map<string, unknown>();
   const workspace = new RouteWorkspace({ registrations: [{ spec: ductsRouteState }],
@@ -53,7 +51,6 @@ it.each(["connect", "ignore"] as const)("closer stages %s through duct-systems W
   expect(mintWriteRequest(claim, sheet, { snapshot, fan, roster: [], grids: {}, inputs: resolveInputs({ snapshot, firm: TEST_FIRM }) },
     { appliedAt: at, slots: { requiredEsp: "ESP" }, peerClaims: new Map(), rulings: {}, storeDeletes: { roles: [], verdicts: [] } }).equipment).toEqual([{ id: 300, externalStaticInWg: 1 }]);
 });
-
 it("a deadhead has no accept closer and staging acceptance is refused", () => {
   const deadhead: FanIssue = { ...issue, closer: { kind: "none", reason: "backflow/deadhead" } };
   const closer = describeCloser({ ...issue, effectInWg: null, detail: "", closer: { kind: "ruling", note: "backflow/deadhead" } }, null,
