@@ -273,6 +273,27 @@ const retirementSchema = z.strictObject({
   patch: z.literal(true).optional(),
 });
 type Retirement = z.infer<typeof retirementSchema>;
+/**
+ * The consumed Work paths a native apply result confirms. Only a successful receipt confirms intent:
+ * a cancelled or refused run retires nothing, so the edits stay staged. A family document is one
+ * family, so any success confirms its cells; a project confirms each cell by its family's receipt.
+ */
+export const confirmedRetirement = (
+  consumed: Retirement,
+  patchNames: readonly string[] | null | undefined,
+  receipts: readonly { familyName: string; success: boolean; converged: boolean }[],
+): WorkPath[] => {
+  const succeeded = new Set(receipts.filter((x) => x.success).map((x) => x.familyName)),
+    converged = new Set(receipts.filter((x) => x.success && x.converged).map((x) => x.familyName));
+  if (!succeeded.size) return [];
+  const paths: WorkPath[] = consumed.cells
+    .filter(
+      (cell) => consumed.route === "family" || succeeded.has(familyCellAddress(cell).familyName),
+    )
+    .map((cell) => ["cells", cell]);
+  if (consumed.patch && patchNames?.every((name) => converged.has(name))) paths.push(["patch"]);
+  return paths;
+};
 const sourceMemberSchema = z
   .strictObject({
     id: z.string(),
@@ -880,23 +901,12 @@ export function familyExecutors(
         )) as FamiliesApply.Res.Response,
         consumed = prepared.retire;
       let retired: unknown;
-      if (consumed) {
-        const succeeded = new Set(
-            result.receipts.filter((x) => x.success).map((x) => x.familyName),
-          ),
-          converged = new Set(
-            result.receipts.filter((x) => x.success && x.converged).map((x) => x.familyName),
-          );
-        const paths: WorkPath[] = consumed.cells
-          .filter(
-            (cell) =>
-              consumed.route === "family" || succeeded.has(familyCellAddress(cell).familyName),
-          )
-          .map((cell) => ["cells", cell]);
-        if (consumed.patch && prepared.retirePatchNames?.every((name) => converged.has(name)))
-          paths.push(["patch"]);
-        retired = yield* execution.retireWork(consumed.key, consumed.route, paths);
-      }
+      if (consumed)
+        retired = yield* execution.retireWork(
+          consumed.key,
+          consumed.route,
+          confirmedRetirement(consumed, prepared.retirePatchNames, result.receipts),
+        );
       const readback: Record<string, unknown> = {},
         names = [...new Set(result.receipts.filter((x) => x.success).map((x) => x.familyName))];
       if (project && names.length)
