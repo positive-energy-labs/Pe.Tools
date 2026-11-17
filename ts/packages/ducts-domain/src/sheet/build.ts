@@ -69,7 +69,8 @@ import {
 } from "./walk.ts";
 import { assumedFanFlows, type AssumedFlow } from "./assumed-flow.ts";
 import { FAN_INPUTS, resolveValue, type DuctsInputs, type Resolved } from "@pe/agent-contracts";
-import { observed, PROPOSED_KEY, sourced, terminalCfmOf } from "./inputs.ts";
+import { coverageOf } from "./coverage.ts";
+import { observed, placeholderNote, PROPOSED_KEY, sourced, terminalCfmOf } from "./inputs.ts";
 import { sectionOf } from "../loss-physics.ts";
 import type {
   CoverageGap,
@@ -479,8 +480,8 @@ class Pricer {
       return t ? drop(t.drop.value, provenance(t.drop)) : drop(null, "terminal not in inputs");
     }
     if (e.kind === "equipment") return drop(null, "inline equipment; no typed drop");
-    // The resolver records a family placeholder as a stated null with its ref (Chadds' 302 dampers at 1.0).
-    const placeholder = stated && stated.value == null ? stated.ref : undefined;
+    // A missing drop has no ref; the family placeholder that demoted it is read from the model again (Chadds' 302 dampers at 1.0).
+    const placeholder = stated?.status === "missing" ? placeholderNote(this.input.snapshot, e) : undefined;
     if (isTap(e)) return this.tap(w, flows, side, s, cfm);
     // A tee walked in at its run: the run port faces the fan on both sides. On the return the air
     // leaves by that port, so the branch and straight converge into it.
@@ -1496,7 +1497,7 @@ function endDirection(
     // An end at another fan is an encounter, and `ENCOUNTERS` explains it on either side (a discharge
     // met on the supply is backflow, on the return an inflow), so it is no evidence of this fan's
     // direction and does not vote (FANS-W2-COSUPPLY).
-    if (e.end.fan && e.end.fan.unitId !== w.states[0]!.el.id) continue;
+    if (e.end.fan && e.end.fan.unitId !== w.states[0]?.el.id) continue;
     if (e.directionHint) {
       score += e.directionHint === "supply" ? 1 : -1;
       reasons.add(
@@ -1831,9 +1832,10 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
       ([w, f]) => [
         ...f.draws.map((d) => {
           const fan = w.ends[d.sibling]!.end.fan!;
+          const terminal = w.ends[d.terminal]?.end.elementId;
           return note(
             "sibling",
-            `sibling ${tagOf(fan.unitId) || g.name(fan.unitId)} ${w === supply.w ? "feeds" : "draws"} ${d.cfm == null ? "an unknown flow" : `${round(d.cfm)} cfm`} ${w === supply.w ? "into" : "from"} shared terminal ${g.name(w.ends[d.terminal]!.end.elementId)}: ${d.source ?? "no design flow"}`,
+            `sibling ${tagOf(fan.unitId) || g.name(fan.unitId)} ${w === supply.w ? "feeds" : "draws"} ${d.cfm == null ? "an unknown flow" : `${round(d.cfm)} cfm`} ${w === supply.w ? "into" : "from"} shared terminal ${terminal == null ? "unknown" : g.name(terminal)}: ${d.source ?? "no design flow"}`,
             d.cfm == null ? null : round(d.cfm),
           );
         }),
@@ -1901,38 +1903,11 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
             buildSheet({ ...input, fan: host, dependents: [...(input.dependents ?? []), self] })
           : "absent"));
   const met = encountersOf(input.fan, paths, pricer.legs, input.encounterRulings);
-  const coverage: CoverageGap[] = [
-    // P-028: a snapshot carrying neither a walk nor a reach never read its coverage. Absent evidence is a gap, never a pass.
-    ...(!input.snapshot.walk && !input.snapshot.reach
-      ? [{ kind: "native-peer", elementId: null, ref: "coverage unread: the snapshot carries no walk and no reach" } as const]
-      : []),
-    // Only a peer unread on an element this fan walked can hide part of this fan's network.
-    ...(input.snapshot.walk?.unreadPeers ?? []).filter((p) => walked.has(p.elementId)).map(
-      (p): CoverageGap => ({
-        kind: "native-peer",
-        elementId: p.elementId,
-        ref: `${p.elementId}:${p.connector}`,
-      }),
-    ),
-    ...(input.snapshot.walk?.truncated
-      ? [{ kind: "budget", elementId: null, ref: "the native walk was truncated" } as const]
-      : []),
-    // The document reach (FANS-DOCREACH-SWALLOW): its unread peers, and an incomplete reach that names none.
-    ...(input.snapshot.reach?.unreadPeers ?? []).filter((p) => walked.has(p.elementId)).map(
-      (p): CoverageGap => ({
-        kind: "native-peer",
-        elementId: p.elementId,
-        ref: `${p.elementId}:${p.connector}`,
-      }),
-    ),
-    ...(input.snapshot.reach?.complete === false && !input.snapshot.reach.unreadPeers.length
-      ? [{ kind: "native-peer", elementId: null, ref: "the document reach is incomplete" } as const]
-      : []),
-  ];
+  const gaps: CoverageGap[] = [];
   for (const m of met) {
     if (m.policy.static !== "host-calc" || m.encounter.verdict !== "accepted") continue;
     const read = hostStatic(hostOf(m.encounter.host), m.encounter, network);
-    if ("kind" in read) coverage.push(read);
+    if ("kind" in read) gaps.push(read);
     else
       m.encounter.static = {
         kind: "host-calc",
@@ -1980,7 +1955,8 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
     paths,
     legs: pricer.legs,
     blockingIds: blockers.filter((b) => !backflow.has(b.id)).map((b) => b.id),
-    coverage,
+    coverage: coverageOf(input.snapshot, walked),
+    gaps,
     met,
     allowanceInWg: allowance,
   });
@@ -1992,7 +1968,7 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
     basis,
     network,
     claim,
-    // Q2: rated reads the model alone; a staged required ESP is a third value and never either's source.
+    // Q2 (P-030): rated is only a stated run or Work `ratedEsp` cell, never the model's `fanStatic`; a staged required ESP is a third value and never either's source.
     esp: {
       rated: sourced(input.inputs.units[unitId]?.esp),
       required: claim,

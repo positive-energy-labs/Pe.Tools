@@ -87,25 +87,45 @@ const mergeCandidates = (lists: readonly (Candidates | null | undefined)[]): Can
 };
 
 type Coverage = Pick<DuctSnapshot, "walk" | "reach">;
+type Walk = NonNullable<Coverage["walk"]>;
+const refKey = (p: { elementId: number; connector: number }) => `${p.elementId}:${p.connector}`;
 /**
- * Coverage over several reads (P-021, P-012): unread peers union, a walk is truncated if any part's
- * was, a reach is complete only if every part's was. The last part's other walk fields stand.
+ * Coverage over several reads, in the wire shape `coverageOf` (sheet/coverage.ts) reads back as the
+ * `read`/`lost` union, so no part's loss can merge away (P-021, P-012, P-033): unread peers union, a
+ * walk is truncated if any part's was and keeps every part's candidates and counts, a reach is
+ * complete only if every part's was, and a part carrying neither walk nor reach makes the merged
+ * reach incomplete. The last part's walk identity (`startId`) stands.
+ * ponytail: hops, elements and open ends are sums, so two walks over shared ducts count them twice.
  */
 export function mergeCoverage(parts: readonly Coverage[]): Coverage {
   const walks = parts.flatMap((p) => (p.walk ? [p.walk] : []));
   const reaches = parts.flatMap((p) => (p.reach ? [p.reach] : []));
-  const peers = (all: readonly { unreadPeers: NonNullable<Coverage["reach"]>["unreadPeers"] }[]) =>
-    byKey(
-      all.flatMap((x) => x.unreadPeers),
-      (p) => `${p.elementId}:${p.connector}`,
-    );
+  const blind = parts.some((p) => p.walk == null && p.reach == null);
+  const walk = walks.reduce<Walk | undefined>(
+    (a, w) =>
+      a
+        ? {
+            ...w,
+            hops: a.hops + w.hops,
+            elementsReached: a.elementsReached + w.elementsReached,
+            openEnds: a.openEnds + w.openEnds,
+            candidates: byKey([...a.candidates, ...w.candidates], refKey),
+            truncated: a.truncated || w.truncated,
+            elapsedMs: a.elapsedMs + w.elapsedMs,
+            unreadPeers: byKey([...a.unreadPeers, ...w.unreadPeers], refKey),
+          }
+        : w,
+    undefined,
+  );
   return {
-    walk: walks.length
-      ? { ...walks.at(-1)!, truncated: walks.some((w) => w.truncated), unreadPeers: peers(walks) }
-      : parts.at(-1)?.walk,
-    reach: reaches.length
-      ? { complete: reaches.every((r) => r.complete), unreadPeers: peers(reaches) }
-      : parts.at(-1)?.reach,
+    walk: walk ?? parts.at(-1)?.walk,
+    reach:
+      reaches.length || blind
+        ? {
+            complete: !blind && reaches.every((r) => r.complete),
+            unreadPeers: byKey(reaches.flatMap((r) => r.unreadPeers), refKey),
+          }
+        : parts.at(-1)?.reach,
   };
 }
 

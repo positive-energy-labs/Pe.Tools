@@ -20,3 +20,15 @@ it("a merge keeps every part's lost coverage: only the second part damaged (P-02
   }
   expect(mergeSnapshots([whole, whole])!.reach).toEqual({ complete: true, unreadPeers: [] });
 });
+
+it("a merge never drops a part that carries no coverage evidence, and keeps every walk's candidates and counts (P-033)", () => {
+  const walk = { startId: 1, hops: 2, elementsReached: 3, openEnds: 1, truncated: false, elapsedMs: 1, unreadPeers: [] };
+  const end = (elementId: number) => ({ elementId, connector: 0, point: [0, 0, 0], candidateCount: 0, candidateIds: [] });
+  const first = snapshotOf({ walk: { ...walk, candidates: [end(5)] } });
+  const second = snapshotOf({ walk: { ...walk, startId: 9, candidates: [end(6)] } });
+  expect(mergeSnapshots([first, second])!.walk).toMatchObject({
+    startId: 9, hops: 4, elementsReached: 6, openEnds: 2, candidates: [end(5), end(6)],
+  });
+  for (const parts of [[first, snapshotOf()], [snapshotOf(), first]])
+    expect(mergeSnapshots(parts)!.reach).toEqual({ complete: false, unreadPeers: [] });
+});

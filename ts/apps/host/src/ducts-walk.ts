@@ -17,7 +17,7 @@ export function mergeSnapshots(a: DuctSnapshot, b: DuctSnapshot): DuctSnapshot {
   };
   return {
     ...a,
-    // The first read's walk stands; both reads' coverage counts (P-012).
+    // The first read's walk identity stands; both reads' coverage, candidates and counts are kept (P-012, P-033(b)).
     ...mergeCoverage([b, a]),
     nodes: union(a.nodes as never[], b.nodes as never[]) as DuctSnapshot["nodes"],
     segments: union(a.segments as never[], b.segments as never[]) as DuctSnapshot["segments"],

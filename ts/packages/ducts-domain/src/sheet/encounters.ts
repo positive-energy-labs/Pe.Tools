@@ -3,6 +3,7 @@
  * follows from it (invariant 1). Pure over a priced sheet: no walk, no pricing, no solver.
  */
 import type { Author, CoverageGap, Encounter, FanClaim } from "@pe/agent-contracts";
+import { coverageGaps, wholeCoverage, type Coverage, type WholeCoverage } from "./coverage.ts";
 import type { FanPortRef, Leg, SheetPath, Side } from "./types.ts";
 
 type Reached = NonNullable<SheetPath["end"]["reached"]> | "unknown";
@@ -123,17 +124,17 @@ export function hostStatic(
     if (p.side !== "supply") continue;
     const k = p.legIds.findIndex((id) => host.legs[id]?.elementId === e.elementId);
     if (k < 0) continue;
-    const losses = p.legIds.slice(0, k).map((id) => host.legs[id]?.lossInWg ?? null);
-    if (losses.some((v) => v == null)) break;
-    return { inWg: losses.reduce<number>((a, v) => a + v!, 0), basis: host.claim.basis };
+    const losses = p.legIds.slice(0, k).flatMap((id) => host.legs[id]?.lossInWg ?? []);
+    if (losses.length < k) break;
+    return { inWg: losses.reduce((a, v) => a + v, 0), basis: host.claim.basis };
   }
   return gap("host-calc", "calc does not reach the tie-in");
 }
 
 /** The one "priced with flow and no blockers" predicate: the totals, the claim and the worksheet all read it. */
+const priced = (l: Leg | undefined) => l?.lossInWg != null && l.flowCfm != null;
 export const whole = (p: SheetPath, legs: Readonly<Record<string, Leg>>) =>
-  p.blockerIds.length === 0 &&
-  p.legIds.every((id) => legs[id]!.lossInWg != null && legs[id]!.flowCfm != null);
+  p.blockerIds.length === 0 && p.legIds.every((id) => priced(legs[id]));
 
 export interface ClaimFacts {
   basis: string;
@@ -141,7 +142,10 @@ export interface ClaimFacts {
   legs: Readonly<Record<string, Leg>>;
   /** Blockers other than backflow, by id. */
   blockingIds: readonly string[];
-  coverage: readonly CoverageGap[];
+  /** The fan's native coverage, whole or not: `coverageOf` is its one source. */
+  coverage: Coverage;
+  /** Gaps found beyond the native read: a host calc that did not answer. */
+  gaps: readonly CoverageGap[];
   met: readonly Met[];
   allowanceInWg: Record<Side, number>;
 }
@@ -152,8 +156,21 @@ const SIDES: readonly Side[] = ["supply", "return"];
  * calc resolved to a number, and a finite nonnegative pressure. An unruled encounter on an otherwise
  * whole calc is `to-boundary`; anything missing unexpectedly is `incomplete`.
  */
+/** The only writer of a `complete` claim. Its coverage parameter is the type no `lost` entry fits. */
+const complete = (
+  _read: WholeCoverage,
+  basis: string,
+  requiredEspInWg: number,
+): Extract<FanClaim, { kind: "complete" }> => ({
+  kind: "complete",
+  basis,
+  requiredEspInWg,
+  coverage: [],
+  blockingIds: [],
+});
+
 export function claimOf(f: ClaimFacts): FanClaim {
-  const coverage = [...f.coverage];
+  const coverage = [...coverageGaps(f.coverage), ...f.gaps];
   const blocking = new Set(f.blockingIds);
   const tieIn = new Map<number, number>();
   for (const m of f.met) {
@@ -175,8 +192,8 @@ export function claimOf(f: ClaimFacts): FanClaim {
     if (p.blockerIds.length) p.blockerIds.forEach((id) => blocking.add(id));
     else if (!whole(p, f.legs))
       for (const id of p.legIds)
-        if (f.legs[id]!.lossInWg == null || f.legs[id]!.flowCfm == null)
-          coverage.push({ kind: "pricing", elementId: f.legs[id]!.elementId, ref: `leg ${id}` });
+        if (!priced(f.legs[id]))
+          coverage.push({ kind: "pricing", elementId: f.legs[id]?.elementId ?? null, ref: `leg ${id}` });
   });
   // Paths arrive ranked: a side's first is its critical run, unless a tie-in's static makes another worse.
   const worst = (side: Side) => {
@@ -200,14 +217,16 @@ export function claimOf(f: ClaimFacts): FanClaim {
   );
   const unruled = f.met.filter((m) => m.encounter.verdict === "unruled").map((m) => m.encounter);
   const boundaryIds = new Set(unruled.map(backflowId));
-  if (unique.length || [...blocking].some((id) => !boundaryIds.has(id)))
+  const read = wholeCoverage(f.coverage);
+  if (!read || unique.length || [...blocking].some((id) => !boundaryIds.has(id)))
     return { kind: "incomplete", basis: f.basis, knownInWg, coverage: unique, blockingIds: [...blocking] };
-  if (unruled.length)
+  const [boundary, ...more] = unruled;
+  if (boundary)
     return {
       kind: "to-boundary",
       basis: f.basis,
       knownInWg,
-      boundaries: unruled as [Encounter, ...Encounter[]],
+      boundaries: [boundary, ...more],
       coverage: [],
       blockingIds: [...blocking],
     };
@@ -219,5 +238,5 @@ export function claimOf(f: ClaimFacts): FanClaim {
       coverage: [{ kind: "pricing", elementId: null, ref: "required ESP is not a finite pressure" }],
       blockingIds: [],
     };
-  return { kind: "complete", basis: f.basis, requiredEspInWg: knownInWg, coverage: [], blockingIds: [] };
+  return complete(read, f.basis, knownInWg);
 }
