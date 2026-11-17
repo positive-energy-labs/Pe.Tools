@@ -39,8 +39,13 @@ export function systemList(snapshot: DuctSnapshot, calcs: readonly Calc[] | null
     const blocked = reached.some((calc) =>
       calc.blockers.some((b) => b.kind === "implausible-loss" && scope.prices.has(b.elementId)),
     );
-    // Unknown stays unknown: a path of this system with no whole loss may be the worst one.
-    const unknown = calcs ? runsOf(calcs).some((run) => run.total == null && reaches(run, scope)) : false;
+    // Unknown stays unknown: a path of this system with no whole loss may be the worst one, and so
+    // may the path to a grille no fan's calc reaches at all (P-074).
+    const runs = calcs ? runsOf(calcs) : [];
+    const ended = new Set(runs.map((run) => run.terminal));
+    const unknown =
+      runs.some((run) => run.total == null && reaches(run, scope)) ||
+      [...scope.terminals].some((terminal) => !ended.has(terminal));
     const rows = blocked || unknown ? undefined : worst?.rows;
     const first = snapshot.groups.find((g) => g.id === system.groups[0]);
     const lead = worst?.unit;
