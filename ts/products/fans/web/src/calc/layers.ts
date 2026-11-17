@@ -8,10 +8,10 @@
  * The worst complete path draws heavy. Every layer carries `targets` and `findings`, so hover,
  * pick and pins work through the picture's one plumbing.
  */
-import { damageLayers } from "../../../../../apps/web/src/scene/damage.ts";
-import { inkOf } from "../../../../../apps/web/src/scene/ink.ts";
-import { markFrame,markLines } from "../../../../../apps/web/src/scene/marks.ts";
-import type { Layer3D,SceneMeshes } from "../../../../../apps/web/src/scene/types.ts";
+import { damageLayers } from "@pe/web/scene/damage";
+import { inkOf } from "@pe/web/scene/ink";
+import { markFrame,markLines } from "@pe/web/scene/marks";
+import type { Layer3D,SceneMeshes } from "@pe/web/scene/types";
 import type { DuctsDesign,DuctsCalcOverview } from "@pe/agent-contracts";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { findingLayers,findingShapes,type FindingShapes } from "@pe/ducts-web/finding-layers";

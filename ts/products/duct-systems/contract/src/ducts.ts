@@ -22,7 +22,7 @@ import { z } from "zod";
 import { serveSetting, type SettingTierRead } from "@pe/agent-contracts/tiered-setting";
 import { DUCT_PARAMETER_KEYS, DUCT_UNIT_KINDS, DUCTS_CRITERIA_CELLS, criteriaLayer, criteriaMeta } from "@pe/ducts-contract/duct-inputs";
 
-import { draftCellSchema, type Author } from "../../../../packages/agent-contracts/src/draft.ts";
+import { draftCellSchema, type Author } from "@pe/agent-contracts/draft";
 import type { FansDocument } from "@pe/fans-contract/fans";
 import { type RouteStateSpec } from "@pe/agent-contracts/route-state";
 

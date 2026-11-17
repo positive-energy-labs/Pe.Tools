@@ -1,10 +1,10 @@
 import { createContext, useContext, type ReactNode } from "react";
 import { declutter, type Box } from "@pe/kit/lang/declutter";
 import { token } from "@pe/kit/lib/token";
-import type { Project } from "../../../../apps/web/src/scene/projection.ts";
+import type { Project } from "@pe/web/scene/projection";
 import { DASH_CLASS, inferredInk } from "./encoding.tsx";
 import type { Scene } from "./scene.ts";
-import { LOOK } from "../../../../apps/web/src/scene/grounds.ts";
+import { LOOK } from "@pe/web/scene/grounds";
 
 export const CaptionBounds = createContext<{
   width: number;

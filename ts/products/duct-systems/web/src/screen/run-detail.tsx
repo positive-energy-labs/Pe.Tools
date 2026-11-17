@@ -1,6 +1,6 @@
 import { useMention } from "@pe/kit/lang/attention";
-import { useElementIndex } from "../../../../../apps/web/src/element-index.ts";
-import { useNativeObservation } from "../../../../../apps/web/src/revit/observation.tsx";
+import { useElementIndex } from "@pe/web/element-index";
+import { useNativeObservation } from "@pe/web/revit/observation";
 import { RevitTarget, revitTarget } from "@pe/kit/lang/revit-target";
 import { useList } from "@pe/kit/lang/collection";
 import { PlainList } from "@pe/kit/lang/list-view";

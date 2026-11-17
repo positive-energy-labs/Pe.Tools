@@ -6,9 +6,7 @@ import {
   fansCalcData,
   openFanCalcSchema,
 } from "@pe/agent-contracts";
-import { LAYOUT_FIXTURE } from "@pe/ducts-web/layout.fixture";
-import { COLOURS_FIXTURE } from "@pe/ducts-web/colours.fixture";
-import { NAVIGATION_FIXTURE } from "@pe/ducts-web/navigation.fixture";
+import { networkFixtures } from "@pe/ducts-web/network-fixtures";
 import fixture from "./calc.fixture.json";
 import { calcState } from "./state.ts";
 import { stableFanKey } from "@pe/ducts-web/calc/model";
@@ -79,10 +77,5 @@ const provide = (snapshot: DuctSnapshot) => (args: { fan: "all" | readonly strin
   };
 };
 export const calcValueFixtures = Object.fromEntries(
-  Object.entries({
-    scene: LAYOUT_FIXTURE,
-    layout: LAYOUT_FIXTURE,
-    colours: COLOURS_FIXTURE,
-    navigation: NAVIGATION_FIXTURE,
-  }).map(([name, value]) => [name, provide(value.snapshot)]),
+  Object.entries(networkFixtures).map(([name, value]) => [name, provide(value.snapshot)]),
 );

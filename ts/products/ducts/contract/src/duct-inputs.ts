@@ -1,9 +1,9 @@
 import { z } from "zod";
 import { decode, subjectRefCodeSchema } from "@pe/agent-contracts/subject-ref";
 import { VALUE_SOURCES, validValueSchema, valueResolutionSchema, type ValueResolution } from "@pe/agent-contracts/work-value";
-import type { Author } from "../../../../packages/agent-contracts/src/draft.ts";
+import type { Author } from "@pe/agent-contracts/draft";
 import { settingWrittenSchema } from "@pe/agent-contracts/tiered-setting";
-import { schemaOf, type Domain } from "../../../../packages/agent-contracts/src/slots/sheet.ts";
+import { schemaOf, type Domain } from "@pe/agent-contracts/slots/sheet";
 import { DUCT_UNIT_KINDS } from "@pe/host-contracts/generated";
 export { DUCT_UNIT_KINDS } from "@pe/host-contracts/generated";
 export type { DuctUnitKind } from "@pe/host-contracts/generated";

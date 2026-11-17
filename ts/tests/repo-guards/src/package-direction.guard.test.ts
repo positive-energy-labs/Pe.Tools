@@ -45,6 +45,20 @@ function reachThrough(): Record<string, number> {
 }
 
 describe("contracts <- runtime <- surface adapters", () => {
+  it("declares generated MCP guide imports through product contract exports", () => {
+    const manifest = JSON.parse(readFileSync(join(ROOT, "packages/mcps/package.json"), "utf8"));
+    const guides = read("ts/packages/mcps/src/pea/guides.generated.ts");
+    expect(guides.length).toBeGreaterThan(0);
+    for (const { module } of guides) {
+      expect(module).toMatch(/^@pe\/[^/]+-contract\//);
+      const [scope, name, ...entry] = module.split("/");
+      expect(manifest.dependencies[`${scope}/${name}`]).toBe("workspace:*");
+      const product = name!.replace(/-contract$/, "");
+      const contract = JSON.parse(readFileSync(join(ROOT, "products", product, "contract/package.json"), "utf8"));
+      expect(contract.exports[`./${entry.join("/")}`]).toBeDefined();
+    }
+  });
+
   it("keeps lower packages independent of MCP and app adapters", () => {
     const violations: string[] = [];
     for (const name of ["host-contracts", "agent-contracts", "runtime", "kit"]) {

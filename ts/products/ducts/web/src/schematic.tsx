@@ -4,8 +4,8 @@ import {
   useMention,
   type SubjectKey,
 } from "@pe/kit/lang/attention";
-import { useElementAttention } from "../../../../apps/web/src/attention.tsx";
-import { useElementIndex } from "../../../../apps/web/src/element-index.ts";
+import { useElementAttention } from "@pe/web/attention";
+import { useElementIndex } from "@pe/web/element-index";
 import type { Tone } from "@pe/kit/lib/token";
 import { nameOrFallback } from "@pe/kit/lang/subject-text";
 import { SvgTip } from "@pe/kit/lang/tooltip";
@@ -32,7 +32,7 @@ import {
   type GroupTree,
 } from "@pe/ducts-domain/topology";
 
-import { PanZoom } from "../../../../apps/web/src/scene/pan-zoom.tsx";
+import { PanZoom } from "@pe/web/scene/pan-zoom";
 import { DASH_CLASS, strokeOf, type Encoding, type EncodingFacts } from "./encoding.tsx";
 import { ISSUE_KINDS } from "./issues.tsx";
 import { sceneOf, type DuctIndex } from "./scene.ts";

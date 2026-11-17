@@ -15,8 +15,8 @@ import { stagedValues } from "@pe/agent-contracts";
 
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
-import type { RevitBridge } from "../../../../apps/host/src/bridge.ts";
-import { refused } from "../../../../apps/host/src/command-executor.ts";
+import type { RevitBridge } from "@pe/host/bridge";
+import { refused } from "@pe/host/command-executor";
 
 
 

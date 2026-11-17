@@ -1,11 +1,11 @@
 /** /fans Work (FANSPLIT, routes LEDGER 2026-11-03): the fan-side cells, split out of the ducts Work. */
 import { z } from "zod";
-import type { Immutable } from "../../../../packages/agent-contracts/src/route-kernel-data.ts";
+import type { Immutable } from "@pe/agent-contracts/route-kernel-data";
 import { ductCalculationSchema } from "@pe/ducts-contract/duct-calculation";
-import { draftCellSchema } from "../../../../packages/agent-contracts/src/draft.ts";
+import { draftCellSchema } from "@pe/agent-contracts/draft";
 import type { RouteStateSpec } from "@pe/agent-contracts/route-state";
 import { FAN_CELLS } from "./fans-inputs.ts";
-import { schemaOf, type Domain } from "../../../../packages/agent-contracts/src/slots/sheet.ts";
+import { schemaOf, type Domain } from "@pe/agent-contracts/slots/sheet";
 import { elementSubjectSchema } from "@pe/ducts-contract/duct-inputs";
 export { DUCT_UNIT_ROLES } from "@pe/ducts-contract/duct-inputs";
 

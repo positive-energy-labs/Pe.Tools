@@ -1,7 +1,7 @@
 import type { PictureScope } from "@pe/agent-contracts/slots";
 import { subjectCode, uniqueIdSchema } from "@pe/agent-contracts/subject-ref";
 import { calc as sheet, type FansDrawContext } from "../route.ts";
-import { valueOf } from "../../../../apps/web/src/route/typed-route.ts";
+import { valueOf } from "@pe/web/route/typed-route";
 import { cellMembers, selectedKeys } from "@pe/ducts-web/cell-focus";
 import { ductElements } from "@pe/ducts-web/identity";
 export function bindings(ctx:FansDrawContext) {

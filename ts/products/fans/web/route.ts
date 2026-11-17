@@ -14,12 +14,13 @@ import * as reads from "@pe/fans-contract/contract";
 import { editPatches } from "@pe/ducts-domain/calc/edits";
 import { field, picturePose, route, subjectSchema, split } from "@pe/web/route";
 import { hostRead } from "@pe/web/host-read";
-import { draw } from "../../../apps/web/src/route/draw.tsx";
-import { fillBody, scrollBody } from "../../../apps/web/src/route/body.ts";
-import { overlay } from "../../../apps/web/src/route/slots/picture/overlay.tsx";
+import { draw } from "@pe/web/route/draw";
+import { fillBody, scrollBody } from "@pe/web/route/body";
+import { overlay } from "@pe/web/route/slots/picture/overlay";
 import { fanLabel, stableFanKey } from "@pe/ducts-web/calc/model";
 import { describeInputHistory, editMetaSchema } from "@pe/ducts-web/calc/input-history.neutral";
-import { calcValueFixtures } from "./src/calc/value-fixtures.ts";
+import { lazyFixtures } from "@pe/ducts-web/registry";
+const calcValueFixtures = lazyFixtures(() => import("./src/calc/value-fixtures.ts").then(m => m.calcValueFixtures));
 import { presentLosses } from "@pe/ducts-web/reviews";
 import { fansCalc } from "./src/calc.ts";
 

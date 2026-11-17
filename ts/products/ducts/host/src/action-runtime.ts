@@ -11,14 +11,14 @@ import { ductsDesign, ductsFirmSchema, ductParameterSlots, subjectOf, workHandle
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import type { HostNativeRead } from "@pe/host-internal/native-read";
 import { Effect } from "effect";
-import { admittedCommandReadIdentity } from "../../../../apps/host/src/command-read-identity.ts";
-import { RequestIdentity } from "../../../../apps/host/src/request-services.ts";
+import { admittedCommandReadIdentity } from "@pe/host/command-read-identity";
+import { RequestIdentity } from "@pe/host/request-services";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { z } from "zod";
-import type { RevitBridge } from "../../../../apps/host/src/bridge.ts";
-import { command, nativeStep, refused, type CommandContext } from "../../../../apps/host/src/command-executor.ts";
-import type { ActionExecution } from "../../../../apps/host/src/action-journal.ts";
-import { lifetime } from "../../../../apps/host/src/document-lifetime.ts";
+import type { RevitBridge } from "@pe/host/bridge";
+import { command, nativeStep, refused, type CommandContext } from "@pe/host/command-executor";
+import type { ActionExecution } from "@pe/host/action-journal";
+import { lifetime } from "@pe/host/document-lifetime";
 import { ductsReadings } from "./ducts-readings.ts";
 import { runPods } from "@pe/host/family-actions";
 import { resolveCriteria } from "@pe/ducts-domain/calc/inputs";
@@ -26,7 +26,7 @@ import { resolveCriteria } from "@pe/ducts-domain/calc/inputs";
 
 
 import { firmLayer, workLayer } from "./ducts-inputs.ts";
-import { readSettingTiers } from "../../../../apps/host/src/tiered-settings.ts";
+import { readSettingTiers } from "@pe/host/tiered-settings";
 import { resolveFirm } from "@pe/host/reads/evaluator";
 
 import type { DuctsApply } from "@pe/host-contracts/generated";

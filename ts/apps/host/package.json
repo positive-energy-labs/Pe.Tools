@@ -69,6 +69,19 @@
     "./ducts-files": "./src/ducts-files.ts",
     "./ducts-inputs": "./src/ducts-inputs.ts",
     "./local-inputs": "./src/local-inputs.ts",
-    "./reads/inputs": "./src/reads/inputs.ts"
+    "./reads/inputs": "./src/reads/inputs.ts",
+    "./bridge": "./src/bridge.ts",
+    "./command-executor": "./src/command-executor.ts",
+    "./vite.config": "./vite.config.ts",
+    "./command-read-identity": "./src/command-read-identity.ts",
+    "./request-services": "./src/request-services.ts",
+    "./action-journal": "./src/action-journal.ts",
+    "./document-lifetime": "./src/document-lifetime.ts",
+    "./tiered-settings": "./src/tiered-settings.ts",
+    "./host-ownership": "./src/host-ownership.ts",
+    "./input-occurrence": "./src/input-occurrence.ts",
+    "./native-reads": "./src/native-reads.ts",
+    "./native-recording": "./src/native-recording.ts",
+    "./call-route": "./src/call-route.ts"
   }
 }

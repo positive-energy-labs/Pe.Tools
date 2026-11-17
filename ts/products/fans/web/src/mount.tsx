@@ -1,8 +1,8 @@
 import { workElementId } from "@pe/ducts-domain/work-subject";
 import { ductElements } from "@pe/ducts-web/identity";
-import { useRevitSubjectProps } from "../../../../apps/web/src/revit/element-menu.tsx";
-import { useRouteSearchSlice } from "../../../../apps/web/src/route/activity.tsx";
-import { useAdmittedSubject } from "../../../../apps/web/src/shell/subject.ts";
+import { useRevitSubjectProps } from "@pe/web/revit/element-menu";
+import { useRouteSearchSlice } from "@pe/web/route/activity";
+import { useAdmittedSubject } from "@pe/web/shell/subject";
 
 import type { FansCalcEdits, SubjectRefCode } from "@pe/agent-contracts";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
@@ -10,7 +10,7 @@ import type { SubjectKey } from "@pe/kit/lang/attention";
 import { SubjectTextContext } from "@pe/kit/lang/reach";
 import { useMemo } from "react";
 import { calc as sheet, type FansDrawContext } from "../route.ts";
-import { valueOf } from "../../../../apps/web/src/route/typed-route.ts";
+import { valueOf } from "@pe/web/route/typed-route";
 import { issueOf, issueSubject } from "@pe/ducts-web/cell-focus";
 import { ductsLink } from "@pe/ducts-web/identity";
 import { subjectNamer } from "@pe/ducts-web/subject-text";

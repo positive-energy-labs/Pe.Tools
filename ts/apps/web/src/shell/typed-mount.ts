@@ -226,14 +226,24 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
   gate.enter({ target: input.target, work: key }, page);
   let workAttempt = gate.capture("work");
   let door = input.history ? recordedWorkDoor(input.history) : ports.work ?? createWorkFeedClient();
+  let fixtureReady = true;
   if (edits && key && spec.core && !input.history && input.fixture !== null) {
     const packet = spec.core.source.provide?.(input.fixture, spec.core.args(page as never));
+    const initialize = (packet: import("@pe/agent-contracts/value").Publication | undefined) => {
     if (!packet?.value) throw Error(`Missing fixture ${input.fixture}`);
     const data = packet.value.data as Record<string,unknown>;
     door = createFixtureWorkDoor(edits!.work, data[edits!.owners[own]!.value!],
       Object.fromEntries(Object.entries(edits!.owners).map(([id,c]) => [id,c.state.schema])),
       Object.fromEntries(Object.entries(edits!.owners).map(([id,c]) => [id,data[c.value!]])),
       Object.fromEntries(Object.keys(edits!.owners).map(id => [id,id])));
+    };
+    if (packet instanceof Promise) {
+      fixtureReady = false;
+      void packet.then(value => {
+        if (disposed) return;
+        initialize(value); fixtureReady = true; syncWork(); notify();
+      }).catch(error => { if (!disposed) { problems.set("fixture", String(error)); notify(); } });
+    } else initialize(packet);
   }
   const accept = (record: typeof owners extends Map<string, infer R> ? R : never, handle: WorkHandle, doc: unknown) => {
     if (disposed || owners.get(record.scope.key.route) !== record) return;
@@ -248,6 +258,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
   };
   let ownerKey: string | undefined;
   const syncWork = () => {
+    if (!fixtureReady) return;
     const next = selectedKey(), signature=canonicalRouteInput(next);
     if(ownerKey === signature) return;
     ownerKey=signature;
@@ -328,7 +339,12 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
         connectTimeline(); notify();
       };
       if (input.fixture !== null) {
-        try { deliver({ kind: "complete", value: read.source.provide!(input.fixture, args), revision: 1 }); }
+        try {
+          const packet = read.source.provide!(input.fixture, args);
+          if (packet instanceof Promise) void packet.then(value => deliver({ kind: "complete", value, revision: 1 }))
+            .catch(error => deliver({ kind: "failure", error }));
+          else deliver({ kind: "complete", value: packet, revision: 1 });
+        }
         catch (error) { deliver({ kind: "failure", error }); }
       } else {
         const ctx: ReadingContext = { target: input.target!, workKey: key, workRevision: null,

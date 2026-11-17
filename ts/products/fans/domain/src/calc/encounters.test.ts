@@ -119,6 +119,22 @@ it("H5 clause 2: missing rating assumes the host is balanced", () => {
   expect(hostStatic(host(), e, "n")).toEqual({ inWg: 0.7, basis: "hb", source: "host required ESP minus loss to tie-in; assumes the host is balanced" });
 });
 
+it.each([
+  ["invalid status", "invalid"],
+  ["NaN", NaN],
+  ["Infinity", Infinity],
+  ["negative", -1],
+] as const)("P-090: %s host rated ESP is a host-calc gap, never a number", (_name, value) => {
+  const valid = resolveValue({ model: { value: 1.2, author: null, ref: "rated" } });
+  if (valid.status !== "valid") throw Error("Expected a valid fixture rating");
+  // Inject at hostStatic's boundary without normalizing malformed ratings through resolveValue.
+  const rated = value === "invalid" ? { ...valid, status: "invalid" as const, value: null } : { ...valid, value };
+  const e = encountersOf(SELF, paths, legs)[0]!.encounter;
+  expect(hostStatic(host({ esp: { rated } }), e, "n")).toEqual({
+    kind: "host-calc", elementId: 20, ref: "host 200:0 rated ESP is invalid",
+  });
+});
+
 it("H5 clause 5: a rating below required ESP is backflow/deadhead", () => {
   const e = encountersOf(SELF, paths, legs)[0]!.encounter;
   // Clause 5: rated 0.8 < required 1.0, so no pressure can authorize a write.

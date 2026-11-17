@@ -1,4 +1,4 @@
-import base from "../../../apps/host/vite.config.ts";
+import base from "@pe/host/vite.config";
 import { defineConfig } from "vite-plus";
 import { fileURLToPath } from "node:url";
 export default defineConfig(async env => {

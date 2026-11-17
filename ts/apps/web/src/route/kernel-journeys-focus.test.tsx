@@ -621,8 +621,8 @@ test("JZ Fans undo after apply: public write journey leaves an honest toolbar re
     target: f.target, fixture: null, work: { address: null, open: f.target.ref },
     address: { read: () => new URLSearchParams(), write() {}, subscribe: () => () => {} },
     custody: { current: () => true }, memory: () => ({}),
-  }, routeRegistry.fans!.fingerprint, { work, timeline: fixtureTimeline(f.saved, () => timelineReceipts(f.journal), changed => f.journal.subscribe({ kinds: ["action"] }, changed)), sources: { "fans.calc": { kind: "use", open(ctx, deliver) {
-    const packet = fans.spec.core?.source.provide?.("scene", ctx.args);
+  }, routeRegistry.fans!.fingerprint, { work, timeline: fixtureTimeline(f.saved, () => timelineReceipts(f.journal), changed => f.journal.subscribe({ kinds: ["action"] }, changed)), sources: { "fans.calc": { kind: "use", async open(ctx, deliver) {
+    const packet = await fans.spec.core?.source.provide?.("scene", ctx.args);
     if (!packet) throw Error("Missing current Fans fixture");
     deliver({ kind: "complete", revision: 1, value: packet });
     return () => {};

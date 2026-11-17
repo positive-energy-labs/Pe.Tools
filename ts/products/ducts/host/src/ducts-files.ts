@@ -1,6 +1,6 @@
-import { targetHomes } from "../../../../apps/host/src/call-route.ts";
-import { RevitBridge } from "../../../../apps/host/src/bridge.ts";
-import { RequestIdentity } from "../../../../apps/host/src/request-services.ts";
+import { targetHomes } from "@pe/host/call-route";
+import { RevitBridge } from "@pe/host/bridge";
+import { RequestIdentity } from "@pe/host/request-services";
 /**
  * The host's file inputs (ADR 0031 rule 1): the firm files and the duct catalogs. A body reads them
  * through this service so a test or a recording can answer instead of the disk. A firm file is
@@ -18,7 +18,7 @@ import type { DoorFailure } from "@pe/host-internal/request-contracts";
 import { firmSettingsDir } from "@pe/host-contracts/product-paths";
 import { readDuctCatalogs, productCatalogsRoots, type CatalogReading } from "./duct-catalogs.ts";
 import { firmFileSchema, firmOwner, type FirmFile } from "@pe/host/reads/evaluator";
-import { readSettingsFile } from "../../../../apps/host/src/tiered-settings.ts";
+import { readSettingsFile } from "@pe/host/tiered-settings";
 import {
   captureInput,
   inputBindingKey,
@@ -26,7 +26,7 @@ import {
   type RecordingReader,
   type RecordingWriter,
   type TakingObserver,
-} from "../../../../apps/host/src/native-recording.ts";
+} from "@pe/host/native-recording";
 
 /**
  * Firm files are the firm tier of a tiered value (ADR 0037 rule 8), at `<firm home>/Settings/<owner>.json`

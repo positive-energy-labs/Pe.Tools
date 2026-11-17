@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { Context, Effect, Exit, Layer, Scope } from "effect";
 import { DuctFiles, ductCatalogsRoute } from "../ducts-files.ts";
+import { readDuctCatalogs } from "../duct-catalogs.ts";
 import { nativeFixture } from "@pe/fans-host/tests/fans-work-fixture";
 import { snapshot } from "@pe/ducts-web/test-fixture";
 import { catalogLinkKey } from "@pe/ducts-domain/catalog";
@@ -13,6 +14,15 @@ import { settle } from "../../../../../apps/host/tests/effect-test.ts";
 
 const closes: (() => Promise<unknown>)[] = [];
 afterEach(async () => { for (const close of closes.splice(0).reverse()) await close(); vi.unstubAllEnvs(); });
+
+test("dot-prefixed catalog directories are ignored without a missing-file finding", async () => {
+  const root = await mkdtemp(join(tmpdir(), "pe-hidden-catalog-"));
+  closes.push(() => rm(root, { recursive: true, force: true }));
+  await mkdir(join(root, ".draft"));
+  const result = await readDuctCatalogs(root);
+  expect(Object.keys(result.tables)).toEqual([]);
+  expect(result.findings).toEqual([]);
+});
 
 test("a losses plan on an incomplete fan calc is refused with the claim's reason, and the catalog read prices from the target project home", async () => {
   const root = await mkdtemp(join(tmpdir(), "pe-loss-catalogs-"));

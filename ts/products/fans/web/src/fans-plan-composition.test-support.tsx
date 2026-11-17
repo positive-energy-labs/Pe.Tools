@@ -255,8 +255,8 @@ export async function fansPlanJourney(journey: "watched publications" | "externa
    // journey waits on the panes' busy marks (slice 6.1) instead of pressing a re-read.
    for(const pane of document.querySelectorAll('[data-slot="pane"][data-pane-id^="sheet-"]')) await settled(pane,45000);
    await mount.whenWritable();
-   // Work creation/staging can reacquire its snapshot; only Plan must avoid dirtying it.
-   const planDirtyStart=dirties.length;
+   // No setup dirty is expected: Work dirties only for revision gaps or late stale acks (work-feed-client.ts:381,432).
+   expect(dirties,"Work creation and staging: zero Work or receipt-feed dirties before Plan").toEqual([]);
    for(mode of ["recording","batched"] as const){
      if(mode==="batched"){batchReleased=false;receiptBatch.length=0;heldReceipts.length=0;readyAfterBatch.length=0;}
      before=sample();
@@ -300,7 +300,7 @@ export async function fansPlanJourney(journey: "watched publications" | "externa
    expect(commandReads.every(record=>record.state==="complete"&&record.inputs.some(input=>input.input.kind==="work"&&input.input.view==="view"))).toBe(true);
    (trace as any).commandReads=commandReads;
    expect(trace.submit).toHaveBeenCalledTimes(2);
-   expect(dirties.slice(planDirtyStart)).toEqual([]);
+   expect(dirties).toEqual([]);
    const receiptKey=receiptBatch.find(row=>row.kind==="held").key;
    expect(receiptBatch.filter(row=>row.kind==="held"&&row.key===receiptKey).length).toBeGreaterThan(1);
    const stream=[...streams].find(stream=>stream.keys.has(receiptKey));

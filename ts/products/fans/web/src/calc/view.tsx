@@ -1,4 +1,4 @@
-import { useAdmittedSubject } from "../../../../../apps/web/src/shell/subject.ts";
+import { useAdmittedSubject } from "@pe/web/shell/subject";
 /**
  * The fan sheet view of /ducts (`?stage=sheet`, the head's "Pricing fans" stage; protoui rounds 1 to 3, 2026-10-28, variant A "Ledger"
  * promoted): pane bodies for the kernel's graph layout, using the house `ListView`. The

@@ -9,11 +9,13 @@ export interface HostRead {
   input: z.ZodType;
   output: z.ZodType<Publication>;
   axes: EntryContract["axes"];
-  fixtures?: Readonly<Record<string, (args: any) => FixtureValue<z.ZodType<Publication>>>>;
+  fixtures?: FixtureProviders<any, unknown>;
   endpoint?: PeRouteId;
   request?(args: any, target?: import("@pe/agent-contracts").ExecutionTarget): object;
-  source: Omit<UseSource,"open"> & { provide?(name: string, args: unknown): Publication };
+  source: Omit<UseSource,"open"> & { provide?(name: string, args: unknown): Publication | Promise<Publication> };
 }
+type FixtureTable<I, D> = Readonly<Record<string, (args: I) => FixtureValue<z.ZodType<Publication<D>>>>>;
+type FixtureProviders<I, D> = FixtureTable<I, D> | (() => Promise<FixtureTable<I, D>>);
 type FixtureValue<O extends z.ZodType<Publication>> = Pick<
   NonNullable<z.output<O>["value"]>,
   "data" | "coverage"
@@ -22,11 +24,11 @@ type FixtureValue<O extends z.ZodType<Publication>> = Pick<
 /** A host publication handle. Importing a route on the host never loads browser transport. */
 export function hostRead<K extends string, S extends z.ZodRawShape, D>(
   contract: ReadHandle<K, z.output<z.ZodObject<S>>, D> & { input: z.ZodObject<S> },
-  fixtures?: Readonly<Record<string, (args: z.output<z.ZodObject<Omit<S, "target">>>) => FixtureValue<z.ZodType<Publication<D>>>>>,
+  fixtures?: FixtureProviders<z.output<z.ZodObject<Omit<S, "target">>>, D>,
 ): HostRead & { input: z.ZodObject<Omit<S, "target">>; output: z.ZodType<Publication<D>> };
 export function hostRead<K extends string, I, D>(
   contract: ReadHandle<K, I, D>,
-  fixtures?: Readonly<Record<string, (args: I) => FixtureValue<z.ZodType<Publication<D>>>>>,
+  fixtures?: FixtureProviders<I, D>,
 ): HostRead & { input: z.ZodType<I>; output: z.ZodType<Publication<D>> };
 export function hostRead<K extends string, D>(
   contract: ReadHandle<K, unknown, D>,
@@ -57,25 +59,28 @@ export function hostRead<K extends string, D>(
       ...(fixtures
         ? {
             provide(name: string, args: unknown) {
-              const provider = fixtures[name];
-              if (!provider) throw Error(`No fixture '${name}' for ${key}`);
-              const parsed = input.parse(args);
-              const value = provider(parsed);
-              const id = `fixture:${key}:${name}:${JSON.stringify(parsed)}`;
-              return {
-                key: id,
-                generation: 0,
-                version: 1,
-                state: "current",
-                value: {
-                  ...value,
-                  evaluation: id,
-                  inputs: id,
-                  origin: { kind: "fixture", name },
-                  works: [], trace: [],
-                  freshness: "current",
-                },
-              } satisfies Publication;
+              const publish = (table: FixtureTable<unknown, unknown>) => {
+                const provider = table[name];
+                if (!provider) throw Error(`No fixture '${name}' for ${key}`);
+                const parsed = input.parse(args);
+                const value = provider(parsed);
+                const id = `fixture:${key}:${name}:${JSON.stringify(parsed)}`;
+                return {
+                  key: id,
+                  generation: 0,
+                  version: 1,
+                  state: "current",
+                  value: {
+                    ...value,
+                    evaluation: id,
+                    inputs: id,
+                    origin: { kind: "fixture", name },
+                    works: [], trace: [],
+                    freshness: "current",
+                  },
+                } satisfies Publication;
+              };
+              return typeof fixtures === "function" ? fixtures().then(publish) : publish(fixtures);
             },
           }
         : {}),

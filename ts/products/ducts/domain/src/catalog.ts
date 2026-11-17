@@ -1,4 +1,4 @@
-import type { Immutable } from "../../../../packages/agent-contracts/src/route-kernel-data.ts";
+import type { Immutable } from "@pe/agent-contracts/route-kernel-data";
 import { friction, sectionOf } from "./loss-physics.ts";
 import type { DuctSnapshot } from "./types.ts";
 

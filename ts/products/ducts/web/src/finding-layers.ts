@@ -22,9 +22,9 @@ import {
 } from "@pe/ducts-domain/proximity";
 import { withStoredRulings } from "@pe/ducts-domain/rulings";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
-import { inkOf } from "../../../../apps/web/src/scene/ink.ts";
-import { markFrame, markLines, markVolume } from "../../../../apps/web/src/scene/marks.ts";
-import type { Layer3D } from "../../../../apps/web/src/scene/types.ts";
+import { inkOf } from "@pe/web/scene/ink";
+import { markFrame, markLines, markVolume } from "@pe/web/scene/marks";
+import type { Layer3D } from "@pe/web/scene/types";
 import type { NoRunBranch } from "@pe/ducts-domain/no-run-types";
 import { issueAt, type StageIssue } from "@pe/ducts-domain/stage-issue";
 
