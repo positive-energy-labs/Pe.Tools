@@ -154,6 +154,8 @@ export type RouteWorkspaceOptions = {
   registrations: readonly RouteWorkspaceRegistration[];
   /** Root-fixed source policy, checked before reads or writes at a mutation boundary. */
   authorizeMutation?: (verb: "edit" | "undo" | "redo" | "publish" | "retire") => void;
+  /** Required for trusted publication; the host resolves the admitted caller at invocation time. */
+  publicationAuthor?: () => WorkAuthor;
   workHistoryLimits?: { readonly maxCount: number; readonly maxBytes: number };
 } & (
   | { store: RouteDocumentStore; capture?: WorkReadCapture; recorded?: never }
@@ -867,12 +869,14 @@ export class RouteWorkspace {
     const validate = (node: unknown): void => {
       if (Array.isArray(node)) return node.forEach(validate);
       if (!node || typeof node !== "object") return;
+      if (Object.hasOwn(node, "invalid")) throw Error("Caller seeds cannot supply invalid markers");
       for (const [key, value] of Object.entries(node)) {
         if (key === "edit") {
           if (value && typeof value === "object" && Object.hasOwn(value, "by"))
             z.never().parse((value as Record<string, unknown>).by);
           if (value != null) edit.parse(value);
-        } else validate(value);
+        }
+        validate(value);
       }
     };
     validate(seed);
@@ -907,7 +911,9 @@ export class RouteWorkspace {
     receiptId?: string,
   ) {
     this.#authorize("publish");
-    return this.apply(scope, route, "human", patches, expectedRevision, true, {
+    if (!this.options.publicationAuthor) throw Error("Trusted publication requires an admitted caller");
+    const by = this.options.publicationAuthor();
+    return this.apply(scope, route, by, patches, expectedRevision, true, {
       kind: "apply",
       press: null,
       receiptId,
@@ -1201,7 +1207,7 @@ export class RouteWorkspace {
     }
   }
 
-  /** Decode, or set aside: stored Work that is not this spec's is never migrated (MAP invariant). */
+  /** Keep valid cells; invalid cells block fallback, with the original bytes kept by set-aside. */
   async #decodeStored(targetKey: string, spec: RouteStateSpec<z.ZodType>, raw: unknown) {
     if (raw == null) return null;
     try {
@@ -1211,6 +1217,13 @@ export class RouteWorkspace {
       if (unstamped) throw Error(`${unstamped} staged row${unstamped === 1 ? " carries" : "s carry"} no caller stamp.`);
       return { raw, envelope };
     } catch (error) {
+      const recovered = recoverCells(raw, spec);
+      if (recovered) {
+        await this.#store.setState({ targetKey, route: spec.route, value: null,
+          reason: setAsideRows(spec.route, { doc: recovered.failed }) });
+        await this.#store.setState({ targetKey, route: spec.route, value: recovered.raw });
+        return recovered;
+      }
       // One notice for the whole record: every staged row it held, then why it was refused.
       await this.#store.setState({ targetKey, route: spec.route, value: null,
         reason: [setAsideRows(spec.route, raw), error instanceof z.ZodError
@@ -1448,6 +1461,42 @@ function parseEnvelope(raw: unknown, spec: RouteStateSpec<z.ZodType>): RouteEnve
   const envelope = envelopeSchema.extend({ schemaVersion: z.literal(spec.schemaVersion ?? 1) }).parse(raw);
   const schema = spec.schema instanceof z.ZodObject ? spec.schema.strict() : spec.schema;
   return { ...envelope, doc: schema.parse(envelope.doc) };
+}
+
+/** Only cell failures are recoverable. Envelope/schema-version and non-cell failures stay whole-record refusals. */
+function recoverCells(raw: unknown, spec: RouteStateSpec<z.ZodType>) {
+  const header = envelopeSchema.extend({ schemaVersion: z.literal(spec.schemaVersion ?? 1) }).safeParse(raw);
+  if (!header.success) return null;
+  const result = spec.schema.safeParse(header.data.doc);
+  if (result.success) return null;
+  const doc = structuredClone(header.data.doc) as Record<string, unknown>, failed: Record<string, unknown> = {};
+  const paths: string[][] = [];
+  const walk = (node: unknown, path: string[]) => {
+    if (!node || typeof node !== "object") return;
+    if (Object.hasOwn(node, "edit")) { paths.push(path); return; }
+    for (const [key, value] of Object.entries(node)) walk(value, [...path, key]);
+  };
+  walk(doc, []);
+  const bad = new Map<string[], string>();
+  for (const issue of result.error.issues) {
+    const path = paths.find(path => path.length && path.every((key, i) => String(issue.path[i]) === key));
+    if (!path) return null;
+    bad.set(path, issue.message);
+  }
+  const put = (root: Record<string, unknown>, path: string[], value: unknown) => {
+    let node = root;
+    for (const key of path.slice(0, -1)) node = (node[key] ??= {}) as Record<string, unknown>;
+    node[path.at(-1)!] = value;
+  };
+  for (const [path, reason] of bad) {
+    let original: unknown = header.data.doc;
+    for (const key of path) original = (original as Record<string, unknown>)[key];
+    put(failed, path, original);
+    put(doc, path, { invalid: reason });
+  }
+  const projected = { ...(raw as object), doc };
+  try { return { raw: projected, envelope: parseEnvelope(projected, spec), failed }; }
+  catch { return null; }
 }
 
 function toJsonSchema(schema: z.ZodType): unknown {

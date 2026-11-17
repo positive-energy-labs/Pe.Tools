@@ -1,4 +1,5 @@
 import { hostState } from "./host-ownership.ts";
+import { workAuthorOf } from "./control.ts";
 import { commands, hostAuthoredRefusal, refusalText } from "@pe/agent-contracts";
 
 import { command, io, refused, StepFailure } from "./command-executor.ts";
@@ -20,7 +21,7 @@ export const workStartExecutor=(workspace:RouteWorkspace|undefined)=>command(com
     if(!workspace) return Effect.fail(refused("Work storage is unavailable"));
     const {key,seed}=execution.prepared;
     return execution.step("publication","work.start",{key},()=>io(async()=>{
-      const result=await workspace.start(key,seed,caller.kind === "pea"?"pea":"human",admission.id);
+      const result=await workspace.start(key,seed,workAuthorOf(caller),admission.id);
       if(!result.ok) throw new StepFailure(refusalText(result),409,"refused",result);
       return result;
     }));

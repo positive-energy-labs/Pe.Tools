@@ -36,6 +36,16 @@ test("an incomplete, stale or misowned cohort refuses and stages nothing", () =>
   expect(stageEspCohort({ ...cohort, owner: { kind: "instance", id: 1 }, members: [onWalk!] }, "b1", { inWg: 1 })).toHaveProperty("esp");
 });
 
+test("stagedDucts never invents a caller for an unstamped cell, and locates uncited evidence", () => {
+  const key = elementSubject(onWalk!), other = elementSubject(peer!);
+  // Deliberately bypass storage decoding to challenge stagedDucts' own boundary.
+  const raw = { flows: { [key]: { edit: { value: 250 } }, [other]: { edit: { value: 90, by: "human" } } } };
+  const fans = { ...fansDocumentSchema.parse({}), ...raw } as Parameters<typeof stagedDucts>[1];
+  expect(stagedDucts(null, fans).flows).toEqual({
+    [other]: { value: 90, by: "human", ref: `work:fans/flows/${other}` },
+  });
+});
+
 test("stagedDucts hands the resolver { value, by, ref } cells: airflow a plain number, a cited ref kept, else the cell's location, and no unstamped cell", () => {
   const key = elementSubject(onWalk!), other = elementSubject(peer!);
   const fans = fansDocumentSchema.parse({

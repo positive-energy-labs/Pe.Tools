@@ -1,4 +1,5 @@
 import { stateScope } from "@pe/host-contracts/service-identity";
+import { currentCaller, workAuthorOf } from "./control.ts";
 import { contentHomes, contentRootsReady, contentFirmHome } from "./content-roots.ts";
 import { productPathNames } from "@pe/host-contracts/contracts";
 import { join } from "node:path";
@@ -181,6 +182,7 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
   const run = <A, E>(effect: Effect.Effect<A, E>) => runPods({}, Effect.provide(effect, provided));
   const registrations = options.registrations ?? createRouteRegistrations();
   const workspace = new RouteWorkspace({
+    publicationAuthor: () => workAuthorOf(currentCaller()),
     registrations: constructorWorkRegistrations(registrations),
     ...(recorded
       ? { recorded: recordedWorkSource(lane.recordingStore) }
