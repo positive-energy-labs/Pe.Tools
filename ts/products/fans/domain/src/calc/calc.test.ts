@@ -973,10 +973,11 @@ it("a branch-entry tap onto this fan's own network is a split (R-Q4): the walk c
   ] as const) {
     const leg = sheet.legs[id]!;
     expect(leg.flowCfm).toBe(q);
-    expect(leg.velocityFpm).toBeCloseTo(q / main8.areaFt2, 6);
-    expect(leg.lossSource).toMatchObject({ kind: "rule" });
-    expect(leg.lossSource.ref).toContain("SD5-18 Cb1=");
-    expect(leg.lossInWg).toBeGreaterThan(0);
+    // Was velocity q/main8 (171.887 for 60 cfm), rule source and positive loss; ruling (c), P-102.
+    expect(leg.velocityFpm).toBeNull();
+    expect(leg.lossInWg).toBeNull();
+    expect(leg.lossSource.ref).toBe("unpriced");
+    expect(sheet.blockers.some((b) => b.kind === "not-priced" && b.detail.includes("outside table"))).toBe(true);
   }
   expect(collar.areaFt2).toBeLessThan(main8.areaFt2);
   expect(sheet.legs["2:1>0"]).toBeUndefined();
@@ -1002,7 +1003,8 @@ it("a branch-entry tap onto this fan's own network is a split (R-Q4): the walk c
   expect(
     sheet.notes.some((i) => i.kind === "merge" && i.text.startsWith("merge 2 branch loss:")),
   ).toBe(false);
-  expect(sheet.paths.flatMap((p) => p.blockerIds)).toEqual([]);
+  // Was no path blockers; ruling (c), P-102 leaves these out-of-range legs unpriced.
+  expect(sheet.paths.flatMap((p) => p.blockerIds)).not.toEqual([]);
   const beyond = buildChain({
     ...input,
     start: { elementId: 100, connector: 0 },

@@ -512,7 +512,9 @@ it("mints computed ESP and authored-only flows on the recorded Manual D fan", ()
     roster: [...r.fans, ...r.suggestions],
     inputs: inputsFor(snapshot, {
       endCfm: { 14577391: 900 },
-      drops: { 14577394: 0.0132, 14577396: 0.18, 14088043: 0.026 },
+      // Was table-only complete replay; ruling (c), P-102 requires human Work drops at both refusals.
+      drops: { 14577394: 0.0132, 14577396: 0.18, 14088043: 0.026, 13926753: 0.04 },
+      fittingDrops: { "proposed:14106988:1|14122436:1>straight": 0.05 },
       rulings: [{ pair: ["14106988:1", "14122436:1"], verdict: "accept" }],
     }),
   };

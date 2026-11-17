@@ -249,9 +249,8 @@ it("a rectangular takeoff where air joins prices on ER5-1 at its real Ab/Ac, Cb 
   );
 });
 
-it("a small collar off ER5-1's Ab/Ac axis is read at the table's edge on the velocity of the table's geometry, not blown up", async () => {
+it("a small collar off ER5-1's Ab/Ac axis is refused outside table range", async () => {
   const { priceLeg } = await import("./kernel/price-leg.ts");
-  const { friction, sectionOf } = await import("./loss-physics.ts");
   // Chadds 13890167's case: a 4x4 collar (Ab/Ac 0.045) drawing 16 of 1600 cfm. ER5-1 stops at
   // Ab/Ac 0.25 (Cb -444 at Qb/Qc 0.01). On the 4x4's own Pv that is -0.57 in-wg, implausible; at
   // the table's Ab/Ac 0.25 the branch runs at (0.01 / 0.25) of the common velocity.
@@ -266,15 +265,9 @@ it("a small collar off ER5-1's Ab/Ac axis is read at the table's edge on the vel
     },
     CONVERGING,
   );
-  const common = friction({ areaFt2: (32 * 11) / 144, dhIn: 1 }, 1600, 0).pv;
-  expect(-444 * friction(sectionOf("rectangular", null, 4, 4)!, 16, 0).pv).toBeLessThan(-0.5);
-  expect(p.unpriced).toBeNull();
-  expect(p.lossInWg).toBeCloseTo(-444 * common * (0.01 / 0.25) ** 2, 12);
-  expect(p.source?.kind === "rule" && p.source.notes).toEqual([
-    "Ab/Ac clamped at 0.25 (As/Ac 1)",
-    "Cb x 0.0331: charged on the velocity the table's own geometry has where it was read",
-    "ER5-1 is a smooth-radius wye; this takeoff is read on it with As = Ac",
-  ]);
+  // Was clamped ER5-1 price and notes; ruling (c), P-102 refuses Ab/Ac below 0.25.
+  expect(p.lossInWg).toBeNull();
+  expect(p.unpriced).toContain("outside table");
 });
 
 it("a junction past ED5-3's edge is refused, never charged an extrapolated coefficient (FC-23 13771256)", async () => {
@@ -407,24 +400,18 @@ it("a round junction where air joins prices on ED5-3 by Dc, Ab/Ac and As/Ac: a t
 
 it("a bullhead (entered from its branch, the main bringing air both ways) prices on ER5-5 or ED5-4, never a tap table", async () => {
   const { priceLeg } = await import("./kernel/price-leg.ts");
-  const { friction, roundSection, sectionOf } = await import("./loss-physics.ts");
   // 12x8 collar on the 32x11 trunk: 300 cfm from one side, 100 from the other, 400 up the collar.
   const tap = rectTap(12, 8);
   const facts = await tapFacts(tap, trunk, { converging: true, bullhead: true });
   const flows = { through: 400, branch: 300, upstreamMain: 400, downstreamMain: 100 };
   const rect = priceLeg({ kind: "fitting", fitting: tap, facts, flows, leg: "Cb" }, CONVERGING);
-  // Ab1/Ac 3.67 is past ER5-5's 1: Cb1 read at Ab1/Ac 1, Qb1/Qc 0.75 (2.59), on branch 1's velocity
-  // at that geometry, which is 0.75 of the collar's.
-  const collar = friction(sectionOf("rectangular", null, 12, 8)!, 400, 0).pv;
-  expect(rect.source).toMatchObject({
-    rule: "bullhead-converging-rect",
-    table: "ER5-5",
-    inputs: { res: "Cb1", x: 0.75 },
-  });
-  expect(rect.lossInWg).toBeCloseTo(((2.8 + 2.38) / 2) * collar * 0.75 ** 2, 12);
-  expect(rect.source?.kind === "rule" && rect.source.notes[0]).toBe("Ab1/Ac clamped at 1");
+  // Was ER5-5 Cb1 at clamped Ab1/Ac 1; ruling (c), P-102: 352/96 exceeds 1.
+  expect(rect.lossInWg).toBeNull();
+  expect(rect.unpriced).toContain("outside table");
+  expect(LOSS_RULES.filter((rule) => rule.when(facts, { q: 400, qb: 300, qc: 400, qs: 100 })).map((rule) => rule.key))
+    .toEqual(["bullhead-converging-rect"]);
 
-  // The round bullhead: a 6 in collar on an 8 in main, ED5-4 at Ab1/Ac = Ab2/Ac 1.78 (clamped at 1).
+  // The round bullhead: a 6 in collar on an 8 in main, ED5-4 at Ab1/Ac = Ab2/Ac 1.78, outside 1.
   const round = nodeOf(9, "fitting", {
     family: "Round Takeoff",
     partType: "Tap",
@@ -434,9 +421,9 @@ it("a bullhead (entered from its branch, the main bringing air both ways) prices
   const main = ductOf(10, { shape: "round", diameterIn: 8 });
   const rf = await tapFacts(round, main, { converging: true, bullhead: true });
   const r = priceLeg({ kind: "fitting", fitting: round, facts: rf, flows, leg: "Cb" }, CONVERGING);
-  const v = lookupGrid(CONVERGING["ED5-4"]!.Cb1!, 0.75, 1, 1).value;
-  expect(r.source).toMatchObject({ rule: "bullhead-converging-round", table: "ED5-4" });
-  expect(r.lossInWg).toBeCloseTo(v * friction(roundSection(6), 400, 0).pv * 0.75 ** 2, 12);
+  // Was ED5-4 at clamped Ab1/Ac 1; ruling (c), P-102: (8/6)^2 exceeds 1.
+  expect(r.lossInWg).toBeNull();
+  expect(r.unpriced).toContain("outside table");
   expect(
     LOSS_RULES.filter((rule) => rule.when(rf, { q: 400, qb: 300, qc: 400, qs: 100 })).map(
       (rule) => rule.key,
