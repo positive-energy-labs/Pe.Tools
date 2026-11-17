@@ -14,7 +14,7 @@ import { appliedScopeSchema } from "./families.ts";
 import { canonicalRouteInput } from "./route-doc.ts";
 import { workKey, workKeySchema } from "./route-state.ts";
 import { addressSchema, documentRefSchema, executionTargetSchema, sameAddress } from "./target.ts";
-import { DUCT_PARAMETER_KEYS } from "./ducts.ts";
+import { DUCT_PARAMETER_KEYS } from "@pe/duct-systems-contract/ducts";
 
 /** Which elements `ducts.snapshot` reads (ducts MAP 2026-10-27, "Where the data comes from" row 1). */
 export const ductsSnapshotSelectorSchema = z.discriminatedUnion("kind", [

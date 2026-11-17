@@ -2,7 +2,7 @@ import { HostInputContext } from "../src/input-context.ts";
 import { stateFixture } from "../../../tests/isolated-home/storage.ts";
 import { journalFixture } from "./storage.ts";
 import { PictureCaptureStore } from "../src/captures-route.ts";
-import { DuctFiles } from "../src/ducts-files.ts";
+import { DuctFiles } from "@pe/ducts-host/ducts-files";
 import { HostDocumentMarks } from "../src/document-marks.ts";
 import { ActionJournalService } from "../src/receipt-services.ts";
 import type { ReceiptStamp } from "@pe/agent-contracts";

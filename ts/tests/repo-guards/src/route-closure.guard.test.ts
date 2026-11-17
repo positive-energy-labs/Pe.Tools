@@ -65,6 +65,6 @@ test("a product's web folder is a route folder, closed against web routes and ot
 
 test("the census sees every route folder and exempts only the design-system window", () => {
   const routes = routeFolders();
-  for (const name of ["chat", "fans", "ducts", "open", "sessions", "settings"]) expect(routes).toContain(name);
+  for (const name of ["chat", "products/fans/web", "products/duct-systems/web", "open", "sessions", "settings"]) expect(routes).toContain(name);
   for (const name of ["design-system", "shell", "route", "navigation", "workbench", "routes"]) expect(routes).not.toContain(name);
 });

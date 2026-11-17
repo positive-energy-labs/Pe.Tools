@@ -393,7 +393,7 @@ function connGeos(
     });
 }
 
-export interface Sheet {
+export interface Calc {
   solids: SolidGeo[];
   planes: PlaneGeo[];
   conns: ConnGeo[];
@@ -401,7 +401,7 @@ export interface Sheet {
 }
 
 /** Everything the triptych draws for ONE type, plus the other types' solids as ghosts. */
-export function buildSheet(model: FamilyModel, typeName: string): Sheet {
+export function buildCalc(model: FamilyModel, typeName: string): Calc {
   const planes = planeGeos(model, typeName);
   const solids = solidGeos(model, typeName, planes);
   const conns = connGeos(model, typeName, planes, solids);
@@ -412,7 +412,7 @@ export function buildSheet(model: FamilyModel, typeName: string): Sheet {
 }
 
 /** One shared world bbox (incl. ghosts) → one px/in factor → true relative scale everywhere. */
-export function sheetBounds(sheet: Sheet): Record<Axis, [number, number]> {
+export function sheetBounds(sheet: Calc): Record<Axis, [number, number]> {
   const axes: Axis[] = ["x", "y", "z"];
   const extent: Record<Axis, number[]> = { x: [], y: [], z: [] };
   const solid = (geo: SolidGeo) => {

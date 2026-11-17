@@ -1,0 +1,29 @@
+{
+  "name": "@pe/ducts-contract",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./criterion-words.neutral": "./src/criterion-words.neutral.ts",
+    "./duct-calculation": "./src/duct-calculation.ts",
+    "./duct-catalog": "./src/duct-catalog.ts",
+    "./duct-inputs": "./src/duct-inputs.ts",
+    "./duct-loss-read": "./src/duct-loss-read.ts",
+    "./fan-scope.neutral": "./src/fan-scope.neutral.ts"
+  },
+  "scripts": {
+    "check": "vp exec tsc --noEmit",
+    "test": "vp test"
+  },
+  "dependencies": {
+    "@pe/agent-contracts": "workspace:*",
+    "@pe/fans-contract": "workspace:*",
+    "@pe/host-contracts": "workspace:*",
+    "zod": "4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.2",
+    "typescript": "^6.0.3",
+    "vite-plus": "catalog:"
+  }
+}

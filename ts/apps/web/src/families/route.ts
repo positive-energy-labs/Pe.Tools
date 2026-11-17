@@ -12,7 +12,7 @@ import {
   showFamilyCell,
 } from "@pe/agent-contracts";
 import * as reads from "./contract.ts";
-import { route, field } from "../route/defaults.ts";
+import { route, field } from "../route/defaults";
 import { hostRead } from "../route/host-read.ts";
 import { draw } from "../route/draw.tsx";
 export const fields = {

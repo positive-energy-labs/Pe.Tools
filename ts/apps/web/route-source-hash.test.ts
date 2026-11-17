@@ -122,7 +122,7 @@ test("explicit roots are portable and producer works in another process cwd", as
   const first = await f.build();
   expect((await fixture().build()).fingerprint).toBe(first.fingerprint);
   const producer = fileURLToPath(new URL("./route-source-hash.ts", import.meta.url));
-  const jiti = new URL("../../node_modules/jiti/lib/jiti.mjs", import.meta.url).href;
+  const jiti = new URL("jiti", import.meta.url).href;
   const runner = join(f.root, "probe.mjs");
   writeFileSync(
     runner,

@@ -109,7 +109,7 @@ test("selected session contract decodes the recording and refuses nested hostile
 // The decoder's return type comes from the generated named map, never a consumer's assertion.
 function selectedPayloadType(value: unknown) {
   const decoded = decodePeRevitPayload("SessionListResult", value);
-  const sessions: import("@pe/host-contracts/pe-revit-contract").SessionListResult = decoded;
+  const sessions: import("../../../packages/host-contracts/src/vendor/generated/pe-revit-contract.ts").SessionListResult = decoded;
   // @ts-expect-error A consumer cannot ask this boundary to assert an arbitrary result type.
   decodePeRevitPayload<{ trusted: true }>("SessionListResult", value);
   // @ts-expect-error Unprojected DTOs have no runtime decoder.

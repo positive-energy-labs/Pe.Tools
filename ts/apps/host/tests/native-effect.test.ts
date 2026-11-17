@@ -6,7 +6,7 @@ import { resolve } from "node:path";
 import ts from "typescript";
 import { emitSchema, generateNativeEffect, nativeEffectPrelude, schemaCode } from "../../../packages/host-contracts/scripts/native-effect-generator.ts";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
-import { nativeEffectSchemas, nativeEffectResponseDefinitions } from "@pe/host-contracts/native-effect";
+import { nativeEffectSchemas, nativeEffectResponseDefinitions } from "../../../packages/host-contracts/src/generated/native-effect.generated.ts";
 import { nativeRecordings, nativeRecordingRequest } from "./native-recordings.ts";
 
 const jiti = createJiti(import.meta.url);

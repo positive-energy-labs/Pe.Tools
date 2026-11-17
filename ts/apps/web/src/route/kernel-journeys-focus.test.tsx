@@ -5,7 +5,7 @@ import { refusalOf, valueOf } from "./typed-route";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
 import { host as placesHost, seedPlaces } from "../workbench/places.test-support";
 // @vitest-environment jsdom
-import { stableFanKey } from "../ducts/sheet/model";
+import { stableFanKey } from "@pe/ducts-web/calc/model";
 import { subjectCode } from "@pe/agent-contracts";
 import { surfaceReadiness } from "./readiness.test.fixture";
 import { useState, useSyncExternalStore } from "react";
@@ -17,8 +17,8 @@ import { StandaloneBand } from "../shell/band.test-support";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from "@tanstack/react-router";
 import { route, scrollBody, type TypedRoute } from "./typed-route";
-import { module as fans } from "../fans/route";
-import { module as ducts } from "../ducts/route";
+import { module as fans } from "@pe/fans-web/route";
+import { module as ducts } from "@pe/duct-systems-web/route";
 import { TypedChrome, TypedShell } from "../shell/typed-shell";
 import * as mounts from "../shell/typed-mount";
 import { planned } from "../shell/typed-mount";
@@ -581,8 +581,8 @@ test.each(["undo after apply", "review identity", "insertText", "pointer keyboar
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 test("JZ Fans undo after apply: public write journey leaves an honest toolbar refusal", async () => {
-  const { nativeFixture } = await import("../../../host/tests/fans-work-fixture");
-  const { closedFan, recordedTables } = await import("../../../host/tests/closed-fan.fixture");
+  const { nativeFixture } = await import("@pe/fans-host/tests/fans-work-fixture");
+  const { closedFan, recordedTables } = await import("@pe/fans-host/tests/closed-fan.fixture");
   const { observeResources } = await import("@pe/runtime");
   const { TimelineButtons } = await import("../shell/situation-band");
   const { withInvocationContext } = await import("@pe/runtime/context");
@@ -993,17 +993,17 @@ test("JZ B02 undo follows focus between typed routes, portal and hidden pane; te
 
 
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
-import { inputsFor } from "@pe/ducts-domain/sheet/test-inputs";
+import { inputsFor } from "@pe/fans-domain/calc/test-inputs";
 import { SheetPane } from "./slots/sheet/pane.tsx";
-import { fansSheet } from "../fans/sheet.ts";
+import { fansCalc } from "@pe/fans-web/calc";
 
 // Plan reviews seal model inputs, never browser pane visibility or Page pose.
 import { useEffect, useReducer } from "react";
-import rawMuas from "../../../../packages/ducts-domain/src/sheet/fixtures/muas-local-20261102.json";
-import { VOCABULARY } from "@pe/ducts-domain/sheet/scoped-snapshot";
+import rawMuas from "@pe/fans-domain/calc/fixtures/muas-local-20261102.json";
+import { VOCABULARY } from "@pe/ducts-domain/calc/scoped-snapshot";
 // The saved capture predates the required `vocabulary` and the P2-B coverage field `walk.unreadPeers`.
 const realMuas = { ...rawMuas, vocabulary: VOCABULARY, walk: { ...rawMuas.walk, unreadPeers: [] } };
-import { createWitness } from "../fans/cutover.test-support";
+import { createWitness } from "@pe/fans-web/cutover.test-support";
 import type { ReceiptFeedState } from "../../../../packages/agent-contracts/src/work-journal-door";
 import { TypedWrite } from "../shell/typed-shell";
 import type { ReadingDelivery } from "../shell/source-contract";
@@ -1762,7 +1762,7 @@ test("JZ E8-03 a typed Fans refused Plan explains the atomic Apply hold at the a
   cleanup();
   // The recorded adapter has no unit rows; prepare the native input model before rendering.
   const nativeInputs = inputsFor(capture);
-  const slot = { ...fansSheet, bindings: { equipmentFlows: fansSheet.bindings.equipmentFlows } };
+  const slot = { ...fansCalc, bindings: { equipmentFlows: fansCalc.bindings.equipmentFlows } };
   function MissingFlow({ ctx }: { ctx: any }) {
     const data = ctx.value.value;
     if (!data.open) throw Error("The native Fan must be open");

@@ -17,8 +17,8 @@ import { builtinPeaSkillSnapshots } from "../src/pea/skill-publication.ts";
 import type { PackageProjection } from "@pe/agent-contracts";
 import { peDo, peRead, peFind } from "../src/pea/capability-tools.ts";
 
-import { nativeFixture as workFixture } from "../../../apps/host/tests/fans-work-fixture.ts";
-import { closedFan, recordedTables } from "../../../apps/host/tests/closed-fan.fixture.ts";
+import { nativeFixture as workFixture } from "@pe/fans-host/tests/fans-work-fixture";
+import { closedFan, recordedTables } from "@pe/fans-host/tests/closed-fan.fixture";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
 import { commands } from "@pe/agent-contracts";
 import { fakeRuntimeHost } from "./runtime-host-fixture.ts";

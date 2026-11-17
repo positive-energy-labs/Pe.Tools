@@ -6,7 +6,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { HOST_RPC_BRIDGE_SESSION_HEADER, HOST_RPC_DOCUMENT_HEADER } from "@pe/host-contracts/contracts";
 import { pagesRoute } from "../src/pages-route.ts";
-import { DuctFiles, ductCatalogsRoute } from "../src/ducts-files.ts";
+import { DuctFiles, ductCatalogsRoute } from "@pe/ducts-host/ducts-files";
 import { projectFixture } from "./project-home-fixture.ts";
 import { createContributionContent } from "../src/pe-routes.ts";
 

@@ -2,7 +2,7 @@ import { expect, test } from "vite-plus/test";
 import { createInstruments } from "../../../../examples/pods/snowdon-circuits/pages/tour/instruments.mjs";
 import { initialCircuitState } from "../../../../examples/pods/snowdon-circuits/pages/tour/circuits.mjs";
 
-function worksheet(refusal?: string) {
+function calcBreakdown(refusal?: string) {
   const slots: any[] = [];
   let cursor = 0;
   const calls: any[] = [];
@@ -65,7 +65,7 @@ function worksheet(refusal?: string) {
 }
 
 test("circuit reads require panel names and send only that scope to the roster", async () => {
-  const page = worksheet();
+  const page = calcBreakdown();
   await page.control("Read circuits").props.onClick();
   expect(page.calls).toEqual([]);
   page.control("Panel names").props.onChange({ target: { value: " C6P, C7P, C6P, " } });
@@ -79,7 +79,7 @@ test("circuit reads require panel names and send only that scope to the roster",
 
 test("a circuit read displays the host refusal verbatim and publishes no reading", async () => {
   const message = "'revit.catalog.electrical-circuits.roster' refused by the host.";
-  const page = worksheet(message);
+  const page = calcBreakdown(message);
   page.control("Panel names").props.onChange({ target: { value: "C6P" } });
   await page.control("Read circuits").props.onClick();
   expect(page.find(page.render(), (node) => node.children.includes(message))).toBeTruthy();

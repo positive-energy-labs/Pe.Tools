@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { DUCT_PARAMETER_KEYS, DUCTS_CRITERIA_CELLS, DUCTS_DEFAULT_CRITERIA, type DuctsCriteriaCell } from "./ducts-sheet.ts";
-import { criterionLabel } from "./criterion-words.neutral.ts";
+import { DUCT_PARAMETER_KEYS, DUCTS_CRITERIA_CELLS, DUCTS_DEFAULT_CRITERIA, type DuctsCriteriaCell } from "@pe/ducts-contract/duct-inputs";
+import { criterionLabel } from "@pe/ducts-contract/criterion-words.neutral";
 import { setting, schemaOf, type Domain, type Home, type SheetBinding } from "./slots/sheet.ts";
 import type { SettingTier } from "./tiered-setting.ts";
 

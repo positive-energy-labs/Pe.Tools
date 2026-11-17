@@ -1,7 +1,7 @@
 import { stateFixture } from "../../../tests/isolated-home/storage.ts";
 import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
-import capturedWalk from "./native-recordings/driver-ducts.snapshot.walk.json" with { type: "json" };
+import capturedWalk from "@pe/ducts-host/tests/native-recordings/driver-ducts.snapshot.walk.json" with { type: "json" };
 import { mkdir, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -13,7 +13,7 @@ import { nativeRecordings, nativeRecordingRequest } from "./native-recordings.ts
 import { testRegistry } from "./effect-test.ts";
 import { bindControl } from "../src/control.ts";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
-import { nativeFixture } from "./fans-native.fixture.ts";
+import { nativeFixture } from "@pe/fans-host/tests/fans-native.fixture";
 import { pagesRoute } from "../src/pages-route.ts";
 import { ActionJournalService } from "../src/receipt-services.ts";
 import { Layer } from "effect";

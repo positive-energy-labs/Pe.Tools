@@ -1,4 +1,4 @@
-import { VOCABULARY } from "@pe/ducts-domain/sheet/scoped-snapshot";
+import { VOCABULARY } from "@pe/ducts-domain/calc/scoped-snapshot";
 import { mkdtemp, stateFixture } from "../../../../tests/isolated-home/storage.ts";
 import { Context, Effect, Fiber, Layer, Schema, Option } from "effect";
 import { expect, test, vi } from "vite-plus/test";
@@ -12,7 +12,7 @@ import rosterCapture from "../../../../packages/host-contracts/src/fixtures/k2-r
 import { hostOwnership } from "../../../host/src/host-ownership.ts";
 import { HostDocumentMarks } from "../../../host/src/document-marks.ts";
 import { HostSessionInventory } from "../../../host/src/session-inventory.ts";
-import { DuctFiles } from "../../../host/src/ducts-files.ts";
+import { DuctFiles } from "@pe/ducts-host/ducts-files";
 import { Publications } from "../../../host/src/reads/publications.ts";
 import { RevitBridge } from "../../../host/src/bridge.ts";
 import { SdkSession } from "../../../host/src/sdk-session.ts";
@@ -26,8 +26,8 @@ import { tmpdir } from "node:os";
 import { HostInputContext } from "../../../host/src/input-context.ts";
 import { openRecordingWriter } from "../../../host/src/native-recording.ts";
 import { dirname, join } from "node:path";
-import { FIRM_SEED } from "../../../host/src/ducts-inputs.ts";
-import { firmRootPath } from "../../../host/src/ducts-files.ts";
+import { FIRM_SEED } from "@pe/ducts-host/ducts-inputs";
+import { firmRootPath } from "@pe/ducts-host/ducts-files";
 
 // Forward the services already owned by makeHttpLive; optional lookup keeps these test layers closed.
 const ambient = <S, I>(tag: Context.Key<S, I>) =>

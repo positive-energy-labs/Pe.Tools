@@ -1,0 +1,281 @@
+import { unpriced, type Priced } from "@pe/ducts-web/priced";
+import { AttentionDocument, useMembers, type SubjectKey } from "@pe/kit/lang/attention";
+import { useElementIndex } from "../../../../../apps/web/src/element-index.ts";
+import { useList } from "@pe/kit/lang/collection";
+import { PlainList } from "@pe/kit/lang/list-view";
+import { nameOrFallback } from "@pe/kit/lang/subject-text";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
+import { useCallback, useContext } from "react";
+/**
+ * THROWAWAY (protoui round 3, E2): the Rules section, "the table is the product" (pressure-drop
+ * ledger, 2026-10-04): a person edits a fitting type's table, never a raw coefficient; the rule is
+ * family:type plus a geometry condition, and Pe re-looks-up every instance. One root row per rule
+ * that governs a fitting in scope (this system, or every system), its condition,
+ * instance count and the table choice inline (the one decision, on the rule's own line). A fitting with a stated drop is an exception:
+ * an override row under its type's rule, its drop editable. The tree's element rows jump here.
+ */
+import { ruleByKey } from "@pe/ducts-domain/loss-rules";
+import { runsOf } from "@pe/ducts-domain/calc-runs";
+import type { DuctSnapshot } from "@pe/ducts-domain/types";
+import { memo, useMemo } from "react";
+
+import { clearWords } from "@pe/ducts-web/inputs";
+import type { LossesWork } from "@pe/ducts-web/work";
+import { RuleAssignment } from "./rule-assignment.tsx";
+import { Chips, DropCell, StagedRules } from "./rules.tsx";
+import { elementSubject, workElementId } from "@pe/ducts-domain/work-subject";
+
+type RuleNode =
+  | { kind: "rule"; key: string; ids: number[] }
+  | { kind: "override"; key: string; id: number };
+
+/** Each fitting id's rule key, over every fan calc's paths. */
+const ruleKey = (rule: string): SubjectKey => `rule:${rule}`;
+const familyKey = (n: { family: string | null; ids: ReadonlySet<number> }): SubjectKey =>
+  `family:${n.family ?? `#${[...n.ids][0]}`}`;
+
+export function ruleOfIds(priced: Priced | null): Map<number, string> {
+  const out = new Map<number, string>();
+  for (const run of priced ? runsOf(priced.calcs) : [])
+    for (const row of run.rows) if (row.rule && !out.has(row.id)) out.set(row.id, row.rule);
+  return out;
+}
+
+// Memoized: a selection, a hover or a camera move never re-renders the rules (107 ms per selection
+export const RulesTree = memo(function RulesTree({
+  snapshot,
+  priced,
+  groups,
+  wide,
+  work,
+  focus,
+  onFocus,
+  landing,
+  nameOf,
+}: {
+  snapshot: DuctSnapshot;
+  priced: Priced;
+  /** The groups of the system in the sentence (stable, `systemScope`); `wide` widens to every system. */
+  groups: readonly string[];
+  wide: boolean;
+  work: LossesWork;
+  /** The rule key the tree last jumped to; it is the cursor and scrolls into view. */
+  focus: string | null;
+  landing?: { readonly id: number; readonly key: string } | null;
+  onFocus: (key: string | null) => void;
+  nameOf: (id: number) => string;
+}) {
+  const doc = useContext(AttentionDocument) ?? "";
+  const groupOf = useMemo(() => {
+    const m = new Map<number, string>();
+    for (const n of snapshot.nodes) if (n.groupId) m.set(n.id, n.groupId);
+    return m;
+  }, [snapshot]);
+  const ruleOf = useMemo(() => ruleOfIds(priced), [priced]);
+  const roots = useMemo(() => {
+    const own = new Set(groups);
+    const inScope = (id: number) => wide || own.has(groupOf.get(id) ?? "");
+    const ids = new Map<string, Set<number>>();
+    for (const [id, key] of ruleOf)
+      if (inScope(id)) (ids.get(key) ?? ids.set(key, new Set()).get(key)!).add(id);
+    // Owner crossings retain their rule even when this scope has no matching fittings.
+    if (focus && ruleByKey(focus) && !ids.has(focus)) ids.set(focus, new Set());
+    const overrides = [
+      ...new Set([
+        ...Object.keys(priced.edit.componentDrops).map(key => workElementId(snapshot, key)),
+        // A restored selection lands on its fitting's drop even where no fan calc reaches it yet.
+        ...(landing ? [landing.id] : []),
+      ]),
+    ].filter(inScope);
+    const rules = [...ids]
+      .sort(([, a], [, b]) => b.size - a.size)
+      .flatMap(([key, set]): RuleNode[] => [
+        { kind: "rule", key, ids: [...set] },
+        ...overrides
+          .filter((id) => ruleOf.get(id) === key)
+          .map((id): RuleNode => ({ kind: "override", key: `${key}/o${id}`, id })),
+      ]);
+    // A stated drop with no pricing rule has no type row to sit under.
+    return [
+      ...rules,
+      ...overrides
+        .filter((id) => !ruleOf.has(id))
+        .map((id): RuleNode => ({ kind: "override", key: `o${id}`, id })),
+    ];
+  }, [priced, ruleOf, groupOf, groups, wide, landing, focus]);
+
+  // What staging each rule's table would move, known before anything is edit: the grilles
+  const fanOuts = useMemo(() => {
+    const runs = runsOf(priced.calcs);
+    const count = (key: string) => ({
+      // Every grille whose path on any fan's calc carries one of the rule's fittings.
+      grilles: new Set(
+        runs.flatMap((run) =>
+          run.terminal != null && run.rows.some((row) => row.rule === key) ? [run.terminal] : [],
+        ),
+      ).size,
+      systems: new Set(
+        [...ruleOf].flatMap(([id, rule]) => (rule === key ? (groupOf.get(id) ?? []) : [])),
+      ).size,
+    });
+    return new Map(roots.flatMap((n) => (n.kind === "rule" ? [[n.key, count(n.key)] as const] : [])));
+  }, [roots, priced, ruleOf, groupOf]);
+
+  // Fittings no rule prices, by family, plus the families a person has assigned a rule to.
+  const unruled = useMemo(() => {
+    const own = new Set(groups);
+    const inScope = (id: number) => wide || own.has(groupOf.get(id) ?? "");
+    const byFamily = new Map<string, { family: string | null; ids: Set<number> }>();
+    for (const path of runsOf(priced.calcs))
+      for (const row of path.rows)
+        if (row.finding === "no-rule" && inScope(row.id)) {
+          const key = row.family ?? `#${row.id}`;
+          const at = byFamily.get(key) ?? { family: row.family ?? null, ids: new Set<number>() };
+          at.ids.add(row.id);
+          byFamily.set(key, at);
+        }
+    for (const family of Object.keys(priced.edit.ruleAssignments))
+      if (!byFamily.has(family)) byFamily.set(family, { family, ids: new Set() });
+    return [...byFamily.values()].sort((a, b) => b.ids.size - a.ids.size);
+  }, [priced, groupOf, groups, wide]);
+  const elements = useElementIndex();
+  const members = useMemo(
+    () =>
+      new Map<SubjectKey, SubjectKey[]>([
+        ...roots.flatMap((n) =>
+          n.kind === "rule" ? [[ruleKey(n.key), elements.keysOf(n.ids)] as const] : [],
+        ),
+        ...unruled.map((n) => [familyKey(n), elements.keysOf(n.ids)] as const),
+      ]),
+    [roots, unruled, elements],
+  );
+  useMembers(doc, members);
+  const list = useList({
+    items: roots,
+    subjectOf: useCallback(
+      (n: RuleNode) => {
+        const key = n.kind === "override" ? elements.keyOf(n.id) : ruleKey(n.key);
+        return key === null ? undefined : { doc, key };
+      },
+      [doc, elements],
+    ),
+    keyOf: (n) => n.key,
+    search: (n) => {
+      if (n.kind === "override") return { text: [nameOf(n.id)], ids: [n.id] };
+      const rule = ruleByKey(n.key);
+      return { text: [n.key, rule?.family, rule?.type, rule?.cond], ids: n.ids };
+    },
+    followSelection: {
+      key: landing
+        ? (roots.find((node) => node.kind === "override" && node.id === landing.id)?.key ?? focus)
+        : focus,
+    },
+    onPick: (n) => onFocus(n.key),
+  });
+  const unassigned = useList({
+    items: unruled,
+    followSelection: {
+      key: landing ? (unruled.find((row) => row.ids.has(landing.id))?.family ?? null) : null,
+    },
+    subjectOf: useCallback((n: (typeof unruled)[number]) => ({ doc, key: familyKey(n) }), [doc]),
+    keyOf: (n) => n.family ?? `#${[...n.ids][0]}`,
+    search: (n) => ({ text: [n.family], ids: [...n.ids] }),
+  });
+  return (
+    <div className="@container flex min-w-0 flex-col" data-e-rules={wide ? "all" : "this"}>
+      <PlainList
+        list={list}
+        aria-label="loss rules"
+        empty={{ message: "No priced fittings", exit: "Read or choose another system" }}
+        row={(n) => {
+          if (n.kind === "override")
+            return {
+              // The drop cell takes its own line: inline beside the name it clipped at 280 px (Manual D #5).
+              label: (
+                <span>
+                  <span data-tone="caution">override</span> · {nameOf(n.id)}
+                </span>
+              ),
+              sub: (
+                <DropCell
+                  segment="componentDrops"
+                  id={n.id}
+                  subject={elementSubject(snapshot.nodes.find(x => x.id === n.id)!)}
+                  land={landing?.id === n.id ? landing.key : undefined}
+                  held={snapshot.nodes.find((x) => x.id === n.id)?.loss?.revitPressureDropInWg}
+                  work={work}
+                  label={`stated drop on ${nameOrFallback(nameOf(n.id))}`}
+                />
+              ),
+              lines: 2,
+            };
+          const rule = ruleByKey(n.key);
+          const name = rule ? `${rule.family} : ${rule.type}` : n.key;
+          const missing = unpriced(priced, n.key);
+          return {
+            label: name,
+            sub: (
+              <div>
+                <p>{rule?.cond || "any size"}</p>
+                <Chips ruleKey={n.key} priced={priced} work={work} />
+                <TooltipHint content="What staging another table for this rule would re-price, in every system">
+                  <span data-e-fanout={n.key}>
+                    {clearWords(fanOuts.get(n.key) ?? { grilles: 0, systems: 0 })}
+                  </span>
+                </TooltipHint>
+              </div>
+            ),
+            meta: `×${n.ids.length}${missing ? ` · ${missing} unpriced` : ""}`,
+            lines: 2,
+          };
+        }}
+      />
+      {unruled.length ? (
+        <div className="hairline-t pt-1" data-e-unruled="">
+          <p className="t-small text-ink-2 pb-1">Unassigned families</p>
+          <PlainList
+            list={unassigned}
+            aria-label="unassigned families"
+            empty={{ message: "No unassigned families", exit: "Read another system" }}
+            row={(n) => {
+              const { family, ids } = n;
+              const first = landing && ids.has(landing.id) ? landing.id : ids.values().next().value;
+              const picked = family
+                ? work.doc?.ruleAssignments?.[family]?.edit?.value?.rule
+                : undefined;
+              return {
+                label: family ?? nameOf(first!),
+                meta: ids.size ? `×${ids.size}` : undefined,
+                lines: 2,
+                sub: (
+                  <div
+                    data-e-unruled-family={family ?? undefined}
+                    data-e-unruled-ids={[...ids].join(" ")}
+                  >
+                    {family ? <RuleAssignment family={family} work={work} /> : null}
+                    {first != null && !picked ? (
+                      <DropCell
+                        segment="componentDrops"
+                        id={first}
+                        subject={elementSubject(snapshot.nodes.find(x => x.id === first)!)}
+                        land={landing?.id === first ? landing.key : undefined}
+                        held={
+                          snapshot.nodes.find((x) => x.id === first)?.loss?.revitPressureDropInWg
+                        }
+                        work={work}
+                        label={`stated drop on ${nameOrFallback(nameOf(first))}`}
+                      />
+                    ) : null}
+                  </div>
+                ),
+              };
+            }}
+          />
+        </div>
+      ) : null}
+      <div className="hairline-t pt-1">
+        <StagedRules priced={priced} work={work} />
+      </div>
+    </div>
+  );
+});

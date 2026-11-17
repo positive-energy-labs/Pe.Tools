@@ -5,7 +5,7 @@ import { field, when, split, route, scrollBody } from "./defaults";
 import { mountTypedRoute } from "../shell/typed-mount";
 import { hostRead } from "./host-read";
 import { workFingerprintSchema } from "@pe/agent-contracts";
-import { module as ducts } from "../ducts/route";
+import { module as ducts } from "@pe/duct-systems-web/route";
 
 const fields = { stage: field(z.enum(["closed", "open"]), "closed", "stage", "push") };
 function typeWitness() {

@@ -3,7 +3,7 @@ import type { ContextOf } from "../route/defaults";
 import { read } from "../route/defaults";
 import { z } from "zod";
 import { SETTINGS_SECTIONS } from "../../../../packages/agent-contracts/src/settings-sections.ts";
-import { field, route } from "../route/defaults.ts";
+import { field, route } from "../route/defaults";
 import { hostRead } from "../route/host-read.ts";
 import { draw } from "../route/draw.tsx";
 import { split } from "../route/typed-route.ts";

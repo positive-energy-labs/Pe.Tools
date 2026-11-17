@@ -462,7 +462,7 @@ test("retained /fans acquisition admits every caller and keeps miss, refresh and
   const { human, pea } = await import("./callers.ts");
   const { sdkSessions } = await import("./native-receipt-fixture.ts");
   const { readSessionScope } = await import("../src/sdk-session.ts");
-  const { snapshot } = await import("../../web/src/ducts/test-fixture.ts");
+  const { snapshot } = await import("@pe/ducts-web/test-fixture");
 
   const dir = await mkdtemp(join(tmpdir(), "pe-ducts-reading-"));
   const target = { session: "bridge-a", openId: "open-a" };
@@ -578,11 +578,11 @@ test("retained /fans acquisition admits every caller and keeps miss, refresh and
 });
 
 import { addressSchema } from "@pe/agent-contracts";
-import { DuctsReadings } from "../src/ducts-readings.ts";
+import { DuctsReadings } from "@pe/ducts-host/ducts-readings";
 import { HostNativeReadLive } from "../src/native-read.ts";
 import { mintContext, retireContext } from "../src/control.ts";
 import { serveRoutes } from "./real-server.ts";
-import { snapshot } from "../../web/src/ducts/test-fixture.ts";
+import { snapshot } from "@pe/ducts-web/test-fixture";
 import { HostNativeRead } from "@pe/host-internal/native-read";
 
 test.each([false, true])("retained Ducts abort both=%s preserves shared native custody and request admission", async (both) => {

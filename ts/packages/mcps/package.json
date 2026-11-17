@@ -53,7 +53,10 @@
     "gunshi": "^0.29.5",
     "parse5": "^8.0.1",
     "pngjs": "catalog:",
-    "zod": "4.3.6"
+    "zod": "4.3.6",
+    "@pe/ducts-host": "workspace:*",
+    "@pe/fans-contract": "workspace:*",
+    "@pe/fans-host": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^25.6.2",
@@ -61,6 +64,7 @@
     "@typescript/native-preview": "7.0.0-dev.20260509.2",
     "bumpp": "^11.1.0",
     "typescript": "^6.0.3",
-    "vite-plus": "catalog:"
+    "vite-plus": "catalog:",
+    "@pe/host": "workspace:*"
   }
 }

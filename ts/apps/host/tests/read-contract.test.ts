@@ -14,12 +14,14 @@ import {
 import { Publications } from "../src/reads/publications.ts";
 import { readRegistry, registeredReads } from "../src/reads/routes.ts";
 import { hostRead } from "../../web/src/route/host-read.ts";
-import { sheet as fanSheet } from "../../web/src/fans/contract.ts";
+import * as fanContracts from "@pe/fans-contract/contract";
+import * as systemContracts from "@pe/duct-systems-contract/contract";
 import { workspace as roomsWorkspace } from "../../web/src/rooms/contract.ts";
 
-const contracts = Object.entries(
-  import.meta.glob<Record<string, ReadHandle>>("../../web/src/*/contract.ts", { eager: true }),
-);
+const contracts = [
+  ...Object.entries(import.meta.glob<Record<string, ReadHandle>>("../../web/src/*/contract.ts", { eager: true })),
+  ["fans", fanContracts], ["duct-systems", systemContracts],
+] as const;
 const shape = (schema: z.ZodType) => z.toJSONSchema(schema, { unrepresentable: "any" });
 const port = (take: InputPort["take"]): InputPort => ({
   evaluation: "test",
@@ -31,7 +33,7 @@ const port = (take: InputPort["take"]): InputPort => ({
 test("the browser door binds the target in the host contract's shape", () => {
   // Mutant: always forward ExecutionTarget, including to a contract that takes DocumentRef.
   const ref = { session: "s", openId: "d" };
-  const fans = hostRead(fanSheet);
+  const fans = hostRead(fanContracts.calc);
   expect(fans.input.parse({ fan: [], sheetPath: "" })).not.toHaveProperty("target");
   expect(fans.request?.({ fan: [], sheetPath: "" }, { kind: "document", ref })).toMatchObject({ args: { target: ref } });
   const rooms = hostRead(roomsWorkspace);

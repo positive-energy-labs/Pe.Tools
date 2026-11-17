@@ -13,7 +13,7 @@ test("one row per builtin: static closure and host read imports, the work projec
     { key: "chat", folder: "chat", host: "./host.ts" },
     { key: "home", folder: "home" },
   ]);
-  expect(text).toContain(`import * as h0 from "../../web/src/fans/host.ts";`);
+  expect(text).toContain(`import * as h0 from "@pe/fans-host/host";`);
   expect(text).toContain(`import c2 from "../../web/src/home/source-closure.generated.json" with { type: "json" };`);
   // The Work binds from the route directory; the binding precedes every row that reads it.
   expect(text).toContain(`import { hydronicWorkSchema as hydronicWorkSchema } from "../../web/src/fans/work.ts";`);

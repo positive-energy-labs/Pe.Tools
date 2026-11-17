@@ -13,12 +13,12 @@ import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { Effect } from "effect";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
-import { fansSheetData, ductsFirmSchema, ductsDocumentSchema, fansDocumentSchema, ductParameterSlots, type DuctsCriteriaCell } from "@pe/agent-contracts";
+import { fansCalcData, ductsFirmSchema, ductsDocumentSchema, fansDocumentSchema, ductParameterSlots, type DuctsCriteriaCell } from "@pe/agent-contracts";
 import { notices as storedNotices } from "@pe/host-contracts/kinds";
-import { resolveCriteria, resolveInputs } from "@pe/ducts-domain/sheet/index";
+import { resolveCriteria, resolveInputs } from "@pe/fans-domain/calc/index";
 import { nodeOf, snapshotOf } from "@pe/ducts-domain/test-snapshot";
-import { DuctFiles } from "../../../host/src/ducts-files.ts";
-import { firmLayer } from "../../../host/src/ducts-inputs.ts";
+import { DuctFiles } from "@pe/ducts-host/ducts-files";
+import { firmLayer } from "@pe/ducts-host/ducts-inputs";
 import { hostState } from "../../../host/src/host-ownership.ts";
 import { SETTING_WRITE_PLACE } from "../../../host/src/notice-feed.ts";
 import { resolveFirm } from "../../../host/src/reads/door.ts";
@@ -27,7 +27,7 @@ import { ductsSettings } from "@pe/agent-contracts/setting-owners";
 import { sheetCells } from "../route/slots/sheet/index.ts";
 
 
-import { fansSheet } from "../fans/sheet.ts";
+import { fansCalc } from "@pe/fans-web/calc";
 
 const pointer = "Projects/2026-014 Chadds Ford";
 let user: string, drive: string, firm: string, project: string;
@@ -207,7 +207,7 @@ test("snapshot slot names come from the project home, never Fans Work", () => {
   expect(writeSettingTier({ owner: "ducts", tier: "firm", path: ["parameters", "fanFlow"], value: "Firm flow", expectedSha256: null }, { pointer })).toMatchObject({ ok: true });
   expect(writeSettingTier({ owner: "ducts", tier: "project", path: ["parameters", "fanFlow"], value: "Project flow", expectedSha256: null }, { pointer })).toMatchObject({ ok: true });
   const tiers = readSettingTiers("ducts", pointer);
-  const cells = sheetCells({ bindings: Object.fromEntries(Object.entries(fansSheet.bindings).filter(([key]) => key.startsWith("setting."))) }, { rows: [], work: null, model: [], read: { settings: { ducts: tiers } } });
+  const cells = sheetCells({ bindings: Object.fromEntries(Object.entries(fansCalc.bindings).filter(([key]) => key.startsWith("setting."))) }, { rows: [], work: null, model: [], read: { settings: { ducts: tiers } } });
   expect(cells.find(cell => cell.binding === "setting.ducts.parameters.fanFlow")).toMatchObject({ value: "Project flow", source: "project" });
   expect(ductParameterSlots(tiers)).toEqual({ fanFlow: "Project flow" });
   expect(fansDocumentSchema.parse({})).not.toHaveProperty("parameters");
@@ -216,7 +216,7 @@ test("snapshot slot names come from the project home, never Fans Work", () => {
 
 // Mutant H5-caption: claim a missing firm file supplied the seed.
 test("the pricing caption calls an absent firm file defaults, never firm seed", () => {
-  const read = fansSheetData.parse({
+  const read = fansCalcData.parse({
     open: null, rows: [], progress: null, espOptions: null, espOptionsError: null,
     ductsRevision: 0, ductsWork: {}, fansWork: {}, design: {}, settings: {},
     sheetSnapshot: { kind: "absent" },
@@ -224,7 +224,7 @@ test("the pricing caption calls an absent firm file defaults, never firm seed", 
     sheetView: { blockers: [], tiers: { taken: 0, accept: 0, preview: 0 }, taken: [], inputs: null,
       firm: { version: "seed", path: "Settings/ducts.json", present: false } },
   });
-  const caption = fansSheet.from(read, {})!.says;
+  const caption = fansCalc.from(read, {})!.says;
   expect(caption).toContain("defaults");
   expect(caption).not.toContain("over firm");
 });

@@ -22,7 +22,7 @@ import { familiesViewArgs } from "@pe/agent-contracts";
 import { withInvocationContext } from "@pe/runtime/context";
 import { read, leaf, RefusedPartition } from "../src/reads/evaluator.ts";
 import { Publications } from "../src/reads/publications.ts";
-import { FIRM_SEED } from "../src/ducts-inputs.ts";
+import { FIRM_SEED } from "@pe/ducts-host/ducts-inputs";
 import { BridgeError } from "@pe/host-internal/dispatch";
 import { RequestIdentity, admittedRequestIdentity } from "../src/request-services.ts";
 import {

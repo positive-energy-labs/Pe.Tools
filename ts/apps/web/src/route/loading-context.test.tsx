@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { module as ducts } from "../ducts/route";
+import { module as ducts } from "@pe/duct-systems-web/route";
 import { module as family } from "../family/route";
 import { publicRoutes } from "./route-discovery";
 for (const typed of [ducts, family])

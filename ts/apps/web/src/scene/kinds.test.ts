@@ -1,5 +1,5 @@
 import { expect, it } from "vite-plus/test";
-import { FIRM_COLOURS } from "#/ducts/colours";
+import { FIRM_COLOURS } from "@pe/ducts-web/colours";
 import { toOklch } from "./oklch";
 import { routeColour } from "./surfaces";
 import { kindHue, kindL } from "./kinds";

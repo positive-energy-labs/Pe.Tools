@@ -1,12 +1,12 @@
 import { valueOf } from "./typed-route";
-import { stableFanKey } from "../ducts/sheet/model";
+import { stableFanKey } from "@pe/ducts-web/calc/model";
 import { expect, test, vi } from "vite-plus/test";
 import { observeResources } from "@pe/runtime";
 import { historyPointSchema, workFingerprintSchema } from "@pe/agent-contracts";
 import { registeredReads } from "../../../host/src/reads/routes";
-import { fansSheet } from "../fans/host";
+import { fansCalc } from "@pe/fans-host/host";
 import { fixture, ref, path, gate } from "../../../host/tests/host-read-graph.test-support";
-import { module as fans } from "../fans/route";
+import { module as fans } from "@pe/fans-web/route";
 import { mountTypedRoute } from "../shell/typed-mount";
 import { createWorkFeedClient } from "../shell/work-feed-client";
 import type { UseSource } from "../shell/source-contract";
@@ -293,7 +293,7 @@ test("J4 refresh Fans while the document changes and inspect the retained answer
 }, 60_000);
 
 test("J5 open a document read then attempt host and malformed targets without widening access", async () => {
-  const unregister = registeredReads.reads.has(fansSheet.name) ? () => {} : registeredReads.register({ sheet: fansSheet });
+  const unregister = registeredReads.reads.has(fansCalc.name) ? () => {} : registeredReads.register({ sheet: fansCalc });
   const j = await journey();
   try {
     await j.ready();

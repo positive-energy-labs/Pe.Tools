@@ -65,3 +65,6 @@ __pycache__/
 # machine-local data that must never be committed or bundled: client fixtures, the SDK feed. See .private/README.md
 .private/*
 !.private/README.md
+
+# Route closures are regenerated build output in product workspaces too.
+ts/products/*/web/source-closure.generated.json

@@ -14,7 +14,7 @@ import { bindControl } from "../src/control.ts";
 import { testRegistry, journalAt, callRouteOver } from "./effect-test.ts";
 import { pictureCaptures } from "./effect-test.ts";
 import { detachedBridge } from "./effect-test.ts";
-import { DuctFiles } from "../src/ducts-files.ts";
+import { DuctFiles } from "@pe/ducts-host/ducts-files";
 import { HostDocumentMarks } from "../src/document-marks.ts";
 import { nativeReadRoot } from "../src/app.ts";
 import { SdkDriver } from "../src/sdk-session.ts";

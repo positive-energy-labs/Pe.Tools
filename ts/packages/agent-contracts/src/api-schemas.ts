@@ -26,8 +26,8 @@ export * from "./family.ts";
 export * from "./grounded-doc.ts";
 export * from "./families.ts";
 export * from "./takeoffs.ts";
-export * from "./ducts.ts";
-export * from "./fans.ts";
+export * from "@pe/duct-systems-contract/ducts";
+export * from "@pe/fans-contract/fans";
 export * from "./rooms.ts";
 export * from "./parameter-links.ts";
 export * from "./settings.ts";
@@ -69,17 +69,17 @@ export * from "./plugin.ts";
 export * from "./plugin-runtime.ts";
 
 export * from "./thread-export.ts";
-export { DUCT_INFERENCE_GRADES, ductFindingSchema, type DuctInferenceGrade, type DuctFinding } from "./ducts-pricing-read.ts";
+export { DUCT_INFERENCE_GRADES, ductFindingSchema, type DuctInferenceGrade, type DuctFinding } from "@pe/duct-systems-contract/ducts-pricing-read";
 export * from "./list-search.ts";
 export * from "./scene-view.ts";
 export { threadSearchDefault } from "./routes/shared.ts";
 export * from "./route-graph.ts";
-export * from "./ducts-sheet.ts";
+export * from "@pe/fans-contract/calc-read";
 
 import { z } from "zod";
 import { nativeResponseDefinitionSchema } from "@pe/host-contracts/decoders";
 import type { RevitMatrixLoadedFamilies } from "@pe/host-contracts/generated";
-export * from "./duct-catalog.ts";
+export * from "@pe/ducts-contract/duct-catalog";
 import { familiesObservationSchema } from "./families.ts";
 export const familyRecordSchema =
   nativeResponseDefinitionSchema<RevitMatrixLoadedFamilies.Res.FamilySnapshotRecord>(
@@ -91,9 +91,9 @@ export const familiesPartsSchema = z.object({
   records: z.array(z.string()).nullable(),
 });
 
-export * from "./fans-read.ts";
+export * from "@pe/fans-contract/fans-read";
 
-export * from "./ducts-read.ts";
+export * from "@pe/duct-systems-contract/ducts-read";
 export {valueReadRequest,valueReadResponse} from "./value.ts";
 
 export { blobRefSchema, blobUploadSchema } from "./blob-ref.ts";

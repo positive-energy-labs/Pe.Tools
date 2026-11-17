@@ -10,7 +10,7 @@ import { connectTestBridge } from "./bridge-fixture.ts";
 import { settle, callRouteOver } from "./effect-test.ts";
 import type { makeCallRoute } from "../src/call-route.ts";
 import { gatewayNativeLeaves } from "../src/gateway-actions.ts";
-import { DuctFiles } from "../src/ducts-files.ts";
+import { DuctFiles } from "@pe/ducts-host/ducts-files";
 import { HostDocumentMarks } from "../src/document-marks.ts";
 import { PictureCaptureStore } from "../src/captures-route.ts";
 import { SdkDriver } from "../src/sdk-session.ts";
