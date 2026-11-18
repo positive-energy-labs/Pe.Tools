@@ -11,6 +11,7 @@ import { Button } from "@pe/kit/lang/button";
 import { emptyListState, useList, type ListState } from "@pe/kit/lang/collection";
 import { ListView, PlainList, type ListRowParts } from "@pe/kit/lang/list-view";
 import { Scroll } from "@pe/kit/lang/scroll";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 import { Fragment, useMemo, useState } from "react";
 import { BlockerRow } from "./blocker-row.tsx";
 import type { Closer } from "./closer.ts";
@@ -29,9 +30,9 @@ import { branchesKnown, CalcBreakdown } from "./calc-breakdown-table.tsx";
 
 const rosterState = (row: FanPort) =>
   row.complete
-    ? `ESP ${pressure(row.requiredEspInWg)} in-wg`
+    ? `ESP ${pressure(row.requiredEspInWg)} in-wg computed`
     : row.complete === false
-      ? "incomplete"
+      ? "partial"
       : "not computed";
 const rosterSearch = (row: FanPort) => ({
   text: [row.mark, row.kind, row.side, String(row.portIndex)],
@@ -164,7 +165,17 @@ function Sides({ props }: { props: LedgerProps }) {
                 <span data-tone="caution"> partial</span>
               )}
             </span>
-            <span className="face-mono text-right">{pressure(totals[side].allowanceInWg)}</span>
+            <span className="face-mono text-right">
+              {pressure(totals[side].allowanceInWg)}{" "}
+              <TooltipHint content={props.inputs?.criteria.allowanceInWg[side].ref}>
+                <span
+                  className="t-small text-ink-2"
+                  data-input-source={props.inputs?.criteria.allowanceInWg[side].source ?? "none"}
+                >
+                  {props.inputs?.criteria.allowanceInWg[side].source ?? "none"}
+                </span>
+              </TooltipHint>
+            </span>
           </span>
         ))}
       </div>

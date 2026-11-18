@@ -70,7 +70,7 @@ test("rated and required ESP stay separate: a partial claim is named partial and
   const complete = { kind: "complete" as const, basis: "b", requiredEspInWg: 0.8, coverage: [] as const, blockingIds: [] as const };
   expect(espWarnings({ rated: value(0.8), required: complete })).toEqual([]);
   expect(espWarnings({ rated: value(0.5), required: complete })).toEqual([
-    "Rated ESP 0.50 in-wg is below the required 0.80 in-wg"]);
+    "Rated ESP 0.50 in-wg (model r) is below the required 0.80 in-wg (computed)"]);
   const partial = espWarnings({ rated: value(2), required: { kind: "incomplete", basis: "b", knownInWg: 0.3, coverage: [{ kind: "pricing", elementId: 4, ref: "x" }], blockingIds: ["no-flow:4"] } });
   expect(partial).toEqual(["Required ESP is not known: 1 coverage gap, 1 blocking; 0.30 in-wg so far"]);
 });
