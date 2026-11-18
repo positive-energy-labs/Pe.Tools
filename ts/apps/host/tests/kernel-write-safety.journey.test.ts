@@ -199,7 +199,8 @@ test("R5 a real native rehearsal receipt cannot substitute for the declared Plan
   } finally { await f.close(); }
 });
 
-test("E3/E4 a lost delivered write stays unknown and blocks a fresh overlapping action", async () => {
+// K1a: only a running action fences an overlap, so a terminal unknown write no longer blocks one.
+test("E3/E4 a lost delivered write stays unknown and no longer blocks a fresh overlapping action", async () => {
   const f = await fixture();
   try {
     expect(await f.submit("plan", "parameter-links.apply.plan")).toMatchObject({ state: "succeeded" });
@@ -211,14 +212,14 @@ test("E3/E4 a lost delivered write stays unknown and blocks a fresh overlapping 
     expect(await f.native.journal.wait("apply")).toEqual(original);
     expect(await f.submit("new-plan", "parameter-links.apply.plan")).toMatchObject({ state: "succeeded" });
     await f.admit("overlap", "parameter-links.apply");
-    const next = (await f.native.journal.list()).find(row => row.id === "overlap");
-    expect(next).toMatchObject({ state: "failed", notDispatched: true });
-    expect(f.native.calls.filter(call => call.key === "revit.apply.parameter-links")).toHaveLength(1);
+    const next = await f.native.journal.wait("overlap");
+    expect(next, JSON.stringify(next)).not.toHaveProperty("notDispatched");
+    expect(f.native.calls.filter(call => call.key === "revit.apply.parameter-links")).toHaveLength(2);
     expect(await f.native.journal.wait("apply")).toEqual(original);
   } finally { await f.close(); }
 });
 
-test("E3 late native refusal cannot erase a delivered write or release its overlap fence", async () => {
+test("E3 late native refusal cannot erase a delivered write, and the terminal write fences nothing", async () => {
   const f = await fixture();
   try {
     expect(await f.submit("plan", "parameter-links.apply.plan")).toMatchObject({ state: "succeeded" });
@@ -231,8 +232,9 @@ test("E3 late native refusal cannot erase a delivered write or release its overl
     expect(original).not.toHaveProperty("notDispatched");
     expect(await f.submit("new-plan", "parameter-links.apply.plan")).toMatchObject({ state: "succeeded" });
     await f.admit("overlap", "parameter-links.apply");
-    expect((await f.native.journal.list()).find(row => row.id === "overlap")).toMatchObject({ state: "failed", notDispatched: true });
-    expect(f.native.calls.filter(call => call.key === "revit.apply.parameter-links")).toHaveLength(1);
+    const next = await f.native.journal.wait("overlap");
+    expect(next, JSON.stringify(next)).not.toHaveProperty("notDispatched");
+    expect(f.native.calls.filter(call => call.key === "revit.apply.parameter-links")).toHaveLength(2);
     expect(await f.native.journal.wait("apply")).toEqual(original);
   } finally { await f.close(); }
 });

@@ -117,12 +117,10 @@ const effected = (step: ActionStep) =>
     ? (!("touched" in step) || !step.touched || ["wrote", "unauthorized", "unknown", "restoreFailed"].includes(step.touched.kind)) &&
       !("notDispatched" in step && step.notDispatched)
     : step.state === "succeeded");
-const holdsClaims = (row: ActionReceipt) =>
-  !(
-    (row.state === "failed" || row.state === "cancelled") &&
-    row.notDispatched === true &&
-    undispatched(row.steps)
-  );
+// Only a running action holds a claim (K1a). Exception: a succeeded launch keeps its session-slot
+// claim until a later step `releases` it, because that Revit is still live. Every other terminal
+// state, `unknown` and `incomplete` included, ends the claim.
+const holdsClaims = (row: ActionReceipt) => row.state === "running" || row.state === "succeeded";
 const patchSnapshot = (snapshot: unknown, patch: RouteStatePatch): void => {
   if (!snapshot || typeof snapshot !== "object" || !patch.path.length) return;
   let parent = snapshot as Record<string | number, unknown>;
@@ -495,11 +493,6 @@ const unsettled = (row: ActionReceipt) => {
 
 /** Telemetry facts kept by compaction; command identities and outcomes never expire. */
 const RETAIN_RECEIPTS = 10_000;
-/** A row that blocks overlapping admissions and must stay visible until recovered. */
-const isOpen = (row: ActionReceipt) =>
-  row.state === "running" ||
-  row.state === "unknown" ||
-  row.state === "incomplete";
 
 /**
  * One host journal. Execution never holds the authored Work lock or the journal write tail.
@@ -517,7 +510,6 @@ export class ActionJournal implements ReceiptReader {
   /** Action id to its receipt id, and step id to its action id. */
   private readonly actionReceipt = new Map<string, string>();
   private readonly stepAction = new Map<string, string>();
-  private readonly open = new Set<string>();
   /** Mapping keys minted since the last append, and since the last compaction. */
   private fresh: string[] = [];
   private minted = new Set<string>();
@@ -866,16 +858,11 @@ export class ActionJournal implements ReceiptReader {
       const earlier = [...this.rows.values()].slice(0, [...this.rows.keys()].indexOf(id));
       const blocked = earlier.find(
         (other) =>
-          isOpen(other) &&
+          other.state === "running" &&
           !this.reconciles(row, other) &&
           effectsOverlap(row.effects, other.effects),
       );
       if (!blocked) return;
-      if (blocked.state === "unknown" || blocked.state === "incomplete")
-        throw refused(
-          `Action '${blocked.id}' requires recovery before this mutation`,
-          "effect.recovery",
-        );
       await new Promise<void>((resolve) => {
         const changed = () => {
           this.listeners.delete(changed);
@@ -890,9 +877,6 @@ export class ActionJournal implements ReceiptReader {
     if (!holdsClaims(row)) return [];
     return row.claims.filter(
       (claim) =>
-        (claim.kind !== "reconciliation" ||
-          row.state !== "cancelled" ||
-          row.steps.some((step) => step.state === "unknown" || step.state === "running")) &&
         ![...this.rows.values()].some((other) =>
           other.steps.some(
             (step) =>
@@ -1438,7 +1422,6 @@ export class ActionJournal implements ReceiptReader {
         const claimed = [...this.rows.values()].find(
           (other) =>
             other.id !== row.id &&
-            holdsClaims(other) &&
             this.claimsOf(other).some((held) =>
               row.claims.some((claim) => canonicalRouteInput(held) === canonicalRouteInput(claim)),
             ),
@@ -1451,17 +1434,6 @@ export class ActionJournal implements ReceiptReader {
           )!;
           throw new CommandRejected({ kind: "claimed", claim, by: claimed.id });
         }
-        const blocked = [...this.rows.values()].find(
-          (other) =>
-            other.id !== row.id &&
-            (other.state === "unknown" || other.state === "incomplete") &&
-            !this.reconciles(row, other) &&
-            effectsOverlap(row.effects, other.effects),
-        );
-        if (blocked)
-          throw Error(
-            `action '${blocked.id}' is ${blocked.state}; recover that attempt before submitting another`,
-          );
       } catch (error) {
         this.activeCallers.delete(row.id);
         if (error instanceof Refused || prior) throw error;
@@ -2169,7 +2141,6 @@ export class ActionJournal implements ReceiptReader {
         this.mappings,
         this.actionReceipt,
         this.stepAction,
-        this.open,
       ])
         held.clear();
       this.fresh = [];
@@ -2339,8 +2310,6 @@ export class ActionJournal implements ReceiptReader {
   private index(row: ActionReceipt) {
     this.rows.set(row.id, row);
     for (const step of row.steps) this.stepAction.set(step.id, row.id);
-    if (isOpen(row)) this.open.add(row.id);
-    else this.open.delete(row.id);
   }
   private keep(receipt: Receipt) {
     if (receipt.body.kind !== "action" && !this.receipts.has(receipt.id)) this.factCount++;
