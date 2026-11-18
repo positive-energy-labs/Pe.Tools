@@ -81,7 +81,7 @@ test("every fixture roster, Ledger and duct-systems sheet value has its own sour
         refusal: null,
       }),
     },
-  } as unknown as Parameters<typeof SheetPane>[0]["ctx"]["draw"];
+  };
   const view = render(
     <>
       <Roster
@@ -95,7 +95,7 @@ test("every fixture roster, Ledger and duct-systems sheet value has its own sour
       />
       <Ledger props={ledger} />
       <Ledger props={{ ...ledger, inputs: null }} />
-      <SheetPane ctx={{ draw: ctx, slot: designCalc }} />
+      <SheetPane ctx={{ draw: ctx as never, slot: designCalc }} />
     </>,
   );
   expect(view.container.querySelectorAll("[data-sheet-cell]").length).toBeGreaterThan(0);
