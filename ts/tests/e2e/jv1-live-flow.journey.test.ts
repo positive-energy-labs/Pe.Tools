@@ -24,10 +24,17 @@ test("J-V1: live terminal edit after receipt reprices, shows drift, and writes t
   model.store = { version: 2, workRevision: 1, appliedAt: CLOSED_AT,
     rules: {}, instances: {}, terminals: {}, equipmentFlows: {}, verdicts: {}, roles: {},
     terminalFlows: { "3": { cfm: 200, source: "human", appliedAt: CLOSED_AT } } };
+  const terminalWrites: unknown[] = [];
   const f = await nativeFixture("real", (key, raw) => {
     if (key === "ducts.snapshot.walk") return structuredClone(model);
     if (key === "ducts.apply") {
-      const request = raw as { equipment: { id: number; externalStaticInWg: number }[] };
+      const request = raw as { terminalFlows: { id: number; cfm: number }[]; equipment: { id: number; externalStaticInWg: number }[] };
+      terminalWrites.push(...request.terminalFlows);
+      for (const row of request.terminalFlows) {
+        const node = model.nodes.find(n => n.id === row.id)!;
+        node.facts.find(f => f.key === "flow")!.value = row.cfm;
+        node.connectors[0]!.flowCfm = row.cfm;
+      }
       const esp = request.equipment.find(row => row.id === 100)?.externalStaticInWg;
       if (esp != null) model.nodes.find(n => n.id === 100)!.facts.push(factOf("externalStatic", esp, { unit: "in-wg" }));
     }
@@ -68,6 +75,8 @@ test("J-V1: live terminal edit after receipt reprices, shows drift, and writes t
     expect(after.sheet.claim.kind).toBe("complete");
     if (before.sheet.claim.kind !== "complete" || after.sheet.claim.kind !== "complete") throw Error("incomplete claim");
     expect(after.sheet.claim.requiredEspInWg).toBeGreaterThan(before.sheet.claim.requiredEspInWg);
+    // Match pane.tsx: model is empty, and receipt evidence travels in calcSnapshot.store.
+    // Do not fabricate a model override to hide the product's missing drift handling.
     const cells = sheetCells(fansCalc, { rows: [subject], work: {}, model: [], read: {
       calcSnapshot: live, calcView: { inputs: after.input.inputs },
       fansWork: fansDocumentSchema.parse({}), settings: {},
@@ -89,6 +98,7 @@ test("J-V1: live terminal edit after receipt reprices, shows drift, and writes t
       expect(response.ok, await response.clone().text()).toBe(true);
       expect(await f.journal.wait(id!), action).toMatchObject({ state: "succeeded" });
     }
+    expect(terminalWrites, "native apply must send no terminal writes").toEqual([]);
     const readback = await read();
     expect(readback.nodes.find((n: { id: number }) => n.id === 100).facts.find((v: { key: string }) => v.key === "externalStatic").value)
       .toBeCloseTo(after.sheet.claim.requiredEspInWg, 6);

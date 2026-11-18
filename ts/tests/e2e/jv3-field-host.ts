@@ -1,4 +1,4 @@
-// Owned fixture host + browser. No native/SDK transport; not a Revit acceptance drive.
+// Fixture linkage only, never J-V3 acceptance. No native/SDK transport.
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve, join } from "node:path";
 import { spawn, execFileSync } from "node:child_process";
@@ -18,7 +18,7 @@ const firm = firmLayer({ present: false } as never, tiers as never);
 const read = { criteria: resolveCriteria(workLayer(ductsDesign(work, fansDocumentSchema.parse({}))), null, firm), settings: { ducts: tiers },
   firm: { present: true, version: "fixture", path: "fixture-firm/Settings/ducts.json" } };
 const evidence = { head: execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim(),
-  when: new Date().toISOString(), lane: "fixture surface composition", read, work };
+  when: new Date().toISOString(), lane: "fixture linkage only; never J-V3 acceptance", read, work };
 const inputs = join(dir, "pricing.json");
 await writeFile(inputs, JSON.stringify(evidence, null, 2));
 if (process.argv.includes("--witness")) {
@@ -57,7 +57,7 @@ try {
   await writeFile(join(dir, "custody.json"), JSON.stringify({ head: evidence.head, web,
     browser: browser.info.id, target, native: false, simulated: true,
     command: "node --import jiti/register tests/e2e/jv3-field-host.ts" }, null, 2));
-  const env = { ...process.env, E2E_WEB: web, CDP_PORT: new URL(browser.info.endpoint).port,
+  const env = { ...process.env, E2E_LINKAGE_MODE: "fixture-linkage", E2E_TARGET: "", E2E_SESSION: "", E2E_WEB: web, CDP_PORT: new URL(browser.info.endpoint).port,
     CDP_TARGET: target, JV3_PRICING_FILE: inputs, E2E_LABEL: `base-${Date.now()}` };
   const child = spawn(process.execPath, ["--import", "jiti/register", "tests/e2e/jv3-field.ts", "--seed", "20261118"], { env, stdio: ["ignore", "pipe", "pipe"], windowsHide: true, timeout: 150_000 });
   let output = "";

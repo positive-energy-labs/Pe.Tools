@@ -3,6 +3,8 @@
 // Real target: JV3_PRICING_FILE=<captured host pricing JSON> E2E_WEB=<bound /duct-systems URL>
 // CDP_PORT/CDP_TARGET=<owned browser> node --import jiti/register tests/e2e/jv3-field.ts --seed 20261118
 // This script never launches or contacts Revit itself. The driver owns the prepared target.
+// Fixture mode proves linkage only, never J-V3 acceptance.
+import { assertPageBinding } from "./page-binding.ts";
 import { readFileSync } from "node:fs";
 import { criterionCellLabel } from "@pe/agent-contracts/setting-owners";
 import { run, type Action, type Rule } from "./walk.ts";
@@ -20,12 +22,16 @@ if (priced.value !== 9 || priced.source.toLowerCase() !== "work" ||
 const label = criterionCellLabel("autoJoinGapIn");
 const rows = (page: Page) => page.evaluate((label: string) =>
   [...document.querySelectorAll<HTMLElement>("[data-sheet-cell]")]
-    .filter(e => e.dataset.sheetCell === label && e.getClientRects().length > 0)
+    .filter(e => e.dataset.sheetCell === label && [...e.querySelectorAll("*")].some(child => child.getClientRects().length > 0))
     .map(e => ({ address: e.dataset.sheetAddress, source: e.dataset.source,
       text: e.textContent?.trim(), value: e.querySelector<HTMLInputElement>("input")?.value })), label);
 const actions: Action[] = [{ name: "open", can: async () => true, async act({ page }) {
   await page.open(WEB);
-  return async () => (await rows(page)).length > 0;
+  return async () => {
+    if (!(await rows(page)).length) return false;
+    await assertPageBinding(page);
+    return true;
+  };
 }, ms: 90_000 }];
 const rules: Rule[] = [{ says: "The criterion occurs once and draws pricing's value and source word.", async holds({ page }) {
   const drawn = await rows(page);
@@ -35,4 +41,4 @@ const rules: Rule[] = [{ says: "The criterion occurs once and draws pricing's va
     row.source?.toLowerCase() === priced.source.toLowerCase() && /\bwork\b/i.test(row.text ?? "")
     ? true : JSON.stringify({ priced, drawn });
 } }];
-await run("J-V3", actions, rules, ["open"], url => url.startsWith(new URL(WEB).origin));
+await run(process.env.E2E_LINKAGE_MODE === "fixture-linkage" ? "J-V3-fixture-linkage" : "J-V3", actions, rules, ["open"], url => url.startsWith(new URL(WEB).origin));
