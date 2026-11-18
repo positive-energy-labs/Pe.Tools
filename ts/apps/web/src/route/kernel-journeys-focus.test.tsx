@@ -600,7 +600,9 @@ test("JZ Fans undo after apply: public write journey leaves an honest toolbar re
       }) },
     )));
     expect(response.status, await response.clone().text()).toBe(200);
-    return response.json();
+    const body = await response.json();
+    expect(body.ok, JSON.stringify(body)).toBe(true);
+    return body;
   };
   const read = observeResources(f.saved, undefined, f.observeHostResource);
   const connected = createWorkFeedClient({ subscribe: read, dirty() {} }, {
@@ -632,7 +634,6 @@ test("JZ Fans undo after apply: public write journey leaves an honest toolbar re
     const staged = await stage("fans", [
       { path: ["writeIntent", "edit"], value: { value: { walk: { unitId: 100, portIndex: 0 } } } },
       { path: ["flows", elementSubject(closed.nodes.find(node => node.id === 3)!), "edit"], value: { value: 250 } },
-      { path: ["calculation", "terminalFlow", "edit"], value: { value: { kind: "balanced-design", source: "test" } } },
     ], "Edit fan airflow");
     await screen.findByRole("button", { name: "Undo Edit fan airflow" });
     const command = async (id: string, commandKey: string) => {
