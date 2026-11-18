@@ -68,15 +68,14 @@ test("ducts.pricing resolves a staged Work criterion over the firm file, as the 
       path: ["criteria", cell, "edit"],
       value: { value: edit.value },
     }));
-    expect(
-      await host.workspace.apply(
-        key("duct-systems"),
-        "duct-systems",
-        recorded.ductSystemsWork.criteria.autoJoinGapIn.edit.by as "human",
-        patches,
-        0,
-      ),
-    ).toMatchObject({ ok: true });
+    const saved = await host.workspace.apply(
+      key("duct-systems"),
+      "duct-systems",
+      recorded.ductSystemsWork.criteria.autoJoinGapIn.edit.by as "human",
+      patches,
+      0,
+    );
+    expect(saved).toMatchObject({ ok: true });
     // The recorded target names the driver's own session; this host serves one document, at `ref`.
     const response = await host.probe({
       ...staged.request,
@@ -95,6 +94,8 @@ test("ducts.pricing resolves a staged Work criterion over the firm file, as the 
       value: data.ductSystemsWork.criteria.autoJoinGapIn!.edit!.value,
       source: "Work",
       author: "human",
+      // The Work revision the read priced on, as `networkCalcs` versions its inputs.
+      version: saved.ok ? saved.revision : null,
     });
   } finally {
     vi.unstubAllEnvs();
