@@ -1,5 +1,5 @@
 import { useAdmittedSubject } from "@pe/web/shell/subject";
-import { cellSource } from "@pe/agent-contracts/slots";
+import { cellSource, espWord } from "@pe/agent-contracts/slots";
 /**
  * The fan sheet view of /ducts (`?stage=sheet`, the head's "Pricing fans" stage; protoui rounds 1 to 3, 2026-10-28, variant A "Ledger"
  * promoted): pane bodies for the kernel's graph layout, using the house `ListView`. The
@@ -29,7 +29,6 @@ import {
 import type { LedgerProps, RosterProps } from "./types.ts";
 import { branchesKnown, CalcBreakdown } from "./calc-breakdown-table.tsx";
 
-export const espWord = (complete: boolean | null | undefined) => complete ? "computed" : complete === false ? "partial" : "not computed";
 const rosterState = (row: FanPort) => row.complete ? `ESP ${pressure(row.requiredEspInWg)} in-wg ${espWord(true)}` : espWord(row.complete);
 const rosterSearch = (row: FanPort) => ({
   text: [row.mark, row.kind, row.side, String(row.portIndex)],

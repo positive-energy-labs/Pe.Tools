@@ -88,11 +88,15 @@ export const store = (store: string, domain: Domain, per: BindingPer = "subject"
   ({ ...draw, domain, home: { at: "store", store }, per });
 export const local = (domain: Domain, per: BindingPer = "route", draw?: BindingDraw): SheetBinding =>
   ({ ...draw, domain, home: { at: "local" }, per });
-export const setting = (owner: string, path: readonly string[], domain: Domain, tiers: readonly SettingTier[], draw?: BindingDraw): SheetBinding =>
-  ({ ...draw, domain, home: { at: "setting", owner, path, tiers }, per: "route", model: draw?.model ?? (read => {
-    const served = serveSetting((read as { settings?: Record<string, readonly SettingTierRead[]> })?.settings?.[owner], tiers, path, schemaOf(domain), draw?.default);
-    return { value: served.value, source: served.tier, ref: served.ref, note: served.note };
-  }) });
+export const settingLayer = (b: Pick<SheetBinding, "home" | "domain" | "default">, tiers?: readonly SettingTierRead[]) => {
+  if (b.home.at !== "setting") return null;
+  const served = serveSetting(tiers, b.home.tiers, b.home.path, schemaOf(b.domain), b.default);
+  return { value: served.value, source: served.tier, ref: served.ref, note: served.note };
+};
+export const setting = (owner: string, path: readonly string[], domain: Domain, tiers: readonly SettingTier[], draw?: BindingDraw): SheetBinding => {
+  const binding = { ...draw, domain, home: { at: "setting" as const, owner, path, tiers }, per: "route" as const };
+  return { ...binding, model: draw?.model ?? ((read: { settings?: Record<string, readonly SettingTierRead[]> }) => settingLayer(binding, read?.settings?.[owner])) };
+};
 
 /** The declaration: bindings by cell name. Rows are the route subject; the kernel supplies them. */
 export interface SheetSlot<B extends Readonly<Record<string, SheetBinding>> = Readonly<Record<string, SheetBinding>>> {
@@ -127,6 +131,7 @@ export interface CellAddress {
  */
 export type CellSource = "work" | "model-store" | SettingTier | "default" | "model";
 export const cellSource = (source: ValueSource): CellSource => source === "Work" || source === "run" ? "work" : source;
+export const espWord = (complete: boolean | null | undefined) => complete ? "computed" : complete === false ? "partial" : "not computed";
 
 /** Every value Pea can touch (ADR 0030 rule 8): current, model (struck), pending author, drift, freshness, source. */
 export interface StateCell<V = unknown> extends CellAddress {

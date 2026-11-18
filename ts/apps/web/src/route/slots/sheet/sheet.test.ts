@@ -3,7 +3,7 @@ import { z } from "zod";
 import { commandCatalogAxes } from "@pe/agent-contracts/command-axes";
 import { commands } from "@pe/agent-contracts/semantic-actions";
 import type { CatalogAxes } from "../../../../../../packages/agent-contracts/src/catalog.ts";
-import { SHEET_COMMANDS, local, parameter, setting, sheetSlotDataSchema } from "@pe/agent-contracts/slots";
+import { SHEET_COMMANDS, local, parameter, setting, settingLayer, sheetSlotDataSchema } from "@pe/agent-contracts/slots";
 import { subjectCode, uniqueIdSchema } from "../../../../../../packages/agent-contracts/src/subject-ref.ts";
 import { sheetCells } from "./index.ts";
 
@@ -15,6 +15,10 @@ import { sheetCells } from "./index.ts";
  * the model, and one plan/apply pair in the catalog that the linker rule admits.
  */
 const uid = (text: string) => subjectCode({ keyKind: "UniqueId", key: uniqueIdSchema.parse(text) });
+
+test("setting projection ignores non-setting bindings", () => {
+  expect(settingLayer(local({ kind: "number" }, "route", { default: 3 }))).toBeNull();
+});
 
 test("setting bindings serve their fallback through the model and prefer a stated home", () => {
   const slot = { bindings: { gap: setting("ducts", ["gap"], { kind: "number" }, ["firm"], { default: 3 }) } };

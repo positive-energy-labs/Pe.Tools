@@ -5,7 +5,7 @@
  * mounts no picture: the kernel pane owns capture, pose, selection, marks and findings.
  */
 import { systemScope } from "@pe/ducts-domain/system-scope";
-import { espWord } from "./calc/view.tsx";
+import { espWord } from "@pe/agent-contracts/slots";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import type { SubjectKey } from "@pe/kit/lang/attention";
 import { useRef } from "react";
