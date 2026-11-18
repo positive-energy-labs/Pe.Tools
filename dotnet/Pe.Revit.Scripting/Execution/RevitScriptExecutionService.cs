@@ -877,8 +877,14 @@ public sealed class RevitScriptExecutionService(
         application.FailuresProcessing += run.OnFailuresProcessing;
         string? unfenced = null;
         var threw = true;
+        // The one dialog lane (RevitDialogs, in Pe.Revit, which this package already references): a dialog the
+        // script raises is answered and recorded here, in every mode, and never waits for whoever is at the keyboard.
+        var dialogs = new List<(bool IsError, string Message)>();
         try {
-            fence.Run(() => this.ExecuteWithTransactionPolicy(container, context, plan, diagnostics, run));
+            _ = RevitDialogs.NoModal(dialogs, () => {
+                fence.Run(() => this.ExecuteWithTransactionPolicy(container, context, plan, diagnostics, run));
+                return true;
+            });
             threw = false;
         } catch (Exception ex) when (ex.Message.Contains("open transaction phase", StringComparison.Ordinal)
                                      && ScriptChangeLedger.SaveRefusedWords(run.TargetHold, fence.Titles) is not null) {
@@ -887,6 +893,8 @@ public sealed class RevitScriptExecutionService(
             diagnostics.Add(ScriptDiagnosticFactory.Warning("transaction", ScriptChangeLedger.SaveRefusedWords(run.TargetHold, fence.Titles)!));
             throw;
         } finally {
+            foreach (var (_, message) in dialogs)
+                diagnostics.Add(ScriptDiagnosticFactory.Warning("dialog", message));
             application.FailuresProcessing -= run.OnFailuresProcessing;
             // The fence's own rollback may raise changes; the run's commits are fixed before it.
             run.KeepGuarded();
@@ -1050,38 +1058,53 @@ public sealed class RevitScriptExecutionService(
         // A save a library makes on the grouped document is refused by Revit; ExecuteContainer says why.
         if (group is not null)
             run.TargetHold = "so that its transactions are one undo entry; a script whose own source calls Save runs ungrouped, and this call was made from a library";
+        string? leaked = null;
         var threw = true;
         try {
             run.Execute(container);
             threw = false;
         } finally {
+            leaked = LeakedTransactionWords(context.Document, plan, run);
+            // The script's own exception is already on its way out; the leak's words go beside it.
+            if (leaked is not null && threw)
+                diagnostics.Add(ScriptDiagnosticFactory.Error("transaction", leaked));
             if (group is not null) {
                 using (group)
-                    run.Undo = CloseUndoGroup(group, undoName, threw && SpikeRollBackOnThrow);
+                    run.Undo = CloseUndoGroup(group, undoName);
             }
         }
+
+        // A script that returns with its document stuck did not succeed.
+        if (leaked is not null)
+            throw new RevitScriptTransactionException(ScriptExecutionStatus.RuntimeFailed, leaked);
     }
 
-    // SPIKE (notransaction-rollback-vs-assimilate), not a landing: the second closing of the run's group, and
-    // what the close answered, for ScriptGroupCloseSpikeTests. Off, the code is the code as it was.
-    internal static bool SpikeRollBackOnThrow;
-    internal static string? SpikeLastClose;
+    /// <summary>
+    ///     FOOTGUN: a script's leaked transaction cannot be ended by the run. The run does not hold the script's
+    ///     Transaction object, Revit's API names no open transaction and ends none but through that object, and a
+    ///     collected one is not rolled back: with no reference kept, after GC.Collect and WaitForPendingFinalizers
+    ///     the document was still modifiable and a new Transaction.Start was refused (fresh Revit 2025, a probe,
+    ///     2026-11-18). The run's group cannot close over it either. So the run ends nothing here: it says the
+    ///     document was left with a transaction open, and which (ScriptRunProofTests
+    ///     A_leaked_transaction_is_named_and_fails_the_run).
+    /// </summary>
+    private static string? LeakedTransactionWords(Document? document, ScriptExecutionPlan plan, RunLedger run) =>
+        document is { IsValidObject: true, IsModifiable: true }
+            ? ScriptChangeLedger.LeakedWords(document.Title,
+                ScriptChangeLedger.StartedNotCommitted(plan.SourceSet, run.Committed().SelectMany(names => names)))
+            : null;
 
     /// <summary>
     ///     A script that returns with a transaction still open leaves a group Revit will not merge: Assimilate
     ///     answers Error, and what the script had committed stays (fresh Revit 2025, 2026-11-14).
     /// </summary>
-    private static ScriptUndo CloseUndoGroup(TransactionGroup group, string undoName, bool rollBack = false) {
+    private static ScriptUndo CloseUndoGroup(TransactionGroup group, string undoName) {
         try {
-            var status = rollBack ? group.RollBack() : group.Assimilate();
-            SpikeLastClose = $"{(rollBack ? "RollBack" : "Assimilate")} -> {status}";
-            if (rollBack)
-                return new ScriptUndo(Ungrouped: $"SPIKE: the script threw and the run's group was rolled back ({status}).");
+            var status = group.Assimilate();
             return status == TransactionStatus.Committed
                 ? new ScriptUndo(undoName)
                 : new ScriptUndo(Ungrouped: $"Revit did not merge the run's transactions ({status}); a script that returns with a transaction still open causes this.");
         } catch (Exception ex) {
-            SpikeLastClose = $"{(rollBack ? "RollBack" : "Assimilate")} threw {ex.GetType().FullName}: {ex.Message}";
             return new ScriptUndo(Ungrouped: $"the run's undo group could not be closed: {ex.Message}");
         }
     }

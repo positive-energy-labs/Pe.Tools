@@ -3,7 +3,7 @@ import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it, onTestFinished, vi } from "vite-plus/test";
-import { freezeScript, runPodScript } from "../src/operation-script.ts";
+import { freezeScript, requireScriptSuccess, runPodScript } from "../src/operation-script.ts";
 import { fixtureNative } from "./fixture-native.ts";
 import { Cause, Effect } from "effect";
 import { z } from "zod";
@@ -242,4 +242,19 @@ it("answers the typed 503 at both script doors when Pod discovery outlasts its w
     ...pending,
     error: expect.stringContaining("Pod discovery exceeded 5000 ms"),
   });
+});
+
+it("a failed script's error names the first Error diagnostic's first line, never its stack", () => {
+  const failed = (value: unknown) => {
+    try { requireScriptSuccess(value); } catch (error) { return (error as Error).message; }
+    return "did not throw";
+  };
+  expect(failed({ status: "RuntimeFailed", diagnostics: [
+    { stage: "normalize", severity: "Info", message: "Inline snippet mode" },
+    { stage: "runtime", severity: "Error", message: "System.NullReferenceException: Object reference not set to an instance of an object.\r\n   at Script.Execute() in C:\Users\someone\Script.cs:line 4" },
+    { stage: "fence", severity: "Error", message: "second" },
+  ] })).toBe("Script execution RuntimeFailed: System.NullReferenceException: Object reference not set to an instance of an object.");
+  expect(failed({ status: "Cancelled", diagnostics: [] })).toBe("Script execution Cancelled");
+  expect(failed({ status: "RuntimeFailed" })).toBe("Script execution RuntimeFailed");
+  expect(failed({ status: "Succeeded", diagnostics: [{ severity: "Error", message: "x" }] })).toBe("did not throw");
 });

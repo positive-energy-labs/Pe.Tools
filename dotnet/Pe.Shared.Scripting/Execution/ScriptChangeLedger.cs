@@ -55,6 +55,27 @@ public static class ScriptChangeLedger {
         .Select(call => call.Expression is MemberAccessExpressionSyntax member ? member.Name.Identifier.ValueText : null)
         .FirstOrDefault(name => name is not null && RefusedInGroup.Contains(name));
 
+    /// <summary>
+    ///     The names <paramref name="sources" /> gives a `new Transaction(document, "name")` that are not in
+    ///     <paramref name="committed" />: the candidates for a transaction a script left open, which Revit does not name.
+    /// </summary>
+    public static List<string> StartedNotCommitted(ScriptSourceSet sources, IEnumerable<string> committed) => sources.Files
+        .SelectMany(file => CSharpSyntaxTree.ParseText(file.Content).GetRoot().DescendantNodes().OfType<ObjectCreationExpressionSyntax>())
+        .Where(creation => creation.Type.ToString().EndsWith("Transaction", StringComparison.Ordinal))
+        .Select(creation => creation.ArgumentList?.Arguments.ElementAtOrDefault(1)?.Expression)
+        .OfType<LiteralExpressionSyntax>().Where(literal => literal.Token.Value is string)
+        .Select(literal => literal.Token.ValueText)
+        .Distinct(StringComparer.Ordinal).Except(committed, StringComparer.Ordinal).ToList();
+
+    /// <summary>What a run says when its script ended with a transaction still open on <paramref name="document" />.</summary>
+    /// <param name="candidates">The names from <see cref="StartedNotCommitted" />.</param>
+    public static string LeakedWords(string document, IReadOnlyList<string> candidates) =>
+        $"The script ended with a transaction still open on '{document}', and the run could not end it: Revit ends a transaction only through the script's own Transaction object. "
+        + (candidates.Count == 0 ? "Revit does not name the open transaction. "
+            : $"Revit does not name it; the script's source starts {Quoted(candidates)}, which did not commit. ")
+        + "What that transaction changed is not committed, and Revit refuses a new transaction, a save and a close on this document while it is open. "
+        + "Start every transaction in a `using` block, so that a throw ends it.";
+
     /// <param name="committed">The transaction names of every commit the run saw, in order, in any document.</param>
     /// <remarks>
     ///     ponytail: a commit that changed no element raises no change event, so a warning in one reads RolledBack.

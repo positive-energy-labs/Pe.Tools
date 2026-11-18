@@ -222,4 +222,23 @@ public sealed class ScriptChangeLedgerTests {
             ScriptFailureOutcome.RolledBack, ScriptFailureOutcome.Committed
         }));
     }
+
+    [Test]
+    public void A_leaked_transaction_is_named_from_the_source_minus_what_committed() {
+        var sources = new ScriptSourceSet([new ScriptSourceFile("Leak.cs", """
+            using (var one = new Transaction(doc, "one")) { one.Start(); one.Commit(); }
+            var two = new Autodesk.Revit.DB.Transaction(doc, "two");
+            var sub = new SubTransaction(doc);
+            var other = new Thing(doc, "not a transaction");
+            """)], "Leak.cs");
+
+        var candidates = ScriptChangeLedger.StartedNotCommitted(sources, ["one"]);
+
+        Assert.Multiple(() => {
+            Assert.That(candidates, Is.EqualTo(new[] { "two" }));
+            Assert.That(ScriptChangeLedger.LeakedWords("Tower.rvt", candidates), Does.StartWith("The script ended with a transaction still open on 'Tower.rvt'")
+                .And.Contain("the script's source starts 'two', which did not commit."));
+            Assert.That(ScriptChangeLedger.LeakedWords("Tower.rvt", []), Does.Contain("Revit does not name the open transaction."));
+        });
+    }
 }
