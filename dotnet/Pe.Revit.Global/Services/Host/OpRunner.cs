@@ -84,6 +84,9 @@ internal static class OpRunner {
                 // lists the view and two non-View elements beside it, so a strict "views only" rule would refuse
                 // the capture itself. The transaction names and counts are stated instead.
                 return new Touched.Wrote(names, added, modified, deleted);
+            case OpEffect.ModelWrite when changes.Any(change => change.RolledBack):
+                // Nothing stray is left and a group took back what was committed: a script run that did not finish.
+                return new Touched.RolledBack();
             case OpEffect.SessionWrite when scope.Restores.Count != 0:
                 return new Touched.Restored(scope.Restores.Select(View).Distinct().ToList());
             case OpEffect.Read or OpEffect.TransactRead when stray.Count != 0 && overlapped:

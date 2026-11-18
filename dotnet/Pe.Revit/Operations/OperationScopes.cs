@@ -51,6 +51,8 @@ public abstract class OperationScope(Document? document) {
     protected bool RollbackFailed { get; set; }
     protected List<Document> Disposables { get; } = [];
     protected bool IsOpDocument(Document other) => document is not null && document.Equals(other);
+    /// <summary>True when <paramref name="changed" /> is the op's own document; false once that document is closed.</summary>
+    public bool IsFor(Document changed) => document is { IsValidObject: true } && document.Equals(changed);
     public ScopeFacts Facts() => new(this.Used, this.Posted, this.Own.ToList(), this.Restores.ToList(),
         this.RollbackFailed || this.Disposables.Any(owned => owned.IsValidObject));
     /// <summary>
@@ -172,6 +174,8 @@ public sealed record ObservedChange(
     public ObservedIds? Ids { get; init; }
     /// <summary>The window's scope was discarding this commit's document when it fired, told by Document.Equals: a script run's fenced sibling.</summary>
     public bool Discarded { get; init; }
+    /// <summary>A transaction group that held this commit was rolled back afterwards (<see cref="OperationMonitor.RolledBack" />), so it is not in the document.</summary>
+    public bool RolledBack { get; init; }
 }
 
 /// <summary>Every element id of one commit, as Revit reported it.</summary>
@@ -186,6 +190,21 @@ public static class OperationMonitor {
     private static readonly object Gate = new();
     private static readonly List<Window> Open = [];
     private static Autodesk.Revit.ApplicationServices.Application? _attached;
+    private static long _commits;
+
+    /// <summary>A point in the order of the commits Revit reported, for <see cref="RolledBack" />.</summary>
+    public static long Mark() { lock (Gate) return _commits; }
+
+    /// <summary>
+    ///     Tells every open window that a transaction group on <paramref name="document" /> was rolled back, so no
+    ///     commit seen there since <paramref name="mark" /> is in the document. The one who rolled back says so:
+    ///     Revit's own TransactionGroupRolledBack event names no element and no commit (fresh Revit 2025, spike
+    ///     b4bd4100, 2026-11-18), and a script's own nested group may roll back less than the run.
+    /// </summary>
+    public static void RolledBack(Document document, long mark) {
+        lock (Gate)
+            foreach (var window in Open) window.RollBack(document, mark);
+    }
 
     public static void Attach(Autodesk.Revit.ApplicationServices.Application application) {
         lock (Gate) {
@@ -224,10 +243,11 @@ public static class OperationMonitor {
         var title = document?.Title ?? "<unknown>";
         ObservedIds? ids = null;
         static List<long> Values(ICollection<ElementId> elementIds) => elementIds.Select(id => id.Value()).ToList();
-        lock (Gate)
+        lock (Gate) {
+            var order = ++_commits;
             foreach (var window in Open) {
                 var discarded = window.Scope?.Discards(document) == true;
-                window.Add(new ObservedChange(title, names, added, modified, deleted, sandbox || discarded) {
+                window.Add(order, document is not null && window.Owns(document), new ObservedChange(title, names, added, modified, deleted, sandbox || discarded) {
                     // Document.Equals, never ReferenceEquals: Revit hands each event its own wrapper.
                     Ids = window.IdsOf is { } wanted && document is not null && wanted.Equals(document)
                         ? ids ??= new ObservedIds(Values(args.GetAddedElementIds()), Values(args.GetModifiedElementIds()), Values(args.GetDeletedElementIds()))
@@ -235,17 +255,31 @@ public static class OperationMonitor {
                     Discarded = discarded
                 });
             }
+        }
     }
 
     public sealed class Window : IDisposable {
-        private readonly List<ObservedChange> _changes = [];
+        // Own: the commit was in the window's own document, told while the event's wrapper was alive. No
+        // wrapper from an event is kept: a document a script closes leaves one that must not be asked anything.
+        private readonly List<(long Order, bool Own, ObservedChange Change)> _changes = [];
         internal Window(OperationScope? scope, Document? idsOf) => (this.Scope, this.IdsOf) = (scope, idsOf);
         public OperationScope? Scope { get; }
         internal Document? IdsOf { get; }
         /// <summary>Another window was open at some point in this one's life, so its changes may be another call's.</summary>
         public bool Overlapped { get; internal set; }
-        public IReadOnlyList<ObservedChange> Changes { get { lock (Gate) return this._changes.ToList(); } }
-        internal void Add(ObservedChange change) => this._changes.Add(change);
+        public IReadOnlyList<ObservedChange> Changes { get { lock (Gate) return this._changes.Select(seen => seen.Change).ToList(); } }
+        /// <summary>The window's own document: the one it keeps ids of, or its scope's. Document.Equals, never ReferenceEquals.</summary>
+        internal bool Owns(Document document) =>
+            (this.IdsOf is { IsValidObject: true } wanted && wanted.Equals(document)) || this.Scope?.IsFor(document) == true;
+        internal void Add(long order, bool own, ObservedChange change) => this._changes.Add((order, own, change));
+        internal void RollBack(Document document, long mark) {
+            if (!this.Owns(document)) return;
+            for (var index = 0; index < this._changes.Count; index++) {
+                var (order, own, change) = this._changes[index];
+                if (order > mark && own)
+                    this._changes[index] = (order, own, change with { Contained = true, RolledBack = true });
+            }
+        }
         public void Dispose() { lock (Gate) _ = Open.Remove(this); }
     }
 }

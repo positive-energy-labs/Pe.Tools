@@ -241,4 +241,35 @@ public sealed class ScriptChangeLedgerTests {
             Assert.That(ScriptChangeLedger.LeakedWords("Tower.rvt", []), Does.Contain("Revit does not name the open transaction."));
         });
     }
+
+    [Test]
+    public void A_run_that_was_rolled_back_keeps_nothing_and_says_what_it_had_committed() {
+        ScriptCommit[] commits = [Commit("one", added: [1, 2]), Commit("two", modified: [10], deleted: [20])];
+        var changes = ScriptChangeLedger.Changes(Write, commits, [], new ScriptUndo(RolledBack: true), failed: true);
+
+        Assert.Multiple(() => {
+            Assert.That(changes.Kept, Is.False);
+            Assert.That(changes.Undo, Is.Null);
+            Assert.That(changes.Ungrouped, Is.Null);
+            // Like a ReadOnly run, the lists are what the run had committed.
+            Assert.That(changes.Added.Ids, Is.EqualTo(new long[] { 1, 2 }));
+            Assert.That(changes.Summary, Is.EqualTo("The script did not finish, so the run was rolled back and nothing changed: it had committed 4 elements (2 added, 1 modified, 1 deleted) in 2 transactions, and none of that is in the model."));
+            Assert.That(ScriptChangeLedger.Changes(Write, [], [], new ScriptUndo(RolledBack: true), failed: true).Summary, Is.EqualTo("The script did not finish. No element changed."));
+        });
+    }
+
+    [Test]
+    public void A_failed_run_revit_could_not_roll_back_says_its_changes_are_still_in_the_model() {
+        ScriptCommit[] commits = [Commit("one", added: [1, 2]), Commit("two", modified: [10], deleted: [20])];
+        var ungrouped = ScriptChangeLedger.Changes(Write, commits, [], new ScriptUndo(Ungrouped: "the script calls Save, which Revit refuses inside a transaction group."), failed: true);
+        var single = ScriptChangeLedger.Changes(Write, [commits[0]], [], new ScriptUndo(Ungrouped: "Revit did not roll back the run's transactions (Error)."), failed: true);
+
+        Assert.Multiple(() => {
+            Assert.That(ungrouped.Kept, Is.True);
+            Assert.That(ungrouped.Summary, Is.EqualTo("The script did not finish, and what it had committed is still in the model: 4 elements (2 added, 1 modified, 1 deleted) in 2 transactions. 2 undo entries, not one: the script calls Save, which Revit refuses inside a transaction group."));
+            Assert.That(single.Summary, Is.EqualTo("The script did not finish, and what it had committed is still in the model: 2 elements (2 added, 0 modified, 0 deleted) in 1 transaction. One undo entry: 'one'."));
+            // A failed run that committed nothing has nothing to warn about.
+            Assert.That(ScriptChangeLedger.Changes(Write, [], [], new ScriptUndo(), failed: true).Summary, Is.EqualTo("No element changed."));
+        });
+    }
 }

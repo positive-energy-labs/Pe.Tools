@@ -27,7 +27,8 @@ public sealed record ScriptFencedCommit(string Document, IReadOnlyList<string> T
 /// <summary>How a write run's transactions sit in Revit's undo list.</summary>
 /// <param name="Undo">The one entry's name, when the run's transactions are one entry.</param>
 /// <param name="Ungrouped">Why they are separate entries, when they are.</param>
-public sealed record ScriptUndo(string? Undo = null, string? Ungrouped = null);
+/// <param name="RolledBack">The run did not finish and its group was rolled back: nothing it committed is in the document.</param>
+public sealed record ScriptUndo(string? Undo = null, string? Ungrouped = null, bool RolledBack = false);
 
 /// <summary>
 ///     What a script run tells the person and Pea about its changes: the result's `changes` and `failures`, from
@@ -73,7 +74,7 @@ public static class ScriptChangeLedger {
         $"The script ended with a transaction still open on '{document}', and the run could not end it: Revit ends a transaction only through the script's own Transaction object. "
         + (candidates.Count == 0 ? "Revit does not name the open transaction. "
             : $"Revit does not name it; the script's source starts {Quoted(candidates)}, which did not commit. ")
-        + "What that transaction changed is not committed, and Revit refuses a new transaction, a save and a close on this document while it is open. "
+        + "What that transaction changed is not committed, and Revit discards it when the run returns. "
         + "Start every transaction in a `using` block, so that a throw ends it.";
 
     /// <param name="committed">The transaction names of every commit the run saw, in order, in any document.</param>
@@ -140,9 +141,14 @@ public static class ScriptChangeLedger {
     /// <param name="failures">The failures Revit raised (<see cref="Failures" />), without the fence's own rows.</param>
     /// <param name="overlapped">Another call's window was open during this run, so a commit here may be that call's.</param>
     /// <param name="fenced">What the run committed in documents it was not run on, which was rolled back.</param>
+    /// <param name="failed">The script did not finish: it threw, timed out or was cancelled.</param>
+    /// <remarks>
+    ///     A run whose group was rolled back (<see cref="ScriptUndo.RolledBack" />) is not kept: like a ReadOnly
+    ///     run, its lists are what it had committed, and none of that is in the document.
+    /// </remarks>
     public static ScriptChanges Changes(
         ScriptPermissionMode mode, IReadOnlyList<ScriptCommit> commits, IReadOnlyList<ScriptFailure> failures, ScriptUndo undo,
-        bool overlapped = false, IReadOnlyList<ScriptFencedCommit>? fenced = null) {
+        bool overlapped = false, IReadOnlyList<ScriptFencedCommit>? fenced = null, bool failed = false) {
         // Net over the run, in commit order: added then modified is added; added then deleted is nothing.
         HashSet<long> added = [], modified = [], deleted = [];
         foreach (var commit in commits) {
@@ -151,7 +157,7 @@ public static class ScriptChangeLedger {
             foreach (var id in commit.Deleted) { if (!added.Remove(id)) { _ = modified.Remove(id); _ = deleted.Add(id); } }
         }
 
-        var kept = mode != ScriptPermissionMode.ReadOnly;
+        var kept = mode != ScriptPermissionMode.ReadOnly && !undo.RolledBack;
         // A ReadOnly run commits under the guard's own name, which names nothing the script did.
         var transactions = mode == ScriptPermissionMode.ReadOnly ? [] : commits.SelectMany(commit => commit.Transactions).ToList();
         static ScriptChangedIds Bound(HashSet<long> ids) => new(ids.OrderBy(id => id).Take(IdCap).ToList(), ids.Count);
@@ -160,7 +166,7 @@ public static class ScriptChangeLedger {
         var entry = !grouped ? null : undo.Undo ?? (commits.Count == 1 ? commits[0].Transactions.FirstOrDefault() : null);
         var ungrouped = grouped && entry is null ? undo.Ungrouped ?? "the run was not grouped." : null;
         return new ScriptChanges(Bound(added), Bound(modified), Bound(deleted), transactions, kept,
-            Summary(mode, added.Count, modified.Count, deleted.Count, commits.Count, failures, entry, ungrouped)
+            Summary(mode, added.Count, modified.Count, deleted.Count, commits.Count, failures, entry, ungrouped, undo.RolledBack, failed)
             + (fenced is { Count: > 0 } ? " " + FencedWords(fenced) : "")
             + (overlapped ? " Another call ran at the same time; these may include its changes." : ""),
             entry, ungrouped, overlapped);
@@ -168,7 +174,7 @@ public static class ScriptChangeLedger {
 
     private static string Summary(
         ScriptPermissionMode mode, int added, int modified, int deleted, int commits, IReadOnlyList<ScriptFailure> failures,
-        string? undo, string? ungrouped) {
+        string? undo, string? ungrouped, bool rolledBackWhole, bool failed) {
         var total = added + modified + deleted;
         var counts = $"{total} element{(total == 1 ? "" : "s")} ({added} added, {modified} modified, {deleted} deleted)";
         var lost = failures.Where(failure => failure.Outcome == ScriptFailureOutcome.RolledBack).ToList();
@@ -177,6 +183,9 @@ public static class ScriptChangeLedger {
         if (mode == ScriptPermissionMode.ReadOnly)
             return (total == 0 ? "ReadOnly run: it would change no element." : $"ReadOnly run: it would change {counts}. Nothing was kept.")
                    + (lost.Count == 0 ? "" : $" Revit raised {lost.Count} failure{(lost.Count == 1 ? "" : "s")}.{why}");
+        if (rolledBackWhole)
+            return commits == 0 ? "The script did not finish. No element changed."
+                : $"The script did not finish, so the run was rolled back and nothing changed: it had committed {counts} in {commits} transaction{(commits == 1 ? "" : "s")}, and none of that is in the model.";
         var rolledBack = lostNames.Count == 0 ? ""
             : $" Revit rolled back {lostNames.Count} transaction{(lostNames.Count == 1 ? "" : "s")} ({string.Join(", ", lostNames.Select(name => $"'{name}'"))}).{why}";
         if (commits == 0)
@@ -185,6 +194,8 @@ public static class ScriptChangeLedger {
         var entry = undo is not null ? $" One undo entry: '{undo}'."
             : ungrouped is not null ? $" {commits} undo entries, not one: {ungrouped}"
             : "";
-        return $"Changed {counts} in {commits} transaction{(commits == 1 ? "" : "s")}.{entry}{rolledBack}";
+        // A run Revit could not roll back (ungrouped, or a transaction left open) keeps what it committed.
+        var lead = failed ? "The script did not finish, and what it had committed is still in the model:" : "Changed";
+        return $"{lead} {counts} in {commits} transaction{(commits == 1 ? "" : "s")}.{entry}{rolledBack}";
     }
 }

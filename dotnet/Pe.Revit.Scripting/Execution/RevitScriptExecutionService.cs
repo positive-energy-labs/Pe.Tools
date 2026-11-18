@@ -372,11 +372,15 @@ public sealed class RevitScriptExecutionService(
             }
         } catch (OperationCanceledException) {
             var status = cancellation.IsTimeout ? ScriptExecutionStatus.TimedOut : ScriptExecutionStatus.Cancelled;
+            // Only a run Revit could not roll back (ungrouped, or a transaction left open) keeps what it committed.
+            var became = outputSink.Changes is { Kept: true } changes && changes.Added.Total + changes.Modified.Total + changes.Deleted.Total != 0
+                ? "What the script had committed is still in the model."
+                : "Partial document changes were rolled back.";
             AppendDiagnostic(diagnostics, ScriptDiagnosticFactory.Error(
                 "cancel",
                 cancellation.IsTimeout
-                    ? $"Script execution exceeded the {cancellation.TimeoutSeconds}s timeout and stopped at a cooperative checkpoint. Partial document changes were rolled back."
-                    : "Script execution was cancelled and stopped at a cooperative checkpoint. Partial document changes were rolled back.",
+                    ? $"Script execution exceeded the {cancellation.TimeoutSeconds}s timeout and stopped at a cooperative checkpoint. {became}"
+                    : $"Script execution was cancelled and stopped at a cooperative checkpoint. {became}",
                 containerTypeName
             ));
             Log.Warning(
@@ -903,11 +907,15 @@ public sealed class RevitScriptExecutionService(
                 var commits = run.Commits();
                 var fenced = run.Fenced();
                 var raised = ScriptChangeLedger.Failures(mode, run.Committed(), run.Raised);
-                outputSink.Changes = ScriptChangeLedger.Changes(mode, commits, raised, run.Undo, window.Overlapped, fenced);
+                outputSink.Changes = ScriptChangeLedger.Changes(mode, commits, raised, run.Undo, window.Overlapped, fenced, failed: threw);
+                // A rolled-back run committed nothing, whatever became of each failure's own transaction.
+                if (run.Undo.RolledBack)
+                    raised = raised.Select(failure => failure with { Outcome = ScriptFailureOutcome.RolledBack }).ToList();
                 outputSink.Failures = [.. raised, .. ScriptChangeLedger.FencedFailures(fenced)];
                 // ReadOnly discards everything by design and WriteTransaction reports its own rollback as an error.
+                // A NoTransaction run that did not finish says in one sentence what became of its commits.
                 if (mode == ScriptPermissionMode.NoTransaction
-                    && raised.Any(failure => failure.Outcome == ScriptFailureOutcome.RolledBack))
+                    && (raised.Any(failure => failure.Outcome == ScriptFailureOutcome.RolledBack) || (threw && commits.Count != 0)))
                     diagnostics.Add(ScriptDiagnosticFactory.Warning("transaction", outputSink.Changes.Summary));
                 else if (fenced.Count != 0)
                     diagnostics.Add(ScriptDiagnosticFactory.Warning("fence", ScriptChangeLedger.FencedWords(fenced)));
@@ -1017,18 +1025,23 @@ public sealed class RevitScriptExecutionService(
             return;
         }
 
-        // NoTransaction is explicit because it has neither rollback nor commit safety; the script or called
-        // library owns any transaction boundaries it needs. The group below only merges what they commit into
-        // one undo entry: it is assimilated however the script ends, so what a script committed stays committed.
+        // NoTransaction is explicit because the script or called library owns the transaction boundaries it
+        // needs. The group below makes the run one unit (owner ruling 2026-11-18): a script that returns keeps
+        // what it committed, as one undo entry, and a script that throws, times out or is cancelled is rolled
+        // back whole. A script that wants to keep partial work catches its own errors and returns.
         ExecuteInUndoGroup(container, context, plan, diagnostics, run, undoName);
     }
 
     /// <summary>
-    ///     Runs a NoTransaction script inside a transaction group that is assimilated when it returns, so the
-    ///     transactions it commits are one undo entry. Proven on fresh Revit 2025 (2026-11-14): a group allows
-    ///     EditFamily and LoadFamily inside it and nests a script's own groups, and refuses Save and SaveAs on its
-    ///     document. A script that makes such a call, or a document Revit will not open a group on, runs ungrouped
-    ///     and the result says why.
+    ///     Runs a NoTransaction script inside a transaction group: assimilated when the script returns, so the
+    ///     transactions it commits are one undo entry, and rolled back when it does not finish, so none of them
+    ///     is in the document. Proven on fresh Revit 2025 (2026-11-14): a group allows EditFamily and LoadFamily
+    ///     inside it and nests a script's own groups, and refuses Save and SaveAs on its document. The rollback
+    ///     restores the document as read back, a family load, an edited family loaded back and a workshared local
+    ///     included; on the local the elements the run borrowed stay borrowed until a synchronize, which sends
+    ///     nothing of the run (2026-11-18, ScriptRunProofTests). A script that makes a refused call, or a document
+    ///     Revit will not open a group on, runs ungrouped: the result says why, and such a run keeps what it
+    ///     committed when it fails.
     /// </summary>
     private static void ExecuteInUndoGroup(
         PeScriptContainer container,
@@ -1059,6 +1072,7 @@ public sealed class RevitScriptExecutionService(
         if (group is not null)
             run.TargetHold = "so that its transactions are one undo entry; a script whose own source calls Save runs ungrouped, and this call was made from a library";
         string? leaked = null;
+        var mark = OperationMonitor.Mark();
         var threw = true;
         try {
             run.Execute(container);
@@ -1070,7 +1084,10 @@ public sealed class RevitScriptExecutionService(
                 diagnostics.Add(ScriptDiagnosticFactory.Error("transaction", leaked));
             if (group is not null) {
                 using (group)
-                    run.Undo = CloseUndoGroup(group, undoName);
+                    run.Undo = CloseUndoGroup(group, undoName, rollBack: threw);
+                // Revit's rollback event names no commit, so the monitor's windows (this run's and the op runner's) are told.
+                if (run.Undo.RolledBack)
+                    OperationMonitor.RolledBack(context.Document!, mark);
             }
         }
 
@@ -1086,7 +1103,9 @@ public sealed class RevitScriptExecutionService(
     ///     the document was still modifiable and a new Transaction.Start was refused (fresh Revit 2025, a probe,
     ///     2026-11-18). The run's group cannot close over it either. So the run ends nothing here: it says the
     ///     document was left with a transaction open, and which (ScriptRunProofTests
-    ///     A_leaked_transaction_is_named_and_fails_the_run).
+    ///     A_leaked_transaction_is_named_and_fails_the_run). Revit ends it after the run: through the bridge, the
+    ///     next run started its guard on the document and the uncommitted element was gone, with no dialog
+    ///     (controlled dev session, Revit 2025, 2026-11-18). What the script committed before the leak stays.
     /// </summary>
     private static string? LeakedTransactionWords(Document? document, ScriptExecutionPlan plan, RunLedger run) =>
         document is { IsValidObject: true, IsModifiable: true }
@@ -1095,15 +1114,18 @@ public sealed class RevitScriptExecutionService(
             : null;
 
     /// <summary>
-    ///     A script that returns with a transaction still open leaves a group Revit will not merge: Assimilate
-    ///     answers Error, and what the script had committed stays (fresh Revit 2025, 2026-11-14).
+    ///     A script that ends with a transaction still open leaves a group Revit will neither merge nor roll back:
+    ///     Assimilate and RollBack both answer Error, and what the script had committed stays (fresh Revit 2025,
+    ///     2026-11-14 and 2026-11-18).
     /// </summary>
-    private static ScriptUndo CloseUndoGroup(TransactionGroup group, string undoName) {
+    private static ScriptUndo CloseUndoGroup(TransactionGroup group, string undoName, bool rollBack) {
         try {
-            var status = group.Assimilate();
+            var status = rollBack ? group.RollBack() : group.Assimilate();
+            if (rollBack && status == TransactionStatus.RolledBack)
+                return new ScriptUndo(RolledBack: true);
             return status == TransactionStatus.Committed
                 ? new ScriptUndo(undoName)
-                : new ScriptUndo(Ungrouped: $"Revit did not merge the run's transactions ({status}); a script that returns with a transaction still open causes this.");
+                : new ScriptUndo(Ungrouped: $"Revit did not {(rollBack ? "roll back" : "merge")} the run's transactions ({status}); a script that ends with a transaction still open causes this.");
         } catch (Exception ex) {
             return new ScriptUndo(Ungrouped: $"the run's undo group could not be closed: {ex.Message}");
         }
@@ -1152,8 +1174,9 @@ public sealed class RevitScriptExecutionService(
         /// <summary>The transaction names of every commit the run saw, in order, in any document: a failure's transaction may be a family's.</summary>
         public IReadOnlyList<IReadOnlyList<string>> Committed() => this.Kept().Select(change => change.Transactions).ToList();
 
+        // A commit the run's own group rolled back is still the run's: the report says what was taken back.
         private IEnumerable<ObservedChange> Kept() => (this._guarded ?? window.Changes)
-            .Where(change => mode == ScriptPermissionMode.ReadOnly || !change.Contained);
+            .Where(change => mode == ScriptPermissionMode.ReadOnly || !change.Contained || change.RolledBack);
 
         /// <summary>Records every failure the accessor holds, in Revit's words. Answers the index of the first one recorded.</summary>
         public int Observe(FailuresAccessor accessor) {
