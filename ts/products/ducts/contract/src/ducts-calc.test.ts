@@ -1,5 +1,12 @@
 import { expect, it } from "vite-plus/test";
 import { subjectCode, uniqueIdSchema } from "@pe/agent-contracts/subject-ref";
+import { fansCalcEditsSchema } from "./duct-inputs.ts";
+
+it("W5: fans edit raw element keys explain the required UniqueId SubjectRefs", () => {
+  const parsed = fansCalcEditsSchema.safeParse({ flows: { "14577396": 100 } });
+  expect(parsed.success).toBe(false);
+  if (!parsed.success) expect(parsed.error.issues[0]?.message).toBe("keys are UniqueId SubjectRefs (UniqueId:<uid>); a raw element id is refused");
+});
 
 import {
   criteriaMeta,
