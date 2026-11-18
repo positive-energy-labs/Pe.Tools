@@ -1,9 +1,10 @@
 // Fixture: node --import jiti/register products/fans/web/journeys/jv7-launch.ts
 // Real: E2E_WEB=<bound fans URL with thread and target>, JV7_HOST=<host origin>,
-// JV7_TOKEN=<service token>, CDP_PORT/CDP_TARGET=<owned tab>; node --import jiti/register products/fans/web/journeys/jv7-fans.ts
+// JV7_TOKEN=<service token>, E2E_CONTEXT_PATH=<own CLI context file>, CDP_PORT/CDP_TARGET=<owned tab>;
+// node --import jiti/register products/fans/web/journeys/jv7-fans.ts
 // The real target requires the driver’s own controlled session; this journey never discovers or starts Revit.
 import { assertPageBinding } from "../../../../tests/e2e/page-binding.ts";
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { journey, WEB } from "../../../../tests/e2e/cdp.ts";
 import { marks, settled } from "../../../../tests/e2e/marks.ts";
@@ -16,10 +17,20 @@ await journey("J-V7", async (page, step, dir) => {
   if (!thread || !process.env.JV7_HOST || !process.env.JV7_TOKEN)
     throw Error("PRECONDITION: bound E2E_WEB thread, JV7_HOST and JV7_TOKEN required");
   const token = process.env.JV7_TOKEN;
+  const context = process.env.E2E_CONTEXT_PATH
+    ? readFileSync(process.env.E2E_CONTEXT_PATH, "utf8").trim() : undefined;
+  if (process.env.E2E_LINKAGE_MODE !== "fixture-linkage" && !context)
+    throw Error("PRECONDITION: E2E_CONTEXT_PATH for own CLI caller required");
+  if (process.env.E2E_TARGET) {
+    const target = JSON.parse(process.env.E2E_TARGET);
+    if (target.kind !== "document") throw Error("PRECONDITION: document execution target required");
+    url.searchParams.set("target", JSON.stringify({ kind: "open", ref: target.ref }));
+  }
   const call = async (path: string, body?: unknown) => {
     const response = await fetch(`${process.env.JV7_HOST}/pe/route-view/fans${path}`, {
       method: body ? "POST" : "GET",
-      headers: { "content-type": "application/json", "x-pe-service-token": token },
+      headers: { "content-type": "application/json", "x-pe-service-token": token,
+        ...(context ? { "x-pe-context": context } : {}) },
       ...(body ? { body: JSON.stringify(body) } : {}),
       signal: AbortSignal.timeout(30_000),
     });
@@ -57,7 +68,7 @@ await journey("J-V7", async (page, step, dir) => {
   writeFileSync(join(dir, "set-view.json"), JSON.stringify({ request, reply }, null, 2));
   step(`set-view acknowledgement: ${JSON.stringify(reply)}`);
   await page.dump(dir, "ack");
-  const ack = reply.body;
+  const ack = reply.body.error?.details ?? reply.body;
   if (ack.outcome !== "refused" || !JSON.stringify(ack.refusal).includes(missing))
     throw Error(`ASSERT missing fan refused by name (${missing}); saw ${JSON.stringify(reply)}`);
   const selection = () => page.evaluate(() => [...document.querySelectorAll(
