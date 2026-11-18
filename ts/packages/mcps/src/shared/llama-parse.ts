@@ -25,8 +25,8 @@ export interface LlamaSend {
 }
 /**
  * Credentials stay inside the parser call. `sent` runs once the upload is accepted; a node caller
- * passes `noteLlamaSend` (`llama-key.ts`). The notice is not written here because the web build
- * reaches this module and may not reach the notice store (host-build-boundary guard).
+ * passes `noteLlamaSend(machine)` (`llama-key.ts`). The caller names the machine state because the
+ * host and a Pea tool process resolve theirs differently, and this module imports nothing node-only.
  */
 export type LlamaParseRequest = LlamaParseWork & { apiKey: string; sent: (send: LlamaSend) => void };
 

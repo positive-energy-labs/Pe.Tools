@@ -9,6 +9,8 @@ import { List } from "@pe/kit/lang/list-popup";
 import { Switcher } from "@pe/kit/lang/switcher";
 import { Button } from "@pe/kit/lang/button";
 import { SpecSheet, SpecText, ProposalCard } from "#/family/doc-pane";
+import { useGroundedDoc } from "#/grounded-doc/engine";
+import { GroundedDocView } from "#/grounded-doc/view/block-markdown";
 import { NavStateCell } from "#/family/marks";
 import { cellFromDraft } from "@pe/kit/lang/cell";
 import {
@@ -59,6 +61,8 @@ export function FamilyWorkspaceDocPane() {
     bindPicker,
     attachSpec,
   } = useFamilyWorkspace();
+  // A sheet read on the page before any is attached: parsed by the host, kept by nobody's member.
+  const lab = useGroundedDoc();
   const upload = useRef<HTMLInputElement>(null);
   const [attaching, setAttaching] = useState(false);
   const partInspector = (part: GeomConstituent): React.ReactNode => (
@@ -425,7 +429,28 @@ export function FamilyWorkspaceDocPane() {
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto">
-          {docMode === "text" ? (
+          {!world.spec ? (
+            <div className="flex h-full min-h-0 flex-col">
+              {lab.doc && (
+                <div className="hairline-b flex shrink-0 items-center gap-2 px-2 py-1">
+                  <Tag>read, not attached</Tag>
+                  <span className="t-small face-mono min-w-0 flex-1 truncate text-ink-2">
+                    {lab.doc.fileName}
+                  </span>
+                  <Button
+                    label="Close the read sheet"
+                    reason="Put this sheet away. It was never attached; attach PDF saves a sheet beside the family."
+                    kind="nav"
+                    direction="back"
+                    onClick={lab.clear}
+                  >
+                    close
+                  </Button>
+                </div>
+              )}
+              <GroundedDocView engine={lab} className="min-h-0 flex-1" />
+            </div>
+          ) : docMode === "text" ? (
             <SpecText spec={world.spec} litBlocks={litBlocks} />
           ) : (
             <SpecSheet

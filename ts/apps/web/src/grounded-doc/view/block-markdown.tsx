@@ -115,7 +115,7 @@ function UploadSurface({ engine, extra }: { engine: GroundedDocEngine; extra?: R
                 <FileUp className="size-6" />
                 <EmptyState
                   story="scope"
-                  exit="drop a PDF here, paste a URL below, or load the sample"
+                  exit="drop a PDF here or paste a URL below; it is sent to LlamaCloud to be read, and attached to nothing"
                 >
                   no document loaded
                 </EmptyState>
@@ -151,7 +151,7 @@ function UploadSurface({ engine, extra }: { engine: GroundedDocEngine; extra?: R
           </div>
           <Button
             label="parse"
-            reason="Send the URL to LlamaCloud and ground the parse against its pages"
+            reason="The host downloads the PDF, sends it to LlamaCloud and grounds the parse against its pages"
             refusal={url.trim() ? null : "paste a public PDF URL first"}
             onClick={submitUrl}
           >

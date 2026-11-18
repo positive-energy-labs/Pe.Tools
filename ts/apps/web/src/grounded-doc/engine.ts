@@ -1,7 +1,18 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 
+import type { SpecParseSource } from "@pe/agent-contracts";
 import { findAmbiguousBlockIds } from "#/grounded-doc/ambiguous";
 import type { DocImage, GroundedBlock, ParsedDocView } from "#/grounded-doc/types";
+import { peClient } from "#/host/pe-client";
+
+/** A picked file's bytes as base64, the body `POST /actions/blobs` takes. */
+const base64Of = (file: File) =>
+  new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve((typeof reader.result === "string" ? reader.result : "").split(",")[1] ?? "");
+    reader.onerror = () => reject(reader.error ?? Error(`Could not read ${file.name}`));
+    reader.readAsDataURL(file);
+  });
 
 type FocusOrigin = "markdown" | "page" | "image" | "external";
 
@@ -44,11 +55,7 @@ export interface GroundedDocEngine {
 const EMPTY_BLOCKS: GroundedBlock[] = [];
 const EMPTY_IMAGES: DocImage[] = [];
 
-export function useGroundedDoc(options?: {
-  parseUrl?: string;
-  initialDoc?: ParsedDocView;
-}): GroundedDocEngine {
-  const parseUrl = options?.parseUrl ?? "/api/pdf-audit/parse";
+export function useGroundedDoc(options?: { initialDoc?: ParsedDocView }): GroundedDocEngine {
   const [doc, setDocState] = useState<ParsedDocView | null>(options?.initialDoc ?? null);
   const [status, setStatus] = useState<GroundedDocStatus>(
     options?.initialDoc ? { phase: "ready" } : { phase: "empty" },
@@ -103,19 +110,17 @@ export function useGroundedDoc(options?: {
     setPinned(null);
   }, []);
 
+  // The host parses (`POST /pe/family-spec/parse`): it sends the PDF to the hosted parser at once
+  // and leaves the notice (ADR 0052). A failure's message is the host's own sentence.
   const runParse = useCallback(
-    async (form: FormData, displayName: string) => {
+    async (source: () => Promise<SpecParseSource>, displayName: string) => {
       const seq = ++loadSeq.current;
       setStatus({ phase: "parsing", fileName: displayName });
       setDocState(null);
       setHover(null);
       setPinned(null);
       try {
-        const response = await fetch(parseUrl, { method: "POST", body: form });
-        const payload = (await response.json()) as ParsedDocView & { error?: string };
-        if (!response.ok || payload.error) {
-          throw new Error(payload.error ?? `parse failed (${response.status})`);
-        }
+        const payload = await peClient.call("family.spec.parse", { body: await source() });
         if (seq !== loadSeq.current) return;
         setDocState(payload);
         setStatus({ phase: "ready" });
@@ -127,24 +132,22 @@ export function useGroundedDoc(options?: {
         });
       }
     },
-    [parseUrl],
+    [],
   );
 
   const load = useCallback(
-    (file: File) => {
-      const form = new FormData();
-      form.append("file", file);
-      return runParse(form, file.name);
-    },
+    (file: File) =>
+      runParse(
+        async () => peClient.call("blobs.put", { body: { fileName: file.name, base64: await base64Of(file) } }),
+        file.name,
+      ),
     [runParse],
   );
 
+  // Shown by its last path segment: a signed URL's query is never drawn.
   const loadUrl = useCallback(
-    (url: string) => {
-      const form = new FormData();
-      form.append("url", url);
-      return runParse(form, decodeURIComponent(url.split("/").pop() || url));
-    },
+    (url: string) =>
+      runParse(async () => ({ url }), decodeURIComponent(url.replace(/[?#].*$/s, "").split("/").pop() || "document")),
     [runParse],
   );
 

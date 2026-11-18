@@ -18,8 +18,6 @@ import { Route as DesignSystemPopoversRouteImport } from "./routes/design-system
 import { Route as DesignSystemRevitRouteImport } from "./routes/design-system_.revit";
 import { Route as DesignSystemSwatchRouteImport } from "./routes/design-system_.swatch";
 import { Route as DesignSystemTableControlsRouteImport } from "./routes/design-system_.table-controls";
-import { Route as ApiPdfAuditParseRouteImport } from "./routes/api/pdf-audit/parse";
-import { Route as ApiPdfAuditParseParseIdRouteImport } from "./routes/api/pdf-audit/parse.$parseId";
 
 const IndexRoute = IndexRouteImport.update({
   id: "/",
@@ -67,16 +65,6 @@ const DesignSystemTableControlsRoute =
     path: "/design-system/table-controls",
     getParentRoute: () => rootRouteImport,
   } as any);
-const ApiPdfAuditParseRoute = ApiPdfAuditParseRouteImport.update({
-  id: "/api/pdf-audit/parse",
-  path: "/api/pdf-audit/parse",
-  getParentRoute: () => rootRouteImport,
-} as any);
-const ApiPdfAuditParseParseIdRoute = ApiPdfAuditParseParseIdRouteImport.update({
-  id: "/$parseId",
-  path: "/$parseId",
-  getParentRoute: () => ApiPdfAuditParseRoute,
-} as any);
 
 export interface FileRoutesByFullPath {
   "/": typeof IndexRoute;
@@ -88,8 +76,6 @@ export interface FileRoutesByFullPath {
   "/design-system/revit": typeof DesignSystemRevitRoute;
   "/design-system/swatch": typeof DesignSystemSwatchRoute;
   "/design-system/table-controls": typeof DesignSystemTableControlsRoute;
-  "/api/pdf-audit/parse": typeof ApiPdfAuditParseRouteWithChildren;
-  "/api/pdf-audit/parse/$parseId": typeof ApiPdfAuditParseParseIdRoute;
 }
 export interface FileRoutesByTo {
   "/": typeof IndexRoute;
@@ -101,8 +87,6 @@ export interface FileRoutesByTo {
   "/design-system/revit": typeof DesignSystemRevitRoute;
   "/design-system/swatch": typeof DesignSystemSwatchRoute;
   "/design-system/table-controls": typeof DesignSystemTableControlsRoute;
-  "/api/pdf-audit/parse": typeof ApiPdfAuditParseRouteWithChildren;
-  "/api/pdf-audit/parse/$parseId": typeof ApiPdfAuditParseParseIdRoute;
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport;
@@ -115,8 +99,6 @@ export interface FileRoutesById {
   "/design-system_/revit": typeof DesignSystemRevitRoute;
   "/design-system_/swatch": typeof DesignSystemSwatchRoute;
   "/design-system_/table-controls": typeof DesignSystemTableControlsRoute;
-  "/api/pdf-audit/parse": typeof ApiPdfAuditParseRouteWithChildren;
-  "/api/pdf-audit/parse/$parseId": typeof ApiPdfAuditParseParseIdRoute;
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath;
@@ -129,9 +111,7 @@ export interface FileRouteTypes {
     | "/design-system/popovers"
     | "/design-system/revit"
     | "/design-system/swatch"
-    | "/design-system/table-controls"
-    | "/api/pdf-audit/parse"
-    | "/api/pdf-audit/parse/$parseId";
+    | "/design-system/table-controls";
   fileRoutesByTo: FileRoutesByTo;
   to:
     | "/"
@@ -142,9 +122,7 @@ export interface FileRouteTypes {
     | "/design-system/popovers"
     | "/design-system/revit"
     | "/design-system/swatch"
-    | "/design-system/table-controls"
-    | "/api/pdf-audit/parse"
-    | "/api/pdf-audit/parse/$parseId";
+    | "/design-system/table-controls";
   id:
     | "__root__"
     | "/"
@@ -155,9 +133,7 @@ export interface FileRouteTypes {
     | "/design-system_/popovers"
     | "/design-system_/revit"
     | "/design-system_/swatch"
-    | "/design-system_/table-controls"
-    | "/api/pdf-audit/parse"
-    | "/api/pdf-audit/parse/$parseId";
+    | "/design-system_/table-controls";
   fileRoutesById: FileRoutesById;
 }
 export interface RootRouteChildren {
@@ -170,7 +146,6 @@ export interface RootRouteChildren {
   DesignSystemRevitRoute: typeof DesignSystemRevitRoute;
   DesignSystemSwatchRoute: typeof DesignSystemSwatchRoute;
   DesignSystemTableControlsRoute: typeof DesignSystemTableControlsRoute;
-  ApiPdfAuditParseRoute: typeof ApiPdfAuditParseRouteWithChildren;
 }
 
 declare module "@tanstack/react-router" {
@@ -238,33 +213,8 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof DesignSystemTableControlsRouteImport;
       parentRoute: typeof rootRouteImport;
     };
-    "/api/pdf-audit/parse": {
-      id: "/api/pdf-audit/parse";
-      path: "/api/pdf-audit/parse";
-      fullPath: "/api/pdf-audit/parse";
-      preLoaderRoute: typeof ApiPdfAuditParseRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/api/pdf-audit/parse/$parseId": {
-      id: "/api/pdf-audit/parse/$parseId";
-      path: "/$parseId";
-      fullPath: "/api/pdf-audit/parse/$parseId";
-      preLoaderRoute: typeof ApiPdfAuditParseParseIdRouteImport;
-      parentRoute: typeof ApiPdfAuditParseRoute;
-    };
   }
 }
-
-interface ApiPdfAuditParseRouteChildren {
-  ApiPdfAuditParseParseIdRoute: typeof ApiPdfAuditParseParseIdRoute;
-}
-
-const ApiPdfAuditParseRouteChildren: ApiPdfAuditParseRouteChildren = {
-  ApiPdfAuditParseParseIdRoute: ApiPdfAuditParseParseIdRoute,
-};
-
-const ApiPdfAuditParseRouteWithChildren =
-  ApiPdfAuditParseRoute._addFileChildren(ApiPdfAuditParseRouteChildren);
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
@@ -276,7 +226,6 @@ const rootRouteChildren: RootRouteChildren = {
   DesignSystemRevitRoute: DesignSystemRevitRoute,
   DesignSystemSwatchRoute: DesignSystemSwatchRoute,
   DesignSystemTableControlsRoute: DesignSystemTableControlsRoute,
-  ApiPdfAuditParseRoute: ApiPdfAuditParseRouteWithChildren,
 };
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

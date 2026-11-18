@@ -114,6 +114,13 @@ const specSourceSchema = z.union([
   z.strictObject({ url: z.url() }),
 ]);
 /**
+ * The PDF the page's upload surface reads without attaching it (`POST /pe/family-spec/parse`): an
+ * upload retained by `POST /actions/blobs`, or a public URL the host fetches. No host path: the
+ * person at the page gives the file itself.
+ */
+export const specParseSourceSchema = z.union([blobRefSchema, z.strictObject({ url: z.url() })]);
+export type SpecParseSource = z.infer<typeof specParseSourceSchema>;
+/**
  * What a plan consumes: a saved member, or a draft's bytes; the run apply files captures either
  * exactly. Strict arms: a shape with both `sha256` and `content` refuses instead of losing one to
  * stripping.

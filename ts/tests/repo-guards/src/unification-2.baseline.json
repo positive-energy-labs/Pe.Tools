@@ -1,8 +1,6 @@
 {
   "hostCalls": [
-    "ts/apps/web/src/grounded-doc/engine.ts#useGroundedDoc/runParse/response:fetch",
     "ts/apps/web/src/revit/observation.tsx#readFamilyPlacements/response:createPeClient",
-    "ts/apps/web/src/routes/api/pdf-audit/parse.ts#fetchPdf:fetch",
     "ts/apps/web/src/routes/design-system_.popovers.tsx#ResourcePreviews:hostFetch"
   ],
   "customDecodes": [],

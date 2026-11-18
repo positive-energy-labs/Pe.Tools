@@ -370,6 +370,7 @@ function hostRouteAxes(leaves: readonly CatalogLink[]): Record<PeRouteId, Catalo
     "contributions.read": axes("None", "One", ["Metadata"], "SessionWrite", "Expensive", []),
     "blobs.put": axes("None", "One", ["Metadata"], "SessionWrite", "Bounded", []),
     "family.spec": axes("None", "One", ["Metadata"], "Read", "Cheap", []),
+    "family.spec.parse": axes("None", "One", ["Metadata"], "SessionWrite", "Expensive", []),
     "feedback.submit": axes("None", "One", ["Metadata"], "SessionWrite", "Bounded", []),
     "feedback.deliver": axes("None", "One", ["Metadata"], "SessionWrite", "Expensive", []),
     "agent-feedback.submit": axes("Session", "One", ["Metadata"], "SessionWrite", "Bounded", []),

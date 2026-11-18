@@ -134,6 +134,7 @@ test("administration doors refuse every principal except a human", async () => {
       ["POST", "/host/update/automatic", { enabled: "not-a-boolean" }],
       ["POST", "/host/update", { planId: "not-a-plan" }],
       ["PUT", "/pe/share", {}],
+      ["POST", "/pe/family-spec/parse", {}],
     ];
     for (const [method, path, body] of doors) {
       const at = (headers: Record<string, string>) =>

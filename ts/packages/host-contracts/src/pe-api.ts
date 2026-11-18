@@ -189,7 +189,8 @@ export type PeApiSchemas = Record<
   | "captureListSchema"
   | "pageTargetReadingSchema"
   | "ductCatalogReadingSchema"
-  | "parsedDocViewSchema",
+  | "parsedDocViewSchema"
+  | "specParseSourceSchema",
   z.ZodType
 >;
 
@@ -706,6 +707,17 @@ export function peRouteTable<S extends PeApiSchemas>(schemas: S) {
       "pe",
       "read",
       "asset",
+    ),
+    // The person's upload surface: parse a PDF without attaching it. Human only, so the parsed
+    // sheet never becomes Pea's context through this door.
+    "family.spec.parse": route(
+      "POST",
+      "/pe/family-spec/parse",
+      schemas.specParseSourceSchema as S["specParseSourceSchema"],
+      schemas.parsedDocViewSchema as S["parsedDocViewSchema"],
+      "human",
+      "pe",
+      "human",
     ),
     "feedback.submit": route(
       "POST",
