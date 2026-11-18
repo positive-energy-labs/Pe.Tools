@@ -1,8 +1,9 @@
 import { expect, test } from "vite-plus/test";
 import { z } from "zod";
-import { address, bindWork, fansRouteState } from "@pe/agent-contracts";
+import { address, bindWork, fansRouteState, resolveValue } from "@pe/agent-contracts";
 import { RouteWorkspace, type RouteDocumentStore } from "../src/route-workspace.ts";
 import stored from "./fixtures/fans-29e4d97e.json" with { type: "json" };
+import qualified from "./fixtures/fans-cellkey.json" with { type: "json" };
 
 test.each([{}, [], null, { edit: { value: 12, by: "human" } }, { future: 1 }, 0, false, ""].map(calculation => ({ calculation })))(
   "stored fans Work preserves flows across an unknown calculation key: %j", async ({ calculation }) => {
@@ -48,4 +49,24 @@ test("whole-record root failures have no empty-path notice prefix", async () => 
     store: { getState: async () => ({ ...stored, doc: 12 }), setState: async ({ reason }) => { reasons.push(reason!); } } });
   expect(await routes.read(bindWork("fans", address("C:/test.rvt")), "fans")).toBeNull();
   expect(reasons).toEqual([expect.stringMatching(/^Invalid input:/)]);
+});
+test.each(["per-room-share", {}, [], null].map(basis => ({ basis })))("unknown in-cell basis invalidates only its cell: %j", async ({ basis }) => {
+  const bad = { edit: { ...qualified.doc.flows["UniqueId:abc-1"].edit, basis } }, neighbor = stored.doc.flows["UniqueId:abc-1"];
+  let saved: unknown = { ...qualified, doc: { ...qualified.doc, flows: { "UniqueId:abc-1": bad, "UniqueId:neighbor": neighbor } } }, kept: unknown;
+  const original = structuredClone(saved), reasons: string[] = [], key = bindWork("fans", address("C:/test.rvt"));
+  const options = { registrations: [{ spec: fansRouteState }], store: {
+    getState: async () => saved, setState: async ({ value, reason }: Parameters<RouteDocumentStore["setState"]>[0]) => {
+      if (value === null) { reasons.push(reason!); kept = structuredClone(saved); } saved = value;
+    },
+  } };
+  const read = await new RouteWorkspace(options).read(key, "fans"), doc = fansRouteState.schema.parse(read?.doc), cell = doc.flows["UniqueId:abc-1"]!;
+  expect(cell).toEqual({ invalid: expect.any(String) });
+  expect(resolveValue({ Work: { value: cell.edit?.value, invalid: cell.invalid, author: cell.edit?.by ?? null, ref: "work:flows/UniqueId:abc-1" },
+    model: { value: 999, author: null, ref: "model" } })).toMatchObject({ status: "invalid", value: null, source: "Work" });
+  expect(doc.flows["UniqueId:neighbor"]).toEqual(neighbor);
+  expect(reasons).toEqual([expect.stringContaining("flows/UniqueId:abc-1 by human")]);
+  expect(reasons[0]).not.toContain("neighbor");
+  expect(kept).toEqual(original);
+  expect(await new RouteWorkspace(options).read(key, "fans")).toEqual(read);
+  expect(reasons).toHaveLength(1);
 });

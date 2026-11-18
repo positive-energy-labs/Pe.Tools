@@ -1507,13 +1507,13 @@ function recoverCells(raw: unknown, spec: RouteStateSpec<z.ZodType>) {
   walk(doc, []);
   const bad = new Map<string[], string | null>(), unknown: string[] = [];
   for (const issue of result.error.issues) {
+    const path = paths.find(path => path.length && path.every((key, i) => String(issue.path[i]) === key));
     // "Work that no longer decodes is set aside with the one notice" (owner, 2026-11-16).
-    // An unknown key is set aside alone because the record's other cells still decode.
-    if (issue.code === "unrecognized_keys") {
+    // Outside cells, an unknown key is set aside alone because the record's other cells still decode.
+    if (issue.code === "unrecognized_keys" && !path) {
       for (const key of issue.keys) bad.set([...issue.path.map(String), key], null);
       continue;
     }
-    const path = paths.find(path => path.length && path.every((key, i) => String(issue.path[i]) === key));
     if (!path) return null;
     bad.set(path, issue.message);
   }
