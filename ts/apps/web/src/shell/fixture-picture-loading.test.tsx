@@ -28,8 +28,8 @@ test("Systems fixture Picture finishes loading its drawing", async () => {
     const router = createRouter({routeTree:createRootRoute({component:Panel}), history:createMemoryHistory()});
     await router.load();
     const page = render(<RouterProvider router={router} />);
-    await waitFor(() => expect(page.getByRole("button", {name: /lines show/i})).toBeTruthy(), {timeout:5000});
-    expect(page.getByRole("button", {name: /lines show/i}).hasAttribute("disabled")).toBe(false);
+    await waitFor(() => expect(page.getByRole("button", {name: /^centrelines$/i})).toBeTruthy(), {timeout:5000});
+    expect(page.getByRole("button", {name: /^centrelines$/i}).getAttribute("aria-disabled")).not.toBe("true");
     expect(document.body.textContent).not.toContain("Loading drawing");
   } finally { cleanup(); mount.dispose(); }
 });
