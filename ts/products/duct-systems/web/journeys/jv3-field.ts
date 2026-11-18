@@ -17,7 +17,7 @@ const evidence = JSON.parse(readFileSync(process.env.JV3_PRICING_FILE, "utf8"));
 const priced = evidence.read.criteria.autoJoinGapIn;
 if (priced.value !== 9 || priced.source.toLowerCase() !== "work" ||
     evidence.work.criteria.autoJoinGapIn.edit.value !== 9 ||
-    !evidence.read.settings.ducts.some((t: any) => t.tier === "firm" && t.json.criteria.autoJoinGapIn === 5))
+    !evidence.read.settings.ducts.some((t: { tier: string; json: { criteria: { autoJoinGapIn: number } } }) => t.tier === "firm" && t.json.criteria.autoJoinGapIn === 5))
   throw Error("PRECONDITION: host evidence must contain firm 5, staged Work 9, pricing 9 Work");
 const label = criterionCellLabel("autoJoinGapIn");
 const rows = (page: Page) => page.evaluate((label: string) =>

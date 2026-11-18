@@ -45,6 +45,7 @@ export async function seedConversationWork(homeInput: string, artifactInput: str
     await import("../../packages/agent-contracts/src/index.ts");
   const { RouteWorkspace } = await import("../../packages/runtime/src/route-workspace.ts");
   const { createRouteRegistrations } = await import("../../packages/mcps/src/pea/routes.ts");
+  const { constructorWorkRegistrations, admittedBuiltinsLayer } = await import("../../apps/host/src/admitted-builtins.ts");
   const { fileRouteDocumentStore } = await import("../../apps/host/src/route-document-store.ts");
   const { homeDirs } = await import("../../packages/host-contracts/src/product-paths.ts");
   const { productPathNames } = await import("../../packages/host-contracts/src/contracts/product.ts");
@@ -64,12 +65,11 @@ export async function seedConversationWork(homeInput: string, artifactInput: str
   const scope = bindWork("fans", address(OFFICE_ADDRESS));
   const unsavedScope = bindWork("fans", null, undefined, UNSAVED_REF);
   const workspace = new RouteWorkspace({
-    registrations: createRouteRegistrations(),
+    registrations: constructorWorkRegistrations(createRouteRegistrations()),
     store: fileRouteDocumentStore(stateScope(machine, machine.work)),
   });
   // Seed through the same admitted builtin enrollment as the HTTP host, not the legacy registry.
   const { Effect, Layer } = await import("effect");
-  const { admittedBuiltinsLayer } = await import("../../apps/host/src/admitted-builtins.ts");
   await Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
@@ -81,12 +81,12 @@ export async function seedConversationWork(homeInput: string, artifactInput: str
               0,
               [
                 {
-                  path: ["flows", "1001", "edit"],
-                  value: { value: { cfm: 100, source: "human effort" } },
+                  path: ["flows", "UniqueId:fixture-1001", "edit"],
+                  value: { value: 100 },
                 },
                 {
-                  path: ["flows", "1002", "edit"],
-                  value: { value: { cfm: 200, source: "reviewed" } },
+                  path: ["flows", "UniqueId:fixture-1002", "edit"],
+                  value: { value: 200 },
                 },
               ],
             ],
@@ -95,12 +95,12 @@ export async function seedConversationWork(homeInput: string, artifactInput: str
               1,
               [
                 {
-                  path: ["flows", "1002", "suggestion"],
-                  value: { value: { cfm: 220, source: "alternative" } },
+                  path: ["flows", "UniqueId:fixture-1002", "edit"],
+                  value: { value: 220 },
                 },
                 {
-                  path: ["flows", "1003", "suggestion"],
-                  value: { value: { cfm: 300, source: "proposal" } },
+                  path: ["flows", "UniqueId:fixture-1003", "edit"],
+                  value: { value: 300 },
                 },
               ],
             ],

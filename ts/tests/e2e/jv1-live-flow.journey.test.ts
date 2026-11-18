@@ -81,8 +81,8 @@ test("J-V1: live terminal edit after receipt reprices, shows drift, and writes t
       calcSnapshot: live, calcView: { inputs: after.input.inputs },
       fansWork: fansDocumentSchema.parse({}), settings: {},
     } });
-    expect(cells.find(cell => cell.binding === "flows" && cell.row === subject)?.drift,
-      "terminal cell must expose receipt drift").toBe(true);
+    expect(cells.find(cell => cell.binding === "flows" && cell.row === subject)?.note,
+      "terminal cell must expose receipt drift").toBe("Changed in Revit since Pe wrote 200 cfm");
     const request = mintWriteRequest(after.sheet.claim, after.sheet, after.input, {
       appliedAt: CLOSED_AT, slots: live.slots, peerClaims: new Map(), rulings: {}, storeDeletes: { roles: [], verdicts: [] },
     });
